@@ -53,3 +53,19 @@ target_include_directories(raptor_cgltf SYSTEM INTERFACE ${CMAKE_CURRENT_SOURCE_
 add_library(raptor_ufbx INTERFACE)
 add_library(Raptor::Ufbx ALIAS raptor_ufbx)
 target_include_directories(raptor_ufbx SYSTEM INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/ufbx)
+
+# msdfgen — multi-channel signed distance field generator (compiled from source).
+# Import-time only: used by the font atlas baker, not linked at runtime.
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/msdfgen/CMakeLists.txt)
+    set(MSDFGEN_CORE_ONLY          ON  CACHE BOOL "" FORCE)
+    set(MSDFGEN_BUILD_STANDALONE   OFF CACHE BOOL "" FORCE)
+    set(MSDFGEN_USE_OPENMP         OFF CACHE BOOL "" FORCE)
+    set(MSDFGEN_USE_SKIA           OFF CACHE BOOL "" FORCE)
+    set(MSDFGEN_USE_VCPKG          OFF CACHE BOOL "" FORCE)
+    set(MSDFGEN_INSTALL            OFF CACHE BOOL "" FORCE)
+    set(MSDFGEN_DYNAMIC_RUNTIME    ON  CACHE BOOL "" FORCE)
+    set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+    add_subdirectory(msdfgen)
+    unset(CMAKE_POLICY_VERSION_MINIMUM)
+    add_library(Raptor::MsdfgenCore ALIAS msdfgen-core)
+endif()

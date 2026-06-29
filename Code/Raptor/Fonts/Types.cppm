@@ -170,6 +170,13 @@ export namespace raptor::fonts
         [[nodiscard]] i32 InsertionIndex() const { return isTrailingHit ? characterIndex + 1 : characterIndex; }
     };
 
+    // How the glyph atlas is generated and interpreted at render time.
+    enum class AtlasMode : u8
+    {
+        Coverage,       // R8 single-channel rasterized alpha (default, existing behavior).
+        DistanceField,  // RGBA8 multi-channel signed distance field.
+    };
+
     // Options for loading a font.
     struct FontLoadOptions
     {
@@ -181,6 +188,7 @@ export namespace raptor::fonts
         u8 oversampleX = 2;
         u8 oversampleY = 2;
         u8 padding = 2;
+        AtlasMode atlasMode = AtlasMode::Coverage;
 
         [[nodiscard]] i32 CharacterCount() const { return lastCodepoint - firstCodepoint + 1; }
 
@@ -196,6 +204,14 @@ export namespace raptor::fonts
         [[nodiscard]] static FontLoadOptions Large()
         {
             FontLoadOptions o; o.pixelHeight = 64.0f; o.atlasWidth = 1024; o.atlasHeight = 1024; return o;
+        }
+        [[nodiscard]] static FontLoadOptions DistanceField()
+        {
+            FontLoadOptions o;
+            o.atlasMode = AtlasMode::DistanceField;
+            o.oversampleX = 1; o.oversampleY = 1;
+            o.padding = 4;
+            return o;
         }
     };
 

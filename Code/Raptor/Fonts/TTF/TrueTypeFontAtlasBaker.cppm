@@ -39,6 +39,12 @@ export namespace raptor::fonts
             return font.BackendTypeId() == kTrueTypeFontTypeId;
         }
 
+        [[nodiscard]] bool CanBake(const IFont& font, const FontLoadOptions& opts) const override
+        {
+            return font.BackendTypeId() == kTrueTypeFontTypeId
+                && opts.atlasMode == AtlasMode::Coverage;
+        }
+
         [[nodiscard]] Result<IFontAtlas*, FontLoadResult> Bake(IFont& font, FontLoadOptions options) override
         {
             if (font.BackendTypeId() != kTrueTypeFontTypeId)

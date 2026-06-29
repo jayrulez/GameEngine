@@ -49,13 +49,18 @@ export namespace raptor::fonts
 
         [[nodiscard]] virtual u32 Width() const = 0;
         [[nodiscard]] virtual u32 Height() const = 0;
-        [[nodiscard]] virtual Span<const u8> PixelData() const = 0;   // single-channel 8-bit coverage
+        [[nodiscard]] virtual Span<const u8> PixelData() const = 0;
 
         [[nodiscard]] virtual bool TryGetRegion(i32 codepoint, AtlasRegion& region) const = 0;
         [[nodiscard]] virtual bool GetGlyphQuad(i32 codepoint, f32& cursorX, f32 cursorY, GlyphQuad& quad) const = 0;
         [[nodiscard]] virtual bool GetGlyphQuadAt(i32 codepoint, f32 x, f32 y, GlyphQuad& quad) const = 0;
         [[nodiscard]] virtual bool Contains(i32 codepoint) const = 0;
-        [[nodiscard]] virtual Vec2 WhitePixelUV() const = 0;          // UV of a solid white texel
+        [[nodiscard]] virtual Vec2 WhitePixelUV() const = 0;
+
+        // Atlas generation mode. Coverage = R8 alpha; DistanceField = RGBA8 MSDF.
+        [[nodiscard]] virtual AtlasMode Mode() const { return AtlasMode::Coverage; }
+        // Signed-distance pixel range (only meaningful for DistanceField atlases).
+        [[nodiscard]] virtual f32 DistanceFieldRange() const { return 0.0f; }
     };
 
     // Text shaping/layout + UI helpers.

@@ -154,9 +154,18 @@ export namespace raptor::fonts
             return nullptr;
         }
 
+        // First baker reporting CanBake(font, options) == true, or null.
+        [[nodiscard]] static IFontAtlasBaker* GetBakerForFont(const IFont& font, const FontLoadOptions& options)
+        {
+            for (IFontAtlasBaker* b : BakerStore())
+                if (b->CanBake(font, options))
+                    return b;
+            return nullptr;
+        }
+
         [[nodiscard]] static Result<IFontAtlas*, FontLoadResult> Bake(IFont& font, FontLoadOptions options = FontLoadOptions::Default())
         {
-            IFontAtlasBaker* baker = GetBakerForFont(font);
+            IFontAtlasBaker* baker = GetBakerForFont(font, options);
             if (baker == nullptr)
                 return Err(FontLoadResult::UnsupportedFormat);
             return baker->Bake(font, options);

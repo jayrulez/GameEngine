@@ -161,7 +161,21 @@ export namespace raptor::fonts
             }
             IFontAtlas* atlas = baked.Value();
 
-            raptor::image::OwnedImageData* texture = FontAtlasTexture::ExpandR8ToRGBA8(atlas);
+            raptor::image::OwnedImageData* texture = nullptr;
+            if (atlas->Mode() == AtlasMode::DistanceField)
+            {
+                // DF atlas is already RGBA8 linear — wrap directly (no sRGB).
+                const Span<const u8> pixels = atlas->PixelData();
+                if (pixels.Size() > 0)
+                    texture = DefaultAllocator().New<raptor::image::OwnedImageData>(
+                        atlas->Width(), atlas->Height(),
+                        raptor::image::PixelFormat::RGBA8, pixels,
+                        raptor::image::ImageColorSpace::Linear);
+            }
+            else
+            {
+                texture = FontAtlasTexture::ExpandR8ToRGBA8(atlas);
+            }
             if (texture == nullptr)
             {
                 DefaultAllocator().Delete(atlas);

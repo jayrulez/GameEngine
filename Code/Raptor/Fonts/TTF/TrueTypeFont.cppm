@@ -61,6 +61,7 @@ export namespace raptor::fonts
 
         // Raw font bytes — the atlas baker needs these for stb's pack API.
         [[nodiscard]] const unsigned char* RawData() const { return m_fontData.Data(); }
+        [[nodiscard]] usize RawDataSize() const { return m_fontData.Size(); }
 
         // --- IFont ---------------------------------------------------------
         [[nodiscard]] u32 BackendTypeId() const override { return kTrueTypeFontTypeId; }

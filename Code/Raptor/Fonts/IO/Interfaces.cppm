@@ -59,6 +59,14 @@ export namespace raptor::fonts
         // True if this baker can produce an atlas from the given font instance.
         [[nodiscard]] virtual bool CanBake(const IFont& font) const = 0;
 
+        // Two-arg form: tests font type AND atlas mode. Defaults to the one-arg
+        // form for backward compatibility with existing bakers.
+        [[nodiscard]] virtual bool CanBake(const IFont& font, const FontLoadOptions& opts) const
+        {
+            (void)opts;
+            return CanBake(font);
+        }
+
         // Produce a new atlas for the font + options. Caller takes ownership.
         [[nodiscard]] virtual Result<IFontAtlas*, FontLoadResult> Bake(IFont& font, FontLoadOptions options) = 0;
     };

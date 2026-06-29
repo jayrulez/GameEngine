@@ -31,10 +31,14 @@ export namespace raptor::vg::renderer
     namespace rhi = raptor::rhi;
     namespace img = raptor::image;
 
-    /// Projection uniform (one per slice, padded to UniformSlotSize on the GPU).
+    /// Projection + distance-field uniforms (one per slice, padded to UniformSlotSize).
     struct VGUniforms
     {
-        Mat4 projection = Mat4::Identity();
+        Mat4 projection = Mat4::Identity();  // 64 bytes
+        f32  dfPxRange  = 4.0f;              // 4 bytes
+        f32  dfAtlasW   = 512.0f;            // 4 bytes
+        f32  dfAtlasH   = 512.0f;            // 4 bytes
+        f32  _pad       = 0.0f;              // 4 bytes  -> total = 80 bytes, fits in 256
     };
 
     /// A handle to one batch's data inside the shared frame buffers. Returned by
@@ -63,8 +67,10 @@ export namespace raptor::vg::renderer
 
         /// Initialize with a device + the (already compiled) vg vertex/fragment
         /// shader modules + the render-target format + frame count.
+        /// The optional dfFragShader enables the distance-field text pipeline.
         Status Initialize(rhi::Device& device, rhi::ShaderModule& vertShader, rhi::ShaderModule& fragShader,
-                          rhi::TextureFormat targetFormat, i32 frameCount)
+                          rhi::TextureFormat targetFormat, i32 frameCount,
+                          rhi::ShaderModule* dfFragShader = nullptr)
         {
             m_device = &device;
             m_queue = device.GetQueue(rhi::QueueType::Graphics, 0);
@@ -74,6 +80,11 @@ export namespace raptor::vg::renderer
             if (!CreateSampler().IsOk()) return ErrorCode::Unknown;
             if (!CreateLayouts().IsOk()) return ErrorCode::Unknown;
             if (!CreatePipeline(vertShader, fragShader).IsOk()) return ErrorCode::Unknown;
+            if (dfFragShader)
+            {
+                if (!CreateDFSampler().IsOk()) return ErrorCode::Unknown;
+                if (!CreateDFPipeline(vertShader, *dfFragShader).IsOk()) return ErrorCode::Unknown;
+            }
             if (!CreatePerFrameResources().IsOk()) return ErrorCode::Unknown;
 
             m_frameVertexOffsets.Resize(static_cast<usize>(frameCount));
@@ -140,9 +151,12 @@ export namespace raptor::vg::renderer
                 m_drawCommands.PushBack(cmd);
             }
 
-            // Write this slice's projection into its uniform slot.
+            // Write this slice's projection + DF metadata into its uniform slot.
             VGUniforms uniforms;
             uniforms.projection = OrthoOffCenter(static_cast<f32>(width), static_cast<f32>(height));
+            uniforms.dfPxRange = batch.dfPxRange;
+            uniforms.dfAtlasW  = batch.dfAtlasW;
+            uniforms.dfAtlasH  = batch.dfAtlasH;
             WriteBuffer(m_uniformBuffers[static_cast<usize>(frameIndex)], sliceUniformOffset, &uniforms, sizeof(VGUniforms));
 
             // Bind groups for any newly-added textures.
@@ -176,6 +190,7 @@ export namespace raptor::vg::renderer
 
             const u32 dynOffsets[1] = { slice.uniformByteOffset };
             i32 currentTextureIndex = -2; // sentinel forces first SetBindGroup
+            auto currentDrawMode = raptor::vg::VGDrawMode::Default;
 
             const i32 cmdEnd = slice.drawCommandStart + slice.drawCommandCount;
             for (i32 i = slice.drawCommandStart; i < cmdEnd; ++i)
@@ -183,6 +198,18 @@ export namespace raptor::vg::renderer
                 const raptor::vg::VGCommand& cmd = m_drawCommands[static_cast<usize>(i)];
                 if (cmd.indexCount == 0)
                     continue;
+
+                // Switch pipeline on draw mode change.
+                if (cmd.drawMode != currentDrawMode)
+                {
+                    if (cmd.drawMode == raptor::vg::VGDrawMode::DistanceField && m_dfPipeline) {
+                        renderPass.SetPipeline(m_dfPipeline);
+                    }
+                    else
+                        renderPass.SetPipeline(m_pipeline);
+                    currentDrawMode = cmd.drawMode;
+                    currentTextureIndex = -2; // force rebind after pipeline switch
+                }
 
                 if (cmd.textureIndex != currentTextureIndex)
                 {
@@ -230,11 +257,14 @@ export namespace raptor::vg::renderer
             DestroyBuffers(m_indexBuffers);
             DestroyBuffers(m_vertexBuffers);
 
+            if (m_dfPipeline) m_device->DestroyRenderPipeline(m_dfPipeline);
             if (m_pipeline) m_device->DestroyRenderPipeline(m_pipeline);
             if (m_pipelineLayout) m_device->DestroyPipelineLayout(m_pipelineLayout);
             if (m_bindGroupLayout) m_device->DestroyBindGroupLayout(m_bindGroupLayout);
+            if (m_dfSampler) m_device->DestroySampler(m_dfSampler);
             if (m_sampler) m_device->DestroySampler(m_sampler);
 
+            m_dfPipeline = nullptr; m_dfSampler = nullptr;
             m_pipeline = nullptr; m_pipelineLayout = nullptr; m_bindGroupLayout = nullptr; m_sampler = nullptr;
             m_initialized = false;
             m_device = nullptr;
@@ -286,7 +316,7 @@ export namespace raptor::vg::renderer
         Status CreateLayouts()
         {
             rhi::BindGroupLayoutEntry entries[3];
-            entries[0] = rhi::BindGroupLayoutEntry::UniformBuffer(0, rhi::ShaderStage::Vertex);
+            entries[0] = rhi::BindGroupLayoutEntry::UniformBuffer(0, rhi::ShaderStage::Vertex | rhi::ShaderStage::Fragment);
             entries[0].hasDynamicOffset = true; // one uniform buffer shared across slices via dynamic offset
             entries[1] = rhi::BindGroupLayoutEntry::SampledTexture(0, rhi::ShaderStage::Fragment);
             entries[2] = rhi::BindGroupLayoutEntry::Sampler(0, rhi::ShaderStage::Fragment);
@@ -336,6 +366,53 @@ export namespace raptor::vg::renderer
             desc.multisample.alphaToCoverageEnabled = false;
 
             return m_device->CreateRenderPipeline(desc, m_pipeline);
+        }
+
+        Status CreateDFSampler()
+        {
+            rhi::SamplerDesc desc{};
+            desc.minFilter = rhi::FilterMode::Linear;
+            desc.magFilter = rhi::FilterMode::Linear;
+            desc.addressU = rhi::AddressMode::ClampToEdge;
+            desc.addressV = rhi::AddressMode::ClampToEdge;
+            return m_device->CreateSampler(desc, m_dfSampler);
+        }
+
+        Status CreateDFPipeline(rhi::ShaderModule& vertShader, rhi::ShaderModule& dfFragShader)
+        {
+            const rhi::VertexAttribute attributes[4] = {
+                { rhi::VertexFormat::Float32x2, 0, 0 },
+                { rhi::VertexFormat::Float32x2, 8, 1 },
+                { rhi::VertexFormat::Float32x4, 16, 2 },
+                { rhi::VertexFormat::Float32, 32, 3 },
+            };
+            rhi::VertexBufferLayout vbLayout{};
+            vbLayout.stride = static_cast<u32>(sizeof(VGRenderVertex));
+            vbLayout.attributes = Span<const rhi::VertexAttribute>(attributes, 4);
+            const rhi::VertexBufferLayout vertexBuffers[1] = { vbLayout };
+
+            rhi::ColorTargetState colorTarget{};
+            colorTarget.format = m_targetFormat;
+            colorTarget.blend = rhi::BlendState::AlphaBlend();
+            const rhi::ColorTargetState colorTargets[1] = { colorTarget };
+
+            rhi::RenderPipelineDesc desc{};
+            desc.layout = m_pipelineLayout;
+            desc.vertex.shader = rhi::ProgrammableStage{ &vertShader, u8"main", rhi::ShaderStage::Vertex };
+            desc.vertex.buffers = Span<const rhi::VertexBufferLayout>(vertexBuffers, 1);
+
+            rhi::FragmentState fragment{};
+            fragment.shader = rhi::ProgrammableStage{ &dfFragShader, u8"main", rhi::ShaderStage::Fragment };
+            fragment.targets = Span<const rhi::ColorTargetState>(colorTargets, 1);
+            desc.fragment = fragment;
+
+            desc.primitive.topology = rhi::PrimitiveTopology::TriangleList;
+            desc.primitive.frontFace = rhi::FrontFace::CCW;
+            desc.primitive.cullMode = rhi::CullMode::None;
+            desc.multisample.count = 1;
+            desc.multisample.alphaToCoverageEnabled = false;
+
+            return m_device->CreateRenderPipeline(desc, m_dfPipeline);
         }
 
         Status CreatePerFrameResources()
@@ -486,7 +563,9 @@ export namespace raptor::vg::renderer
         rhi::BindGroupLayout* m_bindGroupLayout = nullptr;
         rhi::PipelineLayout* m_pipelineLayout = nullptr;
         rhi::RenderPipeline* m_pipeline = nullptr;
+        rhi::RenderPipeline* m_dfPipeline = nullptr;
         rhi::Sampler* m_sampler = nullptr;
+        rhi::Sampler* m_dfSampler = nullptr;
 
         Array<rhi::Buffer*> m_vertexBuffers;
         Array<rhi::Buffer*> m_indexBuffers;

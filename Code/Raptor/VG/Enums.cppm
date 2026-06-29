@@ -42,6 +42,13 @@ export namespace raptor::vg
         Square, ///< Square end extending by half the stroke width.
     };
 
+    /// Selects which rendering pipeline a command uses (internal to VG).
+    enum class VGDrawMode
+    {
+        Default,        ///< Standard alpha-coverage path.
+        DistanceField,  ///< Multi-channel signed distance field.
+    };
+
     /// Line join style for stroke corners.
     enum class VGLineJoin
     {

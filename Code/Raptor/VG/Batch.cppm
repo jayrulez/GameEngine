@@ -33,6 +33,7 @@ export namespace raptor::vg
         VGClipMode clipMode = VGClipMode::None;
         VGBlendMode blendMode = VGBlendMode::Normal;
         i32 stencilRef = 0;        ///< Stencil reference value (for stencil clipping).
+        VGDrawMode drawMode = VGDrawMode::Default; ///< Pipeline selection.
     };
 
     /// Batched vector-graphics geometry and draw commands. The output of
@@ -48,6 +49,11 @@ export namespace raptor::vg
         // batch — VGContext manages lifetime. By convention index 0 is a 1x1
         // white texture for solid-color draws.
         Array<const img::ImageData*> textures;
+
+        // Distance-field rendering metadata (set by VGContext when DF text is drawn).
+        f32 dfPxRange  = 4.0f;  ///< Signed-distance pixel range.
+        f32 dfAtlasW   = 512.0f;
+        f32 dfAtlasH   = 512.0f;
 
         /// Vertex data as a span for GPU upload.
         [[nodiscard]] Span<VGVertex> GetVertexData() { return Span<VGVertex>(vertices.Data(), vertices.Size()); }

@@ -21,6 +21,7 @@ add_subdirectory(Baked)     # raptor.fonts.baked  — rasterizer-free IFont/IFon
 add_subdirectory(IO)        # raptor.fonts.io     — parser/baker pipeline + FontManager
 add_subdirectory(TTF)       # raptor.fonts.ttf    — stb_truetype backend + VFS service
 add_subdirectory(Importer)  # raptor.fonts.importer — editor-time TTF -> baked
+add_subdirectory(DistanceField)  # raptor.fonts.df — distance-field atlas (+ baker when msdfgen available)
 
 if(RAPTOR_BUILD_TESTS)
     add_subdirectory(Tests)

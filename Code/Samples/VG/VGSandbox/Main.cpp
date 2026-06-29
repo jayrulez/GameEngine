@@ -16,6 +16,8 @@ import raptor.samples.framework;
 import raptor.image;
 import raptor.fonts;
 import raptor.fonts.ttf;
+import raptor.fonts.df;
+import raptor.fonts.df.baker;
 import raptor.vg;
 import raptor.vg.renderer;
 import raptor.vg.svg;
@@ -34,7 +36,7 @@ namespace
 {
     constexpr const char8_t kVertSrc[] = u8R"(
 #pragma pack_matrix(row_major)
-cbuffer VGUniforms : register(b0) { float4x4 Projection; };
+cbuffer VGUniforms : register(b0) { float4x4 Projection; float DFPxRange; float DFAtlasW; float DFAtlasH; float _pad; };
 struct VSInput { float2 Position:TEXCOORD0; float2 TexCoord:TEXCOORD1; float4 Color:TEXCOORD2; float Coverage:TEXCOORD3; };
 struct VSOutput { float4 Position:SV_Position; float2 TexCoord:TEXCOORD0; float4 Color:COLOR0; float Coverage:COVERAGE; };
 VSOutput main(VSInput input) {
@@ -53,6 +55,24 @@ float4 main(PSInput input) : SV_Target {
     float4 texColor = VGTexture.Sample(VGSampler, input.TexCoord);
     float4 result = texColor * input.Color;
     result.a *= input.Coverage;
+    return result;
+}
+)";
+
+    constexpr const char8_t kDFFragSrc[] = u8R"(
+#pragma pack_matrix(row_major)
+struct PSInput { float4 Position:SV_Position; float2 TexCoord:TEXCOORD0; float4 Color:COLOR0; float Coverage:COVERAGE; };
+cbuffer VGUniforms : register(b0) { float4x4 Projection; float DFPxRange; float DFAtlasW; float DFAtlasH; float _pad; };
+Texture2D VGTexture : register(t0);
+SamplerState VGSampler : register(s0);
+float Median(float r, float g, float b) { return max(min(r,g), min(max(r,g), b)); }
+float4 main(PSInput input) : SV_Target {
+    float4 msd = VGTexture.Sample(VGSampler, input.TexCoord);
+    float sd = Median(msd.r, msd.g, msd.b);
+    float opacity = clamp(4.0 * (sd - 0.5) + 0.5, 0.0, 1.0);
+
+    float4 result = input.Color;
+    result.a *= opacity;
     return result;
 }
 )";
@@ -93,6 +113,7 @@ private:
     void DrawUIConvenience(vg::VGContext& vgc, f32 x, f32 y);
     void DrawImmediatePath(vg::VGContext& vgc, f32 x, f32 y, f32 t);
     void DrawSVGDemo(vg::VGContext& vgc, f32 x, f32 y);
+    void DrawDFTextDemo(vg::VGContext& vgc, f32 x, f32 y);
 
     void LoadFontSize(StringView path, f32 pixelHeight);
     static Color HSLToColor(f32 h, f32 s, f32 l);
@@ -102,6 +123,7 @@ private:
     ds::Compiler*      m_compiler = nullptr;
     rhi::ShaderModule* m_vs = nullptr;
     rhi::ShaderModule* m_fs = nullptr;
+    rhi::ShaderModule* m_dfFs = nullptr;
     rhi::CommandPool*  m_pool = nullptr;
     rhi::Fence*        m_fence = nullptr;
     u64                m_fenceVal = 0;
@@ -115,6 +137,7 @@ private:
     fonts::CachedFont* m_fontSmall = nullptr;
     fonts::CachedFont* m_fontMedium = nullptr;
     fonts::CachedFont* m_fontLarge = nullptr;
+    fonts::CachedFont* m_fontDF = nullptr;
 
     svg::SVGDocument m_badge; bool m_hasBadge = false;
     svg::SVGDocument m_icon;  bool m_hasIcon = false;
@@ -125,8 +148,9 @@ Status VGSandbox::OnInit()
     if (ds::createCompiler(ds::CompilerDesc{}, m_compiler) != ErrorCode::Ok) return ErrorCode::Unknown;
     if (sf::CompileToModule(m_compiler, m_device, kVertSrc, ds::ShaderStage::Vertex,   u8"main", u8"vg.vert", m_vs) != ErrorCode::Ok) return ErrorCode::Unknown;
     if (sf::CompileToModule(m_compiler, m_device, kFragSrc, ds::ShaderStage::Fragment, u8"main", u8"vg.frag", m_fs) != ErrorCode::Ok) return ErrorCode::Unknown;
+    if (sf::CompileToModule(m_compiler, m_device, kDFFragSrc, ds::ShaderStage::Fragment, u8"main", u8"vg_df.frag", m_dfFs) != ErrorCode::Ok) return ErrorCode::Unknown;
 
-    if (!m_renderer.Initialize(*m_device, *m_vs, *m_fs, m_swapChain->Format(), static_cast<i32>(kFrames)).IsOk())
+    if (!m_renderer.Initialize(*m_device, *m_vs, *m_fs, m_swapChain->Format(), static_cast<i32>(kFrames), m_dfFs).IsOk())
         return ErrorCode::Unknown;
 
     if (m_device->CreateCommandPool(rhi::QueueType::Graphics, m_pool) != ErrorCode::Ok) return ErrorCode::Unknown;
@@ -143,6 +167,14 @@ Status VGSandbox::OnInit()
         m_fontSmall  = m_fontService->GetFont(u8"Roboto", 14.0f);
         m_fontMedium = m_fontService->GetFont(u8"Roboto", 20.0f);
         m_fontLarge  = m_fontService->GetFont(u8"Roboto", 36.0f);
+
+        // Distance-field font (single atlas works at any size).
+        fonts::DFFonts::Initialize();
+        fonts::FontLoadOptions dfOpts = fonts::FontLoadOptions::DistanceField();
+        dfOpts.pixelHeight = 48.0f;
+        dfOpts.atlasWidth = 1024; dfOpts.atlasHeight = 1024;
+        (void)m_fontService->LoadFont(u8"RobotoDF", fontPath, dfOpts);
+        m_fontDF = m_fontService->GetFont(u8"RobotoDF", 48.0f);
     }
 
     m_vg = MakeUnique<vg::VGContext>(DefaultAllocator(), m_fontService.Get());
@@ -199,6 +231,7 @@ void VGSandbox::DrawScene(vg::VGContext& vgc, f32 w, f32 h, f32 t)
     DrawUIConvenience(vgc, 150, 340);
     DrawImmediatePath(vgc, 150, 410, t);
     DrawSVGDemo(vgc, 150, 470);
+    DrawDFTextDemo(vgc, w - 280, 390);
 }
 
 void VGSandbox::DrawLineWidths(vg::VGContext& vgc, f32 x, f32 y)
@@ -613,6 +646,28 @@ void VGSandbox::DrawSVGDemo(vg::VGContext& vgc, f32 x, f32 y)
     }
 }
 
+void VGSandbox::DrawDFTextDemo(vg::VGContext& vgc, f32 x, f32 y)
+{
+    if (!m_fontDF) return;
+
+    // Label (using regular rasterized font).
+    if (m_fontSmall)
+        vgc.DrawText(u8"Distance Field Text (one atlas, multiple scales):", m_fontSmall, Vec2{ x, y + 12 }, GC( 180, 180, 190, 255 ));
+
+    // Draw DF text at native size to verify baseline alignment and descenders.
+    const f32 ascent = m_fontDF->font->Metrics().ascent;
+    const f32 lineH = m_fontDF->font->Metrics().lineHeight;
+
+    vgc.DrawText(u8"Typography", m_fontDF, Vec2{ x, y + 20 + ascent }, GC( 255, 220, 100, 255 ));
+
+    // Scaled version to demonstrate resolution independence.
+    vgc.PushState();
+    vgc.Translate(x, y + 20 + ascent + lineH + 4.0f);
+    vgc.Scale(0.6f, 0.6f);
+    vgc.DrawText(u8"Typography", m_fontDF, Vec2{ 0, ascent }, GC( 200, 255, 200, 255 ));
+    vgc.PopState();
+}
+
 Color VGSandbox::HSLToColor(f32 h, f32 s, f32 l)
 {
     h = h - static_cast<f32>(static_cast<i32>(h)); // h % 1
@@ -688,9 +743,11 @@ void VGSandbox::OnShutdown()
     if (m_device) m_device->WaitIdle();
     m_renderer.Dispose();
     m_vg.Reset();
+    fonts::DFFonts::Shutdown();
     m_fontService.Reset();
     if (m_fence) m_device->DestroyFence(m_fence);
     if (m_pool)  m_device->DestroyCommandPool(m_pool);
+    if (m_dfFs)  m_device->DestroyShaderModule(m_dfFs);
     if (m_fs)    m_device->DestroyShaderModule(m_fs);
     if (m_vs)    m_device->DestroyShaderModule(m_vs);
     if (m_compiler) { m_compiler->Destroy(); delete m_compiler; }

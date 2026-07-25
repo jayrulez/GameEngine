@@ -197,6 +197,7 @@ export namespace draconic::graphics
         core::Array<core::u64> m_fenceValues;
         core::u32 m_width;
         core::u32 m_height;
+        bool m_deviceLost = false;
         core::UniquePtr<IRenderWindowData> m_data; // optional typed payload
     };
 
@@ -433,6 +434,12 @@ export namespace draconic::graphics
         {
             return FrameContext{};
         }
+        // After device removal (GPU hang/TDR), stop rendering. Without this
+        // check the app spins through failing D3D12 calls flooding stderr.
+        if (m_deviceLost)
+        {
+            return FrameContext{};
+        }
 
         const core::u32 fi = m_device->CurrentFrame();
         // Guard reuse of this slot's pool/backbuffer: wait the GPU's last
@@ -489,7 +496,10 @@ export namespace draconic::graphics
         m_device->GfxQueue()->Submit(core::Span<rhi::CommandBuffer* const>(cbs, 1), m_fences[fi],
                                      m_fenceValues[fi]);
 
-        m_swapChain->Present(m_device->GfxQueue());
+        if (!m_swapChain->Present(m_device->GfxQueue()).IsOk())
+        {
+            m_deviceLost = true;
+        }
         m_pools[fi]->DestroyEncoder(frame.encoder);
         frame.encoder = nullptr;
     }

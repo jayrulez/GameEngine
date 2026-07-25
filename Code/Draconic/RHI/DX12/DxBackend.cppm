@@ -74,7 +74,7 @@ export namespace draconic::rhi::dx12
         {
             m_validationEnabled = enableValidation;
 
-            // Enable debug layer before device creation.
+            // Enable debug layer + DRED (Device Removed Extended Data) before device creation.
             if (m_validationEnabled)
             {
                 ComPtr<ID3D12Debug> debugController;
@@ -82,6 +82,15 @@ export namespace draconic::rhi::dx12
                 {
                     debugController->EnableDebugLayer();
                 }
+                // DRED (Device Removed Extended Data): enable only when needed — auto-breadcrumbs
+                // add a GPU write per draw call, which can itself trigger TDR on heavy scenes.
+                // Uncomment the block below to diagnose a GPU hang.
+                // ComPtr<ID3D12DeviceRemovedExtendedDataSettings> dredSettings;
+                // if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&dredSettings))))
+                // {
+                //     dredSettings->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+                //     dredSettings->SetPageFaultEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+                // }
             }
 
             // Create DXGI factory.

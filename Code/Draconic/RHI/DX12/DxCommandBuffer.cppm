@@ -26,11 +26,9 @@ export namespace draconic::rhi::dx12
 
         void release()
         {
-            if (m_cmdList)
-            {
-                m_cmdList->Release();
-                m_cmdList = nullptr;
-            }
+            // The command list is now owned by the pool's ComPtr (m_cachedCmdList)
+            // and reused across frames. Just null out our reference.
+            m_cmdList = nullptr;
         }
 
     private:

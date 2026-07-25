@@ -742,12 +742,16 @@ export namespace draconic::rhi::dx12
 
         void WaitIdle() override
         {
-            for (auto* q : m_graphicsQueues)
-                q->WaitIdle();
-            for (auto* q : m_computeQueues)
-                q->WaitIdle();
-            for (auto* q : m_transferQueues)
-                q->WaitIdle();
+            // Skip queue waits if the device is already lost — they'd hang or no-op.
+            if (SUCCEEDED(m_device->GetDeviceRemovedReason()))
+            {
+                for (auto* q : m_graphicsQueues)
+                    q->WaitIdle();
+                for (auto* q : m_computeQueues)
+                    q->WaitIdle();
+                for (auto* q : m_transferQueues)
+                    q->WaitIdle();
+            }
             drainDebugMessages();
         }
 
@@ -755,6 +759,7 @@ export namespace draconic::rhi::dx12
         {
             if (!m_infoQueue)
                 return;
+            bool sawDeviceRemoved = false;
             UINT64 count = m_infoQueue->GetNumStoredMessages();
             for (UINT64 i = 0; i < count; ++i)
             {
@@ -766,16 +771,101 @@ export namespace draconic::rhi::dx12
                 if (m_infoQueue->GetMessage(i, msg, &len) == S_OK)
                 {
                     if (msg->Severity <= D3D12_MESSAGE_SEVERITY_WARNING)
+                    {
                         std::fprintf(stderr, "[DX12 %s] %.*s\n",
                                      msg->Severity == D3D12_MESSAGE_SEVERITY_ERROR     ? "ERROR"
                                      : msg->Severity == D3D12_MESSAGE_SEVERITY_WARNING ? "WARN"
                                                                                        : "CORRUPT",
                                      static_cast<int>(msg->DescriptionByteLength),
                                      msg->pDescription);
+                        if (msg->ID == D3D12_MESSAGE_ID_DEVICE_REMOVAL_PROCESS_AT_FAULT)
+                            sawDeviceRemoved = true;
+                    }
                 }
                 std::free(msg);
             }
             m_infoQueue->ClearStoredMessages();
+
+            // On device removal, query DRED for auto-breadcrumbs (which GPU operation hung),
+            // then exit — continuing to render on a dead device floods errors and freezes.
+            if (sawDeviceRemoved || FAILED(m_device->GetDeviceRemovedReason()))
+            {
+                dumpDred();
+                std::fprintf(stderr, "[DX12] FATAL: device removed, exiting.\n");
+                std::fflush(stderr);
+                ExitProcess(1);
+            }
+        }
+
+        void dumpDred()
+        {
+            ComPtr<ID3D12DeviceRemovedExtendedData> dred;
+            if (FAILED(m_device->QueryInterface(IID_PPV_ARGS(&dred))) || !dred)
+                return;
+
+            // D3D12_AUTO_BREADCRUMB_OP names for readable output.
+            static constexpr const char* kOpNames[] = {
+                "SetMarker",     "BeginEvent",    "EndEvent",      "DrawInstanced",   // 0-3
+                "DrawIndexed",   "ExecIndirect",  "Dispatch",      "CopyBuffer",      // 4-7
+                "CopyTexture",   "CopyResource",  "CopyTiles",     "ResolveSubres",   // 8-11
+                "ClearRTV",      "ClearDSV",      "Barrier",       "ExecBundle",       // 12-15
+                "Present",       "ResolveQuery",  "BeginSubmit",   "EndSubmit",        // 16-19
+                "DecodeFrame",   "ProcessFrames", "AtomicCopyBuf", "ResolveSubresRgn", // 20-23
+                "WriteBuffImm",  "DecodeFrame1",  "SetProtResRgn", "DecodeFrame2",     // 24-27
+                "ProcessFrames1","BuildRTAccStrt","EmitRTAccStrt", "CopyRTAccStrt",    // 28-31
+                "DispatchRays",  "InitMetaCmd",   "DispatchMesh",  "EncSignal",        // 32-35
+                "EncWait",       "DispatchGraph",                                       // 36-37
+            };
+
+            D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT breadcrumbs{};
+            if (SUCCEEDED(dred->GetAutoBreadcrumbsOutput(&breadcrumbs)))
+            {
+                const D3D12_AUTO_BREADCRUMB_NODE* node = breadcrumbs.pHeadAutoBreadcrumbNode;
+                while (node)
+                {
+                    if (node->pLastBreadcrumbValue && node->pCommandHistory &&
+                        node->BreadcrumbCount > 0)
+                    {
+                        u32 lastCompleted = *node->pLastBreadcrumbValue;
+                        std::fprintf(stderr,
+                                     "[DRED] CommandList: completed %u/%u breadcrumbs\n",
+                                     lastCompleted, node->BreadcrumbCount);
+                        // Only print ±15 breadcrumbs around the fault point.
+                        u32 start = (lastCompleted > 15) ? lastCompleted - 15 : 0;
+                        u32 end = lastCompleted + 16;
+                        if (end > node->BreadcrumbCount)
+                            end = node->BreadcrumbCount;
+                        if (start > 0)
+                            std::fprintf(stderr, "[DRED]   ... (%u earlier breadcrumbs omitted)\n", start);
+                        for (u32 i = start; i < end; ++i)
+                        {
+                            const char* marker = (i < lastCompleted)   ? " DONE"
+                                                 : (i == lastCompleted) ? " >>>"
+                                                                        : "    ";
+                            int op = static_cast<int>(node->pCommandHistory[i]);
+                            const char* name =
+                                (op >= 0 && op < static_cast<int>(sizeof(kOpNames) / sizeof(kOpNames[0])))
+                                    ? kOpNames[op]
+                                    : "?";
+                            std::fprintf(stderr, "[DRED]   %s [%u] %s\n", marker, i, name);
+                        }
+                        if (end < node->BreadcrumbCount)
+                            std::fprintf(stderr, "[DRED]   ... (%u later breadcrumbs omitted)\n",
+                                         node->BreadcrumbCount - end);
+                    }
+                    node = node->pNext;
+                }
+            }
+
+            D3D12_DRED_PAGE_FAULT_OUTPUT pageFault{};
+            if (SUCCEEDED(dred->GetPageFaultAllocationOutput(&pageFault)))
+            {
+                if (pageFault.PageFaultVA != 0)
+                {
+                    std::fprintf(stderr, "[DRED] Page fault at VA 0x%llX\n",
+                                 static_cast<unsigned long long>(pageFault.PageFaultVA));
+                }
+            }
         }
 
         void Destroy() override
@@ -1259,20 +1349,51 @@ export namespace draconic::rhi::dx12
 
     // ---- CommandPool out-of-line methods (need DxCommandEncoderImpl + context structs) ----
 
+    void DxCommandPoolImpl::Reset()
+    {
+        releaseCommandBuffers();
+        // Release bundle encoders from persistent encoders (worker pools keep
+        // an encoder alive across frames; its bundle allocators + command lists
+        // must be freed each frame or they accumulate and exhaust GPU resources).
+        if (m_liveEncoder != nullptr)
+            m_liveEncoder->ReleaseBundleEncoders();
+        // DX12 requires ALL command lists to be closed before
+        // ID3D12CommandAllocator::Reset(). Vulkan has no such requirement
+        // (vkResetCommandPool implicitly handles open buffers), so the
+        // backend-agnostic callers never explicitly close before Reset.
+        const bool wasOpen = m_cmdListOpen;
+        if (wasOpen)
+            m_cmdList->Close();
+        // Reset descriptor staging -- GPU is done (fence waited), so staging
+        // bump pointers can safely return to start.
+        m_srvStaging.Reset();
+        m_samplerStaging.Reset();
+        m_allocator->Reset();
+        // If the list was open (a persistent encoder holds a raw pointer to it),
+        // reopen it immediately so callers don't see a closed list. ForwardPass
+        // worker pools follow this pattern: Reset + reuse the same encoder.
+        if (wasOpen)
+            m_cmdList->Reset(m_allocator.Get(), nullptr);
+        // m_cmdListOpen stays as it was (true if reopened, false if was already closed)
+    }
+
     Status DxCommandPoolImpl::CreateEncoder(CommandEncoder*& out)
     {
         out = nullptr;
 
-        ComPtr<ID3D12Device> d3dDev;
-        m_allocator->GetDevice(IID_PPV_ARGS(&d3dDev));
-        if (!d3dDev)
-            return ErrorCode::Unknown;
+        // Reopen the pool's command list for recording. The list was created in
+        // init() (closed state) and is reused every frame. ID3D12GraphicsCommandList::Reset
+        // transitions closed → recording and re-associates with the (just-reset) allocator.
+        // If the list is already open (pool Reset reopened it for persistent encoders), skip.
+        if (!m_cmdListOpen)
+        {
+            HRESULT hr = m_cmdList->Reset(m_allocator.Get(), nullptr);
+            if (FAILED(hr))
+                return ErrorCode::Unknown;
+            m_cmdListOpen = true;
+        }
 
-        ID3D12GraphicsCommandList* cmdList = nullptr;
-        HRESULT hr = d3dDev->CreateCommandList(0, m_type, m_allocator.Get(), nullptr,
-                                               IID_PPV_ARGS(&cmdList));
-        if (FAILED(hr))
-            return ErrorCode::Unknown;
+        ID3D12GraphicsCommandList* cmdList = m_cmdList.Get();
 
         DxRenderPassContext rpeCtx{};
         rpeCtx.cmdList = cmdList;
@@ -1294,6 +1415,7 @@ export namespace draconic::rhi::dx12
 
         auto* enc = m_allocPtr->New<DxCommandEncoderImpl>(m_device, cmdList, this, rpeCtx, cpeCtx,
                                                           *m_allocPtr);
+        m_liveEncoder = enc;
         out = enc;
         return ErrorCode::Ok;
     }

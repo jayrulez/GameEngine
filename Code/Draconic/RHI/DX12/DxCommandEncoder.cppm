@@ -60,8 +60,17 @@ export namespace draconic::rhi::dx12
 
         ~DxCommandEncoderImpl() override
         {
+            ReleaseBundleEncoders();
+        }
+
+        /// Release all owned bundle encoders. Called by the pool on Reset for
+        /// persistent encoders that outlive individual frames.
+        void ReleaseBundleEncoders()
+        {
             for (auto* e : m_bundleEncoders)
                 m_allocator.Delete(e);
+            m_bundleEncoders.Clear();
+            m_descriptorHeapsSet = false; // command list was Reset; heaps need re-binding
         }
 
         // ================================================================
@@ -638,6 +647,7 @@ export namespace draconic::rhi::dx12
         CommandBuffer* Finish() override
         {
             m_cmdList->Close();
+            m_pool->markCmdListClosed();
             auto* cb = m_allocator.New<DxCommandBufferImpl>(m_cmdList);
             m_pool->trackCommandBuffer(cb);
             return cb;

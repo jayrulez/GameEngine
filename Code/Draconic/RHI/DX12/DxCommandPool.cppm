@@ -40,6 +40,21 @@ export namespace draconic::rhi::dx12
             if (FAILED(hr))
                 return ErrorCode::Unknown;
 
+            // Create a reusable command list. DX12's CreateCommandList starts it in
+            // recording state; close it immediately so the lifecycle is always:
+            //   Reset (pool) → cmdList->Reset (open) → record → Close → submit.
+            // This avoids the Vulkan/DX12 mismatch where Vulkan's vkResetCommandPool
+            // implicitly handles open command buffers but DX12's allocator Reset does not.
+            {
+                ID3D12GraphicsCommandList* rawList = nullptr;
+                hr = d3dDevice->CreateCommandList(0, m_type, m_allocator.Get(), nullptr,
+                                                   IID_PPV_ARGS(&rawList));
+                if (FAILED(hr) || !rawList)
+                    return ErrorCode::Unknown;
+                rawList->Close();
+                m_cmdList.Attach(rawList); // take ownership without AddRef
+            }
+
             // Create descriptor staging (shared by all encoders from this pool).
             m_srvStaging.init(cpuSrvHeap, gpuSrvHeap, d3dDevice,
                               D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1024);
@@ -53,19 +68,17 @@ export namespace draconic::rhi::dx12
         Status CreateEncoder(CommandEncoder*& out) override;
         void DestroyEncoder(CommandEncoder*& encoder) override;
 
-        void Reset() override
-        {
-            releaseCommandBuffers();
-            // Reset descriptor staging -- GPU is done (fence waited), so staging
-            // bump pointers can safely return to start.
-            m_srvStaging.Reset();
-            m_samplerStaging.Reset();
-            m_allocator->Reset();
-        }
+        void Reset() override;
 
         void cleanup()
         {
             releaseCommandBuffers();
+            if (m_cmdListOpen)
+            {
+                m_cmdList->Close();
+                m_cmdListOpen = false;
+            }
+            m_cmdList.Reset();
             m_srvStaging.Destroy();
             m_samplerStaging.Destroy();
             m_allocator.Reset();
@@ -81,6 +94,12 @@ export namespace draconic::rhi::dx12
         /// Called by DxCommandEncoderImpl::finish() to register a command buffer with this pool.
         void trackCommandBuffer(DxCommandBufferImpl* cb) { m_trackedBuffers.PushBack(cb); }
 
+        /// Called by DxCommandEncoderImpl::Finish() after Close().
+        void markCmdListClosed() { m_cmdListOpen = false; }
+
+        /// Track the live encoder so Reset can release its bundles.
+        void trackEncoder(DxCommandEncoderImpl* enc) { m_liveEncoder = enc; }
+
     private:
         void releaseCommandBuffers()
         {
@@ -93,6 +112,9 @@ export namespace draconic::rhi::dx12
         }
 
         ComPtr<ID3D12CommandAllocator> m_allocator;
+        ComPtr<ID3D12GraphicsCommandList> m_cmdList; // created once in init, reused across frames
+        DxCommandEncoderImpl* m_liveEncoder = nullptr; // persistent encoder (if any)
+        bool m_cmdListOpen = false; // true while the command list is in recording state
         ID3D12Device* m_d3dDevice = nullptr;
         DxDeviceImpl* m_device = nullptr;
         IAllocator* m_allocPtr = nullptr;

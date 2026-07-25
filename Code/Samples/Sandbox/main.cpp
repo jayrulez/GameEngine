@@ -5,6 +5,9 @@
 
 #include "Core/Prelude.h"
 #include "imgui.h" // Dear ImGui (debug UI) - used directly; the engine integration is draconic.imgui
+#ifdef _WIN32
+#include <crtdbg.h>
+#endif
 
 import draconic.core;
 import draconic.rhi; // offscreen render target (Texture / ResourceState / Blit)
@@ -1156,6 +1159,9 @@ namespace
                 gfx->Raw() == nullptr || frame.encoder == nullptr || frame.backbuffer == nullptr ||
                 frame.window == nullptr)
             {
+                // Still close the imgui frame so NewFrame/Render stay balanced.
+                if (auto* g = host.Ctx().GetSubsystem<imgui::ImguiSubsystem>())
+                    g->Render(frame);
                 return;
             }
             rhi::Device& device = *gfx->Raw();
@@ -1165,6 +1171,8 @@ namespace
             const core::u32 slot = frame.frameIndex < kOffscreenSlots ? frame.frameIndex : 0u;
             if (!EnsureOffscreen(device, fmt, frame.width, frame.height, slot))
             {
+                if (auto* g = host.Ctx().GetSubsystem<imgui::ImguiSubsystem>())
+                    g->Render(frame);
                 return;
             }
             rhi::Texture* offTex = m_offscreenTex[slot];
@@ -1619,8 +1627,16 @@ namespace
 
 int main(int, char**)
 {
+#ifdef _WIN32
+    // Suppress CRT assertion dialog boxes — print to stderr + abort instead of
+    // popping a modal dialog that freezes the system while the GPU is hung.
+    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+#endif
+
     auto shell = shell::CreateShell();
     graphics::GraphicsDeviceDesc gpuDesc{};
+    gpuDesc.backend = graphics::BackendType::Vulkan;
     auto gpu = graphics::CreateGraphicsDevice(gpuDesc);
     graphics::GraphicsDevice* device = gpu.HasValue() ? gpu.Value().Get() : nullptr;
 

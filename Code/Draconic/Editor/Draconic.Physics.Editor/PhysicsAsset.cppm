@@ -245,15 +245,17 @@ export namespace draconic::physics
         }
     };
 
+    // Registers the CollisionCookKind enum reflection (idempotent). The asset TYPE reflection
+    // bodies are their StaticType(), defined in PhysicsAssetImpl.cpp. Reflection track P1.
+    void RegisterPhysicsAssetReflection();
+
     // Registers the asset types for content-DB construction + deserialization.
     inline void RegisterPhysicsAssets()
     {
+        RegisterPhysicsAssetReflection(); // CollisionCookKind names for the property grid
         GlobalTypeRegistry().Register(CollisionShapeAsset::StaticType(), TypeDomain(u8"Editor"));
         RegisterSerializable<CollisionShapeAsset>();
         GlobalTypeRegistry().Register(PhysicalMaterialAsset::StaticType(), TypeDomain(u8"Editor"));
         RegisterSerializable<PhysicalMaterialAsset>();
     }
-
-    DRACONIC_DEFINE_OBJECT(CollisionShapeAsset, "draconic::physics")
-    DRACONIC_DEFINE_OBJECT(PhysicalMaterialAsset, "draconic::physics")
 }

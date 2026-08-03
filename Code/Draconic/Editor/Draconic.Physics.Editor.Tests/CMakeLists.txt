@@ -1,5 +1,5 @@
 
-add_executable(DraconicPhysicsPipelineTests TestsMain.cpp PhysicsPipelineTests.cpp)
+add_executable(DraconicPhysicsPipelineTests TestsMain.cpp PhysicsPipelineTests.cpp PhysicsReflectionTests.cpp)
 target_link_libraries(DraconicPhysicsPipelineTests PRIVATE
     Draconic::Physics.Editor Draconic::Physics.Resource Draconic::Physics Draconic::Editor
     Draconic::Geometry Draconic::Geometry.Editor Draconic::Geometry.Resource

@@ -12,6 +12,8 @@ target_link_libraries(Draconic.Fonts.Editor
            Draconic::Content Draconic::Policy)
 
 target_sources(Draconic.Fonts.Editor
+    PRIVATE
+        FontAssetImpl.cpp
     PUBLIC
         FILE_SET fonts_editor_modules TYPE CXX_MODULES FILES
             FontAsset.cppm)

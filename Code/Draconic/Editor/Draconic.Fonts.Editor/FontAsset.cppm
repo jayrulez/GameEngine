@@ -376,13 +376,16 @@ export namespace draconic::fonts
         }
     };
 
+    // Registers the FontBakeMode enum reflection (idempotent). FontAsset's own reflection body is
+    // its StaticType(), defined in FontAssetImpl.cpp. Reflection track P1.
+    void RegisterFontAssetReflection();
+
     // Registers FontAsset for content-DB construction + deserialization.
     inline void RegisterFontAsset()
     {
+        RegisterFontAssetReflection(); // FontBakeMode names for the property grid
         GlobalTypeRegistry().Register(FontAsset::StaticType(), TypeDomain(u8"Editor"));
         RegisterSerializable<FontAsset>();
         RegisterFontResource(); // the product type, for the cook's output DB
     }
-
-    DRACONIC_DEFINE_OBJECT(FontAsset, "draconic::fonts")
 }

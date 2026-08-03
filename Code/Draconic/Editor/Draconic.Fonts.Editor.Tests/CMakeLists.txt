@@ -1,4 +1,4 @@
-add_executable(Draconic.Fonts.Editor.Tests TestsMain.cpp FontPipelineTests.cpp)
+add_executable(Draconic.Fonts.Editor.Tests TestsMain.cpp FontPipelineTests.cpp FontReflectionTests.cpp)
 target_link_libraries(Draconic.Fonts.Editor.Tests PRIVATE
     Draconic::Fonts.Editor Draconic::Fonts.Resource Draconic::Fonts Draconic::Editor
     Draconic::Editor.Core Draconic::Content Draconic::Resource Draconic::VFS Draconic::Image doctest::doctest)

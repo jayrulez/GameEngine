@@ -125,6 +125,68 @@ TEST_CASE("frame: MultipleChildren_Stacked")
     CHECK(b->Bounds.x == doctest::Approx(160).epsilon(0.01));
 }
 
+// Reproduces the scene editor's viewport pane (task #118 camera preview): a vertical FlexLayout
+// stacks a fixed-height toolbar over a grow FrameLayout whose Fill child is the 3D viewport and
+// whose bottom-right child is the preview overlay. The regression check is the FILL child's
+// SCREEN position - the input surface region is LocalToScreen(0,0) + Width/Height, so if the
+// nested Fill child's screen origin is off, viewport picking/gizmo input lands in the wrong place.
+TEST_CASE("frame: nested Fill child inside a grow FlexLayout keeps its screen origin (task #118)")
+{
+    UIContext ctx;
+    auto root = MakeRoot();
+    Init(ctx, root.Get(), 400, 300);
+
+    auto pane = New<FlexLayout>();
+    pane->Direction = Orientation::Vertical;
+
+    auto toolbar = TV(0, 0);
+    {
+        auto lp = New<FlexLayoutParams>();
+        lp->Width = SizeSpec::Match();
+        lp->Height = SizeSpec::Fixed(Unit::Px(30));
+        pane->AddView(toolbar.Get(), lp);
+    }
+
+    auto frame = New<FrameLayout>();
+    auto viewport = TV(256, 256); // measures small like ViewportView; Fill overrides it
+    {
+        auto vfp = New<FrameLayoutParams>();
+        vfp->Gravity = Gravity::Fill;
+        frame->AddView(viewport.Get(), vfp);
+    }
+    auto preview = TV(320, 204);
+    {
+        auto pfp = New<FrameLayoutParams>();
+        pfp->Gravity = Gravity::Bottom | Gravity::Right;
+        pfp->Margin = Thickness{12, 12, 12, 12};
+        frame->AddView(preview.Get(), pfp);
+    }
+    {
+        auto lp = New<FlexLayoutParams>();
+        lp->Width = SizeSpec::Match();
+        lp->Grow = 1.0f;
+        pane->AddView(frame.Get(), lp);
+    }
+    root->AddView(pane.Get());
+    LayoutPass(ctx, root.Get());
+
+    // The frame occupies everything below the 30px toolbar; the Fill viewport fills the frame.
+    CHECK(frame->Bounds.y == doctest::Approx(30));
+    CHECK(viewport->Width() == doctest::Approx(400).epsilon(0.01));
+    CHECK(viewport->Height() == doctest::Approx(270).epsilon(0.01));
+
+    // The load-bearing assertion: the viewport's content origin in SCREEN space is (0, 30), NOT
+    // (0, 0). This is exactly what SyncInputRegion feeds the input surface.
+    const Float2 origin = viewport->LocalToScreen(Float2{0.0f, 0.0f});
+    CHECK(origin.x == doctest::Approx(0));
+    CHECK(origin.y == doctest::Approx(30));
+
+    // The preview overlay sits bottom-right inside the frame, 12px inset (screen space).
+    const Float2 pv = preview->LocalToScreen(Float2{0.0f, 0.0f});
+    CHECK(pv.x == doctest::Approx(400 - 12 - 320).epsilon(0.01));
+    CHECK(pv.y == doctest::Approx(30 + 270 - 12 - 204).epsilon(0.01));
+}
+
 // === AbsoluteLayout ===
 
 TEST_CASE("absolute: ChildAtExplicitPosition")

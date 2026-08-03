@@ -768,7 +768,9 @@ export namespace draconic::audio
         RegisterSerializable<SoundCueAsset>();
     }
 
-    DRACONIC_DEFINE_OBJECT(AudioClipAsset, "draconic::audio")
+    // AudioClipAsset's StaticType() is defined WITH reflected properties in AudioAssetImpl.cpp
+    // (reflection track P1). The remaining audio assets stay identity-only for now (bus layout /
+    // sound cue carry nested structure that a flat property pass doesn't cover).
     DRACONIC_DEFINE_OBJECT(AudioImportOptions, "draconic::audio")
     // v2: the custom-bus slot bank (see Serialize) - v0/v1 sources read cleanly.
     DRACONIC_DEFINE_OBJECT_VERSIONED(AudioBusLayoutAsset, "draconic::audio", 2)

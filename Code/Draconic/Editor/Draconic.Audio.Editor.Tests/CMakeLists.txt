@@ -1,4 +1,4 @@
-add_executable(DraconicAudioPipelineTests TestsMain.cpp AudioPipelineTests.cpp)
+add_executable(DraconicAudioPipelineTests TestsMain.cpp AudioPipelineTests.cpp AudioReflectionTests.cpp)
 target_link_libraries(DraconicAudioPipelineTests PRIVATE
     Draconic::Audio.Editor Draconic::Audio.Resource Draconic::Audio Draconic::Editor
     Draconic::Editor.Core Draconic::Content Draconic::Resource Draconic::VFS doctest::doctest)

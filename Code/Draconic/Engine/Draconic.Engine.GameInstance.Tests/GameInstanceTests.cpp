@@ -608,6 +608,43 @@ TEST_CASE("game-instance: LoadScene / LoadSceneAsync own the scene load orchestr
         CHECK_FALSE(gi.SceneReady()); // nothing became current
     }
 
+    SUBCASE("destroying a pending scene sweeps its tracked load (no dangling activation)")
+    {
+        // Fable review finding: the tracked handle holds a raw Scene*. Destroying the pending
+        // scene before it activates must drop the tracked load, or PumpScriptLoads would later
+        // activate freed memory.
+        runtime::GameInstance gi;
+        runtime::SceneLoadHandle handle =
+            gi.LoadSceneAsync(*sceneInst, resources, Function<UniquePtr<IStream>(const Guid&)>{});
+        REQUIRE(handle.Scene() != nullptr);
+        scene::Scene* pending = handle.Scene();
+        const i32 ticket = gi.TrackScriptLoad(handle);
+        CHECK_FALSE(gi.ScriptLoadComplete(ticket)); // in flight (not yet activated)
+
+        gi.DestroyScene(pending);   // sweeps the tracked entry BEFORE freeing the scene
+        gi.PumpScriptLoads();       // must be a safe no-op (nothing to activate)
+        CHECK(gi.ScriptLoadComplete(ticket));   // the ticket now reads terminal-safe via the fallback
+        CHECK_FALSE(gi.ScriptLoadFailed(ticket));
+        CHECK_FALSE(gi.SceneReady());           // nothing became current
+    }
+
+    SUBCASE("script-load registry: a successful load is RETIRED on activation (bounded growth)")
+    {
+        // Fable review finding: m_scriptLoads used to grow monotonically. After activation the
+        // entry is dropped, so re-destroying the (now active) scene is a safe no-op and the ticket
+        // still reads terminal-safe - the externally observable contract is unchanged.
+        runtime::GameInstance gi;
+        const i32 ticket = gi.TrackScriptLoad(
+            gi.LoadSceneAsync(*sceneInst, resources, Function<UniquePtr<IStream>(const Guid&)>{}));
+        gi.PumpScriptLoads(); // activates + retires the entry
+        REQUIRE(gi.SceneReady());
+        scene::Scene* live = gi.GetScene();
+        CHECK(gi.ScriptLoadComplete(ticket)); // retired -> fallback (complete)
+        gi.DestroyScene(live);                // no tracked entry references it anymore: safe
+        gi.PumpScriptLoads();                 // still a safe no-op
+        CHECK(gi.ScriptLoadComplete(ticket));
+    }
+
     FileDelete(u8"draconic_gi_load_db/level.rasset");
     FileDelete(u8"draconic_gi_load_db/level.scene.bin");
     RemoveDirectory(u8"draconic_gi_load_db");

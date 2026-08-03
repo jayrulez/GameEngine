@@ -226,8 +226,21 @@ export namespace draconic::runtime
         /// `activate` (default true) matches the classic behavior; false creates it inactive for an
         /// async load (see LoadSceneAsync).
         scene::Scene* CreateScene(core::StringView name, bool activate = true);
-        /// Destroy a scene in this instance's group.
-        void DestroyScene(scene::Scene* scene) { m_sceneManager.DestroyScene(scene); }
+        /// Destroy a scene in this instance's group. Drops any tracked async load whose pending
+        /// target IS this scene BEFORE freeing it, so PumpScriptLoads can never activate a dangling
+        /// Scene* (Fable review finding: the handle holds a raw Scene*). A dropped ticket then reads
+        /// terminal-safe (complete=true, failed=false) via the unknown-ticket fallback.
+        void DestroyScene(scene::Scene* scene)
+        {
+            for (core::usize i = m_scriptLoads.Size(); i > 0; --i)
+            {
+                if (m_scriptLoads[i - 1].handle.Scene() == scene)
+                {
+                    m_scriptLoads.RemoveAt(i - 1);
+                }
+            }
+            m_sceneManager.DestroyScene(scene);
+        }
 
         // ---- scene / level load (task #123): the load ORCHESTRATION lives on the instance (the
         // user-controllable unit), de-duping the identical block PlayerApplication + GamePageImpl
@@ -400,17 +413,17 @@ export namespace draconic::runtime
         input::IInputSourceProvider* m_inputSource =
             nullptr; // borrowed: the viewport / shell devices
 
-        // Script-driven scene loads (task #123): in-flight handles keyed by ticket. Completed loads
-        // linger (a script may query its ticket at any time); a game issues a handful, so the array
-        // stays tiny. m_nextScriptTicket only grows, so tickets never alias across a run.
-        // MINOR (Fable review): m_scriptLoads grows monotonically (one entry per level switch, linear
-        // scans in the polls). If level switches per run ever become unbounded, retire entries once
-        // activated/failed AND polled, or sweep them on scene destroy. Low priority as is.
+        // Script-driven scene loads (task #123): in-flight handles keyed by ticket. An entry lives
+        // only while its load is IN FLIGHT or has FAILED - PumpScriptLoads RETIRES an entry the moment
+        // it activates successfully (Fable review: was monotonic growth). A retired ticket reads
+        // terminal-safe via the unknown-ticket fallback (progress 1, complete true, failed false),
+        // which is exactly the post-activation answer, so dropping it is transparent to the script.
+        // Failed entries linger so ScriptLoadFailed stays truthful; failures are exceptional, so the
+        // array stays bounded across level switches. m_nextScriptTicket only grows -> tickets never alias.
         struct TrackedScriptLoad
         {
             i32 ticket = 0;
             SceneLoadHandle handle;
-            bool activated = false;
         };
         core::Array<TrackedScriptLoad> m_scriptLoads;
         i32 m_nextScriptTicket = 0;

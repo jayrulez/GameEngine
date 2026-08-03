@@ -271,16 +271,22 @@ namespace draconic::runtime
 
     void GameInstance::PumpScriptLoads()
     {
-        for (TrackedScriptLoad& load : m_scriptLoads)
+        // Index walk (not range-for): a successful activation RETIRES its entry in place, so the
+        // array shrinks mid-loop (Fable review: was monotonic growth). Failed / in-flight entries
+        // stay and we advance past them.
+        for (core::usize i = 0; i < m_scriptLoads.Size();)
         {
-            if (load.activated || load.handle.Failed() || !load.handle.IsComplete())
+            TrackedScriptLoad& load = m_scriptLoads[i];
+            if (load.handle.Failed() || !load.handle.IsComplete())
             {
-                continue; // still streaming, already live, or terminally failed
+                ++i; // terminally failed (lingers so ScriptLoadFailed stays truthful) or still streaming
+                continue;
             }
             scene::Scene* activated = ActivateLoadedScene(load.handle);
             if (activated == nullptr)
             {
                 load.handle.m_failed = true; // complete-but-unactivatable: terminal (defensive)
+                ++i;
                 continue;
             }
             SetScene(activated);              // instance bookkeeping: current scene + net replication
@@ -288,7 +294,7 @@ namespace draconic::runtime
             {
                 m_activatePolicy(activated); // app render/sim policy (EnsureCamera, Start, ...)
             }
-            load.activated = true;
+            m_scriptLoads.RemoveAt(i); // retire: the ticket now reads terminal-safe via the fallback
         }
     }
 
@@ -298,10 +304,10 @@ namespace draconic::runtime
         {
             if (load.ticket == ticket)
             {
-                return load.activated ? 1.0f : load.handle.Progress();
+                return load.handle.Progress();
             }
         }
-        return 1.0f; // unknown/expired ticket
+        return 1.0f; // unknown/expired ticket (incl. a retired-on-activation load: complete)
     }
 
     bool GameInstance::ScriptLoadComplete(i32 ticket) const
@@ -310,10 +316,10 @@ namespace draconic::runtime
         {
             if (load.ticket == ticket)
             {
-                return load.activated || load.handle.Failed(); // terminal: live OR failed
+                return load.handle.Failed(); // a retained entry is terminal only when it FAILED
             }
         }
-        return true; // a bad/expired ticket must never hang a `while (!complete) yield` loop
+        return true; // retired-on-activation (success) OR a bad/expired ticket -> never hang the yield loop
     }
 
     bool GameInstance::ScriptLoadFailed(i32 ticket) const

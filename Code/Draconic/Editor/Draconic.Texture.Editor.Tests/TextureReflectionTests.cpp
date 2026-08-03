@@ -7,6 +7,8 @@
 #include "Draconic.Core/Reflection/Reflect.h"
 #include <initializer_list>
 import draconic.core;
+import draconic.vfs;
+import draconic.editor;
 import draconic.image;
 import draconic.texture;
 import draconic.texture.editor;
@@ -131,4 +133,52 @@ TEST_CASE("reflection-p1: enum property types resolve named values")
     REQUIRE(colorSpace != nullptr);
     REQUIRE(colorSpace->type != nullptr);
     CHECK(IsEnum(*colorSpace->type));
+}
+
+TEST_CASE("reflection-p1: the base Asset::fileName is inherited by every concrete asset")
+{
+    draconic::editor::RegisterAssetReflection();
+    draconic::texture::RegisterTextureAsset();
+
+    const TypeInfo& type = draconic::texture::TextureAsset::StaticType();
+
+    // fileName is NOT an own property of TextureAsset (it lives on the base)...
+    CHECK(FindProperty(type, "fileName") != nullptr);         // ...but the base chain finds it
+    bool ownHasFileName = false;
+    for (const PropertyInfo& p : Properties(type))
+    {
+        ownHasFileName = ownHasFileName || CEq(p.name, "fileName");
+    }
+    CHECK_FALSE(ownHasFileName); // proves it comes from the base, not duplicated per asset
+
+    // Round-trip a SourcePath through the inherited property.
+    const PropertyInfo* fileName = FindProperty(type, "fileName");
+    REQUIRE(fileName != nullptr);
+    draconic::texture::TextureAsset asset;
+    Instance inst = Instance::From(&asset);
+    CHECK(SetProperty(*fileName, inst,
+                      Variant::From(draconic::vfs::SourcePath(u8"Textures/wood.png")))
+              .IsOk());
+    CHECK(asset.fileName.View() == StringView(u8"Textures/wood.png"));
+    CHECK(GetProperty(*fileName, inst).Get<draconic::vfs::SourcePath>().View() ==
+          StringView(u8"Textures/wood.png"));
+}
+
+TEST_CASE("reflection-p1: SourcePath reflects as a value type with read accessors")
+{
+    draconic::editor::RegisterAssetReflection(); // registers SourcePath reflection
+
+    const TypeInfo& type = TypeOf<draconic::vfs::SourcePath>();
+    CHECK(CEq(type.name, "SourcePath"));
+    CHECK(FindMethod(type, "View") != nullptr);
+    CHECK(FindMethod(type, "Stem") != nullptr);
+    CHECK(FindMethod(type, "Extension") != nullptr);
+
+    // Construct + read through reflection.
+    Variant args[] = {Variant::From(StringView(u8"Audio/hit.wav"))};
+    Result<Variant> made = Construct(type, Span<Variant>{args, 1});
+    REQUIRE(made.HasValue());
+    const draconic::vfs::SourcePath path = made.Value().Get<draconic::vfs::SourcePath>();
+    CHECK(path.View() == StringView(u8"Audio/hit.wav"));
+    CHECK(path.Extension().AsView() == StringView(u8"wav"));
 }

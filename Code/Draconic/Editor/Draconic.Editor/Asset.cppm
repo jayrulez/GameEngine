@@ -196,5 +196,9 @@ export namespace draconic::editor
         Array<UniquePtr<IAssetBuilder>> m_builders;
     };
 
-    DRACONIC_DEFINE_OBJECT(Asset, "draconic::editor")
+    // Reflects the Asset base (its fileName property) + SourcePath, so EVERY concrete asset
+    // surfaces its source file through the base chain (FindProperty walks bases). Idempotent.
+    // Asset::StaticType() itself is defined WITH the fileName property in AssetImpl.cpp
+    // (reflection track P1).
+    void RegisterAssetReflection();
 }

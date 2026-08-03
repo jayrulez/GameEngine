@@ -187,4 +187,10 @@ export namespace draconic::vfs
             path.m_value = SourcePath::Normalize(path.m_value.AsView());
         }
     }
+
+    // Reflects SourcePath as a value type (read accessors + a StringView constructor) for tooling
+    // + scripting. The stored string is private, so there are no member properties - the accessors
+    // ARE the surface (the accessor-gated-state convention). Idempotent; body in the impl unit
+    // (gcc module-interface hygiene). Reflection track P1.
+    void RegisterVFSReflection();
 }

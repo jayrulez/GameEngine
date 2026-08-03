@@ -61,6 +61,7 @@ namespace
     // Every builder the engine ships (the editor executable assembles the same set).
     void RegisterAllBuilders(editor::BuilderRegistry& registry)
     {
+        draconic::editor::RegisterAssetReflection(); // base Asset::fileName + SourcePath
         draconic::texture::RegisterTextureAsset();
         draconic::fonts::RegisterFontAsset(); // asset + FontResource product
         draconic::image::RegisterImageAsset();

@@ -7,6 +7,8 @@ add_library(Draconic::VFS ALIAS Draconic.VFS)
 target_link_libraries(Draconic.VFS PUBLIC Draconic::Core Draconic::Policy)
 
 target_sources(Draconic.VFS
+    PRIVATE
+        VFSReflectionImpl.cpp
     PUBLIC
         FILE_SET vfs_modules TYPE CXX_MODULES FILES
             VfsModule.cppm

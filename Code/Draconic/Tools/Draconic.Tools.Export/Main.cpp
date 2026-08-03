@@ -179,6 +179,7 @@ namespace
     // Same builder set as Draconic.Tools.Cook/Draconic.Tools.Editor (kept in lockstep).
     void RegisterAllBuilders(editor::BuilderRegistry& registry)
     {
+        draconic::editor::RegisterAssetReflection(); // base Asset::fileName + SourcePath
         draconic::texture::RegisterTextureAsset();
         draconic::fonts::RegisterFontAsset(); // asset + FontResource product
         draconic::image::RegisterImageAsset();

@@ -96,6 +96,7 @@ namespace
     // Every engine builder (kept in lockstep with the Draconic.Tools.Cook CLI's set).
     void RegisterAllBuilders(editor::BuilderRegistry& registry)
     {
+        draconic::editor::RegisterAssetReflection(); // base Asset::fileName + SourcePath
         draconic::texture::RegisterTextureAsset();
         draconic::fonts::RegisterFontAsset(); // asset + FontResource product
         draconic::image::RegisterImageAsset();

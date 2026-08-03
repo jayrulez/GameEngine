@@ -1,5 +1,5 @@
 
-add_executable(DraconicTexturePipelineTests TestsMain.cpp TexturePipelineTests.cpp)
+add_executable(DraconicTexturePipelineTests TestsMain.cpp TexturePipelineTests.cpp TextureReflectionTests.cpp)
 target_link_libraries(DraconicTexturePipelineTests PRIVATE
     Draconic::Texture.Editor Draconic::Texture.Resource Draconic::Texture Draconic::Editor.Core
     Draconic::RHI Draconic::RHI.Null Draconic::Editor Draconic::Image Draconic::Image.IO

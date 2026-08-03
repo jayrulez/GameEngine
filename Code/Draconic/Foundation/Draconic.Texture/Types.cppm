@@ -40,4 +40,10 @@ export namespace draconic::texture
         ClampToBorder,
         MirroredRepeat,
     };
+
+    // Reflects TextureShape/TextureFilter/TextureWrap for tooling (enum-by-name dropdowns in the
+    // generic asset page) + scripting. Idempotent; called by consumers that need the enum names
+    // (the editor/cook/export tools via RegisterTextureAsset). Body lives in the impl unit
+    // (gcc module-interface hygiene). Reflection track P1.
+    void RegisterTextureReflection();
 }

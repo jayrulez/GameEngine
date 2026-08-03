@@ -665,12 +665,15 @@ export namespace draconic::texture
         }
     };
 
-    // Registers TextureAsset for content-DB construction + deserialization.
+    // Registers TextureAsset for content-DB construction + deserialization. Also registers the
+    // enum reflection its properties reference (owning modules; idempotent) so the generic asset
+    // page can render enum-by-name dropdowns. TextureAsset's OWN reflection body (properties +
+    // attributes) is TextureAsset::StaticType(), defined in TextureAssetImpl.cpp.
     inline void RegisterTextureAsset()
     {
+        RegisterTextureReflection();      // TextureShape / TextureFilter / TextureWrap names
+        image::RegisterImageReflection(); // ImageColorSpace names
         GlobalTypeRegistry().Register(TextureAsset::StaticType(), TypeDomain(u8"Editor"));
         RegisterSerializable<TextureAsset>();
     }
-
-    DRACONIC_DEFINE_OBJECT(TextureAsset, "draconic::texture")
 }

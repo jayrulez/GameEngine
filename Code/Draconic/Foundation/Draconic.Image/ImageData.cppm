@@ -22,11 +22,16 @@ export namespace draconic::image
     /// Color space of the pixel data.
     enum class ImageColorSpace : u32
     {
-        /// sRGB-encoded (photos, UI). GPU decodes sRGB→linear on sample.
+        /// sRGB-encoded (photos, UI). GPU decodes sRGB->linear on sample.
         Srgb,
         /// Linear data (normal maps, masks, HDR). Sampled as-is.
         Linear,
     };
+
+    // Reflects ImageColorSpace for tooling (enum-by-name dropdowns) + scripting. Idempotent;
+    // called by consumers that need the enum names (texture/image asset registration). Body
+    // lives in the impl unit (gcc module-interface hygiene). Reflection track P1.
+    void RegisterImageReflection();
 
     /// Abstract interface for image data. Implemented by OwnedImageData (owning)
     /// and ImageDataRef (non-owning). Allows renderers and other consumers to

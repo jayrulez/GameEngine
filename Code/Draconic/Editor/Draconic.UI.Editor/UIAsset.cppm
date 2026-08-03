@@ -226,6 +226,6 @@ export namespace draconic::ui
         RegisterSerializable<UIThemeAsset>();
     }
 
-    DRACONIC_DEFINE_OBJECT(UIDocumentAsset, "draconic::ui")
-    DRACONIC_DEFINE_OBJECT(UIThemeAsset, "draconic::ui")
+    // UIDocumentAsset/UIThemeAsset StaticType() are defined WITH reflected properties in
+    // UIAssetImpl.cpp (reflection track P1).
 }

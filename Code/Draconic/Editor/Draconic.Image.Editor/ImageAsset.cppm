@@ -90,12 +90,13 @@ export namespace draconic::image
         }
     };
 
-    // Registers ImageAsset for content-DB construction + deserialization.
+    // Registers ImageAsset for content-DB construction + deserialization. ImageAsset's own
+    // reflection body (colorSpace property) is its StaticType(), in ImageAssetImpl.cpp; the
+    // ImageColorSpace enum reflection lives in draconic.image. Reflection track P1.
     inline void RegisterImageAsset()
     {
+        RegisterImageReflection(); // ImageColorSpace names for the property grid
         GlobalTypeRegistry().Register(ImageAsset::StaticType(), TypeDomain(u8"Editor"));
         RegisterSerializable<ImageAsset>();
     }
-
-    DRACONIC_DEFINE_OBJECT(ImageAsset, "draconic::image")
 }

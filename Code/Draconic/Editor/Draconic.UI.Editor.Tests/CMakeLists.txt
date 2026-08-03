@@ -1,5 +1,5 @@
 
-add_executable(DraconicUIPipelineTests TestsMain.cpp UIPipelineTests.cpp)
+add_executable(DraconicUIPipelineTests TestsMain.cpp UIPipelineTests.cpp UIReflectionTests.cpp)
 target_link_libraries(DraconicUIPipelineTests PRIVATE
     Draconic::UI.Editor Draconic::UI.Resource Draconic::UI Draconic::Editor
     Draconic::Content Draconic::Resource Draconic::VFS doctest::doctest)

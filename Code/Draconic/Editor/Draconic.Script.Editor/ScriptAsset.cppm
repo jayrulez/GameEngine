@@ -674,5 +674,6 @@ export namespace draconic::script
         RegisterSerializable<ScriptClassAsset>();
     }
 
-    DRACONIC_DEFINE_OBJECT(ScriptClassAsset, "draconic::script")
+    // ScriptClassAsset::StaticType() is defined WITH reflected properties in ScriptAssetImpl.cpp
+    // (reflection track P1).
 }

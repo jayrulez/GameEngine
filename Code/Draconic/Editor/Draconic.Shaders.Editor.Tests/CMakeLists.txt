@@ -2,7 +2,8 @@
 
 add_executable(Draconic.Shaders.Editor.Tests
     TestsMain.cpp
-    ShaderEditorTests.cpp)
+    ShaderEditorTests.cpp
+    ShaderReflectionTests.cpp)
 
 target_link_libraries(Draconic.Shaders.Editor.Tests PRIVATE
     Draconic::Shaders.Editor doctest::doctest)

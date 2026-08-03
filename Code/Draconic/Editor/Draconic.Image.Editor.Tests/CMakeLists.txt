@@ -1,5 +1,5 @@
 
-add_executable(DraconicImagePipelineTests TestsMain.cpp ImagePipelineTests.cpp)
+add_executable(DraconicImagePipelineTests TestsMain.cpp ImagePipelineTests.cpp ImageReflectionTests.cpp)
 target_link_libraries(DraconicImagePipelineTests PRIVATE
     Draconic::Image.Editor Draconic::Image.Resource Draconic::Image Draconic::Image.IO
     Draconic::Editor Draconic::Content Draconic::Resource Draconic::VFS doctest::doctest)

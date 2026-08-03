@@ -8,6 +8,8 @@ target_link_libraries(Draconic.Shaders.Editor
            Draconic::Content Draconic::Policy)
 
 target_sources(Draconic.Shaders.Editor
+    PRIVATE
+        ShaderAssetImpl.cpp
     PUBLIC
         FILE_SET shader_editor_modules TYPE CXX_MODULES FILES
             ShaderAsset.cppm)

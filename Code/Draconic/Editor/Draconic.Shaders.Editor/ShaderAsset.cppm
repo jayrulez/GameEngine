@@ -122,5 +122,6 @@ export namespace draconic::shaders
         RegisterSerializable<ShaderAsset>();
     }
 
-    DRACONIC_DEFINE_OBJECT(ShaderAsset, "draconic::shaders")
+    // ShaderAsset::StaticType() is defined WITH reflected properties in ShaderAssetImpl.cpp
+    // (reflection track P1).
 }

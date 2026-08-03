@@ -1,6 +1,6 @@
 # The tests REGISTER the Wren backend (an entry point's job) - the library under test
 # stays backend-neutral and resolves through the registry (B3).
-add_executable(DraconicScriptPipelineTests TestsMain.cpp ScriptPipelineTests.cpp)
+add_executable(DraconicScriptPipelineTests TestsMain.cpp ScriptPipelineTests.cpp ScriptReflectionTests.cpp)
 target_link_libraries(DraconicScriptPipelineTests PRIVATE
     Draconic::Script.Editor Draconic::Script.Wren.Editor Draconic::Script.Resource Draconic::Script
     Draconic::Script.Wren Draconic::Script.Facades

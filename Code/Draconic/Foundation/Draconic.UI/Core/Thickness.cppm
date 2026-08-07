@@ -5,13 +5,13 @@
 // Beef properties -> methods).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:thickness;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

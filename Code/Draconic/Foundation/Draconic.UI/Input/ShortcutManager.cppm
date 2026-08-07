@@ -5,15 +5,15 @@
 // View/UIContext-touching bodies (TryDispatch/IsInScope) live in the module impl unit.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:shortcut_manager;
 
-import draconic.core; // Array, RefPtr, Function
+import draconic.foundation; // Array, RefPtr, Function
 import :input_enums;  // KeyCode, KeyModifiers
 import :shortcut;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

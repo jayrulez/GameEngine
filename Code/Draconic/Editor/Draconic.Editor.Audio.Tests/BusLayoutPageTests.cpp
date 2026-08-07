@@ -4,14 +4,14 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.audio;
 import draconic.audio.editor;
 import draconic.editor.audio;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace audio = draconic::audio;
 
 TEST_CASE("bus layout page: AudioBusWouldCycle catches direct + transitive cycles")

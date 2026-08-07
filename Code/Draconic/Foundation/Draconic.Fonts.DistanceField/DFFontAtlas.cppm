@@ -5,14 +5,14 @@
 // loadable from baked assets at runtime.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.fonts.distancefield:atlas;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.fonts;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::fonts
 {

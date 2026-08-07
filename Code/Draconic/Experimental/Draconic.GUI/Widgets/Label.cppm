@@ -6,20 +6,20 @@
 // follow the Text primitive's own growth.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:label;
 
-import draconic.core;  // StringView, Color, Float2
+import draconic.foundation;  // StringView, Color, Float2
 import draconic.fonts; // CachedFont
 import :rect;
 import :draw_context;
 import :text;
 import :ui_widget;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace fonts = draconic::fonts;
 
 export namespace draconic::gui
@@ -30,16 +30,16 @@ export namespace draconic::gui
     public:
         Label()
         {
-            SetTag(core::StringView(u8"label"));
+            SetTag(foundation::StringView(u8"label"));
             m_text.SetAlignment(TextHAlign::Left, TextVAlign::Middle);
         }
 
-        void SetText(core::StringView text)
+        void SetText(foundation::StringView text)
         {
             m_text.SetString(text);
             Invalidate();
         }
-        [[nodiscard]] core::StringView GetText() const { return m_text.GetString(); }
+        [[nodiscard]] foundation::StringView GetText() const { return m_text.GetString(); }
 
         void SetFont(fonts::CachedFont* font)
         {
@@ -68,16 +68,16 @@ export namespace draconic::gui
         }
 
         // Markup: <Label text="Hello" wrap="true">.
-        bool SetMarkupAttribute(core::StringView name, core::StringView value) override
+        bool SetMarkupAttribute(foundation::StringView name, foundation::StringView value) override
         {
-            if (name == core::StringView(u8"text"))
+            if (name == foundation::StringView(u8"text"))
             {
                 SetText(value);
                 return true;
             }
-            if (name == core::StringView(u8"wrap"))
+            if (name == foundation::StringView(u8"wrap"))
             {
-                SetWordWrap(value == core::StringView(u8"true"));
+                SetWordWrap(value == foundation::StringView(u8"true"));
                 return true;
             }
             return UIWidget::SetMarkupAttribute(name, value);
@@ -100,9 +100,9 @@ export namespace draconic::gui
         [[nodiscard]] bool IsWordWrap() const { return m_text.IsWordWrap(); }
 
         // The natural size of the text (for layout).
-        [[nodiscard]] core::Float2 MeasureText() const { return m_text.Measure(); }
+        [[nodiscard]] foundation::Float2 MeasureText() const { return m_text.Measure(); }
         // The size wrapped text occupies at `maxWidth` (widest line x total height).
-        [[nodiscard]] core::Float2 MeasureWrapped(f32 maxWidth) const
+        [[nodiscard]] foundation::Float2 MeasureWrapped(f32 maxWidth) const
         {
             return m_text.MeasureWrapped(maxWidth);
         }

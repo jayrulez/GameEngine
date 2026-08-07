@@ -1,10 +1,10 @@
 // VG batch/cache/clip: VGBatch bookkeeping, PathCache reuse + LRU, ClipPathManager.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.vg;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::vg;
 
 namespace

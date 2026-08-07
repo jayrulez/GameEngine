@@ -17,16 +17,16 @@
 // by the prefab machinery like every other entity ref in a payload.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.script.resource;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.resource;
 import draconic.content;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::script
 {
@@ -120,29 +120,29 @@ export namespace draconic::script
     inline void Serialize(ISerializer& ar, ScriptPropertyValue& v)
     {
         u8 kind = static_cast<u8>(v.kind);
-        draconic::core::Serialize(ar, "kind", kind);
+        draconic::foundation::Serialize(ar, "kind", kind);
         v.kind = static_cast<ScriptPropertyType>(kind);
         switch (v.kind)
         {
         case ScriptPropertyType::Float:
         case ScriptPropertyType::Int:
-            draconic::core::Serialize(ar, "number", v.number);
+            draconic::foundation::Serialize(ar, "number", v.number);
             break;
         case ScriptPropertyType::Bool:
-            draconic::core::Serialize(ar, "boolean", v.boolean);
+            draconic::foundation::Serialize(ar, "boolean", v.boolean);
             break;
         case ScriptPropertyType::String:
-            draconic::core::Serialize(ar, "text", v.text);
+            draconic::foundation::Serialize(ar, "text", v.text);
             break;
         case ScriptPropertyType::Color:
-            draconic::core::Serialize(ar, "color", v.color);
+            draconic::foundation::Serialize(ar, "color", v.color);
             break;
         case ScriptPropertyType::Vec3:
-            draconic::core::Serialize(ar, "vector", v.vector);
+            draconic::foundation::Serialize(ar, "vector", v.vector);
             break;
         case ScriptPropertyType::Entity:
         case ScriptPropertyType::Asset:
-            draconic::core::Serialize(ar, "guid", v.guid);
+            draconic::foundation::Serialize(ar, "guid", v.guid);
             break;
         case ScriptPropertyType::None:
         default:
@@ -194,14 +194,14 @@ export namespace draconic::script
 
     inline void Serialize(ISerializer& ar, ScriptPropertyDesc& d)
     {
-        draconic::core::Serialize(ar, "name", d.name);
-        draconic::core::Serialize(ar, "hash", d.hash);
+        draconic::foundation::Serialize(ar, "name", d.name);
+        draconic::foundation::Serialize(ar, "hash", d.hash);
         u8 type = static_cast<u8>(d.type);
-        draconic::core::Serialize(ar, "type", type);
+        draconic::foundation::Serialize(ar, "type", type);
         d.type = static_cast<ScriptPropertyType>(type);
-        draconic::core::Serialize(ar, "assetType", d.assetType);
-        draconic::core::Serialize(ar, "default", d.defaultValue);
-        draconic::core::Serialize(ar, "description", d.description);
+        draconic::foundation::Serialize(ar, "assetType", d.assetType);
+        draconic::foundation::Serialize(ar, "default", d.defaultValue);
+        draconic::foundation::Serialize(ar, "description", d.description);
     }
 
     // ---- the cooked record ----
@@ -222,13 +222,13 @@ export namespace draconic::script
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "language", language);
-            draconic::core::Serialize(ar, "className", className);
-            draconic::core::Serialize(ar, "sourceName", sourceName);
-            draconic::core::Serialize(ar, "source", source);
-            draconic::core::Serialize(ar, "properties", properties);
-            draconic::core::Serialize(ar, "handlers", handlers);
-            draconic::core::Serialize(ar, "usesCoroutines", usesCoroutines);
+            draconic::foundation::Serialize(ar, "language", language);
+            draconic::foundation::Serialize(ar, "className", className);
+            draconic::foundation::Serialize(ar, "sourceName", sourceName);
+            draconic::foundation::Serialize(ar, "source", source);
+            draconic::foundation::Serialize(ar, "properties", properties);
+            draconic::foundation::Serialize(ar, "handlers", handlers);
+            draconic::foundation::Serialize(ar, "usesCoroutines", usesCoroutines);
         }
     };
 

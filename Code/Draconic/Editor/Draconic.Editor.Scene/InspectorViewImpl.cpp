@@ -15,14 +15,14 @@
 // undo/redo and external changes (gizmos later) stay live.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 #include <limits>
 #include <initializer_list>
 
 module draconic.editor.scene;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.resource;
 import draconic.geometry;
@@ -47,8 +47,8 @@ import draconic.editor.core;
 import draconic.editor.app;
 import :edit;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 namespace draconic::editor
 {
@@ -381,13 +381,13 @@ namespace draconic::editor
     {
         SceneEditContext* edit = m_edit;
         const StringView category = u8"Transform";
-        const core::Transform t = m_edit->Scene().GetLocalTransform(m_edit->Resolve(id));
+        const foundation::Transform t = m_edit->Scene().GetLocalTransform(m_edit->Resolve(id));
 
         auto position = MakeRef<ui::toolkit::Float3Editor>(
             DefaultAllocator(), StringView(u8"Position"), t.position, -100000.0f, 100000.0f, 0.1f,
             Function<void(Float3)>{[edit, id](Float3 v)
                                    {
-                                       core::Transform current =
+                                       foundation::Transform current =
                                            edit->Scene().GetLocalTransform(edit->Resolve(id));
                                        current.position = v;
                                        edit->SetLocalTransform(id, current);
@@ -402,7 +402,7 @@ namespace draconic::editor
             1.0f,
             Function<void(Float3)>{[edit, id](Float3 v)
                                    {
-                                       core::Transform current =
+                                       foundation::Transform current =
                                            edit->Scene().GetLocalTransform(edit->Resolve(id));
                                        current.rotation = FromYawPitchRoll(DegreesToRadians(v.y),
                                                                            DegreesToRadians(v.x),
@@ -421,7 +421,7 @@ namespace draconic::editor
             DefaultAllocator(), StringView(u8"Scale"), t.scale, -100000.0f, 100000.0f, 0.1f,
             Function<void(Float3)>{[edit, id](Float3 v)
                                    {
-                                       core::Transform current =
+                                       foundation::Transform current =
                                            edit->Scene().GetLocalTransform(edit->Resolve(id));
                                        current.scale = v;
                                        edit->SetLocalTransform(id, current);
@@ -2167,7 +2167,7 @@ namespace draconic::editor
 
     const Float4* SceneInspectorView::RangeOf(const PropertyInfo& prop)
     {
-        const core::Attribute* attr = FindAttribute(prop, u8"range");
+        const foundation::Attribute* attr = FindAttribute(prop, u8"range");
         return (attr != nullptr) ? attr->value.TryGet<Float4>() : nullptr;
     }
 
@@ -2209,7 +2209,7 @@ namespace draconic::editor
             (void)buffer.Seek(0, SeekOrigin::Begin);
             BinarySerializer ar(buffer, SerializeMode::Read);
             String typeId;
-            draconic::core::Serialize(ar, "type", typeId);
+            draconic::foundation::Serialize(ar, "type", typeId);
             mgr->ReadComponent(ar, e);
         }
         if (!after.IsEmpty())
@@ -2275,7 +2275,7 @@ namespace draconic::editor
         ContainerListEditor* rawList = listEditor.Get();
         // "description" property attribute -> the list's hover tooltip (the reflection-consistent way
         // to carry help text, e.g. the mesh material slot-0 / submesh semantics).
-        if (const core::Attribute* description = FindAttribute(prop, u8"description"))
+        if (const foundation::Attribute* description = FindAttribute(prop, u8"description"))
         {
             if (const String* text = description->value.TryGet<String>())
             {

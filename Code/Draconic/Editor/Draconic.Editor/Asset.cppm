@@ -18,16 +18,16 @@
 //   - `BuilderRegistry`: asset type -> builder routing for the cook driver.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.editor;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 export import draconic.vfs; // Asset::fileName is vfs::SourcePath
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {
@@ -45,7 +45,7 @@ export namespace draconic::editor
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "fileName", fileName);
+            draconic::foundation::Serialize(ar, "fileName", fileName);
         }
     };
 

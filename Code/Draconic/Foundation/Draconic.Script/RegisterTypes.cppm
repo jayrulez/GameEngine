@@ -1,26 +1,26 @@
 // Draconic Script - :script_register partition
 //
 // Bridges reflection -> scripting: registers every type in a TypeRegistry with a
-// script manager. Call after the engine's RegisterCoreTypes() (and any
+// script manager. Call after the engine's RegisterFoundationTypes() (and any
 // higher-layer registration) to expose them to scripts in one shot.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.script:script_register;
 
-import draconic.core;
+import draconic.foundation;
 import :script_manager;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::script
 {
     inline void
     RegisterReflectedTypes(IScriptManager& manager,
-                           const core::TypeRegistry& registry = core::GlobalTypeRegistry())
+                           const foundation::TypeRegistry& registry = foundation::GlobalTypeRegistry())
     {
-        for (const core::TypeInfo* type : registry.All())
+        for (const foundation::TypeInfo* type : registry.All())
         {
             manager.RegisterType(*type);
         }

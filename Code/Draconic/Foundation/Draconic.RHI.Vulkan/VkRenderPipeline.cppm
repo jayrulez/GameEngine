@@ -2,20 +2,20 @@
 /// Ported from Sedulous.RHI.Vulkan/VulkanRenderPipeline.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include "VkIncludes.h"
 
 export module draconic.rhi.vulkan:render_pipeline;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :conversions;
 import :shader_module;
 import :pipeline_layout;
 import :pipeline_cache;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::vk
 {

@@ -1,11 +1,11 @@
 // draconic.net:socket - the REAL UDP backend over localhost (integration: uses the OS network stack).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.net;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace net = draconic::net;
 
 TEST_CASE("udp: endpoint pack/unpack and IPv4 parsing round-trip")

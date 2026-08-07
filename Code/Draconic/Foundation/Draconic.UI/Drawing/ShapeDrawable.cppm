@@ -1,19 +1,19 @@
 // Draconic UI - :shape_drawable partition
 //
 // Delegate-based custom drawing without subclassing. Ported from
-// Sedulous.UI/src/Drawing/ShapeDrawable.bf (Beef delegate -> core::Function).
+// Sedulous.UI/src/Drawing/ShapeDrawable.bf (Beef delegate -> foundation::Function).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:shape_drawable;
 
-import draconic.core; // Function, Rectangle
+import draconic.foundation; // Function, Rectangle
 import :drawable;
 import :draw_context;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

@@ -1,13 +1,13 @@
 // Ported from Sedulous.UI.Tests/src/PopupPositionerTests.bf (faithful). Beef `let (x,y) = ...` tuple ->
-// Float2; RectangleF -> core::Rectangle; Vector2 -> Float2; Math.Abs(d) < eps -> doctest::Approx.
+// Float2; RectangleF -> foundation::Rectangle; Vector2 -> Float2; Math.Abs(d) < eps -> doctest::Approx.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 
 using namespace draconic::ui;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 TEST_CASE("popup-positioner: BestFit_PositionsBelowAnchor")
 {

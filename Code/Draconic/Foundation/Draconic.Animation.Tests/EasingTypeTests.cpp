@@ -1,11 +1,11 @@
-// EasingType -> core easing function mapping. Ported from Sedulous.Animation.Tests.EasingTypeTests.
+// EasingType -> foundation easing function mapping. Ported from Sedulous.Animation.Tests.EasingTypeTests.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.animation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::animation;
 
 TEST_CASE("easing: Linear returns input unchanged")

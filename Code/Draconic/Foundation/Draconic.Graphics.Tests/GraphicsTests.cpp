@@ -3,15 +3,15 @@
 // Covers device bring-up, per-window frame begin/end, the frame-in-flight ring,
 // multi-window rendering, resize, and the minimized-skip path.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.graphics;
 import draconic.graphics.null;
 import draconic.shell;
 import draconic.shell.null;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::graphics; // GraphicsDevice etc. (moved from draconic::runtime)
 using namespace draconic::shell;
 

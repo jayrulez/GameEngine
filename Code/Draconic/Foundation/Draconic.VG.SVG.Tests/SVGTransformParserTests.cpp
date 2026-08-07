@@ -1,11 +1,11 @@
 // Ported from Sedulous.VG.Tests/SVGTransformParserTests.bf.
 // (M11->m[0][0], M12->m[0][1], M21->m[1][0], M22->m[1][1], M41->m[3][0], M42->m[3][1].)
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.vg.svg;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::vg::svg;
 
 TEST_CASE("svg.transform: translate")

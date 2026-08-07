@@ -14,12 +14,12 @@
 // player and the editor's Game tab both consume it instead of hand-rolling copies.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 export module draconic.engine.defaultapp;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.runtime.client;       // IApplication, IApplicationHost
 import draconic.engine.gameinstance; // GameInstance - this app's running game (scene + script bracket)
@@ -68,7 +68,7 @@ import draconic.engine.net; // NetworkSubsystem (injects the NetworkComponentMan
 import draconic.profiler;      // the CPU scope profiler (P-key dump)
 
 namespace rhi = draconic::rhi;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace net = draconic::net;   // NetworkManager + NetworkStartup + the Net facade
 using namespace draconic::shell; // IShell + input/window types (moved from draconic::runtime)
 using namespace draconic::
@@ -82,12 +82,12 @@ export namespace draconic::runtime
         // Press P to print the previous frame's CPU scope tree + per-pass GPU timing. A game
         // subclass that overrides OnUpdate should call DefaultApplication::OnUpdate(host, dt) to
         // keep the hotkey. (Reads the GPU timestamps after a device stall - fine for an on-demand dump.)
-        void OnUpdate(IApplicationHost& host, core::f32 deltaTime) override;
+        void OnUpdate(IApplicationHost& host, foundation::f32 deltaTime) override;
 
         // Ticks the game script with GAMEPLAY time: dt x context scale x the primary
         // scene's scale (per-scene time, H1). Subclasses overriding OnUpdate call the
         // base to keep the script (and the profile hotkey) alive.
-        void TickGameScript(IApplicationHost& host, core::f32 deltaTime);
+        void TickGameScript(IApplicationHost& host, foundation::f32 deltaTime);
 
         // Registers ALL standard engine subsystems. A game subclass overrides this,
         // calls DefaultApplication::Configure(host) first, then adds its own. Entry
@@ -131,7 +131,7 @@ export namespace draconic::runtime
         // Drives networking on the FIXED lane (deterministic step) for EVERY instance: pump datagrams,
         // dispatch RPCs, push per-peer deltas / sample interpolation. Runs even with no game script (a
         // dedicated server has none). A subclass overriding OnFixedUpdate calls the base to keep it alive.
-        void OnFixedUpdate(IApplicationHost& host, core::f32 fixedDeltaTime) override;
+        void OnFixedUpdate(IApplicationHost& host, foundation::f32 fixedDeltaTime) override;
         /// Preset BEFORE Configure: audio engine tuning (listener count for split-screen,
         /// voice pool sizes). Defaults suit a single-listener game.
         void SetAudioEngineSettings(const draconic::audio::AudioEngineSettings& settings);
@@ -139,7 +139,7 @@ export namespace draconic::runtime
 
         /// TTF for the game UI's default font (preset BEFORE Configure; the editor passes
         /// its own font path, the player defaults to the dev-tree Roboto).
-        void SetUIFontPath(core::StringView path) { m_uiFontPath = core::String(path); }
+        void SetUIFontPath(foundation::StringView path) { m_uiFontPath = foundation::String(path); }
 
         // ---- infrastructure preset (Sedulous PresetInfrastructure lineage): shared
         // pieces are handed in BEFORE Startup; anything not preset the app creates for
@@ -183,7 +183,7 @@ export namespace draconic::runtime
         /// The CALLER resolves where the source lives (player: project file / pak entry; editor:
         /// SourceDb). The exposeServices lambda binds the per-context script facades on the fallback
         /// path (the normal path uses the ScriptSubsystem's configured shared context).
-        bool StartGameScript(core::StringView source, core::StringView name);
+        bool StartGameScript(foundation::StringView source, foundation::StringView name);
 
         /// exit() + release (idempotent; the update fault path also lands here). The run host tears
         /// down via the scene-stop observer once the run's scene stops.
@@ -237,10 +237,10 @@ export namespace draconic::runtime
         draconic::model::ModelFactory m_modelFactory;
         draconic::ui::UIDocumentFactory m_uiDocumentFactory;
         draconic::ui::UIThemeFactory m_uiThemeFactory;
-        core::UniquePtr<draconic::texture::TextureFactory> m_textureFactory;
+        foundation::UniquePtr<draconic::texture::TextureFactory> m_textureFactory;
         draconic::resource::ResourceManager* m_borrowedResources = nullptr;
         draconic::content::IContentDatabase* m_contentDatabase = nullptr;
-        core::UniquePtr<draconic::resource::ResourceManager> m_ownedResources;
+        foundation::UniquePtr<draconic::resource::ResourceManager> m_ownedResources;
         draconic::input::InputSubsystem* m_input = nullptr;
         draconic::ui::UISubsystem* m_ui = nullptr;
         // Backs the Ui.* script facade with the live screen tier (task #123 step 3.5): the host owns
@@ -248,7 +248,7 @@ export namespace draconic::runtime
         // context by the context configurator. App-owned (the screen tier is app-wide).
         draconic::ui::UiScriptHost m_uiScriptHost;
         draconic::ui::UiScriptBinding m_uiScriptBinding;
-        core::String m_uiFontPath;
+        foundation::String m_uiFontPath;
         draconic::physics::PhysicsSubsystem* m_physics = nullptr;
         draconic::audio::AudioSubsystem* m_audio = nullptr;
         net::NetworkStartup m_netStartup; // preset before Configure (default = single-player)
@@ -259,7 +259,7 @@ export namespace draconic::runtime
         void ForEachInstance(Fn&& fn)
         {
             fn(m_instance);
-            for (core::UniquePtr<GameInstance>& gi : m_extraInstances)
+            for (foundation::UniquePtr<GameInstance>& gi : m_extraInstances)
             {
                 fn(*gi);
             }
@@ -278,7 +278,7 @@ export namespace draconic::runtime
 
         draconic::scene::SceneSubsystem* m_scenes = nullptr;
         GameInstance m_instance; // the primary running game (app-level ops target this one)
-        core::Array<core::UniquePtr<GameInstance>>
+        foundation::Array<foundation::UniquePtr<GameInstance>>
             m_extraInstances; // multi-instance PIE / headless server
     };
 }

@@ -1,11 +1,11 @@
-// Ported from Sedulous.UI.Tests/src/ViewTransformTests.bf (faithful; Vector2 -> core::Float2).
+// Ported from Sedulous.UI.Tests/src/ViewTransformTests.bf (faithful; Vector2 -> foundation::Float2).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 
 using namespace draconic::ui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 TEST_CASE("view-transform: Default_IsIdentity")
 {
@@ -16,7 +16,7 @@ TEST_CASE("view-transform: Default_IsIdentity")
 TEST_CASE("view-transform: WithTranslation_NotIdentity")
 {
     ViewTransform t;
-    t.Translation = core::Float2{10.0f, 20.0f};
+    t.Translation = foundation::Float2{10.0f, 20.0f};
     CHECK_FALSE(t.IsIdentity());
 }
 
@@ -30,7 +30,7 @@ TEST_CASE("view-transform: WithRotation_NotIdentity")
 TEST_CASE("view-transform: WithScale_NotIdentity")
 {
     ViewTransform t;
-    t.Scale = core::Float2{2.0f, 2.0f};
+    t.Scale = foundation::Float2{2.0f, 2.0f};
     CHECK_FALSE(t.IsIdentity());
 }
 

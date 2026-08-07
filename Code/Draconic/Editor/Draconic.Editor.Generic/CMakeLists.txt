@@ -5,7 +5,7 @@ add_library(Draconic::Editor.Generic ALIAS Draconic.Editor.Generic)
 
 target_link_libraries(Draconic.Editor.Generic
     PUBLIC
-        Draconic::Core Draconic::Content
+        Draconic::Foundation Draconic::Content
         Draconic::UI Draconic::UI.Toolkit
         Draconic::Editor.Core Draconic::Editor.App Draconic::Policy)
 

@@ -3,7 +3,7 @@
 add_executable(PhysicsPlayground main.cpp)
 
 target_link_libraries(PhysicsPlayground PRIVATE
-    Draconic::Core
+    Draconic::Foundation
     Draconic::Runtime
     Draconic::Runtime.Client
     Draconic::Shell.Desktop Draconic::Runtime.Desktop

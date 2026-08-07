@@ -2,16 +2,16 @@
 /// Ported from Sedulous.RHI.DX12/DX12ShaderModule.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include <cstring>
 
 export module draconic.rhi.dx12:shader_module;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::dx12
 {

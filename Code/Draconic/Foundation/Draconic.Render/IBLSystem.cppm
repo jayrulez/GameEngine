@@ -19,18 +19,18 @@
 /// caches can key on it alone ([[bind-group-cache-versioning]]).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.render:ibl;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.rendergraph;
 import draconic.shaders;
 import draconic.shaders.system;
 import :data;        // SkySnapshot / SkyMode / ExtractedScene (context identity)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 
 export namespace draconic::render

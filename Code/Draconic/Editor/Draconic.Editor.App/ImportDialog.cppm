@@ -10,16 +10,16 @@
 // later nicety; the seam is the options object, which already travels through the importer.)
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.editor.app:import_dialog;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.ui;
 import draconic.editor.core;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor::app
 {

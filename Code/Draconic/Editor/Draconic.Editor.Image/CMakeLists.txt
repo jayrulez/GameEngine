@@ -5,7 +5,7 @@ add_library(Draconic::Editor.Image ALIAS Draconic.Editor.Image)
 
 target_link_libraries(Draconic.Editor.Image
     PUBLIC
-        Draconic::Core Draconic::Content
+        Draconic::Foundation Draconic::Content
         Draconic::Image Draconic::Image.IO Draconic::Image.Editor
         Draconic::UI Draconic::UI.Toolkit
         Draconic::Editor.Core Draconic::Editor.App Draconic::Policy)

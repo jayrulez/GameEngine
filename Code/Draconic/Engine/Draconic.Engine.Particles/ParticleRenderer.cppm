@@ -7,11 +7,11 @@
 // draw-list sort. Registered with RenderSubsystem via the RegisterRenderer seam (rides Transparent).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.engine.particles:renderer;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.shaders;
 import draconic.shaders.system;
@@ -19,7 +19,7 @@ import draconic.render; // Renderer, RenderRecordContext, ResolvedDraw, DrawItem
 import draconic.particles; // ParticleBlendMode
 import :renderdata;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 namespace shaders = draconic::shaders;
 namespace render = draconic::render;
@@ -47,7 +47,7 @@ export namespace draconic::particles
         ParticleRenderer(const ParticleRenderer&) = delete;
         ParticleRenderer& operator=(const ParticleRenderer&) = delete;
 
-        core::Status Initialize()
+        foundation::Status Initialize()
         {
 
             rhi::BindGroupLayoutEntry viewEntry = rhi::BindGroupLayoutEntry::UniformBuffer(
@@ -57,7 +57,7 @@ export namespace draconic::particles
             vld.entries = Span<const rhi::BindGroupLayoutEntry>{&viewEntry, 1};
             if (!m_device->CreateBindGroupLayout(vld, m_viewLayout).IsOk())
             {
-                return core::Status{core::ErrorCode::Unknown};
+                return foundation::Status{foundation::ErrorCode::Unknown};
             }
 
             rhi::BindGroupLayoutEntry texEntries[] = {
@@ -68,7 +68,7 @@ export namespace draconic::particles
             tld.entries = Span<const rhi::BindGroupLayoutEntry>{texEntries, 2};
             if (!m_device->CreateBindGroupLayout(tld, m_texLayout).IsOk())
             {
-                return core::Status{core::ErrorCode::Unknown};
+                return foundation::Status{foundation::ErrorCode::Unknown};
             }
 
             // set 2: the opaque scene depth (sampled via Load, no sampler) for soft particles.
@@ -80,7 +80,7 @@ export namespace draconic::particles
             dld.entries = Span<const rhi::BindGroupLayoutEntry>{&depthEntry, 1};
             if (!m_device->CreateBindGroupLayout(dld, m_depthLayout).IsOk())
             {
-                return core::Status{core::ErrorCode::Unknown};
+                return foundation::Status{foundation::ErrorCode::Unknown};
             }
 
             rhi::BindGroupLayout* layouts[] = {m_viewLayout, m_texLayout, m_depthLayout};
@@ -88,7 +88,7 @@ export namespace draconic::particles
             pld.bindGroupLayouts = Span<rhi::BindGroupLayout* const>{layouts, 3};
             if (!m_device->CreatePipelineLayout(pld, m_pipelineLayout).IsOk())
             {
-                return core::Status{core::ErrorCode::Unknown};
+                return foundation::Status{foundation::ErrorCode::Unknown};
             }
 
             rhi::SamplerDesc sd{};
@@ -99,7 +99,7 @@ export namespace draconic::particles
             sd.addressW = rhi::AddressMode::ClampToEdge;
             if (!m_device->CreateSampler(sd, m_sampler).IsOk())
             {
-                return core::Status{core::ErrorCode::Unknown};
+                return foundation::Status{foundation::ErrorCode::Unknown};
             }
 
             const u16 indices[6] = {0, 1, 2, 3, 4, 5};
@@ -110,7 +110,7 @@ export namespace draconic::particles
             ibd.label = u8"particle.indices";
             if (!m_device->CreateBuffer(ibd, m_indexBuffer).IsOk())
             {
-                return core::Status{core::ErrorCode::Unknown};
+                return foundation::Status{foundation::ErrorCode::Unknown};
             }
             if (void* p = m_indexBuffer->Map())
             {
@@ -147,14 +147,14 @@ export namespace draconic::particles
             wtd.label = u8"particle.softdot";
             if (!m_device->CreateTexture(wtd, m_whiteTex).IsOk())
             {
-                return core::Status{core::ErrorCode::Unknown};
+                return foundation::Status{foundation::ErrorCode::Unknown};
             }
             rhi::TextureViewDesc wvd{};
             wvd.format = rhi::TextureFormat::RGBA8Unorm;
             wvd.dimension = rhi::TextureViewDimension::Texture2D;
             if (!m_device->CreateTextureView(m_whiteTex, wvd, m_whiteView).IsOk())
             {
-                return core::Status{core::ErrorCode::Unknown};
+                return foundation::Status{foundation::ErrorCode::Unknown};
             }
             if (rhi::Queue* q = m_device->GetQueue(rhi::QueueType::Graphics))
             {
@@ -178,7 +178,7 @@ export namespace draconic::particles
             tpld.bindGroupLayouts = Span<rhi::BindGroupLayout* const>{trailLayouts, 2};
             if (!m_device->CreatePipelineLayout(tpld, m_trailPipelineLayout).IsOk())
             {
-                return core::Status{core::ErrorCode::Unknown};
+                return foundation::Status{foundation::ErrorCode::Unknown};
             }
             rhi::BufferDesc tibd{};
             tibd.size = static_cast<u64>(kTrailMaxIndices) * sizeof(u32);
@@ -187,7 +187,7 @@ export namespace draconic::particles
             tibd.label = u8"particle.trailindices";
             if (!m_device->CreateBuffer(tibd, m_trailIndexBuffer).IsOk())
             {
-                return core::Status{core::ErrorCode::Unknown};
+                return foundation::Status{foundation::ErrorCode::Unknown};
             }
             if (void* p = m_trailIndexBuffer->Map())
             {
@@ -198,7 +198,7 @@ export namespace draconic::particles
                 }
                 m_trailIndexBuffer->Unmap();
             }
-            return core::Status{};
+            return foundation::Status{};
         }
 
         [[nodiscard]] Span<const render::RenderCategory> SupportedCategories() const override

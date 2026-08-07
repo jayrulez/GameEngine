@@ -5,14 +5,14 @@
 // for list and table models); a parent handle for tree models is a follow-up.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:model_index;
 
-import draconic.core; // i32
+import draconic.foundation; // i32
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {

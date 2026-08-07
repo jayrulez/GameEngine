@@ -7,28 +7,28 @@
 // reader, and keeps the host GPU-backend-agnostic.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.graphics.null;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.rhi.null;
 import draconic.graphics;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace rhi = draconic::rhi;
 
 export namespace draconic::graphics
 {
     // Create a headless GraphicsDevice backed by the Null RHI. No Vulkan required.
-    core::Result<core::UniquePtr<GraphicsDevice>>
-    CreateNullGraphicsDevice(core::u32 framesInFlight = 2)
+    foundation::Result<foundation::UniquePtr<GraphicsDevice>>
+    CreateNullGraphicsDevice(foundation::u32 framesInFlight = 2)
     {
         rhi::Backend* raw = nullptr;
         if (!rhi::null::CreateNullBackend(raw).IsOk())
         {
-            return core::Err(core::ErrorCode::Unknown);
+            return foundation::Err(foundation::ErrorCode::Unknown);
         }
         return GraphicsDevice::FromBackend(raw, framesInFlight);
     }

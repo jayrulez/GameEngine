@@ -9,16 +9,16 @@
 /// sequential indices generated at load), so there is no non-indexed path here.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.modelimporter:mesh_convert;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.model;
 import draconic.geometry;
 import draconic.geometry.resource;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace model = draconic::model;
 namespace geometry = draconic::geometry;
 
@@ -189,7 +189,7 @@ namespace draconic::modelimporter
 
         // Asset name for an imported sub-object: the authored name, sanitized for file paths
         // (instance names become envelope/sidecar file names), else "{fallback}.{index}".
-        [[nodiscard]] String ImportedAssetName(core::StringView authored, core::StringView fallback,
+        [[nodiscard]] String ImportedAssetName(foundation::StringView authored, foundation::StringView fallback,
                                                usize index)
         {
             String out;

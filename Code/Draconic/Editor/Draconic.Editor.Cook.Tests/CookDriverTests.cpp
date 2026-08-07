@@ -4,17 +4,17 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 #include <initializer_list>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.vfs;
 import draconic.editor;
 import draconic.editor.cook;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::editor;
 namespace content = draconic::content;
 namespace vfs = draconic::vfs;
@@ -31,7 +31,7 @@ namespace
         void Serialize(ISerializer& ar) override
         {
             Asset::Serialize(ar);
-            draconic::core::Serialize(ar, "quality", quality);
+            draconic::foundation::Serialize(ar, "quality", quality);
         }
     };
 
@@ -42,7 +42,7 @@ namespace
         i32 cookedValue = 0;
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "cookedValue", cookedValue);
+            draconic::foundation::Serialize(ar, "cookedValue", cookedValue);
         }
     };
 
@@ -94,8 +94,8 @@ namespace
         void Serialize(ISerializer& ar) override
         {
             Asset::Serialize(ar);
-            draconic::core::Serialize(ar, "readDep", readDep);
-            draconic::core::Serialize(ar, "refDep", refDep);
+            draconic::foundation::Serialize(ar, "readDep", readDep);
+            draconic::foundation::Serialize(ar, "refDep", refDep);
         }
     };
 

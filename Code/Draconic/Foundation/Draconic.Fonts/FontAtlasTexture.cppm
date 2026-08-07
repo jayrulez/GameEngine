@@ -5,15 +5,15 @@
 // Sedulous.Fonts (FontAtlasTexture.bf). Caller owns the returned image.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.fonts:atlas_texture;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.image;
 import :interfaces;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::fonts
 {

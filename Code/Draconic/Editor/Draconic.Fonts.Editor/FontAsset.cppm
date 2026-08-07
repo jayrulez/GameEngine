@@ -15,12 +15,12 @@
 // Never linked by the runtime.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.fonts.editor;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.editor;
 import draconic.editor.core;
 import draconic.fonts;
@@ -33,7 +33,7 @@ import draconic.fonts.distancefield.baker;
 import draconic.fonts.resource;
 import draconic.content;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::fonts
 {
@@ -78,16 +78,16 @@ export namespace draconic::fonts
         void Serialize(ISerializer& ar) override
         {
             draconic::editor::Asset::Serialize(ar); // fileName
-            draconic::core::Serialize(ar, "family", family);
+            draconic::foundation::Serialize(ar, "family", family);
             u32 bakeMode = static_cast<u32>(mode);
-            draconic::core::Serialize(ar, "mode", bakeMode);
+            draconic::foundation::Serialize(ar, "mode", bakeMode);
             mode = static_cast<FontBakeMode>(bakeMode);
-            draconic::core::Serialize(ar, "sizes", sizes);
-            draconic::core::Serialize(ar, "dfSize", dfSize);
-            draconic::core::Serialize(ar, "firstCodepoint", firstCodepoint);
-            draconic::core::Serialize(ar, "lastCodepoint", lastCodepoint);
-            draconic::core::Serialize(ar, "atlasWidth", atlasWidth);
-            draconic::core::Serialize(ar, "atlasHeight", atlasHeight);
+            draconic::foundation::Serialize(ar, "sizes", sizes);
+            draconic::foundation::Serialize(ar, "dfSize", dfSize);
+            draconic::foundation::Serialize(ar, "firstCodepoint", firstCodepoint);
+            draconic::foundation::Serialize(ar, "lastCodepoint", lastCodepoint);
+            draconic::foundation::Serialize(ar, "atlasWidth", atlasWidth);
+            draconic::foundation::Serialize(ar, "atlasHeight", atlasHeight);
         }
     };
 

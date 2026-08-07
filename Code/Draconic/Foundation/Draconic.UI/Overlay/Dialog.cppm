@@ -8,12 +8,12 @@
 // DialogResult)>. The dialog is one VisualChild (m_layout); measure/layout/draw delegate to it.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:dialog;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import :view;
 import :property;
@@ -34,7 +34,7 @@ import :label;
 import :button_base;
 import :button;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

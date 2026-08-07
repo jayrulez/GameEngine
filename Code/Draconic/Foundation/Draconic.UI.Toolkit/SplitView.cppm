@@ -1,22 +1,22 @@
 // Draconic UI Toolkit - :split_view partition
 //
 // Resizable two-pane container with a draggable divider. Ported from Sedulous.UI.Toolkit/src/SplitView.bf.
-// Panes are borrowed raw View* (the child tree owns the RefPtr). Beef `Math.Clamp` -> core::Clamp;
+// Panes are borrowed raw View* (the child tree owns the RefPtr). Beef `Math.Clamp` -> foundation::Clamp;
 // `Context.FocusManager` -> Context->GetFocusManager(); mouse capture via Set/ReleaseCapture. NOTE: the
 // public field `Orientation` shadows the enum type of the same name inside the class, so the enum is
 // spelled fully-qualified (draconic::ui::Orientation) wherever the type/enumerators are named.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui.toolkit:split_view;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import draconic.ui;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui::toolkit
 {
@@ -44,7 +44,7 @@ export namespace draconic::ui::toolkit
 
         void SetSplitRatio(f32 value)
         {
-            const f32 clamped = core::Clamp(value, 0.0f, 1.0f);
+            const f32 clamped = foundation::Clamp(value, 0.0f, 1.0f);
             if (m_splitRatio != clamped)
             {
                 m_splitRatio = clamped;
@@ -156,7 +156,7 @@ export namespace draconic::ui::toolkit
                                                  ? 1.0f - MinPaneSize / available
                                                  : 1.0f;
                         SetSplitRatio(
-                            core::Clamp((e.X - divSize * 0.5f) / available, minRatio, maxRatio));
+                            foundation::Clamp((e.X - divSize * 0.5f) / available, minRatio, maxRatio));
                     }
                 }
                 else
@@ -170,7 +170,7 @@ export namespace draconic::ui::toolkit
                                                  ? 1.0f - MinPaneSize / available
                                                  : 1.0f;
                         SetSplitRatio(
-                            core::Clamp((e.Y - divSize * 0.5f) / available, minRatio, maxRatio));
+                            foundation::Clamp((e.Y - divSize * 0.5f) / available, minRatio, maxRatio));
                     }
                 }
             }

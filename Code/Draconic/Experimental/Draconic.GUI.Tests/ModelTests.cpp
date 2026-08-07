@@ -1,16 +1,16 @@
 // Draconic GUI - MVC data-core tests: Variant (typed value + ToString + Compare), ModelIndex,
 // and StringListModel (row/column/data + client notification on mutation).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.gui;
 
 using namespace draconic::gui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 namespace
 {
-    core::StringView SV(const char8_t* s) { return core::StringView(s); }
+    foundation::StringView SV(const char8_t* s) { return foundation::StringView(s); }
 
     // Counts model-update notifications.
     struct CountingClient : public IModelClient
@@ -24,11 +24,11 @@ TEST_CASE("variant: types, accessors, ToString")
 {
     CHECK(Variant{}.IsEmpty());
     CHECK(Variant(true).GetType() == Variant::Type::Bool);
-    CHECK(Variant(static_cast<core::i64>(42)).AsInt() == 42);
+    CHECK(Variant(static_cast<foundation::i64>(42)).AsInt() == 42);
     CHECK(Variant(SV(u8"hi")).AsString() == SV(u8"hi"));
 
-    CHECK(Variant(static_cast<core::i64>(-7)).ToString() == SV(u8"-7"));
-    CHECK(Variant(static_cast<core::i64>(0)).ToString() == SV(u8"0"));
+    CHECK(Variant(static_cast<foundation::i64>(-7)).ToString() == SV(u8"-7"));
+    CHECK(Variant(static_cast<foundation::i64>(0)).ToString() == SV(u8"0"));
     CHECK(Variant(true).ToString() == SV(u8"true"));
     CHECK(Variant(SV(u8"text")).ToString() == SV(u8"text"));
     CHECK(Variant(1.5).ToString() == SV(u8"1.5"));
@@ -37,8 +37,8 @@ TEST_CASE("variant: types, accessors, ToString")
 
 TEST_CASE("variant: Compare orders numbers and strings")
 {
-    CHECK(Variant(static_cast<core::i64>(1)).Compare(Variant(static_cast<core::i64>(2))) < 0);
-    CHECK(Variant(static_cast<core::i64>(5)).Compare(Variant(static_cast<core::i64>(5))) == 0);
+    CHECK(Variant(static_cast<foundation::i64>(1)).Compare(Variant(static_cast<foundation::i64>(2))) < 0);
+    CHECK(Variant(static_cast<foundation::i64>(5)).Compare(Variant(static_cast<foundation::i64>(5))) == 0);
     CHECK(Variant(SV(u8"apple")).Compare(Variant(SV(u8"banana"))) < 0);
     CHECK(Variant(SV(u8"pear")).Compare(Variant(SV(u8"peach"))) > 0);
 }
@@ -53,10 +53,10 @@ TEST_CASE("model-index: validity + equality")
 
 TEST_CASE("string-list-model: rows/columns/data")
 {
-    core::Array<core::String> items;
-    items.PushBack(core::String(SV(u8"Alpha")));
-    items.PushBack(core::String(SV(u8"Beta")));
-    StringListModel model(core::Move(items));
+    foundation::Array<foundation::String> items;
+    items.PushBack(foundation::String(SV(u8"Alpha")));
+    items.PushBack(foundation::String(SV(u8"Beta")));
+    StringListModel model(foundation::Move(items));
 
     CHECK(model.RowCount() == 2);
     CHECK(model.ColumnCount() == 1);

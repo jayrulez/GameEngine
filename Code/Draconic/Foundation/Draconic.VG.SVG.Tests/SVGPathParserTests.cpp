@@ -1,11 +1,11 @@
 // Ported from Sedulous.VG.Tests/SVGPathParserTests.bf.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.vg;
 import draconic.vg.svg;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::vg;
 using namespace draconic::vg::svg;
 

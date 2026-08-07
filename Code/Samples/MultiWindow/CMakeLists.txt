@@ -4,7 +4,7 @@
 add_executable(MultiWindow main.cpp)
 
 target_link_libraries(MultiWindow PRIVATE
-    Draconic::Core
+    Draconic::Foundation
     Draconic::RHI
     Draconic::Runtime
     Draconic::Runtime.Client

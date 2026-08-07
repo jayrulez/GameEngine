@@ -7,7 +7,7 @@
 // here: the browser drives it through draconic.runtime.web (emscripten_set_main_loop).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.shell.web;
 
@@ -16,10 +16,10 @@ export import :window_manager;
 export import :input;
 export import :dialogs;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.shell;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::shell
 {
@@ -28,7 +28,7 @@ export namespace draconic::shell
     public:
         // The selector defaults to Emscripten's canonical "#canvas". The app can point at a
         // different canvas by constructing with an explicit selector.
-        explicit WebShell(core::StringView selector = u8"#canvas", const WindowSettings& settings = {})
+        explicit WebShell(foundation::StringView selector = u8"#canvas", const WindowSettings& settings = {})
             : m_windows(selector, settings)
         {
             // Wire the HTML5 keyboard/mouse callbacks to the canvas now that it exists.
@@ -55,8 +55,8 @@ export namespace draconic::shell
         void RequestExit() override { m_running = false; }
 
         // In-memory clipboard for now; the async navigator.clipboard bridge is a later pass.
-        void SetClipboardText(core::StringView text) override { m_clipboard = core::String(text); }
-        [[nodiscard]] core::String GetClipboardText() const override { return m_clipboard; }
+        void SetClipboardText(foundation::StringView text) override { m_clipboard = foundation::String(text); }
+        [[nodiscard]] foundation::String GetClipboardText() const override { return m_clipboard; }
         [[nodiscard]] bool HasClipboardText() const noexcept override
         {
             return m_clipboard.Size() > 0;
@@ -67,6 +67,6 @@ export namespace draconic::shell
         WebInputManager m_input;
         WebDialogService m_dialogs;
         bool m_running = true;
-        core::String m_clipboard;
+        foundation::String m_clipboard;
     };
 }

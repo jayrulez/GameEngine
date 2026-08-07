@@ -5,12 +5,12 @@
 // markers on the offending lines.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 module draconic.editor.script;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.runtime.client;
 import draconic.ui;
@@ -20,7 +20,7 @@ import draconic.script.editor;
 import draconic.editor.core;
 import draconic.editor.app;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::editor
 {

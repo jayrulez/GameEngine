@@ -3,12 +3,12 @@
 // The state-machine / blend-tree authoring tool (see AnimationGraphPage.cppm for the overview).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 module draconic.editor.scene;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.rhi;
 import draconic.graphics;
@@ -31,7 +31,7 @@ import draconic.editor.core;
 import draconic.editor.app;
 import :camera;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::editor
 {
@@ -45,9 +45,9 @@ namespace draconic::editor
         [[nodiscard]] constexpr i32 StateToNode(i32 state) noexcept { return state + 1; }
         [[nodiscard]] constexpr i32 NodeToState(i32 node) noexcept { return node - 1; }
 
-        [[nodiscard]] core::Color HeaderPlain() { return core::Color{0.27f, 0.40f, 0.60f, 1.0f}; }
-        [[nodiscard]] core::Color HeaderDefault() { return core::Color{0.80f, 0.52f, 0.18f, 1.0f}; }
-        [[nodiscard]] core::Color HeaderAny() { return core::Color{0.30f, 0.55f, 0.50f, 1.0f}; }
+        [[nodiscard]] foundation::Color HeaderPlain() { return foundation::Color{0.27f, 0.40f, 0.60f, 1.0f}; }
+        [[nodiscard]] foundation::Color HeaderDefault() { return foundation::Color{0.80f, 0.52f, 0.18f, 1.0f}; }
+        [[nodiscard]] foundation::Color HeaderAny() { return foundation::Color{0.30f, 0.55f, 0.50f, 1.0f}; }
 
         [[nodiscard]] StringView NodeKindLabel(u8 kind)
         {

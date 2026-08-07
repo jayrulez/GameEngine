@@ -8,7 +8,7 @@
 # climbed the extension too).
 
 set(_webscene_common_libs
-    Draconic::Core
+    Draconic::Foundation
     Draconic::RHI
     Draconic::Runtime
     Draconic::Runtime.Client

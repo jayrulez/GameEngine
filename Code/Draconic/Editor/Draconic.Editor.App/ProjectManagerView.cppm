@@ -20,12 +20,12 @@
 // the button lives in the very row the rebuild destroys.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.editor.app:project_manager_view;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.settings;
 import draconic.shell;
 import draconic.ui;
@@ -33,7 +33,7 @@ import draconic.ui.toolkit;
 import draconic.engine.project;
 import draconic.editor.core;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor::app
 {

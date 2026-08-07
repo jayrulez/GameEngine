@@ -15,16 +15,16 @@
 // closes itself. Cancel fires nothing.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.editor.app:path_picker_dialog;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.ui;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor::app
 {

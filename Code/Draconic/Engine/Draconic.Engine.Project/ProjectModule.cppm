@@ -6,16 +6,16 @@
 // EditorProject builds on top of this (mounts, DBs, per-user state stay editor-side).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.engine.project;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.xml.serialization;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::project
 {
@@ -70,19 +70,19 @@ export namespace draconic::project
         // the manifest helpers below (DRACONIC_DEFINE_OBJECT_VERSIONED sets the current one).
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "name", name);
+            draconic::foundation::Serialize(ar, "name", name);
             if (ar.Version() >= 2) // v2 added the engine stamp
             {
-                draconic::core::Serialize(ar, "engineVersion", engineVersion);
+                draconic::foundation::Serialize(ar, "engineVersion", engineVersion);
             }
             if (ar.Version() >= 3) // v3 made the default scene guid-authoritative
             {
                 ar.Key("defaultSceneId");
                 ar.GuidValue(defaultSceneId);
             }
-            draconic::core::Serialize(ar, "defaultScene", defaultScene);
-            draconic::core::Serialize(ar, "startupScript", startupScript);
-            draconic::core::Serialize(ar, "nativeModule", nativeModule);
+            draconic::foundation::Serialize(ar, "defaultScene", defaultScene);
+            draconic::foundation::Serialize(ar, "startupScript", startupScript);
+            draconic::foundation::Serialize(ar, "nativeModule", nativeModule);
             if (ar.Version() >= 4) // v4 added the default input map
             {
                 ar.Key("defaultInputMapId");

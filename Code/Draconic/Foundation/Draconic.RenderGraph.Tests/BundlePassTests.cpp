@@ -2,14 +2,14 @@
 // extension that lets parallel command recording run inside the frame graph). Driven on the
 // Null RHI so Execute actually runs the pass.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.rhi.null;
 import draconic.rendergraph;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::rendergraph;
 namespace rhi = draconic::rhi;
 

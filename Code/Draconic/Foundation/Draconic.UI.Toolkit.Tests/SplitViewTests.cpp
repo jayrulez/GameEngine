@@ -1,23 +1,23 @@
 // Smoke test for SplitView: panes, ratio clamp + event, and a basic horizontal layout split.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 import draconic.ui.toolkit;
 
 using namespace draconic::ui;
 using namespace draconic::ui::toolkit;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 TEST_CASE("toolkit-splitview: PanesRatioAndLayout")
 {
-    auto split = core::MakeRef<SplitView>(core::DefaultAllocator());
+    auto split = foundation::MakeRef<SplitView>(foundation::DefaultAllocator());
     CHECK(split->Orientation == Orientation::Horizontal);
     CHECK(split->SplitRatio() == doctest::Approx(0.5f));
 
-    auto first = core::MakeRef<Panel>(core::DefaultAllocator());
-    auto second = core::MakeRef<Panel>(core::DefaultAllocator());
+    auto first = foundation::MakeRef<Panel>(foundation::DefaultAllocator());
+    auto second = foundation::MakeRef<Panel>(foundation::DefaultAllocator());
     split->SetPanes(first.Get(), second.Get());
     CHECK(split->FirstPane() == first.Get());
     CHECK(split->SecondPane() == second.Get());

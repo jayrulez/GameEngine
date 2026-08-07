@@ -12,18 +12,18 @@
 /// Tested headlessly against SimDatagramNetwork's loss/reorder - no OS sockets.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Debug/Assert.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Debug/Assert.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 export module draconic.net:reliable;
 
-import draconic.core;
+import draconic.foundation;
 import :transport;
 import :datagram;
 import :wire;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::net
 {

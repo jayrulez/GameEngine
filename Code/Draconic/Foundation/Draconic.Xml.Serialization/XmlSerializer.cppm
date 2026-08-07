@@ -10,15 +10,15 @@
 // library (which stays serialization-agnostic) - mirrors Sedulous.Serialization.Xml.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include <cstdlib> // strtoll / strtoull / strtod
 
 export module draconic.xml.serialization;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.xml;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::xml
 {

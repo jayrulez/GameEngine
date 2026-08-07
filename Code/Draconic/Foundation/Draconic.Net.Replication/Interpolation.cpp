@@ -3,14 +3,14 @@
 // same module. Depends only on Core reflection (no wire).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include <cmath>
 
 module draconic.net.replication;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::net
 {

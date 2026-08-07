@@ -8,13 +8,13 @@ module;
 
 module draconic.rhi;
 
-import draconic.core;
+import draconic.foundation;
 
 namespace draconic::rhi
 {
-    core::u64 NextTextureViewUniqueId() noexcept
+    foundation::u64 NextTextureViewUniqueId() noexcept
     {
-        static std::atomic<core::u64> counter{0};
+        static std::atomic<foundation::u64> counter{0};
         return counter.fetch_add(1, std::memory_order_relaxed) + 1;
     }
 }

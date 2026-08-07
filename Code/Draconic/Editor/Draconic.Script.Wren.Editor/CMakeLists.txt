@@ -5,7 +5,7 @@
 add_library(Draconic.Script.Wren.Editor STATIC)
 add_library(Draconic::Script.Wren.Editor ALIAS Draconic.Script.Wren.Editor)
 target_link_libraries(Draconic.Script.Wren.Editor PUBLIC
-    Draconic::Core Draconic::Editor Draconic::Editor.Core Draconic::Content
+    Draconic::Foundation Draconic::Editor Draconic::Editor.Core Draconic::Content
     Draconic::Script Draconic::Script.Resource Draconic::Script.Facades
     Draconic::Script.Editor Draconic::Script.Wren Draconic::Policy)
 target_sources(Draconic.Script.Wren.Editor
@@ -21,7 +21,7 @@ target_sources(Draconic.Script.Wren.Editor
 add_library(Draconic.Script.Wren.Editor.UI STATIC)
 add_library(Draconic::Script.Wren.Editor.UI ALIAS Draconic.Script.Wren.Editor.UI)
 target_link_libraries(Draconic.Script.Wren.Editor.UI PUBLIC
-    Draconic::Core Draconic::UI.Toolkit Draconic::Policy)
+    Draconic::Foundation Draconic::UI.Toolkit Draconic::Policy)
 target_sources(Draconic.Script.Wren.Editor.UI
     PRIVATE
         WrenEditorUIImpl.cpp

@@ -25,18 +25,18 @@
 // unit's global module fragment).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.script.angelscript;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.script;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::script::angelscript
 {
-    [[nodiscard]] core::RefPtr<IScriptManager> CreateScriptManager();
+    [[nodiscard]] foundation::RefPtr<IScriptManager> CreateScriptManager();
 
     /// Registers AngelScript with the backend registry (scripting.md B1) - the ONE
     /// line that makes the language available; consumers resolve by extension
@@ -57,5 +57,5 @@ export namespace draconic::script::angelscript
     /// adds to every loaded behavior module. Exposed so the editor cook, which builds
     /// the behavior through CScriptBuilder, compiles it with the SAME surface the
     /// runtime does (a coroutine-using behavior harvests exactly as it runs).
-    [[nodiscard]] core::StringView AngelScriptCoroutineModulePrelude() noexcept;
+    [[nodiscard]] foundation::StringView AngelScriptCoroutineModulePrelude() noexcept;
 }

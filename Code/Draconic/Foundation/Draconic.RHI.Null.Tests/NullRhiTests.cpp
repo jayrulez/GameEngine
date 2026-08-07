@@ -1,12 +1,12 @@
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.rhi.null;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::rhi;
 
 TEST_CASE("rhi.null: backend enumerates an adapter and creates a device")
@@ -73,7 +73,7 @@ TEST_CASE("rhi: texture views carry unique monotonic ids (address-reuse guard)")
 
     TextureView* a = nullptr;
     REQUIRE(device->CreateTextureView(texture, TextureViewDesc{}, a).IsOk());
-    const draconic::core::u64 idA = a->uniqueId;
+    const draconic::foundation::u64 idA = a->uniqueId;
     CHECK(idA != 0u);
 
     TextureView* b = nullptr;

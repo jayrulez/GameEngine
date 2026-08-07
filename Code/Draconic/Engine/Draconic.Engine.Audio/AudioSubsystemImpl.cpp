@@ -5,19 +5,19 @@
 // make GCC emit an unreadable gcm cluster for -fno-module-lazy consumers.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 module draconic.engine.audio;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.runtime;
 import draconic.scene;
 import draconic.audio;
 import draconic.engine.render; // CameraComponentManager (listener fallback)
 import draconic.script.facades; // RegisterExtraFacadeName (Audio into the behavior prelude)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::audio
 {
@@ -209,14 +209,14 @@ namespace draconic::audio
 
         // Surface the audio SOURCE component to script (AudioSourceComponent.of(entity) - live
         // volume/pitch/loop/...): register it, seed the Wren emission root, name it for the prelude.
-        GlobalTypeRegistry().Register(core::TypeOf<AudioSourceComponent>());
-        draconic::script::RegisterExtraScriptRootType(&core::TypeOf<AudioSourceComponent>());
+        GlobalTypeRegistry().Register(foundation::TypeOf<AudioSourceComponent>());
+        draconic::script::RegisterExtraScriptRootType(&foundation::TypeOf<AudioSourceComponent>());
         draconic::script::RegisterExtraFacadeName(u8"AudioSourceComponent");
 
         // The scene-bound audio handle (SceneAudio.of(scene)): reflect it, register + seed + name it.
         DraconicRegisterValue_SceneAudio();
-        GlobalTypeRegistry().Register(core::TypeOf<SceneAudio>());
-        draconic::script::RegisterExtraScriptRootType(&core::TypeOf<SceneAudio>());
+        GlobalTypeRegistry().Register(foundation::TypeOf<SceneAudio>());
+        draconic::script::RegisterExtraScriptRootType(&foundation::TypeOf<SceneAudio>());
         draconic::script::RegisterExtraFacadeName(u8"SceneAudio");
     }
 

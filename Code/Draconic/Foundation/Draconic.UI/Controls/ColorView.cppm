@@ -4,20 +4,20 @@
 // (The `Color` property shadows the Color type, so the type is fully qualified.)
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:color_view;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import :view;
 import :property;
 import :box_constraints;
 import :draw_context;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::ui
 {
@@ -25,7 +25,7 @@ export namespace draconic::ui
     {
         DRACONIC_OBJECT(ColorView, View)
     public:
-        Property<core::Color> Color{core::Color::White};
+        Property<foundation::Color> Color{foundation::Color::White};
         Property<f32> PreferredWidth{0.0f};
         Property<f32> PreferredHeight{0.0f};
 
@@ -35,8 +35,8 @@ export namespace draconic::ui
             PreferredWidth.SetOwner(this);
             PreferredHeight.SetOwner(this);
         }
-        explicit ColorView(core::Color color) : ColorView() { Color.SetSilent(color); }
-        ColorView(core::Color color, f32 w, f32 h) : ColorView()
+        explicit ColorView(foundation::Color color) : ColorView() { Color.SetSilent(color); }
+        ColorView(foundation::Color color, f32 w, f32 h) : ColorView()
         {
             Color.SetSilent(color);
             PreferredWidth.SetSilent(w);

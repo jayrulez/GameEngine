@@ -6,7 +6,7 @@ add_library(Draconic.Engine.GameInstance STATIC)
 add_library(Draconic::Engine.GameInstance ALIAS Draconic.Engine.GameInstance)
 
 target_link_libraries(Draconic.Engine.GameInstance PUBLIC
-    Draconic::Core Draconic::Scene Draconic::Scene.Resource Draconic::Content Draconic::Resource
+    Draconic::Foundation Draconic::Scene Draconic::Scene.Resource Draconic::Content Draconic::Resource
     Draconic::Script Draconic::Engine.Script Draconic::Script.Facades
     Draconic::Net.Manager Draconic::Input Draconic::Policy)
 

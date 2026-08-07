@@ -14,11 +14,11 @@
 /// order must dominate). Material set-2 binding + real lighting are later phases.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.render:mesh_renderer;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.geometry;
 import draconic.shaders;
@@ -32,7 +32,7 @@ import :cluster_system;
 import :resources;
 import :gpu_mesh;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 
 export namespace draconic::render

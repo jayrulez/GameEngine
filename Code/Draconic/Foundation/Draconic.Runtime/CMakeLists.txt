@@ -3,7 +3,7 @@
 add_library(Draconic.Runtime STATIC)
 add_library(Draconic::Runtime ALIAS Draconic.Runtime)
 
-target_link_libraries(Draconic.Runtime PUBLIC Draconic::Core Draconic::Policy)
+target_link_libraries(Draconic.Runtime PUBLIC Draconic::Foundation Draconic::Policy)
 
 target_sources(Draconic.Runtime
     PUBLIC

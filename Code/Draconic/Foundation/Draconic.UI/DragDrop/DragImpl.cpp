@@ -6,11 +6,11 @@
 // only forward-declares the view types. Ported from Sedulous.UI/src/DragDrop/DragDropManager.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 module draconic.ui;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::ui
 {

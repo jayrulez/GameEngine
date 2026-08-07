@@ -8,17 +8,17 @@
 // into the store and persists it; font changes apply on the next editor start. [Cancel] discards.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.editor.app:preferences_dialog;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.ui;
 import draconic.editor.core;
 import draconic.settings;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor::app
 {

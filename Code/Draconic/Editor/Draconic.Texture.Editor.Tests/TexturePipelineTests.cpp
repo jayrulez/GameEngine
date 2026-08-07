@@ -3,10 +3,10 @@
 // cooked TextureResource and build a live GPU Texture via the device-backed
 // factory (Null RHI backend). Also exercises the TextureImporter authoring helper.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include <initializer_list>
-#include "Draconic.Core/Reflection/Reflect.h"
-import draconic.core;
+#include "Draconic.Foundation/Reflection/Reflect.h"
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.resource;
@@ -20,7 +20,7 @@ import draconic.texture;
 import draconic.texture.resource;
 import draconic.texture.editor;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::vfs;
 using namespace draconic::resource;
 using namespace draconic::texture;
@@ -63,7 +63,7 @@ TEST_CASE("texture.pipeline: TextureAsset -> cook -> GPU Texture")
     // --- cook (tooling): TextureAsset -> TextureResource in the output DB ---
     {
         draconic::content::ContentDatabase outDb(
-            outMount, draconic::core::BinarySerializerFactory(), u8".rasset");
+            outMount, draconic::foundation::BinarySerializerFactory(), u8".rasset");
         auto* inst = outDb.RootGroup()->CreateInstance(u8"diffuse", TextureResource::StaticType());
         id = inst->Id();
 
@@ -83,7 +83,7 @@ TEST_CASE("texture.pipeline: TextureAsset -> cook -> GPU Texture")
 
     // --- runtime load: cooked TextureResource -> live GPU Texture (model A) ---
     rhi::null::NullDevice device{DefaultAllocator()};
-    draconic::content::ContentDatabase outDb(outMount, draconic::core::BinarySerializerFactory(),
+    draconic::content::ContentDatabase outDb(outMount, draconic::foundation::BinarySerializerFactory(),
                                              u8".rasset");
     TextureFactory factory(device);
     ResourceManager manager(outDb);
@@ -122,7 +122,7 @@ TEST_CASE("texture.pipeline: builder fails on a missing source file")
     RegisterTextureAsset();
     RemoveTree();
     NativeFileSystem outMount(u8"draconic_texpipe_out_db");
-    draconic::content::ContentDatabase outDb(outMount, draconic::core::BinarySerializerFactory(),
+    draconic::content::ContentDatabase outDb(outMount, draconic::foundation::BinarySerializerFactory(),
                                              u8".rasset");
     auto* inst = outDb.RootGroup()->CreateInstance(u8"diffuse", TextureResource::StaticType());
 
@@ -233,7 +233,7 @@ TEST_CASE("texture.pipeline: cubemap - 6 faces cook into one cube product (end t
     Guid id;
     {
         draconic::content::ContentDatabase outDb(
-            outMount, draconic::core::BinarySerializerFactory(), u8".rasset");
+            outMount, draconic::foundation::BinarySerializerFactory(), u8".rasset");
         auto* inst = outDb.RootGroup()->CreateInstance(u8"sky", TextureResource::StaticType());
         id = inst->Id();
 
@@ -257,7 +257,7 @@ TEST_CASE("texture.pipeline: cubemap - 6 faces cook into one cube product (end t
 
     // Runtime: the factory builds a real cube (6 layers, cube view, per-face upload).
     rhi::null::NullDevice device{DefaultAllocator()};
-    draconic::content::ContentDatabase outDb(outMount, draconic::core::BinarySerializerFactory(),
+    draconic::content::ContentDatabase outDb(outMount, draconic::foundation::BinarySerializerFactory(),
                                              u8".rasset");
     TextureFactory factory(device);
     ResourceManager manager(outDb);

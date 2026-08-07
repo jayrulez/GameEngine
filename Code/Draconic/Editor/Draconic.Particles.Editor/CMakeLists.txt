@@ -5,7 +5,7 @@ add_library(Draconic.Particles.Editor STATIC)
 add_library(Draconic::Particles.Editor ALIAS Draconic.Particles.Editor)
 
 target_link_libraries(Draconic.Particles.Editor
-    PUBLIC Draconic::Core Draconic::Editor Draconic::Particles Draconic::Particles.Resource
+    PUBLIC Draconic::Foundation Draconic::Editor Draconic::Particles Draconic::Particles.Resource
            Draconic::Content Draconic::Policy)
 
 target_sources(Draconic.Particles.Editor

@@ -6,15 +6,15 @@
 // the CollisionCookKind enum reflection. Reflection track P1.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 module draconic.physics.editor;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.editor;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::physics
 {

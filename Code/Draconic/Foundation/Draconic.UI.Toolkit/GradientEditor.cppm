@@ -10,16 +10,16 @@
 // The immediate path API (BeginPath/MoveTo/LineTo/ClosePath/Fill/Stroke) ports 1:1 to draconic.vg.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui.toolkit:gradient_editor;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import draconic.ui;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui::toolkit
 {
@@ -42,7 +42,7 @@ export namespace draconic::ui::toolkit
         i32 MaxStops = 8;
 
         /// Color used to fill the gradient strip when there are no stops.
-        core::Color EmptyFill = Rgb(40, 40, 46, 255);
+        foundation::Color EmptyFill = Rgb(40, 40, 46, 255);
 
         Event<void()> OnEditBegin;
         Event<void()> OnEditEnd;
@@ -201,11 +201,11 @@ export namespace draconic::ui::toolkit
             else
             {
                 // Sample the gradient at 1-px columns.
-                const i32 cols = static_cast<i32>(core::Max(Width(), 1.0f));
+                const i32 cols = static_cast<i32>(foundation::Max(Width(), 1.0f));
                 for (i32 i = 0; i < cols; ++i)
                 {
                     const f32 t = i / static_cast<f32>(cols - 1);
-                    const core::Color c = Vector4ToColor(Sample(t));
+                    const foundation::Color c = Vector4ToColor(Sample(t));
                     ctx.VG().FillRect(Rectangle{static_cast<f32>(i), 0, 1, stripH}, c);
                 }
             }
@@ -223,8 +223,8 @@ export namespace draconic::ui::toolkit
             {
                 const f32 mx = TimeToX(m_stops[static_cast<usize>(i)].Time);
                 const bool isSel = (i == m_selectedIdx);
-                const core::Color body = Vector4ToColor(m_stops[static_cast<usize>(i)].Color);
-                const core::Color stroke =
+                const foundation::Color body = Vector4ToColor(m_stops[static_cast<usize>(i)].Color);
+                const foundation::Color stroke =
                     isSel ? Rgb(255, 220, 100, 255) : Rgb(200, 200, 210, 255);
 
                 // Filled triangle.
@@ -253,15 +253,15 @@ export namespace draconic::ui::toolkit
         }
 
     private:
-        [[nodiscard]] static core::Color Rgb(u8 r, u8 g, u8 b, u8 a = 255) noexcept
+        [[nodiscard]] static foundation::Color Rgb(u8 r, u8 g, u8 b, u8 a = 255) noexcept
         {
-            return core::Color{r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
+            return foundation::Color{r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
         }
 
-        [[nodiscard]] static core::Color Vector4ToColor(Float4 c)
+        [[nodiscard]] static foundation::Color Vector4ToColor(Float4 c)
         {
-            return core::Color{core::Clamp(c.x, 0.0f, 1.0f), core::Clamp(c.y, 0.0f, 1.0f),
-                               core::Clamp(c.z, 0.0f, 1.0f), core::Clamp(c.w, 0.0f, 1.0f)};
+            return foundation::Color{foundation::Clamp(c.x, 0.0f, 1.0f), foundation::Clamp(c.y, 0.0f, 1.0f),
+                               foundation::Clamp(c.z, 0.0f, 1.0f), foundation::Clamp(c.w, 0.0f, 1.0f)};
         }
 
         // === Sampling (linear interp between stops) ===
@@ -315,7 +315,7 @@ export namespace draconic::ui::toolkit
 
         [[nodiscard]] f32 StripBottom() const { return Height() - kMarkerStripHeight; }
         [[nodiscard]] f32 TimeToX(f32 t) const { return t * Width(); }
-        [[nodiscard]] f32 XToTime(f32 x) const { return core::Clamp(x / Width(), 0.0f, 1.0f); }
+        [[nodiscard]] f32 XToTime(f32 x) const { return foundation::Clamp(x / Width(), 0.0f, 1.0f); }
 
         [[nodiscard]] bool IsOverStrip(f32 y) const { return y < StripBottom(); }
         [[nodiscard]] bool IsOverMarkers(f32 y) const { return y >= StripBottom(); }

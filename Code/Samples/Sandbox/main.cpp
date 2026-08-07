@@ -3,10 +3,10 @@
 // scene with two spinning cube grids (instanced + distinct), and lets the engine draw it.
 // As the renderer grows, this is where we exercise it.
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include "imgui.h" // Dear ImGui (debug UI) - used directly; the engine integration is draconic.imgui
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi; // offscreen render target (Texture / ResourceState / Blit)
 import draconic.runtime;
 import draconic.runtime.client;
@@ -50,7 +50,7 @@ import draconic.animation;          // AnimationPlayer (drives GPU skinning)
 #define DRACONIC_SANDBOX_OUTPUT_DIR ""
 #endif
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace samples = draconic::samples;
 namespace rhi = draconic::rhi;
 namespace runtime = draconic::runtime;
@@ -105,13 +105,13 @@ namespace
             if (auto* env = m_scene->GetSystem<render::EnvironmentSystem>())
             {
                 render::EnvironmentSettings& e = env->Environment();
-                e.ambientColor = core::Color{0.12f, 0.16f, 0.28f, 1.0f}; // flat fallback (IBL off)
+                e.ambientColor = foundation::Color{0.12f, 0.16f, 0.28f, 1.0f}; // flat fallback (IBL off)
                 e.ambientIntensity = 0.35f;
                 e.skyMode = render::SkyMode::Procedural;
                 e.skyIntensity = 0.7f; // dimmer sky -> less washed-out IBL ambient
-                e.skyHorizon = core::Color{0.62f, 0.70f, 0.85f, 1.0f};
-                e.skyZenith = core::Color{0.18f, 0.34f, 0.68f, 1.0f};
-                e.skyGround = core::Color{0.28f, 0.26f, 0.24f, 1.0f};
+                e.skyHorizon = foundation::Color{0.62f, 0.70f, 0.85f, 1.0f};
+                e.skyZenith = foundation::Color{0.18f, 0.34f, 0.68f, 1.0f};
+                e.skyGround = foundation::Color{0.28f, 0.26f, 0.24f, 1.0f};
                 e.sunIntensity = 1.0f;
             }
 
@@ -121,56 +121,56 @@ namespace
                 // Default exposure below 1.0 - the procedural sky + IBL ambient are bright, so the AgX
                 // tonemap washes out at 1.0. Tune live via the Environment window's Exposure slider.
                 render->SetExposure(0.5f);
-                core::String hdrPath = core::Format(
-                    u8"{}/BlueSky.hdr", core::StringView(reinterpret_cast<const core::utf8char*>(
+                foundation::String hdrPath = foundation::Format(
+                    u8"{}/BlueSky.hdr", foundation::StringView(reinterpret_cast<const foundation::utf8char*>(
                                             DRACONIC_SANDBOX_ENV_DIR)));
                 draconic::image::Image img;
                 if (draconic::image::io::LoadImage(hdrPath.AsView(), img).IsOk() &&
                     img.Format() == draconic::image::PixelFormat::RGBA32F)
                 {
-                    const core::Span<const core::u8> px = img.PixelData();
-                    const core::Span<const core::f32> rgba{
-                        reinterpret_cast<const core::f32*>(px.Data()),
-                        px.Size() / sizeof(core::f32)};
+                    const foundation::Span<const foundation::u8> px = img.PixelData();
+                    const foundation::Span<const foundation::f32> rgba{
+                        reinterpret_cast<const foundation::f32*>(px.Data()),
+                        px.Size() / sizeof(foundation::f32)};
                     render->SetSkyEquirect(img.Width(), img.Height(), rgba);
-                    core::ConsoleWrite(
-                        core::Format(
+                    foundation::ConsoleWrite(
+                        foundation::Format(
                             u8"Sandbox: loaded HDR sky {}x{} (F5 / Sky Mode combo to use it)\n",
                             img.Width(), img.Height())
                             .AsView());
                 }
                 else
                 {
-                    core::ConsoleWrite(core::Format(u8"Sandbox: FAILED to load HDR sky from {}\n",
+                    foundation::ConsoleWrite(foundation::Format(u8"Sandbox: FAILED to load HDR sky from {}\n",
                                                     hdrPath.AsView())
                                            .AsView());
                 }
 
                 // Cubemap source: point at ONE face; the importer detects the other 5 (px/nx/...) and
                 // loads + combines them. (Explicit 6-path LoadCubemap also works.)
-                core::String oneFace =
-                    core::Format(u8"{}/cube_sky/px.png",
-                                 core::StringView(reinterpret_cast<const core::utf8char*>(
+                foundation::String oneFace =
+                    foundation::Format(u8"{}/cube_sky/px.png",
+                                 foundation::StringView(reinterpret_cast<const foundation::utf8char*>(
                                      DRACONIC_SANDBOX_ENV_DIR)));
-                core::Array<core::String> facePaths;
+                foundation::Array<foundation::String> facePaths;
                 if (texture::TextureImporter::DetectCubemapFaces(oneFace.AsView(), facePaths)
                         .IsOk() &&
                     facePaths.Size() == 6)
                 {
-                    core::StringView faceViews[6];
+                    foundation::StringView faceViews[6];
                     for (int i = 0; i < 6; ++i)
                     {
-                        faceViews[i] = facePaths[static_cast<core::usize>(i)].AsView();
+                        faceViews[i] = facePaths[static_cast<foundation::usize>(i)].AsView();
                     }
-                    core::Array<core::u8> cube;
-                    core::u32 cubeFace = 0;
+                    foundation::Array<foundation::u8> cube;
+                    foundation::u32 cubeFace = 0;
                     if (texture::TextureImporter::LoadCubemap(
-                            core::Span<const core::StringView>{faceViews, 6}, cube, cubeFace)
+                            foundation::Span<const foundation::StringView>{faceViews, 6}, cube, cubeFace)
                             .IsOk())
                     {
                         render->SetSkyCubemap(cubeFace,
-                                              core::Span<const core::u8>{cube.Data(), cube.Size()});
-                        core::ConsoleWrite(core::Format(u8"Sandbox: loaded cubemap sky {}x{} x6\n",
+                                              foundation::Span<const foundation::u8>{cube.Data(), cube.Size()});
+                        foundation::ConsoleWrite(foundation::Format(u8"Sandbox: loaded cubemap sky {}x{} x6\n",
                                                         cubeFace, cubeFace)
                                                .AsView());
                     }
@@ -182,15 +182,15 @@ namespace
             // with the cube grids standing on it. Pitch ~28 deg below horizontal (looks toward the
             // scene center). Default camera looks down -Z; rotating about +X by -pitch tilts it down.
             m_camera = m_scene->CreateEntity(u8"camera");
-            m_scene->SetLocalPosition(m_camera, core::Float3{0.0f, 21.0f, 30.0f});
-            core::Transform camT = m_scene->GetLocalTransform(m_camera);
-            camT.rotation = core::Quaternion::FromAxisAngle(core::Float3{1.0f, 0.0f, 0.0f}, -0.48f);
+            m_scene->SetLocalPosition(m_camera, foundation::Float3{0.0f, 21.0f, 30.0f});
+            foundation::Transform camT = m_scene->GetLocalTransform(m_camera);
+            camT.rotation = foundation::Quaternion::FromAxisAngle(foundation::Float3{1.0f, 0.0f, 0.0f}, -0.48f);
             m_scene->SetLocalTransform(m_camera, camT);
             if (auto* cameras = m_scene->GetSystem<render::CameraComponentManager>())
             {
                 render::CameraComponent& cam = cameras->Add(m_camera); // default 60deg perspective
                 cam.clearColor =
-                    core::Color{0.02f, 0.02f, 0.03f, 1.0f}; // dark backdrop so the lit scene reads
+                    foundation::Color{0.02f, 0.02f, 0.03f, 1.0f}; // dark backdrop so the lit scene reads
             }
 
             // A large horizontal floor (Plane normal = +Y) under the scene - the point lights hover
@@ -198,7 +198,7 @@ namespace
             if (auto* meshes = m_scene->GetSystem<render::MeshComponentManager>())
             {
                 m_floorEntity = m_scene->CreateEntity(u8"floor");
-                m_scene->SetLocalPosition(m_floorEntity, core::Float3{0.0f, 0.0f, 0.0f});
+                m_scene->SetLocalPosition(m_floorEntity, foundation::Float3{0.0f, 0.0f, 0.0f});
                 render::MeshComponent& fmc = meshes->Add(m_floorEntity);
                 fmc.mesh = geometry::Primitives::Plane(120.0f, 120.0f);
                 // Semi-glossy DIELECTRIC green floor (non-metallic, moderate roughness): shadows read
@@ -206,21 +206,21 @@ namespace
                 // Metallic/roughness are LIVE-tweakable from the Environment window (SSR eye test).
                 ApplyFloorMaterial();
 
-                core::RefPtr<geometry::StaticMesh> cube = geometry::Primitives::Cube(0.35f);
+                foundation::RefPtr<geometry::StaticMesh> cube = geometry::Primitives::Cube(0.35f);
                 BuildGrid(*meshes, cube, /*originX*/ -8.0f, /*instanced*/ true);
                 BuildGrid(*meshes, cube, /*originX*/ 8.0f, /*instanced*/ false);
 
                 // A row of cubes resting EXACTLY on the floor (bottom face flush at y=-7) - a static
                 // reference for judging shadow contact / peter-panning (the grids float in the air).
-                constexpr core::f32 kBoxSize = 2.5f, kFloorY = 0.0f;
-                core::RefPtr<geometry::StaticMesh> box = geometry::Primitives::Cube(kBoxSize);
-                core::RefPtr<materials::Material> boxMat = materials::CreatePBR(
-                    u8"lit", core::Float4{0.85f, 0.55f, 0.2f, 1.0f}, 0.0f, 0.5f);
+                constexpr foundation::f32 kBoxSize = 2.5f, kFloorY = 0.0f;
+                foundation::RefPtr<geometry::StaticMesh> box = geometry::Primitives::Cube(kBoxSize);
+                foundation::RefPtr<materials::Material> boxMat = materials::CreatePBR(
+                    u8"lit", foundation::Float4{0.85f, 0.55f, 0.2f, 1.0f}, 0.0f, 0.5f);
                 for (int k = 0; k < 4; ++k)
                 {
                     scene::EntityHandle b = m_scene->CreateEntity(u8"floorBox");
                     m_scene->SetLocalPosition(b,
-                                              core::Float3{-7.5f + 5.0f * static_cast<core::f32>(k),
+                                              foundation::Float3{-7.5f + 5.0f * static_cast<foundation::f32>(k),
                                                            kFloorY + kBoxSize * 0.5f, 10.0f});
                     render::MeshComponent& bmc = meshes->Add(b);
                     bmc.mesh = box;
@@ -230,19 +230,19 @@ namespace
                 // Spheres resting ON the floor (bottom flush) - their contact shadow is mostly hidden
                 // under the sphere, so you see only the "half" extending away from the sun (vs the
                 // floating grids, whose full shadow ellipse is visible on the ground).
-                constexpr core::f32 kBallR = 1.25f;
-                core::RefPtr<geometry::StaticMesh> ball =
+                constexpr foundation::f32 kBallR = 1.25f;
+                foundation::RefPtr<geometry::StaticMesh> ball =
                     geometry::Primitives::Sphere(kBallR, 24, 12);
                 // Metal spheres with INCREASING roughness across the row (0.05 -> 0.59), all fully metallic,
                 // so the probe reflection goes mirror-sharp -> blurry - showcasing the GGX roughness prefilter.
                 for (int k = 0; k < 4; ++k)
                 {
-                    core::RefPtr<materials::Material> ballMat =
-                        materials::CreatePBR(u8"lit", core::Float4{0.90f, 0.90f, 0.92f, 1.0f}, 1.0f,
-                                             0.05f + 0.18f * static_cast<core::f32>(k));
+                    foundation::RefPtr<materials::Material> ballMat =
+                        materials::CreatePBR(u8"lit", foundation::Float4{0.90f, 0.90f, 0.92f, 1.0f}, 1.0f,
+                                             0.05f + 0.18f * static_cast<foundation::f32>(k));
                     scene::EntityHandle s = m_scene->CreateEntity(u8"floorBall");
                     m_scene->SetLocalPosition(s,
-                                              core::Float3{-7.5f + 5.0f * static_cast<core::f32>(k),
+                                              foundation::Float3{-7.5f + 5.0f * static_cast<foundation::f32>(k),
                                                            kFloorY + kBallR, 16.0f});
                     render::MeshComponent& smc = meshes->Add(s);
                     smc.mesh = ball;
@@ -252,8 +252,8 @@ namespace
                 // Transparent (alpha-blended) spheres hovering in front of the opaque row - exercises the
                 // transparent path: routed to the Transparent category (blend mode), sorted back-to-front,
                 // blended with depth-test/no-write. Base-color alpha (<1) makes them see-through.
-                core::RefPtr<materials::Material> glassMat = materials::CreatePBR(
-                    u8"lit", core::Float4{0.35f, 0.6f, 0.95f, 0.4f}, 0.0f, 0.12f);
+                foundation::RefPtr<materials::Material> glassMat = materials::CreatePBR(
+                    u8"lit", foundation::Float4{0.35f, 0.6f, 0.95f, 0.4f}, 0.0f, 0.12f);
                 glassMat->pipeline.blendMode = materials::BlendMode::AlphaBlend;
                 glassMat->pipeline.depthMode =
                     materials::DepthMode::ReadOnly; // test against opaque depth, don't write
@@ -263,7 +263,7 @@ namespace
                     // Moved well off to the left (x ~ -26, outside the probe box) + higher, to isolate them
                     // from the chrome spheres while inspecting reflections.
                     m_scene->SetLocalPosition(
-                        g, core::Float3{-26.0f, kFloorY + 6.0f + 3.0f * static_cast<core::f32>(k),
+                        g, foundation::Float3{-26.0f, kFloorY + 6.0f + 3.0f * static_cast<foundation::f32>(k),
                                         16.0f});
                     render::MeshComponent& gmc = meshes->Add(g);
                     gmc.mesh = ball;
@@ -277,15 +277,15 @@ namespace
                 {
                     if (rhi::TextureView* cutout = CreateCutoutTexture(*dev))
                     {
-                        core::RefPtr<materials::Material> maskMat = materials::CreatePBR(
-                            u8"lit", core::Float4{0.95f, 0.8f, 0.3f, 1.0f}, 0.0f, 0.45f);
+                        foundation::RefPtr<materials::Material> maskMat = materials::CreatePBR(
+                            u8"lit", foundation::Float4{0.95f, 0.8f, 0.3f, 1.0f}, 0.0f, 0.45f);
                         maskMat->pipeline.blendMode = materials::BlendMode::Masked;
                         maskMat->SetDefaultTexture(u8"AlbedoMap", cutout); // alpha holes -> discard
                         for (int k = 0; k < 3; ++k)
                         {
                             scene::EntityHandle m = m_scene->CreateEntity(u8"maskedBall");
                             m_scene->SetLocalPosition(
-                                m, core::Float3{-5.0f + 5.0f * static_cast<core::f32>(k),
+                                m, foundation::Float3{-5.0f + 5.0f * static_cast<foundation::f32>(k),
                                                 kFloorY + 3.5f, 24.0f});
                             render::MeshComponent& mmc = meshes->Add(m);
                             mmc.mesh = ball;
@@ -304,7 +304,7 @@ namespace
                 ApplyKeyLightDir(); // pitch/yaw -> entity rotation (steeper downward tilt by default)
                 render::LightComponent& kl = lights->Add(key);
                 kl.type = render::LightType::Directional;
-                kl.color = core::Color{0.4f, 0.5f, 0.7f, 1.0f};
+                kl.color = foundation::Color{0.4f, 0.5f, 0.7f, 1.0f};
                 kl.intensity = 0.5f;    // key light: bright enough that its shadow reads
                 kl.castsShadows = true; // directional CSM (5.2) + spot (5.3a) + point cube (5.3b)
 
@@ -317,15 +317,15 @@ namespace
                     for (int i = 0; i < kCols; ++i)
                     {
                         scene::EntityHandle e = m_scene->CreateEntity(u8"pointLight");
-                        const core::f32 fi = static_cast<core::f32>(i) / (kCols - 1);
-                        const core::f32 fj = static_cast<core::f32>(j) / (kRows - 1);
-                        const core::Float3 base{-15.0f + 30.0f * fi, 5.5f,
+                        const foundation::f32 fi = static_cast<foundation::f32>(i) / (kCols - 1);
+                        const foundation::f32 fj = static_cast<foundation::f32>(j) / (kRows - 1);
+                        const foundation::Float3 base{-15.0f + 30.0f * fi, 5.5f,
                                                 -2.0f + 16.0f * fj}; // hover above floor
                         m_scene->SetLocalPosition(e, base);
                         render::LightComponent& pl = lights->Add(e);
                         pl.type = render::LightType::Point;
                         pl.color =
-                            core::Color{0.4f + 0.6f * fi, 0.4f + 0.6f * fj, 1.0f - 0.6f * fi, 1.0f};
+                            foundation::Color{0.4f + 0.6f * fi, 0.4f + 0.6f * fj, 1.0f - 0.6f * fi, 1.0f};
                         pl.intensity = 14.0f;
                         pl.range = 8.0f; // floor pool radius ~= sqrt(range^2 - dist^2)
                         m_pointLights.PushBack(e);
@@ -338,15 +338,15 @@ namespace
                 // floor (distinct from the directional CSM), packed into the local-shadow atlas.
                 scene::EntityHandle spot = m_scene->CreateEntity(u8"spotLight");
                 m_scene->SetLocalPosition(
-                    spot, core::Float3{0.0f, 14.0f,
+                    spot, foundation::Float3{0.0f, 14.0f,
                                        13.0f}); // between box row (z=10) and sphere row (z=16)
-                core::Transform st = m_scene->GetLocalTransform(spot);
-                st.rotation = core::Quaternion::FromAxisAngle(core::Float3{1.0f, 0.0f, 0.0f},
+                foundation::Transform st = m_scene->GetLocalTransform(spot);
+                st.rotation = foundation::Quaternion::FromAxisAngle(foundation::Float3{1.0f, 0.0f, 0.0f},
                                                               -1.5f); // nearly straight down
                 m_scene->SetLocalTransform(spot, st);
                 render::LightComponent& sl = lights->Add(spot);
                 sl.type = render::LightType::Spot;
-                sl.color = core::Color{1.0f, 0.92f, 0.78f, 1.0f}; // warm, to contrast the blue key
+                sl.color = foundation::Color{1.0f, 0.92f, 0.78f, 1.0f}; // warm, to contrast the blue key
                 sl.intensity = 120.0f; // inverse-square over ~14u to the floor
                 sl.range = 30.0f;
                 sl.innerAngle = 0.55f;
@@ -358,11 +358,11 @@ namespace
                 // A shadow-casting POINT light hovering among the floor boxes/spheres - the phase 5.3b
                 // cube-shadow demo. Its 6 atlas faces cast shadows radially (onto the floor + box sides).
                 scene::EntityHandle pt = m_scene->CreateEntity(u8"shadowPoint");
-                m_scene->SetLocalPosition(pt, core::Float3{4.0f, 5.0f, 13.0f});
+                m_scene->SetLocalPosition(pt, foundation::Float3{4.0f, 5.0f, 13.0f});
                 render::LightComponent& pls = lights->Add(pt);
                 pls.type = render::LightType::Point;
                 pls.color =
-                    core::Color{0.5f, 1.0f, 0.6f, 1.0f}; // green, distinct from the warm spot
+                    foundation::Color{0.5f, 1.0f, 0.6f, 1.0f}; // green, distinct from the warm spot
                 pls.intensity = 28.0f;
                 pls.range = 16.0f;
                 pls.castsShadows = true; // point cube atlas caster (5.3b)
@@ -375,18 +375,18 @@ namespace
             {
                 m_probeEntity = m_scene->CreateEntity(
                     u8"reflectionProbeL"); // left probe (F6/UI toggles this one)
-                m_scene->SetLocalPosition(m_probeEntity, core::Float3{-8.0f, 6.0f, 16.0f});
+                m_scene->SetLocalPosition(m_probeEntity, foundation::Float3{-8.0f, 6.0f, 16.0f});
                 render::ReflectionProbeComponent& rpL = probes->Add(m_probeEntity);
-                rpL.halfExtents = core::Float3{12.0f, 12.0f, 14.0f}; // covers x[-20,4]
+                rpL.halfExtents = foundation::Float3{12.0f, 12.0f, 14.0f}; // covers x[-20,4]
                 rpL.blendDistance = 4.0f;
                 rpL.update = render::ProbeUpdateMode::Realtime;
 
                 scene::EntityHandle probeR =
                     m_scene->CreateEntity(u8"reflectionProbeR"); // right probe
-                m_scene->SetLocalPosition(probeR, core::Float3{8.0f, 6.0f, 16.0f});
+                m_scene->SetLocalPosition(probeR, foundation::Float3{8.0f, 6.0f, 16.0f});
                 render::ReflectionProbeComponent& rpR = probes->Add(probeR);
                 rpR.halfExtents =
-                    core::Float3{12.0f, 12.0f, 14.0f}; // covers x[-4,20] -> overlap x[-4,4]
+                    foundation::Float3{12.0f, 12.0f, 14.0f}; // covers x[-4,20] -> overlap x[-4,4]
                 rpR.blendDistance = 4.0f;
                 rpR.update = render::ProbeUpdateMode::Realtime;
             }
@@ -395,7 +395,7 @@ namespace
 
             BuildParticleDemo(); // campfire + sparks: the particle path in the full-scene mix
 
-            core::ConsoleWrite(
+            foundation::ConsoleWrite(
                 u8"Sandbox: split-screen - click a half to fly its camera (WASD/QE, Shift fast); "
                 u8"RMB-drag looks in the hovered half. G cycles the Character graph. Close to "
                 u8"exit.\n");
@@ -414,7 +414,7 @@ namespace
             }
             {
                 particles::ParticleSystem& sys = m_campfire.AddSystem(5000);
-                sys.name = core::String{u8"campfire"};
+                sys.name = foundation::String{u8"campfire"};
                 sys.blendMode = particles::ParticleBlendMode::Additive;
                 sys.renderMode = particles::ParticleRenderMode::Billboard;
                 sys.emitter.mode = particles::EmissionMode::Continuous;
@@ -426,23 +426,23 @@ namespace
                 {
                     particles::VelocityInitializer& v =
                         sys.AddInitializer<particles::VelocityInitializer>();
-                    v.baseVelocity = core::Float3{0.0f, 3.2f, 0.0f};
-                    v.randomness = core::Float3{0.8f, 0.8f, 0.8f};
+                    v.baseVelocity = foundation::Float3{0.0f, 3.2f, 0.0f};
+                    v.randomness = foundation::Float3{0.8f, 0.8f, 0.8f};
                 }
                 sys.AddInitializer<particles::SizeInitializer>().size =
-                    particles::RangeFloat2::Constant(core::Float2{0.5f, 0.5f});
+                    particles::RangeFloat2::Constant(foundation::Float2{0.5f, 0.5f});
                 sys.AddInitializer<particles::ColorInitializer>().color = particles::RangeColor(
-                    core::Float4{1.0f, 0.55f, 0.15f, 1.0f}, core::Float4{1.0f, 0.8f, 0.35f, 1.0f});
+                    foundation::Float4{1.0f, 0.55f, 0.15f, 1.0f}, foundation::Float4{1.0f, 0.8f, 0.35f, 1.0f});
                 sys.AddBehavior<particles::ColorOverLifetimeBehavior>().curve =
-                    particles::ParticleCurveColor::FadeAlpha(core::Float4{1.0f, 0.45f, 0.1f, 1.0f},
+                    particles::ParticleCurveColor::FadeAlpha(foundation::Float4{1.0f, 0.45f, 0.1f, 1.0f},
                                                              0.3f);
                 sys.AddBehavior<particles::SizeOverLifetimeBehavior>().curve =
-                    particles::ParticleCurveFloat2::Linear(core::Float2{0.55f, 0.55f},
-                                                           core::Float2{0.08f, 0.08f});
+                    particles::ParticleCurveFloat2::Linear(foundation::Float2{0.55f, 0.55f},
+                                                           foundation::Float2{0.08f, 0.08f});
             }
             {
                 particles::ParticleSystem& sys = m_campfire.AddSystem(600);
-                sys.name = core::String{u8"campfire-sparks"};
+                sys.name = foundation::String{u8"campfire-sparks"};
                 sys.renderMode = particles::ParticleRenderMode::Trail;
                 sys.blendMode = particles::ParticleBlendMode::Additive;
                 sys.emitter.mode = particles::EmissionMode::Continuous;
@@ -454,17 +454,17 @@ namespace
                 {
                     particles::VelocityInitializer& v =
                         sys.AddInitializer<particles::VelocityInitializer>();
-                    v.baseVelocity = core::Float3{0.0f, 5.0f, 0.0f};
-                    v.randomness = core::Float3{2.5f, 1.5f, 2.5f};
+                    v.baseVelocity = foundation::Float3{0.0f, 5.0f, 0.0f};
+                    v.randomness = foundation::Float3{2.5f, 1.5f, 2.5f};
                 }
                 sys.AddInitializer<particles::SizeInitializer>().size =
-                    particles::RangeFloat2::Constant(core::Float2{0.12f, 0.12f});
+                    particles::RangeFloat2::Constant(foundation::Float2{0.12f, 0.12f});
                 sys.AddInitializer<particles::ColorInitializer>().color = particles::RangeColor(
-                    core::Float4{1.0f, 0.7f, 0.2f, 1.0f}, core::Float4{1.0f, 0.45f, 0.1f, 1.0f});
+                    foundation::Float4{1.0f, 0.7f, 0.2f, 1.0f}, foundation::Float4{1.0f, 0.45f, 0.1f, 1.0f});
                 sys.AddBehavior<particles::GravityBehavior>().multiplier = 0.9f;
             }
             m_campfireEntity = m_scene->CreateEntity(u8"campfire");
-            m_scene->SetLocalPosition(m_campfireEntity, core::Float3{-10.0f, 0.2f, 8.0f});
+            m_scene->SetLocalPosition(m_campfireEntity, foundation::Float3{-10.0f, 0.2f, 8.0f});
             pmgr->Add(m_campfireEntity).SetEffect(m_campfire);
         }
 
@@ -475,10 +475,10 @@ namespace
         // wiring (factory -> Bind -> render) is identical.
         void LoadImportedModel(runtime::IApplicationHost& host)
         {
-            const core::StringView outputDir(
-                reinterpret_cast<const core::utf8char*>(DRACONIC_SANDBOX_OUTPUT_DIR));
-            const core::StringView modelDir(
-                reinterpret_cast<const core::utf8char*>(DRACONIC_SANDBOX_MODEL_DIR));
+            const foundation::StringView outputDir(
+                reinterpret_cast<const foundation::utf8char*>(DRACONIC_SANDBOX_OUTPUT_DIR));
+            const foundation::StringView modelDir(
+                reinterpret_cast<const foundation::utf8char*>(DRACONIC_SANDBOX_MODEL_DIR));
             if (outputDir.IsEmpty() || modelDir.IsEmpty())
             {
                 return;
@@ -487,12 +487,12 @@ namespace
             // Output DB (cooked resources) + resource manager + the factories. ModelFactory builds the
             // manifest into a ModelResource, resolving its meshes/materials/textures (dependency edges).
             m_contentFs =
-                core::MakeUnique<vfs::NativeFileSystem>(core::DefaultAllocator(), outputDir);
-            m_contentDb = core::MakeUnique<content::ContentDatabase>(
-                core::DefaultAllocator(), *m_contentFs, core::BinarySerializerFactory(),
+                foundation::MakeUnique<vfs::NativeFileSystem>(foundation::DefaultAllocator(), outputDir);
+            m_contentDb = foundation::MakeUnique<content::ContentDatabase>(
+                foundation::DefaultAllocator(), *m_contentFs, foundation::BinarySerializerFactory(),
                 u8".rasset");
             m_resources =
-                core::MakeUnique<resource::ResourceManager>(core::DefaultAllocator(), *m_contentDb);
+                foundation::MakeUnique<resource::ResourceManager>(foundation::DefaultAllocator(), *m_contentDb);
             m_resources->AddFactory(&m_meshFactory);
             m_resources->AddFactory(&m_skinnedMeshFactory);
             m_resources->AddFactory(&m_modelFactory);
@@ -501,23 +501,23 @@ namespace
             m_resources->AddFactory(&m_clipFactory);
             if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
             {
-                m_textureFactory = core::MakeUnique<texture::TextureFactory>(
-                    core::DefaultAllocator(), *gfx->Raw());
+                m_textureFactory = foundation::MakeUnique<texture::TextureFactory>(
+                    foundation::DefaultAllocator(), *gfx->Raw());
                 m_resources->AddFactory(m_textureFactory.Get());
             }
             model::RegisterModelResourceTypes(); // make the cooked types deserializable
 
             // A few imported models side by side (runtime cook seam; an editor would cook offline + Bind).
-            SpawnModel(u8"Duck", core::Format(u8"{}/Duck/glTF/Duck.gltf", modelDir).AsView(),
-                       core::Float3{-5.0f, 3.0f, 6.0f});
-            SpawnModel(u8"Fox", core::Format(u8"{}/Fox/glTF/Fox.gltf", modelDir).AsView(),
-                       core::Float3{5.0f, 0.0f, 6.0f});
+            SpawnModel(u8"Duck", foundation::Format(u8"{}/Duck/glTF/Duck.gltf", modelDir).AsView(),
+                       foundation::Float3{-5.0f, 3.0f, 6.0f});
+            SpawnModel(u8"Fox", foundation::Format(u8"{}/Fox/glTF/Fox.gltf", modelDir).AsView(),
+                       foundation::Float3{5.0f, 0.0f, 6.0f});
             // The Character is driven by an AnimationGraph (a state machine over its clips) rather than a
             // single clip - press G to fire the graph's "Next" trigger and cross-fade to the next state.
             SpawnModel(
                 u8"Char",
-                core::Format(u8"{}/QuaterniusCharacter/glTF/Character.gltf", modelDir).AsView(),
-                core::Float3{0.0f, 0.0f, 12.0f}, /*useGraph=*/true);
+                foundation::Format(u8"{}/QuaterniusCharacter/glTF/Character.gltf", modelDir).AsView(),
+                foundation::Float3{0.0f, 0.0f, 12.0f}, /*useGraph=*/true);
 
             SpawnSpriteDemo(); // billboards (all orientation + blend modes) using the imported logo
             SpawnDecalDemo();  // project the same logo onto the floor (screen-space decal)
@@ -547,13 +547,13 @@ namespace
             render::DecalComponent& dc = decals->Add(e);
             dc.texture = logo;
             dc.size =
-                core::Float3{8.0f, 8.0f, 6.0f}; // 8x8 floor footprint; 6-unit box depth spans y=0
+                foundation::Float3{8.0f, 8.0f, 6.0f}; // 8x8 floor footprint; 6-unit box depth spans y=0
             dc.fadeStart = 0.0f;
             dc.fadeEnd = 1.4f; // ~80deg - fully faded on near-vertical surfaces
             // Sit on a clear patch of floor (props start at z>=6) and rotate so +Z projects down.
-            core::Transform t;
-            t.position = core::Float3{0.0f, 0.0f, -3.0f};
-            t.rotation = core::Quaternion::FromAxisAngle(core::Float3{1.0f, 0.0f, 0.0f},
+            foundation::Transform t;
+            t.position = foundation::Float3{0.0f, 0.0f, -3.0f};
+            t.rotation = foundation::Quaternion::FromAxisAngle(foundation::Float3{1.0f, 0.0f, 0.0f},
                                                          1.5707963f); // +90deg about X
             m_scene->SetLocalTransform(e, t);
         }
@@ -566,8 +566,8 @@ namespace
             {
                 return nullptr;
             }
-            const core::StringView imageDir(
-                reinterpret_cast<const core::utf8char*>(DRACONIC_SANDBOX_IMAGE_DIR));
+            const foundation::StringView imageDir(
+                reinterpret_cast<const foundation::utf8char*>(DRACONIC_SANDBOX_IMAGE_DIR));
 
             texture::TextureAsset asset;
             texture::TextureImporter::Import2D(u8"draconic_logo_no_text.png",
@@ -614,7 +614,7 @@ namespace
             rhi::TextureView* logo = LoadLogoTexture();
             if (logo == nullptr)
             {
-                core::ConsoleWrite(u8"Sandbox: sprite demo skipped (logo import failed)\n");
+                foundation::ConsoleWrite(u8"Sandbox: sprite demo skipped (logo import failed)\n");
                 return;
             }
 
@@ -624,46 +624,46 @@ namespace
                 const char8_t* name;
                 SpriteOrientation mode;
                 bool additive;
-                core::Color tint;
+                foundation::Color tint;
             };
             const Variant variants[] = {
                 {u8"spriteFace", SpriteOrientation::CameraFacing, false,
-                 core::Color{1.0f, 1.0f, 1.0f, 1.0f}},
+                 foundation::Color{1.0f, 1.0f, 1.0f, 1.0f}},
                 {u8"spriteFaceY", SpriteOrientation::CameraFacingY, false,
-                 core::Color{1.0f, 1.0f, 1.0f, 1.0f}},
+                 foundation::Color{1.0f, 1.0f, 1.0f, 1.0f}},
                 {u8"spriteWorld", SpriteOrientation::WorldAligned, false,
-                 core::Color{1.0f, 1.0f, 1.0f, 1.0f}},
+                 foundation::Color{1.0f, 1.0f, 1.0f, 1.0f}},
                 {u8"spriteAdd", SpriteOrientation::CameraFacing, true,
-                 core::Color{2.6f, 2.2f, 1.4f,
+                 foundation::Color{2.6f, 2.2f, 1.4f,
                              1.0f}}, // additive glow (HDR tint so it reads over the bright scene)
                 {u8"spriteTint", SpriteOrientation::CameraFacing, false,
-                 core::Color{0.4f, 0.9f, 1.0f, 1.0f}}, // tinted cyan
+                 foundation::Color{0.4f, 0.9f, 1.0f, 1.0f}}, // tinted cyan
             };
-            const core::f32 spacing = 4.5f;
-            const core::f32 x0 =
+            const foundation::f32 spacing = 4.5f;
+            const foundation::f32 x0 =
                 -0.5f * spacing *
-                static_cast<core::f32>((sizeof(variants) / sizeof(variants[0])) - 1);
-            for (core::usize i = 0; i < sizeof(variants) / sizeof(variants[0]); ++i)
+                static_cast<foundation::f32>((sizeof(variants) / sizeof(variants[0])) - 1);
+            for (foundation::usize i = 0; i < sizeof(variants) / sizeof(variants[0]); ++i)
             {
                 const Variant& v = variants[i];
                 scene::EntityHandle e = m_scene->CreateEntity(v.name);
                 render::SpriteComponent& sp = sprites->Add(e);
                 sp.texture = logo;
-                sp.size = core::Float2{3.0f, 3.0f};
+                sp.size = foundation::Float2{3.0f, 3.0f};
                 sp.tint = v.tint;
                 sp.orientation = v.mode;
                 sp.additive = v.additive;
                 // Above the cube grids (which top out at y=13) and in front of them (z=-8), so the row
                 // reads as a clear banner over the scene and the billboard modes are easy to compare.
                 m_scene->SetLocalPosition(
-                    e, core::Float3{x0 + spacing * static_cast<core::f32>(i), 16.0f, -8.0f});
+                    e, foundation::Float3{x0 + spacing * static_cast<foundation::f32>(i), 16.0f, -8.0f});
             }
         }
 
         // Cook + bind + spawn one model, placed at `position` and auto-fit to a target size. Each model
         // spawns its node hierarchy (local TRS + parent links) under a scaled model-root entity; mesh
         // nodes get a MeshComponent referencing the cooked StaticMesh + material.
-        void SpawnModel(core::StringView prefix, core::StringView path, core::Float3 position,
+        void SpawnModel(foundation::StringView prefix, foundation::StringView path, foundation::Float3 position,
                         bool useGraph = false)
         {
             auto* meshes = m_scene->GetSystem<render::MeshComponentManager>();
@@ -672,46 +672,46 @@ namespace
                 return;
             }
 
-            core::Guid modelGuid;
+            foundation::Guid modelGuid;
             const model::ModelLoadResult r =
                 modelimporter::LoadAndCook(path, *m_contentDb, prefix, modelGuid);
             if (r != model::ModelLoadResult::Ok)
             {
-                core::ConsoleWrite(core::Format(u8"Sandbox: model import failed ({}) for {}\n",
-                                                static_cast<core::u32>(r), prefix));
+                foundation::ConsoleWrite(foundation::Format(u8"Sandbox: model import failed ({}) for {}\n",
+                                                static_cast<foundation::u32>(r), prefix));
                 return;
             }
             resource::Proxy<model::ModelResource> model =
                 m_resources->Bind<model::ModelResource>(modelGuid);
             if (!model)
             {
-                core::ConsoleWrite(u8"Sandbox: model bind failed\n");
+                foundation::ConsoleWrite(u8"Sandbox: model bind failed\n");
                 return;
             }
 
             // Auto-fit: the model-root scales the model's largest extent to a target size (models come in
             // wildly different unit scales - the Duck is ~100 units, the Fox ~150).
-            constexpr core::f32 kTargetSize = 6.0f;
-            const core::Float3 extent = model->boundsMax - model->boundsMin;
-            const core::f32 maxExtent = core::Max(extent.x, core::Max(extent.y, extent.z));
-            const core::f32 fit = (maxExtent > 0.0001f) ? (kTargetSize / maxExtent) : 1.0f;
+            constexpr foundation::f32 kTargetSize = 6.0f;
+            const foundation::Float3 extent = model->boundsMax - model->boundsMin;
+            const foundation::f32 maxExtent = foundation::Max(extent.x, foundation::Max(extent.y, extent.z));
+            const foundation::f32 fit = (maxExtent > 0.0001f) ? (kTargetSize / maxExtent) : 1.0f;
             scene::EntityHandle modelRoot = m_scene->CreateEntity(prefix);
-            core::Transform rootT;
+            foundation::Transform rootT;
             rootT.position = position;
-            rootT.scale = core::Float3{fit, fit, fit};
+            rootT.scale = foundation::Float3{fit, fit, fit};
             m_scene->SetLocalTransform(modelRoot, rootT);
 
             // All the model's materials, indexed by SubMesh::materialIndex (= model material index) for
             // per-submesh (multi-material) rendering. The resource manager keeps them alive via m_models.
-            core::Array<core::RefPtr<materials::Material>> modelMats;
+            foundation::Array<foundation::RefPtr<materials::Material>> modelMats;
             modelMats.Reserve(model->materials.Size());
             for (auto& mp : model->materials)
             {
-                modelMats.PushBack(core::RefPtr<materials::Material>(mp.Get()));
+                modelMats.PushBack(foundation::RefPtr<materials::Material>(mp.Get()));
             }
 
-            core::Array<scene::EntityHandle> entities;
-            core::Array<scene::EntityHandle> skinnedEntities;
+            foundation::Array<scene::EntityHandle> entities;
+            foundation::Array<scene::EntityHandle> skinnedEntities;
             entities.Reserve(model->nodes.Size());
             for (const modelimporter::ModelNode& node : model->nodes)
             {
@@ -719,14 +719,14 @@ namespace
                 m_scene->SetLocalTransform(e, node.localTransform);
                 entities.PushBack(e);
             }
-            for (core::usize i = 0; i < model->nodes.Size(); ++i)
+            for (foundation::usize i = 0; i < model->nodes.Size(); ++i)
             {
                 const modelimporter::ModelNode& node = model->nodes[i];
                 if (node.parentIndex >= 0 &&
-                    static_cast<core::usize>(node.parentIndex) < entities.Size())
+                    static_cast<foundation::usize>(node.parentIndex) < entities.Size())
                 {
                     m_scene->SetParent(entities[i],
-                                       entities[static_cast<core::usize>(node.parentIndex)]);
+                                       entities[static_cast<foundation::usize>(node.parentIndex)]);
                 }
                 else
                 {
@@ -734,20 +734,20 @@ namespace
                                        modelRoot); // top-level node -> the scaled model root
                 }
                 if (node.meshIndex < 0 ||
-                    static_cast<core::usize>(node.meshIndex) >= model->meshes.Size())
+                    static_cast<foundation::usize>(node.meshIndex) >= model->meshes.Size())
                 {
                     continue;
                 }
                 geometry::StaticMesh* mesh =
-                    model->meshes[static_cast<core::usize>(node.meshIndex)].Get();
+                    model->meshes[static_cast<foundation::usize>(node.meshIndex)].Get();
                 if (mesh == nullptr)
                 {
                     continue;
                 }
                 render::MeshComponent& mc = meshes->Add(entities[i]);
-                mc.mesh = core::RefPtr<geometry::StaticMesh>(
+                mc.mesh = foundation::RefPtr<geometry::StaticMesh>(
                     mesh); // hold a ref (manager owns the handle)
-                mc.color = core::Color{1.0f, 1.0f, 1.0f, 1.0f};
+                mc.color = foundation::Color{1.0f, 1.0f, 1.0f, 1.0f};
 
                 // The unified material list: submeshes index it by SubMesh::materialIndex,
                 // slot 0 covers anything out of range.
@@ -772,14 +772,14 @@ namespace
                     if (auto* graphMgr =
                             m_scene->GetSystem<animation::AnimationGraphComponentManager>())
                     {
-                        core::RefPtr<animation::AnimationGraph> graph =
+                        foundation::RefPtr<animation::AnimationGraph> graph =
                             BuildClipCyclerGraph(*model);
                         animation::AnimationGraphComponent& gc = graphMgr->Add(modelRoot);
                         gc.skeleton = model->skeleton.Get();
                         gc.graph = graph.Get();
                         gc.meshEntities =
-                            static_cast<core::Array<scene::EntityHandle>&&>(skinnedEntities);
-                        m_graphs.PushBack(static_cast<core::RefPtr<animation::AnimationGraph>&&>(
+                            static_cast<foundation::Array<scene::EntityHandle>&&>(skinnedEntities);
+                        m_graphs.PushBack(static_cast<foundation::RefPtr<animation::AnimationGraph>&&>(
                             graph));             // keep alive
                         m_graphChar = modelRoot; // G drives this one
                     }
@@ -791,7 +791,7 @@ namespace
                     sa.skeleton = model->skeleton.Get();
                     sa.clip = model->animations[0].Get();
                     sa.meshEntities =
-                        static_cast<core::Array<scene::EntityHandle>&&>(skinnedEntities);
+                        static_cast<foundation::Array<scene::EntityHandle>&&>(skinnedEntities);
                 }
             }
         }
@@ -799,40 +799,40 @@ namespace
         // Build a simple state-machine graph over a model's clips: one Clip state per animation, plus a
         // "Next" trigger that cross-fades each state to the following one (wrapping). Demonstrates the
         // AnimationGraph machinery (states, transitions, parameters, cross-fades) without authored data.
-        core::RefPtr<animation::AnimationGraph> BuildClipCyclerGraph(model::ModelResource& model)
+        foundation::RefPtr<animation::AnimationGraph> BuildClipCyclerGraph(model::ModelResource& model)
         {
-            core::RefPtr<animation::AnimationGraph> graph =
-                core::MakeRef<animation::AnimationGraph>(core::DefaultAllocator());
-            const core::i32 nextParam =
+            foundation::RefPtr<animation::AnimationGraph> graph =
+                foundation::MakeRef<animation::AnimationGraph>(foundation::DefaultAllocator());
+            const foundation::i32 nextParam =
                 graph->AddParameter(u8"Next", animation::AnimationParameterType::Trigger);
 
-            auto layer = core::MakeUnique<animation::AnimationLayer>(core::DefaultAllocator(),
-                                                                     core::StringView(u8"Base"));
-            const core::i32 clipCount = static_cast<core::i32>(model.animations.Size());
-            for (core::i32 i = 0; i < clipCount; ++i)
+            auto layer = foundation::MakeUnique<animation::AnimationLayer>(foundation::DefaultAllocator(),
+                                                                     foundation::StringView(u8"Base"));
+            const foundation::i32 clipCount = static_cast<foundation::i32>(model.animations.Size());
+            for (foundation::i32 i = 0; i < clipCount; ++i)
             {
                 animation::AnimationClip* clip =
-                    model.animations[static_cast<core::usize>(i)].Get();
-                auto state = core::MakeUnique<animation::AnimationGraphState>(
-                    core::DefaultAllocator(),
-                    clip != nullptr ? clip->Name().AsView() : core::StringView(u8"State"),
-                    core::MakeUnique<animation::ClipStateNode>(core::DefaultAllocator(), clip));
+                    model.animations[static_cast<foundation::usize>(i)].Get();
+                auto state = foundation::MakeUnique<animation::AnimationGraphState>(
+                    foundation::DefaultAllocator(),
+                    clip != nullptr ? clip->Name().AsView() : foundation::StringView(u8"State"),
+                    foundation::MakeUnique<animation::ClipStateNode>(foundation::DefaultAllocator(), clip));
                 layer->AddState(
-                    static_cast<core::UniquePtr<animation::AnimationGraphState>&&>(state));
+                    static_cast<foundation::UniquePtr<animation::AnimationGraphState>&&>(state));
             }
             // state[i] --Next--> state[(i+1) % N], cross-fading over 0.25s.
-            for (core::i32 i = 0; i < clipCount; ++i)
+            for (foundation::i32 i = 0; i < clipCount; ++i)
             {
                 auto t =
-                    core::MakeUnique<animation::AnimationGraphTransition>(core::DefaultAllocator());
+                    foundation::MakeUnique<animation::AnimationGraphTransition>(foundation::DefaultAllocator());
                 t->sourceStateIndex = i;
                 t->destStateIndex = (i + 1) % clipCount;
                 t->duration = 0.25f;
                 t->AddBoolCondition(nextParam, true);
                 layer->AddTransition(
-                    static_cast<core::UniquePtr<animation::AnimationGraphTransition>&&>(t));
+                    static_cast<foundation::UniquePtr<animation::AnimationGraphTransition>&&>(t));
             }
-            graph->AddLayer(static_cast<core::UniquePtr<animation::AnimationLayer>&&>(layer));
+            graph->AddLayer(static_cast<foundation::UniquePtr<animation::AnimationLayer>&&>(layer));
             return graph;
         }
 
@@ -854,7 +854,7 @@ namespace
             {
                 if (gc->player.Get() != nullptr)
                 {
-                    gc->player->SetTrigger(core::StringView(u8"Next"));
+                    gc->player->SetTrigger(foundation::StringView(u8"Next"));
                 }
             }
         }
@@ -867,10 +867,10 @@ namespace
             {
                 return;
             }
-            core::Transform t = m_scene->GetLocalTransform(m_keyLight);
+            foundation::Transform t = m_scene->GetLocalTransform(m_keyLight);
             t.rotation =
-                core::Quaternion::FromAxisAngle(core::Float3{0.0f, 1.0f, 0.0f}, m_keyYaw) *
-                core::Quaternion::FromAxisAngle(core::Float3{1.0f, 0.0f, 0.0f}, m_keyPitch);
+                foundation::Quaternion::FromAxisAngle(foundation::Float3{0.0f, 1.0f, 0.0f}, m_keyYaw) *
+                foundation::Quaternion::FromAxisAngle(foundation::Float3{1.0f, 0.0f, 0.0f}, m_keyPitch);
             m_scene->SetLocalTransform(m_keyLight, t);
         }
 
@@ -1098,17 +1098,17 @@ namespace
                     float h[3] = {e.skyHorizon.r, e.skyHorizon.g, e.skyHorizon.b};
                     if (ImGui::ColorEdit3("Horizon", h))
                     {
-                        e.skyHorizon = core::Color{h[0], h[1], h[2], 1.0f};
+                        e.skyHorizon = foundation::Color{h[0], h[1], h[2], 1.0f};
                     }
                     float z[3] = {e.skyZenith.r, e.skyZenith.g, e.skyZenith.b};
                     if (ImGui::ColorEdit3("Zenith", z))
                     {
-                        e.skyZenith = core::Color{z[0], z[1], z[2], 1.0f};
+                        e.skyZenith = foundation::Color{z[0], z[1], z[2], 1.0f};
                     }
                     float gr[3] = {e.skyGround.r, e.skyGround.g, e.skyGround.b};
                     if (ImGui::ColorEdit3("Ground", gr))
                     {
-                        e.skyGround = core::Color{gr[0], gr[1], gr[2], 1.0f};
+                        e.skyGround = foundation::Color{gr[0], gr[1], gr[2], 1.0f};
                     }
                 }
             }
@@ -1124,7 +1124,7 @@ namespace
                     float lc[3] = {kl->color.r, kl->color.g, kl->color.b};
                     if (ImGui::ColorEdit3("Light Color", lc))
                     {
-                        kl->color = core::Color{lc[0], lc[1], lc[2], 1.0f};
+                        kl->color = foundation::Color{lc[0], lc[1], lc[2], 1.0f};
                     }
                     // Aim the light live (pitch = downward tilt, yaw = compass). SliderAngle shows degrees.
                     bool dirChanged = false;
@@ -1166,7 +1166,7 @@ namespace
                 }
                 if (cull)
                 {
-                    core::u32 culled = 0, total = 0;
+                    foundation::u32 culled = 0, total = 0;
                     render->ViewCullStats(culled, total);
                     ImGui::SameLine();
                     ImGui::TextDisabled("(%u/%u)", culled, total);
@@ -1186,24 +1186,24 @@ namespace
         // contentSize, Stretch), so a viewport mouse reads [0..halfW]x[0..H] local to that view.
         void UpdateInputRouting(shell::IInputManager& input, shell::IWindow& win)
         {
-            const core::f32 w = static_cast<core::f32>(win.Width());
-            const core::f32 h = static_cast<core::f32>(win.Height());
-            const core::f32 halfW = w * 0.5f;
+            const foundation::f32 w = static_cast<foundation::f32>(win.Width());
+            const foundation::f32 h = static_cast<foundation::f32>(win.Height());
+            const foundation::f32 halfW = w * 0.5f;
 
             if (!m_inputRouter)
             {
-                core::ContentFit fitL{.region = core::Rectangle{0.0f, 0.0f, halfW, h},
-                                      .contentSize = core::Float2{halfW, h},
-                                      .mode = core::FitMode::Stretch};
-                core::ContentFit fitR{.region = core::Rectangle{halfW, 0.0f, w - halfW, h},
-                                      .contentSize = core::Float2{w - halfW, h},
-                                      .mode = core::FitMode::Stretch};
-                m_surfaceL = core::MakeUnique<shell::InputSurface>(core::DefaultAllocator(), &input,
+                foundation::ContentFit fitL{.region = foundation::Rectangle{0.0f, 0.0f, halfW, h},
+                                      .contentSize = foundation::Float2{halfW, h},
+                                      .mode = foundation::FitMode::Stretch};
+                foundation::ContentFit fitR{.region = foundation::Rectangle{halfW, 0.0f, w - halfW, h},
+                                      .contentSize = foundation::Float2{w - halfW, h},
+                                      .mode = foundation::FitMode::Stretch};
+                m_surfaceL = foundation::MakeUnique<shell::InputSurface>(foundation::DefaultAllocator(), &input,
                                                                    win.Id(), fitL);
-                m_surfaceR = core::MakeUnique<shell::InputSurface>(core::DefaultAllocator(), &input,
+                m_surfaceR = foundation::MakeUnique<shell::InputSurface>(foundation::DefaultAllocator(), &input,
                                                                    win.Id(), fitR);
                 m_inputRouter =
-                    core::MakeUnique<shell::InputRouter>(core::DefaultAllocator(), &input);
+                    foundation::MakeUnique<shell::InputRouter>(foundation::DefaultAllocator(), &input);
                 m_inputRouter->AddSurface(m_surfaceL.Get());
                 m_inputRouter->AddSurface(m_surfaceR.Get());
                 // Click-to-focus (router default): a click sets keyboard focus to that half, so WASD/QE
@@ -1211,10 +1211,10 @@ namespace
             }
 
             // Keep regions in sync with the live window size (resize/DPI).
-            m_surfaceL->SetRegion(core::Rectangle{0.0f, 0.0f, halfW, h});
-            m_surfaceL->SetContentSize(core::Float2{halfW, h});
-            m_surfaceR->SetRegion(core::Rectangle{halfW, 0.0f, w - halfW, h});
-            m_surfaceR->SetContentSize(core::Float2{w - halfW, h});
+            m_surfaceL->SetRegion(foundation::Rectangle{0.0f, 0.0f, halfW, h});
+            m_surfaceL->SetContentSize(foundation::Float2{halfW, h});
+            m_surfaceR->SetRegion(foundation::Rectangle{halfW, 0.0f, w - halfW, h});
+            m_surfaceR->SetContentSize(foundation::Float2{w - halfW, h});
 
             // Let ImGui swallow input it's using this frame (e.g. scrolling the debug window) so the
             // viewport cameras don't also react. WantCapture* are valid after ImGui::NewFrame (above).
@@ -1243,7 +1243,7 @@ namespace
             auto fmt = frame.window->Swap()->Format();
             // One offscreen per frame-in-flight: frame N+1 must not render into the target frame N's
             // blit still reads. (A single shared offscreen across in-flight frames races on resize.)
-            const core::u32 slot = frame.frameIndex < kOffscreenSlots ? frame.frameIndex : 0u;
+            const foundation::u32 slot = frame.frameIndex < kOffscreenSlots ? frame.frameIndex : 0u;
             if (!EnsureOffscreen(device, fmt, frame.width, frame.height, slot))
             {
                 return;
@@ -1251,14 +1251,14 @@ namespace
             rhi::Texture* offTex = m_offscreenTex[slot];
             rhi::TextureView* offView = m_offscreenView[slot];
 
-            const core::u32 halfW = frame.width / 2;
-            const core::f32 aspect =
-                static_cast<core::f32>(halfW) / static_cast<core::f32>(frame.height);
-            auto makeCam = [&](core::Float3 eye, core::Float3 target)
+            const foundation::u32 halfW = frame.width / 2;
+            const foundation::f32 aspect =
+                static_cast<foundation::f32>(halfW) / static_cast<foundation::f32>(frame.height);
+            auto makeCam = [&](foundation::Float3 eye, foundation::Float3 target)
             {
                 render::ViewCamera vc;
-                vc.view = core::Float4x4::LookAtRH(eye, target, core::Float3{0.0f, 1.0f, 0.0f});
-                vc.projection = core::Float4x4::PerspectiveFovRH(1.0472f, aspect, 0.1f, 1000.0f);
+                vc.view = foundation::Float4x4::LookAtRH(eye, target, foundation::Float3{0.0f, 1.0f, 0.0f});
+                vc.projection = foundation::Float4x4::PerspectiveFovRH(1.0472f, aspect, 0.1f, 1000.0f);
                 vc.position = eye;
                 vc.farZ = 1000.0f;
                 return vc;
@@ -1266,10 +1266,10 @@ namespace
             // Each half is driven by its own fly camera (hover a half to control it - see UpdateInputRouting).
             render::CameraOverride camL;
             camL.camera = makeCam(m_flyL.position, m_flyL.position + m_flyL.Forward());
-            camL.clearColor = core::Color{0.02f, 0.02f, 0.03f, 1.0f};
+            camL.clearColor = foundation::Color{0.02f, 0.02f, 0.03f, 1.0f};
             render::CameraOverride camR;
             camR.camera = makeCam(m_flyR.position, m_flyR.position + m_flyR.Forward());
-            camR.clearColor = core::Color{0.02f, 0.02f, 0.03f, 1.0f};
+            camR.clearColor = foundation::Color{0.02f, 0.02f, 0.03f, 1.0f};
 
             // Render both views into this slot's offscreen texture; the graph leaves it in CopySrc.
             render::TargetState ts{offTex, m_offscreenState[slot], rhi::ResourceState::CopySrc};
@@ -1277,7 +1277,7 @@ namespace
             render->RenderScene(*m_scene, offView, fmt, frame.width, frame.height,
                                 render::ViewportRect{0, 0, halfW, frame.height}, &camL, ts);
             render->RenderScene(*m_scene, offView, fmt, frame.width, frame.height,
-                                render::ViewportRect{static_cast<core::i32>(halfW), 0,
+                                render::ViewportRect{static_cast<foundation::i32>(halfW), 0,
                                                      frame.width - halfW, frame.height},
                                 &camR, ts);
             render->EndRendering();
@@ -1299,8 +1299,8 @@ namespace
 
         // Create (or resize) one frame-slot's offscreen color target. Each slot tracks its own size,
         // so a resize lazily recreates each slot as it next renders.
-        bool EnsureOffscreen(rhi::Device& device, rhi::TextureFormat fmt, core::u32 w, core::u32 h,
-                             core::u32 slot)
+        bool EnsureOffscreen(rhi::Device& device, rhi::TextureFormat fmt, foundation::u32 w, foundation::u32 h,
+                             foundation::u32 slot)
         {
             if (m_offscreenTex[slot] != nullptr && m_offscreenW[slot] == w &&
                 m_offscreenH[slot] == h)
@@ -1344,7 +1344,7 @@ namespace
             return true;
         }
 
-        void OnUpdate(runtime::IApplicationHost& host, core::f32 deltaTime) override
+        void OnUpdate(runtime::IApplicationHost& host, foundation::f32 deltaTime) override
         {
             runtime::DefaultApplication::OnUpdate(host, deltaTime); // keep the P-key profiling dump
 
@@ -1414,11 +1414,11 @@ namespace
             // components ticked on the scene's PostUpdate phase) - no per-frame driving here anymore.
 
             m_angle += deltaTime;
-            const core::Quaternion spin =
-                core::Quaternion::FromAxisAngle(core::Float3{0.3f, 1.0f, 0.0f}, m_angle);
+            const foundation::Quaternion spin =
+                foundation::Quaternion::FromAxisAngle(foundation::Float3{0.3f, 1.0f, 0.0f}, m_angle);
             for (scene::EntityHandle cube : m_cubes)
             {
-                core::Transform t = m_scene->GetLocalTransform(cube);
+                foundation::Transform t = m_scene->GetLocalTransform(cube);
                 t.rotation = spin;
                 m_scene->SetLocalTransform(cube, t);
             }
@@ -1426,12 +1426,12 @@ namespace
             // slices every frame - exercising the per-frame cluster rebuild, not a static binning.
             // Sweep the whole light field left/right (so the colored pools clearly slide as a
             // group - easy confirmation that pools exist and track the lights) + a gentle Z-bob.
-            const core::f32 sweep = 5.0f * core::Sin(m_angle * 0.6f);
-            for (core::usize k = 0; k < m_pointLights.Size(); ++k)
+            const foundation::f32 sweep = 5.0f * foundation::Sin(m_angle * 0.6f);
+            for (foundation::usize k = 0; k < m_pointLights.Size(); ++k)
             {
-                core::Float3 p = m_lightBases[k];
+                foundation::Float3 p = m_lightBases[k];
                 p.x += sweep;
-                p.z += 0.8f * core::Sin(m_angle * 1.3f + static_cast<core::f32>(k) * 0.5f);
+                p.z += 0.8f * foundation::Sin(m_angle * 1.3f + static_cast<foundation::f32>(k) * 0.5f);
                 m_scene->SetLocalPosition(m_pointLights[k], p);
             }
 
@@ -1447,41 +1447,41 @@ namespace
                     auto& dbg = render->DebugScene(*m_scene);
                     for (int k = 0; k < 4; ++k)
                     {
-                        const core::Float3 boxC{-7.5f + 5.0f * static_cast<core::f32>(k), 1.25f,
+                        const foundation::Float3 boxC{-7.5f + 5.0f * static_cast<foundation::f32>(k), 1.25f,
                                                 10.0f};
-                        dbg.DrawWireBoxCenter(boxC, core::Float3{1.3f, 1.3f, 1.3f},
-                                              core::Color{1.0f, 1.0f, 0.0f, 1.0f});
-                        const core::Float3 ballC{-7.5f + 5.0f * static_cast<core::f32>(k), 1.25f,
+                        dbg.DrawWireBoxCenter(boxC, foundation::Float3{1.3f, 1.3f, 1.3f},
+                                              foundation::Color{1.0f, 1.0f, 0.0f, 1.0f});
+                        const foundation::Float3 ballC{-7.5f + 5.0f * static_cast<foundation::f32>(k), 1.25f,
                                                  16.0f};
-                        dbg.DrawWireSphere(core::BoundingSphere{ballC, 1.4f},
-                                           core::Color{0.2f, 0.9f, 1.0f, 1.0f});
+                        dbg.DrawWireSphere(foundation::BoundingSphere{ballC, 1.4f},
+                                           foundation::Color{0.2f, 0.9f, 1.0f, 1.0f});
                     }
-                    dbg.DrawAxis(core::Float4x4::Identity(), 3.0f, /*overlay*/ true);
-                    dbg.DrawGrid(core::Float3{0.0f, 0.01f, 0.0f}, 60.0f, 30,
-                                 core::Color{0.25f, 0.25f, 0.30f, 1.0f});
-                    dbg.DrawArrow(core::Float3{0.0f, 14.0f, 13.0f}, core::Float3{0.0f, 0.5f, 13.0f},
-                                  core::Color{1.0f, 0.5f, 0.0f, 1.0f});
-                    dbg.DrawText3D(core::Float3{0.0f, 0.5f, 0.0f}, core::StringView(u8"origin"),
-                                   core::Color{1.0f, 1.0f, 1.0f, 1.0f});
+                    dbg.DrawAxis(foundation::Float4x4::Identity(), 3.0f, /*overlay*/ true);
+                    dbg.DrawGrid(foundation::Float3{0.0f, 0.01f, 0.0f}, 60.0f, 30,
+                                 foundation::Color{0.25f, 0.25f, 0.30f, 1.0f});
+                    dbg.DrawArrow(foundation::Float3{0.0f, 14.0f, 13.0f}, foundation::Float3{0.0f, 0.5f, 13.0f},
+                                  foundation::Color{1.0f, 0.5f, 0.0f, 1.0f});
+                    dbg.DrawText3D(foundation::Float3{0.0f, 0.5f, 0.0f}, foundation::StringView(u8"origin"),
+                                   foundation::Color{1.0f, 1.0f, 1.0f, 1.0f});
                     render->DebugScreen().DrawScreenText(12.0f, 12.0f,
-                                                         core::StringView(u8"Draconic Debug Draw"),
-                                                         core::Color{0.6f, 1.0f, 0.6f, 1.0f}, 2.0f);
+                                                         foundation::StringView(u8"Draconic Debug Draw"),
+                                                         foundation::Color{0.6f, 1.0f, 0.6f, 1.0f}, 2.0f);
                 }
 
                 // FPS / frame-time readout (smoothed). Format() has no float-precision spec, so round
                 // to whole FPS and tenths-of-a-millisecond by hand.
-                const core::f32 inst = (deltaTime > 0.0f) ? (1.0f / deltaTime) : 0.0f;
+                const foundation::f32 inst = (deltaTime > 0.0f) ? (1.0f / deltaTime) : 0.0f;
                 m_fpsSmoothed =
                     (m_fpsSmoothed > 0.0f) ? (m_fpsSmoothed * 0.9f + inst * 0.1f) : inst;
-                const core::f32 ms = (m_fpsSmoothed > 0.0f) ? (1000.0f / m_fpsSmoothed) : 0.0f;
+                const foundation::f32 ms = (m_fpsSmoothed > 0.0f) ? (1000.0f / m_fpsSmoothed) : 0.0f;
                 const int fpsWhole = static_cast<int>(m_fpsSmoothed + 0.5f);
                 const int msWhole = static_cast<int>(ms);
                 const int msTenth =
-                    static_cast<int>((ms - static_cast<core::f32>(msWhole)) * 10.0f + 0.5f);
-                const core::String fpsText =
-                    core::Format(u8"{} FPS  {}.{} ms", fpsWhole, msWhole, msTenth);
+                    static_cast<int>((ms - static_cast<foundation::f32>(msWhole)) * 10.0f + 0.5f);
+                const foundation::String fpsText =
+                    foundation::Format(u8"{} FPS  {}.{} ms", fpsWhole, msWhole, msTenth);
                 render->DebugScreen().DrawScreenText(12.0f, 34.0f, fpsText.AsView(),
-                                                     core::Color{1.0f, 1.0f, 0.4f, 1.0f}, 2.0f);
+                                                     foundation::Color{1.0f, 1.0f, 0.4f, 1.0f}, 2.0f);
             }
         }
 
@@ -1491,7 +1491,7 @@ namespace
             {
                 rhi::Device& device = *gfx->Raw();
                 device.WaitIdle(); // GPU must finish before freeing the offscreen targets
-                for (core::u32 i = 0; i < kOffscreenSlots; ++i)
+                for (foundation::u32 i = 0; i < kOffscreenSlots; ++i)
                 {
                     if (m_offscreenView[i] != nullptr)
                     {
@@ -1515,7 +1515,7 @@ namespace
                     m_cutoutTex = nullptr;
                 }
             }
-            core::ConsoleWrite(u8"Sandbox: shutting down.\n");
+            foundation::ConsoleWrite(u8"Sandbox: shutting down.\n");
         }
 
         // Build a small procedural alpha-cutout texture (checkerboard: opaque cells + fully-transparent
@@ -1523,15 +1523,15 @@ namespace
         // whose alpha-test discard cuts the holes. Stores the texture/view for shutdown cleanup.
         rhi::TextureView* CreateCutoutTexture(rhi::Device& device)
         {
-            constexpr core::u32 N = 64, cell = 8;
-            core::Array<core::u8> px;
-            px.Resize(static_cast<core::usize>(N) * N * 4);
-            for (core::u32 y = 0; y < N; ++y)
+            constexpr foundation::u32 N = 64, cell = 8;
+            foundation::Array<foundation::u8> px;
+            px.Resize(static_cast<foundation::usize>(N) * N * 4);
+            for (foundation::u32 y = 0; y < N; ++y)
             {
-                for (core::u32 x = 0; x < N; ++x)
+                for (foundation::u32 x = 0; x < N; ++x)
                 {
                     const bool solid = ((((x / cell) + (y / cell)) & 1u) == 0u);
-                    core::u8* p = &px[(static_cast<core::usize>(y) * N + x) * 4];
+                    foundation::u8* p = &px[(static_cast<foundation::usize>(y) * N + x) * 4];
                     p[0] = 255;
                     p[1] = 255;
                     p[2] = 255;
@@ -1574,7 +1574,7 @@ namespace
                     layout.bytesPerRow = N * 4;
                     layout.rowsPerImage = N;
                     batch->WriteTexture(m_cutoutTex,
-                                        core::Span<const core::u8>(px.Data(), px.Size()), layout,
+                                        foundation::Span<const foundation::u8>(px.Data(), px.Size()), layout,
                                         rhi::Extent3D{N, N, 1});
                     (void)batch->Submit();
                     q->DestroyTransferBatch(batch);
@@ -1589,19 +1589,19 @@ namespace
         // matrix (roughness sweeps smooth→rough across X, top half metallic) -> many distinct
         // draws -> parallel command recording. Both grids run every frame.
         void BuildGrid(render::MeshComponentManager& meshes,
-                       const core::RefPtr<geometry::StaticMesh>& cube, core::f32 originX,
+                       const foundation::RefPtr<geometry::StaticMesh>& cube, foundation::f32 originX,
                        bool instanced)
         {
             constexpr int kGrid =
                 16; // 256 cubes -> the distinct grid trips the parallel-emit threshold
-            constexpr core::f32 kSpacing = 0.8f;
+            constexpr foundation::f32 kSpacing = 0.8f;
 
-            core::RefPtr<materials::Material> shared;
+            foundation::RefPtr<materials::Material> shared;
             if (instanced)
             {
                 // White base + middling PBR; the per-instance color supplies each cube's hue.
                 shared =
-                    materials::CreatePBR(u8"lit", core::Float4{1.0f, 1.0f, 1.0f, 1.0f}, 0.0f, 0.4f);
+                    materials::CreatePBR(u8"lit", foundation::Float4{1.0f, 1.0f, 1.0f, 1.0f}, 0.0f, 0.4f);
             }
 
             for (int y = 0; y < kGrid; ++y)
@@ -1609,29 +1609,29 @@ namespace
                 for (int x = 0; x < kGrid; ++x)
                 {
                     scene::EntityHandle e = m_scene->CreateEntity(u8"cube");
-                    const core::f32 fx = static_cast<core::f32>(x) - (kGrid - 1) * 0.5f;
-                    const core::f32 fy = static_cast<core::f32>(y) - (kGrid - 1) * 0.5f;
+                    const foundation::f32 fx = static_cast<foundation::f32>(x) - (kGrid - 1) * 0.5f;
+                    const foundation::f32 fy = static_cast<foundation::f32>(y) - (kGrid - 1) * 0.5f;
                     m_scene->SetLocalPosition(
-                        e, core::Float3{originX + fx * kSpacing, fy * kSpacing + 7.0f, 0.0f});
+                        e, foundation::Float3{originX + fx * kSpacing, fy * kSpacing + 7.0f, 0.0f});
 
-                    const core::Float4 baseColor{static_cast<core::f32>(x) / (kGrid - 1),
-                                                 static_cast<core::f32>(y) / (kGrid - 1), 0.6f,
+                    const foundation::Float4 baseColor{static_cast<foundation::f32>(x) / (kGrid - 1),
+                                                 static_cast<foundation::f32>(y) / (kGrid - 1), 0.6f,
                                                  1.0f};
                     render::MeshComponent& mc = meshes.Add(e);
                     mc.mesh = cube;
                     if (instanced)
                     {
                         mc.SetMaterial(shared);
-                        mc.color = core::Color{baseColor.x, baseColor.y, baseColor.z,
+                        mc.color = foundation::Color{baseColor.x, baseColor.y, baseColor.z,
                                                1.0f}; // per-instance hue
                     }
                     else
                     {
-                        const core::f32 rough =
-                            0.05f + 0.95f * static_cast<core::f32>(x) / (kGrid - 1);
-                        const core::f32 metal = (y >= kGrid / 2) ? 1.0f : 0.0f;
+                        const foundation::f32 rough =
+                            0.05f + 0.95f * static_cast<foundation::f32>(x) / (kGrid - 1);
+                        const foundation::f32 metal = (y >= kGrid / 2) ? 1.0f : 0.0f;
                         mc.SetMaterial(materials::CreatePBR(u8"lit", baseColor, metal, rough));
-                        mc.color = core::Color{1.0f, 1.0f, 1.0f, 1.0f};
+                        mc.color = foundation::Color{1.0f, 1.0f, 1.0f, 1.0f};
                     }
                     m_cubes.PushBack(e);
                 }
@@ -1649,7 +1649,7 @@ namespace
                 if (render::MeshComponent* fmc = meshes->Get(m_floorEntity))
                 {
                     fmc->SetMaterial(materials::CreatePBR(
-                        u8"lit", core::Float4{0.12f, 0.45f, 0.22f, 1.0f}, m_floorMetallic,
+                        u8"lit", foundation::Float4{0.12f, 0.45f, 0.22f, 1.0f}, m_floorMetallic,
                         m_floorRoughness));
                 }
             }
@@ -1657,61 +1657,61 @@ namespace
 
         scene::Scene* m_scene = nullptr;
         scene::EntityHandle m_floorEntity{};
-        core::f32 m_floorMetallic = 0.0f;  // floor material tweakables (SSR eye test)
-        core::f32 m_floorRoughness = 0.45f;
+        foundation::f32 m_floorMetallic = 0.0f;  // floor material tweakables (SSR eye test)
+        foundation::f32 m_floorRoughness = 0.45f;
         particles::ParticleEffect m_campfire; // the particle demo (billboards + trail sparks)
         scene::EntityHandle m_campfireEntity{};
         scene::EntityHandle m_camera{};
         // Offscreen render target, double-buffered per frame-in-flight (each slot tracks its own size).
-        static constexpr core::u32 kOffscreenSlots = 3;
+        static constexpr foundation::u32 kOffscreenSlots = 3;
         rhi::Texture* m_offscreenTex[kOffscreenSlots] = {};
         rhi::TextureView* m_offscreenView[kOffscreenSlots] = {};
         rhi::ResourceState m_offscreenState[kOffscreenSlots] = {rhi::ResourceState::Undefined,
                                                                 rhi::ResourceState::Undefined,
                                                                 rhi::ResourceState::Undefined};
-        core::u32 m_offscreenW[kOffscreenSlots] = {}, m_offscreenH[kOffscreenSlots] = {};
+        foundation::u32 m_offscreenW[kOffscreenSlots] = {}, m_offscreenH[kOffscreenSlots] = {};
         rhi::Texture* m_cutoutTex = nullptr; // masked-demo alpha-cutout texture
         rhi::TextureView* m_cutoutView = nullptr;
         scene::EntityHandle
             m_keyLight; // directional key light (intensity/color tweakable in the debug UI)
-        core::f32 m_keyPitch = -1.05f; // downward tilt (~-60 deg); Environment window slider
-        core::f32 m_keyYaw = 0.35f;    // compass heading
-        core::Array<scene::EntityHandle> m_pointLights;
-        core::Array<core::Float3> m_lightBases;
-        core::Array<scene::EntityHandle> m_cubes;
-        core::f32 m_angle = 0.0f;
-        core::f32 m_fpsSmoothed = 0.0f; // exponential moving average of 1/deltaTime
+        foundation::f32 m_keyPitch = -1.05f; // downward tilt (~-60 deg); Environment window slider
+        foundation::f32 m_keyYaw = 0.35f;    // compass heading
+        foundation::Array<scene::EntityHandle> m_pointLights;
+        foundation::Array<foundation::Float3> m_lightBases;
+        foundation::Array<scene::EntityHandle> m_cubes;
+        foundation::f32 m_angle = 0.0f;
+        foundation::f32 m_fpsSmoothed = 0.0f; // exponential moving average of 1/deltaTime
         // One fly camera per split view; hovering a view routes input to its camera (no V toggle).
-        samples::FlyCamera m_flyL{.position = core::Float3{-6.0f, 21.0f, 30.0f}, .pitch = -0.45f};
-        samples::FlyCamera m_flyR{.position = core::Float3{6.0f, 21.0f, 30.0f}, .pitch = -0.45f};
+        samples::FlyCamera m_flyL{.position = foundation::Float3{-6.0f, 21.0f, 30.0f}, .pitch = -0.45f};
+        samples::FlyCamera m_flyR{.position = foundation::Float3{6.0f, 21.0f, 30.0f}, .pitch = -0.45f};
 
         // Viewport-input routing: each split half is an InputSurface (a ContentFit slice of the window);
         // the router picks the hovered surface and gates/transforms input into it. Created lazily once
         // the shell + window exist. focus-follows-hover so the pointer alone selects the active view.
-        core::UniquePtr<shell::InputRouter> m_inputRouter;
-        core::UniquePtr<shell::InputSurface> m_surfaceL;
-        core::UniquePtr<shell::InputSurface> m_surfaceR;
+        foundation::UniquePtr<shell::InputRouter> m_inputRouter;
+        foundation::UniquePtr<shell::InputSurface> m_surfaceL;
+        foundation::UniquePtr<shell::InputSurface> m_surfaceR;
 
         // Model-import pipeline state (must outlive the spawned entities - the resource manager owns
         // the cooked products' handles; the content DB + its filesystem mount back the manager).
-        core::UniquePtr<vfs::NativeFileSystem> m_contentFs;
-        core::UniquePtr<content::ContentDatabase> m_contentDb;
-        core::UniquePtr<resource::ResourceManager> m_resources;
+        foundation::UniquePtr<vfs::NativeFileSystem> m_contentFs;
+        foundation::UniquePtr<content::ContentDatabase> m_contentDb;
+        foundation::UniquePtr<resource::ResourceManager> m_resources;
         geometry::StaticMeshFactory m_meshFactory;
         geometry::SkinnedMeshFactory m_skinnedMeshFactory;
         materials::MaterialFactory m_materialFactory;
         animation::SkeletonFactory m_skeletonFactory;
         animation::AnimationClipFactory m_clipFactory;
-        core::UniquePtr<texture::TextureFactory> m_textureFactory; // needs the device
+        foundation::UniquePtr<texture::TextureFactory> m_textureFactory; // needs the device
         resource::Proxy<texture::Texture>
             m_logoTex; // sprite-demo logo (kept alive for its GPU view)
         model::ModelFactory m_modelFactory;
-        core::Array<resource::Proxy<model::ModelResource>>
+        foundation::Array<resource::Proxy<model::ModelResource>>
             m_models; // keep cooked models + their resources alive
 
         // Animation graphs owned by the demo (the AnimationGraphComponents borrow them); the entity whose
         // graph the G key advances (the Character). Skinned models are otherwise driven by the subsystem.
-        core::Array<core::RefPtr<animation::AnimationGraph>> m_graphs;
+        foundation::Array<foundation::RefPtr<animation::AnimationGraph>> m_graphs;
         scene::EntityHandle m_graphChar{};
         scene::EntityHandle m_probeEntity{}; // reflection probe (F6 toggles its parallax)
         bool m_showDebugDraw = true;         // debug gizmos (grid/axes/wire volumes/text)

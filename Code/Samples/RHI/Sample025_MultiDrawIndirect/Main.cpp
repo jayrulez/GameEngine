@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <cstring>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.shaders;
 import draconic.samples.framework;
@@ -18,18 +18,18 @@ namespace shaders = draconic::shaders;
 
 struct DrawIndexedIndirectArgs
 {
-    draconic::core::u32 indexCountPerInstance;
-    draconic::core::u32 instanceCount;
-    draconic::core::u32 startIndexLocation;
-    draconic::core::i32 baseVertexLocation;
-    draconic::core::u32 startInstanceLocation;
+    draconic::foundation::u32 indexCountPerInstance;
+    draconic::foundation::u32 instanceCount;
+    draconic::foundation::u32 startIndexLocation;
+    draconic::foundation::i32 baseVertexLocation;
+    draconic::foundation::u32 startInstanceLocation;
 };
 
 class MultiDrawIndirectSample : public samples::framework::SampleApp
 {
 public:
     using samples::framework::SampleApp::SampleApp;
-    draconic::core::StringView Title() const override
+    draconic::foundation::StringView Title() const override
     {
         return u8"Sample025 - Multi-Draw Indirect & Lines";
     }
@@ -41,7 +41,7 @@ protected:
         f.multiDrawIndirect = true;
         return f;
     }
-    draconic::core::Status OnInit() override;
+    draconic::foundation::Status OnInit() override;
     void OnRender() override;
     void OnShutdown() override;
 
@@ -73,9 +73,9 @@ private:
         }
     )";
 
-    draconic::core::Status createGeometry();
-    draconic::core::Status createIndirectBuffer();
-    draconic::core::Status createLineGeometry();
+    draconic::foundation::Status createGeometry();
+    draconic::foundation::Status createIndirectBuffer();
+    draconic::foundation::Status createLineGeometry();
 
     shaders::Compiler* m_compiler = nullptr;
     rhi::ShaderModule *m_vs = nullptr, *m_ps = nullptr;
@@ -84,35 +84,35 @@ private:
     rhi::RenderPipeline *m_fillPipeline = nullptr, *m_linePipeline = nullptr;
     rhi::CommandPool* m_pool = nullptr;
     rhi::Fence* m_fence = nullptr;
-    draconic::core::u64 m_fenceVal = 0;
+    draconic::foundation::u64 m_fenceVal = 0;
 };
 
-draconic::core::Status MultiDrawIndirectSample::OnInit()
+draconic::foundation::Status MultiDrawIndirectSample::OnInit()
 {
-    using draconic::core::Status, draconic::core::Span, draconic::core::u8;
+    using draconic::foundation::Status, draconic::foundation::Span, draconic::foundation::u8;
     if (shaders::createCompiler(shaders::CompilerDesc{}, m_compiler) !=
-        draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+        draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
     if (samples::framework::CompileToModule(m_compiler, m_device, kShader,
                                             shaders::ShaderStage::Vertex, u8"VSMain", u8"VS",
-                                            m_vs) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+                                            m_vs) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
     if (samples::framework::CompileToModule(m_compiler, m_device, kShader,
                                             shaders::ShaderStage::Fragment, u8"PSMain", u8"PS",
-                                            m_ps) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+                                            m_ps) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
-    if (createGeometry() != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
-    if (createIndirectBuffer() != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
-    if (createLineGeometry() != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (createGeometry() != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
+    if (createIndirectBuffer() != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
+    if (createLineGeometry() != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     // Pipeline layout (empty - no bind groups needed).
     rhi::PipelineLayoutDesc pld{};
-    if (m_device->CreatePipelineLayout(pld, m_pl) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_device->CreatePipelineLayout(pld, m_pl) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     // Vertex layout: pos float3 + color float4, stride 28.
     rhi::VertexAttribute attrs[2] = {{rhi::VertexFormat::Float32x3, 0, 0},
@@ -135,8 +135,8 @@ draconic::core::Status MultiDrawIndirectSample::OnInit()
         rpd.fragment->shader = {m_ps, u8"PSMain", rhi::ShaderStage::Fragment};
         rpd.fragment->targets = Span<const rhi::ColorTargetState>(&ct, 1);
         rpd.primitive.topology = rhi::PrimitiveTopology::TriangleList;
-        if (m_device->CreateRenderPipeline(rpd, m_fillPipeline) != draconic::core::ErrorCode::Ok)
-            return draconic::core::ErrorCode::Unknown;
+        if (m_device->CreateRenderPipeline(rpd, m_fillPipeline) != draconic::foundation::ErrorCode::Ok)
+            return draconic::foundation::ErrorCode::Unknown;
     }
 
     // Line pipeline (LineList).
@@ -149,21 +149,21 @@ draconic::core::Status MultiDrawIndirectSample::OnInit()
         rpd.fragment->shader = {m_ps, u8"PSMain", rhi::ShaderStage::Fragment};
         rpd.fragment->targets = Span<const rhi::ColorTargetState>(&ct, 1);
         rpd.primitive.topology = rhi::PrimitiveTopology::LineList;
-        if (m_device->CreateRenderPipeline(rpd, m_linePipeline) != draconic::core::ErrorCode::Ok)
-            return draconic::core::ErrorCode::Unknown;
+        if (m_device->CreateRenderPipeline(rpd, m_linePipeline) != draconic::foundation::ErrorCode::Ok)
+            return draconic::foundation::ErrorCode::Unknown;
     }
 
     if (m_device->CreateCommandPool(rhi::QueueType::Graphics, m_pool) !=
-        draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
-    if (m_device->CreateFence(0, m_fence) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
-    return draconic::core::ErrorCode::Ok;
+        draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
+    if (m_device->CreateFence(0, m_fence) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
+    return draconic::foundation::ErrorCode::Ok;
 }
 
-draconic::core::Status MultiDrawIndirectSample::createGeometry()
+draconic::foundation::Status MultiDrawIndirectSample::createGeometry()
 {
-    using draconic::core::Status, draconic::core::Span, draconic::core::u8, draconic::core::u32;
+    using draconic::foundation::Status, draconic::foundation::Span, draconic::foundation::u8, draconic::foundation::u32;
 
     // 4 quads at different positions.
     static constexpr float verts[] = {
@@ -288,7 +288,7 @@ draconic::core::Status MultiDrawIndirectSample::createGeometry()
         1.0f,
     };
 
-    static constexpr draconic::core::u16 indices[] = {
+    static constexpr draconic::foundation::u16 indices[] = {
         0,  1,  2,  0,  2,  3,  // Quad 0
         4,  5,  6,  4,  6,  7,  // Quad 1
         8,  9,  10, 8,  10, 11, // Quad 2
@@ -299,15 +299,15 @@ draconic::core::Status MultiDrawIndirectSample::createGeometry()
     vbd.size = sizeof(verts);
     vbd.usage = rhi::BufferUsage::Vertex | rhi::BufferUsage::CopyDst;
     vbd.memory = rhi::MemoryLocation::GpuOnly;
-    if (m_device->CreateBuffer(vbd, m_vb) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_device->CreateBuffer(vbd, m_vb) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     rhi::BufferDesc ibd{};
     ibd.size = sizeof(indices);
     ibd.usage = rhi::BufferUsage::Index | rhi::BufferUsage::CopyDst;
     ibd.memory = rhi::MemoryLocation::GpuOnly;
-    if (m_device->CreateBuffer(ibd, m_ib) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_device->CreateBuffer(ibd, m_ib) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     rhi::TransferBatch* batch = nullptr;
     m_graphicsQueue->CreateTransferBatch(batch);
@@ -317,12 +317,12 @@ draconic::core::Status MultiDrawIndirectSample::createGeometry()
     batch->Submit();
     m_graphicsQueue->DestroyTransferBatch(batch);
 
-    return draconic::core::ErrorCode::Ok;
+    return draconic::foundation::ErrorCode::Ok;
 }
 
-draconic::core::Status MultiDrawIndirectSample::createIndirectBuffer()
+draconic::foundation::Status MultiDrawIndirectSample::createIndirectBuffer()
 {
-    using draconic::core::Status, draconic::core::Span, draconic::core::u8;
+    using draconic::foundation::Status, draconic::foundation::Span, draconic::foundation::u8;
 
     // 4 indirect draw commands - one per quad.
     DrawIndexedIndirectArgs args[4] = {
@@ -336,8 +336,8 @@ draconic::core::Status MultiDrawIndirectSample::createIndirectBuffer()
     bd.size = sizeof(args);
     bd.usage = rhi::BufferUsage::Indirect | rhi::BufferUsage::CopyDst;
     bd.memory = rhi::MemoryLocation::GpuOnly;
-    if (m_device->CreateBuffer(bd, m_indirectBuf) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_device->CreateBuffer(bd, m_indirectBuf) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     rhi::TransferBatch* batch = nullptr;
     m_graphicsQueue->CreateTransferBatch(batch);
@@ -346,12 +346,12 @@ draconic::core::Status MultiDrawIndirectSample::createIndirectBuffer()
     batch->Submit();
     m_graphicsQueue->DestroyTransferBatch(batch);
 
-    return draconic::core::ErrorCode::Ok;
+    return draconic::foundation::ErrorCode::Ok;
 }
 
-draconic::core::Status MultiDrawIndirectSample::createLineGeometry()
+draconic::foundation::Status MultiDrawIndirectSample::createLineGeometry()
 {
-    using draconic::core::Status, draconic::core::Span, draconic::core::u8;
+    using draconic::foundation::Status, draconic::foundation::Span, draconic::foundation::u8;
 
     // Line wireframes for each quad: 4 edges per quad = 8 verts per quad, white lines.
     static constexpr float lineVerts[] = {
@@ -592,8 +592,8 @@ draconic::core::Status MultiDrawIndirectSample::createLineGeometry()
     bd.size = sizeof(lineVerts);
     bd.usage = rhi::BufferUsage::Vertex | rhi::BufferUsage::CopyDst;
     bd.memory = rhi::MemoryLocation::GpuOnly;
-    if (m_device->CreateBuffer(bd, m_lineVb) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_device->CreateBuffer(bd, m_lineVb) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     rhi::TransferBatch* batch = nullptr;
     m_graphicsQueue->CreateTransferBatch(batch);
@@ -602,20 +602,20 @@ draconic::core::Status MultiDrawIndirectSample::createLineGeometry()
     batch->Submit();
     m_graphicsQueue->DestroyTransferBatch(batch);
 
-    return draconic::core::ErrorCode::Ok;
+    return draconic::foundation::ErrorCode::Ok;
 }
 
 void MultiDrawIndirectSample::OnRender()
 {
-    using draconic::core::f32, draconic::core::Span, draconic::core::u32;
+    using draconic::foundation::f32, draconic::foundation::Span, draconic::foundation::u32;
     if (m_fenceVal > 0)
         m_fence->Wait(m_fenceVal, ~0ull);
-    if (m_swapChain->AcquireNextImage() != draconic::core::ErrorCode::Ok)
+    if (m_swapChain->AcquireNextImage() != draconic::foundation::ErrorCode::Ok)
         return;
 
     m_pool->Reset();
     rhi::CommandEncoder* enc = nullptr;
-    if (m_pool->CreateEncoder(enc) != draconic::core::ErrorCode::Ok || !enc)
+    if (m_pool->CreateEncoder(enc) != draconic::foundation::ErrorCode::Ok || !enc)
         return;
     enc->TransitionTexture(m_swapChain->CurrentTexture(), rhi::ResourceState::Undefined,
                            rhi::ResourceState::RenderTarget);

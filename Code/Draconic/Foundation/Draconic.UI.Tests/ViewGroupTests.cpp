@@ -1,40 +1,40 @@
 // Ported from Sedulous.UI.Tests/src/ViewGroupTests.bf (faithful; RefPtr views, `===` -> pointer ==,
 // Vector2 -> Float2, LayoutParams -> RefPtr<LayoutParams>).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 #include "TestHelpers.h"
 
 using namespace draconic::ui;
 using namespace draconic::ui::tests;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
-static core::RefPtr<RootView> MakeRoot()
+static foundation::RefPtr<RootView> MakeRoot()
 {
-    return core::MakeRef<RootView>(core::DefaultAllocator());
+    return foundation::MakeRef<RootView>(foundation::DefaultAllocator());
 }
-static core::RefPtr<TestView> MakeTestView(f32 w = 50, f32 h = 30)
+static foundation::RefPtr<TestView> MakeTestView(f32 w = 50, f32 h = 30)
 {
-    return core::MakeRef<TestView>(core::DefaultAllocator(), w, h);
+    return foundation::MakeRef<TestView>(foundation::DefaultAllocator(), w, h);
 }
-static core::RefPtr<TestGroup> MakeTestGroup()
+static foundation::RefPtr<TestGroup> MakeTestGroup()
 {
-    return core::MakeRef<TestGroup>(core::DefaultAllocator());
+    return foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
 }
 
 TEST_CASE("viewgroup: AddView_IncreasesChildCount")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestGroup> group = MakeTestGroup();
+    foundation::RefPtr<TestGroup> group = MakeTestGroup();
     root->AddView(group.Get());
 
     CHECK(group->ChildCount() == 0u);
-    core::RefPtr<TestView> child = MakeTestView();
+    foundation::RefPtr<TestView> child = MakeTestView();
     group->AddView(child.Get());
     CHECK(group->ChildCount() == 1u);
     CHECK(group->GetChildAt(0) == child.Get());
@@ -43,13 +43,13 @@ TEST_CASE("viewgroup: AddView_IncreasesChildCount")
 TEST_CASE("viewgroup: AddView_SetsParentAndContext")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestGroup> group = MakeTestGroup();
+    foundation::RefPtr<TestGroup> group = MakeTestGroup();
     root->AddView(group.Get());
 
-    core::RefPtr<TestView> child = MakeTestView();
+    foundation::RefPtr<TestView> child = MakeTestView();
     group->AddView(child.Get());
     CHECK(child->Parent == group.Get());
     CHECK(child->Context == &ctx);
@@ -57,14 +57,14 @@ TEST_CASE("viewgroup: AddView_SetsParentAndContext")
 
 TEST_CASE("viewgroup: AddView_RejectsNull")
 {
-    core::RefPtr<TestGroup> group = MakeTestGroup();
+    foundation::RefPtr<TestGroup> group = MakeTestGroup();
     group->AddView(nullptr);
     CHECK(group->ChildCount() == 0u);
 }
 
 TEST_CASE("viewgroup: AddView_RejectsSelf")
 {
-    core::RefPtr<TestGroup> group = MakeTestGroup();
+    foundation::RefPtr<TestGroup> group = MakeTestGroup();
     group->AddView(group.Get());
     CHECK(group->ChildCount() == 0u);
 }
@@ -72,13 +72,13 @@ TEST_CASE("viewgroup: AddView_RejectsSelf")
 TEST_CASE("viewgroup: AddView_RejectsDuplicate")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestGroup> group = MakeTestGroup();
+    foundation::RefPtr<TestGroup> group = MakeTestGroup();
     root->AddView(group.Get());
 
-    core::RefPtr<TestView> child = MakeTestView();
+    foundation::RefPtr<TestView> child = MakeTestView();
     group->AddView(child.Get());
     group->AddView(child.Get()); // duplicate
     CHECK(group->ChildCount() == 1u);
@@ -87,15 +87,15 @@ TEST_CASE("viewgroup: AddView_RejectsDuplicate")
 TEST_CASE("viewgroup: AddView_ReparentsFromOldParent")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestGroup> groupA = MakeTestGroup();
-    core::RefPtr<TestGroup> groupB = MakeTestGroup();
+    foundation::RefPtr<TestGroup> groupA = MakeTestGroup();
+    foundation::RefPtr<TestGroup> groupB = MakeTestGroup();
     root->AddView(groupA.Get());
     root->AddView(groupB.Get());
 
-    core::RefPtr<TestView> child = MakeTestView();
+    foundation::RefPtr<TestView> child = MakeTestView();
     groupA->AddView(child.Get());
     CHECK(groupA->ChildCount() == 1u);
 
@@ -108,13 +108,13 @@ TEST_CASE("viewgroup: AddView_ReparentsFromOldParent")
 TEST_CASE("viewgroup: AddView_CreatesDefaultLayoutParams")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestGroup> group = MakeTestGroup();
+    foundation::RefPtr<TestGroup> group = MakeTestGroup();
     root->AddView(group.Get());
 
-    core::RefPtr<TestView> child = MakeTestView();
+    foundation::RefPtr<TestView> child = MakeTestView();
     CHECK(!child->LayoutParams);
     group->AddView(child.Get());
     CHECK(child->LayoutParams);
@@ -123,17 +123,17 @@ TEST_CASE("viewgroup: AddView_CreatesDefaultLayoutParams")
 TEST_CASE("viewgroup: AddView_ReplacesOldLayoutParams")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestGroup> group = MakeTestGroup();
+    foundation::RefPtr<TestGroup> group = MakeTestGroup();
     root->AddView(group.Get());
 
-    core::RefPtr<TestView> child = MakeTestView();
-    core::RefPtr<LayoutParams> oldLp = core::MakeRef<LayoutParams>(core::DefaultAllocator());
+    foundation::RefPtr<TestView> child = MakeTestView();
+    foundation::RefPtr<LayoutParams> oldLp = foundation::MakeRef<LayoutParams>(foundation::DefaultAllocator());
     child->LayoutParams = oldLp;
 
-    core::RefPtr<LayoutParams> newLp = core::MakeRef<LayoutParams>(core::DefaultAllocator());
+    foundation::RefPtr<LayoutParams> newLp = foundation::MakeRef<LayoutParams>(foundation::DefaultAllocator());
     group->AddView(child.Get(), newLp);
     CHECK(child->LayoutParams.Get() == newLp.Get());
 }
@@ -141,13 +141,13 @@ TEST_CASE("viewgroup: AddView_ReplacesOldLayoutParams")
 TEST_CASE("viewgroup: RemoveView_ClearsParentAndContext")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestGroup> group = MakeTestGroup();
+    foundation::RefPtr<TestGroup> group = MakeTestGroup();
     root->AddView(group.Get());
 
-    core::RefPtr<TestView> child = MakeTestView();
+    foundation::RefPtr<TestView> child = MakeTestView();
     group->AddView(child.Get());
     group->RemoveView(child.Get());
 
@@ -159,13 +159,13 @@ TEST_CASE("viewgroup: RemoveView_ClearsParentAndContext")
 TEST_CASE("viewgroup: RemoveView_WithDelete")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestGroup> group = MakeTestGroup();
+    foundation::RefPtr<TestGroup> group = MakeTestGroup();
     root->AddView(group.Get());
 
-    core::RefPtr<TestView> child = MakeTestView();
+    foundation::RefPtr<TestView> child = MakeTestView();
     group->AddView(child.Get());
     group->RemoveView(child.Get(), true);
     CHECK(group->ChildCount() == 0u);
@@ -174,10 +174,10 @@ TEST_CASE("viewgroup: RemoveView_WithDelete")
 TEST_CASE("viewgroup: RemoveAllViews_ClearsAll")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestGroup> group = MakeTestGroup();
+    foundation::RefPtr<TestGroup> group = MakeTestGroup();
     root->AddView(group.Get());
 
     group->AddView(MakeTestView().Get());
@@ -192,15 +192,15 @@ TEST_CASE("viewgroup: RemoveAllViews_ClearsAll")
 TEST_CASE("viewgroup: InsertView_AtIndex")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestGroup> group = MakeTestGroup();
+    foundation::RefPtr<TestGroup> group = MakeTestGroup();
     root->AddView(group.Get());
 
-    core::RefPtr<TestView> a = MakeTestView();
-    core::RefPtr<TestView> b = MakeTestView();
-    core::RefPtr<TestView> c = MakeTestView();
+    foundation::RefPtr<TestView> a = MakeTestView();
+    foundation::RefPtr<TestView> b = MakeTestView();
+    foundation::RefPtr<TestView> c = MakeTestView();
     group->AddView(a.Get());
     group->AddView(c.Get());
     group->InsertView(b.Get(), 1);
@@ -213,7 +213,7 @@ TEST_CASE("viewgroup: InsertView_AtIndex")
 
 TEST_CASE("viewgroup: ContentBounds_AccountsForPadding")
 {
-    core::RefPtr<TestGroup> group = MakeTestGroup();
+    foundation::RefPtr<TestGroup> group = MakeTestGroup();
     group->Padding = Thickness{10, 5, 10, 5};
     group->Layout(0, 0, 200, 100);
 
@@ -227,12 +227,12 @@ TEST_CASE("viewgroup: ContentBounds_AccountsForPadding")
 TEST_CASE("viewgroup: HitTest_ReturnsDeepestChild")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get(), 400, 300);
 
-    core::RefPtr<TestGroup> group = MakeTestGroup();
+    foundation::RefPtr<TestGroup> group = MakeTestGroup();
     root->AddView(group.Get());
-    core::RefPtr<TestView> child = MakeTestView(400, 300);
+    foundation::RefPtr<TestView> child = MakeTestView(400, 300);
     group->AddView(child.Get());
 
     LayoutPass(ctx, root.Get());
@@ -244,7 +244,7 @@ TEST_CASE("viewgroup: HitTest_ReturnsDeepestChild")
 TEST_CASE("viewgroup: HitTest_ReturnsNullOutsideBounds")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get(), 400, 300);
 
     LayoutPass(ctx, root.Get());
@@ -256,10 +256,10 @@ TEST_CASE("viewgroup: HitTest_ReturnsNullOutsideBounds")
 TEST_CASE("viewgroup: HitTest_SkipsNotVisible")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get(), 400, 300);
 
-    core::RefPtr<TestView> child = MakeTestView(400, 300);
+    foundation::RefPtr<TestView> child = MakeTestView(400, 300);
     child->Visibility = Visibility::Hidden;
     root->AddView(child.Get());
 
@@ -272,10 +272,10 @@ TEST_CASE("viewgroup: HitTest_SkipsNotVisible")
 TEST_CASE("viewgroup: HitTest_SkipsNotInteractionEnabled")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get(), 400, 300);
 
-    core::RefPtr<TestView> child = MakeTestView(400, 300);
+    foundation::RefPtr<TestView> child = MakeTestView(400, 300);
     child->IsInteractionEnabled = false;
     root->AddView(child.Get());
 
@@ -288,14 +288,14 @@ TEST_CASE("viewgroup: HitTest_SkipsNotInteractionEnabled")
 TEST_CASE("viewgroup: HitTest_PassThroughNonHitTestVisible")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get(), 400, 300);
 
-    core::RefPtr<TestGroup> group = MakeTestGroup();
+    foundation::RefPtr<TestGroup> group = MakeTestGroup();
     group->IsHitTestVisible = false;
     root->AddView(group.Get());
 
-    core::RefPtr<TestView> child = MakeTestView(400, 300);
+    foundation::RefPtr<TestView> child = MakeTestView(400, 300);
     group->AddView(child.Get());
 
     LayoutPass(ctx, root.Get());
@@ -307,11 +307,11 @@ TEST_CASE("viewgroup: HitTest_PassThroughNonHitTestVisible")
 TEST_CASE("viewgroup: HitTest_ReverseOrder_TopmostFirst")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get(), 400, 300);
 
-    core::RefPtr<TestView> a = MakeTestView(400, 300);
-    core::RefPtr<TestView> b = MakeTestView(400, 300);
+    foundation::RefPtr<TestView> a = MakeTestView(400, 300);
+    foundation::RefPtr<TestView> b = MakeTestView(400, 300);
     root->AddView(a.Get());
     root->AddView(b.Get()); // b on top
 
@@ -326,10 +326,10 @@ TEST_CASE("viewgroup: HitTest_ReverseOrder_TopmostFirst")
 TEST_CASE("viewgroup: FindByName_DirectChild")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestView> child = MakeTestView();
+    foundation::RefPtr<TestView> child = MakeTestView();
     child->Name = String(u8"target");
     root->AddView(child.Get());
 
@@ -339,12 +339,12 @@ TEST_CASE("viewgroup: FindByName_DirectChild")
 TEST_CASE("viewgroup: FindByName_NestedChild")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestGroup> group = MakeTestGroup();
+    foundation::RefPtr<TestGroup> group = MakeTestGroup();
     root->AddView(group.Get());
-    core::RefPtr<TestView> nested = MakeTestView();
+    foundation::RefPtr<TestView> nested = MakeTestView();
     nested->Name = String(u8"deep");
     group->AddView(nested.Get());
 
@@ -354,7 +354,7 @@ TEST_CASE("viewgroup: FindByName_NestedChild")
 TEST_CASE("viewgroup: FindByName_NotFound")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
     root->AddView(MakeTestView().Get());
@@ -364,10 +364,10 @@ TEST_CASE("viewgroup: FindByName_NotFound")
 TEST_CASE("viewgroup: FindByName_Typed")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestView> child = MakeTestView();
+    foundation::RefPtr<TestView> child = MakeTestView();
     child->Name = String(u8"typed");
     root->AddView(child.Get());
 
@@ -378,12 +378,12 @@ TEST_CASE("viewgroup: FindByName_Typed")
 TEST_CASE("viewgroup: FindByName_DeeplyNested")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestGroup> level1 = MakeTestGroup();
-    core::RefPtr<TestGroup> level2 = MakeTestGroup();
-    core::RefPtr<TestView> target = MakeTestView();
+    foundation::RefPtr<TestGroup> level1 = MakeTestGroup();
+    foundation::RefPtr<TestGroup> level2 = MakeTestGroup();
+    foundation::RefPtr<TestView> target = MakeTestView();
     target->Name = String(u8"deep-target");
     root->AddView(level1.Get());
     level1->AddView(level2.Get());
@@ -397,12 +397,12 @@ TEST_CASE("viewgroup: FindByName_DeeplyNested")
 TEST_CASE("viewgroup: HitTest_AppliesInverseTransform")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get(), 400, 300);
 
-    core::RefPtr<TestGroup> group = MakeTestGroup();
+    foundation::RefPtr<TestGroup> group = MakeTestGroup();
     root->AddView(group.Get());
-    core::RefPtr<TestView> child = MakeTestView(400, 300);
+    foundation::RefPtr<TestView> child = MakeTestView(400, 300);
     group->AddView(child.Get());
     LayoutPass(ctx, root.Get());
 
@@ -420,14 +420,14 @@ TEST_CASE("viewgroup: HitTest_AppliesInverseTransform")
 TEST_CASE("viewgroup: MoveView_ReordersWithoutDetach")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestGroup> group = MakeTestGroup();
+    foundation::RefPtr<TestGroup> group = MakeTestGroup();
     root->AddView(group.Get());
-    core::RefPtr<TestView> a = MakeTestView();
-    core::RefPtr<TestView> b = MakeTestView();
-    core::RefPtr<TestView> c = MakeTestView();
+    foundation::RefPtr<TestView> a = MakeTestView();
+    foundation::RefPtr<TestView> b = MakeTestView();
+    foundation::RefPtr<TestView> c = MakeTestView();
     group->AddView(a.Get());
     group->AddView(b.Get());
     group->AddView(c.Get());
@@ -448,7 +448,7 @@ TEST_CASE("viewgroup: MoveView_ReordersWithoutDetach")
     CHECK(group->GetChildAt(1) == a.Get());
 
     // A view that is not a child is ignored.
-    core::RefPtr<TestView> stranger = MakeTestView();
+    foundation::RefPtr<TestView> stranger = MakeTestView();
     group->MoveView(stranger.Get(), 0);
     CHECK(group->ChildCount() == 3u);
     CHECK(group->GetChildAt(0) == b.Get());

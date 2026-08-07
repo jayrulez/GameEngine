@@ -11,12 +11,12 @@
 // PopupLayer holds the only surviving ref; submenus are shown ownsView:false (parent MenuItem owns them).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:context_menu;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import draconic.fonts;
 import :view;
@@ -32,7 +32,7 @@ import :ipopup_owner;
 import :popup_layer;
 import :popup_positioner;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace fonts = draconic::fonts;
 
 export namespace draconic::ui

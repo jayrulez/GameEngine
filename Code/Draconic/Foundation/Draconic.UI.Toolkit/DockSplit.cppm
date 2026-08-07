@@ -7,16 +7,16 @@
 // getter hides the `Orientation` enum inside the class, so type positions are fully qualified.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui.toolkit:dock_split;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import draconic.ui;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui::toolkit
 {

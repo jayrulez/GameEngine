@@ -5,7 +5,7 @@
 add_library(Draconic.Net.Manager STATIC)
 add_library(Draconic::Net.Manager ALIAS Draconic.Net.Manager)
 
-target_link_libraries(Draconic.Net.Manager PUBLIC Draconic::Core Draconic::Net Draconic::Net.Replication Draconic::Scene Draconic::Script Draconic::Script.Facades Draconic::Policy)
+target_link_libraries(Draconic.Net.Manager PUBLIC Draconic::Foundation Draconic::Net Draconic::Net.Replication Draconic::Scene Draconic::Script Draconic::Script.Facades Draconic::Policy)
 
 target_sources(Draconic.Net.Manager
     PUBLIC

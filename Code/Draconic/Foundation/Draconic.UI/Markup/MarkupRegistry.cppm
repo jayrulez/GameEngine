@@ -6,14 +6,14 @@
 // nothing; a captureless lambda converts to a fn-ptr); Beef nested `Dictionary<String, Registration>`
 // with an inner Dictionary -> flat HashMaps keyed by "element\x1fname" (avoids nested-container copies);
 // the static tables -> function-local statics (no static-init-order issues); Beef `as X` -> Cast<X>;
-// FlexLayout.LayoutParams -> FlexLayoutParams; float.Parse -> core::ParseFloat.
+// FlexLayout.LayoutParams -> FlexLayoutParams; float.Parse -> foundation::ParseFloat.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:markup_registry;
 
-import draconic.core;
+import draconic.foundation;
 import :view;
 import :layout_params;
 import :size_spec;
@@ -56,7 +56,7 @@ import :list_view;
 import :tree_view;
 import :grid_view;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

@@ -2,12 +2,12 @@
 // FontLoadOptions tests (the GPU/TTF-free type coverage).
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.fonts;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::fonts;
 
 TEST_CASE("fonts.rect: construction, bounds, contains, FromBounds")

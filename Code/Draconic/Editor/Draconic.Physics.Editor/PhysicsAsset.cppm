@@ -11,13 +11,13 @@
 // Never linked by the runtime.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.physics.editor;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.editor;
 import draconic.content;
 import draconic.geometry;
@@ -26,7 +26,7 @@ import draconic.geometry.resource;
 import draconic.physics;
 import draconic.physics.resource;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::physics
 {
@@ -48,11 +48,11 @@ export namespace draconic::physics
         void Serialize(ISerializer& ar) override
         {
             draconic::editor::Asset::Serialize(ar); // fileName (unused; guid-sourced)
-            draconic::core::Serialize(ar, "sourceMesh", sourceMesh);
+            draconic::foundation::Serialize(ar, "sourceMesh", sourceMesh);
             u8 kind = static_cast<u8>(cook);
-            draconic::core::Serialize(ar, "cook", kind);
+            draconic::foundation::Serialize(ar, "cook", kind);
             cook = static_cast<CollisionCookKind>(kind);
-            draconic::core::Serialize(ar, "hullTolerance", hullTolerance);
+            draconic::foundation::Serialize(ar, "hullTolerance", hullTolerance);
         }
     };
 
@@ -211,9 +211,9 @@ export namespace draconic::physics
         void Serialize(ISerializer& ar) override
         {
             draconic::editor::Asset::Serialize(ar);
-            draconic::core::Serialize(ar, "friction", friction);
-            draconic::core::Serialize(ar, "restitution", restitution);
-            draconic::core::Serialize(ar, "density", density);
+            draconic::foundation::Serialize(ar, "friction", friction);
+            draconic::foundation::Serialize(ar, "restitution", restitution);
+            draconic::foundation::Serialize(ar, "density", density);
         }
     };
 

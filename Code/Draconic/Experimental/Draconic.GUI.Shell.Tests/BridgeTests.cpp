@@ -1,28 +1,28 @@
 // Draconic GUI - GuiInputBridge tests: translate synthetic platform InputEvents into
 // EventDispatcher injections (hover/click/key/text), map enums, and apply a ContentFit.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.shell;
 import draconic.shell.null;
 import draconic.gui;
 import draconic.gui.shell;
 
 using namespace draconic::gui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace shell = draconic::shell;
 
 namespace
 {
-    core::RefPtr<SceneNode> MakeScene(core::Float2 size)
+    foundation::RefPtr<SceneNode> MakeScene(foundation::Float2 size)
     {
-        auto s = core::MakeRef<SceneNode>(core::DefaultAllocator());
+        auto s = foundation::MakeRef<SceneNode>(foundation::DefaultAllocator());
         s->SetSize(size);
         return s;
     }
-    core::RefPtr<Node> MakePanel(core::Float2 pos, core::Float2 size)
+    foundation::RefPtr<Node> MakePanel(foundation::Float2 pos, foundation::Float2 size)
     {
-        auto n = core::MakeRef<Node>(core::DefaultAllocator());
+        auto n = foundation::MakeRef<Node>(foundation::DefaultAllocator());
         n->SetSize(size);
         n->SetPosition(pos);
         return n;
@@ -61,7 +61,7 @@ namespace
     {
         shell::InputEvent e;
         e.kind = shell::InputEventKind::TextInput;
-        core::usize i = 0;
+        foundation::usize i = 0;
         for (; s[i] != 0 && i < 31; ++i)
             e.text[i] = s[i];
         e.text[i] = 0;
@@ -71,8 +71,8 @@ namespace
 
 TEST_CASE("bridge: mouse move drives hover")
 {
-    auto root = MakeScene(core::Float2{200.0f, 200.0f});
-    auto child = MakePanel(core::Float2{10.0f, 10.0f}, core::Float2{50.0f, 50.0f});
+    auto root = MakeScene(foundation::Float2{200.0f, 200.0f});
+    auto child = MakePanel(foundation::Float2{10.0f, 10.0f}, foundation::Float2{50.0f, 50.0f});
     root->AddChild(child.Get());
     GuiInputBridge bridge{root->GetEventDispatcher()};
 
@@ -86,8 +86,8 @@ TEST_CASE("bridge: mouse move drives hover")
 
 TEST_CASE("bridge: left press+release becomes a click; button mapping is explicit")
 {
-    auto root = MakeScene(core::Float2{200.0f, 200.0f});
-    auto child = MakePanel(core::Float2{0.0f, 0.0f}, core::Float2{100.0f, 100.0f});
+    auto root = MakeScene(foundation::Float2{200.0f, 200.0f});
+    auto child = MakePanel(foundation::Float2{0.0f, 0.0f}, foundation::Float2{100.0f, 100.0f});
     root->AddChild(child.Get());
     GuiInputBridge bridge{root->GetEventDispatcher()};
 
@@ -117,14 +117,14 @@ TEST_CASE("bridge: left press+release becomes a click; button mapping is explici
 
 TEST_CASE("bridge: key and text route to the focus node with mapped modifiers")
 {
-    auto root = MakeScene(core::Float2{200.0f, 200.0f});
-    auto child = MakePanel(core::Float2{0.0f, 0.0f}, core::Float2{100.0f, 100.0f});
+    auto root = MakeScene(foundation::Float2{200.0f, 200.0f});
+    auto child = MakePanel(foundation::Float2{0.0f, 0.0f}, foundation::Float2{100.0f, 100.0f});
     root->AddChild(child.Get());
     GuiInputBridge bridge{root->GetEventDispatcher()};
     root->GetEventDispatcher()->SetFocusNode(child.Get());
 
     unsigned seenMods = 0;
-    core::StringView seenText;
+    foundation::StringView seenText;
     child->AddEventListener(EventType::KeyDown, [&](const Event& e)
                             { seenMods = static_cast<const KeyEvent&>(e).Modifiers; });
     child->AddEventListener(EventType::TextInput, [&](const Event& e)
@@ -134,44 +134,44 @@ TEST_CASE("bridge: key and text route to the focus node with mapped modifiers")
         Key(shell::InputEventKind::KeyDown, shell::KeyCode::A, shell::KeyModifiers::LeftCtrl));
     bridge.Dispatch(MakeTextEvent(u8"hi"));
     CHECK((seenMods & KeyModCtrl) != 0u);
-    CHECK(seenText == core::StringView(u8"hi"));
+    CHECK(seenText == foundation::StringView(u8"hi"));
 }
 
 TEST_CASE("bridge: navigation keys map platform KeyCode to the GUI KeyCode")
 {
-    auto root = MakeScene(core::Float2{200.0f, 200.0f});
-    auto child = MakePanel(core::Float2{0.0f, 0.0f}, core::Float2{100.0f, 100.0f});
+    auto root = MakeScene(foundation::Float2{200.0f, 200.0f});
+    auto child = MakePanel(foundation::Float2{0.0f, 0.0f}, foundation::Float2{100.0f, 100.0f});
     root->AddChild(child.Get());
     GuiInputBridge bridge{root->GetEventDispatcher()};
     root->GetEventDispatcher()->SetFocusNode(child.Get());
 
-    core::u32 seenKey = 0xFFFFFFFFu;
+    foundation::u32 seenKey = 0xFFFFFFFFu;
     child->AddEventListener(EventType::KeyDown, [&](const Event& e)
                             { seenKey = static_cast<const KeyEvent&>(e).KeyCode; });
 
     bridge.Dispatch(Key(shell::InputEventKind::KeyDown, shell::KeyCode::Backspace));
-    CHECK(seenKey == static_cast<core::u32>(KeyCode::Backspace));
+    CHECK(seenKey == static_cast<foundation::u32>(KeyCode::Backspace));
     bridge.Dispatch(Key(shell::InputEventKind::KeyDown, shell::KeyCode::Left));
-    CHECK(seenKey == static_cast<core::u32>(KeyCode::Left));
+    CHECK(seenKey == static_cast<foundation::u32>(KeyCode::Left));
     bridge.Dispatch(Key(shell::InputEventKind::KeyDown, shell::KeyCode::Home));
-    CHECK(seenKey == static_cast<core::u32>(KeyCode::Home));
+    CHECK(seenKey == static_cast<foundation::u32>(KeyCode::Home));
 
     // The editing-shortcut letters (A/C/V/X) map through so Ctrl+A/C/V/X reach widgets.
     bridge.Dispatch(Key(shell::InputEventKind::KeyDown, shell::KeyCode::A));
-    CHECK(seenKey == static_cast<core::u32>(KeyCode::A));
+    CHECK(seenKey == static_cast<foundation::u32>(KeyCode::A));
     bridge.Dispatch(Key(shell::InputEventKind::KeyDown, shell::KeyCode::V));
-    CHECK(seenKey == static_cast<core::u32>(KeyCode::V));
+    CHECK(seenKey == static_cast<foundation::u32>(KeyCode::V));
 
     // A printable key with no shortcut meaning maps to Unknown (its glyph arrives as text).
     bridge.Dispatch(Key(shell::InputEventKind::KeyDown, shell::KeyCode::B));
-    CHECK(seenKey == static_cast<core::u32>(KeyCode::Unknown));
+    CHECK(seenKey == static_cast<foundation::u32>(KeyCode::Unknown));
 }
 
 TEST_CASE("bridge: text-input target follows focus of an editable widget")
 {
-    auto root = MakeScene(core::Float2{200.0f, 200.0f});
-    auto field = core::MakeRef<TextField>(core::DefaultAllocator());
-    field->SetSize(core::Float2{100.0f, 24.0f}); // covers (0,0)-(100,24)
+    auto root = MakeScene(foundation::Float2{200.0f, 200.0f});
+    auto field = foundation::MakeRef<TextField>(foundation::DefaultAllocator());
+    field->SetSize(foundation::Float2{100.0f, 24.0f}); // covers (0,0)-(100,24)
     root->AddChild(field.Get());
 
     shell::NullWindow window(1u, shell::WindowSettings{});
@@ -195,15 +195,15 @@ TEST_CASE("bridge: text-input target follows focus of an editable widget")
 
 TEST_CASE("bridge: content fit maps window position into content space")
 {
-    auto root = MakeScene(core::Float2{200.0f, 200.0f});
-    auto child = MakePanel(core::Float2{10.0f, 10.0f}, core::Float2{50.0f, 50.0f});
+    auto root = MakeScene(foundation::Float2{200.0f, 200.0f});
+    auto child = MakePanel(foundation::Float2{10.0f, 10.0f}, foundation::Float2{50.0f, 50.0f});
     root->AddChild(child.Get());
     GuiInputBridge bridge{root->GetEventDispatcher()};
 
-    core::ContentFit fit;
-    fit.region = core::Rectangle{0.0f, 0.0f, 400.0f, 400.0f};
-    fit.contentSize = core::Float2{200.0f, 200.0f};
-    fit.mode = core::FitMode::Stretch;
+    foundation::ContentFit fit;
+    fit.region = foundation::Rectangle{0.0f, 0.0f, 400.0f, 400.0f};
+    fit.contentSize = foundation::Float2{200.0f, 200.0f};
+    fit.mode = foundation::FitMode::Stretch;
     bridge.SetContentFit(fit);
 
     bridge.Dispatch(MouseMove(40.0f, 40.0f)); // window (40,40) -> content (20,20), inside child
@@ -213,7 +213,7 @@ TEST_CASE("bridge: content fit maps window position into content space")
 
 TEST_CASE("bridge: unroutable events return false")
 {
-    auto root = MakeScene(core::Float2{200.0f, 200.0f});
+    auto root = MakeScene(foundation::Float2{200.0f, 200.0f});
     GuiInputBridge bridge{root->GetEventDispatcher()};
 
     shell::InputEvent gamepad;
@@ -227,16 +227,16 @@ TEST_CASE("ShellClipboard: adapts the shell clipboard to gui::IClipboard and rou
     ShellClipboard clipboard{&shell};
 
     CHECK_FALSE(clipboard.HasText());
-    clipboard.SetText(core::StringView(u8"copied"));
+    clipboard.SetText(foundation::StringView(u8"copied"));
     CHECK(clipboard.HasText());
-    CHECK(clipboard.GetText() == core::StringView(u8"copied"));
-    CHECK(shell.GetClipboardText() == core::StringView(u8"copied")); // reached the shell
+    CHECK(clipboard.GetText() == foundation::StringView(u8"copied"));
+    CHECK(shell.GetClipboardText() == foundation::StringView(u8"copied")); // reached the shell
 
     // A null shell degrades safely (no crash, empty text).
     ShellClipboard none{nullptr};
     CHECK_FALSE(none.HasText());
     CHECK(none.GetText().Size() == 0);
-    none.SetText(core::StringView(u8"ignored"));
+    none.SetText(foundation::StringView(u8"ignored"));
 }
 
 // --- Minimal settable input mocks for the poll-based PumpFromSurface path ---
@@ -256,14 +256,14 @@ namespace
     {
     public:
         bool leftPressed = false;
-        core::f32 X() const override { return 0.0f; }
-        core::f32 Y() const override { return 0.0f; }
-        core::f32 GlobalX() const override { return 0.0f; }
-        core::f32 GlobalY() const override { return 0.0f; }
-        core::f32 DeltaX() const override { return 0.0f; }
-        core::f32 DeltaY() const override { return 0.0f; }
-        core::f32 ScrollX() const override { return 0.0f; }
-        core::f32 ScrollY() const override { return 0.0f; }
+        foundation::f32 X() const override { return 0.0f; }
+        foundation::f32 Y() const override { return 0.0f; }
+        foundation::f32 GlobalX() const override { return 0.0f; }
+        foundation::f32 GlobalY() const override { return 0.0f; }
+        foundation::f32 DeltaX() const override { return 0.0f; }
+        foundation::f32 DeltaY() const override { return 0.0f; }
+        foundation::f32 ScrollX() const override { return 0.0f; }
+        foundation::f32 ScrollY() const override { return 0.0f; }
         bool IsButtonDown(shell::MouseButton) const override { return false; }
         bool IsButtonPressed(shell::MouseButton b) const override
         {
@@ -286,19 +286,19 @@ namespace
         shell::IKeyboard* Keyboard() override { return &keyboard; }
         shell::IMouse* Mouse() override { return &mouse; }
         shell::ITouch* Touch() override { return nullptr; }
-        core::i32 GamepadCount() const override { return 0; }
-        shell::IGamepad* GetGamepad(core::i32) override { return nullptr; }
-        core::Span<const shell::InputEvent> Events() const override { return {}; }
-        core::u32 HoverWindow() const override { return 0; }
-        core::u32 FocusedWindow() const override { return 0; }
+        foundation::i32 GamepadCount() const override { return 0; }
+        shell::IGamepad* GetGamepad(foundation::i32) override { return nullptr; }
+        foundation::Span<const shell::InputEvent> Events() const override { return {}; }
+        foundation::u32 HoverWindow() const override { return 0; }
+        foundation::u32 FocusedWindow() const override { return 0; }
         void Update() override {}
     };
 }
 
 TEST_CASE("bridge: PumpFromSurface carries keyboard modifiers into a click (Shift+click)")
 {
-    auto root = MakeScene(core::Float2{200.0f, 200.0f});
-    auto child = MakePanel(core::Float2{0.0f, 0.0f}, core::Float2{100.0f, 100.0f});
+    auto root = MakeScene(foundation::Float2{200.0f, 200.0f});
+    auto child = MakePanel(foundation::Float2{0.0f, 0.0f}, foundation::Float2{100.0f, 100.0f});
     root->AddChild(child.Get());
     GuiInputBridge bridge{root->GetEventDispatcher()};
 
@@ -310,9 +310,9 @@ TEST_CASE("bridge: PumpFromSurface carries keyboard modifiers into a click (Shif
     manager.keyboard.mods = shell::KeyModifiers::LeftShift;
     manager.mouse.leftPressed = true;
 
-    shell::InputSurface surface{&manager, 1u, core::ContentFit{}};
+    shell::InputSurface surface{&manager, 1u, foundation::ContentFit{}};
     // Gate the surface active (hovered + focused) with the content cursor over the child.
-    surface.ApplyGate(true, true, false, core::Float2{10.0f, 10.0f}, core::Float2{0.0f, 0.0f});
+    surface.ApplyGate(true, true, false, foundation::Float2{10.0f, 10.0f}, foundation::Float2{0.0f, 0.0f});
 
     bridge.PumpFromSurface(surface);
     CHECK((seenMods & KeyModShift) != 0u); // Shift reached the widget via the poll path

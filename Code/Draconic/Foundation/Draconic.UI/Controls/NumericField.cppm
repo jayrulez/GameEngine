@@ -5,18 +5,18 @@
 // value + a digits/'-'/'.' input filter). Ported from Sedulous.UI/src/Controls/NumericField.bf.
 //
 // Port taxes: Beef `double` -> f64; get/set properties -> Value()/SetValue()/... methods; `double.Parse`
-// -> core::ParseFloat, `text.Trim()` -> core::Trimmed, `{0:F2}`/round formatting -> core::FormatFixed
+// -> foundation::ParseFloat, `text.Trim()` -> foundation::Trimmed, `{0:F2}`/round formatting -> foundation::FormatFixed
 // (uniform: FormatFixed(v, 0) already yields the rounded integer). Min()/Max() member getters shadow
-// core::Min/Max, so the two-arg clamps call them qualified (core::Min/core::Max/core::Clamp). Beef
+// foundation::Min/Max, so the two-arg clamps call them qualified (foundation::Min/foundation::Max/foundation::Clamp). Beef
 // [Friend]mText/[Friend]mBehavior test access -> public Text()/Behavior().
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:numeric_field;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import draconic.fonts;
 import :view;
@@ -37,8 +37,8 @@ import :text_editing_behavior;
 import :input_filter;
 import :palette;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace fonts = draconic::fonts;
 
 export namespace draconic::ui
@@ -74,7 +74,7 @@ export namespace draconic::ui
         [[nodiscard]] f64 Value() const noexcept { return m_value; }
         void SetValue(f64 value)
         {
-            const f64 clamped = core::Clamp(value, m_min, m_max);
+            const f64 clamped = foundation::Clamp(value, m_min, m_max);
             if (m_value != clamped)
             {
                 m_value = clamped;
@@ -109,11 +109,11 @@ export namespace draconic::ui
             }
         }
         [[nodiscard]] f64 Step() const noexcept { return m_step; }
-        void SetStep(f64 value) { m_step = core::Max(0.0, value); }
+        void SetStep(f64 value) { m_step = foundation::Max(0.0, value); }
         [[nodiscard]] i32 DecimalPlaces() const noexcept { return m_decimalPlaces; }
         void SetDecimalPlaces(i32 value)
         {
-            m_decimalPlaces = core::Max(0, value);
+            m_decimalPlaces = foundation::Max(0, value);
             UpdateText();
         }
 
@@ -186,7 +186,7 @@ export namespace draconic::ui
             {
                 if (Optional<f64> parsed = ParseFloat(m_text); parsed.HasValue())
                 {
-                    const f64 clamped = core::Clamp(parsed.Value(), m_min, m_max);
+                    const f64 clamped = foundation::Clamp(parsed.Value(), m_min, m_max);
                     if (m_value != clamped)
                     {
                         m_value = clamped;
@@ -422,7 +422,7 @@ export namespace draconic::ui
         {
             if (Optional<f64> parsed = ParseFloat(m_text); parsed.HasValue())
             {
-                m_value = core::Clamp(parsed.Value(), m_min, m_max);
+                m_value = foundation::Clamp(parsed.Value(), m_min, m_max);
                 OnValueChanged.Invoke(this, m_value);
             }
             UpdateText();
@@ -648,7 +648,7 @@ export namespace draconic::ui
                 m_scrollOffsetX = cursorX - contentW;
             }
             m_scrollOffsetX =
-                core::Clamp(m_scrollOffsetX, 0.0f, core::Max(0.0f, m_textWidth - contentW));
+                foundation::Clamp(m_scrollOffsetX, 0.0f, foundation::Max(0.0f, m_textWidth - contentW));
         }
 
         void DrawTextContent(UIDrawContext& ctx, f32 areaX, f32 areaW, f32 fontSize)
@@ -782,7 +782,7 @@ export namespace draconic::ui
             const Color arrowColor =
                 ResolveStyleColor(StyleProperty::TextColor,
                                   Color{220.0f / 255.0f, 225.0f / 255.0f, 235.0f / 255.0f, 1.0f});
-            const f32 arrowSz = core::Min(ButtonWidth.Value(), halfH) * 0.25f;
+            const f32 arrowSz = foundation::Min(ButtonWidth.Value(), halfH) * 0.25f;
             const f32 cx = btnX + ButtonWidth.Value() * 0.5f;
 
             // Up arrow.

@@ -1,8 +1,8 @@
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h" // <new> reachability for container instantiation (GCC)
+#include "Draconic.Foundation/Prelude.h" // <new> reachability for container instantiation (GCC)
 
-import draconic.core;
+import draconic.foundation;
 import draconic.runtime;
 import draconic.shell;
 import draconic.shell.null;
@@ -10,7 +10,7 @@ import draconic.graphics;
 import draconic.graphics.null;
 import draconic.runtime.client;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::runtime;
 using namespace draconic::shell;
 using namespace draconic::

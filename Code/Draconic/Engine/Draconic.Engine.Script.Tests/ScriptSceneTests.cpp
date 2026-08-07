@@ -8,11 +8,11 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h" // DRACONIC_REFLECT_VALUE (the OPTION 1 test component)
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h" // DRACONIC_REFLECT_VALUE (the OPTION 1 test component)
 #include <initializer_list>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.runtime;
 import draconic.scene;
 import draconic.scene.resource;
@@ -37,7 +37,7 @@ import draconic.engine.particles;   // *.of + SceneParticles (Track A, particle 
 import draconic.net.replication;    // NetworkComponent + manager + .of (Track A, net surface)
 import draconic.engine.ui;          // world-space UI components + managers + .of (Track A, UI surface)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::script;
 namespace scene = draconic::scene;
 namespace physics = draconic::physics;
@@ -173,7 +173,7 @@ namespace
             }();
             (void)logReady;
             draconic::script::wren::RegisterWrenScriptBackend();
-            RegisterCoreTypes();
+            RegisterFoundationTypes();
             RegisterScriptComponentReflection();
             RegisterScriptFacadeReflection();
             components = scene.AddSystem<ScriptComponentManager>();
@@ -1390,7 +1390,7 @@ namespace
         ContactWorld()
         {
             draconic::script::wren::RegisterWrenScriptBackend();
-            RegisterCoreTypes();
+            RegisterFoundationTypes();
             physics::RegisterPhysicsComponentReflection();
             RegisterScriptComponentReflection();
             RegisterScriptFacadeReflection();
@@ -1513,7 +1513,7 @@ TEST_CASE("script.scene: behaviors tick without error when no physics subsystem 
     scenes->RegisterManager(&sm);
     ctx.AddSubsystem<ScriptSubsystem>(); // NO physics subsystem
     draconic::script::wren::RegisterWrenScriptBackend();
-    RegisterCoreTypes();
+    RegisterFoundationTypes();
     RegisterScriptComponentReflection();
     RegisterScriptFacadeReflection();
     ctx.Startup(); // OnReady must not crash resolving the (absent) physics subsystem

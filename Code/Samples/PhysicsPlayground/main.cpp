@@ -6,12 +6,12 @@
 // trigger). Fly with WASD/RMB-look; LEFT-CLICK shoves the body under the crosshair; R
 // respawns the stack; the ImGui panel has gravity + time-scale sliders and live counts.
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include "Draconic.Runtime.Client/AppMain.h"
 #include "imgui.h"
 #include <cmath>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.runtime;
 import draconic.runtime.client;
 import draconic.engine.defaultapp;
@@ -31,9 +31,9 @@ import draconic.ui;
 import draconic.ui.resource;
 import draconic.engine.ui;
 
-#include "../Common/FlyCamera.h" // after the imports: uses draconic::core/runtime types
+#include "../Common/FlyCamera.h" // after the imports: uses draconic::foundation/runtime types
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace runtime = draconic::runtime;
 namespace graphics = draconic::graphics;
 namespace shell = draconic::shell;
@@ -42,7 +42,7 @@ namespace render = draconic::render;
 namespace physics = draconic::physics;
 namespace imgui = draconic::imgui;
 
-using core::f32;
+using foundation::f32;
 
 namespace
 {
@@ -52,7 +52,7 @@ namespace
         PlaygroundApp()
         {
 #ifdef DRACONIC_PLAYGROUND_FONT
-            SetUIFontPath(reinterpret_cast<const core::utf8char*>(DRACONIC_PLAYGROUND_FONT));
+            SetUIFontPath(reinterpret_cast<const foundation::utf8char*>(DRACONIC_PLAYGROUND_FONT));
 #endif
         }
 
@@ -88,7 +88,7 @@ namespace
             {
                 cameras->Add(m_camera);
             }
-            m_fly.position = core::Float3{8.0f, 6.0f, 14.0f};
+            m_fly.position = foundation::Float3{8.0f, 6.0f, 14.0f};
             m_fly.yaw = 0.5f;
             m_fly.pitch = -0.3f;
             m_fly.moveSpeed = 10.0f;
@@ -97,7 +97,7 @@ namespace
             BuildWorld();
             m_scene->Start();
             m_scene->SetSimulationEnabled(true);
-            core::ConsoleWrite(u8"PhysicsPlayground: WASD/RMB-look fly, LMB shove, R respawn.\n");
+            foundation::ConsoleWrite(u8"PhysicsPlayground: WASD/RMB-look fly, LMB shove, R respawn.\n");
         }
 
         void OnUpdate(runtime::IApplicationHost& host, f32 dt) override
@@ -126,7 +126,7 @@ namespace
                 if (physics::CharacterComponent* hero = characters->Get(m_hero))
                 {
                     const f32 speed = 4.0f;
-                    core::Float3 move{0.0f, 0.0f, 0.0f};
+                    foundation::Float3 move{0.0f, 0.0f, 0.0f};
                     if (input->Keyboard()->IsKeyDown(shell::KeyCode::Right))
                     {
                         move.x += speed;
@@ -159,7 +159,7 @@ namespace
                     if (auto* canvas = canvases->Get(m_hudEntity);
                         canvas != nullptr && canvas->root.Get() != nullptr)
                     {
-                        if (auto* button = core::Cast<draconic::ui::ViewGroup>(canvas->root.Get())
+                        if (auto* button = foundation::Cast<draconic::ui::ViewGroup>(canvas->root.Get())
                                                ->FindByName<draconic::ui::Button>(u8"hud-btn"))
                         {
                             PlaygroundApp* self = this;
@@ -168,16 +168,16 @@ namespace
                                 [self, raw](draconic::ui::ButtonBase*)
                                 {
                                     ++self->m_hudClicks;
-                                    core::String text(u8"Clicks: ");
-                                    const core::u32 n = self->m_hudClicks;
+                                    foundation::String text(u8"Clicks: ");
+                                    const foundation::u32 n = self->m_hudClicks;
                                     if (n >= 10)
                                     {
                                         text.PushBack(
-                                            static_cast<core::utf8char>('0' + n / 10 % 10));
+                                            static_cast<foundation::utf8char>('0' + n / 10 % 10));
                                     }
-                                    text.PushBack(static_cast<core::utf8char>('0' + n % 10));
+                                    text.PushBack(static_cast<foundation::utf8char>('0' + n % 10));
                                     raw->SetText(text.AsView());
-                                    core::ConsoleWrite(u8"HUD button clicked\n");
+                                    foundation::ConsoleWrite(u8"HUD button clicked\n");
                                 });
                             m_hudBound = true;
                         }
@@ -192,7 +192,7 @@ namespace
                         panel != nullptr && panel->renderRoot.Get() != nullptr)
                     {
                         if (auto* button =
-                                core::Cast<draconic::ui::ViewGroup>(panel->renderRoot.Get())
+                                foundation::Cast<draconic::ui::ViewGroup>(panel->renderRoot.Get())
                                     ->FindByName<draconic::ui::Button>(u8"kiosk-btn"))
                         {
                             PlaygroundApp* self = this;
@@ -201,16 +201,16 @@ namespace
                                 [self, raw](draconic::ui::ButtonBase*)
                                 {
                                     ++self->m_kioskTaps;
-                                    core::String text(u8"Taps: ");
-                                    const core::u32 n = self->m_kioskTaps;
+                                    foundation::String text(u8"Taps: ");
+                                    const foundation::u32 n = self->m_kioskTaps;
                                     if (n >= 10)
                                     {
                                         text.PushBack(
-                                            static_cast<core::utf8char>('0' + n / 10 % 10));
+                                            static_cast<foundation::utf8char>('0' + n / 10 % 10));
                                     }
-                                    text.PushBack(static_cast<core::utf8char>('0' + n % 10));
+                                    text.PushBack(static_cast<foundation::utf8char>('0' + n % 10));
                                     raw->SetText(text.AsView());
-                                    core::ConsoleWrite(u8"Kiosk panel tapped\n");
+                                    foundation::ConsoleWrite(u8"Kiosk panel tapped\n");
                                 });
                             m_kioskBound = true;
                         }
@@ -228,13 +228,13 @@ namespace
                 // Shove ray: through the CURSOR while it is free (click a crate to shove it);
                 // along the camera forward (crosshair) while look-flying captures the mouse -
                 // the same free-cursor/center-aim convention the kiosk world panel uses.
-                core::Float3 rayDir = m_fly.Forward();
+                foundation::Float3 rayDir = m_fly.Forward();
                 const bool lookCaptured =
                     m_fly.mouseCaptured || input->Mouse()->IsButtonDown(shell::MouseButton::Right);
                 shell::IWindow* win = host.Shell()->MainWindow();
                 if (!lookCaptured && win != nullptr && win->Width() > 0 && win->Height() > 0)
                 {
-                    core::f32 fovY = 1.04719755f; // the camera component's authored fov
+                    foundation::f32 fovY = 1.04719755f; // the camera component's authored fov
                     if (auto* cameras = m_scene->GetSystem<render::CameraComponentManager>())
                     {
                         if (render::CameraComponent* cam = cameras->Get(m_camera))
@@ -242,13 +242,13 @@ namespace
                             fovY = cam->fovYRadians;
                         }
                     }
-                    const core::f32 w = static_cast<core::f32>(win->Width());
-                    const core::f32 h = static_cast<core::f32>(win->Height());
-                    const core::f32 ndcX = (input->Mouse()->X() / w) * 2.0f - 1.0f;
-                    const core::f32 ndcY = 1.0f - (input->Mouse()->Y() / h) * 2.0f;
-                    const core::f32 tanHalfY = core::Tan(fovY * 0.5f);
-                    const core::f32 tanHalfX = tanHalfY * (w / h);
-                    rayDir = core::Normalized(m_fly.Forward() + m_fly.Right() * (ndcX * tanHalfX) +
+                    const foundation::f32 w = static_cast<foundation::f32>(win->Width());
+                    const foundation::f32 h = static_cast<foundation::f32>(win->Height());
+                    const foundation::f32 ndcX = (input->Mouse()->X() / w) * 2.0f - 1.0f;
+                    const foundation::f32 ndcY = 1.0f - (input->Mouse()->Y() / h) * 2.0f;
+                    const foundation::f32 tanHalfY = foundation::Tan(fovY * 0.5f);
+                    const foundation::f32 tanHalfX = tanHalfY * (w / h);
+                    rayDir = foundation::Normalized(m_fly.Forward() + m_fly.Right() * (ndcX * tanHalfX) +
                                               m_fly.Up() * (ndcY * tanHalfY));
                 }
                 physics::RayHit hit;
@@ -258,7 +258,7 @@ namespace
                     // the impulse must be in the thousands - 400 only WOKE the body (delta-v
                     // 0.4 m/s reads as a highlight, not a shove).
                     m_physics->World()->AddImpulse(
-                        hit.body, core::Float3{rayDir.x * 4000.0f, rayDir.y * 4000.0f + 1400.0f,
+                        hit.body, foundation::Float3{rayDir.x * 4000.0f, rayDir.y * 4000.0f + 1400.0f,
                                                rayDir.z * 4000.0f});
                     m_lastSurface = hit.surface; // ramp panels report 1 / 2
                     m_haveSurface = true;
@@ -272,7 +272,7 @@ namespace
                 {
                     if (e.kind == physics::ContactKind::TriggerEnter)
                     {
-                        core::ConsoleWrite(u8"PhysicsPlayground: trigger entered!\n");
+                        foundation::ConsoleWrite(u8"PhysicsPlayground: trigger entered!\n");
                     }
                 }
             }
@@ -321,27 +321,27 @@ namespace
             // A cooked TRIANGLE-MESH ramp (P2): two panels, two material slots - the
             // crosshair ray reports which slot it hit (HUD "surface").
             {
-                const core::Float3 positions[] = {
+                const foundation::Float3 positions[] = {
                     {6.0f, 0.0f, -3.0f}, {6.0f, 0.0f, 3.0f},   // low edge
                     {12.0f, 3.0f, 3.0f}, {12.0f, 3.0f, -3.0f}, // high edge
                     {18.0f, 3.0f, 3.0f}, {18.0f, 3.0f, -3.0f}, // flat top end
                 };
-                const core::u32 indices[] = {0, 1, 2, 0, 2, 3,  // sloped panel
+                const foundation::u32 indices[] = {0, 1, 2, 0, 2, 3,  // sloped panel
                                              3, 2, 4, 3, 4, 5}; // flat panel
-                const core::u32 slots[] = {1, 1, 2, 2};
-                core::Array<core::byte> blob;
-                if (physics::CookTriangleMesh(core::Span<const core::Float3>(positions, 6),
-                                              core::Span<const core::u32>(indices, 12),
-                                              core::Span<const core::u32>(slots, 4), blob))
+                const foundation::u32 slots[] = {1, 1, 2, 2};
+                foundation::Array<foundation::byte> blob;
+                if (physics::CookTriangleMesh(foundation::Span<const foundation::Float3>(positions, 6),
+                                              foundation::Span<const foundation::u32>(indices, 12),
+                                              foundation::Span<const foundation::u32>(slots, 4), blob))
                 {
-                    m_rampShape = core::MakeRef<physics::CollisionShape>(core::DefaultAllocator());
+                    m_rampShape = foundation::MakeRef<physics::CollisionShape>(foundation::DefaultAllocator());
                     m_rampShape->blob.Resize(blob.Size());
-                    core::MemCopy(m_rampShape->blob.Data(), blob.Data(), blob.Size());
-                    core::Array<core::Float3> outline;
+                    foundation::MemCopy(m_rampShape->blob.Data(), blob.Data(), blob.Size());
+                    foundation::Array<foundation::Float3> outline;
                     if (physics::ExtractShapeTriangles(
-                            core::Span<const core::byte>(blob.Data(), blob.Size()), outline))
+                            foundation::Span<const foundation::byte>(blob.Data(), blob.Size()), outline))
                     {
-                        m_rampShape->outline = static_cast<core::Array<core::Float3>&&>(outline);
+                        m_rampShape->outline = static_cast<foundation::Array<foundation::Float3>&&>(outline);
                     }
                     scene::EntityHandle e = m_scene->CreateEntity(u8"ramp");
                     physics::RigidBodyComponent& body = bodies->Add(e);
@@ -353,31 +353,31 @@ namespace
             }
             // A cooked CONVEX boulder (P2) dropped onto the ramp - hulls may be dynamic.
             {
-                core::Array<core::Float3> points;
-                const core::f32 axes[3][3] = {{0.9f, 0, 0}, {0, 0.7f, 0}, {0, 0, 0.8f}};
+                foundation::Array<foundation::Float3> points;
+                const foundation::f32 axes[3][3] = {{0.9f, 0, 0}, {0, 0.7f, 0}, {0, 0, 0.8f}};
                 for (const auto& a : axes)
                 {
-                    points.PushBack(core::Float3{a[0], a[1], a[2]});
-                    points.PushBack(core::Float3{-a[0], -a[1], -a[2]});
+                    points.PushBack(foundation::Float3{a[0], a[1], a[2]});
+                    points.PushBack(foundation::Float3{-a[0], -a[1], -a[2]});
                 }
-                points.PushBack(core::Float3{0.5f, 0.5f, 0.5f});
-                points.PushBack(core::Float3{-0.5f, 0.5f, -0.5f});
-                core::Array<core::byte> blob;
+                points.PushBack(foundation::Float3{0.5f, 0.5f, 0.5f});
+                points.PushBack(foundation::Float3{-0.5f, 0.5f, -0.5f});
+                foundation::Array<foundation::byte> blob;
                 if (physics::CookConvexHull(
-                        core::Span<const core::Float3>(points.Data(), points.Size()), blob))
+                        foundation::Span<const foundation::Float3>(points.Data(), points.Size()), blob))
                 {
                     m_boulderShape =
-                        core::MakeRef<physics::CollisionShape>(core::DefaultAllocator());
+                        foundation::MakeRef<physics::CollisionShape>(foundation::DefaultAllocator());
                     m_boulderShape->blob.Resize(blob.Size());
-                    core::MemCopy(m_boulderShape->blob.Data(), blob.Data(), blob.Size());
-                    core::Array<core::Float3> outline;
+                    foundation::MemCopy(m_boulderShape->blob.Data(), blob.Data(), blob.Size());
+                    foundation::Array<foundation::Float3> outline;
                     if (physics::ExtractShapeTriangles(
-                            core::Span<const core::byte>(blob.Data(), blob.Size()), outline))
+                            foundation::Span<const foundation::byte>(blob.Data(), blob.Size()), outline))
                     {
-                        m_boulderShape->outline = static_cast<core::Array<core::Float3>&&>(outline);
+                        m_boulderShape->outline = static_cast<foundation::Array<foundation::Float3>&&>(outline);
                     }
                     m_boulder = m_scene->CreateEntity(u8"boulder");
-                    m_scene->SetLocalPosition(m_boulder, core::Float3{14.0f, 8.0f, 0.0f});
+                    m_scene->SetLocalPosition(m_boulder, foundation::Float3{14.0f, 8.0f, 0.0f});
                     physics::RigidBodyComponent& body = bodies->Add(m_boulder);
                     body.shape = physics::ShapeKind::Cooked;
                     body.collisionShape = m_boulderShape;
@@ -391,9 +391,9 @@ namespace
                 {
                     scene::EntityHandle e = m_scene->CreateEntity(u8"crate");
                     m_scene->SetLocalPosition(
-                        e, core::Float3{(col - 2) * 1.05f, 0.5f + row * 1.05f, 0.0f});
+                        e, foundation::Float3{(col - 2) * 1.05f, 0.5f + row * 1.05f, 0.0f});
                     physics::RigidBodyComponent& body = bodies->Add(e);
-                    body.halfExtents = core::Float3{0.5f, 0.5f, 0.5f};
+                    body.halfExtents = foundation::Float3{0.5f, 0.5f, 0.5f};
                     body.friction = 0.6f;
                     m_crates.PushBack(e);
                 }
@@ -402,13 +402,13 @@ namespace
             // (stairs + slopes) and shoves crates with its 500N of push.
             {
                 m_hero = m_scene->CreateEntity(u8"hero");
-                m_scene->SetLocalPosition(m_hero, core::Float3{-6.0f, 0.9f, 4.0f});
+                m_scene->SetLocalPosition(m_hero, foundation::Float3{-6.0f, 0.9f, 4.0f});
                 m_scene->GetSystem<physics::CharacterComponentManager>()->Add(m_hero);
 
                 // Billboard proof (UI P2): a nameplate riding the character, distance-scaled.
                 m_nameplateDocument =
-                    core::MakeRef<draconic::ui::UIDocument>(core::DefaultAllocator());
-                m_nameplateDocument->markup = core::String(
+                    foundation::MakeRef<draconic::ui::UIDocument>(foundation::DefaultAllocator());
+                m_nameplateDocument->markup = foundation::String(
                     u8"<Panel padding=\"4\""
                     u8"       style=\"background: rounded-rect(rgb(20, 24, 30), radius=4);\">"
                     u8"  <Label text=\"Hero\" font-size=\"13\"/>"
@@ -418,7 +418,7 @@ namespace
                 {
                     draconic::ui::UIBillboardComponent& plate = billboards->Add(m_hero);
                     plate.document = m_nameplateDocument;
-                    plate.offset = core::Float3{0.0f, 1.4f, 0.0f}; // above the capsule
+                    plate.offset = foundation::Float3{0.0f, 1.4f, 0.0f}; // above the capsule
                     plate.scaleMode = draconic::ui::BillboardScale::Distance;
                     plate.referenceDistance = 12.0f;
                 }
@@ -428,9 +428,9 @@ namespace
             // routes into the panel (and is consumed - no crate shove through it).
             {
                 scene::EntityHandle e = m_scene->CreateEntity(u8"kiosk");
-                m_scene->SetLocalPosition(e, core::Float3{4.0f, 1.6f, -6.0f});
-                m_kioskDocument = core::MakeRef<draconic::ui::UIDocument>(core::DefaultAllocator());
-                m_kioskDocument->markup = core::String(
+                m_scene->SetLocalPosition(e, foundation::Float3{4.0f, 1.6f, -6.0f});
+                m_kioskDocument = foundation::MakeRef<draconic::ui::UIDocument>(foundation::DefaultAllocator());
+                m_kioskDocument->markup = foundation::String(
                     u8"<Panel padding=\"14\""
                     u8" style=\"background: rounded-rect(rgb(28, 32, 40), radius=10);\">"
                     u8"  <Flex direction=\"vertical\" spacing=\"10\">"
@@ -443,7 +443,7 @@ namespace
                 {
                     draconic::ui::UIWorldPanelComponent& panel = panels->Add(e);
                     panel.document = m_kioskDocument;
-                    panel.sizeMeters = core::Float2{1.6f, 1.0f};
+                    panel.sizeMeters = foundation::Float2{1.6f, 1.0f};
                     panel.pixelsPerMeter = 220.0f;
                     m_kioskEntity = e;
                 }
@@ -453,13 +453,13 @@ namespace
             // spinning at 2 rad/s - walk the character into it to get batted away.
             {
                 scene::EntityHandle e = m_scene->CreateEntity(u8"spinner");
-                m_scene->SetLocalPosition(e, core::Float3{-6.0f, 1.0f, -4.0f});
+                m_scene->SetLocalPosition(e, foundation::Float3{-6.0f, 1.0f, -4.0f});
                 physics::RigidBodyComponent& body = bodies->Add(e);
-                body.halfExtents = core::Float3{2.0f, 0.1f, 0.1f};
+                body.halfExtents = foundation::Float3{2.0f, 0.1f, 0.1f};
                 physics::JointComponent& joint =
                     m_scene->GetSystem<physics::JointComponentManager>()->Add(e);
                 joint.kind = physics::JointKind::Hinge;
-                joint.localAxis = core::Float3{0.0f, 1.0f, 0.0f};
+                joint.localAxis = foundation::Float3{0.0f, 1.0f, 0.0f};
                 joint.motorEnabled = true;
                 joint.motorTargetVelocity = 2.0f;
             }
@@ -467,10 +467,10 @@ namespace
             // asset path is exercised by the editor flow). The button proves CONSUMPTION:
             // clicking it must NOT fire the crosshair shove.
             {
-                m_hudDocument = core::MakeRef<draconic::ui::UIDocument>(core::DefaultAllocator());
+                m_hudDocument = foundation::MakeRef<draconic::ui::UIDocument>(foundation::DefaultAllocator());
                 // The proven UISandbox pause-menu vocabulary: kebab-case attributes,
                 // EXPLICIT sizes (an unsized child in a root Flex stretches to a bar).
-                m_hudDocument->markup = core::String(
+                m_hudDocument->markup = foundation::String(
                     u8"<Flex direction=\"vertical\" align=\"start\" padding=\"12\" spacing=\"8\">"
                     u8"  <Panel padding=\"12\" width=\"220\""
                     u8"         style=\"background: rounded-rect(rgb(28, 32, 40), radius=8);\">"
@@ -493,20 +493,20 @@ namespace
             // A kinematic sweeper the update drives in a circle (knocks crates around).
             {
                 m_sweeper = m_scene->CreateEntity(u8"sweeper");
-                m_scene->SetLocalPosition(m_sweeper, core::Float3{6.0f, 0.75f, 0.0f});
+                m_scene->SetLocalPosition(m_sweeper, foundation::Float3{6.0f, 0.75f, 0.0f});
                 physics::RigidBodyComponent& body = bodies->Add(m_sweeper);
                 body.motion = physics::MotionKind::Kinematic;
                 body.layer = physics::PhysicsLayer::Kinematic;
-                body.halfExtents = core::Float3{0.4f, 0.75f, 0.4f};
+                body.halfExtents = foundation::Float3{0.4f, 0.75f, 0.4f};
             }
             // The trigger volume above the stack.
             {
                 scene::EntityHandle e = m_scene->CreateEntity(u8"trigger");
-                m_scene->SetLocalPosition(e, core::Float3{0.0f, 6.0f, 0.0f});
+                m_scene->SetLocalPosition(e, foundation::Float3{0.0f, 6.0f, 0.0f});
                 physics::RigidBodyComponent& body = bodies->Add(e);
                 body.motion = physics::MotionKind::Kinematic;
                 body.isTrigger = true;
-                body.halfExtents = core::Float3{2.0f, 1.0f, 2.0f};
+                body.halfExtents = foundation::Float3{2.0f, 1.0f, 2.0f};
             }
         }
 
@@ -529,12 +529,12 @@ namespace
                 {
                     continue;
                 }
-                const core::Float3 position{(col - 2) * 1.05f, 0.5f + row * 1.05f, 0.0f};
+                const foundation::Float3 position{(col - 2) * 1.05f, 0.5f + row * 1.05f, 0.0f};
                 m_physics->World()->SetBodyTransform(body->body, position,
-                                                     core::Quaternion::Identity);
-                m_physics->World()->SetLinearVelocity(body->body, core::Float3{0, 0, 0});
+                                                     foundation::Quaternion::Identity);
+                m_physics->World()->SetLinearVelocity(body->body, foundation::Float3{0, 0, 0});
                 body->prevPosition = body->currPosition = position;
-                body->prevRotation = body->currRotation = core::Quaternion::Identity;
+                body->prevRotation = body->currRotation = foundation::Quaternion::Identity;
             }
         }
 
@@ -545,7 +545,7 @@ namespace
             if (m_physics != nullptr && m_physics->World() != nullptr)
             {
                 ImGui::Text("bodies: %zu", m_physics->World()->BodyCount());
-                core::Float3 gravity = m_physics->World()->Gravity();
+                foundation::Float3 gravity = m_physics->World()->Gravity();
                 if (ImGui::SliderFloat("gravity y", &gravity.y, -30.0f, 10.0f))
                 {
                     m_physics->World()->SetGravity(gravity);
@@ -576,8 +576,8 @@ namespace
             m_sweepAngle += 0.6f * (1.0f / 60.0f) * host.Ctx().TimeScale();
             if (m_sweeper.IsAssigned())
             {
-                core::Transform t = m_scene->GetLocalTransform(m_sweeper);
-                t.position = core::Float3{6.0f * std::cos(m_sweepAngle), 0.75f,
+                foundation::Transform t = m_scene->GetLocalTransform(m_sweeper);
+                t.position = foundation::Float3{6.0f * std::cos(m_sweepAngle), 0.75f,
                                           6.0f * std::sin(m_sweepAngle)};
                 m_scene->SetLocalTransform(m_sweeper, t);
             }
@@ -585,7 +585,7 @@ namespace
 
         void PushCameraToEntity()
         {
-            core::Transform t = m_scene->GetLocalTransform(m_camera);
+            foundation::Transform t = m_scene->GetLocalTransform(m_camera);
             t.position = m_fly.position;
             t.rotation = m_fly.Rotation();
             m_scene->SetLocalTransform(m_camera, t);
@@ -595,21 +595,21 @@ namespace
         physics::PhysicsSceneSystem* m_physics = nullptr;
         scene::EntityHandle m_camera;
         scene::EntityHandle m_sweeper;
-        core::Array<scene::EntityHandle> m_crates;
+        foundation::Array<scene::EntityHandle> m_crates;
         scene::EntityHandle m_boulder;
         scene::EntityHandle m_hero;
         scene::EntityHandle m_hudEntity;
-        core::RefPtr<draconic::ui::UIDocument> m_hudDocument;
-        core::RefPtr<draconic::ui::UIDocument> m_nameplateDocument;
+        foundation::RefPtr<draconic::ui::UIDocument> m_hudDocument;
+        foundation::RefPtr<draconic::ui::UIDocument> m_nameplateDocument;
         bool m_hudBound = false;
-        core::RefPtr<draconic::ui::UIDocument> m_kioskDocument;
+        foundation::RefPtr<draconic::ui::UIDocument> m_kioskDocument;
         scene::EntityHandle m_kioskEntity{};
         bool m_kioskBound = false;
-        core::u32 m_kioskTaps = 0;
-        core::u32 m_hudClicks = 0;
-        core::RefPtr<physics::CollisionShape> m_rampShape;
-        core::RefPtr<physics::CollisionShape> m_boulderShape;
-        core::u32 m_lastSurface = 0;
+        foundation::u32 m_kioskTaps = 0;
+        foundation::u32 m_hudClicks = 0;
+        foundation::RefPtr<physics::CollisionShape> m_rampShape;
+        foundation::RefPtr<physics::CollisionShape> m_boulderShape;
+        foundation::u32 m_lastSurface = 0;
         bool m_haveSurface = false;
         draconic::samples::FlyCamera m_fly;
         f32 m_sweepAngle = 0.0f;

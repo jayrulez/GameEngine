@@ -5,13 +5,13 @@
 // Grouped into one partition (Beef had a file per enum).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:input_enums;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

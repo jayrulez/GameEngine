@@ -2,16 +2,16 @@
 //
 // Standalone scrollbar (used by ScrollView internally). Ported from Sedulous.UI/src/Controls/ScrollBar.bf.
 // Beef get/set properties (Value/MaxValue/ViewportSize/IsHorizontal) -> methods; Math.Clamp/Max ->
-// core::Clamp/core::Max (qualified where a getter would shadow); Context.InputManager.MouseX/Y ->
-// Context->GetInputManager()->MouseX()/MouseY(); RectangleF -> core::Rectangle.
+// foundation::Clamp/foundation::Max (qualified where a getter would shadow); Context.InputManager.MouseX/Y ->
+// Context->GetInputManager()->MouseX()/MouseY(); RectangleF -> foundation::Rectangle.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:scroll_bar;
 
-import draconic.core;
+import draconic.foundation;
 import :view;
 import :event;
 import :control_state;
@@ -23,8 +23,8 @@ import :event_args;
 import :input_enums;
 import :enums;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::ui
 {
@@ -49,7 +49,7 @@ export namespace draconic::ui
         [[nodiscard]] f32 Value() const noexcept { return m_value; }
         void SetValue(f32 value)
         {
-            const f32 clamped = core::Clamp(value, 0.0f, m_maxValue);
+            const f32 clamped = foundation::Clamp(value, 0.0f, m_maxValue);
             if (m_value == clamped)
             {
                 return;
@@ -61,13 +61,13 @@ export namespace draconic::ui
         [[nodiscard]] f32 MaxValue() const noexcept { return m_maxValue; }
         void SetMaxValue(f32 value)
         {
-            m_maxValue = core::Max(0.0f, value);
+            m_maxValue = foundation::Max(0.0f, value);
             SetValue(m_value);
         }
         [[nodiscard]] f32 ViewportSize() const noexcept { return m_viewportSize; }
         void SetViewportSize(f32 value)
         {
-            m_viewportSize = core::Max(1.0f, value);
+            m_viewportSize = foundation::Max(1.0f, value);
             Invalidate();
         }
         [[nodiscard]] bool IsHorizontal() const noexcept { return m_isHorizontal; }
@@ -128,7 +128,7 @@ export namespace draconic::ui
                 const f32 trackSize = m_isHorizontal ? Width() : Height();
                 const f32 thumbSize = trackSize * ThumbRatio();
                 const f32 clickNorm = (localPos - thumbSize * 0.5f) / (trackSize - thumbSize);
-                SetValue(core::Clamp(clickNorm * m_maxValue, 0.0f, m_maxValue));
+                SetValue(foundation::Clamp(clickNorm * m_maxValue, 0.0f, m_maxValue));
             }
             e.Handled = true;
         }
@@ -215,7 +215,7 @@ export namespace draconic::ui
     private:
         [[nodiscard]] f32 ThumbRatio() const
         {
-            return core::Clamp(m_viewportSize / (m_maxValue + m_viewportSize), 0.05f, 1.0f);
+            return foundation::Clamp(m_viewportSize / (m_maxValue + m_viewportSize), 0.05f, 1.0f);
         }
         [[nodiscard]] f32 NormalizedValue() const
         {

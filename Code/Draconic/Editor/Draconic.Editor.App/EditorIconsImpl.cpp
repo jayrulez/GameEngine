@@ -12,14 +12,14 @@
 // EditorIcons::Get(); drawables are null before Initialize.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 module draconic.editor.app;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.ui;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::editor::app
 {

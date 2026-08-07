@@ -5,15 +5,15 @@
 // kept for API parity - lifetime is governed by ref-counting (drop-on-close destroys iff no other ref).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:popup_entry;
 
-import draconic.core; // RefPtr
+import draconic.foundation; // RefPtr
 import :view;
 import :ipopup_owner;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

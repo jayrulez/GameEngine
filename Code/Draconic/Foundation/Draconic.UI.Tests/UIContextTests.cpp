@@ -2,33 +2,33 @@
 // All managers (Input/Focus/DragDrop/Animation/Shortcut/Tooltip) are owned by-value on UIContext, so
 // Managers_CreatedByDefault just checks the accessors return non-null (they point at the value members).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 #include "TestHelpers.h"
 
 using namespace draconic::ui;
 using namespace draconic::ui::tests;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
-static core::RefPtr<RootView> MakeRoot()
+static foundation::RefPtr<RootView> MakeRoot()
 {
-    return core::MakeRef<RootView>(core::DefaultAllocator());
+    return foundation::MakeRef<RootView>(foundation::DefaultAllocator());
 }
-static core::RefPtr<TestView> MakeTestView()
+static foundation::RefPtr<TestView> MakeTestView()
 {
-    return core::MakeRef<TestView>(core::DefaultAllocator(), 50.0f, 30.0f);
+    return foundation::MakeRef<TestView>(foundation::DefaultAllocator(), 50.0f, 30.0f);
 }
-static core::RefPtr<TestGroup> MakeTestGroup()
+static foundation::RefPtr<TestGroup> MakeTestGroup()
 {
-    return core::MakeRef<TestGroup>(core::DefaultAllocator());
+    return foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
 }
 
 TEST_CASE("uicontext: AddRootView_RegistersAndSetsActive")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     ctx.AddRootView(root.Get());
 
     CHECK(ctx.RootViewCount() == 1u);
@@ -39,8 +39,8 @@ TEST_CASE("uicontext: AddRootView_RegistersAndSetsActive")
 TEST_CASE("uicontext: AddRootView_FirstBecomesActive")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root1 = MakeRoot();
-    core::RefPtr<RootView> root2 = MakeRoot();
+    foundation::RefPtr<RootView> root1 = MakeRoot();
+    foundation::RefPtr<RootView> root2 = MakeRoot();
 
     ctx.AddRootView(root1.Get());
     ctx.AddRootView(root2.Get());
@@ -51,8 +51,8 @@ TEST_CASE("uicontext: AddRootView_FirstBecomesActive")
 TEST_CASE("uicontext: RemoveRootView_UpdatesActive")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root1 = MakeRoot();
-    core::RefPtr<RootView> root2 = MakeRoot();
+    foundation::RefPtr<RootView> root1 = MakeRoot();
+    foundation::RefPtr<RootView> root2 = MakeRoot();
 
     ctx.AddRootView(root1.Get());
     ctx.AddRootView(root2.Get());
@@ -65,7 +65,7 @@ TEST_CASE("uicontext: RemoveRootView_UpdatesActive")
 TEST_CASE("uicontext: RemoveRootView_ClearsContext")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     ctx.AddRootView(root.Get());
     ctx.RemoveRootView(root.Get());
 
@@ -77,10 +77,10 @@ TEST_CASE("uicontext: RemoveRootView_ClearsContext")
 TEST_CASE("uicontext: Register_ViewLookupByIdWorks")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestView> child = MakeTestView();
+    foundation::RefPtr<TestView> child = MakeTestView();
     root->AddView(child.Get());
 
     CHECK(ctx.GetViewById(child->Id) == child.Get());
@@ -89,10 +89,10 @@ TEST_CASE("uicontext: Register_ViewLookupByIdWorks")
 TEST_CASE("uicontext: Register_TypedLookup")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestView> child = MakeTestView();
+    foundation::RefPtr<TestView> child = MakeTestView();
     root->AddView(child.Get());
 
     CHECK(ctx.GetViewById<TestView>(child->Id) == child.Get());
@@ -101,10 +101,10 @@ TEST_CASE("uicontext: Register_TypedLookup")
 TEST_CASE("uicontext: Unregister_LookupReturnsNull")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestView> child = MakeTestView();
+    foundation::RefPtr<TestView> child = MakeTestView();
     root->AddView(child.Get());
     const ViewId id = child->Id;
 
@@ -116,11 +116,11 @@ TEST_CASE("uicontext: Unregister_LookupReturnsNull")
 TEST_CASE("uicontext: AttachView_RegistersSubtree")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestGroup> group = MakeTestGroup();
-    core::RefPtr<TestView> child = MakeTestView();
+    foundation::RefPtr<TestGroup> group = MakeTestGroup();
+    foundation::RefPtr<TestView> child = MakeTestView();
     group->AddView(child.Get()); // build subtree before attaching
     root->AddView(group.Get());  // attach to root - registers both
 
@@ -132,11 +132,11 @@ TEST_CASE("uicontext: AttachView_RegistersSubtree")
 TEST_CASE("uicontext: DetachView_UnregistersSubtree")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestGroup> group = MakeTestGroup();
-    core::RefPtr<TestView> child = MakeTestView();
+    foundation::RefPtr<TestGroup> group = MakeTestGroup();
+    foundation::RefPtr<TestView> child = MakeTestView();
     root->AddView(group.Get());
     group->AddView(child.Get());
     const ViewId groupId = group->Id;
@@ -167,7 +167,7 @@ TEST_CASE("uicontext: DpiScale_DefaultsTo1")
 TEST_CASE("uicontext: DpiScale_FromActiveRoot")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     root->DpiScale = 2.0f;
     ctx.AddRootView(root.Get());
 

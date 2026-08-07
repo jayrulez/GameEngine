@@ -2,14 +2,14 @@
 // a VFS. A mock in-memory IFileSystem exercises the plumbing; a real BMP round-trip (SaveImage ->
 // NativeFileSystem -> LoadImage) exercises the decode path.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.image;
 import draconic.image.io;
 import draconic.vfs;
 import draconic.gui.vfs;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace vfs = draconic::vfs;
 namespace image = draconic::image;
 namespace gui = draconic::gui;

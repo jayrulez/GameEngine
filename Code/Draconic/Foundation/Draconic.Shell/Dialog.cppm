@@ -7,13 +7,13 @@
 // SDL_ShowOpenFolderDialog. A future in-engine file-browser widget can layer on top; native first.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.shell:dialog;
 
-import draconic.core;
+import draconic.foundation;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::shell
 {
@@ -22,15 +22,15 @@ export namespace draconic::shell
     // pattern = u8"*" matches everything. Both are borrowed for the duration of the Show* call.
     struct FileFilter
     {
-        core::StringView name;
-        core::StringView pattern;
+        foundation::StringView name;
+        foundation::StringView pattern;
     };
 
     // Delivered once when a dialog resolves. `paths` is empty on cancel or error; otherwise one
-    // entry (or several, for a multi-select open). The core::String elements are valid for the
+    // entry (or several, for a multi-select open). The foundation::String elements are valid for the
     // duration of the call - copy any you need to keep past it. (Improvement over Sedulous, which
     // hands back views into SDL's transient list.)
-    using DialogResultCallback = core::Function<void(core::Span<const core::String>)>;
+    using DialogResultCallback = foundation::Function<void(foundation::Span<const foundation::String>)>;
 
     // Native OS file/folder dialogs + shell "open" actions. Every Show* is async: it returns
     // immediately and `callback` fires later, exactly once, on the main thread (during the event
@@ -47,28 +47,28 @@ export namespace draconic::shell
         /// where the backend supports it. Async: `callback` fires once with the chosen path(s), or an
         /// empty span on cancel / error.
         virtual void ShowOpenFile(DialogResultCallback callback,
-                                  core::Span<const FileFilter> filters = {},
-                                  core::StringView defaultPath = {}, bool allowMultiple = false,
-                                  core::u32 parentWindowId = 0) = 0;
+                                  foundation::Span<const FileFilter> filters = {},
+                                  foundation::StringView defaultPath = {}, bool allowMultiple = false,
+                                  foundation::u32 parentWindowId = 0) = 0;
 
         /// Show a native "save file" dialog to pick a (possibly new) file path to write. Same
         /// `filters` / `defaultPath` / `parentWindowId` / async-callback semantics as ShowOpenFile,
         /// but always a single path (empty span on cancel).
         virtual void ShowSaveFile(DialogResultCallback callback,
-                                  core::Span<const FileFilter> filters = {},
-                                  core::StringView defaultPath = {},
-                                  core::u32 parentWindowId = 0) = 0;
+                                  foundation::Span<const FileFilter> filters = {},
+                                  foundation::StringView defaultPath = {},
+                                  foundation::u32 parentWindowId = 0) = 0;
 
         /// Show a native "choose folder" dialog. `defaultPath` is the initial directory;
         /// `allowMultiple` permits selecting several folders; `parentWindowId` as above. Async:
         /// `callback` fires once with the chosen folder(s), or an empty span on cancel / error.
         virtual void ShowOpenFolder(DialogResultCallback callback,
-                                    core::StringView defaultPath = {}, bool allowMultiple = false,
-                                    core::u32 parentWindowId = 0) = 0;
+                                    foundation::StringView defaultPath = {}, bool allowMultiple = false,
+                                    foundation::u32 parentWindowId = 0) = 0;
 
         /// Open `path` with the OS default handler: a FOLDER opens in the system file manager, a file
         /// opens in its associated application. Fire-and-forget (no callback / no result). No-op on
         /// headless backends. Used e.g. to reveal an export's output directory.
-        virtual void OpenPath(core::StringView path) = 0;
+        virtual void OpenPath(foundation::StringView path) = 0;
     };
 }

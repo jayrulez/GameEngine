@@ -1,8 +1,8 @@
 // Ported from Sedulous.UI.Tests/src/ThicknessTests.bf (faithful; Beef Test.Assert -> doctest CHECK,
 // Beef properties -> methods).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 
 using namespace draconic::ui;

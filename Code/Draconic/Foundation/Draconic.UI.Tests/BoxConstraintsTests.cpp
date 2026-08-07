@@ -1,11 +1,11 @@
 // Ported from Sedulous.UI.Tests/src/BoxConstraintsTests.bf (faithful; float.MaxValue -> kFloatMax).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 
 using namespace draconic::ui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 TEST_CASE("box-constraints: Tight_SetsMinEqualMax")
 {
@@ -32,9 +32,9 @@ TEST_CASE("box-constraints: Expand_IsUnconstrained")
 {
     BoxConstraints c = BoxConstraints::Expand();
     CHECK(c.MinWidth == 0.0f);
-    CHECK(c.MaxWidth == core::kFloatMax);
+    CHECK(c.MaxWidth == foundation::kFloatMax);
     CHECK(c.MinHeight == 0.0f);
-    CHECK(c.MaxHeight == core::kFloatMax);
+    CHECK(c.MaxHeight == foundation::kFloatMax);
 }
 
 TEST_CASE("box-constraints: Deflate_ShrinksByPadding")

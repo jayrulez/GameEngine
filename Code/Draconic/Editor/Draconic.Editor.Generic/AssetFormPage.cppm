@@ -16,19 +16,19 @@
 // object keeps its live values from that point) and triggers a full re-scan + grid rebuild.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 export module draconic.editor.generic;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.ui;
 import draconic.ui.toolkit;
 import draconic.editor.core;
 import draconic.editor.app;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {

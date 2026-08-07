@@ -1,12 +1,12 @@
 // AnimationSampler: track/clip sampling + pose blending. Covers the ported math directly (no
 // Sedulous sampler test existed).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.animation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::animation;
 
 TEST_CASE("sampler: Float3 track linear interpolation")

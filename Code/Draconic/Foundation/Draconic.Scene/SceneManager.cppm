@@ -12,15 +12,15 @@
 /// (no runtime dependency, so draconic.scene stays runtime-free).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.scene:manager;
 
-import draconic.core;
+import draconic.foundation;
 import :scene;
 import :aware;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::scene
 {

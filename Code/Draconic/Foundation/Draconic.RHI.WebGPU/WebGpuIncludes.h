@@ -9,7 +9,7 @@
 #ifndef DRACONIC_RHI_WEBGPU_INCLUDES_H
 #define DRACONIC_RHI_WEBGPU_INCLUDES_H
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include <webgpu/webgpu.h>
 #if !DRACONIC_PLATFORM_WEB

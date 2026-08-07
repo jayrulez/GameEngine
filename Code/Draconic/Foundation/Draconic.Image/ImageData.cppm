@@ -2,7 +2,7 @@
 /// Ported from Sedulous.Images.ImageData.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include <atomic>
 #include <cstdint>
@@ -11,10 +11,10 @@ module;
 
 export module draconic.image:image_data;
 
-import draconic.core;
+import draconic.foundation;
 import :pixel_format;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::image
 {

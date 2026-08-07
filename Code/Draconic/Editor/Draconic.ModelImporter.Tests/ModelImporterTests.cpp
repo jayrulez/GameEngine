@@ -2,11 +2,11 @@
 // content DB, then bind the cooked ModelResource back through the resource manager and
 // verify the whole convert -> cook -> bind chain (manifest nodes + resolved meshes).
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include <doctest/doctest.h>
 #include <initializer_list>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.resource;
@@ -32,7 +32,7 @@ import draconic.rhi;
 import draconic.rhi.null;
 import draconic.materials.resource;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace vfs = draconic::vfs;
 namespace content = draconic::content;
 namespace resource = draconic::resource;
@@ -58,7 +58,7 @@ TEST_CASE("import glTF -> cooked ModelResource round-trips through the resource 
     model::RegisterModelResourceTypes(); // make the cooked types deserializable
 
     vfs::NativeFileSystem mount(u8"draconic_modelimporter_test_db");
-    content::ContentDatabase db(mount, draconic::core::BinarySerializerFactory(), u8".rasset");
+    content::ContentDatabase db(mount, draconic::foundation::BinarySerializerFactory(), u8".rasset");
 
     // Cook the model file into the DB; get back the manifest (ModelResource) Guid.
     Guid modelGuid;
@@ -105,7 +105,7 @@ TEST_CASE("import skinned glTF -> cooked skeleton + animations + skinned mesh")
     model::RegisterModelResourceTypes();
 
     vfs::NativeFileSystem mount(u8"draconic_modelimporter_fox_db");
-    content::ContentDatabase db(mount, draconic::core::BinarySerializerFactory(), u8".rasset");
+    content::ContentDatabase db(mount, draconic::foundation::BinarySerializerFactory(), u8".rasset");
 
     Guid modelGuid;
     REQUIRE(modelimporter::LoadAndCook(fox, db, u8"Fox", modelGuid) == model::ModelLoadResult::Ok);
@@ -215,7 +215,7 @@ TEST_CASE("model-import: GLB fans out into source assets and cooks through the d
     modelimporter::ModelFileImporter importer;
     CHECK(importer.Accepts(u8"glb"));
     Result<draconic::content::Instance*> imported =
-        importer.Import(reinterpret_cast<const draconic::core::utf8char*>(DRACONIC_MI_TEST_GLB),
+        importer.Import(reinterpret_cast<const draconic::foundation::utf8char*>(DRACONIC_MI_TEST_GLB),
                         *project, *project->SourceDb().RootGroup(), nullptr, nullptr, nullptr);
     REQUIRE(imported.HasValue());
     draconic::content::Instance* manifestInst = imported.Value();
@@ -321,7 +321,7 @@ TEST_CASE("model-import: external-sidecar .gltf imports and its sidecars land in
 
     modelimporter::ModelFileImporter importer;
     Result<draconic::content::Instance*> imported =
-        importer.Import(reinterpret_cast<const draconic::core::utf8char*>(DRACONIC_MI_TEST_FOX),
+        importer.Import(reinterpret_cast<const draconic::foundation::utf8char*>(DRACONIC_MI_TEST_FOX),
                         *project, *project->SourceDb().RootGroup(), nullptr, nullptr, nullptr);
     REQUIRE(imported.HasValue());
     REQUIRE(imported.Value() != nullptr);
@@ -399,7 +399,7 @@ TEST_CASE("model-import: a bound material carries its albedo texture")
     // Import the Duck (textured, static) + cook everything.
     modelimporter::ModelFileImporter importer;
     Result<draconic::content::Instance*> imported =
-        importer.Import(reinterpret_cast<const draconic::core::utf8char*>(DRACONIC_MI_TEST_DUCK),
+        importer.Import(reinterpret_cast<const draconic::foundation::utf8char*>(DRACONIC_MI_TEST_DUCK),
                         *project, *project->SourceDb().RootGroup(), nullptr, nullptr, nullptr);
     REQUIRE(imported.HasValue());
 
@@ -675,7 +675,7 @@ TEST_CASE("cook: delete group -> reimport -> recook keeps product identities cle
     // Duck has a texture (the crashing product kind). Import + cook generation 1.
     modelimporter::ModelFileImporter importer;
     Result<draconic::content::Instance*> firstImport =
-        importer.Import(reinterpret_cast<const draconic::core::utf8char*>(DRACONIC_MI_TEST_DUCK),
+        importer.Import(reinterpret_cast<const draconic::foundation::utf8char*>(DRACONIC_MI_TEST_DUCK),
                         *project, *project->SourceDb().RootGroup(), nullptr, nullptr, nullptr);
     REQUIRE(firstImport.HasValue());
 
@@ -702,7 +702,7 @@ TEST_CASE("cook: delete group -> reimport -> recook keeps product identities cle
 
     // === user step 2: reimport the same file ===
     Result<draconic::content::Instance*> secondImport =
-        importer.Import(reinterpret_cast<const draconic::core::utf8char*>(DRACONIC_MI_TEST_DUCK),
+        importer.Import(reinterpret_cast<const draconic::foundation::utf8char*>(DRACONIC_MI_TEST_DUCK),
                         *project, *project->SourceDb().RootGroup(), nullptr, nullptr, nullptr);
     REQUIRE(secondImport.HasValue());
     draconic::content::Group* duckGroup2 = project->SourceDb().RootGroup()->GetGroup(u8"Duck");
@@ -886,8 +886,8 @@ namespace
     {
         for (StringView sub : {u8"Content", u8"Cooked", u8"Sources", u8".cache"})
         {
-            draconic::vfs::NativeFileSystem fs(draconic::core::PathJoin(dir, sub).AsView());
-            draconic::core::Array<draconic::vfs::DirEntry> tops;
+            draconic::vfs::NativeFileSystem fs(draconic::foundation::PathJoin(dir, sub).AsView());
+            draconic::foundation::Array<draconic::vfs::DirEntry> tops;
             if (!fs.AsEnumerable()->Enumerate(u8"", tops).IsOk())
             {
                 continue;
@@ -899,22 +899,22 @@ namespace
                     (void)fs.AsWritable()->Delete(top.name.AsView());
                     continue;
                 }
-                draconic::core::Array<draconic::vfs::DirEntry> inner;
+                draconic::foundation::Array<draconic::vfs::DirEntry> inner;
                 if (fs.AsEnumerable()->Enumerate(top.name.AsView(), inner).IsOk())
                 {
                     for (const auto& e : inner)
                     {
-                        draconic::core::String path =
-                            draconic::core::PathJoin(top.name.AsView(), e.name.AsView());
+                        draconic::foundation::String path =
+                            draconic::foundation::PathJoin(top.name.AsView(), e.name.AsView());
                         (void)fs.AsWritable()->Delete(path.AsView());
                     }
                 }
                 (void)fs.AsWritable()->Delete(top.name.AsView());
             }
-            (void)draconic::core::RemoveDirectory(draconic::core::PathJoin(dir, sub).AsView());
+            (void)draconic::foundation::RemoveDirectory(draconic::foundation::PathJoin(dir, sub).AsView());
         }
         draconic::vfs::NativeFileSystem fs(dir);
-        draconic::core::Array<draconic::vfs::DirEntry> entries;
+        draconic::foundation::Array<draconic::vfs::DirEntry> entries;
         if (fs.AsEnumerable()->Enumerate(u8"", entries).IsOk())
         {
             for (const auto& e : entries)
@@ -925,7 +925,7 @@ namespace
                 }
             }
         }
-        (void)draconic::core::RemoveDirectory(dir);
+        (void)draconic::foundation::RemoveDirectory(dir);
     }
 }
 
@@ -963,7 +963,7 @@ TEST_CASE("model-import: options gate textures/materials/animations")
     options->importMaterials = false;
     options->importAnimations = false;
     Result<draconic::content::Instance*> imported =
-        importer.Import(reinterpret_cast<const draconic::core::utf8char*>(DRACONIC_MI_TEST_GLB),
+        importer.Import(reinterpret_cast<const draconic::foundation::utf8char*>(DRACONIC_MI_TEST_GLB),
                         *project, *project->SourceDb().RootGroup(), options, nullptr, nullptr);
     REQUIRE(imported.HasValue());
 
@@ -1009,7 +1009,7 @@ TEST_CASE("model-import: generate-collision emits CollisionShapeAssets wired to 
     options->generateCollision = true;
     options->collisionConvex = true;
     Result<draconic::content::Instance*> imported =
-        importer.Import(reinterpret_cast<const draconic::core::utf8char*>(DRACONIC_MI_TEST_GLB),
+        importer.Import(reinterpret_cast<const draconic::foundation::utf8char*>(DRACONIC_MI_TEST_GLB),
                         *project, *project->SourceDb().RootGroup(), options, nullptr, nullptr);
     REQUIRE(imported.HasValue());
 
@@ -1068,7 +1068,7 @@ TEST_CASE("model-import: re-import WITHOUT delete reuses instances (same guids, 
 
     modelimporter::ModelFileImporter importer;
     Result<draconic::content::Instance*> first =
-        importer.Import(reinterpret_cast<const draconic::core::utf8char*>(DRACONIC_MI_TEST_DUCK),
+        importer.Import(reinterpret_cast<const draconic::foundation::utf8char*>(DRACONIC_MI_TEST_DUCK),
                         *project, *project->SourceDb().RootGroup(), nullptr, nullptr, nullptr);
     REQUIRE(first.HasValue());
 
@@ -1085,7 +1085,7 @@ TEST_CASE("model-import: re-import WITHOUT delete reuses instances (same guids, 
     // Re-drop the SAME file with the group intact: every instance is REUSED by (name, type) -
     // guids survive (placed refs + the prefab keep working) and nothing duplicates as ".2".
     Result<draconic::content::Instance*> second =
-        importer.Import(reinterpret_cast<const draconic::core::utf8char*>(DRACONIC_MI_TEST_DUCK),
+        importer.Import(reinterpret_cast<const draconic::foundation::utf8char*>(DRACONIC_MI_TEST_DUCK),
                         *project, *project->SourceDb().RootGroup(), nullptr, nullptr, nullptr);
     REQUIRE(second.HasValue());
     CHECK(second.Value()->Id() == first.Value()->Id());

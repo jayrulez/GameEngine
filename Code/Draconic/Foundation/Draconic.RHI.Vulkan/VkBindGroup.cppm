@@ -2,13 +2,13 @@
 /// Ported from Sedulous.RHI.Vulkan/VulkanBindGroup.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include "VkIncludes.h"
 
 export module draconic.rhi.vulkan:bind_group;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :conversions;
 import :binding_shifts;
@@ -20,7 +20,7 @@ import :sampler;
 import :accel_struct;
 import :descriptor_pool_manager;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::vk
 {

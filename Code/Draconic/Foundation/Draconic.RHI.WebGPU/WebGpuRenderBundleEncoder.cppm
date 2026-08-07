@@ -6,12 +6,12 @@
 /// WebGPU bundles inherit, so it is ignored here.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include "WebGpuIncludes.h"
 
 export module draconic.rhi.webgpu:render_bundle_encoder;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :api;
 import :conversions;
@@ -20,7 +20,7 @@ import :buffer;
 import :render_pipeline;
 import :push_constant_emulator;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::webgpu
 {

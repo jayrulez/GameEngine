@@ -17,7 +17,7 @@
 // the basis for detachable UI windows - with close deferred to frame end.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include "Draconic.Profiler/Profiler.h"
 
 export module draconic.runtime.client;
@@ -25,13 +25,13 @@ export module draconic.runtime.client;
 export import :app;           // ApplicationSettings, IApplicationHost, IApplication
 export import :embedded_host; // EmbeddedApplicationHost (editor-embedded runtime)
 
-import draconic.core;
+import draconic.foundation;
 import draconic.runtime;
 import draconic.shell;
 import draconic.graphics;
 import draconic.profiler;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 using namespace draconic::shell; // IShell + input/window types (moved from draconic::runtime)
 using namespace draconic::
     graphics; // GraphicsDevice/RenderWindow/FrameContext (moved from draconic::runtime)
@@ -65,7 +65,7 @@ export namespace draconic::runtime
 
             // Bring up the engine-wide JobSystem before any subsystem starts, so it is
             // available to all of them and outlives them (torn down last, in Stop()).
-            core::InitGlobalJobSystem();
+            foundation::InitGlobalJobSystem();
 
             m_app->Configure(*this);
             m_context.Startup();
@@ -81,7 +81,7 @@ export namespace draconic::runtime
                     if (rw.HasValue())
                     {
                         m_windows.PushBack(
-                            static_cast<core::UniquePtr<RenderWindow>&&>(rw.Value()));
+                            static_cast<foundation::UniquePtr<RenderWindow>&&>(rw.Value()));
                     }
                 }
             }
@@ -95,7 +95,7 @@ export namespace draconic::runtime
 
         // Advance exactly one frame with an explicit delta. The shell runner
         // passes wall-clock time; call directly for deterministic stepping.
-        void Tick(core::f32 deltaTime)
+        void Tick(foundation::f32 deltaTime)
         {
             DRACONIC_PROFILE_FRAME_BEGIN();
             m_context.BeginFrame(deltaTime);
@@ -104,11 +104,11 @@ export namespace draconic::runtime
                 DRACONIC_PROFILE_SCOPE("Update");
                 // Simulation lanes run on SCALED time (slow-mo/pause); the app hook and
                 // frame bookkeeping keep the raw dt.
-                const core::f32 scaledDelta = deltaTime * m_context.TimeScale();
+                const foundation::f32 scaledDelta = deltaTime * m_context.TimeScale();
                 m_stepper.step = m_settings.fixedTimeStep;
                 m_stepper.maxSteps = m_settings.maxFixedStepsPerFrame;
-                const core::u32 fixedSteps = m_stepper.Advance(scaledDelta);
-                for (core::u32 i = 0; i < fixedSteps; ++i)
+                const foundation::u32 fixedSteps = m_stepper.Advance(scaledDelta);
+                for (foundation::u32 i = 0; i < fixedSteps; ++i)
                 {
                     m_context.FixedUpdate(m_settings.fixedTimeStep);
                     m_app->OnFixedUpdate(*this, m_settings.fixedTimeStep);
@@ -176,7 +176,7 @@ export namespace draconic::runtime
 
             // Tear down the engine-wide JobSystem last - after every subsystem (Context.Shutdown)
             // and all GPU resource frees (window dtors), so nothing references it afterward.
-            core::ShutdownGlobalJobSystem();
+            foundation::ShutdownGlobalJobSystem();
 
             m_started = false;
             m_running = false;
@@ -226,7 +226,7 @@ export namespace draconic::runtime
             }
 
             RenderWindow* ptr = rw.Value().Get();
-            m_windows.PushBack(static_cast<core::UniquePtr<RenderWindow>&&>(rw.Value()));
+            m_windows.PushBack(static_cast<foundation::UniquePtr<RenderWindow>&&>(rw.Value()));
             return ptr;
         }
 
@@ -249,9 +249,9 @@ export namespace draconic::runtime
         [[nodiscard]] const ApplicationSettings& Settings() const noexcept { return m_settings; }
         [[nodiscard]] bool IsRunning() const noexcept { return m_running; }
         [[nodiscard]] int ExitCode() const noexcept { return m_exitCode; }
-        [[nodiscard]] core::Span<const core::UniquePtr<RenderWindow>> Windows() const noexcept
+        [[nodiscard]] foundation::Span<const foundation::UniquePtr<RenderWindow>> Windows() const noexcept
         {
-            return core::Span<const core::UniquePtr<RenderWindow>>(m_windows.Data(),
+            return foundation::Span<const foundation::UniquePtr<RenderWindow>>(m_windows.Data(),
                                                                    m_windows.Size());
         }
 
@@ -269,7 +269,7 @@ export namespace draconic::runtime
             for (RenderWindow* dead : m_pendingClose)
             {
                 IWindow* osWindow = &dead->Window();
-                for (core::usize i = 0; i < m_windows.Size(); ++i)
+                for (foundation::usize i = 0; i < m_windows.Size(); ++i)
                 {
                     if (m_windows[i].Get() == dead)
                     {
@@ -294,8 +294,8 @@ export namespace draconic::runtime
         IApplication* m_app = nullptr;                        // borrowed; owned by the entry point
         IShell* m_shell = nullptr;                            // borrowed; owned by the entry point
         GraphicsDevice* m_graphics = nullptr;                 // borrowed; owned by the entry point
-        core::Array<core::UniquePtr<RenderWindow>> m_windows; // [0] == main
-        core::Array<RenderWindow*> m_pendingClose;            // deferred destroy
+        foundation::Array<foundation::UniquePtr<RenderWindow>> m_windows; // [0] == main
+        foundation::Array<RenderWindow*> m_pendingClose;            // deferred destroy
         bool m_started = false;
         bool m_running = false;
         int m_exitCode = 0;

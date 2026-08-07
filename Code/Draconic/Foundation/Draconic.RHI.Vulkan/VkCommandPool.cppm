@@ -2,18 +2,18 @@
 /// Ported from Sedulous.RHI.Vulkan/VulkanCommandPool.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include "VkIncludes.h"
 
 export module draconic.rhi.vulkan:command_pool;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :adapter;
 import :command_buffer;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::vk
 {

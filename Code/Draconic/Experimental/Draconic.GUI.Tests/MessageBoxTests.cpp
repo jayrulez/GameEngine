@@ -2,41 +2,41 @@
 // the dialog (background clicks are swallowed by the dispatcher's modal root); MessageBox shows
 // the right buttons and reports the pressed result, then closes.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.gui;
 
 using namespace draconic::gui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 namespace
 {
     template <typename T>
-    core::RefPtr<T> Make()
+    foundation::RefPtr<T> Make()
     {
-        return core::MakeRef<T>(core::DefaultAllocator());
+        return foundation::MakeRef<T>(foundation::DefaultAllocator());
     }
 
     // Sum of a node's positions up to the root, plus half its size = its world-space center
     // (identity transforms, matching the popup/menu model). Used to click a nested button.
-    core::Float2 WorldCenter(Node* node)
+    foundation::Float2 WorldCenter(Node* node)
     {
-        core::Float2 p{0.0f, 0.0f};
+        foundation::Float2 p{0.0f, 0.0f};
         for (Node* c = node; c != nullptr && c->GetParent() != nullptr; c = c->GetParent())
             p += c->GetPosition();
-        const core::Float2 s = node->GetSize();
-        return core::Float2{p.x + s.x * 0.5f, p.y + s.y * 0.5f};
+        const foundation::Float2 s = node->GetSize();
+        return foundation::Float2{p.x + s.x * 0.5f, p.y + s.y * 0.5f};
     }
 }
 
 TEST_CASE("window: OpenModal centers, adds a scrim, and sets the dispatcher modal root")
 {
     auto root = Make<SceneNode>();
-    root->SetSize(core::Float2{400.0f, 400.0f});
+    root->SetSize(foundation::Float2{400.0f, 400.0f});
     EventDispatcher* d = root->GetEventDispatcher();
 
     auto window = Make<Window>();
-    window->SetSize(core::Float2{200.0f, 100.0f});
+    window->SetSize(foundation::Float2{200.0f, 100.0f});
     window->OpenModal(*root.Get());
 
     CHECK(window->IsOpen());
@@ -51,23 +51,23 @@ TEST_CASE("window: OpenModal centers, adds a scrim, and sets the dispatcher moda
 TEST_CASE("window: a modal swallows clicks on the background")
 {
     auto root = Make<SceneNode>();
-    root->SetSize(core::Float2{400.0f, 400.0f});
+    root->SetSize(foundation::Float2{400.0f, 400.0f});
     EventDispatcher* d = root->GetEventDispatcher();
 
     int backgroundClicks = 0;
     auto background = Make<Button>();
-    background->SetSize(core::Float2{100.0f, 40.0f});
-    background->SetPosition(core::Float2{0.0f, 0.0f}); // top-left corner
+    background->SetSize(foundation::Float2{100.0f, 40.0f});
+    background->SetPosition(foundation::Float2{0.0f, 0.0f}); // top-left corner
     background->SetOnClick([&] { ++backgroundClicks; });
     root->AddChild(background.Get());
 
     auto window = Make<Window>();
-    window->SetSize(core::Float2{200.0f, 100.0f}); // centered -> covers (100,150)-(300,250)
+    window->SetSize(foundation::Float2{200.0f, 100.0f}); // centered -> covers (100,150)-(300,250)
     window->OpenModal(*root.Get());
 
     // Click the background button (outside the modal) -> swallowed.
-    d->InjectMouseDown(core::Float2{50.0f, 20.0f}, MouseButton::Left);
-    d->InjectMouseUp(core::Float2{50.0f, 20.0f}, MouseButton::Left);
+    d->InjectMouseDown(foundation::Float2{50.0f, 20.0f}, MouseButton::Left);
+    d->InjectMouseUp(foundation::Float2{50.0f, 20.0f}, MouseButton::Left);
     CHECK(backgroundClicks == 0);
     CHECK(d->GetFocusNode() != background.Get());
 }
@@ -75,12 +75,12 @@ TEST_CASE("window: a modal swallows clicks on the background")
 TEST_CASE("window: Close removes the window + scrim, releases the modal, and fires onClose")
 {
     auto root = Make<SceneNode>();
-    root->SetSize(core::Float2{400.0f, 400.0f});
+    root->SetSize(foundation::Float2{400.0f, 400.0f});
     EventDispatcher* d = root->GetEventDispatcher();
 
     int closed = 0;
     auto window = Make<Window>();
-    window->SetSize(core::Float2{200.0f, 100.0f});
+    window->SetSize(foundation::Float2{200.0f, 100.0f});
     window->SetOnClose([&] { ++closed; });
     window->OpenModal(*root.Get());
     REQUIRE(root->ChildCount() == 2);
@@ -96,11 +96,11 @@ TEST_CASE("window: Close removes the window + scrim, releases the modal, and fir
 TEST_CASE("window: non-modal Open adds no scrim and no modal root")
 {
     auto root = Make<SceneNode>();
-    root->SetSize(core::Float2{400.0f, 400.0f});
+    root->SetSize(foundation::Float2{400.0f, 400.0f});
     EventDispatcher* d = root->GetEventDispatcher();
 
     auto window = Make<Window>();
-    window->SetSize(core::Float2{200.0f, 100.0f});
+    window->SetSize(foundation::Float2{200.0f, 100.0f});
     window->Open(*root.Get());
     CHECK(window->IsOpen());
     CHECK_FALSE(window->IsModal());
@@ -111,18 +111,18 @@ TEST_CASE("window: non-modal Open adds no scrim and no modal root")
 TEST_CASE("messagebox: Configure shows the right buttons per style")
 {
     auto ok = Make<MessageBox>();
-    ok->Configure(core::StringView(u8"Hi"), core::StringView(u8"All good."),
+    ok->Configure(foundation::StringView(u8"Hi"), foundation::StringView(u8"All good."),
                   MessageBox::Buttons::Ok);
     CHECK(ok->ButtonCount() == 1);
-    CHECK(ok->GetMessage() == core::StringView(u8"All good."));
+    CHECK(ok->GetMessage() == foundation::StringView(u8"All good."));
 
     auto okCancel = Make<MessageBox>();
-    okCancel->Configure(core::StringView(u8"?"), core::StringView(u8"Proceed?"),
+    okCancel->Configure(foundation::StringView(u8"?"), foundation::StringView(u8"Proceed?"),
                         MessageBox::Buttons::OkCancel);
     CHECK(okCancel->ButtonCount() == 2);
 
     auto yesNo = Make<MessageBox>();
-    yesNo->Configure(core::StringView(u8"?"), core::StringView(u8"Save?"),
+    yesNo->Configure(foundation::StringView(u8"?"), foundation::StringView(u8"Save?"),
                      MessageBox::Buttons::YesNo);
     CHECK(yesNo->ButtonCount() == 2);
 }
@@ -130,13 +130,13 @@ TEST_CASE("messagebox: Configure shows the right buttons per style")
 TEST_CASE("messagebox: pressing a button reports the result and closes")
 {
     auto root = Make<SceneNode>();
-    root->SetSize(core::Float2{500.0f, 500.0f});
+    root->SetSize(foundation::Float2{500.0f, 500.0f});
     EventDispatcher* d = root->GetEventDispatcher();
 
     MessageBox::Result got = MessageBox::Result::Cancel;
     int results = 0;
     auto box = Make<MessageBox>();
-    box->Configure(core::StringView(u8"Confirm"), core::StringView(u8"Delete it?"),
+    box->Configure(foundation::StringView(u8"Confirm"), foundation::StringView(u8"Delete it?"),
                    MessageBox::Buttons::OkCancel);
     box->SetOnResult(
         [&](MessageBox::Result r)
@@ -149,7 +149,7 @@ TEST_CASE("messagebox: pressing a button reports the result and closes")
     // Buttons: [Cancel, OK] (OK rightmost). Click OK.
     Button* okButton = box->ButtonAt(1);
     REQUIRE(okButton != nullptr);
-    const core::Float2 center = WorldCenter(okButton);
+    const foundation::Float2 center = WorldCenter(okButton);
     d->InjectMouseDown(center, MouseButton::Left);
     d->InjectMouseUp(center, MouseButton::Left);
 

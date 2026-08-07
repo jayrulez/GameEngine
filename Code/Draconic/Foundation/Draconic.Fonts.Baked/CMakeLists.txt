@@ -4,7 +4,7 @@
 add_library(Draconic.Fonts.Baked STATIC)
 add_library(Draconic::Fonts.Baked ALIAS Draconic.Fonts.Baked)
 
-target_link_libraries(Draconic.Fonts.Baked PUBLIC Draconic::Core Draconic::Fonts Draconic::Policy)
+target_link_libraries(Draconic.Fonts.Baked PUBLIC Draconic::Foundation Draconic::Fonts Draconic::Policy)
 
 target_sources(Draconic.Fonts.Baked
     PUBLIC

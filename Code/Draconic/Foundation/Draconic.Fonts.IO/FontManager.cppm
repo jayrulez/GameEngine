@@ -7,15 +7,15 @@
 // Mutex/ScopedLock + Function.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.fonts.io:manager;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.fonts;
 import :factories;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::fonts
 {

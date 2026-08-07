@@ -12,15 +12,15 @@
 #pragma once
 
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.script;
 
 namespace draconic::script::conformance
 {
-    using namespace draconic::core;
+    using namespace draconic::foundation;
 
     // A real native API that takes a script function as a typed callback (the delegate
     // seam's "user"): an event a behavior subscribes to, that native code later fires.
@@ -138,7 +138,7 @@ namespace draconic::script::conformance
                                             const Dialect& dialect)
     {
         // --- manager + two-phase type registration (collect, then finalize) ---
-        RegisterCoreTypes(); // self-contained: the introspection diff below
+        RegisterFoundationTypes(); // self-contained: the introspection diff below
                              // needs the global registry populated (idempotent)
         RefPtr<IScriptManager> manager = factory();
         REQUIRE(manager.Get() != nullptr);

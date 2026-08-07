@@ -2,9 +2,9 @@
 // ImageAssetBuilder into an output content DB -> load the cooked ImageResource
 // through the ResourceManager (device-free, model B). PNG round-trips RGBA8.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.resource;
@@ -14,7 +14,7 @@ import draconic.image.io;
 import draconic.image.resource;
 import draconic.image.editor;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::vfs;
 using namespace draconic::resource;
 using namespace draconic::image;
@@ -55,7 +55,7 @@ TEST_CASE("image.pipeline: ImageAsset -> cook -> ImageResource round-trips")
     Guid id;
     {
         draconic::content::ContentDatabase outDb(
-            outMount, draconic::core::BinarySerializerFactory(), u8".rasset");
+            outMount, draconic::foundation::BinarySerializerFactory(), u8".rasset");
         auto* inst = outDb.RootGroup()->CreateInstance(u8"icon", ImageResource::StaticType());
         id = inst->Id();
 
@@ -72,7 +72,7 @@ TEST_CASE("image.pipeline: ImageAsset -> cook -> ImageResource round-trips")
     }
 
     // --- runtime load (device-free): cooked ImageResource via the manager ---
-    draconic::content::ContentDatabase outDb(outMount, draconic::core::BinarySerializerFactory(),
+    draconic::content::ContentDatabase outDb(outMount, draconic::foundation::BinarySerializerFactory(),
                                              u8".rasset");
     ImageFactory factory;
     ResourceManager manager(outDb);
@@ -111,7 +111,7 @@ TEST_CASE("image.pipeline: builder fails on a missing source file")
     RegisterImageAsset();
     RemoveTree();
     NativeFileSystem outMount(u8"draconic_imgpipe_out_db");
-    draconic::content::ContentDatabase outDb(outMount, draconic::core::BinarySerializerFactory(),
+    draconic::content::ContentDatabase outDb(outMount, draconic::foundation::BinarySerializerFactory(),
                                              u8".rasset");
     auto* inst = outDb.RootGroup()->CreateInstance(u8"icon", ImageResource::StaticType());
 

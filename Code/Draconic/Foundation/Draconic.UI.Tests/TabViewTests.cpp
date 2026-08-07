@@ -2,24 +2,24 @@
 // methods; `new TestView()` content -> a MakeRef<TestView> whose ref AddView adopts (kept as a local when
 // the test inspects its Visibility). KeyEventArgs.Set + OnKeyDown drive the keyboard case. No font needed.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 #include "TestHelpers.h"
 
 using namespace draconic::ui;
 using namespace draconic::ui::tests;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
-static core::RefPtr<RootView> MakeRoot()
+static foundation::RefPtr<RootView> MakeRoot()
 {
-    return core::MakeRef<RootView>(core::DefaultAllocator());
+    return foundation::MakeRef<RootView>(foundation::DefaultAllocator());
 }
-static core::RefPtr<TabView> MakeTabs() { return core::MakeRef<TabView>(core::DefaultAllocator()); }
-static core::RefPtr<TestView> MakeView(f32 w = 50.0f, f32 h = 30.0f)
+static foundation::RefPtr<TabView> MakeTabs() { return foundation::MakeRef<TabView>(foundation::DefaultAllocator()); }
+static foundation::RefPtr<TestView> MakeView(f32 w = 50.0f, f32 h = 30.0f)
 {
-    return core::MakeRef<TestView>(core::DefaultAllocator(), w, h);
+    return foundation::MakeRef<TestView>(foundation::DefaultAllocator(), w, h);
 }
 
 TEST_CASE("tab-view: AddTab_SelectsFirst")

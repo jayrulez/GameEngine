@@ -7,14 +7,14 @@
 // frame. Ported from Draconic (itself a Sedulous port).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.shell:input;
 
-import draconic.core;
+import draconic.foundation;
 import :input_types;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::shell
 {
@@ -34,17 +34,17 @@ export namespace draconic::shell
     public:
         virtual ~IMouse() = default;
 
-        [[nodiscard]] virtual core::f32 X() const = 0; // window-space position
-        [[nodiscard]] virtual core::f32 Y() const = 0;
+        [[nodiscard]] virtual foundation::f32 X() const = 0; // window-space position
+        [[nodiscard]] virtual foundation::f32 Y() const = 0;
         // Desktop-global cursor position in logical screen coordinates (surface/window-independent).
         // Multi-window drag math uses this because per-window-local coords are unreliable while a
         // window follows the cursor or resizes mid-event; global deltas stay valid regardless.
-        [[nodiscard]] virtual core::f32 GlobalX() const = 0;
-        [[nodiscard]] virtual core::f32 GlobalY() const = 0;
-        [[nodiscard]] virtual core::f32 DeltaX() const = 0; // movement this frame
-        [[nodiscard]] virtual core::f32 DeltaY() const = 0;
-        [[nodiscard]] virtual core::f32 ScrollX() const = 0; // wheel this frame
-        [[nodiscard]] virtual core::f32 ScrollY() const = 0;
+        [[nodiscard]] virtual foundation::f32 GlobalX() const = 0;
+        [[nodiscard]] virtual foundation::f32 GlobalY() const = 0;
+        [[nodiscard]] virtual foundation::f32 DeltaX() const = 0; // movement this frame
+        [[nodiscard]] virtual foundation::f32 DeltaY() const = 0;
+        [[nodiscard]] virtual foundation::f32 ScrollX() const = 0; // wheel this frame
+        [[nodiscard]] virtual foundation::f32 ScrollY() const = 0;
 
         [[nodiscard]] virtual bool IsButtonDown(MouseButton button) const = 0;
         [[nodiscard]] virtual bool IsButtonPressed(MouseButton button) const = 0;
@@ -68,17 +68,17 @@ export namespace draconic::shell
     public:
         virtual ~IGamepad() = default;
 
-        [[nodiscard]] virtual core::i32 Index() const = 0;
-        [[nodiscard]] virtual core::StringView Name() const = 0;
+        [[nodiscard]] virtual foundation::i32 Index() const = 0;
+        [[nodiscard]] virtual foundation::StringView Name() const = 0;
         [[nodiscard]] virtual bool Connected() const = 0;
 
         [[nodiscard]] virtual bool IsButtonDown(GamepadButton button) const = 0;
         [[nodiscard]] virtual bool IsButtonPressed(GamepadButton button) const = 0;
         [[nodiscard]] virtual bool IsButtonReleased(GamepadButton button) const = 0;
-        [[nodiscard]] virtual core::f32 Axis(GamepadAxis axis) const = 0; // [-1,1], triggers [0,1]
+        [[nodiscard]] virtual foundation::f32 Axis(GamepadAxis axis) const = 0; // [-1,1], triggers [0,1]
 
         // Low/high-frequency motor strengths in [0,1] for durationMs milliseconds.
-        virtual void SetRumble(core::f32 lowFreq, core::f32 highFreq, core::u32 durationMs) = 0;
+        virtual void SetRumble(foundation::f32 lowFreq, foundation::f32 highFreq, foundation::u32 durationMs) = 0;
     };
 
     class ITouch
@@ -86,8 +86,8 @@ export namespace draconic::shell
     public:
         virtual ~ITouch() = default;
 
-        [[nodiscard]] virtual core::i32 TouchCount() const = 0;
-        [[nodiscard]] virtual bool GetTouchPoint(core::i32 index, TouchPoint& out) const = 0;
+        [[nodiscard]] virtual foundation::i32 TouchCount() const = 0;
+        [[nodiscard]] virtual bool GetTouchPoint(foundation::i32 index, TouchPoint& out) const = 0;
         [[nodiscard]] virtual bool HasTouch() const = 0;
     };
 
@@ -100,17 +100,17 @@ export namespace draconic::shell
         [[nodiscard]] virtual IKeyboard* Keyboard() = 0;
         [[nodiscard]] virtual IMouse* Mouse() = 0;
         [[nodiscard]] virtual ITouch* Touch() = 0;
-        [[nodiscard]] virtual core::i32 GamepadCount() const = 0;
-        [[nodiscard]] virtual IGamepad* GetGamepad(core::i32 index) = 0;
+        [[nodiscard]] virtual foundation::i32 GamepadCount() const = 0;
+        [[nodiscard]] virtual IGamepad* GetGamepad(foundation::i32 index) = 0;
 
         // This frame's input events (the event-first source of truth; the device
         // snapshots above are a fold over these). Cleared each frame by Update().
-        [[nodiscard]] virtual core::Span<const InputEvent> Events() const = 0;
+        [[nodiscard]] virtual foundation::Span<const InputEvent> Events() const = 0;
 
         // Routing authority (per docs/design/viewport-input.md §4.1): the window under
         // the pointer (mouse routing) and the keyboard/gamepad-focused window. 0 = none.
-        [[nodiscard]] virtual core::u32 HoverWindow() const = 0;
-        [[nodiscard]] virtual core::u32 FocusedWindow() const = 0;
+        [[nodiscard]] virtual foundation::u32 HoverWindow() const = 0;
+        [[nodiscard]] virtual foundation::u32 FocusedWindow() const = 0;
 
         // Rolls per-frame state (current -> previous, clears deltas + events). The
         // shell calls this once per frame before pumping OS events.

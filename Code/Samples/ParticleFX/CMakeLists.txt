@@ -4,7 +4,7 @@
 add_executable(ParticleFX main.cpp)
 
 target_link_libraries(ParticleFX PRIVATE
-    Draconic::Core
+    Draconic::Foundation
     Draconic::Runtime
     Draconic::Runtime.Client
     Draconic::Shell.Desktop Draconic::Runtime.Desktop

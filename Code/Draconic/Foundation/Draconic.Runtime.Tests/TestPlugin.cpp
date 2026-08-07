@@ -2,12 +2,12 @@
 // It registers a subsystem on load and removes it on unload; the subsystem bumps
 // a counter the test observes across the library boundary via DraconicTestPluginTicks.
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.runtime;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::runtime;
 
 #if defined(_WIN32)

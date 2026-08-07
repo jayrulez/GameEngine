@@ -8,13 +8,13 @@
 // voice counts. Emitters draw as debug wire spheres. Runs fine without an audio device
 // (Null mode - a warning logs and everything else still works, just silently).
 
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 #include "Draconic.Runtime.Client/AppMain.h"
 #include "imgui.h"
 #include <cmath>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.runtime;
 import draconic.runtime.client;
 import draconic.engine.defaultapp;
@@ -30,9 +30,9 @@ import draconic.imgui;
 import draconic.audio;
 import draconic.engine.audio;
 
-#include "../Common/FlyCamera.h" // after the imports: uses draconic::core/runtime types
+#include "../Common/FlyCamera.h" // after the imports: uses draconic::foundation/runtime types
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace runtime = draconic::runtime;
 namespace graphics = draconic::graphics;
 namespace shell = draconic::shell;
@@ -41,14 +41,14 @@ namespace render = draconic::render;
 namespace audio = draconic::audio;
 namespace imgui = draconic::imgui;
 
-using core::f32;
+using foundation::f32;
 
 namespace
 {
-    [[nodiscard]] core::RefPtr<audio::AudioClip> LoadClipFromFile(core::StringView path,
+    [[nodiscard]] foundation::RefPtr<audio::AudioClip> LoadClipFromFile(foundation::StringView path,
                                                                   bool loop = false)
     {
-        core::Result<core::Array<core::byte>> bytes = core::ReadFile(path);
+        foundation::Result<foundation::Array<foundation::byte>> bytes = foundation::ReadFile(path);
         if (!bytes.HasValue())
         {
             DRACONIC_LOG_ERROR(u8"AudioPlayground", u8"missing sample data: {}", path);
@@ -56,18 +56,18 @@ namespace
         }
         audio::AudioClipMetadata metadata;
         if (!audio::ProbeAudioClipMetadata(
-                core::Span<const core::byte>(bytes.Value().Data(), bytes.Value().Size()), metadata))
+                foundation::Span<const foundation::byte>(bytes.Value().Data(), bytes.Value().Size()), metadata))
         {
             return {};
         }
-        core::RefPtr<audio::AudioClip> clip =
-            core::MakeRef<audio::AudioClip>(core::DefaultAllocator());
+        foundation::RefPtr<audio::AudioClip> clip =
+            foundation::MakeRef<audio::AudioClip>(foundation::DefaultAllocator());
         clip->channels = metadata.channels;
         clip->sampleRate = metadata.sampleRate;
         clip->frameCount = metadata.frameCount;
         clip->durationSeconds = metadata.durationSeconds;
         clip->loop = loop;
-        clip->encodedData = core::Move(bytes.Value());
+        clip->encodedData = foundation::Move(bytes.Value());
         return clip;
     }
 
@@ -92,12 +92,12 @@ namespace
             }
             m_scene = PrimaryScenes().CreateScene(u8"audio-playground");
 
-            const core::String dataDir(u8"" DRACONIC_AUDIO_SAMPLE_DATA_DIR);
+            const foundation::String dataDir(u8"" DRACONIC_AUDIO_SAMPLE_DATA_DIR);
             m_ambient =
-                LoadClipFromFile(core::PathJoin(dataDir.AsView(), u8"ambient_loop.wav"), true);
-            m_beepHigh = LoadClipFromFile(core::PathJoin(dataDir.AsView(), u8"beep_high.wav"));
-            m_beepLow = LoadClipFromFile(core::PathJoin(dataDir.AsView(), u8"beep_low.wav"), true);
-            m_click = LoadClipFromFile(core::PathJoin(dataDir.AsView(), u8"click.wav"));
+                LoadClipFromFile(foundation::PathJoin(dataDir.AsView(), u8"ambient_loop.wav"), true);
+            m_beepHigh = LoadClipFromFile(foundation::PathJoin(dataDir.AsView(), u8"beep_high.wav"));
+            m_beepLow = LoadClipFromFile(foundation::PathJoin(dataDir.AsView(), u8"beep_low.wav"), true);
+            m_click = LoadClipFromFile(foundation::PathJoin(dataDir.AsView(), u8"click.wav"));
 
             // Camera entity = the LISTENER (AudioListenerComponent drives the engine).
             m_camera = m_scene->CreateEntity(u8"camera");
@@ -106,7 +106,7 @@ namespace
                 cameras->Add(m_camera);
             }
             m_scene->GetSystem<audio::AudioListenerComponentManager>()->Add(m_camera);
-            m_fly.position = core::Float3{0.0f, 2.0f, 14.0f};
+            m_fly.position = foundation::Float3{0.0f, 2.0f, 14.0f};
             m_fly.moveSpeed = 8.0f;
             m_fly.fastSpeed = 25.0f;
 
@@ -135,7 +135,7 @@ namespace
                 const f32 angle = 3.14159265f * 0.5f * static_cast<f32>(i);
                 scene::EntityHandle e = m_scene->CreateEntity(u8"emitter");
                 m_scene->SetLocalPosition(
-                    e, core::Float3{10.0f * std::cos(angle), 1.5f, 10.0f * std::sin(angle)});
+                    e, foundation::Float3{10.0f * std::cos(angle), 1.5f, 10.0f * std::sin(angle)});
                 audio::AudioSourceComponent& c =
                     m_scene->GetSystem<audio::AudioSourceComponentManager>()->Add(e);
                 c.clip = m_beepLow;
@@ -165,7 +165,7 @@ namespace
 
             // LMB one-shots fire through a CUE (P3): three weighted variants with
             // pitch jitter - no two consecutive shots pick the same clip.
-            m_shotCue = core::MakeRef<audio::SoundCue>(core::DefaultAllocator());
+            m_shotCue = foundation::MakeRef<audio::SoundCue>(foundation::DefaultAllocator());
             m_shotCue->variants.PushBack(audio::SoundCueVariant{m_beepHigh, 3.0f});
             m_shotCue->variants.PushBack(audio::SoundCueVariant{m_click, 2.0f});
             m_shotCue->variants.PushBack(audio::SoundCueVariant{m_beepLow, 1.0f});
@@ -176,10 +176,10 @@ namespace
             m_scene->SetSimulationEnabled(true);
             if (Audio()->Engine() != nullptr && Audio()->Engine()->IsHeadless())
             {
-                core::ConsoleWrite(
+                foundation::ConsoleWrite(
                     u8"AudioPlayground: NO audio device - running silent (Null mode).\n");
             }
-            core::ConsoleWrite(
+            foundation::ConsoleWrite(
                 u8"AudioPlayground: WASD/RMB-look fly. LMB = positional one-shot at the\n"
                 u8"crosshair distance (random pitch). Space = UI click one-shot. T = pause\n"
                 u8"scene simulation (fades the scene's voices). Esc quits.\n");
@@ -205,9 +205,9 @@ namespace
             // engine-global PlayOneShot3D on the Effects bus.
             if (input->Mouse()->IsButtonPressed(shell::MouseButton::Left) && Audio() != nullptr)
             {
-                const core::Float3 forward = m_fly.Forward();
+                const foundation::Float3 forward = m_fly.Forward();
                 const f32 distance = 4.0f + 8.0f * Random01();
-                const core::Float3 position{
+                const foundation::Float3 position{
                     m_fly.position.x + forward.x * distance + (Random01() - 0.5f) * 4.0f,
                     m_fly.position.y + forward.y * distance,
                     m_fly.position.z + forward.z * distance + (Random01() - 0.5f) * 4.0f};
@@ -276,13 +276,13 @@ namespace
             auto& draw = renderer->DebugScene(*m_scene);
             for (scene::EntityHandle e : m_emitters)
             {
-                const core::Float3 position = m_scene->GetWorldPosition(e);
-                draw.DrawWireSphere(position, 0.5f, core::Color{0.3f, 0.9f, 1.0f, 1.0f});
+                const foundation::Float3 position = m_scene->GetWorldPosition(e);
+                draw.DrawWireSphere(position, 0.5f, foundation::Color{0.3f, 0.9f, 1.0f, 1.0f});
             }
             if (m_haveOneShot && Audio() != nullptr && Audio()->IsPlaying(m_lastOneShot))
             {
                 draw.DrawWireSphere(m_lastOneShotPosition, 0.35f,
-                                    core::Color{1.0f, 0.8f, 0.2f, 1.0f});
+                                    foundation::Color{1.0f, 0.8f, 0.2f, 1.0f});
             }
         }
 
@@ -328,7 +328,7 @@ namespace
             {
                 return;
             }
-            core::Transform t = m_scene->GetLocalTransform(m_camera);
+            foundation::Transform t = m_scene->GetLocalTransform(m_camera);
             t.position = m_fly.position;
             t.rotation = m_fly.Rotation();
             m_scene->SetLocalTransform(m_camera, t);
@@ -336,16 +336,16 @@ namespace
 
         scene::Scene* m_scene = nullptr;
         scene::EntityHandle m_camera;
-        core::Array<scene::EntityHandle> m_emitters;
-        core::RefPtr<audio::AudioClip> m_ambient;
-        core::RefPtr<audio::SoundCue> m_shotCue;
-        core::RefPtr<audio::AudioClip> m_beepHigh;
-        core::RefPtr<audio::AudioClip> m_beepLow;
-        core::RefPtr<audio::AudioClip> m_click;
+        foundation::Array<scene::EntityHandle> m_emitters;
+        foundation::RefPtr<audio::AudioClip> m_ambient;
+        foundation::RefPtr<audio::SoundCue> m_shotCue;
+        foundation::RefPtr<audio::AudioClip> m_beepHigh;
+        foundation::RefPtr<audio::AudioClip> m_beepLow;
+        foundation::RefPtr<audio::AudioClip> m_click;
         audio::VoiceHandle m_lastOneShot;
-        core::Float3 m_lastOneShotPosition{0, 0, 0};
+        foundation::Float3 m_lastOneShotPosition{0, 0, 0};
         bool m_haveOneShot = false;
-        core::u32 m_randomState = 0x12345678u;
+        foundation::u32 m_randomState = 0x12345678u;
         draconic::samples::FlyCamera m_fly;
     };
 }

@@ -2,7 +2,7 @@
 /// Ported from Sedulous.Models.GLTF/GltfLoader.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include <algorithm>
 #include <cctype>
@@ -18,7 +18,7 @@ module;
 
 export module draconic.model.gltf;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.model;
 import draconic.model.io;
 import draconic.image;
@@ -27,7 +27,7 @@ import draconic.image.io;
 export namespace draconic::model::gltf
 {
 
-    using namespace draconic::core;
+    using namespace draconic::foundation;
     using namespace draconic::model;
 
     // cgltf hands back char* (UTF-8); the engine String is UTF-8 too, so this just

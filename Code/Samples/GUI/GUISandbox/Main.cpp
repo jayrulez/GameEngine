@@ -6,7 +6,7 @@
 
 #include <new>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.rhi.vulkan;
 import draconic.shaders;
@@ -21,7 +21,7 @@ import draconic.vg.renderer;
 import draconic.gui;
 import draconic.gui.shell;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace samples = draconic::samples;
 namespace rhi = draconic::rhi;
 namespace shaders = draconic::shaders;

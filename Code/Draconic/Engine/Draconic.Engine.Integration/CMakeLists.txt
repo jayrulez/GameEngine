@@ -5,7 +5,7 @@ add_library(Draconic.Engine.Integration STATIC)
 add_library(Draconic::Engine.Integration ALIAS Draconic.Engine.Integration)
 
 target_link_libraries(Draconic.Engine.Integration
-    PUBLIC Draconic::Core Draconic::Scene Draconic::Physics
+    PUBLIC Draconic::Foundation Draconic::Scene Draconic::Physics
            Draconic::Engine.Physics Draconic::Engine.Script Draconic::Policy)
 
 target_sources(Draconic.Engine.Integration

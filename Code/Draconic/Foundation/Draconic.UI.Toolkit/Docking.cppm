@@ -18,12 +18,12 @@
 // Beef `IDockableWindow` interface is DEAD (not ported); DetachPanel() is a plain method on DockableWindow.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui.toolkit:docking;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import draconic.ui;
 import draconic.fonts;
@@ -34,7 +34,7 @@ import :idockable_window_host;
 import :dock_zone_indicator;
 import :dock_split;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui::toolkit
 {

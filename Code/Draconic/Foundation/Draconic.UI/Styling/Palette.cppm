@@ -5,18 +5,18 @@
 // struct with static methods; Color fields R/G/B/A -> r/g/b/a; returns RefPtr<StateListDrawable>.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:palette;
 
-import draconic.core; // Color, Min, Max, RefPtr
+import draconic.foundation; // Color, Min, Max, RefPtr
 import draconic.vg;   // CornerRadii
 import :control_state;
 import :color_drawable;
 import :rounded_rect_drawable;
 import :state_list_drawable;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace vg = draconic::vg;
 
 export namespace draconic::ui

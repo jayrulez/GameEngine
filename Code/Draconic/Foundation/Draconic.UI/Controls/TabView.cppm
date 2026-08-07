@@ -4,15 +4,15 @@
 // optional closable tabs. Ported from Sedulous.UI/src/Controls/TabView.bf. Each tab's content is a
 // logical child (AddView -> ViewGroup RefPtr owns it); TabItem stores a BORROWED View* + an owned Title
 // String (RAII, no manual dtor). Beef SelectedIndex/TabCount get/set -> methods; RectangleF ->
-// core::Rectangle; CornerRadii fields are lowercase (topLeft/topRight/bottomRight/bottomLeft).
+// foundation::Rectangle; CornerRadii fields are lowercase (topLeft/topRight/bottomRight/bottomLeft).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:tab_view;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import draconic.fonts;
 import :view;
@@ -29,8 +29,8 @@ import :event_args;
 import :input_enums;
 import :enums;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace fonts = draconic::fonts;
 namespace vg = draconic::vg;
 
@@ -527,21 +527,21 @@ export namespace draconic::ui
             switch (Placement.Value())
             {
             case TabPlacement::Top:
-                content->Layout(0, th, width, core::Max(0.0f, height - th));
+                content->Layout(0, th, width, foundation::Max(0.0f, height - th));
                 break;
             case TabPlacement::Bottom:
-                content->Layout(0, 0, width, core::Max(0.0f, height - th));
+                content->Layout(0, 0, width, foundation::Max(0.0f, height - th));
                 break;
             case TabPlacement::Left:
             {
                 const f32 stripW = ComputeStripWidth();
-                content->Layout(stripW, 0, core::Max(0.0f, width - stripW), height);
+                content->Layout(stripW, 0, foundation::Max(0.0f, width - stripW), height);
                 break;
             }
             case TabPlacement::Right:
             {
                 const f32 stripW = ComputeStripWidth();
-                content->Layout(0, 0, core::Max(0.0f, width - stripW), height);
+                content->Layout(0, 0, foundation::Max(0.0f, width - stripW), height);
                 break;
             }
             }
@@ -594,7 +594,7 @@ export namespace draconic::ui
                     {
                         tabW += CloseButtonSize.Value() + 4;
                     }
-                    tabW = core::Max(MinTabWidth.Value(), tabW);
+                    tabW = foundation::Max(MinTabWidth.Value(), tabW);
                     extents.PushBack(tabW);
                     total += tabW;
                 }
@@ -612,8 +612,8 @@ export namespace draconic::ui
             // selection change requested it (mirrors the dock tab strip). Both run on the measured
             // extents, so the drawn rects — reused for hit-testing — stay aligned with what's on screen.
             const f32 available = horizontal ? Width() : Height();
-            const f32 maxScroll = core::Max(0.0f, total - available);
-            m_tabScroll = core::Clamp(m_tabScroll, 0.0f, maxScroll);
+            const f32 maxScroll = foundation::Max(0.0f, total - available);
+            m_tabScroll = foundation::Clamp(m_tabScroll, 0.0f, maxScroll);
             if (m_scrollSelectedIntoView && m_selectedIndex >= 0 &&
                 m_selectedIndex < static_cast<i32>(extents.Size()))
             {
@@ -631,7 +631,7 @@ export namespace draconic::ui
                 {
                     m_tabScroll = selStart + selExtent - available;
                 }
-                m_tabScroll = core::Clamp(m_tabScroll, 0.0f, maxScroll);
+                m_tabScroll = foundation::Clamp(m_tabScroll, 0.0f, maxScroll);
             }
             m_scrollSelectedIntoView = false;
             m_tabOverflow = maxScroll > 0.0f;
@@ -679,7 +679,7 @@ export namespace draconic::ui
             f32 maxW = 0;
             for (const TabItem& tab : m_tabs)
             {
-                maxW = core::Max(maxW, font->font->MeasureString(tab.Title));
+                maxW = foundation::Max(maxW, font->font->MeasureString(tab.Title));
             }
             return maxW + 24 + (TabsClosable.Value() ? CloseButtonSize.Value() + 4 : 0);
         }

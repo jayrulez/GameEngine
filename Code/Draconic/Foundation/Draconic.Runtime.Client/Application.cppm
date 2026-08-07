@@ -17,17 +17,17 @@
 // the defaults link it.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.runtime.client:app;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi; // PresentMode for the main window's swapchain
 import draconic.runtime;
 import draconic.shell;
 import draconic.graphics;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 using namespace draconic::shell; // IShell + input/window types (moved from draconic::runtime)
 using namespace draconic::
     graphics; // GraphicsDevice/RenderWindow/FrameContext (moved from draconic::runtime)
@@ -39,9 +39,9 @@ export namespace draconic::runtime
     // RenderWindowDesc (see IApplication::MainRenderWindow) - the same descriptor runtime windows use.
     struct ApplicationSettings
     {
-        core::f32 fixedTimeStep = 1.0f / 60.0f; // seconds per fixed update
-        core::f32 maxFrameTime = 0.25f;         // clamp per frame (avoids the spiral of death)
-        core::u32 maxFixedStepsPerFrame = 4;    // catch-up cap at the ACCUMULATOR (physics P0):
+        foundation::f32 fixedTimeStep = 1.0f / 60.0f; // seconds per fixed update
+        foundation::f32 maxFrameTime = 0.25f;         // clamp per frame (avoids the spiral of death)
+        foundation::u32 maxFixedStepsPerFrame = 4;    // catch-up cap at the ACCUMULATOR (physics P0):
                                                 // excess time is DROPPED, so a hitch (debugger
                                                 // pause) never cascades into a step storm -
                                                 // independent of the runner's maxFrameTime clamp
@@ -51,9 +51,9 @@ export namespace draconic::runtime
     // Advance() returns how many fixed steps this frame runs (clamped; excess time dropped);
     // Alpha() is the leftover fraction of a step in [0,1) - the interpolation weight render
     // consumers (physics pose smoothing) blend prev->current poses with.
-    // The fixed-timestep accumulator moved to draconic.core (scenes own one each
+    // The fixed-timestep accumulator moved to Draconic.Foundation (scenes own one each
     // since per-scene time); re-exposed here for the host's app-level lane.
-    using FixedStepper = core::FixedStepper;
+    using FixedStepper = foundation::FixedStepper;
 
     // The host as seen by the application: register subsystems via Ctx(), reach the
     // shell/graphics services, manage runtime windows, request exit. Implemented
@@ -103,12 +103,12 @@ export namespace draconic::runtime
         virtual void Configure(IApplicationHost& host) { (void)host; } // register subsystems/types
         virtual void OnStartup(IApplicationHost& host) { (void)host; } // after Context.Startup
         virtual void OnLaunch(IApplicationHost& host) { (void)host; }  // enter play
-        virtual void OnUpdate(IApplicationHost& host, core::f32 deltaTime)
+        virtual void OnUpdate(IApplicationHost& host, foundation::f32 deltaTime)
         {
             (void)host;
             (void)deltaTime;
         }
-        virtual void OnFixedUpdate(IApplicationHost& host, core::f32 fixedDeltaTime)
+        virtual void OnFixedUpdate(IApplicationHost& host, foundation::f32 fixedDeltaTime)
         {
             (void)host;
             (void)fixedDeltaTime;

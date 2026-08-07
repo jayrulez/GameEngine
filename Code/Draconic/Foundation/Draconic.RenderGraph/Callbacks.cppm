@@ -4,14 +4,14 @@
 // Function objects over the RHI encoder a pass records into.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.rendergraph:callbacks;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rendergraph
 {

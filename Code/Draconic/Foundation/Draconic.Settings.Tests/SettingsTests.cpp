@@ -2,14 +2,14 @@
 // here; the editor exercises the XML factory). Also covers defaults, change notification, and the
 // core UserDataDir / GetEnvironmentVariable helpers the store's storage location builds on.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.settings;
 import draconic.xml.serialization; // XML factory, to exercise passthrough on both backends
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace settings = draconic::settings;
 namespace xml = draconic::xml;
 
@@ -25,8 +25,8 @@ namespace
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "profile", profile);
-            draconic::core::Serialize(ar, "locale", locale);
+            draconic::foundation::Serialize(ar, "profile", profile);
+            draconic::foundation::Serialize(ar, "locale", locale);
         }
     };
     DRACONIC_DEFINE_OBJECT_VERSIONED(GameSettings, "draconic::test", 1)
@@ -112,7 +112,7 @@ namespace
         DRACONIC_OBJECT(SecA, ISerializable)
     public:
         i32 a = 0;
-        void Serialize(ISerializer& ar) override { draconic::core::Serialize(ar, "a", a); }
+        void Serialize(ISerializer& ar) override { draconic::foundation::Serialize(ar, "a", a); }
     };
     DRACONIC_DEFINE_OBJECT_VERSIONED(SecA, "draconic::test", 1)
 
@@ -124,8 +124,8 @@ namespace
         String tag = String(u8"");
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "x", x);
-            draconic::core::Serialize(ar, "tag", tag);
+            draconic::foundation::Serialize(ar, "x", x);
+            draconic::foundation::Serialize(ar, "tag", tag);
         }
     };
     DRACONIC_DEFINE_OBJECT_VERSIONED(SecX, "draconic::test", 1)
@@ -135,7 +135,7 @@ namespace
         DRACONIC_OBJECT(SecB, ISerializable)
     public:
         i32 b = 0;
-        void Serialize(ISerializer& ar) override { draconic::core::Serialize(ar, "b", b); }
+        void Serialize(ISerializer& ar) override { draconic::foundation::Serialize(ar, "b", b); }
     };
     DRACONIC_DEFINE_OBJECT_VERSIONED(SecB, "draconic::test", 1)
 

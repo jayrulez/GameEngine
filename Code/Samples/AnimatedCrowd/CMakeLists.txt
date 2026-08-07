@@ -5,7 +5,7 @@
 add_executable(AnimatedCrowd main.cpp)
 
 target_link_libraries(AnimatedCrowd PRIVATE
-    Draconic::Core
+    Draconic::Foundation
     Draconic::Runtime
     Draconic::Runtime.Client
     Draconic::Shell.Desktop Draconic::Runtime.Desktop

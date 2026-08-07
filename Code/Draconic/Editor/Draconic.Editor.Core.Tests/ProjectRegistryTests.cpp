@@ -4,16 +4,16 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.settings;
 import draconic.xml.serialization;
 import draconic.engine.project;
 import draconic.editor.core;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::editor;
 namespace settings = draconic::settings;
 namespace project = draconic::project;

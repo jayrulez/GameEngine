@@ -1,13 +1,13 @@
 // Ported from Sedulous.UI.Tests/src/TokenizerTests.bf (faithful; Beef `scope Tokenizer` -> stack
 // value, List<Token> -> Array<Token>, Math.Abs(...) < eps -> doctest::Approx).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 
 using namespace draconic::ui;
-namespace core = draconic::core;
-using namespace draconic::core;
+namespace foundation = draconic::foundation;
+using namespace draconic::foundation;
 
 TEST_CASE("tokenizer: Ident")
 {
@@ -182,7 +182,7 @@ TEST_CASE("tokenizer: EOF")
 TEST_CASE("tokenizer: FullSelector_Tokenizes")
 {
     Tokenizer tok(u8"Button.primary:hover");
-    core::Array<Token> tokens;
+    foundation::Array<Token> tokens;
     tok.TokenizeAll(tokens);
 
     CHECK(tokens.Size() >= 4); // Ident, ClassSelector, PseudoState, EOF
@@ -195,7 +195,7 @@ TEST_CASE("tokenizer: FullSelector_Tokenizes")
 TEST_CASE("tokenizer: CompoundState_Tokenizes")
 {
     Tokenizer tok(u8"CheckBox:checked:hover");
-    core::Array<Token> tokens;
+    foundation::Array<Token> tokens;
     tok.TokenizeAll(tokens);
 
     CHECK((tokens[0].Kind == TokenKind::Ident && tokens[0].Text == StringView(u8"CheckBox")));

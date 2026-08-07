@@ -6,15 +6,15 @@
 // the pool, Recycle moves one IN (ownership transfers via RefPtr, no manual delete).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:view_recycler;
 
-import draconic.core; // HashMap, Array, RefPtr, Move
+import draconic.foundation; // HashMap, Array, RefPtr, Move
 import :view;
 import :ilist_adapter;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

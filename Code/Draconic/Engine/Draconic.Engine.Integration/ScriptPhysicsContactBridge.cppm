@@ -11,11 +11,11 @@
 // them, so draconic.engine.physics and draconic.engine.script stay mutually independent.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.engine.integration;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.physics;        // ContactKind (the foundation contact enum)
 import draconic.engine.physics; // PhysicsSubsystem, IContactListener, EntityContact
 import draconic.engine.script;  // ScriptSubsystem, ScriptContactKind

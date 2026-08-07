@@ -7,14 +7,14 @@
 // mount's As*() instead. Mounts are non-owning.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.vfs:vfs;
 
-import draconic.core;
+import draconic.foundation;
 import :ifilesystem;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::vfs
 {

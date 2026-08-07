@@ -11,7 +11,7 @@
 /// Views are pooled per frame from a `RenderViewPool` (reset, not freed, each frame).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.render:views;
 
@@ -19,11 +19,11 @@ export module draconic.render:views;
 // ISceneRenderer); re-exported here so draconic.render importers see them unchanged.
 export import draconic.render.api;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :data;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 
 export namespace draconic::render

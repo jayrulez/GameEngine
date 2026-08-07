@@ -5,14 +5,14 @@
 // literals.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 module draconic.script.wren.editor.ui;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.ui.toolkit;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::script::wren
 {

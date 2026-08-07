@@ -3,9 +3,9 @@
 
 export module draconic.image:pixel_format;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::image
 {

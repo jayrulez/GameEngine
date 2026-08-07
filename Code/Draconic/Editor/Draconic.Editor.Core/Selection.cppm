@@ -5,13 +5,13 @@
 // gizmos) subscribe to. Selection is deliberately NOT undoable (Lumix/Traktor agree).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.editor.core:selection;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {

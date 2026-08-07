@@ -6,27 +6,27 @@
 // widget properties (color/length/drawable) is a later CSS increment.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:style_rule;
 
-import draconic.core; // String, StringView, Array, i64, Move
+import draconic.foundation; // String, StringView, Array, i64, Move
 import :style_selector;
 import :media_query;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
     struct StyleProperty
     {
-        core::String Name;
-        core::String Value;
+        foundation::String Name;
+        foundation::String Value;
         bool Important = false;
 
         StyleProperty() = default;
-        StyleProperty(core::StringView name, core::StringView value, bool important = false)
+        StyleProperty(foundation::StringView name, foundation::StringView value, bool important = false)
             : Name(name), Value(value), Important(important)
         {
         }
@@ -36,14 +36,14 @@ export namespace draconic::gui
     {
     public:
         StyleRule() = default;
-        explicit StyleRule(StyleSelector selector) : m_selector(core::Move(selector)) {}
-        explicit StyleRule(core::StringView selector) : m_selector(selector) {}
+        explicit StyleRule(StyleSelector selector) : m_selector(foundation::Move(selector)) {}
+        explicit StyleRule(foundation::StringView selector) : m_selector(selector) {}
 
         [[nodiscard]] const StyleSelector& Selector() const noexcept { return m_selector; }
         [[nodiscard]] i64 Specificity() const noexcept { return m_selector.Specificity(); }
 
         // Set (or override) a declaration.
-        void SetProperty(core::StringView name, core::StringView value, bool important = false)
+        void SetProperty(foundation::StringView name, foundation::StringView value, bool important = false)
         {
             for (StyleProperty& p : m_properties)
                 if (p.Name == name)
@@ -62,7 +62,7 @@ export namespace draconic::gui
         [[nodiscard]] usize PropertyCount() const noexcept { return m_properties.Size(); }
 
         // The @media condition this rule is nested in (empty = always active).
-        void SetMedia(MediaQuery media) { m_media = core::Move(media); }
+        void SetMedia(MediaQuery media) { m_media = foundation::Move(media); }
         [[nodiscard]] const MediaQuery& Media() const noexcept { return m_media; }
 
     private:

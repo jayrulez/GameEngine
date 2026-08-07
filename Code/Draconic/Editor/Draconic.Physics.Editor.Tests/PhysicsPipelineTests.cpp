@@ -2,10 +2,10 @@
 // the builder into an output db -> load the CollisionShape product through the factory ->
 // hand its blob to a live PhysicsWorld. Same for PhysicalMaterial.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include <initializer_list>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.resource;
@@ -17,7 +17,7 @@ import draconic.physics;
 import draconic.physics.resource;
 import draconic.physics.editor;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::resource;
 using namespace draconic::physics;
 namespace geometry = draconic::geometry;

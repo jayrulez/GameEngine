@@ -5,30 +5,30 @@
 // the deferred Fonts service) are not ported. Undo/Redo coverage is added here (Sedulous had none - it
 // exercised undo only interactively).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 #include "TestHelpers.h"
 
 using namespace draconic::ui;
 using namespace draconic::ui::tests;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
-static core::RefPtr<RootView> MakeRoot()
+static foundation::RefPtr<RootView> MakeRoot()
 {
-    return core::MakeRef<RootView>(core::DefaultAllocator());
+    return foundation::MakeRef<RootView>(foundation::DefaultAllocator());
 }
-static core::RefPtr<EditText> MakeEdit()
+static foundation::RefPtr<EditText> MakeEdit()
 {
-    return core::MakeRef<EditText>(core::DefaultAllocator());
+    return foundation::MakeRef<EditText>(foundation::DefaultAllocator());
 }
-static core::RefPtr<PasswordBox> MakePassword()
+static foundation::RefPtr<PasswordBox> MakePassword()
 {
-    return core::MakeRef<PasswordBox>(core::DefaultAllocator());
+    return foundation::MakeRef<PasswordBox>(foundation::DefaultAllocator());
 }
 
-static core::i32 CharCount(StringView v) { return static_cast<core::i32>(core::Utf8Length(v)); }
+static foundation::i32 CharCount(StringView v) { return static_cast<foundation::i32>(foundation::Utf8Length(v)); }
 
 // === EditText ===
 

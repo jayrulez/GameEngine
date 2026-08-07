@@ -5,13 +5,13 @@
 // member values ARE the Dark palette (Dark() returns the default).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:theme_palette;
 
-import draconic.core; // Color
+import draconic.foundation; // Color
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

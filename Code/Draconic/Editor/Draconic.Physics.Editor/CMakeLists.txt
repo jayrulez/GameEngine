@@ -2,7 +2,7 @@
 add_library(Draconic.Physics.Editor STATIC)
 add_library(Draconic::Physics.Editor ALIAS Draconic.Physics.Editor)
 target_link_libraries(Draconic.Physics.Editor PUBLIC
-    Draconic::Core Draconic::Editor Draconic::Content Draconic::Geometry Draconic::Geometry.Editor
+    Draconic::Foundation Draconic::Editor Draconic::Content Draconic::Geometry Draconic::Geometry.Editor
     Draconic::Geometry.Resource Draconic::Physics Draconic::Physics.Resource Draconic::Policy)
 target_sources(Draconic.Physics.Editor
     PRIVATE

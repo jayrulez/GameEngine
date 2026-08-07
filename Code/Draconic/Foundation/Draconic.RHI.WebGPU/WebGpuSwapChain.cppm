@@ -7,12 +7,12 @@
 /// index in the API - a frame counter modulo bufferCount satisfies the RHI shape.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include "WebGpuIncludes.h"
 
 export module draconic.rhi.webgpu:swapchain;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :api;
 import :conversions;
@@ -21,7 +21,7 @@ import :surface;
 import :texture;
 import :texture_view;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::webgpu
 {

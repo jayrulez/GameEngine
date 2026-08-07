@@ -4,7 +4,7 @@ add_library(Draconic.Scene.Resource STATIC)
 add_library(Draconic::Scene.Resource ALIAS Draconic.Scene.Resource)
 
 target_link_libraries(Draconic.Scene.Resource
-    PUBLIC Draconic::Core Draconic::Content Draconic::Scene Draconic::Policy
+    PUBLIC Draconic::Foundation Draconic::Content Draconic::Scene Draconic::Policy
            Draconic::Xml.Serialization)
 
 target_sources(Draconic.Scene.Resource

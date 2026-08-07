@@ -7,12 +7,12 @@
 /// subsystem is self-contained (its own DXC compiler + ShaderSystem) so it has no renderer dependency.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include "imgui.h"
 
 export module draconic.imgui:subsystem;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.runtime;  // Subsystem
 import draconic.shell;    // IInputManager / IMouse / IKeyboard / KeyCode / MouseButton
@@ -21,7 +21,7 @@ import draconic.shaders;
 import draconic.shaders.system;
 import :renderer;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 namespace shell = draconic::shell;
 

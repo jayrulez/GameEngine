@@ -3,15 +3,15 @@
 // static ctor (MarkupLoader.Initialize + StyleSheetLoader.InitializeGlobals) -> an idempotent EnsureInit()
 // called per test.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 #include "TestHelpers.h"
 
 using namespace draconic::ui;
 using namespace draconic::ui::tests;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 static void EnsureInit()
 {
@@ -101,7 +101,7 @@ TEST_CASE("markup: IdAttribute_RegistersName")
 {
     EnsureInit();
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
 
     auto view = MarkupLoader::LoadFromString(u8"<Flex direction=\"vertical\">\n"
@@ -354,10 +354,10 @@ TEST_CASE("markup: Style_BeatsContextSheetRule")
 {
     EnsureInit();
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
 
-    auto sheet = core::MakeRef<StyleSheet>(core::DefaultAllocator());
+    auto sheet = foundation::MakeRef<StyleSheet>(foundation::DefaultAllocator());
     ctx.SetStyleSheet(sheet);
     sheet->ForType(&Label::StaticType()).Set(StyleProperty::TextColor, Color{0, 0, 1, 1});
 
@@ -455,7 +455,7 @@ TEST_CASE("markup: StyleClass_ResolvesTheme")
 {
     EnsureInit();
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
 
     auto sheet = DarkTheme::Create();

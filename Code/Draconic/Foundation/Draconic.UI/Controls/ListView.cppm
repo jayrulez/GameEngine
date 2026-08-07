@@ -12,12 +12,12 @@
 // (_, dy) momentum tuple -> Float2; Dictionary+manual delete -> RefPtr map (no manual delete).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:list_view;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import :view;
 import :property;
@@ -36,8 +36,8 @@ import :ilist_adapter;
 import :selection_model;
 import :view_recycler;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::ui
 {
@@ -106,13 +106,13 @@ export namespace draconic::ui
                     ? m_totalContentHeight
                     : ((m_adapter != nullptr) ? m_adapter->ItemCount() * ItemHeight.Value() : 0.0f);
             const f32 viewportH = Height() - Padding.TotalVertical();
-            return core::Max(0.0f, contentH - viewportH);
+            return foundation::Max(0.0f, contentH - viewportH);
         }
 
         /// Scroll by delta, clamping to valid range.
         void ScrollBy(f32 dy)
         {
-            m_scrollY = core::Clamp(m_scrollY + dy, 0.0f, MaxScrollY());
+            m_scrollY = foundation::Clamp(m_scrollY + dy, 0.0f, MaxScrollY());
             Invalidate();
         }
 
@@ -430,7 +430,7 @@ export namespace draconic::ui
             {
                 m_scrollY = itemBottom - viewportH;
             }
-            m_scrollY = core::Clamp(m_scrollY, 0.0f, MaxScrollY());
+            m_scrollY = foundation::Clamp(m_scrollY, 0.0f, MaxScrollY());
             Invalidate();
         }
 
@@ -474,7 +474,7 @@ export namespace draconic::ui
             const f32 viewportW = width - Padding.TotalHorizontal() -
                                   (m_scrollBarVisible ? m_scrollBar->BarThickness : 0.0f);
 
-            m_scrollY = core::Clamp(m_scrollY, 0.0f, MaxScrollY());
+            m_scrollY = foundation::Clamp(m_scrollY, 0.0f, MaxScrollY());
 
             if (m_adapter->ItemCount() == 0)
             {

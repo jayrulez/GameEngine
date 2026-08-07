@@ -5,13 +5,13 @@
 // depend on the other. Ported from Sedulous.Xml/XmlWriter.bf escaping.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.xml:escape;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::xml
 {

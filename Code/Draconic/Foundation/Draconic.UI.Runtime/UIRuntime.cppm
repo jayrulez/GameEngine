@@ -14,11 +14,11 @@
 // OnUpdate and RenderWindow(frame) from OnRenderWindow. No bespoke swapchain / VG bring-up in the app.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui.runtime;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.image;
 import draconic.shaders;
@@ -32,7 +32,7 @@ import draconic.fonts;
 import draconic.ui;
 import draconic.ui.shell;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace rhi = draconic::rhi;
 namespace shaders = draconic::shaders;
 namespace shell = draconic::shell;
@@ -45,22 +45,22 @@ namespace fonts = draconic::fonts;
 // ShellClipboard resolve unqualified.
 export namespace draconic::ui::runtime
 {
-    using core::f32;
-    using core::i32;
-    using core::u32;
-    using core::u64;
-    using core::u8;
-    using core::usize;
+    using foundation::f32;
+    using foundation::i32;
+    using foundation::u32;
+    using foundation::u64;
+    using foundation::u8;
+    using foundation::usize;
 
     /// Per-window UI payload stashed on a graphics::RenderWindow via SetData. Owns that window's VG
     /// context + renderer + input surface; shares ownership of its RootView with the UIContext.
     class UIWindowData final : public graphics::IRenderWindowData
     {
     public:
-        core::RefPtr<RootView> root;
-        core::UniquePtr<vg::VGContext> vg;
+        foundation::RefPtr<RootView> root;
+        foundation::UniquePtr<vg::VGContext> vg;
         vg::renderer::VGRenderer renderer;
-        core::UniquePtr<shell::InputSurface> surface;
+        foundation::UniquePtr<shell::InputSurface> surface;
 
         // VG quality targets (host-provided per the stencil-then-cover design): a 4x MSAA
         // color target resolved into the backbuffer + a stencil attachment for the fill
@@ -168,9 +168,9 @@ export namespace draconic::ui::runtime
             InitShaders();
             m_ctx.SetFontService(&fontService);
             m_router =
-                core::MakeUnique<shell::InputRouter>(core::DefaultAllocator(), shellRef.Input());
-            m_bridge = core::MakeUnique<UiInputBridge>(core::DefaultAllocator(), &m_ctx);
-            m_clipboard = core::MakeUnique<ShellClipboard>(core::DefaultAllocator(), &shellRef);
+                foundation::MakeUnique<shell::InputRouter>(foundation::DefaultAllocator(), shellRef.Input());
+            m_bridge = foundation::MakeUnique<UiInputBridge>(foundation::DefaultAllocator(), &m_ctx);
+            m_clipboard = foundation::MakeUnique<ShellClipboard>(foundation::DefaultAllocator(), &shellRef);
             m_ctx.SetClipboard(m_clipboard.Get());
         }
 
@@ -190,7 +190,7 @@ export namespace draconic::ui::runtime
         /// USER UI-scale factor multiplied onto every window's OS content scale (editor
         /// preference / accessibility). Roots pick it up next Update; callers re-bake any
         /// baked icon sets themselves at the new effective scale.
-        void SetUiScale(f32 scale) noexcept { m_uiScale = core::Clamp(scale, 0.5f, 3.0f); }
+        void SetUiScale(f32 scale) noexcept { m_uiScale = foundation::Clamp(scale, 0.5f, 3.0f); }
         [[nodiscard]] f32 UiScale() const noexcept { return m_uiScale; }
 
         /// Background clear color behind the UI (the theme usually paints an opaque root over it).
@@ -202,22 +202,22 @@ export namespace draconic::ui::runtime
         /// bare background, showed this the loudest.
         void SetClearColor(f32 r, f32 g, f32 b, f32 a = 1.0f) noexcept
         {
-            m_clear = rhi::ClearColor(core::SrgbToLinear(r), core::SrgbToLinear(g),
-                                      core::SrgbToLinear(b), a);
+            m_clear = rhi::ClearColor(foundation::SrgbToLinear(r), foundation::SrgbToLinear(g),
+                                      foundation::SrgbToLinear(b), a);
         }
 
         /// Give a RenderWindow a RootView: builds its VGContext + VGRenderer (against the window's swap
         /// format + the device frame-ring) + InputSurface, and stashes the payload on the RenderWindow.
-        void AttachWindow(graphics::RenderWindow* window, core::RefPtr<RootView> root)
+        void AttachWindow(graphics::RenderWindow* window, foundation::RefPtr<RootView> root)
         {
             if (window == nullptr || !root)
             {
                 return;
             }
 
-            auto data = core::MakeUnique<UIWindowData>(core::DefaultAllocator());
+            auto data = foundation::MakeUnique<UIWindowData>(foundation::DefaultAllocator());
             data->root = root;
-            data->vg = core::MakeUnique<vg::VGContext>(core::DefaultAllocator(), m_fonts);
+            data->vg = foundation::MakeUnique<vg::VGContext>(foundation::DefaultAllocator(), m_fonts);
             // Per-pixel radial/conic gradients only if both shaders resolved (a pre-cooked pack
             // may predate them); otherwise the renderer + context fall back to the affine LUT.
             const bool perPixelGrad = m_gradRadialFs != nullptr && m_gradConicFs != nullptr;
@@ -246,12 +246,12 @@ export namespace draconic::ui::runtime
 
             const f32 w = static_cast<f32>(window->Window().Width());
             const f32 h = static_cast<f32>(window->Window().Height());
-            const core::ContentFit fit{core::Rectangle{0.0f, 0.0f, w, h}, core::Float2{w, h},
-                                       core::FitMode::Stretch};
-            data->surface = core::MakeUnique<shell::InputSurface>(
-                core::DefaultAllocator(), m_shell->Input(), window->Window().Id(), fit);
+            const foundation::ContentFit fit{foundation::Rectangle{0.0f, 0.0f, w, h}, foundation::Float2{w, h},
+                                       foundation::FitMode::Stretch};
+            data->surface = foundation::MakeUnique<shell::InputSurface>(
+                foundation::DefaultAllocator(), m_shell->Input(), window->Window().Id(), fit);
 
-            root->ViewportSize = core::Float2{w, h};
+            root->ViewportSize = foundation::Float2{w, h};
             root->DpiScale = window->Window().ContentScale() * m_uiScale;
             m_ctx.AddRootView(root.Get());
             m_router->AddSurface(data->surface.Get());
@@ -268,7 +268,7 @@ export namespace draconic::ui::runtime
             {
                 m_device->Raw()->WaitIdle();
             }
-            window->SetData(static_cast<core::UniquePtr<UIWindowData>&&>(
+            window->SetData(static_cast<foundation::UniquePtr<UIWindowData>&&>(
                 data)); // RenderWindow owns the payload
             m_attached.PushBack(Attached{window, raw});
         }
@@ -347,8 +347,8 @@ export namespace draconic::ui::runtime
                 {
                     const f32 w = static_cast<f32>(hoverW->window->Window().Width());
                     const f32 h = static_cast<f32>(hoverW->window->Window().Height());
-                    hoverW->data->surface->SetRegion(core::Rectangle{0.0f, 0.0f, w, h});
-                    hoverW->data->surface->SetContentSize(core::Float2{w, h});
+                    hoverW->data->surface->SetRegion(foundation::Rectangle{0.0f, 0.0f, w, h});
+                    hoverW->data->surface->SetContentSize(foundation::Float2{w, h});
                     m_ctx.SetActiveInputRoot(hoverW->data->root.Get());
                     m_bridge->PumpFromSurface(*hoverW->data->surface);
                 }
@@ -406,7 +406,7 @@ export namespace draconic::ui::runtime
             for (Attached& a : m_attached)
             {
                 a.data->root->ViewportSize =
-                    core::Float2{static_cast<f32>(a.window->Window().Width()),
+                    foundation::Float2{static_cast<f32>(a.window->Window().Width()),
                                  static_cast<f32>(a.window->Window().Height())};
                 // Effective scale = OS content scale x the user UI-scale preference;
                 // refreshed per frame so monitor moves and preference changes both land.
@@ -508,8 +508,8 @@ export namespace draconic::ui::runtime
         /// Synchronous (one small GPU roundtrip) - call at startup/theme load, not per
         /// frame. Returns false untouched on any failure (drawables keep the live-vector
         /// fallback).
-        bool BakeSvgDrawables(core::Span<BakedSVGDrawable* const> drawables,
-                              core::Span<const u32> sizes)
+        bool BakeSvgDrawables(foundation::Span<BakedSVGDrawable* const> drawables,
+                              foundation::Span<const u32> sizes)
         {
             constexpr u32 kSupersample = 4;
             constexpr u32 kPad = 1;
@@ -528,7 +528,7 @@ export namespace draconic::ui::runtime
                 u32 x = 0;
                 u32 y = 0;
             };
-            core::Array<Cell> cells;
+            foundation::Array<Cell> cells;
             u32 cursorX = kPad;
             u32 cursorY = kPad;
             u32 rowHeight = 0;
@@ -547,7 +547,7 @@ export namespace draconic::ui::runtime
                         rowHeight = 0;
                     }
                     cells.PushBack(Cell{drawable, size, cursorX, cursorY});
-                    rowHeight = core::Max(rowHeight, size);
+                    rowHeight = foundation::Max(rowHeight, size);
                     cursorX += size + kPad;
                 }
             }
@@ -584,7 +584,7 @@ export namespace draconic::ui::runtime
             vg::VGContext bakeVg(m_fonts);
             for (const Cell& cell : cells)
             {
-                const core::Rectangle rect{static_cast<f32>(cell.x * kSupersample),
+                const foundation::Rectangle rect{static_cast<f32>(cell.x * kSupersample),
                                            static_cast<f32>(cell.y * kSupersample),
                                            static_cast<f32>(cell.size * kSupersample),
                                            static_cast<f32>(cell.size * kSupersample)};
@@ -615,12 +615,12 @@ export namespace draconic::ui::runtime
             rhi::Fence* fence = nullptr;
             bool ok = device->CreateBuffer(readDesc, readBuffer).IsOk() &&
                       device->CreateCommandPool(rhi::QueueType::Graphics, pool) ==
-                          core::ErrorCode::Ok &&
-                      device->CreateFence(0, fence) == core::ErrorCode::Ok;
+                          foundation::ErrorCode::Ok &&
+                      device->CreateFence(0, fence) == foundation::ErrorCode::Ok;
             rhi::CommandEncoder* encoder = nullptr;
             if (ok)
             {
-                ok = pool->CreateEncoder(encoder) == core::ErrorCode::Ok && encoder != nullptr;
+                ok = pool->CreateEncoder(encoder) == foundation::ErrorCode::Ok && encoder != nullptr;
             }
             if (ok)
             {
@@ -649,11 +649,11 @@ export namespace draconic::ui::runtime
                 rhi::CommandBuffer* commands = encoder->Finish();
                 rhi::Queue* queue = device->GetQueue(rhi::QueueType::Graphics, 0);
                 rhi::CommandBuffer* buffers[1] = {commands};
-                queue->Submit(core::Span<rhi::CommandBuffer* const>(buffers, 1), fence, 1);
+                queue->Submit(foundation::Span<rhi::CommandBuffer* const>(buffers, 1), fence, 1);
                 fence->Wait(1, ~0ull);
             }
 
-            core::UniquePtr<image::OwnedImageData> atlas;
+            foundation::UniquePtr<image::OwnedImageData> atlas;
             if (ok)
             {
                 const u8* pixels = static_cast<const u8*>(readBuffer->Map());
@@ -699,7 +699,7 @@ export namespace draconic::ui::runtime
                 {
                     continue;
                 }
-                core::Array<BakedSVGDrawable::BakedVariant> variants;
+                foundation::Array<BakedSVGDrawable::BakedVariant> variants;
                 for (const Cell& cell : cells)
                 {
                     if (cell.drawable != drawable)
@@ -709,14 +709,14 @@ export namespace draconic::ui::runtime
                     BakedSVGDrawable::BakedVariant variant;
                     variant.atlas = atlasImage;
                     variant.srcRect =
-                        core::Rectangle{static_cast<f32>(cell.x), static_cast<f32>(cell.y),
+                        foundation::Rectangle{static_cast<f32>(cell.x), static_cast<f32>(cell.y),
                                         static_cast<f32>(cell.size), static_cast<f32>(cell.size)};
                     variant.sizePx = static_cast<f32>(cell.size);
                     variants.PushBack(variant);
                 }
-                drawable->SetBakedVariants(core::Move(variants));
+                drawable->SetBakedVariants(foundation::Move(variants));
             }
-            m_bakedIconAtlases.PushBack(core::Move(atlas));
+            m_bakedIconAtlases.PushBack(foundation::Move(atlas));
             return true;
         }
 
@@ -752,7 +752,7 @@ export namespace draconic::ui::runtime
         /// CPU half of the bake: sRGB-decode, average the SS x SS premultiplied box,
         /// UN-premultiply (the vg shader premultiplies its output, but DrawImage expects
         /// straight alpha - it premultiplies again at draw), sRGB-encode.
-        [[nodiscard]] static core::UniquePtr<image::OwnedImageData>
+        [[nodiscard]] static foundation::UniquePtr<image::OwnedImageData>
         DownsampleBake(const u8* pixels, u32 rowPitch, u32 atlasWidth, u32 atlasHeight,
                        u32 supersample)
         {
@@ -761,9 +761,9 @@ export namespace draconic::ui::runtime
             f32 srgbToLinear[256];
             for (u32 i = 0; i < 256; ++i)
             {
-                srgbToLinear[i] = core::SrgbToLinear(static_cast<f32>(i) / 255.0f);
+                srgbToLinear[i] = foundation::SrgbToLinear(static_cast<f32>(i) / 255.0f);
             }
-            core::Array<u8> out(static_cast<usize>(atlasWidth) * atlasHeight * 4u);
+            foundation::Array<u8> out(static_cast<usize>(atlasWidth) * atlasHeight * 4u);
             const f32 invCount = 1.0f / static_cast<f32>(supersample * supersample);
             for (u32 y = 0; y < atlasHeight; ++y)
             {
@@ -796,17 +796,17 @@ export namespace draconic::ui::runtime
                     }
                     u8* dst = out.Data() + (static_cast<usize>(y) * atlasWidth + x) * 4u;
                     dst[0] = static_cast<u8>(
-                        core::Clamp(core::LinearToSrgb(r) * 255.0f + 0.5f, 0.0f, 255.0f));
+                        foundation::Clamp(foundation::LinearToSrgb(r) * 255.0f + 0.5f, 0.0f, 255.0f));
                     dst[1] = static_cast<u8>(
-                        core::Clamp(core::LinearToSrgb(g) * 255.0f + 0.5f, 0.0f, 255.0f));
+                        foundation::Clamp(foundation::LinearToSrgb(g) * 255.0f + 0.5f, 0.0f, 255.0f));
                     dst[2] = static_cast<u8>(
-                        core::Clamp(core::LinearToSrgb(b) * 255.0f + 0.5f, 0.0f, 255.0f));
-                    dst[3] = static_cast<u8>(core::Clamp(a * 255.0f + 0.5f, 0.0f, 255.0f));
+                        foundation::Clamp(foundation::LinearToSrgb(b) * 255.0f + 0.5f, 0.0f, 255.0f));
+                    dst[3] = static_cast<u8>(foundation::Clamp(a * 255.0f + 0.5f, 0.0f, 255.0f));
                 }
             }
-            return core::MakeUnique<image::OwnedImageData>(
-                core::DefaultAllocator(), atlasWidth, atlasHeight, image::PixelFormat::RGBA8,
-                core::Move(out), image::ImageColorSpace::Srgb);
+            return foundation::MakeUnique<image::OwnedImageData>(
+                foundation::DefaultAllocator(), atlasWidth, atlasHeight, image::PixelFormat::RGBA8,
+                foundation::Move(out), image::ImageColorSpace::Srgb);
         }
 
 
@@ -871,8 +871,8 @@ export namespace draconic::ui::runtime
         {
             const f32 w = static_cast<f32>(a.window->Window().Width());
             const f32 h = static_cast<f32>(a.window->Window().Height());
-            a.data->surface->SetRegion(core::Rectangle{0.0f, 0.0f, w, h});
-            a.data->surface->SetContentSize(core::Float2{w, h});
+            a.data->surface->SetRegion(foundation::Rectangle{0.0f, 0.0f, w, h});
+            a.data->surface->SetContentSize(foundation::Float2{w, h});
             m_ctx.SetActiveInputRoot(a.data->root.Get());
 
             shell::IMouse* mouse =
@@ -893,9 +893,9 @@ export namespace draconic::ui::runtime
         void InitShaders()
         {
 #ifdef DRACONIC_ENGINE_SHADER_DIR
-            constexpr core::StringView kShaderRoot = u8"" DRACONIC_ENGINE_SHADER_DIR;
+            constexpr foundation::StringView kShaderRoot = u8"" DRACONIC_ENGINE_SHADER_DIR;
 #else
-            constexpr core::StringView kShaderRoot = u8"Shaders";
+            constexpr foundation::StringView kShaderRoot = u8"Shaders";
 #endif
             if (!m_shaderHost.Initialize(*m_device->Raw(), kShaderRoot))
             {
@@ -928,13 +928,13 @@ export namespace draconic::ui::runtime
         rhi::ShaderModule* m_gradConicFs = nullptr;  // per-pixel conic gradient (borrowed)
 
         UIContext m_ctx; // shared context; owns N RootViews
-        core::UniquePtr<shell::InputRouter> m_router;
-        core::UniquePtr<UiInputBridge> m_bridge;
-        core::UniquePtr<ShellClipboard> m_clipboard;
-        core::Array<Attached> m_attached;
+        foundation::UniquePtr<shell::InputRouter> m_router;
+        foundation::UniquePtr<UiInputBridge> m_bridge;
+        foundation::UniquePtr<ShellClipboard> m_clipboard;
+        foundation::Array<Attached> m_attached;
         // Default near-black, stored LINEAR (matches an sRGB backbuffer's clear semantics).
         // Baked icon atlases (BakeSvgDrawables): drawables' variants borrow these.
-        core::Array<core::UniquePtr<image::OwnedImageData>> m_bakedIconAtlases;
+        foundation::Array<foundation::UniquePtr<image::OwnedImageData>> m_bakedIconAtlases;
         f32 m_uiScale = 1.0f; // user preference multiplier on the OS content scale
         rhi::ClearColor m_clear = rhi::ClearColor(0.006f, 0.006f, 0.009f, 1.0f);
     };

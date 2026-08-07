@@ -3,16 +3,16 @@
 // -> `ctx.SetStyleSheet(DarkTheme::Create())` (RefPtr ownership; Create returns refcount-1); Color byte
 // fields R/G/B -> r/g/b; TestThemeExtension/CountingThemeExtension implement IThemeExtension via *out ptrs.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
+import draconic.foundation;
 import draconic.ui;
 #include "TestHelpers.h"
 
 using namespace draconic::ui;
 using namespace draconic::ui::tests;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 namespace
 {
@@ -101,11 +101,11 @@ TEST_CASE("theme: RoundedDarkTheme_CreatesWithCustomPalette")
 TEST_CASE("theme: DarkTheme_ResolvesTextColor")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
     ctx.SetStyleSheet(DarkTheme::Create());
 
-    auto view = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto view = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(view.Get());
 
     const Color color = view->ResolveStyleColor(StyleProperty::TextColor);
@@ -116,11 +116,11 @@ TEST_CASE("theme: DarkTheme_ResolvesTextColor")
 TEST_CASE("theme: DarkTheme_ResolvesFontSize")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
     ctx.SetStyleSheet(DarkTheme::Create());
 
-    auto view = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto view = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(view.Get());
 
     const f32 size = view->ResolveStyleFloat(StyleProperty::FontSize);
@@ -130,11 +130,11 @@ TEST_CASE("theme: DarkTheme_ResolvesFontSize")
 TEST_CASE("theme: DarkTheme_ButtonStyleClass")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
     ctx.SetStyleSheet(DarkTheme::Create());
 
-    auto view = core::MakeRef<Button>(core::DefaultAllocator(), StringView(u8"Test"));
+    auto view = foundation::MakeRef<Button>(foundation::DefaultAllocator(), StringView(u8"Test"));
     root->AddView(view.Get());
 
     // Button should have a background drawable (matched by type)
@@ -162,11 +162,11 @@ TEST_CASE("theme: LightTheme_Creates")
 TEST_CASE("theme: LightTheme_ResolvesTextColor")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
     ctx.SetStyleSheet(LightTheme::Create());
 
-    auto view = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto view = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(view.Get());
 
     const Color color = view->ResolveStyleColor(StyleProperty::TextColor);
@@ -179,10 +179,10 @@ TEST_CASE("theme: LightTheme_ResolvesTextColor")
 TEST_CASE("theme: ThemeSwitching_ChangesResolvedValues")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
 
-    auto view = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto view = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(view.Get());
 
     // Dark theme
@@ -208,11 +208,11 @@ TEST_CASE("theme: DarkTheme_WithCustomPalette")
     palette.Text = Color{1.0f, 0.0f, 0.0f, 1.0f}; // red text
 
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
     ctx.SetStyleSheet(DarkTheme::Create(palette));
 
-    auto view = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto view = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(view.Get());
 
     const Color color = view->ResolveStyleColor(StyleProperty::TextColor);

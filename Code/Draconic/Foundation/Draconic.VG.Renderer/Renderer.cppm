@@ -17,18 +17,18 @@
 //     later if a single RT must be sampled by more than one window's renderer.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.vg.renderer:renderer;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.image;
 import draconic.texture;
 import draconic.vg;
 import :vertex;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::vg::renderer
 {
@@ -36,7 +36,7 @@ export namespace draconic::vg::renderer
     /// count, probed with a tiny texture (Vulkan drivers commonly support only one of
     /// D24S8 / D32S8). Undefined = none - the host skips the stencil config.
     [[nodiscard]] inline draconic::rhi::TextureFormat
-    PickStencilCapableFormat(draconic::rhi::Device& device, draconic::core::u32 sampleCount)
+    PickStencilCapableFormat(draconic::rhi::Device& device, draconic::foundation::u32 sampleCount)
     {
         namespace rhi = draconic::rhi;
         const rhi::TextureFormat candidates[3] = {rhi::TextureFormat::Depth24PlusStencil8,
@@ -69,7 +69,7 @@ export namespace draconic::vg::renderer
     /// match the pass, so BOTH values apply to ALL pipelines, not just the stencil ones.
     struct VGTargetConfig
     {
-        draconic::core::u32 sampleCount = 1;
+        draconic::foundation::u32 sampleCount = 1;
         draconic::rhi::TextureFormat depthStencilFormat = draconic::rhi::TextureFormat::Undefined;
     };
 

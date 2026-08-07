@@ -4,16 +4,16 @@
 
 module;
 #define _CRT_SECURE_NO_WARNINGS
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 
 module draconic.engine.ui;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.runtime;
 import draconic.scene;
 import draconic.engine.scene;
@@ -36,7 +36,7 @@ import draconic.engine.render; // RenderSubsystem (overlay-role registration)
 import draconic.script;         // the Ui facade reflection body
 import draconic.script.facades; // RegisterExtraFacadeName (behavior-prelude hook)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace vg = draconic::vg;
 
 namespace draconic::ui
@@ -92,7 +92,7 @@ namespace draconic::ui
     {
         UiScriptHost* self = this;
         binding.pushOverlay =
-            Function<i32(const core::Guid&)>{[self](const core::Guid& d) { return self->PushOverlay(d); }};
+            Function<i32(const foundation::Guid&)>{[self](const foundation::Guid& d) { return self->PushOverlay(d); }};
         binding.popOverlay = Function<void(i32)>{[self](i32 h) { self->PopOverlay(h); }};
         binding.setText = Function<void(i32, StringView, StringView)>{
             [self](i32 h, StringView id, StringView t) { self->SetText(h, id, t); }};
@@ -105,7 +105,7 @@ namespace draconic::ui
             { self->OnClick(h, id, Move(fn)); }};
     }
 
-    i32 UiScriptHost::PushOverlay(const core::Guid& document)
+    i32 UiScriptHost::PushOverlay(const foundation::Guid& document)
     {
         if (m_ui == nullptr || !m_resolve)
         {

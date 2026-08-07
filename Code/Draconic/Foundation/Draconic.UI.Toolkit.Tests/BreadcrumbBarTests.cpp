@@ -1,18 +1,18 @@
 // Smoke test for BreadcrumbBar: SetPath split, SetSegments, GetSegment / GetPathUpTo round-trips.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 import draconic.ui.toolkit;
 
 using namespace draconic::ui;
 using namespace draconic::ui::toolkit;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 TEST_CASE("toolkit-breadcrumb: PathSplitAndQueries")
 {
-    auto bar = core::MakeRef<BreadcrumbBar>(core::DefaultAllocator());
+    auto bar = foundation::MakeRef<BreadcrumbBar>(foundation::DefaultAllocator());
     CHECK(bar->SegmentCount() == 0);
 
     // Split on '/', trimming and dropping empty segments.
@@ -23,12 +23,12 @@ TEST_CASE("toolkit-breadcrumb: PathSplitAndQueries")
     CHECK(bar->GetSegment(2) == StringView{u8"Dev"});
     CHECK(bar->GetSegment(99).IsEmpty()); // out of range
 
-    String upTo(core::DefaultAllocator());
+    String upTo(foundation::DefaultAllocator());
     bar->GetPathUpTo(1, upTo);
     CHECK(upTo == StringView{u8"home/robert"});
 
     // Replace via explicit segment list.
-    core::Array<StringView> segs;
+    foundation::Array<StringView> segs;
     segs.PushBack(StringView{u8"A"});
     segs.PushBack(StringView{u8"B"});
     bar->SetSegments(segs.AsSpan());

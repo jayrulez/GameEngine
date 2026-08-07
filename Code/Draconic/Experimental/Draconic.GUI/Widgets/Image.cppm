@@ -6,19 +6,19 @@
 // None use the drawable's intrinsic size to place it (clip the widget to crop Fill/None).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:image;
 
-import draconic.core; // RefPtr, Move, Optional, Float2, Min, Max
+import draconic.foundation; // RefPtr, Move, Optional, Float2, Min, Max
 import :rect;
 import :draw_context;
 import :drawable;
 import :ui_widget;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -35,11 +35,11 @@ export namespace draconic::gui
     {
         DRACONIC_OBJECT(Image, UIWidget)
     public:
-        Image() { SetTag(core::StringView(u8"image")); }
+        Image() { SetTag(foundation::StringView(u8"image")); }
 
         void SetDrawable(RefPtr<Drawable> drawable)
         {
-            m_drawable = core::Move(drawable);
+            m_drawable = foundation::Move(drawable);
             Invalidate();
         }
         [[nodiscard]] Drawable* GetDrawable() const noexcept { return m_drawable.Get(); }
@@ -52,9 +52,9 @@ export namespace draconic::gui
         [[nodiscard]] ImageScaleMode GetScaleMode() const noexcept { return m_mode; }
 
         // Natural size of the drawable (for layout), if it has one.
-        [[nodiscard]] Optional<core::Float2> IntrinsicSize() const
+        [[nodiscard]] Optional<foundation::Float2> IntrinsicSize() const
         {
-            return m_drawable ? m_drawable->IntrinsicSize() : Optional<core::Float2>{};
+            return m_drawable ? m_drawable->IntrinsicSize() : Optional<foundation::Float2>{};
         }
 
         // The rect the drawable is painted into, for the current scale mode, within the
@@ -62,13 +62,13 @@ export namespace draconic::gui
         [[nodiscard]] Rect DrawnBounds() const
         {
             const Rect box = GetContentBounds();
-            const Optional<core::Float2> intrinsic =
-                m_drawable ? m_drawable->IntrinsicSize() : Optional<core::Float2>{};
+            const Optional<foundation::Float2> intrinsic =
+                m_drawable ? m_drawable->IntrinsicSize() : Optional<foundation::Float2>{};
             if (m_mode == ImageScaleMode::Stretch || !intrinsic.HasValue())
                 return box;
 
-            const core::Float2 nat = intrinsic.Value();
-            core::Float2 size = nat;
+            const foundation::Float2 nat = intrinsic.Value();
+            foundation::Float2 size = nat;
             if (m_mode == ImageScaleMode::Fit || m_mode == ImageScaleMode::Fill)
             {
                 if (nat.x > 0.0f && nat.y > 0.0f)
@@ -76,8 +76,8 @@ export namespace draconic::gui
                     const f32 sx = box.width / nat.x;
                     const f32 sy = box.height / nat.y;
                     const f32 scale =
-                        (m_mode == ImageScaleMode::Fit) ? core::Min(sx, sy) : core::Max(sx, sy);
-                    size = core::Float2{nat.x * scale, nat.y * scale};
+                        (m_mode == ImageScaleMode::Fit) ? foundation::Min(sx, sy) : foundation::Max(sx, sy);
+                    size = foundation::Float2{nat.x * scale, nat.y * scale};
                 }
             }
             // None uses the natural size at the top-left; the rest center within the box.

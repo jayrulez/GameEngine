@@ -8,15 +8,15 @@
 // engine stays clip-based - a resolved pick plays through the ordinary voice path.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.audio:cue;
 
-import draconic.core;
+import draconic.foundation;
 import :clip;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::audio
 {

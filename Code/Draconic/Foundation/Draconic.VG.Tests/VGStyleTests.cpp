@@ -3,11 +3,11 @@
 // convert outputs via ToColor32 for the byte-channel assertions - keeping the
 // Sedulous checks (R==0, R in (100,155), etc.) identical in spirit.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.vg;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::vg;
 
 TEST_CASE("style: solid fill returns same color")

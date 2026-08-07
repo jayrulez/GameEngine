@@ -2,27 +2,27 @@
 // ScrollBar cases). Beef get/set properties -> methods (scroll->SetScrollY / ScrollY()); the (dx,dy)
 // tuple -> Float2. Logic only - no font service needed.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 #include "TestHelpers.h"
 
 using namespace draconic::ui;
 using namespace draconic::ui::tests;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
-static core::RefPtr<RootView> MakeRoot()
+static foundation::RefPtr<RootView> MakeRoot()
 {
-    return core::MakeRef<RootView>(core::DefaultAllocator());
+    return foundation::MakeRef<RootView>(foundation::DefaultAllocator());
 }
-static core::RefPtr<ScrollView> MakeScroll()
+static foundation::RefPtr<ScrollView> MakeScroll()
 {
-    return core::MakeRef<ScrollView>(core::DefaultAllocator());
+    return foundation::MakeRef<ScrollView>(foundation::DefaultAllocator());
 }
-static core::RefPtr<TestView> MakeContent(f32 w, f32 h)
+static foundation::RefPtr<TestView> MakeContent(f32 w, f32 h)
 {
-    return core::MakeRef<TestView>(core::DefaultAllocator(), w, h);
+    return foundation::MakeRef<TestView>(foundation::DefaultAllocator(), w, h);
 }
 
 // === ScrollView ===
@@ -152,7 +152,7 @@ TEST_CASE("scroll-view: Momentum_Stop")
 
 TEST_CASE("scroll-view: ScrollBar_ValueClamps")
 {
-    auto bar = core::MakeRef<ScrollBar>(core::DefaultAllocator());
+    auto bar = foundation::MakeRef<ScrollBar>(foundation::DefaultAllocator());
     bar->SetMaxValue(100);
     bar->SetValue(-10);
     CHECK(bar->Value() == 0);
@@ -162,7 +162,7 @@ TEST_CASE("scroll-view: ScrollBar_ValueClamps")
 
 TEST_CASE("scroll-view: ScrollBar_ValueChanged")
 {
-    auto bar = core::MakeRef<ScrollBar>(core::DefaultAllocator());
+    auto bar = foundation::MakeRef<ScrollBar>(foundation::DefaultAllocator());
     bar->SetMaxValue(100);
     f32 lastVal = -1;
     bar->OnValueChanged.Add(

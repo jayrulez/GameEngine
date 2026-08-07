@@ -5,7 +5,7 @@
 add_executable(AudioPlayground main.cpp)
 
 target_link_libraries(AudioPlayground PRIVATE
-    Draconic::Core
+    Draconic::Foundation
     Draconic::Runtime
     Draconic::Runtime.Client
     Draconic::Shell.Desktop Draconic::Runtime.Desktop

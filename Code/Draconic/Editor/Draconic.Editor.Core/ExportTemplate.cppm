@@ -7,19 +7,19 @@
 // directory (Bin/...), so a dev export for the current platform needs zero setup.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 #include <filesystem> // recursive dir copy when importing a template bundle
 
 export module draconic.editor.core:export_template;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.xml.serialization;
 import draconic.engine.project;
 import :export_preset; // ExportPreset, ExportPresetSet
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {

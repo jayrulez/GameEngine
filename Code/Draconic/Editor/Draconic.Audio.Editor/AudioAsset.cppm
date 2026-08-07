@@ -16,21 +16,21 @@
 // draconic.audio keeps this module decoder-free.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 #include <initializer_list>
 
 export module draconic.audio.editor;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.editor;
 import draconic.editor.core;
 import draconic.content;
 import draconic.audio;
 import draconic.audio.resource;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::audio
 {
@@ -54,15 +54,15 @@ export namespace draconic::audio
         void Serialize(ISerializer& ar) override
         {
             draconic::editor::Asset::Serialize(ar); // fileName
-            draconic::core::Serialize(ar, "stream", stream);
-            draconic::core::Serialize(ar, "keepCompressed", keepCompressed);
-            draconic::core::Serialize(ar, "forceMono", forceMono);
-            draconic::core::Serialize(ar, "loop", loop);
-            draconic::core::Serialize(ar, "loopStartFrame", loopStartFrame);
-            draconic::core::Serialize(ar, "loopEndFrame", loopEndFrame);
-            draconic::core::Serialize(ar, "trimTrailingSilence", trimTrailingSilence);
-            draconic::core::Serialize(ar, "normalize", normalize);
-            draconic::core::Serialize(ar, "gain", gain);
+            draconic::foundation::Serialize(ar, "stream", stream);
+            draconic::foundation::Serialize(ar, "keepCompressed", keepCompressed);
+            draconic::foundation::Serialize(ar, "forceMono", forceMono);
+            draconic::foundation::Serialize(ar, "loop", loop);
+            draconic::foundation::Serialize(ar, "loopStartFrame", loopStartFrame);
+            draconic::foundation::Serialize(ar, "loopEndFrame", loopEndFrame);
+            draconic::foundation::Serialize(ar, "trimTrailingSilence", trimTrailingSilence);
+            draconic::foundation::Serialize(ar, "normalize", normalize);
+            draconic::foundation::Serialize(ar, "gain", gain);
         }
     };
 
@@ -468,15 +468,15 @@ export namespace draconic::audio
             draconic::editor::Asset::Serialize(ar);
             auto serializeBus = [&ar](Bus& bus)
             {
-                draconic::core::Serialize(ar, "volume", bus.volume);
-                draconic::core::Serialize(ar, "muted", bus.muted);
-                draconic::core::Serialize(ar, "lowpassHz", bus.lowpassHz);
-                draconic::core::Serialize(ar, "highpassHz", bus.highpassHz);
-                draconic::core::Serialize(ar, "delaySeconds", bus.delaySeconds);
-                draconic::core::Serialize(ar, "delayDecay", bus.delayDecay);
-                draconic::core::Serialize(ar, "reverbWet", bus.reverbWet);
-                draconic::core::Serialize(ar, "reverbRoomSize", bus.reverbRoomSize);
-                draconic::core::Serialize(ar, "reverbDamping", bus.reverbDamping);
+                draconic::foundation::Serialize(ar, "volume", bus.volume);
+                draconic::foundation::Serialize(ar, "muted", bus.muted);
+                draconic::foundation::Serialize(ar, "lowpassHz", bus.lowpassHz);
+                draconic::foundation::Serialize(ar, "highpassHz", bus.highpassHz);
+                draconic::foundation::Serialize(ar, "delaySeconds", bus.delaySeconds);
+                draconic::foundation::Serialize(ar, "delayDecay", bus.delayDecay);
+                draconic::foundation::Serialize(ar, "reverbWet", bus.reverbWet);
+                draconic::foundation::Serialize(ar, "reverbRoomSize", bus.reverbRoomSize);
+                draconic::foundation::Serialize(ar, "reverbDamping", bus.reverbDamping);
             };
             serializeBus(master);
             serializeBus(effects);
@@ -485,12 +485,12 @@ export namespace draconic::audio
             if (ar.Version() >= 2) // v2: the custom-bus slot bank
             {
                 u32 slots = kAudioCustomBusSlotCount;
-                draconic::core::Serialize(ar, "customSlots", slots);
+                draconic::foundation::Serialize(ar, "customSlots", slots);
                 const u32 count = Min<u32>(slots, kAudioCustomBusSlotCount);
                 for (u32 i = 0; i < count; ++i)
                 {
-                    draconic::core::Serialize(ar, "name", custom[i].name);
-                    draconic::core::Serialize(ar, "parent", custom[i].parent);
+                    draconic::foundation::Serialize(ar, "name", custom[i].name);
+                    draconic::foundation::Serialize(ar, "parent", custom[i].parent);
                     serializeBus(custom[i].bus);
                 }
             }
@@ -683,19 +683,19 @@ export namespace draconic::audio
         {
             draconic::editor::Asset::Serialize(ar);
             u32 slots = kSoundCueSlotCount;
-            draconic::core::Serialize(ar, "slots", slots);
+            draconic::foundation::Serialize(ar, "slots", slots);
             const u32 count = Min<u32>(slots, kSoundCueSlotCount);
             for (u32 i = 0; i < count; ++i)
             {
                 ar.Key("clip");
                 ar.GuidValue(clipIds[i]);
-                draconic::core::Serialize(ar, "weight", weights[i]);
+                draconic::foundation::Serialize(ar, "weight", weights[i]);
             }
-            draconic::core::Serialize(ar, "mode", mode);
-            draconic::core::Serialize(ar, "pitchMin", pitchMin);
-            draconic::core::Serialize(ar, "pitchMax", pitchMax);
-            draconic::core::Serialize(ar, "volumeMin", volumeMin);
-            draconic::core::Serialize(ar, "volumeMax", volumeMax);
+            draconic::foundation::Serialize(ar, "mode", mode);
+            draconic::foundation::Serialize(ar, "pitchMin", pitchMin);
+            draconic::foundation::Serialize(ar, "pitchMax", pitchMax);
+            draconic::foundation::Serialize(ar, "volumeMin", volumeMin);
+            draconic::foundation::Serialize(ar, "volumeMax", volumeMax);
         }
     };
 

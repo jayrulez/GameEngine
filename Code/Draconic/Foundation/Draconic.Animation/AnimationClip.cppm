@@ -6,21 +6,21 @@
 /// valid as more tracks are added (matching the Beef List<AnimationTrack<T>> of references).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.animation:clip;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::animation
 {
 
     // Event callback: (event name, event time in seconds). The engine's move-only delegate. Defined here
     // (with AnimationEvent) so both the player and the graph's IAnimationStateNode can use it.
-    using AnimationEventHandler = core::Function<void(StringView, f32)>;
+    using AnimationEventHandler = foundation::Function<void(StringView, f32)>;
 
     // Keyframe interpolation mode.
     enum class InterpolationMode

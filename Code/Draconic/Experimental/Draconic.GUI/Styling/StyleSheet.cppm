@@ -6,18 +6,18 @@
 // higher-specificity and later-source rules win - producing a flat name/value ResolvedStyle.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:style_sheet;
 
-import draconic.core; // String, StringView, Array, i64, Move
+import draconic.foundation; // String, StringView, Array, i64, Move
 import :style_selector;
 import :style_rule;
 import :media_query;
 import :ui_widget;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -26,7 +26,7 @@ export namespace draconic::gui
     {
     public:
         // Set/override a property. An !important value resists later non-important overrides.
-        void Set(core::StringView name, core::StringView value, bool important = false)
+        void Set(foundation::StringView name, foundation::StringView value, bool important = false)
         {
             for (StyleProperty& p : m_props)
                 if (p.Name == name)
@@ -40,7 +40,7 @@ export namespace draconic::gui
             m_props.PushBack(StyleProperty(name, value, important));
         }
 
-        [[nodiscard]] bool Has(core::StringView name) const
+        [[nodiscard]] bool Has(foundation::StringView name) const
         {
             for (const StyleProperty& p : m_props)
                 if (p.Name == name)
@@ -48,8 +48,8 @@ export namespace draconic::gui
             return false;
         }
 
-        [[nodiscard]] core::StringView Get(core::StringView name,
-                                           core::StringView fallback = core::StringView{}) const
+        [[nodiscard]] foundation::StringView Get(foundation::StringView name,
+                                           foundation::StringView fallback = foundation::StringView{}) const
         {
             for (const StyleProperty& p : m_props)
                 if (p.Name == name)
@@ -68,12 +68,12 @@ export namespace draconic::gui
             {
                 if (IsCustomProperty(p.Name.AsView()))
                     continue;
-                const core::StringView v = core::Trim(p.Value.AsView());
-                if (v.Size() < 5 || v.SubStr(0, 4) != core::StringView(u8"var(") ||
+                const foundation::StringView v = foundation::Trim(p.Value.AsView());
+                if (v.Size() < 5 || v.SubStr(0, 4) != foundation::StringView(u8"var(") ||
                     v[v.Size() - 1] != u8')')
                     continue;
 
-                const core::StringView inside = v.SubStr(4, v.Size() - 5);
+                const foundation::StringView inside = v.SubStr(4, v.Size() - 5);
                 usize comma = inside.Size();
                 for (usize i = 0; i < inside.Size(); ++i)
                     if (inside[i] == u8',')
@@ -82,18 +82,18 @@ export namespace draconic::gui
                         break;
                     }
 
-                const core::StringView varName = core::Trim(inside.SubStr(0, comma));
-                const core::StringView fallback =
+                const foundation::StringView varName = foundation::Trim(inside.SubStr(0, comma));
+                const foundation::StringView fallback =
                     (comma < inside.Size())
-                        ? core::Trim(inside.SubStr(comma + 1, inside.Size() - comma - 1))
-                        : core::StringView{};
+                        ? foundation::Trim(inside.SubStr(comma + 1, inside.Size() - comma - 1))
+                        : foundation::StringView{};
                 p.Value =
                     Get(varName, fallback); // Get scans a different element; safe to assign here
             }
         }
 
     private:
-        [[nodiscard]] static bool IsCustomProperty(core::StringView name) noexcept
+        [[nodiscard]] static bool IsCustomProperty(foundation::StringView name) noexcept
         {
             return name.Size() >= 2 && name[0] == u8'-' && name[1] == u8'-';
         }
@@ -111,20 +111,20 @@ export namespace draconic::gui
     // A named @keyframes animation: an ordered list of stops.
     struct Keyframes
     {
-        core::String Name;
+        foundation::String Name;
         Array<KeyframeStop> Stops;
     };
 
     class StyleSheet
     {
     public:
-        void AddRule(StyleRule rule) { m_rules.PushBack(core::Move(rule)); }
+        void AddRule(StyleRule rule) { m_rules.PushBack(foundation::Move(rule)); }
         [[nodiscard]] usize RuleCount() const noexcept { return m_rules.Size(); }
         [[nodiscard]] const Array<StyleRule>& Rules() const noexcept { return m_rules; }
 
-        void AddKeyframes(Keyframes keyframes) { m_keyframes.PushBack(core::Move(keyframes)); }
+        void AddKeyframes(Keyframes keyframes) { m_keyframes.PushBack(foundation::Move(keyframes)); }
         [[nodiscard]] usize KeyframesCount() const noexcept { return m_keyframes.Size(); }
-        [[nodiscard]] const Keyframes* FindKeyframes(core::StringView name) const
+        [[nodiscard]] const Keyframes* FindKeyframes(foundation::StringView name) const
         {
             for (const Keyframes& k : m_keyframes)
                 if (k.Name.AsView() == name)
@@ -138,7 +138,7 @@ export namespace draconic::gui
         [[nodiscard]] ResolvedStyle Resolve(const UIWidget& element,
                                             const MediaContext& context = {},
                                             bool applyPseudo = true,
-                                            core::StringView pseudoElement = {}) const
+                                            foundation::StringView pseudoElement = {}) const
         {
             // Collect indices of matching rules (selector + pseudo-element + media), in source order.
             Array<usize> matches;

@@ -11,14 +11,14 @@
 // non-colliding accessors keep their faithful names.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:itext_edit_host;
 
-import draconic.core; // StringView
+import draconic.foundation; // StringView
 import :iclipboard;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

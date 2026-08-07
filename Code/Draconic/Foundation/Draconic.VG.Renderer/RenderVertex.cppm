@@ -7,14 +7,14 @@
 // decode). Ported from Sedulous.VG.Renderer/VGRenderVertex.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.vg.renderer:vertex;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::vg::renderer
 {

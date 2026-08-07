@@ -4,12 +4,12 @@
 // The class declaration + trivial inline accessors stay in DefaultApplication.cppm.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 module draconic.engine.defaultapp;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.runtime.client;       // IApplication, IApplicationHost
 import draconic.engine.gameinstance; // GameInstance - this app's running game (scene + script bracket)
@@ -57,14 +57,14 @@ import draconic.engine.net; // NetworkSubsystem (injects the NetworkComponentMan
 import draconic.profiler;      // the CPU scope profiler (P-key dump)
 
 namespace rhi = draconic::rhi;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace net = draconic::net;
 using namespace draconic::shell;
 using namespace draconic::graphics;
 
 namespace draconic::runtime
 {
-    void DefaultApplication::OnUpdate(IApplicationHost& host, core::f32 deltaTime)
+    void DefaultApplication::OnUpdate(IApplicationHost& host, foundation::f32 deltaTime)
     {
         // Finalize any async resource loads first, so this frame's spawns/ticks see ready
         // resources (task #123). Pump ONLY the manager this app OWNS: when this DefaultApplication
@@ -78,7 +78,7 @@ namespace draconic::runtime
 
         // Drive + tick EVERY instance (primary + any extras - multi-instance PIE / headless server).
         // Input FIRST (so the game script sees this frame's keys), then the run host clock, then tick.
-        const core::f32 contextScale = host.Ctx().TimeScale();
+        const foundation::f32 contextScale = host.Ctx().TimeScale();
         ForEachInstance(
             [&](GameInstance& gi)
             {
@@ -95,16 +95,16 @@ namespace draconic::runtime
             return;
         }
 
-        core::ConsoleWrite(draconic::profiler::Profiler::Get().BuildReport().AsView());
+        foundation::ConsoleWrite(draconic::profiler::Profiler::Get().BuildReport().AsView());
         if (auto* renderer = host.Ctx().GetSubsystem<draconic::render::RenderSubsystem>())
         {
-            core::String gpu;
+            foundation::String gpu;
             renderer->BuildGpuProfileReport(gpu);
-            core::ConsoleWrite(gpu.AsView());
+            foundation::ConsoleWrite(gpu.AsView());
         }
     }
 
-    void DefaultApplication::TickGameScript(IApplicationHost& host, core::f32 deltaTime)
+    void DefaultApplication::TickGameScript(IApplicationHost& host, foundation::f32 deltaTime)
     {
         m_instance.TickScript(deltaTime, host.Ctx().TimeScale());
     }
@@ -182,7 +182,7 @@ namespace draconic::runtime
 
         DefaultApplication* self = this;
 
-        m_scripts->SetContextConfigurator(core::Function<void(draconic::script::IScriptContext&)>{
+        m_scripts->SetContextConfigurator(foundation::Function<void(draconic::script::IScriptContext&)>{
             [self](draconic::script::IScriptContext& context)
             {
                 if (self->m_input != nullptr)
@@ -208,8 +208,8 @@ namespace draconic::runtime
         {
             m_uiScriptHost.Attach(*m_ui);
             m_uiScriptHost.SetDocumentResolver(
-                core::Function<core::RefPtr<draconic::ui::UIDocument>(const core::Guid&)>{
-                    [self](const core::Guid& id) -> core::RefPtr<draconic::ui::UIDocument>
+                foundation::Function<foundation::RefPtr<draconic::ui::UIDocument>(const foundation::Guid&)>{
+                    [self](const foundation::Guid& id) -> foundation::RefPtr<draconic::ui::UIDocument>
                     {
                         if (self->Resources() == nullptr || id.IsNil())
                         {
@@ -218,8 +218,8 @@ namespace draconic::runtime
                         auto proxy = self->Resources()->Bind<draconic::ui::UIDocument>(id);
                         draconic::ui::UIDocument* document = proxy.Get();
                         return document != nullptr
-                                   ? core::RefPtr<draconic::ui::UIDocument>(document)
-                                   : core::RefPtr<draconic::ui::UIDocument>{};
+                                   ? foundation::RefPtr<draconic::ui::UIDocument>(document)
+                                   : foundation::RefPtr<draconic::ui::UIDocument>{};
                     }});
             m_uiScriptHost.Install(m_uiScriptBinding);
         }
@@ -227,10 +227,10 @@ namespace draconic::runtime
         // preset, spawn it, place the root at the requested world position, and bind
         // the freshly spawned entities' resources.
         m_scripts->SetPrefabSpawner(
-            core::Function<draconic::scene::EntityHandle(draconic::scene::Scene*, const core::Guid&,
-                                                         const core::Float3&)>{
-                [self](draconic::scene::Scene* scene, const core::Guid& prefabId,
-                       const core::Float3& position) -> draconic::scene::EntityHandle
+            foundation::Function<draconic::scene::EntityHandle(draconic::scene::Scene*, const foundation::Guid&,
+                                                         const foundation::Float3&)>{
+                [self](draconic::scene::Scene* scene, const foundation::Guid& prefabId,
+                       const foundation::Float3& position) -> draconic::scene::EntityHandle
                 {
                     if (scene == nullptr || self->m_contentDatabase == nullptr)
                     {
@@ -238,9 +238,9 @@ namespace draconic::runtime
                     }
                     draconic::content::Instance* prefab =
                         self->m_contentDatabase->GetInstance(prefabId);
-                    core::UniquePtr<core::IStream> payload = (prefab != nullptr)
+                    foundation::UniquePtr<foundation::IStream> payload = (prefab != nullptr)
                                                                  ? prefab->ReadData(u8"scene")
-                                                                 : core::UniquePtr<core::IStream>{};
+                                                                 : foundation::UniquePtr<foundation::IStream>{};
                     if (!payload)
                     {
                         return draconic::scene::EntityHandle::Invalid();
@@ -249,7 +249,7 @@ namespace draconic::runtime
                         draconic::scene::SpawnPrefab(*scene, *payload, prefabId);
                     if (root.IsAssigned())
                     {
-                        core::Transform transform = scene->GetLocalTransform(root);
+                        foundation::Transform transform = scene->GetLocalTransform(root);
                         transform.position = position;
                         scene->SetLocalTransform(root, transform);
                         if (self->Resources() != nullptr)
@@ -263,7 +263,7 @@ namespace draconic::runtime
         // Track A resource swaps (SceneRender.setMesh, ...): give the run a GETTER for the app's
         // resource manager (created later, in OnStartup), so a behavior can bind a resource id onto
         // a component's Ref. Borrowed - the app owns it.
-        m_scripts->SetResourceManager(core::Function<draconic::resource::ResourceManager*()>{
+        m_scripts->SetResourceManager(foundation::Function<draconic::resource::ResourceManager*()>{
             [self]() -> draconic::resource::ResourceManager* { return self->Resources(); }});
 
         // Composition-root bridge: forward physics contacts to the script subsystem's
@@ -291,8 +291,8 @@ namespace draconic::runtime
         {
             return nullptr;
         }
-        core::UniquePtr<GameInstance> owned =
-            core::MakeUnique<GameInstance>(core::DefaultAllocator());
+        foundation::UniquePtr<GameInstance> owned =
+            foundation::MakeUnique<GameInstance>(foundation::DefaultAllocator());
         GameInstance* gi = owned.Get();
         gi->SetHeadless(headless);
         gi->Scenes().SetAwareRegistry(&m_scenes->AwareRegistry());
@@ -315,7 +315,7 @@ namespace draconic::runtime
         {
             return;
         }
-        for (core::usize i = 0; i < m_extraInstances.Size(); ++i)
+        for (foundation::usize i = 0; i < m_extraInstances.Size(); ++i)
         {
             if (m_extraInstances[i].Get() != instance)
             {
@@ -349,14 +349,14 @@ namespace draconic::runtime
 
         // The render/sim policy PumpScriptLoads runs when a tracked load finishes (SetScene already
         // done by then). Virtual, so the player seeds a camera; the base just starts + simulates.
-        gi.SetSceneActivationPolicy(core::Function<void(draconic::scene::Scene*)>{
+        gi.SetSceneActivationPolicy(foundation::Function<void(draconic::scene::Scene*)>{
             [self](draconic::scene::Scene* scene) { self->ApplyLoadedSceneActivation(scene); }});
 
         // SceneLoader.loadSceneAsync(id) -> resolve the cooked scene instance, kick an async load into THIS
         // instance, register it under a ticket. 0 = could not start (bad id / no DB). The prefab
         // provider reads a nested-prefab payload by guid - the same source the sync path uses.
         gi.SceneLoaderBinding().loadSceneAsync =
-            core::Function<core::i32(const core::Guid&)>{[self, instance](const core::Guid& sceneId) -> core::i32
+            foundation::Function<foundation::i32(const foundation::Guid&)>{[self, instance](const foundation::Guid& sceneId) -> foundation::i32
             {
                 if (self->m_contentDatabase == nullptr || self->Resources() == nullptr)
                 {
@@ -370,28 +370,28 @@ namespace draconic::runtime
                 draconic::content::IContentDatabase* db = self->m_contentDatabase;
                 runtime::SceneLoadHandle handle = instance->LoadSceneAsync(
                     *sceneInst, *self->Resources(),
-                    core::Function<core::UniquePtr<core::IStream>(const core::Guid&)>{
-                        [db](const core::Guid& prefabId) -> core::UniquePtr<core::IStream>
+                    foundation::Function<foundation::UniquePtr<foundation::IStream>(const foundation::Guid&)>{
+                        [db](const foundation::Guid& prefabId) -> foundation::UniquePtr<foundation::IStream>
                         {
                             draconic::content::Instance* prefab = db->GetInstance(prefabId);
                             return (prefab != nullptr) ? prefab->ReadData(u8"scene")
-                                                       : core::UniquePtr<core::IStream>{};
+                                                       : foundation::UniquePtr<foundation::IStream>{};
                         }});
-                return instance->TrackScriptLoad(core::Move(handle));
+                return instance->TrackScriptLoad(foundation::Move(handle));
             }};
 
-        gi.SceneLoaderBinding().loadProgress = core::Function<core::f64(core::i32)>{
-            [instance](core::i32 ticket) -> core::f64
-            { return static_cast<core::f64>(instance->ScriptLoadProgress(ticket)); }};
-        gi.SceneLoaderBinding().loadComplete = core::Function<bool(core::i32)>{
-            [instance](core::i32 ticket) -> bool { return instance->ScriptLoadComplete(ticket); }};
-        gi.SceneLoaderBinding().loadFailed = core::Function<bool(core::i32)>{
-            [instance](core::i32 ticket) -> bool { return instance->ScriptLoadFailed(ticket); }};
+        gi.SceneLoaderBinding().loadProgress = foundation::Function<foundation::f64(foundation::i32)>{
+            [instance](foundation::i32 ticket) -> foundation::f64
+            { return static_cast<foundation::f64>(instance->ScriptLoadProgress(ticket)); }};
+        gi.SceneLoaderBinding().loadComplete = foundation::Function<bool(foundation::i32)>{
+            [instance](foundation::i32 ticket) -> bool { return instance->ScriptLoadComplete(ticket); }};
+        gi.SceneLoaderBinding().loadFailed = foundation::Function<bool(foundation::i32)>{
+            [instance](foundation::i32 ticket) -> bool { return instance->ScriptLoadFailed(ticket); }};
 
         // Game.loadScene(id): synchronous convenience for tiny scenes - load, make current, apply the
         // same activation policy, all before the call returns. false on a resolve/load failure.
         gi.SceneLoaderBinding().loadScene =
-            core::Function<bool(const core::Guid&)>{[self, instance](const core::Guid& sceneId) -> bool
+            foundation::Function<bool(const foundation::Guid&)>{[self, instance](const foundation::Guid& sceneId) -> bool
             {
                 if (self->m_contentDatabase == nullptr || self->Resources() == nullptr)
                 {
@@ -405,12 +405,12 @@ namespace draconic::runtime
                 draconic::content::IContentDatabase* db = self->m_contentDatabase;
                 draconic::scene::Scene* scene = instance->LoadScene(
                     *sceneInst, *self->Resources(),
-                    core::Function<core::UniquePtr<core::IStream>(const core::Guid&)>{
-                        [db](const core::Guid& prefabId) -> core::UniquePtr<core::IStream>
+                    foundation::Function<foundation::UniquePtr<foundation::IStream>(const foundation::Guid&)>{
+                        [db](const foundation::Guid& prefabId) -> foundation::UniquePtr<foundation::IStream>
                         {
                             draconic::content::Instance* prefab = db->GetInstance(prefabId);
                             return (prefab != nullptr) ? prefab->ReadData(u8"scene")
-                                                       : core::UniquePtr<core::IStream>{};
+                                                       : foundation::UniquePtr<foundation::IStream>{};
                         }});
                 if (scene == nullptr)
                 {
@@ -422,8 +422,8 @@ namespace draconic::runtime
             }};
 
         gi.SceneLoaderBinding().sceneReady =
-            core::Function<bool()>{[instance]() -> bool { return instance->SceneReady(); }};
-        gi.SceneLoaderBinding().currentScene = core::Function<scene::Scene*()>{
+            foundation::Function<bool()>{[instance]() -> bool { return instance->SceneReady(); }};
+        gi.SceneLoaderBinding().currentScene = foundation::Function<scene::Scene*()>{
             [instance]() -> scene::Scene* { return instance->GetScene(); }};
     }
 
@@ -432,10 +432,10 @@ namespace draconic::runtime
         return m_physics;
     }
 
-    void DefaultApplication::OnFixedUpdate(IApplicationHost& host, core::f32 fixedDeltaTime)
+    void DefaultApplication::OnFixedUpdate(IApplicationHost& host, foundation::f32 fixedDeltaTime)
     {
         (void)host;
-        const core::f32 fixedMs = fixedDeltaTime * 1000.0f; // seconds -> ms
+        const foundation::f32 fixedMs = fixedDeltaTime * 1000.0f; // seconds -> ms
         ForEachInstance([fixedMs](GameInstance& gi) { gi.DriveNetwork(fixedMs); });
     }
 
@@ -473,8 +473,8 @@ namespace draconic::runtime
         draconic::audio::RegisterAudioResource();
         draconic::script::RegisterScriptResource();
         draconic::ui::RegisterUIResource();
-        core::GlobalTypeRegistry().Register(draconic::scene::SceneDocument::StaticType());
-        core::RegisterSerializable<draconic::scene::SceneDocument>();
+        foundation::GlobalTypeRegistry().Register(draconic::scene::SceneDocument::StaticType());
+        foundation::RegisterSerializable<draconic::scene::SceneDocument>();
         draconic::ui::RegisterUIComponentReflection();
         if (GraphicsDevice* gfx = host.Graphics();
             gfx != nullptr && gfx->Raw() != nullptr && m_ui != nullptr)
@@ -486,9 +486,9 @@ namespace draconic::runtime
         {
             // Share the global JobSystem so migrated factories can decode off the main thread
             // (async resource loading, task #123); null when there is no pool = synchronous loads.
-            m_ownedResources = core::MakeUnique<draconic::resource::ResourceManager>(
-                core::DefaultAllocator(), *m_contentDatabase,
-                core::HasGlobalJobSystem() ? &core::GlobalJobs() : nullptr);
+            m_ownedResources = foundation::MakeUnique<draconic::resource::ResourceManager>(
+                foundation::DefaultAllocator(), *m_contentDatabase,
+                foundation::HasGlobalJobSystem() ? &foundation::GlobalJobs() : nullptr);
         }
         draconic::resource::ResourceManager* resources = Resources();
         if (resources == nullptr)
@@ -522,8 +522,8 @@ namespace draconic::runtime
         {
             if (!m_textureFactory)
             {
-                m_textureFactory = core::MakeUnique<draconic::texture::TextureFactory>(
-                    core::DefaultAllocator(), *gfx->Raw());
+                m_textureFactory = foundation::MakeUnique<draconic::texture::TextureFactory>(
+                    foundation::DefaultAllocator(), *gfx->Raw());
             }
             resources.AddFactory(m_textureFactory.Get());
         }
@@ -572,7 +572,7 @@ namespace draconic::runtime
         m_instance.SetScriptErrorHandler(handler);
     }
 
-    bool DefaultApplication::StartGameScript(core::StringView source, core::StringView name)
+    bool DefaultApplication::StartGameScript(foundation::StringView source, foundation::StringView name)
     {
         return m_instance.StartScript(source, name);
     }
@@ -593,7 +593,7 @@ namespace draconic::runtime
         // see this frame's UI (the RenderCanvasTextures host seam).
         if (m_ui != nullptr)
         {
-            m_ui->RenderCanvasTextures(*frame.encoder, static_cast<core::i32>(frame.frameIndex));
+            m_ui->RenderCanvasTextures(*frame.encoder, static_cast<foundation::i32>(frame.frameIndex));
         }
         render->BeginRendering(*frame.encoder, frame.frameIndex);
         // Render every NON-headless instance's scenes (game-instance.md §11 - a headless dedicated
@@ -627,9 +627,9 @@ namespace draconic::runtime
             [self](net::NetworkManager& endpoint)
             {
                 endpoint.Replication().SetSpawnHandler(
-                    core::Function<draconic::scene::EntityHandle(
-                        draconic::scene::Scene&, const core::Guid&, net::NetworkId)>{
-                        [self](draconic::scene::Scene& scene, const core::Guid& prefabId,
+                    foundation::Function<draconic::scene::EntityHandle(
+                        draconic::scene::Scene&, const foundation::Guid&, net::NetworkId)>{
+                        [self](draconic::scene::Scene& scene, const foundation::Guid& prefabId,
                                net::NetworkId) -> draconic::scene::EntityHandle
                         {
                             if (self->m_contentDatabase == nullptr)
@@ -638,9 +638,9 @@ namespace draconic::runtime
                             }
                             draconic::content::Instance* prefab =
                                 self->m_contentDatabase->GetInstance(prefabId);
-                            core::UniquePtr<core::IStream> payload =
+                            foundation::UniquePtr<foundation::IStream> payload =
                                 (prefab != nullptr) ? prefab->ReadData(u8"scene")
-                                                    : core::UniquePtr<core::IStream>{};
+                                                    : foundation::UniquePtr<foundation::IStream>{};
                             if (!payload)
                             {
                                 return draconic::scene::EntityHandle::Invalid();

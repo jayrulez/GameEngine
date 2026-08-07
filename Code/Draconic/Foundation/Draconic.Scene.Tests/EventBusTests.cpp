@@ -1,12 +1,12 @@
 // The native event bus (draconic.scene :events) - exercised with ZERO scripting, because the
 // C++-only contract is load-bearing: a C++-only game must publish/subscribe with native callbacks.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.scene;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::scene;
 
 TEST_CASE("event bus: publish is deferred; Drain delivers the payload to a native subscriber")

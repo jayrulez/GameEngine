@@ -3,23 +3,23 @@
 // passthroughs -> methods (tv->FlatAdapter()/Selection()); HierarchicalState.CaptureState/ApplyState take
 // a TreeView&. Logic only, no font.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 #include "TestHelpers.h"
 
 using namespace draconic::ui;
 using namespace draconic::ui::tests;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
-static core::RefPtr<RootView> MakeRoot()
+static foundation::RefPtr<RootView> MakeRoot()
 {
-    return core::MakeRef<RootView>(core::DefaultAllocator());
+    return foundation::MakeRef<RootView>(foundation::DefaultAllocator());
 }
-static core::RefPtr<TreeView> MakeTree()
+static foundation::RefPtr<TreeView> MakeTree()
 {
-    return core::MakeRef<TreeView>(core::DefaultAllocator());
+    return foundation::MakeRef<TreeView>(foundation::DefaultAllocator());
 }
 
 TEST_CASE("tree-view: SetAdapter_ShowsRootItems")

@@ -1,17 +1,17 @@
 // Draconic UI - :event partition
 //
-// Event<void(Args...)>: a minimal multicast delegate over core::Function, the port's
+// Event<void(Args...)>: a minimal multicast delegate over foundation::Function, the port's
 // equivalent of Beef's `Event<delegate void(...)>` used pervasively across Sedulous.UI
 // (Property.Changed, Button.Clicked, ...). Add handlers; invoke via operator() / Invoke.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:event;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

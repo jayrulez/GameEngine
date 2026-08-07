@@ -8,12 +8,12 @@
 // icon drawable is borrowed (typically owned by an icon set that outlives the button).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:icon_button;
 
-import draconic.core;
+import draconic.foundation;
 import :button_base;
 import :view;
 import :control_state;
@@ -24,7 +24,7 @@ import :draw_context;
 import :svg_drawable;
 import :palette;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

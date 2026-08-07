@@ -7,7 +7,7 @@
 // (only pointers), so no :view dependency.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:ipopup_owner;
 

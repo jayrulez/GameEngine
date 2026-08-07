@@ -13,18 +13,18 @@
 // Never linked by the runtime.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.materials.editor;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.editor;
 import draconic.content;
 import draconic.materials;
 import draconic.materials.resource;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::materials
 {

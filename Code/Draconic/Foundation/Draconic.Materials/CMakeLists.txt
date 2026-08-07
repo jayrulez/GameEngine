@@ -5,7 +5,7 @@ add_library(Draconic.Materials STATIC)
 add_library(Draconic::Materials ALIAS Draconic.Materials)
 
 target_link_libraries(Draconic.Materials
-    PUBLIC Draconic::Core Draconic::RHI Draconic::Shaders Draconic::Policy)
+    PUBLIC Draconic::Foundation Draconic::RHI Draconic::Shaders Draconic::Policy)
 
 target_sources(Draconic.Materials
     PRIVATE

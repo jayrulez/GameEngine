@@ -3,16 +3,16 @@
 // and verify the reconstructed effect matches - modules polymorphically rebuilt via reflection - and
 // that it still simulates. Mirrors TextureFactoryTests.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.resource;
 import draconic.particles;
 import draconic.particles.resource;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::vfs;
 using namespace draconic::resource;
 using namespace draconic::particles;
@@ -69,7 +69,7 @@ TEST_CASE("particles.pipeline: code effect -> cook -> Bind reconstructs an equiv
 
     // Cook: author the effect into a ParticleEffectResource record and write it to the DB.
     {
-        draconic::content::ContentDatabase db(mount, draconic::core::BinarySerializerFactory(),
+        draconic::content::ContentDatabase db(mount, draconic::foundation::BinarySerializerFactory(),
                                               u8".rasset");
         auto* inst =
             db.RootGroup()->CreateInstance(u8"effect", ParticleEffectResource::StaticType());
@@ -81,7 +81,7 @@ TEST_CASE("particles.pipeline: code effect -> cook -> Bind reconstructs an equiv
     }
 
     // Load: bind the cooked resource back through the manager + factory.
-    draconic::content::ContentDatabase db(mount, draconic::core::BinarySerializerFactory(),
+    draconic::content::ContentDatabase db(mount, draconic::foundation::BinarySerializerFactory(),
                                           u8".rasset");
     ParticleEffectFactory factory;
     ResourceManager manager(db);

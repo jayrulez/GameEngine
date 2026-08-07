@@ -3,7 +3,7 @@
 /// Ported from Sedulous.RHI.Vulkan/VulkanBackend.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include "VkIncludes.h"
 
@@ -14,12 +14,12 @@ module;
 
 export module draconic.rhi.vulkan:backend;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :adapter;
 import :surface;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 // Linux surface types - forward-declared to avoid header pollution. In the module
 // purview (not the GMF): GCC requires the GMF to contain only #includes.

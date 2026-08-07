@@ -6,13 +6,13 @@
 // registries - $vars / @icon / @image references are not resolved.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 module draconic.ui;
 
 import draconic.image; // image::ImageData for the (empty) image registry
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::ui
 {

@@ -5,18 +5,18 @@
 // inspector's Float4 component properties (e.g. sprite uvRect).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui.toolkit:float4_editor;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import draconic.ui;
 import :property_editor;
 import :vector_fields; // reuse AxisLabel + AxisColors
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui::toolkit
 {

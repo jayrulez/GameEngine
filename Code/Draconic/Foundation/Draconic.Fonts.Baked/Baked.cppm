@@ -6,14 +6,14 @@
 // (BakedFont.bf, BakedFontAtlas.bf) - its own library, matching Sedulous.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.fonts.baked;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.fonts;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::fonts
 {

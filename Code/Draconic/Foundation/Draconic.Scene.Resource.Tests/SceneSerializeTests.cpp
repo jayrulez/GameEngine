@@ -2,15 +2,15 @@
 // transform hierarchy + components) to bytes and deserialize into a fresh scene,
 // preserving Guids, names, parent links, transforms, and component data.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.scene;
 import draconic.scene.resource;
 import draconic.xml.serialization;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::scene;
 
 namespace
@@ -19,7 +19,7 @@ namespace
     {
         f32 value = 100.0f;
     };
-    void Serialize(ISerializer& ar, Health& h) { draconic::core::Serialize(ar, "value", h.value); }
+    void Serialize(ISerializer& ar, Health& h) { draconic::foundation::Serialize(ar, "value", h.value); }
 
     class HealthManager : public SerializableComponentManager<Health>
     {
@@ -276,7 +276,7 @@ namespace
     void Serialize(ISerializer& ar, Turret& t)
     {
         t.seenVersion = ar.Version(); // record what the scope exposes (test probe)
-        draconic::core::Serialize(ar, "range", t.range);
+        draconic::foundation::Serialize(ar, "range", t.range);
     }
     class TurretManager : public SerializableComponentManager<Turret>
     {
@@ -345,8 +345,8 @@ namespace
         [[nodiscard]] StringView SettingsId() const noexcept override { return u8"fog"; }
         void SerializeSettings(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "density", settings.density);
-            draconic::core::Serialize(ar, "tint", settings.tint);
+            draconic::foundation::Serialize(ar, "density", settings.density);
+            draconic::foundation::Serialize(ar, "tint", settings.tint);
         }
         FogSettings settings;
     };
@@ -1861,15 +1861,15 @@ TEST_CASE("text scenes v3: proper guid + full transform names; v2 saves still lo
     auto legacyGuid = [](ISerializer& ar, const char* key, Guid g)
     {
         ar.Key(key);
-        draconic::core::Serialize(ar, "hi", g.high);
-        draconic::core::Serialize(ar, "lo", g.low);
+        draconic::foundation::Serialize(ar, "hi", g.high);
+        draconic::foundation::Serialize(ar, "lo", g.low);
     };
     u32 magic = draconic::scene::detail::kSceneStreamMagic;
     u32 version = 2;
-    draconic::core::Serialize(legacyOut, "magic", magic);
-    draconic::core::Serialize(legacyOut, "version", version);
+    draconic::foundation::Serialize(legacyOut, "magic", magic);
+    draconic::foundation::Serialize(legacyOut, "version", version);
     String sceneName(u8"legacy");
-    draconic::core::Serialize(legacyOut, "name", sceneName);
+    draconic::foundation::Serialize(legacyOut, "name", sceneName);
     legacyOut.Key("entities");
     u32 entityCount = 2;
     legacyOut.BeginArray(entityCount);
@@ -1883,12 +1883,12 @@ TEST_CASE("text scenes v3: proper guid + full transform names; v2 saves still lo
         Guid parentId = p.IsAssigned() ? author.GetEntityId(p) : Guid{};
         Transform lt = author.GetLocalTransform(e);
         legacyGuid(legacyOut, "id", id);
-        draconic::core::Serialize(legacyOut, "name", ename);
-        draconic::core::Serialize(legacyOut, "active", active);
+        draconic::foundation::Serialize(legacyOut, "name", ename);
+        draconic::foundation::Serialize(legacyOut, "active", active);
         legacyGuid(legacyOut, "parent", parentId);
-        draconic::core::Serialize(legacyOut, "pos", lt.position);
-        draconic::core::Serialize(legacyOut, "rot", lt.rotation);
-        draconic::core::Serialize(legacyOut, "scl", lt.scale);
+        draconic::foundation::Serialize(legacyOut, "pos", lt.position);
+        draconic::foundation::Serialize(legacyOut, "rot", lt.rotation);
+        draconic::foundation::Serialize(legacyOut, "scl", lt.scale);
     }
     legacyOut.EndArray();
     legacyOut.Key("components");
@@ -1899,7 +1899,7 @@ TEST_CASE("text scenes v3: proper guid + full transform names; v2 saves still lo
         Guid ownerId = author.GetEntityId(hero);
         legacyGuid(legacyOut, "owner", ownerId);
         String typeId(u8"demo.Health");
-        draconic::core::Serialize(legacyOut, "type", typeId);
+        draconic::foundation::Serialize(legacyOut, "type", typeId);
         legacyOut.Key("data");
         legacyOut.BeginObject();
         health->WriteComponent(legacyOut, hero);
@@ -1912,7 +1912,7 @@ TEST_CASE("text scenes v3: proper guid + full transform names; v2 saves still lo
     legacyOut.BeginArray(settingsCount);
     legacyOut.EndArray();
     u8 mode = draconic::scene::detail::kPrefabWireReferenced3;
-    draconic::core::Serialize(legacyOut, "prefabMode", mode);
+    draconic::foundation::Serialize(legacyOut, "prefabMode", mode);
     legacyOut.Key("prefabInstances");
     u32 instanceCount = 0;
     legacyOut.BeginArray(instanceCount);

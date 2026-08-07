@@ -3,17 +3,17 @@
 // Fills bounds with a solid color. Ported from Sedulous.UI/src/Drawing/ColorDrawable.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:color_drawable;
 
-import draconic.core; // Color, Rectangle
+import draconic.foundation; // Color, Rectangle
 import :drawable;
 import :draw_context;
 
-using namespace draconic::core;
-namespace core = draconic::core; // to name core::Color where the field shadows the type
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation; // to name foundation::Color where the field shadows the type
 
 export namespace draconic::ui
 {
@@ -21,10 +21,10 @@ export namespace draconic::ui
     {
         DRACONIC_OBJECT(ColorDrawable, Drawable)
     public:
-        core::Color Color{};
+        foundation::Color Color{};
 
         ColorDrawable() = default;
-        explicit ColorDrawable(core::Color color) : Color(color) {}
+        explicit ColorDrawable(foundation::Color color) : Color(color) {}
 
         void Draw(UIDrawContext& ctx, const Rectangle& bounds) override
         {

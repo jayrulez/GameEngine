@@ -3,15 +3,15 @@
 // Float2 (Vector2Animation -> Float2Animation); Color byte ctors -> float (/255); ctx.Animations ->
 // ctx.Animations().
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 #include "TestHelpers.h"
 
 using namespace draconic::ui;
 using namespace draconic::ui::tests;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 // === FloatAnimation ===
 
@@ -197,7 +197,7 @@ TEST_CASE("animation: Storyboard_Sequential_RunsInOrder")
     i32 first = -1, second = -1;
 
     Storyboard sb(Storyboard::Mode::Sequential);
-    sb.Add(core::MakeUnique<FloatAnimation>(core::DefaultAllocator(), 0.0f, 1.0f, 0.1f,
+    sb.Add(foundation::MakeUnique<FloatAnimation>(foundation::DefaultAllocator(), 0.0f, 1.0f, 0.1f,
                                             Function<void(f32)>{[&first, &order](f32)
                                                                 {
                                                                     if (first < 0)
@@ -205,7 +205,7 @@ TEST_CASE("animation: Storyboard_Sequential_RunsInOrder")
                                                                         first = order++;
                                                                     }
                                                                 }}));
-    sb.Add(core::MakeUnique<FloatAnimation>(core::DefaultAllocator(), 0.0f, 1.0f, 0.1f,
+    sb.Add(foundation::MakeUnique<FloatAnimation>(foundation::DefaultAllocator(), 0.0f, 1.0f, 0.1f,
                                             Function<void(f32)>{[&second, &order](f32)
                                                                 {
                                                                     if (second < 0)
@@ -229,9 +229,9 @@ TEST_CASE("animation: Storyboard_Parallel_RunsSimultaneously")
     bool aRan = false, bRan = false;
 
     Storyboard sb(Storyboard::Mode::Parallel);
-    sb.Add(core::MakeUnique<FloatAnimation>(core::DefaultAllocator(), 0.0f, 1.0f, 0.2f,
+    sb.Add(foundation::MakeUnique<FloatAnimation>(foundation::DefaultAllocator(), 0.0f, 1.0f, 0.2f,
                                             Function<void(f32)>{[&aRan](f32) { aRan = true; }}));
-    sb.Add(core::MakeUnique<FloatAnimation>(core::DefaultAllocator(), 0.0f, 1.0f, 0.1f,
+    sb.Add(foundation::MakeUnique<FloatAnimation>(foundation::DefaultAllocator(), 0.0f, 1.0f, 0.1f,
                                             Function<void(f32)>{[&bRan](f32) { bRan = true; }}));
     sb.Start();
 
@@ -245,7 +245,7 @@ TEST_CASE("animation: Storyboard_Parallel_RunsSimultaneously")
 TEST_CASE("animation: Manager_DeletesOnComplete")
 {
     AnimationManager mgr;
-    mgr.Add(core::MakeUnique<FloatAnimation>(core::DefaultAllocator(), 0.0f, 1.0f, 0.1f,
+    mgr.Add(foundation::MakeUnique<FloatAnimation>(foundation::DefaultAllocator(), 0.0f, 1.0f, 0.1f,
                                              Function<void(f32)>{[](f32) {}}));
     CHECK(mgr.ActiveCount() == 1);
 
@@ -256,9 +256,9 @@ TEST_CASE("animation: Manager_DeletesOnComplete")
 TEST_CASE("animation: Manager_CancelAll")
 {
     AnimationManager mgr;
-    mgr.Add(core::MakeUnique<FloatAnimation>(core::DefaultAllocator(), 0.0f, 1.0f, 1.0f,
+    mgr.Add(foundation::MakeUnique<FloatAnimation>(foundation::DefaultAllocator(), 0.0f, 1.0f, 1.0f,
                                              Function<void(f32)>{[](f32) {}}));
-    mgr.Add(core::MakeUnique<FloatAnimation>(core::DefaultAllocator(), 0.0f, 1.0f, 1.0f,
+    mgr.Add(foundation::MakeUnique<FloatAnimation>(foundation::DefaultAllocator(), 0.0f, 1.0f, 1.0f,
                                              Function<void(f32)>{[](f32) {}}));
     CHECK(mgr.ActiveCount() == 2);
 
@@ -269,13 +269,13 @@ TEST_CASE("animation: Manager_CancelAll")
 TEST_CASE("animation: Manager_CancelForView")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
 
-    auto view = core::MakeRef<TestView>(core::DefaultAllocator(), 50.0f, 30.0f);
+    auto view = foundation::MakeRef<TestView>(foundation::DefaultAllocator(), 50.0f, 30.0f);
     root->AddView(view.Get());
 
-    auto anim = core::MakeUnique<FloatAnimation>(core::DefaultAllocator(), 0.0f, 1.0f, 1.0f,
+    auto anim = foundation::MakeUnique<FloatAnimation>(foundation::DefaultAllocator(), 0.0f, 1.0f, 1.0f,
                                                  Function<void(f32)>{[](f32) {}});
     anim->SetTarget(view.Get());
     ctx.Animations()->Add(Move(anim));
@@ -288,13 +288,13 @@ TEST_CASE("animation: Manager_CancelForView")
 TEST_CASE("animation: Manager_AutoCancelOnViewDelete")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
 
-    auto view = core::MakeRef<TestView>(core::DefaultAllocator(), 50.0f, 30.0f);
+    auto view = foundation::MakeRef<TestView>(foundation::DefaultAllocator(), 50.0f, 30.0f);
     root->AddView(view.Get());
 
-    auto anim = core::MakeUnique<FloatAnimation>(core::DefaultAllocator(), 0.0f, 1.0f, 1.0f,
+    auto anim = foundation::MakeUnique<FloatAnimation>(foundation::DefaultAllocator(), 0.0f, 1.0f, 1.0f,
                                                  Function<void(f32)>{[](f32) {}});
     anim->SetTarget(view.Get());
     ctx.Animations()->Add(Move(anim));

@@ -6,14 +6,14 @@
 // EventDispatcher lands (Phase 3). MouseEvent/KeyEvent subclasses grow with that phase.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:event;
 
-import draconic.core; // Function, String
+import draconic.foundation; // Function, String
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -24,8 +24,8 @@ export namespace draconic::gui
     // a path, text). Richer payloads (a RefPtr<Object>) can be layered on later.
     struct DragPayload
     {
-        core::String Type;
-        core::String Value;
+        foundation::String Type;
+        foundation::String Value;
     };
 
     enum class EventType : u32
@@ -121,11 +121,11 @@ export namespace draconic::gui
 
     struct MouseEvent : Event
     {
-        core::Float2 Position;
+        foundation::Float2 Position;
         MouseButton Button;
         u32 Modifiers;
 
-        MouseEvent(EventType type, Node* target, core::Float2 position,
+        MouseEvent(EventType type, Node* target, foundation::Float2 position,
                    MouseButton button = MouseButton::Left, u32 modifiers = 0) noexcept
             : Event(type, target), Position(position), Button(button), Modifiers(modifiers)
         {
@@ -134,10 +134,10 @@ export namespace draconic::gui
 
     struct WheelEvent : Event
     {
-        core::Float2 Position;
-        core::Float2 Delta;
+        foundation::Float2 Position;
+        foundation::Float2 Delta;
 
-        WheelEvent(Node* target, core::Float2 position, core::Float2 delta) noexcept
+        WheelEvent(Node* target, foundation::Float2 position, foundation::Float2 delta) noexcept
             : Event(EventType::MouseWheel, target), Position(position), Delta(delta)
         {
         }
@@ -156,9 +156,9 @@ export namespace draconic::gui
 
     struct TextInputEvent : Event
     {
-        core::StringView Text;
+        foundation::StringView Text;
 
-        TextInputEvent(Node* target, core::StringView text) noexcept
+        TextInputEvent(Node* target, foundation::StringView text) noexcept
             : Event(EventType::TextInput, target), Text(text)
         {
         }
@@ -174,5 +174,5 @@ export namespace draconic::gui
         }
     };
 
-    using EventCallback = core::Function<void(const Event&)>;
+    using EventCallback = foundation::Function<void(const Event&)>;
 }

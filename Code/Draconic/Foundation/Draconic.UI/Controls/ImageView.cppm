@@ -5,12 +5,12 @@
 // borrowed pointer - not owned.)
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:image_view;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import draconic.image; // ImageData
 import :view;
@@ -18,8 +18,8 @@ import :property;
 import :box_constraints;
 import :draw_context;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace image = draconic::image;
 
 export namespace draconic::ui
@@ -38,7 +38,7 @@ export namespace draconic::ui
         DRACONIC_OBJECT(ImageView, View)
     public:
         Property<::draconic::ui::ScaleType> ScaleType{::draconic::ui::ScaleType::FitCenter};
-        Property<core::Color> Tint{core::Color::White};
+        Property<foundation::Color> Tint{foundation::Color::White};
 
         ImageView()
         {

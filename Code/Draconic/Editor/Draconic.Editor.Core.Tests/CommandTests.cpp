@@ -4,12 +4,12 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.editor.core;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::editor;
 
 namespace

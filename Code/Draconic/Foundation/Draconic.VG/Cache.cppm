@@ -6,18 +6,18 @@
 // Keyed by Path pointer identity - the caller keeps the Path objects alive.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.vg:cache;
 
-import draconic.core;
+import draconic.foundation;
 import :enums;
 import :vertex;
 import :style;
 import :path;
 import :tessellation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::vg
 {

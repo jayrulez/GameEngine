@@ -7,15 +7,15 @@
 // asset-agnostic UI framework). For now it renders exactly like its text-button base.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.editor.app:asset_picker_slot;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.ui;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace ui = draconic::ui;
 
 export namespace draconic::editor::app

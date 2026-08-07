@@ -7,17 +7,17 @@
 /// dispatch uses a NodeType tag + static_cast (the engine builds with -fno-rtti, so no dynamic_cast).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.animation:graph;
 
-import draconic.core;
+import draconic.foundation;
 import :skeleton; // Skeleton, Bone, BoneTransform
 import :clip;     // AnimationClip, AnimationEventHandler
 import :sampler;  // SampleClip, BlendPoses
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::animation
 {

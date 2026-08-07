@@ -6,7 +6,7 @@ add_library(Draconic.Shaders.System STATIC)
 add_library(Draconic::Shaders.System ALIAS Draconic.Shaders.System)
 
 target_link_libraries(Draconic.Shaders.System
-    PUBLIC Draconic::Core Draconic::RHI Draconic::Shaders Draconic::VFS Draconic::Policy)
+    PUBLIC Draconic::Foundation Draconic::RHI Draconic::Shaders Draconic::VFS Draconic::Policy)
 
 target_sources(Draconic.Shaders.System
     PUBLIC

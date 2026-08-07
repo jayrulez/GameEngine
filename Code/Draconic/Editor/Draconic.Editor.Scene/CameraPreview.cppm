@@ -6,16 +6,16 @@
 // be unit-tested without a renderer or a UI tree (per the spec).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.editor.scene:camera_preview;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.scene;
 import draconic.render.api;    // ViewCamera / CameraOverride
 import draconic.engine.render; // CameraComponent
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {

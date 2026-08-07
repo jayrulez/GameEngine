@@ -6,11 +6,11 @@
 // XML downcasts use XmlNode::NodeType() + static_cast (draconic.xml nodes are not DRACONIC_OBJECTs).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:markup_loader;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.xml;
 import :view;
 import :layout_params;
@@ -21,7 +21,7 @@ import :style_property;
 import :markup_registry;
 import :sss_parser; // SSSParser::ApplyInlineStyle for style="..."
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace xml = draconic::xml;
 
 export namespace draconic::ui

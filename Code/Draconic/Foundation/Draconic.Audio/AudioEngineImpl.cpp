@@ -14,8 +14,8 @@
 //            reserved on VoiceSlot (`lowpassNode`) and in the attach path below]
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 #include "miniaudio.h"
 
@@ -25,10 +25,10 @@ module;
 
 module draconic.audio;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::audio
 {

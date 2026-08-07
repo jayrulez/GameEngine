@@ -5,10 +5,10 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include <cmath>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.scene;
 import draconic.scene.resource;
 import draconic.audio;
@@ -21,7 +21,7 @@ import draconic.resource;
 import draconic.script;
 import draconic.script.wren;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::audio;
 namespace scene = draconic::scene;
 

@@ -2,14 +2,14 @@
 //
 // Empty view for explicit spacing. Ported from Sedulous.UI/src/Controls/Spacer.bf.
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 export module draconic.ui:spacer;
-import draconic.core;
+import draconic.foundation;
 import :view;
 import :property;
 import :box_constraints;
-using namespace draconic::core;
+using namespace draconic::foundation;
 export namespace draconic::ui
 {
     class Spacer : public View

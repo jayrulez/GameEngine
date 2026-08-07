@@ -13,16 +13,16 @@
 /// discover + bind the skinning stream without RTTI.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.geometry:mesh;
 
-import draconic.core;
+import draconic.foundation;
 import :types;
 import :index_buffer;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::geometry
 {

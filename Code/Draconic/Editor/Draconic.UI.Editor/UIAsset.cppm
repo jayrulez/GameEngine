@@ -13,20 +13,20 @@
 // Never linked by the runtime.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui.editor;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.editor;
 import draconic.editor.core; // IFileImporter/EditorProject/import plumbing
 import draconic.content;
 import draconic.ui;
 import draconic.ui.resource;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {
@@ -57,7 +57,7 @@ export namespace draconic::ui
         void Serialize(ISerializer& ar) override
         {
             draconic::editor::Asset::Serialize(ar);
-            draconic::core::Serialize(ar, "markup", markup);
+            draconic::foundation::Serialize(ar, "markup", markup);
         }
     };
 
@@ -70,7 +70,7 @@ export namespace draconic::ui
         void Serialize(ISerializer& ar) override
         {
             draconic::editor::Asset::Serialize(ar);
-            draconic::core::Serialize(ar, "stylesheet", stylesheet);
+            draconic::foundation::Serialize(ar, "stylesheet", stylesheet);
         }
     };
 

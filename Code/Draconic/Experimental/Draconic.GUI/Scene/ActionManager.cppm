@@ -5,15 +5,15 @@
 // here. Actions are RefPtr-owned; a finished action is dropped after Update.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:action_manager;
 
-import draconic.core; // RefPtr, Array, Duration, Move
+import draconic.foundation; // RefPtr, Array, Duration, Move
 import :action;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -28,11 +28,11 @@ export namespace draconic::gui
             if (!action)
                 return;
             action->Start();
-            m_actions.PushBack(core::Move(action));
+            m_actions.PushBack(foundation::Move(action));
         }
 
         // Ticks all actions; drops finished ones.
-        void Update(core::Duration elapsed)
+        void Update(foundation::Duration elapsed)
         {
             for (usize i = 0; i < m_actions.Size();)
             {

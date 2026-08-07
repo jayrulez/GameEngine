@@ -17,8 +17,8 @@
 // immediately rather than crashing.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 #include <cstdint>
 #define SDL_MAIN_HANDLED
 
@@ -26,15 +26,15 @@ module;
 
 export module draconic.shell.desktop;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.shell;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::shell
 {
     // Human-readable WSI name for the diagnostic log line (compared against the RHI's surface-WSI log).
-    [[nodiscard]] inline core::StringView WindowSystemName(WindowSystem s) noexcept
+    [[nodiscard]] inline foundation::StringView WindowSystemName(WindowSystem s) noexcept
     {
         switch (s)
         {
@@ -60,15 +60,15 @@ export namespace draconic::shell
         SDL3Window(const SDL3Window&) = delete;
         SDL3Window& operator=(const SDL3Window&) = delete;
 
-        [[nodiscard]] core::u32 Id() const noexcept override { return m_id; }
-        [[nodiscard]] core::u32 Width() const noexcept override { return m_width; }
-        [[nodiscard]] core::u32 Height() const noexcept override { return m_height; }
+        [[nodiscard]] foundation::u32 Id() const noexcept override { return m_id; }
+        [[nodiscard]] foundation::u32 Width() const noexcept override { return m_width; }
+        [[nodiscard]] foundation::u32 Height() const noexcept override { return m_height; }
 
-        [[nodiscard]] core::i32 X() const noexcept override;
-        [[nodiscard]] core::i32 Y() const noexcept override;
-        void SetPosition(core::i32 x, core::i32 y) override;
-        void SetSize(core::u32 width, core::u32 height) override;
-        [[nodiscard]] core::f32 ContentScale() const noexcept override;
+        [[nodiscard]] foundation::i32 X() const noexcept override;
+        [[nodiscard]] foundation::i32 Y() const noexcept override;
+        void SetPosition(foundation::i32 x, foundation::i32 y) override;
+        void SetSize(foundation::u32 width, foundation::u32 height) override;
+        [[nodiscard]] foundation::f32 ContentScale() const noexcept override;
 
         // Extract the real native handles from SDL's window properties so RHI can
         // create its own surface (it does not use SDL's Vulkan helpers).
@@ -83,13 +83,13 @@ export namespace draconic::shell
         [[nodiscard]] bool IsTextInputActive() const noexcept override { return m_textInputActive; }
 
         [[nodiscard]] SDL_Window* Handle() const noexcept { return m_window; }
-        void OnResized(core::u32 w, core::u32 h) noexcept;
+        void OnResized(foundation::u32 w, foundation::u32 h) noexcept;
 
     private:
         SDL_Window* m_window;
-        core::u32 m_id = 0;
-        core::u32 m_width = 0;
-        core::u32 m_height = 0;
+        foundation::u32 m_id = 0;
+        foundation::u32 m_width = 0;
+        foundation::u32 m_height = 0;
         bool m_open = true;
         bool m_textInputActive = false;
     };
@@ -102,19 +102,19 @@ export namespace draconic::shell
     class SDL3WindowManager final : public IWindowManager
     {
     public:
-        [[nodiscard]] core::Result<IWindow*> CreateWindow(const WindowSettings& settings) override;
+        [[nodiscard]] foundation::Result<IWindow*> CreateWindow(const WindowSettings& settings) override;
 
         void DestroyWindow(IWindow* window) override;
 
-        [[nodiscard]] core::Span<IWindow* const> Windows() const noexcept override;
+        [[nodiscard]] foundation::Span<IWindow* const> Windows() const noexcept override;
         [[nodiscard]] IWindow* MainWindow() const noexcept override;
-        [[nodiscard]] IWindow* GetWindow(core::u32 id) const noexcept override;
-        [[nodiscard]] core::Span<const WindowEvent> Events() const noexcept override;
+        [[nodiscard]] IWindow* GetWindow(foundation::u32 id) const noexcept override;
+        [[nodiscard]] foundation::Span<const WindowEvent> Events() const noexcept override;
 
         void FlushDestroyed() override;
 
         // --- event pump wiring (called by SDL3Shell::ProcessEvents) ---
-        SDL3Window* Find(core::u32 id) noexcept;
+        SDL3Window* Find(foundation::u32 id) noexcept;
         void ClearEvents() noexcept { m_events.Clear(); }
         void PushEvent(const WindowEvent& e) { m_events.PushBack(e); }
 
@@ -128,20 +128,20 @@ export namespace draconic::shell
         // a window from another manager can share an id, and acting on it would corrupt bookkeeping.
         [[nodiscard]] bool Owns(IWindow* window) const noexcept;
 
-        core::Array<core::UniquePtr<SDL3Window>> m_owned;
-        core::Array<IWindow*> m_live;
-        core::Array<core::u32> m_pendingDestroy;
-        core::Array<WindowEvent> m_events;
-        core::u32 m_mainWindowId = 0; // id of the main window (first created); 0 = none
+        foundation::Array<foundation::UniquePtr<SDL3Window>> m_owned;
+        foundation::Array<IWindow*> m_live;
+        foundation::Array<foundation::u32> m_pendingDestroy;
+        foundation::Array<WindowEvent> m_events;
+        foundation::u32 m_mainWindowId = 0; // id of the main window (first created); 0 = none
     };
 
     // -----------------------------------------------------------------------
     // Input devices - double-buffered state fed by the SDL3 event pump.
     // -----------------------------------------------------------------------
-    inline constexpr core::u32 kKeyCount = static_cast<core::u32>(KeyCode::Count);
-    inline constexpr core::u32 kMouseButtonCount = static_cast<core::u32>(MouseButton::Count);
-    inline constexpr core::u32 kGamepadButtonCount = static_cast<core::u32>(GamepadButton::Count);
-    inline constexpr core::u32 kCursorCount = static_cast<core::u32>(CursorType::Count);
+    inline constexpr foundation::u32 kKeyCount = static_cast<foundation::u32>(KeyCode::Count);
+    inline constexpr foundation::u32 kMouseButtonCount = static_cast<foundation::u32>(MouseButton::Count);
+    inline constexpr foundation::u32 kGamepadButtonCount = static_cast<foundation::u32>(GamepadButton::Count);
+    inline constexpr foundation::u32 kCursorCount = static_cast<foundation::u32>(CursorType::Count);
 
     class SDL3Keyboard final : public IKeyboard
     {
@@ -156,7 +156,7 @@ export namespace draconic::shell
         void BeginFrame();
 
     private:
-        static core::u32 Index(KeyCode key) noexcept;
+        static foundation::u32 Index(KeyCode key) noexcept;
         bool m_current[kKeyCount] = {};
         bool m_previous[kKeyCount] = {};
         KeyModifiers m_mods = KeyModifiers::None;
@@ -165,14 +165,14 @@ export namespace draconic::shell
     class SDL3Mouse final : public IMouse
     {
     public:
-        [[nodiscard]] core::f32 X() const override { return m_x; }
-        [[nodiscard]] core::f32 Y() const override { return m_y; }
-        [[nodiscard]] core::f32 GlobalX() const override;
-        [[nodiscard]] core::f32 GlobalY() const override;
-        [[nodiscard]] core::f32 DeltaX() const override { return m_dx; }
-        [[nodiscard]] core::f32 DeltaY() const override { return m_dy; }
-        [[nodiscard]] core::f32 ScrollX() const override { return m_sx; }
-        [[nodiscard]] core::f32 ScrollY() const override { return m_sy; }
+        [[nodiscard]] foundation::f32 X() const override { return m_x; }
+        [[nodiscard]] foundation::f32 Y() const override { return m_y; }
+        [[nodiscard]] foundation::f32 GlobalX() const override;
+        [[nodiscard]] foundation::f32 GlobalY() const override;
+        [[nodiscard]] foundation::f32 DeltaX() const override { return m_dx; }
+        [[nodiscard]] foundation::f32 DeltaY() const override { return m_dy; }
+        [[nodiscard]] foundation::f32 ScrollX() const override { return m_sx; }
+        [[nodiscard]] foundation::f32 ScrollY() const override { return m_sy; }
         [[nodiscard]] bool IsButtonDown(MouseButton b) const override;
         [[nodiscard]] bool IsButtonPressed(MouseButton b) const override;
         [[nodiscard]] bool IsButtonReleased(MouseButton b) const override;
@@ -187,16 +187,16 @@ export namespace draconic::shell
         // Frees the lazily-created system cursors. Called before SDL_Quit so no
         // SDL calls happen after the video subsystem is torn down.
         void ReleaseCursors();
-        void OnMotion(core::f32 x, core::f32 y, core::f32 relX, core::f32 relY);
-        void OnButton(core::u32 index, bool down);
-        void OnWheel(core::f32 x, core::f32 y);
+        void OnMotion(foundation::f32 x, foundation::f32 y, foundation::f32 relX, foundation::f32 relY);
+        void OnButton(foundation::u32 index, bool down);
+        void OnWheel(foundation::f32 x, foundation::f32 y);
         void BeginFrame();
 
     private:
-        static core::u32 Index(MouseButton b) noexcept;
+        static foundation::u32 Index(MouseButton b) noexcept;
 
         SDL_Window* m_window = nullptr;
-        core::f32 m_x = 0, m_y = 0, m_dx = 0, m_dy = 0, m_sx = 0, m_sy = 0;
+        foundation::f32 m_x = 0, m_y = 0, m_dx = 0, m_dy = 0, m_sx = 0, m_sy = 0;
         bool m_current[kMouseButtonCount] = {};
         bool m_previous[kMouseButtonCount] = {};
         bool m_relative = false;
@@ -209,9 +209,9 @@ export namespace draconic::shell
     class SDL3Gamepad final : public IGamepad
     {
     public:
-        SDL3Gamepad(SDL_Gamepad* pad, core::u32 id, core::i32 index,
-                    core::String name) noexcept
-            : m_pad(pad), m_id(id), m_index(index), m_name(static_cast<core::String&&>(name))
+        SDL3Gamepad(SDL_Gamepad* pad, foundation::u32 id, foundation::i32 index,
+                    foundation::String name) noexcept
+            : m_pad(pad), m_id(id), m_index(index), m_name(static_cast<foundation::String&&>(name))
         {
         }
         // Owns the SDL_Gamepad; closing it here means the owning UniquePtr frees the whole device
@@ -221,28 +221,28 @@ export namespace draconic::shell
         SDL3Gamepad(const SDL3Gamepad&) = delete;
         SDL3Gamepad& operator=(const SDL3Gamepad&) = delete;
 
-        [[nodiscard]] core::i32 Index() const override { return m_index; }
-        [[nodiscard]] core::StringView Name() const override { return m_name; }
+        [[nodiscard]] foundation::i32 Index() const override { return m_index; }
+        [[nodiscard]] foundation::StringView Name() const override { return m_name; }
         [[nodiscard]] bool Connected() const override { return m_pad != nullptr; }
         [[nodiscard]] bool IsButtonDown(GamepadButton b) const override;
         [[nodiscard]] bool IsButtonPressed(GamepadButton b) const override;
         [[nodiscard]] bool IsButtonReleased(GamepadButton b) const override;
-        [[nodiscard]] core::f32 Axis(GamepadAxis a) const override;
-        void SetRumble(core::f32 lowFreq, core::f32 highFreq, core::u32 durationMs) override;
+        [[nodiscard]] foundation::f32 Axis(GamepadAxis a) const override;
+        void SetRumble(foundation::f32 lowFreq, foundation::f32 highFreq, foundation::u32 durationMs) override;
 
-        [[nodiscard]] core::u32 Id() const noexcept { return m_id; }
+        [[nodiscard]] foundation::u32 Id() const noexcept { return m_id; }
         [[nodiscard]] SDL_Gamepad* Handle() const noexcept { return m_pad; }
-        void SetIndex(core::i32 index) noexcept { m_index = index; }
+        void SetIndex(foundation::i32 index) noexcept { m_index = index; }
         void SetButton(GamepadButton b, bool down) { m_current[Index(b)] = down; }
         void Disconnect() noexcept { m_pad = nullptr; }
         void BeginFrame();
 
     private:
-        static core::u32 Index(GamepadButton b) noexcept;
+        static foundation::u32 Index(GamepadButton b) noexcept;
         SDL_Gamepad* m_pad;
-        core::u32 m_id;
-        core::i32 m_index;
-        core::String m_name;
+        foundation::u32 m_id;
+        foundation::i32 m_index;
+        foundation::String m_name;
         bool m_current[kGamepadButtonCount] = {};
         bool m_previous[kGamepadButtonCount] = {};
     };
@@ -250,15 +250,15 @@ export namespace draconic::shell
     class SDL3Touch final : public ITouch
     {
     public:
-        [[nodiscard]] core::i32 TouchCount() const override;
-        [[nodiscard]] bool GetTouchPoint(core::i32 index, TouchPoint& out) const override;
+        [[nodiscard]] foundation::i32 TouchCount() const override;
+        [[nodiscard]] bool GetTouchPoint(foundation::i32 index, TouchPoint& out) const override;
         [[nodiscard]] bool HasTouch() const override { return !m_points.IsEmpty(); }
 
         void AddOrUpdate(const TouchPoint& tp);
-        void Remove(core::u64 id);
+        void Remove(foundation::u64 id);
 
     private:
-        core::Array<TouchPoint> m_points;
+        foundation::Array<TouchPoint> m_points;
     };
 
     class SDL3InputManager final : public IInputManager
@@ -274,11 +274,11 @@ export namespace draconic::shell
         [[nodiscard]] IKeyboard* Keyboard() override { return &m_keyboard; }
         [[nodiscard]] IMouse* Mouse() override { return &m_mouse; }
         [[nodiscard]] ITouch* Touch() override { return &m_touch; }
-        [[nodiscard]] core::i32 GamepadCount() const override;
-        [[nodiscard]] IGamepad* GetGamepad(core::i32 index) override;
-        [[nodiscard]] core::Span<const InputEvent> Events() const override;
-        [[nodiscard]] core::u32 HoverWindow() const override { return m_hoverWindow; }
-        [[nodiscard]] core::u32 FocusedWindow() const override { return m_focusWindow; }
+        [[nodiscard]] foundation::i32 GamepadCount() const override;
+        [[nodiscard]] IGamepad* GetGamepad(foundation::i32 index) override;
+        [[nodiscard]] foundation::Span<const InputEvent> Events() const override;
+        [[nodiscard]] foundation::u32 HoverWindow() const override { return m_hoverWindow; }
+        [[nodiscard]] foundation::u32 FocusedWindow() const override { return m_focusWindow; }
         void Update() override;
 
         // --- backend wiring (called by the shell event pump) ---
@@ -290,23 +290,23 @@ export namespace draconic::shell
         // Emit an input event onto this frame's stream (also apply it to the snapshot at the
         // call site - the snapshot is a fold over these events).
         void EmitEvent(const InputEvent& e) { m_events.PushBack(e); }
-        void SetHoverWindow(core::u32 id) noexcept { m_hoverWindow = id; }
-        void SetFocusWindow(core::u32 id) noexcept { m_focusWindow = id; }
+        void SetHoverWindow(foundation::u32 id) noexcept { m_hoverWindow = id; }
+        void SetFocusWindow(foundation::u32 id) noexcept { m_focusWindow = id; }
 
-        void AddGamepad(core::u32 id);
+        void AddGamepad(foundation::u32 id);
 
-        void RemoveGamepad(core::u32 id);
+        void RemoveGamepad(foundation::u32 id);
 
-        SDL3Gamepad* FindGamepadById(core::u32 id);
+        SDL3Gamepad* FindGamepadById(foundation::u32 id);
 
     private:
         SDL3Keyboard m_keyboard;
         SDL3Mouse m_mouse;
         SDL3Touch m_touch;
-        core::Array<core::UniquePtr<SDL3Gamepad>> m_gamepads;
-        core::Array<InputEvent> m_events; // this frame's event stream
-        core::u32 m_hoverWindow = 0;      // window under the pointer
-        core::u32 m_focusWindow = 0;      // keyboard-focused window
+        foundation::Array<foundation::UniquePtr<SDL3Gamepad>> m_gamepads;
+        foundation::Array<InputEvent> m_events; // this frame's event stream
+        foundation::u32 m_hoverWindow = 0;      // window under the pointer
+        foundation::u32 m_focusWindow = 0;      // keyboard-focused window
     };
 
     // Native file/folder dialogs over SDL3 (SDL_Show{Open,Save}FileDialog / SDL_ShowOpenFolderDialog).
@@ -318,22 +318,22 @@ export namespace draconic::shell
     public:
         explicit SDL3DialogService(SDL3WindowManager& windows) noexcept : m_windows(&windows) {}
 
-        void ShowOpenFile(DialogResultCallback callback, core::Span<const FileFilter> filters,
-                          core::StringView defaultPath, bool allowMultiple,
-                          core::u32 parentWindowId) override;
+        void ShowOpenFile(DialogResultCallback callback, foundation::Span<const FileFilter> filters,
+                          foundation::StringView defaultPath, bool allowMultiple,
+                          foundation::u32 parentWindowId) override;
 
-        void ShowSaveFile(DialogResultCallback callback, core::Span<const FileFilter> filters,
-                          core::StringView defaultPath, core::u32 parentWindowId) override;
+        void ShowSaveFile(DialogResultCallback callback, foundation::Span<const FileFilter> filters,
+                          foundation::StringView defaultPath, foundation::u32 parentWindowId) override;
 
-        void ShowOpenFolder(DialogResultCallback callback, core::StringView defaultPath,
-                            bool allowMultiple, core::u32 parentWindowId) override;
+        void ShowOpenFolder(DialogResultCallback callback, foundation::StringView defaultPath,
+                            bool allowMultiple, foundation::u32 parentWindowId) override;
 
-        void OpenPath(core::StringView path) override;
+        void OpenPath(foundation::StringView path) override;
 
     private:
         // The async dialog Context (holds SDL_DialogFileFilter), MakeContext, and the SDL
         // Trampoline callback are file-local helpers in SDL3ShellImpl.cpp.
-        [[nodiscard]] SDL_Window* ParentHandle(core::u32 id) const noexcept;
+        [[nodiscard]] SDL_Window* ParentHandle(foundation::u32 id) const noexcept;
 
         SDL3WindowManager* m_windows;
     };
@@ -360,13 +360,13 @@ export namespace draconic::shell
 
         [[nodiscard]] bool IsRunning() const noexcept override;
 
-        void DrainDroppedFiles(core::Array<DroppedFile>& out) override;
+        void DrainDroppedFiles(foundation::Array<DroppedFile>& out) override;
 
         void RequestExit() override { m_running = false; }
 
-        void SetClipboardText(core::StringView text) override;
+        void SetClipboardText(foundation::StringView text) override;
 
-        [[nodiscard]] core::String GetClipboardText() const override;
+        [[nodiscard]] foundation::String GetClipboardText() const override;
 
         [[nodiscard]] bool HasClipboardText() const noexcept override;
 
@@ -374,7 +374,7 @@ export namespace draconic::shell
         // The SDL-enum mappers (MapKeyCode/MapModifiers/MapGamepadButton/MapGamepadAxis) are
         // file-local helpers in SDL3ShellImpl.cpp.
         // SDL mouse button number (1-based) minus 1 -> MouseButton (Left/Middle/Right/X1/X2).
-        static MouseButton MapMouseButton(core::u32 idx) noexcept;
+        static MouseButton MapMouseButton(foundation::u32 idx) noexcept;
 
         SDL3WindowManager m_windows;
         SDL3InputManager m_input;
@@ -382,13 +382,13 @@ export namespace draconic::shell
             m_windows}; // ctor takes m_windows (declared above -> init order OK)
         bool m_initialized = false;
         bool m_running = true;
-        core::Array<DroppedFile> m_droppedFiles; // queued during ProcessEvents, drained per frame
+        foundation::Array<DroppedFile> m_droppedFiles; // queued during ProcessEvents, drained per frame
     };
 
     // Factory the DRACONIC_APP_MAIN entry point calls to create the shell.
-    [[nodiscard]] core::UniquePtr<IShell> CreateShell(const WindowSettings& settings = {})
+    [[nodiscard]] foundation::UniquePtr<IShell> CreateShell(const WindowSettings& settings = {})
     {
-        IShell* shell = core::DefaultAllocator().New<SDL3Shell>(settings);
-        return core::UniquePtr<IShell>(shell, core::DefaultAllocator());
+        IShell* shell = foundation::DefaultAllocator().New<SDL3Shell>(settings);
+        return foundation::UniquePtr<IShell>(shell, foundation::DefaultAllocator());
     }
 }

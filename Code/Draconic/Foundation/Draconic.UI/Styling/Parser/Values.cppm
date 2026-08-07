@@ -5,19 +5,19 @@
 //
 // Divergences (language): Beef Result<Color> -> Optional<Color>; the Beef Color int ctor (0..255)
 // is expressed as float components divided by 255 (draconic Color is float 0..1). Named colors
-// missing from core::Color (yellow/cyan/magenta/gray, and the CSS dark "green") are built as float
+// missing from foundation::Color (yellow/cyan/magenta/gray, and the CSS dark "green") are built as float
 // literals to match Sedulous exactly.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:style_value_parser;
 
-import draconic.core; // Color, StringView, Optional
+import draconic.foundation; // Color, StringView, Optional
 import :thickness;
 import :unit;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

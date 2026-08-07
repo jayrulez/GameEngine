@@ -4,18 +4,18 @@
 // disables clipboard copy/cut for security. Ported from Sedulous.UI/src/Controls/PasswordBox.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:password_box;
 
-import draconic.core; // String, StringView, DecodeUtf8, AppendUtf8
+import draconic.foundation; // String, StringView, DecodeUtf8, AppendUtf8
 import :edit_text;
 import :property;
 import :event_args;
 import :input_enums; // KeyCode, KeyModifiers, HasFlag
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

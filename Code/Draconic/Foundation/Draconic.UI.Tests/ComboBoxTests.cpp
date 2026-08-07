@@ -1,17 +1,17 @@
 // Ported from Sedulous.UI.Tests/src/ComboBoxTests.bf (faithful). Beef get/set props -> methods
 // (cb->SetSelectedIndex / SelectedIndex()); item/selection/event logic only - no popup, no font.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 
 using namespace draconic::ui;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
-static core::RefPtr<ComboBox> MakeCombo()
+static foundation::RefPtr<ComboBox> MakeCombo()
 {
-    return core::MakeRef<ComboBox>(core::DefaultAllocator());
+    return foundation::MakeRef<ComboBox>(foundation::DefaultAllocator());
 }
 
 TEST_CASE("combo-box: AddItem_ReturnsIndex")

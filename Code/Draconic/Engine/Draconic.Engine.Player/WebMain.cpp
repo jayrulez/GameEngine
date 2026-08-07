@@ -9,12 +9,12 @@
 // folder, browse. The fetches are synchronous under ASYNCIFY (the same yield mechanism the GPU
 // waits use).
 
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 #include <emscripten/emscripten.h>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.resource;
@@ -68,7 +68,7 @@ import draconic.vfs.pak;
 #include "PlayerApplication.h"      // the shared runner (uses the imports above)
 #include "Draconic.Runtime.Client/AppMain.h" // DRACONIC_APP_MAIN (web body: WebShell + WebGPU + rAF runner)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace
 {

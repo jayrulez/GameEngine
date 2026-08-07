@@ -1,12 +1,12 @@
 # Draconic::RHI - the `draconic.rhi` module (the backend-agnostic RHI interface).
-# Ported from the Draconic RHI, adapted to Draconic types (draconic.core) and the
+# Ported from the Draconic RHI, adapted to Draconic types (Draconic.Foundation) and the
 # minimal-STL / -fno-exceptions / -fno-rtti policy. Backends (Null, Vulkan, DX12,
 # Validation) are separate targets.
 
 add_library(Draconic.RHI STATIC)
 add_library(Draconic::RHI ALIAS Draconic.RHI)
 
-target_link_libraries(Draconic.RHI PUBLIC Draconic::Core Draconic::Policy)
+target_link_libraries(Draconic.RHI PUBLIC Draconic::Foundation Draconic::Policy)
 
 # Implementation units (headers they need stay OUT of the interface gcm - GCC hygiene).
 # Listed as regular sources, NOT in the CXX_MODULES file set.

@@ -5,13 +5,13 @@
 // window size; the loop skips rendering while minimized.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include <cstdio>
 #include <cstring>
 
 export module draconic.samples.framework:sample_app;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.rhi.vulkan;
 #ifdef DRACONIC_HAS_DX12
@@ -24,7 +24,7 @@ import draconic.rhi.validation;
 import draconic.shell;
 import draconic.shell.desktop;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::samples::framework
 {

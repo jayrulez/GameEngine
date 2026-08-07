@@ -5,14 +5,14 @@
 // between tags emits Default-kind runs (the renderer draws only tokens).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 module draconic.ui.toolkit;
 
-import draconic.core;
+import draconic.foundation;
 import :code_lexer_scan;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::ui::toolkit
 {

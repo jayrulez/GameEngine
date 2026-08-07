@@ -9,11 +9,11 @@
 // `Type` -> const TypeInfo*; `StyleProperty?`/`ControlState?` -> Optional<...>.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:textured_theme;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.image; // ImageData, NineSlice
 import :style_sheet;
 import :style_rule;
@@ -51,7 +51,7 @@ import :list_view;
 import :tree_view;
 import :grid_view;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace image = draconic::image;
 
 export namespace draconic::ui

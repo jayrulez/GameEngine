@@ -6,15 +6,15 @@
 // the result for the page's lifetime. Completion and the API browser both read this.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 module draconic.editor.script;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.script;
 import draconic.script.facades;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::editor
 {
@@ -28,7 +28,7 @@ namespace draconic::editor
         }
         m_built = true; // one attempt; a language without a backend just stays empty
 
-        core::RegisterCoreTypes();
+        foundation::RegisterFoundationTypes();
         script::RegisterScriptFacadeReflection();
         RefPtr<script::IScriptManager> manager =
             script::CreateScriptManagerForLanguage(m_language.AsView());

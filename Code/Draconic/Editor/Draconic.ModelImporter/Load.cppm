@@ -6,11 +6,11 @@
 /// drives; it keeps the loader dependency inside the importer library.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.modelimporter:load;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.model;
 import draconic.model.io;
 import draconic.model.gltf;
@@ -18,7 +18,7 @@ import draconic.model.fbx;
 import draconic.content;
 import :cook;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace model = draconic::model;
 namespace content = draconic::content;
 

@@ -5,19 +5,19 @@
 // job is refusing kind-mismatched or nameless entries before they reach the runtime.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 export module draconic.input.editor;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.editor;
 import draconic.input;
 import draconic.input.resource;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::input
 {

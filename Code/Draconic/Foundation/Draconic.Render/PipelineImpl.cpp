@@ -1,11 +1,11 @@
 // Draconic Render - draconic.render:pipeline implementation unit (sec 3.2 / sec 10.6).
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include "Draconic.Profiler/Profiler.h"
 
 module draconic.render;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.rendergraph;
 import draconic.profiler;
@@ -26,7 +26,7 @@ import :debug_pass;
 import :decal_pass;
 import :sky;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 
 namespace draconic::render

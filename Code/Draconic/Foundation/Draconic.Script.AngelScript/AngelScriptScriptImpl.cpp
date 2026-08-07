@@ -20,8 +20,8 @@
 //    per-context services through CurrentScriptContext().
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 #include <angelscript.h>
 #include <scriptstdstring/scriptstdstring.h>
@@ -31,24 +31,24 @@ module;
 
 module draconic.script.angelscript;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.script;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 namespace draconic::script::angelscript
 {
-    inline const char* CStr(const core::String& s) noexcept
+    inline const char* CStr(const foundation::String& s) noexcept
     {
         return reinterpret_cast<const char*>(s.CStr());
     }
 
-    inline void AppendAscii(core::String& s, const char* text)
+    inline void AppendAscii(foundation::String& s, const char* text)
     {
-        s.Append(core::StringView(reinterpret_cast<const core::utf8char*>(text)));
+        s.Append(foundation::StringView(reinterpret_cast<const foundation::utf8char*>(text)));
     }
 
-    inline void AppendUint(core::String& s, core::u32 n)
+    inline void AppendUint(foundation::String& s, foundation::u32 n)
     {
         char buf[16];
         int i = 0;
@@ -76,7 +76,7 @@ namespace draconic::script::angelscript
 
     inline bool NameEq(const char* a, const char* b) noexcept
     {
-        core::usize i = 0;
+        foundation::usize i = 0;
         while (a[i] != '\0' && a[i] == b[i])
         {
             ++i;
@@ -106,21 +106,21 @@ namespace draconic::script::angelscript
         return true;
     }
 
-    inline core::StringView ViewOfAscii(const char* text) noexcept
+    inline foundation::StringView ViewOfAscii(const char* text) noexcept
     {
-        return (text != nullptr) ? core::StringView(reinterpret_cast<const core::utf8char*>(text))
-                                 : core::StringView{};
+        return (text != nullptr) ? foundation::StringView(reinterpret_cast<const foundation::utf8char*>(text))
+                                 : foundation::StringView{};
     }
 
-    inline core::String StringFromStd(const std::string& s)
+    inline foundation::String StringFromStd(const std::string& s)
     {
-        return core::String(
-            core::StringView(reinterpret_cast<const core::utf8char*>(s.c_str()), s.size()));
+        return foundation::String(
+            foundation::StringView(reinterpret_cast<const foundation::utf8char*>(s.c_str()), s.size()));
     }
 
-    inline std::string StdFromVariantString(const core::Variant& value)
+    inline std::string StdFromVariantString(const foundation::Variant& value)
     {
-        if (const core::String* s = value.TryGet<core::String>())
+        if (const foundation::String* s = value.TryGet<foundation::String>())
         {
             return std::string(reinterpret_cast<const char*>(s->CStr()), s->Size());
         }
@@ -128,46 +128,46 @@ namespace draconic::script::angelscript
     }
 
     // Numeric value of a Variant as double; `ok` false when it holds no number.
-    inline double NumericOf(const core::Variant& value, bool& ok) noexcept
+    inline double NumericOf(const foundation::Variant& value, bool& ok) noexcept
     {
         ok = true;
-        if (const core::f64* d = value.TryGet<core::f64>())
+        if (const foundation::f64* d = value.TryGet<foundation::f64>())
         {
             return *d;
         }
-        if (const core::f32* f = value.TryGet<core::f32>())
+        if (const foundation::f32* f = value.TryGet<foundation::f32>())
         {
             return static_cast<double>(*f);
         }
-        if (const core::i32* i = value.TryGet<core::i32>())
+        if (const foundation::i32* i = value.TryGet<foundation::i32>())
         {
             return static_cast<double>(*i);
         }
-        if (const core::i64* i = value.TryGet<core::i64>())
+        if (const foundation::i64* i = value.TryGet<foundation::i64>())
         {
             return static_cast<double>(*i);
         }
-        if (const core::u32* u = value.TryGet<core::u32>())
+        if (const foundation::u32* u = value.TryGet<foundation::u32>())
         {
             return static_cast<double>(*u);
         }
-        if (const core::u64* u = value.TryGet<core::u64>())
+        if (const foundation::u64* u = value.TryGet<foundation::u64>())
         {
             return static_cast<double>(*u);
         }
-        if (const core::i16* i = value.TryGet<core::i16>())
+        if (const foundation::i16* i = value.TryGet<foundation::i16>())
         {
             return static_cast<double>(*i);
         }
-        if (const core::u16* u = value.TryGet<core::u16>())
+        if (const foundation::u16* u = value.TryGet<foundation::u16>())
         {
             return static_cast<double>(*u);
         }
-        if (const core::i8* i = value.TryGet<core::i8>())
+        if (const foundation::i8* i = value.TryGet<foundation::i8>())
         {
             return static_cast<double>(*i);
         }
-        if (const core::u8* u = value.TryGet<core::u8>())
+        if (const foundation::u8* u = value.TryGet<foundation::u8>())
         {
             return static_cast<double>(*u);
         }
@@ -181,9 +181,9 @@ namespace draconic::script::angelscript
 
     // A number, coerced into a Variant of the reflected type a callee expects
     // (default f64, mirroring the Wren backend's marshalling currency).
-    inline core::Variant CoerceNumber(double d, const core::TypeInfo* expected)
+    inline foundation::Variant CoerceNumber(double d, const foundation::TypeInfo* expected)
     {
-        using namespace core;
+        using namespace foundation;
         if (expected == &TypeOf<f32>())
         {
             return Variant::From<f32>(static_cast<f32>(d));
@@ -232,9 +232,9 @@ namespace draconic::script::angelscript
     // funnels through double and would corrupt them). Integer targets cast integer->integer on the
     // two's-complement bit pattern; float targets convert honoring the source's signedness. Only
     // valid when `src` holds i64 or u64 (the caller guarantees it). expected==null keeps the source.
-    inline core::Variant CoerceInteger(const core::Variant& src, const core::TypeInfo* expected)
+    inline foundation::Variant CoerceInteger(const foundation::Variant& src, const foundation::TypeInfo* expected)
     {
-        using namespace core;
+        using namespace foundation;
         if (expected == nullptr || src.Type() == expected)
         {
             return src;
@@ -293,9 +293,9 @@ namespace draconic::script::angelscript
 
     // Reflected scalar/string -> AngelScript type name (null when `type` is not a
     // primitive - i.e. it needs an object-type registration instead).
-    inline const char* PrimitiveDeclName(const core::TypeInfo* type) noexcept
+    inline const char* PrimitiveDeclName(const foundation::TypeInfo* type) noexcept
     {
-        using namespace core;
+        using namespace foundation;
         if (type == &TypeOf<f32>())
         {
             return "float";
@@ -350,31 +350,31 @@ namespace draconic::script::angelscript
     // A short display string for a captured Variant (a debugger local / object member):
     // strings quoted inline, bools as true/false, any number decimal, an object/value type
     // rendered as its type name (its fields fetched lazily via CaptureObject).
-    inline core::String DebugValueText(const core::Variant& value)
+    inline foundation::String DebugValueText(const foundation::Variant& value)
     {
         if (value.IsEmpty())
         {
-            return core::String(u8"null");
+            return foundation::String(u8"null");
         }
-        if (const core::String* s = value.TryGet<core::String>())
+        if (const foundation::String* s = value.TryGet<foundation::String>())
         {
-            core::String out(u8"\"");
+            foundation::String out(u8"\"");
             out += *s;
             out += u8"\"";
             return out;
         }
         if (const bool* b = value.TryGet<bool>())
         {
-            return core::String(*b ? u8"true" : u8"false");
+            return foundation::String(*b ? u8"true" : u8"false");
         }
         bool ok = false;
         const double number = NumericOf(value, ok);
         if (ok)
         {
-            return core::Format(u8"{}", number);
+            return foundation::Format(u8"{}", number);
         }
-        const core::TypeInfo* type = value.Type();
-        return core::String(ViewOfAscii(type != nullptr ? type->name : "object"));
+        const foundation::TypeInfo* type = value.Type();
+        return foundation::String(ViewOfAscii(type != nullptr ? type->name : "object"));
     }
 
     inline constexpr int kMaxArgs = 8;
@@ -382,14 +382,14 @@ namespace draconic::script::angelscript
     // Every reflected instance held by script: a refcounted box around a Variant.
     struct BoxedVariant
     {
-        core::Variant value;
-        core::i32 refCount = 1;
+        foundation::Variant value;
+        foundation::i32 refCount = 1;
     };
 
-    inline BoxedVariant* NewBox(core::Variant value)
+    inline BoxedVariant* NewBox(foundation::Variant value)
     {
-        BoxedVariant* box = core::DefaultAllocator().New<BoxedVariant>();
-        box->value = core::Move(value);
+        BoxedVariant* box = foundation::DefaultAllocator().New<BoxedVariant>();
+        box->value = foundation::Move(value);
         return box;
     }
 
@@ -397,7 +397,7 @@ namespace draconic::script::angelscript
     {
         if (box != nullptr && --box->refCount == 0)
         {
-            core::DefaultAllocator().Delete(box);
+            foundation::DefaultAllocator().Delete(box);
         }
     }
 
@@ -428,10 +428,10 @@ namespace draconic::script::angelscript
         };
         Kind kind;
         AngelScriptManager* manager;
-        const core::TypeInfo* type;
-        const core::ConstructorInfo* constructor;
-        const core::PropertyInfo* property;
-        const core::MethodInfo* method;
+        const foundation::TypeInfo* type;
+        const foundation::ConstructorInfo* constructor;
+        const foundation::PropertyInfo* property;
+        const foundation::MethodInfo* method;
     };
 
     void FactoryDispatch(asIScriptGeneric* gen);
@@ -463,7 +463,7 @@ namespace draconic::script::angelscript
     // A script funcdef-handle argument -> an AngelScriptDelegate wrapping it, as an
     // object-mode Variant (defined after AngelScriptDelegate). Forward-declared so
     // AngelScriptManager::ValueFromArg can wrap a delegate parameter.
-    core::Variant MakeAngelScriptDelegateVariant(asIScriptFunction* function);
+    foundation::Variant MakeAngelScriptDelegateVariant(asIScriptFunction* function);
 
     // Reflected RefPtr<IScriptDelegate> parameters are spelled `?&in` (AppendDeclType), so a
     // script may pass a funcdef handle of ANY signature; ValueFromArg detects the funcdef handle
@@ -509,7 +509,7 @@ namespace draconic::script::angelscript
             }
             for (Binding* binding : m_bindings)
             {
-                core::DefaultAllocator().Delete(binding);
+                foundation::DefaultAllocator().Delete(binding);
             }
         }
 
@@ -517,9 +517,9 @@ namespace draconic::script::angelscript
         AngelScriptManager& operator=(const AngelScriptManager&) = delete;
 
         // ---- IScriptManager --------------------------------------------------
-        void RegisterType(const core::TypeInfo& type) override
+        void RegisterType(const foundation::TypeInfo& type) override
         {
-            for (const core::TypeInfo* existing : m_types)
+            for (const foundation::TypeInfo* existing : m_types)
             {
                 if (existing == &type)
                 {
@@ -546,23 +546,23 @@ namespace draconic::script::angelscript
             m_finalized = true;
             // Phase 1: DECLARE every collected type - after this, any declaration
             // string may reference any reflected type.
-            for (const core::TypeInfo* type : m_types)
+            for (const foundation::TypeInfo* type : m_types)
             {
                 DeclareType(*type);
             }
             // ...plus any enum a member references (enums ride a member's type, not the registry).
-            for (const core::TypeInfo* type : m_types)
+            for (const foundation::TypeInfo* type : m_types)
             {
                 DeclareReferencedEnums(*type);
             }
             // Phase 2: bind members (factories, properties, methods, statics).
-            for (const core::TypeInfo* type : m_types)
+            for (const foundation::TypeInfo* type : m_types)
             {
                 BindType(*type);
             }
         }
 
-        [[nodiscard]] core::RefPtr<IScriptContext> CreateContext() override;
+        [[nodiscard]] foundation::RefPtr<IScriptContext> CreateContext() override;
 
         void CollectGarbage() override
         {
@@ -585,7 +585,7 @@ namespace draconic::script::angelscript
         // A step debugger over this engine's contexts (suspension breakpoints + AS
         // introspection). One at a time; it registers itself as the active debugger on
         // construction (ExecuteCall consults it) and unregisters on destruction.
-        [[nodiscard]] core::UniquePtr<IScriptDebugger> CreateDebugger() override;
+        [[nodiscard]] foundation::UniquePtr<IScriptDebugger> CreateDebugger() override;
 
         /// The active debugger the dispatch path arms/adopts, or null (the default). The
         /// debugger sets this from its ctor/dtor - one per manager.
@@ -598,52 +598,52 @@ namespace draconic::script::angelscript
         // could not express (and therefore did not register) is omitted, so the surface
         // matches what BindType actually bound - which is exactly what the reflection diff
         // needs to catch a silently-unbound type.
-        [[nodiscard]] core::Array<ScriptApiType> DescribeBoundApi() const override
+        [[nodiscard]] foundation::Array<ScriptApiType> DescribeBoundApi() const override
         {
-            core::Array<ScriptApiType> result;
+            foundation::Array<ScriptApiType> result;
             for (const RegisteredType& entry : m_registered)
             {
-                const core::TypeInfo& type = *entry.type;
+                const foundation::TypeInfo& type = *entry.type;
                 ScriptApiType api;
-                api.scriptName = core::String(ViewOfAscii(type.name));
+                api.scriptName = foundation::String(ViewOfAscii(type.name));
                 api.typeId = type.id;
                 api.isNamespace = false;
-                for (core::usize i = 0; i < core::PropertyCount(type); ++i)
+                for (foundation::usize i = 0; i < foundation::PropertyCount(type); ++i)
                 {
-                    const core::PropertyInfo& property = core::PropertyAt(type, i);
-                    if (!IsValidIdentifier(property.name) || core::IsNested(property))
+                    const foundation::PropertyInfo& property = foundation::PropertyAt(type, i);
+                    if (!IsValidIdentifier(property.name) || foundation::IsNested(property))
                     {
                         continue; // nested structures are not scriptable leaf values
                     }
                     ScriptApiMember member;
-                    member.name = core::String(ViewOfAscii(property.name));
-                    core::String signature(ViewOfAscii(type.name));
+                    member.name = foundation::String(ViewOfAscii(property.name));
+                    foundation::String signature(ViewOfAscii(type.name));
                     AppendAscii(signature, ".");
                     AppendAscii(signature, property.name);
-                    member.signature = core::Move(signature);
+                    member.signature = foundation::Move(signature);
                     member.kind = ScriptApiMemberKind::Property;
-                    api.members.PushBack(core::Move(member));
+                    api.members.PushBack(foundation::Move(member));
                 }
-                for (core::usize i = 0; i < core::MethodCount(type); ++i)
+                for (foundation::usize i = 0; i < foundation::MethodCount(type); ++i)
                 {
-                    const core::MethodInfo& method = core::MethodAt(type, i);
+                    const foundation::MethodInfo& method = foundation::MethodAt(type, i);
                     if (!IsValidIdentifier(method.name))
                     {
                         continue;
                     }
-                    core::String signature;
+                    foundation::String signature;
                     if (!BuildMemberSignature(signature, type, method))
                     {
                         continue;
                     } // not bound
                     ScriptApiMember member;
-                    member.name = core::String(ViewOfAscii(method.name));
-                    member.signature = core::Move(signature);
+                    member.name = foundation::String(ViewOfAscii(method.name));
+                    member.signature = foundation::Move(signature);
                     member.isStatic = method.isStatic;
                     member.kind = ScriptApiMemberKind::Method;
-                    api.members.PushBack(core::Move(member));
+                    api.members.PushBack(foundation::Move(member));
                 }
-                result.PushBack(core::Move(api));
+                result.PushBack(foundation::Move(api));
             }
             return result;
         }
@@ -652,12 +652,12 @@ namespace draconic::script::angelscript
         // native code with reflected args: runs on a pooled context, marshalling against the
         // funcdef's actual parameters, and returns its result. Handles a delegate-to-method
         // (bound object) as well as a plain function handle.
-        [[nodiscard]] core::Result<core::Variant> ExecuteDelegate(asIScriptFunction* delegate,
-                                                                  core::Span<core::Variant> args)
+        [[nodiscard]] foundation::Result<foundation::Variant> ExecuteDelegate(asIScriptFunction* delegate,
+                                                                  foundation::Span<foundation::Variant> args)
         {
             if (delegate == nullptr || m_engine == nullptr)
             {
-                return core::Err(core::ErrorCode::Internal);
+                return foundation::Err(foundation::ErrorCode::Internal);
             }
             asIScriptFunction* func = delegate;
             asIScriptObject* object = nullptr;
@@ -668,7 +668,7 @@ namespace draconic::script::angelscript
             }
             if (func == nullptr)
             {
-                return core::Err(core::ErrorCode::Internal);
+                return foundation::Err(foundation::ErrorCode::Internal);
             }
 
             asIScriptContext* executor = m_engine->RequestContext();
@@ -678,7 +678,7 @@ namespace draconic::script::angelscript
                 {
                     m_engine->ReturnContext(executor);
                 }
-                return core::Err(core::ErrorCode::Internal);
+                return foundation::Err(foundation::ErrorCode::Internal);
             }
             if (object != nullptr)
             {
@@ -694,13 +694,13 @@ namespace draconic::script::angelscript
                 ReleaseBox(box);
             }
 
-            core::Result<core::Variant> outcome = core::Err(core::ErrorCode::Internal);
+            foundation::Result<foundation::Variant> outcome = foundation::Err(foundation::ErrorCode::Internal);
             if (result == asEXECUTION_FINISHED)
             {
                 const int returnTypeId = func->GetReturnTypeId();
                 outcome = (returnTypeId == asTYPEID_VOID)
-                              ? core::Result<core::Variant>(core::Variant{})
-                              : core::Result<core::Variant>(VariantFromTypedAddress(
+                              ? foundation::Result<foundation::Variant>(foundation::Variant{})
+                              : foundation::Result<foundation::Variant>(VariantFromTypedAddress(
                                     returnTypeId, executor->GetAddressOfReturnValue()));
             }
             m_engine->ReturnContext(executor);
@@ -711,11 +711,11 @@ namespace draconic::script::angelscript
         // needs NO import prelude - reflected types and the coroutine surface (startCoroutine/
         // wait) are registered engine-globally, so every reflected type is already visible.
         // This keeps the language framing in the backend, off the neutral libs (§7.5).
-        [[nodiscard]] core::String
-        AssembleBehaviorModuleSource(core::Span<const core::StringView> classSources) const override
+        [[nodiscard]] foundation::String
+        AssembleBehaviorModuleSource(foundation::Span<const foundation::StringView> classSources) const override
         {
-            core::String moduleSource;
-            for (const core::StringView& source : classSources)
+            foundation::String moduleSource;
+            for (const foundation::StringView& source : classSources)
             {
                 moduleSource += source;
                 moduleSource += u8"\n";
@@ -730,7 +730,7 @@ namespace draconic::script::angelscript
         struct Coroutine
         {
             asIScriptContext* ctx = nullptr;
-            core::f64 wait = 0.0;
+            foundation::f64 wait = 0.0;
             asIScriptObject* owner = nullptr;
         };
 
@@ -790,14 +790,14 @@ namespace draconic::script::angelscript
             {
                 if (co.ctx == active)
                 {
-                    co.wait = static_cast<core::f64>(seconds);
+                    co.wait = static_cast<foundation::f64>(seconds);
                     break;
                 }
             }
             (void)active->Suspend();
         }
 
-        void AdvanceCoroutines(core::f64 deltaSeconds) override
+        void AdvanceCoroutines(foundation::f64 deltaSeconds) override
         {
             for (Coroutine& co : m_coroutines)
             {
@@ -834,7 +834,7 @@ namespace draconic::script::angelscript
 
         // The reflected type behind an AngelScript type id (handle flags ignored);
         // null when the id is not one of OUR registered object types.
-        [[nodiscard]] const core::TypeInfo* TypeInfoForTypeId(int typeId) const noexcept
+        [[nodiscard]] const foundation::TypeInfo* TypeInfoForTypeId(int typeId) const noexcept
         {
             const int base = typeId & ~(asTYPEID_OBJHANDLE | asTYPEID_HANDLETOCONST);
             for (const RegisteredType& entry : m_registered)
@@ -848,8 +848,8 @@ namespace draconic::script::angelscript
         }
 
         // Script argument -> engine Variant (generic calling convention).
-        [[nodiscard]] core::Variant ValueFromArg(asIScriptGeneric* gen, asUINT index,
-                                                 const core::TypeInfo* expected) const
+        [[nodiscard]] foundation::Variant ValueFromArg(asIScriptGeneric* gen, asUINT index,
+                                                 const foundation::TypeInfo* expected) const
         {
             const int typeId = gen->GetArgTypeId(index);
             switch (typeId)
@@ -857,30 +857,30 @@ namespace draconic::script::angelscript
             case asTYPEID_BOOL:
             {
                 const bool b = gen->GetArgByte(index) != 0;
-                return (expected == nullptr || expected == &core::TypeOf<bool>())
-                           ? core::Variant::From<bool>(b)
+                return (expected == nullptr || expected == &foundation::TypeOf<bool>())
+                           ? foundation::Variant::From<bool>(b)
                            : CoerceNumber(b ? 1.0 : 0.0, expected);
             }
             case asTYPEID_INT8:
-                return CoerceNumber(static_cast<core::i8>(gen->GetArgByte(index)), expected);
+                return CoerceNumber(static_cast<foundation::i8>(gen->GetArgByte(index)), expected);
             case asTYPEID_UINT8:
                 return CoerceNumber(gen->GetArgByte(index), expected);
             case asTYPEID_INT16:
-                return CoerceNumber(static_cast<core::i16>(gen->GetArgWord(index)), expected);
+                return CoerceNumber(static_cast<foundation::i16>(gen->GetArgWord(index)), expected);
             case asTYPEID_UINT16:
                 return CoerceNumber(gen->GetArgWord(index), expected);
             case asTYPEID_INT32:
-                return CoerceNumber(static_cast<core::i32>(gen->GetArgDWord(index)), expected);
+                return CoerceNumber(static_cast<foundation::i32>(gen->GetArgDWord(index)), expected);
             case asTYPEID_UINT32:
                 return CoerceNumber(gen->GetArgDWord(index), expected);
             // 64-bit integers carry their exact type across (never via double) so values
             // above 2^53 survive - the reason CoerceInteger exists.
             case asTYPEID_INT64:
                 return CoerceInteger(
-                    core::Variant::From<core::i64>(static_cast<core::i64>(gen->GetArgQWord(index))),
+                    foundation::Variant::From<foundation::i64>(static_cast<foundation::i64>(gen->GetArgQWord(index))),
                     expected);
             case asTYPEID_UINT64:
-                return CoerceInteger(core::Variant::From<core::u64>(gen->GetArgQWord(index)),
+                return CoerceInteger(foundation::Variant::From<foundation::u64>(gen->GetArgQWord(index)),
                                      expected);
             case asTYPEID_FLOAT:
                 return CoerceNumber(gen->GetArgFloat(index), expected);
@@ -892,22 +892,22 @@ namespace draconic::script::angelscript
             if (typeId == m_stringTypeId)
             {
                 const std::string* s = static_cast<const std::string*>(gen->GetArgAddress(index));
-                return (s != nullptr) ? core::Variant::From<core::String>(StringFromStd(*s))
-                                      : core::Variant{};
+                return (s != nullptr) ? foundation::Variant::From<foundation::String>(StringFromStd(*s))
+                                      : foundation::Variant{};
             }
             // A native enum argument: read its int32 value and carry it as an i64 (the property setter
             // / enum-arg path casts it to the enum - enums cross as their underlying int).
-            if (const core::TypeInfo* enumType = TypeInfoForTypeId(typeId);
+            if (const foundation::TypeInfo* enumType = TypeInfoForTypeId(typeId);
                 enumType != nullptr && enumType->enumeratorCount > 0)
             {
-                return core::Variant::From<core::i64>(
-                    static_cast<core::i64>(gen->GetArgDWord(index)));
+                return foundation::Variant::From<foundation::i64>(
+                    static_cast<foundation::i64>(gen->GetArgDWord(index)));
             }
             if ((typeId & asTYPEID_OBJHANDLE) != 0 && TypeInfoForTypeId(typeId) != nullptr)
             {
                 const BoxedVariant* box =
                     static_cast<const BoxedVariant*>(gen->GetArgObject(index));
-                return (box != nullptr) ? box->value : core::Variant{};
+                return (box != nullptr) ? box->value : foundation::Variant{};
             }
             // A funcdef handle (a delegate parameter): wrap the function into a script delegate.
             // A generic IScriptDelegate param is spelled `?&in` (by reference), so the handle
@@ -927,7 +927,7 @@ namespace draconic::script::angelscript
                 }
                 return MakeAngelScriptDelegateVariant(fn);
             }
-            return core::Variant{};
+            return foundation::Variant{};
         }
 
         // True when parameter `index` of the executing generic function is an IN-reference
@@ -962,7 +962,7 @@ namespace draconic::script::angelscript
 
         // Engine Variant -> the generic call's declared return slot. An empty
         // Variant produces the type's zero value (null handle / empty string).
-        void SetGenericReturn(asIScriptGeneric* gen, const core::Variant& value) const
+        void SetGenericReturn(asIScriptGeneric* gen, const foundation::Variant& value) const
         {
             const int typeId = gen->GetReturnTypeId();
             if (typeId == asTYPEID_VOID)
@@ -971,10 +971,10 @@ namespace draconic::script::angelscript
             }
             // A native enum return (a getter for an enum property): AngelScript enums are int32-backed,
             // so return the enum's underlying value as a DWord under its enum typeId.
-            if (const core::TypeInfo* enumType = TypeInfoForTypeId(typeId);
+            if (const foundation::TypeInfo* enumType = TypeInfoForTypeId(typeId);
                 enumType != nullptr && enumType->enumeratorCount > 0)
             {
-                gen->SetReturnDWord(static_cast<asDWORD>(static_cast<core::i32>(value.AsEnumInt())));
+                gen->SetReturnDWord(static_cast<asDWORD>(static_cast<foundation::i32>(value.AsEnumInt())));
                 return;
             }
             bool ok = false;
@@ -986,32 +986,32 @@ namespace draconic::script::angelscript
                 return;
             case asTYPEID_INT8:
             case asTYPEID_UINT8:
-                gen->SetReturnByte(static_cast<asBYTE>(static_cast<core::i64>(number)));
+                gen->SetReturnByte(static_cast<asBYTE>(static_cast<foundation::i64>(number)));
                 return;
             case asTYPEID_INT16:
             case asTYPEID_UINT16:
-                gen->SetReturnWord(static_cast<asWORD>(static_cast<core::i64>(number)));
+                gen->SetReturnWord(static_cast<asWORD>(static_cast<foundation::i64>(number)));
                 return;
             case asTYPEID_INT32:
             case asTYPEID_UINT32:
-                gen->SetReturnDWord(static_cast<asDWORD>(static_cast<core::i64>(number)));
+                gen->SetReturnDWord(static_cast<asDWORD>(static_cast<foundation::i64>(number)));
                 return;
             case asTYPEID_INT64:
             case asTYPEID_UINT64:
             {
                 // Prefer the Variant's exact 64-bit value (a facade returning i64/u64); only a
                 // float source falls back through `number`, which is the correct currency there.
-                if (const core::i64* iv = value.TryGet<core::i64>())
+                if (const foundation::i64* iv = value.TryGet<foundation::i64>())
                 {
                     gen->SetReturnQWord(static_cast<asQWORD>(*iv));
                     return;
                 }
-                if (const core::u64* uv = value.TryGet<core::u64>())
+                if (const foundation::u64* uv = value.TryGet<foundation::u64>())
                 {
                     gen->SetReturnQWord(static_cast<asQWORD>(*uv));
                     return;
                 }
-                gen->SetReturnQWord(static_cast<asQWORD>(static_cast<core::i64>(number)));
+                gen->SetReturnQWord(static_cast<asQWORD>(static_cast<foundation::i64>(number)));
                 return;
             }
             case asTYPEID_FLOAT:
@@ -1040,57 +1040,57 @@ namespace draconic::script::angelscript
         // Typed script storage (module global / finished call's return register)
         // -> engine Variant. Numbers surface uniformly as f64, strings as String,
         // handles to OUR types as a copy of the boxed Variant (Wren parity).
-        [[nodiscard]] core::Variant VariantFromTypedAddress(int typeId, void* address) const
+        [[nodiscard]] foundation::Variant VariantFromTypedAddress(int typeId, void* address) const
         {
             if (address == nullptr)
             {
-                return core::Variant{};
+                return foundation::Variant{};
             }
             switch (typeId)
             {
             case asTYPEID_BOOL:
-                return core::Variant::From<bool>(*static_cast<bool*>(address));
+                return foundation::Variant::From<bool>(*static_cast<bool*>(address));
             case asTYPEID_INT8:
-                return core::Variant::From<core::f64>(*static_cast<core::i8*>(address));
+                return foundation::Variant::From<foundation::f64>(*static_cast<foundation::i8*>(address));
             case asTYPEID_UINT8:
-                return core::Variant::From<core::f64>(*static_cast<core::u8*>(address));
+                return foundation::Variant::From<foundation::f64>(*static_cast<foundation::u8*>(address));
             case asTYPEID_INT16:
-                return core::Variant::From<core::f64>(*static_cast<core::i16*>(address));
+                return foundation::Variant::From<foundation::f64>(*static_cast<foundation::i16*>(address));
             case asTYPEID_UINT16:
-                return core::Variant::From<core::f64>(*static_cast<core::u16*>(address));
+                return foundation::Variant::From<foundation::f64>(*static_cast<foundation::u16*>(address));
             case asTYPEID_INT32:
-                return core::Variant::From<core::f64>(*static_cast<core::i32*>(address));
+                return foundation::Variant::From<foundation::f64>(*static_cast<foundation::i32*>(address));
             case asTYPEID_UINT32:
-                return core::Variant::From<core::f64>(*static_cast<core::u32*>(address));
+                return foundation::Variant::From<foundation::f64>(*static_cast<foundation::u32*>(address));
             case asTYPEID_INT64:
-                return core::Variant::From<core::f64>(
-                    static_cast<core::f64>(*static_cast<core::i64*>(address)));
+                return foundation::Variant::From<foundation::f64>(
+                    static_cast<foundation::f64>(*static_cast<foundation::i64*>(address)));
             case asTYPEID_UINT64:
-                return core::Variant::From<core::f64>(
-                    static_cast<core::f64>(*static_cast<core::u64*>(address)));
+                return foundation::Variant::From<foundation::f64>(
+                    static_cast<foundation::f64>(*static_cast<foundation::u64*>(address)));
             case asTYPEID_FLOAT:
-                return core::Variant::From<core::f64>(*static_cast<float*>(address));
+                return foundation::Variant::From<foundation::f64>(*static_cast<float*>(address));
             case asTYPEID_DOUBLE:
-                return core::Variant::From<core::f64>(*static_cast<double*>(address));
+                return foundation::Variant::From<foundation::f64>(*static_cast<double*>(address));
             default:
                 break;
             }
             if (typeId == m_stringTypeId)
             {
-                return core::Variant::From<core::String>(
+                return foundation::Variant::From<foundation::String>(
                     StringFromStd(*static_cast<const std::string*>(address)));
             }
             if ((typeId & asTYPEID_OBJHANDLE) != 0 && TypeInfoForTypeId(typeId) != nullptr)
             {
                 const BoxedVariant* box = *static_cast<const BoxedVariant* const*>(address);
-                return (box != nullptr) ? box->value : core::Variant{};
+                return (box != nullptr) ? box->value : foundation::Variant{};
             }
-            return core::Variant{};
+            return foundation::Variant{};
         }
 
         // Engine Variant -> typed script storage (SetGlobal). False when the
         // slot's type cannot take the value.
-        bool WriteTypedAddress(int typeId, void* address, const core::Variant& value) const
+        bool WriteTypedAddress(int typeId, void* address, const foundation::Variant& value) const
         {
             if (address == nullptr)
             {
@@ -1109,49 +1109,49 @@ namespace draconic::script::angelscript
             case asTYPEID_INT8:
                 if (ok)
                 {
-                    *static_cast<core::i8*>(address) = static_cast<core::i8>(number);
+                    *static_cast<foundation::i8*>(address) = static_cast<foundation::i8>(number);
                 }
                 return ok;
             case asTYPEID_UINT8:
                 if (ok)
                 {
-                    *static_cast<core::u8*>(address) = static_cast<core::u8>(number);
+                    *static_cast<foundation::u8*>(address) = static_cast<foundation::u8>(number);
                 }
                 return ok;
             case asTYPEID_INT16:
                 if (ok)
                 {
-                    *static_cast<core::i16*>(address) = static_cast<core::i16>(number);
+                    *static_cast<foundation::i16*>(address) = static_cast<foundation::i16>(number);
                 }
                 return ok;
             case asTYPEID_UINT16:
                 if (ok)
                 {
-                    *static_cast<core::u16*>(address) = static_cast<core::u16>(number);
+                    *static_cast<foundation::u16*>(address) = static_cast<foundation::u16>(number);
                 }
                 return ok;
             case asTYPEID_INT32:
                 if (ok)
                 {
-                    *static_cast<core::i32*>(address) = static_cast<core::i32>(number);
+                    *static_cast<foundation::i32*>(address) = static_cast<foundation::i32>(number);
                 }
                 return ok;
             case asTYPEID_UINT32:
                 if (ok)
                 {
-                    *static_cast<core::u32*>(address) = static_cast<core::u32>(number);
+                    *static_cast<foundation::u32*>(address) = static_cast<foundation::u32>(number);
                 }
                 return ok;
             case asTYPEID_INT64:
                 if (ok)
                 {
-                    *static_cast<core::i64*>(address) = static_cast<core::i64>(number);
+                    *static_cast<foundation::i64*>(address) = static_cast<foundation::i64>(number);
                 }
                 return ok;
             case asTYPEID_UINT64:
                 if (ok)
                 {
-                    *static_cast<core::u64*>(address) = static_cast<core::u64>(number);
+                    *static_cast<foundation::u64*>(address) = static_cast<foundation::u64>(number);
                 }
                 return ok;
             case asTYPEID_FLOAT:
@@ -1171,7 +1171,7 @@ namespace draconic::script::angelscript
             }
             if (typeId == m_stringTypeId)
             {
-                if (value.TryGet<core::String>() == nullptr)
+                if (value.TryGet<foundation::String>() == nullptr)
                 {
                     return false;
                 }
@@ -1213,13 +1213,13 @@ namespace draconic::script::angelscript
             {
                 if (handler != nullptr)
                 {
-                    const ScriptError error{kind, core::StringView(message.section), message.row,
-                                            core::StringView(message.text)};
+                    const ScriptError error{kind, foundation::StringView(message.section), message.row,
+                                            foundation::StringView(message.text)};
                     handler->OnError(error);
                 }
                 else
                 {
-                    core::ConsoleWriteError(core::StringView(message.text));
+                    foundation::ConsoleWriteError(foundation::StringView(message.text));
                 }
             }
             m_capturedMessages.Clear();
@@ -1227,7 +1227,7 @@ namespace draconic::script::angelscript
 
         [[nodiscard]] Binding* MakeBinding(Binding binding)
         {
-            Binding* stored = core::DefaultAllocator().New<Binding>(binding);
+            Binding* stored = foundation::DefaultAllocator().New<Binding>(binding);
             m_bindings.PushBack(stored);
             return stored;
         }
@@ -1272,17 +1272,17 @@ namespace draconic::script::angelscript
         // declared parameters. Shared by ExecuteDelegate (and mirrors the context's own
         // BindArgs); boxTemps hold object references released by the caller after Execute.
         void BindArgsInto(asIScriptContext* executor, asIScriptFunction* function,
-                          core::Span<core::Variant> args, std::string* stringTemps,
+                          foundation::Span<foundation::Variant> args, std::string* stringTemps,
                           BoxedVariant** boxTemps)
         {
-            const core::usize limit = function->GetParamCount();
-            for (core::usize i = 0;
-                 i < args.Size() && i < limit && i < static_cast<core::usize>(kMaxArgs); ++i)
+            const foundation::usize limit = function->GetParamCount();
+            for (foundation::usize i = 0;
+                 i < args.Size() && i < limit && i < static_cast<foundation::usize>(kMaxArgs); ++i)
             {
                 const asUINT arg = static_cast<asUINT>(i);
                 int typeId = 0;
                 (void)function->GetParam(arg, &typeId);
-                const core::Variant& value = args[i];
+                const foundation::Variant& value = args[i];
                 bool ok = false;
                 const double number = NumericOf(value, ok);
                 switch (typeId)
@@ -1293,22 +1293,22 @@ namespace draconic::script::angelscript
                 case asTYPEID_INT8:
                 case asTYPEID_UINT8:
                     (void)executor->SetArgByte(arg,
-                                               static_cast<asBYTE>(static_cast<core::i64>(number)));
+                                               static_cast<asBYTE>(static_cast<foundation::i64>(number)));
                     continue;
                 case asTYPEID_INT16:
                 case asTYPEID_UINT16:
                     (void)executor->SetArgWord(arg,
-                                               static_cast<asWORD>(static_cast<core::i64>(number)));
+                                               static_cast<asWORD>(static_cast<foundation::i64>(number)));
                     continue;
                 case asTYPEID_INT32:
                 case asTYPEID_UINT32:
                     (void)executor->SetArgDWord(
-                        arg, static_cast<asDWORD>(static_cast<core::i64>(number)));
+                        arg, static_cast<asDWORD>(static_cast<foundation::i64>(number)));
                     continue;
                 case asTYPEID_INT64:
                 case asTYPEID_UINT64:
                     (void)executor->SetArgQWord(
-                        arg, static_cast<asQWORD>(static_cast<core::i64>(number)));
+                        arg, static_cast<asQWORD>(static_cast<foundation::i64>(number)));
                     continue;
                 case asTYPEID_FLOAT:
                     (void)executor->SetArgFloat(arg, static_cast<float>(number));
@@ -1338,10 +1338,10 @@ namespace draconic::script::angelscript
         // Builds the AngelScript declaration string of a method for the introspection
         // surface (return name(params), statics as Type::name). False when a return/param
         // type is not expressible - i.e. BindType never registered it either.
-        [[nodiscard]] bool BuildMemberSignature(core::String& out, const core::TypeInfo& type,
-                                                const core::MethodInfo& method) const
+        [[nodiscard]] bool BuildMemberSignature(foundation::String& out, const foundation::TypeInfo& type,
+                                                const foundation::MethodInfo& method) const
         {
-            const core::TypeInfo* returnType =
+            const foundation::TypeInfo* returnType =
                 (method.returnType != nullptr) ? method.returnType() : nullptr;
             if (returnType == nullptr)
             {
@@ -1369,7 +1369,7 @@ namespace draconic::script::angelscript
 
         [[nodiscard]] int FindCoroutine(asIScriptContext* ctx) const
         {
-            for (core::usize i = 0; i < m_coroutines.Size(); ++i)
+            for (foundation::usize i = 0; i < m_coroutines.Size(); ++i)
             {
                 if (m_coroutines[i].ctx == ctx)
                 {
@@ -1380,7 +1380,7 @@ namespace draconic::script::angelscript
         }
 
         // Release a coroutine's context (unwinding a suspended call stack) and its owner ref.
-        void DropCoroutineAt(core::usize index)
+        void DropCoroutineAt(foundation::usize index)
         {
             Coroutine& co = m_coroutines[index];
             if (co.ctx != nullptr)
@@ -1414,23 +1414,23 @@ namespace draconic::script::angelscript
             const int index = FindCoroutine(ctx);
             if (index >= 0)
             {
-                DropCoroutineAt(static_cast<core::usize>(index));
+                DropCoroutineAt(static_cast<foundation::usize>(index));
             }
         }
 
-        static constexpr core::f64 kDueEpsilon = 1e-4;
+        static constexpr foundation::f64 kDueEpsilon = 1e-4;
 
         struct RegisteredType
         {
-            const core::TypeInfo* type;
+            const foundation::TypeInfo* type;
             int typeId;
         };
 
         struct CapturedMessage
         {
-            core::String section;
-            core::i32 row;
-            core::String text;
+            foundation::String section;
+            foundation::i32 row;
+            foundation::String text;
         };
 
         static void OnMessage(const asSMessageInfo* message, void* param)
@@ -1443,16 +1443,16 @@ namespace draconic::script::angelscript
             if (self->m_capturing)
             {
                 CapturedMessage captured;
-                captured.section = core::String(ViewOfAscii(message->section));
-                captured.row = static_cast<core::i32>(message->row);
-                captured.text = core::String(ViewOfAscii(message->message));
-                self->m_capturedMessages.PushBack(core::Move(captured));
+                captured.section = foundation::String(ViewOfAscii(message->section));
+                captured.row = static_cast<foundation::i32>(message->row);
+                captured.text = foundation::String(ViewOfAscii(message->message));
+                self->m_capturedMessages.PushBack(foundation::Move(captured));
                 return;
             }
-            core::ConsoleWriteError(ViewOfAscii(message->message));
+            foundation::ConsoleWriteError(ViewOfAscii(message->message));
         }
 
-        [[nodiscard]] bool IsDeclared(const core::TypeInfo* type) const noexcept
+        [[nodiscard]] bool IsDeclared(const foundation::TypeInfo* type) const noexcept
         {
             for (const RegisteredType& entry : m_registered)
             {
@@ -1467,7 +1467,7 @@ namespace draconic::script::angelscript
         // Appends the AngelScript declaration name for a reflected type: scalars/
         // string by value (strings as `const string &in` in parameter position),
         // declared object types as handles. False = not expressible, skip member.
-        bool AppendDeclType(core::String& out, const core::TypeInfo* type, bool isParam) const
+        bool AppendDeclType(foundation::String& out, const foundation::TypeInfo* type, bool isParam) const
         {
             if (type == nullptr)
             {
@@ -1498,7 +1498,7 @@ namespace draconic::script::angelscript
             // reflected handle - and ValueFromArg boxes whatever arrives straight into a Variant.
             // Declared last among overloads, so a specific typed overload still wins on exact match.
             // Return position never carries a raw Variant (the ReturnType-override path handles that).
-            if (type == &core::TypeOf<core::Variant>())
+            if (type == &foundation::TypeOf<foundation::Variant>())
             {
                 if (!isParam)
                 {
@@ -1509,7 +1509,7 @@ namespace draconic::script::angelscript
             }
             if (const char* primitive = PrimitiveDeclName(type))
             {
-                if (isParam && type == &core::TypeOf<core::String>())
+                if (isParam && type == &foundation::TypeOf<foundation::String>())
                 {
                     AppendAscii(out, "const string &in");
                     return true;
@@ -1534,7 +1534,7 @@ namespace draconic::script::angelscript
 
         // Phase 1: declare the object type (skips scalars/string/enums/containers
         // and anything AngelScript's own registry rejects, e.g. name collisions).
-        void DeclareType(const core::TypeInfo& type)
+        void DeclareType(const foundation::TypeInfo& type)
         {
             if (!IsValidIdentifier(type.name))
             {
@@ -1572,7 +1572,7 @@ namespace draconic::script::angelscript
         // a script writes `NetworkAuthority::Server` and an enum-typed property/param binds. Recorded
         // in m_registered like object types, so TypeInfoForTypeId maps the enum typeId back for
         // marshalling (enum values cross as their underlying int - the property setter casts).
-        void DeclareEnum(const core::TypeInfo& type)
+        void DeclareEnum(const foundation::TypeInfo& type)
         {
             if (IsDeclared(&type))
             {
@@ -1585,7 +1585,7 @@ namespace draconic::script::angelscript
                                    ViewOfAscii(type.name), enumTypeId);
                 return;
             }
-            for (const core::EnumValue& value : core::Enumerators(type))
+            for (const foundation::EnumValue& value : foundation::Enumerators(type))
             {
                 m_engine->RegisterEnumValue(type.name, value.name,
                                             static_cast<int>(value.value));
@@ -1601,31 +1601,31 @@ namespace draconic::script::angelscript
         // harvest them in Phase 1 so a member declaration string can name the enum (AngelScript
         // otherwise rejects a decl that references an undeclared enum, and a broken property binding
         // crashes at dispatch). Idempotent (DeclareEnum no-ops on a re-seen enum).
-        void DeclareReferencedEnums(const core::TypeInfo& type)
+        void DeclareReferencedEnums(const foundation::TypeInfo& type)
         {
-            auto maybe = [&](const core::TypeInfo* t)
+            auto maybe = [&](const foundation::TypeInfo* t)
             {
                 if (t != nullptr && t->enumeratorCount > 0)
                 {
                     DeclareEnum(*t);
                 }
             };
-            for (core::usize i = 0; i < core::PropertyCount(type); ++i)
+            for (foundation::usize i = 0; i < foundation::PropertyCount(type); ++i)
             {
-                maybe(core::PropertyAt(type, i).type);
+                maybe(foundation::PropertyAt(type, i).type);
             }
-            for (core::usize i = 0; i < core::MethodCount(type); ++i)
+            for (foundation::usize i = 0; i < foundation::MethodCount(type); ++i)
             {
-                const core::MethodInfo& method = core::MethodAt(type, i);
-                for (core::u32 p = 0; p < method.paramCount; ++p)
+                const foundation::MethodInfo& method = foundation::MethodAt(type, i);
+                for (foundation::u32 p = 0; p < method.paramCount; ++p)
                 {
                     maybe(method.params[p].type());
                 }
             }
-            for (core::usize i = 0; i < core::ConstructorCount(type); ++i)
+            for (foundation::usize i = 0; i < foundation::ConstructorCount(type); ++i)
             {
-                const core::ConstructorInfo& constructor = core::ConstructorAt(type, i);
-                for (core::u32 p = 0; p < constructor.paramCount; ++p)
+                const foundation::ConstructorInfo& constructor = foundation::ConstructorAt(type, i);
+                for (foundation::u32 p = 0; p < constructor.paramCount; ++p)
                 {
                     maybe(constructor.params[p].type());
                 }
@@ -1637,15 +1637,15 @@ namespace draconic::script::angelscript
         // (homogeneous), `<name>_removeAt(uint)`, `<name>_move(uint, uint)`. The element handle
         // spelling comes from the container's static element type; at/add are skipped if it is not
         // expressible (count/removeAt/move still register).
-        void RegisterContainerMethods(const char* name, const core::TypeInfo& type,
-                                      const core::PropertyInfo& property)
+        void RegisterContainerMethods(const char* name, const foundation::TypeInfo& type,
+                                      const foundation::PropertyInfo& property)
         {
-            const core::ContainerInfo& ci = *property.type->container;
-            const bool polymorphic = core::IsPolymorphicContainer(ci);
-            core::String elemDecl;
+            const foundation::ContainerInfo& ci = *property.type->container;
+            const bool polymorphic = foundation::IsPolymorphicContainer(ci);
+            foundation::String elemDecl;
             const bool elemSpellable = AppendDeclType(elemDecl, ci.elementType, /*isParam*/ false);
 
-            auto reg = [&](const core::String& decl, Binding::Kind kind)
+            auto reg = [&](const foundation::String& decl, Binding::Kind kind)
             {
                 Binding* binding =
                     MakeBinding(Binding{kind, this, &type, nullptr, &property, nullptr});
@@ -1653,7 +1653,7 @@ namespace draconic::script::angelscript
                                                      asCALL_GENERIC, binding);
             };
             {
-                core::String d;
+                foundation::String d;
                 AppendAscii(d, "uint ");
                 AppendAscii(d, property.name);
                 AppendAscii(d, "_count()");
@@ -1661,27 +1661,27 @@ namespace draconic::script::angelscript
             }
             if (elemSpellable)
             {
-                core::String d = elemDecl;
+                foundation::String d = elemDecl;
                 AppendAscii(d, " ");
                 AppendAscii(d, property.name);
                 AppendAscii(d, "_at(uint)");
                 reg(d, Binding::Kind::ContainerAt);
 
-                core::String a = elemDecl;
+                foundation::String a = elemDecl;
                 AppendAscii(a, " ");
                 AppendAscii(a, property.name);
                 AppendAscii(a, polymorphic ? "_add(const string &in)" : "_add()");
                 reg(a, Binding::Kind::ContainerAdd);
             }
             {
-                core::String d;
+                foundation::String d;
                 AppendAscii(d, "void ");
                 AppendAscii(d, property.name);
                 AppendAscii(d, "_removeAt(uint)");
                 reg(d, Binding::Kind::ContainerRemoveAt);
             }
             {
-                core::String d;
+                foundation::String d;
                 AppendAscii(d, "void ");
                 AppendAscii(d, property.name);
                 AppendAscii(d, "_move(uint, uint)");
@@ -1692,10 +1692,10 @@ namespace draconic::script::angelscript
         // Bind a nested-VALUE member as a read getter returning a borrow handle: `<NestedType>@
         // get_<name>() property`. Skipped if the nested type is not expressible as a handle (not
         // declared). No setter - a nested value is edited in place through the borrow, not reassigned.
-        void RegisterNestedGetter(const char* name, const core::TypeInfo& type,
-                                  const core::PropertyInfo& property)
+        void RegisterNestedGetter(const char* name, const foundation::TypeInfo& type,
+                                  const foundation::PropertyInfo& property)
         {
-            core::String decl;
+            foundation::String decl;
             if (!AppendDeclType(decl, property.type, /*isParam*/ false))
             {
                 return;
@@ -1710,7 +1710,7 @@ namespace draconic::script::angelscript
         }
 
         // Phase 2: bind the declared type's members.
-        void BindType(const core::TypeInfo& type)
+        void BindType(const foundation::TypeInfo& type)
         {
             // An enum is fully declared by DeclareEnum (a native enum + its values); it has no object
             // members. Binding object behaviours (opAssign, factories, ...) onto an enum name crashes
@@ -1733,7 +1733,7 @@ namespace draconic::script::angelscript
             // Value assignment so `Float3 p = expr;` works (copies the boxed value). All reflected
             // types are asOBJ_REF boxes, so AngelScript otherwise reports no opAssign.
             {
-                core::String decl;
+                foundation::String decl;
                 AppendAscii(decl, name);
                 AppendAscii(decl, "& opAssign(const ");
                 AppendAscii(decl, name);
@@ -1742,14 +1742,14 @@ namespace draconic::script::angelscript
                                                      asCALL_GENERIC);
             }
 
-            core::Array<core::String> used; // exact-declaration dedupe
+            foundation::Array<foundation::String> used; // exact-declaration dedupe
 
             // Factories: one per reflected constructor (`builder.Constructor()` is
             // the contract's constructibility requirement).
-            for (core::usize i = 0; i < core::ConstructorCount(type); ++i)
+            for (foundation::usize i = 0; i < foundation::ConstructorCount(type); ++i)
             {
-                const core::ConstructorInfo& constructor = core::ConstructorAt(type, i);
-                core::String decl;
+                const foundation::ConstructorInfo& constructor = foundation::ConstructorAt(type, i);
+                foundation::String decl;
                 AppendAscii(decl, name);
                 AppendAscii(decl, "@ f(");
                 if (!AppendParams(decl, constructor.params, constructor.paramCount))
@@ -1767,19 +1767,19 @@ namespace draconic::script::angelscript
                                                       asFUNCTION(FactoryDispatch), asCALL_GENERIC,
                                                       binding) >= 0)
                 {
-                    used.PushBack(core::Move(decl));
+                    used.PushBack(foundation::Move(decl));
                 }
             }
 
             // Properties -> virtual property accessors (`v.x`, `v.x = 9`).
-            for (core::usize i = 0; i < core::PropertyCount(type); ++i)
+            for (foundation::usize i = 0; i < foundation::PropertyCount(type); ++i)
             {
-                const core::PropertyInfo& property = core::PropertyAt(type, i);
+                const foundation::PropertyInfo& property = foundation::PropertyAt(type, i);
                 if (!IsValidIdentifier(property.name))
                 {
                     continue;
                 }
-                if (core::IsNested(property))
+                if (foundation::IsNested(property))
                 {
                     // A container member binds as owner methods (count/at/add/removeAt/move); a plain
                     // nested-VALUE member binds as a getter returning a borrow handle (edited in place).
@@ -1794,7 +1794,7 @@ namespace draconic::script::angelscript
                     continue;
                 }
                 {
-                    core::String decl;
+                    foundation::String decl;
                     if (!AppendDeclType(decl, property.type, /*isParam*/ false))
                     {
                         continue;
@@ -1807,11 +1807,11 @@ namespace draconic::script::angelscript
                     (void)m_engine->RegisterObjectMethod(
                         name, CStr(decl), asFUNCTION(PropertyGetDispatch), asCALL_GENERIC, binding);
                 }
-                const bool readOnly = (static_cast<core::u32>(property.flags) &
-                                       static_cast<core::u32>(core::PropertyFlags::ReadOnly)) != 0;
+                const bool readOnly = (static_cast<foundation::u32>(property.flags) &
+                                       static_cast<foundation::u32>(foundation::PropertyFlags::ReadOnly)) != 0;
                 if (!readOnly)
                 {
-                    core::String decl;
+                    foundation::String decl;
                     AppendAscii(decl, "void set_");
                     AppendAscii(decl, property.name);
                     AppendAscii(decl, "(");
@@ -1831,17 +1831,17 @@ namespace draconic::script::angelscript
             // overload registers distinctly (no Wren-style arity collapsing).
             // Statics become global functions in a namespace named after the class
             // - script calls read `Float3::Dot(a, b)`.
-            core::Array<core::String> usedStatics;
-            for (core::usize i = 0; i < core::MethodCount(type); ++i)
+            foundation::Array<foundation::String> usedStatics;
+            for (foundation::usize i = 0; i < foundation::MethodCount(type); ++i)
             {
-                const core::MethodInfo& method = core::MethodAt(type, i);
+                const foundation::MethodInfo& method = foundation::MethodAt(type, i);
                 if (!IsValidIdentifier(method.name))
                 {
                     continue;
                 }
-                const core::TypeInfo* returnType =
+                const foundation::TypeInfo* returnType =
                     (method.returnType != nullptr) ? method.returnType() : nullptr;
-                core::String decl;
+                foundation::String decl;
                 if (returnType == nullptr)
                 {
                     AppendAscii(decl, "void");
@@ -1859,7 +1859,7 @@ namespace draconic::script::angelscript
                 }
                 AppendAscii(decl, ")");
 
-                core::Array<core::String>& dedupe = method.isStatic ? usedStatics : used;
+                foundation::Array<foundation::String>& dedupe = method.isStatic ? usedStatics : used;
                 if (IsUsed(dedupe, decl))
                 {
                     continue;
@@ -1881,14 +1881,14 @@ namespace draconic::script::angelscript
                 }
                 if (r >= 0)
                 {
-                    dedupe.PushBack(core::Move(decl));
+                    dedupe.PushBack(foundation::Move(decl));
                 }
             }
         }
 
-        bool AppendParams(core::String& decl, const core::ParamInfo* params, core::u32 count) const
+        bool AppendParams(foundation::String& decl, const foundation::ParamInfo* params, foundation::u32 count) const
         {
-            for (core::u32 p = 0; p < count; ++p)
+            for (foundation::u32 p = 0; p < count; ++p)
             {
                 if (!AppendDeclType(decl, params[p].type != nullptr ? params[p].type() : nullptr,
                                     /*isParam*/ true))
@@ -1903,10 +1903,10 @@ namespace draconic::script::angelscript
             return true;
         }
 
-        [[nodiscard]] static bool IsUsed(const core::Array<core::String>& used,
-                                         const core::String& decl) noexcept
+        [[nodiscard]] static bool IsUsed(const foundation::Array<foundation::String>& used,
+                                         const foundation::String& decl) noexcept
         {
-            for (const core::String& existing : used)
+            for (const foundation::String& existing : used)
             {
                 if (existing == decl)
                 {
@@ -1920,13 +1920,13 @@ namespace draconic::script::angelscript
         int m_stringTypeId = -1;
         bool m_finalized = false;
         bool m_capturing = false;
-        core::u32 m_nextContextId = 0;
-        core::Array<const core::TypeInfo*> m_types;
-        core::Array<RegisteredType> m_registered;
-        core::Array<Binding*> m_bindings;
-        core::Array<CapturedMessage> m_capturedMessages;
-        core::Array<Coroutine> m_coroutines;
-        core::Array<asIScriptContext*> m_dueScratch; // reused per-frame due snapshot
+        foundation::u32 m_nextContextId = 0;
+        foundation::Array<const foundation::TypeInfo*> m_types;
+        foundation::Array<RegisteredType> m_registered;
+        foundation::Array<Binding*> m_bindings;
+        foundation::Array<CapturedMessage> m_capturedMessages;
+        foundation::Array<Coroutine> m_coroutines;
+        foundation::Array<asIScriptContext*> m_dueScratch; // reused per-frame due snapshot
         AngelScriptDebugger* m_debugger = nullptr; // borrowed; the active debugger (self-registers)
     };
 
@@ -1973,16 +1973,16 @@ namespace draconic::script::angelscript
         {
             argc = kMaxArgs;
         }
-        core::Variant args[kMaxArgs];
+        foundation::Variant args[kMaxArgs];
         for (int i = 0; i < argc; ++i)
         {
-            const core::ParamInfo& param = binding->constructor->params[i];
+            const foundation::ParamInfo& param = binding->constructor->params[i];
             args[i] = binding->manager->ValueFromArg(
                 gen, static_cast<asUINT>(i), param.type != nullptr ? param.type() : nullptr);
         }
         ReleaseHandleArgs(gen, binding->manager);
-        core::Result<core::Variant> created = binding->constructor->invoke(
-            core::Span<core::Variant>{args, static_cast<core::usize>(argc)});
+        foundation::Result<foundation::Variant> created = binding->constructor->invoke(
+            foundation::Span<foundation::Variant>{args, static_cast<foundation::usize>(argc)});
         if (!created.HasValue())
         {
             *static_cast<void**>(gen->GetAddressOfReturnLocation()) = nullptr;
@@ -1993,7 +1993,7 @@ namespace draconic::script::angelscript
             return;
         }
         *static_cast<void**>(gen->GetAddressOfReturnLocation()) =
-            NewBox(core::Move(created.Value()));
+            NewBox(foundation::Move(created.Value()));
     }
 
     // Value assignment (T& opAssign(const T&in other)): every reflected type is an asOBJ_REF box, so
@@ -2024,36 +2024,36 @@ namespace draconic::script::angelscript
     {
         const Binding* binding = static_cast<const Binding*>(gen->GetAuxiliary());
         BoxedVariant* self = static_cast<BoxedVariant*>(gen->GetObject());
-        core::Instance instance = core::ToInstance(self->value);
-        binding->manager->SetGenericReturn(gen, core::GetProperty(*binding->property, instance));
+        foundation::Instance instance = foundation::ToInstance(self->value);
+        binding->manager->SetGenericReturn(gen, foundation::GetProperty(*binding->property, instance));
     }
 
     void PropertySetDispatch(asIScriptGeneric* gen)
     {
         const Binding* binding = static_cast<const Binding*>(gen->GetAuxiliary());
         BoxedVariant* self = static_cast<BoxedVariant*>(gen->GetObject());
-        core::Instance instance = core::ToInstance(self->value);
-        const core::Variant value = binding->manager->ValueFromArg(gen, 0, binding->property->type);
+        foundation::Instance instance = foundation::ToInstance(self->value);
+        const foundation::Variant value = binding->manager->ValueFromArg(gen, 0, binding->property->type);
         ReleaseHandleArgs(gen, binding->manager);
-        (void)core::SetProperty(*binding->property, instance, value);
+        (void)foundation::SetProperty(*binding->property, instance, value);
     }
 
     // Resolve a polymorphic container's add-by-name to a concrete derived type: match the name
     // against each creatable derived type's `displayName` attribute, then its bare type name.
-    const core::TypeInfo* ResolveElementType(const core::TypeInfo& base, core::StringView name)
+    const foundation::TypeInfo* ResolveElementType(const foundation::TypeInfo& base, foundation::StringView name)
     {
-        core::Array<const core::TypeInfo*> derived;
-        core::EnumerateDerived(base, derived);
-        for (const core::TypeInfo* t : derived)
+        foundation::Array<const foundation::TypeInfo*> derived;
+        foundation::EnumerateDerived(base, derived);
+        for (const foundation::TypeInfo* t : derived)
         {
-            if (core::TypeAttrString(*t, "displayName", core::StringView{}) == name)
+            if (foundation::TypeAttrString(*t, "displayName", foundation::StringView{}) == name)
             {
                 return t;
             }
         }
-        for (const core::TypeInfo* t : derived)
+        for (const foundation::TypeInfo* t : derived)
         {
-            if (core::StringView(reinterpret_cast<const core::utf8char*>(t->name)) == name)
+            if (foundation::StringView(reinterpret_cast<const foundation::utf8char*>(t->name)) == name)
             {
                 return t;
             }
@@ -2064,17 +2064,17 @@ namespace draconic::script::angelscript
     // The Variant to hand a script for container element `index`: an object / value element via getAt
     // (owned); a NON-Object value element (getAt empty) via a BORROW over its address, pinned to the
     // container owner `parent` and generation-guarded. Empty if out of range / no element.
-    core::Variant ContainerElementVariant(const core::ContainerInfo& ci,
-                                          const core::Instance& container, core::usize index,
-                                          const core::Variant& parent)
+    foundation::Variant ContainerElementVariant(const foundation::ContainerInfo& ci,
+                                          const foundation::Instance& container, foundation::usize index,
+                                          const foundation::Variant& parent)
     {
-        core::Variant element = core::ContainerGetAt(ci, container, index);
+        foundation::Variant element = foundation::ContainerGetAt(ci, container, index);
         if (element.IsEmpty())
         {
-            const core::Instance addr = core::ContainerAddressAt(ci, container, index);
+            const foundation::Instance addr = foundation::ContainerAddressAt(ci, container, index);
             if (addr.Pointer() != nullptr)
             {
-                element = core::Variant::Borrow(addr.Pointer(), addr.Type(), parent);
+                element = foundation::Variant::Borrow(addr.Pointer(), addr.Type(), parent);
             }
         }
         return element;
@@ -2085,13 +2085,13 @@ namespace draconic::script::angelscript
     {
         const Binding* binding = static_cast<const Binding*>(gen->GetAuxiliary());
         BoxedVariant* self = static_cast<BoxedVariant*>(gen->GetObject());
-        core::Instance owner = core::ToInstance(self->value);
+        foundation::Instance owner = foundation::ToInstance(self->value);
         void* addr =
             (owner.Pointer() != nullptr) ? binding->property->address(owner) : nullptr;
         binding->manager->SetGenericReturn(
             gen, addr != nullptr
-                     ? core::Variant::Borrow(addr, binding->property->type, self->value)
-                     : core::Variant{});
+                     ? foundation::Variant::Borrow(addr, binding->property->type, self->value)
+                     : foundation::Variant{});
     }
 
     // One dispatcher for every container op; the Binding::Kind selects which. The owner is `self`,
@@ -2101,10 +2101,10 @@ namespace draconic::script::angelscript
     {
         const Binding* binding = static_cast<const Binding*>(gen->GetAuxiliary());
         BoxedVariant* self = static_cast<BoxedVariant*>(gen->GetObject());
-        core::Instance owner = core::ToInstance(self->value);
-        core::Instance container(binding->property->address(owner), binding->property->type);
-        const core::ContainerInfo& ci = *binding->property->type->container;
-        const core::usize size = core::ContainerSize(ci, container);
+        foundation::Instance owner = foundation::ToInstance(self->value);
+        foundation::Instance container(binding->property->address(owner), binding->property->type);
+        const foundation::ContainerInfo& ci = *binding->property->type->container;
+        const foundation::usize size = foundation::ContainerSize(ci, container);
         switch (binding->kind)
         {
         case Binding::Kind::ContainerCount:
@@ -2112,34 +2112,34 @@ namespace draconic::script::angelscript
             break;
         case Binding::Kind::ContainerAt:
         {
-            const core::usize idx = static_cast<core::usize>(gen->GetArgDWord(0));
+            const foundation::usize idx = static_cast<foundation::usize>(gen->GetArgDWord(0));
             binding->manager->SetGenericReturn(
                 gen, idx < size ? ContainerElementVariant(ci, container, idx, self->value)
-                                : core::Variant{});
+                                : foundation::Variant{});
             break;
         }
         case Binding::Kind::ContainerAdd:
         {
-            if (core::IsPolymorphicContainer(ci)) // add by element-type name
+            if (foundation::IsPolymorphicContainer(ci)) // add by element-type name
             {
-                const core::Variant nameV =
-                    binding->manager->ValueFromArg(gen, 0, &core::TypeOf<core::String>());
+                const foundation::Variant nameV =
+                    binding->manager->ValueFromArg(gen, 0, &foundation::TypeOf<foundation::String>());
                 ReleaseHandleArgs(gen, binding->manager);
-                const core::String* typeName = nameV.TryGet<core::String>();
-                const core::TypeInfo* elem =
+                const foundation::String* typeName = nameV.TryGet<foundation::String>();
+                const foundation::TypeInfo* elem =
                     (typeName != nullptr && ci.elementType != nullptr)
                         ? ResolveElementType(*ci.elementType, typeName->AsView())
                         : nullptr;
                 if (elem == nullptr ||
-                    core::ContainerCreateElement(ci, container, size, *elem).Pointer() == nullptr)
+                    foundation::ContainerCreateElement(ci, container, size, *elem).Pointer() == nullptr)
                 {
-                    binding->manager->SetGenericReturn(gen, core::Variant{});
+                    binding->manager->SetGenericReturn(gen, foundation::Variant{});
                     break;
                 }
             }
-            else if (core::ContainerEmplaceDefault(ci, container, size).Pointer() == nullptr)
+            else if (foundation::ContainerEmplaceDefault(ci, container, size).Pointer() == nullptr)
             {
-                binding->manager->SetGenericReturn(gen, core::Variant{});
+                binding->manager->SetGenericReturn(gen, foundation::Variant{});
                 break;
             }
             binding->manager->SetGenericReturn(gen,
@@ -2148,13 +2148,13 @@ namespace draconic::script::angelscript
             break;
         }
         case Binding::Kind::ContainerRemoveAt:
-            (void)core::ContainerRemoveAt(ci, container,
-                                          static_cast<core::usize>(gen->GetArgDWord(0)));
+            (void)foundation::ContainerRemoveAt(ci, container,
+                                          static_cast<foundation::usize>(gen->GetArgDWord(0)));
             break;
         case Binding::Kind::ContainerMove:
-            (void)core::ContainerMoveElement(ci, container,
-                                             static_cast<core::usize>(gen->GetArgDWord(0)),
-                                             static_cast<core::usize>(gen->GetArgDWord(1)));
+            (void)foundation::ContainerMoveElement(ci, container,
+                                             static_cast<foundation::usize>(gen->GetArgDWord(0)),
+                                             static_cast<foundation::usize>(gen->GetArgDWord(1)));
             break;
         default:
             break;
@@ -2164,35 +2164,35 @@ namespace draconic::script::angelscript
     void MethodDispatch(asIScriptGeneric* gen)
     {
         const Binding* binding = static_cast<const Binding*>(gen->GetAuxiliary());
-        const core::MethodInfo& method = *binding->method;
+        const foundation::MethodInfo& method = *binding->method;
         int argc = static_cast<int>(gen->GetArgCount());
         if (argc > kMaxArgs)
         {
             argc = kMaxArgs;
         }
-        core::Variant args[kMaxArgs];
+        foundation::Variant args[kMaxArgs];
         for (int i = 0; i < argc; ++i)
         {
-            const core::TypeInfo* expected =
+            const foundation::TypeInfo* expected =
                 (i < static_cast<int>(method.paramCount) && method.params[i].type != nullptr)
                     ? method.params[i].type()
                     : nullptr;
             args[i] = binding->manager->ValueFromArg(gen, static_cast<asUINT>(i), expected);
         }
         ReleaseHandleArgs(gen, binding->manager);
-        const core::Span<core::Variant> argSpan{args, static_cast<core::usize>(argc)};
-        core::Result<core::Variant> result = core::Err(core::ErrorCode::Internal);
+        const foundation::Span<foundation::Variant> argSpan{args, static_cast<foundation::usize>(argc)};
+        foundation::Result<foundation::Variant> result = foundation::Err(foundation::ErrorCode::Internal);
         if (method.isStatic)
         {
-            result = core::InvokeStatic(method, argSpan);
+            result = foundation::InvokeStatic(method, argSpan);
         }
         else
         {
             BoxedVariant* self = static_cast<BoxedVariant*>(gen->GetObject());
-            result = core::InvokeMethod(method, core::ToInstance(self->value), argSpan);
+            result = foundation::InvokeMethod(method, foundation::ToInstance(self->value), argSpan);
         }
         binding->manager->SetGenericReturn(gen,
-                                           result.HasValue() ? result.Value() : core::Variant{});
+                                           result.HasValue() ? result.Value() : foundation::Variant{});
     }
 
     // ---- coroutine host functions (auxiliary = the manager) ----
@@ -2219,8 +2219,8 @@ namespace draconic::script::angelscript
     class AngelScriptContext final : public IScriptContext
     {
     public:
-        AngelScriptContext(core::RefPtr<AngelScriptManager> manager, core::u32 id)
-            : m_manager(core::Move(manager))
+        AngelScriptContext(foundation::RefPtr<AngelScriptManager> manager, foundation::u32 id)
+            : m_manager(foundation::Move(manager))
         {
             AppendAscii(m_namePrefix, "ctx");
             AppendUint(m_namePrefix, id);
@@ -2241,19 +2241,19 @@ namespace draconic::script::angelscript
 
         void SetErrorHandler(IScriptErrorHandler* handler) override { m_errorHandler = handler; }
 
-        core::Status Load(core::StringView source, core::StringView chunkName) override
+        foundation::Status Load(foundation::StringView source, foundation::StringView chunkName) override
         {
             asIScriptEngine* engine = m_manager->Engine();
-            core::String moduleName = m_namePrefix;
+            foundation::String moduleName = m_namePrefix;
             AppendAscii(moduleName, ":");
             AppendUint(moduleName, m_loadCounter++);
             asIScriptModule* module = engine->GetModule(CStr(moduleName), asGM_ALWAYS_CREATE);
             if (module == nullptr)
             {
-                return core::Status{core::ErrorCode::Internal};
+                return foundation::Status{foundation::ErrorCode::Internal};
             }
 
-            const core::String section(chunkName);
+            const foundation::String section(chunkName);
             (void)module->AddScriptSection(
                 CStr(section), reinterpret_cast<const char*>(source.Data()), source.Size());
             // The in-script `waitUntil` helper, in its OWN section so it never shifts the
@@ -2274,8 +2274,8 @@ namespace draconic::script::angelscript
             if (result < 0)
             {
                 module->Discard();
-                return core::Status{initFailed ? core::ErrorCode::Internal
-                                               : core::ErrorCode::InvalidArgument};
+                return foundation::Status{initFailed ? foundation::ErrorCode::Internal
+                                               : foundation::ErrorCode::InvalidArgument};
             }
 
             m_ownedModules.PushBack(module);
@@ -2286,29 +2286,29 @@ namespace draconic::script::angelscript
             // and script-setup seam the contract's Load semantics map onto).
             if (asIScriptFunction* entry = module->GetFunctionByName("main"))
             {
-                core::Result<core::Variant> ran =
-                    ExecuteCall(entry, nullptr, core::Span<core::Variant>{});
+                foundation::Result<foundation::Variant> ran =
+                    ExecuteCall(entry, nullptr, foundation::Span<foundation::Variant>{});
                 if (!ran.HasValue())
                 {
-                    return core::Status{core::ErrorCode::Internal};
+                    return foundation::Status{foundation::ErrorCode::Internal};
                 }
             }
-            return core::Status{};
+            return foundation::Status{};
         }
 
         // The behaviors module, loaded with each class in its OWN script section named by
         // its sourceName - so GetLineNumber reports (sourceFile, sourceLine) and an editor
         // breakpoint keyed on the file lines up (script-debugger.md P1.5). Same framing +
         // build/classify path as Load; only the section split differs (Load uses one section).
-        core::Status LoadBehaviorModule(core::Span<const BehaviorModuleClass> classes,
-                                        core::StringView moduleName) override
+        foundation::Status LoadBehaviorModule(foundation::Span<const BehaviorModuleClass> classes,
+                                        foundation::StringView moduleName) override
         {
             asIScriptEngine* engine = m_manager->Engine();
-            const core::String moduleNameStr(moduleName);
+            const foundation::String moduleNameStr(moduleName);
             asIScriptModule* module = engine->GetModule(CStr(moduleNameStr), asGM_ALWAYS_CREATE);
             if (module == nullptr)
             {
-                return core::Status{core::ErrorCode::Internal};
+                return foundation::Status{foundation::ErrorCode::Internal};
             }
 
             // One section PER CLASS, named by its sourceName (the editor's breakpoint key).
@@ -2316,7 +2316,7 @@ namespace draconic::script::angelscript
             // its breakpoints won't line up - the cook always stamps sourceName).
             for (const BehaviorModuleClass& entry : classes)
             {
-                const core::String section(entry.name.IsEmpty() ? moduleName : entry.name);
+                const foundation::String section(entry.name.IsEmpty() ? moduleName : entry.name);
                 (void)module->AddScriptSection(CStr(section),
                                                reinterpret_cast<const char*>(entry.source.Data()),
                                                entry.source.Size());
@@ -2336,8 +2336,8 @@ namespace draconic::script::angelscript
             if (result < 0)
             {
                 module->Discard();
-                return core::Status{initFailed ? core::ErrorCode::Internal
-                                               : core::ErrorCode::InvalidArgument};
+                return foundation::Status{initFailed ? foundation::ErrorCode::Internal
+                                               : foundation::ErrorCode::InvalidArgument};
             }
 
             m_ownedModules.PushBack(module);
@@ -2345,23 +2345,23 @@ namespace draconic::script::angelscript
 
             if (asIScriptFunction* entry = module->GetFunctionByName("main"))
             {
-                core::Result<core::Variant> ran =
-                    ExecuteCall(entry, nullptr, core::Span<core::Variant>{});
+                foundation::Result<foundation::Variant> ran =
+                    ExecuteCall(entry, nullptr, foundation::Span<foundation::Variant>{});
                 if (!ran.HasValue())
                 {
-                    return core::Status{core::ErrorCode::Internal};
+                    return foundation::Status{foundation::ErrorCode::Internal};
                 }
             }
-            return core::Status{};
+            return foundation::Status{};
         }
 
-        void SetGlobal(core::StringView name, const core::Variant& value) override
+        void SetGlobal(foundation::StringView name, const foundation::Variant& value) override
         {
             if (m_module == nullptr)
             {
                 return;
             }
-            const core::String globalName(name);
+            const foundation::String globalName(name);
             const int index = m_module->GetGlobalVarIndexByName(CStr(globalName));
             if (index < 0)
             {
@@ -2374,17 +2374,17 @@ namespace draconic::script::angelscript
                 typeId, m_module->GetAddressOfGlobalVar(static_cast<asUINT>(index)), value);
         }
 
-        [[nodiscard]] core::Variant GetGlobal(core::StringView name) override
+        [[nodiscard]] foundation::Variant GetGlobal(foundation::StringView name) override
         {
             if (m_module == nullptr)
             {
-                return core::Variant{};
+                return foundation::Variant{};
             }
-            const core::String globalName(name);
+            const foundation::String globalName(name);
             const int index = m_module->GetGlobalVarIndexByName(CStr(globalName));
             if (index < 0)
             {
-                return core::Variant{};
+                return foundation::Variant{};
             }
             int typeId = 0;
             (void)m_module->GetGlobalVar(static_cast<asUINT>(index), nullptr, nullptr, &typeId,
@@ -2393,30 +2393,30 @@ namespace draconic::script::angelscript
                 typeId, m_module->GetAddressOfGlobalVar(static_cast<asUINT>(index)));
         }
 
-        [[nodiscard]] bool HasFunction(core::StringView name) const override
+        [[nodiscard]] bool HasFunction(foundation::StringView name) const override
         {
             return FindFunction(name, -1) != nullptr;
         }
 
-        [[nodiscard]] core::Result<core::Variant> Call(core::StringView function,
-                                                       core::Span<core::Variant> args) override
+        [[nodiscard]] foundation::Result<foundation::Variant> Call(foundation::StringView function,
+                                                       foundation::Span<foundation::Variant> args) override
         {
             // Strict arity: never Execute with unset argument slots.
             asIScriptFunction* target = FindFunction(function, static_cast<int>(args.Size()));
             if (target == nullptr || target->GetParamCount() != args.Size())
             {
-                return core::Err(core::ErrorCode::NotFound);
+                return foundation::Err(foundation::ErrorCode::NotFound);
             }
             return ExecuteCall(target, nullptr, args);
         }
 
-        [[nodiscard]] core::RefPtr<ScriptObject>
-        CreateInstance(core::StringView className, core::Span<core::Variant> args) override;
+        [[nodiscard]] foundation::RefPtr<ScriptObject>
+        CreateInstance(foundation::StringView className, foundation::Span<foundation::Variant> args) override;
 
         // Prepare + execute a script function on the engine's pooled contexts.
         // The public seam AngelScriptObject::Invoke dispatches through as well.
-        [[nodiscard]] core::Result<core::Variant>
-        ExecuteCall(asIScriptFunction* function, void* object, core::Span<core::Variant> args)
+        [[nodiscard]] foundation::Result<foundation::Variant>
+        ExecuteCall(asIScriptFunction* function, void* object, foundation::Span<foundation::Variant> args)
         {
             asIScriptEngine* engine = m_manager->Engine();
             asIScriptContext* executor = engine->RequestContext();
@@ -2426,7 +2426,7 @@ namespace draconic::script::angelscript
                 {
                     engine->ReturnContext(executor);
                 }
-                return core::Err(core::ErrorCode::Internal);
+                return foundation::Err(foundation::ErrorCode::Internal);
             }
             if (object != nullptr)
             {
@@ -2464,20 +2464,20 @@ namespace draconic::script::angelscript
                 {
                     ReleaseBox(box);
                 }
-                return core::Err(core::ErrorCode::Internal);
+                return foundation::Err(foundation::ErrorCode::Internal);
             }
             for (BoxedVariant* box : boxTemps)
             {
                 ReleaseBox(box);
             }
 
-            core::Result<core::Variant> outcome = core::Err(core::ErrorCode::Internal);
+            foundation::Result<foundation::Variant> outcome = foundation::Err(foundation::ErrorCode::Internal);
             if (result == asEXECUTION_FINISHED)
             {
                 const int returnTypeId = function->GetReturnTypeId();
                 outcome = (returnTypeId == asTYPEID_VOID)
-                              ? core::Result<core::Variant>(core::Variant{})
-                              : core::Result<core::Variant>(m_manager->VariantFromTypedAddress(
+                              ? foundation::Result<foundation::Variant>(foundation::Variant{})
+                              : foundation::Result<foundation::Variant>(m_manager->VariantFromTypedAddress(
                                     returnTypeId, executor->GetAddressOfReturnValue()));
             }
             else if (result == asEXECUTION_EXCEPTION)
@@ -2496,13 +2496,13 @@ namespace draconic::script::angelscript
         [[nodiscard]] AngelScriptManager& Manager() noexcept { return *m_manager; }
 
     private:
-        [[nodiscard]] asIScriptFunction* FindFunction(core::StringView name, int argc) const
+        [[nodiscard]] asIScriptFunction* FindFunction(foundation::StringView name, int argc) const
         {
             if (m_module == nullptr)
             {
                 return nullptr;
             }
-            const core::String functionName(name);
+            const foundation::String functionName(name);
             asIScriptFunction* byName = nullptr;
             for (asUINT i = 0; i < m_module->GetFunctionCount(); ++i)
             {
@@ -2525,17 +2525,17 @@ namespace draconic::script::angelscript
         }
 
         void BindArgs(asIScriptContext* executor, asIScriptFunction* function,
-                      core::Span<core::Variant> args, std::string* stringTemps,
+                      foundation::Span<foundation::Variant> args, std::string* stringTemps,
                       BoxedVariant** boxTemps)
         {
-            const core::usize limit = function->GetParamCount();
-            for (core::usize i = 0;
-                 i < args.Size() && i < limit && i < static_cast<core::usize>(kMaxArgs); ++i)
+            const foundation::usize limit = function->GetParamCount();
+            for (foundation::usize i = 0;
+                 i < args.Size() && i < limit && i < static_cast<foundation::usize>(kMaxArgs); ++i)
             {
                 const asUINT arg = static_cast<asUINT>(i);
                 int typeId = 0;
                 (void)function->GetParam(arg, &typeId);
-                const core::Variant& value = args[i];
+                const foundation::Variant& value = args[i];
                 bool ok = false;
                 const double number = NumericOf(value, ok);
                 switch (typeId)
@@ -2546,22 +2546,22 @@ namespace draconic::script::angelscript
                 case asTYPEID_INT8:
                 case asTYPEID_UINT8:
                     (void)executor->SetArgByte(arg,
-                                               static_cast<asBYTE>(static_cast<core::i64>(number)));
+                                               static_cast<asBYTE>(static_cast<foundation::i64>(number)));
                     continue;
                 case asTYPEID_INT16:
                 case asTYPEID_UINT16:
                     (void)executor->SetArgWord(arg,
-                                               static_cast<asWORD>(static_cast<core::i64>(number)));
+                                               static_cast<asWORD>(static_cast<foundation::i64>(number)));
                     continue;
                 case asTYPEID_INT32:
                 case asTYPEID_UINT32:
                     (void)executor->SetArgDWord(
-                        arg, static_cast<asDWORD>(static_cast<core::i64>(number)));
+                        arg, static_cast<asDWORD>(static_cast<foundation::i64>(number)));
                     continue;
                 case asTYPEID_INT64:
                 case asTYPEID_UINT64:
                     (void)executor->SetArgQWord(
-                        arg, static_cast<asQWORD>(static_cast<core::i64>(number)));
+                        arg, static_cast<asQWORD>(static_cast<foundation::i64>(number)));
                     continue;
                 case asTYPEID_FLOAT:
                     (void)executor->SetArgFloat(arg, static_cast<float>(number));
@@ -2598,20 +2598,20 @@ namespace draconic::script::angelscript
             if (m_errorHandler != nullptr)
             {
                 const ScriptError error{ScriptErrorKind::Runtime, ViewOfAscii(section),
-                                        static_cast<core::i32>(line),
+                                        static_cast<foundation::i32>(line),
                                         ViewOfAscii(executor->GetExceptionString())};
                 m_errorHandler->OnError(error);
                 return;
             }
-            core::ConsoleWriteError(ViewOfAscii(executor->GetExceptionString()));
+            foundation::ConsoleWriteError(ViewOfAscii(executor->GetExceptionString()));
         }
 
-        core::RefPtr<AngelScriptManager> m_manager;
+        foundation::RefPtr<AngelScriptManager> m_manager;
         IScriptErrorHandler* m_errorHandler = nullptr;
-        core::String m_namePrefix;
-        core::u32 m_loadCounter = 0;
+        foundation::String m_namePrefix;
+        foundation::u32 m_loadCounter = 0;
         asIScriptModule* m_module = nullptr; // most recent successful Load
-        core::Array<asIScriptModule*> m_ownedModules;
+        foundation::Array<asIScriptModule*> m_ownedModules;
     };
 
     // A live instance of a script-declared class. Holds the asIScriptObject plus a
@@ -2620,9 +2620,9 @@ namespace draconic::script::angelscript
     class AngelScriptObject final : public ScriptObject
     {
     public:
-        AngelScriptObject(core::RefPtr<AngelScriptContext> owner,
+        AngelScriptObject(foundation::RefPtr<AngelScriptContext> owner,
                           asIScriptObject* instance) noexcept
-            : m_owner(core::Move(owner)), m_instance(instance)
+            : m_owner(foundation::Move(owner)), m_instance(instance)
         {
         }
 
@@ -2640,13 +2640,13 @@ namespace draconic::script::angelscript
         /// The underlying script object (CancelCoroutinesFor matches coroutines by owner).
         [[nodiscard]] asIScriptObject* ScriptInstance() const noexcept { return m_instance; }
 
-        [[nodiscard]] core::Result<core::Variant> Invoke(core::StringView method,
-                                                         core::Span<core::Variant> args) override
+        [[nodiscard]] foundation::Result<foundation::Variant> Invoke(foundation::StringView method,
+                                                         foundation::Span<foundation::Variant> args) override
         {
             asITypeInfo* type = m_instance->GetObjectType();
             if (type == nullptr)
             {
-                return core::Err(core::ErrorCode::NotFound);
+                return foundation::Err(foundation::ErrorCode::NotFound);
             }
 
             // The neutral property-apply path Invokes the setter as `<name>=` with one
@@ -2656,15 +2656,15 @@ namespace draconic::script::angelscript
             // "settable member" AngelScript exposes for harvested behavior properties.
             if (args.Size() == 1 && !method.IsEmpty() && method[method.Size() - 1] == u8'=')
             {
-                const core::StringView fieldName = method.SubStr(0, method.Size() - 1);
+                const foundation::StringView fieldName = method.SubStr(0, method.Size() - 1);
                 if (SetMemberField(fieldName, args[0]))
                 {
-                    return core::Variant{};
+                    return foundation::Variant{};
                 }
-                return core::Err(core::ErrorCode::NotFound);
+                return foundation::Err(foundation::ErrorCode::NotFound);
             }
 
-            const core::String methodName(method);
+            const foundation::String methodName(method);
             asIScriptFunction* target = nullptr;
             for (asUINT i = 0; i < type->GetMethodCount(); ++i)
             {
@@ -2679,7 +2679,7 @@ namespace draconic::script::angelscript
             }
             if (target == nullptr)
             {
-                return core::Err(core::ErrorCode::NotFound);
+                return foundation::Err(foundation::ErrorCode::NotFound);
             }
             return m_owner->ExecuteCall(target, m_instance, args);
         }
@@ -2689,9 +2689,9 @@ namespace draconic::script::angelscript
         // editor-property apply path). Marshals through the manager's typed-address writer,
         // so scalars/string/reflected-handle members all take the value uniformly. False
         // when no such (writable) member exists or the value's type cannot fill it.
-        [[nodiscard]] bool SetMemberField(core::StringView fieldName, const core::Variant& value)
+        [[nodiscard]] bool SetMemberField(foundation::StringView fieldName, const foundation::Variant& value)
         {
-            const core::String name(fieldName);
+            const foundation::String name(fieldName);
             const asUINT count = m_instance->GetPropertyCount();
             for (asUINT i = 0; i < count; ++i)
             {
@@ -2723,7 +2723,7 @@ namespace draconic::script::angelscript
             return false;
         }
 
-        core::RefPtr<AngelScriptContext> m_owner;
+        foundation::RefPtr<AngelScriptContext> m_owner;
         asIScriptObject* m_instance;
     };
 
@@ -2734,9 +2734,9 @@ namespace draconic::script::angelscript
     class AngelScriptDelegate final : public IScriptDelegate
     {
     public:
-        AngelScriptDelegate(core::RefPtr<AngelScriptManager> manager,
+        AngelScriptDelegate(foundation::RefPtr<AngelScriptManager> manager,
                             asIScriptFunction* function) noexcept
-            : m_manager(core::Move(manager)), m_function(function)
+            : m_manager(foundation::Move(manager)), m_function(function)
         {
             if (m_function != nullptr)
             {
@@ -2755,34 +2755,34 @@ namespace draconic::script::angelscript
         AngelScriptDelegate(const AngelScriptDelegate&) = delete;
         AngelScriptDelegate& operator=(const AngelScriptDelegate&) = delete;
 
-        [[nodiscard]] core::Result<core::Variant> Invoke(core::Span<core::Variant> args) override
+        [[nodiscard]] foundation::Result<foundation::Variant> Invoke(foundation::Span<foundation::Variant> args) override
         {
             if (m_manager.Get() == nullptr || m_function == nullptr)
             {
-                return core::Err(core::ErrorCode::Internal);
+                return foundation::Err(foundation::ErrorCode::Internal);
             }
             return m_manager->ExecuteDelegate(m_function, args);
         }
 
     private:
-        core::RefPtr<AngelScriptManager> m_manager;
+        foundation::RefPtr<AngelScriptManager> m_manager;
         asIScriptFunction* m_function;
     };
 
-    core::Variant MakeAngelScriptDelegateVariant(asIScriptFunction* function)
+    foundation::Variant MakeAngelScriptDelegateVariant(asIScriptFunction* function)
     {
         // The wrapping happens inside a reflected dispatch, so the executing context (and its
         // manager) is the current script context.
         IScriptContext* current = CurrentScriptContext();
         if (current == nullptr || function == nullptr)
         {
-            return core::Variant{};
+            return foundation::Variant{};
         }
         AngelScriptContext* context = static_cast<AngelScriptContext*>(current);
-        core::RefPtr<AngelScriptManager> manager(&context->Manager());
-        core::RefPtr<IScriptDelegate> delegate(core::MakeRef<AngelScriptDelegate>(
-            core::DefaultAllocator(), core::Move(manager), function));
-        return core::Variant::From(delegate);
+        foundation::RefPtr<AngelScriptManager> manager(&context->Manager());
+        foundation::RefPtr<IScriptDelegate> delegate(foundation::MakeRef<AngelScriptDelegate>(
+            foundation::DefaultAllocator(), foundation::Move(manager), function));
+        return foundation::Variant::From(delegate);
     }
 
     void AngelScriptManager::CancelCoroutinesFor(ScriptObject& instance)
@@ -2790,7 +2790,7 @@ namespace draconic::script::angelscript
         // We hold the owner pointer directly - drop every coroutine started by this
         // behavior instance (its context is aborted + released, its owner ref freed).
         asIScriptObject* owner = static_cast<AngelScriptObject&>(instance).ScriptInstance();
-        for (core::usize i = m_coroutines.Size(); i-- > 0;)
+        for (foundation::usize i = m_coroutines.Size(); i-- > 0;)
         {
             if (m_coroutines[i].owner == owner)
             {
@@ -2841,7 +2841,7 @@ namespace draconic::script::angelscript
         AngelScriptDebugger& operator=(const AngelScriptDebugger&) = delete;
 
         // ---- IScriptDebugger -------------------------------------------------
-        void SetBreakpoint(core::StringView file, core::i32 line) override
+        void SetBreakpoint(foundation::StringView file, foundation::i32 line) override
         {
             for (const Breakpoint& breakpoint : m_breakpoints)
             {
@@ -2850,12 +2850,12 @@ namespace draconic::script::angelscript
                     return;
                 }
             }
-            m_breakpoints.PushBack(Breakpoint{core::String(file), line});
+            m_breakpoints.PushBack(Breakpoint{foundation::String(file), line});
         }
 
-        void RemoveBreakpoint(core::StringView file, core::i32 line) override
+        void RemoveBreakpoint(foundation::StringView file, foundation::i32 line) override
         {
-            for (core::usize i = 0; i < m_breakpoints.Size(); ++i)
+            for (foundation::usize i = 0; i < m_breakpoints.Size(); ++i)
             {
                 if (m_breakpoints[i].line == line && m_breakpoints[i].file.AsView() == file)
                 {
@@ -2873,9 +2873,9 @@ namespace draconic::script::angelscript
         void StepInto() override { Resume(StepMode::Into); }
         void StepOver() override { Resume(StepMode::Over); }
 
-        [[nodiscard]] core::Array<ScriptStackFrame> CaptureStackFrames() override
+        [[nodiscard]] foundation::Array<ScriptStackFrame> CaptureStackFrames() override
         {
-            core::Array<ScriptStackFrame> frames;
+            foundation::Array<ScriptStackFrame> frames;
             if (m_pausedContext == nullptr)
             {
                 return frames;
@@ -2886,18 +2886,18 @@ namespace draconic::script::angelscript
                 ScriptStackFrame frame;
                 const char* section = nullptr;
                 frame.line = m_pausedContext->GetLineNumber(level, nullptr, &section);
-                frame.file = core::String(ViewOfAscii(section));
+                frame.file = foundation::String(ViewOfAscii(section));
                 asIScriptFunction* function = m_pausedContext->GetFunction(level);
-                frame.function = core::String(
+                frame.function = foundation::String(
                     ViewOfAscii(function != nullptr ? function->GetDeclaration() : "?"));
-                frames.PushBack(core::Move(frame));
+                frames.PushBack(foundation::Move(frame));
             }
             return frames;
         }
 
-        [[nodiscard]] core::Array<ScriptVariable> CaptureLocals(core::u32 depth) override
+        [[nodiscard]] foundation::Array<ScriptVariable> CaptureLocals(foundation::u32 depth) override
         {
-            core::Array<ScriptVariable> locals;
+            foundation::Array<ScriptVariable> locals;
             if (m_pausedContext == nullptr)
             {
                 return locals;
@@ -2916,52 +2916,52 @@ namespace draconic::script::angelscript
                     continue;
                 } // unnamed temporary
                 ScriptVariable variable;
-                variable.name = core::String(ViewOfAscii(name));
+                variable.name = foundation::String(ViewOfAscii(name));
                 const char* declaration =
                     m_pausedContext->GetVarDeclaration(static_cast<asUINT>(i), depth, false);
-                variable.typeName = core::String(ViewOfAscii(declaration));
+                variable.typeName = foundation::String(ViewOfAscii(declaration));
                 void* address = m_pausedContext->GetAddressOfVar(static_cast<asUINT>(i), depth);
                 if (address == nullptr)
                 {
-                    variable.value = core::String(u8"<uninitialized>");
-                    locals.PushBack(core::Move(variable));
+                    variable.value = foundation::String(u8"<uninitialized>");
+                    locals.PushBack(foundation::Move(variable));
                     continue;
                 }
-                core::Variant value = m_manager->VariantFromTypedAddress(typeId, address);
+                foundation::Variant value = m_manager->VariantFromTypedAddress(typeId, address);
                 DescribeValue(variable, value);
-                locals.PushBack(core::Move(variable));
+                locals.PushBack(foundation::Move(variable));
             }
             return locals;
         }
 
-        [[nodiscard]] core::Array<ScriptVariable> CaptureObject(core::u64 objectRef) override
+        [[nodiscard]] foundation::Array<ScriptVariable> CaptureObject(foundation::u64 objectRef) override
         {
-            core::Array<ScriptVariable> members;
-            core::Variant* stored = FindObject(objectRef);
+            foundation::Array<ScriptVariable> members;
+            foundation::Variant* stored = FindObject(objectRef);
             if (stored == nullptr)
             {
                 return members;
             }
-            const core::TypeInfo* type = stored->Type();
+            const foundation::TypeInfo* type = stored->Type();
             if (type == nullptr)
             {
                 return members;
             }
-            core::Instance instance = core::ToInstance(*stored);
-            for (core::usize i = 0; i < core::PropertyCount(*type); ++i)
+            foundation::Instance instance = foundation::ToInstance(*stored);
+            for (foundation::usize i = 0; i < foundation::PropertyCount(*type); ++i)
             {
-                const core::PropertyInfo& property = core::PropertyAt(*type, i);
-                if (core::IsNested(property))
+                const foundation::PropertyInfo& property = foundation::PropertyAt(*type, i);
+                if (foundation::IsNested(property))
                 {
                     continue; // no by-value read for a nested structure (empty Variant)
                 }
                 ScriptVariable variable;
-                variable.name = core::String(ViewOfAscii(property.name));
+                variable.name = foundation::String(ViewOfAscii(property.name));
                 variable.typeName =
-                    core::String(ViewOfAscii(property.type != nullptr ? property.type->name : "?"));
-                core::Variant value = core::GetProperty(property, instance);
+                    foundation::String(ViewOfAscii(property.type != nullptr ? property.type->name : "?"));
+                foundation::Variant value = foundation::GetProperty(property, instance);
                 DescribeValue(variable, value);
-                members.PushBack(core::Move(variable));
+                members.PushBack(foundation::Move(variable));
             }
             return members;
         }
@@ -3053,19 +3053,19 @@ namespace draconic::script::angelscript
 
         struct Breakpoint
         {
-            core::String file;
-            core::i32 line = -1;
+            foundation::String file;
+            foundation::i32 line = -1;
         };
 
         struct CapturedObject
         {
-            core::u64 ref = 0;
-            core::Variant value;
+            foundation::u64 ref = 0;
+            foundation::Variant value;
         };
 
         [[nodiscard]] bool IsBreakpoint(const char* section, int line) const
         {
-            const core::StringView sectionView = ViewOfAscii(section);
+            const foundation::StringView sectionView = ViewOfAscii(section);
             for (const Breakpoint& breakpoint : m_breakpoints)
             {
                 if (breakpoint.line == line && breakpoint.file.AsView() == sectionView)
@@ -3078,10 +3078,10 @@ namespace draconic::script::angelscript
 
         // Fill a ScriptVariable's display text + expandability from a captured Variant: a
         // reflected object/value with properties gets a non-zero objectRef for lazy expansion.
-        void DescribeValue(ScriptVariable& variable, const core::Variant& value)
+        void DescribeValue(ScriptVariable& variable, const foundation::Variant& value)
         {
-            const core::TypeInfo* type = value.Type();
-            const bool expandable = type != nullptr && core::PropertyCount(*type) > 0 &&
+            const foundation::TypeInfo* type = value.Type();
+            const bool expandable = type != nullptr && foundation::PropertyCount(*type) > 0 &&
                                     PrimitiveDeclName(type) == nullptr;
             if (expandable)
             {
@@ -3090,14 +3090,14 @@ namespace draconic::script::angelscript
             variable.value = DebugValueText(value);
         }
 
-        [[nodiscard]] core::u64 StoreObject(const core::Variant& value)
+        [[nodiscard]] foundation::u64 StoreObject(const foundation::Variant& value)
         {
-            const core::u64 ref = m_nextObjectRef++;
+            const foundation::u64 ref = m_nextObjectRef++;
             m_objects.PushBack(CapturedObject{ref, value});
             return ref;
         }
 
-        [[nodiscard]] core::Variant* FindObject(core::u64 ref)
+        [[nodiscard]] foundation::Variant* FindObject(foundation::u64 ref)
         {
             for (CapturedObject& object : m_objects)
             {
@@ -3171,9 +3171,9 @@ namespace draconic::script::angelscript
         IScriptContext* m_owner = nullptr; // call scope for a resumed context
         asIScriptContext* m_pausedContext =
             nullptr; // the held suspended context (owned while paused)
-        core::Array<Breakpoint> m_breakpoints;
-        core::Array<CapturedObject> m_objects; // lazily-expandable handles for this break
-        core::u64 m_nextObjectRef = 1;         // 0 = a leaf scalar
+        foundation::Array<Breakpoint> m_breakpoints;
+        foundation::Array<CapturedObject> m_objects; // lazily-expandable handles for this break
+        foundation::u64 m_nextObjectRef = 1;         // 0 = a leaf scalar
         Cause m_cause = Cause::Breakpoint;
         StepMode m_stepMode = StepMode::None;
         int m_stepFromLine = -1;
@@ -3199,28 +3199,28 @@ namespace draconic::script::angelscript
         return debugger.Adopt(ctx);
     }
 
-    core::UniquePtr<IScriptDebugger> AngelScriptManager::CreateDebugger()
+    foundation::UniquePtr<IScriptDebugger> AngelScriptManager::CreateDebugger()
     {
-        return core::MakeUnique<AngelScriptDebugger>(core::DefaultAllocator(), this);
+        return foundation::MakeUnique<AngelScriptDebugger>(foundation::DefaultAllocator(), this);
     }
 
-    core::RefPtr<IScriptContext> AngelScriptManager::CreateContext()
+    foundation::RefPtr<IScriptContext> AngelScriptManager::CreateContext()
     {
         // Defensive finalize (the documented contract): a context may be created
         // without RegisterReflectedTypes having driven the two-phase emission.
         FinalizeTypes();
-        return core::RefPtr<IScriptContext>(core::MakeRef<AngelScriptContext>(
-            core::DefaultAllocator(), core::RefPtr<AngelScriptManager>(this), m_nextContextId++));
+        return foundation::RefPtr<IScriptContext>(foundation::MakeRef<AngelScriptContext>(
+            foundation::DefaultAllocator(), foundation::RefPtr<AngelScriptManager>(this), m_nextContextId++));
     }
 
-    core::RefPtr<ScriptObject> AngelScriptContext::CreateInstance(core::StringView className,
-                                                                  core::Span<core::Variant> args)
+    foundation::RefPtr<ScriptObject> AngelScriptContext::CreateInstance(foundation::StringView className,
+                                                                  foundation::Span<foundation::Variant> args)
     {
         if (m_module == nullptr)
         {
             return nullptr;
         }
-        const core::String name(className);
+        const foundation::String name(className);
         asITypeInfo* type = m_module->GetTypeInfoByDecl(CStr(name));
         if (type == nullptr)
         {
@@ -3294,17 +3294,17 @@ namespace draconic::script::angelscript
         {
             return nullptr;
         }
-        return core::RefPtr<ScriptObject>(core::MakeRef<AngelScriptObject>(
-            core::DefaultAllocator(), core::RefPtr<AngelScriptContext>(this), instance));
+        return foundation::RefPtr<ScriptObject>(foundation::MakeRef<AngelScriptObject>(
+            foundation::DefaultAllocator(), foundation::RefPtr<AngelScriptContext>(this), instance));
     }
 
-    core::RefPtr<IScriptManager> CreateScriptManager()
+    foundation::RefPtr<IScriptManager> CreateScriptManager()
     {
-        return core::RefPtr<IScriptManager>(
-            core::MakeRef<AngelScriptManager>(core::DefaultAllocator()));
+        return foundation::RefPtr<IScriptManager>(
+            foundation::MakeRef<AngelScriptManager>(foundation::DefaultAllocator()));
     }
 
-    core::StringView AngelScriptCoroutineModulePrelude() noexcept
+    foundation::StringView AngelScriptCoroutineModulePrelude() noexcept
     {
         return ViewOfAscii(kCoroutinePreludeSection);
     }
@@ -3321,10 +3321,10 @@ namespace draconic::script::angelscript
     void RegisterAngelScriptBackend()
     {
         ScriptBackendDesc desc;
-        desc.languageId = core::String(u8"angelscript");
-        desc.displayName = core::String(u8"AngelScript");
-        desc.fileExtensions.PushBack(core::String(u8"as"));
+        desc.languageId = foundation::String(u8"angelscript");
+        desc.displayName = foundation::String(u8"AngelScript");
+        desc.fileExtensions.PushBack(foundation::String(u8"as"));
         desc.create = []() { return CreateScriptManager(); };
-        ScriptBackendRegistry::Get().Register(core::Move(desc));
+        ScriptBackendRegistry::Get().Register(foundation::Move(desc));
     }
 }

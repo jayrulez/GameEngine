@@ -1,14 +1,14 @@
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h" // <new> reachability for container instantiation (GCC)
+#include "Draconic.Foundation/Prelude.h" // <new> reachability for container instantiation (GCC)
 
-import draconic.core;
+import draconic.foundation;
 import draconic.runtime;
 import draconic.runtime.client;
 import draconic.shell;
 import draconic.graphics;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::runtime;
 
 namespace
@@ -65,7 +65,7 @@ TEST_CASE("runtime: time scale clamps at zero and defaults to realtime")
     // Half-speed feeding the stepper: 60 raw frames at 1/60 yield ~30 fixed steps.
     draconic::runtime::FixedStepper stepper;
     ctx.SetTimeScale(0.5f);
-    draconic::core::u32 steps = 0;
+    draconic::foundation::u32 steps = 0;
     for (int i = 0; i < 60; ++i)
     {
         steps += stepper.Advance((1.0f / 60.0f) * ctx.TimeScale());
@@ -82,7 +82,7 @@ TEST_CASE("runtime: fixed stepper - exact cadence, alpha, and the hitch clamp")
     FixedStepper stepper;
     stepper.step = 1.0f / 60.0f;
     stepper.maxSteps = 4;
-    draconic::core::u32 total = 0;
+    draconic::foundation::u32 total = 0;
     for (int i = 0; i < 60; ++i)
     {
         total += stepper.Advance(1.0f / 60.0f);
@@ -366,7 +366,7 @@ TEST_CASE("embedded host routes Ctx to the runtime context and exit to the embed
     // Exit means "stop the play session" - the embedder's handler receives it.
     int exitCode = -1;
     embedded.SetExitHandler(
-        draconic::core::Function<void(int)>{[&](int code) { exitCode = code; }});
+        draconic::foundation::Function<void(int)>{[&](int code) { exitCode = code; }});
     embedded.RequestExit(7);
     CHECK(exitCode == 7);
 }

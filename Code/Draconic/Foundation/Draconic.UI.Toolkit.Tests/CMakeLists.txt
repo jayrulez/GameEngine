@@ -33,7 +33,7 @@ add_executable(Draconic.UI.Toolkit.Tests
     TestsMain.cpp)
 
 target_link_libraries(Draconic.UI.Toolkit.Tests PRIVATE
-    Draconic::UI.Toolkit Draconic::UI Draconic::Core doctest::doctest)
+    Draconic::UI.Toolkit Draconic::UI Draconic::Foundation doctest::doctest)
 
 target_compile_definitions(Draconic.UI.Toolkit.Tests PRIVATE
     DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS)

@@ -5,7 +5,7 @@
 add_library(Draconic.RHI.WebGPU STATIC)
 add_library(Draconic::RHI.WebGPU ALIAS Draconic.RHI.WebGPU)
 target_link_libraries(Draconic.RHI.WebGPU
-    PUBLIC Draconic::RHI Draconic::Core Draconic::Policy)
+    PUBLIC Draconic::RHI Draconic::Foundation Draconic::Policy)
 
 if(EMSCRIPTEN)
     # emdawnwebgpu supplies <webgpu/webgpu.h> (Dawn's spec header) at compile time and the

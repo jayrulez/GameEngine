@@ -11,19 +11,19 @@
 // satisfied by construction.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 export module draconic.script.wren.editor;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.script; // registry + IScriptManager/IScriptContext + RegisterReflectedTypes
 import draconic.script.resource; // ScriptClassSource + ScriptPropertyDesc + parse helpers
 import draconic.script.facades;  // RegisterScriptFacadeReflection (the cook VM's "main" surface)
 import draconic.script.editor;   // IScriptLanguageCook + registry + shared cook helpers
 import draconic.script.wren;     // ensures the Wren backend is available to the registry
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::script
 {

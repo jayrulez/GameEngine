@@ -1,11 +1,11 @@
 // Reflection track P1: UIDocumentAsset (markup) + UIThemeAsset (stylesheet) reflected surfaces.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
+import draconic.foundation;
 import draconic.ui.editor;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 TEST_CASE("reflection-p1: UIDocumentAsset exposes markup and round-trips")
 {

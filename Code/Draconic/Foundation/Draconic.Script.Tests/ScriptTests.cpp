@@ -1,12 +1,12 @@
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h" // <new> reachability for container instantiation (GCC)
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h" // <new> reachability for container instantiation (GCC)
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.script;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::script;
 
 // A tiny reflected object to exercise object-valued globals.
@@ -77,7 +77,7 @@ DRACONIC_DEFINE_OBJECT(Widget, "draconic::script::test")
 
 TEST_CASE("script: reflected types register with a manager")
 {
-    RegisterCoreTypes();
+    RegisterFoundationTypes();
 
     RefPtr<MockManager> manager = MakeRef<MockManager>(DefaultAllocator());
     RegisterReflectedTypes(*manager);

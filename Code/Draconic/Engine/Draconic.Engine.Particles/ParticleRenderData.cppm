@@ -6,17 +6,17 @@
 // The ParticleRenderer packs the batch into its instance ring and emits one instanced draw.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include <type_traits>
 
 export module draconic.engine.particles:renderdata;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.render;    // RenderData base + RenderCategories
 import draconic.particles; // ParticleBlendMode
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 
 export namespace draconic::particles

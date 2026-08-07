@@ -3,7 +3,7 @@
 /// Ported from Sedulous.RHI.DX12/DX12RayTracingPipeline.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include "DxIncludes.h"
 
@@ -12,12 +12,12 @@ module;
 
 export module draconic.rhi.dx12:ray_tracing_pipeline;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :shader_module;
 import :pipeline_layout;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::dx12
 {

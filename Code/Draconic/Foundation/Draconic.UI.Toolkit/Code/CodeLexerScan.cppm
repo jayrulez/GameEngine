@@ -6,14 +6,14 @@
 // toolkit consumers - GCC rejects the not-re-exported interface-partition alternative.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 module draconic.ui.toolkit:code_lexer_scan;
 
-import draconic.core;
+import draconic.foundation;
 import :code_lexer;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::ui::toolkit::lexer_scan
 {

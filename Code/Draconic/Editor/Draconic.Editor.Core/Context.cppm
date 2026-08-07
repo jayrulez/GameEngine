@@ -7,11 +7,11 @@
 // the statically-assembled editor executable calls those entry points (design doc §3.1).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.editor.core:context;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.resource;
 import draconic.settings;
 import :importer;
@@ -22,7 +22,7 @@ import :page;
 import :job_service;
 import :project;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {

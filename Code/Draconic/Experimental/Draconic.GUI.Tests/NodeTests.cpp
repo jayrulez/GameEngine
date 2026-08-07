@@ -2,16 +2,16 @@
 // conversion, hit testing, visibility, invalidation, and event listeners. Derived from
 // eepp Scene::Node behavior, adapted to the RefPtr-owned child tree.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.gui;
 
 using namespace draconic::gui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 namespace
 {
-    core::RefPtr<Node> MakeNode() { return core::MakeRef<Node>(core::DefaultAllocator()); }
+    foundation::RefPtr<Node> MakeNode() { return foundation::MakeRef<Node>(foundation::DefaultAllocator()); }
 }
 
 TEST_CASE("node: add child sets parent and count")
@@ -88,8 +88,8 @@ TEST_CASE("node: z-order and siblings")
 TEST_CASE("node: size and local bounds")
 {
     auto node = MakeNode();
-    node->SetSize(core::Float2{120.0f, 40.0f});
-    CHECK(node->GetSize() == core::Float2{120.0f, 40.0f});
+    node->SetSize(foundation::Float2{120.0f, 40.0f});
+    CHECK(node->GetSize() == foundation::Float2{120.0f, 40.0f});
     Rect b = node->GetLocalBounds();
     CHECK(b == Rect{0.0f, 0.0f, 120.0f, 40.0f});
 }
@@ -99,10 +99,10 @@ TEST_CASE("node: world position accumulates parent chain")
     auto root = MakeNode();
     auto child = MakeNode();
     root->AddChild(child.Get());
-    root->SetPosition(core::Float2{100.0f, 0.0f});
-    child->SetPosition(core::Float2{10.0f, 5.0f});
+    root->SetPosition(foundation::Float2{100.0f, 0.0f});
+    child->SetPosition(foundation::Float2{10.0f, 5.0f});
 
-    const core::Float2 screen = child->GetScreenPosition();
+    const foundation::Float2 screen = child->GetScreenPosition();
     CHECK(screen.x == doctest::Approx(110.0f));
     CHECK(screen.y == doctest::Approx(5.0f));
 }
@@ -110,26 +110,26 @@ TEST_CASE("node: world position accumulates parent chain")
 TEST_CASE("node: hit test returns topmost child")
 {
     auto root = MakeNode();
-    root->SetSize(core::Float2{200.0f, 200.0f});
+    root->SetSize(foundation::Float2{200.0f, 200.0f});
     auto a = MakeNode();
     auto b = MakeNode();
-    a->SetSize(core::Float2{100.0f, 100.0f});
-    b->SetSize(core::Float2{100.0f, 100.0f});
+    a->SetSize(foundation::Float2{100.0f, 100.0f});
+    b->SetSize(foundation::Float2{100.0f, 100.0f});
     root->AddChild(a.Get());
     root->AddChild(b.Get()); // b is topmost in the overlap
 
-    CHECK(root->OverFind(core::Float2{50.0f, 50.0f}) == b.Get());
-    CHECK(root->OverFind(core::Float2{150.0f, 150.0f}) == root.Get()); // only root there
-    CHECK(root->OverFind(core::Float2{300.0f, 300.0f}) == nullptr);    // outside all
+    CHECK(root->OverFind(foundation::Float2{50.0f, 50.0f}) == b.Get());
+    CHECK(root->OverFind(foundation::Float2{150.0f, 150.0f}) == root.Get()); // only root there
+    CHECK(root->OverFind(foundation::Float2{300.0f, 300.0f}) == nullptr);    // outside all
 }
 
 TEST_CASE("node: hidden node is not hit and hides subtree")
 {
     auto root = MakeNode();
-    root->SetSize(core::Float2{100.0f, 100.0f});
+    root->SetSize(foundation::Float2{100.0f, 100.0f});
     root->SetVisible(false);
     CHECK_FALSE(root->IsVisible());
-    CHECK(root->OverFind(core::Float2{50.0f, 50.0f}) == nullptr);
+    CHECK(root->OverFind(foundation::Float2{50.0f, 50.0f}) == nullptr);
 }
 
 TEST_CASE("node: tree visibility follows parents")
@@ -151,7 +151,7 @@ TEST_CASE("node: invalidation bubbles to ancestors")
     root->ClearNeedsRedraw();
     child->ClearNeedsRedraw();
 
-    child->SetSize(core::Float2{10.0f, 10.0f});
+    child->SetSize(foundation::Float2{10.0f, 10.0f});
     CHECK(child->NeedsRedraw());
     CHECK(root->NeedsRedraw()); // bubbled up
 }
@@ -168,21 +168,21 @@ TEST_CASE("node: event listener fires on size change")
                                                seen = e.Type;
                                            });
 
-    node->SetSize(core::Float2{10.0f, 10.0f});
+    node->SetSize(foundation::Float2{10.0f, 10.0f});
     CHECK(fired == 1);
     CHECK(seen == EventType::SizeChanged);
 
     node->RemoveEventListener(id);
-    node->SetSize(core::Float2{20.0f, 20.0f});
+    node->SetSize(foundation::Float2{20.0f, 20.0f});
     CHECK(fired == 1); // no longer listening
 }
 
 TEST_CASE("node: setting same size does not notify")
 {
     auto node = MakeNode();
-    node->SetSize(core::Float2{10.0f, 10.0f});
+    node->SetSize(foundation::Float2{10.0f, 10.0f});
     int fired = 0;
     node->AddEventListener(EventType::SizeChanged, [&](const Event&) { ++fired; });
-    node->SetSize(core::Float2{10.0f, 10.0f}); // unchanged
+    node->SetSize(foundation::Float2{10.0f, 10.0f}); // unchanged
     CHECK(fired == 0);
 }

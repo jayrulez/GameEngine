@@ -3,7 +3,7 @@ add_library(Draconic.Engine.Input STATIC)
 add_library(Draconic::Engine.Input ALIAS Draconic.Engine.Input)
 
 target_link_libraries(Draconic.Engine.Input
-    PUBLIC Draconic::Core Draconic::Shell Draconic::Runtime Draconic::Script Draconic::Script.Facades Draconic::Input Draconic::Policy)
+    PUBLIC Draconic::Foundation Draconic::Shell Draconic::Runtime Draconic::Script Draconic::Script.Facades Draconic::Input Draconic::Policy)
 
 target_sources(Draconic.Engine.Input
     PRIVATE

@@ -5,10 +5,10 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.image;
 import draconic.texture;
@@ -16,7 +16,7 @@ import draconic.texture.editor;
 import draconic.editor.core;
 import draconic.editor.texture;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace texture = draconic::texture;
 namespace image = draconic::image;
 

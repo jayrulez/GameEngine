@@ -2,16 +2,16 @@
 //
 // Static positioning helpers for popups, tooltips, and menus - pure calculations, no state. Ported from
 // Sedulous.UI/src/Overlay/PopupPositioner.bf. Beef `static class` -> a struct of static methods; the
-// `(float x, float y)` tuple returns -> Float2; RectangleF -> core::Rectangle; Vector2 -> Float2.
+// `(float x, float y)` tuple returns -> Float2; RectangleF -> foundation::Rectangle; Vector2 -> Float2.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:popup_positioner;
 
-import draconic.core; // Rectangle, Float2
+import draconic.foundation; // Rectangle, Float2
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

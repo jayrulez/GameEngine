@@ -4,13 +4,13 @@
 // Sedulous.UI/src/Styling/Parser/Token.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:sss_token;
 
-import draconic.core; // StringView
+import draconic.foundation; // StringView
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

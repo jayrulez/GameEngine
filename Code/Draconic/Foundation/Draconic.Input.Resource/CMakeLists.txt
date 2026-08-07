@@ -3,7 +3,7 @@ add_library(Draconic.Input.Resource STATIC)
 add_library(Draconic::Input.Resource ALIAS Draconic.Input.Resource)
 
 target_link_libraries(Draconic.Input.Resource
-    PUBLIC Draconic::Core Draconic::Content Draconic::Resource Draconic::Input Draconic::Policy)
+    PUBLIC Draconic::Foundation Draconic::Content Draconic::Resource Draconic::Input Draconic::Policy)
 
 target_sources(Draconic.Input.Resource
     PUBLIC

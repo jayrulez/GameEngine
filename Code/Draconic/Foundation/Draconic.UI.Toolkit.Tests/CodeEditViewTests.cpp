@@ -2,15 +2,15 @@
 // undo chords, Tab-through-WantsTabKey, gutter breakpoint clicks, clipboard round trip) plus
 // CompletionModel unit coverage (filter ranking + popup key routing without a UIContext).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 import draconic.ui.toolkit;
 
 using namespace draconic::ui;
 using namespace draconic::ui::toolkit;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 namespace
 {
@@ -351,8 +351,8 @@ namespace
     UniquePtr<ICodeLexer> MakeCLike()
     {
         return UniquePtr<ICodeLexer>(
-            core::DefaultAllocator().New<CLikeLexer>(CommentableSpec()),
-            core::DefaultAllocator());
+            foundation::DefaultAllocator().New<CLikeLexer>(CommentableSpec()),
+            foundation::DefaultAllocator());
     }
 }
 
@@ -444,8 +444,8 @@ TEST_CASE("toolkit-codeeditview: ToggleLineComment")
 TEST_CASE("toolkit-codeeditview: ToggleLineCommentXmlIsNoOp")
 {
     Harness h;
-    h.view->SetLexer(UniquePtr<ICodeLexer>(core::DefaultAllocator().New<XmlLexer>(),
-                                           core::DefaultAllocator()));
+    h.view->SetLexer(UniquePtr<ICodeLexer>(foundation::DefaultAllocator().New<XmlLexer>(),
+                                           foundation::DefaultAllocator()));
     h.view->SetText(u8"<a/>");
     h.Key(KeyCode::Slash, KeyModifiers::Ctrl);
     CHECK(h.view->Text().AsView() == StringView(u8"<a/>")); // no line comments in XML

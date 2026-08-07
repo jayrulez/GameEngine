@@ -2,17 +2,17 @@
 /// Ported from Sedulous.RHI.Vulkan/VulkanSampler.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include "VkIncludes.h"
 
 export module draconic.rhi.vulkan:sampler;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :conversions;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::vk
 {

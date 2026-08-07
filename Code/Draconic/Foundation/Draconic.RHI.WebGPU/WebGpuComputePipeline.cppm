@@ -1,19 +1,19 @@
 /// draconic.rhi.webgpu:compute_pipeline - ComputePipeline over WGPUComputePipeline.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include "WebGpuIncludes.h"
 
 export module draconic.rhi.webgpu:compute_pipeline;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :api;
 import :conversions;
 import :pipeline_layout;
 import :shader_module;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::webgpu
 {

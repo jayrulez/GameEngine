@@ -8,13 +8,13 @@
 /// true = always-on-top. Immediate-mode: Clear() once per frame.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 module draconic.render;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::render::debug
 {

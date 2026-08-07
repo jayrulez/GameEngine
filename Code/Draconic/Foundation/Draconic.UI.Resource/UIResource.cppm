@@ -11,16 +11,16 @@
 // without pulling the whole UI stack.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui.resource;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.resource;
 import draconic.content;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::resource;
 
 export namespace draconic::ui
@@ -34,7 +34,7 @@ export namespace draconic::ui
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "markup", markup);
+            draconic::foundation::Serialize(ar, "markup", markup);
         }
     };
 
@@ -78,7 +78,7 @@ export namespace draconic::ui
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "stylesheet", stylesheet);
+            draconic::foundation::Serialize(ar, "stylesheet", stylesheet);
         }
     };
 

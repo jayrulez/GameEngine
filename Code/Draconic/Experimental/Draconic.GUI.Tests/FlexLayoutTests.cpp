@@ -1,22 +1,22 @@
 // Draconic GUI - FlexLayout tests: main-axis distribution (justify-content + flex-grow), cross-
 // axis alignment (align-items), gap, and row/column direction.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.gui;
 
 using namespace draconic::gui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 namespace
 {
     template <typename T>
-    core::RefPtr<T> Make()
+    foundation::RefPtr<T> Make()
     {
-        return core::MakeRef<T>(core::DefaultAllocator());
+        return foundation::MakeRef<T>(foundation::DefaultAllocator());
     }
 
-    core::RefPtr<UIWidget> Child(core::Float2 size)
+    foundation::RefPtr<UIWidget> Child(foundation::Float2 size)
     {
         auto w = Make<UIWidget>();
         w->SetSize(size);
@@ -24,15 +24,15 @@ namespace
     }
 
     // A flex row of three 40x20 children in a 300x100 box (gap 0 unless set).
-    core::RefPtr<FlexLayout> Row3(core::RefPtr<UIWidget>& a, core::RefPtr<UIWidget>& b,
-                                  core::RefPtr<UIWidget>& c)
+    foundation::RefPtr<FlexLayout> Row3(foundation::RefPtr<UIWidget>& a, foundation::RefPtr<UIWidget>& b,
+                                  foundation::RefPtr<UIWidget>& c)
     {
         auto flex = Make<FlexLayout>();
-        flex->SetSize(core::Float2{300.0f, 100.0f});
+        flex->SetSize(foundation::Float2{300.0f, 100.0f});
         flex->SetDirection(FlexDirection::Row);
-        a = Child(core::Float2{40.0f, 20.0f});
-        b = Child(core::Float2{40.0f, 20.0f});
-        c = Child(core::Float2{40.0f, 20.0f});
+        a = Child(foundation::Float2{40.0f, 20.0f});
+        b = Child(foundation::Float2{40.0f, 20.0f});
+        c = Child(foundation::Float2{40.0f, 20.0f});
         flex->AddChild(a.Get());
         flex->AddChild(b.Get());
         flex->AddChild(c.Get());
@@ -42,7 +42,7 @@ namespace
 
 TEST_CASE("flex: row start with gap")
 {
-    core::RefPtr<UIWidget> a, b, c;
+    foundation::RefPtr<UIWidget> a, b, c;
     auto flex = Row3(a, b, c);
     flex->SetGap(10.0f); // 40 + 10 stride
     CHECK(a->GetPosition().x == doctest::Approx(0.0f));
@@ -52,7 +52,7 @@ TEST_CASE("flex: row start with gap")
 
 TEST_CASE("flex: justify-content distributes the leftover space")
 {
-    core::RefPtr<UIWidget> a, b, c;
+    foundation::RefPtr<UIWidget> a, b, c;
     auto flex = Row3(a, b, c); // free = 300 - 120 = 180
 
     flex->SetJustifyContent(JustifyContent::Center); // start += 90
@@ -79,7 +79,7 @@ TEST_CASE("flex: justify-content distributes the leftover space")
 
 TEST_CASE("flex: flex-grow shares leftover main-axis space")
 {
-    core::RefPtr<UIWidget> a, b, c;
+    foundation::RefPtr<UIWidget> a, b, c;
     auto flex = Row3(a, b, c); // free = 180
 
     flex->SetChildGrow(a.Get(), 2.0f);
@@ -95,7 +95,7 @@ TEST_CASE("flex: flex-grow shares leftover main-axis space")
 
 TEST_CASE("flex: align-items positions/stretches on the cross axis")
 {
-    core::RefPtr<UIWidget> a, b, c;
+    foundation::RefPtr<UIWidget> a, b, c;
     auto flex = Row3(a, b, c); // cross = 100, child height 20
 
     flex->SetAlignItems(AlignItems::Center);
@@ -112,11 +112,11 @@ TEST_CASE("flex: align-items positions/stretches on the cross axis")
 TEST_CASE("flex: column direction stacks on the y (main) axis")
 {
     auto flex = Make<FlexLayout>();
-    flex->SetSize(core::Float2{100.0f, 300.0f});
+    flex->SetSize(foundation::Float2{100.0f, 300.0f});
     flex->SetDirection(FlexDirection::Column);
     flex->SetGap(5.0f);
-    auto a = Child(core::Float2{40.0f, 30.0f});
-    auto b = Child(core::Float2{40.0f, 30.0f});
+    auto a = Child(foundation::Float2{40.0f, 30.0f});
+    auto b = Child(foundation::Float2{40.0f, 30.0f});
     flex->AddChild(a.Get());
     flex->AddChild(b.Get());
     CHECK(a->GetPosition().y == doctest::Approx(0.0f));
@@ -128,10 +128,10 @@ TEST_CASE("flex: markup structural attributes configure the layout")
 {
     static WidgetFactory factory = DefaultWidgetFactory();
     MarkupLoader loader(factory);
-    auto root = loader.LoadFromString(core::StringView(
+    auto root = loader.LoadFromString(foundation::StringView(
         u8R"(<FlexLayout direction="column" justify-content="center" align-items="stretch" gap="6"/>)"));
     REQUIRE(root.Get() != nullptr);
-    auto* flex = core::Cast<FlexLayout>(root.Get());
+    auto* flex = foundation::Cast<FlexLayout>(root.Get());
     REQUIRE(flex != nullptr);
     CHECK(flex->GetDirection() == FlexDirection::Column);
     CHECK(flex->GetJustifyContent() == JustifyContent::Center);

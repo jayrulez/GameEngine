@@ -6,17 +6,17 @@
 // than lexicographically. Mutating it notifies attached views via DidUpdate.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:table_model;
 
-import draconic.core; // Array, String, StringView, Move
+import draconic.foundation; // Array, String, StringView, Move
 import :variant;
 import :model_index;
 import :model;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -25,14 +25,14 @@ export namespace draconic::gui
     public:
         TableModel() = default;
 
-        void SetColumns(Array<core::String> columns)
+        void SetColumns(Array<foundation::String> columns)
         {
-            m_columns = core::Move(columns);
+            m_columns = foundation::Move(columns);
             DidUpdate();
         }
         void AddRow(Array<Variant> row)
         {
-            m_rows.PushBack(core::Move(row));
+            m_rows.PushBack(foundation::Move(row));
             DidUpdate();
         }
         void Clear()
@@ -54,9 +54,9 @@ export namespace draconic::gui
             return parent.IsValid() ? 0 : m_rows.Size();
         }
         [[nodiscard]] usize ColumnCount() const override { return m_columns.Size(); }
-        [[nodiscard]] core::String ColumnName(usize column) const override
+        [[nodiscard]] foundation::String ColumnName(usize column) const override
         {
-            return column < m_columns.Size() ? m_columns[column] : core::String{};
+            return column < m_columns.Size() ? m_columns[column] : foundation::String{};
         }
         [[nodiscard]] Variant Data(const ModelIndex& index,
                                    ModelRole role = ModelRole::Display) const override
@@ -69,7 +69,7 @@ export namespace draconic::gui
         }
 
     private:
-        Array<core::String> m_columns;
+        Array<foundation::String> m_columns;
         Array<Array<Variant>> m_rows;
     };
 }

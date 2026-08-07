@@ -8,7 +8,7 @@ add_library(Draconic.Script.AngelScript.Editor STATIC)
 add_library(Draconic::Script.AngelScript.Editor ALIAS Draconic.Script.AngelScript.Editor)
 target_link_libraries(Draconic.Script.AngelScript.Editor
     PUBLIC
-        Draconic::Core Draconic::Editor Draconic::Editor.Core Draconic::Content
+        Draconic::Foundation Draconic::Editor Draconic::Editor.Core Draconic::Content
         Draconic::Script Draconic::Script.Resource Draconic::Script.Facades
         Draconic::Script.Editor Draconic::Script.AngelScript Draconic::Policy
     PRIVATE
@@ -26,7 +26,7 @@ target_sources(Draconic.Script.AngelScript.Editor
 add_library(Draconic.Script.AngelScript.Editor.UI STATIC)
 add_library(Draconic::Script.AngelScript.Editor.UI ALIAS Draconic.Script.AngelScript.Editor.UI)
 target_link_libraries(Draconic.Script.AngelScript.Editor.UI PUBLIC
-    Draconic::Core Draconic::UI.Toolkit Draconic::Policy)
+    Draconic::Foundation Draconic::UI.Toolkit Draconic::Policy)
 target_sources(Draconic.Script.AngelScript.Editor.UI
     PRIVATE
         AngelScriptEditorUIImpl.cpp

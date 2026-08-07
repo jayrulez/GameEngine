@@ -8,11 +8,11 @@
 // AngelScript introspection seam) joins here with code-editor P4.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.script.angelscript.editor.ui;
 
-import draconic.core;
+import draconic.foundation;
 
 export namespace draconic::script::angelscript
 {

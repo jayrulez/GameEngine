@@ -13,12 +13,12 @@
 // drag/resize (all position/size writes are ATOMIC - per-axis writes race on async X11).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h" // Cast<DockPanelDragData> for the drag-follow
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h" // Cast<DockPanelDragData> for the drag-follow
 
 export module draconic.ui.application;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.shell;
 import draconic.graphics;
 import draconic.runtime.client;
@@ -26,7 +26,7 @@ import draconic.ui;
 import draconic.ui.toolkit;
 import draconic.ui.runtime;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace shell = draconic::shell;
 namespace graphics = draconic::graphics;
 namespace ui = draconic::ui;
@@ -35,10 +35,10 @@ namespace ui = draconic::ui;
 // toolkit::* / runtime-host types resolve via the parent namespace.
 export namespace draconic::ui::application
 {
-    using core::f32;
-    using core::i32;
-    using core::u32;
-    using core::usize;
+    using foundation::f32;
+    using foundation::i32;
+    using foundation::u32;
+    using foundation::usize;
 
     /// Implements the toolkit docking host on the runtime's multi-window graphics host. Assign to a
     /// DockManager's DockableWindowHost; floated panels become borderless OS windows drawn by the UIHost.
@@ -57,7 +57,7 @@ export namespace draconic::ui::application
         [[nodiscard]] bool SupportsOSWindows() override { return true; }
 
         void CreateDockableWindow(View* dockableWindow, f32 width, f32 height, f32 x, f32 y,
-                                  core::Function<void(View*)> onCloseRequested = {}) override
+                                  foundation::Function<void(View*)> onCloseRequested = {}) override
         {
             if (dockableWindow == nullptr || m_host == nullptr)
             {
@@ -84,12 +84,12 @@ export namespace draconic::ui::application
             }
 
             // The OS window's RootView owns the dockable-window view (the DockManager keeps only a raw ref).
-            core::RefPtr<RootView> root = core::MakeRef<RootView>(core::DefaultAllocator());
+            foundation::RefPtr<RootView> root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
             root->AddView(dockableWindow);
             m_uiHost->AttachWindow(rw, root);
 
             m_entries.PushBack(Entry{dockableWindow, rw, root,
-                                     static_cast<core::Function<void(View*)>&&>(onCloseRequested)});
+                                     static_cast<foundation::Function<void(View*)>&&>(onCloseRequested)});
         }
 
         void DestroyDockableWindow(View* dockableWindow) override
@@ -232,8 +232,8 @@ export namespace draconic::ui::application
         {
             View* view = nullptr;                 // borrowed (RootView owns it)
             graphics::RenderWindow* rw = nullptr; // borrowed (IApplicationHost owns it)
-            core::RefPtr<RootView> root;
-            core::Function<void(View*)> onClose;
+            foundation::RefPtr<RootView> root;
+            foundation::Function<void(View*)> onClose;
         };
 
         [[nodiscard]] Entry* Find(View* view)
@@ -268,7 +268,7 @@ export namespace draconic::ui::application
 
         draconic::runtime::IApplicationHost* m_host; // borrowed
         ui::runtime::UIHost* m_uiHost;               // borrowed (the app owns it)
-        core::Array<Entry> m_entries;
+        foundation::Array<Entry> m_entries;
 
         // Drag-follow state (Tick): the OS window currently being dragged + the grab offset.
         graphics::RenderWindow* m_dragWindow = nullptr;

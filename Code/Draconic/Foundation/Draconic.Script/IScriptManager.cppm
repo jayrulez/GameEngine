@@ -5,23 +5,23 @@
 // One backend (Lua, ...) implements this per VM; backends are plugins.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.script:script_manager;
 
-import draconic.core;
+import draconic.foundation;
 import :script_context;
 import :script_introspection; // DescribeBoundApi surface
 import :script_debug;         // IScriptDebugger / IScriptProfiler / IScriptBlob seams
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::script
 {
     /// Optional backend features (scripting.md B4), declared per backend and consumed
     /// contract-first: a consumer CHECKS the flag and degrades cleanly - a backend
     /// without Coroutines still runs behaviors, it just has no coroutine scheduler.
-    enum class ScriptCapabilities : core::u32
+    enum class ScriptCapabilities : foundation::u32
     {
         None = 0,
         Coroutines = 1 << 0, // cooperative coroutines (wait/waitUntil scheduler) - implemented
@@ -33,21 +33,21 @@ export namespace draconic::script
     };
     inline constexpr ScriptCapabilities operator|(ScriptCapabilities a, ScriptCapabilities b)
     {
-        return static_cast<ScriptCapabilities>(static_cast<core::u32>(a) |
-                                               static_cast<core::u32>(b));
+        return static_cast<ScriptCapabilities>(static_cast<foundation::u32>(a) |
+                                               static_cast<foundation::u32>(b));
     }
     inline constexpr bool HasScriptCapability(ScriptCapabilities value, ScriptCapabilities flag)
     {
-        return (static_cast<core::u32>(value) & static_cast<core::u32>(flag)) != 0;
+        return (static_cast<foundation::u32>(value) & static_cast<foundation::u32>(flag)) != 0;
     }
 
-    class IScriptManager : public core::Object
+    class IScriptManager : public foundation::Object
     {
     public:
         // Expose a reflected type to scripts. The backend introspects the
         // TypeInfo (properties / methods / constructors / constants) and installs
         // the corresponding bindings.
-        virtual void RegisterType(const core::TypeInfo& type) = 0;
+        virtual void RegisterType(const foundation::TypeInfo& type) = 0;
 
         /// Called once after ALL RegisterType calls, before the first CreateContext
         /// (RegisterReflectedTypes drives it). Backends that need two-phase emission -
@@ -59,7 +59,7 @@ export namespace draconic::script
 
         // Create a fresh, isolated execution context. Contexts see the classes
         // registered up to their creation.
-        [[nodiscard]] virtual core::RefPtr<IScriptContext> CreateContext() = 0;
+        [[nodiscard]] virtual foundation::RefPtr<IScriptContext> CreateContext() = 0;
 
         // Single-step garbage collection, for backends that need it kept small in
         // real-time loops. Default: no-op.
@@ -71,7 +71,7 @@ export namespace draconic::script
         /// ONCE per simulated frame. A backend without ScriptCapabilities::Coroutines
         /// leaves this a no-op - the battery certifies the behavior, the flag only
         /// advertises it.
-        virtual void AdvanceCoroutines(core::f64 deltaSeconds) { (void)deltaSeconds; }
+        virtual void AdvanceCoroutines(foundation::f64 deltaSeconds) { (void)deltaSeconds; }
 
         /// Stop and drop every coroutine owned by `instance` (its behavior is being
         /// disabled or destroyed). No-op on a backend without the capability.
@@ -90,24 +90,24 @@ export namespace draconic::script
         /// and for the conformance diff that catches a type the backend silently failed to
         /// bind. NOT a capability - every backend implements it; the default (empty) is the
         /// honest answer for a backend that has bound nothing, and the diff then flags it.
-        [[nodiscard]] virtual core::Array<ScriptApiType> DescribeBoundApi() const
+        [[nodiscard]] virtual foundation::Array<ScriptApiType> DescribeBoundApi() const
         {
-            return core::Array<ScriptApiType>{};
+            return foundation::Array<ScriptApiType>{};
         }
 
         // ---- committed seams (no backend implements these yet) ----
 
         /// A step debugger for this VM, or null when ScriptCapabilities::Debugger is absent
         /// (the default - the seam is committed, the impl is a later track).
-        [[nodiscard]] virtual core::UniquePtr<IScriptDebugger> CreateDebugger()
+        [[nodiscard]] virtual foundation::UniquePtr<IScriptDebugger> CreateDebugger()
         {
-            return core::UniquePtr<IScriptDebugger>{};
+            return foundation::UniquePtr<IScriptDebugger>{};
         }
 
         /// A VM profiler, or null when ScriptCapabilities::Profiler is absent (the default).
-        [[nodiscard]] virtual core::UniquePtr<IScriptProfiler> CreateProfiler()
+        [[nodiscard]] virtual foundation::UniquePtr<IScriptProfiler> CreateProfiler()
         {
-            return core::UniquePtr<IScriptProfiler>{};
+            return foundation::UniquePtr<IScriptProfiler>{};
         }
 
         /// Compile source to an opaque bytecode blob (the cook side of the Bytecode seam).
@@ -115,12 +115,12 @@ export namespace draconic::script
         /// stable bytecode (AngelScript SaveByteCode) fills this later; a source-only
         /// backend (Wren) stays unsupported - exactly the split the capability model exists
         /// for.
-        [[nodiscard]] virtual core::Result<core::RefPtr<IScriptBlob>>
-        CompileToBlob(core::StringView source, core::StringView chunkName)
+        [[nodiscard]] virtual foundation::Result<foundation::RefPtr<IScriptBlob>>
+        CompileToBlob(foundation::StringView source, foundation::StringView chunkName)
         {
             (void)source;
             (void)chunkName;
-            return core::Err(core::ErrorCode::NotSupported);
+            return foundation::Err(foundation::ErrorCode::NotSupported);
         }
 
         /// Assemble the ONE behavior module's source from the loaded class SOURCES. The
@@ -131,11 +131,11 @@ export namespace draconic::script
         /// coroutine base; a backend with globally-visible types needs none. The default
         /// is a plain newline-joined concatenation - the safe behavior for a backend that
         /// needs no framing at all.
-        [[nodiscard]] virtual core::String
-        AssembleBehaviorModuleSource(core::Span<const core::StringView> classSources) const
+        [[nodiscard]] virtual foundation::String
+        AssembleBehaviorModuleSource(foundation::Span<const foundation::StringView> classSources) const
         {
-            core::String moduleSource;
-            for (const core::StringView& source : classSources)
+            foundation::String moduleSource;
+            for (const foundation::StringView& source : classSources)
             {
                 moduleSource += source;
                 moduleSource += u8"\n";

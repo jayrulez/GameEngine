@@ -4,17 +4,17 @@
 // from Sedulous.RenderGraph (GraphDebug.bf).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.rendergraph:debug;
 
-import draconic.core;
+import draconic.foundation;
 import :types;
 import :pass;
 import :resource;
 import :graph;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rendergraph
 {

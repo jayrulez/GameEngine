@@ -9,11 +9,11 @@
 // Color32 happens only in the VGVertex constructor.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.vg:tessellation;
 
-import draconic.core;
+import draconic.foundation;
 import :enums;
 import :vertex;
 import :style;
@@ -21,7 +21,7 @@ import :fills;
 import :path;
 import :shapes;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::vg
 {

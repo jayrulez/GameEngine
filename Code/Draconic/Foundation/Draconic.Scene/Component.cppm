@@ -16,17 +16,17 @@
 /// hatch from the storage decision - with no consumer impact.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Debug/Assert.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Debug/Assert.h"
 
 export module draconic.scene:component;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.resource;
 import :entity;
 import :system;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::scene
 {
@@ -286,7 +286,7 @@ export namespace draconic::scene
         // brings the core overloads into scope for the component's own field serialization.
         static void SerializeOne(ISerializer& ar, T& value)
         {
-            using draconic::core::Serialize;
+            using draconic::foundation::Serialize;
             Serialize(ar, value);
         }
         static void ResolveOne(draconic::resource::ResourceManager& manager, T& value)

@@ -8,15 +8,15 @@
 // Auditioning honors the asset's loop intent; a playhead tracks the voice.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 export module draconic.editor.audio;
 
 export import :sound_cue_page;
 export import :bus_layout_page;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.runtime.client;
 import draconic.audio;
@@ -26,7 +26,7 @@ import draconic.ui;
 import draconic.editor.core;
 import draconic.editor.app;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {

@@ -3,7 +3,7 @@
 add_executable(InputActions main.cpp)
 
 target_link_libraries(InputActions PRIVATE
-    Draconic::Core
+    Draconic::Foundation
     Draconic::Runtime
     Draconic::Runtime.Client
     Draconic::Shell.Desktop Draconic::Runtime.Desktop

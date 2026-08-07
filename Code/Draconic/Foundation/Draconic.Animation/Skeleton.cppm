@@ -4,24 +4,24 @@
 /// node with a local bind pose + inverse bind matrix; the `Skeleton` owns the bones and computes
 /// world-space + skinning matrices from a set of local poses, evaluated parents-before-children.
 ///
-/// `BoneTransform` reuses `core::Transform` (position/rotation/scale, S*R*T) - byte-for-byte the
-/// Sedulous BoneTransform, with Lerp/ToMatrix already in core math.
+/// `BoneTransform` reuses `foundation::Transform` (position/rotation/scale, S*R*T) - byte-for-byte the
+/// Sedulous BoneTransform, with Lerp/ToMatrix already in foundation math.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.animation:skeleton;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::animation
 {
 
-    // A compact per-bone transform for animation (pos/rot/scale). Reuses the core math type.
-    using BoneTransform = core::Transform;
+    // A compact per-bone transform for animation (pos/rot/scale). Reuses the foundation math type.
+    using BoneTransform = foundation::Transform;
 
     // One bone in a skeleton hierarchy. Value type owned by the Skeleton's bone array (no per-bone heap
     // allocation, unlike the Beef original's Bone[] of references).

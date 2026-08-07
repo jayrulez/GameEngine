@@ -1,12 +1,12 @@
 // Draconic::EditorFonts - the `draconic.editor.fonts` module (implementation).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 module draconic.editor.fonts;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.vfs;
 import draconic.image;
@@ -21,7 +21,7 @@ import draconic.ui.toolkit;
 import draconic.editor.core;
 import draconic.editor.app;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::editor
 {

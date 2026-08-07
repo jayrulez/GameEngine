@@ -6,19 +6,19 @@
 // VGLinearGradientFill over a rect path. Angle is RADIANS (0 = left-to-right).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:linear_gradient_drawable;
 
-import draconic.core; // Color, Float2, Array, Cos/Sin, Max
+import draconic.foundation; // Color, Float2, Array, Cos/Sin, Max
 import draconic.vg;   // VGLinearGradientFill, GradientStop, PathBuilder
 import :rect;
 import :draw_context;
 import :drawable;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace vg = draconic::vg;
 
 export namespace draconic::gui
@@ -41,12 +41,12 @@ export namespace draconic::gui
                 return;
 
             // Endpoints span the box along the gradient axis (through the center).
-            const core::Float2 dir{core::Cos(Angle), core::Sin(Angle)};
-            const core::Float2 center = dest.Center();
+            const foundation::Float2 dir{foundation::Cos(Angle), foundation::Sin(Angle)};
+            const foundation::Float2 center = dest.Center();
             const f32 half = dest.width * 0.5f * (dir.x < 0.0f ? -dir.x : dir.x) +
                              dest.height * 0.5f * (dir.y < 0.0f ? -dir.y : dir.y);
-            const core::Float2 from = center - dir * half;
-            const core::Float2 to = center + dir * half;
+            const foundation::Float2 from = center - dir * half;
+            const foundation::Float2 to = center + dir * half;
 
             vg::VGLinearGradientFill fill{from, to};
             for (const vg::GradientStop& stop : m_stops)

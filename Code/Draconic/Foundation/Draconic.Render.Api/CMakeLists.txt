@@ -6,7 +6,7 @@
 add_library(Draconic.Render.Api STATIC)
 add_library(Draconic::Render.Api ALIAS Draconic.Render.Api)
 
-target_link_libraries(Draconic.Render.Api PUBLIC Draconic::Core Draconic::RHI Draconic::Scene Draconic::Policy)
+target_link_libraries(Draconic.Render.Api PUBLIC Draconic::Foundation Draconic::RHI Draconic::Scene Draconic::Policy)
 
 target_sources(Draconic.Render.Api
     PUBLIC

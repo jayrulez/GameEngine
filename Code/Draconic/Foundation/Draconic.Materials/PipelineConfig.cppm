@@ -10,16 +10,16 @@
 /// vertex attributes / strides (mirrors Sedulous's common formats).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.materials:pipeline;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.shaders;
 import :types;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 
 export namespace draconic::materials

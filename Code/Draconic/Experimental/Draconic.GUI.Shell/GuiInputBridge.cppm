@@ -10,16 +10,16 @@
 // InputSurface consumption lives here, never in the core.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui.shell;
 
-import draconic.core;  // ContentFit, Float2, String, StringView, u32
+import draconic.foundation;  // ContentFit, Float2, String, StringView, u32
 import draconic.gui;   // EventDispatcher, MouseButton, KeyMod*, IClipboard
 import draconic.shell; // InputEvent, InputEventKind, MouseButton, KeyModifiers, IWindow, IShell
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace shell = draconic::shell;
 
 export namespace draconic::gui
@@ -32,7 +32,7 @@ export namespace draconic::gui
 
         // The content fit maps window/region-space event positions into GUI content space.
         // Without one, positions pass through unchanged (identity).
-        void SetContentFit(const core::ContentFit& fit) noexcept
+        void SetContentFit(const foundation::ContentFit& fit) noexcept
         {
             m_fit = fit;
             m_hasFit = true;
@@ -71,21 +71,21 @@ export namespace draconic::gui
             switch (event.kind)
             {
             case shell::InputEventKind::MouseMove:
-                m_dispatcher->InjectMouseMove(ToContent(core::Float2{event.x, event.y}));
+                m_dispatcher->InjectMouseMove(ToContent(foundation::Float2{event.x, event.y}));
                 break;
             case shell::InputEventKind::MouseButtonDown:
-                m_dispatcher->InjectMouseDown(ToContent(core::Float2{event.x, event.y}),
+                m_dispatcher->InjectMouseDown(ToContent(foundation::Float2{event.x, event.y}),
                                               MapButton(event.button),
                                               MapModifiers(event.modifiers));
                 break;
             case shell::InputEventKind::MouseButtonUp:
-                m_dispatcher->InjectMouseUp(ToContent(core::Float2{event.x, event.y}),
+                m_dispatcher->InjectMouseUp(ToContent(foundation::Float2{event.x, event.y}),
                                             MapButton(event.button), MapModifiers(event.modifiers));
                 break;
             case shell::InputEventKind::MouseWheel:
                 // For wheel, x/y is the scroll delta; position is the last known cursor spot.
                 m_dispatcher->InjectMouseWheel(m_dispatcher->GetMousePosition(),
-                                               core::Float2{event.x, event.y});
+                                               foundation::Float2{event.x, event.y});
                 break;
             case shell::InputEventKind::KeyDown:
                 m_dispatcher->InjectKeyDown(MapKey(event.key), MapModifiers(event.modifiers));
@@ -94,7 +94,7 @@ export namespace draconic::gui
                 m_dispatcher->InjectKeyUp(MapKey(event.key), MapModifiers(event.modifiers));
                 break;
             case shell::InputEventKind::TextInput:
-                m_dispatcher->InjectText(core::StringView(event.text));
+                m_dispatcher->InjectText(foundation::StringView(event.text));
                 break;
             default:
                 routed = false; // gamepad / touch not routed to the GUI yet
@@ -117,7 +117,7 @@ export namespace draconic::gui
             if (mouse == nullptr)
                 return;
 
-            const core::Float2 position{mouse->X(), mouse->Y()};
+            const foundation::Float2 position{mouse->X(), mouse->Y()};
             m_dispatcher->InjectMouseMove(position);
 
             // Current keyboard modifiers, so a modified click (Shift+click to extend a text
@@ -138,17 +138,17 @@ export namespace draconic::gui
             const f32 scrollX = mouse->ScrollX();
             const f32 scrollY = mouse->ScrollY();
             if (scrollX != 0.0f || scrollY != 0.0f)
-                m_dispatcher->InjectMouseWheel(position, core::Float2{scrollX, scrollY});
+                m_dispatcher->InjectMouseWheel(position, foundation::Float2{scrollX, scrollY});
 
             SyncTextInput(); // a click this frame may have focused (or blurred) an editable widget
         }
 
     private:
-        [[nodiscard]] core::Float2 ToContent(core::Float2 windowPos) const
+        [[nodiscard]] foundation::Float2 ToContent(foundation::Float2 windowPos) const
         {
             if (!m_hasFit)
                 return windowPos;
-            core::Float2 out{0.0f, 0.0f};
+            foundation::Float2 out{0.0f, 0.0f};
             [[maybe_unused]] const bool inside =
                 m_fit.ToContent(windowPos, out); // out set regardless
             return out;
@@ -264,7 +264,7 @@ export namespace draconic::gui
         EventDispatcher* m_dispatcher;
         shell::IWindow* m_textInputTarget =
             nullptr; // window whose IME follows GUI focus (optional)
-        core::ContentFit m_fit{};
+        foundation::ContentFit m_fit{};
         bool m_hasFit = false;
     };
 
@@ -282,11 +282,11 @@ export namespace draconic::gui
         {
             return m_shell != nullptr && m_shell->HasClipboardText();
         }
-        [[nodiscard]] core::String GetText() const override
+        [[nodiscard]] foundation::String GetText() const override
         {
-            return m_shell != nullptr ? m_shell->GetClipboardText() : core::String{};
+            return m_shell != nullptr ? m_shell->GetClipboardText() : foundation::String{};
         }
-        void SetText(core::StringView text) override
+        void SetText(foundation::StringView text) override
         {
             if (m_shell != nullptr)
                 m_shell->SetClipboardText(text);

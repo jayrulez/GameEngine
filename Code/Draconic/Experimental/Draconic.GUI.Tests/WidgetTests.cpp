@@ -1,26 +1,26 @@
 // Draconic GUI - UINode / UIWidget tests: padding + content bounds, input-driven control
 // state (hover/press/focus/disabled), and the CSS identity surface (tag/id/classes).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.gui;
 
 using namespace draconic::gui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 namespace
 {
     template <typename T>
-    core::RefPtr<T> Make()
+    foundation::RefPtr<T> Make()
     {
-        return core::MakeRef<T>(core::DefaultAllocator());
+        return foundation::MakeRef<T>(foundation::DefaultAllocator());
     }
 }
 
 TEST_CASE("uinode: padding insets the content bounds")
 {
     auto n = Make<UINode>();
-    n->SetSize(core::Float2{100.0f, 80.0f});
+    n->SetSize(foundation::Float2{100.0f, 80.0f});
     n->SetPadding(Thickness{5.0f, 10.0f, 15.0f, 20.0f});
     Rect content = n->GetContentBounds();
     CHECK(content == Rect{5.0f, 10.0f, 80.0f, 50.0f}); // 100-5-15, 80-10-20
@@ -29,7 +29,7 @@ TEST_CASE("uinode: padding insets the content bounds")
 TEST_CASE("uinode: over-large padding clamps to zero, not negative")
 {
     auto n = Make<UINode>();
-    n->SetSize(core::Float2{20.0f, 20.0f});
+    n->SetSize(foundation::Float2{20.0f, 20.0f});
     n->SetPadding(Thickness{30.0f});
     Rect content = n->GetContentBounds();
     CHECK(content.width == 0.0f);
@@ -39,34 +39,34 @@ TEST_CASE("uinode: over-large padding clamps to zero, not negative")
 TEST_CASE("uinode: control state follows pointer, focus, and enabled")
 {
     auto root = Make<SceneNode>();
-    root->SetSize(core::Float2{200.0f, 200.0f});
+    root->SetSize(foundation::Float2{200.0f, 200.0f});
     auto w = Make<UINode>();
-    w->SetSize(core::Float2{100.0f, 100.0f});
+    w->SetSize(foundation::Float2{100.0f, 100.0f});
     root->AddChild(w.Get());
     EventDispatcher* d = root->GetEventDispatcher();
 
     CHECK(w->GetControlState() == ControlState::Normal);
 
     // Hover then leave (before any click, so no focus yet): Hover -> Normal.
-    d->InjectMouseMove(core::Float2{50.0f, 50.0f}); // over w
+    d->InjectMouseMove(foundation::Float2{50.0f, 50.0f}); // over w
     CHECK(w->IsHovered());
     CHECK(w->GetControlState() == ControlState::Hover);
-    d->InjectMouseMove(core::Float2{150.0f, 150.0f}); // off w
+    d->InjectMouseMove(foundation::Float2{150.0f, 150.0f}); // off w
     CHECK_FALSE(w->IsHovered());
     CHECK(w->GetControlState() == ControlState::Normal);
 
     // Press/release (click focuses the node).
-    d->InjectMouseMove(core::Float2{50.0f, 50.0f});
-    d->InjectMouseDown(core::Float2{50.0f, 50.0f}, MouseButton::Left);
+    d->InjectMouseMove(foundation::Float2{50.0f, 50.0f});
+    d->InjectMouseDown(foundation::Float2{50.0f, 50.0f}, MouseButton::Left);
     CHECK(w->IsPressed());
     CHECK(w->GetControlState() == ControlState::Pressed);
 
-    d->InjectMouseUp(core::Float2{50.0f, 50.0f}, MouseButton::Left);
+    d->InjectMouseUp(foundation::Float2{50.0f, 50.0f}, MouseButton::Left);
     CHECK_FALSE(w->IsPressed());
     CHECK(w->GetControlState() == ControlState::Hover); // hover outranks focus
 
     // Leave while focused (from the click): falls to Focused, not Normal.
-    d->InjectMouseMove(core::Float2{150.0f, 150.0f});
+    d->InjectMouseMove(foundation::Float2{150.0f, 150.0f});
     CHECK(w->IsFocused());
     CHECK(w->GetControlState() == ControlState::Focused);
 
@@ -77,15 +77,15 @@ TEST_CASE("uinode: control state follows pointer, focus, and enabled")
 TEST_CASE("uinode: skin background draws with the current control state")
 {
     auto root = Make<SceneNode>();
-    root->SetSize(core::Float2{200.0f, 200.0f});
+    root->SetSize(foundation::Float2{200.0f, 200.0f});
     auto w = Make<UINode>();
-    w->SetSize(core::Float2{100.0f, 100.0f});
+    w->SetSize(foundation::Float2{100.0f, 100.0f});
 
-    auto skin = core::MakeRef<StateListDrawable>(core::DefaultAllocator());
+    auto skin = foundation::MakeRef<StateListDrawable>(foundation::DefaultAllocator());
     skin->Set(ControlState::Normal,
-              core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), core::Color::Blue));
+              foundation::MakeRef<RectangleDrawable>(foundation::DefaultAllocator(), foundation::Color::Blue));
     skin->Set(ControlState::Hover,
-              core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), core::Color::Red));
+              foundation::MakeRef<RectangleDrawable>(foundation::DefaultAllocator(), foundation::Color::Red));
     w->SetSkin(skin);
     root->AddChild(w.Get());
 
@@ -99,10 +99,10 @@ TEST_CASE("uiwidget: tag and id")
 {
     auto w = Make<UIWidget>();
     CHECK(w->GetTag().Size() == 0);
-    w->SetTag(core::StringView(u8"button"));
-    w->SetId(core::StringView(u8"ok"));
-    CHECK(w->GetTag() == core::StringView(u8"button"));
-    CHECK(w->GetId() == core::StringView(u8"ok"));
+    w->SetTag(foundation::StringView(u8"button"));
+    w->SetId(foundation::StringView(u8"ok"));
+    CHECK(w->GetTag() == foundation::StringView(u8"button"));
+    CHECK(w->GetId() == foundation::StringView(u8"ok"));
 }
 
 TEST_CASE("uiwidget: style classes add/remove/toggle")
@@ -110,22 +110,22 @@ TEST_CASE("uiwidget: style classes add/remove/toggle")
     auto w = Make<UIWidget>();
     CHECK(w->ClassCount() == 0);
 
-    w->AddClass(core::StringView(u8"primary"));
-    w->AddClass(core::StringView(u8"large"));
-    w->AddClass(core::StringView(u8"primary")); // duplicate ignored
+    w->AddClass(foundation::StringView(u8"primary"));
+    w->AddClass(foundation::StringView(u8"large"));
+    w->AddClass(foundation::StringView(u8"primary")); // duplicate ignored
     CHECK(w->ClassCount() == 2);
-    CHECK(w->HasClass(core::StringView(u8"primary")));
-    CHECK(w->HasClass(core::StringView(u8"large")));
-    CHECK_FALSE(w->HasClass(core::StringView(u8"small")));
+    CHECK(w->HasClass(foundation::StringView(u8"primary")));
+    CHECK(w->HasClass(foundation::StringView(u8"large")));
+    CHECK_FALSE(w->HasClass(foundation::StringView(u8"small")));
 
-    w->RemoveClass(core::StringView(u8"large"));
-    CHECK_FALSE(w->HasClass(core::StringView(u8"large")));
+    w->RemoveClass(foundation::StringView(u8"large"));
+    CHECK_FALSE(w->HasClass(foundation::StringView(u8"large")));
     CHECK(w->ClassCount() == 1);
 
-    w->ToggleClass(core::StringView(u8"active"));
-    CHECK(w->HasClass(core::StringView(u8"active")));
-    w->ToggleClass(core::StringView(u8"active"));
-    CHECK_FALSE(w->HasClass(core::StringView(u8"active")));
+    w->ToggleClass(foundation::StringView(u8"active"));
+    CHECK(w->HasClass(foundation::StringView(u8"active")));
+    w->ToggleClass(foundation::StringView(u8"active"));
+    CHECK_FALSE(w->HasClass(foundation::StringView(u8"active")));
 }
 
 TEST_CASE("uiwidget: margin and inherited padding/state")

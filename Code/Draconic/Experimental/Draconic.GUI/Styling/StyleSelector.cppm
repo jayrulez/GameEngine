@@ -11,17 +11,17 @@
 // combinators, structural pseudo (:nth-child), attribute selectors, :not.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:style_selector;
 
-import draconic.core; // String, StringView, Array, i64, Cast
+import draconic.foundation; // String, StringView, Array, i64, Cast
 import :node;
 import :ui_widget;
 import :parse_util; // IsIdentChar, ReadIdent
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 namespace draconic::gui
 {
@@ -54,7 +54,7 @@ export namespace draconic::gui
     {
     public:
         StyleSelectorRule() = default;
-        StyleSelectorRule(core::StringView fragment, Combinator combinator)
+        StyleSelectorRule(foundation::StringView fragment, Combinator combinator)
             : m_combinator(combinator)
         {
             Parse(fragment);
@@ -62,11 +62,11 @@ export namespace draconic::gui
 
         [[nodiscard]] Combinator GetCombinator() const noexcept { return m_combinator; }
         [[nodiscard]] i64 Specificity() const noexcept { return m_specificity; }
-        [[nodiscard]] core::StringView GetTag() const { return m_tag.AsView(); }
-        [[nodiscard]] core::StringView GetId() const { return m_id.AsView(); }
+        [[nodiscard]] foundation::StringView GetTag() const { return m_tag.AsView(); }
+        [[nodiscard]] foundation::StringView GetId() const { return m_id.AsView(); }
         [[nodiscard]] u32 GetPseudoClasses() const noexcept { return m_pseudo; }
         // The `::part` pseudo-element (empty = none) - its declarations style a widget part.
-        [[nodiscard]] core::StringView GetPseudoElement() const { return m_pseudoElement.AsView(); }
+        [[nodiscard]] foundation::StringView GetPseudoElement() const { return m_pseudoElement.AsView(); }
 
         [[nodiscard]] bool Matches(const UIWidget& element, bool applyPseudo = true) const
         {
@@ -74,7 +74,7 @@ export namespace draconic::gui
                 return false;
             if (m_id.AsView().Size() != 0 && m_id != element.GetId())
                 return false;
-            for (const core::String& cls : m_classes)
+            for (const foundation::String& cls : m_classes)
                 if (!element.HasClass(cls.AsView()))
                     return false;
 
@@ -93,7 +93,7 @@ export namespace draconic::gui
         }
 
     private:
-        void Parse(core::StringView fragment)
+        void Parse(foundation::StringView fragment)
         {
             usize i = 0;
             const usize n = fragment.Size();
@@ -108,14 +108,14 @@ export namespace draconic::gui
                 else if (c == u8'.')
                 {
                     ++i;
-                    m_classes.PushBack(core::String(ReadIdent(fragment, i)));
+                    m_classes.PushBack(foundation::String(ReadIdent(fragment, i)));
                 }
                 else if (c == u8':')
                 {
                     if (i + 1 < n && fragment[i + 1] == u8':')
                     {
                         i += 2;
-                        m_pseudoElement = core::String(ReadIdent(fragment, i));
+                        m_pseudoElement = foundation::String(ReadIdent(fragment, i));
                     } // ::part
                     else
                     {
@@ -139,15 +139,15 @@ export namespace draconic::gui
             ComputeSpecificity();
         }
 
-        void ApplyPseudo(core::StringView name)
+        void ApplyPseudo(foundation::StringView name)
         {
-            if (name == core::StringView(u8"hover"))
+            if (name == foundation::StringView(u8"hover"))
                 m_pseudo |= PseudoHover;
-            else if (name == core::StringView(u8"focus"))
+            else if (name == foundation::StringView(u8"focus"))
                 m_pseudo |= PseudoFocus;
-            else if (name == core::StringView(u8"active"))
+            else if (name == foundation::StringView(u8"active"))
                 m_pseudo |= PseudoActive;
-            else if (name == core::StringView(u8"disabled"))
+            else if (name == foundation::StringView(u8"disabled"))
                 m_pseudo |= PseudoDisabled;
             // unknown pseudo-classes are ignored (deferred)
         }
@@ -177,10 +177,10 @@ export namespace draconic::gui
             return c;
         }
 
-        core::String m_tag;
-        core::String m_id;
-        core::String m_pseudoElement;
-        Array<core::String> m_classes;
+        foundation::String m_tag;
+        foundation::String m_id;
+        foundation::String m_pseudoElement;
+        Array<foundation::String> m_classes;
         u32 m_pseudo = PseudoNone;
         Combinator m_combinator = Combinator::Descendant;
         i64 m_specificity = 0;
@@ -190,16 +190,16 @@ export namespace draconic::gui
     {
     public:
         StyleSelector() = default;
-        explicit StyleSelector(core::StringView selector) { Parse(selector); }
+        explicit StyleSelector(foundation::StringView selector) { Parse(selector); }
 
         [[nodiscard]] i64 Specificity() const noexcept { return m_specificity; }
         [[nodiscard]] bool IsEmpty() const noexcept { return m_rules.Size() == 0; }
         [[nodiscard]] usize RuleCount() const noexcept { return m_rules.Size(); }
         // The pseudo-element of the subject (rightmost) rule; empty for a normal selector.
-        [[nodiscard]] core::StringView PseudoElement() const
+        [[nodiscard]] foundation::StringView PseudoElement() const
         {
             return m_rules.Size() != 0 ? m_rules[m_rules.Size() - 1].GetPseudoElement()
-                                       : core::StringView{};
+                                       : foundation::StringView{};
         }
 
         // True if `element` matches this selector (the rightmost rule matches the element,
@@ -251,10 +251,10 @@ export namespace draconic::gui
     private:
         [[nodiscard]] static const UIWidget* AsWidget(Node* n)
         {
-            return n != nullptr ? core::Cast<UIWidget>(n) : nullptr;
+            return n != nullptr ? foundation::Cast<UIWidget>(n) : nullptr;
         }
 
-        void Parse(core::StringView selector)
+        void Parse(foundation::StringView selector)
         {
             usize i = 0;
             const usize n = selector.Size();

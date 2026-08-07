@@ -7,16 +7,16 @@
 // position for velocity/doppler) are transient - never serialized.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.engine.audio:components;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.scene;
 import draconic.resource;
 import draconic.audio;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::audio
 {
@@ -62,35 +62,35 @@ export namespace draconic::audio
 
     inline void Serialize(ISerializer& ar, AudioSourceComponent& c)
     {
-        draconic::core::Serialize(ar, "clip", c.clip);
+        draconic::foundation::Serialize(ar, "clip", c.clip);
         u8 bus = static_cast<u8>(c.bus);
         u8 attenuation = static_cast<u8>(c.attenuationModel);
-        draconic::core::Serialize(ar, "bus", bus);
+        draconic::foundation::Serialize(ar, "bus", bus);
         c.bus = static_cast<AudioBus>(bus);
-        draconic::core::Serialize(ar, "volume", c.volume);
-        draconic::core::Serialize(ar, "pitch", c.pitch);
-        draconic::core::Serialize(ar, "loop", c.loop);
-        draconic::core::Serialize(ar, "spatial", c.spatial);
-        draconic::core::Serialize(ar, "autoPlay", c.autoPlay);
-        draconic::core::Serialize(ar, "distanceLowpassHz", c.distanceLowpassHz);
-        draconic::core::Serialize(ar, "cue", c.cue);
-        draconic::core::Serialize(ar, "priority", c.priority);
-        draconic::core::Serialize(ar, "minDistance", c.minDistance);
-        draconic::core::Serialize(ar, "maxDistance", c.maxDistance);
-        draconic::core::Serialize(ar, "attenuationModel", attenuation);
+        draconic::foundation::Serialize(ar, "volume", c.volume);
+        draconic::foundation::Serialize(ar, "pitch", c.pitch);
+        draconic::foundation::Serialize(ar, "loop", c.loop);
+        draconic::foundation::Serialize(ar, "spatial", c.spatial);
+        draconic::foundation::Serialize(ar, "autoPlay", c.autoPlay);
+        draconic::foundation::Serialize(ar, "distanceLowpassHz", c.distanceLowpassHz);
+        draconic::foundation::Serialize(ar, "cue", c.cue);
+        draconic::foundation::Serialize(ar, "priority", c.priority);
+        draconic::foundation::Serialize(ar, "minDistance", c.minDistance);
+        draconic::foundation::Serialize(ar, "maxDistance", c.maxDistance);
+        draconic::foundation::Serialize(ar, "attenuationModel", attenuation);
         c.attenuationModel = static_cast<AudioAttenuationModel>(attenuation);
-        draconic::core::Serialize(ar, "rolloff", c.rolloff);
-        draconic::core::Serialize(ar, "dopplerFactor", c.dopplerFactor);
-        draconic::core::Serialize(ar, "coneInnerAngleDegrees", c.coneInnerAngleDegrees);
-        draconic::core::Serialize(ar, "coneOuterAngleDegrees", c.coneOuterAngleDegrees);
-        draconic::core::Serialize(ar, "coneOuterGain", c.coneOuterGain);
+        draconic::foundation::Serialize(ar, "rolloff", c.rolloff);
+        draconic::foundation::Serialize(ar, "dopplerFactor", c.dopplerFactor);
+        draconic::foundation::Serialize(ar, "coneInnerAngleDegrees", c.coneInnerAngleDegrees);
+        draconic::foundation::Serialize(ar, "coneOuterAngleDegrees", c.coneOuterAngleDegrees);
+        draconic::foundation::Serialize(ar, "coneOuterGain", c.coneOuterGain);
         if (ar.Version() >= 2) // v2: named custom-bus routing
         {
-            draconic::core::Serialize(ar, "busName", c.busName);
+            draconic::foundation::Serialize(ar, "busName", c.busName);
         }
         if (ar.Version() >= 3) // v3: per-voice reverb send
         {
-            draconic::core::Serialize(ar, "reverbSend", c.reverbSend);
+            draconic::foundation::Serialize(ar, "reverbSend", c.reverbSend);
         }
     }
 
@@ -123,7 +123,7 @@ export namespace draconic::audio
 
     inline void Serialize(ISerializer& ar, AudioListenerComponent& c)
     {
-        draconic::core::Serialize(ar, "isActive", c.isActive);
+        draconic::foundation::Serialize(ar, "isActive", c.isActive);
     }
 
     // ---- reverb zones (P3): environmental reverb follows the LISTENER ----
@@ -141,12 +141,12 @@ export namespace draconic::audio
 
     inline void Serialize(ISerializer& ar, AudioReverbZoneComponent& c)
     {
-        draconic::core::Serialize(ar, "radius", c.radius);
-        draconic::core::Serialize(ar, "edgeFade", c.edgeFade);
-        draconic::core::Serialize(ar, "roomSize", c.roomSize);
-        draconic::core::Serialize(ar, "damping", c.damping);
-        draconic::core::Serialize(ar, "wetLevel", c.wetLevel);
-        draconic::core::Serialize(ar, "enabled", c.enabled);
+        draconic::foundation::Serialize(ar, "radius", c.radius);
+        draconic::foundation::Serialize(ar, "edgeFade", c.edgeFade);
+        draconic::foundation::Serialize(ar, "roomSize", c.roomSize);
+        draconic::foundation::Serialize(ar, "damping", c.damping);
+        draconic::foundation::Serialize(ar, "wetLevel", c.wetLevel);
+        draconic::foundation::Serialize(ar, "enabled", c.enabled);
     }
 
     class AudioReverbZoneComponentManager final

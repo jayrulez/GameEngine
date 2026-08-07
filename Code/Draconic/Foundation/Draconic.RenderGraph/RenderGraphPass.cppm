@@ -6,17 +6,17 @@
 // Sedulous.RenderGraph (RenderGraphPass.bf).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.rendergraph:pass;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :types;
 import :descriptors;
 import :callbacks;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rendergraph
 {

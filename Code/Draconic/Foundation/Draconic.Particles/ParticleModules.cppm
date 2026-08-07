@@ -9,16 +9,16 @@
 // module. The GPU simulator is deferred (Phase 6) behind the same interfaces + BehaviorSupport.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h" // DRACONIC_OBJECT / DRACONIC_DEFINE_OBJECT
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h" // DRACONIC_OBJECT / DRACONIC_DEFINE_OBJECT
 
 export module draconic.particles:modules;
 
-import draconic.core;
+import draconic.foundation;
 import :types;
 import :streams;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::particles
 {
@@ -79,8 +79,8 @@ export namespace draconic::particles
 
         void Serialize(ISerializer& ar) override
         {
-            core::Serialize(ar, "shape", shape);
-            core::Serialize(ar, "localSpace", localSpace);
+            foundation::Serialize(ar, "shape", shape);
+            foundation::Serialize(ar, "localSpace", localSpace);
         }
         [[nodiscard]] BehaviorSupport Support() const noexcept override
         {
@@ -112,11 +112,11 @@ export namespace draconic::particles
 
         void Serialize(ISerializer& ar) override
         {
-            core::Serialize(ar, "baseVelocity", baseVelocity);
-            core::Serialize(ar, "randomness", randomness);
-            core::Serialize(ar, "shapeDirectionSpeed", shapeDirectionSpeed);
-            core::Serialize(ar, "velocityInheritance", velocityInheritance);
-            core::Serialize(ar, "shape", shape);
+            foundation::Serialize(ar, "baseVelocity", baseVelocity);
+            foundation::Serialize(ar, "randomness", randomness);
+            foundation::Serialize(ar, "shapeDirectionSpeed", shapeDirectionSpeed);
+            foundation::Serialize(ar, "velocityInheritance", velocityInheritance);
+            foundation::Serialize(ar, "shape", shape);
         }
         [[nodiscard]] BehaviorSupport Support() const noexcept override
         {
@@ -150,7 +150,7 @@ export namespace draconic::particles
         DRACONIC_OBJECT(LifetimeInitializer, ParticleInitializer)
     public:
         RangeFloat lifetime{1.0f, 1.0f};
-        void Serialize(ISerializer& ar) override { core::Serialize(ar, "lifetime", lifetime); }
+        void Serialize(ISerializer& ar) override { foundation::Serialize(ar, "lifetime", lifetime); }
         [[nodiscard]] BehaviorSupport Support() const noexcept override
         {
             return BehaviorSupport::Both;
@@ -168,7 +168,7 @@ export namespace draconic::particles
         DRACONIC_OBJECT(ColorInitializer, ParticleInitializer)
     public:
         RangeColor color = RangeColor::Constant(Float4{1.0f, 1.0f, 1.0f, 1.0f});
-        void Serialize(ISerializer& ar) override { core::Serialize(ar, "color", color); }
+        void Serialize(ISerializer& ar) override { foundation::Serialize(ar, "color", color); }
         [[nodiscard]] BehaviorSupport Support() const noexcept override
         {
             return BehaviorSupport::Both;
@@ -188,7 +188,7 @@ export namespace draconic::particles
         DRACONIC_OBJECT(SizeInitializer, ParticleInitializer)
     public:
         RangeFloat2 size = RangeFloat2::Constant(Float2{0.1f, 0.1f});
-        void Serialize(ISerializer& ar) override { core::Serialize(ar, "size", size); }
+        void Serialize(ISerializer& ar) override { foundation::Serialize(ar, "size", size); }
         [[nodiscard]] BehaviorSupport Support() const noexcept override
         {
             return BehaviorSupport::Both;
@@ -211,8 +211,8 @@ export namespace draconic::particles
         RangeFloat rotationSpeed{-2.0f, 2.0f};
         void Serialize(ISerializer& ar) override
         {
-            core::Serialize(ar, "rotation", rotation);
-            core::Serialize(ar, "rotationSpeed", rotationSpeed);
+            foundation::Serialize(ar, "rotation", rotation);
+            foundation::Serialize(ar, "rotationSpeed", rotationSpeed);
         }
         [[nodiscard]] BehaviorSupport Support() const noexcept override
         {
@@ -238,8 +238,8 @@ export namespace draconic::particles
         Float3 fixedAxis{0.0f, 1.0f, 0.0f};
         void Serialize(ISerializer& ar) override
         {
-            core::Serialize(ar, "randomAxis", randomAxis);
-            core::Serialize(ar, "fixedAxis", fixedAxis);
+            foundation::Serialize(ar, "randomAxis", randomAxis);
+            foundation::Serialize(ar, "fixedAxis", fixedAxis);
         }
         [[nodiscard]] BehaviorSupport Support() const noexcept override
         {
@@ -277,8 +277,8 @@ export namespace draconic::particles
         Float3 direction{0.0f, -1.0f, 0.0f};
         void Serialize(ISerializer& ar) override
         {
-            core::Serialize(ar, "multiplier", multiplier);
-            core::Serialize(ar, "direction", direction);
+            foundation::Serialize(ar, "multiplier", multiplier);
+            foundation::Serialize(ar, "direction", direction);
         }
         [[nodiscard]] BehaviorSupport Support() const noexcept override
         {
@@ -308,7 +308,7 @@ export namespace draconic::particles
         DRACONIC_OBJECT(DragBehavior, ParticleBehavior)
     public:
         f32 drag = 1.0f;
-        void Serialize(ISerializer& ar) override { core::Serialize(ar, "drag", drag); }
+        void Serialize(ISerializer& ar) override { foundation::Serialize(ar, "drag", drag); }
         [[nodiscard]] BehaviorSupport Support() const noexcept override
         {
             return BehaviorSupport::Both;
@@ -340,8 +340,8 @@ export namespace draconic::particles
         f32 turbulence = 0.0f;
         void Serialize(ISerializer& ar) override
         {
-            core::Serialize(ar, "force", force);
-            core::Serialize(ar, "turbulence", turbulence);
+            foundation::Serialize(ar, "force", force);
+            foundation::Serialize(ar, "turbulence", turbulence);
         }
         [[nodiscard]] BehaviorSupport Support() const noexcept override
         {
@@ -378,9 +378,9 @@ export namespace draconic::particles
         f32 speed = 1.0f;
         void Serialize(ISerializer& ar) override
         {
-            core::Serialize(ar, "strength", strength);
-            core::Serialize(ar, "frequency", frequency);
-            core::Serialize(ar, "speed", speed);
+            foundation::Serialize(ar, "strength", strength);
+            foundation::Serialize(ar, "frequency", frequency);
+            foundation::Serialize(ar, "speed", speed);
         }
         [[nodiscard]] BehaviorSupport Support() const noexcept override
         {
@@ -418,9 +418,9 @@ export namespace draconic::particles
         Float3 axis{0.0f, 1.0f, 0.0f};
         void Serialize(ISerializer& ar) override
         {
-            core::Serialize(ar, "strength", strength);
-            core::Serialize(ar, "center", center);
-            core::Serialize(ar, "axis", axis);
+            foundation::Serialize(ar, "strength", strength);
+            foundation::Serialize(ar, "center", center);
+            foundation::Serialize(ar, "axis", axis);
         }
         [[nodiscard]] BehaviorSupport Support() const noexcept override
         {
@@ -458,9 +458,9 @@ export namespace draconic::particles
         f32 radius = 0.0f;
         void Serialize(ISerializer& ar) override
         {
-            core::Serialize(ar, "strength", strength);
-            core::Serialize(ar, "position", position);
-            core::Serialize(ar, "radius", radius);
+            foundation::Serialize(ar, "strength", strength);
+            foundation::Serialize(ar, "position", position);
+            foundation::Serialize(ar, "radius", radius);
         }
         [[nodiscard]] BehaviorSupport Support() const noexcept override
         {
@@ -501,7 +501,7 @@ export namespace draconic::particles
         DRACONIC_OBJECT(RadialForceBehavior, ParticleBehavior)
     public:
         f32 strength = 1.0f;
-        void Serialize(ISerializer& ar) override { core::Serialize(ar, "strength", strength); }
+        void Serialize(ISerializer& ar) override { foundation::Serialize(ar, "strength", strength); }
         [[nodiscard]] BehaviorSupport Support() const noexcept override
         {
             return BehaviorSupport::Both;
@@ -553,18 +553,18 @@ export namespace draconic::particles
 
     inline void Serialize(ISerializer& ar, CollisionPlane& p)
     {
-        core::Serialize(ar, "normal", p.normal);
-        core::Serialize(ar, "distance", p.distance);
+        foundation::Serialize(ar, "normal", p.normal);
+        foundation::Serialize(ar, "distance", p.distance);
     }
     inline void Serialize(ISerializer& ar, CollisionSphere& s)
     {
-        core::Serialize(ar, "center", s.center);
-        core::Serialize(ar, "radius", s.radius);
+        foundation::Serialize(ar, "center", s.center);
+        foundation::Serialize(ar, "radius", s.radius);
     }
     inline void Serialize(ISerializer& ar, CollisionBox& b)
     {
-        core::Serialize(ar, "center", b.center);
-        core::Serialize(ar, "halfExtents", b.halfExtents);
+        foundation::Serialize(ar, "center", b.center);
+        foundation::Serialize(ar, "halfExtents", b.halfExtents);
     }
 
     // Bounces particles off a small set of world planes + spheres (ground, walls, obstacles). Beyond
@@ -592,9 +592,9 @@ export namespace draconic::particles
 
         void Serialize(ISerializer& ar) override
         {
-            core::Serialize(ar, "planeCount", planeCount);
-            core::Serialize(ar, "sphereCount", sphereCount);
-            core::Serialize(ar, "boxCount", boxCount);
+            foundation::Serialize(ar, "planeCount", planeCount);
+            foundation::Serialize(ar, "sphereCount", sphereCount);
+            foundation::Serialize(ar, "boxCount", boxCount);
             for (i32 i = 0; i < Clamp(planeCount, 0, kMaxPlanes); ++i)
             {
                 ar.Key("plane");
@@ -616,10 +616,10 @@ export namespace draconic::particles
                 draconic::particles::Serialize(ar, boxes[i]);
                 ar.EndObject();
             }
-            core::Serialize(ar, "radius", radius);
-            core::Serialize(ar, "bounce", bounce);
-            core::Serialize(ar, "friction", friction);
-            core::Serialize(ar, "lifetimeLoss", lifetimeLoss);
+            foundation::Serialize(ar, "radius", radius);
+            foundation::Serialize(ar, "bounce", bounce);
+            foundation::Serialize(ar, "friction", friction);
+            foundation::Serialize(ar, "lifetimeLoss", lifetimeLoss);
         }
         [[nodiscard]] BehaviorSupport Support() const noexcept override
         {
@@ -727,7 +727,7 @@ export namespace draconic::particles
         DRACONIC_OBJECT(ColorOverLifetimeBehavior, ParticleBehavior)
     public:
         ParticleCurveColor curve;
-        void Serialize(ISerializer& ar) override { core::Serialize(ar, "curve", curve); }
+        void Serialize(ISerializer& ar) override { foundation::Serialize(ar, "curve", curve); }
         [[nodiscard]] BehaviorSupport Support() const noexcept override
         {
             return BehaviorSupport::Both;
@@ -759,7 +759,7 @@ export namespace draconic::particles
         DRACONIC_OBJECT(AlphaOverLifetimeBehavior, ParticleBehavior)
     public:
         ParticleCurveFloat curve;
-        void Serialize(ISerializer& ar) override { core::Serialize(ar, "curve", curve); }
+        void Serialize(ISerializer& ar) override { foundation::Serialize(ar, "curve", curve); }
         [[nodiscard]] BehaviorSupport Support() const noexcept override
         {
             return BehaviorSupport::Both;
@@ -795,7 +795,7 @@ export namespace draconic::particles
         DRACONIC_OBJECT(SizeOverLifetimeBehavior, ParticleBehavior)
     public:
         ParticleCurveFloat2 curve;
-        void Serialize(ISerializer& ar) override { core::Serialize(ar, "curve", curve); }
+        void Serialize(ISerializer& ar) override { foundation::Serialize(ar, "curve", curve); }
         [[nodiscard]] BehaviorSupport Support() const noexcept override
         {
             return BehaviorSupport::Both;
@@ -827,7 +827,7 @@ export namespace draconic::particles
         DRACONIC_OBJECT(RotationOverLifetimeBehavior, ParticleBehavior)
     public:
         ParticleCurveFloat curve;
-        void Serialize(ISerializer& ar) override { core::Serialize(ar, "curve", curve); }
+        void Serialize(ISerializer& ar) override { foundation::Serialize(ar, "curve", curve); }
         [[nodiscard]] BehaviorSupport Support() const noexcept override
         {
             return BehaviorSupport::Both;
@@ -859,7 +859,7 @@ export namespace draconic::particles
         DRACONIC_OBJECT(SpeedOverLifetimeBehavior, ParticleBehavior)
     public:
         ParticleCurveFloat curve;
-        void Serialize(ISerializer& ar) override { core::Serialize(ar, "curve", curve); }
+        void Serialize(ISerializer& ar) override { foundation::Serialize(ar, "curve", curve); }
         [[nodiscard]] BehaviorSupport Support() const noexcept override
         {
             return BehaviorSupport::Both;

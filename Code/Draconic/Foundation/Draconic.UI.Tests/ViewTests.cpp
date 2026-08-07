@@ -1,37 +1,37 @@
 // Ported from Sedulous.UI.Tests/src/ViewTests.bf (faithful; Beef `scope`/`new` -> RefPtr via MakeRef,
 // `===` -> pointer ==, Vector2 -> Float2 (.x/.y), UserData Object -> void*).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 #include "TestHelpers.h"
 
 using namespace draconic::ui;
 using namespace draconic::ui::tests;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
-static core::RefPtr<RootView> MakeRoot()
+static foundation::RefPtr<RootView> MakeRoot()
 {
-    return core::MakeRef<RootView>(core::DefaultAllocator());
+    return foundation::MakeRef<RootView>(foundation::DefaultAllocator());
 }
-static core::RefPtr<TestView> MakeTestView(f32 w = 50, f32 h = 30)
+static foundation::RefPtr<TestView> MakeTestView(f32 w = 50, f32 h = 30)
 {
-    return core::MakeRef<TestView>(core::DefaultAllocator(), w, h);
+    return foundation::MakeRef<TestView>(foundation::DefaultAllocator(), w, h);
 }
-static core::RefPtr<TestGroup> MakeTestGroup()
+static foundation::RefPtr<TestGroup> MakeTestGroup()
 {
-    return core::MakeRef<TestGroup>(core::DefaultAllocator());
+    return foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
 }
 
 TEST_CASE("view: View_HasUniqueId")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestView> a = MakeTestView();
-    core::RefPtr<TestView> b = MakeTestView();
+    foundation::RefPtr<TestView> a = MakeTestView();
+    foundation::RefPtr<TestView> b = MakeTestView();
     root->AddView(a.Get());
     root->AddView(b.Get());
 
@@ -43,10 +43,10 @@ TEST_CASE("view: View_HasUniqueId")
 TEST_CASE("view: View_ParentSetOnAdd")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestView> child = MakeTestView();
+    foundation::RefPtr<TestView> child = MakeTestView();
     root->AddView(child.Get());
     CHECK(child->Parent == root.Get());
 }
@@ -54,10 +54,10 @@ TEST_CASE("view: View_ParentSetOnAdd")
 TEST_CASE("view: View_ContextSetOnAttach")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestView> child = MakeTestView();
+    foundation::RefPtr<TestView> child = MakeTestView();
     root->AddView(child.Get());
     CHECK(child->Context == &ctx);
 }
@@ -65,10 +65,10 @@ TEST_CASE("view: View_ContextSetOnAttach")
 TEST_CASE("view: View_ContextClearedOnRemove")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestView> child = MakeTestView();
+    foundation::RefPtr<TestView> child = MakeTestView();
     root->AddView(child.Get());
     root->RemoveView(child.Get());
     CHECK(child->Context == nullptr);
@@ -78,11 +78,11 @@ TEST_CASE("view: View_ContextClearedOnRemove")
 TEST_CASE("view: View_RootProperty")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestGroup> group = MakeTestGroup();
-    core::RefPtr<TestView> child = MakeTestView();
+    foundation::RefPtr<TestGroup> group = MakeTestGroup();
+    foundation::RefPtr<TestView> child = MakeTestView();
     root->AddView(group.Get());
     group->AddView(child.Get());
 
@@ -93,7 +93,7 @@ TEST_CASE("view: View_RootProperty")
 
 TEST_CASE("view: View_DefaultMeasure_ClampsToZero")
 {
-    core::RefPtr<TestView> view = MakeTestView(0, 0);
+    foundation::RefPtr<TestView> view = MakeTestView(0, 0);
     view->Measure(BoxConstraints::Loose(100, 100));
     CHECK(view->MeasuredSize.x == 0);
     CHECK(view->MeasuredSize.y == 0);
@@ -101,7 +101,7 @@ TEST_CASE("view: View_DefaultMeasure_ClampsToZero")
 
 TEST_CASE("view: View_Layout_SetsBounds")
 {
-    core::RefPtr<TestView> view = MakeTestView();
+    foundation::RefPtr<TestView> view = MakeTestView();
     view->Layout(10, 20, 100, 50);
     CHECK(view->Bounds.x == 10);
     CHECK(view->Bounds.y == 20);
@@ -112,10 +112,10 @@ TEST_CASE("view: View_Layout_SetsBounds")
 TEST_CASE("view: View_Invalidate_MarksRedraw")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestView> child = MakeTestView();
+    foundation::RefPtr<TestView> child = MakeTestView();
     root->AddView(child.Get());
 
     CHECK(child->NeedsRedraw());
@@ -130,10 +130,10 @@ TEST_CASE("view: View_Invalidate_MarksRedraw")
 TEST_CASE("view: View_Visibility_GoneSkipsMeasure")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestView> child = MakeTestView(100, 50);
+    foundation::RefPtr<TestView> child = MakeTestView(100, 50);
     child->Visibility = Visibility::Gone;
     root->AddView(child.Get());
 
@@ -144,10 +144,10 @@ TEST_CASE("view: View_Visibility_GoneSkipsMeasure")
 TEST_CASE("view: View_UserData_SetAndGet")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestView> view = MakeTestView();
+    foundation::RefPtr<TestView> view = MakeTestView();
     root->AddView(view.Get());
 
     String testObj(u8"hello");
@@ -158,13 +158,13 @@ TEST_CASE("view: View_UserData_SetAndGet")
 
 TEST_CASE("view: View_UserData_NullWhenNotSet")
 {
-    core::RefPtr<TestView> view = MakeTestView();
+    foundation::RefPtr<TestView> view = MakeTestView();
     CHECK(view->GetUserData(u8"missing") == nullptr);
 }
 
 TEST_CASE("view: View_UserData_TypedRetrieval")
 {
-    core::RefPtr<TestView> view = MakeTestView();
+    foundation::RefPtr<TestView> view = MakeTestView();
     String str(u8"test");
     view->SetUserData(u8"str", &str);
     String* typed = view->GetUserData<String>(u8"str");
@@ -174,11 +174,11 @@ TEST_CASE("view: View_UserData_TypedRetrieval")
 TEST_CASE("view: View_LocalToScreen_NestedViews")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestGroup> group = MakeTestGroup();
-    core::RefPtr<TestView> child = MakeTestView();
+    foundation::RefPtr<TestGroup> group = MakeTestGroup();
+    foundation::RefPtr<TestView> child = MakeTestView();
     root->AddView(group.Get());
     group->AddView(child.Get());
 
@@ -193,11 +193,11 @@ TEST_CASE("view: View_LocalToScreen_NestedViews")
 TEST_CASE("view: View_ScreenToLocal_NestedViews")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestGroup> group = MakeTestGroup();
-    core::RefPtr<TestView> child = MakeTestView();
+    foundation::RefPtr<TestGroup> group = MakeTestGroup();
+    foundation::RefPtr<TestView> child = MakeTestView();
     root->AddView(group.Get());
     group->AddView(child.Get());
 
@@ -212,11 +212,11 @@ TEST_CASE("view: View_ScreenToLocal_NestedViews")
 TEST_CASE("view: View_IsEffectivelyEnabled_WalksParents")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestGroup> group = MakeTestGroup();
-    core::RefPtr<TestView> child = MakeTestView();
+    foundation::RefPtr<TestGroup> group = MakeTestGroup();
+    foundation::RefPtr<TestView> child = MakeTestView();
     root->AddView(group.Get());
     group->AddView(child.Get());
 
@@ -229,7 +229,7 @@ TEST_CASE("view: View_IsEffectivelyEnabled_WalksParents")
 
 TEST_CASE("view: View_GetControlState_Disabled")
 {
-    core::RefPtr<TestView> view = MakeTestView();
+    foundation::RefPtr<TestView> view = MakeTestView();
     view->IsEnabled = false;
     CHECK(HasFlag(view->GetControlState(), ControlState::Disabled));
 }
@@ -237,12 +237,12 @@ TEST_CASE("view: View_GetControlState_Disabled")
 TEST_CASE("view: View_EffectiveCursor_InheritsFromParent")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestGroup> group = MakeTestGroup();
+    foundation::RefPtr<TestGroup> group = MakeTestGroup();
     group->Cursor = CursorType::Hand;
-    core::RefPtr<TestView> child = MakeTestView();
+    foundation::RefPtr<TestView> child = MakeTestView();
     root->AddView(group.Get());
     group->AddView(child.Get());
 
@@ -253,12 +253,12 @@ TEST_CASE("view: View_EffectiveCursor_InheritsFromParent")
 TEST_CASE("view: View_EffectiveCursor_ChildOverridesParent")
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = MakeRoot();
+    foundation::RefPtr<RootView> root = MakeRoot();
     Init(ctx, root.Get());
 
-    core::RefPtr<TestGroup> group = MakeTestGroup();
+    foundation::RefPtr<TestGroup> group = MakeTestGroup();
     group->Cursor = CursorType::Hand;
-    core::RefPtr<TestView> child = MakeTestView();
+    foundation::RefPtr<TestView> child = MakeTestView();
     child->Cursor = CursorType::IBeam;
     root->AddView(group.Get());
     group->AddView(child.Get());

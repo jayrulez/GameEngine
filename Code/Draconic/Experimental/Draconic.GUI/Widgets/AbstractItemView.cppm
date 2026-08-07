@@ -14,12 +14,12 @@
 // header (ContentTopInset), the item -> ModelIndex mapping, and any extra decorations/keys.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:abstract_item_view;
 
-import draconic.core; // RefPtr, MakeRef, Array, Function, Move, Max, Min, Float2
+import draconic.foundation; // RefPtr, MakeRef, Array, Function, Move, Max, Min, Float2
 import :rect;
 import :event;
 import :draw_context;
@@ -31,8 +31,8 @@ import :linear_layout; // Orientation
 import :model_index;
 import :model;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -49,7 +49,7 @@ export namespace draconic::gui
     {
         DRACONIC_OBJECT(ItemRow, UIWidget)
     public:
-        ItemRow() { SetTag(core::StringView(u8"itemrow")); }
+        ItemRow() { SetTag(foundation::StringView(u8"itemrow")); }
 
         void SetItemIndex(i32 item) noexcept { m_item = item; }
         [[nodiscard]] i32 GetItemIndex() const noexcept { return m_item; }
@@ -67,9 +67,9 @@ export namespace draconic::gui
             m_selectionColor = color;
             Invalidate();
         }
-        void SetOnPicked(core::Function<void(i32, u32)> callback)
+        void SetOnPicked(foundation::Function<void(i32, u32)> callback)
         {
-            m_onPicked = core::Move(callback);
+            m_onPicked = foundation::Move(callback);
         }
 
     protected:
@@ -88,7 +88,7 @@ export namespace draconic::gui
         i32 m_item = -1;
         bool m_selected = false;
         Color m_selectionColor{0.18f, 0.37f, 0.62f, 1.0f};
-        core::Function<void(i32, u32)> m_onPicked;
+        foundation::Function<void(i32, u32)> m_onPicked;
     };
 
     class AbstractItemView : public UIWidget, public IModelClient
@@ -100,9 +100,9 @@ export namespace draconic::gui
             SetClipChildren(true);
             SetTabFocusable(true);
             SetBackground(
-                core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), m_backgroundColor));
+                foundation::MakeRef<RectangleDrawable>(foundation::DefaultAllocator(), m_backgroundColor));
 
-            m_vBar = core::MakeRef<ScrollBar>(core::DefaultAllocator());
+            m_vBar = foundation::MakeRef<ScrollBar>(foundation::DefaultAllocator());
             m_vBar->SetOrientation(Orientation::Vertical);
             AbstractItemView* self = this;
             m_vBar->SetOnValueChanged(
@@ -147,7 +147,7 @@ export namespace draconic::gui
         // === Appearance ===
         void SetRowHeight(f32 height)
         {
-            m_rowHeight = core::Max(1.0f, height);
+            m_rowHeight = foundation::Max(1.0f, height);
             Relayout();
         }
         [[nodiscard]] f32 GetRowHeight() const noexcept { return m_rowHeight; }
@@ -157,22 +157,22 @@ export namespace draconic::gui
             for (const RefPtr<ItemRow>& r : m_pool)
                 r->SetSelectionColor(color);
         }
-        void SetThemePartColor(core::StringView part, Color color) override
+        void SetThemePartColor(foundation::StringView part, Color color) override
         {
-            if (part == core::StringView(u8"selection"))
+            if (part == foundation::StringView(u8"selection"))
                 SetSelectionColor(color);
         }
-        void CollectStyleParts(core::Array<core::StringView>& out) const override
+        void CollectStyleParts(foundation::Array<foundation::StringView>& out) const override
         {
-            out.PushBack(core::StringView(u8"selection"));
+            out.PushBack(foundation::StringView(u8"selection"));
         }
 
         // === Selection ===
         void SetSelectionMode(SelectionMode mode) noexcept { m_selectionMode = mode; }
         [[nodiscard]] SelectionMode GetSelectionMode() const noexcept { return m_selectionMode; }
-        void SetOnSelectionChanged(core::Function<void(ModelIndex)> callback)
+        void SetOnSelectionChanged(foundation::Function<void(ModelIndex)> callback)
         {
-            m_onSelection = core::Move(callback);
+            m_onSelection = foundation::Move(callback);
         }
 
         [[nodiscard]] const Array<i32>& SelectedItems() const noexcept { return m_selection; }
@@ -233,7 +233,7 @@ export namespace draconic::gui
         [[nodiscard]] f32 ContentWidth() const noexcept { return m_contentWidth; }
         [[nodiscard]] f32 BodyHeight() const
         {
-            return core::Max(0.0f, GetSize().y - ContentTopInset());
+            return foundation::Max(0.0f, GetSize().y - ContentTopInset());
         }
         [[nodiscard]] ScrollBar* GetScrollBar() const noexcept { return m_vBar.Get(); }
         [[nodiscard]] const Array<RefPtr<ItemRow>>& RowPool() const noexcept { return m_pool; }
@@ -262,7 +262,7 @@ export namespace draconic::gui
             if (items == 0)
                 return;
             const bool shift = (event.Modifiers & static_cast<u32>(KeyModShift)) != 0;
-            const i32 page = core::Max(1, static_cast<i32>(BodyHeight() / m_rowHeight) - 1);
+            const i32 page = foundation::Max(1, static_cast<i32>(BodyHeight() / m_rowHeight) - 1);
             const i32 primary = GetSelectedItem();
             i32 target = primary;
             switch (key)
@@ -271,7 +271,7 @@ export namespace draconic::gui
                 target = (primary <= 0) ? 0 : primary - 1;
                 break;
             case KeyCode::Down:
-                target = (primary < 0) ? 0 : core::Min(items - 1, primary + 1);
+                target = (primary < 0) ? 0 : foundation::Min(items - 1, primary + 1);
                 break;
             case KeyCode::Home:
                 target = 0;
@@ -280,10 +280,10 @@ export namespace draconic::gui
                 target = items - 1;
                 break;
             case KeyCode::PageUp:
-                target = core::Max(0, (primary < 0 ? 0 : primary) - page);
+                target = foundation::Max(0, (primary < 0 ? 0 : primary) - page);
                 break;
             case KeyCode::PageDown:
-                target = core::Min(items - 1, (primary < 0 ? 0 : primary) + page);
+                target = foundation::Min(items - 1, (primary < 0 ? 0 : primary) + page);
                 break;
             default:
                 return;
@@ -321,9 +321,9 @@ export namespace draconic::gui
         }
         [[nodiscard]] f32 MaxScroll() const
         {
-            return core::Max(0.0f, ContentHeight() - BodyHeight());
+            return foundation::Max(0.0f, ContentHeight() - BodyHeight());
         }
-        void ClampOffset() { m_offset = core::Max(0.0f, core::Min(m_offset, MaxScroll())); }
+        void ClampOffset() { m_offset = foundation::Max(0.0f, foundation::Min(m_offset, MaxScroll())); }
         void ScrollBy(f32 dy)
         {
             m_offset += dy;
@@ -386,8 +386,8 @@ export namespace draconic::gui
             if (item < 0 || item >= items)
                 return;
             const i32 a = m_anchor >= 0 ? m_anchor : item;
-            const i32 lo = core::Min(a, item);
-            const i32 hi = core::Max(a, item);
+            const i32 lo = foundation::Min(a, item);
+            const i32 hi = foundation::Max(a, item);
             m_selection.Clear();
             for (i32 r = lo; r <= hi; ++r)
                 m_selection.PushBack(r);
@@ -420,24 +420,24 @@ export namespace draconic::gui
                 row->SetOnPicked([self](i32 item, u32 modifiers)
                                  { self->OnRowClicked(item, modifiers); });
                 AddChild(row.Get());
-                m_pool.PushBack(core::Move(row));
+                m_pool.PushBack(foundation::Move(row));
             }
         }
 
         void Relayout()
         {
-            const core::Float2 size = GetSize();
+            const foundation::Float2 size = GetSize();
             const f32 inset = ContentTopInset();
             const bool barVisible = MaxScroll() > 0.0f;
-            m_contentWidth = core::Max(0.0f, barVisible ? size.x - m_barThickness : size.x);
+            m_contentWidth = foundation::Max(0.0f, barVisible ? size.x - m_barThickness : size.x);
             OnBeforeLayout(m_contentWidth);
 
             const i32 items = static_cast<i32>(ItemCount());
             const i32 first = m_rowHeight > 0.0f ? static_cast<i32>(m_offset / m_rowHeight) : 0;
             const i32 span =
                 m_rowHeight > 0.0f ? static_cast<i32>(BodyHeight() / m_rowHeight) + 2 : 0;
-            const i32 last = core::Min(items, first + core::Max(0, span));
-            const usize needed = static_cast<usize>(core::Max(0, last - first));
+            const i32 last = foundation::Min(items, first + foundation::Max(0, span));
+            const usize needed = static_cast<usize>(foundation::Max(0, last - first));
             EnsurePool(needed);
             m_visibleCount = needed;
 
@@ -449,8 +449,8 @@ export namespace draconic::gui
                 row->SetItemIndex(r);
                 row->SetSelected(IsItemSelected(r));
                 row->SetPosition(
-                    core::Float2{0.0f, inset + static_cast<f32>(r) * m_rowHeight - m_offset});
-                row->SetSize(core::Float2{m_contentWidth, m_rowHeight});
+                    foundation::Float2{0.0f, inset + static_cast<f32>(r) * m_rowHeight - m_offset});
+                row->SetSize(foundation::Float2{m_contentWidth, m_rowHeight});
                 BindItemRow(*row, r, m_contentWidth);
             }
             for (; p < m_pool.Size(); ++p)
@@ -461,8 +461,8 @@ export namespace draconic::gui
             if (barVisible)
             {
                 m_vBar->SetVisible(true);
-                m_vBar->SetPosition(core::Float2{size.x - m_barThickness, inset});
-                m_vBar->SetSize(core::Float2{m_barThickness, BodyHeight()});
+                m_vBar->SetPosition(foundation::Float2{size.x - m_barThickness, inset});
+                m_vBar->SetSize(foundation::Float2{m_barThickness, BodyHeight()});
                 m_vBar->SetThumbProportion(ContentHeight() > 0.0f ? BodyHeight() / ContentHeight()
                                                                   : 1.0f);
                 m_syncing = true;
@@ -482,7 +482,7 @@ export namespace draconic::gui
         Array<i32> m_selection; // selected item indices (primary = last)
         i32 m_anchor = -1;      // range-selection anchor
         SelectionMode m_selectionMode = SelectionMode::Single;
-        core::Function<void(ModelIndex)> m_onSelection;
+        foundation::Function<void(ModelIndex)> m_onSelection;
         f32 m_offset = 0.0f;
         f32 m_rowHeight = 24.0f;
         f32 m_barThickness = 12.0f;

@@ -1,15 +1,15 @@
 // draconic.editor.scene: the UI-free core of the scene-editor camera preview (task #118) - the
 // CameraOverride built from a CameraComponent + world matrix, and the visibility/pin decision.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.scene;
 import draconic.render.api;
 import draconic.engine.render;
 import draconic.editor.scene;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace scene = draconic::scene;
 namespace render = draconic::render;
 namespace editor = draconic::editor;

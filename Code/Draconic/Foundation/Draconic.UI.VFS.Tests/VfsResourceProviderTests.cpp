@@ -1,12 +1,12 @@
 // Tests for VfsResourceProvider (draconic.ui.vfs) - a Draconic addition, so covered per the additions
 // rule. A mock in-memory IFileSystem (MemoryStream-backed) exercises the LoadText glue without disk IO.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.vfs;
 import draconic.ui.vfs;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace vfs = draconic::vfs;
 namespace ui = draconic::ui;
 

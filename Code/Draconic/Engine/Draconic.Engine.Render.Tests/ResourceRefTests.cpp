@@ -4,10 +4,10 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.resource;
@@ -19,7 +19,7 @@ import draconic.scene;
 import draconic.scene.resource;
 import draconic.engine.render;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::render;
 namespace scene = draconic::scene;
 namespace resource = draconic::resource;

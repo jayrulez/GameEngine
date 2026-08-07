@@ -10,16 +10,16 @@
 //     reference instead of authoring friction/restitution inline.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.physics.resource;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.resource;
 import draconic.content;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace resource = draconic::resource;
 
 export namespace draconic::physics
@@ -36,9 +36,9 @@ export namespace draconic::physics
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "convex", convex);
-            draconic::core::Serialize(ar, "shapeBlob", shapeBlob);
-            draconic::core::Serialize(ar, "outline", outline);
+            draconic::foundation::Serialize(ar, "convex", convex);
+            draconic::foundation::Serialize(ar, "shapeBlob", shapeBlob);
+            draconic::foundation::Serialize(ar, "outline", outline);
         }
     };
 
@@ -103,9 +103,9 @@ export namespace draconic::physics
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "friction", friction);
-            draconic::core::Serialize(ar, "restitution", restitution);
-            draconic::core::Serialize(ar, "density", density);
+            draconic::foundation::Serialize(ar, "friction", friction);
+            draconic::foundation::Serialize(ar, "restitution", restitution);
+            draconic::foundation::Serialize(ar, "density", density);
         }
     };
 

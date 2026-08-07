@@ -4,13 +4,13 @@
 // Sedulous.UI/src/DragDrop/DragDropEffects.bf (Beef `: int32` -> `: i32`).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:drag_drop_effects;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

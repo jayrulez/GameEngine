@@ -9,14 +9,14 @@
 //
 // Defaults to wgsl when no formats are given.
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include <cstdio>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.shaders;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace shaders = draconic::shaders;
 
 namespace

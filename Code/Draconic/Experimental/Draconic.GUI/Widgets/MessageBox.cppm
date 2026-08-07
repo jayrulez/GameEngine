@@ -7,12 +7,12 @@
 // and a dim scrim covers the background.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:message_box;
 
-import draconic.core;  // RefPtr, MakeRef, Array, Function, Move, Max, Float2
+import draconic.foundation;  // RefPtr, MakeRef, Array, Function, Move, Max, Float2
 import draconic.fonts; // CachedFont
 import :rect;
 import :node;
@@ -22,8 +22,8 @@ import :text;
 import :ui_widget;
 import :window;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace fonts = draconic::fonts;
 
 export namespace draconic::gui
@@ -48,21 +48,21 @@ export namespace draconic::gui
 
         MessageBox()
         {
-            SetTag(core::StringView(u8"messagebox"));
+            SetTag(foundation::StringView(u8"messagebox"));
 
             // Create the message before SetSize, since SetSize -> OnSizeChange -> LayoutContent
             // reads m_message.
-            m_message = core::MakeRef<Label>(core::DefaultAllocator());
+            m_message = foundation::MakeRef<Label>(foundation::DefaultAllocator());
             m_message->SetWordWrap(true);
             m_message->SetTextAlignment(TextHAlign::Left, TextVAlign::Top);
             GetContent()->AddChild(m_message.Get());
 
-            SetSize(core::Float2{360.0f, 180.0f});
+            SetSize(foundation::Float2{360.0f, 180.0f});
             LayoutContent();
         }
 
         // Set the title, message, and which buttons to show.
-        void Configure(core::StringView title, core::StringView message, Buttons buttons)
+        void Configure(foundation::StringView title, foundation::StringView message, Buttons buttons)
         {
             SetTitle(title);
             m_message->SetText(message);
@@ -70,9 +70,9 @@ export namespace draconic::gui
             LayoutContent();
         }
 
-        void SetOnResult(core::Function<void(Result)> callback)
+        void SetOnResult(foundation::Function<void(Result)> callback)
         {
-            m_onResult = core::Move(callback);
+            m_onResult = foundation::Move(callback);
         }
 
         // Font reaches the title (base), the message, and the buttons.
@@ -86,7 +86,7 @@ export namespace draconic::gui
         }
         void SetMessageColor(Color color) { m_message->SetTextColor(color); }
 
-        [[nodiscard]] core::StringView GetMessage() const { return m_message->GetText(); }
+        [[nodiscard]] foundation::StringView GetMessage() const { return m_message->GetText(); }
         [[nodiscard]] usize ButtonCount() const noexcept { return m_buttons.Size(); }
         [[nodiscard]] Button* ButtonAt(usize index) const
         {
@@ -110,29 +110,29 @@ export namespace draconic::gui
             switch (buttons)
             {
             case Buttons::Ok:
-                AddButton(core::StringView(u8"OK"), Result::Ok);
+                AddButton(foundation::StringView(u8"OK"), Result::Ok);
                 break;
             case Buttons::OkCancel:
-                AddButton(core::StringView(u8"Cancel"), Result::Cancel);
-                AddButton(core::StringView(u8"OK"), Result::Ok); // primary rightmost
+                AddButton(foundation::StringView(u8"Cancel"), Result::Cancel);
+                AddButton(foundation::StringView(u8"OK"), Result::Ok); // primary rightmost
                 break;
             case Buttons::YesNo:
-                AddButton(core::StringView(u8"No"), Result::No);
-                AddButton(core::StringView(u8"Yes"), Result::Yes); // primary rightmost
+                AddButton(foundation::StringView(u8"No"), Result::No);
+                AddButton(foundation::StringView(u8"Yes"), Result::Yes); // primary rightmost
                 break;
             }
         }
 
-        void AddButton(core::StringView text, Result result)
+        void AddButton(foundation::StringView text, Result result)
         {
-            auto button = core::MakeRef<Button>(core::DefaultAllocator());
+            auto button = foundation::MakeRef<Button>(foundation::DefaultAllocator());
             button->SetText(text);
             button->SetFont(m_font);
-            button->AddClass(core::StringView(u8"dialogbutton"));
+            button->AddClass(foundation::StringView(u8"dialogbutton"));
             MessageBox* self = this;
             button->SetOnClick([self, result]() { self->Finish(result); });
             GetContent()->AddChild(button.Get());
-            m_buttons.PushBack(core::Move(button));
+            m_buttons.PushBack(foundation::Move(button));
         }
 
         void Finish(Result result)
@@ -147,12 +147,12 @@ export namespace draconic::gui
             Node* content = GetContent();
             if (content == nullptr || !m_message)
                 return; // may run mid-construction
-            const core::Float2 cs = content->GetSize();
+            const foundation::Float2 cs = content->GetSize();
 
-            const f32 buttonAreaTop = core::Max(0.0f, cs.y - kButtonHeight - kPad);
-            m_message->SetPosition(core::Float2{kPad, kPad});
-            m_message->SetSize(core::Float2{core::Max(0.0f, cs.x - 2.0f * kPad),
-                                            core::Max(0.0f, buttonAreaTop - kPad)});
+            const f32 buttonAreaTop = foundation::Max(0.0f, cs.y - kButtonHeight - kPad);
+            m_message->SetPosition(foundation::Float2{kPad, kPad});
+            m_message->SetSize(foundation::Float2{foundation::Max(0.0f, cs.x - 2.0f * kPad),
+                                            foundation::Max(0.0f, buttonAreaTop - kPad)});
 
             // Right-align the button group at the bottom.
             const usize n = m_buttons.Size();
@@ -160,19 +160,19 @@ export namespace draconic::gui
                 return;
             const f32 totalWidth =
                 static_cast<f32>(n) * kButtonWidth + static_cast<f32>(n - 1) * kButtonGap;
-            const f32 startX = core::Max(kPad, cs.x - kPad - totalWidth);
+            const f32 startX = foundation::Max(kPad, cs.x - kPad - totalWidth);
             for (usize i = 0; i < n; ++i)
             {
-                m_buttons[i]->SetPosition(core::Float2{
+                m_buttons[i]->SetPosition(foundation::Float2{
                     startX + static_cast<f32>(i) * (kButtonWidth + kButtonGap), buttonAreaTop});
-                m_buttons[i]->SetSize(core::Float2{kButtonWidth, kButtonHeight});
+                m_buttons[i]->SetSize(foundation::Float2{kButtonWidth, kButtonHeight});
             }
         }
 
         RefPtr<Label> m_message;
         Array<RefPtr<Button>> m_buttons;
         fonts::CachedFont* m_font = nullptr;
-        core::Function<void(Result)> m_onResult;
+        foundation::Function<void(Result)> m_onResult;
 
         static constexpr f32 kPad = 16.0f;
         static constexpr f32 kButtonWidth = 84.0f;

@@ -6,14 +6,14 @@
 // methods -> virtual with default bodies; CreateView returns RefPtr<View> (RAII).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:itree_adapter;
 
-import draconic.core;
+import draconic.foundation;
 import :view;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

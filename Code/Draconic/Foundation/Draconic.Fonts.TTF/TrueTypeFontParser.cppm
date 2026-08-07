@@ -5,17 +5,17 @@
 // Ported from Sedulous.Fonts.TTF/TrueTypeFontParser.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.fonts.ttf:parser;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.fonts;
 import draconic.fonts.io;
 import :common;
 import :font;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::fonts
 {

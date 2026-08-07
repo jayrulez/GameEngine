@@ -8,12 +8,12 @@
 // re-flattening; the primary selection is remapped by id across expand/collapse.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:tree_view;
 
-import draconic.core;  // RefPtr, MakeRef, Array, HashMap, Function, Move, Max, Float2
+import draconic.foundation;  // RefPtr, MakeRef, Array, HashMap, Function, Move, Max, Float2
 import draconic.fonts; // CachedFont
 import draconic.vg;    // PathBuilder
 import :rect;
@@ -25,8 +25,8 @@ import :model_index;
 import :model;
 import :abstract_item_view;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace fonts = draconic::fonts;
 namespace vg = draconic::vg;
 
@@ -37,7 +37,7 @@ export namespace draconic::gui
     {
         DRACONIC_OBJECT(TreeArrow, UIWidget)
     public:
-        TreeArrow() { SetTag(core::StringView(u8"treearrow")); }
+        TreeArrow() { SetTag(foundation::StringView(u8"treearrow")); }
         void SetExpanded(bool expanded)
         {
             if (m_expanded != expanded)
@@ -51,7 +51,7 @@ export namespace draconic::gui
             m_color = color;
             Invalidate();
         }
-        void SetOnClicked(core::Function<void()> callback) { m_onClicked = core::Move(callback); }
+        void SetOnClicked(foundation::Function<void()> callback) { m_onClicked = foundation::Move(callback); }
 
     protected:
         void OnMouseClick(const MouseEvent&) override
@@ -85,7 +85,7 @@ export namespace draconic::gui
     private:
         bool m_expanded = false;
         Color m_color{0.80f, 0.84f, 0.90f, 1.0f};
-        core::Function<void()> m_onClicked;
+        foundation::Function<void()> m_onClicked;
     };
 
     // A tree row: an ItemRow with an arrow (clickable) + a hit-transparent label.
@@ -95,11 +95,11 @@ export namespace draconic::gui
     public:
         TreeRow()
         {
-            SetTag(core::StringView(u8"treerow"));
-            m_arrow = core::MakeRef<TreeArrow>(core::DefaultAllocator());
+            SetTag(foundation::StringView(u8"treerow"));
+            m_arrow = foundation::MakeRef<TreeArrow>(foundation::DefaultAllocator());
             AddChild(m_arrow.Get());
-            m_label = core::MakeRef<Label>(core::DefaultAllocator());
-            m_label->SetTag(core::StringView(u8"treecell"));
+            m_label = foundation::MakeRef<Label>(foundation::DefaultAllocator());
+            m_label->SetTag(foundation::StringView(u8"treecell"));
             m_label->SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
             m_label->SetHitTestVisible(false);
             AddChild(m_label.Get());
@@ -112,11 +112,11 @@ export namespace draconic::gui
         {
             m_arrow->SetVisible(hasChildren);
             m_arrow->SetExpanded(expanded);
-            m_arrow->SetPosition(core::Float2{indent, 0.0f});
-            m_arrow->SetSize(core::Float2{arrowSize, rowHeight});
+            m_arrow->SetPosition(foundation::Float2{indent, 0.0f});
+            m_arrow->SetSize(foundation::Float2{arrowSize, rowHeight});
             const f32 textX = indent + arrowSize;
-            m_label->SetPosition(core::Float2{textX + 2.0f, 0.0f});
-            m_label->SetSize(core::Float2{core::Max(0.0f, rowWidth - textX - 4.0f), rowHeight});
+            m_label->SetPosition(foundation::Float2{textX + 2.0f, 0.0f});
+            m_label->SetSize(foundation::Float2{foundation::Max(0.0f, rowWidth - textX - 4.0f), rowHeight});
         }
 
     private:
@@ -128,7 +128,7 @@ export namespace draconic::gui
     {
         DRACONIC_OBJECT(TreeView, AbstractItemView)
     public:
-        TreeView() { SetTag(core::StringView(u8"treeview")); }
+        TreeView() { SetTag(foundation::StringView(u8"treeview")); }
 
         void SetFont(fonts::CachedFont* font)
         {
@@ -145,7 +145,7 @@ export namespace draconic::gui
         }
         void SetIndentWidth(f32 width)
         {
-            m_indentWidth = core::Max(0.0f, width);
+            m_indentWidth = foundation::Max(0.0f, width);
             RequestRelayout();
         }
         void SetThemeTextColor(Color color) override { SetRowTextColor(color); }
@@ -183,7 +183,7 @@ export namespace draconic::gui
 
         [[nodiscard]] RefPtr<ItemRow> CreateItemRow() override
         {
-            auto row = core::MakeRef<TreeRow>(core::DefaultAllocator());
+            auto row = foundation::MakeRef<TreeRow>(foundation::DefaultAllocator());
             row->GetLabel()->SetFont(m_font);
             row->GetLabel()->SetTextColor(m_textColor);
             TreeView* self = this;

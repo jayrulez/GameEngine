@@ -9,9 +9,9 @@
 //
 // Build (wasm preset) emits WebTriangle.html + .js + .wasm; open the .html in a WebGPU browser.
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.runtime;
 import draconic.runtime.client;
 import draconic.shell;
@@ -23,7 +23,7 @@ import draconic.rhi;
 
 #include "Draconic.Runtime.Client/AppMain.h"
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace runtime = draconic::runtime;
 namespace graphics = draconic::graphics;
 namespace rhi = draconic::rhi;
@@ -64,15 +64,15 @@ namespace
             graphics::GraphicsDevice* gpu = host.Graphics();
             if (gpu == nullptr)
             {
-                core::ConsoleWrite(u8"WebTriangle: no graphics device - nothing to draw.\n");
+                foundation::ConsoleWrite(u8"WebTriangle: no graphics device - nothing to draw.\n");
                 return;
             }
             m_device = gpu->Raw();
 
             rhi::ShaderModuleDesc moduleDesc;
-            moduleDesc.code = core::Span<const core::u8>(
-                reinterpret_cast<const core::u8*>(kTriangleWgsl),
-                core::StringView(kTriangleWgsl).Size());
+            moduleDesc.code = foundation::Span<const foundation::u8>(
+                reinterpret_cast<const foundation::u8*>(kTriangleWgsl),
+                foundation::StringView(kTriangleWgsl).Size());
             moduleDesc.label = u8"TriangleWGSL";
             if (!m_device->CreateShaderModule(moduleDesc, m_shader).IsOk())
             {
@@ -87,7 +87,7 @@ namespace
             }
             rhi::PipelineLayoutDesc plDesc;
             rhi::BindGroupLayout* sets[1] = {m_bgl};
-            plDesc.bindGroupLayouts = core::Span<rhi::BindGroupLayout* const>(sets, 1);
+            plDesc.bindGroupLayouts = foundation::Span<rhi::BindGroupLayout* const>(sets, 1);
             plDesc.label = u8"TrianglePL";
             if (!m_device->CreatePipelineLayout(plDesc, m_pipelineLayout).IsOk())
             {
@@ -104,7 +104,7 @@ namespace
             pipelineDesc.fragment = rhi::FragmentState{};
             pipelineDesc.fragment->shader = {m_shader, u8"fs", rhi::ShaderStage::Fragment};
             pipelineDesc.fragment->targets =
-                core::Span<const rhi::ColorTargetState>(&colorTarget, 1);
+                foundation::Span<const rhi::ColorTargetState>(&colorTarget, 1);
             pipelineDesc.primitive.topology = rhi::PrimitiveTopology::TriangleList;
             pipelineDesc.label = u8"TrianglePipeline";
             if (!m_device->CreateRenderPipeline(pipelineDesc, m_pipeline).IsOk())
@@ -124,8 +124,8 @@ namespace
             if (pass != nullptr && m_pipeline != nullptr)
             {
                 pass->SetPipeline(m_pipeline);
-                pass->SetViewport(0.0f, 0.0f, static_cast<core::f32>(frame.width),
-                                  static_cast<core::f32>(frame.height), 0.0f, 1.0f);
+                pass->SetViewport(0.0f, 0.0f, static_cast<foundation::f32>(frame.width),
+                                  static_cast<foundation::f32>(frame.height), 0.0f, 1.0f);
                 pass->SetScissor(0, 0, frame.width, frame.height);
                 pass->Draw(3);
             }

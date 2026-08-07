@@ -2,9 +2,9 @@
 
 export module draconic.shaders:types;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::shaders
 {

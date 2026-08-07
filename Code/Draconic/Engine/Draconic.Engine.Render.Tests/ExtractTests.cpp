@@ -3,9 +3,9 @@
 // ExtractedScene (the data the scene-agnostic renderer consumes), and ExtractPrimaryCamera
 // reads the camera view/projection.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.scene;
 import draconic.geometry;
 import draconic.materials;
@@ -17,7 +17,7 @@ import draconic.rhi;
 import draconic.rhi.null; // NullDevice (headless RenderSubsystem for the DebugView keying test)
 import draconic.texture.resource; // texture::Texture (the sky-texture product)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::render;
 namespace scene = draconic::scene;
 namespace geometry = draconic::geometry;

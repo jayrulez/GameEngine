@@ -2,12 +2,12 @@
 // CollisionCookKind enum. Verifies authored properties enumerate with attributes, round-trip
 // through get/set, and that the cook-mode enum resolves named values.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
+import draconic.foundation;
 import draconic.physics.editor;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace
 {

@@ -15,11 +15,11 @@
 /// sampling the normalT G-buffer are later optimizations.)
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.render:decal_pass;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.rendergraph;
 import draconic.shaders;
@@ -27,7 +27,7 @@ import draconic.shaders.system;
 import :data;
 import :resources;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 
 export namespace draconic::render

@@ -1,18 +1,18 @@
 // Draconic UI - :color_animation partition
 //
 // Animates a Color value from a start to an end color via a setter delegate. Ported from
-// Sedulous.UI/src/Animation/ColorAnimation.bf. Beef `Color.Lerp` -> core::Lerp(Color,Color,f32) (free
+// Sedulous.UI/src/Animation/ColorAnimation.bf. Beef `Color.Lerp` -> foundation::Lerp(Color,Color,f32) (free
 // function); owned delegate -> Function<void(Color)>.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:color_animation;
 
-import draconic.core;
+import draconic.foundation;
 import :animation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

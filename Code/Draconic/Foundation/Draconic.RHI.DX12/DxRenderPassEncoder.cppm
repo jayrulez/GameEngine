@@ -3,13 +3,13 @@
 /// Ported from Sedulous.RHI.DX12/DX12RenderPassEncoder.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include "DxIncludes.h"
 
 export module draconic.rhi.dx12:render_pass_encoder;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :conversions;
 import :buffer;
@@ -24,7 +24,7 @@ import :descriptor_staging;
 import :gpu_descriptor_heap;
 import :mesh_pipeline;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::dx12
 {

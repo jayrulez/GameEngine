@@ -7,15 +7,15 @@
 // still enumerate the built-ins for tooling).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.shaders:pack;
 
-import draconic.core;
+import draconic.foundation;
 import :types;
 import :flags;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::shaders
 {

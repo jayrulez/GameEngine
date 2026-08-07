@@ -9,12 +9,12 @@
 // shared between UIContexts via RefPtr.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:style_sheet;
 
-import draconic.core; // Object, Array, RefPtr, TypeInfo, Color, StringView, Optional
+import draconic.foundation; // Object, Array, RefPtr, TypeInfo, Color, StringView, Optional
 import :control_state;
 import :thickness;
 import :drawable;
@@ -24,7 +24,7 @@ import :style_value;
 import :style_selector;
 import :style_rule;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

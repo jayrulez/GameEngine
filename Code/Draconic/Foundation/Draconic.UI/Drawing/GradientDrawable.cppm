@@ -4,18 +4,18 @@
 // Sedulous.UI/src/Drawing/GradientDrawable.bf (VGLinearGradientFill + a rect Path).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:gradient_drawable;
 
-import draconic.core; // Color, Float2, Rectangle
+import draconic.foundation; // Color, Float2, Rectangle
 import draconic.vg;   // VGLinearGradientFill, Path
 import :drawable;
 import :draw_context;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace vg = draconic::vg;
 
 export namespace draconic::ui
@@ -32,12 +32,12 @@ export namespace draconic::ui
     {
         DRACONIC_OBJECT(GradientDrawable, Drawable)
     public:
-        core::Color StartColor{};
-        core::Color EndColor{};
+        foundation::Color StartColor{};
+        foundation::Color EndColor{};
         GradientDirection Direction = GradientDirection::TopToBottom;
 
         GradientDrawable() = default;
-        GradientDrawable(core::Color start, core::Color end,
+        GradientDrawable(foundation::Color start, foundation::Color end,
                          GradientDirection dir = GradientDirection::TopToBottom)
             : StartColor(start), EndColor(end), Direction(dir)
         {

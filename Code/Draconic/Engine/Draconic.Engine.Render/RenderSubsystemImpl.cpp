@@ -12,12 +12,12 @@
 /// no material set; that lands with material binding in phase 3.)
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include "Draconic.Profiler/Profiler.h"
 
 module draconic.engine.render;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.profiler;
 import draconic.runtime;         // Subsystem, Context
@@ -31,7 +31,7 @@ import :components;
 import :extract;
 import :scene_renderer;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 
 namespace draconic::render

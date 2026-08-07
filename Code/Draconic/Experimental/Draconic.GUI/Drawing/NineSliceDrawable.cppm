@@ -5,19 +5,19 @@
 // quads); maps to VG's DrawNineSlice. The image is owned elsewhere (non-owning pointer).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:nine_slice_drawable;
 
-import draconic.core;  // Color, Rectangle, Float2, Optional
+import draconic.foundation;  // Color, Rectangle, Float2, Optional
 import draconic.image; // ImageData, NineSlice
 import :rect;
 import :draw_context;
 import :drawable;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace image = draconic::image;
 
 export namespace draconic::gui
@@ -42,7 +42,7 @@ export namespace draconic::gui
             if (Image == nullptr)
                 return;
             ctx.VG().DrawNineSlice(Image, dest.ToRectangle(),
-                                   core::Rectangle{0.0f, 0.0f, static_cast<f32>(Image->Width()),
+                                   foundation::Rectangle{0.0f, 0.0f, static_cast<f32>(Image->Width()),
                                                    static_cast<f32>(Image->Height())},
                                    Slices, Tint);
         }
@@ -51,7 +51,7 @@ export namespace draconic::gui
         {
             if (Image == nullptr)
                 return {};
-            return core::Float2{static_cast<f32>(Image->Width()),
+            return foundation::Float2{static_cast<f32>(Image->Width()),
                                 static_cast<f32>(Image->Height())};
         }
     };

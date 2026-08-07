@@ -2,27 +2,27 @@
 // ParentIndex/HasChildren), and a TreeView that flattens visible nodes, expands/collapses (arrow
 // click + keyboard), and remaps selection by node id across re-flattening.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.gui;
 
 using namespace draconic::gui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 namespace
 {
     template <typename T>
-    core::RefPtr<T> Make()
+    foundation::RefPtr<T> Make()
     {
-        return core::MakeRef<T>(core::DefaultAllocator());
+        return foundation::MakeRef<T>(foundation::DefaultAllocator());
     }
-    core::StringView SV(const char8_t* s) { return core::StringView(s); }
+    foundation::StringView SV(const char8_t* s) { return foundation::StringView(s); }
 
     // Tree:  A [A1 [A1x], A2],  B
     struct Tree
     {
         TreeModel model;
-        core::i32 a, b, a1, a2, a1x;
+        foundation::i32 a, b, a1, a2, a1x;
         Tree()
         {
             a = model.AddNode(TreeModel::kRoot, SV(u8"A"));
@@ -33,12 +33,12 @@ namespace
         }
     };
 
-    core::RefPtr<TreeView> MountTree(core::RefPtr<SceneNode>& root, IModel* model)
+    foundation::RefPtr<TreeView> MountTree(foundation::RefPtr<SceneNode>& root, IModel* model)
     {
         root = Make<SceneNode>();
-        root->SetSize(core::Float2{400.0f, 400.0f});
+        root->SetSize(foundation::Float2{400.0f, 400.0f});
         auto tree = Make<TreeView>();
-        tree->SetSize(core::Float2{260.0f, 300.0f}); // tall enough to realize all visible rows
+        tree->SetSize(foundation::Float2{260.0f, 300.0f}); // tall enough to realize all visible rows
         tree->SetRowHeight(20.0f);
         tree->SetIndentWidth(16.0f);
         root->AddChild(tree.Get());
@@ -69,7 +69,7 @@ TEST_CASE("tree-model: hierarchy navigation")
 TEST_CASE("tree-view: collapsed shows only roots; expanding reveals children")
 {
     Tree t;
-    core::RefPtr<SceneNode> root;
+    foundation::RefPtr<SceneNode> root;
     auto tree = MountTree(root, &t.model);
 
     CHECK(tree->VisibleRowCount() == 2); // A, B (collapsed)
@@ -90,30 +90,30 @@ TEST_CASE("tree-view: collapsed shows only roots; expanding reveals children")
 TEST_CASE("tree-view: clicking the arrow toggles expansion")
 {
     Tree t;
-    core::RefPtr<SceneNode> root;
+    foundation::RefPtr<SceneNode> root;
     auto tree = MountTree(root, &t.model);
     EventDispatcher* d = root->GetEventDispatcher();
 
     // Root A's arrow: row 0 (y in [0,20]), depth 0 -> arrow at x in [0,16].
-    d->InjectMouseDown(core::Float2{8.0f, 10.0f}, MouseButton::Left);
-    d->InjectMouseUp(core::Float2{8.0f, 10.0f}, MouseButton::Left);
+    d->InjectMouseDown(foundation::Float2{8.0f, 10.0f}, MouseButton::Left);
+    d->InjectMouseUp(foundation::Float2{8.0f, 10.0f}, MouseButton::Left);
     CHECK(tree->VisibleRowCount() == 4); // expanded
     CHECK(tree->IsItemExpanded(0));
 
-    d->InjectMouseDown(core::Float2{8.0f, 10.0f}, MouseButton::Left);
-    d->InjectMouseUp(core::Float2{8.0f, 10.0f}, MouseButton::Left);
+    d->InjectMouseDown(foundation::Float2{8.0f, 10.0f}, MouseButton::Left);
+    d->InjectMouseUp(foundation::Float2{8.0f, 10.0f}, MouseButton::Left);
     CHECK(tree->VisibleRowCount() == 2); // collapsed again
 }
 
 TEST_CASE("tree-view: selection is remapped by node id across expand/collapse")
 {
     Tree t;
-    core::RefPtr<SceneNode> root;
+    foundation::RefPtr<SceneNode> root;
     auto tree = MountTree(root, &t.model);
 
     tree->ExpandItem(0);      // flat: A(0), A1(1), A2(2), B(3)
     tree->SetSelectedItem(3); // select B
-    const core::i64 selId = tree->GetSelectedIndex().InternalId;
+    const foundation::i64 selId = tree->GetSelectedIndex().InternalId;
 
     tree->CollapseItem(0);                               // flat: A(0), B(1) - B moved
     CHECK(tree->GetSelectedItem() == 1);                 // remapped to B's new row
@@ -123,13 +123,13 @@ TEST_CASE("tree-view: selection is remapped by node id across expand/collapse")
 TEST_CASE("tree-view: keyboard Right expands and Left collapses the selection")
 {
     Tree t;
-    core::RefPtr<SceneNode> root;
+    foundation::RefPtr<SceneNode> root;
     auto tree = MountTree(root, &t.model);
     EventDispatcher* d = root->GetEventDispatcher();
     tree->RequestFocus();
 
     tree->SetSelectedItem(0); // select A
-    const auto key = [](KeyCode k) { return static_cast<core::u32>(k); };
+    const auto key = [](KeyCode k) { return static_cast<foundation::u32>(k); };
     d->InjectKeyDown(key(KeyCode::Right)); // expand A
     CHECK(tree->VisibleRowCount() == 4);
     CHECK(tree->IsItemExpanded(0));

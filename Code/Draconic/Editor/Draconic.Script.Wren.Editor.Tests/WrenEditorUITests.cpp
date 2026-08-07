@@ -1,12 +1,12 @@
 // WrenEditorUI: registering the Wren lexer makes it resolvable by language id, and the spec
 // encodes the Wren quirks (nested block comments, """ raw strings).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui.toolkit;
 import draconic.script.wren.editor.ui;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::ui::toolkit;
 
 TEST_CASE("wren-editor-ui: LexerRegistration")

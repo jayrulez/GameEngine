@@ -9,13 +9,13 @@
 /// GPU bind-group layout is still inferred later by the MaterialSystem.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.materials.resource;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.resource;
 import draconic.content;
@@ -25,7 +25,7 @@ import draconic.texture;
 import draconic.texture.resource;
 import draconic.materials;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::resource;
 
 export namespace draconic::materials
@@ -69,26 +69,26 @@ export namespace draconic::materials
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "name", name);
-            draconic::core::Serialize(ar, "shaderId", shaderId);
-            draconic::core::Serialize(ar, "shaderName", shaderName);
-            draconic::core::Serialize(ar, "shaderFlags", shaderFlags);
-            draconic::core::Serialize(ar, "blendMode", blendMode);
-            draconic::core::Serialize(ar, "depthMode", depthMode);
-            draconic::core::Serialize(ar, "cullMode", cullMode);
-            draconic::core::Serialize(ar, "vertexLayout", vertexLayout);
-            draconic::core::Serialize(ar, "propNames", propNames);
-            draconic::core::Serialize(ar, "propTypes", propTypes);
-            draconic::core::Serialize(ar, "propBindings", propBindings);
-            draconic::core::Serialize(ar, "propOffsets", propOffsets);
-            draconic::core::Serialize(ar, "propSizes", propSizes);
-            draconic::core::Serialize(ar, "uniformDefaults", uniformDefaults);
-            draconic::core::Serialize(ar, "textureSlots", textureSlots);
-            draconic::core::Serialize(ar, "textureIds", textureIds);
+            draconic::foundation::Serialize(ar, "name", name);
+            draconic::foundation::Serialize(ar, "shaderId", shaderId);
+            draconic::foundation::Serialize(ar, "shaderName", shaderName);
+            draconic::foundation::Serialize(ar, "shaderFlags", shaderFlags);
+            draconic::foundation::Serialize(ar, "blendMode", blendMode);
+            draconic::foundation::Serialize(ar, "depthMode", depthMode);
+            draconic::foundation::Serialize(ar, "cullMode", cullMode);
+            draconic::foundation::Serialize(ar, "vertexLayout", vertexLayout);
+            draconic::foundation::Serialize(ar, "propNames", propNames);
+            draconic::foundation::Serialize(ar, "propTypes", propTypes);
+            draconic::foundation::Serialize(ar, "propBindings", propBindings);
+            draconic::foundation::Serialize(ar, "propOffsets", propOffsets);
+            draconic::foundation::Serialize(ar, "propSizes", propSizes);
+            draconic::foundation::Serialize(ar, "uniformDefaults", uniformDefaults);
+            draconic::foundation::Serialize(ar, "textureSlots", textureSlots);
+            draconic::foundation::Serialize(ar, "textureIds", textureIds);
             if (ar.Version() >= 2)
             { // v2: sampler address modes (older sources read Repeat)
-                draconic::core::Serialize(ar, "samplerU", samplerU);
-                draconic::core::Serialize(ar, "samplerV", samplerV);
+                draconic::foundation::Serialize(ar, "samplerU", samplerU);
+                draconic::foundation::Serialize(ar, "samplerV", samplerV);
             }
         }
 

@@ -2,32 +2,32 @@
 // `animation` property spawns a KeyframeAction that interpolates opacity across the stops as the
 // scene ticks, looping when requested).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.gui;
 
 using namespace draconic::gui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 namespace
 {
     template <typename T>
-    core::RefPtr<T> Make()
+    foundation::RefPtr<T> Make()
     {
-        return core::MakeRef<T>(core::DefaultAllocator());
+        return foundation::MakeRef<T>(foundation::DefaultAllocator());
     }
-    core::Duration Secs(double s) { return core::Duration::FromSeconds(s); }
+    foundation::Duration Secs(double s) { return foundation::Duration::FromSeconds(s); }
 }
 
 TEST_CASE("keyframes: parse names, offsets (%, from/to), and stop declarations")
 {
-    StyleSheet sheet = CSSParser::Parse(core::StringView(
+    StyleSheet sheet = CSSParser::Parse(foundation::StringView(
         u8"@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.25; } 100% { opacity: 1; } }"
         u8"@keyframes fade  { from { opacity: 1; } to { opacity: 0; } }"));
 
     CHECK(sheet.KeyframesCount() == 2);
 
-    const Keyframes* pulse = sheet.FindKeyframes(core::StringView(u8"pulse"));
+    const Keyframes* pulse = sheet.FindKeyframes(foundation::StringView(u8"pulse"));
     REQUIRE(pulse != nullptr);
     REQUIRE(pulse->Stops.Size() == 3);
     CHECK(pulse->Stops[0].Offset == doctest::Approx(0.0f));
@@ -35,7 +35,7 @@ TEST_CASE("keyframes: parse names, offsets (%, from/to), and stop declarations")
     CHECK(pulse->Stops[2].Offset == doctest::Approx(1.0f));
     CHECK(pulse->Stops[1].Properties.Size() == 1);
 
-    const Keyframes* fade = sheet.FindKeyframes(core::StringView(u8"fade"));
+    const Keyframes* fade = sheet.FindKeyframes(foundation::StringView(u8"fade"));
     REQUIRE(fade != nullptr);
     REQUIRE(fade->Stops.Size() == 2);
     CHECK(fade->Stops[0].Offset == doctest::Approx(0.0f)); // from
@@ -45,8 +45,8 @@ TEST_CASE("keyframes: parse names, offsets (%, from/to), and stop declarations")
 TEST_CASE("keyframes: a comma offset list shares the block")
 {
     StyleSheet sheet = CSSParser::Parse(
-        core::StringView(u8"@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }"));
-    const Keyframes* blink = sheet.FindKeyframes(core::StringView(u8"blink"));
+        foundation::StringView(u8"@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }"));
+    const Keyframes* blink = sheet.FindKeyframes(foundation::StringView(u8"blink"));
     REQUIRE(blink != nullptr);
     CHECK(blink->Stops.Size() == 3); // 0%, 100%, 50%
 }
@@ -55,11 +55,11 @@ TEST_CASE("keyframes: the animation property drives opacity across the stops")
 {
     auto root = Make<SceneNode>();
     auto w = Make<UIWidget>();
-    w->AddClass(core::StringView(u8"anim"));
+    w->AddClass(foundation::StringView(u8"anim"));
     root->AddChild(w.Get());
 
     StyleManager mgr;
-    mgr.SetStyleSheet(CSSParser::Parse(core::StringView(
+    mgr.SetStyleSheet(CSSParser::Parse(foundation::StringView(
         u8"@keyframes fade { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 1; } }"
         u8".anim { animation: fade 2s; }")));
     mgr.ApplyTree(*root.Get()); // spawns the KeyframeAction; Start() applies t=0
@@ -83,11 +83,11 @@ TEST_CASE("keyframes: infinite animations loop")
 {
     auto root = Make<SceneNode>();
     auto w = Make<UIWidget>();
-    w->AddClass(core::StringView(u8"loop"));
+    w->AddClass(foundation::StringView(u8"loop"));
     root->AddChild(w.Get());
 
     StyleManager mgr;
-    mgr.SetStyleSheet(CSSParser::Parse(core::StringView(
+    mgr.SetStyleSheet(CSSParser::Parse(foundation::StringView(
         u8"@keyframes fade { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 1; } }"
         u8".loop { animation: fade 2s infinite; }")));
     mgr.ApplyTree(*root.Get());
@@ -104,11 +104,11 @@ TEST_CASE("keyframes: the animation is spawned once, not re-spawned each ApplyTr
 {
     auto root = Make<SceneNode>();
     auto w = Make<UIWidget>();
-    w->AddClass(core::StringView(u8"anim"));
+    w->AddClass(foundation::StringView(u8"anim"));
     root->AddChild(w.Get());
 
     StyleManager mgr;
-    mgr.SetStyleSheet(CSSParser::Parse(core::StringView(
+    mgr.SetStyleSheet(CSSParser::Parse(foundation::StringView(
         u8"@keyframes fade { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 1; } }"
         u8".anim { animation: fade 2s; }")));
 
@@ -122,11 +122,11 @@ TEST_CASE("keyframes: animates background-color across the stops")
 {
     auto root = Make<SceneNode>();
     auto w = Make<UIWidget>();
-    w->AddClass(core::StringView(u8"cycle"));
+    w->AddClass(foundation::StringView(u8"cycle"));
     root->AddChild(w.Get());
 
     StyleManager mgr;
-    mgr.SetStyleSheet(CSSParser::Parse(core::StringView(
+    mgr.SetStyleSheet(CSSParser::Parse(foundation::StringView(
         u8"@keyframes cyc { 0% { background-color: #000000; } 100% { background-color: #ffffff; } }"
         u8".cycle { animation: cyc 2s; }")));
     mgr.ApplyTree(*root.Get());
@@ -135,7 +135,7 @@ TEST_CASE("keyframes: animates background-color across the stops")
     auto grey = [&](float expect)
     {
         Drawable* bg = w->GetBackground();
-        RectangleDrawable* r = core::Cast<RectangleDrawable>(bg);
+        RectangleDrawable* r = foundation::Cast<RectangleDrawable>(bg);
         REQUIRE(r != nullptr);
         CHECK(r->GetColor().r == doctest::Approx(expect));
     };

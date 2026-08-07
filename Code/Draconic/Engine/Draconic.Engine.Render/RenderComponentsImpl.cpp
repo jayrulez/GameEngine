@@ -5,12 +5,12 @@
 // RegisterRenderComponentReflection(); this unit defines it + the DraconicRegister* bodies.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 module draconic.engine.render;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.resource;
 import draconic.scene;
 import draconic.geometry;
@@ -18,13 +18,13 @@ import draconic.materials;
 import draconic.rhi;
 import draconic.script.facades; // ComponentOf<T> + RegisterExtra* (the script `.of` surface, Track A)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 // ============================================================================================
 // Reflection (tooling: the editor inspector auto-generates property grids from these).
 // Pointer/RefPtr/array fields (mesh, material, textures, bone matrices) are deliberately not
 // reflected yet - they need resource-picker editors (editor phase 6). NON-export namespace:
-// the macros expand static helpers (internal linkage), per the CoreReflection.cppm pattern.
+// the macros expand static helpers (internal linkage), per the FoundationReflection.cppm pattern.
 // ============================================================================================
 namespace draconic::render
 {
@@ -369,17 +369,17 @@ namespace draconic::render
         // The WHOLE render component set - each `.of(entity)` exposes its editor-reflected properties.
         struct RenderComponentEntry
         {
-            const core::TypeInfo* type;
-            core::StringView name;
+            const foundation::TypeInfo* type;
+            foundation::StringView name;
         };
         const RenderComponentEntry components[] = {
-            {&core::TypeOf<MeshComponent>(), u8"MeshComponent"},
-            {&core::TypeOf<InstancedMeshComponent>(), u8"InstancedMeshComponent"},
-            {&core::TypeOf<CameraComponent>(), u8"CameraComponent"},
-            {&core::TypeOf<LightComponent>(), u8"LightComponent"},
-            {&core::TypeOf<SpriteComponent>(), u8"SpriteComponent"},
-            {&core::TypeOf<DecalComponent>(), u8"DecalComponent"},
-            {&core::TypeOf<ReflectionProbeComponent>(), u8"ReflectionProbeComponent"}};
+            {&foundation::TypeOf<MeshComponent>(), u8"MeshComponent"},
+            {&foundation::TypeOf<InstancedMeshComponent>(), u8"InstancedMeshComponent"},
+            {&foundation::TypeOf<CameraComponent>(), u8"CameraComponent"},
+            {&foundation::TypeOf<LightComponent>(), u8"LightComponent"},
+            {&foundation::TypeOf<SpriteComponent>(), u8"SpriteComponent"},
+            {&foundation::TypeOf<DecalComponent>(), u8"DecalComponent"},
+            {&foundation::TypeOf<ReflectionProbeComponent>(), u8"ReflectionProbeComponent"}};
         for (const RenderComponentEntry& component : components)
         {
             GlobalTypeRegistry().Register(*component.type);
@@ -390,17 +390,17 @@ namespace draconic::render
         // The scene-bound render handle (SceneRender.of(scene)): reflect it, register it, seed the
         // Wren emission root (nothing else reaches it), and make the class name prelude-visible.
         DraconicRegisterValue_SceneRender();
-        GlobalTypeRegistry().Register(core::TypeOf<SceneRender>());
-        draconic::script::RegisterExtraScriptRootType(&core::TypeOf<SceneRender>());
+        GlobalTypeRegistry().Register(foundation::TypeOf<SceneRender>());
+        draconic::script::RegisterExtraScriptRootType(&foundation::TypeOf<SceneRender>());
         draconic::script::RegisterExtraFacadeName(u8"SceneRender");
 
         // The render scene-SYSTEM settings handles (EnvironmentSettings.of(scene) / PostProcess-
         // Settings.of(scene)): register + seed the Wren emission root + name for the prelude. Their
         // TypeData (incl `of`) was built by RegisterRenderComponentReflection above.
-        const core::TypeInfo* settings[] = {&core::TypeOf<EnvironmentSettings>(),
-                                            &core::TypeOf<PostProcessSettings>()};
-        const core::StringView settingsNames[] = {u8"EnvironmentSettings", u8"PostProcessSettings"};
-        for (core::usize i = 0; i < 2; ++i)
+        const foundation::TypeInfo* settings[] = {&foundation::TypeOf<EnvironmentSettings>(),
+                                            &foundation::TypeOf<PostProcessSettings>()};
+        const foundation::StringView settingsNames[] = {u8"EnvironmentSettings", u8"PostProcessSettings"};
+        for (foundation::usize i = 0; i < 2; ++i)
         {
             GlobalTypeRegistry().Register(*settings[i]);
             draconic::script::RegisterExtraScriptRootType(settings[i]);

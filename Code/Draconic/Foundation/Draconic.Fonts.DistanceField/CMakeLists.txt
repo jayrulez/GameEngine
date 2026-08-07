@@ -4,7 +4,7 @@
 add_library(Draconic.Fonts.DistanceField STATIC)
 add_library(Draconic::Fonts.DistanceField ALIAS Draconic.Fonts.DistanceField)
 
-target_link_libraries(Draconic.Fonts.DistanceField PUBLIC Draconic::Core Draconic::Fonts Draconic::Policy)
+target_link_libraries(Draconic.Fonts.DistanceField PUBLIC Draconic::Foundation Draconic::Fonts Draconic::Policy)
 
 target_sources(Draconic.Fonts.DistanceField
     PUBLIC

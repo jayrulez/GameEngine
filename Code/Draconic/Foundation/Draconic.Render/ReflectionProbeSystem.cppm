@@ -13,18 +13,18 @@
 /// assignment; capture, prefilter, and the debug view land in P1b/P1c.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.render:probes;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.rendergraph;
 import draconic.shaders;
 import draconic.shaders.system;
 import :data; // ReflectionProbe / kMaxReflectionProbes / ProbeUpdateMode
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 
 export namespace draconic::render

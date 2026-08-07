@@ -1,23 +1,23 @@
 // Draconic GUI - CSS !important + custom-property (variable) tests, end-to-end via the
 // parser -> cascade -> resolve (+ typed application for the var-driven background).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.gui;
 
 using namespace draconic::gui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 namespace
 {
     template <typename T>
-    core::RefPtr<T> Make()
+    foundation::RefPtr<T> Make()
     {
-        return core::MakeRef<T>(core::DefaultAllocator());
+        return foundation::MakeRef<T>(foundation::DefaultAllocator());
     }
-    core::StringView SV(const char8_t* s) { return core::StringView(s); }
+    foundation::StringView SV(const char8_t* s) { return foundation::StringView(s); }
 
-    core::RefPtr<UIWidget> Widget(const char8_t* tag)
+    foundation::RefPtr<UIWidget> Widget(const char8_t* tag)
     {
         auto w = Make<UIWidget>();
         w->SetTag(SV(tag));
@@ -93,7 +93,7 @@ TEST_CASE("css-vars: end-to-end through the applier")
         CSSParser::Parse(SV(u8"button { --bg: #0000ff; background-color: var(--bg); }"));
     ApplyStyle(*w.Get(), sheet.Resolve(*w.Get()));
 
-    auto* bg = core::Cast<RectangleDrawable>(w->GetBackground());
+    auto* bg = foundation::Cast<RectangleDrawable>(w->GetBackground());
     REQUIRE(bg != nullptr);
     CHECK(bg->GetColor().b == doctest::Approx(1.0f)); // var(--bg) -> #0000ff -> blue
 }

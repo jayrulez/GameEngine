@@ -1,44 +1,44 @@
 // Draconic GUI - TableModel + TableView tests: multi-column data, virtualized rows with a
 // header, single selection (mouse + keyboard), and header-click reporting (for sorting).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.gui;
 
 using namespace draconic::gui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 namespace
 {
     template <typename T>
-    core::RefPtr<T> Make()
+    foundation::RefPtr<T> Make()
     {
-        return core::MakeRef<T>(core::DefaultAllocator());
+        return foundation::MakeRef<T>(foundation::DefaultAllocator());
     }
-    core::StringView SV(const char8_t* s) { return core::StringView(s); }
+    foundation::StringView SV(const char8_t* s) { return foundation::StringView(s); }
 
     // A 2-column model (Name, Age) with `count` rows.
     void FillPeople(TableModel& model, int count)
     {
-        core::Array<core::String> cols;
-        cols.PushBack(core::String(SV(u8"Name")));
-        cols.PushBack(core::String(SV(u8"Age")));
-        model.SetColumns(core::Move(cols));
+        foundation::Array<foundation::String> cols;
+        cols.PushBack(foundation::String(SV(u8"Name")));
+        cols.PushBack(foundation::String(SV(u8"Age")));
+        model.SetColumns(foundation::Move(cols));
         for (int i = 0; i < count; ++i)
         {
-            core::Array<Variant> row;
+            foundation::Array<Variant> row;
             row.PushBack(Variant(SV(u8"Person")));
-            row.PushBack(Variant(static_cast<core::i64>(20 + i)));
-            model.AddRow(core::Move(row));
+            row.PushBack(Variant(static_cast<foundation::i64>(20 + i)));
+            model.AddRow(foundation::Move(row));
         }
     }
 
-    core::RefPtr<TableView> MountTable(core::RefPtr<SceneNode>& root, IModel* model)
+    foundation::RefPtr<TableView> MountTable(foundation::RefPtr<SceneNode>& root, IModel* model)
     {
         root = Make<SceneNode>();
-        root->SetSize(core::Float2{400.0f, 400.0f});
+        root->SetSize(foundation::Float2{400.0f, 400.0f});
         auto table = Make<TableView>();
-        table->SetSize(core::Float2{300.0f, 200.0f});
+        table->SetSize(foundation::Float2{300.0f, 200.0f});
         table->SetRowHeight(24.0f);
         table->SetHeaderHeight(26.0f);
         root->AddChild(table.Get());
@@ -66,7 +66,7 @@ TEST_CASE("table-view: virtualizes rows over the body viewport")
 {
     TableModel model;
     FillPeople(model, 1000);
-    core::RefPtr<SceneNode> root;
+    foundation::RefPtr<SceneNode> root;
     auto table = MountTable(root, &model);
 
     // body = 200 - 26 header = 174; 174/24 + 2 buffer = 9 realized, not 1000.
@@ -78,7 +78,7 @@ TEST_CASE("table-view: clicking a row selects it")
 {
     TableModel model;
     FillPeople(model, 5); // fits (no scrollbar), body width = 300, 2 cols of 150
-    core::RefPtr<SceneNode> root;
+    foundation::RefPtr<SceneNode> root;
     auto table = MountTable(root, &model);
     EventDispatcher* d = root->GetEventDispatcher();
 
@@ -86,8 +86,8 @@ TEST_CASE("table-view: clicking a row selects it")
     table->SetOnSelectionChanged([&](ModelIndex i) { selected = i.Row; });
 
     // Row 1 spans y in [26 + 24, 26 + 48) = [50, 74); cells are hit-transparent -> row gets it.
-    d->InjectMouseDown(core::Float2{60.0f, 60.0f}, MouseButton::Left);
-    d->InjectMouseUp(core::Float2{60.0f, 60.0f}, MouseButton::Left);
+    d->InjectMouseDown(foundation::Float2{60.0f, 60.0f}, MouseButton::Left);
+    d->InjectMouseUp(foundation::Float2{60.0f, 60.0f}, MouseButton::Left);
     CHECK(table->GetSelectedRow() == 1);
     CHECK(selected == 1);
 }
@@ -96,12 +96,12 @@ TEST_CASE("table-view: keyboard navigation moves the selection")
 {
     TableModel model;
     FillPeople(model, 8);
-    core::RefPtr<SceneNode> root;
+    foundation::RefPtr<SceneNode> root;
     auto table = MountTable(root, &model);
     EventDispatcher* d = root->GetEventDispatcher();
     table->RequestFocus();
 
-    const auto key = [](KeyCode k) { return static_cast<core::u32>(k); };
+    const auto key = [](KeyCode k) { return static_cast<foundation::u32>(k); };
     d->InjectKeyDown(key(KeyCode::Down)); // -> row 0
     d->InjectKeyDown(key(KeyCode::Down)); // -> row 1
     CHECK(table->GetSelectedRow() == 1);
@@ -113,17 +113,17 @@ TEST_CASE("table-view: clicking a column header reports its index")
 {
     TableModel model;
     FillPeople(model, 3);
-    core::RefPtr<SceneNode> root;
+    foundation::RefPtr<SceneNode> root;
     auto table = MountTable(root, &model);
     EventDispatcher* d = root->GetEventDispatcher();
 
     int clickedColumn = -1;
-    table->SetOnColumnHeaderClicked([&](core::usize col)
+    table->SetOnColumnHeaderClicked([&](foundation::usize col)
                                     { clickedColumn = static_cast<int>(col); });
 
     // Header spans y in [0, 26). Two columns of 150 -> column 1 header at x in [150, 300).
-    d->InjectMouseDown(core::Float2{200.0f, 13.0f}, MouseButton::Left);
-    d->InjectMouseUp(core::Float2{200.0f, 13.0f}, MouseButton::Left);
+    d->InjectMouseDown(foundation::Float2{200.0f, 13.0f}, MouseButton::Left);
+    d->InjectMouseUp(foundation::Float2{200.0f, 13.0f}, MouseButton::Left);
     CHECK(clickedColumn == 1);
 }
 
@@ -131,7 +131,7 @@ TEST_CASE("table-view: reacts to model updates and rebuilds the header")
 {
     TableModel model;
     FillPeople(model, 4);
-    core::RefPtr<SceneNode> root;
+    foundation::RefPtr<SceneNode> root;
     auto table = MountTable(root, &model);
 
     table->SetSelectedRow(3);

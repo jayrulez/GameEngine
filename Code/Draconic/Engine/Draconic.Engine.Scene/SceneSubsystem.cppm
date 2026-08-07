@@ -9,15 +9,15 @@
 /// fixed-step to the managers (draconic.scene stays runtime-free - the manager takes those as params).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.engine.scene;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.runtime;
 import draconic.scene;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::scene
 {

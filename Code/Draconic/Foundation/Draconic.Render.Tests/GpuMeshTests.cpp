@@ -1,15 +1,15 @@
 // Slice 2 (mesh upload) - the mesh GPU cache uploads a StaticMesh's vertex/index
 // streams to RHI buffers on first use and reuses them after. Exercised on the Null RHI.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.rhi.null;
 import draconic.geometry;
 import draconic.render;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::render;
 namespace rhi = draconic::rhi;
 namespace geometry = draconic::geometry;

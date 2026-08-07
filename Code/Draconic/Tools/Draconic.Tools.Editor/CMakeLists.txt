@@ -16,7 +16,7 @@ add_custom_command(
 
 add_executable(Draconic.Tools.Editor Main.cpp "${_embedded_font_src}")
 target_link_libraries(Draconic.Tools.Editor PRIVATE
-    Draconic::Core
+    Draconic::Foundation
     Draconic::Runtime Draconic::Runtime.Client Draconic::Runtime.Desktop Draconic::Shell.Desktop
     Draconic::Shell Draconic::Graphics Draconic::Graphics.Gpu
     Draconic::Engine.Scene Draconic::Engine.Render Draconic::Engine.Animation Draconic::Engine.Particles

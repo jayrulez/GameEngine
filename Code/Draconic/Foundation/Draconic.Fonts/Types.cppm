@@ -6,13 +6,13 @@
 // FontLoadResult/FontCacheKey + alignment enums).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.fonts:types;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::fonts
 {
@@ -301,7 +301,7 @@ export namespace draconic::fonts
     }
 }
 
-export namespace draconic::core
+export namespace draconic::foundation
 {
     // Hash for FontCacheKey, mirroring Sedulous: path hash combined with the
     // pixel height quantized to hundredths. Equality (operator==) uses a 0.001

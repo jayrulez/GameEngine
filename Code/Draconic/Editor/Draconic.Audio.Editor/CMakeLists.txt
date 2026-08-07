@@ -2,7 +2,7 @@
 add_library(Draconic.Audio.Editor STATIC)
 add_library(Draconic::Audio.Editor ALIAS Draconic.Audio.Editor)
 target_link_libraries(Draconic.Audio.Editor PUBLIC
-    Draconic::Core Draconic::Editor Draconic::Editor.Core Draconic::Content
+    Draconic::Foundation Draconic::Editor Draconic::Editor.Core Draconic::Content
     Draconic::Audio Draconic::Audio.Resource Draconic::Policy)
 target_sources(Draconic.Audio.Editor
     PRIVATE

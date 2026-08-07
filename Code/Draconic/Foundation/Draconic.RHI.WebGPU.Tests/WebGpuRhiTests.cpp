@@ -4,13 +4,13 @@
 // a GPU-less machine, mirroring how Vulkan/DX12 stay sample-verified.
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.rhi.webgpu;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::rhi;
 
 namespace

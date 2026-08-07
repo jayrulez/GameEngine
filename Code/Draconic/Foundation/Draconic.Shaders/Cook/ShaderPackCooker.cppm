@@ -7,11 +7,11 @@
 // WGSL via the WgslTranslator. Runs on the dev/CI host only; the dist just reads the pack.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.shaders:pack_cook;
 
-import draconic.core;
+import draconic.foundation;
 import :types;
 import :flags;
 import :variants;
@@ -19,7 +19,7 @@ import :pack;
 import :compiler;
 import :wgsl_cook;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::shaders
 {

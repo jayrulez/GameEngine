@@ -1,18 +1,18 @@
 // Smoke test for the toolkit GradientEditor: set stops, read them back, update a stop color.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 import draconic.ui.toolkit;
 
 using namespace draconic::ui;
 using namespace draconic::ui::toolkit;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 TEST_CASE("toolkit-gradienteditor: SetStopsAndUpdate")
 {
-    auto ed = core::MakeRef<GradientEditor>(core::DefaultAllocator());
+    auto ed = foundation::MakeRef<GradientEditor>(foundation::DefaultAllocator());
     CHECK(ed->StopCount() == 0);
     CHECK(ed->SelectedIndex() == -1);
 

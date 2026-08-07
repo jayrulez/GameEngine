@@ -6,14 +6,14 @@
 // Toolkit ships no language tables - see the layering note in CodeLexer.cppm.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 module draconic.ui.toolkit;
 
-import draconic.core;
+import draconic.foundation;
 import :code_lexer_scan;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::ui::toolkit
 {

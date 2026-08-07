@@ -9,17 +9,17 @@
 /// the vertices), so they aren't stored.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.geometry.resource;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.resource;
 import draconic.content;
 import draconic.geometry;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::resource;
 
 export namespace draconic::geometry
@@ -100,8 +100,8 @@ export namespace draconic::geometry
         // Shared by the skinned subclass so it can append after the static fields.
         void SerializeStatic(ISerializer& ar)
         {
-            draconic::core::Serialize(ar, "name", name);
-            draconic::core::Serialize(ar, "vertexBlob", vertexBlob);
+            draconic::foundation::Serialize(ar, "name", name);
+            draconic::foundation::Serialize(ar, "vertexBlob", vertexBlob);
             // v1 blobs predate the Float4 tangent (48-byte stride, Float3 tangent at offset 36):
             // expand each vertex in place with handedness +1 - identical look, no re-authoring.
             if (ar.Mode() == SerializeMode::Read && ar.Version() < 2)
@@ -126,11 +126,11 @@ export namespace draconic::geometry
                     vertexBlob = Move(wide);
                 }
             }
-            draconic::core::Serialize(ar, "indexData", indexData);
-            draconic::core::Serialize(ar, "subStart", subStart);
-            draconic::core::Serialize(ar, "subCount", subCount);
-            draconic::core::Serialize(ar, "subMaterial", subMaterial);
-            draconic::core::Serialize(ar, "subPrim", subPrim);
+            draconic::foundation::Serialize(ar, "indexData", indexData);
+            draconic::foundation::Serialize(ar, "subStart", subStart);
+            draconic::foundation::Serialize(ar, "subCount", subCount);
+            draconic::foundation::Serialize(ar, "subMaterial", subMaterial);
+            draconic::foundation::Serialize(ar, "subPrim", subPrim);
         }
     };
 
@@ -145,8 +145,8 @@ export namespace draconic::geometry
         void Serialize(ISerializer& ar) override
         {
             SerializeStatic(ar);
-            draconic::core::Serialize(ar, "skinningBlob", skinningBlob);
-            draconic::core::Serialize(ar, "skeletonIndex", skeletonIndex);
+            draconic::foundation::Serialize(ar, "skinningBlob", skinningBlob);
+            draconic::foundation::Serialize(ar, "skeletonIndex", skeletonIndex);
         }
 
         static void FromMesh(const SkinnedMesh& mesh, SkinnedMeshSource& out)

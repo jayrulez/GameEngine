@@ -5,14 +5,14 @@
 // this unit defines it + the DraconicRegisterEnum_ImageColorSpace body. Reflection track P1.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 module draconic.image;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::image
 {

@@ -18,10 +18,10 @@ module;
 
 export module draconic.shaders:compiler;
 
-import draconic.core;
+import draconic.foundation;
 import :types;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::shaders
 {

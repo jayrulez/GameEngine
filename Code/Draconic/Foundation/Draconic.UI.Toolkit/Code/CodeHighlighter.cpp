@@ -4,13 +4,13 @@
 // cached line's entry state matches the incoming chain, lazily up to the requested line.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 module draconic.ui.toolkit;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::ui::toolkit
 {

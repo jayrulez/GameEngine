@@ -4,15 +4,15 @@
 // data's color space. Ported from Sedulous.Textures/TextureFormatUtils.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.texture:format_utils;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.image;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::texture
 {

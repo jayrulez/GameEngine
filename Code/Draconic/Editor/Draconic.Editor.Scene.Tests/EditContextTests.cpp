@@ -5,11 +5,11 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include <initializer_list>
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.scene;
 import draconic.scene.resource;
 import draconic.engine.render;
@@ -19,7 +19,7 @@ import draconic.content;
 import draconic.materials;
 import draconic.materials.editor;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::editor;
 namespace scene = draconic::scene;
 
@@ -32,7 +32,7 @@ namespace
 
     void Serialize(ISerializer& ar, HealthComponent& c)
     {
-        draconic::core::Serialize(ar, "amount", c.amount);
+        draconic::foundation::Serialize(ar, "amount", c.amount);
     }
 
     class HealthManager final : public scene::SerializableComponentManager<HealthComponent>
@@ -616,7 +616,7 @@ TEST_CASE("edit-context: generic container mutation (MutateComponent-style add) 
         (void)buffer.Seek(0, SeekOrigin::Begin);
         BinarySerializer ar(buffer, SerializeMode::Read);
         String typeId;
-        draconic::core::Serialize(ar, "type", typeId);
+        draconic::foundation::Serialize(ar, "type", typeId);
         meshes->ReadComponent(ar, edit.Resolve(a));
     }
     CHECK(ContainerSize(ci, containerInstance()) == 0u); // restored
@@ -649,7 +649,7 @@ namespace
         [[nodiscard]] StringView SettingsId() const noexcept override { return u8"wind"; }
         void SerializeSettings(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "speed", settings.speed);
+            draconic::foundation::Serialize(ar, "speed", settings.speed);
         }
         WindSettings settings;
     };
@@ -813,7 +813,7 @@ TEST_CASE("scene-edit: render components carry the inspector attribute annotatio
     const TypeInfo& light = TypeOf<draconic::render::LightComponent>();
     const PropertyInfo* inner = FindProperty(light, "innerAngle");
     REQUIRE(inner != nullptr);
-    const draconic::core::Attribute* vis = FindAttribute(*inner, u8"visibleWhen");
+    const draconic::foundation::Attribute* vis = FindAttribute(*inner, u8"visibleWhen");
     REQUIRE(vis != nullptr);
     PropertyCondition c;
     REQUIRE(ParsePropertyCondition(vis->value.TryGet<String>()->AsView(), c));
@@ -823,7 +823,7 @@ TEST_CASE("scene-edit: render components carry the inspector attribute annotatio
 
     const PropertyInfo* intensity = FindProperty(light, "intensity");
     REQUIRE(intensity != nullptr);
-    const draconic::core::Attribute* range = FindAttribute(*intensity, u8"range");
+    const draconic::foundation::Attribute* range = FindAttribute(*intensity, u8"range");
     REQUIRE(range != nullptr);
     CHECK(range->value.TryGet<Float4>() != nullptr);
 
@@ -832,7 +832,7 @@ TEST_CASE("scene-edit: render components carry the inspector attribute annotatio
     const PropertyInfo* turbidity = FindProperty(env, "turbidity");
     REQUIRE(turbidity != nullptr);
     CHECK(FindAttribute(*turbidity, u8"range") != nullptr);
-    const draconic::core::Attribute* tvis = FindAttribute(*turbidity, u8"visibleWhen");
+    const draconic::foundation::Attribute* tvis = FindAttribute(*turbidity, u8"visibleWhen");
     REQUIRE(tvis != nullptr);
     REQUIRE(ParsePropertyCondition(tvis->value.TryGet<String>()->AsView(), c));
     CHECK(MatchesPropertyCondition(c, 1));  // Analytic
@@ -841,7 +841,7 @@ TEST_CASE("scene-edit: render components carry the inspector attribute annotatio
     // Display-name override on the shared zenith/color slot.
     const PropertyInfo* zenith = FindProperty(env, "skyZenith");
     REQUIRE(zenith != nullptr);
-    const draconic::core::Attribute* label = FindAttribute(*zenith, u8"displayName");
+    const draconic::foundation::Attribute* label = FindAttribute(*zenith, u8"displayName");
     REQUIRE(label != nullptr);
     CHECK(label->value.TryGet<String>()->AsView() == StringView(u8"Sky Zenith / Color"));
 }
@@ -910,7 +910,7 @@ TEST_CASE("scene-edit: replace entity with prefab instance is ONE undo step")
     const Guid after = edit.CreateEntity(u8"After", parent);
     {
         scene::EntityHandle h = edit.Resolve(original);
-        draconic::core::Transform t = scene.GetLocalTransform(h);
+        draconic::foundation::Transform t = scene.GetLocalTransform(h);
         t.position = Float3{4, 5, 6};
         scene.SetLocalTransform(h, t);
     }

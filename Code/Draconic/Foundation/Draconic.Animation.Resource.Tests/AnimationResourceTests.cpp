@@ -2,17 +2,17 @@
 // ResourceManager via the factory and verify the runtime types round-trip. Mirrors the mesh
 // resource test (full content-DB round-trip).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.resource;
 import draconic.animation;
 import draconic.animation.resource;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::vfs;
 using namespace draconic::resource;
 using namespace draconic::animation;
@@ -54,7 +54,7 @@ TEST_CASE("skeleton resource: round-trips through the resource manager")
 
     Guid id;
     {
-        draconic::content::ContentDatabase db(mount, draconic::core::BinarySerializerFactory(),
+        draconic::content::ContentDatabase db(mount, draconic::foundation::BinarySerializerFactory(),
                                               u8".rasset");
         auto* inst = db.RootGroup()->CreateInstance(u8"skel", SkeletonSource::StaticType());
         id = inst->Id();
@@ -66,7 +66,7 @@ TEST_CASE("skeleton resource: round-trips through the resource manager")
         REQUIRE(inst->WriteObject(src).IsOk());
     }
 
-    draconic::content::ContentDatabase db(mount, draconic::core::BinarySerializerFactory(),
+    draconic::content::ContentDatabase db(mount, draconic::foundation::BinarySerializerFactory(),
                                           u8".rasset");
     SkeletonFactory factory;
     ResourceManager manager(db);
@@ -98,7 +98,7 @@ TEST_CASE("animation clip resource: round-trips tracks + events")
 
     Guid id;
     {
-        draconic::content::ContentDatabase db(mount, draconic::core::BinarySerializerFactory(),
+        draconic::content::ContentDatabase db(mount, draconic::foundation::BinarySerializerFactory(),
                                               u8".rasset");
         auto* inst = db.RootGroup()->CreateInstance(u8"clip", AnimationClipSource::StaticType());
         id = inst->Id();
@@ -115,7 +115,7 @@ TEST_CASE("animation clip resource: round-trips tracks + events")
         REQUIRE(inst->WriteObject(src).IsOk());
     }
 
-    draconic::content::ContentDatabase db(mount, draconic::core::BinarySerializerFactory(),
+    draconic::content::ContentDatabase db(mount, draconic::foundation::BinarySerializerFactory(),
                                           u8".rasset");
     AnimationClipFactory factory;
     ResourceManager manager(db);
@@ -161,7 +161,7 @@ TEST_CASE("animation graph resource: composite - resolves clip refs through the 
 
     Guid graphId;
     {
-        draconic::content::ContentDatabase db(mount, draconic::core::BinarySerializerFactory(),
+        draconic::content::ContentDatabase db(mount, draconic::foundation::BinarySerializerFactory(),
                                               u8".rasset");
 
         // A clip resource the graph will reference by id.
@@ -197,7 +197,7 @@ TEST_CASE("animation graph resource: composite - resolves clip refs through the 
         REQUIRE(graphInst->WriteObject(gsrc).IsOk());
     }
 
-    draconic::content::ContentDatabase db(mount, draconic::core::BinarySerializerFactory(),
+    draconic::content::ContentDatabase db(mount, draconic::foundation::BinarySerializerFactory(),
                                           u8".rasset");
     AnimationClipFactory clipFactory;
     AnimationGraphFactory graphFactory;

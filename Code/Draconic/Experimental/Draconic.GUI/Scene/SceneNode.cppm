@@ -9,19 +9,19 @@
 // which walk up the parent chain; SceneNode overrides them to return its own.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:scene_node;
 
-import draconic.core; // Duration
+import draconic.foundation; // Duration
 import :node;
 import :action_manager;
 import :mutation_queue;
 import :event_dispatcher;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -33,7 +33,7 @@ export namespace draconic::gui
 
         // Advance the tree by `elapsed`: tick actions, run the per-frame hook, then drain
         // deferred tree edits (e.g. queued Node::Close removals).
-        void Update(core::Duration elapsed)
+        void Update(foundation::Duration elapsed)
         {
             m_actionManager.Update(elapsed);
             OnUpdate(elapsed);
@@ -45,7 +45,7 @@ export namespace draconic::gui
         [[nodiscard]] EventDispatcher* GetEventDispatcher() override { return &m_eventDispatcher; }
 
         // Per-frame hook for subclasses (layout, timers, ...).
-        virtual void OnUpdate(core::Duration elapsed) { (void)elapsed; }
+        virtual void OnUpdate(foundation::Duration elapsed) { (void)elapsed; }
 
     private:
         ActionManager m_actionManager;

@@ -1,10 +1,10 @@
 // VG geometry: PathBuilder/Path queries, flattening, shapes, dashing.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.vg;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::vg;
 
 TEST_CASE("vg.path: builder + bounds + length on a unit square")

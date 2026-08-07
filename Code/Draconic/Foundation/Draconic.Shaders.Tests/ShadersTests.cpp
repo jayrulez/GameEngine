@@ -1,12 +1,12 @@
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include <cstring>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.shaders;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::shaders;
 
 namespace

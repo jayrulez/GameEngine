@@ -3,8 +3,8 @@
 // textured quad that Prepare can turn into a valid slice (proving the external texture is usable
 // end-to-end); RenderContent fires the render callback bracketed by state transitions.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.rhi;
 import draconic.rhi.null;
 import draconic.image;
@@ -15,7 +15,7 @@ import draconic.ui.viewport;
 import draconic.shell;
 import draconic.shell.null;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 namespace vg = draconic::vg;
 namespace ui = draconic::ui;

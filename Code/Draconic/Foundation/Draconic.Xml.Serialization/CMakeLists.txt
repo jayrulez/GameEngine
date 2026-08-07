@@ -4,7 +4,7 @@
 add_library(Draconic.Xml.Serialization STATIC)
 add_library(Draconic::Xml.Serialization ALIAS Draconic.Xml.Serialization)
 
-target_link_libraries(Draconic.Xml.Serialization PUBLIC Draconic::Core Draconic::Xml Draconic::Policy)
+target_link_libraries(Draconic.Xml.Serialization PUBLIC Draconic::Foundation Draconic::Xml Draconic::Policy)
 
 target_sources(Draconic.Xml.Serialization
     PUBLIC

@@ -4,7 +4,7 @@
 add_library(Draconic.Script.Facades STATIC)
 add_library(Draconic::Script.Facades ALIAS Draconic.Script.Facades)
 target_link_libraries(Draconic.Script.Facades PUBLIC
-    Draconic::Core Draconic::Scene Draconic::Script Draconic::Policy)
+    Draconic::Foundation Draconic::Scene Draconic::Script Draconic::Policy)
 target_sources(Draconic.Script.Facades
     PRIVATE
         ScriptFacadesImpl.cpp   # implementation unit: the DRACONIC_REFLECT_* bodies (GCC gcm rule)

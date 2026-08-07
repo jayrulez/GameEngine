@@ -1,10 +1,10 @@
 // Draconic Render - draconic.render:mesh_renderer implementation unit (sec 3.2 / sec 10.6).
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 module draconic.render;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.geometry;
 import draconic.shaders;
@@ -18,7 +18,7 @@ import :cluster_system;
 import :resources;
 import :gpu_mesh;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 
 namespace draconic::render

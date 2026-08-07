@@ -6,13 +6,13 @@
 // the `(float dx, float dy)` tuple return -> Float2.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:momentum_helper;
 
-import draconic.core; // Float2, Abs, Min
+import draconic.foundation; // Float2, Abs, Min
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

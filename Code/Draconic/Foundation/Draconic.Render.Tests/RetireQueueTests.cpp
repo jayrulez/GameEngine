@@ -2,14 +2,14 @@
 // for grow-path WaitIdle). Null-RHI: verifies aging (freed only after framesInFlight+1
 // ticks), typed retire, and Flush.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.rhi.null;
 import draconic.render;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::render;
 namespace rhi = draconic::rhi;
 

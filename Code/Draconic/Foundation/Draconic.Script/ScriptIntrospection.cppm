@@ -9,18 +9,18 @@
 // reflection registry catches exactly that silent gap.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.script:script_introspection;
 
-import draconic.core;
+import draconic.foundation;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::script
 {
     /// What kind of member a bound API entry is, in the language's own terms.
-    enum class ScriptApiMemberKind : core::u8
+    enum class ScriptApiMemberKind : foundation::u8
     {
         Method,   // callable member / free function
         Property, // field-like accessor (get / get+set)
@@ -32,8 +32,8 @@ export namespace draconic::script
     /// `Float3@ Dot(const Float3&in, const Float3&in)`).
     struct ScriptApiMember
     {
-        core::String name;
-        core::String signature;
+        foundation::String name;
+        foundation::String signature;
         bool isStatic = false;
         ScriptApiMemberKind kind = ScriptApiMemberKind::Method;
     };
@@ -43,11 +43,11 @@ export namespace draconic::script
     /// class from a namespace a backend synthesizes for statics.
     struct ScriptApiType
     {
-        core::String scriptName;
+        foundation::String scriptName;
         // The reflected identity behind the binding (0 = none). Tooling maps it back to
         // registry metadata - e.g. TypeRegistry::DomainOf marks editor-only bindings.
-        core::TypeId typeId = 0;
+        foundation::TypeId typeId = 0;
         bool isNamespace = false;
-        core::Array<ScriptApiMember> members;
+        foundation::Array<ScriptApiMember> members;
     };
 }

@@ -1,10 +1,10 @@
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.model;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::model;
 
 TEST_CASE("model: core data types - names round-trip as wide strings")

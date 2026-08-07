@@ -4,10 +4,10 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include <cmath>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.scene;
 import draconic.physics;
 import draconic.physics.resource;
@@ -16,7 +16,7 @@ import draconic.script;
 import draconic.script.facades; // ExtraFacadeNames (the behavior-prelude facade list)
 import draconic.script.wren;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::physics;
 namespace scene = draconic::scene;
 

@@ -223,19 +223,19 @@ if(EMSCRIPTEN)
 endif()
 
 add_subdirectory(ThirdParty)
-add_subdirectory(Code/Draconic/Foundation/Draconic.Core)
-add_subdirectory(Code/Draconic/Foundation/Draconic.Settings)  # typed/versioned settings store over Core (runtime + editor)
-add_subdirectory(Code/Draconic/Foundation/Draconic.Profiler)  # CPU scope profiler over Core (instrumented across the engine)
-add_subdirectory(Code/Draconic/Foundation/Draconic.Net)       # real-time game networking: wire + INetTransport + loopback sim (over Core)
-add_subdirectory(Code/Draconic/Foundation/Draconic.Net.Replication)  # StateReplication foundation: NetworkId + reflection-driven field codec (over Net + Core)
-add_subdirectory(Code/Draconic/Foundation/Draconic.Xml)       # DOM XML parser + writer over Core
+add_subdirectory(Code/Draconic/Foundation/Draconic.Foundation)
+add_subdirectory(Code/Draconic/Foundation/Draconic.Settings)  # typed/versioned settings store over Foundation (runtime + editor)
+add_subdirectory(Code/Draconic/Foundation/Draconic.Profiler)  # CPU scope profiler over Foundation (instrumented across the engine)
+add_subdirectory(Code/Draconic/Foundation/Draconic.Net)       # real-time game networking: wire + INetTransport + loopback sim (over Foundation)
+add_subdirectory(Code/Draconic/Foundation/Draconic.Net.Replication)  # StateReplication foundation: NetworkId + reflection-driven field codec (over Net + Foundation)
+add_subdirectory(Code/Draconic/Foundation/Draconic.Xml)       # DOM XML parser + writer over Foundation
     add_subdirectory(Code/Draconic/Foundation/Draconic.Xml.Serialization)
-add_subdirectory(Code/Draconic/Foundation/Draconic.VFS)       # byte access over Core stream primitives
+add_subdirectory(Code/Draconic/Foundation/Draconic.VFS)       # byte access over Foundation stream primitives
     add_subdirectory(Code/Draconic/Foundation/Draconic.VFS.Pak)
 add_subdirectory(Code/Draconic/Engine/Draconic.Engine.Project)   # project manifest/layout (runtime-side, editor-free)
 add_subdirectory(Code/Draconic/Foundation/Draconic.Content)   # content database over Core + VFS
 add_subdirectory(Code/Draconic/Foundation/Draconic.Resource)  # resource manager over content
-add_subdirectory(Code/Draconic/Foundation/Draconic.RHI)   # depends only on Core (foundational sibling of Runtime)
+add_subdirectory(Code/Draconic/Foundation/Draconic.RHI)   # depends only on Foundation (foundational sibling of Runtime)
 # --- RHI backends (Null/Validation always; GPU backends by platform + availability) ---
 add_subdirectory(Code/Draconic/Foundation/Draconic.RHI.Null)
 add_subdirectory(Code/Draconic/Foundation/Draconic.RHI.Validation)
@@ -284,7 +284,7 @@ add_subdirectory(Code/Draconic/Engine/Draconic.Engine.Animation) # skeletal-anim
 add_subdirectory(Code/Draconic/Engine/Draconic.Engine.Particles) # particle scene/render integration (renderer + provider seam; after Render)
 add_subdirectory(Code/Draconic/Engine/Draconic.Engine.Physics) # physics scene integration (components + per-scene Jolt world + interpolation; after Render)
 add_subdirectory(Code/Draconic/Engine/Draconic.Engine.Audio)   # audio scene integration (components + per-scene voice group + listener sync; after Render)
-add_subdirectory(Code/Draconic/Foundation/Draconic.Fonts)     # font types/interfaces over Core + Image
+add_subdirectory(Code/Draconic/Foundation/Draconic.Fonts)     # font types/interfaces over Foundation + Image
 add_subdirectory(Code/Draconic/Foundation/Draconic.Fonts.Baked)
 add_subdirectory(Code/Draconic/Foundation/Draconic.Fonts.IO)
 add_subdirectory(Code/Draconic/Foundation/Draconic.Fonts.TTF)
@@ -341,7 +341,7 @@ else()
         message(STATUS "SDL3 not found - skipping Draconic::Shell.Desktop")
     endif()
 endif()
-add_subdirectory(Code/Draconic/Foundation/Draconic.Input)     # action-mapping layer (InputMap + ActionRuntime + asset/cooked) over Core + Shell
+add_subdirectory(Code/Draconic/Foundation/Draconic.Input)     # action-mapping layer (InputMap + ActionRuntime + asset/cooked) over Foundation + Shell
 add_subdirectory(Code/Draconic/Foundation/Draconic.Input.Resource)
 if(DRACONIC_EXPERIMENTAL_GUI)
     add_subdirectory(Code/Draconic/Experimental/Draconic.GUI.Shell)  # platform input bridge (Shell InputEvents -> GUI EventDispatcher)
@@ -459,7 +459,7 @@ if(DRACONIC_BUILD_TESTS)
     draconic_test_suite(Code/Draconic/Foundation/Draconic.Animation.Tests                 Draconic::Animation)
     draconic_test_suite(Code/Draconic/Foundation/Draconic.Audio.Tests                     Draconic::Audio)
     draconic_test_suite(Code/Draconic/Foundation/Draconic.Content.Tests                   Draconic::Content)
-    draconic_test_suite(Code/Draconic/Foundation/Draconic.Core.Tests                      Draconic::Core)
+    draconic_test_suite(Code/Draconic/Foundation/Draconic.Foundation.Tests                Draconic::Foundation)
     draconic_test_suite(Code/Draconic/Foundation/Draconic.Fonts.Baked.Tests               Draconic::Fonts.Baked)
     draconic_test_suite(Code/Draconic/Foundation/Draconic.Fonts.DistanceField.Baker.Tests Draconic::Fonts.DistanceField.Baker)
     draconic_test_suite(Code/Draconic/Foundation/Draconic.Fonts.DistanceField.Tests       Draconic::Fonts.DistanceField)

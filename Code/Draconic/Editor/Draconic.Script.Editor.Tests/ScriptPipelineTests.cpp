@@ -6,10 +6,10 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include <initializer_list>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.resource;
@@ -21,7 +21,7 @@ import draconic.script.resource;
 import draconic.script.editor;
 import draconic.script.wren.editor; // the Wren cook (starter + compile/harvest) under test
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::script;
 namespace content = draconic::content;
 

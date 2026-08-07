@@ -9,17 +9,17 @@
 // LoadImage returns a borrowed, provider-owned pointer.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui.vfs;
 
-import draconic.core;     // IStream, FileMode, SeekOrigin, Array, Span, UniquePtr, MakeUnique
+import draconic.foundation;     // IStream, FileMode, SeekOrigin, Array, Span, UniquePtr, MakeUnique
 import draconic.image;    // ImageData, Image, OwnedImageData
 import draconic.image.io; // LoadImageFromMemory
 import draconic.vfs;      // IFileSystem
 import draconic.gui;      // IResourceProvider
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace image = draconic::image;
 
 export namespace draconic::gui::vfs
@@ -33,7 +33,7 @@ export namespace draconic::gui::vfs
 
         // Load + decode image data at `path`. Returns a borrowed pointer owned by this provider
         // (cached in m_images), or null if the file is missing or fails to decode.
-        const image::ImageData* LoadImage(core::StringView path) override
+        const image::ImageData* LoadImage(foundation::StringView path) override
         {
             if (m_fs == nullptr)
                 return nullptr;

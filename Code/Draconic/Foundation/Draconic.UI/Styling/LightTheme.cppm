@@ -5,11 +5,11 @@
 // literal colours and dark-tinted icons; see that file's header for the conventions.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:light_theme;
 
-import draconic.core;
+import draconic.foundation;
 import :style_sheet;
 import :style_rule;
 import :style_property;
@@ -44,7 +44,7 @@ import :list_view;
 import :tree_view;
 import :grid_view;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

@@ -7,12 +7,12 @@
 // subtree through the DrawContext/VG seam (eepp's nodeDraw + matrix/clip, on VG).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:node;
 
-import draconic.core; // Object, RefPtr, Array, Move, Float2
+import draconic.foundation; // Object, RefPtr, Array, Move, Float2
 import :rect;
 import :transform2d;
 import :transformable;
@@ -24,8 +24,8 @@ import :action;
 import :action_manager;
 import :mutation_queue;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -92,7 +92,7 @@ export namespace draconic::gui
             if (child->m_parent != nullptr)
                 child->m_parent->RemoveChild(child);
             child->m_parent = this;
-            m_children.PushBack(core::Move(keepAlive));
+            m_children.PushBack(foundation::Move(keepAlive));
             child->HandleParentChange();
             OnChildrenChanged();
             Invalidate();
@@ -152,7 +152,7 @@ export namespace draconic::gui
                 return;
             RefPtr<Node> ref = m_children[cur];
             m_children.RemoveAt(cur);
-            m_children.Insert(newIndex, core::Move(ref));
+            m_children.Insert(newIndex, foundation::Move(ref));
             Invalidate();
         }
         void ToFront()
@@ -167,15 +167,15 @@ export namespace draconic::gui
         }
 
         // === Size / bounds ===
-        void SetSize(core::Float2 size)
+        void SetSize(foundation::Float2 size)
         {
-            const core::Float2 clamped = ClampToSizeConstraints(size);
+            const foundation::Float2 clamped = ClampToSizeConstraints(size);
             if (clamped == m_size)
                 return;
             m_size = clamped;
             HandleSizeChange();
         }
-        [[nodiscard]] core::Float2 GetSize() const noexcept { return m_size; }
+        [[nodiscard]] foundation::Float2 GetSize() const noexcept { return m_size; }
         [[nodiscard]] Rect GetLocalBounds() const noexcept
         {
             return Rect{0.0f, 0.0f, m_size.x, m_size.y};
@@ -183,18 +183,18 @@ export namespace draconic::gui
 
         // Min/max size constraints (CSS min/max-width/height). A negative max component means
         // "unbounded" on that axis. SetSize clamps to [min, max]; changing a bound re-clamps.
-        void SetMinSize(core::Float2 minSize)
+        void SetMinSize(foundation::Float2 minSize)
         {
             m_minSize = minSize;
             SetSize(m_size);
         }
-        void SetMaxSize(core::Float2 maxSize)
+        void SetMaxSize(foundation::Float2 maxSize)
         {
             m_maxSize = maxSize;
             SetSize(m_size);
         }
-        [[nodiscard]] core::Float2 GetMinSize() const noexcept { return m_minSize; }
-        [[nodiscard]] core::Float2 GetMaxSize() const noexcept { return m_maxSize; }
+        [[nodiscard]] foundation::Float2 GetMinSize() const noexcept { return m_minSize; }
+        [[nodiscard]] foundation::Float2 GetMaxSize() const noexcept { return m_maxSize; }
 
         // World transform accumulates the parent chain (parentWorld * local).
         [[nodiscard]] Transform2D GetWorldTransform() const
@@ -202,17 +202,17 @@ export namespace draconic::gui
             return m_parent != nullptr ? (m_parent->GetWorldTransform() * GetTransform())
                                        : GetTransform();
         }
-        [[nodiscard]] core::Float2 ConvertToWorldSpace(core::Float2 nodePoint) const
+        [[nodiscard]] foundation::Float2 ConvertToWorldSpace(foundation::Float2 nodePoint) const
         {
             return GetWorldTransform().TransformPoint(nodePoint);
         }
-        [[nodiscard]] core::Float2 ConvertToNodeSpace(core::Float2 worldPoint) const
+        [[nodiscard]] foundation::Float2 ConvertToNodeSpace(foundation::Float2 worldPoint) const
         {
             return GetWorldTransform().GetInverse().TransformPoint(worldPoint);
         }
-        [[nodiscard]] core::Float2 GetScreenPosition() const
+        [[nodiscard]] foundation::Float2 GetScreenPosition() const
         {
-            return ConvertToWorldSpace(core::Float2{0.0f, 0.0f});
+            return ConvertToWorldSpace(foundation::Float2{0.0f, 0.0f});
         }
         [[nodiscard]] Rect GetScreenBounds() const
         {
@@ -254,15 +254,15 @@ export namespace draconic::gui
         void SetHitTestVisible(bool visible) noexcept { m_hitTestVisible = visible; }
         [[nodiscard]] bool IsHitTestVisible() const noexcept { return m_hitTestVisible; }
 
-        [[nodiscard]] virtual bool PointInside(core::Float2 worldPoint) const
+        [[nodiscard]] virtual bool PointInside(foundation::Float2 worldPoint) const
         {
             if (!m_hitTestVisible)
                 return false;
-            const core::Float2 p = ConvertToNodeSpace(worldPoint);
+            const foundation::Float2 p = ConvertToNodeSpace(worldPoint);
             return p.x >= 0.0f && p.x <= m_size.x && p.y >= 0.0f && p.y <= m_size.y;
         }
         // Topmost visible descendant (or self) under a world point; nullptr if none.
-        [[nodiscard]] virtual Node* OverFind(core::Float2 worldPoint)
+        [[nodiscard]] virtual Node* OverFind(foundation::Float2 worldPoint)
         {
             if (!m_visible)
                 return nullptr;
@@ -275,13 +275,13 @@ export namespace draconic::gui
         // === Drawing ===
         void SetBackground(RefPtr<Drawable> background)
         {
-            m_background = core::Move(background);
+            m_background = foundation::Move(background);
             Invalidate();
         }
         [[nodiscard]] Drawable* GetBackground() const noexcept { return m_background.Get(); }
         void SetForeground(RefPtr<Drawable> foreground)
         {
-            m_foreground = core::Move(foreground);
+            m_foreground = foundation::Move(foreground);
             Invalidate();
         }
         [[nodiscard]] Drawable* GetForeground() const noexcept { return m_foreground.Get(); }
@@ -368,7 +368,7 @@ export namespace draconic::gui
                 return;
             action->SetTarget(this);
             if (ActionManager* manager = GetActionManager())
-                manager->AddAction(core::Move(action));
+                manager->AddAction(foundation::Move(action));
         }
 
         // Detach this node from its tree at the next safe sync point (SceneNode drain).
@@ -457,9 +457,9 @@ export namespace draconic::gui
         // Set a predicate deciding which payloads this node accepts; when it returns true the
         // dispatcher delivers the drag-enter/over/leave and drop here (nearest accepting
         // ancestor of the cursor wins). Each also fires the matching DragEvent to listeners.
-        void SetDropAcceptor(core::Function<bool(const DragPayload&)> predicate)
+        void SetDropAcceptor(foundation::Function<bool(const DragPayload&)> predicate)
         {
-            m_dropAcceptor = core::Move(predicate);
+            m_dropAcceptor = foundation::Move(predicate);
         }
         [[nodiscard]] bool AcceptsDrop(const DragPayload& payload) const
         {
@@ -493,7 +493,7 @@ export namespace draconic::gui
 
         // Optional hover-tooltip text. A TooltipManager reads the hovered node's answer and
         // shows a tooltip after a delay. Empty (the default) means no tooltip.
-        [[nodiscard]] virtual core::StringView GetTooltipText() const { return {}; }
+        [[nodiscard]] virtual foundation::StringView GetTooltipText() const { return {}; }
 
         // True if this node consumes the mouse wheel (e.g. a ScrollView). The dispatcher
         // bubbles a wheel event from the hit node up the ancestor chain to the nearest node
@@ -519,7 +519,7 @@ export namespace draconic::gui
         void ClearNeedsRedraw() noexcept { m_needsRedraw = false; }
 
         // === Transformable overrides: geometry changes invalidate + notify ===
-        void SetPosition(core::Float2 position) override
+        void SetPosition(foundation::Float2 position) override
         {
             Transformable::SetPosition(position);
             HandlePositionChange();
@@ -529,7 +529,7 @@ export namespace draconic::gui
             Transformable::SetRotation(radians);
             Invalidate();
         }
-        void SetScale(core::Float2 factors) override
+        void SetScale(foundation::Float2 factors) override
         {
             Transformable::SetScale(factors);
             Invalidate();
@@ -539,7 +539,7 @@ export namespace draconic::gui
         u32 AddEventListener(EventType type, EventCallback callback)
         {
             const u32 id = ++m_nextListenerId;
-            m_listeners.PushBack(Listener{id, type, core::Move(callback)});
+            m_listeners.PushBack(Listener{id, type, foundation::Move(callback)});
             return id;
         }
         void RemoveEventListener(u32 id)
@@ -600,9 +600,9 @@ export namespace draconic::gui
         }
 
         // Clamp a size to [m_minSize, m_maxSize] per axis (a negative max = unbounded).
-        [[nodiscard]] core::Float2 ClampToSizeConstraints(core::Float2 size) const noexcept
+        [[nodiscard]] foundation::Float2 ClampToSizeConstraints(foundation::Float2 size) const noexcept
         {
-            core::Float2 out = size;
+            foundation::Float2 out = size;
             if (out.x < m_minSize.x)
                 out.x = m_minSize.x;
             if (out.y < m_minSize.y)
@@ -646,9 +646,9 @@ export namespace draconic::gui
             m_dropAcceptor; // drop-target predicate (empty = rejects)
         RefPtr<Drawable> m_background;
         RefPtr<Drawable> m_foreground;
-        core::Float2 m_size{0.0f, 0.0f};
-        core::Float2 m_minSize{0.0f, 0.0f};   // CSS min-width/height
-        core::Float2 m_maxSize{-1.0f, -1.0f}; // CSS max-width/height (<0 = unbounded)
+        foundation::Float2 m_size{0.0f, 0.0f};
+        foundation::Float2 m_minSize{0.0f, 0.0f};   // CSS min-width/height
+        foundation::Float2 m_maxSize{-1.0f, -1.0f}; // CSS max-width/height (<0 = unbounded)
         f32 m_alpha = 1.0f;
         bool m_visible = true;
         bool m_enabled = true;

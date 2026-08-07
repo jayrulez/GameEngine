@@ -8,15 +8,15 @@
 /// to create modules, so it's separate from the RHI-free draconic.shaders.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.shaders.system:shader_system;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.shaders;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace rhi = draconic::rhi;
 
 export namespace draconic::shaders
@@ -33,15 +33,15 @@ export namespace draconic::shaders
         virtual ~IShaderSourceProvider() = default;
 
         /// HLSL text for (name, stage); false when the provider has no such shader.
-        virtual bool FetchSource(core::StringView name, ShaderStage stage,
-                                 core::String& outSource) = 0;
+        virtual bool FetchSource(foundation::StringView name, ShaderStage stage,
+                                 foundation::String& outSource) = 0;
 
         /// Every shader name the provider can serve (tooling: builtin dropdowns).
-        virtual void CollectShaderNames(core::Array<core::String>& out) = 0;
+        virtual void CollectShaderNames(foundation::Array<foundation::String>& out) = 0;
 
         /// Appends names whose source changed since the last poll (dev file watch);
         /// returns true if any did. Called once per frame - implementations throttle.
-        virtual bool PollChanges(core::Array<core::String>& outChangedNames) = 0;
+        virtual bool PollChanges(foundation::Array<foundation::String>& outChangedNames) = 0;
     };
 
     // Map a device's expected shader format (rhi::ShaderFormat) to the cooked-pack blob format.
@@ -87,10 +87,10 @@ export namespace draconic::shaders
         // sources are compiled with the RAW requested flags (no declared-mask model): they are
         // outside the corpus/cook lattice by definition, and callers like the NormalMap-guarded
         // tests rely on every requested define being applied.
-        void RegisterSource(core::StringView name, ShaderStage stage, core::StringView hlsl)
+        void RegisterSource(foundation::StringView name, ShaderStage stage, foundation::StringView hlsl)
         {
-            const core::u64 key = SourceKey(name, stage);
-            m_sources.InsertOrAssign(key, core::String(hlsl));
+            const foundation::u64 key = SourceKey(name, stage);
+            m_sources.InsertOrAssign(key, foundation::String(hlsl));
             m_declaredMasks.Remove(key); // explicit registration overrides a provider fetch
         }
 
@@ -111,18 +111,18 @@ export namespace draconic::shaders
         // Dev hot reload: asks the provider which sources changed, drops their
         // cached source + variants, and bumps versions (the PSO cache rebuilds on
         // its existing poll). Call once per frame. Returns how many shaders reloaded.
-        core::usize PumpReloads()
+        foundation::usize PumpReloads()
         {
             if (m_provider == nullptr)
             {
                 return 0;
             }
-            core::Array<core::String> changed;
+            foundation::Array<foundation::String> changed;
             if (!m_provider->PollChanges(changed))
             {
                 return 0;
             }
-            for (const core::String& name : changed)
+            for (const foundation::String& name : changed)
             {
                 RemoveSource(name.AsView()); // refetched lazily on next GetVariant
                 InvalidateShader(name.AsView());
@@ -132,32 +132,32 @@ export namespace draconic::shaders
 
         // Drops the cached source text for every stage of `name` (the variant cache
         // is handled by InvalidateShader).
-        void RemoveSource(core::StringView name)
+        void RemoveSource(foundation::StringView name)
         {
             constexpr ShaderStage kStages[] = {ShaderStage::Vertex, ShaderStage::Fragment,
                                                ShaderStage::Compute};
             for (const ShaderStage stage : kStages)
             {
-                const core::u64 key = SourceKey(name, stage);
+                const foundation::u64 key = SourceKey(name, stage);
                 m_sources.Remove(key);
                 m_declaredMasks.Remove(key);
             }
         }
 
         // Include search paths for DXC #include resolution of shared .hlsli (owned).
-        void SetIncludePaths(core::Span<const core::StringView> paths)
+        void SetIncludePaths(foundation::Span<const foundation::StringView> paths)
         {
             m_includePaths.Clear();
-            for (core::usize i = 0; i < paths.Size(); ++i)
+            for (foundation::usize i = 0; i < paths.Size(); ++i)
             {
-                m_includePaths.PushBack(core::String(paths[i]));
+                m_includePaths.PushBack(foundation::String(paths[i]));
             }
         }
 
         // Get (compile-on-demand + cache) the GPU module for a variant. Returns null
         // if the source is unknown or compilation fails (failures are NOT cached, so a
         // later request retries - e.g. after a fix).
-        [[nodiscard]] rhi::ShaderModule* GetVariant(core::StringView name, ShaderStage stage,
+        [[nodiscard]] rhi::ShaderModule* GetVariant(foundation::StringView name, ShaderStage stage,
                                                     ShaderFlags flags)
         {
             if (m_pack != nullptr)
@@ -174,7 +174,7 @@ export namespace draconic::shaders
                     }
                     // Compiler-free dist: a registered SOURCE cannot be served. Loud once
                     // per (name, stage) - the fix is cooking user shaders to bytecode.
-                    const core::u64 srcKey = SourceKey(name, stage);
+                    const foundation::u64 srcKey = SourceKey(name, stage);
                     if (m_loggedFailures.Find(srcKey) == nullptr)
                     {
                         m_loggedFailures.InsertOrAssign(srcKey, true);
@@ -195,10 +195,10 @@ export namespace draconic::shaders
         // Drop + destroy every cached variant of a shader and BUMP its version (the
         // reload signal consumers poll). Call on a shader reload. The next GetVariant
         // recompiles. Returns how many variants were invalidated.
-        core::usize InvalidateShader(core::StringView name)
+        foundation::usize InvalidateShader(foundation::StringView name)
         {
-            const core::u64 nameHash = ShaderNameHash(name);
-            core::Array<ShaderVariantKey> toRemove;
+            const foundation::u64 nameHash = ShaderNameHash(name);
+            foundation::Array<ShaderVariantKey> toRemove;
             for (auto& e : m_cache)
             {
                 if (e.key.nameHash == nameHash)
@@ -221,9 +221,9 @@ export namespace draconic::shaders
         // Monotonic version of a shader: bumped each InvalidateShader (i.e. each
         // reload). The PSO cache stamps pipelines with this and rebuilds when it
         // changes. 0 if the shader was never registered/invalidated.
-        [[nodiscard]] core::u64 Version(core::StringView name) noexcept
+        [[nodiscard]] foundation::u64 Version(foundation::StringView name) noexcept
         {
-            core::u64* v = m_versions.Find(ShaderNameHash(name));
+            foundation::u64* v = m_versions.Find(ShaderNameHash(name));
             return (v != nullptr) ? *v : 0ull;
         }
 
@@ -241,17 +241,17 @@ export namespace draconic::shaders
         // like the cooked path does - the design requires dev and dist to canonicalize
         // identically, and it dedupes variants (a PS that ignores SKINNED stops recompiling
         // per skin). Explicitly registered sources have no mask entry and compile raw flags.
-        [[nodiscard]] rhi::ShaderModule* GetCompiledVariant(core::StringView name,
+        [[nodiscard]] rhi::ShaderModule* GetCompiledVariant(foundation::StringView name,
                                                             ShaderStage stage, ShaderFlags flags)
         {
-            const core::u64 srcKey = SourceKey(name, stage);
-            core::String* source = m_sources.Find(srcKey);
+            const foundation::u64 srcKey = SourceKey(name, stage);
+            foundation::String* source = m_sources.Find(srcKey);
             if (source == nullptr && m_provider != nullptr)
             {
-                core::String fetched;
+                foundation::String fetched;
                 if (m_provider->FetchSource(name, stage, fetched))
                 {
-                    m_sources.InsertOrAssign(srcKey, core::Move(fetched));
+                    m_sources.InsertOrAssign(srcKey, foundation::Move(fetched));
                     source = m_sources.Find(srcKey);
                     // Corpus sources carry the variant directive; absent means single-variant
                     // (mask None) - the same rule the cook applies.
@@ -289,10 +289,10 @@ export namespace draconic::shaders
         // Dist path: canonicalize against the declared mask, look up the prebuilt blob, and create
         // the GPU module directly. Cached under the CANONICAL key so requests that differ only in
         // ignored flags dedupe. A miss is a cook-coverage bug (loud, returns null).
-        [[nodiscard]] rhi::ShaderModule* GetCookedVariant(core::StringView name, ShaderStage stage,
+        [[nodiscard]] rhi::ShaderModule* GetCookedVariant(foundation::StringView name, ShaderStage stage,
                                                           ShaderFlags flags)
         {
-            const core::u64 nameHash = ShaderNameHash(name);
+            const foundation::u64 nameHash = ShaderNameHash(name);
             const ShaderFlags canon =
                 CanonicalizeFlags(flags, m_pack->DeclaredMask(nameHash, stage));
             const ShaderVariantKey key{nameHash, stage, canon};
@@ -302,13 +302,13 @@ export namespace draconic::shaders
             }
 
             const CookedShaderFormat format = FormatForDevice();
-            const core::Array<core::byte>* blob = m_pack->Find(nameHash, stage, canon, format);
+            const foundation::Array<foundation::byte>* blob = m_pack->Find(nameHash, stage, canon, format);
             if (blob == nullptr)
             {
                 // Loud, but once per variant - PSO layers retry every frame and the full
                 // pack dump per frame would drown the log.
-                const core::u64 missKey = (SourceKey(name, stage) * 1099511628211ull) ^
-                                          (static_cast<core::u64>(canon) << 32);
+                const foundation::u64 missKey = (SourceKey(name, stage) * 1099511628211ull) ^
+                                          (static_cast<foundation::u64>(canon) << 32);
                 if (m_loggedFailures.Find(missKey) != nullptr)
                 {
                     return nullptr;
@@ -335,10 +335,10 @@ export namespace draconic::shaders
             }
 
             rhi::ShaderModuleDesc desc{};
-            desc.code = core::Span<const core::u8>(reinterpret_cast<const core::u8*>(blob->Data()),
+            desc.code = foundation::Span<const foundation::u8>(reinterpret_cast<const foundation::u8*>(blob->Data()),
                                                    blob->Size());
             rhi::ShaderModule* module = nullptr;
-            if (m_device->CreateShaderModule(desc, module) != core::ErrorCode::Ok)
+            if (m_device->CreateShaderModule(desc, module) != foundation::ErrorCode::Ok)
             {
                 return nullptr;
             }
@@ -346,7 +346,7 @@ export namespace draconic::shaders
             return module;
         }
 
-        [[nodiscard]] rhi::ShaderModule* Compile(core::StringView source, ShaderStage stage,
+        [[nodiscard]] rhi::ShaderModule* Compile(foundation::StringView source, ShaderStage stage,
                                                  ShaderFlags flags)
         {
             if (m_compiler == nullptr)
@@ -356,11 +356,11 @@ export namespace draconic::shaders
             const bool isDX12 = (m_device->type == rhi::DeviceType::DX12);
             const ShaderTarget target = isDX12 ? ShaderTarget::DXIL : ShaderTarget::SPIRV;
 
-            core::Array<ShaderDefine> defines;
+            foundation::Array<ShaderDefine> defines;
             AppendDefines(flags, defines);
 
-            core::Array<core::StringView> includeViews;
-            for (const core::String& p : m_includePaths)
+            foundation::Array<foundation::StringView> includeViews;
+            for (const foundation::String& p : m_includePaths)
             {
                 includeViews.PushBack(p.AsView());
             }
@@ -368,9 +368,9 @@ export namespace draconic::shaders
             CompileOptions opts{};
             opts.shaderModel = u8"6_0";
             opts.optimizationLevel = 3;
-            opts.defines = core::Span<const ShaderDefine>(defines.Data(), defines.Size());
+            opts.defines = foundation::Span<const ShaderDefine>(defines.Data(), defines.Size());
             opts.includePaths =
-                core::Span<const core::StringView>(includeViews.Data(), includeViews.Size());
+                foundation::Span<const foundation::StringView>(includeViews.Data(), includeViews.Size());
             if (!isDX12)
             {
                 // Vulkan: shift register spaces so HLSL b/t/u/s registers don't collide
@@ -384,11 +384,11 @@ export namespace draconic::shaders
             }
 
             CompileResult cr{};
-            const core::Status r =
-                m_compiler->compile(reinterpret_cast<const core::u8*>(source.Data()), source.Size(),
+            const foundation::Status r =
+                m_compiler->compile(reinterpret_cast<const foundation::u8*>(source.Data()), source.Size(),
                                     stage, u8"main", target, opts, cr);
 
-            if (r != core::ErrorCode::Ok || !cr.success)
+            if (r != foundation::ErrorCode::Ok || !cr.success)
             {
                 if (cr.messages != nullptr)
                 {
@@ -399,11 +399,11 @@ export namespace draconic::shaders
             }
 
             rhi::ShaderModuleDesc desc{};
-            desc.code = core::Span<const core::u8>(cr.bytecode, cr.bytecodeSize);
+            desc.code = foundation::Span<const foundation::u8>(cr.bytecode, cr.bytecodeSize);
             rhi::ShaderModule* module = nullptr;
-            const core::Status mr = m_device->CreateShaderModule(desc, module);
+            const foundation::Status mr = m_device->CreateShaderModule(desc, module);
             m_compiler->freeResult(cr);
-            return (mr == core::ErrorCode::Ok) ? module : nullptr;
+            return (mr == foundation::ErrorCode::Ok) ? module : nullptr;
         }
 
         void DestroyAll()
@@ -418,14 +418,14 @@ export namespace draconic::shaders
             m_cache.Clear();
         }
 
-        [[nodiscard]] static core::u64 SourceKey(core::StringView name, ShaderStage stage) noexcept
+        [[nodiscard]] static foundation::u64 SourceKey(foundation::StringView name, ShaderStage stage) noexcept
         {
-            return (ShaderNameHash(name) * 1099511628211ull) ^ static_cast<core::u64>(stage);
+            return (ShaderNameHash(name) * 1099511628211ull) ^ static_cast<foundation::u64>(stage);
         }
 
-        void BumpVersion(core::u64 nameHash)
+        void BumpVersion(foundation::u64 nameHash)
         {
-            core::u64* v = m_versions.Find(nameHash);
+            foundation::u64* v = m_versions.Find(nameHash);
             if (v == nullptr)
             {
                 m_versions.InsertOrAssign(nameHash, 0ull);
@@ -438,15 +438,15 @@ export namespace draconic::shaders
         rhi::Device* m_device;                            // borrowed
         IShaderSourceProvider* m_provider = nullptr;      // borrowed (may be null)
         const CookedShaderPack* m_pack = nullptr;         // dist mode: cooked blobs (borrowed)
-        core::HashMap<core::u64, core::String> m_sources; // (name,stage) -> HLSL
+        foundation::HashMap<foundation::u64, foundation::String> m_sources; // (name,stage) -> HLSL
         // Declared variant mask per PROVIDER-FETCHED (corpus) source - the dev half of the
         // canonicalization contract. Explicitly registered sources have no entry (raw flags).
-        core::HashMap<core::u64, ShaderFlags> m_declaredMasks;
-        core::HashMap<core::u64, bool> m_loggedFailures; // once-per-key error throttling
-        core::HashMap<ShaderVariantKey, rhi::ShaderModule*>
+        foundation::HashMap<foundation::u64, ShaderFlags> m_declaredMasks;
+        foundation::HashMap<foundation::u64, bool> m_loggedFailures; // once-per-key error throttling
+        foundation::HashMap<ShaderVariantKey, rhi::ShaderModule*>
             m_cache;                                    // variant -> GPU module (owned)
-        core::HashMap<core::u64, core::u64> m_versions; // nameHash -> version
-        core::Array<core::String> m_includePaths;
+        foundation::HashMap<foundation::u64, foundation::u64> m_versions; // nameHash -> version
+        foundation::Array<foundation::String> m_includePaths;
     };
 
 } // namespace draconic::shaders

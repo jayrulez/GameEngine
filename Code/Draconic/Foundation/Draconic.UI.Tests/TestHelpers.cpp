@@ -1,17 +1,17 @@
 // Single definition point for the shared test doubles (TestView/TestGroup).
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 #include "TestHelpers.h"
 
 using namespace draconic::ui;
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::ui::tests
 {
     void TestView::OnMeasure(BoxConstraints constraints)
     {
-        MeasuredSize = draconic::core::Float2{constraints.ConstrainWidth(DesiredWidth),
+        MeasuredSize = draconic::foundation::Float2{constraints.ConstrainWidth(DesiredWidth),
                                               constraints.ConstrainHeight(DesiredHeight)};
     }
 

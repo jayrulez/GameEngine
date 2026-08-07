@@ -19,12 +19,12 @@
 //    resolution via IFontService, ScrollIntoView (ScrollView), and UIContext::DrawRootView.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:view;
 
-import draconic.core; // Object, RefPtr, Array, HashMap, String, StringView, Float2, Rectangle, Function, Cast, IsDerivedFrom, TypeInfo, Max, Min, Optional
+import draconic.foundation; // Object, RefPtr, Array, HashMap, String, StringView, Float2, Rectangle, Function, Cast, IsDerivedFrom, TypeInfo, Max, Min, Optional
 import draconic.vg;   // VGContext (child draw transforms)
 import draconic.fonts; // IFontService (UIContext seam + font-family resolution)
 import :enums;         // Visibility, CursorType, InvalidationKind
@@ -59,7 +59,7 @@ import :input_manager;
 import :focus_manager;
 import :shortcut_manager;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace fonts = draconic::fonts;
 namespace vg = draconic::vg;
 

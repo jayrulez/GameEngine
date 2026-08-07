@@ -3,14 +3,14 @@
 
 export module draconic.rhi:commands;
 
-import draconic.core;
+import draconic.foundation;
 import :forward;
 import :enums;
 import :types;
 import :descriptors;
 import :resources;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi
 {

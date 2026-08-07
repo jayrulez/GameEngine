@@ -11,19 +11,19 @@
 // with the path kept alongside as the human-readable mirror; the picker's [Clear] sets "none".
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 module draconic.editor.app;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.ui;
 import draconic.editor.core;
 import :asset_picker_dialog;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::editor::app
 {

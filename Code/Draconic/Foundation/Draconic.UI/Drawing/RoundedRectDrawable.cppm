@@ -4,18 +4,18 @@
 // Ported from Sedulous.UI/src/Drawing/RoundedRectDrawable.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:rounded_rect_drawable;
 
-import draconic.core; // Color, Rectangle
+import draconic.foundation; // Color, Rectangle
 import draconic.vg;   // CornerRadii
 import :drawable;
 import :draw_context;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace vg = draconic::vg;
 
 export namespace draconic::ui
@@ -24,23 +24,23 @@ export namespace draconic::ui
     {
         DRACONIC_OBJECT(RoundedRectDrawable, Drawable)
     public:
-        core::Color FillColor{};
-        core::Color BorderColor = core::Color::Transparent;
+        foundation::Color FillColor{};
+        foundation::Color BorderColor = foundation::Color::Transparent;
         f32 BorderWidth = 0.0f;
         vg::CornerRadii Radii{};
 
         RoundedRectDrawable() = default;
         /// Uniform corner radius.
-        explicit RoundedRectDrawable(core::Color fill, f32 cornerRadius = 0.0f,
-                                     core::Color borderColor = core::Color::Transparent,
+        explicit RoundedRectDrawable(foundation::Color fill, f32 cornerRadius = 0.0f,
+                                     foundation::Color borderColor = foundation::Color::Transparent,
                                      f32 borderWidth = 0.0f)
             : FillColor(fill), BorderColor(borderColor), BorderWidth(borderWidth),
               Radii(cornerRadius)
         {
         }
         /// Per-corner radii.
-        RoundedRectDrawable(core::Color fill, vg::CornerRadii radii,
-                            core::Color borderColor = core::Color::Transparent,
+        RoundedRectDrawable(foundation::Color fill, vg::CornerRadii radii,
+                            foundation::Color borderColor = foundation::Color::Transparent,
                             f32 borderWidth = 0.0f)
             : FillColor(fill), BorderColor(borderColor), BorderWidth(borderWidth), Radii(radii)
         {

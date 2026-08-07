@@ -4,7 +4,7 @@ add_library(Draconic.Engine.Physics STATIC)
 add_library(Draconic::Engine.Physics ALIAS Draconic.Engine.Physics)
 
 target_link_libraries(Draconic.Engine.Physics
-    PUBLIC Draconic::Core Draconic::Runtime Draconic::Scene Draconic::Engine.Scene
+    PUBLIC Draconic::Foundation Draconic::Runtime Draconic::Scene Draconic::Engine.Scene
            Draconic::Physics Draconic::Physics.Resource Draconic::Resource Draconic::Script
            Draconic::Script.Facades Draconic::Engine.Render Draconic::Policy)
 

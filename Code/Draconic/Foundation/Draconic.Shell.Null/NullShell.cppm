@@ -9,42 +9,42 @@
 // without an OS.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.shell.null;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.shell;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::shell
 {
     class NullWindow final : public IWindow
     {
     public:
-        NullWindow(core::u32 id, const WindowSettings& settings) noexcept
+        NullWindow(foundation::u32 id, const WindowSettings& settings) noexcept
             : m_id(id), m_width(settings.width), m_height(settings.height),
               m_x(settings.positioned ? settings.x : 0), m_y(settings.positioned ? settings.y : 0)
         {
         }
 
-        [[nodiscard]] core::u32 Id() const noexcept override { return m_id; }
-        [[nodiscard]] core::u32 Width() const noexcept override { return m_width; }
-        [[nodiscard]] core::u32 Height() const noexcept override { return m_height; }
-        [[nodiscard]] core::i32 X() const noexcept override { return m_x; }
-        [[nodiscard]] core::i32 Y() const noexcept override { return m_y; }
-        void SetPosition(core::i32 x, core::i32 y) override
+        [[nodiscard]] foundation::u32 Id() const noexcept override { return m_id; }
+        [[nodiscard]] foundation::u32 Width() const noexcept override { return m_width; }
+        [[nodiscard]] foundation::u32 Height() const noexcept override { return m_height; }
+        [[nodiscard]] foundation::i32 X() const noexcept override { return m_x; }
+        [[nodiscard]] foundation::i32 Y() const noexcept override { return m_y; }
+        void SetPosition(foundation::i32 x, foundation::i32 y) override
         {
             m_x = x;
             m_y = y;
         } // headless: just record
-        void SetSize(core::u32 width, core::u32 height) override
+        void SetSize(foundation::u32 width, foundation::u32 height) override
         {
             m_width = width;
             m_height = height;
         }
-        [[nodiscard]] core::f32 ContentScale() const noexcept override { return 1.0f; }
+        [[nodiscard]] foundation::f32 ContentScale() const noexcept override { return 1.0f; }
         [[nodiscard]] NativeWindow Native() const noexcept override
         {
             return {};
@@ -58,7 +58,7 @@ export namespace draconic::shell
         [[nodiscard]] bool IsTextInputActive() const noexcept override { return m_textInputActive; }
 
         // --- test/headless controls (no OS to drive these) ---
-        void Resize(core::u32 w, core::u32 h) noexcept
+        void Resize(foundation::u32 w, foundation::u32 h) noexcept
         {
             m_width = w;
             m_height = h;
@@ -66,11 +66,11 @@ export namespace draconic::shell
         void SetMinimized(bool m) noexcept { m_minimized = m; }
 
     private:
-        core::u32 m_id;
-        core::u32 m_width;
-        core::u32 m_height;
-        core::i32 m_x = 0;
-        core::i32 m_y = 0;
+        foundation::u32 m_id;
+        foundation::u32 m_width;
+        foundation::u32 m_height;
+        foundation::i32 m_x = 0;
+        foundation::i32 m_y = 0;
         bool m_open = true;
         bool m_minimized = false;
         bool m_textInputActive = false;
@@ -81,12 +81,12 @@ export namespace draconic::shell
     public:
         explicit NullWindowManager(const WindowSettings& main) { (void)CreateWindow(main); }
 
-        [[nodiscard]] core::Result<IWindow*> CreateWindow(const WindowSettings& settings) override
+        [[nodiscard]] foundation::Result<IWindow*> CreateWindow(const WindowSettings& settings) override
         {
-            const core::u32 id = m_nextId++;
-            auto window = core::MakeUnique<NullWindow>(core::DefaultAllocator(), id, settings);
+            const foundation::u32 id = m_nextId++;
+            auto window = foundation::MakeUnique<NullWindow>(foundation::DefaultAllocator(), id, settings);
             IWindow* borrowed = window.Get();
-            m_owned.PushBack(static_cast<core::UniquePtr<NullWindow>&&>(window));
+            m_owned.PushBack(static_cast<foundation::UniquePtr<NullWindow>&&>(window));
             m_live.PushBack(borrowed);
             if (m_mainWindowId == 0)
             {
@@ -105,9 +105,9 @@ export namespace draconic::shell
             m_pendingDestroy.PushBack(window->Id());
         }
 
-        [[nodiscard]] core::Span<IWindow* const> Windows() const noexcept override
+        [[nodiscard]] foundation::Span<IWindow* const> Windows() const noexcept override
         {
-            return core::Span<IWindow* const>(m_live.Data(), m_live.Size());
+            return foundation::Span<IWindow* const>(m_live.Data(), m_live.Size());
         }
         [[nodiscard]] IWindow* MainWindow() const noexcept override
         {
@@ -115,7 +115,7 @@ export namespace draconic::shell
             // window into its place; returns null once the main window is gone.
             return GetWindow(m_mainWindowId);
         }
-        [[nodiscard]] IWindow* GetWindow(core::u32 id) const noexcept override
+        [[nodiscard]] IWindow* GetWindow(foundation::u32 id) const noexcept override
         {
             for (IWindow* w : m_live)
             {
@@ -126,16 +126,16 @@ export namespace draconic::shell
             }
             return nullptr;
         }
-        [[nodiscard]] core::Span<const WindowEvent> Events() const noexcept override
+        [[nodiscard]] foundation::Span<const WindowEvent> Events() const noexcept override
         {
-            return core::Span<const WindowEvent>(m_events.Data(), m_events.Size());
+            return foundation::Span<const WindowEvent>(m_events.Data(), m_events.Size());
         }
 
         void FlushDestroyed() override
         {
-            for (core::u32 id : m_pendingDestroy)
+            for (foundation::u32 id : m_pendingDestroy)
             {
-                for (core::usize i = 0; i < m_live.Size(); ++i)
+                for (foundation::usize i = 0; i < m_live.Size(); ++i)
                 {
                     if (m_live[i]->Id() == id)
                     {
@@ -143,7 +143,7 @@ export namespace draconic::shell
                         break;
                     }
                 }
-                for (core::usize i = 0; i < m_owned.Size(); ++i)
+                for (foundation::usize i = 0; i < m_owned.Size(); ++i)
                 {
                     if (m_owned[i]->Id() == id)
                     {
@@ -171,12 +171,12 @@ export namespace draconic::shell
             return false;
         }
 
-        core::Array<core::UniquePtr<NullWindow>> m_owned;
-        core::Array<IWindow*> m_live;            // borrowed parallel pointers for the span
-        core::Array<core::u32> m_pendingDestroy; // window ids
-        core::Array<WindowEvent> m_events;       // always empty (no OS event source)
-        core::u32 m_nextId = 1;
-        core::u32 m_mainWindowId = 0; // id of the main window (first created); 0 = none
+        foundation::Array<foundation::UniquePtr<NullWindow>> m_owned;
+        foundation::Array<IWindow*> m_live;            // borrowed parallel pointers for the span
+        foundation::Array<foundation::u32> m_pendingDestroy; // window ids
+        foundation::Array<WindowEvent> m_events;       // always empty (no OS event source)
+        foundation::u32 m_nextId = 1;
+        foundation::u32 m_mainWindowId = 0; // id of the main window (first created); 0 = none
     };
 
     // No-op input devices: report nothing held/pressed so headless callers can
@@ -193,14 +193,14 @@ export namespace draconic::shell
     class NullMouse final : public IMouse
     {
     public:
-        [[nodiscard]] core::f32 X() const override { return 0.0f; }
-        [[nodiscard]] core::f32 Y() const override { return 0.0f; }
-        [[nodiscard]] core::f32 GlobalX() const override { return 0.0f; }
-        [[nodiscard]] core::f32 GlobalY() const override { return 0.0f; }
-        [[nodiscard]] core::f32 DeltaX() const override { return 0.0f; }
-        [[nodiscard]] core::f32 DeltaY() const override { return 0.0f; }
-        [[nodiscard]] core::f32 ScrollX() const override { return 0.0f; }
-        [[nodiscard]] core::f32 ScrollY() const override { return 0.0f; }
+        [[nodiscard]] foundation::f32 X() const override { return 0.0f; }
+        [[nodiscard]] foundation::f32 Y() const override { return 0.0f; }
+        [[nodiscard]] foundation::f32 GlobalX() const override { return 0.0f; }
+        [[nodiscard]] foundation::f32 GlobalY() const override { return 0.0f; }
+        [[nodiscard]] foundation::f32 DeltaX() const override { return 0.0f; }
+        [[nodiscard]] foundation::f32 DeltaY() const override { return 0.0f; }
+        [[nodiscard]] foundation::f32 ScrollX() const override { return 0.0f; }
+        [[nodiscard]] foundation::f32 ScrollY() const override { return 0.0f; }
         [[nodiscard]] bool IsButtonDown(MouseButton) const override { return false; }
         [[nodiscard]] bool IsButtonPressed(MouseButton) const override { return false; }
         [[nodiscard]] bool IsButtonReleased(MouseButton) const override { return false; }
@@ -215,8 +215,8 @@ export namespace draconic::shell
     class NullTouch final : public ITouch
     {
     public:
-        [[nodiscard]] core::i32 TouchCount() const override { return 0; }
-        [[nodiscard]] bool GetTouchPoint(core::i32, TouchPoint&) const override { return false; }
+        [[nodiscard]] foundation::i32 TouchCount() const override { return 0; }
+        [[nodiscard]] bool GetTouchPoint(foundation::i32, TouchPoint&) const override { return false; }
         [[nodiscard]] bool HasTouch() const override { return false; }
     };
 
@@ -226,11 +226,11 @@ export namespace draconic::shell
         [[nodiscard]] IKeyboard* Keyboard() override { return &m_keyboard; }
         [[nodiscard]] IMouse* Mouse() override { return &m_mouse; }
         [[nodiscard]] ITouch* Touch() override { return &m_touch; }
-        [[nodiscard]] core::i32 GamepadCount() const override { return 0; }
-        [[nodiscard]] IGamepad* GetGamepad(core::i32) override { return nullptr; }
-        [[nodiscard]] core::Span<const InputEvent> Events() const override { return {}; }
-        [[nodiscard]] core::u32 HoverWindow() const override { return 0; }
-        [[nodiscard]] core::u32 FocusedWindow() const override { return 0; }
+        [[nodiscard]] foundation::i32 GamepadCount() const override { return 0; }
+        [[nodiscard]] IGamepad* GetGamepad(foundation::i32) override { return nullptr; }
+        [[nodiscard]] foundation::Span<const InputEvent> Events() const override { return {}; }
+        [[nodiscard]] foundation::u32 HoverWindow() const override { return 0; }
+        [[nodiscard]] foundation::u32 FocusedWindow() const override { return 0; }
         void Update() override {}
 
     private:
@@ -244,29 +244,29 @@ export namespace draconic::shell
     class NullDialogService final : public IDialogService
     {
     public:
-        void ShowOpenFile(DialogResultCallback callback, core::Span<const FileFilter> = {},
-                          core::StringView = {}, bool = false, core::u32 = 0) override
+        void ShowOpenFile(DialogResultCallback callback, foundation::Span<const FileFilter> = {},
+                          foundation::StringView = {}, bool = false, foundation::u32 = 0) override
         {
             Cancel(callback);
         }
-        void ShowSaveFile(DialogResultCallback callback, core::Span<const FileFilter> = {},
-                          core::StringView = {}, core::u32 = 0) override
+        void ShowSaveFile(DialogResultCallback callback, foundation::Span<const FileFilter> = {},
+                          foundation::StringView = {}, foundation::u32 = 0) override
         {
             Cancel(callback);
         }
-        void ShowOpenFolder(DialogResultCallback callback, core::StringView = {}, bool = false,
-                            core::u32 = 0) override
+        void ShowOpenFolder(DialogResultCallback callback, foundation::StringView = {}, bool = false,
+                            foundation::u32 = 0) override
         {
             Cancel(callback);
         }
-        void OpenPath(core::StringView) override {} // headless: no OS file manager
+        void OpenPath(foundation::StringView) override {} // headless: no OS file manager
 
     private:
         static void Cancel(DialogResultCallback& callback)
         {
             if (callback)
             {
-                callback(core::Span<const core::String>{});
+                callback(foundation::Span<const foundation::String>{});
             }
         }
     };
@@ -292,8 +292,8 @@ export namespace draconic::shell
 
         // In-memory clipboard: no OS backing, but round-trips text so headless tests of the
         // GUI clipboard path (cut/copy/paste) work without a windowing system.
-        void SetClipboardText(core::StringView text) override { m_clipboard = core::String(text); }
-        [[nodiscard]] core::String GetClipboardText() const override { return m_clipboard; }
+        void SetClipboardText(foundation::StringView text) override { m_clipboard = foundation::String(text); }
+        [[nodiscard]] foundation::String GetClipboardText() const override { return m_clipboard; }
         [[nodiscard]] bool HasClipboardText() const noexcept override
         {
             return m_clipboard.Size() > 0;
@@ -304,6 +304,6 @@ export namespace draconic::shell
         NullInputManager m_input;
         NullDialogService m_dialogs;
         bool m_running = true;
-        core::String m_clipboard;
+        foundation::String m_clipboard;
     };
 }

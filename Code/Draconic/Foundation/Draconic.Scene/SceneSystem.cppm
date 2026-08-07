@@ -13,16 +13,16 @@
 /// partitions stay acyclic (:scene -> :component -> :system).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.scene:system;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.resource;
 import :entity;
 import :phase;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::scene
 {

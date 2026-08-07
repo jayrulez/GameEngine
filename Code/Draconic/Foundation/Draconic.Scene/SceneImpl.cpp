@@ -5,14 +5,14 @@
 // method bodies live here so the interface partition stays small.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include <type_traits>
 
 module draconic.scene;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::scene
 {

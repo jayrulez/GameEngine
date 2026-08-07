@@ -6,14 +6,14 @@
 // ToString renders it for display and Compare orders it for sorting.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:variant;
 
-import draconic.core; // String, StringView, Color, i64, f64
+import draconic.foundation; // String, StringView, Color, i64, f64
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -35,9 +35,9 @@ export namespace draconic::gui
         Variant(i64 value) : m_type(Type::Int), m_int(value) {}
         Variant(i32 value) : m_type(Type::Int), m_int(value) {}
         Variant(f64 value) : m_type(Type::Float), m_float(value) {}
-        Variant(core::StringView value) : m_type(Type::String), m_string(value) {}
-        Variant(const core::String& value) : m_type(Type::String), m_string(value) {}
-        Variant(core::Color value) : m_type(Type::Color), m_color(value) {}
+        Variant(foundation::StringView value) : m_type(Type::String), m_string(value) {}
+        Variant(const foundation::String& value) : m_type(Type::String), m_string(value) {}
+        Variant(foundation::Color value) : m_type(Type::Color), m_color(value) {}
 
         [[nodiscard]] Type GetType() const noexcept { return m_type; }
         [[nodiscard]] bool IsEmpty() const noexcept { return m_type == Type::Empty; }
@@ -56,19 +56,19 @@ export namespace draconic::gui
             return m_type == Type::Float ? m_float
                                          : (m_type == Type::Int ? static_cast<f64>(m_int) : 0.0);
         }
-        [[nodiscard]] core::StringView AsString() const noexcept { return m_string.AsView(); }
-        [[nodiscard]] core::Color AsColor() const noexcept { return m_color; }
+        [[nodiscard]] foundation::StringView AsString() const noexcept { return m_string.AsView(); }
+        [[nodiscard]] foundation::Color AsColor() const noexcept { return m_color; }
 
         // A display string for any type (numbers rendered simply; string returned as-is).
-        [[nodiscard]] core::String ToString() const
+        [[nodiscard]] foundation::String ToString() const
         {
             switch (m_type)
             {
             case Type::Empty:
-                return core::String{};
+                return foundation::String{};
             case Type::Bool:
-                return core::String(m_bool ? core::StringView(u8"true")
-                                           : core::StringView(u8"false"));
+                return foundation::String(m_bool ? foundation::StringView(u8"true")
+                                           : foundation::StringView(u8"false"));
             case Type::Int:
                 return IntToString(m_int);
             case Type::Float:
@@ -76,9 +76,9 @@ export namespace draconic::gui
             case Type::String:
                 return m_string;
             case Type::Color:
-                return core::String{}; // colors have no textual form here
+                return foundation::String{}; // colors have no textual form here
             }
-            return core::String{};
+            return foundation::String{};
         }
 
         // Order two variants: numbers by value, strings lexicographically, bools false<true.
@@ -106,7 +106,7 @@ export namespace draconic::gui
         }
 
     private:
-        [[nodiscard]] static i32 CompareStrings(core::StringView a, core::StringView b) noexcept
+        [[nodiscard]] static i32 CompareStrings(foundation::StringView a, foundation::StringView b) noexcept
         {
             const usize n = a.Size() < b.Size() ? a.Size() : b.Size();
             for (usize i = 0; i < n; ++i)
@@ -117,7 +117,7 @@ export namespace draconic::gui
             return a.Size() < b.Size() ? -1 : 1;
         }
 
-        [[nodiscard]] static core::String IntToString(i64 value)
+        [[nodiscard]] static foundation::String IntToString(i64 value)
         {
             char8_t buf[24];
             usize pos = 24;
@@ -132,19 +132,19 @@ export namespace draconic::gui
             }
             if (neg)
                 buf[--pos] = u8'-';
-            return core::String(core::StringView(buf + pos, 24 - pos));
+            return foundation::String(foundation::StringView(buf + pos, 24 - pos));
         }
 
         // Compact fixed-ish float rendering (integer part + up to 3 decimals, trailing zeros trimmed).
-        [[nodiscard]] static core::String FloatToString(f64 value)
+        [[nodiscard]] static foundation::String FloatToString(f64 value)
         {
             const bool neg = value < 0.0;
             f64 v = neg ? -value : value;
             const i64 whole = static_cast<i64>(v);
             f64 frac = v - static_cast<f64>(whole);
-            core::String out;
+            foundation::String out;
             if (neg)
-                out.Append(core::StringView(u8"-"));
+                out.Append(foundation::StringView(u8"-"));
             out += IntToString(whole);
             // up to 3 decimal digits
             char8_t digits[3];
@@ -160,8 +160,8 @@ export namespace draconic::gui
                 --dc; // trim trailing zeros
             if (dc > 0)
             {
-                out.Append(core::StringView(u8"."));
-                out.Append(core::StringView(digits, dc));
+                out.Append(foundation::StringView(u8"."));
+                out.Append(foundation::StringView(digits, dc));
             }
             return out;
         }
@@ -170,7 +170,7 @@ export namespace draconic::gui
         bool m_bool = false;
         i64 m_int = 0;
         f64 m_float = 0.0;
-        core::String m_string;
-        core::Color m_color{};
+        foundation::String m_string;
+        foundation::Color m_color{};
     };
 }

@@ -1,11 +1,11 @@
 // VGContext: batch production, transform/opacity, immediate-mode, images, commands.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.image;
 import draconic.vg;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::vg;
 namespace image = draconic::image;
 

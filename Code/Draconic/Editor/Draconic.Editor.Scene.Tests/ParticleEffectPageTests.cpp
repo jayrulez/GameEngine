@@ -4,13 +4,13 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.particles;
 import draconic.editor.scene;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace particles = draconic::particles;
 
 TEST_CASE("particle page: default seed builds a one-system fountain with the core modules")

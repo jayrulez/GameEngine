@@ -4,7 +4,7 @@
 
 #include <cstdio>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.shaders;
 import draconic.samples.framework;
@@ -26,7 +26,7 @@ class MeshShaderSample : public samples::framework::SampleApp
 {
 public:
     using samples::framework::SampleApp::SampleApp;
-    draconic::core::StringView Title() const override
+    draconic::foundation::StringView Title() const override
     {
         return u8"Sample020 - Mesh Shaders (Rotating Triangle)";
     }
@@ -38,7 +38,7 @@ protected:
         f.meshShaders = true;
         return f;
     }
-    draconic::core::Status OnInit() override;
+    draconic::foundation::Status OnInit() override;
     void OnRender() override;
     void OnShutdown() override;
 
@@ -115,36 +115,36 @@ private:
     rhi::MeshPipeline* m_meshPipeline = nullptr;
     rhi::CommandPool* m_pool = nullptr;
     rhi::Fence* m_fence = nullptr;
-    draconic::core::u64 m_fenceVal = 0;
+    draconic::foundation::u64 m_fenceVal = 0;
 };
 
-draconic::core::Status MeshShaderSample::OnInit()
+draconic::foundation::Status MeshShaderSample::OnInit()
 {
-    using draconic::core::Status, draconic::core::Span;
+    using draconic::foundation::Status, draconic::foundation::Span;
 
     // Check mesh shader support.
     if (!m_device->features.meshShaders)
     {
         std::fprintf(stderr, "ERROR: Mesh shaders are not supported by this device/backend\n");
-        return draconic::core::ErrorCode::Unknown;
+        return draconic::foundation::ErrorCode::Unknown;
     }
 
     // Shader compiler.
     if (shaders::createCompiler(shaders::CompilerDesc{}, m_compiler) !=
-        draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+        draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     // Compile mesh shader (SM 6.5 required for mesh shaders).
     if (samples::framework::CompileToModule(m_compiler, m_device, kMeshShaderSource,
                                             shaders::ShaderStage::Mesh, u8"MSMain", u8"MeshShader",
-                                            u8"6_5", m_meshModule) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+                                            u8"6_5", m_meshModule) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     // Compile fragment shader.
     if (samples::framework::CompileToModule(
             m_compiler, m_device, kFragmentShaderSource, shaders::ShaderStage::Fragment, u8"PSMain",
-            u8"FragmentShader", m_fragModule) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+            u8"FragmentShader", m_fragModule) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     // Pipeline layout with push constants.
     rhi::PushConstantRange pushRange{};
@@ -155,8 +155,8 @@ draconic::core::Status MeshShaderSample::OnInit()
     rhi::PipelineLayoutDesc pld{};
     pld.pushConstantRanges = Span<const rhi::PushConstantRange>(&pushRange, 1);
     pld.label = u8"MeshPipelineLayout";
-    if (m_device->CreatePipelineLayout(pld, m_pipelineLayout) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_device->CreatePipelineLayout(pld, m_pipelineLayout) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     // Create mesh pipeline.
     rhi::ColorTargetState ct{};
@@ -171,31 +171,31 @@ draconic::core::Status MeshShaderSample::OnInit()
     mpd.fragment->targets = Span<const rhi::ColorTargetState>(&ct, 1);
     mpd.colorTargets = Span<const rhi::ColorTargetState>(&ct, 1);
     mpd.label = u8"MeshShaderPipeline";
-    if (m_device->CreateMeshPipeline(mpd, m_meshPipeline) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_device->CreateMeshPipeline(mpd, m_meshPipeline) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     // Command pool and fence.
     if (m_device->CreateCommandPool(rhi::QueueType::Graphics, m_pool) !=
-        draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
-    if (m_device->CreateFence(0, m_fence) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+        draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
+    if (m_device->CreateFence(0, m_fence) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
-    return draconic::core::ErrorCode::Ok;
+    return draconic::foundation::ErrorCode::Ok;
 }
 
 void MeshShaderSample::OnRender()
 {
-    using draconic::core::f32, draconic::core::Span;
+    using draconic::foundation::f32, draconic::foundation::Span;
 
     if (m_fenceVal > 0)
         m_fence->Wait(m_fenceVal, ~0ull);
-    if (m_swapChain->AcquireNextImage() != draconic::core::ErrorCode::Ok)
+    if (m_swapChain->AcquireNextImage() != draconic::foundation::ErrorCode::Ok)
         return;
 
     m_pool->Reset();
     rhi::CommandEncoder* enc = nullptr;
-    if (m_pool->CreateEncoder(enc) != draconic::core::ErrorCode::Ok || !enc)
+    if (m_pool->CreateEncoder(enc) != draconic::foundation::ErrorCode::Ok || !enc)
         return;
 
     // Barrier: present -> render target.

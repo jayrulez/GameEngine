@@ -11,11 +11,11 @@
 /// renderer's builtin "forward" shader by name (no cooked ShaderResource needed yet).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.modelimporter:cook;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.model;
 import draconic.geometry;
@@ -34,7 +34,7 @@ import :mesh_convert;
 import :anim_convert;
 import draconic.model.resource;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 namespace model = draconic::model;
 namespace geometry = draconic::geometry;
@@ -149,7 +149,7 @@ export namespace draconic::modelimporter
             asset.source.shaderName = String(u8"forward");
             // Wire every authored texture (see FileImport::ImportMaterials - same self-contained rule).
             {
-                const auto wire = [&](i32 texIdx, core::StringView slot)
+                const auto wire = [&](i32 texIdx, foundation::StringView slot)
                 {
                     if (texIdx >= 0 && static_cast<usize>(texIdx) < textureGuids.Size() &&
                         !textureGuids[static_cast<usize>(texIdx)].IsNil())

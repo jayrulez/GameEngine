@@ -1,13 +1,13 @@
 // Draconic GUI - Thickness + LayerDrawable (background compositor) tests, including the
 // Phase 2 vertical slice: a styled panel (background + border) composited through VG.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.vg;
 import draconic.gui;
 
 using namespace draconic::gui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace vg = draconic::vg;
 
 // === Thickness ===
@@ -44,8 +44,8 @@ TEST_CASE("compositor: AddLayer increments count")
 {
     LayerDrawable layers;
     CHECK(layers.LayerCount() == 0);
-    layers.AddLayer(core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), core::Color::Red));
-    layers.AddLayer(core::MakeRef<BorderDrawable>(core::DefaultAllocator()), Thickness{2.0f});
+    layers.AddLayer(foundation::MakeRef<RectangleDrawable>(foundation::DefaultAllocator(), foundation::Color::Red));
+    layers.AddLayer(foundation::MakeRef<BorderDrawable>(foundation::DefaultAllocator()), Thickness{2.0f});
     CHECK(layers.LayerCount() == 2);
     layers.ClearLayers();
     CHECK(layers.LayerCount() == 0);
@@ -64,11 +64,11 @@ TEST_CASE("compositor: empty draws nothing")
 // composited drawable, rendered through VG.
 TEST_CASE("compositor: panel background + border produces geometry")
 {
-    auto background = core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), core::Color::Blue);
+    auto background = foundation::MakeRef<RectangleDrawable>(foundation::DefaultAllocator(), foundation::Color::Blue);
     background->SetCornerRadii(vg::CornerRadii{6.0f});
 
-    auto border = core::MakeRef<BorderDrawable>(core::DefaultAllocator(),
-                                                core::Color{0.0f, 0.0f, 0.0f, 1.0f}, 2.0f);
+    auto border = foundation::MakeRef<BorderDrawable>(foundation::DefaultAllocator(),
+                                                foundation::Color{0.0f, 0.0f, 0.0f, 1.0f}, 2.0f);
     border->SetCornerRadii(vg::CornerRadii{6.0f});
 
     LayerDrawable panel;
@@ -86,9 +86,9 @@ TEST_CASE("compositor: state-aware draw dispatches to layers")
     LayerDrawable layers;
     StateListDrawable* stateful = nullptr;
     {
-        auto sl = core::MakeRef<StateListDrawable>(core::DefaultAllocator());
+        auto sl = foundation::MakeRef<StateListDrawable>(foundation::DefaultAllocator());
         sl->Set(ControlState::Normal,
-                core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), core::Color::Red));
+                foundation::MakeRef<RectangleDrawable>(foundation::DefaultAllocator(), foundation::Color::Red));
         stateful = sl.Get();
         layers.AddLayer(sl);
     }

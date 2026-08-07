@@ -14,18 +14,18 @@
 // edits a backend.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.script.facades;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.scene;
 import draconic.script;
 import draconic.resource; // ResourceManager - the run's resource-swap seam (Track A resource refs)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::script
 {
@@ -39,15 +39,15 @@ export namespace draconic::script
     /// the language framing stays in the backends: a Wren backend builds its import line
     /// from this list, and adding a facade here reaches every backend for free. Order is
     /// the authored order. Kept in sync with RegisterScriptFacadeReflection below.
-    [[nodiscard]] core::Span<const core::StringView> BehaviorFacadeNames();
+    [[nodiscard]] foundation::Span<const foundation::StringView> BehaviorFacadeNames();
 
     /// Register an ADDITIONAL facade name from an out-of-tree module (e.g. draconic.net's `Net`),
     /// so the behavior prelude imports it too - without this base lib depending on that module.
     /// Idempotent; call alongside the module's own reflection registration. Names are borrowed as
     /// interned copies. See ExtraFacadeNames.
-    void RegisterExtraFacadeName(core::StringView name);
+    void RegisterExtraFacadeName(foundation::StringView name);
     /// The extra facade names registered by other modules (appended to the prelude after the built-ins).
-    [[nodiscard]] core::Span<const core::StringView> ExtraFacadeNames();
+    [[nodiscard]] foundation::Span<const foundation::StringView> ExtraFacadeNames();
 
     /// Register an ADDITIONAL emission root: a reflected type the Wren collector should emit as a
     /// script class even when no facade signature statically reaches it (e.g. a component type
@@ -55,29 +55,29 @@ export namespace draconic::script
     /// GENERAL, not component-specific (the UI View reflection follow-on wants the same door).
     /// AngelScript already emits every registry type, so this is consumed by the Wren collector.
     /// Idempotent; the type is borrowed (its TypeInfo has static lifetime).
-    void RegisterExtraScriptRootType(const core::TypeInfo* type);
+    void RegisterExtraScriptRootType(const foundation::TypeInfo* type);
     /// The additional emission roots registered by other modules (extra seeds for the Wren closure).
-    [[nodiscard]] core::Span<const core::TypeInfo* const> ExtraScriptRootTypes();
+    [[nodiscard]] foundation::Span<const foundation::TypeInfo* const> ExtraScriptRootTypes();
 
     struct ScriptRuntimeBinding
     {
         f64 timeSeconds = 0.0;   // seconds since the run context was created
         f32 deltaSeconds = 0.0f; // last frame's dt
-        core::Random random;     // the run's RNG (per-run determinism seam)
+        foundation::Random random;     // the run's RNG (per-run determinism seam)
 
         // Behavior-to-behavior messaging (P2): `entity.send("heal", amount)` routes here.
         // The subsystem installs this; it invokes `on<Heal>(amount)` on every behavior of
         // the target entity that declares the handler. Args are already marshalled. Null
         // when no subsystem is driving the run (a bare cook VM) - send becomes a no-op.
-        core::Function<void(scene::Scene*, scene::EntityHandle, StringView,
-                            core::Span<const core::Variant>)>
+        foundation::Function<void(scene::Scene*, scene::EntityHandle, StringView,
+                            foundation::Span<const foundation::Variant>)>
             dispatchMessage;
 
         // Prefab spawning (P2): `scene.spawn(prefab, x, y, z)` on a BOUND Scene routes here. The
         // host app installs `spawnPrefab` (it owns the content DB that resolves a prefab id to its
         // payload); the bound Scene passes its OWN scene ptr, so there is no ambient current-scene
         // state to keep correct. Null spawner (bare cook VM / no host) = safe no-op.
-        core::Function<scene::EntityHandle(scene::Scene*, const core::Guid&, const core::Float3&)>
+        foundation::Function<scene::EntityHandle(scene::Scene*, const foundation::Guid&, const foundation::Float3&)>
             spawnPrefab;
 
         // Resource swaps (Track A): the run's resource manager, for binding a resource id (a Guid)
@@ -85,7 +85,7 @@ export namespace draconic::script
         // LATE-BOUND (a getter, not a stored ptr) so it is correct regardless of the order the host
         // wires things: the composition root owns the manager (DefaultApplication::Resources()) and
         // installs this. Null / returns null on a bare cook VM => the swap sets the id only (unbound).
-        core::Function<draconic::resource::ResourceManager*()> resolveResources;
+        foundation::Function<draconic::resource::ResourceManager*()> resolveResources;
     };
 
     // ---- the curated behavior facades (camelCase = the script-visible names, the

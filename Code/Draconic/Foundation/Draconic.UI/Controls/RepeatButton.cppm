@@ -4,17 +4,17 @@
 // Ported from Sedulous.UI/src/Controls/RepeatButton.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:repeat_button;
 
-import draconic.core;
+import draconic.foundation;
 import :button;
 import :event_args;
 import :input_enums;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

@@ -3,15 +3,15 @@
 // input editor page itself stays bespoke; this proves the asset is reflection-visible.
 
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.editor;
 import draconic.input;
 import draconic.input.editor;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::input;
 
 TEST_CASE("input editor: InputMapAsset exposes its InputMap as a Nested, traversable property")

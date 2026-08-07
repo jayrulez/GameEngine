@@ -2,34 +2,34 @@
 // (aspect-preserving Fit/Fill, centered Center, natural None, box Stretch) from a drawable's
 // intrinsic size.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.vg;
 import draconic.image;
 import draconic.gui;
 
 using namespace draconic::gui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace vg = draconic::vg;
 namespace image = draconic::image;
 
 namespace
 {
     template <typename T>
-    core::RefPtr<T> Make()
+    foundation::RefPtr<T> Make()
     {
-        return core::MakeRef<T>(core::DefaultAllocator());
+        return foundation::MakeRef<T>(foundation::DefaultAllocator());
     }
 
     // A 4x2 (aspect 2:1) RGBA image.
     image::OwnedImageData MakeImage()
     {
-        static const core::u8 pixels[32] = {
+        static const foundation::u8 pixels[32] = {
             255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255,
             255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255,
         };
         return image::OwnedImageData(4, 2, image::PixelFormat::RGBA8,
-                                     core::Span<const core::u8>(pixels, 32));
+                                     foundation::Span<const foundation::u8>(pixels, 32));
     }
 }
 
@@ -40,7 +40,7 @@ TEST_CASE("image: stretch fills the content box")
     drawable->Image = &img;
 
     auto w = Make<Image>();
-    w->SetSize(core::Float2{100.0f, 100.0f});
+    w->SetSize(foundation::Float2{100.0f, 100.0f});
     w->SetDrawable(drawable);
     w->SetScaleMode(ImageScaleMode::Stretch);
 
@@ -58,7 +58,7 @@ TEST_CASE("image: fit preserves aspect inside the box, centered")
     drawable->Image = &img;
 
     auto w = Make<Image>();
-    w->SetSize(core::Float2{100.0f, 100.0f});
+    w->SetSize(foundation::Float2{100.0f, 100.0f});
     w->SetDrawable(drawable);
     w->SetScaleMode(ImageScaleMode::Fit); // scale = min(100/4, 100/2) = 25 -> 100x50
 
@@ -76,7 +76,7 @@ TEST_CASE("image: fill covers the box, centered (overflow negative)")
     drawable->Image = &img;
 
     auto w = Make<Image>();
-    w->SetSize(core::Float2{100.0f, 100.0f});
+    w->SetSize(foundation::Float2{100.0f, 100.0f});
     w->SetDrawable(drawable);
     w->SetScaleMode(ImageScaleMode::Fill); // scale = max(25, 50) = 50 -> 200x100
 
@@ -94,7 +94,7 @@ TEST_CASE("image: center uses natural size centered; none is natural at top-left
     drawable->Image = &img;
 
     auto w = Make<Image>();
-    w->SetSize(core::Float2{100.0f, 100.0f});
+    w->SetSize(foundation::Float2{100.0f, 100.0f});
     w->SetDrawable(drawable);
 
     w->SetScaleMode(ImageScaleMode::Center);
@@ -115,7 +115,7 @@ TEST_CASE("image: center uses natural size centered; none is natural at top-left
 TEST_CASE("image: no drawable falls back to the content box and draws nothing")
 {
     auto w = Make<Image>();
-    w->SetSize(core::Float2{60.0f, 40.0f});
+    w->SetSize(foundation::Float2{60.0f, 40.0f});
     w->SetScaleMode(ImageScaleMode::Fit);
 
     const Rect r = w->DrawnBounds(); // no intrinsic -> the box

@@ -9,15 +9,15 @@
 // filesystem.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.editor.core:export_controller;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import :export_preset;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {

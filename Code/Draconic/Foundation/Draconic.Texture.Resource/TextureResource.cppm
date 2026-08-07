@@ -13,18 +13,18 @@
 // The runtime never links the editor/source side; it loads only cooked resources.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.texture.resource;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.texture;
 import draconic.content;
 import draconic.resource;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::resource;
 
 export namespace draconic::texture
@@ -52,19 +52,19 @@ export namespace draconic::texture
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "width", width);
-            draconic::core::Serialize(ar, "height", height);
-            draconic::core::Serialize(ar, "depthOrArrayLayers", depthOrArrayLayers);
-            draconic::core::Serialize(ar, "mipLevels", mipLevels);
-            draconic::core::Serialize(ar, "format", format);
-            draconic::core::Serialize(ar, "shape", shape);
-            draconic::core::Serialize(ar, "minFilter", minFilter);
-            draconic::core::Serialize(ar, "magFilter", magFilter);
-            draconic::core::Serialize(ar, "wrapU", wrapU);
-            draconic::core::Serialize(ar, "wrapV", wrapV);
-            draconic::core::Serialize(ar, "wrapW", wrapW);
-            draconic::core::Serialize(ar, "generateMipmaps", generateMipmaps);
-            draconic::core::Serialize(ar, "anisotropy", anisotropy);
+            draconic::foundation::Serialize(ar, "width", width);
+            draconic::foundation::Serialize(ar, "height", height);
+            draconic::foundation::Serialize(ar, "depthOrArrayLayers", depthOrArrayLayers);
+            draconic::foundation::Serialize(ar, "mipLevels", mipLevels);
+            draconic::foundation::Serialize(ar, "format", format);
+            draconic::foundation::Serialize(ar, "shape", shape);
+            draconic::foundation::Serialize(ar, "minFilter", minFilter);
+            draconic::foundation::Serialize(ar, "magFilter", magFilter);
+            draconic::foundation::Serialize(ar, "wrapU", wrapU);
+            draconic::foundation::Serialize(ar, "wrapV", wrapV);
+            draconic::foundation::Serialize(ar, "wrapW", wrapW);
+            draconic::foundation::Serialize(ar, "generateMipmaps", generateMipmaps);
+            draconic::foundation::Serialize(ar, "anisotropy", anisotropy);
         }
     };
 

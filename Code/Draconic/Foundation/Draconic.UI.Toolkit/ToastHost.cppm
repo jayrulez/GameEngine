@@ -15,17 +15,17 @@
 //    Refresh) - there is no self-ticking.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui.toolkit:toast_host;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import draconic.fonts;
 import draconic.ui;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace fonts = draconic::fonts;
 
 export namespace draconic::ui::toolkit

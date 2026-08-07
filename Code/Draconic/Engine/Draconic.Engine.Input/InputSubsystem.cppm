@@ -7,18 +7,18 @@
 // pass its viewport's gated InputSurface facades.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.engine.input;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.shell;
 import draconic.runtime;
 import draconic.script;
 import draconic.input;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::input
 {

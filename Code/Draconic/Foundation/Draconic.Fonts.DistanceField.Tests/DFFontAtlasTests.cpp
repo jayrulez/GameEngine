@@ -1,10 +1,10 @@
 #include <doctest/doctest.h>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.fonts;
 import draconic.fonts.distancefield;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::fonts;
 
 TEST_CASE("DFFontAtlas: mode returns DistanceField")

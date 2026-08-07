@@ -4,13 +4,13 @@ module;
 
 export module draconic.rhi:descriptors;
 
-import draconic.core;
+import draconic.foundation;
 import :enums;
 import :texture_format;
 import :types;
 import :forward;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi
 {

@@ -2,7 +2,7 @@
 /// Ported from Sedulous.RHI.DX12/DX12TransferBatch.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include "DxIncludes.h"
 
@@ -11,14 +11,14 @@ module;
 
 export module draconic.rhi.dx12:transfer_batch;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :conversions;
 import :buffer;
 import :texture;
 import :fence;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::dx12
 {

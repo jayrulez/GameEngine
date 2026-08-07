@@ -6,20 +6,20 @@
 /// back the finished Material (RefPtr, since Material is an Object).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.materials:builder;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.shaders;
 import :types;
 import :pipeline;
 import :material;
 
-using namespace draconic::core;
-namespace core =
-    draconic::core; // to name the packed types where builder methods (Float2/3/4) shadow them
+using namespace draconic::foundation;
+namespace foundation =
+    draconic::foundation; // to name the packed types where builder methods (Float2/3/4) shadow them
 namespace rhi = draconic::rhi;
 
 export namespace draconic::materials
@@ -93,14 +93,14 @@ export namespace draconic::materials
             m_material->SetDefaultFloat(name, v);
             return *this;
         }
-        MaterialBuilder& Float2(StringView name, core::Float2 v = {})
+        MaterialBuilder& Float2(StringView name, foundation::Float2 v = {})
         {
             AddUniform(name, MaterialPropertyType::Float2, 8, false);
             m_material->AllocateDefaultUniformData();
             m_material->SetDefaultFloat2(name, v);
             return *this;
         }
-        MaterialBuilder& Float3(StringView name, core::Float3 v = {})
+        MaterialBuilder& Float3(StringView name, foundation::Float3 v = {})
         {
             AddUniform(name, MaterialPropertyType::Float3, 12,
                        /*align16*/ true); // float3 occupies 16 (std140)
@@ -108,14 +108,14 @@ export namespace draconic::materials
             m_material->SetDefaultFloat3(name, v);
             return *this;
         }
-        MaterialBuilder& Float4(StringView name, core::Float4 v = {})
+        MaterialBuilder& Float4(StringView name, foundation::Float4 v = {})
         {
             AddUniform(name, MaterialPropertyType::Float4, 16, true);
             m_material->AllocateDefaultUniformData();
             m_material->SetDefaultFloat4(name, v);
             return *this;
         }
-        MaterialBuilder& Color(StringView name, core::Float4 v = core::Float4{1, 1, 1, 1})
+        MaterialBuilder& Color(StringView name, foundation::Float4 v = foundation::Float4{1, 1, 1, 1})
         {
             return Float4(name, v);
         }

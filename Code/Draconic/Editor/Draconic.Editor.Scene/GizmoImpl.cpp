@@ -26,18 +26,18 @@
 // GizmoFrameInput struct - both fully scriptable in headless tests.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include <initializer_list>
 
 module draconic.editor.scene;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.scene;
 import draconic.render;
 import draconic.editor.core;
 import :edit;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::editor
 {
@@ -216,7 +216,7 @@ namespace draconic::editor
             return;
         }
 
-        core::Transform t = m_dragStartLocal;
+        foundation::Transform t = m_dragStartLocal;
         switch (m_mode)
         {
         case GizmoMode::Translate:

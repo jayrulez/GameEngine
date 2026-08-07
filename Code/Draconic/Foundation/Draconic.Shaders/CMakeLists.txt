@@ -11,7 +11,7 @@ add_library(Draconic.Shaders STATIC)
 add_library(Draconic::Shaders ALIAS Draconic.Shaders)
 
 target_link_libraries(Draconic.Shaders
-    PUBLIC Draconic::Core Draconic::DXCHeaders Draconic::Policy Draconic::ShaderCookTools
+    PUBLIC Draconic::Foundation Draconic::DXCHeaders Draconic::Policy Draconic::ShaderCookTools
     PRIVATE ${CMAKE_DL_LIBS})
 
 target_sources(Draconic.Shaders

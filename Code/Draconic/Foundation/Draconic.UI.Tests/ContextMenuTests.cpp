@@ -2,17 +2,17 @@
 // void()>; Beef nullable String -> empty String check; MenuItem.CreateSeparator returns UniquePtr; menu
 // item/submenu structure only (no popup, no font).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 
 using namespace draconic::ui;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
-static core::RefPtr<ContextMenu> MakeMenu()
+static foundation::RefPtr<ContextMenu> MakeMenu()
 {
-    return core::MakeRef<ContextMenu>(core::DefaultAllocator());
+    return foundation::MakeRef<ContextMenu>(foundation::DefaultAllocator());
 }
 
 TEST_CASE("context-menu: MenuItem_Properties")

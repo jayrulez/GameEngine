@@ -1,12 +1,12 @@
 // Basic checks for the asset-pipeline base (Asset serialize round-trip + builder dispatch shape).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
+import draconic.foundation;
 import draconic.content;
 import draconic.editor;
 import draconic.vfs;
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::editor;
 
 namespace
@@ -20,7 +20,7 @@ namespace
         void Serialize(ISerializer& ar) override
         {
             Asset::Serialize(ar); // fileName
-            draconic::core::Serialize(ar, "quality", quality);
+            draconic::foundation::Serialize(ar, "quality", quality);
         }
     };
 }

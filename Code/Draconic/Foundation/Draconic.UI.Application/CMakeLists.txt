@@ -7,7 +7,7 @@ add_library(Draconic::UI.Application ALIAS Draconic.UI.Application)
 
 target_link_libraries(Draconic.UI.Application
     PUBLIC
-        Draconic::Core Draconic::Shell Draconic::Graphics Draconic::Runtime.Client
+        Draconic::Foundation Draconic::Shell Draconic::Graphics Draconic::Runtime.Client
         Draconic::UI Draconic::UI.Toolkit Draconic::UI.Runtime Draconic::Policy)
 
 target_sources(Draconic.UI.Application

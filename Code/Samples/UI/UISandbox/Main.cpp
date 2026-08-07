@@ -9,7 +9,7 @@
 #include <new>
 #include <cstdio>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.shaders;
 import draconic.shell;
@@ -35,7 +35,7 @@ import draconic.ui.viewport;
 
 #include "../../Common/FlyCamera.h" // shared free-fly camera, driven from the viewport's gated devices
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace runtime = draconic::runtime;
 namespace graphics = draconic::graphics;
 namespace ui = draconic::ui;
@@ -464,7 +464,7 @@ float4 PSMain(PSIn i) : SV_TARGET { return float4(i.Color, 1.0); }
         }
         void BindView(draconic::ui::View* view, i32 position) override
         {
-            if (auto* label = draconic::core::Cast<draconic::ui::Label>(view))
+            if (auto* label = draconic::foundation::Cast<draconic::ui::Label>(view))
             {
                 char8_t buf[24] = u8"Item ";
                 usize p = 5;
@@ -556,7 +556,7 @@ float4 PSMain(PSIn i) : SV_TARGET { return float4(i.Color, 1.0); }
     class DragChip final : public draconic::ui::ColorView, public draconic::ui::IDragSource
     {
     public:
-        explicit DragChip(draconic::core::Color color)
+        explicit DragChip(draconic::foundation::Color color)
             : draconic::ui::ColorView(color, 30.0f, 30.0f)
         {
         }
@@ -615,7 +615,7 @@ float4 PSMain(PSIn i) : SV_TARGET { return float4(i.Color, 1.0); }
                     DragChip* target = static_cast<DragChip*>(child);
                     if (target != source)
                     {
-                        const draconic::core::Color tmp = source->Color.Value();
+                        const draconic::foundation::Color tmp = source->Color.Value();
                         source->Color.SetValue(target->Color.Value());
                         target->Color.SetValue(tmp);
                     }
@@ -727,13 +727,13 @@ float4 PSMain(PSIn i) : SV_TARGET { return float4(i.Color, 1.0); }
             menu->AddItem(u8"Paste", []() {});
             menu->AddSeparator();
             draconic::ui::MenuItem* sub = menu->AddSubmenu(u8"More");
-            auto* subMenu = draconic::core::Cast<draconic::ui::ContextMenu>(sub->Submenu.Get());
+            auto* subMenu = draconic::foundation::Cast<draconic::ui::ContextMenu>(sub->Submenu.Get());
             subMenu->AddItem(u8"Select All", []() {});
             subMenu->AddItem(u8"Find", []() {});
             subMenu->AddSeparator();
             draconic::ui::MenuItem* nested = subMenu->AddSubmenu(u8"Even More");
             auto* nestedMenu =
-                draconic::core::Cast<draconic::ui::ContextMenu>(nested->Submenu.Get());
+                draconic::foundation::Cast<draconic::ui::ContextMenu>(nested->Submenu.Get());
             nestedMenu->AddItem(u8"Nested Item 1", []() {});
             nestedMenu->AddItem(u8"Nested Item 2", []() {});
             menu->AddSeparator();
@@ -816,7 +816,7 @@ float4 PSMain(PSIn i) : SV_TARGET { return float4(i.Color, 1.0); }
         }
         void BindView(draconic::ui::View* view, i32 position) override
         {
-            if (auto* cv = draconic::core::Cast<draconic::ui::ColorView>(view))
+            if (auto* cv = draconic::foundation::Cast<draconic::ui::ColorView>(view))
             {
                 const f32 r = (60 + (position * 7) % 160) / 255.0f;
                 const f32 g = (80 + (position * 13) % 140) / 255.0f;
@@ -859,7 +859,7 @@ float4 PSMain(PSIn i) : SV_TARGET { return float4(i.Color, 1.0); }
 
         void BindView(draconic::ui::View* view, i32 nodeId, i32, bool) override
         {
-            if (auto* label = draconic::core::Cast<draconic::ui::Label>(view))
+            if (auto* label = draconic::foundation::Cast<draconic::ui::Label>(view))
             {
                 if (nodeId >= 0 && nodeId < static_cast<i32>(m_items.Size()))
                 {
@@ -1575,7 +1575,7 @@ void UISandbox::BuildPauseMenuTab(ui::TabView* tabView)
     tabView->AddTab(u8"Pause (.sml)", pauseView.Get(), true);
 
     // The root Flex is a ViewGroup - FindByName walks its subtree.
-    ui::ViewGroup* pauseRoot = draconic::core::Cast<ui::ViewGroup>(pauseView.Get());
+    ui::ViewGroup* pauseRoot = draconic::foundation::Cast<ui::ViewGroup>(pauseView.Get());
     if (pauseRoot == nullptr)
     {
         return;

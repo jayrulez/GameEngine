@@ -10,18 +10,18 @@
 // every type - see RegisterEditorSettingsTypes.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.editor.core:editor_settings;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.xml.serialization;
 import draconic.settings;
 import :export_preset; // EditorExportSettings (registered below)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {
@@ -40,8 +40,8 @@ export namespace draconic::editor
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "fontPath", fontPath);
-            draconic::core::Serialize(ar, "monoFontPath", monoFontPath);
+            draconic::foundation::Serialize(ar, "fontPath", fontPath);
+            draconic::foundation::Serialize(ar, "monoFontPath", monoFontPath);
         }
     };
 
@@ -56,7 +56,7 @@ export namespace draconic::editor
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "uiScale", uiScale);
+            draconic::foundation::Serialize(ar, "uiScale", uiScale);
         }
     };
 

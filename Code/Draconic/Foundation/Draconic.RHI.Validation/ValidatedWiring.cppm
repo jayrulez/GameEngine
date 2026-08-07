@@ -2,17 +2,17 @@
 /// ValidatedBackend, ValidatedAdapter, and ValidatedDevice.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.rhi.validation:wiring;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :validated_backend;
 import :validated_adapter;
 import :validated_device;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::rhi::validation
 {

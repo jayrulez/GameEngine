@@ -5,18 +5,18 @@
 // Beef "consumes the caller's ref" -> RefPtr<Drawable> held by value (auto-released).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:inset_drawable;
 
-import draconic.core; // RefPtr, Rectangle, Max
+import draconic.foundation; // RefPtr, Rectangle, Max
 import :thickness;
 import :control_state;
 import :drawable;
 import :draw_context;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

@@ -11,14 +11,14 @@
 // active page's stack.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Debug/Assert.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Debug/Assert.h"
 
 export module draconic.editor.core:command;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {

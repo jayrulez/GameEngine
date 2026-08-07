@@ -5,14 +5,14 @@
 // Sedulous.Fonts.TTF/TrueTypeTextShaper.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.fonts.ttf:text_shaper;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.fonts;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::fonts
 {

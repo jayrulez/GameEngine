@@ -4,7 +4,7 @@ add_library(Draconic.Audio STATIC)
 add_library(Draconic::Audio ALIAS Draconic.Audio)
 
 target_link_libraries(Draconic.Audio
-    PUBLIC Draconic::Core Draconic::VFS Draconic::Policy
+    PUBLIC Draconic::Foundation Draconic::VFS Draconic::Policy
     PRIVATE Draconic::Miniaudio)
 
 target_sources(Draconic.Audio

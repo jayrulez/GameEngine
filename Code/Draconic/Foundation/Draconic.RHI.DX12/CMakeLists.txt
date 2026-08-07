@@ -5,7 +5,7 @@ add_library(Draconic.RHI.DX12 STATIC)
 add_library(Draconic::RHI.DX12 ALIAS Draconic.RHI.DX12)
 
 target_link_libraries(Draconic.RHI.DX12
-    PUBLIC Draconic::RHI Draconic::Core Draconic::Policy
+    PUBLIC Draconic::RHI Draconic::Foundation Draconic::Policy
     PRIVATE d3d12 dxgi dxguid d3dcompiler)
 
 # DX12 headers use __uuidof (MSVC extension) via IID_PPV_ARGS. Clang supports

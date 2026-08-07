@@ -8,12 +8,12 @@
 // Run it on the cooked-pack WGSL path too (the browser's shaders, on wgpu-native):
 //   DRACONIC_USE_SHADER_PACK=1 DRACONIC_WEBGPU_WGSL=1 ./Draconic.Render.Backend.Tests
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include <cstdio>
 #include <cstring>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.rhi.vulkan;
 import draconic.rhi.webgpu;
@@ -25,7 +25,7 @@ import draconic.shaders.system;
 import draconic.render;
 import draconic.rendergraph;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::render;
 namespace rhi = draconic::rhi;
 namespace geometry = draconic::geometry;

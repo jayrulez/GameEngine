@@ -1,20 +1,20 @@
 // Draconic GUI - CheckBox tests: toggle on click, programmatic set, change callback, and
 // tag for CSS.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.vg;
 import draconic.gui;
 
 using namespace draconic::gui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 namespace
 {
     template <typename T>
-    core::RefPtr<T> Make()
+    foundation::RefPtr<T> Make()
     {
-        return core::MakeRef<T>(core::DefaultAllocator());
+        return foundation::MakeRef<T>(foundation::DefaultAllocator());
     }
 }
 
@@ -22,7 +22,7 @@ TEST_CASE("checkbox: defaults")
 {
     auto cb = Make<CheckBox>();
     CHECK_FALSE(cb->IsChecked());
-    CHECK(cb->GetTag() == core::StringView(u8"checkbox"));
+    CHECK(cb->GetTag() == foundation::StringView(u8"checkbox"));
 }
 
 TEST_CASE("checkbox: toggle and set fire the change callback")
@@ -56,30 +56,30 @@ TEST_CASE("checkbox: toggle and set fire the change callback")
 TEST_CASE("checkbox: click through the dispatcher toggles it")
 {
     auto root = Make<SceneNode>();
-    root->SetSize(core::Float2{100.0f, 100.0f});
+    root->SetSize(foundation::Float2{100.0f, 100.0f});
     auto cb = Make<CheckBox>();
-    cb->SetSize(core::Float2{24.0f, 24.0f});
+    cb->SetSize(foundation::Float2{24.0f, 24.0f});
     root->AddChild(cb.Get());
     EventDispatcher* d = root->GetEventDispatcher();
 
-    d->InjectMouseDown(core::Float2{12.0f, 12.0f}, MouseButton::Left);
-    d->InjectMouseUp(core::Float2{12.0f, 12.0f}, MouseButton::Left);
+    d->InjectMouseDown(foundation::Float2{12.0f, 12.0f}, MouseButton::Left);
+    d->InjectMouseUp(foundation::Float2{12.0f, 12.0f}, MouseButton::Left);
     CHECK(cb->IsChecked());
 
-    d->InjectMouseDown(core::Float2{12.0f, 12.0f}, MouseButton::Left);
-    d->InjectMouseUp(core::Float2{12.0f, 12.0f}, MouseButton::Left);
+    d->InjectMouseDown(foundation::Float2{12.0f, 12.0f}, MouseButton::Left);
+    d->InjectMouseUp(foundation::Float2{12.0f, 12.0f}, MouseButton::Left);
     CHECK_FALSE(cb->IsChecked());
 }
 
 TEST_CASE("checkbox: draws box outline, plus a check when checked")
 {
     auto cb = Make<CheckBox>();
-    cb->SetSize(core::Float2{24.0f, 24.0f});
+    cb->SetSize(foundation::Float2{24.0f, 24.0f});
 
     draconic::vg::VGContext ctxUnchecked;
     DrawContext dcU{ctxUnchecked};
     cb->Draw(dcU);
-    const core::usize unchecked = ctxUnchecked.GetBatch().vertices.Size();
+    const foundation::usize unchecked = ctxUnchecked.GetBatch().vertices.Size();
     CHECK(unchecked > 0); // outline
 
     cb->SetChecked(true);

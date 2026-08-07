@@ -9,13 +9,13 @@
 // `String outText` accumulator becomes a `String&` we assign into.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:undo_stack;
 
-import draconic.core; // String, StringView, Array, Max
+import draconic.foundation; // String, StringView, Array, Max
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

@@ -6,13 +6,13 @@
 #include <doctest/doctest.h>
 #include <cstdio>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.fonts;
 import draconic.fonts.distancefield;
 import draconic.fonts.distancefield.baker;
 import draconic.fonts.ttf;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::fonts;
 
 namespace

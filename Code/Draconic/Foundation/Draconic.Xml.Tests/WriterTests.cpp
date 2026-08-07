@@ -1,9 +1,9 @@
 // Ported from Sedulous.Xml.Tests/WriterTests.bf
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.xml;
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::xml;
 
 namespace

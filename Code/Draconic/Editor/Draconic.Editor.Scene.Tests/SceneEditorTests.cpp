@@ -4,9 +4,9 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.scene;
 import draconic.scene.resource;
@@ -17,7 +17,7 @@ import draconic.editor.core;
 import draconic.editor.scene;
 import draconic.shell;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::editor;
 
 namespace
@@ -257,14 +257,14 @@ TEST_CASE("inspector: rebuilds when the selection switches entities")
 
     edit.EntitySelection().Set(a);
     inspector.Refresh();
-    auto* nameEditor = draconic::core::Cast<draconic::ui::toolkit::StringEditor>(
+    auto* nameEditor = draconic::foundation::Cast<draconic::ui::toolkit::StringEditor>(
         inspector.Grid()->GetProperty(u8"Name"));
     REQUIRE(nameEditor != nullptr);
     CHECK(nameEditor->Value() == u8"Alpha");
 
     edit.EntitySelection().Set(b);
     inspector.Refresh();
-    nameEditor = draconic::core::Cast<draconic::ui::toolkit::StringEditor>(
+    nameEditor = draconic::foundation::Cast<draconic::ui::toolkit::StringEditor>(
         inspector.Grid()->GetProperty(u8"Name"));
     REQUIRE(nameEditor != nullptr);
     CHECK(nameEditor->Value() == u8"Beta");

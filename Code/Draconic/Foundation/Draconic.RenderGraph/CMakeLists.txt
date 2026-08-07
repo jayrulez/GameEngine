@@ -5,7 +5,7 @@
 add_library(Draconic.RenderGraph STATIC)
 add_library(Draconic::RenderGraph ALIAS Draconic.RenderGraph)
 
-target_link_libraries(Draconic.RenderGraph PUBLIC Draconic::Core Draconic::RHI Draconic::Policy)
+target_link_libraries(Draconic.RenderGraph PUBLIC Draconic::Foundation Draconic::RHI Draconic::Policy)
 
 target_sources(Draconic.RenderGraph
     PUBLIC

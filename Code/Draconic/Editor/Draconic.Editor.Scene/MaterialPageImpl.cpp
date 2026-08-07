@@ -16,12 +16,12 @@
 // custom shader-backed materials come later with the shader-asset story).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 module draconic.editor.scene;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.rhi;
@@ -50,7 +50,7 @@ import draconic.editor.app;
 import :camera;    // EditorCamera (fly camera on the preview viewport)
 import :inspector; // ResourceRefEditor (the picker row)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::editor
 {
@@ -386,7 +386,7 @@ namespace draconic::editor
         if (!m_previewMeshGuid.IsNil() && m_context->Resources() != nullptr)
         {
             m_previewMesh = nullptr;
-            mc->mesh.SetDirect(core::RefPtr<draconic::geometry::StaticMesh>{});
+            mc->mesh.SetDirect(foundation::RefPtr<draconic::geometry::StaticMesh>{});
             mc->mesh.SetId(m_previewMeshGuid);
             mc->mesh.Bind(*m_context->Resources());
             FramePreview(mc->mesh.Get());
@@ -427,7 +427,7 @@ namespace draconic::editor
         if (mesh != nullptr && mesh->VertexCount() > 0)
         {
             center = mesh->bounds.Center();
-            radius = core::Max(0.25f, Length(mesh->bounds.Extents()));
+            radius = foundation::Max(0.25f, Length(mesh->bounds.Extents()));
         }
         m_camera.position = center + Float3{0.0f, 0.35f, 1.0f} * (radius * 2.4f);
         m_camera.LookAt(center);
@@ -462,7 +462,7 @@ namespace draconic::editor
                 Function<void(i32)>{[self](i32 index)
                                     {
                                         self->m_previewShape =
-                                            static_cast<u32>(core::Max(0, index));
+                                            static_cast<u32>(foundation::Max(0, index));
                                         self->m_previewMeshGuid =
                                             Guid{}; // shape picks override an asset mesh
                                         self->ApplyPreviewMesh();

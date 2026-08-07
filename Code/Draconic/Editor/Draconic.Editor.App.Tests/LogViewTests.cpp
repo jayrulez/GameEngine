@@ -3,12 +3,12 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.editor.app;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::editor::app;
 
 TEST_CASE("editor-logview: entries accumulate with category-prefixed, level-bucketed rows")

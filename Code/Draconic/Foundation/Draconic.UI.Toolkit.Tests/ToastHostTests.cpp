@@ -1,19 +1,19 @@
 // ToastHost tests: timed expiry vs sticky toasts, deferred removal (never mid-dispatch),
 // action/close buttons, and the bottom-right stacking layout.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 import draconic.ui.toolkit;
 
 using namespace draconic::ui;
 using namespace draconic::ui::toolkit;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 TEST_CASE("toolkit-toasthost: TimedExpiryAndStickiness")
 {
-    auto host = core::MakeRef<ToastHost>(core::DefaultAllocator());
+    auto host = foundation::MakeRef<ToastHost>(foundation::DefaultAllocator());
     CHECK(host->ToastCount() == 0u);
 
     ToastRequest timed;
@@ -55,7 +55,7 @@ TEST_CASE("toolkit-toasthost: TimedExpiryAndStickiness")
 
 TEST_CASE("toolkit-toasthost: ActionAndCloseButtons")
 {
-    auto host = core::MakeRef<ToastHost>(core::DefaultAllocator());
+    auto host = foundation::MakeRef<ToastHost>(foundation::DefaultAllocator());
 
     ToastRequest request;
     request.message = String(u8"3 assets imported");
@@ -93,7 +93,7 @@ TEST_CASE("toolkit-toasthost: ActionAndCloseButtons")
 
 TEST_CASE("toolkit-toasthost: BottomRightStacking")
 {
-    auto host = core::MakeRef<ToastHost>(core::DefaultAllocator());
+    auto host = foundation::MakeRef<ToastHost>(foundation::DefaultAllocator());
     CHECK(!host->IsHitTestVisible); // pass-through outside the cards
 
     ToastRequest first;

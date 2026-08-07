@@ -8,11 +8,11 @@
 /// (LessEqual, read-only depth) + overlay (Always) buckets; screen text/rects are always-on-top.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 module draconic.render;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.rendergraph;
 import draconic.shaders;
@@ -20,7 +20,7 @@ import draconic.shaders.system;
 import :debug_font;
 import :debug_draw;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 
 namespace draconic::render

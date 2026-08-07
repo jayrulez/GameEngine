@@ -2,28 +2,28 @@
 // DockLayoutTests, GridLayoutTests, FlexLayoutTests (faithful; RefPtr views/params, Beef object-init
 // `new X() { F = v }` -> construct + set fields, Math.Abs(..) < eps -> doctest::Approx).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 #include "TestHelpers.h"
 
 using namespace draconic::ui;
 using namespace draconic::ui::tests;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
-static core::RefPtr<RootView> MakeRoot()
+static foundation::RefPtr<RootView> MakeRoot()
 {
-    return core::MakeRef<RootView>(core::DefaultAllocator());
+    return foundation::MakeRef<RootView>(foundation::DefaultAllocator());
 }
-static core::RefPtr<TestView> TV(f32 w, f32 h)
+static foundation::RefPtr<TestView> TV(f32 w, f32 h)
 {
-    return core::MakeRef<TestView>(core::DefaultAllocator(), w, h);
+    return foundation::MakeRef<TestView>(foundation::DefaultAllocator(), w, h);
 }
 template <typename T>
-static core::RefPtr<T> New()
+static foundation::RefPtr<T> New()
 {
-    return core::MakeRef<T>(core::DefaultAllocator());
+    return foundation::MakeRef<T>(foundation::DefaultAllocator());
 }
 
 // === FrameLayout ===
@@ -390,7 +390,7 @@ TEST_CASE("dock: Top_TakesFullWidthMeasuredHeight")
     Init(ctx, root.Get(), 400, 300);
     auto dock = New<DockLayout>();
     auto top = TV(400, 50);
-    dock->AddView(top.Get(), core::MakeRef<DockLayoutParams>(core::DefaultAllocator(), Dock::Top));
+    dock->AddView(top.Get(), foundation::MakeRef<DockLayoutParams>(foundation::DefaultAllocator(), Dock::Top));
     root->AddView(dock.Get());
     LayoutPass(ctx, root.Get());
     CHECK(top->Bounds.x == doctest::Approx(0));
@@ -407,7 +407,7 @@ TEST_CASE("dock: Bottom_DocksToBottom")
     auto dock = New<DockLayout>();
     auto bottom = TV(400, 40);
     dock->AddView(bottom.Get(),
-                  core::MakeRef<DockLayoutParams>(core::DefaultAllocator(), Dock::Bottom));
+                  foundation::MakeRef<DockLayoutParams>(foundation::DefaultAllocator(), Dock::Bottom));
     root->AddView(dock.Get());
     LayoutPass(ctx, root.Get());
     CHECK(bottom->Bounds.y == doctest::Approx(260).epsilon(0.01));
@@ -422,7 +422,7 @@ TEST_CASE("dock: Left_TakesFullHeightMeasuredWidth")
     auto dock = New<DockLayout>();
     auto left = TV(80, 300);
     dock->AddView(left.Get(),
-                  core::MakeRef<DockLayoutParams>(core::DefaultAllocator(), Dock::Left));
+                  foundation::MakeRef<DockLayoutParams>(foundation::DefaultAllocator(), Dock::Left));
     root->AddView(dock.Get());
     LayoutPass(ctx, root.Get());
     CHECK(left->Bounds.x == doctest::Approx(0));
@@ -438,7 +438,7 @@ TEST_CASE("dock: Right_DocksToRight")
     auto dock = New<DockLayout>();
     auto right = TV(60, 300);
     dock->AddView(right.Get(),
-                  core::MakeRef<DockLayoutParams>(core::DefaultAllocator(), Dock::Right));
+                  foundation::MakeRef<DockLayoutParams>(foundation::DefaultAllocator(), Dock::Right));
     root->AddView(dock.Get());
     LayoutPass(ctx, root.Get());
     CHECK(right->Bounds.x == doctest::Approx(340).epsilon(0.01));
@@ -453,9 +453,9 @@ TEST_CASE("dock: Fill_TakesRemainingSpace")
     auto dock = New<DockLayout>();
     auto top = TV(400, 50);
     auto fill = TV(50, 30);
-    dock->AddView(top.Get(), core::MakeRef<DockLayoutParams>(core::DefaultAllocator(), Dock::Top));
+    dock->AddView(top.Get(), foundation::MakeRef<DockLayoutParams>(foundation::DefaultAllocator(), Dock::Top));
     dock->AddView(fill.Get(),
-                  core::MakeRef<DockLayoutParams>(core::DefaultAllocator(), Dock::Fill));
+                  foundation::MakeRef<DockLayoutParams>(foundation::DefaultAllocator(), Dock::Fill));
     root->AddView(dock.Get());
     LayoutPass(ctx, root.Get());
     CHECK(fill->Bounds.y == doctest::Approx(50).epsilon(0.01));
@@ -472,9 +472,9 @@ TEST_CASE("dock: LastChildFill_False_DoesNotFill")
     dock->LastChildFill = false;
     auto top = TV(400, 50);
     auto last = TV(100, 40);
-    dock->AddView(top.Get(), core::MakeRef<DockLayoutParams>(core::DefaultAllocator(), Dock::Top));
+    dock->AddView(top.Get(), foundation::MakeRef<DockLayoutParams>(foundation::DefaultAllocator(), Dock::Top));
     dock->AddView(last.Get(),
-                  core::MakeRef<DockLayoutParams>(core::DefaultAllocator(), Dock::Left));
+                  foundation::MakeRef<DockLayoutParams>(foundation::DefaultAllocator(), Dock::Left));
     root->AddView(dock.Get());
     LayoutPass(ctx, root.Get());
     CHECK(last->Width() == doctest::Approx(100).epsilon(0.01));
@@ -489,9 +489,9 @@ TEST_CASE("dock: LastChildFill_True_FillsRemaining")
     dock->LastChildFill = true;
     auto top = TV(400, 50);
     auto last = TV(100, 40);
-    dock->AddView(top.Get(), core::MakeRef<DockLayoutParams>(core::DefaultAllocator(), Dock::Top));
+    dock->AddView(top.Get(), foundation::MakeRef<DockLayoutParams>(foundation::DefaultAllocator(), Dock::Top));
     dock->AddView(last.Get(),
-                  core::MakeRef<DockLayoutParams>(core::DefaultAllocator(), Dock::Left));
+                  foundation::MakeRef<DockLayoutParams>(foundation::DefaultAllocator(), Dock::Left));
     root->AddView(dock.Get());
     LayoutPass(ctx, root.Get());
     CHECK(last->Width() == doctest::Approx(400).epsilon(0.01));
@@ -507,11 +507,11 @@ TEST_CASE("dock: MultipleEdges_ShrinkRemaining")
     auto top = TV(400, 40);
     auto left = TV(60, 260);
     auto fill = TV(50, 30);
-    dock->AddView(top.Get(), core::MakeRef<DockLayoutParams>(core::DefaultAllocator(), Dock::Top));
+    dock->AddView(top.Get(), foundation::MakeRef<DockLayoutParams>(foundation::DefaultAllocator(), Dock::Top));
     dock->AddView(left.Get(),
-                  core::MakeRef<DockLayoutParams>(core::DefaultAllocator(), Dock::Left));
+                  foundation::MakeRef<DockLayoutParams>(foundation::DefaultAllocator(), Dock::Left));
     dock->AddView(fill.Get(),
-                  core::MakeRef<DockLayoutParams>(core::DefaultAllocator(), Dock::Fill));
+                  foundation::MakeRef<DockLayoutParams>(foundation::DefaultAllocator(), Dock::Fill));
     root->AddView(dock.Get());
     LayoutPass(ctx, root.Get());
     CHECK(fill->Bounds.x == doctest::Approx(60).epsilon(0.01));
@@ -522,7 +522,7 @@ TEST_CASE("dock: MultipleEdges_ShrinkRemaining")
 
 // === GridLayout ===
 
-static core::RefPtr<GridLayoutParams> Cell(i32 row, i32 col, i32 rowSpan = 1, i32 colSpan = 1)
+static foundation::RefPtr<GridLayoutParams> Cell(i32 row, i32 col, i32 rowSpan = 1, i32 colSpan = 1)
 {
     auto lp = New<GridLayoutParams>();
     lp->Row = row;
@@ -697,7 +697,7 @@ TEST_CASE("grid: MixedTracks_FixedAutoFlex")
 
 // === FlexLayout ===
 
-static core::RefPtr<FlexLayoutParams> Growth(f32 grow)
+static foundation::RefPtr<FlexLayoutParams> Growth(f32 grow)
 {
     auto lp = New<FlexLayoutParams>();
     lp->Grow = grow;

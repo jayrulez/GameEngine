@@ -5,7 +5,7 @@ add_library(Draconic.RHI.Vulkan STATIC)
 add_library(Draconic::RHI.Vulkan ALIAS Draconic.RHI.Vulkan)
 
 target_link_libraries(Draconic.RHI.Vulkan
-    PUBLIC Draconic::RHI Draconic::Core Draconic::Policy
+    PUBLIC Draconic::RHI Draconic::Foundation Draconic::Policy
     PRIVATE Vulkan::Vulkan)
 
 target_sources(Draconic.RHI.Vulkan

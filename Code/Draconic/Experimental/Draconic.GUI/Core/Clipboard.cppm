@@ -8,14 +8,14 @@
 // GetEventDispatcher()->GetClipboard(), which may be null (then cut/copy/paste no-op).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:clipboard;
 
-import draconic.core; // String, StringView
+import draconic.foundation; // String, StringView
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -28,9 +28,9 @@ export namespace draconic::gui
         [[nodiscard]] virtual bool HasText() const = 0;
 
         // The clipboard's text (empty string if none).
-        [[nodiscard]] virtual core::String GetText() const = 0;
+        [[nodiscard]] virtual foundation::String GetText() const = 0;
 
         // Replace the clipboard's text.
-        virtual void SetText(core::StringView text) = 0;
+        virtual void SetText(foundation::StringView text) = 0;
     };
 }

@@ -9,14 +9,14 @@
 /// deterministic headless unit tests (no sockets, no flake).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Debug/Assert.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Debug/Assert.h"
 
 export module draconic.net:transport;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::net
 {

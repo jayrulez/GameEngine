@@ -6,12 +6,12 @@
 // wired into UIContext; this base provides the button background chrome.)
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:button_base;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import :view;
 import :event;
@@ -25,7 +25,7 @@ import :palette;
 import :event_args;
 import :input_enums;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

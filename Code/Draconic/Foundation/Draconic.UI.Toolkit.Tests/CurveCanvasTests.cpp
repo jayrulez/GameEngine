@@ -1,19 +1,19 @@
 // Smoke test for the toolkit CurveCanvas: set channels, set keys, read them back, check defaults.
 // No font/VG rendering, no input simulation (events fire only from mouse handlers).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 import draconic.ui.toolkit;
 
 using namespace draconic::ui;
 using namespace draconic::ui::toolkit;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 TEST_CASE("toolkit-curvecanvas: SetChannelsAndKeys")
 {
-    auto cv = core::MakeRef<CurveCanvas>(core::DefaultAllocator());
+    auto cv = foundation::MakeRef<CurveCanvas>(foundation::DefaultAllocator());
 
     // Defaults on a fresh canvas.
     CHECK(cv->ChannelCount() == 0);
@@ -26,10 +26,10 @@ TEST_CASE("toolkit-curvecanvas: SetChannelsAndKeys")
     // Configure two channels.
     ChannelDescriptor descs[2];
     descs[0].Name = String(u8"X");
-    descs[0].StrokeColor = core::Color{1, 0, 0, 1};
+    descs[0].StrokeColor = foundation::Color{1, 0, 0, 1};
     descs[0].Interpolation = CurveInterpolation::Hermite;
     descs[1].Name = String(u8"Y");
-    descs[1].StrokeColor = core::Color{0, 1, 0, 1};
+    descs[1].StrokeColor = foundation::Color{0, 1, 0, 1};
     descs[1].Interpolation = CurveInterpolation::Linear;
 
     cv->SetChannels(Span<const ChannelDescriptor>(descs, 2));
@@ -48,7 +48,7 @@ TEST_CASE("toolkit-curvecanvas: SetChannelsAndKeys")
 
 TEST_CASE("toolkit-curvecanvas: SetKeysRoundTrip")
 {
-    auto cv = core::MakeRef<CurveCanvas>(core::DefaultAllocator());
+    auto cv = foundation::MakeRef<CurveCanvas>(foundation::DefaultAllocator());
 
     ChannelDescriptor descs[1];
     descs[0].Name = String(u8"V");
@@ -77,7 +77,7 @@ TEST_CASE("toolkit-curvecanvas: SetKeysRoundTrip")
 
 TEST_CASE("toolkit-curvecanvas: ValueRangeDefaults")
 {
-    auto cv = core::MakeRef<CurveCanvas>(core::DefaultAllocator());
+    auto cv = foundation::MakeRef<CurveCanvas>(foundation::DefaultAllocator());
     CHECK(cv->ValueMin == doctest::Approx(0.0f));
     CHECK(cv->ValueMax == doctest::Approx(1.0f));
 

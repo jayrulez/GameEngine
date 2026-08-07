@@ -10,18 +10,18 @@
 // of the shown dialog (ownsView), so the local RefPtrs may drop.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui.toolkit:color_editor;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import draconic.ui;
 import :property_editor;
 import :color_picker;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui::toolkit
 {
@@ -94,16 +94,16 @@ export namespace draconic::ui::toolkit
             return;
         }
 
-        // `Color` names ColorView's shadowing property here, so the type is spelled core::Color.
+        // `Color` names ColorView's shadowing property here, so the type is spelled foundation::Color.
         ColorEditor* editor = m_editor;
-        const core::Color originalColor = editor->m_value;
+        const foundation::Color originalColor = editor->m_value;
         editor->BeginEdit();
 
         RefPtr<ColorPicker> picker = MakeRef<ColorPicker>(DefaultAllocator());
         picker->SetColor(editor->m_value);
         picker->SetOriginalColor(editor->m_value);
         picker->OnColorChanged.Add(
-            [editor](ColorPicker*, core::Color color)
+            [editor](ColorPicker*, foundation::Color color)
             {
                 editor->m_value = color;
                 editor->m_swatch->Color.SetValue(color);

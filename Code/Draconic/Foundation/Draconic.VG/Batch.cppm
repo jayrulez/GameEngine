@@ -6,18 +6,18 @@
 // from Sedulous.VG (VGCommand/VGBatch/ClipPathManager).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.vg:batch;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.image;
 import :enums;
 import :vertex;
 import :path;
 import :tessellation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::vg
 {

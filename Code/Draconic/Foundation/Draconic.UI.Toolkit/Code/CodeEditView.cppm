@@ -14,20 +14,20 @@
 
 module;
 #include <cstdio>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Debug/Assert.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Debug/Assert.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui.toolkit:code_edit_view;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import draconic.fonts;
 import draconic.ui;
 import :code_document;
 import :code_lexer;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui::toolkit
 {
@@ -37,18 +37,18 @@ export namespace draconic::ui::toolkit
     /// dark editor themes (keywords lean into the Graphite & Orange accent).
     struct CodeTokenColors
     {
-        core::Color keyword{235.0f / 255.0f, 155.0f / 255.0f, 90.0f / 255.0f, 1.0f};
-        core::Color type{86.0f / 255.0f, 182.0f / 255.0f, 194.0f / 255.0f, 1.0f};
-        core::Color number{220.0f / 255.0f, 190.0f / 255.0f, 120.0f / 255.0f, 1.0f};
-        core::Color string{152.0f / 255.0f, 195.0f / 255.0f, 121.0f / 255.0f, 1.0f};
-        core::Color comment{110.0f / 255.0f, 120.0f / 255.0f, 130.0f / 255.0f, 1.0f};
-        core::Color op{170.0f / 255.0f, 178.0f / 255.0f, 190.0f / 255.0f, 1.0f};
-        core::Color punctuation{150.0f / 255.0f, 158.0f / 255.0f, 170.0f / 255.0f, 1.0f};
-        core::Color preprocessor{198.0f / 255.0f, 120.0f / 255.0f, 221.0f / 255.0f, 1.0f};
-        core::Color tag{97.0f / 255.0f, 175.0f / 255.0f, 239.0f / 255.0f, 1.0f};
-        core::Color attribute{229.0f / 255.0f, 192.0f / 255.0f, 123.0f / 255.0f, 1.0f};
+        foundation::Color keyword{235.0f / 255.0f, 155.0f / 255.0f, 90.0f / 255.0f, 1.0f};
+        foundation::Color type{86.0f / 255.0f, 182.0f / 255.0f, 194.0f / 255.0f, 1.0f};
+        foundation::Color number{220.0f / 255.0f, 190.0f / 255.0f, 120.0f / 255.0f, 1.0f};
+        foundation::Color string{152.0f / 255.0f, 195.0f / 255.0f, 121.0f / 255.0f, 1.0f};
+        foundation::Color comment{110.0f / 255.0f, 120.0f / 255.0f, 130.0f / 255.0f, 1.0f};
+        foundation::Color op{170.0f / 255.0f, 178.0f / 255.0f, 190.0f / 255.0f, 1.0f};
+        foundation::Color punctuation{150.0f / 255.0f, 158.0f / 255.0f, 170.0f / 255.0f, 1.0f};
+        foundation::Color preprocessor{198.0f / 255.0f, 120.0f / 255.0f, 221.0f / 255.0f, 1.0f};
+        foundation::Color tag{97.0f / 255.0f, 175.0f / 255.0f, 239.0f / 255.0f, 1.0f};
+        foundation::Color attribute{229.0f / 255.0f, 192.0f / 255.0f, 123.0f / 255.0f, 1.0f};
 
-        [[nodiscard]] core::Color For(CodeTokenKind kind, core::Color defaultColor) const noexcept
+        [[nodiscard]] foundation::Color For(CodeTokenKind kind, foundation::Color defaultColor) const noexcept
         {
             switch (kind)
             {

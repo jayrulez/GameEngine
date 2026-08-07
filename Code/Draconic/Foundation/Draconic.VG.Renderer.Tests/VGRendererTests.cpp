@@ -3,16 +3,16 @@
 // the returned slice. (Render needs a live RenderPassEncoder, exercised by the
 // real backends; this covers init + the upload/slice path device-agnostically.)
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include <new>
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.rhi.null;
 import draconic.image;
 import draconic.vg;
 import draconic.vg.renderer;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::vg;
 using namespace draconic::vg::renderer;
 namespace rhi = draconic::rhi;

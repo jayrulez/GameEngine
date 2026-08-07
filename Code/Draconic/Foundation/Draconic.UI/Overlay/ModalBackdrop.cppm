@@ -4,22 +4,22 @@
 // all mouse events. Ported from Sedulous.UI/src/Overlay/ModalBackdrop.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:modal_backdrop;
 
-import draconic.core;
+import draconic.foundation;
 import :view;
 import :draw_context;
 import :event_args;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {
     // Alias so the faithful `Color` field name can still name the core Color type (field shadows type).
-    using ColorValue = draconic::core::Color;
+    using ColorValue = draconic::foundation::Color;
 
     class ModalBackdrop : public View
     {

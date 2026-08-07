@@ -10,7 +10,7 @@
 #include <cstring>
 #include <cmath>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.shaders;
 import draconic.samples.framework;
@@ -24,18 +24,18 @@ class BatchUploadSample : public samples::framework::SampleApp
 {
 public:
     using samples::framework::SampleApp::SampleApp;
-    draconic::core::StringView Title() const override
+    draconic::foundation::StringView Title() const override
     {
         return u8"Sample019 - Batch Upload (Async Transfer)";
     }
 
 protected:
-    draconic::core::Status OnInit() override;
+    draconic::foundation::Status OnInit() override;
     void OnRender() override;
     void OnShutdown() override;
 
 private:
-    draconic::core::Status doBatchUpload();
+    draconic::foundation::Status doBatchUpload();
 
     static constexpr const char8_t kShader[] = u8R"(
         Texture2D gTexture : register(t0, space0);
@@ -81,7 +81,7 @@ private:
         }
     )";
 
-    static constexpr draconic::core::u32 kTexSize = 128;
+    static constexpr draconic::foundation::u32 kTexSize = 128;
 
     shaders::Compiler* m_compiler = nullptr;
     rhi::ShaderModule* m_vs = nullptr;
@@ -102,30 +102,30 @@ private:
     rhi::RenderPipeline* m_pipeline = nullptr;
     rhi::CommandPool* m_pool = nullptr;
     rhi::Fence* m_frameFence = nullptr;
-    draconic::core::u64 m_frameFenceVal = 0;
+    draconic::foundation::u64 m_frameFenceVal = 0;
 
     // Upload tracking
     rhi::Fence* m_uploadFence = nullptr;
-    draconic::core::u64 m_uploadFenceVal = 0;
+    draconic::foundation::u64 m_uploadFenceVal = 0;
     bool m_uploadComplete = false;
     float m_uploadStartTime = 0.0f;
 };
 
-draconic::core::Status BatchUploadSample::OnInit()
+draconic::foundation::Status BatchUploadSample::OnInit()
 {
-    using draconic::core::Status, draconic::core::Span, draconic::core::u8, draconic::core::u32;
+    using draconic::foundation::Status, draconic::foundation::Span, draconic::foundation::u8, draconic::foundation::u32;
 
     if (shaders::createCompiler(shaders::CompilerDesc{}, m_compiler) !=
-        draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+        draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
     if (samples::framework::CompileToModule(m_compiler, m_device, kShader,
                                             shaders::ShaderStage::Vertex, u8"VSMain", u8"BatchVS",
-                                            m_vs) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+                                            m_vs) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
     if (samples::framework::CompileToModule(m_compiler, m_device, kShader,
                                             shaders::ShaderStage::Fragment, u8"PSMain", u8"BatchPS",
-                                            m_ps) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+                                            m_ps) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     // Vertex buffer: 4 vertices x (pos3 + uv2) x 4 = 80 bytes
     rhi::BufferDesc vbd{};
@@ -133,8 +133,8 @@ draconic::core::Status BatchUploadSample::OnInit()
     vbd.usage = rhi::BufferUsage::Vertex | rhi::BufferUsage::CopyDst;
     vbd.memory = rhi::MemoryLocation::GpuOnly;
     vbd.label = u8"BatchVB";
-    if (m_device->CreateBuffer(vbd, m_vb) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_device->CreateBuffer(vbd, m_vb) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     // Index buffer: 6 uint16 = 12 bytes
     rhi::BufferDesc ibd{};
@@ -142,8 +142,8 @@ draconic::core::Status BatchUploadSample::OnInit()
     ibd.usage = rhi::BufferUsage::Index | rhi::BufferUsage::CopyDst;
     ibd.memory = rhi::MemoryLocation::GpuOnly;
     ibd.label = u8"BatchIB";
-    if (m_device->CreateBuffer(ibd, m_ib) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_device->CreateBuffer(ibd, m_ib) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     // Texture
     rhi::TextureDesc td{};
@@ -153,15 +153,15 @@ draconic::core::Status BatchUploadSample::OnInit()
     td.mipLevelCount = 1;
     td.usage = rhi::TextureUsage::Sampled | rhi::TextureUsage::CopyDst;
     td.label = u8"BatchTex";
-    if (m_device->CreateTexture(td, m_tex) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_device->CreateTexture(td, m_tex) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     rhi::TextureViewDesc tvd{};
     tvd.format = rhi::TextureFormat::RGBA8Unorm;
     tvd.mipLevelCount = 1;
     tvd.arrayLayerCount = 1;
-    if (m_device->CreateTextureView(m_tex, tvd, m_texView) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_device->CreateTextureView(m_tex, tvd, m_texView) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     rhi::SamplerDesc sd{};
     sd.minFilter = rhi::FilterMode::Linear;
@@ -169,8 +169,8 @@ draconic::core::Status BatchUploadSample::OnInit()
     sd.addressU = rhi::AddressMode::Repeat;
     sd.addressV = rhi::AddressMode::Repeat;
     sd.label = u8"BatchSampler";
-    if (m_device->CreateSampler(sd, m_sampler) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_device->CreateSampler(sd, m_sampler) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     // Transform UBO
     rhi::BufferDesc tbd{};
@@ -178,8 +178,8 @@ draconic::core::Status BatchUploadSample::OnInit()
     tbd.usage = rhi::BufferUsage::Uniform;
     tbd.memory = rhi::MemoryLocation::CpuToGpu;
     tbd.label = u8"BatchTransform";
-    if (m_device->CreateBuffer(tbd, m_transformBuf) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_device->CreateBuffer(tbd, m_transformBuf) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
     m_transformMapped = m_transformBuf->Map();
 
     // Bind group layout: UBO + texture + sampler
@@ -191,8 +191,8 @@ draconic::core::Status BatchUploadSample::OnInit()
     rhi::BindGroupLayoutDesc bgld{};
     bgld.entries = Span<const rhi::BindGroupLayoutEntry>(bglEntries, 3);
     bgld.label = u8"BatchBGL";
-    if (m_device->CreateBindGroupLayout(bgld, m_bgl) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_device->CreateBindGroupLayout(bgld, m_bgl) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     rhi::BindGroupEntry bgEntries[3] = {
         rhi::BindGroupEntry::BufferEntry(m_transformBuf, 0, 16),
@@ -203,16 +203,16 @@ draconic::core::Status BatchUploadSample::OnInit()
     bgd.layout = m_bgl;
     bgd.entries = Span<const rhi::BindGroupEntry>(bgEntries, 3);
     bgd.label = u8"BatchBG";
-    if (m_device->CreateBindGroup(bgd, m_bg) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_device->CreateBindGroup(bgd, m_bg) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     // Pipeline layout
     rhi::BindGroupLayout* bgls[1] = {m_bgl};
     rhi::PipelineLayoutDesc pld{};
     pld.bindGroupLayouts = Span<rhi::BindGroupLayout* const>(bgls, 1);
     pld.label = u8"BatchPL";
-    if (m_device->CreatePipelineLayout(pld, m_pl) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_device->CreatePipelineLayout(pld, m_pl) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     // Render pipeline
     rhi::VertexAttribute attrs[2] = {{rhi::VertexFormat::Float32x3, 0, 0},
@@ -231,35 +231,35 @@ draconic::core::Status BatchUploadSample::OnInit()
     rpd.fragment->targets = Span<const rhi::ColorTargetState>(&ct, 1);
     rpd.primitive.topology = rhi::PrimitiveTopology::TriangleList;
     rpd.label = u8"BatchPipeline";
-    if (m_device->CreateRenderPipeline(rpd, m_pipeline) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_device->CreateRenderPipeline(rpd, m_pipeline) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     if (m_device->CreateCommandPool(rhi::QueueType::Graphics, m_pool) !=
-        draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
-    if (m_device->CreateFence(0, m_frameFence) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+        draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
+    if (m_device->CreateFence(0, m_frameFence) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     // Upload fence
-    if (m_device->CreateFence(0, m_uploadFence) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_device->CreateFence(0, m_uploadFence) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     // === Batch upload: VB + IB + texture in one submission ===
-    if (doBatchUpload() != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (doBatchUpload() != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
-    return draconic::core::ErrorCode::Ok;
+    return draconic::foundation::ErrorCode::Ok;
 }
 
-draconic::core::Status BatchUploadSample::doBatchUpload()
+draconic::foundation::Status BatchUploadSample::doBatchUpload()
 {
-    using draconic::core::Status, draconic::core::Span, draconic::core::u8, draconic::core::u32;
+    using draconic::foundation::Status, draconic::foundation::Span, draconic::foundation::u8, draconic::foundation::u32;
 
     m_uploadStartTime = m_totalTime;
 
     rhi::TransferBatch* transfer = nullptr;
-    if (m_graphicsQueue->CreateTransferBatch(transfer) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_graphicsQueue->CreateTransferBatch(transfer) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     // Vertex data: quad
     float verts[20] = {
@@ -269,7 +269,7 @@ draconic::core::Status BatchUploadSample::doBatchUpload()
     transfer->WriteBuffer(m_vb, 0, Span<const u8>(reinterpret_cast<const u8*>(verts), 80));
 
     // Index data
-    draconic::core::u16 indices[6] = {0, 1, 2, 0, 2, 3};
+    draconic::foundation::u16 indices[6] = {0, 1, 2, 0, 2, 3};
     transfer->WriteBuffer(m_ib, 0, Span<const u8>(reinterpret_cast<const u8*>(indices), 12));
 
     // Texture data: procedural mandelbrot-ish pattern
@@ -323,20 +323,20 @@ draconic::core::Status BatchUploadSample::doBatchUpload()
 
     // Async submit - signals fence when GPU transfer completes
     m_uploadFenceVal = 1;
-    if (transfer->SubmitAsync(m_uploadFence, m_uploadFenceVal) != draconic::core::ErrorCode::Ok)
+    if (transfer->SubmitAsync(m_uploadFence, m_uploadFenceVal) != draconic::foundation::ErrorCode::Ok)
     {
         m_graphicsQueue->DestroyTransferBatch(transfer);
-        return draconic::core::ErrorCode::Unknown;
+        return draconic::foundation::ErrorCode::Unknown;
     }
 
     std::printf("Batch upload submitted asynchronously (VB: 80B, IB: 12B, Tex: %uB)\n", texBytes);
     m_graphicsQueue->DestroyTransferBatch(transfer);
-    return draconic::core::ErrorCode::Ok;
+    return draconic::foundation::ErrorCode::Ok;
 }
 
 void BatchUploadSample::OnRender()
 {
-    using draconic::core::f32, draconic::core::Span;
+    using draconic::foundation::f32, draconic::foundation::Span;
 
     if (m_frameFenceVal > 0)
         m_frameFence->Wait(m_frameFenceVal, ~0ull);
@@ -351,7 +351,7 @@ void BatchUploadSample::OnRender()
         }
     }
 
-    if (m_swapChain->AcquireNextImage() != draconic::core::ErrorCode::Ok)
+    if (m_swapChain->AcquireNextImage() != draconic::foundation::ErrorCode::Ok)
         return;
 
     // Update transform
@@ -360,7 +360,7 @@ void BatchUploadSample::OnRender()
 
     m_pool->Reset();
     rhi::CommandEncoder* enc = nullptr;
-    if (m_pool->CreateEncoder(enc) != draconic::core::ErrorCode::Ok || !enc)
+    if (m_pool->CreateEncoder(enc) != draconic::foundation::ErrorCode::Ok || !enc)
         return;
 
     enc->TransitionTexture(m_swapChain->CurrentTexture(), rhi::ResourceState::Undefined,

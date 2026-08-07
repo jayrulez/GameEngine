@@ -11,17 +11,17 @@
 // lifecycle wiring.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:event_dispatcher;
 
-import draconic.core; // Float2, StringView
+import draconic.foundation; // Float2, StringView
 import :node;
 import :event;
 import :clipboard;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -46,7 +46,7 @@ export namespace draconic::gui
 
         [[nodiscard]] Node* GetOverNode() const noexcept { return m_overNode; }
         [[nodiscard]] Node* GetFocusNode() const noexcept { return m_focusNode; }
-        [[nodiscard]] core::Float2 GetMousePosition() const noexcept { return m_mousePos; }
+        [[nodiscard]] foundation::Float2 GetMousePosition() const noexcept { return m_mousePos; }
 
         // True if the currently focused node wants platform text input (the gui.shell bridge
         // reconciles the window's IME state against this each frame).
@@ -56,7 +56,7 @@ export namespace draconic::gui
         }
 
         // === Injection API (fed by the shell bridge) ===
-        void InjectMouseMove(core::Float2 position)
+        void InjectMouseMove(foundation::Float2 position)
         {
             m_mousePos = position;
             // While a drag-and-drop is in progress, route to the drop target (enter/leave/over)
@@ -94,7 +94,7 @@ export namespace draconic::gui
                 target->HandleMouseMove(MouseEvent(EventType::MouseMove, target, position));
         }
 
-        void InjectMouseDown(core::Float2 position, MouseButton button, u32 modifiers = 0)
+        void InjectMouseDown(foundation::Float2 position, MouseButton button, u32 modifiers = 0)
         {
             m_mousePos = position;
             Node* hit = HitTest(position);
@@ -112,7 +112,7 @@ export namespace draconic::gui
                     MouseEvent(EventType::MouseDown, hit, position, button, modifiers));
         }
 
-        void InjectMouseUp(core::Float2 position, MouseButton button, u32 modifiers = 0)
+        void InjectMouseUp(foundation::Float2 position, MouseButton button, u32 modifiers = 0)
         {
             m_mousePos = position;
             // A release while dragging completes the drop on the target under the cursor, then
@@ -141,7 +141,7 @@ export namespace draconic::gui
             m_downNode = nullptr;
         }
 
-        void InjectMouseWheel(core::Float2 position, core::Float2 delta)
+        void InjectMouseWheel(foundation::Float2 position, foundation::Float2 delta)
         {
             Node* hit = HitTest(position);
             // Bubble to the nearest ancestor that consumes the wheel (a ScrollView), so
@@ -188,7 +188,7 @@ export namespace draconic::gui
                 m_focusNode->HandleKeyUp(
                     KeyEvent(EventType::KeyUp, m_focusNode, keyCode, modifiers));
         }
-        void InjectText(core::StringView text)
+        void InjectText(foundation::StringView text)
         {
             if (m_focusNode)
                 m_focusNode->HandleTextInput(TextInputEvent(m_focusNode, text));
@@ -215,7 +215,7 @@ export namespace draconic::gui
         {
             m_dragActive = true;
             m_dragSource = source;
-            m_dragPayload = core::Move(payload);
+            m_dragPayload = foundation::Move(payload);
             m_dropTarget = FindDropTarget(HitTest(m_mousePos));
             if (m_dropTarget)
                 m_dropTarget->HandleDragEnter(m_dragPayload);
@@ -238,21 +238,21 @@ export namespace draconic::gui
         // the tree, typically as a top-level child of the root so it draws over everything).
         // A press outside it and its owner, or Escape, dismisses it via the onClose callback.
         // `owner` is the widget that opened it (e.g. the ComboBox) - clicks on it don't dismiss.
-        void OpenPopup(Node* popup, Node* owner, core::Function<void()> onClose,
-                       core::Function<bool(Node*)> contains = {})
+        void OpenPopup(Node* popup, Node* owner, foundation::Function<void()> onClose,
+                       foundation::Function<bool(Node*)> contains = {})
         {
             if (m_popup != nullptr)
                 ClosePopup();
             m_popup = popup;
             m_popupOwner = owner;
-            m_onPopupClose = core::Move(onClose);
-            m_popupContains = core::Move(contains);
+            m_onPopupClose = foundation::Move(onClose);
+            m_popupContains = foundation::Move(contains);
         }
         void ClosePopup()
         {
             if (m_popup == nullptr)
                 return;
-            core::Function<void()> cb = core::Move(m_onPopupClose);
+            foundation::Function<void()> cb = foundation::Move(m_onPopupClose);
             m_popup = nullptr;
             m_popupOwner = nullptr;
             m_onPopupClose = {};
@@ -291,7 +291,7 @@ export namespace draconic::gui
         }
 
     private:
-        [[nodiscard]] Node* HitTest(core::Float2 position) const
+        [[nodiscard]] Node* HitTest(foundation::Float2 position) const
         {
             Node* hit = m_root ? m_root->OverFind(position) : nullptr;
             // A modal confines the pointer: hits outside the modal subtree are swallowed.
@@ -330,7 +330,7 @@ export namespace draconic::gui
 
         // Gather tab-focusable nodes under `node` in pre-order (skipping invisible subtrees
         // and disabled nodes).
-        static void CollectTabStops(Node* node, core::Array<Node*>& out)
+        static void CollectTabStops(Node* node, foundation::Array<Node*>& out)
         {
             if (node == nullptr || !node->IsVisible())
                 return;
@@ -342,7 +342,7 @@ export namespace draconic::gui
 
         bool MoveTabFocus(i32 direction)
         {
-            core::Array<Node*> stops;
+            foundation::Array<Node*> stops;
             CollectTabStops(m_modalRoot != nullptr ? m_modalRoot : m_root,
                             stops); // confine to a modal
             const usize count = stops.Size();
@@ -376,12 +376,12 @@ export namespace draconic::gui
         Node* m_focusNode = nullptr;       // non-owning
         Node* m_popup = nullptr;           // non-owning active popup
         Node* m_popupOwner = nullptr;      // non-owning opener (clicks on it don't dismiss)
-        core::Function<void()> m_onPopupClose;
-        core::Function<bool(Node*)> m_popupContains; // optional: extends the popup's "inside" set
+        foundation::Function<void()> m_onPopupClose;
+        foundation::Function<bool(Node*)> m_popupContains; // optional: extends the popup's "inside" set
         bool m_dragActive = false;                   // drag-and-drop in progress
         Node* m_dragSource = nullptr;                // non-owning
         Node* m_dropTarget = nullptr;                // non-owning current target
         DragPayload m_dragPayload;
-        core::Float2 m_mousePos{0.0f, 0.0f};
+        foundation::Float2 m_mousePos{0.0f, 0.0f};
     };
 }

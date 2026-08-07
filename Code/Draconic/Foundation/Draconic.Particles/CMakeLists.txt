@@ -7,7 +7,7 @@ add_library(Draconic.Particles STATIC)
 add_library(Draconic::Particles ALIAS Draconic.Particles)
 
 target_link_libraries(Draconic.Particles
-    PUBLIC Draconic::Core Draconic::Policy)
+    PUBLIC Draconic::Foundation Draconic::Policy)
 
 target_sources(Draconic.Particles
     PRIVATE

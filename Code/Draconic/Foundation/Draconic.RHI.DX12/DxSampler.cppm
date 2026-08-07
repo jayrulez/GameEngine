@@ -2,18 +2,18 @@
 /// Ported from Sedulous.RHI.DX12/DX12Sampler.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include "DxIncludes.h"
 
 export module draconic.rhi.dx12:sampler;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :conversions;
 import :descriptor_heap;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::dx12
 {

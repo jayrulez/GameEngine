@@ -5,19 +5,19 @@
 // UITypeRegistry::Register("MyControl", &MyControl::StaticType()). Ported from
 // Sedulous.UI/src/Styling/Parser/UITypeRegistry.bf.
 //
-// Divergences (language): Beef `Type` -> const core::TypeInfo*; the static Dictionary lives in a
+// Divergences (language): Beef `Type` -> const foundation::TypeInfo*; the static Dictionary lives in a
 // function-local static HashMap (avoids C++ static-init-order issues). RegisterBuiltins() is DEFERRED
 // until the control classes land (it references View subclasses not yet ported); the parser and its
 // tests register the types they need explicitly for now.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:ui_type_registry;
 
-import draconic.core; // TypeInfo, HashMap, String, StringView
+import draconic.foundation; // TypeInfo, HashMap, String, StringView
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::ui::detail
 {

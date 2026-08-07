@@ -7,17 +7,17 @@
 // capturing the borrowed View*.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:view_animator;
 
-import draconic.core;
+import draconic.foundation;
 import :view;
 import :view_transform;
 import :animation;
 import :float_animation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

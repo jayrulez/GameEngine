@@ -6,15 +6,15 @@
 /// untyped vertex-buffer indirection).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.geometry:primitives;
 
-import draconic.core;
+import draconic.foundation;
 import :types;
 import :mesh;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::geometry
 {

@@ -6,15 +6,15 @@
 // DraconicRegisterValue_* bodies.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 module draconic.engine.animation;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.script.facades; // ComponentOf<T> + RegisterExtra* (the script `.of` surface, Track A)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::animation
 {
@@ -98,13 +98,13 @@ namespace draconic::animation
         // register them, seed the Wren emission roots, and name them for the behavior prelude.
         struct Entry
         {
-            const core::TypeInfo* type;
-            core::StringView name;
+            const foundation::TypeInfo* type;
+            foundation::StringView name;
         };
         const Entry components[] = {
-            {&core::TypeOf<SkeletalAnimationComponent>(), u8"SkeletalAnimationComponent"},
-            {&core::TypeOf<AnimationGraphComponent>(), u8"AnimationGraphComponent"},
-            {&core::TypeOf<InstancedSkinningComponent>(), u8"InstancedSkinningComponent"}};
+            {&foundation::TypeOf<SkeletalAnimationComponent>(), u8"SkeletalAnimationComponent"},
+            {&foundation::TypeOf<AnimationGraphComponent>(), u8"AnimationGraphComponent"},
+            {&foundation::TypeOf<InstancedSkinningComponent>(), u8"InstancedSkinningComponent"}};
         for (const Entry& component : components)
         {
             GlobalTypeRegistry().Register(*component.type);
@@ -114,8 +114,8 @@ namespace draconic::animation
 
         // The scene-bound animation handle (SceneAnimation.of(scene)): reflect + register + seed + name.
         DraconicRegisterValue_SceneAnimation();
-        GlobalTypeRegistry().Register(core::TypeOf<SceneAnimation>());
-        draconic::script::RegisterExtraScriptRootType(&core::TypeOf<SceneAnimation>());
+        GlobalTypeRegistry().Register(foundation::TypeOf<SceneAnimation>());
+        draconic::script::RegisterExtraScriptRootType(&foundation::TypeOf<SceneAnimation>());
         draconic::script::RegisterExtraFacadeName(u8"SceneAnimation");
     }
 }

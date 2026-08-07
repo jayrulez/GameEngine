@@ -7,7 +7,7 @@ add_library(Draconic::UI.Runtime ALIAS Draconic.UI.Runtime)
 
 target_link_libraries(Draconic.UI.Runtime
     PUBLIC
-        Draconic::Core Draconic::RHI Draconic::Shaders Draconic::Shaders.System Draconic::Shell
+        Draconic::Foundation Draconic::RHI Draconic::Shaders Draconic::Shaders.System Draconic::Shell
         Draconic::Graphics Draconic::VG Draconic::VG.Renderer Draconic::Fonts Draconic::UI
         Draconic::UI.Shell Draconic::Policy)
 

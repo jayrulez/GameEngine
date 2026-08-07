@@ -2,7 +2,7 @@
 add_library(Draconic.Engine.UI STATIC)
 add_library(Draconic::Engine.UI ALIAS Draconic.Engine.UI)
 target_link_libraries(Draconic.Engine.UI
-    PUBLIC Draconic::Core Draconic::Runtime Draconic::Scene Draconic::Engine.Scene
+    PUBLIC Draconic::Foundation Draconic::Runtime Draconic::Scene Draconic::Engine.Scene
            Draconic::Resource Draconic::Shell Draconic::RHI Draconic::Fonts Draconic::Fonts.TTF Draconic::Fonts.Resource
            Draconic::Input Draconic::Engine.Input Draconic::UI Draconic::UI.Shell
            Draconic::UI.Resource

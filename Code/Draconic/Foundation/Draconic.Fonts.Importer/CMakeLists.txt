@@ -5,7 +5,7 @@ add_library(Draconic.Fonts.Importer STATIC)
 add_library(Draconic::Fonts.Importer ALIAS Draconic.Fonts.Importer)
 
 target_link_libraries(Draconic.Fonts.Importer
-    PUBLIC Draconic::Core Draconic::Fonts Draconic::Fonts.Baked Draconic::Fonts.TTF Draconic::Policy)
+    PUBLIC Draconic::Foundation Draconic::Fonts Draconic::Fonts.Baked Draconic::Fonts.TTF Draconic::Policy)
 
 target_sources(Draconic.Fonts.Importer
     PUBLIC

@@ -7,20 +7,20 @@
 // gravity are deferred.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:linear_layout;
 
-import draconic.core; // Float2, Max
+import draconic.foundation; // Float2, Max
 import :rect;
 import :thickness;
 import :node;
 import :ui_widget;
 import :css_values; // ParseLength (markup spacing)
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -61,23 +61,23 @@ export namespace draconic::gui
         [[nodiscard]] bool IsWrapContent() const noexcept { return m_wrapContent; }
 
         // Markup: <LinearLayout orientation="horizontal" spacing="8" wrap-content="true">.
-        bool SetMarkupAttribute(core::StringView name, core::StringView value) override
+        bool SetMarkupAttribute(foundation::StringView name, foundation::StringView value) override
         {
-            if (name == core::StringView(u8"orientation"))
+            if (name == foundation::StringView(u8"orientation"))
             {
-                SetOrientation(value == core::StringView(u8"horizontal") ? Orientation::Horizontal
+                SetOrientation(value == foundation::StringView(u8"horizontal") ? Orientation::Horizontal
                                                                          : Orientation::Vertical);
                 return true;
             }
-            if (name == core::StringView(u8"spacing"))
+            if (name == foundation::StringView(u8"spacing"))
             {
                 if (Optional<f32> s = ParseLength(value); s.HasValue())
                     SetSpacing(s.Value());
                 return true;
             }
-            if (name == core::StringView(u8"wrap-content"))
+            if (name == foundation::StringView(u8"wrap-content"))
             {
-                SetWrapContent(value == core::StringView(u8"true"));
+                SetWrapContent(value == foundation::StringView(u8"true"));
                 return true;
             }
             return UIWidget::SetMarkupAttribute(name, value);
@@ -100,7 +100,7 @@ export namespace draconic::gui
                 if (child == nullptr || !child->IsVisible())
                     continue;
 
-                child->SetPosition(core::Float2{x, y});
+                child->SetPosition(foundation::Float2{x, y});
                 if (m_orientation == Orientation::Vertical)
                 {
                     const f32 h = child->GetSize().y;
@@ -120,10 +120,10 @@ export namespace draconic::gui
             {
                 const Thickness p = GetPadding();
                 if (m_orientation == Orientation::Vertical)
-                    SetSize(core::Float2{GetSize().x, core::Max(0.0f, extent) + p.TotalVertical()});
+                    SetSize(foundation::Float2{GetSize().x, foundation::Max(0.0f, extent) + p.TotalVertical()});
                 else
                     SetSize(
-                        core::Float2{core::Max(0.0f, extent) + p.TotalHorizontal(), GetSize().y});
+                        foundation::Float2{foundation::Max(0.0f, extent) + p.TotalHorizontal(), GetSize().y});
             }
         }
 

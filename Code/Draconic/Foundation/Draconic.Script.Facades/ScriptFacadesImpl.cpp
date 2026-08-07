@@ -2,17 +2,17 @@
 // never sit in a module interface unit - the GCC gcm-cluster rule).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 module draconic.script.facades;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.scene;
 import draconic.script;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::script
 {
@@ -89,13 +89,13 @@ namespace draconic::script
         builder.Constructor(); // Wren only materializes constructible foreign classes
     }
 
-    core::Span<const core::StringView> BehaviorFacadeNames()
+    foundation::Span<const foundation::StringView> BehaviorFacadeNames()
     {
         // Kept in sync with RegisterScriptFacadeReflection below.
-        static const core::StringView names[] = {
+        static const foundation::StringView names[] = {
             u8"Entity", u8"Log", u8"Time", u8"Random", u8"Scene", u8"SceneEvents",
         };
-        return core::Span<const core::StringView>{names, 6};
+        return foundation::Span<const foundation::StringView>{names, 6};
     }
 
     namespace
@@ -110,20 +110,20 @@ namespace draconic::script
             static Array<StringView> views;
             return views;
         }
-        Array<const core::TypeInfo*>& ExtraRootStorage()
+        Array<const foundation::TypeInfo*>& ExtraRootStorage()
         {
-            static Array<const core::TypeInfo*> roots;
+            static Array<const foundation::TypeInfo*> roots;
             return roots;
         }
     }
 
-    void RegisterExtraScriptRootType(const core::TypeInfo* type)
+    void RegisterExtraScriptRootType(const foundation::TypeInfo* type)
     {
         if (type == nullptr)
         {
             return;
         }
-        for (const core::TypeInfo* existing : ExtraRootStorage())
+        for (const foundation::TypeInfo* existing : ExtraRootStorage())
         {
             if (existing == type)
             {
@@ -133,7 +133,7 @@ namespace draconic::script
         ExtraRootStorage().PushBack(type);
     }
 
-    core::Span<const core::TypeInfo* const> ExtraScriptRootTypes()
+    foundation::Span<const foundation::TypeInfo* const> ExtraScriptRootTypes()
     {
         return {ExtraRootStorage().Data(), ExtraRootStorage().Size()};
     }

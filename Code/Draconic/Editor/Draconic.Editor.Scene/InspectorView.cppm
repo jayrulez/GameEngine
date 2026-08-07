@@ -15,14 +15,14 @@
 // undo/redo and external changes (gizmos later) stay live.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 #include <limits>
 #include <initializer_list>
 
 export module draconic.editor.scene:inspector;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.resource;
 import draconic.geometry;
@@ -47,8 +47,8 @@ import draconic.editor.core;
 import draconic.editor.app;
 import :edit;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::editor
 {
@@ -343,15 +343,15 @@ export namespace draconic::editor
         // Applies the displayName/description/visibleWhen conventions to every row that
         // `prop`'s Build*Row call just added (rows firstRow..end). `instance` is a copyable
         // callable re-reading the owning object each frame so visibleWhen rows follow live
-        // edits (a plain lambda, NOT core::Function - that one is move-only and each row's
+        // edits (a plain lambda, NOT foundation::Function - that one is move-only and each row's
         // refresher needs its own copy).
         template <typename GetInstance>
         void ApplyPropertyPresentation(const TypeInfo* type, const PropertyInfo& prop,
                                        usize firstRow, GetInstance instance)
         {
-            const core::Attribute* displayName = FindAttribute(prop, u8"displayName");
-            const core::Attribute* description = FindAttribute(prop, u8"description");
-            const core::Attribute* visibleWhen = FindAttribute(prop, u8"visibleWhen");
+            const foundation::Attribute* displayName = FindAttribute(prop, u8"displayName");
+            const foundation::Attribute* description = FindAttribute(prop, u8"description");
+            const foundation::Attribute* visibleWhen = FindAttribute(prop, u8"visibleWhen");
 
             // Resolve the dependent property + condition once; refreshers share them.
             const PropertyInfo* dependent = nullptr;

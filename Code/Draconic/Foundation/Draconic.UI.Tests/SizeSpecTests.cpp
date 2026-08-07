@@ -1,7 +1,7 @@
 // Ported from Sedulous.UI.Tests/src/SizeSpecTests.bf (faithful; SizeSpec.Match/.Wrap -> Match()/Wrap()).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 
 using namespace draconic::ui;

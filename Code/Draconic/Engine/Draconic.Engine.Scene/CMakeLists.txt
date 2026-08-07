@@ -5,7 +5,7 @@ add_library(Draconic.Engine.Scene STATIC)
 add_library(Draconic::Engine.Scene ALIAS Draconic.Engine.Scene)
 
 target_link_libraries(Draconic.Engine.Scene
-    PUBLIC Draconic::Core Draconic::Runtime Draconic::Scene Draconic::Policy)
+    PUBLIC Draconic::Foundation Draconic::Runtime Draconic::Scene Draconic::Policy)
 
 target_sources(Draconic.Engine.Scene
     PUBLIC

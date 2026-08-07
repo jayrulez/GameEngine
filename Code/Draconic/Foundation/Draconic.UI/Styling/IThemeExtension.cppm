@@ -4,7 +4,7 @@
 // Ported from Sedulous.UI/src/Styling/IThemeExtension.bf. Injected/held-by-reference (pattern B).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:theme_extension;
 

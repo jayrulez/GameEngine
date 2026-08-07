@@ -2,9 +2,9 @@
 
 export module draconic.rhi:enums;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi
 {

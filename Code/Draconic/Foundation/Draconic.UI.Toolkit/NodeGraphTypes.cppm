@@ -4,20 +4,20 @@
 // and connections between ports. Model-agnostic - the NodeGraphCanvas renders these and callers push
 // their own data in. Ported 1:1 from Sedulous.UI.Toolkit/src/NodeGraph/NodeGraphTypes.bf.
 //
-// Port taxes: Beef `Vector2` -> Float2; byte `Color(r,g,b,a)` -> float core::Color{...}; Beef heap
+// Port taxes: Beef `Vector2` -> Float2; byte `Color(r,g,b,a)` -> float foundation::Color{...}; Beef heap
 // `List<NodeGraphPort>` (owned) -> Array<NodeGraphPort> BY VALUE (ports are index-accessed, never held
 // by stable pointer); Beef `String Label = new .() ~ delete _` -> value `String Label`. The member
-// named `Color` is declared with the qualified type `core::Color` to stay clear of gcc's
+// named `Color` is declared with the qualified type `foundation::Color` to stay clear of gcc's
 // -Werror=changes-meaning (field name == unqualified type name).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui.toolkit:node_graph_types;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui::toolkit
 {
@@ -37,16 +37,16 @@ export namespace draconic::ui::toolkit
         i32 TypeId = 0;
 
         /// Display color for the port circle and compatible connections.
-        core::Color Color{};
+        foundation::Color Color{};
 
         NodeGraphPortType() = default;
-        NodeGraphPortType(i32 typeId, core::Color color) : TypeId(typeId), Color(color) {}
+        NodeGraphPortType(i32 typeId, foundation::Color color) : TypeId(typeId), Color(color) {}
 
         /// Untyped port - connects to anything.
         [[nodiscard]] static NodeGraphPortType Untyped()
         {
             return NodeGraphPortType(
-                0, core::Color{180.0f / 255.0f, 180.0f / 255.0f, 190.0f / 255.0f, 1.0f});
+                0, foundation::Color{180.0f / 255.0f, 180.0f / 255.0f, 190.0f / 255.0f, 1.0f});
         }
     };
 
@@ -83,7 +83,7 @@ export namespace draconic::ui::toolkit
         Float2 Size{160.0f, 80.0f};
 
         /// Header bar color.
-        core::Color HeaderColor{70.0f / 255.0f, 130.0f / 255.0f, 200.0f / 255.0f, 1.0f};
+        foundation::Color HeaderColor{70.0f / 255.0f, 130.0f / 255.0f, 200.0f / 255.0f, 1.0f};
 
         /// Whether this node is selected.
         bool IsSelected = false;
@@ -92,7 +92,7 @@ export namespace draconic::ui::toolkit
         /// ACTIVE state while a live animation-graph preview runs. Caller-driven; never set by
         /// the canvas itself.
         bool IsHighlighted = false;
-        core::Color HighlightColor{255.0f / 255.0f, 170.0f / 255.0f, 60.0f / 255.0f,
+        foundation::Color HighlightColor{255.0f / 255.0f, 170.0f / 255.0f, 60.0f / 255.0f,
                                    220.0f / 255.0f};
 
         /// Input ports (ordered top to bottom on the left side).

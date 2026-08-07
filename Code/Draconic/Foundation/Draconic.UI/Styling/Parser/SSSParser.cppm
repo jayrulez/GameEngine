@@ -19,11 +19,11 @@
 //    a bare declaration body into an existing rule.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:sss_parser;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.image;
 import draconic.vg;
 import :style_property;
@@ -51,7 +51,7 @@ import :color_functions;
 import :ui_type_registry;
 import :iresource_provider;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace image = draconic::image;
 namespace vg = draconic::vg;
 

@@ -7,7 +7,7 @@ endif()
 
 add_executable(Draconic.Tools.ShaderPack main.cpp)
 target_link_libraries(Draconic.Tools.ShaderPack PRIVATE
-    Draconic::Core
+    Draconic::Foundation
     Draconic::Shaders
     Draconic::Policy)
 

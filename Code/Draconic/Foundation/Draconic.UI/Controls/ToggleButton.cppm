@@ -5,12 +5,12 @@
 // Label content view (live now that the Fonts service is wired).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:toggle_button;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import :button_base;
 import :label;
@@ -27,8 +27,8 @@ import :palette;
 import :event_args;
 import :input_enums;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::ui
 {
@@ -43,7 +43,7 @@ export namespace draconic::ui
         explicit ToggleButton(StringView text)
         {
             Wire();
-            m_content = core::MakeRef<Label>(core::DefaultAllocator(), text);
+            m_content = foundation::MakeRef<Label>(foundation::DefaultAllocator(), text);
         }
 
         [[nodiscard]] View* Content() const noexcept { return m_content.Get(); }

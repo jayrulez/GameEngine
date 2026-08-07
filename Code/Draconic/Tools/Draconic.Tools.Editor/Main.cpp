@@ -12,9 +12,9 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Log/Log.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.shell;
 import draconic.shell.desktop;
 import draconic.graphics;
@@ -80,7 +80,7 @@ import draconic.script.angelscript.editor.ui;
 import draconic.script.resource;
 import draconic.script.editor;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace editor = draconic::editor;
 namespace shell = draconic::shell;
 
@@ -224,7 +224,7 @@ namespace
             creator.create =
                 [make, base](editor::EditorContext& ctx, draconic::content::Group* group)
             { return CreatePrimitiveMeshInstance(ctx, base.AsView(), make(), group); };
-            context.RegisterCreator(draconic::core::Move(creator));
+            context.RegisterCreator(draconic::foundation::Move(creator));
         }
     }
 

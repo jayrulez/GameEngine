@@ -1,18 +1,18 @@
 // Smoke test for the toolkit ColorPicker: constructs, round-trips a color through HSV, sets an original.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 import draconic.ui.toolkit;
 
 using namespace draconic::ui;
 using namespace draconic::ui::toolkit;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 TEST_CASE("toolkit-colorpicker: ConstructAndRoundTrip")
 {
-    auto picker = core::MakeRef<ColorPicker>(core::DefaultAllocator());
+    auto picker = foundation::MakeRef<ColorPicker>(foundation::DefaultAllocator());
     // 9 children: SV square, hue strip, alpha strip, 2 previews, hex, R/G/B.
     CHECK(picker->ChildCount() == 9u);
 

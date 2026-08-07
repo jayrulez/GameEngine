@@ -8,9 +8,9 @@
 
 #include <cstdio>
 #include <cstring>
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Log/Log.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.vfs;
 import draconic.editor;
@@ -45,7 +45,7 @@ import draconic.script.angelscript.editor;
 import draconic.script.resource;
 import draconic.script.editor;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace editor = draconic::editor;
 namespace vfs = draconic::vfs;
 

@@ -13,12 +13,12 @@
 // resource refs and the manifest's defaultScene path keep working in the pak.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 export module draconic.editor.core:export_pipeline;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.vfs.pak;
 import draconic.content;
@@ -31,7 +31,7 @@ import :export_preset;
 import :export_roots;
 import :export_template;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {

@@ -2,10 +2,10 @@
 // authored ShaderSource, compile variants through it, and verify a reload bumps the
 // shader's version (the PSO-cache reload signal). Real DXC + Null RHI + content DB.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.resource;
@@ -15,7 +15,7 @@ import draconic.shaders;
 import draconic.shaders.system;
 import draconic.shaders.resource;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::vfs;
 using namespace draconic::resource;
 using namespace draconic::shaders;
@@ -54,7 +54,7 @@ TEST_CASE("shader resource: built via the resource manager; reload bumps version
 
     Guid id;
     {
-        draconic::content::ContentDatabase db(mount, draconic::core::BinarySerializerFactory(),
+        draconic::content::ContentDatabase db(mount, draconic::foundation::BinarySerializerFactory(),
                                               u8".rasset");
         auto* inst = db.RootGroup()->CreateInstance(u8"lit", ShaderSource::StaticType());
         id = inst->Id();
@@ -65,7 +65,7 @@ TEST_CASE("shader resource: built via the resource manager; reload bumps version
         REQUIRE(inst->WriteObject(s).IsOk());
     }
 
-    draconic::content::ContentDatabase db(mount, draconic::core::BinarySerializerFactory(),
+    draconic::content::ContentDatabase db(mount, draconic::foundation::BinarySerializerFactory(),
                                           u8".rasset");
     rhi::null::NullDevice device{DefaultAllocator()};
     ShaderSystem system(*compiler, device);

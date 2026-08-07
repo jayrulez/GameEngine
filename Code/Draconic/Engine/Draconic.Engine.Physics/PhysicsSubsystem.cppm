@@ -11,16 +11,16 @@
 // immutable while simulating.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
-#include "Draconic.Core/Reflection/Reflect.h" // DRACONIC_OBJECT (the Physics facade)
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
+#include "Draconic.Foundation/Reflection/Reflect.h" // DRACONIC_OBJECT (the Physics facade)
 #include <cmath>
 
 export module draconic.engine.physics;
 
 export import :components;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.runtime;
 import draconic.scene;
 import draconic.engine.scene;
@@ -31,7 +31,7 @@ import draconic.physics;
 // implementation unit). Keeping heavyweight imports out of the interface matters for
 // GCC's module loader (-fno-module-lazy consumers force-load the whole import graph).
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::physics
 {

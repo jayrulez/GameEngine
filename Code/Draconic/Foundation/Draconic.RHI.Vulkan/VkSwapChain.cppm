@@ -2,13 +2,13 @@
 /// Ported from Sedulous.RHI.Vulkan/VulkanSwapChain.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include "VkIncludes.h"
 
 export module draconic.rhi.vulkan:swap_chain;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :conversions;
 import :adapter;
@@ -16,7 +16,7 @@ import :surface;
 import :texture;
 import :texture_view;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::vk
 {

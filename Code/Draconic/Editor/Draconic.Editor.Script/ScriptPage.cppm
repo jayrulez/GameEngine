@@ -13,12 +13,12 @@
 // through the registries by the asset's language id, so it edits Wren and AngelScript alike.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 export module draconic.editor.script;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.runtime.client;
@@ -29,7 +29,7 @@ import draconic.script.editor;
 import draconic.editor.core;
 import draconic.editor.app;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {
@@ -39,7 +39,7 @@ export namespace draconic::editor
     // The backend's ACTUAL bound API for one language (IScriptManager::DescribeBoundApi),
     // built ONCE per page and shared by every consumer - completion AND the API browser read
     // this one source, so they can never disagree. The build replays the runtime's exact
-    // registration sequence against a throwaway manager (RegisterCoreTypes + facade
+    // registration sequence against a throwaway manager (RegisterFoundationTypes + facade
     // reflection + CreateScriptManagerForLanguage + RegisterReflectedTypes) - so what the
     // page shows is exactly what a run can call, spelled the language's way. Lazy: nothing
     // runs until the first Types() call; an unknown language stays empty.
@@ -396,7 +396,7 @@ export namespace draconic::editor
         DRACONIC_LOG_INFO(u8"Editor",
                           u8"RegisterScriptEditor: {} script backend(s) in the registry",
                           backends.Size());
-        core::u32 registeredCreators = 0;
+        foundation::u32 registeredCreators = 0;
         for (const draconic::script::ScriptBackendDesc& backend : backends)
         {
             // A backend with no cook (compile/harvest) cannot seed a starter - skip it.

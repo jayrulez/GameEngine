@@ -8,18 +8,18 @@
 // defaults to the top-left. Re-runs on size change and child add/remove.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:relative_layout;
 
-import draconic.core; // Float2, HashMap
+import draconic.foundation; // Float2, HashMap
 import :rect;
 import :node;
 import :ui_widget;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -71,7 +71,7 @@ export namespace draconic::gui
                     continue;
 
                 const u32 anchor = GetAnchor(child);
-                const core::Float2 size = child->GetSize();
+                const foundation::Float2 size = child->GetSize();
 
                 f32 x = content.x; // default: left
                 if (anchor & AnchorCenterH)
@@ -85,7 +85,7 @@ export namespace draconic::gui
                 else if (anchor & AnchorBottom)
                     y = content.y + content.height - size.y;
 
-                child->SetPosition(core::Float2{x, y});
+                child->SetPosition(foundation::Float2{x, y});
             }
         }
 

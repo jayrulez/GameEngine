@@ -3,7 +3,7 @@
 add_library(Draconic.RHI.Null STATIC)
 add_library(Draconic::RHI.Null ALIAS Draconic.RHI.Null)
 
-target_link_libraries(Draconic.RHI.Null PUBLIC Draconic::RHI Draconic::Core Draconic::Policy)
+target_link_libraries(Draconic.RHI.Null PUBLIC Draconic::RHI Draconic::Foundation Draconic::Policy)
 
 target_sources(Draconic.RHI.Null
     PUBLIC

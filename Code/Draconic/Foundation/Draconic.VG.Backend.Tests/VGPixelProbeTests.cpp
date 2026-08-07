@@ -5,9 +5,9 @@
 // probes instead of stored image diffs - no cross-driver golden drift, and each assertion
 // names the property it guards. Skips cleanly when a backend/GPU is unavailable.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.rhi.vulkan;
 import draconic.rhi.webgpu;
@@ -16,7 +16,7 @@ import draconic.shaders.system;
 import draconic.vg;
 import draconic.vg.renderer;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 namespace vg = draconic::vg;
 namespace shaders = draconic::shaders;

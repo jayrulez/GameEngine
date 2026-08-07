@@ -5,14 +5,14 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.editor.core;
 import draconic.editor.generic;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::editor;
 
 namespace
@@ -34,22 +34,22 @@ namespace
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "friction", friction);
-            draconic::core::Serialize(ar, "group", group);
-            draconic::core::Serialize(ar, "enabled", enabled);
-            draconic::core::Serialize(ar, "note", note);
-            draconic::core::Serialize(ar, "mesh", mesh);
-            draconic::core::Serialize(ar, "weights", weights);
+            draconic::foundation::Serialize(ar, "friction", friction);
+            draconic::foundation::Serialize(ar, "group", group);
+            draconic::foundation::Serialize(ar, "enabled", enabled);
+            draconic::foundation::Serialize(ar, "note", note);
+            draconic::foundation::Serialize(ar, "mesh", mesh);
+            draconic::foundation::Serialize(ar, "weights", weights);
             ar.Key("blob");
             ar.Blob(blob, sizeof(blob));
-            draconic::core::Serialize(ar, "hasExtra", hasExtra);
+            draconic::foundation::Serialize(ar, "hasExtra", hasExtra);
             if (hasExtra)
             {
-                draconic::core::Serialize(ar, "extra", extra);
+                draconic::foundation::Serialize(ar, "extra", extra);
             }
             if (ar.Version() >= 2)
             {
-                draconic::core::Serialize(ar, "gated", gated);
+                draconic::foundation::Serialize(ar, "gated", gated);
             }
         }
     };

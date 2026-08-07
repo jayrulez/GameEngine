@@ -2,12 +2,12 @@
 // entity, dense contiguous iteration, swap-remove keeping the pack dense, generation
 // staleness, the one-per-entity invariant, and manager-driven deferred lifecycle.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.scene;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::scene;
 
 namespace

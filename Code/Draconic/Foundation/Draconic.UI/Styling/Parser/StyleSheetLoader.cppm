@@ -9,11 +9,11 @@
 // classes land, so it is not called yet.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:style_sheet_loader;
 
-import draconic.core;  // HashMap, String, StringView, Color, RefPtr
+import draconic.foundation;  // HashMap, String, StringView, Color, RefPtr
 import draconic.image; // ImageData
 import :style_sheet;
 import :theme_palette;
@@ -23,7 +23,7 @@ import :sss_parser;
 import :ui_type_registry;
 import :iresource_provider;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace image = draconic::image;
 
 export namespace draconic::ui

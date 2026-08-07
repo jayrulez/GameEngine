@@ -6,18 +6,18 @@
 // Sedulous.Xml/XmlDocument.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.xml:document;
 
-import draconic.core;
+import draconic.foundation;
 import :result;
 import :lexer;
 import :ns;
 import :nodes;
 import :writer;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::xml
 {

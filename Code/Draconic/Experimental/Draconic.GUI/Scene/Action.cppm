@@ -3,21 +3,21 @@
 // Action + ActionInterpolation: the animation/tween base. Ported from eepp's Scene::Action
 // (include/eepp/scene/action.hpp) - abstract lifecycle (Start/Stop/Update/IsDone) driven by
 // the ActionManager, targeting a Node, with a tag/id and an OnDone callback. eepp Time ->
-// core::Duration. Object-derived so actions are RefPtr-owned by the manager and Cast<T>-able.
+// foundation::Duration. Object-derived so actions are RefPtr-owned by the manager and Cast<T>-able.
 //
 // The base only stores the target as a Node* (forward-declared) and never dereferences it;
 // concrete actions that touch the node live in :actions (which imports the full Node).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:action;
 
-import draconic.core; // Object, Function, Duration, Max, Min
+import draconic.foundation; // Object, Function, Duration, Max, Min
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -35,14 +35,14 @@ export namespace draconic::gui
     {
         DRACONIC_OBJECT(Action, Object)
     public:
-        using Callback = core::Function<void(Action&)>;
+        using Callback = foundation::Function<void(Action&)>;
 
         virtual void Start() = 0;
         virtual void Stop() = 0;
-        virtual void Update(core::Duration elapsed) = 0;
+        virtual void Update(foundation::Duration elapsed) = 0;
         [[nodiscard]] virtual bool IsDone() = 0;
         [[nodiscard]] virtual f32 GetCurrentProgress() = 0;
-        [[nodiscard]] virtual core::Duration GetTotalTime() = 0;
+        [[nodiscard]] virtual foundation::Duration GetTotalTime() = 0;
 
         void SetTarget(Node* target)
         {
@@ -56,7 +56,7 @@ export namespace draconic::gui
         void SetTag(u64 tag) noexcept { m_tag = tag; }
         [[nodiscard]] u64 GetTag() const noexcept { return m_tag; }
 
-        void SetOnDone(Callback callback) { m_onDone = core::Move(callback); }
+        void SetOnDone(Callback callback) { m_onDone = foundation::Move(callback); }
 
     protected:
         virtual void OnTargetChange() {}
@@ -80,18 +80,18 @@ export namespace draconic::gui
     {
         DRACONIC_OBJECT(ActionInterpolation, Action)
     public:
-        explicit ActionInterpolation(core::Duration duration) noexcept : m_duration(duration) {}
+        explicit ActionInterpolation(foundation::Duration duration) noexcept : m_duration(duration) {}
 
         void Start() override
         {
-            m_elapsed = core::Duration{};
+            m_elapsed = foundation::Duration{};
             m_started = true;
             m_done = false;
             OnStep(0.0f);
         }
         void Stop() override { m_done = true; }
 
-        void Update(core::Duration elapsed) override
+        void Update(foundation::Duration elapsed) override
         {
             if (m_done)
                 return;
@@ -101,7 +101,7 @@ export namespace draconic::gui
 
             const f32 total = m_duration.AsSecondsF();
             f32 t = (total > 0.0f) ? (m_elapsed.AsSecondsF() / total) : 1.0f;
-            t = core::Max(0.0f, core::Min(1.0f, t));
+            t = foundation::Max(0.0f, foundation::Min(1.0f, t));
             m_progress = t;
             OnStep(t);
 
@@ -114,14 +114,14 @@ export namespace draconic::gui
 
         [[nodiscard]] bool IsDone() override { return m_done; }
         [[nodiscard]] f32 GetCurrentProgress() override { return m_progress; }
-        [[nodiscard]] core::Duration GetTotalTime() override { return m_duration; }
+        [[nodiscard]] foundation::Duration GetTotalTime() override { return m_duration; }
 
     protected:
         // Apply progress t in [0,1] to the target.
         virtual void OnStep(f32 t) = 0;
 
-        core::Duration m_duration;
-        core::Duration m_elapsed;
+        foundation::Duration m_duration;
+        foundation::Duration m_elapsed;
         f32 m_progress = 0.0f;
         bool m_started = false;
         bool m_done = false;

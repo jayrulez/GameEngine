@@ -3,17 +3,17 @@
 // get/set, and that the enum property types resolve named values (the generic asset page's
 // enum-by-name dropdowns + the script backends read exactly this).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 #include <initializer_list>
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.editor;
 import draconic.image;
 import draconic.texture;
 import draconic.texture.editor;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace image = draconic::image;
 
 namespace

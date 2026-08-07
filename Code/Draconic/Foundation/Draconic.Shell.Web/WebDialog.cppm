@@ -5,43 +5,43 @@
 // shell's own service so that wiring has a home.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.shell.web:dialogs;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.shell;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::shell
 {
     class WebDialogService final : public IDialogService
     {
     public:
-        void ShowOpenFile(DialogResultCallback callback, core::Span<const FileFilter> = {},
-                          core::StringView = {}, bool = false, core::u32 = 0) override
+        void ShowOpenFile(DialogResultCallback callback, foundation::Span<const FileFilter> = {},
+                          foundation::StringView = {}, bool = false, foundation::u32 = 0) override
         {
             Cancel(callback);
         }
-        void ShowSaveFile(DialogResultCallback callback, core::Span<const FileFilter> = {},
-                          core::StringView = {}, core::u32 = 0) override
+        void ShowSaveFile(DialogResultCallback callback, foundation::Span<const FileFilter> = {},
+                          foundation::StringView = {}, foundation::u32 = 0) override
         {
             Cancel(callback);
         }
-        void ShowOpenFolder(DialogResultCallback callback, core::StringView = {}, bool = false,
-                            core::u32 = 0) override
+        void ShowOpenFolder(DialogResultCallback callback, foundation::StringView = {}, bool = false,
+                            foundation::u32 = 0) override
         {
             Cancel(callback);
         }
-        void OpenPath(core::StringView) override {} // no OS file manager in a browser
+        void OpenPath(foundation::StringView) override {} // no OS file manager in a browser
 
     private:
         static void Cancel(DialogResultCallback& callback)
         {
             if (callback)
             {
-                callback(core::Span<const core::String>{});
+                callback(foundation::Span<const foundation::String>{});
             }
         }
     };

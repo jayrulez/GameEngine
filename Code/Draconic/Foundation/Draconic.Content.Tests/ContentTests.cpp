@@ -1,14 +1,14 @@
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.xml.serialization;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::vfs;
 using namespace draconic::content;
 
@@ -23,8 +23,8 @@ namespace
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "shininess", shininess);
-            draconic::core::Serialize(ar, "shader", shader);
+            draconic::foundation::Serialize(ar, "shininess", shininess);
+            draconic::foundation::Serialize(ar, "shader", shader);
         }
     };
 

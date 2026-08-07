@@ -10,19 +10,19 @@
 // at their own sizes). Wrapping (flex-wrap), flex-shrink, and per-child align-self are follow-ups.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:flex_layout;
 
-import draconic.core; // Float2, HashMap, Array, Max, Min
+import draconic.foundation; // Float2, HashMap, Array, Max, Min
 import :rect;
 import :node;
 import :ui_widget;
 import :css_values; // ParseLength (markup)
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -52,7 +52,7 @@ export namespace draconic::gui
     {
         DRACONIC_OBJECT(FlexLayout, UIWidget)
     public:
-        FlexLayout() { SetTag(core::StringView(u8"flexlayout")); }
+        FlexLayout() { SetTag(foundation::StringView(u8"flexlayout")); }
 
         void SetDirection(FlexDirection direction)
         {
@@ -75,7 +75,7 @@ export namespace draconic::gui
         [[nodiscard]] AlignItems GetAlignItems() const noexcept { return m_align; }
         void SetGap(f32 gap)
         {
-            m_gap = core::Max(0.0f, gap);
+            m_gap = foundation::Max(0.0f, gap);
             PerformLayout();
         }
         [[nodiscard]] f32 GetGap() const noexcept { return m_gap; }
@@ -98,26 +98,26 @@ export namespace draconic::gui
             return g != nullptr ? *g : 0.0f;
         }
 
-        bool SetMarkupAttribute(core::StringView name, core::StringView value) override
+        bool SetMarkupAttribute(foundation::StringView name, foundation::StringView value) override
         {
-            if (name == core::StringView(u8"direction") ||
-                name == core::StringView(u8"flex-direction"))
+            if (name == foundation::StringView(u8"direction") ||
+                name == foundation::StringView(u8"flex-direction"))
             {
-                SetDirection(value == core::StringView(u8"column") ? FlexDirection::Column
+                SetDirection(value == foundation::StringView(u8"column") ? FlexDirection::Column
                                                                    : FlexDirection::Row);
                 return true;
             }
-            if (name == core::StringView(u8"justify-content"))
+            if (name == foundation::StringView(u8"justify-content"))
             {
                 SetJustifyContent(ParseJustify(value));
                 return true;
             }
-            if (name == core::StringView(u8"align-items"))
+            if (name == foundation::StringView(u8"align-items"))
             {
                 SetAlignItems(ParseAlign(value));
                 return true;
             }
-            if (name == core::StringView(u8"gap"))
+            if (name == foundation::StringView(u8"gap"))
             {
                 if (Optional<f32> g = ParseLength(value); g.HasValue())
                     SetGap(g.Value());
@@ -167,7 +167,7 @@ export namespace draconic::gui
             f32 usedMain = gapTotal;
             for (f32 m : mainSizes)
                 usedMain += m;
-            const f32 remaining = core::Max(0.0f, mainSize - usedMain);
+            const f32 remaining = foundation::Max(0.0f, mainSize - usedMain);
 
             f32 mainStart = row ? content.x : content.y;
             f32 between = m_gap;
@@ -185,13 +185,13 @@ export namespace draconic::gui
 
                 if (row)
                 {
-                    child->SetPosition(core::Float2{mainPos, crossPos});
-                    child->SetSize(core::Float2{mainLen, crossLen});
+                    child->SetPosition(foundation::Float2{mainPos, crossPos});
+                    child->SetSize(foundation::Float2{mainLen, crossLen});
                 }
                 else
                 {
-                    child->SetPosition(core::Float2{crossPos, mainPos});
-                    child->SetSize(core::Float2{crossLen, mainLen});
+                    child->SetPosition(foundation::Float2{crossPos, mainPos});
+                    child->SetSize(foundation::Float2{crossLen, mainLen});
                 }
                 mainPos += mainLen + between;
             }
@@ -225,9 +225,9 @@ export namespace draconic::gui
             case AlignItems::Start:
                 return 0.0f;
             case AlignItems::End:
-                return core::Max(0.0f, crossSize - childCross);
+                return foundation::Max(0.0f, crossSize - childCross);
             case AlignItems::Center:
-                return core::Max(0.0f, (crossSize - childCross) * 0.5f);
+                return foundation::Max(0.0f, (crossSize - childCross) * 0.5f);
             case AlignItems::Stretch:
                 return 0.0f;
             }
@@ -272,27 +272,27 @@ export namespace draconic::gui
             }
         }
 
-        [[nodiscard]] static JustifyContent ParseJustify(core::StringView v)
+        [[nodiscard]] static JustifyContent ParseJustify(foundation::StringView v)
         {
-            if (v == core::StringView(u8"end") || v == core::StringView(u8"flex-end"))
+            if (v == foundation::StringView(u8"end") || v == foundation::StringView(u8"flex-end"))
                 return JustifyContent::End;
-            if (v == core::StringView(u8"center"))
+            if (v == foundation::StringView(u8"center"))
                 return JustifyContent::Center;
-            if (v == core::StringView(u8"space-between"))
+            if (v == foundation::StringView(u8"space-between"))
                 return JustifyContent::SpaceBetween;
-            if (v == core::StringView(u8"space-around"))
+            if (v == foundation::StringView(u8"space-around"))
                 return JustifyContent::SpaceAround;
-            if (v == core::StringView(u8"space-evenly"))
+            if (v == foundation::StringView(u8"space-evenly"))
                 return JustifyContent::SpaceEvenly;
             return JustifyContent::Start;
         }
-        [[nodiscard]] static AlignItems ParseAlign(core::StringView v)
+        [[nodiscard]] static AlignItems ParseAlign(foundation::StringView v)
         {
-            if (v == core::StringView(u8"end") || v == core::StringView(u8"flex-end"))
+            if (v == foundation::StringView(u8"end") || v == foundation::StringView(u8"flex-end"))
                 return AlignItems::End;
-            if (v == core::StringView(u8"center"))
+            if (v == foundation::StringView(u8"center"))
                 return AlignItems::Center;
-            if (v == core::StringView(u8"stretch"))
+            if (v == foundation::StringView(u8"stretch"))
                 return AlignItems::Stretch;
             return AlignItems::Start;
         }

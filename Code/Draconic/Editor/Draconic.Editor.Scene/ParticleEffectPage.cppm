@@ -23,11 +23,11 @@
 // speed slider, and pause.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.editor.scene:particle_effect_page;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.rhi;
 import draconic.graphics;
@@ -50,7 +50,7 @@ import draconic.editor.core;
 import draconic.editor.app;
 import :camera;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {

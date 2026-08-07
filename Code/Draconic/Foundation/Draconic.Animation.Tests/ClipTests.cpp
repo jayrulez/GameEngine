@@ -1,12 +1,12 @@
 // AnimationEvent + AnimationClip event storage + FireEvents. Ported from the applicable parts of
 // Sedulous.Animation.Tests.AnimationEventTests (Player/ClipStateNode/BlendTree parts land later).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.animation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::animation;
 
 TEST_CASE("event: constructor sets time and name")

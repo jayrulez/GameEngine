@@ -8,12 +8,12 @@
 // testable headless.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 export module draconic.rendergraph:graph;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :types;
 import :descriptors;
@@ -26,7 +26,7 @@ import :barrier_solver;
 import :profiler;
 import :transient_pool;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rendergraph
 {
@@ -232,7 +232,7 @@ export namespace draconic::rendergraph
 
                 // Per-pass CPU cost (barriers + record/execute, incl. any bundle build/wait): the graph's
                 // execute is often CPU-bound while the GPU is idle, so this shows which pass RECORDING is slow.
-                const u64 cpuStart = prof ? core::GetTicks() : 0;
+                const u64 cpuStart = prof ? foundation::GetTicks() : 0;
                 encoder->BeginDebugLabel(pass->name.AsView());
                 if (prof)
                 {
@@ -262,7 +262,7 @@ export namespace draconic::rendergraph
                 encoder->EndDebugLabel();
                 if (prof)
                 {
-                    m_passCpu.PushBack(PassCpu{pass->name.AsView(), core::GetTicks() - cpuStart});
+                    m_passCpu.PushBack(PassCpu{pass->name.AsView(), foundation::GetTicks() - cpuStart});
                 }
             }
 

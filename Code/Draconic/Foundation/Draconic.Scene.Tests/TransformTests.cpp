@@ -3,12 +3,12 @@
 // previous-matrix snapshotting, recursive destroy, and the reparent cycle guard.
 // Encodes the transform-hierarchy behaviors pinned from the Sedulous test suite.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.scene;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::scene;
 
 namespace

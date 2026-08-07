@@ -9,12 +9,12 @@
 // EnsureCamera frames the origin when the scene ships none, like the player).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 export module draconic.editor.scene:game_page;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.vfs;
 import draconic.resource;
@@ -47,7 +47,7 @@ import draconic.engine.gameinstance; // GameInstance - this tab drives its OWN r
 import draconic.editor.core;
 import draconic.editor.app;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {

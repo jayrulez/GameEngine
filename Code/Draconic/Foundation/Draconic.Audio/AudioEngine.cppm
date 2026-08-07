@@ -21,16 +21,16 @@
 // machines without audio hardware run the full state machine deterministically.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.audio:engine;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import :clip;
 import :reverb; // AudioReverbParams (the scene-reverb seam)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::audio
 {

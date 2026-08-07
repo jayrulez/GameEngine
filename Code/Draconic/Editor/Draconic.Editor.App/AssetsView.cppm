@@ -22,13 +22,13 @@
 // the cook service's revision (badges after a cook), and the filter text.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 export module draconic.editor.app:assets_view;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.fonts;
 import draconic.ui;
@@ -37,7 +37,7 @@ import draconic.editor.core;
 import :editor_icons;
 import :import_dialog;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor::app
 {

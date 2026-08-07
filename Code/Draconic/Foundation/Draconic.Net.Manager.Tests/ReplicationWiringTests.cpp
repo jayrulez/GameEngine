@@ -1,16 +1,16 @@
 // draconic.net.manager - StateReplication driven end-to-end through NetworkManager over the sim
 // transport: a server-assigned networked entity's replicated state reaches a connected client's scene.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.net;
 import draconic.net.replication;
 import draconic.net.manager;
 import draconic.scene;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace net = draconic::net;
 namespace scene = draconic::scene;
 
@@ -24,8 +24,8 @@ namespace
 
     inline void Serialize(ISerializer& ar, RepMover& m)
     {
-        draconic::core::Serialize(ar, "position", m.position);
-        draconic::core::Serialize(ar, "health", m.health);
+        draconic::foundation::Serialize(ar, "position", m.position);
+        draconic::foundation::Serialize(ar, "health", m.health);
     }
 
     class RepMoverManager final : public scene::SerializableComponentManager<RepMover>

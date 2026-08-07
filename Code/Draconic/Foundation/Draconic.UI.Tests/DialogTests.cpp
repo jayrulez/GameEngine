@@ -2,19 +2,19 @@
 // `scope Dialog` / `new Dialog` -> RefPtr (RAII, ownsView:false so the test controls lifetime); Event
 // delegate captures -> lambda captures; ctx.MutationQueue.Drain() -> ctx.MutationQueueRef().Drain().
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 #include "TestHelpers.h"
 
 using namespace draconic::ui;
 using namespace draconic::ui::tests;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
-static core::RefPtr<Dialog> MakeDialog(StringView title)
+static foundation::RefPtr<Dialog> MakeDialog(StringView title)
 {
-    return core::MakeRef<Dialog>(core::DefaultAllocator(), title);
+    return foundation::MakeRef<Dialog>(foundation::DefaultAllocator(), title);
 }
 
 TEST_CASE("dialog: Dialog_TitleProperty")
@@ -47,7 +47,7 @@ TEST_CASE("dialog: Confirm_Factory")
 TEST_CASE("dialog: Close_FiresOnClosed")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
 
     auto dlg = MakeDialog(u8"Test");
@@ -77,7 +77,7 @@ TEST_CASE("dialog: Close_FiresOnClosed")
 TEST_CASE("dialog: Show_CreatesModalPopup")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
 
     auto dlg = MakeDialog(u8"Modal Test");
@@ -96,7 +96,7 @@ TEST_CASE("dialog: Show_CreatesModalPopup")
 TEST_CASE("dialog: NoneButton_IsCallerManaged")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
 
     auto dlg = MakeDialog(u8"Test");

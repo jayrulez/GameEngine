@@ -3,7 +3,7 @@
 /// Works with draconic::image::Image directly.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include <cstdint>
 #include <cstring>
@@ -15,10 +15,10 @@ module;
 
 export module draconic.image.io;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.image;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::image::io
 {

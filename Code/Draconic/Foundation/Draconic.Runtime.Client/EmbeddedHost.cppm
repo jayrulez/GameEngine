@@ -12,18 +12,18 @@
 // the exit handler (deferred to frame end by the embedder, never torn down mid-callback).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 export module draconic.runtime.client:embedded_host;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.shell;
 import draconic.graphics;
 import draconic.runtime;
 import :app;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 using namespace draconic::shell;
 using namespace draconic::graphics;
 
@@ -56,7 +56,7 @@ export namespace draconic::runtime
 
         /// The embedder decides what "exit" means (stop the play session, deferred to
         /// frame end). Without a handler the request is logged and dropped.
-        void SetExitHandler(core::Function<void(int)> handler) { m_onExit = core::Move(handler); }
+        void SetExitHandler(foundation::Function<void(int)> handler) { m_onExit = foundation::Move(handler); }
         void RequestExit(int code = 0) override
         {
             if (m_onExit)
@@ -71,6 +71,6 @@ export namespace draconic::runtime
     private:
         IApplicationHost* m_outer;
         Context* m_runtimeContext;
-        core::Function<void(int)> m_onExit;
+        foundation::Function<void(int)> m_onExit;
     };
 }

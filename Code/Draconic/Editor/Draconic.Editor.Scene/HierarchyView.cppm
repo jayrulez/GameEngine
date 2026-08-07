@@ -15,12 +15,12 @@
 //     pane and swallow every right-click) and a filter box (matches keep their ancestors).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.editor.scene:hierarchy;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.fonts;
 import draconic.scene;
 import draconic.ui;
@@ -28,7 +28,7 @@ import draconic.ui.toolkit;
 import draconic.editor.core;
 import :edit;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {

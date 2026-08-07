@@ -2,7 +2,7 @@
 /// Ported from Sedulous.Models/ModelBone.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include <cmath>
 #include <string>
@@ -10,9 +10,9 @@ module;
 
 export module draconic.model:model_bone;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::model
 {

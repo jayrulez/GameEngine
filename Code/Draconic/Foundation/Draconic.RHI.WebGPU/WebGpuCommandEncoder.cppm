@@ -10,12 +10,12 @@
 /// render pass (load the MSAA attachment, discard it, resolve out).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include "WebGpuIncludes.h"
 
 export module draconic.rhi.webgpu:command_encoder;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :api;
 import :blit_helper;
@@ -29,7 +29,7 @@ import :render_pass_encoder;
 import :compute_pass_encoder;
 import :render_bundle_encoder;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::webgpu
 {

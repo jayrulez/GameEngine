@@ -3,27 +3,27 @@
 // controls (Label/ToggleButton/Slider/...) land in later batches. Text rendering is deferred in the
 // controls, but every tested behavior (state/events/toggle/measure fallback) is exercised here.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 #include "TestHelpers.h"
 
 using namespace draconic::ui;
 using namespace draconic::ui::tests;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
-static core::RefPtr<RootView> MakeRoot()
+static foundation::RefPtr<RootView> MakeRoot()
 {
-    return core::MakeRef<RootView>(core::DefaultAllocator());
+    return foundation::MakeRef<RootView>(foundation::DefaultAllocator());
 }
-static core::RefPtr<Button> MakeButton(StringView t)
+static foundation::RefPtr<Button> MakeButton(StringView t)
 {
-    return core::MakeRef<Button>(core::DefaultAllocator(), t);
+    return foundation::MakeRef<Button>(foundation::DefaultAllocator(), t);
 }
-static core::RefPtr<CheckBox> MakeCheckBox(StringView t)
+static foundation::RefPtr<CheckBox> MakeCheckBox(StringView t)
 {
-    return core::MakeRef<CheckBox>(core::DefaultAllocator(), t);
+    return foundation::MakeRef<CheckBox>(foundation::DefaultAllocator(), t);
 }
 
 // === Button ===
@@ -114,7 +114,7 @@ TEST_CASE("control: Button_OnActivate_FiresClick")
 
 TEST_CASE("control: IconButton_MeasuresToFixedSize")
 {
-    auto btn = core::MakeRef<IconButton>(core::DefaultAllocator(), nullptr, 24.0f);
+    auto btn = foundation::MakeRef<IconButton>(foundation::DefaultAllocator(), nullptr, 24.0f);
     btn->Measure(BoxConstraints(0, 100, 0, 100));
     CHECK(btn->MeasuredSize.x == doctest::Approx(24.0f));
     CHECK(btn->MeasuredSize.y == doctest::Approx(24.0f));
@@ -125,7 +125,7 @@ TEST_CASE("control: IconButton_Clicks")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get(), 400, 300);
-    auto btn = core::MakeRef<IconButton>(core::DefaultAllocator(), nullptr, 20.0f);
+    auto btn = foundation::MakeRef<IconButton>(foundation::DefaultAllocator(), nullptr, 20.0f);
     root->AddView(btn.Get());
     bool clicked = false;
     btn->OnClick.Add([&clicked](ButtonBase*) { clicked = true; });
@@ -138,7 +138,7 @@ TEST_CASE("control: IconButton_PressedTransitions")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get(), 400, 300);
-    auto btn = core::MakeRef<IconButton>(core::DefaultAllocator(), nullptr, 20.0f);
+    auto btn = foundation::MakeRef<IconButton>(foundation::DefaultAllocator(), nullptr, 20.0f);
     root->AddView(btn.Get());
     MouseEventArgs down;
     down.Set(5, 5, MouseButton::Left);
@@ -152,7 +152,7 @@ TEST_CASE("control: IconButton_PressedTransitions")
 
 TEST_CASE("control: IconButton_IsFocusable")
 {
-    auto btn = core::MakeRef<IconButton>(core::DefaultAllocator(), nullptr);
+    auto btn = foundation::MakeRef<IconButton>(foundation::DefaultAllocator(), nullptr);
     CHECK(btn->IsFocusable);
 }
 
@@ -163,7 +163,7 @@ TEST_CASE("control: RepeatButton_ClicksOnce")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get(), 400, 300);
-    auto btn = core::MakeRef<RepeatButton>(core::DefaultAllocator(), StringView(u8"Hold"));
+    auto btn = foundation::MakeRef<RepeatButton>(foundation::DefaultAllocator(), StringView(u8"Hold"));
     root->AddView(btn.Get());
     int clickCount = 0;
     btn->OnClick.Add([&clickCount](ButtonBase*) { ++clickCount; });
@@ -178,7 +178,7 @@ TEST_CASE("control: RepeatButton_RepeatsOnHold")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get(), 400, 300);
-    auto btn = core::MakeRef<RepeatButton>(core::DefaultAllocator(), StringView(u8"Hold"));
+    auto btn = foundation::MakeRef<RepeatButton>(foundation::DefaultAllocator(), StringView(u8"Hold"));
     btn->RepeatDelay = 0.1f;
     btn->RepeatInterval = 0.05f;
     root->AddView(btn.Get());
@@ -203,7 +203,7 @@ TEST_CASE("control: RepeatButton_StopsOnRelease")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get(), 400, 300);
-    auto btn = core::MakeRef<RepeatButton>(core::DefaultAllocator(), StringView(u8"Hold"));
+    auto btn = foundation::MakeRef<RepeatButton>(foundation::DefaultAllocator(), StringView(u8"Hold"));
     btn->RepeatDelay = 0.05f;
     btn->RepeatInterval = 0.02f;
     root->AddView(btn.Get());
@@ -264,7 +264,7 @@ TEST_CASE("control: CheckBox_MouseToggle")
 
 TEST_CASE("control: CheckBox_NoChangeNotifyOnSameValue")
 {
-    auto cb = core::MakeRef<CheckBox>(core::DefaultAllocator(), StringView(u8"Test"), true);
+    auto cb = foundation::MakeRef<CheckBox>(foundation::DefaultAllocator(), StringView(u8"Test"), true);
     int fireCount = 0;
     cb->OnCheckedChanged.Add([&fireCount](CheckBox*, bool) { ++fireCount; });
     cb->IsChecked.SetValue(true); // same value
@@ -285,13 +285,13 @@ TEST_CASE("control: CheckBox_OnActivate_Toggles")
 
 TEST_CASE("control: Label_SetText")
 {
-    auto label = core::MakeRef<Label>(core::DefaultAllocator(), StringView(u8"Hello"));
+    auto label = foundation::MakeRef<Label>(foundation::DefaultAllocator(), StringView(u8"Hello"));
     CHECK(label->Text.Value() == StringView(u8"Hello"));
 }
 
 TEST_CASE("control: Label_SetTextChaining")
 {
-    auto label = core::MakeRef<Label>(core::DefaultAllocator());
+    auto label = foundation::MakeRef<Label>(foundation::DefaultAllocator());
     label->SetText(u8"World");
     CHECK(label->Text.Value() == StringView(u8"World"));
 }
@@ -301,7 +301,7 @@ TEST_CASE("control: Label_MeasuresNonZero")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get(), 400, 300);
-    auto label = core::MakeRef<Label>(core::DefaultAllocator(), StringView(u8"Hello"));
+    auto label = foundation::MakeRef<Label>(foundation::DefaultAllocator(), StringView(u8"Hello"));
     root->AddView(label.Get());
     LayoutPass(ctx, root.Get());
     CHECK(label->MeasuredSize.y > 0);
@@ -311,7 +311,7 @@ TEST_CASE("control: Label_MeasuresNonZero")
 
 TEST_CASE("control: Spacer_MeasuresToDesiredSize")
 {
-    auto spacer = core::MakeRef<Spacer>(core::DefaultAllocator(), 20.0f, 10.0f);
+    auto spacer = foundation::MakeRef<Spacer>(foundation::DefaultAllocator(), 20.0f, 10.0f);
     spacer->Measure(BoxConstraints::Expand());
     CHECK(spacer->MeasuredSize.x == 20);
     CHECK(spacer->MeasuredSize.y == 10);
@@ -322,7 +322,7 @@ TEST_CASE("control: Spacer_MeasuresToDesiredSize")
 TEST_CASE("control: ColorView_StoresColor")
 {
     auto cv =
-        core::MakeRef<ColorView>(core::DefaultAllocator(), core::Color{1.0f, 0.0f, 0.0f, 1.0f});
+        foundation::MakeRef<ColorView>(foundation::DefaultAllocator(), foundation::Color{1.0f, 0.0f, 0.0f, 1.0f});
     CHECK(cv->Color.Value().r == 1.0f);
     CHECK(cv->Color.Value().g == 0.0f);
 }
@@ -331,7 +331,7 @@ TEST_CASE("control: ColorView_StoresColor")
 
 TEST_CASE("control: Separator_HorizontalMeasure")
 {
-    auto sep = core::MakeRef<Separator>(core::DefaultAllocator(), Orientation::Horizontal);
+    auto sep = foundation::MakeRef<Separator>(foundation::DefaultAllocator(), Orientation::Horizontal);
     sep->Measure(BoxConstraints::Loose(400, 300));
     CHECK(sep->MeasuredSize.y == 1);
     CHECK(sep->MeasuredSize.x == 400);
@@ -339,7 +339,7 @@ TEST_CASE("control: Separator_HorizontalMeasure")
 
 TEST_CASE("control: Separator_VerticalMeasure")
 {
-    auto sep = core::MakeRef<Separator>(core::DefaultAllocator(), Orientation::Vertical);
+    auto sep = foundation::MakeRef<Separator>(foundation::DefaultAllocator(), Orientation::Vertical);
     sep->Measure(BoxConstraints::Loose(400, 300));
     CHECK(sep->MeasuredSize.x == 1);
     CHECK(sep->MeasuredSize.y == 300);
@@ -349,7 +349,7 @@ TEST_CASE("control: Separator_VerticalMeasure")
 
 TEST_CASE("control: ProgressBar_ValueClamped")
 {
-    auto bar = core::MakeRef<ProgressBar>(core::DefaultAllocator());
+    auto bar = foundation::MakeRef<ProgressBar>(foundation::DefaultAllocator());
     bar->Value.SetValue(0.5f);
     CHECK(bar->Value.Value() == 0.5f);
     bar->Value.SetValue(-1.0f);
@@ -365,9 +365,9 @@ TEST_CASE("control: Panel_ChildFillsContent")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get(), 400, 300);
-    auto panel = core::MakeRef<Panel>(core::DefaultAllocator());
+    auto panel = foundation::MakeRef<Panel>(foundation::DefaultAllocator());
     panel->Padding = Thickness{10.0f};
-    auto child = core::MakeRef<TestView>(core::DefaultAllocator(), 50.0f, 30.0f);
+    auto child = foundation::MakeRef<TestView>(foundation::DefaultAllocator(), 50.0f, 30.0f);
     panel->AddView(child.Get());
     root->AddView(panel.Get());
     LayoutPass(ctx, root.Get());
@@ -379,7 +379,7 @@ TEST_CASE("control: Panel_ChildFillsContent")
 
 TEST_CASE("control: ImageView_NullImage_ZeroSize")
 {
-    auto iv = core::MakeRef<ImageView>(core::DefaultAllocator());
+    auto iv = foundation::MakeRef<ImageView>(foundation::DefaultAllocator());
     iv->Measure(BoxConstraints::Expand());
     CHECK(iv->MeasuredSize.x == 0);
     CHECK(iv->MeasuredSize.y == 0);
@@ -392,7 +392,7 @@ TEST_CASE("control: ToggleButton_Toggle")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get(), 400, 300);
-    auto toggle = core::MakeRef<ToggleButton>(core::DefaultAllocator(), StringView(u8"Toggle"));
+    auto toggle = foundation::MakeRef<ToggleButton>(foundation::DefaultAllocator(), StringView(u8"Toggle"));
     root->AddView(toggle.Get());
     CHECK(!toggle->IsChecked.Value());
     bool fired = false;
@@ -411,7 +411,7 @@ TEST_CASE("control: RadioButton_CannotUncheckByClick")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get(), 400, 300);
-    auto radio = core::MakeRef<RadioButton>(core::DefaultAllocator(), StringView(u8"Option"));
+    auto radio = foundation::MakeRef<RadioButton>(foundation::DefaultAllocator(), StringView(u8"Option"));
     radio->IsChecked.SetValue(true);
     root->AddView(radio.Get());
     MouseEventArgs args;
@@ -425,10 +425,10 @@ TEST_CASE("control: RadioGroup_MutualExclusion")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get(), 400, 300);
-    auto group = core::MakeRef<RadioGroup>(core::DefaultAllocator());
-    auto a = core::MakeRef<RadioButton>(core::DefaultAllocator(), StringView(u8"A"));
-    auto b = core::MakeRef<RadioButton>(core::DefaultAllocator(), StringView(u8"B"));
-    auto c = core::MakeRef<RadioButton>(core::DefaultAllocator(), StringView(u8"C"));
+    auto group = foundation::MakeRef<RadioGroup>(foundation::DefaultAllocator());
+    auto a = foundation::MakeRef<RadioButton>(foundation::DefaultAllocator(), StringView(u8"A"));
+    auto b = foundation::MakeRef<RadioButton>(foundation::DefaultAllocator(), StringView(u8"B"));
+    auto c = foundation::MakeRef<RadioButton>(foundation::DefaultAllocator(), StringView(u8"C"));
     group->AddRadioButton(a.Get());
     group->AddRadioButton(b.Get());
     group->AddRadioButton(c.Get());
@@ -449,9 +449,9 @@ TEST_CASE("control: RadioGroup_SelectionChangedEvent")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get(), 400, 300);
-    auto group = core::MakeRef<RadioGroup>(core::DefaultAllocator());
-    auto a = core::MakeRef<RadioButton>(core::DefaultAllocator(), StringView(u8"A"));
-    auto b = core::MakeRef<RadioButton>(core::DefaultAllocator(), StringView(u8"B"));
+    auto group = foundation::MakeRef<RadioGroup>(foundation::DefaultAllocator());
+    auto a = foundation::MakeRef<RadioButton>(foundation::DefaultAllocator(), StringView(u8"A"));
+    auto b = foundation::MakeRef<RadioButton>(foundation::DefaultAllocator(), StringView(u8"B"));
     group->AddRadioButton(a.Get());
     group->AddRadioButton(b.Get());
     root->AddView(group.Get());
@@ -472,7 +472,7 @@ TEST_CASE("control: ToggleSwitch_Toggle")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get(), 400, 300);
-    auto sw = core::MakeRef<ToggleSwitch>(core::DefaultAllocator(), StringView(u8"VSync"));
+    auto sw = foundation::MakeRef<ToggleSwitch>(foundation::DefaultAllocator(), StringView(u8"VSync"));
     root->AddView(sw.Get());
     CHECK(!sw->IsChecked.Value());
     bool toggled = false;
@@ -486,7 +486,7 @@ TEST_CASE("control: ToggleSwitch_Toggle")
 
 TEST_CASE("control: ToggleSwitch_OnActivate_Toggles")
 {
-    auto sw = core::MakeRef<ToggleSwitch>(core::DefaultAllocator(), StringView(u8"Test"));
+    auto sw = foundation::MakeRef<ToggleSwitch>(foundation::DefaultAllocator(), StringView(u8"Test"));
     CHECK(!sw->IsChecked.Value());
     sw->OnActivate();
     CHECK(sw->IsChecked.Value());
@@ -494,7 +494,7 @@ TEST_CASE("control: ToggleSwitch_OnActivate_Toggles")
 
 TEST_CASE("control: RadioButton_OnActivate_Selects")
 {
-    auto rb = core::MakeRef<RadioButton>(core::DefaultAllocator(), StringView(u8"Test"));
+    auto rb = foundation::MakeRef<RadioButton>(foundation::DefaultAllocator(), StringView(u8"Test"));
     CHECK(!rb->IsChecked.Value());
     rb->OnActivate();
     CHECK(rb->IsChecked.Value());
@@ -504,7 +504,7 @@ TEST_CASE("control: RadioButton_OnActivate_Selects")
 
 TEST_CASE("control: Slider_ValueClamped")
 {
-    auto slider = core::MakeRef<Slider>(core::DefaultAllocator(), 0.0f, 100.0f, 50.0f);
+    auto slider = foundation::MakeRef<Slider>(foundation::DefaultAllocator(), 0.0f, 100.0f, 50.0f);
     CHECK(slider->Value.Value() == 50);
     slider->Value.SetValue(-10.0f);
     CHECK(slider->Value.Value() == 0);
@@ -514,7 +514,7 @@ TEST_CASE("control: Slider_ValueClamped")
 
 TEST_CASE("control: Slider_Step")
 {
-    auto slider = core::MakeRef<Slider>(core::DefaultAllocator(), 0.0f, 100.0f);
+    auto slider = foundation::MakeRef<Slider>(foundation::DefaultAllocator(), 0.0f, 100.0f);
     slider->Step.SetValue(10.0f);
     slider->Value.SetValue(33.0f);
     CHECK(slider->Value.Value() == doctest::Approx(30));
@@ -525,7 +525,7 @@ TEST_CASE("control: Slider_ValueChangedEvent")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get(), 400, 300);
-    auto slider = core::MakeRef<Slider>(core::DefaultAllocator(), 0.0f, 100.0f);
+    auto slider = foundation::MakeRef<Slider>(foundation::DefaultAllocator(), 0.0f, 100.0f);
     root->AddView(slider.Get());
     f32 lastVal = -1;
     slider->OnValueChanged.Add([&lastVal](Slider*, f32 v) { lastVal = v; });
@@ -535,7 +535,7 @@ TEST_CASE("control: Slider_ValueChangedEvent")
 
 TEST_CASE("control: Slider_KeyboardControl")
 {
-    auto slider = core::MakeRef<Slider>(core::DefaultAllocator(), 0.0f, 100.0f, 50.0f);
+    auto slider = foundation::MakeRef<Slider>(foundation::DefaultAllocator(), 0.0f, 100.0f, 50.0f);
     slider->Step.SetValue(5.0f);
     KeyEventArgs r;
     r.Set(KeyCode::Right, KeyModifiers::None, false);
@@ -559,7 +559,7 @@ TEST_CASE("control: Slider_KeyboardControl")
 
 TEST_CASE("control: Expander_DefaultExpanded")
 {
-    auto expander = core::MakeRef<Expander>(core::DefaultAllocator(), StringView(u8"Header"));
+    auto expander = foundation::MakeRef<Expander>(foundation::DefaultAllocator(), StringView(u8"Header"));
     CHECK(expander->IsExpanded());
 }
 
@@ -568,8 +568,8 @@ TEST_CASE("control: Expander_Toggle")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get(), 400, 300);
-    auto expander = core::MakeRef<Expander>(core::DefaultAllocator(), StringView(u8"Settings"));
-    auto content = core::MakeRef<TestView>(core::DefaultAllocator(), 100.0f, 50.0f);
+    auto expander = foundation::MakeRef<Expander>(foundation::DefaultAllocator(), StringView(u8"Settings"));
+    auto content = foundation::MakeRef<TestView>(foundation::DefaultAllocator(), 100.0f, 50.0f);
     expander->SetContent(content.Get());
     root->AddView(expander.Get());
 
@@ -585,8 +585,8 @@ TEST_CASE("control: Expander_Toggle")
 
 TEST_CASE("control: Expander_CollapsedMeasure")
 {
-    auto expander = core::MakeRef<Expander>(core::DefaultAllocator(), StringView(u8"Header"));
-    auto content = core::MakeRef<TestView>(core::DefaultAllocator(), 100.0f, 50.0f);
+    auto expander = foundation::MakeRef<Expander>(foundation::DefaultAllocator(), StringView(u8"Header"));
+    auto content = foundation::MakeRef<TestView>(foundation::DefaultAllocator(), 100.0f, 50.0f);
     expander->SetContent(content.Get());
 
     expander->Measure(BoxConstraints::Loose(400, 300));
@@ -612,7 +612,7 @@ TEST_CASE("control: WantsArrowKeys_EditTextTrue")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get(), 400, 300);
-    auto edit = core::MakeRef<EditText>(core::DefaultAllocator());
+    auto edit = foundation::MakeRef<EditText>(foundation::DefaultAllocator());
     root->AddView(edit.Get());
     CHECK(edit->WantsArrowKeys);
 }
@@ -622,7 +622,7 @@ TEST_CASE("control: WantsArrowKeys_NumericFieldTrue")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get(), 400, 300);
-    auto nf = core::MakeRef<NumericField>(core::DefaultAllocator());
+    auto nf = foundation::MakeRef<NumericField>(foundation::DefaultAllocator());
     root->AddView(nf.Get());
     CHECK(nf->WantsArrowKeys);
 }

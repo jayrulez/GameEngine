@@ -5,17 +5,17 @@
 // default map through the ResourceManager and hands it to an ActionRuntime.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.input.resource;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.resource;
 import draconic.input;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::input
 {

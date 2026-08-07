@@ -8,16 +8,16 @@
 // the last toolkit partition. Register before building a theme:
 //   ThemeRegistry::RegisterExtension(MakeUnique<ToolkitThemeExtension>(...));
 //
-// Port taxes: Beef `typeof(X)` -> `&X::StaticType()`; byte `Color(r,g,b,a)` -> float core::Color (the
+// Port taxes: Beef `typeof(X)` -> `&X::StaticType()`; byte `Color(r,g,b,a)` -> float foundation::Color (the
 // palette is float, so `p.Background.R < 128` -> `p.Background.r < 0.5f`); `new RoundedRectDrawable(...)`
 // -> `MakeRef<RoundedRectDrawable>(DefaultAllocator(), ...)` handed to sheet.OwnDrawable.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui.toolkit:toolkit_theme_extension;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import draconic.ui;
 
@@ -31,7 +31,7 @@ import :color_picker;
 import :property_grid;
 import :toast_host;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui::toolkit
 {
@@ -50,7 +50,7 @@ export namespace draconic::ui::toolkit
 
             // === DockablePanel ===
             {
-                const core::Color headerBg =
+                const foundation::Color headerBg =
                     isDark ? Palette::Darken(p.Surface, 0.1f) : Palette::Darken(p.Surface, 0.05f);
                 RefPtr<RoundedRectDrawable> headerDrawable =
                     MakeRef<RoundedRectDrawable>(DefaultAllocator(), headerBg, 0.0f);
@@ -72,13 +72,13 @@ export namespace draconic::ui::toolkit
 
             // === DockTabGroup ===
             {
-                const core::Color tabBg =
+                const foundation::Color tabBg =
                     isDark ? Palette::Darken(p.Surface, 0.15f) : Palette::Darken(p.Surface, 0.08f);
-                const core::Color activeTab =
+                const foundation::Color activeTab =
                     isDark ? p.Surface : Palette::Lighten(p.Surface, 0.03f);
-                const core::Color hoverTab =
+                const foundation::Color hoverTab =
                     isDark ? Palette::Lighten(tabBg, 0.05f) : Palette::Darken(p.Surface, 0.04f);
-                const core::Color inactiveText = WithAlpha(p.Text, 153);
+                const foundation::Color inactiveText = WithAlpha(p.Text, 153);
 
                 sheet.ForType(&DockTabGroup::StaticType())
                     .Set(StyleProperty::BorderColor, p.Border)
@@ -117,9 +117,9 @@ export namespace draconic::ui::toolkit
 
             // === DockSplit ===
             {
-                const core::Color divColor =
+                const foundation::Color divColor =
                     isDark ? Palette::Lighten(p.Surface, 0.1f) : Palette::Darken(p.Surface, 0.1f);
-                const core::Color divHover =
+                const foundation::Color divHover =
                     isDark ? Palette::Lighten(p.Surface, 0.25f) : Palette::Darken(p.Surface, 0.2f);
                 sheet.ForType(&DockSplit::StaticType())
                     .Set(StyleProperty::BorderColor, divColor)
@@ -136,7 +136,7 @@ export namespace draconic::ui::toolkit
 
             // === MenuBar ===
             {
-                const core::Color menuBg = isDark ? Palette::Darken(p.Surface, 0.15f) : p.Surface;
+                const foundation::Color menuBg = isDark ? Palette::Darken(p.Surface, 0.15f) : p.Surface;
                 sheet.ForType(&MenuBar::StaticType())
                     .Set(StyleProperty::Background, sheet.OwnColor(menuBg))
                     .Set(StyleProperty::TextColor, p.Text)
@@ -148,9 +148,9 @@ export namespace draconic::ui::toolkit
 
             // === Toolbar ===
             {
-                const core::Color toolbarBg =
+                const foundation::Color toolbarBg =
                     isDark ? Palette::Darken(p.Surface, 0.15f) : Palette::Darken(p.Surface, 0.05f);
-                const core::Color toggleOn = isDark ? Palette::Darken(p.PrimaryAccent, 0.3f)
+                const foundation::Color toggleOn = isDark ? Palette::Darken(p.PrimaryAccent, 0.3f)
                                                     : Palette::Lighten(p.PrimaryAccent, 0.3f);
                 sheet.ForType(&Toolbar::StaticType())
                     .Set(StyleProperty::Background, sheet.OwnColor(toolbarBg))
@@ -160,7 +160,7 @@ export namespace draconic::ui::toolkit
 
             // === StatusBar ===
             {
-                const core::Color statusBg =
+                const foundation::Color statusBg =
                     isDark ? Palette::Darken(p.Surface, 0.2f) : Palette::Darken(p.Surface, 0.05f);
                 sheet.ForType(&StatusBar::StaticType())
                     .Set(StyleProperty::Background, sheet.OwnColor(statusBg))
@@ -170,9 +170,9 @@ export namespace draconic::ui::toolkit
 
             // === SplitView ===
             {
-                const core::Color divColor =
+                const foundation::Color divColor =
                     isDark ? Palette::Lighten(p.Surface, 0.1f) : Palette::Darken(p.Surface, 0.1f);
-                const core::Color divHover =
+                const foundation::Color divHover =
                     isDark ? Palette::Lighten(p.Surface, 0.25f) : Palette::Darken(p.Surface, 0.2f);
                 sheet.ForType(&SplitView::StaticType())
                     .Set(StyleProperty::BorderColor, divColor)
@@ -208,15 +208,15 @@ export namespace draconic::ui::toolkit
         }
 
     private:
-        [[nodiscard]] static core::Color Rgb(u8 r, u8 g, u8 b, u8 a = 255) noexcept
+        [[nodiscard]] static foundation::Color Rgb(u8 r, u8 g, u8 b, u8 a = 255) noexcept
         {
-            return core::Color{r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
+            return foundation::Color{r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
         }
 
         /// Beef `Color(c.R, c.G, c.B, byteAlpha)` - keep RGB, override alpha with a 0..255 byte.
-        [[nodiscard]] static core::Color WithAlpha(core::Color c, u8 a) noexcept
+        [[nodiscard]] static foundation::Color WithAlpha(foundation::Color c, u8 a) noexcept
         {
-            return core::Color{c.r, c.g, c.b, a / 255.0f};
+            return foundation::Color{c.r, c.g, c.b, a / 255.0f};
         }
     };
 }

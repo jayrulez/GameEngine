@@ -9,17 +9,17 @@
 // dist).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.editor.core:export_preset;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.xml.serialization;
 import draconic.settings;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {
@@ -51,25 +51,25 @@ export namespace draconic::editor
 
         void Serialize(ISerializer& ar)
         {
-            draconic::core::Serialize(ar, "name", name);
-            draconic::core::Serialize(ar, "platform", platform);
-            draconic::core::Serialize(ar, "templateId", templateId);
-            draconic::core::Serialize(ar, "playerName", playerName);
-            draconic::core::Serialize(ar, "outputSubdir", outputSubdir);
-            draconic::core::Serialize(ar, "additionalFiles", additionalFiles);
+            draconic::foundation::Serialize(ar, "name", name);
+            draconic::foundation::Serialize(ar, "platform", platform);
+            draconic::foundation::Serialize(ar, "templateId", templateId);
+            draconic::foundation::Serialize(ar, "playerName", playerName);
+            draconic::foundation::Serialize(ar, "outputSubdir", outputSubdir);
+            draconic::foundation::Serialize(ar, "additionalFiles", additionalFiles);
             // v2 added the config axis: a preset selects (platform, config) and opts symbols in/out.
             // A v1 export_presets.xml lacks these, so gate them on the stored ExportPresetSet version -
             // an old file reads config="" (=> Release at resolution) and stageSymbols=false (stripped).
             if (ar.Version() >= 2)
             {
-                draconic::core::Serialize(ar, "config", config);
-                draconic::core::Serialize(ar, "stageSymbols", stageSymbols);
+                draconic::foundation::Serialize(ar, "config", config);
+                draconic::foundation::Serialize(ar, "stageSymbols", stageSymbols);
             }
             // v3 added closure pruning. Absent (v1/v2) => false = today's "pack everything", so a
             // preset written before this axis keeps shipping the whole cooked dir (back-compat).
             if (ar.Version() >= 3)
             {
-                draconic::core::Serialize(ar, "pruneToReachable", pruneToReachable);
+                draconic::foundation::Serialize(ar, "pruneToReachable", pruneToReachable);
             }
         }
     };
@@ -94,7 +94,7 @@ export namespace draconic::editor
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "presets", presets);
+            draconic::foundation::Serialize(ar, "presets", presets);
         }
 
         // Find a preset by name (case-sensitive); null when absent.
@@ -181,7 +181,7 @@ export namespace draconic::editor
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "templatesRoot", templatesRoot);
+            draconic::foundation::Serialize(ar, "templatesRoot", templatesRoot);
         }
     };
 

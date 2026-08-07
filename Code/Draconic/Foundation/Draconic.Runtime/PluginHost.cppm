@@ -7,15 +7,15 @@
 // closes it on teardown).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.runtime:pluginhost;
 
-import draconic.core;
+import draconic.foundation;
 import :context;
 import :plugin;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::runtime
 {
@@ -37,44 +37,44 @@ export namespace draconic::runtime
                 return nullptr;
             }
             plugin->OnLoad(*m_context);
-            m_entries.PushBack(Entry{plugin, core::DynamicLibrary{}});
+            m_entries.PushBack(Entry{plugin, foundation::DynamicLibrary{}});
             return plugin;
         }
 
         // Loads a plugin from a shared library: resolves the factory, creates the
         // plugin, and calls OnLoad. The library is closed when the host unloads.
-        core::Result<IRuntimePlugin*> Load(core::StringView path)
+        foundation::Result<IRuntimePlugin*> Load(foundation::StringView path)
         {
-            core::DynamicLibrary library;
-            if (core::Status status = library.Load(path); !status)
+            foundation::DynamicLibrary library;
+            if (foundation::Status status = library.Load(path); !status)
             {
-                return core::Err(status.Code());
+                return foundation::Err(status.Code());
             }
 
             const auto create = library.GetSymbol<CreatePluginFn>(CreatePluginSymbol);
             if (create == nullptr)
             {
-                return core::Err(core::ErrorCode::NotFound);
+                return foundation::Err(foundation::ErrorCode::NotFound);
             }
 
             IRuntimePlugin* plugin = create();
             if (plugin == nullptr)
             {
-                return core::Err(core::ErrorCode::Internal);
+                return foundation::Err(foundation::ErrorCode::Internal);
             }
 
             plugin->OnLoad(*m_context);
-            m_entries.PushBack(Entry{plugin, core::Move(library)});
+            m_entries.PushBack(Entry{plugin, foundation::Move(library)});
             return plugin;
         }
 
-        [[nodiscard]] core::usize Count() const noexcept { return m_entries.Size(); }
+        [[nodiscard]] foundation::usize Count() const noexcept { return m_entries.Size(); }
 
         // Unloads everything in reverse load order: OnUnload each plugin, then
         // close libraries (which may invalidate library-owned plugin objects).
         void UnloadAll()
         {
-            for (core::usize i = m_entries.Size(); i-- > 0;)
+            for (foundation::usize i = m_entries.Size(); i-- > 0;)
             {
                 if (m_entries[i].plugin != nullptr)
                 {
@@ -88,10 +88,10 @@ export namespace draconic::runtime
         struct Entry
         {
             IRuntimePlugin* plugin;
-            core::DynamicLibrary library;
+            foundation::DynamicLibrary library;
         };
 
         Context* m_context;
-        core::Array<Entry> m_entries;
+        foundation::Array<Entry> m_entries;
     };
 }

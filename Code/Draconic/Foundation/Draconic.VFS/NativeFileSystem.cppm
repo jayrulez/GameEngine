@@ -11,14 +11,14 @@
 // can replace the sweep behind the same Poll() later.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.vfs:native_filesystem;
 
-import draconic.core;
+import draconic.foundation;
 import :ifilesystem;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::vfs
 {

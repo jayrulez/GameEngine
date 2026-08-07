@@ -5,18 +5,18 @@
 // fields); Expand is a ui::Thickness (PascalCase).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:nine_slice_drawable;
 
-import draconic.core;  // Color, Rectangle, Float2, Optional, Max
+import draconic.foundation;  // Color, Rectangle, Float2, Optional, Max
 import draconic.image; // ImageData, NineSlice
 import :thickness;
 import :drawable;
 import :draw_context;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace image = draconic::image;
 
 export namespace draconic::ui

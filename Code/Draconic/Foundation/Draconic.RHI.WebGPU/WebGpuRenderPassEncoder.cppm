@@ -7,12 +7,12 @@
 /// Begin/End then carry only the index. Timestamps also ride the pass descriptor.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include "WebGpuIncludes.h"
 
 export module draconic.rhi.webgpu:render_pass_encoder;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :api;
 import :bind_group;
@@ -21,7 +21,7 @@ import :render_pipeline;
 import :render_bundle_encoder;
 import :push_constant_emulator;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::webgpu
 {

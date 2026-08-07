@@ -9,17 +9,17 @@
 // delta machinery (baseline blob compare) covers them with zero new code.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.engine.script:components;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.scene;
 import draconic.resource;
 import draconic.script;
 import draconic.script.resource;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::script
 {
@@ -31,8 +31,8 @@ export namespace draconic::script
 
     inline void Serialize(ISerializer& ar, ScriptPropertyOverride& o)
     {
-        draconic::core::Serialize(ar, "nameHash", o.nameHash);
-        draconic::core::Serialize(ar, "value", o.value);
+        draconic::foundation::Serialize(ar, "nameHash", o.nameHash);
+        draconic::foundation::Serialize(ar, "value", o.value);
     }
 
     struct ScriptBehavior
@@ -91,10 +91,10 @@ export namespace draconic::script
 
     inline void Serialize(ISerializer& ar, ScriptBehavior& b)
     {
-        draconic::core::Serialize(ar, "script", b.script);
-        draconic::core::Serialize(ar, "enabled", b.enabled);
-        draconic::core::Serialize(ar, "updateInterval", b.updateInterval);
-        draconic::core::Serialize(ar, "overrides", b.overrides); // count-prefixed array scope
+        draconic::foundation::Serialize(ar, "script", b.script);
+        draconic::foundation::Serialize(ar, "enabled", b.enabled);
+        draconic::foundation::Serialize(ar, "updateInterval", b.updateInterval);
+        draconic::foundation::Serialize(ar, "overrides", b.overrides); // count-prefixed array scope
     }
 
     struct ScriptComponent
@@ -104,7 +104,7 @@ export namespace draconic::script
 
     inline void Serialize(ISerializer& ar, ScriptComponent& c)
     {
-        draconic::core::Serialize(ar, "behaviors", c.behaviors);
+        draconic::foundation::Serialize(ar, "behaviors", c.behaviors);
     }
 
     inline void ResolveResources(draconic::resource::ResourceManager& manager, ScriptComponent& c)

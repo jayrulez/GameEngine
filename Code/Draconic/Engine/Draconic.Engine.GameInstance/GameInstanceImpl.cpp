@@ -2,13 +2,13 @@
 // former StartGameScript/StopGameScript/TickGameScript, now per-instance).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
-#include "Draconic.Core/Reflection/Reflect.h" // the SceneLoader facade reflection body
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
+#include "Draconic.Foundation/Reflection/Reflect.h" // the SceneLoader facade reflection body
 
 module draconic.engine.gameinstance;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.scene;
 import draconic.scene.resource; // LoadScene / ResolveSceneResources / ResolveScenePrefabs
 import draconic.content;        // content::Instance
@@ -19,7 +19,7 @@ import draconic.script.facades; // RegisterExtraFacadeName (SceneLoader behavior
 import draconic.net.manager; // NetworkManager factories + InstallNetScriptService
 import draconic.input;       // kInputScriptService (install the per-instance runtime)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::runtime
 {
@@ -49,7 +49,7 @@ namespace draconic::runtime
         (void)once;
     }
 
-    bool GameInstance::StartScript(core::StringView source, core::StringView name)
+    bool GameInstance::StartScript(foundation::StringView source, foundation::StringView name)
     {
         StopScript();
         // THIS instance's run host is the game's context (game-instance.md §11.10). The host was
@@ -61,7 +61,7 @@ namespace draconic::runtime
             DRACONIC_LOG_ERROR(u8"App", u8"no script backend for '{}'", name);
             return false;
         }
-        m_scriptContext = core::RefPtr<script::IScriptContext>(context);
+        m_scriptContext = foundation::RefPtr<script::IScriptContext>(context);
         m_runHost.SetGameScriptHold(true);
         InstallNetBinding(); // the game script (its menu) can now call Net.startServer()/connect()
         InstallSceneLoaderScriptService(
@@ -79,7 +79,7 @@ namespace draconic::runtime
             StopScript();
             return false;
         }
-        m_game = m_scriptContext->CreateInstance(u8"Game", core::Span<core::Variant>{});
+        m_game = m_scriptContext->CreateInstance(u8"Game", foundation::Span<foundation::Variant>{});
         if (m_game.Get() == nullptr)
         {
             DRACONIC_LOG_ERROR(u8"App", u8"game script '{}' has no `Game` class (construct new())",
@@ -87,7 +87,7 @@ namespace draconic::runtime
             StopScript();
             return false;
         }
-        (void)m_game->Invoke(u8"launch", core::Span<core::Variant>{});
+        (void)m_game->Invoke(u8"launch", foundation::Span<foundation::Variant>{});
         DRACONIC_LOG_INFO(u8"App", u8"game script '{}' launched", name);
         return true;
     }
@@ -96,7 +96,7 @@ namespace draconic::runtime
     {
         if (m_game.Get() != nullptr)
         {
-            (void)m_game->Invoke(u8"exit", core::Span<core::Variant>{});
+            (void)m_game->Invoke(u8"exit", foundation::Span<foundation::Variant>{});
             m_game = nullptr;
         }
         m_scriptContext = nullptr; // drop the game script's ref; the run host owns the context
@@ -133,7 +133,7 @@ namespace draconic::runtime
         return true;
     }
 
-    bool GameInstance::Connect(core::StringView host, u16 port)
+    bool GameInstance::Connect(foundation::StringView host, u16 port)
     {
         m_net = net::NetworkManager::JoinServer(host, port);
         if (!m_net)
@@ -177,7 +177,7 @@ namespace draconic::runtime
         m_inputRuntime.Update(*m_inputSource, deltaTime);
     }
 
-    scene::Scene* GameInstance::CreateScene(core::StringView name, bool activate)
+    scene::Scene* GameInstance::CreateScene(foundation::StringView name, bool activate)
     {
         scene::Scene* scene = m_sceneManager.CreateScene(name, activate);
         if (scene != nullptr)
@@ -279,7 +279,7 @@ namespace draconic::runtime
         // Index walk (not range-for): a successful activation RETIRES its entry in place, so the
         // array shrinks mid-loop (Fable review: was monotonic growth). Failed / in-flight entries
         // stay and we advance past them.
-        for (core::usize i = 0; i < m_scriptLoads.Size();)
+        for (foundation::usize i = 0; i < m_scriptLoads.Size();)
         {
             TrackedScriptLoad& load = m_scriptLoads[i];
             if (load.handle.Failed() || !load.handle.IsComplete())
@@ -342,7 +342,7 @@ namespace draconic::runtime
     void GameInstance::DriveRunHost(f32 deltaTime)
     {
         auto& binding = m_runHost.Binding();
-        binding.timeSeconds += static_cast<core::f64>(deltaTime);
+        binding.timeSeconds += static_cast<foundation::f64>(deltaTime);
         binding.deltaSeconds = deltaTime;
         if (m_runHost.Manager() != nullptr)
         {
@@ -364,9 +364,9 @@ namespace draconic::runtime
             return;
         }
         const f32 sceneScale = m_scene != nullptr ? m_scene->TimeScale() : 1.0f;
-        core::Variant dt = core::Variant::From(hostDeltaTime * contextTimeScale *
+        foundation::Variant dt = foundation::Variant::From(hostDeltaTime * contextTimeScale *
                                                m_instanceTimeScale * sceneScale);
-        if (auto result = m_game->Invoke(u8"update", core::Span<core::Variant>{&dt, 1});
+        if (auto result = m_game->Invoke(u8"update", foundation::Span<foundation::Variant>{&dt, 1});
             !result.HasValue())
         {
             // A DEBUGGER SUSPENSION surfaces as an error result too (the suspended call

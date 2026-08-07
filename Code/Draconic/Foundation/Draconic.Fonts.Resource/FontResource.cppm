@@ -18,12 +18,12 @@
 // The runtime never links the editor/source side; it loads only cooked resources.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.fonts.resource;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.fonts;
 import draconic.fonts.baked;
 import draconic.fonts.ttf;
@@ -32,7 +32,7 @@ import draconic.image;
 import draconic.content;
 import draconic.resource;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::resource;
 
 export namespace draconic::fonts
@@ -55,15 +55,15 @@ export namespace draconic::fonts
 
         void Serialize(ISerializer& ar)
         {
-            draconic::core::Serialize(ar, "codepoint", codepoint);
-            draconic::core::Serialize(ar, "glyphIndex", info.glyphIndex);
-            draconic::core::Serialize(ar, "advanceWidth", info.advanceWidth);
-            draconic::core::Serialize(ar, "leftSideBearing", info.leftSideBearing);
-            draconic::core::Serialize(ar, "bbX", info.boundingBox.x);
-            draconic::core::Serialize(ar, "bbY", info.boundingBox.y);
-            draconic::core::Serialize(ar, "bbW", info.boundingBox.width);
-            draconic::core::Serialize(ar, "bbH", info.boundingBox.height);
-            draconic::core::Serialize(ar, "hasBitmap", info.hasBitmap);
+            draconic::foundation::Serialize(ar, "codepoint", codepoint);
+            draconic::foundation::Serialize(ar, "glyphIndex", info.glyphIndex);
+            draconic::foundation::Serialize(ar, "advanceWidth", info.advanceWidth);
+            draconic::foundation::Serialize(ar, "leftSideBearing", info.leftSideBearing);
+            draconic::foundation::Serialize(ar, "bbX", info.boundingBox.x);
+            draconic::foundation::Serialize(ar, "bbY", info.boundingBox.y);
+            draconic::foundation::Serialize(ar, "bbW", info.boundingBox.width);
+            draconic::foundation::Serialize(ar, "bbH", info.boundingBox.height);
+            draconic::foundation::Serialize(ar, "hasBitmap", info.hasBitmap);
             if (ar.Mode() == SerializeMode::Read)
             {
                 info.codepoint = codepoint;
@@ -85,9 +85,9 @@ export namespace draconic::fonts
 
         void Serialize(ISerializer& ar)
         {
-            draconic::core::Serialize(ar, "first", first);
-            draconic::core::Serialize(ar, "second", second);
-            draconic::core::Serialize(ar, "amount", amount);
+            draconic::foundation::Serialize(ar, "first", first);
+            draconic::foundation::Serialize(ar, "second", second);
+            draconic::foundation::Serialize(ar, "amount", amount);
         }
     };
     inline void Serialize(ISerializer& ar, FontResourceKerning& k)
@@ -104,14 +104,14 @@ export namespace draconic::fonts
 
         void Serialize(ISerializer& ar)
         {
-            draconic::core::Serialize(ar, "codepoint", codepoint);
-            draconic::core::Serialize(ar, "x", region.x);
-            draconic::core::Serialize(ar, "y", region.y);
-            draconic::core::Serialize(ar, "width", region.width);
-            draconic::core::Serialize(ar, "height", region.height);
-            draconic::core::Serialize(ar, "offsetX", region.offsetX);
-            draconic::core::Serialize(ar, "offsetY", region.offsetY);
-            draconic::core::Serialize(ar, "advanceX", region.advanceX);
+            draconic::foundation::Serialize(ar, "codepoint", codepoint);
+            draconic::foundation::Serialize(ar, "x", region.x);
+            draconic::foundation::Serialize(ar, "y", region.y);
+            draconic::foundation::Serialize(ar, "width", region.width);
+            draconic::foundation::Serialize(ar, "height", region.height);
+            draconic::foundation::Serialize(ar, "offsetX", region.offsetX);
+            draconic::foundation::Serialize(ar, "offsetY", region.offsetY);
+            draconic::foundation::Serialize(ar, "advanceX", region.advanceX);
         }
     };
     inline void Serialize(ISerializer& ar, FontResourceRegion& r)
@@ -148,21 +148,21 @@ export namespace draconic::fonts
 
         void Serialize(ISerializer& ar)
         {
-            draconic::core::Serialize(ar, "pixelHeight", pixelHeight);
-            draconic::core::Serialize(ar, "ascent", ascent);
-            draconic::core::Serialize(ar, "descent", descent);
-            draconic::core::Serialize(ar, "lineGap", lineGap);
-            draconic::core::Serialize(ar, "scale", scale);
-            draconic::core::Serialize(ar, "glyphs", glyphs);
-            draconic::core::Serialize(ar, "kerning", kerning);
-            draconic::core::Serialize(ar, "regions", regions);
-            draconic::core::Serialize(ar, "atlasWidth", atlasWidth);
-            draconic::core::Serialize(ar, "atlasHeight", atlasHeight);
-            draconic::core::Serialize(ar, "whitePixelU", whitePixelU);
-            draconic::core::Serialize(ar, "whitePixelV", whitePixelV);
-            draconic::core::Serialize(ar, "dfPixelRange", dfPixelRange);
-            draconic::core::Serialize(ar, "pixelOffset", pixelOffset);
-            draconic::core::Serialize(ar, "pixelBytes", pixelBytes);
+            draconic::foundation::Serialize(ar, "pixelHeight", pixelHeight);
+            draconic::foundation::Serialize(ar, "ascent", ascent);
+            draconic::foundation::Serialize(ar, "descent", descent);
+            draconic::foundation::Serialize(ar, "lineGap", lineGap);
+            draconic::foundation::Serialize(ar, "scale", scale);
+            draconic::foundation::Serialize(ar, "glyphs", glyphs);
+            draconic::foundation::Serialize(ar, "kerning", kerning);
+            draconic::foundation::Serialize(ar, "regions", regions);
+            draconic::foundation::Serialize(ar, "atlasWidth", atlasWidth);
+            draconic::foundation::Serialize(ar, "atlasHeight", atlasHeight);
+            draconic::foundation::Serialize(ar, "whitePixelU", whitePixelU);
+            draconic::foundation::Serialize(ar, "whitePixelV", whitePixelV);
+            draconic::foundation::Serialize(ar, "dfPixelRange", dfPixelRange);
+            draconic::foundation::Serialize(ar, "pixelOffset", pixelOffset);
+            draconic::foundation::Serialize(ar, "pixelBytes", pixelBytes);
         }
     };
     inline void Serialize(ISerializer& ar, FontResourceEntry& e)
@@ -183,11 +183,11 @@ export namespace draconic::fonts
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "family", family);
+            draconic::foundation::Serialize(ar, "family", family);
             u32 mode = static_cast<u32>(pixels);
-            draconic::core::Serialize(ar, "pixels", mode);
+            draconic::foundation::Serialize(ar, "pixels", mode);
             pixels = static_cast<FontResourcePixels>(mode);
-            draconic::core::Serialize(ar, "entries", entries);
+            draconic::foundation::Serialize(ar, "entries", entries);
         }
     };
 

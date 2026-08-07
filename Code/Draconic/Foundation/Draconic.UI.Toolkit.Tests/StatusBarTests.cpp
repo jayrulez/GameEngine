@@ -1,18 +1,18 @@
 // Smoke test for the toolkit skeleton: StatusBar constructs, adds sections, measures with a min height.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 import draconic.ui.toolkit;
 
 using namespace draconic::ui;
 using namespace draconic::ui::toolkit;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 TEST_CASE("toolkit-statusbar: DefaultsAndSections")
 {
-    auto bar = core::MakeRef<StatusBar>(core::DefaultAllocator());
+    auto bar = foundation::MakeRef<StatusBar>(foundation::DefaultAllocator());
     CHECK(bar->Direction == Orientation::Horizontal);
 
     bar->SetText(u8"Ready");

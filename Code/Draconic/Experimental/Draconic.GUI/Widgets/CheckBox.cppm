@@ -7,20 +7,20 @@
 // Label in a horizontal LinearLayout for the usual "[x] caption" look.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:check_box;
 
-import draconic.core; // Color, Function, Move, Max
+import draconic.foundation; // Color, Function, Move, Max
 import draconic.vg;   // CornerRadii
 import :rect;
 import :event;
 import :draw_context;
 import :ui_widget;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace vg = draconic::vg;
 
 export namespace draconic::gui
@@ -31,7 +31,7 @@ export namespace draconic::gui
     public:
         CheckBox()
         {
-            SetTag(core::StringView(u8"checkbox"));
+            SetTag(foundation::StringView(u8"checkbox"));
             SetTabFocusable(true);
         }
 
@@ -47,9 +47,9 @@ export namespace draconic::gui
         }
         void Toggle() { SetChecked(!m_checked); }
 
-        void SetOnCheckedChanged(core::Function<void(bool)> callback)
+        void SetOnCheckedChanged(foundation::Function<void(bool)> callback)
         {
-            m_onChanged = core::Move(callback);
+            m_onChanged = foundation::Move(callback);
         }
 
         void SetBoxColor(Color color)
@@ -64,16 +64,16 @@ export namespace draconic::gui
         }
 
         // Theming parts: checkbox::box (outline) / ::mark (inner fill).
-        void CollectStyleParts(core::Array<core::StringView>& out) const override
+        void CollectStyleParts(foundation::Array<foundation::StringView>& out) const override
         {
-            out.PushBack(core::StringView(u8"box"));
-            out.PushBack(core::StringView(u8"mark"));
+            out.PushBack(foundation::StringView(u8"box"));
+            out.PushBack(foundation::StringView(u8"mark"));
         }
-        void SetThemePartColor(core::StringView part, Color color) override
+        void SetThemePartColor(foundation::StringView part, Color color) override
         {
-            if (part == core::StringView(u8"box"))
+            if (part == foundation::StringView(u8"box"))
                 SetBoxColor(color);
-            else if (part == core::StringView(u8"mark"))
+            else if (part == foundation::StringView(u8"mark"))
                 SetCheckColor(color);
         }
 
@@ -93,8 +93,8 @@ export namespace draconic::gui
             {
                 const f32 inset = 4.0f;
                 const Rect inner{box.x + inset, box.y + inset,
-                                 core::Max(0.0f, box.width - inset * 2.0f),
-                                 core::Max(0.0f, box.height - inset * 2.0f)};
+                                 foundation::Max(0.0f, box.width - inset * 2.0f),
+                                 foundation::Max(0.0f, box.height - inset * 2.0f)};
                 ctx.VG().FillRoundedRect(inner.ToRectangle(), vg::CornerRadii(2.0f), m_checkColor);
             }
         }
@@ -102,7 +102,7 @@ export namespace draconic::gui
         bool m_checked = false;
         Color m_boxColor{0.60f, 0.65f, 0.72f, 1.0f};
         Color m_checkColor{0.31f, 0.63f, 0.85f, 1.0f};
-        core::Function<void(bool)> m_onChanged;
+        foundation::Function<void(bool)> m_onChanged;
     };
 
     DRACONIC_DEFINE_OBJECT(CheckBox, "draconic::gui")

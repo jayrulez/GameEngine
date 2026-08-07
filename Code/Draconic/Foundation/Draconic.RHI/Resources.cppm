@@ -3,14 +3,14 @@
 
 export module draconic.rhi:resources;
 
-import draconic.core;
+import draconic.foundation;
 import :enums;
 import :texture_format;
 import :types;
 import :descriptors;
 import :ext_descriptors;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi
 {

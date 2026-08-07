@@ -10,17 +10,17 @@
 // (this provider owns the decoded images in m_images, matching "provider owns the returned image").
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui.vfs;
 
-import draconic.core;     // IStream, FileMode, SeekOrigin, Array, String, Span, UniquePtr
+import draconic.foundation;     // IStream, FileMode, SeekOrigin, Array, String, Span, UniquePtr
 import draconic.image;    // ImageData, OwnedImageData
 import draconic.image.io; // LoadImageFromMemory
 import draconic.vfs;      // IFileSystem
 import draconic.ui;       // IResourceProvider
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace image = draconic::image;
 namespace vfs = draconic::vfs;
 

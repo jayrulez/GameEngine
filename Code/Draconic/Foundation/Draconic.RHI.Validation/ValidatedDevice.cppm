@@ -3,18 +3,18 @@
 /// Ported from Sedulous.RHI.Validation/ValidatedDevice.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.rhi.validation:validated_device;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :validated_fence;
 import :validated_swap_chain;
 import :validated_command_pool;
 import :validated_queue;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::validation
 {

@@ -8,11 +8,11 @@
 // StateListDrawables for the button backgrounds and uses per-corner radii for the spin buttons.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:rounded_dark_theme;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg; // CornerRadii
 import :style_sheet;
 import :style_rule;
@@ -48,7 +48,7 @@ import :list_view;
 import :tree_view;
 import :grid_view;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace vg = draconic::vg;
 
 export namespace draconic::ui

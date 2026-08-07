@@ -8,16 +8,16 @@
 /// of this codec in later slices; this unit depends only on Core (reflection) + draconic.net (wire).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.net.replication;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.net;      // BitWriter / BitReader (:wire)
 import draconic.scene;    // Scene / EntityHandle / ComponentManagerBase (snapshot assembly)
 import draconic.resource; // ResourceManager (SerializableComponentManager's ResolveResources seam)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace scene = draconic::scene;
 
 export namespace draconic::net
@@ -114,11 +114,11 @@ export namespace draconic::net
     // ADL serialization for scene persistence (bidirectional; enum via the temp-u8 idiom).
     inline void Serialize(ISerializer& ar, NetworkComponent& c)
     {
-        draconic::core::Serialize(ar, "id", c.id.value);
+        draconic::foundation::Serialize(ar, "id", c.id.value);
         u8 authority = static_cast<u8>(c.authority);
-        draconic::core::Serialize(ar, "authority", authority);
+        draconic::foundation::Serialize(ar, "authority", authority);
         c.authority = static_cast<NetworkAuthority>(authority);
-        draconic::core::Serialize(
+        draconic::foundation::Serialize(
             ar, "prefab", c.prefab); // the Guid overload routes through ISerializer::GuidValue
     }
 
@@ -147,9 +147,9 @@ export namespace draconic::net
 
     inline void Serialize(ISerializer& ar, NetworkedTransform& t)
     {
-        draconic::core::Serialize(ar, "position", t.position);
-        draconic::core::Serialize(ar, "rotation", t.rotation);
-        draconic::core::Serialize(ar, "scale", t.scale);
+        draconic::foundation::Serialize(ar, "position", t.position);
+        draconic::foundation::Serialize(ar, "rotation", t.rotation);
+        draconic::foundation::Serialize(ar, "scale", t.scale);
     }
 
     class NetworkedTransformComponentManager final
@@ -247,7 +247,7 @@ export namespace draconic::net
         // wires this to its content DB via SpawnPrefab). Null (or a nil prefab id) => a bare entity is
         // created instead - enough to round-trip state, but no prefab structure/visuals.
         using SpawnHandler =
-            core::Function<scene::EntityHandle(scene::Scene&, const Guid&, NetworkId)>;
+            foundation::Function<scene::EntityHandle(scene::Scene&, const Guid&, NetworkId)>;
         void SetSpawnHandler(SpawnHandler handler);
 
         // Per-peer RELEVANCY / interest (§5.6 - fog-of-war is SECURITY, not just bandwidth): return true
@@ -255,7 +255,7 @@ export namespace draconic::net
         // entity LEAVES a peer's relevance, its next delta actively REMOVES it on that client (destroyed,
         // so hidden state can't be memory-read to cheat) - the server never sends what a peer may not see.
         using RelevanceFn =
-            core::Function<bool(u32 peerId, NetworkId id, scene::EntityHandle entity)>;
+            foundation::Function<bool(u32 peerId, NetworkId id, scene::EntityHandle entity)>;
         void SetRelevance(RelevanceFn fn);
 
         // Server: give an entity a NetworkId (adds the NetworkComponent if absent), returning it. A

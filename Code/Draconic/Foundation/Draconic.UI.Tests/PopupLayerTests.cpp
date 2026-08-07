@@ -3,22 +3,22 @@
 // module-cycle divergence - so the "is last child" tests capture it into a local first, mirroring Beef's
 // eager ctor creation). Popups are MakeRef'd and passed by .Get(); `new`+`delete` -> RefPtr (RAII).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 #include "TestHelpers.h"
 
 using namespace draconic::ui;
 using namespace draconic::ui::tests;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 namespace
 {
-    core::RefPtr<RootView> MakeRoot() { return core::MakeRef<RootView>(core::DefaultAllocator()); }
-    core::RefPtr<TestView> MakeView(f32 w = 50.0f, f32 h = 30.0f)
+    foundation::RefPtr<RootView> MakeRoot() { return foundation::MakeRef<RootView>(foundation::DefaultAllocator()); }
+    foundation::RefPtr<TestView> MakeView(f32 w = 50.0f, f32 h = 30.0f)
     {
-        return core::MakeRef<TestView>(core::DefaultAllocator(), w, h);
+        return foundation::MakeRef<TestView>(foundation::DefaultAllocator(), w, h);
     }
 
     class TestPopupOwner final : public IPopupOwner

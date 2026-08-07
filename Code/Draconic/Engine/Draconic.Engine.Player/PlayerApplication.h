@@ -6,7 +6,7 @@
 //
 // Classic header (the DRACONIC_APP_MAIN pattern): it carries no `import` of its own and uses names
 // the INCLUDING TU must bring in first. Include it AFTER these imports:
-//   draconic.core, draconic.vfs, draconic.vfs.pak, draconic.content, draconic.resource,
+//   Draconic.Foundation, draconic.vfs, draconic.vfs.pak, draconic.content, draconic.resource,
 //   draconic.runtime, draconic.runtime.client, draconic.engine.defaultapp,
 //   draconic.scene, draconic.engine.scene, draconic.scene.resource,
 //   draconic.render, draconic.script, draconic.script.resource,
@@ -17,12 +17,12 @@
 #ifndef DRACONIC_TOOLS_PLAYER_PLAYERAPPLICATION_H
 #define DRACONIC_TOOLS_PLAYER_PLAYERAPPLICATION_H
 
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 namespace draconic::player
 {
-    using namespace draconic::core;
+    using namespace draconic::foundation;
     namespace runtime = draconic::runtime;
     namespace scene = draconic::scene;
     namespace resource = draconic::resource;
@@ -198,7 +198,7 @@ namespace draconic::player
             {
                 draconic::audio::RegisterAudioSettingsTypes();
                 draconic::vfs::NativeFileSystem userFs(
-                    draconic::core::GetUserDataDirectory(u8"draconic").AsView());
+                    draconic::foundation::GetUserDataDirectory(u8"draconic").AsView());
                 UniquePtr<IStream> stream =
                     userFs.Open(UserSettingsFileName().AsView(), FileMode::Read);
                 if (stream)
@@ -334,8 +334,8 @@ namespace draconic::player
                 draconic::settings::Settings store;
                 draconic::audio::CaptureAudioUserSettings(
                     *Audio()->Engine(), store.Section<draconic::audio::AudioUserSettings>());
-                const String dir = draconic::core::GetUserDataDirectory(u8"draconic");
-                (void)draconic::core::CreateDirectory(dir.AsView());
+                const String dir = draconic::foundation::GetUserDataDirectory(u8"draconic");
+                (void)draconic::foundation::CreateDirectory(dir.AsView());
                 draconic::vfs::NativeFileSystem userFs(dir.AsView());
                 MemoryStream buffer;
                 if (store.Save(buffer, draconic::xml::XmlSerializerFactory()).IsOk())

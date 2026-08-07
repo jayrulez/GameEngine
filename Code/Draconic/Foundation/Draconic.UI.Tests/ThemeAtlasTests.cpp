@@ -3,19 +3,19 @@
 // NOTE: Sedulous NineSlice exposes PascalCase `.Left`; draconic image::NineSlice uses lowercase
 // `.left` (the image module's field convention), so `Slices.left` here is the faithful equivalent.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.image;
 import draconic.ui;
 
 using namespace draconic::ui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace image = draconic::image;
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 static image::OwnedImageData MakeTestImage(u32 w, u32 h, u8 r, u8 g, u8 b)
 {
-    core::Array<u8> data;
+    foundation::Array<u8> data;
     data.Resize(static_cast<usize>(w) * h * 4);
     for (u32 i = 0; i < w * h; ++i)
     {
@@ -24,7 +24,7 @@ static image::OwnedImageData MakeTestImage(u32 w, u32 h, u8 r, u8 g, u8 b)
         data[i * 4 + 2] = b;
         data[i * 4 + 3] = 255;
     }
-    return image::OwnedImageData(w, h, image::PixelFormat::RGBA8, core::Move(data));
+    return image::OwnedImageData(w, h, image::PixelFormat::RGBA8, foundation::Move(data));
 }
 
 // === ThemeAtlas ===
@@ -37,7 +37,7 @@ TEST_CASE("theme-atlas: ThemeAtlas_CreateImageDrawable")
     atlas.AddImage(u8"button", &img);
     CHECK(atlas.Build());
 
-    core::RefPtr<AtlasImageDrawable> drawable = atlas.CreateImageDrawable(u8"button");
+    foundation::RefPtr<AtlasImageDrawable> drawable = atlas.CreateImageDrawable(u8"button");
     CHECK(drawable);
     CHECK(drawable->AtlasImage != nullptr);
 }
@@ -51,7 +51,7 @@ TEST_CASE("theme-atlas: ThemeAtlas_CreateNineSliceDrawable")
     CHECK(atlas.Build());
 
     image::NineSlice slices(4, 4, 4, 4);
-    core::RefPtr<AtlasNineSliceDrawable> drawable =
+    foundation::RefPtr<AtlasNineSliceDrawable> drawable =
         atlas.CreateNineSliceDrawable(u8"panel", slices);
     CHECK(drawable);
     CHECK(drawable->Slices.left == 4);
@@ -60,7 +60,7 @@ TEST_CASE("theme-atlas: ThemeAtlas_CreateNineSliceDrawable")
 TEST_CASE("theme-atlas: ThemeAtlas_CreateDrawable_BeforeBuild_ReturnsNull")
 {
     ThemeAtlas atlas;
-    core::RefPtr<AtlasImageDrawable> drawable = atlas.CreateImageDrawable(u8"missing");
+    foundation::RefPtr<AtlasImageDrawable> drawable = atlas.CreateImageDrawable(u8"missing");
     CHECK(!drawable);
 }
 
@@ -76,8 +76,8 @@ TEST_CASE("theme-atlas: ThemeAtlas_CreateStateDrawable")
 
     const StateImageEntry states[2] = {{ControlState::Normal, u8"btn_normal"},
                                        {ControlState::Hover, u8"btn_hover"}};
-    core::RefPtr<StateListDrawable> stateDrawable =
-        atlas.CreateStateDrawable(core::Span<const StateImageEntry>(states, 2));
+    foundation::RefPtr<StateListDrawable> stateDrawable =
+        atlas.CreateStateDrawable(foundation::Span<const StateImageEntry>(states, 2));
     CHECK(stateDrawable);
 }
 
@@ -93,9 +93,9 @@ TEST_CASE("theme-atlas: ThemeAtlas_MultipleImages_AllPackable")
     atlas.AddImage(u8"blue", &img3);
     CHECK(atlas.Build());
 
-    core::RefPtr<AtlasImageDrawable> d1 = atlas.CreateImageDrawable(u8"red");
-    core::RefPtr<AtlasImageDrawable> d2 = atlas.CreateImageDrawable(u8"green");
-    core::RefPtr<AtlasImageDrawable> d3 = atlas.CreateImageDrawable(u8"blue");
+    foundation::RefPtr<AtlasImageDrawable> d1 = atlas.CreateImageDrawable(u8"red");
+    foundation::RefPtr<AtlasImageDrawable> d2 = atlas.CreateImageDrawable(u8"green");
+    foundation::RefPtr<AtlasImageDrawable> d3 = atlas.CreateImageDrawable(u8"blue");
 
     CHECK(d1);
     CHECK(d2);
@@ -110,7 +110,7 @@ TEST_CASE("theme-atlas: ThemeImageSet_AddImage")
     image::OwnedImageData img = MakeTestImage(16, 16, 255, 0, 0);
 
     set.AddImage(u8"button:Background", &img);
-    core::Optional<ThemeImageEntry> entry = set.GetEntry(u8"button:Background");
+    foundation::Optional<ThemeImageEntry> entry = set.GetEntry(u8"button:Background");
     CHECK(entry.HasValue());
     CHECK(!entry.Value().IsNineSlice);
 }
@@ -121,7 +121,7 @@ TEST_CASE("theme-atlas: ThemeImageSet_AddImage_NineSlice")
     image::OwnedImageData img = MakeTestImage(32, 32, 255, 0, 0);
 
     set.AddImage(u8"panel:Background", &img, image::NineSlice(4, 4, 4, 4));
-    core::Optional<ThemeImageEntry> entry = set.GetEntry(u8"panel:Background");
+    foundation::Optional<ThemeImageEntry> entry = set.GetEntry(u8"panel:Background");
     CHECK(entry.HasValue());
     CHECK(entry.Value().IsNineSlice);
     CHECK(entry.Value().Slices.left == 4);
@@ -136,9 +136,9 @@ TEST_CASE("theme-atlas: ThemeImageSet_AddStateImages")
     set.AddStateImages(u8"button:Background", &normal, &hover);
 
     // State images are added with internal keys.
-    core::Optional<ThemeImageEntry> normalEntry = set.GetEntry(u8"button:Background_Normal");
+    foundation::Optional<ThemeImageEntry> normalEntry = set.GetEntry(u8"button:Background_Normal");
     CHECK(normalEntry.HasValue());
-    core::Optional<ThemeImageEntry> hoverEntry = set.GetEntry(u8"button:Background_Hover");
+    foundation::Optional<ThemeImageEntry> hoverEntry = set.GetEntry(u8"button:Background_Hover");
     CHECK(hoverEntry.HasValue());
 }
 

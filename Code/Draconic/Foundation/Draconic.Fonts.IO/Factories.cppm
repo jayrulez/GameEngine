@@ -11,15 +11,15 @@
 // keeping the static-class call style backed by function-local storage.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.fonts.io:factories;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.fonts;
 import :interfaces;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::fonts
 {

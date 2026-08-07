@@ -10,11 +10,11 @@
 /// writing its own RenderData category into the snapshot.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 module draconic.engine.render;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.scene;
 import draconic.render;    // ExtractedScene / MeshRenderData / ViewCamera / categories
 import draconic.materials; // BlendMode (category mapping)
@@ -22,7 +22,7 @@ import draconic.geometry;  // StaticMesh::bounds (world bounding sphere for shad
 import draconic.texture.resource; // texture::Texture (cooked product behind sprite/decal refs)
 import :components;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::render
 {

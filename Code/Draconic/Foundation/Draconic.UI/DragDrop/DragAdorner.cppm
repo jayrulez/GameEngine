@@ -6,18 +6,18 @@
 // The visual is owned by the ViewGroup tree (AddView RefPtr).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:drag_adorner;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import :view;
 import :box_constraints;
 import :draw_context;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

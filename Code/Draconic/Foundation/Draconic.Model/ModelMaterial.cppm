@@ -2,15 +2,15 @@
 /// Ported from Sedulous.Models/ModelMaterial.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include <string>
 
 export module draconic.model:model_material;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::model
 {

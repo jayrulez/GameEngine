@@ -4,13 +4,13 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.editor.core;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::editor;
 
 TEST_CASE("editor-log: captures dispatches and collects incrementally")
@@ -77,7 +77,7 @@ TEST_CASE("editor-log: messages are not truncated")
     Array<EditorLogEntry> out;
     (void)buffer.CollectSince(0, out);
     REQUIRE(out.Size() == 1);
-    CHECK(out[0].message.Size() == longMessage.Size()); // core RingLogSink would cap at 192
+    CHECK(out[0].message.Size() == longMessage.Size()); // foundation RingLogSink would cap at 192
 }
 
 TEST_CASE("editor-log: registered on the global logger it captures DRACONIC_LOG output")

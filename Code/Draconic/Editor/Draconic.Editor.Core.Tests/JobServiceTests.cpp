@@ -2,12 +2,12 @@
 // the main thread from Update(). Tests pump Update() in a spin loop (the workers are fast) and check
 // completion status, log drain, error propagation, and one-at-a-time ordering.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.editor.core;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace editor = draconic::editor;
 
 namespace

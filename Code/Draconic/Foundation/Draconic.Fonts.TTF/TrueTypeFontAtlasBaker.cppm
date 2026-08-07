@@ -6,18 +6,18 @@
 // Sedulous.Fonts.TTF/TrueTypeFontAtlasBaker.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.fonts.ttf:atlas_baker;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.fonts;
 import draconic.fonts.io;
 import :common;
 import :font;
 import :atlas;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::fonts
 {

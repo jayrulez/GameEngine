@@ -5,7 +5,7 @@ add_library(Draconic.Engine.Particles STATIC)
 add_library(Draconic::Engine.Particles ALIAS Draconic.Engine.Particles)
 
 target_link_libraries(Draconic.Engine.Particles
-    PUBLIC Draconic::Core Draconic::RHI Draconic::Shaders Draconic::Shaders.System
+    PUBLIC Draconic::Foundation Draconic::RHI Draconic::Shaders Draconic::Shaders.System
            Draconic::Runtime Draconic::Scene Draconic::Engine.Scene
            Draconic::Render Draconic::Engine.Render Draconic::Particles
            Draconic::Particles.Resource Draconic::Resource Draconic::Content

@@ -4,19 +4,19 @@
 // modeled on eepp's UIProgressBar (role only). No interaction; drive it with SetProgress.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:progress_bar;
 
-import draconic.core; // Color, Max, Min
+import draconic.foundation; // Color, Max, Min
 import draconic.vg;   // CornerRadii
 import :rect;
 import :draw_context;
 import :ui_widget;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace vg = draconic::vg;
 
 export namespace draconic::gui
@@ -25,12 +25,12 @@ export namespace draconic::gui
     {
         DRACONIC_OBJECT(ProgressBar, UIWidget)
     public:
-        ProgressBar() { SetTag(core::StringView(u8"progressbar")); }
+        ProgressBar() { SetTag(foundation::StringView(u8"progressbar")); }
 
         [[nodiscard]] f32 GetProgress() const noexcept { return m_progress; }
         void SetProgress(f32 progress)
         {
-            progress = core::Max(0.0f, core::Min(1.0f, progress));
+            progress = foundation::Max(0.0f, foundation::Min(1.0f, progress));
             if (progress == m_progress)
                 return;
             m_progress = progress;
@@ -49,16 +49,16 @@ export namespace draconic::gui
         }
 
         // Theming parts: progressbar::track / ::fill.
-        void CollectStyleParts(core::Array<core::StringView>& out) const override
+        void CollectStyleParts(foundation::Array<foundation::StringView>& out) const override
         {
-            out.PushBack(core::StringView(u8"track"));
-            out.PushBack(core::StringView(u8"fill"));
+            out.PushBack(foundation::StringView(u8"track"));
+            out.PushBack(foundation::StringView(u8"fill"));
         }
-        void SetThemePartColor(core::StringView part, Color color) override
+        void SetThemePartColor(foundation::StringView part, Color color) override
         {
-            if (part == core::StringView(u8"track"))
+            if (part == foundation::StringView(u8"track"))
                 SetTrackColor(color);
-            else if (part == core::StringView(u8"fill"))
+            else if (part == foundation::StringView(u8"fill"))
                 SetFillColor(color);
         }
 

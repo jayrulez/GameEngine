@@ -1,12 +1,12 @@
 // draconic.net.manager - the runtime networking home (NetworkManager) mechanics + facade registration.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.net;
 import draconic.net.manager;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace net = draconic::net;
 
 TEST_CASE("net-manager: server + client connect, and an RPC routes through the manager")

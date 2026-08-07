@@ -10,7 +10,7 @@ endif()
 add_executable(WebTriangle main.cpp)
 
 target_link_libraries(WebTriangle PRIVATE
-    Draconic::Core
+    Draconic::Foundation
     Draconic::RHI
     Draconic::Runtime
     Draconic::Runtime.Client

@@ -7,11 +7,11 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include <cmath>
 #include <initializer_list>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.resource;
@@ -21,7 +21,7 @@ import draconic.audio;
 import draconic.audio.resource;
 import draconic.audio.editor;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::resource;
 using namespace draconic::audio;
 namespace content = draconic::content;

@@ -21,8 +21,8 @@
 // scriptbuilder add-on header live here only (GCC module hygiene by construction).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 #include <angelscript.h>
 #include <scriptbuilder/scriptbuilder.h>
@@ -33,7 +33,7 @@ module;
 
 module draconic.script.angelscript.editor;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.editor.core; // FileStemOf
 import draconic.script;
 import draconic.script.resource;
@@ -41,7 +41,7 @@ import draconic.script.facades;
 import draconic.script.editor;
 import draconic.script.angelscript;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::script
 {
@@ -465,7 +465,7 @@ namespace draconic::script
                 // Same "main"-module surface the runtime registers (core + facades), so a
                 // facade-using behavior compiles at cook exactly as at runtime; FinalizeTypes
                 // emits every reflected type into the engine CScriptBuilder builds against.
-                RegisterCoreTypes();
+                RegisterFoundationTypes();
                 RegisterScriptFacadeReflection();
                 RegisterReflectedTypes(*manager);
 

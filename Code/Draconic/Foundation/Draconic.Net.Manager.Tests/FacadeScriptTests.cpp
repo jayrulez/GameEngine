@@ -5,16 +5,16 @@
 // Net.isServer()/isClient()/peerCount() and we read the results back. This is the acceptance test
 // for the extensibility hook (RegisterExtraFacadeName -> Wren prelude; registry -> AngelScript).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.net;
 import draconic.net.manager;
 import draconic.script;
 import draconic.script.wren;
 import draconic.script.angelscript;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::script;
 namespace net = draconic::net;
 
@@ -46,7 +46,7 @@ namespace
 
 TEST_CASE("net-facade: Wren reads the live session through the Net facade")
 {
-    RegisterCoreTypes();
+    RegisterFoundationTypes();
     net::RegisterNetScriptFacade();
 
     RefPtr<IScriptManager> manager = wren::CreateScriptManager();
@@ -71,7 +71,7 @@ TEST_CASE("net-facade: Wren reads the live session through the Net facade")
 
 TEST_CASE("net-facade: AngelScript reads the live session through the Net facade")
 {
-    RegisterCoreTypes();
+    RegisterFoundationTypes();
     net::RegisterNetScriptFacade();
 
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager();

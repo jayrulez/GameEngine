@@ -2,7 +2,7 @@
 /// Ported from Sedulous.Models.FBX/FbxLoader.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include <algorithm>
 #include <cctype>
@@ -19,7 +19,7 @@ module;
 
 export module draconic.model.fbx;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.model;
 import draconic.model.io;
 import draconic.image;
@@ -28,7 +28,7 @@ import draconic.image.io;
 export namespace draconic::model::fbx
 {
 
-    using namespace draconic::core;
+    using namespace draconic::foundation;
     using namespace draconic::model;
 
     // ufbx hands back char* (UTF-8); the engine String is UTF-8 too, so these just

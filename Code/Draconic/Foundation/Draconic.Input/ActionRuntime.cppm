@@ -12,16 +12,16 @@
 // Sedulous's "editor viewport forwards nothing".
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include <cmath>
 
 export module draconic.input:action_runtime;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.shell;
 import :input_map;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::input
 {
@@ -31,7 +31,7 @@ export namespace draconic::input
     // (each context can read a DIFFERENT runtime - the shared editor runtime, or a per-GameInstance
     // one). Lives here (not the subsystem) so a GameInstance can install its own runtime without
     // pulling the whole InputSubsystem in.
-    inline constexpr core::StringView kInputScriptService = u8"input.runtime";
+    inline constexpr foundation::StringView kInputScriptService = u8"input.runtime";
 
     // The device seam. All accessors may return null / zero - devices come and go (hotplug,
     // unfocused editor viewport) and evaluation treats absence as "released".

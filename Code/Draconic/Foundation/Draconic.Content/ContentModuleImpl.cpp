@@ -4,16 +4,16 @@
 // ContentModule.cppm keeps the class declarations + trivial inline accessors.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include <chrono>
 #include <random>
 
 module draconic.content;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::vfs;
 
 namespace draconic::content

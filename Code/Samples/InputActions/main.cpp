@@ -6,12 +6,12 @@
 // a Dear ImGui debug panel. The moving square renders as the window clear color (position
 // = color); the point is the input layer, not the drawing.
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include "Draconic.Runtime.Client/AppMain.h"
 #include "imgui.h"
 #include <cstdio>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.runtime;
 import draconic.runtime.client;
 import draconic.shell;
@@ -26,15 +26,15 @@ import draconic.imgui;
 import draconic.input;
 import draconic.engine.input;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace runtime = draconic::runtime;
 namespace graphics = draconic::graphics;
 namespace shell = draconic::shell;
 namespace input = draconic::input;
 namespace imgui = draconic::imgui;
 
-using core::f32;
-using core::u32;
+using foundation::f32;
+using foundation::u32;
 
 namespace
 {
@@ -43,10 +43,10 @@ namespace
         input::InputMap map;
 
         input::ActionSet gameplay;
-        gameplay.name = core::String(u8"Gameplay");
+        gameplay.name = foundation::String(u8"Gameplay");
         {
             input::Action move;
-            move.name = core::String(u8"Move");
+            move.name = foundation::String(u8"Move");
             move.kind = input::ActionKind::Axis2D;
             input::Binding wasd;
             wasd.source = input::BindingSource::Composite2D;
@@ -77,7 +77,7 @@ namespace
         }
         {
             input::Action jump;
-            jump.name = core::String(u8"Jump");
+            jump.name = foundation::String(u8"Jump");
             jump.kind = input::ActionKind::Button;
             input::Binding space;
             space.source = input::BindingSource::Key;
@@ -99,11 +99,11 @@ namespace
         map.sets.PushBack(static_cast<input::ActionSet&&>(gameplay));
 
         input::ActionSet menu;
-        menu.name = core::String(u8"Menu");
+        menu.name = foundation::String(u8"Menu");
         menu.priority = 10;
         {
             input::Action confirm;
-            confirm.name = core::String(u8"Confirm");
+            confirm.name = foundation::String(u8"Confirm");
             confirm.kind = input::ActionKind::Button;
             input::Binding space;
             space.source = input::BindingSource::Key;
@@ -162,7 +162,7 @@ namespace
             m_asset = MakeDefaultMap(); // "the asset": pristine defaults
             LoadOverlay();
             ApplyEffectiveMap();
-            core::ConsoleWrite(
+            foundation::ConsoleWrite(
                 u8"InputActions: WASD/stick/touch drives the clear color;\n"
                 u8"  the ImGui panel has rebinding, time scale, and the menu toggle.\n");
         }
@@ -193,12 +193,12 @@ namespace
                     input::Binding captured;
                     if (input::CaptureBinding(devices, m_captureFilter, captured))
                     {
-                        core::Array<input::Binding> replacement;
+                        foundation::Array<input::Binding> replacement;
                         replacement.PushBack(captured);
                         m_overlay.Set(
                             u8"Gameplay",
-                            core::StringView(reinterpret_cast<const core::utf8char*>(m_capturing)),
-                            static_cast<core::Array<input::Binding>&&>(replacement));
+                            foundation::StringView(reinterpret_cast<const foundation::utf8char*>(m_capturing)),
+                            static_cast<foundation::Array<input::Binding>&&>(replacement));
                         m_capturing = nullptr;
                         SaveOverlay();
                         ApplyEffectiveMap();
@@ -206,16 +206,16 @@ namespace
                 }
             }
 
-            const core::Float2 move = actions.Value2D(m_move);
-            m_x = core::Clamp(m_x + move.x * dt * 0.6f, 0.0f, 1.0f);
-            m_y = core::Clamp(m_y + move.y * dt * 0.6f, 0.0f, 1.0f);
+            const foundation::Float2 move = actions.Value2D(m_move);
+            m_x = foundation::Clamp(m_x + move.x * dt * 0.6f, 0.0f, 1.0f);
+            m_y = foundation::Clamp(m_y + move.y * dt * 0.6f, 0.0f, 1.0f);
             if (actions.WasPressed(m_jump))
             {
-                core::ConsoleWrite(u8"InputActions: Jump!\n");
+                foundation::ConsoleWrite(u8"InputActions: Jump!\n");
             }
             if (actions.WasPressed(m_confirm))
             {
-                core::ConsoleWrite(u8"InputActions: Confirm.\n");
+                foundation::ConsoleWrite(u8"InputActions: Confirm.\n");
             }
         }
 
@@ -240,29 +240,29 @@ namespace
             m_confirm = m_input->Runtime().Resolve(u8"Confirm");
         }
 
-        [[nodiscard]] static core::String OverlayPath()
+        [[nodiscard]] static foundation::String OverlayPath()
         {
-            return core::PathJoin(core::GetUserDataDirectory(u8"draconic").AsView(),
+            return foundation::PathJoin(foundation::GetUserDataDirectory(u8"draconic").AsView(),
                                   u8"inputactions.rebinds.xml");
         }
 
         void LoadOverlay()
         {
-            core::Result<core::Array<core::byte>> bytes = core::ReadFile(OverlayPath().AsView());
+            foundation::Result<foundation::Array<foundation::byte>> bytes = foundation::ReadFile(OverlayPath().AsView());
             if (!bytes.HasValue())
             {
                 return;
             }
-            core::MemoryStream stream;
+            foundation::MemoryStream stream;
             (void)stream.Write(bytes.Value().Data(), bytes.Value().Size());
-            (void)stream.Seek(0, core::SeekOrigin::Begin);
+            (void)stream.Seek(0, foundation::SeekOrigin::Begin);
             draconic::settings::Settings store;
             if (store.Load(stream, draconic::xml::XmlSerializerFactory()).IsOk())
             {
                 if (const auto* section = store.Find<input::InputBindingOverrides>())
                 {
                     m_overlay.overrides = section->overrides;
-                    core::ConsoleWrite(u8"InputActions: loaded user rebinds.\n");
+                    foundation::ConsoleWrite(u8"InputActions: loaded user rebinds.\n");
                 }
             }
         }
@@ -271,12 +271,12 @@ namespace
         {
             draconic::settings::Settings store;
             store.Section<input::InputBindingOverrides>().overrides = m_overlay.overrides;
-            core::MemoryStream stream;
+            foundation::MemoryStream stream;
             if (store.Save(stream, draconic::xml::XmlSerializerFactory()).IsOk())
             {
-                if (core::WriteFile(OverlayPath().AsView(), stream.Bytes()).IsOk())
+                if (foundation::WriteFile(OverlayPath().AsView(), stream.Bytes()).IsOk())
                 {
-                    core::ConsoleWrite(u8"InputActions: rebinds saved.\n");
+                    foundation::ConsoleWrite(u8"InputActions: rebinds saved.\n");
                 }
             }
         }
@@ -288,7 +288,7 @@ namespace
             ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
             ImGui::Begin("Input");
 
-            const core::Float2 move = actions.Value2D(m_move);
+            const foundation::Float2 move = actions.Value2D(m_move);
             ImGui::Text("Move  %+.2f %+.2f", static_cast<double>(move.x),
                         static_cast<double>(move.y));
             ImGui::Text("Jump  %s", actions.IsDown(m_jump) ? "DOWN" : "up");
@@ -339,7 +339,7 @@ namespace
             // Current EFFECTIVE first binding, for display.
             const input::InputMap& map = m_input->Runtime().Map();
             const input::Binding* first = nullptr;
-            const core::StringView wanted(reinterpret_cast<const core::utf8char*>(actionName));
+            const foundation::StringView wanted(reinterpret_cast<const foundation::utf8char*>(actionName));
             for (const input::ActionSet& set : map.sets)
             {
                 for (const input::Action& action : set.actions)
@@ -366,7 +366,7 @@ namespace
             {
                 m_capturing = actionName;
                 m_captureFilter = input::CaptureFilter{};
-                if (wanted == core::StringView(u8"Move"))
+                if (wanted == foundation::StringView(u8"Move"))
                 {
                     // Axis2D: sticks only (keyboard stays on the default composite).
                     m_captureFilter.keys = false;
@@ -401,8 +401,8 @@ namespace
             if (shellInput != nullptr && shellInput->Touch() != nullptr)
             {
                 shell::ITouch* touch = shellInput->Touch();
-                const core::i32 count = touch->TouchCount();
-                for (core::i32 i = 0; i < count; ++i)
+                const foundation::i32 count = touch->TouchCount();
+                for (foundation::i32 i = 0; i < count; ++i)
                 {
                     shell::TouchPoint point;
                     if (touch->GetTouchPoint(i, point))

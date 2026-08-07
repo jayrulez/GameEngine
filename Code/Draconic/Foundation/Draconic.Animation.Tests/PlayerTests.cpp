@@ -1,12 +1,12 @@
 // AnimationPlayer: playback, event firing, looping, evaluation. Ports the player section of
 // Sedulous.Animation.Tests.AnimationEventTests + adds playback/eval coverage.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.animation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::animation;
 
 // A 1-bone skeleton with a position clip moving +Y over 1s.

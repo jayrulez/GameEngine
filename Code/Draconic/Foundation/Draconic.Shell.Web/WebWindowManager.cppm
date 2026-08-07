@@ -6,34 +6,34 @@
 // runner reconfigures the swapchain (the browser has no OS resize event queue to drain).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.shell.web:window_manager;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.shell;
 import :window;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::shell
 {
     class WebWindowManager final : public IWindowManager
     {
     public:
-        WebWindowManager(core::StringView selector, const WindowSettings& main)
+        WebWindowManager(foundation::StringView selector, const WindowSettings& main)
         {
             auto window =
-                core::MakeUnique<WebWindow>(core::DefaultAllocator(), m_nextId, selector, main);
+                foundation::MakeUnique<WebWindow>(foundation::DefaultAllocator(), m_nextId, selector, main);
             m_mainWindowId = m_nextId++;
             m_window = window.Get();
-            m_owned = static_cast<core::UniquePtr<WebWindow>&&>(window);
+            m_owned = static_cast<foundation::UniquePtr<WebWindow>&&>(window);
             m_live.PushBack(m_window);
         }
 
-        [[nodiscard]] core::Result<IWindow*> CreateWindow(const WindowSettings&) override
+        [[nodiscard]] foundation::Result<IWindow*> CreateWindow(const WindowSettings&) override
         {
-            return core::Err(core::ErrorCode::NotSupported); // single canvas
+            return foundation::Err(foundation::ErrorCode::NotSupported); // single canvas
         }
         void DestroyWindow(IWindow* window) override
         {
@@ -42,21 +42,21 @@ export namespace draconic::shell
                 m_window->Close();
             }
         }
-        [[nodiscard]] core::Span<IWindow* const> Windows() const noexcept override
+        [[nodiscard]] foundation::Span<IWindow* const> Windows() const noexcept override
         {
-            return core::Span<IWindow* const>(m_live.Data(), m_live.Size());
+            return foundation::Span<IWindow* const>(m_live.Data(), m_live.Size());
         }
         [[nodiscard]] IWindow* MainWindow() const noexcept override
         {
             return m_window != nullptr && m_window->IsOpen() ? m_window : nullptr;
         }
-        [[nodiscard]] IWindow* GetWindow(core::u32 id) const noexcept override
+        [[nodiscard]] IWindow* GetWindow(foundation::u32 id) const noexcept override
         {
             return id == m_mainWindowId ? m_window : nullptr;
         }
-        [[nodiscard]] core::Span<const WindowEvent> Events() const noexcept override
+        [[nodiscard]] foundation::Span<const WindowEvent> Events() const noexcept override
         {
-            return core::Span<const WindowEvent>(m_events.Data(), m_events.Size());
+            return foundation::Span<const WindowEvent>(m_events.Data(), m_events.Size());
         }
         void FlushDestroyed() override {}
 
@@ -76,11 +76,11 @@ export namespace draconic::shell
         }
 
     private:
-        core::UniquePtr<WebWindow> m_owned;
+        foundation::UniquePtr<WebWindow> m_owned;
         WebWindow* m_window = nullptr;
-        core::Array<IWindow*> m_live;
-        core::Array<WindowEvent> m_events;
-        core::u32 m_nextId = 1;
-        core::u32 m_mainWindowId = 0;
+        foundation::Array<IWindow*> m_live;
+        foundation::Array<WindowEvent> m_events;
+        foundation::u32 m_nextId = 1;
+        foundation::u32 m_mainWindowId = 0;
     };
 }

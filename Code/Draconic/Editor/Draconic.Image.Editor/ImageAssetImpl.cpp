@@ -6,16 +6,16 @@
 // Reflection track P1.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 module draconic.image.editor;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.editor;
 import draconic.image;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::image
 {

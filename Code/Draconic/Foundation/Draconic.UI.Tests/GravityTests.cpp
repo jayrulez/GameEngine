@@ -1,13 +1,13 @@
 // Ported from Sedulous.UI.Tests/src/GravityTests.bf (faithful; enum-vs-int compares via underlying u32).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 
 using namespace draconic::ui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
-TEST_CASE("gravity: None_IsZero") { CHECK(static_cast<core::u32>(Gravity::None) == 0u); }
+TEST_CASE("gravity: None_IsZero") { CHECK(static_cast<foundation::u32>(Gravity::None) == 0u); }
 
 TEST_CASE("gravity: Center_IsCenterHOrCenterV")
 {
@@ -27,9 +27,9 @@ TEST_CASE("gravity: Combinations_Work")
 
 TEST_CASE("gravity: FlagsAreDistinct")
 {
-    CHECK(static_cast<core::u32>(Gravity::Left & Gravity::Right) == 0u);
-    CHECK(static_cast<core::u32>(Gravity::Top & Gravity::Bottom) == 0u);
-    CHECK(static_cast<core::u32>(Gravity::CenterH & Gravity::FillH) == 0u);
-    CHECK(static_cast<core::u32>(Gravity::CenterV & Gravity::FillV) == 0u);
-    CHECK(static_cast<core::u32>(Gravity::Left & Gravity::Top) == 0u);
+    CHECK(static_cast<foundation::u32>(Gravity::Left & Gravity::Right) == 0u);
+    CHECK(static_cast<foundation::u32>(Gravity::Top & Gravity::Bottom) == 0u);
+    CHECK(static_cast<foundation::u32>(Gravity::CenterH & Gravity::FillH) == 0u);
+    CHECK(static_cast<foundation::u32>(Gravity::CenterV & Gravity::FillV) == 0u);
+    CHECK(static_cast<foundation::u32>(Gravity::Left & Gravity::Top) == 0u);
 }

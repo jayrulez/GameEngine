@@ -7,11 +7,11 @@
 // import this partition to call it without a module cycle.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:ui_debug_overlay;
 
-import draconic.core;
+import draconic.foundation;
 import :draw_context; // UIDrawContext (referenced in the signature; body uses ctx.VG()/DebugSettings())
 
 export namespace draconic::ui

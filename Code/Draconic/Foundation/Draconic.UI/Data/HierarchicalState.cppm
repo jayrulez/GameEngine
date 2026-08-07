@@ -5,17 +5,17 @@
 // Selection / InternalListView), so it sits above :tree_view (clean DAG - TreeView doesn't reference it).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:hierarchical_state;
 
-import draconic.core;
+import draconic.foundation;
 import :tree_view;
 import :flattened_tree_adapter; // FlattenedTreeAdapter (named directly)
 import :selection_model;        // SelectionModel (tree.Selection())
 import :list_view;              // ListView (tree.InternalListView())
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

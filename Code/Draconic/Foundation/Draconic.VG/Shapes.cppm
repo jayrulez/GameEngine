@@ -5,15 +5,15 @@
 // from Sedulous.VG/ShapeBuilder.bf and DashGenerator.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.vg:shapes;
 
-import draconic.core;
+import draconic.foundation;
 import :style;
 import :path;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::vg
 {

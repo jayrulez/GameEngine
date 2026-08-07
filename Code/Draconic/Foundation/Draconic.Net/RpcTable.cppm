@@ -10,16 +10,16 @@
 /// server; the server validates + resolves it and CallAlls the result back out.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.net:rpc;
 
-import draconic.core;
+import draconic.foundation;
 import :transport;
 import :session;
 import :wire;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::net
 {

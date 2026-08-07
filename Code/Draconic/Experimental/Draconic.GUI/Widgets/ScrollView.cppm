@@ -12,20 +12,20 @@
 // (SetContentSize) or measured from the children (SetAutoMeasureContent / MeasureContent).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:scroll_view;
 
-import draconic.core; // RefPtr, MakeRef, Function, Move, Max, Min, Float2
+import draconic.foundation; // RefPtr, MakeRef, Function, Move, Max, Min, Float2
 import :rect;
 import :node;
 import :event;
 import :ui_widget;
 import :scroll_bar;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -42,7 +42,7 @@ export namespace draconic::gui
     {
         DRACONIC_OBJECT(ScrollContent, UIWidget)
     public:
-        core::Function<void()> OnContentChanged;
+        foundation::Function<void()> OnContentChanged;
 
     protected:
         void OnChildrenChanged() override
@@ -58,11 +58,11 @@ export namespace draconic::gui
     public:
         ScrollView()
         {
-            SetTag(core::StringView(u8"scrollview"));
+            SetTag(foundation::StringView(u8"scrollview"));
             SetClipChildren(true);
             SetTabFocusable(true); // so the view can receive focus for keyboard scrolling
 
-            m_content = core::MakeRef<ScrollContent>(core::DefaultAllocator());
+            m_content = foundation::MakeRef<ScrollContent>(foundation::DefaultAllocator());
             m_content->OnContentChanged = [this]()
             {
                 if (m_autoMeasure)
@@ -70,7 +70,7 @@ export namespace draconic::gui
             };
             AddChild(m_content.Get());
 
-            m_vBar = core::MakeRef<ScrollBar>(core::DefaultAllocator());
+            m_vBar = foundation::MakeRef<ScrollBar>(foundation::DefaultAllocator());
             m_vBar->SetOrientation(Orientation::Vertical);
             m_vBar->SetOnValueChanged(
                 [this](f32 v)
@@ -80,7 +80,7 @@ export namespace draconic::gui
                 });
             AddChild(m_vBar.Get());
 
-            m_hBar = core::MakeRef<ScrollBar>(core::DefaultAllocator());
+            m_hBar = foundation::MakeRef<ScrollBar>(foundation::DefaultAllocator());
             m_hBar->SetOrientation(Orientation::Horizontal);
             m_hBar->SetOnValueChanged(
                 [this](f32 v)
@@ -97,12 +97,12 @@ export namespace draconic::gui
         [[nodiscard]] ScrollBar* GetVerticalScrollBar() const noexcept { return m_vBar.Get(); }
         [[nodiscard]] ScrollBar* GetHorizontalScrollBar() const noexcept { return m_hBar.Get(); }
 
-        void SetContentSize(core::Float2 size)
+        void SetContentSize(foundation::Float2 size)
         {
             m_content->SetSize(size);
             Relayout();
         }
-        [[nodiscard]] core::Float2 GetContentSize() const { return m_content->GetSize(); }
+        [[nodiscard]] foundation::Float2 GetContentSize() const { return m_content->GetSize(); }
 
         // Size the content container to the bounding box of its (visible) children.
         void MeasureContent()
@@ -113,12 +113,12 @@ export namespace draconic::gui
                 Node* child = m_content->GetChildAt(i);
                 if (child == nullptr || !child->IsVisible())
                     continue;
-                const core::Float2 p = child->GetPosition();
-                const core::Float2 s = child->GetSize();
-                w = core::Max(w, p.x + s.x);
-                h = core::Max(h, p.y + s.y);
+                const foundation::Float2 p = child->GetPosition();
+                const foundation::Float2 s = child->GetSize();
+                w = foundation::Max(w, p.x + s.x);
+                h = foundation::Max(h, p.y + s.y);
             }
-            m_content->SetSize(core::Float2{w, h});
+            m_content->SetSize(foundation::Float2{w, h});
             Relayout();
         }
         // When on, MeasureContent runs automatically whenever the content's children change.
@@ -134,18 +134,18 @@ export namespace draconic::gui
         [[nodiscard]] Rect Viewport() const { return GetContentBounds(); }
 
         // The maximum scrollable distance on each axis: max(0, content - viewport).
-        [[nodiscard]] core::Float2 ScrollRange() const
+        [[nodiscard]] foundation::Float2 ScrollRange() const
         {
             const Rect vp = Viewport();
-            const core::Float2 cs = m_content->GetSize();
-            return core::Float2{core::Max(0.0f, cs.x - vp.width),
-                                core::Max(0.0f, cs.y - vp.height)};
+            const foundation::Float2 cs = m_content->GetSize();
+            return foundation::Float2{foundation::Max(0.0f, cs.x - vp.width),
+                                foundation::Max(0.0f, cs.y - vp.height)};
         }
 
-        [[nodiscard]] core::Float2 GetScrollOffset() const noexcept { return m_offset; }
-        void SetScrollOffset(core::Float2 offset)
+        [[nodiscard]] foundation::Float2 GetScrollOffset() const noexcept { return m_offset; }
+        void SetScrollOffset(foundation::Float2 offset)
         {
-            const core::Float2 clamped = Clamp(offset);
+            const foundation::Float2 clamped = Clamp(offset);
             if (clamped.x == m_offset.x && clamped.y == m_offset.y)
                 return;
             m_offset = clamped;
@@ -153,27 +153,27 @@ export namespace draconic::gui
             if (m_onScroll)
                 m_onScroll(m_offset);
         }
-        void ScrollBy(core::Float2 delta)
+        void ScrollBy(foundation::Float2 delta)
         {
-            SetScrollOffset(core::Float2{m_offset.x + delta.x, m_offset.y + delta.y});
+            SetScrollOffset(foundation::Float2{m_offset.x + delta.x, m_offset.y + delta.y});
         }
 
         // Scroll fraction on each axis in [0,1] (0 when the axis cannot scroll).
-        [[nodiscard]] core::Float2 GetScrollFraction() const
+        [[nodiscard]] foundation::Float2 GetScrollFraction() const
         {
-            const core::Float2 r = ScrollRange();
-            return core::Float2{r.x > 0.0f ? m_offset.x / r.x : 0.0f,
+            const foundation::Float2 r = ScrollRange();
+            return foundation::Float2{r.x > 0.0f ? m_offset.x / r.x : 0.0f,
                                 r.y > 0.0f ? m_offset.y / r.y : 0.0f};
         }
         void SetVerticalFraction(f32 fraction)
         {
-            SetScrollOffset(core::Float2{
-                m_offset.x, ScrollRange().y * core::Max(0.0f, core::Min(1.0f, fraction))});
+            SetScrollOffset(foundation::Float2{
+                m_offset.x, ScrollRange().y * foundation::Max(0.0f, foundation::Min(1.0f, fraction))});
         }
         void SetHorizontalFraction(f32 fraction)
         {
-            SetScrollOffset(core::Float2{
-                ScrollRange().x * core::Max(0.0f, core::Min(1.0f, fraction)), m_offset.y});
+            SetScrollOffset(foundation::Float2{
+                ScrollRange().x * foundation::Max(0.0f, foundation::Min(1.0f, fraction)), m_offset.y});
         }
 
         void SetVerticalScrollBarPolicy(ScrollBarPolicy policy)
@@ -194,9 +194,9 @@ export namespace draconic::gui
 
         void SetWheelSpeed(f32 pixelsPerNotch) noexcept { m_wheelSpeed = pixelsPerNotch; }
         void SetLineStep(f32 pixels) noexcept { m_lineStep = pixels; }
-        void SetOnScroll(core::Function<void(core::Float2)> callback)
+        void SetOnScroll(foundation::Function<void(foundation::Float2)> callback)
         {
-            m_onScroll = core::Move(callback);
+            m_onScroll = foundation::Move(callback);
         }
 
         [[nodiscard]] bool WantsWheel() const override { return true; }
@@ -205,7 +205,7 @@ export namespace draconic::gui
         void OnMouseWheel(const WheelEvent& event) override
         {
             // Wheel up (positive y) reveals content above -> decreases the offset.
-            ScrollBy(core::Float2{-event.Delta.x * m_wheelSpeed, -event.Delta.y * m_wheelSpeed});
+            ScrollBy(foundation::Float2{-event.Delta.x * m_wheelSpeed, -event.Delta.y * m_wheelSpeed});
         }
 
         void OnKeyDown(const KeyEvent& event) override
@@ -214,28 +214,28 @@ export namespace draconic::gui
             switch (static_cast<KeyCode>(event.KeyCode))
             {
             case KeyCode::Down:
-                ScrollBy(core::Float2{0.0f, m_lineStep});
+                ScrollBy(foundation::Float2{0.0f, m_lineStep});
                 break;
             case KeyCode::Up:
-                ScrollBy(core::Float2{0.0f, -m_lineStep});
+                ScrollBy(foundation::Float2{0.0f, -m_lineStep});
                 break;
             case KeyCode::Right:
-                ScrollBy(core::Float2{m_lineStep, 0.0f});
+                ScrollBy(foundation::Float2{m_lineStep, 0.0f});
                 break;
             case KeyCode::Left:
-                ScrollBy(core::Float2{-m_lineStep, 0.0f});
+                ScrollBy(foundation::Float2{-m_lineStep, 0.0f});
                 break;
             case KeyCode::PageDown:
-                ScrollBy(core::Float2{0.0f, vp.height});
+                ScrollBy(foundation::Float2{0.0f, vp.height});
                 break;
             case KeyCode::PageUp:
-                ScrollBy(core::Float2{0.0f, -vp.height});
+                ScrollBy(foundation::Float2{0.0f, -vp.height});
                 break;
             case KeyCode::Home:
-                SetScrollOffset(core::Float2{m_offset.x, 0.0f});
+                SetScrollOffset(foundation::Float2{m_offset.x, 0.0f});
                 break;
             case KeyCode::End:
-                SetScrollOffset(core::Float2{m_offset.x, ScrollRange().y});
+                SetScrollOffset(foundation::Float2{m_offset.x, ScrollRange().y});
                 break;
             default:
                 break;
@@ -245,11 +245,11 @@ export namespace draconic::gui
         void OnSizeChange() override { Relayout(); }
 
     private:
-        [[nodiscard]] core::Float2 Clamp(core::Float2 offset) const
+        [[nodiscard]] foundation::Float2 Clamp(foundation::Float2 offset) const
         {
-            const core::Float2 r = ScrollRange();
-            return core::Float2{core::Max(0.0f, core::Min(r.x, offset.x)),
-                                core::Max(0.0f, core::Min(r.y, offset.y))};
+            const foundation::Float2 r = ScrollRange();
+            return foundation::Float2{foundation::Max(0.0f, foundation::Min(r.x, offset.x)),
+                                foundation::Max(0.0f, foundation::Min(r.y, offset.y))};
         }
 
         [[nodiscard]] static bool BarVisible(ScrollBarPolicy policy, f32 range)
@@ -263,12 +263,12 @@ export namespace draconic::gui
         void Relayout()
         {
             const Rect vp = Viewport();
-            const core::Float2 cs = m_content->GetSize();
-            const core::Float2 range{core::Max(0.0f, cs.x - vp.width),
-                                     core::Max(0.0f, cs.y - vp.height)};
-            m_offset = core::Float2{core::Max(0.0f, core::Min(range.x, m_offset.x)),
-                                    core::Max(0.0f, core::Min(range.y, m_offset.y))};
-            m_content->SetPosition(core::Float2{vp.x - m_offset.x, vp.y - m_offset.y});
+            const foundation::Float2 cs = m_content->GetSize();
+            const foundation::Float2 range{foundation::Max(0.0f, cs.x - vp.width),
+                                     foundation::Max(0.0f, cs.y - vp.height)};
+            m_offset = foundation::Float2{foundation::Max(0.0f, foundation::Min(range.x, m_offset.x)),
+                                    foundation::Max(0.0f, foundation::Min(range.y, m_offset.y))};
+            m_content->SetPosition(foundation::Float2{vp.x - m_offset.x, vp.y - m_offset.y});
 
             const bool vVis = BarVisible(m_vPolicy, range.y);
             const bool hVis = BarVisible(m_hPolicy, range.x);
@@ -277,18 +277,18 @@ export namespace draconic::gui
             m_vBar->SetVisible(vVis);
             if (vVis)
             {
-                m_vBar->SetPosition(core::Float2{vp.x + vp.width - m_barThickness, vp.y});
+                m_vBar->SetPosition(foundation::Float2{vp.x + vp.width - m_barThickness, vp.y});
                 m_vBar->SetSize(
-                    core::Float2{m_barThickness, vp.height - (hVis ? m_barThickness : 0.0f)});
+                    foundation::Float2{m_barThickness, vp.height - (hVis ? m_barThickness : 0.0f)});
                 m_vBar->SetThumbProportion(cs.y > 0.0f ? vp.height / cs.y : 1.0f);
                 m_vBar->SetValue(range.y > 0.0f ? m_offset.y / range.y : 0.0f);
             }
             m_hBar->SetVisible(hVis);
             if (hVis)
             {
-                m_hBar->SetPosition(core::Float2{vp.x, vp.y + vp.height - m_barThickness});
+                m_hBar->SetPosition(foundation::Float2{vp.x, vp.y + vp.height - m_barThickness});
                 m_hBar->SetSize(
-                    core::Float2{vp.width - (vVis ? m_barThickness : 0.0f), m_barThickness});
+                    foundation::Float2{vp.width - (vVis ? m_barThickness : 0.0f), m_barThickness});
                 m_hBar->SetThumbProportion(cs.x > 0.0f ? vp.width / cs.x : 1.0f);
                 m_hBar->SetValue(range.x > 0.0f ? m_offset.x / range.x : 0.0f);
             }
@@ -298,7 +298,7 @@ export namespace draconic::gui
         RefPtr<ScrollContent> m_content;
         RefPtr<ScrollBar> m_vBar;
         RefPtr<ScrollBar> m_hBar;
-        core::Float2 m_offset{0.0f, 0.0f};
+        foundation::Float2 m_offset{0.0f, 0.0f};
         ScrollBarPolicy m_vPolicy = ScrollBarPolicy::Auto;
         ScrollBarPolicy m_hPolicy = ScrollBarPolicy::Auto;
         f32 m_barThickness = 12.0f;
@@ -306,7 +306,7 @@ export namespace draconic::gui
         f32 m_lineStep = 30.0f;
         bool m_autoMeasure = false;
         bool m_syncing = false;
-        core::Function<void(core::Float2)> m_onScroll;
+        foundation::Function<void(foundation::Float2)> m_onScroll;
     };
 
     DRACONIC_DEFINE_OBJECT(ScrollContent, "draconic::gui")

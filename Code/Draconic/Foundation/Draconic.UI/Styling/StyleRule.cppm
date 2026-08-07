@@ -9,19 +9,19 @@
 // RefPtr<Drawable>; ownership is by-value).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:style_rule;
 
-import draconic.core; // Object, Array, Optional, RefPtr, Color, StringView
+import draconic.foundation; // Object, Array, Optional, RefPtr, Color, StringView
 import :thickness;
 import :drawable;
 import :style_property;
 import :style_value;
 import :style_selector;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {
@@ -41,7 +41,7 @@ export namespace draconic::ui
 
         StyleRule() = default;
 
-        StyleRule& Set(StyleProperty prop, core::Color color)
+        StyleRule& Set(StyleProperty prop, foundation::Color color)
         {
             SetOverwrite(prop, StyleValue::ColorVal(color));
             return *this;

@@ -2,7 +2,7 @@
 /// Ported from Sedulous.Models/Model.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include <limits>
 #include <string>
@@ -10,7 +10,7 @@ module;
 
 export module draconic.model:model;
 
-import draconic.core;
+import draconic.foundation;
 import :vertex_format;
 import :mesh_part;
 import :model_texture;
@@ -20,7 +20,7 @@ import :model_mesh;
 import :model_animation;
 import :model_skin;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::model
 {

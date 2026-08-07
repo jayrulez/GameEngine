@@ -6,19 +6,19 @@
 // Sedulous port).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.shell:input_types;
 
-import draconic.core;
+import draconic.foundation;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::shell
 {
     // ---- Keyboard ---------------------------------------------------------
 
-    enum class KeyCode : core::u32
+    enum class KeyCode : foundation::u32
     {
         Unknown = 0,
         A,
@@ -142,7 +142,7 @@ export namespace draconic::shell
         Count,
     };
 
-    enum class KeyModifiers : core::u32
+    enum class KeyModifiers : foundation::u32
     {
         None = 0,
         LeftShift = 1 << 0,
@@ -165,11 +165,11 @@ export namespace draconic::shell
 
     inline constexpr KeyModifiers operator|(KeyModifiers a, KeyModifiers b) noexcept
     {
-        return static_cast<KeyModifiers>(static_cast<core::u32>(a) | static_cast<core::u32>(b));
+        return static_cast<KeyModifiers>(static_cast<foundation::u32>(a) | static_cast<foundation::u32>(b));
     }
     inline constexpr KeyModifiers operator&(KeyModifiers a, KeyModifiers b) noexcept
     {
-        return static_cast<KeyModifiers>(static_cast<core::u32>(a) & static_cast<core::u32>(b));
+        return static_cast<KeyModifiers>(static_cast<foundation::u32>(a) & static_cast<foundation::u32>(b));
     }
     inline constexpr KeyModifiers& operator|=(KeyModifiers& a, KeyModifiers b) noexcept
     {
@@ -183,7 +183,7 @@ export namespace draconic::shell
 
     // ---- Mouse ------------------------------------------------------------
 
-    enum class MouseButton : core::u32
+    enum class MouseButton : foundation::u32
     {
         Left,
         Middle,
@@ -194,7 +194,7 @@ export namespace draconic::shell
         Count,
     };
 
-    enum class CursorType : core::u32
+    enum class CursorType : foundation::u32
     {
         Default,
         Text,
@@ -222,7 +222,7 @@ export namespace draconic::shell
 
     // ---- Gamepad ----------------------------------------------------------
 
-    enum class GamepadButton : core::u32
+    enum class GamepadButton : foundation::u32
     {
         South,
         East,
@@ -249,7 +249,7 @@ export namespace draconic::shell
         Count,
     };
 
-    enum class GamepadAxis : core::u32
+    enum class GamepadAxis : foundation::u32
     {
         LeftX,
         LeftY,
@@ -265,10 +265,10 @@ export namespace draconic::shell
 
     struct TouchPoint
     {
-        core::u64 id = 0;
-        core::f32 x = 0.0f;
-        core::f32 y = 0.0f;
-        core::f32 pressure = 1.0f;
+        foundation::u64 id = 0;
+        foundation::f32 x = 0.0f;
+        foundation::f32 y = 0.0f;
+        foundation::f32 pressure = 1.0f;
     };
 
     // ---- Input events (the event-first source of truth) -------------------
@@ -278,7 +278,7 @@ export namespace draconic::shell
     // and the (upcoming) viewport surfaces / UI dispatch consume the same stream - so
     // poll and event views never disagree. See docs/design/viewport-input.md §4.2.
 
-    enum class InputEventKind : core::u8
+    enum class InputEventKind : foundation::u8
     {
         KeyDown,
         KeyUp,
@@ -298,7 +298,7 @@ export namespace draconic::shell
     struct InputEvent
     {
         InputEventKind kind{};
-        core::u32 window = 0; // source window id (0 = unknown/global)
+        foundation::u32 window = 0; // source window id (0 = unknown/global)
 
         // Payload - interpret by `kind`:
         KeyCode key{};                  // KeyDown/KeyUp
@@ -306,11 +306,11 @@ export namespace draconic::shell
         MouseButton button{};           // MouseButton*
         GamepadButton padButton{};      // GamepadButton*
         GamepadAxis padAxis{};          // GamepadAxis
-        core::i32 gamepad = 0;          // Gamepad* device index
-        core::f32 x = 0.0f, y = 0.0f;   // window-space pos (MouseMove/Touch) / wheel delta
-        core::f32 dx = 0.0f, dy = 0.0f; // relative movement (MouseMove)
-        core::f32 value = 0.0f;         // GamepadAxis value / touch pressure
-        core::u64 touchId = 0;          // Touch*
-        core::utf8char text[32] = {};   // TextInput (UTF-8, null-terminated)
+        foundation::i32 gamepad = 0;          // Gamepad* device index
+        foundation::f32 x = 0.0f, y = 0.0f;   // window-space pos (MouseMove/Touch) / wheel delta
+        foundation::f32 dx = 0.0f, dy = 0.0f; // relative movement (MouseMove)
+        foundation::f32 value = 0.0f;         // GamepadAxis value / touch pressure
+        foundation::u64 touchId = 0;          // Touch*
+        foundation::utf8char text[32] = {};   // TextInput (UTF-8, null-terminated)
     };
 }

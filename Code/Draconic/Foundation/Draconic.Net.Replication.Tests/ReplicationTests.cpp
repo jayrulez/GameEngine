@@ -2,15 +2,15 @@
 // driven Variant<->wire codec. The central bet: a component marks fields Replicated and the wire
 // format is GENERATED from reflection - no hand-written per-component net code.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.net; // BitWriter / BitReader
 import draconic.net.replication;
 import draconic.scene; // Scene / EntityHandle / SerializableComponentManager
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace net = draconic::net;
 namespace scene = draconic::scene;
 
@@ -32,13 +32,13 @@ namespace
     // ADL serialization (required to instantiate SerializableComponentManager<Mover>).
     inline void Serialize(ISerializer& ar, Mover& m)
     {
-        draconic::core::Serialize(ar, "position", m.position);
-        draconic::core::Serialize(ar, "rotation", m.rotation);
-        draconic::core::Serialize(ar, "speed", m.speed);
-        draconic::core::Serialize(ar, "grounded", m.grounded);
-        draconic::core::Serialize(ar, "health", m.health);
-        draconic::core::Serialize(ar, "localOnly", m.localOnly);
-        draconic::core::Serialize(ar, "label", m.label);
+        draconic::foundation::Serialize(ar, "position", m.position);
+        draconic::foundation::Serialize(ar, "rotation", m.rotation);
+        draconic::foundation::Serialize(ar, "speed", m.speed);
+        draconic::foundation::Serialize(ar, "grounded", m.grounded);
+        draconic::foundation::Serialize(ar, "health", m.health);
+        draconic::foundation::Serialize(ar, "localOnly", m.localOnly);
+        draconic::foundation::Serialize(ar, "label", m.label);
     }
 
     // A serializable pool so Mover can live in a scene + carry the wire type tag "test.Mover".

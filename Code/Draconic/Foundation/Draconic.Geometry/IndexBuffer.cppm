@@ -5,13 +5,13 @@
 /// append (Add/AddTriangle) for the primitive generators + importers.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.geometry:index_buffer;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::geometry
 {

@@ -1,7 +1,7 @@
 # Draconic.Tools.Cook - the command-line cooker (headless: no shell/GPU).
 add_executable(Draconic.Tools.Cook Main.cpp)
 target_link_libraries(Draconic.Tools.Cook PRIVATE
-    Draconic::Core Draconic::Content Draconic::VFS
+    Draconic::Foundation Draconic::Content Draconic::VFS
     Draconic::Editor Draconic::Editor.Core Draconic::Editor.Cook
     Draconic::Texture.Editor Draconic::Fonts.Editor Draconic::Image.Editor Draconic::Geometry.Editor
     Draconic::Animation.Editor Draconic::Materials.Editor Draconic::Shaders.Editor

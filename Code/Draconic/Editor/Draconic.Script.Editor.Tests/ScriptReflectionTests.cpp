@@ -1,11 +1,11 @@
 // Reflection track P1: ScriptClassAsset's reflected surface (its language string).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
+import draconic.foundation;
 import draconic.script.editor;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 TEST_CASE("reflection-p1: ScriptClassAsset exposes language and round-trips")
 {

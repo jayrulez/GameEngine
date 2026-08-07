@@ -6,15 +6,15 @@
 // ui.runtime service, then a script pushes an overlay, drives its controls by id, binds a click
 // handler, and pops it; we read back what each host call recorded and fire the click delegate.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.engine.ui; // Ui / UiScriptBinding / InstallUiScriptService / RegisterUiScriptFacade
 import draconic.script;
 import draconic.script.wren;
 import draconic.script.angelscript;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::script;
 namespace ui = draconic::ui;
 
@@ -109,7 +109,7 @@ namespace
 
 TEST_CASE("ui-facade: Wren pushes an overlay, drives controls by id, binds + fires a click handler")
 {
-    RegisterCoreTypes();
+    RegisterFoundationTypes();
     ui::RegisterUiScriptFacade();
 
     RefPtr<IScriptManager> manager = wren::CreateScriptManager();
@@ -139,7 +139,7 @@ TEST_CASE("ui-facade: Wren pushes an overlay, drives controls by id, binds + fir
 
 TEST_CASE("ui-facade: AngelScript pushes an overlay, drives controls by id, binds + fires a click")
 {
-    RegisterCoreTypes();
+    RegisterFoundationTypes();
     ui::RegisterUiScriptFacade();
 
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager();

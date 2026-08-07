@@ -1,16 +1,16 @@
 // Draconic UI - :slider partition
 //
 // Value slider with track, fill, and draggable thumb. Ported from Sedulous.UI/src/Controls/Slider.bf.
-// (The Min/Max/Orientation properties shadow core::Min/Max and the Orientation type, so the core
-// functions are called qualified as core::Min/core::Max and the enum is fully qualified. Round -> std::round.)
+// (The Min/Max/Orientation properties shadow foundation::Min/Max and the Orientation type, so the core
+// functions are called qualified as foundation::Min/foundation::Max and the enum is fully qualified. Round -> std::round.)
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:slider;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import :view;
 import :event;
@@ -24,8 +24,8 @@ import :event_args;
 import :input_enums;
 import :enums;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::ui
 {
@@ -49,7 +49,7 @@ export namespace draconic::ui
             Init();
             Min.SetSilent(minV);
             Max.SetSilent(maxV);
-            Value.SetSilent(core::Max(minV, core::Min(value, maxV)));
+            Value.SetSilent(foundation::Max(minV, foundation::Min(value, maxV)));
         }
 
         void OnMouseDown(MouseEventArgs& e) override
@@ -251,7 +251,7 @@ export namespace draconic::ui
                 [self](f32 val)
                 {
                     const f32 clamped = self->SnapToStep(
-                        core::Max(self->Min.Value(), core::Min(val, self->Max.Value())));
+                        foundation::Max(self->Min.Value(), foundation::Min(val, self->Max.Value())));
                     if (clamped != val)
                     {
                         self->Value.SetSilent(clamped);
@@ -263,7 +263,7 @@ export namespace draconic::ui
             Step.Changed.Add(Event<void(f32)>::Handler{[self](f32 val)
                                                        {
                                                            self->Step.SetSilent(
-                                                               core::Max(0.0f, val));
+                                                               foundation::Max(0.0f, val));
                                                            self->ReclampValue();
                                                        }});
         }
@@ -271,7 +271,7 @@ export namespace draconic::ui
         void ReclampValue()
         {
             const f32 clamped =
-                SnapToStep(core::Max(Min.Value(), core::Min(Value.Value(), Max.Value())));
+                SnapToStep(foundation::Max(Min.Value(), foundation::Min(Value.Value(), Max.Value())));
             if (clamped != Value.Value())
             {
                 Value.SetValue(clamped);
@@ -295,7 +295,7 @@ export namespace draconic::ui
                 progress = trackH > 0 ? 1.0f - (localY - thumbHalf) / trackH : 0.0f;
             }
             Value.SetValue(Min.Value() + (Max.Value() - Min.Value()) *
-                                             core::Max(0.0f, core::Min(progress, 1.0f)));
+                                             foundation::Max(0.0f, foundation::Min(progress, 1.0f)));
         }
 
         [[nodiscard]] f32 SnapToStep(f32 value) const
@@ -304,7 +304,7 @@ export namespace draconic::ui
             {
                 return value;
             }
-            return Min.Value() + core::Round((value - Min.Value()) / Step.Value()) * Step.Value();
+            return Min.Value() + foundation::Round((value - Min.Value()) / Step.Value()) * Step.Value();
         }
 
         bool m_dragging = false;

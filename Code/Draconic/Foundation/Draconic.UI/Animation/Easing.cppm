@@ -1,17 +1,17 @@
 // Draconic UI - :easing partition
 //
-// Convenience re-exports of draconic.core's easing functions (:easings) with short, UI-friendly names.
+// Convenience re-exports of Draconic.Foundation's easing functions (:easings) with short, UI-friendly names.
 // Ported from Sedulous.UI/src/Animation/Easing.bf (Beef `static class` of readonly EasingFunction ->
 // a struct of static constexpr function-pointer members). EasingFunction = f32(*)(f32).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:easing;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {
@@ -26,19 +26,19 @@ export namespace draconic::ui
         static constexpr EasingFunction EaseInOut = &EaseInOutQuadratic;
 
         // Cubic (default for smooth UI animations)
-        static constexpr EasingFunction EaseInCubic = &draconic::core::EaseInCubic;
-        static constexpr EasingFunction EaseOutCubic = &draconic::core::EaseOutCubic;
-        static constexpr EasingFunction EaseInOutCubic = &draconic::core::EaseInOutCubic;
+        static constexpr EasingFunction EaseInCubic = &draconic::foundation::EaseInCubic;
+        static constexpr EasingFunction EaseOutCubic = &draconic::foundation::EaseOutCubic;
+        static constexpr EasingFunction EaseInOutCubic = &draconic::foundation::EaseInOutCubic;
 
         // Quartic
-        static constexpr EasingFunction EaseInQuartic = &draconic::core::EaseInQuartic;
-        static constexpr EasingFunction EaseOutQuartic = &draconic::core::EaseOutQuartic;
-        static constexpr EasingFunction EaseInOutQuartic = &draconic::core::EaseInOutQuartic;
+        static constexpr EasingFunction EaseInQuartic = &draconic::foundation::EaseInQuartic;
+        static constexpr EasingFunction EaseOutQuartic = &draconic::foundation::EaseOutQuartic;
+        static constexpr EasingFunction EaseInOutQuartic = &draconic::foundation::EaseInOutQuartic;
 
         // Quintic
-        static constexpr EasingFunction EaseInQuintic = &draconic::core::EaseInQuintic;
-        static constexpr EasingFunction EaseOutQuintic = &draconic::core::EaseOutQuintic;
-        static constexpr EasingFunction EaseInOutQuintic = &draconic::core::EaseInOutQuintic;
+        static constexpr EasingFunction EaseInQuintic = &draconic::foundation::EaseInQuintic;
+        static constexpr EasingFunction EaseOutQuintic = &draconic::foundation::EaseOutQuintic;
+        static constexpr EasingFunction EaseInOutQuintic = &draconic::foundation::EaseInOutQuintic;
 
         // Bounce
         static constexpr EasingFunction BounceIn = &EaseInBounce;

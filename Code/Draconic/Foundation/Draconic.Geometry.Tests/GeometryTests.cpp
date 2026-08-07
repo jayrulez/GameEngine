@@ -3,12 +3,12 @@
 // stream is usable anywhere a StaticMesh is, with the skinning stream discoverable via
 // the virtual hooks. Plus the procedural primitives.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.geometry;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::geometry;
 
 TEST_CASE("stream layouts are the GPU-canonical sizes")

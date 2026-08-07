@@ -7,12 +7,12 @@
 // (StringView slices into the stable Text string); String.RawChars ellipsis loop -> byte scan.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:label;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.fonts; // CachedFont, TextAlignment, VerticalAlignment, GlyphPosition
 import :view;
 import :property;
@@ -21,8 +21,8 @@ import :style_property;
 import :draw_context;
 import :palette;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace fonts = draconic::fonts;
 
 export namespace draconic::ui
@@ -38,7 +38,7 @@ export namespace draconic::ui
         Property<bool> Ellipsis{false};
         Property<Optional<f32>> FontSize;
         Property<String> FontFamily;
-        Property<Optional<core::Color>> TextColor;
+        Property<Optional<foundation::Color>> TextColor;
 
         Label()
         {

@@ -3,9 +3,9 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.shell;
 import draconic.input;
 import draconic.settings;
@@ -15,7 +15,7 @@ import draconic.engine.input;
 import draconic.xml;
 import draconic.xml.serialization;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::input;
 namespace shell = draconic::shell;
 

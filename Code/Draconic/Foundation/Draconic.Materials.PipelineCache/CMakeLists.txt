@@ -4,7 +4,7 @@ add_library(Draconic.Materials.PipelineCache STATIC)
 add_library(Draconic::Materials.PipelineCache ALIAS Draconic.Materials.PipelineCache)
 
 target_link_libraries(Draconic.Materials.PipelineCache
-    PUBLIC Draconic::Core Draconic::RHI Draconic::Shaders Draconic::Shaders.System
+    PUBLIC Draconic::Foundation Draconic::RHI Draconic::Shaders Draconic::Shaders.System
            Draconic::Materials Draconic::Policy)
 
 target_sources(Draconic.Materials.PipelineCache

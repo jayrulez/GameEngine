@@ -5,22 +5,22 @@
 // reflection TypeOf<T>() (Draconic has -fno-rtti, so no std::type_index).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include <type_traits>
 
 export module draconic.runtime:context;
 
-import draconic.core;
+import draconic.foundation;
 import :subsystem;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::runtime
 {
     class Context
     {
     public:
-        explicit Context(core::IAllocator& allocator = core::DefaultAllocator()) noexcept
+        explicit Context(foundation::IAllocator& allocator = foundation::DefaultAllocator()) noexcept
             : m_allocator(&allocator)
         {
         }
@@ -39,10 +39,10 @@ export namespace draconic::runtime
         T* AddSubsystem(Args&&... args)
         {
             static_assert(std::is_base_of_v<Subsystem, T>, "T must derive from Subsystem");
-            T* subsystem = m_allocator->New<T>(core::Forward<Args>(args)...);
+            T* subsystem = m_allocator->New<T>(foundation::Forward<Args>(args)...);
             m_owned.PushBack(
-                core::UniquePtr<Subsystem>(static_cast<Subsystem*>(subsystem), *m_allocator));
-            RegisterInternal(&core::TypeOf<T>(), static_cast<Subsystem*>(subsystem));
+                foundation::UniquePtr<Subsystem>(static_cast<Subsystem*>(subsystem), *m_allocator));
+            RegisterInternal(&foundation::TypeOf<T>(), static_cast<Subsystem*>(subsystem));
             return subsystem;
         }
 
@@ -53,7 +53,7 @@ export namespace draconic::runtime
         T* RegisterSubsystem(T* subsystem)
         {
             static_assert(std::is_base_of_v<Subsystem, T>, "T must derive from Subsystem");
-            RegisterInternal(&core::TypeOf<T>(), static_cast<Subsystem*>(subsystem));
+            RegisterInternal(&foundation::TypeOf<T>(), static_cast<Subsystem*>(subsystem));
             return subsystem;
         }
 
@@ -62,20 +62,20 @@ export namespace draconic::runtime
         template <typename T>
         void RemoveSubsystem()
         {
-            RemoveByType(&core::TypeOf<T>());
+            RemoveByType(&foundation::TypeOf<T>());
         }
 
         template <typename T>
         [[nodiscard]] T* GetSubsystem() noexcept
         {
-            Subsystem* const* found = m_byType.Find(&core::TypeOf<T>());
+            Subsystem* const* found = m_byType.Find(&foundation::TypeOf<T>());
             return (found != nullptr) ? static_cast<T*>(*found) : nullptr;
         }
 
         template <typename T>
         [[nodiscard]] bool HasSubsystem() const noexcept
         {
-            return m_byType.Contains(&core::TypeOf<T>());
+            return m_byType.Contains(&foundation::TypeOf<T>());
         }
 
         // Init then Ready, in UpdateOrder; marks the context running.
@@ -96,41 +96,41 @@ export namespace draconic::runtime
         // scales the dt feeding FixedUpdate accumulation and the Update/PostUpdate phases;
         // frame-rate-tied work (UI, app hooks) keeps the raw dt. Gameplay code and the
         // input runtime's per-action timeScale flag read it from here.
-        void SetTimeScale(core::f32 scale) noexcept { m_timeScale = scale < 0.0f ? 0.0f : scale; }
-        [[nodiscard]] core::f32 TimeScale() const noexcept { return m_timeScale; }
+        void SetTimeScale(foundation::f32 scale) noexcept { m_timeScale = scale < 0.0f ? 0.0f : scale; }
+        [[nodiscard]] foundation::f32 TimeScale() const noexcept { return m_timeScale; }
 
         // Fixed-lane timing, published by the host each frame AFTER the fixed steps ran:
         // subsystems interpolating fixed-rate state (physics poses) blend with FixedAlpha().
-        void SetFixedTiming(core::f32 step, core::f32 alpha) noexcept
+        void SetFixedTiming(foundation::f32 step, foundation::f32 alpha) noexcept
         {
             m_fixedStep = step;
             m_fixedAlpha = alpha;
         }
-        [[nodiscard]] core::f32 FixedTimeStep() const noexcept { return m_fixedStep; }
-        [[nodiscard]] core::f32 FixedAlpha() const noexcept { return m_fixedAlpha; }
+        [[nodiscard]] foundation::f32 FixedTimeStep() const noexcept { return m_fixedStep; }
+        [[nodiscard]] foundation::f32 FixedAlpha() const noexcept { return m_fixedAlpha; }
 
-        void BeginFrame(core::f32 dt)
+        void BeginFrame(foundation::f32 dt)
         {
             for (Subsystem* s : m_sorted)
             {
                 s->BeginFrame(dt);
             }
         }
-        void FixedUpdate(core::f32 dt)
+        void FixedUpdate(foundation::f32 dt)
         {
             for (Subsystem* s : m_sorted)
             {
                 s->FixedUpdate(dt);
             }
         }
-        void Update(core::f32 dt)
+        void Update(foundation::f32 dt)
         {
             for (Subsystem* s : m_sorted)
             {
                 s->Update(dt);
             }
         }
-        void PostUpdate(core::f32 dt)
+        void PostUpdate(foundation::f32 dt)
         {
             for (Subsystem* s : m_sorted)
             {
@@ -149,11 +149,11 @@ export namespace draconic::runtime
         void Shutdown()
         {
             m_running = false;
-            for (core::usize i = m_sorted.Size(); i-- > 0;)
+            for (foundation::usize i = m_sorted.Size(); i-- > 0;)
             {
                 m_sorted[i]->PrepareShutdown();
             }
-            for (core::usize i = m_sorted.Size(); i-- > 0;)
+            for (foundation::usize i = m_sorted.Size(); i-- > 0;)
             {
                 m_sorted[i]->Shutdown();
             }
@@ -178,7 +178,7 @@ export namespace draconic::runtime
     private:
         // Registers an already-constructed subsystem: index by type, insert into
         // the sorted phase list, wire the context, and bring it up if running.
-        void RegisterInternal(const core::TypeInfo* type, Subsystem* subsystem)
+        void RegisterInternal(const foundation::TypeInfo* type, Subsystem* subsystem)
         {
             m_byType.InsertOrAssign(type, subsystem);
             InsertSorted(subsystem);
@@ -192,7 +192,7 @@ export namespace draconic::runtime
 
         // Detaches a subsystem by type: shut it down (if running), unregister,
         // drop from the lookup/phase lists, and destroy it if Context-owned.
-        void RemoveByType(const core::TypeInfo* type)
+        void RemoveByType(const foundation::TypeInfo* type)
         {
             Subsystem* const* found = m_byType.Find(type);
             if (found == nullptr)
@@ -208,7 +208,7 @@ export namespace draconic::runtime
             subsystem->Shutdown();
             subsystem->OnUnregister();
 
-            for (core::usize i = 0; i < m_sorted.Size(); ++i)
+            for (foundation::usize i = 0; i < m_sorted.Size(); ++i)
             {
                 if (m_sorted[i] == subsystem)
                 {
@@ -219,7 +219,7 @@ export namespace draconic::runtime
             m_byType.Remove(type);
 
             // If the Context owns it, destroying the UniquePtr frees the object.
-            for (core::usize i = 0; i < m_owned.Size(); ++i)
+            for (foundation::usize i = 0; i < m_owned.Size(); ++i)
             {
                 if (m_owned[i].Get() == subsystem)
                 {
@@ -233,7 +233,7 @@ export namespace draconic::runtime
         void InsertSorted(Subsystem* subsystem)
         {
             m_sorted.PushBack(subsystem);
-            core::usize i = m_sorted.Size() - 1;
+            foundation::usize i = m_sorted.Size() - 1;
             while (i > 0 && m_sorted[i - 1]->UpdateOrder() > subsystem->UpdateOrder())
             {
                 Subsystem* prev = m_sorted[i - 1];
@@ -243,14 +243,14 @@ export namespace draconic::runtime
             }
         }
 
-        core::IAllocator* m_allocator;
-        core::HashMap<const core::TypeInfo*, Subsystem*> m_byType;
-        core::Array<Subsystem*> m_sorted;                // non-owning, UpdateOrder-sorted
-        core::Array<core::UniquePtr<Subsystem>> m_owned; // ownership
+        foundation::IAllocator* m_allocator;
+        foundation::HashMap<const foundation::TypeInfo*, Subsystem*> m_byType;
+        foundation::Array<Subsystem*> m_sorted;                // non-owning, UpdateOrder-sorted
+        foundation::Array<foundation::UniquePtr<Subsystem>> m_owned; // ownership
         bool m_running = false;
-        core::f32 m_fixedStep = 1.0f / 60.0f;
-        core::f32 m_fixedAlpha = 0.0f;
-        core::f32 m_timeScale = 1.0f;
+        foundation::f32 m_fixedStep = 1.0f / 60.0f;
+        foundation::f32 m_fixedAlpha = 0.0f;
+        foundation::f32 m_timeScale = 1.0f;
         bool m_disposed = false;
     };
 }

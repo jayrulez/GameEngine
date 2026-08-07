@@ -2,13 +2,13 @@
 // fields enumerate with attributes (loop-frame fields gated on `loop`), and round-trip through
 // get/set. No enums on this asset.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 #include <initializer_list>
-import draconic.core;
+import draconic.foundation;
 import draconic.audio.editor;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace
 {

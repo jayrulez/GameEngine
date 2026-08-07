@@ -1,12 +1,12 @@
 // Ported from Sedulous.UI.Tests/src/ViewIdTests.bf (faithful).
-// ViewId.ToString appends a debug string via core::AppendFormat (Sedulous ViewId.ToString).
+// ViewId.ToString appends a debug string via foundation::AppendFormat (Sedulous ViewId.ToString).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 
 using namespace draconic::ui;
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 TEST_CASE("view-id: Create_ReturnsValidId")
 {

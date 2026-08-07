@@ -2,17 +2,17 @@
 //
 // Matches views by type, style class(es), control state, and optional pseudo-element name.
 // Specificity: class=10, type=1, state=1, pseudo=1. Ported from Sedulous.UI/src/Styling/StyleSelector.bf.
-// Beef `Type` -> const core::TypeInfo* (our RTTI); nullable String -> Optional<String>.
+// Beef `Type` -> const foundation::TypeInfo* (our RTTI); nullable String -> Optional<String>.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:style_selector;
 
-import draconic.core; // TypeInfo, IsDerivedFrom, Array, String, StringView, Optional, i32
+import draconic.foundation; // TypeInfo, IsDerivedFrom, Array, String, StringView, Optional, i32
 import :control_state;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

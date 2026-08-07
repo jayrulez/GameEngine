@@ -17,12 +17,12 @@
 // Activating a leaf item closes the entire chain back to the root.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:menu;
 
-import draconic.core;  // RefPtr, MakeRef, Array, Function, Move, Max, Cast
+import draconic.foundation;  // RefPtr, MakeRef, Array, Function, Move, Max, Cast
 import draconic.fonts; // CachedFont
 import draconic.vg;    // PathBuilder, StrokeStyle
 import :rect;
@@ -35,8 +35,8 @@ import :node;
 import :ui_widget;
 import :event_dispatcher;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace fonts = draconic::fonts;
 namespace vg = draconic::vg;
 
@@ -54,7 +54,7 @@ export namespace draconic::gui
         [[nodiscard]] virtual bool IsSelectable() const { return false; }
 
         // Called (with this row) whenever the pointer enters it - the menu wires this.
-        void SetOnHovered(core::Function<void()> callback) { m_onHovered = core::Move(callback); }
+        void SetOnHovered(foundation::Function<void()> callback) { m_onHovered = foundation::Move(callback); }
 
     protected:
         void OnMouseEnter(const MouseEvent& event) override
@@ -65,7 +65,7 @@ export namespace draconic::gui
         }
 
     private:
-        core::Function<void()> m_onHovered;
+        foundation::Function<void()> m_onHovered;
     };
 
     // === Separator =============================================================
@@ -73,7 +73,7 @@ export namespace draconic::gui
     {
         DRACONIC_OBJECT(MenuSeparator, MenuRow)
     public:
-        MenuSeparator() { SetTag(core::StringView(u8"menuseparator")); }
+        MenuSeparator() { SetTag(foundation::StringView(u8"menuseparator")); }
 
         [[nodiscard]] f32 RowHeight() const override { return m_height; }
         void SetLineColor(Color color)
@@ -83,13 +83,13 @@ export namespace draconic::gui
         }
 
         // Theming part: menuseparator::line.
-        void CollectStyleParts(core::Array<core::StringView>& out) const override
+        void CollectStyleParts(foundation::Array<foundation::StringView>& out) const override
         {
-            out.PushBack(core::StringView(u8"line"));
+            out.PushBack(foundation::StringView(u8"line"));
         }
-        void SetThemePartColor(core::StringView part, Color color) override
+        void SetThemePartColor(foundation::StringView part, Color color) override
         {
-            if (part == core::StringView(u8"line"))
+            if (part == foundation::StringView(u8"line"))
                 m_line = color;
         }
 
@@ -100,7 +100,7 @@ export namespace draconic::gui
             const Rect b = GetLocalBounds();
             const f32 y = b.y + b.height * 0.5f;
             ctx.VG().FillRect(
-                core::Rectangle{b.x + 8.0f, y, core::Max(0.0f, b.width - 16.0f), 1.0f}, m_line);
+                foundation::Rectangle{b.x + 8.0f, y, foundation::Max(0.0f, b.width - 16.0f), 1.0f}, m_line);
         }
 
     private:
@@ -115,27 +115,27 @@ export namespace draconic::gui
     public:
         MenuItem()
         {
-            SetTag(core::StringView(u8"menuitem"));
+            SetTag(foundation::StringView(u8"menuitem"));
             m_text.SetAlignment(TextHAlign::Left, TextVAlign::Middle);
             m_shortcut.SetAlignment(TextHAlign::Right, TextVAlign::Middle);
         }
 
         // Content.
-        void SetText(core::StringView text)
+        void SetText(foundation::StringView text)
         {
             m_text.SetString(text);
             Invalidate();
         }
-        [[nodiscard]] core::StringView GetText() const { return m_text.GetString(); }
-        void SetShortcut(core::StringView text)
+        [[nodiscard]] foundation::StringView GetText() const { return m_text.GetString(); }
+        void SetShortcut(foundation::StringView text)
         {
             m_shortcut.SetString(text);
             Invalidate();
         }
-        [[nodiscard]] core::StringView GetShortcut() const { return m_shortcut.GetString(); }
-        void SetIcon(core::RefPtr<Drawable> icon)
+        [[nodiscard]] foundation::StringView GetShortcut() const { return m_shortcut.GetString(); }
+        void SetIcon(foundation::RefPtr<Drawable> icon)
         {
-            m_icon = core::Move(icon);
+            m_icon = foundation::Move(icon);
             Invalidate();
         }
 
@@ -152,7 +152,7 @@ export namespace draconic::gui
             Invalidate();
         }
         void SetHighlightColor(Color color) { m_highlight = color; }
-        void SetRowHeight(f32 height) { m_rowHeight = core::Max(1.0f, height); }
+        void SetRowHeight(f32 height) { m_rowHeight = foundation::Max(1.0f, height); }
 
         // Checkable state (a leading check mark). SetChecked fires the toggle callback.
         void SetCheckable(bool checkable)
@@ -176,17 +176,17 @@ export namespace draconic::gui
             m_checked = checked;
             Invalidate();
         } // no callback (init)
-        void SetOnToggled(core::Function<void(bool)> callback)
+        void SetOnToggled(foundation::Function<void(bool)> callback)
         {
-            m_onToggled = core::Move(callback);
+            m_onToggled = foundation::Move(callback);
         }
 
         // The user's action (run before the menu closes).
-        void SetOnPicked(core::Function<void()> callback) { m_onPicked = core::Move(callback); }
+        void SetOnPicked(foundation::Function<void()> callback) { m_onPicked = foundation::Move(callback); }
         // The menu installs this to close the whole chain after activation.
-        void SetOnActivated(core::Function<void()> callback)
+        void SetOnActivated(foundation::Function<void()> callback)
         {
-            m_onActivated = core::Move(callback);
+            m_onActivated = foundation::Move(callback);
         }
 
         [[nodiscard]] f32 RowHeight() const override { return m_rowHeight; }
@@ -202,13 +202,13 @@ export namespace draconic::gui
         }
 
         // Theming: menuitem::highlight (hover row background); text via the hook below.
-        void CollectStyleParts(core::Array<core::StringView>& out) const override
+        void CollectStyleParts(foundation::Array<foundation::StringView>& out) const override
         {
-            out.PushBack(core::StringView(u8"highlight"));
+            out.PushBack(foundation::StringView(u8"highlight"));
         }
-        void SetThemePartColor(core::StringView part, Color color) override
+        void SetThemePartColor(foundation::StringView part, Color color) override
         {
-            if (part == core::StringView(u8"highlight"))
+            if (part == foundation::StringView(u8"highlight"))
                 m_highlight = color;
         }
         void SetThemeTextColor(Color color) override { SetTextColor(color); }
@@ -242,12 +242,12 @@ export namespace draconic::gui
             }
             else if (m_icon)
             {
-                const f32 s = core::Max(0.0f, core::Max(0.0f, kGutter - 8.0f));
+                const f32 s = foundation::Max(0.0f, foundation::Max(0.0f, kGutter - 8.0f));
                 m_icon->Draw(ctx, Rect{b.x + 4.0f, b.y + (b.height - s) * 0.5f, s, s});
             }
 
             // Text + shortcut share the inner rect (opposite alignments).
-            const Rect inner{b.x + kGutter, b.y, core::Max(0.0f, b.width - kGutter - kRightPad),
+            const Rect inner{b.x + kGutter, b.y, foundation::Max(0.0f, b.width - kGutter - kRightPad),
                              b.height};
             m_text.Draw(ctx, inner);
             if (m_shortcut.GetString().Size() > 0)
@@ -272,15 +272,15 @@ export namespace draconic::gui
     private:
         Text m_text;
         Text m_shortcut;
-        core::RefPtr<Drawable> m_icon;
+        foundation::RefPtr<Drawable> m_icon;
         bool m_checkable = false;
         bool m_checked = false;
         f32 m_rowHeight = 26.0f;
         Color m_highlight{0.24f, 0.40f, 0.62f, 1.0f};
         Color m_checkColor{0.88f, 0.90f, 0.94f, 1.0f};
-        core::Function<void()> m_onPicked;
-        core::Function<void()> m_onActivated;
-        core::Function<void(bool)> m_onToggled;
+        foundation::Function<void()> m_onPicked;
+        foundation::Function<void()> m_onActivated;
+        foundation::Function<void(bool)> m_onToggled;
     };
 
     class Menu; // for MenuSubItem's submenu pointer
@@ -293,13 +293,13 @@ export namespace draconic::gui
     {
         DRACONIC_OBJECT(MenuSubItem, MenuItem)
     public:
-        MenuSubItem() { SetTag(core::StringView(u8"menusubmenu")); }
+        MenuSubItem() { SetTag(foundation::StringView(u8"menusubmenu")); }
 
         void SetSubMenu(Menu* menu) noexcept { m_subMenu = menu; }
         [[nodiscard]] Menu* GetSubMenu() const noexcept { return m_subMenu; }
 
         // The menu installs this to open the submenu (also used by hover).
-        void SetOnOpenSubMenu(core::Function<void()> callback) { m_onOpen = core::Move(callback); }
+        void SetOnOpenSubMenu(foundation::Function<void()> callback) { m_onOpen = foundation::Move(callback); }
 
         [[nodiscard]] Color ArrowColor() const noexcept { return m_arrowColor; }
 
@@ -328,7 +328,7 @@ export namespace draconic::gui
 
     private:
         Menu* m_subMenu = nullptr; // non-owning; owned as a RefPtr by the Menu
-        core::Function<void()> m_onOpen;
+        foundation::Function<void()> m_onOpen;
         Color m_arrowColor{0.80f, 0.84f, 0.90f, 1.0f};
     };
 
@@ -339,26 +339,26 @@ export namespace draconic::gui
     public:
         Menu()
         {
-            SetTag(core::StringView(u8"menu"));
-            SetBackground(core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), m_panelColor));
+            SetTag(foundation::StringView(u8"menu"));
+            SetBackground(foundation::MakeRef<RectangleDrawable>(foundation::DefaultAllocator(), m_panelColor));
         }
 
         void SetFont(fonts::CachedFont* font)
         {
             m_font = font;
             for (MenuRow* row : m_rows)
-                if (MenuItem* it = core::Cast<MenuItem>(row))
+                if (MenuItem* it = foundation::Cast<MenuItem>(row))
                     it->SetFont(font);
         }
         void SetWidth(f32 width)
         {
-            m_width = core::Max(1.0f, width);
+            m_width = foundation::Max(1.0f, width);
             m_autoWidth = false;
             Relayout();
         }
         void SetItemHeight(f32 height)
         {
-            m_itemHeight = core::Max(1.0f, height);
+            m_itemHeight = foundation::Max(1.0f, height);
             ApplyItemHeights();
             Relayout();
         }
@@ -371,13 +371,13 @@ export namespace draconic::gui
         }
 
         // Add a plain activatable item. Activating runs `action`, then closes the whole chain.
-        MenuItem* AddItem(core::StringView text, core::Function<void()> action)
+        MenuItem* AddItem(foundation::StringView text, foundation::Function<void()> action)
         {
-            auto item = core::MakeRef<MenuItem>(core::DefaultAllocator());
+            auto item = foundation::MakeRef<MenuItem>(foundation::DefaultAllocator());
             item->SetText(text);
-            core::Function<void()> act = core::Move(action);
+            foundation::Function<void()> act = foundation::Move(action);
             item->SetOnPicked(
-                [act = core::Move(act)]()
+                [act = foundation::Move(act)]()
                 {
                     if (act)
                         act();
@@ -388,14 +388,14 @@ export namespace draconic::gui
         }
 
         // Add a checkable item. Activating toggles it (firing `onToggled`) and closes the chain.
-        MenuItem* AddCheckItem(core::StringView text, bool checked,
-                               core::Function<void(bool)> onToggled)
+        MenuItem* AddCheckItem(foundation::StringView text, bool checked,
+                               foundation::Function<void(bool)> onToggled)
         {
-            auto item = core::MakeRef<MenuItem>(core::DefaultAllocator());
+            auto item = foundation::MakeRef<MenuItem>(foundation::DefaultAllocator());
             item->SetText(text);
             item->SetCheckable(true);
             item->SetCheckedSilently(checked);
-            item->SetOnToggled(core::Move(onToggled));
+            item->SetOnToggled(foundation::Move(onToggled));
             MenuItem* raw = item.Get();
             AddItemNode(item.Get(), raw);
             return raw;
@@ -404,7 +404,7 @@ export namespace draconic::gui
         // Add a horizontal separator (a non-interactive divider).
         void AddSeparator()
         {
-            auto sep = core::MakeRef<MenuSeparator>(core::DefaultAllocator());
+            auto sep = foundation::MakeRef<MenuSeparator>(foundation::DefaultAllocator());
             MenuSeparator* raw = sep.Get();
             Menu* self = this;
             raw->SetOnHovered([self, raw]() { self->OnRowHovered(raw); });
@@ -415,11 +415,11 @@ export namespace draconic::gui
 
         // Add a submenu item; returns the (empty) child Menu to populate. The child is owned by
         // this menu and shown to the item's right on hover/click.
-        Menu* AddSubMenu(core::StringView text)
+        Menu* AddSubMenu(foundation::StringView text)
         {
-            auto item = core::MakeRef<MenuSubItem>(core::DefaultAllocator());
+            auto item = foundation::MakeRef<MenuSubItem>(foundation::DefaultAllocator());
             item->SetText(text);
-            auto sub = core::MakeRef<Menu>(core::DefaultAllocator());
+            auto sub = foundation::MakeRef<Menu>(foundation::DefaultAllocator());
             sub->SetFont(m_font);
             sub->SetItemHeight(m_itemHeight);
             item->SetSubMenu(sub.Get());
@@ -430,7 +430,7 @@ export namespace draconic::gui
             item->SetOnOpenSubMenu([self, rawItem]() { self->OpenSubMenuFor(rawItem); });
 
             AddItemNode(item.Get(), rawItem);
-            m_ownedSubMenus.PushBack(core::Move(sub)); // keep the submenu alive
+            m_ownedSubMenus.PushBack(foundation::Move(sub)); // keep the submenu alive
             return rawSub;
         }
 
@@ -448,7 +448,7 @@ export namespace draconic::gui
 
         // Notified when this menu closes as a top-level popup (outside click / Escape /
         // activation). A MenuBar uses it to clear its "open menu" state.
-        void SetOnClosed(core::Function<void()> callback) { m_onClosed = core::Move(callback); }
+        void SetOnClosed(foundation::Function<void()> callback) { m_onClosed = foundation::Move(callback); }
 
         // Close this menu if it is open as a popup (used by a MenuBar toggle).
         void Close()
@@ -462,7 +462,7 @@ export namespace draconic::gui
         // passes its button so clicking it again can toggle the menu closed. A context menu
         // passes none, so ANY press outside the menu's whole open chain dismisses it. The
         // chain-aware `contains` predicate keeps clicks inside open submenus from dismissing.
-        void Open(Node& owner, core::Float2 position, Node* popupOwner = nullptr)
+        void Open(Node& owner, foundation::Float2 position, Node* popupOwner = nullptr)
         {
             Node* root = owner.GetRootNode();
             EventDispatcher* dispatcher = owner.GetEventDispatcher();
@@ -488,7 +488,7 @@ export namespace draconic::gui
     private:
         void AddItemNode(Node* node, MenuRow* row)
         {
-            if (MenuItem* it = core::Cast<MenuItem>(row))
+            if (MenuItem* it = foundation::Cast<MenuItem>(row))
             {
                 it->SetFont(m_font);
                 it->SetTextColor(m_textColor);
@@ -506,7 +506,7 @@ export namespace draconic::gui
         void ApplyItemHeights()
         {
             for (MenuRow* row : m_rows)
-                if (MenuItem* it = core::Cast<MenuItem>(row))
+                if (MenuItem* it = foundation::Cast<MenuItem>(row))
                     it->SetRowHeight(m_itemHeight);
         }
 
@@ -517,8 +517,8 @@ export namespace draconic::gui
             {
                 f32 widest = 1.0f;
                 for (MenuRow* row : m_rows)
-                    if (MenuItem* it = core::Cast<MenuItem>(row))
-                        widest = core::Max(widest, it->PreferredWidth());
+                    if (MenuItem* it = foundation::Cast<MenuItem>(row))
+                        widest = foundation::Max(widest, it->PreferredWidth());
                 width = widest;
             }
 
@@ -526,11 +526,11 @@ export namespace draconic::gui
             for (MenuRow* row : m_rows)
             {
                 const f32 h = row->RowHeight();
-                row->SetPosition(core::Float2{0.0f, y});
-                row->SetSize(core::Float2{width, h});
+                row->SetPosition(foundation::Float2{0.0f, y});
+                row->SetSize(foundation::Float2{width, h});
                 y += h;
             }
-            SetSize(core::Float2{width, y});
+            SetSize(foundation::Float2{width, y});
         }
 
         // === Submenu chain ===
@@ -550,7 +550,7 @@ export namespace draconic::gui
                 return;
             // Assume identity root transforms (menus attach directly to the root): the item's
             // root-local y = this menu's position + the item's local position.
-            const core::Float2 pos{GetPosition().x + GetSize().x,
+            const foundation::Float2 pos{GetPosition().x + GetSize().x,
                                    GetPosition().y + item->GetPosition().y};
             sub->m_ownerItem = item;
             sub->SetPosition(pos);
@@ -581,7 +581,7 @@ export namespace draconic::gui
                 m_currentSubMenu->HideAsSubMenu();
                 m_currentSubMenu = nullptr;
             }
-            if (MenuSubItem* sub = core::Cast<MenuSubItem>(row))
+            if (MenuSubItem* sub = foundation::Cast<MenuSubItem>(row))
                 OpenSubMenuFor(sub);
         }
 
@@ -591,7 +591,7 @@ export namespace draconic::gui
             Menu* menu = this;
             while (menu->m_ownerItem != nullptr)
             {
-                Menu* parent = core::Cast<Menu>(menu->m_ownerItem->GetParent());
+                Menu* parent = foundation::Cast<Menu>(menu->m_ownerItem->GetParent());
                 if (parent == nullptr)
                     break;
                 menu = parent;
@@ -636,7 +636,7 @@ export namespace draconic::gui
         }
 
         Array<MenuRow*> m_rows;                    // rows, owned as children
-        Array<core::RefPtr<Menu>> m_ownedSubMenus; // keep submenus alive (they live under the root)
+        Array<foundation::RefPtr<Menu>> m_ownedSubMenus; // keep submenus alive (they live under the root)
         MenuSubItem* m_ownerItem = nullptr;        // set when shown AS a submenu
         Menu* m_currentSubMenu = nullptr;          // the open child submenu (non-owning; a sibling)
         fonts::CachedFont* m_font = nullptr;
@@ -646,7 +646,7 @@ export namespace draconic::gui
         f32 m_itemHeight = 26.0f;
         Color m_panelColor{0.16f, 0.17f, 0.21f, 1.0f};
         Color m_textColor{0.88f, 0.90f, 0.94f, 1.0f};
-        core::Function<void()> m_onClosed;
+        foundation::Function<void()> m_onClosed;
     };
 
     DRACONIC_DEFINE_OBJECT(MenuRow, "draconic::gui")

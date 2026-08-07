@@ -6,15 +6,15 @@
 // returns the full root until the Overlay subsystem lands.)
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:focus_manager;
 
-import draconic.core; // Array, ViewId-compatible
+import draconic.foundation; // Array, ViewId-compatible
 import :view_id;
 import :input_enums; // FocusDirection
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

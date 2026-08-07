@@ -2,17 +2,17 @@
 // cook through ShaderAssetBuilder into an output content DB, and verify the cooked
 // ShaderSource carries the name + both stages' inline HLSL.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.editor;
 import draconic.shaders.resource;
 import draconic.shaders.editor;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::vfs;
 using namespace draconic::shaders;
 
@@ -57,7 +57,7 @@ TEST_CASE("shader editor: cooks a ShaderAsset -> ShaderSource from two .hlsl fil
     Guid id;
     {
         draconic::content::ContentDatabase outDb(
-            outMount, draconic::core::BinarySerializerFactory(), u8".rasset");
+            outMount, draconic::foundation::BinarySerializerFactory(), u8".rasset");
         auto* inst = outDb.RootGroup()->CreateInstance(u8"lit", ShaderSource::StaticType());
         id = inst->Id();
 
@@ -76,7 +76,7 @@ TEST_CASE("shader editor: cooks a ShaderAsset -> ShaderSource from two .hlsl fil
     // --- verify: read back the cooked ShaderSource ---
     {
         draconic::content::ContentDatabase outDb(
-            outMount, draconic::core::BinarySerializerFactory(), u8".rasset");
+            outMount, draconic::foundation::BinarySerializerFactory(), u8".rasset");
         RefPtr<ISerializable> object = outDb.ReadObject(id);
         ShaderSource* cooked = Cast<ShaderSource>(object.Get());
         REQUIRE(cooked != nullptr);
@@ -94,7 +94,7 @@ TEST_CASE("shader editor: missing source file is an error, not a crash")
     RemoveTree();
 
     NativeFileSystem outMount(u8"draconic_shader_edit_db");
-    draconic::content::ContentDatabase outDb(outMount, draconic::core::BinarySerializerFactory(),
+    draconic::content::ContentDatabase outDb(outMount, draconic::foundation::BinarySerializerFactory(),
                                              u8".rasset");
     auto* inst = outDb.RootGroup()->CreateInstance(u8"missing", ShaderSource::StaticType());
 

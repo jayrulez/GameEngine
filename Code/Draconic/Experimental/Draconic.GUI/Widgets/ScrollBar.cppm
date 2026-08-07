@@ -8,12 +8,12 @@
 // m_pressed - keeps tracking. Clicking the track jumps the thumb to the cursor.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:scroll_bar;
 
-import draconic.core; // Color, Function, Move, Max, Min, Float2, Rectangle, RefPtr, MakeRef
+import draconic.foundation; // Color, Function, Move, Max, Min, Float2, Rectangle, RefPtr, MakeRef
 import draconic.vg;   // CornerRadii
 import :rect;
 import :event;
@@ -22,8 +22,8 @@ import :rectangle_drawable;
 import :ui_widget;
 import :linear_layout; // Orientation
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace vg = draconic::vg;
 
 export namespace draconic::gui
@@ -34,9 +34,9 @@ export namespace draconic::gui
     public:
         ScrollBar()
         {
-            SetTag(core::StringView(u8"scrollbar"));
+            SetTag(foundation::StringView(u8"scrollbar"));
             // The track is the node background so the theme's background-color styles it.
-            SetBackground(core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), m_trackColor));
+            SetBackground(foundation::MakeRef<RectangleDrawable>(foundation::DefaultAllocator(), m_trackColor));
         }
 
         void SetOrientation(Orientation orientation)
@@ -49,7 +49,7 @@ export namespace draconic::gui
         [[nodiscard]] f32 GetValue() const noexcept { return m_value; }
         void SetValue(f32 value)
         {
-            value = core::Max(0.0f, core::Min(1.0f, value));
+            value = foundation::Max(0.0f, foundation::Min(1.0f, value));
             if (value == m_value)
                 return;
             m_value = value;
@@ -57,15 +57,15 @@ export namespace draconic::gui
             if (m_onChanged)
                 m_onChanged(m_value);
         }
-        void SetOnValueChanged(core::Function<void(f32)> callback)
+        void SetOnValueChanged(foundation::Function<void(f32)> callback)
         {
-            m_onChanged = core::Move(callback);
+            m_onChanged = foundation::Move(callback);
         }
 
         // Fraction of the track the thumb fills = viewport / content (clamped to [0,1]).
         void SetThumbProportion(f32 proportion)
         {
-            m_proportion = core::Max(0.0f, core::Min(1.0f, proportion));
+            m_proportion = foundation::Max(0.0f, foundation::Min(1.0f, proportion));
             Invalidate();
         }
         [[nodiscard]] f32 GetThumbProportion() const noexcept { return m_proportion; }
@@ -73,7 +73,7 @@ export namespace draconic::gui
         void SetTrackColor(Color color)
         {
             m_trackColor = color;
-            SetBackground(core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), color));
+            SetBackground(foundation::MakeRef<RectangleDrawable>(foundation::DefaultAllocator(), color));
         }
         void SetThumbColor(Color color)
         {
@@ -82,13 +82,13 @@ export namespace draconic::gui
         }
 
         // Theming: track = background-color (node background); thumb = scrollbar::thumb part.
-        void CollectStyleParts(core::Array<core::StringView>& out) const override
+        void CollectStyleParts(foundation::Array<foundation::StringView>& out) const override
         {
-            out.PushBack(core::StringView(u8"thumb"));
+            out.PushBack(foundation::StringView(u8"thumb"));
         }
-        void SetThemePartColor(core::StringView part, Color color) override
+        void SetThemePartColor(foundation::StringView part, Color color) override
         {
-            if (part == core::StringView(u8"thumb"))
+            if (part == foundation::StringView(u8"thumb"))
                 SetThumbColor(color);
         }
 
@@ -104,7 +104,7 @@ export namespace draconic::gui
             const Rect b = GetContentBounds();
             const f32 track = TrackLength(b);
             const f32 thumbLen = ThumbLength(track);
-            const f32 travel = core::Max(0.0f, track - thumbLen);
+            const f32 travel = foundation::Max(0.0f, track - thumbLen);
             const f32 thumbStart = travel * m_value;
             const f32 along = AlongAxis(event, b);
 
@@ -126,7 +126,7 @@ export namespace draconic::gui
             const Rect b = GetContentBounds();
             const f32 track = TrackLength(b);
             const f32 thumbLen = ThumbLength(track);
-            const f32 travel = core::Max(0.0f, track - thumbLen);
+            const f32 travel = foundation::Max(0.0f, track - thumbLen);
             if (travel <= 0.0f)
             {
                 SetValue(0.0f);
@@ -146,7 +146,7 @@ export namespace draconic::gui
             const Rect b = GetContentBounds();
             const f32 track = TrackLength(b);
             const f32 thumbLen = ThumbLength(track);
-            const f32 travel = core::Max(0.0f, track - thumbLen);
+            const f32 travel = foundation::Max(0.0f, track - thumbLen);
             const f32 pos = travel * m_value;
 
             // The track is painted by the node background (themable via background-color); we
@@ -164,17 +164,17 @@ export namespace draconic::gui
         }
         [[nodiscard]] f32 ThumbLength(f32 track) const
         {
-            return core::Max(kMinThumb, track * m_proportion);
+            return foundation::Max(kMinThumb, track * m_proportion);
         }
         [[nodiscard]] static vg::CornerRadii Radii(const Rect& r)
         {
-            return vg::CornerRadii(core::Min(r.width, r.height) * 0.5f);
+            return vg::CornerRadii(foundation::Min(r.width, r.height) * 0.5f);
         }
 
         // Cursor position along the bar's axis, relative to the track start.
         [[nodiscard]] f32 AlongAxis(const MouseEvent& event, const Rect& b) const
         {
-            const core::Float2 local = ConvertToNodeSpace(event.Position);
+            const foundation::Float2 local = ConvertToNodeSpace(event.Position);
             return (m_orientation == Orientation::Vertical) ? (local.y - b.y) : (local.x - b.x);
         }
 
@@ -185,7 +185,7 @@ export namespace draconic::gui
         f32 m_grabOffset = 0.0f;
         Color m_trackColor{0.18f, 0.19f, 0.23f, 1.0f};
         Color m_thumbColor{0.42f, 0.45f, 0.52f, 1.0f};
-        core::Function<void(f32)> m_onChanged;
+        foundation::Function<void(f32)> m_onChanged;
 
         static constexpr f32 kMinThumb = 16.0f;
     };

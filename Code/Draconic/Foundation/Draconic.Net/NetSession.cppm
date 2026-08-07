@@ -6,17 +6,17 @@
 /// clients, the client tracks its one server, and Broadcast fans a message out to every peer.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.net:session;
 
-import draconic.core;
+import draconic.foundation;
 import :transport;
 import :datagram;
 import :reliable;
 import :wire;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::net
 {

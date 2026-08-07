@@ -4,14 +4,14 @@
 // DRACONIC_FONTS_ASSET_DIR compile definition.
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.fonts;
 import draconic.fonts.io;
 import draconic.fonts.ttf;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::fonts;
 
 namespace

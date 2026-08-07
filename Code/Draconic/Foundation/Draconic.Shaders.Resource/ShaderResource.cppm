@@ -9,19 +9,19 @@
 /// ShaderSystem; this product is the resource-system handle + version accessor.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.shaders.resource;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.shaders;
 import draconic.shaders.system;
 import draconic.resource;
 import draconic.content;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::resource;
 namespace rhi = draconic::rhi;
 
@@ -40,9 +40,9 @@ export namespace draconic::shaders
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "name", name);
-            draconic::core::Serialize(ar, "vertexSource", vertexSource);
-            draconic::core::Serialize(ar, "fragmentSource", fragmentSource);
+            draconic::foundation::Serialize(ar, "name", name);
+            draconic::foundation::Serialize(ar, "vertexSource", vertexSource);
+            draconic::foundation::Serialize(ar, "fragmentSource", fragmentSource);
         }
     };
 

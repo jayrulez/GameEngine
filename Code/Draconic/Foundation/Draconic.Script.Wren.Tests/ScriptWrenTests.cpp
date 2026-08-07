@@ -1,13 +1,13 @@
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h" // <new> reachability for reflection containers (GCC)
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h" // <new> reachability for reflection containers (GCC)
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.script;
 import draconic.script.wren;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::script;
 
 // A reflected Object-derived type to exercise object foreign classes in Wren.
@@ -256,7 +256,7 @@ TEST_CASE("wren: read module globals as Variant")
 
 TEST_CASE("wren: reflected value types are usable from script (construct + properties)")
 {
-    RegisterCoreTypes();
+    RegisterFoundationTypes();
     RefPtr<IScriptManager> manager = wren::CreateScriptManager();
     RegisterReflectedTypes(*manager);                      // reflection -> manager
     RefPtr<IScriptContext> ctx = manager->CreateContext(); // emits Wren foreign classes
@@ -277,7 +277,7 @@ TEST_CASE("wren: reflected value types are usable from script (construct + prope
 
 TEST_CASE("wren: call reflected methods (static, instance, struct return, foreign args)")
 {
-    RegisterCoreTypes();
+    RegisterFoundationTypes();
     RefPtr<IScriptManager> manager = wren::CreateScriptManager();
     RegisterReflectedTypes(*manager);
     RefPtr<IScriptContext> ctx = manager->CreateContext();
@@ -313,7 +313,7 @@ TEST_CASE("wren: call reflected methods (static, instance, struct return, foreig
 
 TEST_CASE("wren: same-name overloads resolve by argument type")
 {
-    RegisterCoreTypes();
+    RegisterFoundationTypes();
     RefPtr<IScriptManager> manager = wren::CreateScriptManager();
     RegisterReflectedTypes(*manager);
     RefPtr<IScriptContext> ctx = manager->CreateContext();
@@ -490,7 +490,7 @@ TEST_CASE("wren: a polymorphic container member binds as script ops (count/at/ad
 
 TEST_CASE("wren: a default-constructed reflected type")
 {
-    RegisterCoreTypes();
+    RegisterFoundationTypes();
     RefPtr<IScriptManager> manager = wren::CreateScriptManager();
     RegisterReflectedTypes(*manager);
     RefPtr<IScriptContext> ctx = manager->CreateContext();

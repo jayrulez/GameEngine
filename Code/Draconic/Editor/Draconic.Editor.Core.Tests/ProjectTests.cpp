@@ -4,17 +4,17 @@
 #include <doctest/doctest.h>
 #include <string>
 
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.xml.serialization;
 import draconic.engine.project;
 import draconic.editor.core;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::editor;
 
 namespace
@@ -27,7 +27,7 @@ namespace
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "shininess", shininess);
+            draconic::foundation::Serialize(ar, "shininess", shininess);
         }
     };
 

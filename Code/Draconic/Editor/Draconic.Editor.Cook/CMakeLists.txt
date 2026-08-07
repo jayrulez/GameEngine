@@ -5,7 +5,7 @@ add_library(Draconic.Editor.Cook STATIC)
 add_library(Draconic::Editor.Cook ALIAS Draconic.Editor.Cook)
 
 target_link_libraries(Draconic.Editor.Cook PUBLIC
-    Draconic::Core Draconic::Content Draconic::VFS Draconic::Editor Draconic::Policy)
+    Draconic::Foundation Draconic::Content Draconic::VFS Draconic::Editor Draconic::Policy)
 
 target_sources(Draconic.Editor.Cook
     PRIVATE

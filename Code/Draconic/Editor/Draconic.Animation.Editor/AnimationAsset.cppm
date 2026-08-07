@@ -6,18 +6,18 @@
 /// for now sources are populated round-trip from the runtime types via the resource layer.)
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.animation.editor;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.editor;
 import draconic.content;
 import draconic.animation;
 import draconic.animation.resource;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::animation
 {
@@ -61,8 +61,8 @@ export namespace draconic::animation
         {
             draconic::editor::Asset::Serialize(ar);
             source.Serialize(ar);
-            draconic::core::Serialize(ar, "layerStatePositions", layerStatePositions);
-            draconic::core::Serialize(ar, "layerAnyStatePositions", layerAnyStatePositions);
+            draconic::foundation::Serialize(ar, "layerStatePositions", layerStatePositions);
+            draconic::foundation::Serialize(ar, "layerAnyStatePositions", layerAnyStatePositions);
         }
     };
 

@@ -4,7 +4,7 @@ add_library(Draconic.Animation.Editor STATIC)
 add_library(Draconic::Animation.Editor ALIAS Draconic.Animation.Editor)
 
 target_link_libraries(Draconic.Animation.Editor
-    PUBLIC Draconic::Core Draconic::Editor Draconic::Content
+    PUBLIC Draconic::Foundation Draconic::Editor Draconic::Content
            Draconic::Animation Draconic::Animation.Resource Draconic::Policy)
 
 target_sources(Draconic.Animation.Editor

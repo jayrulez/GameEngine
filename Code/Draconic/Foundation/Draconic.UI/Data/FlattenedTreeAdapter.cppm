@@ -6,16 +6,16 @@
 // Array<i32>/HashSet<i32>; CreateView returns RefPtr<View>.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:flattened_tree_adapter;
 
-import draconic.core;
+import draconic.foundation;
 import :view;
 import :ilist_adapter;
 import :itree_adapter;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

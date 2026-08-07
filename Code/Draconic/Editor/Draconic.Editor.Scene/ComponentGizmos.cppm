@@ -11,16 +11,16 @@
 // renderer looks its data up from the manager's GetComponentInstance.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.editor.scene:component_gizmos;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.scene;
 import draconic.render;
 import draconic.engine.render;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {

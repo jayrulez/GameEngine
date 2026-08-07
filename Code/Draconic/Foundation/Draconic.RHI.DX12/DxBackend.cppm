@@ -3,7 +3,7 @@
 /// Ported from Sedulous.RHI.DX12/DX12Backend.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include "DxIncludes.h"
 
@@ -11,12 +11,12 @@ module;
 
 export module draconic.rhi.dx12:backend;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :surface;
 import :adapter;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::dx12
 {

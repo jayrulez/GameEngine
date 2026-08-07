@@ -2,25 +2,25 @@
 // return true when focused-and-editable, and UIContext::WantsTextInput() reflects the focused view, so the
 // ui.shell bridge can drive the window's IME from focus. Not a port - covered here per the additions rule.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 #include "TestHelpers.h"
 
 using namespace draconic::ui;
 using namespace draconic::ui::tests;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 TEST_CASE("wants-text-input: plain view does not want text")
 {
-    auto v = core::MakeRef<TestView>(core::DefaultAllocator(), 50.0f, 30.0f);
+    auto v = foundation::MakeRef<TestView>(foundation::DefaultAllocator(), 50.0f, 30.0f);
     CHECK(!v->WantsTextInput());
 }
 
 TEST_CASE("wants-text-input: EditText wants text unless read-only")
 {
-    auto edit = core::MakeRef<EditText>(core::DefaultAllocator());
+    auto edit = foundation::MakeRef<EditText>(foundation::DefaultAllocator());
     CHECK(edit->WantsTextInput());
     edit->IsReadOnly.SetValue(true);
     CHECK(!edit->WantsTextInput());
@@ -31,18 +31,18 @@ TEST_CASE("wants-text-input: EditText wants text unless read-only")
 
 TEST_CASE("wants-text-input: NumericField wants text")
 {
-    auto nf = core::MakeRef<NumericField>(core::DefaultAllocator());
+    auto nf = foundation::MakeRef<NumericField>(foundation::DefaultAllocator());
     CHECK(nf->WantsTextInput());
 }
 
 TEST_CASE("wants-text-input: UIContext reflects the focused view")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
 
-    auto edit = core::MakeRef<EditText>(core::DefaultAllocator());
-    auto plain = core::MakeRef<TestView>(core::DefaultAllocator(), 50.0f, 30.0f);
+    auto edit = foundation::MakeRef<EditText>(foundation::DefaultAllocator());
+    auto plain = foundation::MakeRef<TestView>(foundation::DefaultAllocator(), 50.0f, 30.0f);
     plain->IsFocusable = true;
     root->AddView(edit.Get());
     root->AddView(plain.Get());

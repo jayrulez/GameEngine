@@ -5,16 +5,16 @@
 // -> a SetupLocalSheet(view) helper mirroring SetupSheet(ctx); `=== sheet` -> pointer ==; `case .None` ->
 // StyleValue::Kind::None; `SetInlinePartStyle(part, prop, .FloatVal(v))` -> View::SetPartStyle(part, prop, v).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
+import draconic.foundation;
 import draconic.ui;
 #include "TestHelpers.h"
 
 using namespace draconic::ui;
 using namespace draconic::ui::tests;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 namespace
 {
@@ -26,7 +26,7 @@ namespace
     // Install a fresh empty StyleSheet on ctx; returns a borrowed pointer for the test to add rules to.
     StyleSheet* SetupCtxSheet(UIContext& ctx)
     {
-        auto s = core::MakeRef<StyleSheet>(core::DefaultAllocator());
+        auto s = foundation::MakeRef<StyleSheet>(foundation::DefaultAllocator());
         StyleSheet* raw = s.Get();
         ctx.SetStyleSheet(Move(s));
         return raw;
@@ -35,7 +35,7 @@ namespace
     // Attach a fresh empty StyleSheet to view as its local sheet; returns a borrowed pointer to add rules to.
     StyleSheet* SetupLocalSheet(View& view)
     {
-        auto s = core::MakeRef<StyleSheet>(core::DefaultAllocator());
+        auto s = foundation::MakeRef<StyleSheet>(foundation::DefaultAllocator());
         StyleSheet* raw = s.Get();
         view.SetLocalStyleSheet(Move(s));
         return raw;
@@ -52,8 +52,8 @@ TEST_CASE("local-stylesheet: Default_IsNull")
 
 TEST_CASE("local-stylesheet: Set_AddRefsAndRetains")
 {
-    auto sheet = core::MakeRef<StyleSheet>(core::DefaultAllocator());
-    auto view = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto sheet = foundation::MakeRef<StyleSheet>(foundation::DefaultAllocator());
+    auto view = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     view->SetLocalStyleSheet(sheet);
     CHECK(view->GetLocalStyleSheet() == sheet.Get());
     view.Reset(); // destroy view; sheet stays alive on the local ref, freed at scope exit
@@ -61,7 +61,7 @@ TEST_CASE("local-stylesheet: Set_AddRefsAndRetains")
 
 TEST_CASE("local-stylesheet: Set_Twice_NoOpForIdentical")
 {
-    auto sheet = core::MakeRef<StyleSheet>(core::DefaultAllocator());
+    auto sheet = foundation::MakeRef<StyleSheet>(foundation::DefaultAllocator());
     TestView view;
     view.SetLocalStyleSheet(sheet);
     view.SetLocalStyleSheet(sheet); // second assignment to the same sheet is a guarded no-op
@@ -70,9 +70,9 @@ TEST_CASE("local-stylesheet: Set_Twice_NoOpForIdentical")
 
 TEST_CASE("local-stylesheet: Reassign_ReleasesPrevious")
 {
-    auto s1 = core::MakeRef<StyleSheet>(core::DefaultAllocator());
-    auto s2 = core::MakeRef<StyleSheet>(core::DefaultAllocator());
-    auto view = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto s1 = foundation::MakeRef<StyleSheet>(foundation::DefaultAllocator());
+    auto s2 = foundation::MakeRef<StyleSheet>(foundation::DefaultAllocator());
+    auto view = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     view->SetLocalStyleSheet(s1);
     view->SetLocalStyleSheet(s2); // releases view's ref on s1
     CHECK(view->GetLocalStyleSheet() == s2.Get());
@@ -82,7 +82,7 @@ TEST_CASE("local-stylesheet: Reassign_ReleasesPrevious")
 
 TEST_CASE("local-stylesheet: Clear_ReleasesAndFallsBackToNull")
 {
-    auto sheet = core::MakeRef<StyleSheet>(core::DefaultAllocator());
+    auto sheet = foundation::MakeRef<StyleSheet>(foundation::DefaultAllocator());
     TestView view;
     view.SetLocalStyleSheet(sheet);
     view.SetLocalStyleSheet(nullptr); // view releases its ref
@@ -91,8 +91,8 @@ TEST_CASE("local-stylesheet: Clear_ReleasesAndFallsBackToNull")
 
 TEST_CASE("local-stylesheet: Destruction_ReleasesSheet")
 {
-    auto sheet = core::MakeRef<StyleSheet>(core::DefaultAllocator());
-    auto view = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto sheet = foundation::MakeRef<StyleSheet>(foundation::DefaultAllocator());
+    auto view = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     view->SetLocalStyleSheet(sheet);
     view.Reset(); // view destructor releases its ref; sheet still held by the local RefPtr
     CHECK(sheet.Get() != nullptr);
@@ -100,9 +100,9 @@ TEST_CASE("local-stylesheet: Destruction_ReleasesSheet")
 
 TEST_CASE("local-stylesheet: SharedBetweenViews")
 {
-    auto sheet = core::MakeRef<StyleSheet>(core::DefaultAllocator());
-    auto v1 = core::MakeRef<TestView>(core::DefaultAllocator());
-    auto v2 = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto sheet = foundation::MakeRef<StyleSheet>(foundation::DefaultAllocator());
+    auto v1 = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
+    auto v2 = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     v1->SetLocalStyleSheet(sheet);
     v2->SetLocalStyleSheet(sheet);
     CHECK(v1->GetLocalStyleSheet() == sheet.Get());
@@ -117,12 +117,12 @@ TEST_CASE("local-stylesheet: SharedBetweenViews")
 TEST_CASE("local-stylesheet: Resolution_LocalOnThisView_WinsOverContext")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
     StyleSheet* ctxSheet = SetupCtxSheet(ctx);
     ctxSheet->ForType(&TestView::StaticType()).Set(StyleProperty::TextColor, Rgb(255, 0, 0));
 
-    auto view = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto view = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(view.Get());
     StyleSheet* local = SetupLocalSheet(*view);
     local->ForType(&TestView::StaticType()).Set(StyleProperty::TextColor, Rgb(0, 255, 0));
@@ -134,13 +134,13 @@ TEST_CASE("local-stylesheet: Resolution_LocalOnThisView_WinsOverContext")
 TEST_CASE("local-stylesheet: Resolution_LocalOnAncestor_WinsOverContext")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
     StyleSheet* ctxSheet = SetupCtxSheet(ctx);
     ctxSheet->ForType(&TestView::StaticType()).Set(StyleProperty::TextColor, Color::Red);
 
-    auto group = core::MakeRef<TestGroup>(core::DefaultAllocator());
-    auto child = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto group = foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
+    auto child = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(group.Get());
     group->AddView(child.Get());
 
@@ -153,13 +153,13 @@ TEST_CASE("local-stylesheet: Resolution_LocalOnAncestor_WinsOverContext")
 TEST_CASE("local-stylesheet: Resolution_CloserAncestor_WinsOverFarther")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
     SetupCtxSheet(ctx);
 
-    auto outer = core::MakeRef<TestGroup>(core::DefaultAllocator());
-    auto inner = core::MakeRef<TestGroup>(core::DefaultAllocator());
-    auto child = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto outer = foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
+    auto inner = foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
+    auto child = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(outer.Get());
     outer->AddView(inner.Get());
     inner->AddView(child.Get());
@@ -175,13 +175,13 @@ TEST_CASE("local-stylesheet: Resolution_CloserAncestor_WinsOverFarther")
 TEST_CASE("local-stylesheet: Resolution_NotFound_FallsThroughToNextAncestor")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
     SetupCtxSheet(ctx);
 
-    auto outer = core::MakeRef<TestGroup>(core::DefaultAllocator());
-    auto inner = core::MakeRef<TestGroup>(core::DefaultAllocator());
-    auto child = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto outer = foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
+    auto inner = foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
+    auto child = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(outer.Get());
     outer->AddView(inner.Get());
     inner->AddView(child.Get());
@@ -198,13 +198,13 @@ TEST_CASE("local-stylesheet: Resolution_NotFound_FallsThroughToNextAncestor")
 TEST_CASE("local-stylesheet: Resolution_NotFound_FallsThroughToContext")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
     StyleSheet* ctxSheet = SetupCtxSheet(ctx);
     ctxSheet->ForType(&TestView::StaticType()).Set(StyleProperty::TextColor, Rgb(100, 100, 100));
 
-    auto group = core::MakeRef<TestGroup>(core::DefaultAllocator());
-    auto child = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto group = foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
+    auto child = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(group.Get());
     group->AddView(child.Get());
 
@@ -217,13 +217,13 @@ TEST_CASE("local-stylesheet: Resolution_NotFound_FallsThroughToContext")
 TEST_CASE("local-stylesheet: Resolution_InheritableProperty_CascadesThroughLocalOnAncestor")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
     SetupCtxSheet(ctx);
 
-    auto dialog = core::MakeRef<TestGroup>(core::DefaultAllocator());
-    auto inner = core::MakeRef<TestGroup>(core::DefaultAllocator());
-    auto child = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto dialog = foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
+    auto inner = foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
+    auto child = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(dialog.Get());
     dialog->AddView(inner.Get());
     inner->AddView(child.Get());
@@ -237,12 +237,12 @@ TEST_CASE("local-stylesheet: Resolution_InheritableProperty_CascadesThroughLocal
 TEST_CASE("local-stylesheet: Resolution_NonInheritable_DoesNotCascade")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
     SetupCtxSheet(ctx);
 
-    auto group = core::MakeRef<TestGroup>(core::DefaultAllocator());
-    auto child = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto group = foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
+    auto child = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(group.Get());
     group->AddView(child.Get());
 
@@ -257,13 +257,13 @@ TEST_CASE("local-stylesheet: Resolution_NonInheritable_DoesNotCascade")
 TEST_CASE("local-stylesheet: Pseudo_LocalOnThisView_WinsOverContext")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
     StyleSheet* ctxSheet = SetupCtxSheet(ctx);
     ctxSheet->ForTypePseudo(&TestView::StaticType(), u8"thumb")
         .Set(StyleProperty::CornerRadius, 4.0f);
 
-    auto view = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto view = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(view.Get());
     StyleSheet* local = SetupLocalSheet(*view);
     local->ForTypePseudo(&TestView::StaticType(), u8"thumb")
@@ -276,14 +276,14 @@ TEST_CASE("local-stylesheet: Pseudo_LocalOnThisView_WinsOverContext")
 TEST_CASE("local-stylesheet: Pseudo_LocalOnAncestor_WinsOverContext")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
     StyleSheet* ctxSheet = SetupCtxSheet(ctx);
     ctxSheet->ForTypePseudo(&TestView::StaticType(), u8"thumb")
         .Set(StyleProperty::CornerRadius, 2.0f);
 
-    auto group = core::MakeRef<TestGroup>(core::DefaultAllocator());
-    auto child = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto group = foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
+    auto child = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(group.Get());
     group->AddView(child.Get());
 
@@ -298,13 +298,13 @@ TEST_CASE("local-stylesheet: Pseudo_LocalOnAncestor_WinsOverContext")
 TEST_CASE("local-stylesheet: Pseudo_CloserAncestor_WinsOverFarther")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
     SetupCtxSheet(ctx);
 
-    auto outer = core::MakeRef<TestGroup>(core::DefaultAllocator());
-    auto inner = core::MakeRef<TestGroup>(core::DefaultAllocator());
-    auto child = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto outer = foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
+    auto inner = foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
+    auto child = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(outer.Get());
     outer->AddView(inner.Get());
     inner->AddView(child.Get());
@@ -323,11 +323,11 @@ TEST_CASE("local-stylesheet: Pseudo_CloserAncestor_WinsOverFarther")
 TEST_CASE("local-stylesheet: Pseudo_InlineBeatsLocalOnThisView")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
     SetupCtxSheet(ctx);
 
-    auto view = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto view = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(view.Get());
     StyleSheet* local = SetupLocalSheet(*view);
     local->ForTypePseudo(&TestView::StaticType(), u8"thumb").Set(StyleProperty::CornerRadius, 4.0f);
@@ -341,12 +341,12 @@ TEST_CASE("local-stylesheet: Pseudo_InlineBeatsLocalOnThisView")
 TEST_CASE("local-stylesheet: Pseudo_InlineBeatsLocalOnAncestor")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
     SetupCtxSheet(ctx);
 
-    auto group = core::MakeRef<TestGroup>(core::DefaultAllocator());
-    auto child = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto group = foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
+    auto child = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(group.Get());
     group->AddView(child.Get());
 
@@ -363,14 +363,14 @@ TEST_CASE("local-stylesheet: Pseudo_InlineBeatsLocalOnAncestor")
 TEST_CASE("local-stylesheet: Pseudo_NotFound_FallsThroughToContext")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
     StyleSheet* ctxSheet = SetupCtxSheet(ctx);
     ctxSheet->ForTypePseudo(&TestView::StaticType(), u8"thumb")
         .Set(StyleProperty::CornerRadius, 7.0f);
 
-    auto group = core::MakeRef<TestGroup>(core::DefaultAllocator());
-    auto child = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto group = foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
+    auto child = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(group.Get());
     group->AddView(child.Get());
 
@@ -387,13 +387,13 @@ TEST_CASE("local-stylesheet: Pseudo_NotFound_FallsThroughToContext")
 TEST_CASE("local-stylesheet: Pseudo_FontFamily_ForAllOnAncestorLocal_ReachesAllDescendantTypes")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
     SetupCtxSheet(ctx);
 
-    auto pauseRoot = core::MakeRef<TestGroup>(core::DefaultAllocator());
-    auto inner = core::MakeRef<TestGroup>(core::DefaultAllocator());
-    auto view = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto pauseRoot = foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
+    auto inner = foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
+    auto view = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(pauseRoot.Get());
     pauseRoot->AddView(inner.Get());
     inner->AddView(view.Get());
@@ -412,12 +412,12 @@ TEST_CASE("local-stylesheet: Pseudo_FontFamily_ForAllOnAncestorLocal_ReachesAllD
 TEST_CASE("local-stylesheet: FontFamily_TypeScopedRule_NoMatchInChain_ReturnsNone")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
     SetupCtxSheet(ctx);
 
-    auto outer = core::MakeRef<TestGroup>(core::DefaultAllocator());
-    auto inner = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto outer = foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
+    auto inner = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(outer.Get());
     outer->AddView(inner.Get());
 
@@ -431,12 +431,12 @@ TEST_CASE("local-stylesheet: FontFamily_TypeScopedRule_NoMatchInChain_ReturnsNon
 TEST_CASE("local-stylesheet: FontFamily_TypeScopedRule_AncestorMatchesType_InheritsDown")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
     SetupCtxSheet(ctx);
 
-    auto outer = core::MakeRef<TestGroup>(core::DefaultAllocator());
-    auto inner = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto outer = foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
+    auto inner = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(outer.Get());
     outer->AddView(inner.Get());
 

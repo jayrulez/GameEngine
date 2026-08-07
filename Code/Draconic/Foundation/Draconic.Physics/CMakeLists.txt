@@ -4,7 +4,7 @@ add_library(Draconic.Physics STATIC)
 add_library(Draconic::Physics ALIAS Draconic.Physics)
 
 target_link_libraries(Draconic.Physics
-    PUBLIC Draconic::Core Draconic::Policy
+    PUBLIC Draconic::Foundation Draconic::Policy
     PRIVATE Draconic::Jolt)
 
 target_sources(Draconic.Physics

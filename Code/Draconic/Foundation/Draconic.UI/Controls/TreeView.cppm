@@ -7,12 +7,12 @@
 // is BORROWED. Beef Selection/ItemHeight passthrough props -> methods.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:tree_view;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import :view;
 import :property;
@@ -30,8 +30,8 @@ import :selection_model;
 import :itree_adapter;
 import :flattened_tree_adapter;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::ui
 {

@@ -1,7 +1,7 @@
 # VG Sandbox - end-to-end VG stack demo (window + VGRenderer).
 add_executable(VGSandbox Main.cpp)
 target_link_libraries(VGSandbox PRIVATE
-    Draconic::Core Draconic::RHI Draconic::RHI.Vulkan Draconic::Shaders Draconic::Shaders.System
+    Draconic::Foundation Draconic::RHI Draconic::RHI.Vulkan Draconic::Shaders Draconic::Shaders.System
     Draconic::SamplesFramework
     Draconic::Image Draconic::Fonts Draconic::Fonts.TTF Draconic::Fonts.DistanceField Draconic::Fonts.DistanceField.Baker
     Draconic::VG Draconic::VG.Renderer Draconic::VG.SVG)

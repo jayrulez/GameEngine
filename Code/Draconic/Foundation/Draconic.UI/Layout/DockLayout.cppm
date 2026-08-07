@@ -5,18 +5,18 @@
 // (Beef nested `DockLayout.LayoutParams` -> top-level `DockLayoutParams`.)
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:dock_layout;
 
-import draconic.core; // Max
+import draconic.foundation; // Max
 import :view;
 import :layout_params;
 import :box_constraints;
 import :thickness;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

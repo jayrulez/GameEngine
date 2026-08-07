@@ -10,14 +10,14 @@
 
 export module draconic.rhi:extensions;
 
-import draconic.core;
+import draconic.foundation;
 import :enums;
 import :types;
 import :descriptors;
 import :ext_descriptors;
 import :resources;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi
 {

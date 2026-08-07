@@ -8,12 +8,12 @@
 // node come from the dispatcher; the app supplies the delta time).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:tooltip;
 
-import draconic.core;  // RefPtr, MakeRef, String, StringView, Float2, Max
+import draconic.foundation;  // RefPtr, MakeRef, String, StringView, Float2, Max
 import draconic.fonts; // CachedFont
 import :rect;
 import :draw_context;
@@ -23,8 +23,8 @@ import :node;
 import :ui_widget;
 import :event_dispatcher;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace fonts = draconic::fonts;
 
 export namespace draconic::gui
@@ -35,14 +35,14 @@ export namespace draconic::gui
     public:
         Tooltip()
         {
-            SetTag(core::StringView(u8"tooltip"));
+            SetTag(foundation::StringView(u8"tooltip"));
             SetHitTestVisible(false); // never steals pointer events
             SetPadding(Thickness{6.0f, 3.0f, 6.0f, 3.0f});
-            SetBackground(core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), m_bgColor));
+            SetBackground(foundation::MakeRef<RectangleDrawable>(foundation::DefaultAllocator(), m_bgColor));
             m_text.SetAlignment(TextHAlign::Left, TextVAlign::Middle);
         }
 
-        void SetText(core::StringView text)
+        void SetText(foundation::StringView text)
         {
             m_text.SetString(text);
             Invalidate();
@@ -59,11 +59,11 @@ export namespace draconic::gui
         }
 
         // Natural size for the text plus padding.
-        [[nodiscard]] core::Float2 MeasureContent() const
+        [[nodiscard]] foundation::Float2 MeasureContent() const
         {
-            const core::Float2 t = m_text.Measure();
+            const foundation::Float2 t = m_text.Measure();
             const Thickness pad = GetPadding();
-            return core::Float2{t.x + pad.TotalHorizontal(), t.y + pad.TotalVertical()};
+            return foundation::Float2{t.x + pad.TotalHorizontal(), t.y + pad.TotalVertical()};
         }
 
     protected:
@@ -82,7 +82,7 @@ export namespace draconic::gui
     class TooltipManager
     {
     public:
-        TooltipManager() { m_tooltip = core::MakeRef<Tooltip>(core::DefaultAllocator()); }
+        TooltipManager() { m_tooltip = foundation::MakeRef<Tooltip>(foundation::DefaultAllocator()); }
 
         void SetFont(fonts::CachedFont* font) { m_tooltip->SetFont(font); }
         void SetDelay(f64 seconds) noexcept { m_delay = seconds; }
@@ -100,8 +100,8 @@ export namespace draconic::gui
                 Hide();
             }
 
-            const core::StringView text =
-                (over != nullptr) ? over->GetTooltipText() : core::StringView{};
+            const foundation::StringView text =
+                (over != nullptr) ? over->GetTooltipText() : foundation::StringView{};
             if (text.Size() == 0)
             {
                 Hide();
@@ -119,12 +119,12 @@ export namespace draconic::gui
         void HideNow() { Hide(); }
 
     private:
-        void Show(Node& root, core::Float2 mouse, core::StringView text)
+        void Show(Node& root, foundation::Float2 mouse, foundation::StringView text)
         {
             m_tooltip->SetText(text);
-            const core::Float2 size = m_tooltip->MeasureContent();
+            const foundation::Float2 size = m_tooltip->MeasureContent();
             m_tooltip->SetSize(size);
-            m_tooltip->SetPosition(core::Float2{mouse.x + 12.0f, mouse.y + 18.0f});
+            m_tooltip->SetPosition(foundation::Float2{mouse.x + 12.0f, mouse.y + 18.0f});
             root.AddChild(m_tooltip.Get());
             m_shown = true;
         }

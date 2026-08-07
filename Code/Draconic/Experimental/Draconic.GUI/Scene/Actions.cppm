@@ -6,18 +6,18 @@
 // target Node, so this partition imports the full :node.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:actions;
 
-import draconic.core; // Float2, Duration, Lerp, Function, RefPtr, Array, Move, Color, MakeRef
+import draconic.foundation; // Float2, Duration, Lerp, Function, RefPtr, Array, Move, Color, MakeRef
 import :action;
 import :node;
 import :rectangle_drawable;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -26,7 +26,7 @@ export namespace draconic::gui
     {
         DRACONIC_OBJECT(MoveAction, ActionInterpolation)
     public:
-        MoveAction(core::Float2 from, core::Float2 to, core::Duration duration) noexcept
+        MoveAction(foundation::Float2 from, foundation::Float2 to, foundation::Duration duration) noexcept
             : ActionInterpolation(duration), m_from(from), m_to(to)
         {
         }
@@ -35,11 +35,11 @@ export namespace draconic::gui
         void OnStep(f32 t) override
         {
             if (m_target)
-                m_target->SetPosition(core::Lerp(m_from, m_to, t));
+                m_target->SetPosition(foundation::Lerp(m_from, m_to, t));
         }
 
     private:
-        core::Float2 m_from, m_to;
+        foundation::Float2 m_from, m_to;
     };
     DRACONIC_DEFINE_OBJECT(MoveAction, "draconic::gui")
 
@@ -48,7 +48,7 @@ export namespace draconic::gui
     {
         DRACONIC_OBJECT(FadeAction, ActionInterpolation)
     public:
-        FadeAction(f32 from, f32 to, core::Duration duration) noexcept
+        FadeAction(f32 from, f32 to, foundation::Duration duration) noexcept
             : ActionInterpolation(duration), m_from(from), m_to(to)
         {
         }
@@ -70,7 +70,7 @@ export namespace draconic::gui
     {
         DRACONIC_OBJECT(ScaleAction, ActionInterpolation)
     public:
-        ScaleAction(core::Float2 from, core::Float2 to, core::Duration duration) noexcept
+        ScaleAction(foundation::Float2 from, foundation::Float2 to, foundation::Duration duration) noexcept
             : ActionInterpolation(duration), m_from(from), m_to(to)
         {
         }
@@ -79,11 +79,11 @@ export namespace draconic::gui
         void OnStep(f32 t) override
         {
             if (m_target)
-                m_target->SetScale(core::Lerp(m_from, m_to, t));
+                m_target->SetScale(foundation::Lerp(m_from, m_to, t));
         }
 
     private:
-        core::Float2 m_from, m_to;
+        foundation::Float2 m_from, m_to;
     };
     DRACONIC_DEFINE_OBJECT(ScaleAction, "draconic::gui")
 
@@ -92,7 +92,7 @@ export namespace draconic::gui
     {
         DRACONIC_OBJECT(DelayAction, ActionInterpolation)
     public:
-        explicit DelayAction(core::Duration duration) noexcept : ActionInterpolation(duration) {}
+        explicit DelayAction(foundation::Duration duration) noexcept : ActionInterpolation(duration) {}
 
     protected:
         void OnStep(f32) override {}
@@ -104,9 +104,9 @@ export namespace draconic::gui
     {
         DRACONIC_OBJECT(RunnableAction, ActionInterpolation)
     public:
-        explicit RunnableAction(core::Function<void()> fn,
-                                core::Duration delay = core::Duration{}) noexcept
-            : ActionInterpolation(delay), m_fn(core::Move(fn))
+        explicit RunnableAction(foundation::Function<void()> fn,
+                                foundation::Duration delay = foundation::Duration{}) noexcept
+            : ActionInterpolation(delay), m_fn(foundation::Move(fn))
         {
         }
 
@@ -121,7 +121,7 @@ export namespace draconic::gui
         }
 
     private:
-        core::Function<void()> m_fn;
+        foundation::Function<void()> m_fn;
         bool m_ran = false;
     };
     DRACONIC_DEFINE_OBJECT(RunnableAction, "draconic::gui")
@@ -141,22 +141,22 @@ export namespace draconic::gui
     {
         DRACONIC_OBJECT(KeyframeAction, Action)
     public:
-        KeyframeAction(Array<core::Float2> opacityTrack, Array<ColorKey> colorTrack,
-                       core::Duration duration, bool loop) noexcept
-            : m_opacity(core::Move(opacityTrack)), m_color(core::Move(colorTrack)),
+        KeyframeAction(Array<foundation::Float2> opacityTrack, Array<ColorKey> colorTrack,
+                       foundation::Duration duration, bool loop) noexcept
+            : m_opacity(foundation::Move(opacityTrack)), m_color(foundation::Move(colorTrack)),
               m_duration(duration), m_loop(loop)
         {
         }
 
         void Start() override
         {
-            m_elapsed = core::Duration{};
+            m_elapsed = foundation::Duration{};
             m_done = false;
             Apply(0.0f);
         }
         void Stop() override { m_done = true; }
 
-        void Update(core::Duration elapsed) override
+        void Update(foundation::Duration elapsed) override
         {
             if (m_done)
                 return;
@@ -179,7 +179,7 @@ export namespace draconic::gui
                 return;
             }
             const f32 t = m_loop ? (cycles - static_cast<f32>(static_cast<i64>(cycles)))
-                                 : core::Min(cycles, 1.0f);
+                                 : foundation::Min(cycles, 1.0f);
             Apply(t);
         }
 
@@ -187,10 +187,10 @@ export namespace draconic::gui
         [[nodiscard]] f32 GetCurrentProgress() override
         {
             return m_duration.AsSecondsF() > 0.0f
-                       ? core::Min(m_elapsed.AsSecondsF() / m_duration.AsSecondsF(), 1.0f)
+                       ? foundation::Min(m_elapsed.AsSecondsF() / m_duration.AsSecondsF(), 1.0f)
                        : 1.0f;
         }
-        [[nodiscard]] core::Duration GetTotalTime() override { return m_duration; }
+        [[nodiscard]] foundation::Duration GetTotalTime() override { return m_duration; }
 
     private:
         void Apply(f32 t)
@@ -201,7 +201,7 @@ export namespace draconic::gui
                 m_target->SetAlpha(OpacityAt(t));
             if (m_color.Size() != 0)
                 m_target->SetBackground(
-                    core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), ColorAt(t)));
+                    foundation::MakeRef<RectangleDrawable>(foundation::DefaultAllocator(), ColorAt(t)));
         }
 
         [[nodiscard]] f32 OpacityAt(f32 t) const
@@ -237,10 +237,10 @@ export namespace draconic::gui
                          a.a + (b.a - a.a) * t};
         }
 
-        Array<core::Float2> m_opacity; // {offset, opacity}
+        Array<foundation::Float2> m_opacity; // {offset, opacity}
         Array<ColorKey> m_color;       // background-color stops
-        core::Duration m_duration;
-        core::Duration m_elapsed;
+        foundation::Duration m_duration;
+        foundation::Duration m_elapsed;
         bool m_loop = false;
         bool m_done = false;
     };
@@ -251,7 +251,7 @@ export namespace draconic::gui
     {
         DRACONIC_OBJECT(SequenceAction, Action)
     public:
-        void Add(RefPtr<Action> action) { m_children.PushBack(core::Move(action)); }
+        void Add(RefPtr<Action> action) { m_children.PushBack(foundation::Move(action)); }
 
         void Start() override
         {
@@ -262,7 +262,7 @@ export namespace draconic::gui
         }
         void Stop() override { m_done = true; }
 
-        void Update(core::Duration elapsed) override
+        void Update(foundation::Duration elapsed) override
         {
             if (m_done || m_index >= m_children.Size())
                 return;
@@ -288,9 +288,9 @@ export namespace draconic::gui
                        ? static_cast<f32>(m_index) / static_cast<f32>(m_children.Size())
                        : 1.0f;
         }
-        [[nodiscard]] core::Duration GetTotalTime() override
+        [[nodiscard]] foundation::Duration GetTotalTime() override
         {
-            core::Duration total{};
+            foundation::Duration total{};
             for (const RefPtr<Action>& c : m_children)
                 total += c->GetTotalTime();
             return total;

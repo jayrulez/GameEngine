@@ -4,17 +4,17 @@
 // (the core stays platform-agnostic). The app / ui.shell bridge supplies an adapter that
 // bridges the platform clipboard. Ported from Sedulous.UI/src/Core/IClipboard.bf.
 //
-// Injected/held-by-reference (pattern B). Beef Result<void> -> core::Status; Beef HasText
+// Injected/held-by-reference (pattern B). Beef Result<void> -> foundation::Status; Beef HasText
 // property -> HasText() method.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:iclipboard;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

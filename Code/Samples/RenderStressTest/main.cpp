@@ -13,10 +13,10 @@
 // inherited P key dumps the CPU scope tree + per-pass GPU timings. Fly camera: WASD/QE move,
 // hold RMB (or Tab to capture) to look, Shift to move fast, Esc to exit.
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include "imgui.h" // Dear ImGui (HUD) - used directly; engine integration is draconic.imgui
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi; // PresentMode (run the benchmark vsync-off)
 import draconic.runtime;
 import draconic.runtime.client;
@@ -35,7 +35,7 @@ import draconic.materials;
 
 #include "../Common/FlyCamera.h" // shared free-fly camera (uses the imported runtime/core types)
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace rhi = draconic::rhi;
 namespace runtime = draconic::runtime;
 namespace graphics = draconic::graphics;
@@ -51,10 +51,10 @@ namespace
 {
     class StressTestApp final : public runtime::DefaultApplication
     {
-        static constexpr core::i32 kSpheresPerBatch = 8000;
-        static constexpr core::f32 kSphereSpacing = 1.5f;
-        static constexpr core::f32 kSphereHeight = 2.5f; // base height above the floor (radius 0.5)
-        static constexpr core::f32 kFloorBaseSize =
+        static constexpr foundation::i32 kSpheresPerBatch = 8000;
+        static constexpr foundation::f32 kSphereSpacing = 1.5f;
+        static constexpr foundation::f32 kSphereHeight = 2.5f; // base height above the floor (radius 0.5)
+        static constexpr foundation::f32 kFloorBaseSize =
             500.0f; // base ground-plane size (scaled to cover the grid)
 
     public:
@@ -89,14 +89,14 @@ namespace
             // A modest ambient so unlit-facing hemispheres aren't pure black.
             if (auto* env = m_scene->GetSystem<render::EnvironmentSystem>())
             {
-                env->Environment().ambientColor = core::Color{0.10f, 0.12f, 0.16f, 1.0f};
+                env->Environment().ambientColor = foundation::Color{0.10f, 0.12f, 0.16f, 1.0f};
                 env->Environment().ambientIntensity = 0.30f;
             }
 
             // Shared sphere material (gray PBR). Every sphere points at THIS one by default, so the
             // renderer can batch them. Unique mode (U) builds a per-sphere material instead.
             m_sharedMat = materials::CreatePBR(u8"stress.shared",
-                                               core::Float4{0.7f, 0.7f, 0.7f, 1.0f}, 0.1f, 0.4f);
+                                               foundation::Float4{0.7f, 0.7f, 0.7f, 1.0f}, 0.1f, 0.4f);
 
             // One sphere mesh, shared by all instances (matches Sedulous: radius 0.5, 16x8).
             m_sphere = geometry::Primitives::Sphere(0.5f, 16, 8);
@@ -105,25 +105,25 @@ namespace
             if (auto* meshes = m_scene->GetSystem<render::MeshComponentManager>())
             {
                 m_ground = m_scene->CreateEntity(u8"ground");
-                m_scene->SetLocalPosition(m_ground, core::Float3{0.0f, 0.0f, 0.0f});
+                m_scene->SetLocalPosition(m_ground, foundation::Float3{0.0f, 0.0f, 0.0f});
                 render::MeshComponent& gm = meshes->Add(m_ground);
                 gm.mesh = geometry::Primitives::Plane(kFloorBaseSize, kFloorBaseSize);
                 gm.SetMaterial(materials::CreatePBR(
-                    u8"stress.ground", core::Float4{0.3f, 0.3f, 0.3f, 1.0f}, 0.0f, 0.8f));
+                    u8"stress.ground", foundation::Float4{0.3f, 0.3f, 0.3f, 1.0f}, 0.0f, 0.8f));
             }
 
             // Directional key light.
             if (auto* lights = m_scene->GetSystem<render::LightComponentManager>())
             {
                 scene::EntityHandle sun = m_scene->CreateEntity(u8"sun");
-                core::Transform st = m_scene->GetLocalTransform(sun);
+                foundation::Transform st = m_scene->GetLocalTransform(sun);
                 st.rotation =
-                    core::Quaternion::FromAxisAngle(core::Float3{1.0f, 0.0f, 0.0f}, -0.9f) *
-                    core::Quaternion::FromAxisAngle(core::Float3{0.0f, 1.0f, 0.0f}, 0.5f);
+                    foundation::Quaternion::FromAxisAngle(foundation::Float3{1.0f, 0.0f, 0.0f}, -0.9f) *
+                    foundation::Quaternion::FromAxisAngle(foundation::Float3{0.0f, 1.0f, 0.0f}, 0.5f);
                 m_scene->SetLocalTransform(sun, st);
                 render::LightComponent& sl = lights->Add(sun);
                 sl.type = render::LightType::Directional;
-                sl.color = core::Color{1.0f, 0.95f, 0.9f, 1.0f};
+                sl.color = foundation::Color{1.0f, 0.95f, 0.9f, 1.0f};
                 sl.intensity = 1.5f;
                 sl.castsShadows = true; // phase 5.1: the spheres cast shadows on the ground
                 m_sun = sun; // K toggles its shadows (for shadowed-vs-unshadowed benchmarking)
@@ -137,7 +137,7 @@ namespace
                 cam.fovYRadians = 1.04719755f; // 60 deg
                 cam.nearZ = 0.1f;
                 cam.farZ = 2000.0f;
-                cam.clearColor = core::Color{0.04f, 0.05f, 0.07f, 1.0f};
+                cam.clearColor = foundation::Color{0.04f, 0.05f, 0.07f, 1.0f};
             }
             PushCameraToEntity();
 
@@ -149,7 +149,7 @@ namespace
                 render->SetExposure(0.5f);
             }
 
-            core::ConsoleWrite(
+            foundation::ConsoleWrite(
                 u8"=== Render Stress Test ===\n"
                 u8"  Space: +8000 spheres   Backspace: -8000\n"
                 u8"  U: toggle unique materials (defeats batching)\n"
@@ -170,8 +170,8 @@ namespace
                 {
                     if (render::CameraComponent* cam = cameras->Get(m_camera))
                     {
-                        cam->aspect = static_cast<core::f32>(frame.width) /
-                                      static_cast<core::f32>(frame.height);
+                        cam->aspect = static_cast<foundation::f32>(frame.width) /
+                                      static_cast<foundation::f32>(frame.height);
                     }
                 }
             }
@@ -184,7 +184,7 @@ namespace
             }
         }
 
-        void OnUpdate(runtime::IApplicationHost& host, core::f32 deltaTime) override
+        void OnUpdate(runtime::IApplicationHost& host, foundation::f32 deltaTime) override
         {
             runtime::DefaultApplication::OnUpdate(host, deltaTime); // inherited P-key profiler dump
 
@@ -226,21 +226,21 @@ namespace
             {
                 m_uniqueMaterials = !m_uniqueMaterials;
                 RebuildSphereMaterials();
-                core::ConsoleWrite(m_uniqueMaterials
+                foundation::ConsoleWrite(m_uniqueMaterials
                                        ? u8"Unique materials: ON (a draw per sphere)\n"
                                        : u8"Unique materials: OFF (shared, batched)\n");
             }
             if (kb->IsKeyPressed(shell::KeyCode::B))
             {
                 m_bob = !m_bob;
-                core::ConsoleWrite(m_bob ? u8"Sin-wave bob: ON (transforms rewritten every frame)\n"
+                foundation::ConsoleWrite(m_bob ? u8"Sin-wave bob: ON (transforms rewritten every frame)\n"
                                          : u8"Sin-wave bob: OFF\n");
             }
             if (kb->IsKeyPressed(shell::KeyCode::M))
             {
                 m_multiMesh = !m_multiMesh;
                 RebuildMultiMesh();
-                core::ConsoleWrite(
+                foundation::ConsoleWrite(
                     m_multiMesh
                         ? u8"MultiMesh: ON (whole grid = ONE instanced set, O(1)/frame CPU)\n"
                         : u8"MultiMesh: OFF (per-entity spheres)\n");
@@ -255,7 +255,7 @@ namespace
                 {
                     const bool on = !render->TaaEnabled();
                     render->SetTaaEnabled(on);
-                    core::ConsoleWrite(on ? u8"TAA: ON (motion vectors active)\n" : u8"TAA: OFF\n");
+                    foundation::ConsoleWrite(on ? u8"TAA: ON (motion vectors active)\n" : u8"TAA: OFF\n");
                 }
             }
             if (kb->IsKeyPressed(shell::KeyCode::I))
@@ -264,7 +264,7 @@ namespace
                 {
                     const bool on = !render->InstanceSharing();
                     render->SetInstanceSharing(on);
-                    core::ConsoleWrite(
+                    foundation::ConsoleWrite(
                         on ? u8"Instance sharing: ON (prepass builds once, forward reuses)\n"
                            : u8"Instance sharing: OFF (forward re-fills = old double-build)\n");
                 }
@@ -277,7 +277,7 @@ namespace
                             m_sun.IsAssigned() ? lights->Get(m_sun) : nullptr)
                     {
                         sl->castsShadows = !sl->castsShadows;
-                        core::ConsoleWrite(
+                        foundation::ConsoleWrite(
                             sl->castsShadows
                                 ? u8"Directional shadows: ON (CSM)\n"
                                 : u8"Directional shadows: OFF (matches Sedulous stress test)\n");
@@ -293,14 +293,14 @@ namespace
             if (m_bob)
             {
                 auto* meshScene = m_scene;
-                constexpr core::f32 amplitude = 1.0f, speed = 2.0f;
+                constexpr foundation::f32 amplitude = 1.0f, speed = 2.0f;
                 for (scene::EntityHandle e : m_spheres)
                 {
-                    core::Transform t = meshScene->GetLocalTransform(e);
+                    foundation::Transform t = meshScene->GetLocalTransform(e);
                     // Phase from world X/Z (stable as the grid grows). Bob AROUND the base height so the
                     // spheres stay above the floor (full, separated shadows) instead of dipping through it.
-                    const core::f32 phase = (t.position.x + t.position.z) * 0.2f;
-                    t.position.y = kSphereHeight + core::Sin(m_time * speed + phase) * amplitude;
+                    const foundation::f32 phase = (t.position.x + t.position.z) * 0.2f;
+                    t.position.y = kSphereHeight + foundation::Sin(m_time * speed + phase) * amplitude;
                     meshScene->SetLocalTransform(e, t);
                 }
             }
@@ -308,14 +308,14 @@ namespace
 
         void OnShutdown(runtime::IApplicationHost&) override
         {
-            core::ConsoleWrite(u8"=== Stress Test Shutdown ===\n");
+            foundation::ConsoleWrite(u8"=== Stress Test Shutdown ===\n");
         }
 
     private:
         // Push the fly camera's pose onto the camera entity (the default render path reads it).
         void PushCameraToEntity()
         {
-            core::Transform t = m_scene->GetLocalTransform(m_camera);
+            foundation::Transform t = m_scene->GetLocalTransform(m_camera);
             t.position = m_fly.position;
             t.rotation = m_fly.Rotation();
             m_scene->SetLocalTransform(m_camera, t);
@@ -326,21 +326,21 @@ namespace
         // whole field and the far plane wide enough that no spheres get frustum-far-culled.
         void FitFloorAndCamera()
         {
-            const core::f32 gridWidth =
-                static_cast<core::f32>(m_gridSize) * kSphereSpacing; // full grid extent
+            const foundation::f32 gridWidth =
+                static_cast<foundation::f32>(m_gridSize) * kSphereSpacing; // full grid extent
             // Floor: scale the base plane so it covers the grid + a margin (uniform XZ; Y stays flat).
-            const core::f32 scale = core::Max(0.1f, (gridWidth + 40.0f) / kFloorBaseSize);
-            core::Transform ft = m_scene->GetLocalTransform(m_ground);
-            ft.scale = core::Float3{scale, 1.0f, scale};
+            const foundation::f32 scale = foundation::Max(0.1f, (gridWidth + 40.0f) / kFloorBaseSize);
+            foundation::Transform ft = m_scene->GetLocalTransform(m_ground);
+            ft.scale = foundation::Float3{scale, 1.0f, scale};
             m_scene->SetLocalTransform(m_ground, ft);
 
             // Camera: pull back + up so the grid fits the 60° FOV, looking down at the center.
-            const core::f32 extent = gridWidth * 0.5f + 6.0f;
-            const core::f32 dist = extent / core::Tan(0.5236f) + 10.0f; // half of 60° = 0.5236 rad
-            const core::f32 camY = extent * 0.55f + kSphereHeight;
-            m_fly.position = core::Float3{0.0f, kSphereHeight + camY, dist};
+            const foundation::f32 extent = gridWidth * 0.5f + 6.0f;
+            const foundation::f32 dist = extent / foundation::Tan(0.5236f) + 10.0f; // half of 60° = 0.5236 rad
+            const foundation::f32 camY = extent * 0.55f + kSphereHeight;
+            m_fly.position = foundation::Float3{0.0f, kSphereHeight + camY, dist};
             m_fly.yaw = 0.0f;
-            m_fly.pitch = -core::Atan2(camY, dist); // look down onto the grid center
+            m_fly.pitch = -foundation::Atan2(camY, dist); // look down onto the grid center
             if (auto* cameras = m_scene->GetSystem<render::CameraComponentManager>())
             {
                 if (render::CameraComponent* cam = cameras->Get(m_camera))
@@ -356,34 +356,34 @@ namespace
         // existing spheres keep their world positions when the grid widens.
         // Grid position of sphere `index` for the current grid size (existing spheres keep their spot as
         // the grid widens; only new indices use the new size).
-        [[nodiscard]] core::Float3 SphereTranslation(core::i32 index) const
+        [[nodiscard]] foundation::Float3 SphereTranslation(foundation::i32 index) const
         {
-            const core::i32 gx = index % m_gridSize;
-            const core::i32 gz = index / m_gridSize;
-            const core::f32 x =
-                (static_cast<core::f32>(gx) - static_cast<core::f32>(m_gridSize) * 0.5f) *
+            const foundation::i32 gx = index % m_gridSize;
+            const foundation::i32 gz = index / m_gridSize;
+            const foundation::f32 x =
+                (static_cast<foundation::f32>(gx) - static_cast<foundation::f32>(m_gridSize) * 0.5f) *
                 kSphereSpacing;
-            const core::f32 z =
-                (static_cast<core::f32>(gz) - static_cast<core::f32>(m_gridSize) * 0.5f) *
+            const foundation::f32 z =
+                (static_cast<foundation::f32>(gz) - static_cast<foundation::f32>(m_gridSize) * 0.5f) *
                 kSphereSpacing;
-            return core::Float3{x, kSphereHeight, z};
+            return foundation::Float3{x, kSphereHeight, z};
         }
 
         void AddSphereBatch()
         {
-            const core::i32 startIndex = m_batchCount * kSpheresPerBatch;
-            const core::i32 newTotal = (m_batchCount + 1) * kSpheresPerBatch;
+            const foundation::i32 startIndex = m_batchCount * kSpheresPerBatch;
+            const foundation::i32 newTotal = (m_batchCount + 1) * kSpheresPerBatch;
             m_gridSize =
-                static_cast<core::i32>(core::Ceil(core::Sqrt(static_cast<core::f32>(newTotal))));
+                static_cast<foundation::i32>(foundation::Ceil(foundation::Sqrt(static_cast<foundation::f32>(newTotal))));
 
             if (m_multiMesh)
             {
                 // MultiMesh: no per-entity entities exist - grow the canonical transform list + the set.
-                m_mmTransforms.Reserve(static_cast<core::u32>(newTotal));
-                for (core::i32 i = 0; i < kSpheresPerBatch; ++i)
+                m_mmTransforms.Reserve(static_cast<foundation::u32>(newTotal));
+                for (foundation::i32 i = 0; i < kSpheresPerBatch; ++i)
                 {
                     m_mmTransforms.PushBack(
-                        core::Float4x4::Translation(SphereTranslation(startIndex + i)));
+                        foundation::Float4x4::Translation(SphereTranslation(startIndex + i)));
                 }
             }
             else
@@ -393,9 +393,9 @@ namespace
                 {
                     return;
                 }
-                for (core::i32 i = 0; i < kSpheresPerBatch; ++i)
+                for (foundation::i32 i = 0; i < kSpheresPerBatch; ++i)
                 {
-                    const core::i32 index = startIndex + i;
+                    const foundation::i32 index = startIndex + i;
                     scene::EntityHandle e = m_scene->CreateEntity(u8"sphere");
                     m_scene->SetLocalPosition(e, SphereTranslation(index));
                     render::MeshComponent& mc = meshes->Add(e);
@@ -422,7 +422,7 @@ namespace
             }
             if (m_multiMesh)
             {
-                core::usize remove = static_cast<core::usize>(kSpheresPerBatch);
+                foundation::usize remove = static_cast<foundation::usize>(kSpheresPerBatch);
                 if (remove > m_mmTransforms.Size())
                 {
                     remove = m_mmTransforms.Size();
@@ -431,12 +431,12 @@ namespace
             }
             else
             {
-                core::i32 removeCount = kSpheresPerBatch;
-                if (static_cast<core::usize>(removeCount) > m_spheres.Size())
+                foundation::i32 removeCount = kSpheresPerBatch;
+                if (static_cast<foundation::usize>(removeCount) > m_spheres.Size())
                 {
-                    removeCount = static_cast<core::i32>(m_spheres.Size());
+                    removeCount = static_cast<foundation::i32>(m_spheres.Size());
                 }
-                for (core::i32 i = 0; i < removeCount; ++i)
+                for (foundation::i32 i = 0; i < removeCount; ++i)
                 {
                     m_scene->DestroyEntity(m_spheres[m_spheres.Size() - 1]);
                     m_spheres.PopBack();
@@ -456,22 +456,22 @@ namespace
         }
 
         // Point a sphere's mesh component at the right material for the current mode.
-        void AssignSphereMaterial(render::MeshComponent& mc, core::i32 index)
+        void AssignSphereMaterial(render::MeshComponent& mc, foundation::i32 index)
         {
             if (m_uniqueMaterials)
             {
-                const core::f32 hue = static_cast<core::f32>(index % 360) / 360.0f;
-                const core::Float3 c = HsvToRgb(hue, 0.8f, 0.9f);
-                core::RefPtr<materials::Material> m = materials::CreatePBR(
-                    u8"stress.unique", core::Float4{c.x, c.y, c.z, 1.0f}, 0.1f, 0.4f);
+                const foundation::f32 hue = static_cast<foundation::f32>(index % 360) / 360.0f;
+                const foundation::Float3 c = HsvToRgb(hue, 0.8f, 0.9f);
+                foundation::RefPtr<materials::Material> m = materials::CreatePBR(
+                    u8"stress.unique", foundation::Float4{c.x, c.y, c.z, 1.0f}, 0.1f, 0.4f);
                 mc.SetMaterial(m);
-                mc.color = core::Color{1.0f, 1.0f, 1.0f, 1.0f};
-                m_uniqueMats.PushBack(static_cast<core::RefPtr<materials::Material>&&>(m));
+                mc.color = foundation::Color{1.0f, 1.0f, 1.0f, 1.0f};
+                m_uniqueMats.PushBack(static_cast<foundation::RefPtr<materials::Material>&&>(m));
             }
             else
             {
                 mc.SetMaterial(m_sharedMat);
-                mc.color = core::Color{1.0f, 1.0f, 1.0f, 1.0f};
+                mc.color = foundation::Color{1.0f, 1.0f, 1.0f, 1.0f};
             }
         }
 
@@ -485,11 +485,11 @@ namespace
                 return;
             }
             m_uniqueMats.Clear();
-            for (core::usize i = 0; i < m_spheres.Size(); ++i)
+            for (foundation::usize i = 0; i < m_spheres.Size(); ++i)
             {
                 if (render::MeshComponent* mc = meshes->Get(m_spheres[i]))
                 {
-                    AssignSphereMaterial(*mc, static_cast<core::i32>(i));
+                    AssignSphereMaterial(*mc, static_cast<foundation::i32>(i));
                 }
             }
         }
@@ -522,7 +522,7 @@ namespace
             c.mesh = m_sphere;
             c.material = m_sharedMat;
             c.SetInstances(
-                core::Span<const core::Float4x4>{m_mmTransforms.Data(), m_mmTransforms.Size()});
+                foundation::Span<const foundation::Float4x4>{m_mmTransforms.Data(), m_mmTransforms.Size()});
         }
 
         // Convert between per-entity spheres and the single MultiMesh set when the mode flips. Entering
@@ -541,7 +541,7 @@ namespace
             if (m_multiMesh)
             {
                 m_mmTransforms.Clear();
-                m_mmTransforms.Reserve(static_cast<core::u32>(m_spheres.Size()));
+                m_mmTransforms.Reserve(static_cast<foundation::u32>(m_spheres.Size()));
                 for (scene::EntityHandle e : m_spheres)
                 {
                     m_mmTransforms.PushBack(m_scene->GetWorldMatrix(e));
@@ -562,16 +562,16 @@ namespace
                     m_scene->DestroyEntity(m_multiMeshEntity);
                     m_multiMeshEntity = {};
                 }
-                m_spheres.Reserve(static_cast<core::u32>(m_mmTransforms.Size()));
-                for (core::usize i = 0; i < m_mmTransforms.Size(); ++i)
+                m_spheres.Reserve(static_cast<foundation::u32>(m_mmTransforms.Size()));
+                for (foundation::usize i = 0; i < m_mmTransforms.Size(); ++i)
                 {
-                    const core::Float4x4& xf =
+                    const foundation::Float4x4& xf =
                         m_mmTransforms[i]; // translation-only spheres: read the position row
                     scene::EntityHandle e = m_scene->CreateEntity(u8"sphere");
-                    m_scene->SetLocalPosition(e, core::Float3{xf.m[3][0], xf.m[3][1], xf.m[3][2]});
+                    m_scene->SetLocalPosition(e, foundation::Float3{xf.m[3][0], xf.m[3][1], xf.m[3][2]});
                     render::MeshComponent& mc = meshes->Add(e);
                     mc.mesh = m_sphere;
-                    AssignSphereMaterial(mc, static_cast<core::i32>(i));
+                    AssignSphereMaterial(mc, static_cast<foundation::i32>(i));
                     m_spheres.PushBack(e);
                 }
                 m_mmTransforms.Clear();
@@ -581,16 +581,16 @@ namespace
 
         void PrintCounts()
         {
-            const core::i32 count = m_multiMesh ? static_cast<core::i32>(m_mmTransforms.Size())
-                                                : static_cast<core::i32>(m_spheres.Size());
-            core::String s;
-            core::AppendFormat(s, u8"  spheres {}  batches {}  grid {}x{}  materials {}{}\n", count,
+            const foundation::i32 count = m_multiMesh ? static_cast<foundation::i32>(m_mmTransforms.Size())
+                                                : static_cast<foundation::i32>(m_spheres.Size());
+            foundation::String s;
+            foundation::AppendFormat(s, u8"  spheres {}  batches {}  grid {}x{}  materials {}{}\n", count,
                                m_batchCount, m_gridSize, m_gridSize,
                                (m_multiMesh || !m_uniqueMaterials)
                                    ? 1
-                                   : static_cast<core::i32>(m_uniqueMats.Size()),
+                                   : static_cast<foundation::i32>(m_uniqueMats.Size()),
                                m_multiMesh ? u8"  [multimesh]" : u8"");
-            core::ConsoleWrite(s.AsView());
+            foundation::ConsoleWrite(s.AsView());
         }
 
         // ImGui HUD: benchmark stats + controls (H toggles it). Built in OnUpdate, drawn in OnRenderWindow.
@@ -655,7 +655,7 @@ namespace
                 }
                 if (cull)
                 {
-                    core::u32 culled = 0, total = 0;
+                    foundation::u32 culled = 0, total = 0;
                     render->ViewCullStats(culled, total);
                     ImGui::SameLine();
                     ImGui::TextDisabled("(%u/%u culled)", culled, total);
@@ -706,27 +706,27 @@ namespace
             ImGui::End();
         }
 
-        static core::Float3 HsvToRgb(core::f32 h, core::f32 s, core::f32 v)
+        static foundation::Float3 HsvToRgb(foundation::f32 h, foundation::f32 s, foundation::f32 v)
         {
-            const core::i32 i = static_cast<core::i32>(h * 6.0f);
-            const core::f32 f = h * 6.0f - static_cast<core::f32>(i);
-            const core::f32 p = v * (1.0f - s);
-            const core::f32 q = v * (1.0f - f * s);
-            const core::f32 t = v * (1.0f - (1.0f - f) * s);
+            const foundation::i32 i = static_cast<foundation::i32>(h * 6.0f);
+            const foundation::f32 f = h * 6.0f - static_cast<foundation::f32>(i);
+            const foundation::f32 p = v * (1.0f - s);
+            const foundation::f32 q = v * (1.0f - f * s);
+            const foundation::f32 t = v * (1.0f - (1.0f - f) * s);
             switch (i % 6)
             {
             case 0:
-                return core::Float3{v, t, p};
+                return foundation::Float3{v, t, p};
             case 1:
-                return core::Float3{q, v, p};
+                return foundation::Float3{q, v, p};
             case 2:
-                return core::Float3{p, v, t};
+                return foundation::Float3{p, v, t};
             case 3:
-                return core::Float3{p, q, v};
+                return foundation::Float3{p, q, v};
             case 4:
-                return core::Float3{t, p, v};
+                return foundation::Float3{t, p, v};
             default:
-                return core::Float3{v, p, q};
+                return foundation::Float3{v, p, q};
             }
         }
 
@@ -734,28 +734,28 @@ namespace
         scene::EntityHandle m_camera{};
         scene::EntityHandle m_sun{};
         scene::EntityHandle m_ground{};
-        core::RefPtr<geometry::StaticMesh> m_sphere;
-        core::RefPtr<materials::Material> m_sharedMat;
-        core::Array<scene::EntityHandle> m_spheres;
-        core::Array<core::RefPtr<materials::Material>> m_uniqueMats;
+        foundation::RefPtr<geometry::StaticMesh> m_sphere;
+        foundation::RefPtr<materials::Material> m_sharedMat;
+        foundation::Array<scene::EntityHandle> m_spheres;
+        foundation::Array<foundation::RefPtr<materials::Material>> m_uniqueMats;
 
-        core::i32 m_batchCount = 0;
-        core::i32 m_gridSize = 0;
+        foundation::i32 m_batchCount = 0;
+        foundation::i32 m_gridSize = 0;
         bool m_uniqueMaterials = false;
         bool m_bob = false;
         bool m_multiMesh = false; // M: draw the whole grid as ONE InstancedMeshComponent
         scene::EntityHandle m_multiMeshEntity{}; // the single set entity (when m_multiMesh)
-        core::Array<core::Float4x4>
+        foundation::Array<foundation::Float4x4>
             m_mmTransforms; // canonical instance transforms while in MultiMesh mode
                             // (the per-entity spheres are DESTROYED, not hidden)
-        core::f32 m_time = 0.0f;
+        foundation::f32 m_time = 0.0f;
 
         // Fly camera, pulled well back + up so the whole grid is in frame (worst case for culling).
-        samples::FlyCamera m_fly{.position = core::Float3{0.0f, 50.0f, 200.0f}, .pitch = -0.245f};
+        samples::FlyCamera m_fly{.position = foundation::Float3{0.0f, 50.0f, 200.0f}, .pitch = -0.245f};
 
         // Stats
         bool m_showStats = true; // HUD visibility (H)
-        core::f32 m_frameMs = 0.0f;
+        foundation::f32 m_frameMs = 0.0f;
     };
 }
 

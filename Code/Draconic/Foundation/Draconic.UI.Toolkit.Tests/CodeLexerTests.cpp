@@ -6,13 +6,13 @@
 // Toolkit ships NO language tables (they live with the language-owning modules), so these
 // tests drive the machinery with local specs.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui.toolkit;
 
 using namespace draconic::ui::toolkit;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 namespace
 {
@@ -204,8 +204,8 @@ TEST_CASE("toolkit-codelexer: RegistrySeam")
     registry.Register(u8"testlang", []
                       {
                           return UniquePtr<ICodeLexer>(
-                              core::DefaultAllocator().New<CLikeLexer>(TestSpec()),
-                              core::DefaultAllocator());
+                              foundation::DefaultAllocator().New<CLikeLexer>(TestSpec()),
+                              foundation::DefaultAllocator());
                       });
 
     CHECK(registry.Create(u8"testlang").Get() != nullptr);
@@ -327,9 +327,9 @@ TEST_CASE("toolkit-codehighlighter: LazyFrontierResumes")
 TEST_CASE("toolkit-codeeditview: LexerWiredThroughEdits")
 {
     // The view forwards document changes to its highlighter; tokens stay queryable.
-    auto view = core::MakeRef<CodeEditView>(core::DefaultAllocator());
-    view->SetLexer(UniquePtr<ICodeLexer>(core::DefaultAllocator().New<CLikeLexer>(TestSpec()),
-                                         core::DefaultAllocator()));
+    auto view = foundation::MakeRef<CodeEditView>(foundation::DefaultAllocator());
+    view->SetLexer(UniquePtr<ICodeLexer>(foundation::DefaultAllocator().New<CLikeLexer>(TestSpec()),
+                                         foundation::DefaultAllocator()));
     view->SetText(u8"var a = 1");
     view->Highlighter().EnsureLexed(view->Document(), 0);
     REQUIRE(view->Highlighter().TokensFor(0).Size() > 0);

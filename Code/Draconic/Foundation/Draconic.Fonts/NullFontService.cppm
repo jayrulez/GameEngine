@@ -4,15 +4,15 @@
 // Ported from Sedulous.Fonts (NullFontService.bf).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.fonts:null_service;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.image;
 import :interfaces;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::fonts
 {

@@ -4,10 +4,10 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.resource;
@@ -18,7 +18,7 @@ import draconic.engine.render; // MeshComponentManager (the skeletal tick's feed
 import draconic.scene;
 import draconic.scene.resource;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace scene = draconic::scene;
 namespace resource = draconic::resource;
 namespace animation = draconic::animation;

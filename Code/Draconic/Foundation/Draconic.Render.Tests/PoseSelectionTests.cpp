@@ -4,12 +4,12 @@
 // says" question is settled (the visual muddle in the sample is clip bucketing, not this math).
 #include <doctest/doctest.h>
 #include <initializer_list>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.render;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::render;
 
 TEST_CASE("SelectPose: Sequential is i % M")

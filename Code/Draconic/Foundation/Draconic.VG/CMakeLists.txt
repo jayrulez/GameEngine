@@ -5,7 +5,7 @@
 add_library(Draconic.VG STATIC)
 add_library(Draconic::VG ALIAS Draconic.VG)
 
-target_link_libraries(Draconic.VG PUBLIC Draconic::Core Draconic::Image Draconic::Fonts Draconic::Policy)
+target_link_libraries(Draconic.VG PUBLIC Draconic::Foundation Draconic::Image Draconic::Fonts Draconic::Policy)
 
 target_sources(Draconic.VG
     PUBLIC

@@ -4,12 +4,12 @@
 // Sedulous.UI/src/Controls/Panel.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:panel;
 
-import draconic.core;
+import draconic.foundation;
 import :view;
 import :box_constraints;
 import :thickness;
@@ -18,7 +18,7 @@ import :control_state;
 import :draw_context;
 import :drawable;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

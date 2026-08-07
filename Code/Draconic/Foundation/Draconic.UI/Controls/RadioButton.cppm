@@ -5,12 +5,12 @@
 // label are LIVE now that the Fonts service + VG are wired; toggle/state/event faithful.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:radio_button;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.fonts; // CachedFont, TextAlignment, VerticalAlignment
 import :view;
 import :event;
@@ -25,8 +25,8 @@ import :input_enums;
 import :enums;
 import :palette;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace fonts = draconic::fonts;
 
 export namespace draconic::ui
@@ -39,7 +39,7 @@ export namespace draconic::ui
         Property<String> Text;
         Property<Optional<f32>> FontSize;
         Property<String> FontFamily;
-        Property<Optional<core::Color>> TextColor;
+        Property<Optional<foundation::Color>> TextColor;
         Event<void(RadioButton*, bool)> OnCheckedChanged;
 
         RadioButton() { Init(); }

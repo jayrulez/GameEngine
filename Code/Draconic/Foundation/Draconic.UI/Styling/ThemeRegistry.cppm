@@ -8,16 +8,16 @@
 // destruction-order pitfalls). The list lives in a function-local static.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:theme_registry;
 
-import draconic.core; // Array
+import draconic.foundation; // Array
 import :style_sheet;
 import :theme_palette;
 import :theme_extension;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::ui::detail
 {

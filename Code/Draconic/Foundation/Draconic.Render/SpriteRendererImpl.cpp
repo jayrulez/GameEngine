@@ -12,11 +12,11 @@
 /// DrawIndexed), so a static 6-index buffer [0..5] drives the SV_VertexID quad.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 module draconic.render;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.shaders;
 import draconic.shaders.system;
@@ -24,7 +24,7 @@ import :data;
 import :pipeline;
 import :resources;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 
 namespace draconic::render

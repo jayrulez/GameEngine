@@ -11,14 +11,14 @@
 /// double-buffered extraction - extract N while submit N-1 - slots in here later.)
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.render:extract_ctx;
 
-import draconic.core;
+import draconic.foundation;
 import :data;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::render
 {

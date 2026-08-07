@@ -3,7 +3,7 @@
 add_executable(Draconic.Tools.Export Main.cpp)
 add_dependencies(Draconic.Tools.Export Draconic.Engine.Player)   # stages the player exe when present
 target_link_libraries(Draconic.Tools.Export PRIVATE
-    Draconic::Core Draconic::Scene.Resource
+    Draconic::Foundation Draconic::Scene.Resource
     Draconic::Editor Draconic::Editor.Cook Draconic::Editor.Core
     Draconic::Texture.Editor Draconic::Fonts.Editor Draconic::Image.Editor Draconic::Image.Resource Draconic::Geometry.Editor
     Draconic::Animation.Editor Draconic::Materials.Editor Draconic::Shaders.Editor

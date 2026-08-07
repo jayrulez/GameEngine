@@ -6,7 +6,7 @@ add_library(Draconic.Fonts.Resource STATIC)
 add_library(Draconic::Fonts.Resource ALIAS Draconic.Fonts.Resource)
 
 target_link_libraries(Draconic.Fonts.Resource
-    PUBLIC Draconic::Core Draconic::Fonts Draconic::Fonts.Baked Draconic::Fonts.TTF Draconic::Fonts.DistanceField
+    PUBLIC Draconic::Foundation Draconic::Fonts Draconic::Fonts.Baked Draconic::Fonts.TTF Draconic::Fonts.DistanceField
            Draconic::Image Draconic::Content Draconic::Resource Draconic::Policy)
 
 target_sources(Draconic.Fonts.Resource

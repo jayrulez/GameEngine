@@ -7,21 +7,21 @@
 // sheet - the StyleManager already hot-reloads.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:theme;
 
-import draconic.core; // StringView
+import draconic.foundation; // StringView
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
     // Built-in dark theme.
-    [[nodiscard]] inline core::StringView DefaultDarkThemeCSS()
+    [[nodiscard]] inline foundation::StringView DefaultDarkThemeCSS()
     {
-        return core::StringView(u8R"(
+        return foundation::StringView(u8R"(
             .panel    { background-color: #14161c; }
             label, menuitem, menusubmenu { color: #d2d8e0; }
             button    { background-color: #33507a; color: #f4f7fb; padding: 9; transition: opacity 0.15s; }
@@ -72,9 +72,9 @@ export namespace draconic::gui
     }
 
     // Built-in light theme (same structure, light palette).
-    [[nodiscard]] inline core::StringView DefaultLightThemeCSS()
+    [[nodiscard]] inline foundation::StringView DefaultLightThemeCSS()
     {
-        return core::StringView(u8R"(
+        return foundation::StringView(u8R"(
             .panel    { background-color: #dde3ec; }
             label, menuitem, menusubmenu { color: #1c2530; }
             button    { background-color: #cdd8ea; color: #17202b; padding: 9; transition: opacity 0.15s; }

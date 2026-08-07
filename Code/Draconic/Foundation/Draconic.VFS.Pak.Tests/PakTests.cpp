@@ -1,13 +1,13 @@
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include <cstring>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.vfs.pak;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::vfs;
 
 namespace

@@ -4,10 +4,10 @@
 // instances through the standard rebuild machinery).
 
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.scene;
@@ -17,7 +17,7 @@ import draconic.engine.animation;
 import draconic.modelimporter;
 import draconic.editor.scene;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace scene = draconic::scene;
 namespace render = draconic::render;
 namespace animation = draconic::animation;

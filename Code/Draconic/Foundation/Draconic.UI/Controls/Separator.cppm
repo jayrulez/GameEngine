@@ -4,12 +4,12 @@
 // (The `Orientation` property shadows the enum type, so enum values are fully qualified.)
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:separator;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import :view;
 import :property;
@@ -18,7 +18,7 @@ import :style_property;
 import :draw_context;
 import :enums; // Orientation
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

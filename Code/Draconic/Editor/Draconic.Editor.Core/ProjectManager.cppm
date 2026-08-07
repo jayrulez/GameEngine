@@ -6,17 +6,17 @@
 // Future home of project TEMPLATES (create-from-template picks a scaffold here, not in UI).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.editor.core:project_manager;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.settings;
 import draconic.engine.project;
 import :project;
 import :project_registry;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {

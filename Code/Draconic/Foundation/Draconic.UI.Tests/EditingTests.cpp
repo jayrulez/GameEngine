@@ -3,12 +3,12 @@
 // U'...'). UndoStack has no upstream test file (Sedulous exercises it only through EditText), so its
 // cases below are direct unit coverage for the ported primitive.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 
 using namespace draconic::ui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 TEST_CASE("input-filter: None_AcceptsAll")
 {
@@ -69,8 +69,8 @@ TEST_CASE("undo-stack: PushState then Undo restores the pushed snapshot")
     CHECK(stack.CanUndo());
     CHECK(stack.UndoCount() == 1);
 
-    core::String out;
-    core::i32 cursor = 0, anchor = 0;
+    foundation::String out;
+    foundation::i32 cursor = 0, anchor = 0;
     const bool ok = stack.Undo(u8"ab", 2, 2, out, cursor, anchor);
     CHECK(ok);
     CHECK(out == u8"a");
@@ -85,13 +85,13 @@ TEST_CASE("undo-stack: Redo restores the state undone away")
     UndoStack stack;
     stack.PushState(u8"a", 1, 1);
 
-    core::String out;
-    core::i32 cursor = 0, anchor = 0;
+    foundation::String out;
+    foundation::i32 cursor = 0, anchor = 0;
     stack.Undo(u8"ab", 2, 2, out, cursor, anchor);
 
     // Redo should give back "ab" (the state that was current at Undo time).
-    core::String redoOut;
-    core::i32 rc = 0, ra = 0;
+    foundation::String redoOut;
+    foundation::i32 rc = 0, ra = 0;
     const bool ok = stack.Redo(out.AsView(), cursor, anchor, redoOut, rc, ra);
     CHECK(ok);
     CHECK(redoOut == u8"ab");
@@ -106,8 +106,8 @@ TEST_CASE("undo-stack: PushState clears the redo stack")
     UndoStack stack;
     stack.PushState(u8"a", 1, 1);
 
-    core::String out;
-    core::i32 cursor = 0, anchor = 0;
+    foundation::String out;
+    foundation::i32 cursor = 0, anchor = 0;
     stack.Undo(u8"ab", 2, 2, out, cursor, anchor);
     CHECK(stack.CanRedo());
 
@@ -126,8 +126,8 @@ TEST_CASE("undo-stack: capacity drops the oldest entry")
     stack.PushState(u8"three", 0, 0); // drops "one"
     CHECK(stack.UndoCount() == 2);
 
-    core::String out;
-    core::i32 c = 0, a = 0;
+    foundation::String out;
+    foundation::i32 c = 0, a = 0;
     stack.Undo(u8"cur", 0, 0, out, c, a);
     CHECK(out == u8"three");
     stack.Undo(out.AsView(), c, a, out, c, a);
@@ -138,8 +138,8 @@ TEST_CASE("undo-stack: capacity drops the oldest entry")
 TEST_CASE("undo-stack: Undo/Redo on empty stacks return false")
 {
     UndoStack stack;
-    core::String out;
-    core::i32 c = 0, a = 0;
+    foundation::String out;
+    foundation::i32 c = 0, a = 0;
     CHECK(!stack.Undo(u8"x", 0, 0, out, c, a));
     CHECK(!stack.Redo(u8"x", 0, 0, out, c, a));
 

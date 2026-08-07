@@ -1,4 +1,4 @@
-# Draconic::Animation unit tests (doctest; pure logic over Core math).
+# Draconic::Animation unit tests (doctest; pure logic over Foundation math).
 
 add_executable(Draconic.Animation.Tests
     TestsMain.cpp

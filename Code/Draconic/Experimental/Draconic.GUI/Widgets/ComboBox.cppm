@@ -7,12 +7,12 @@
 // closes the dropdown.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:combo_box;
 
-import draconic.core;  // RefPtr, MakeRef, Array, String, Function, Move, Min, Float2
+import draconic.foundation;  // RefPtr, MakeRef, Array, String, Function, Move, Min, Float2
 import draconic.fonts; // CachedFont
 import draconic.vg;    // PathBuilder
 import :rect;
@@ -25,8 +25,8 @@ import :ui_widget;
 import :list_box;
 import :event_dispatcher;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace fonts = draconic::fonts;
 namespace vg = draconic::vg;
 
@@ -38,10 +38,10 @@ export namespace draconic::gui
     public:
         ComboBox()
         {
-            SetTag(core::StringView(u8"combobox"));
+            SetTag(foundation::StringView(u8"combobox"));
             SetTabFocusable(true);
             // A visible box so it reads as a control even before it is opened.
-            SetBackground(core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), m_boxColor));
+            SetBackground(foundation::MakeRef<RectangleDrawable>(foundation::DefaultAllocator(), m_boxColor));
             m_text.SetAlignment(TextHAlign::Left, TextVAlign::Middle);
         }
 
@@ -66,20 +66,20 @@ export namespace draconic::gui
         }
         void SetThemeFont(fonts::CachedFont* font) override { SetFont(font); }
 
-        void AddItem(core::StringView text)
+        void AddItem(foundation::StringView text)
         {
-            m_items.PushBack(core::String(text));
+            m_items.PushBack(foundation::String(text));
             if (m_dropdown)
                 m_dropdown->AddItem(text);
         }
         [[nodiscard]] usize ItemCount() const noexcept { return m_items.Size(); }
 
         [[nodiscard]] i32 GetSelectedIndex() const noexcept { return m_selected; }
-        [[nodiscard]] core::StringView GetSelectedText() const
+        [[nodiscard]] foundation::StringView GetSelectedText() const
         {
             return (m_selected >= 0 && static_cast<usize>(m_selected) < m_items.Size())
                        ? m_items[static_cast<usize>(m_selected)].AsView()
-                       : core::StringView{};
+                       : foundation::StringView{};
         }
         void SetSelectedIndex(i32 index)
         {
@@ -93,9 +93,9 @@ export namespace draconic::gui
             if (m_onChanged)
                 m_onChanged(index);
         }
-        void SetOnSelectionChanged(core::Function<void(i32)> callback)
+        void SetOnSelectionChanged(foundation::Function<void(i32)> callback)
         {
-            m_onChanged = core::Move(callback);
+            m_onChanged = foundation::Move(callback);
         }
 
         [[nodiscard]] bool IsOpen() const noexcept { return m_open; }
@@ -115,7 +115,7 @@ export namespace draconic::gui
             (void)localBounds;
             const Rect b = GetContentBounds();
             // Selection text (leaving room for the arrow on the right).
-            m_text.Draw(ctx, Rect{b.x, b.y, core::Max(0.0f, b.width - 16.0f), b.height});
+            m_text.Draw(ctx, Rect{b.x, b.y, foundation::Max(0.0f, b.width - 16.0f), b.height});
             // A small down-arrow at the right.
             const f32 aw = 8.0f, ah = 5.0f;
             const f32 ax = b.x + b.width - aw - 4.0f;
@@ -133,10 +133,10 @@ export namespace draconic::gui
         {
             if (m_dropdown)
                 return;
-            m_dropdown = core::MakeRef<ListBox>(core::DefaultAllocator());
+            m_dropdown = foundation::MakeRef<ListBox>(foundation::DefaultAllocator());
             m_dropdown->SetFont(m_font);
             m_dropdown->SetItemHeight(m_itemHeight);
-            for (const core::String& item : m_items)
+            for (const foundation::String& item : m_items)
                 m_dropdown->AddItem(item.AsView());
             ComboBox* self = this;
             m_dropdown->SetOnSelectionChanged([self](i32 i) { self->OnPicked(i); });
@@ -150,11 +150,11 @@ export namespace draconic::gui
                 return;
             BuildDropdown();
 
-            const core::Float2 below = ConvertToWorldSpace(core::Float2{0.0f, GetSize().y});
+            const foundation::Float2 below = ConvertToWorldSpace(foundation::Float2{0.0f, GetSize().y});
             const f32 h =
-                core::Min(static_cast<f32>(m_items.Size()) * m_itemHeight, m_dropdownMaxHeight);
+                foundation::Min(static_cast<f32>(m_items.Size()) * m_itemHeight, m_dropdownMaxHeight);
             m_dropdown->SetPosition(below);
-            m_dropdown->SetSize(core::Float2{GetSize().x, h});
+            m_dropdown->SetSize(foundation::Float2{GetSize().x, h});
             root->AddChild(m_dropdown.Get());
 
             m_open = true;
@@ -180,7 +180,7 @@ export namespace draconic::gui
                 CloseDropdown();
         }
 
-        Array<core::String> m_items;
+        Array<foundation::String> m_items;
         Text m_text;
         RefPtr<ListBox> m_dropdown;
         fonts::CachedFont* m_font = nullptr;
@@ -190,7 +190,7 @@ export namespace draconic::gui
         f32 m_dropdownMaxHeight = 160.0f;
         Color m_boxColor{0.18f, 0.20f, 0.25f, 1.0f};
         Color m_arrowColor{0.75f, 0.80f, 0.86f, 1.0f};
-        core::Function<void(i32)> m_onChanged;
+        foundation::Function<void(i32)> m_onChanged;
     };
 
     DRACONIC_DEFINE_OBJECT(ComboBox, "draconic::gui")

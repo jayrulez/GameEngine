@@ -2,19 +2,19 @@
 /// Ported from Sedulous.RHI.Vulkan/VulkanTexture.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 #include "VkIncludes.h"
 
 export module draconic.rhi.vulkan:texture;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :adapter;
 import :conversions;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::rhi::vk
 {

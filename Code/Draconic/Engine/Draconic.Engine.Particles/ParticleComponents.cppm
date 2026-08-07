@@ -8,14 +8,14 @@
 //                                    IRenderDataProvider role - called by the ParticleSubsystem).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 #include "Draconic.Profiler/Profiler.h" // DRACONIC_PROFILE_SCOPE (compiles to nothing when disabled)
 #include <algorithm>           // std::sort (per-particle back-to-front ordering)
 
 export module draconic.engine.particles:components;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.profiler;
 import draconic.rhi;                // TextureView (billboard texture)
 import draconic.scene;              // Scene, ComponentManager, EntityHandle, ScenePhase
@@ -30,7 +30,7 @@ import draconic.texture.resource;
 import draconic.script.facades; // script::Entity/Scene + CurrentRunResources (the SceneParticles handle)
 import :renderdata;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 namespace scene = draconic::scene;
 namespace render = draconic::render;
@@ -102,13 +102,13 @@ export namespace draconic::particles
     // Persist the resource refs + tunables; the live instance/clone and the raw view are runtime-only.
     inline void Serialize(ISerializer& ar, ParticleEffectComponent& c)
     {
-        draconic::core::Serialize(ar, "effect", c.effectAsset);
-        draconic::core::Serialize(ar, "mesh", c.mesh);
-        draconic::core::Serialize(ar, "material", c.material);
-        draconic::core::Serialize(ar, "meshScale", c.meshScale);
-        draconic::core::Serialize(ar, "lightIntensity", c.lightIntensity);
-        draconic::core::Serialize(ar, "lightRange", c.lightRange);
-        draconic::core::Serialize(ar, "visible", c.visible);
+        draconic::foundation::Serialize(ar, "effect", c.effectAsset);
+        draconic::foundation::Serialize(ar, "mesh", c.mesh);
+        draconic::foundation::Serialize(ar, "material", c.material);
+        draconic::foundation::Serialize(ar, "meshScale", c.meshScale);
+        draconic::foundation::Serialize(ar, "lightIntensity", c.lightIntensity);
+        draconic::foundation::Serialize(ar, "lightRange", c.lightRange);
+        draconic::foundation::Serialize(ar, "visible", c.visible);
     }
 
     inline void ResolveResources(resource::ResourceManager& manager, ParticleEffectComponent& c)

@@ -1,12 +1,12 @@
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.shell;
 import draconic.shell.null;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::shell;
 
 TEST_CASE("shell.null: a headless shell reports a window and run state")

@@ -5,7 +5,7 @@ add_library(Draconic.Engine.Render STATIC)
 add_library(Draconic::Engine.Render ALIAS Draconic.Engine.Render)
 
 target_link_libraries(Draconic.Engine.Render
-    PUBLIC Draconic::Core Draconic::Scene Draconic::Engine.Scene Draconic::Render Draconic::Runtime
+    PUBLIC Draconic::Foundation Draconic::Scene Draconic::Engine.Scene Draconic::Render Draconic::Runtime
            Draconic::Geometry Draconic::Materials Draconic::Shaders Draconic::Shaders.System
            Draconic::Texture.Resource Draconic::Resource Draconic::Script.Facades
            Draconic::Materials.PipelineCache Draconic::Profiler Draconic::Policy)

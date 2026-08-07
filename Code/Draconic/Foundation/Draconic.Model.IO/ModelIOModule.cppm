@@ -3,17 +3,17 @@
 /// Callers use loadModel(path, model) which selects the right loader by extension.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include <cstring>
 #include <vector>
 
 export module draconic.model.io;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.model;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::model::io
 {

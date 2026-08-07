@@ -4,7 +4,7 @@
 add_library(Draconic.Texture STATIC)
 add_library(Draconic::Texture ALIAS Draconic.Texture)
 
-target_link_libraries(Draconic.Texture PUBLIC Draconic::Core Draconic::RHI Draconic::Image Draconic::Policy)
+target_link_libraries(Draconic.Texture PUBLIC Draconic::Foundation Draconic::RHI Draconic::Image Draconic::Policy)
 
 target_sources(Draconic.Texture
     PRIVATE

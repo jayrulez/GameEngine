@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <cstring>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.shaders;
 import draconic.samples.framework;
@@ -15,21 +15,21 @@ import draconic.rhi.vulkan;
 namespace samples = draconic::samples;
 namespace rhi = draconic::rhi;
 namespace shaders = draconic::shaders;
-using draconic::core::Float4x4;
+using draconic::foundation::Float4x4;
 
 class UniformBufferSample : public samples::framework::SampleApp
 {
 public:
     using samples::framework::SampleApp::SampleApp;
-    draconic::core::StringView Title() const override
+    draconic::foundation::StringView Title() const override
     {
         return u8"Sample003 - Rotating Cube (Uniform Buffers)";
     }
 
 protected:
-    draconic::core::Status OnInit() override;
+    draconic::foundation::Status OnInit() override;
     void OnRender() override;
-    void OnResize(draconic::core::u32 w, draconic::core::u32 h) override
+    void OnResize(draconic::foundation::u32 w, draconic::foundation::u32 h) override
     {
         m_depthBuf.Recreate(m_device, w, h);
     }
@@ -54,7 +54,7 @@ private:
         -0.5f, -0.5f, 0.5f,  1, 0, 1, 0.5f,  -0.5f, 0.5f,  0,   1,   1,
         0.5f,  0.5f,  0.5f,  1, 1, 1, -0.5f, 0.5f,  0.5f,  .5f, .5f, .5f,
     };
-    static constexpr draconic::core::u16 kCubeIdx[] = {
+    static constexpr draconic::foundation::u16 kCubeIdx[] = {
         0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 4, 7, 3, 4, 3, 0,
         1, 2, 6, 1, 6, 5, 3, 7, 6, 3, 6, 2, 4, 0, 1, 4, 1, 5,
     };
@@ -68,46 +68,46 @@ private:
     rhi::RenderPipeline* m_pipeline = nullptr;
     rhi::CommandPool* m_pool = nullptr;
     rhi::Fence* m_fence = nullptr;
-    draconic::core::u64 m_fenceVal = 0;
+    draconic::foundation::u64 m_fenceVal = 0;
     void* m_ubMapped = nullptr;
     samples::framework::DepthBuffer m_depthBuf;
 };
 
-draconic::core::Status UniformBufferSample::OnInit()
+draconic::foundation::Status UniformBufferSample::OnInit()
 {
-    using draconic::core::Status, draconic::core::Span, draconic::core::u8;
+    using draconic::foundation::Status, draconic::foundation::Span, draconic::foundation::u8;
 
     if (shaders::createCompiler(shaders::CompilerDesc{}, m_compiler) !=
-        draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+        draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
     if (samples::framework::CompileToModule(m_compiler, m_device, kShaderSource,
                                             shaders::ShaderStage::Vertex, u8"VSMain", u8"CubeVS",
-                                            m_vs) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+                                            m_vs) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
     if (samples::framework::CompileToModule(m_compiler, m_device, kShaderSource,
                                             shaders::ShaderStage::Fragment, u8"PSMain", u8"CubePS",
-                                            m_ps) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+                                            m_ps) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     // Buffers.
     rhi::BufferDesc vbd{};
     vbd.size = sizeof(kCubeVerts);
     vbd.usage = rhi::BufferUsage::Vertex | rhi::BufferUsage::CopyDst;
     vbd.memory = rhi::MemoryLocation::GpuOnly;
-    if (m_device->CreateBuffer(vbd, m_vb) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_device->CreateBuffer(vbd, m_vb) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
     rhi::BufferDesc ibd{};
     ibd.size = sizeof(kCubeIdx);
     ibd.usage = rhi::BufferUsage::Index | rhi::BufferUsage::CopyDst;
     ibd.memory = rhi::MemoryLocation::GpuOnly;
-    if (m_device->CreateBuffer(ibd, m_ib) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_device->CreateBuffer(ibd, m_ib) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
     rhi::BufferDesc ubd{};
     ubd.size = 64;
     ubd.usage = rhi::BufferUsage::Uniform;
     ubd.memory = rhi::MemoryLocation::CpuToGpu;
-    if (m_device->CreateBuffer(ubd, m_ub) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_device->CreateBuffer(ubd, m_ub) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
     m_ubMapped = m_ub->Map();
 
     // Upload.
@@ -125,15 +125,15 @@ draconic::core::Status UniformBufferSample::OnInit()
         0, rhi::ShaderStage::Vertex | rhi::ShaderStage::Fragment)};
     rhi::BindGroupLayoutDesc bgld{};
     bgld.entries = Span<const rhi::BindGroupLayoutEntry>(bglE, 1);
-    if (m_device->CreateBindGroupLayout(bgld, m_bgl) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_device->CreateBindGroupLayout(bgld, m_bgl) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     rhi::BindGroupEntry bgE[1] = {rhi::BindGroupEntry::BufferEntry(m_ub, 0, 64)};
     rhi::BindGroupDesc bgd{};
     bgd.layout = m_bgl;
     bgd.entries = Span<const rhi::BindGroupEntry>(bgE, 1);
-    if (m_device->CreateBindGroup(bgd, m_bg) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_device->CreateBindGroup(bgd, m_bg) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     // Pipeline layout with push constants.
     rhi::BindGroupLayout* sets[1] = {m_bgl};
@@ -141,8 +141,8 @@ draconic::core::Status UniformBufferSample::OnInit()
     rhi::PipelineLayoutDesc pld{};
     pld.bindGroupLayouts = Span<rhi::BindGroupLayout* const>(sets, 1);
     pld.pushConstantRanges = Span<const rhi::PushConstantRange>(&pc, 1);
-    if (m_device->CreatePipelineLayout(pld, m_pl) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_device->CreatePipelineLayout(pld, m_pl) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     // Depth buffer.
     m_depthBuf.Recreate(m_device, m_width, m_height);
@@ -167,40 +167,40 @@ draconic::core::Status UniformBufferSample::OnInit()
     rpd.depthStencil = rhi::DepthStencilState{};
     rpd.depthStencil->format = rhi::TextureFormat::Depth24PlusStencil8;
     rpd.depthStencil->depthCompare = rhi::CompareFunction::Less;
-    if (m_device->CreateRenderPipeline(rpd, m_pipeline) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
+    if (m_device->CreateRenderPipeline(rpd, m_pipeline) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
 
     if (m_device->CreateCommandPool(rhi::QueueType::Graphics, m_pool) !=
-        draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
-    if (m_device->CreateFence(0, m_fence) != draconic::core::ErrorCode::Ok)
-        return draconic::core::ErrorCode::Unknown;
-    return draconic::core::ErrorCode::Ok;
+        draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
+    if (m_device->CreateFence(0, m_fence) != draconic::foundation::ErrorCode::Ok)
+        return draconic::foundation::ErrorCode::Unknown;
+    return draconic::foundation::ErrorCode::Ok;
 }
 
 void UniformBufferSample::OnRender()
 {
     if (m_fenceVal > 0)
         m_fence->Wait(m_fenceVal, ~0ull);
-    if (m_swapChain->AcquireNextImage() != draconic::core::ErrorCode::Ok)
+    if (m_swapChain->AcquireNextImage() != draconic::foundation::ErrorCode::Ok)
         return;
 
     // Update MVP.
-    draconic::core::f32 aspect =
-        static_cast<draconic::core::f32>(m_width) / static_cast<draconic::core::f32>(m_height);
-    draconic::core::f32 angle = m_totalTime * 1.2f;
+    draconic::foundation::f32 aspect =
+        static_cast<draconic::foundation::f32>(m_width) / static_cast<draconic::foundation::f32>(m_height);
+    draconic::foundation::f32 angle = m_totalTime * 1.2f;
     Float4x4 model = (Float4x4::RotationY(angle) * Float4x4::RotationX(angle * 0.7f));
     Float4x4 view =
-        Float4x4::LookAtRH(draconic::core::Float3{0, 1.5f, -3}, draconic::core::Float3{0, 0, 0},
-                           draconic::core::Float3{0, 1, 0});
+        Float4x4::LookAtRH(draconic::foundation::Float3{0, 1.5f, -3}, draconic::foundation::Float3{0, 0, 0},
+                           draconic::foundation::Float3{0, 1, 0});
     Float4x4 proj =
-        Float4x4::PerspectiveFovRH(draconic::core::DegreesToRadians(45.0f), aspect, 0.1f, 100.0f);
+        Float4x4::PerspectiveFovRH(draconic::foundation::DegreesToRadians(45.0f), aspect, 0.1f, 100.0f);
     Float4x4 mvp = model * view * proj;
     std::memcpy(m_ubMapped, mvp.Data(), 64);
 
     m_pool->Reset();
     rhi::CommandEncoder* enc = nullptr;
-    if (m_pool->CreateEncoder(enc) != draconic::core::ErrorCode::Ok || !enc)
+    if (m_pool->CreateEncoder(enc) != draconic::foundation::ErrorCode::Ok || !enc)
         return;
 
     enc->TransitionTexture(m_swapChain->CurrentTexture(), rhi::ResourceState::Undefined,
@@ -225,11 +225,11 @@ void UniformBufferSample::OnRender()
     auto* rp = enc->BeginRenderPass(rpd);
     rp->SetPipeline(m_pipeline);
     rp->SetBindGroup(0, m_bg);
-    draconic::core::f32 pulse = (std::sin(m_totalTime * 2.0f) * 0.3f + 0.7f);
-    draconic::core::f32 tint[4] = {pulse, pulse, pulse, 1.0f};
+    draconic::foundation::f32 pulse = (std::sin(m_totalTime * 2.0f) * 0.3f + 0.7f);
+    draconic::foundation::f32 tint[4] = {pulse, pulse, pulse, 1.0f};
     rp->SetPushConstants(rhi::ShaderStage::Vertex | rhi::ShaderStage::Fragment, 0, 16, tint);
-    rp->SetViewport(0, 0, static_cast<draconic::core::f32>(m_width),
-                    static_cast<draconic::core::f32>(m_height), 0, 1);
+    rp->SetViewport(0, 0, static_cast<draconic::foundation::f32>(m_width),
+                    static_cast<draconic::foundation::f32>(m_height), 0, 1);
     rp->SetScissor(0, 0, m_width, m_height);
     rp->SetVertexBuffer(0, m_vb, 0);
     rp->SetIndexBuffer(m_ib, rhi::IndexFormat::UInt16, 0);
@@ -242,7 +242,7 @@ void UniformBufferSample::OnRender()
     rhi::CommandBuffer* cb = enc->Finish();
     m_fenceVal++;
     rhi::CommandBuffer* cbs[1] = {cb};
-    m_graphicsQueue->Submit(draconic::core::Span<rhi::CommandBuffer* const>(cbs, 1), m_fence,
+    m_graphicsQueue->Submit(draconic::foundation::Span<rhi::CommandBuffer* const>(cbs, 1), m_fence,
                             m_fenceVal);
     m_swapChain->Present(m_graphicsQueue);
     m_pool->DestroyEncoder(enc);

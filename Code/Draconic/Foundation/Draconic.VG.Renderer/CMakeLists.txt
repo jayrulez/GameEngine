@@ -6,7 +6,7 @@ add_library(Draconic.VG.Renderer STATIC)
 add_library(Draconic::VG.Renderer ALIAS Draconic.VG.Renderer)
 
 target_link_libraries(Draconic.VG.Renderer PUBLIC
-    Draconic::Core Draconic::RHI Draconic::VG Draconic::Image Draconic::Texture Draconic::Policy)
+    Draconic::Foundation Draconic::RHI Draconic::VG Draconic::Image Draconic::Texture Draconic::Policy)
 
 target_sources(Draconic.VG.Renderer
     PUBLIC

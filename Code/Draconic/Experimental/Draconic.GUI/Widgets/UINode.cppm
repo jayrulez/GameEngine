@@ -6,12 +6,12 @@
 // carries the background/foreground drawables + clip from the render-seam phase.)
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:ui_node;
 
-import draconic.core;  // RefPtr, Max, Move, Color
+import draconic.foundation;  // RefPtr, Max, Move, Color
 import draconic.fonts; // CachedFont
 import :rect;
 import :thickness;
@@ -21,8 +21,8 @@ import :drawable;
 import :text; // TextHAlign / TextVAlign (theme text-align hooks)
 import :node;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace fonts = draconic::fonts;
 
 export namespace draconic::gui
@@ -46,13 +46,13 @@ export namespace draconic::gui
         {
             const Rect b = GetLocalBounds();
             return Rect{b.x + m_padding.Left, b.y + m_padding.Top,
-                        core::Max(0.0f, b.width - m_padding.TotalHorizontal()),
-                        core::Max(0.0f, b.height - m_padding.TotalVertical())};
+                        foundation::Max(0.0f, b.width - m_padding.TotalHorizontal()),
+                        foundation::Max(0.0f, b.height - m_padding.TotalVertical())};
         }
 
         // Skin = a state-aware background (typically a StateListDrawable). Node::Draw draws
         // the background with GetControlState(), so the skin reacts to hover/press/focus.
-        void SetSkin(RefPtr<Drawable> skin) { SetBackground(core::Move(skin)); }
+        void SetSkin(RefPtr<Drawable> skin) { SetBackground(foundation::Move(skin)); }
 
         [[nodiscard]] bool IsHovered() const noexcept { return m_hovered; }
         [[nodiscard]] bool IsPressed() const noexcept { return m_pressed; }
@@ -70,7 +70,7 @@ export namespace draconic::gui
         // Markup hook: a widget consumes its own structural XML attributes (e.g. Label "text",
         // LinearLayout "orientation"/"spacing"), returning true if it handled `name`. Attributes
         // it doesn't claim are applied as CSS properties by the markup loader. Default: none.
-        virtual bool SetMarkupAttribute(core::StringView /*name*/, core::StringView /*value*/)
+        virtual bool SetMarkupAttribute(foundation::StringView /*name*/, foundation::StringView /*value*/)
         {
             return false;
         }
@@ -79,8 +79,8 @@ export namespace draconic::gui
         // "thumb", checkbox "box"/"mark", window "title"/"grip", ...) so CSS `tag::part` can
         // style them. CollectStyleParts lists them; SetThemePartColor receives a part's
         // background-color. Defaults: no parts / no-op.
-        virtual void CollectStyleParts(core::Array<core::StringView>&) const {}
-        virtual void SetThemePartColor(core::StringView, Color) {}
+        virtual void CollectStyleParts(foundation::Array<foundation::StringView>&) const {}
+        virtual void SetThemePartColor(foundation::StringView, Color) {}
 
         // Visual state, driven by pointer/focus/enabled (priority: disabled > pressed >
         // hover > focused > normal).

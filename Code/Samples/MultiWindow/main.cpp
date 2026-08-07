@@ -7,9 +7,9 @@
 // The path: CreateShell (SDL3) -> CreateGraphicsDevice (Vulkan) -> Application
 // (+ OpenWindow) -> RunApplication. No bespoke swapchain/loop code in the app.
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.runtime;
 import draconic.runtime.client;
@@ -19,7 +19,7 @@ import draconic.shell.desktop;
 import draconic.graphics;
 import draconic.graphics.gpu;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace runtime = draconic::runtime;
 namespace graphics = draconic::graphics;
 namespace shell = draconic::shell;
@@ -40,7 +40,7 @@ namespace
             ws.width = 480;
             ws.height = 360;
             m_second = host.OpenWindow(ws, graphics::RenderWindowDesc{});
-            core::ConsoleWrite(u8"MultiWindow: two windows up - close the main window to exit.\n");
+            foundation::ConsoleWrite(u8"MultiWindow: two windows up - close the main window to exit.\n");
         }
 
         void OnRenderWindow(runtime::IApplicationHost&, graphics::FrameContext& frame) override
@@ -56,7 +56,7 @@ namespace
 
         void OnShutdown(runtime::IApplicationHost&) override
         {
-            core::ConsoleWrite(u8"MultiWindow: shutting down.\n");
+            foundation::ConsoleWrite(u8"MultiWindow: shutting down.\n");
         }
 
     private:
@@ -74,7 +74,7 @@ int main(int /*argc*/, char** /*argv*/)
     auto shell = shell::CreateShell(ws);
     if (shell.Get() == nullptr || shell->MainWindow() == nullptr)
     {
-        core::ConsoleWrite(u8"MultiWindow: shell/window init failed.\n");
+        foundation::ConsoleWrite(u8"MultiWindow: shell/window init failed.\n");
         return 1;
     }
 
@@ -84,7 +84,7 @@ int main(int /*argc*/, char** /*argv*/)
     auto gpu = graphics::CreateGraphicsDevice(gdd);
     if (!gpu.HasValue())
     {
-        core::ConsoleWrite(u8"MultiWindow: graphics device creation failed.\n");
+        foundation::ConsoleWrite(u8"MultiWindow: graphics device creation failed.\n");
         return 1;
     }
 

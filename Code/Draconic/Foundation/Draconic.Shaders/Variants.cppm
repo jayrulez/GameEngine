@@ -15,15 +15,15 @@
 // All of it derives from the single kShaderFlagNames table in :flags.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.shaders:variants;
 
-import draconic.core;
+import draconic.foundation;
 import :types;
 import :flags;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::shaders
 {

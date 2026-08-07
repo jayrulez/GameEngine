@@ -3,17 +3,17 @@
 /// Ported from Sedulous.RHI.DX12/DX12BindGroupLayout.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include <cstdint>
 
 export module draconic.rhi.dx12:bind_group_layout;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :conversions;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::dx12
 {

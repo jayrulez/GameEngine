@@ -6,7 +6,7 @@ add_library(Draconic.GUI.VFS STATIC)
 add_library(Draconic::GUI.VFS ALIAS Draconic.GUI.VFS)
 
 target_link_libraries(Draconic.GUI.VFS
-    PUBLIC Draconic::Core Draconic::GUI Draconic::Image Draconic::Image.IO Draconic::VFS Draconic::Policy)
+    PUBLIC Draconic::Foundation Draconic::GUI Draconic::Image Draconic::Image.IO Draconic::VFS Draconic::Policy)
 
 target_sources(Draconic.GUI.VFS
     PUBLIC

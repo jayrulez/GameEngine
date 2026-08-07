@@ -3,7 +3,7 @@
 add_executable(ScriptPlayground main.cpp)
 
 target_link_libraries(ScriptPlayground PRIVATE
-    Draconic::Core
+    Draconic::Foundation
     Draconic::Runtime
     Draconic::Runtime.Client
     Draconic::Shell.Desktop Draconic::Runtime.Desktop

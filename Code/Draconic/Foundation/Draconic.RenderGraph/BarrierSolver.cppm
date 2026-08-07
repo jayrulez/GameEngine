@@ -7,18 +7,18 @@
 // from Sedulous.RenderGraph (BarrierSolver.bf).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.rendergraph:barrier_solver;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :types;
 import :resource;
 import :pass;
 import :state_tracker;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rendergraph
 {

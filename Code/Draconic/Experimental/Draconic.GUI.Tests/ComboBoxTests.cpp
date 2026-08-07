@@ -2,29 +2,29 @@
 // an item through the dropdown, and dismissal (outside click / Escape) via the dispatcher's
 // popup support.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.gui;
 
 using namespace draconic::gui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 namespace
 {
     template <typename T>
-    core::RefPtr<T> Make()
+    foundation::RefPtr<T> Make()
     {
-        return core::MakeRef<T>(core::DefaultAllocator());
+        return foundation::MakeRef<T>(foundation::DefaultAllocator());
     }
 
-    core::RefPtr<ComboBox> MakeCombo(SceneNode* root)
+    foundation::RefPtr<ComboBox> MakeCombo(SceneNode* root)
     {
-        auto cb = core::MakeRef<ComboBox>(core::DefaultAllocator());
-        cb->SetSize(core::Float2{120.0f, 26.0f});
+        auto cb = foundation::MakeRef<ComboBox>(foundation::DefaultAllocator());
+        cb->SetSize(foundation::Float2{120.0f, 26.0f});
         cb->SetItemHeight(24.0f);
-        cb->AddItem(core::StringView(u8"Red"));
-        cb->AddItem(core::StringView(u8"Green"));
-        cb->AddItem(core::StringView(u8"Blue"));
+        cb->AddItem(foundation::StringView(u8"Red"));
+        cb->AddItem(foundation::StringView(u8"Green"));
+        cb->AddItem(foundation::StringView(u8"Blue"));
         root->AddChild(cb.Get());
         return cb;
     }
@@ -33,8 +33,8 @@ namespace
 TEST_CASE("combobox: item management and selection")
 {
     auto cb = Make<ComboBox>();
-    cb->AddItem(core::StringView(u8"One"));
-    cb->AddItem(core::StringView(u8"Two"));
+    cb->AddItem(foundation::StringView(u8"One"));
+    cb->AddItem(foundation::StringView(u8"Two"));
     CHECK(cb->ItemCount() == 2);
     CHECK(cb->GetSelectedIndex() == -1);
 
@@ -42,7 +42,7 @@ TEST_CASE("combobox: item management and selection")
     cb->SetOnSelectionChanged([&](int) { ++changes; });
     cb->SetSelectedIndex(1);
     CHECK(cb->GetSelectedIndex() == 1);
-    CHECK(cb->GetSelectedText() == core::StringView(u8"Two"));
+    CHECK(cb->GetSelectedText() == foundation::StringView(u8"Two"));
     CHECK(changes == 1);
     cb->SetSelectedIndex(1); // no change
     CHECK(changes == 1);
@@ -51,7 +51,7 @@ TEST_CASE("combobox: item management and selection")
 TEST_CASE("combobox: click opens the dropdown; it registers as the dispatcher popup")
 {
     auto root = Make<SceneNode>();
-    root->SetSize(core::Float2{400.0f, 400.0f});
+    root->SetSize(foundation::Float2{400.0f, 400.0f});
     auto cb = MakeCombo(root.Get());
     EventDispatcher* d = root->GetEventDispatcher();
 
@@ -59,8 +59,8 @@ TEST_CASE("combobox: click opens the dropdown; it registers as the dispatcher po
     CHECK(d->GetPopup() == nullptr);
 
     // Click the combo (a press+release on it).
-    d->InjectMouseDown(core::Float2{20.0f, 13.0f}, MouseButton::Left);
-    d->InjectMouseUp(core::Float2{20.0f, 13.0f}, MouseButton::Left);
+    d->InjectMouseDown(foundation::Float2{20.0f, 13.0f}, MouseButton::Left);
+    d->InjectMouseUp(foundation::Float2{20.0f, 13.0f}, MouseButton::Left);
     CHECK(cb->IsOpen());
     CHECK(d->GetPopup() != nullptr); // the dropdown is the active popup
 }
@@ -68,20 +68,20 @@ TEST_CASE("combobox: click opens the dropdown; it registers as the dispatcher po
 TEST_CASE("combobox: clicking a dropdown row selects it and closes")
 {
     auto root = Make<SceneNode>();
-    root->SetSize(core::Float2{400.0f, 400.0f});
+    root->SetSize(foundation::Float2{400.0f, 400.0f});
     auto cb = MakeCombo(root.Get());
     EventDispatcher* d = root->GetEventDispatcher();
 
-    d->InjectMouseDown(core::Float2{20.0f, 13.0f}, MouseButton::Left);
-    d->InjectMouseUp(core::Float2{20.0f, 13.0f}, MouseButton::Left); // open
+    d->InjectMouseDown(foundation::Float2{20.0f, 13.0f}, MouseButton::Left);
+    d->InjectMouseUp(foundation::Float2{20.0f, 13.0f}, MouseButton::Left); // open
     REQUIRE(cb->IsOpen());
 
     // The dropdown sits just below the combo (combo is 26 tall at y=0). Row 1 (Green) spans
     // y in [26 + 24, 26 + 48) = [50, 74).
-    d->InjectMouseDown(core::Float2{20.0f, 60.0f}, MouseButton::Left);
-    d->InjectMouseUp(core::Float2{20.0f, 60.0f}, MouseButton::Left);
+    d->InjectMouseDown(foundation::Float2{20.0f, 60.0f}, MouseButton::Left);
+    d->InjectMouseUp(foundation::Float2{20.0f, 60.0f}, MouseButton::Left);
     CHECK(cb->GetSelectedIndex() == 1);
-    CHECK(cb->GetSelectedText() == core::StringView(u8"Green"));
+    CHECK(cb->GetSelectedText() == foundation::StringView(u8"Green"));
     CHECK_FALSE(cb->IsOpen());
     CHECK(root->GetEventDispatcher()->GetPopup() == nullptr);
 }
@@ -89,16 +89,16 @@ TEST_CASE("combobox: clicking a dropdown row selects it and closes")
 TEST_CASE("combobox: clicking outside dismisses the dropdown")
 {
     auto root = Make<SceneNode>();
-    root->SetSize(core::Float2{400.0f, 400.0f});
+    root->SetSize(foundation::Float2{400.0f, 400.0f});
     auto cb = MakeCombo(root.Get());
     EventDispatcher* d = root->GetEventDispatcher();
 
-    d->InjectMouseDown(core::Float2{20.0f, 13.0f}, MouseButton::Left);
-    d->InjectMouseUp(core::Float2{20.0f, 13.0f}, MouseButton::Left); // open
+    d->InjectMouseDown(foundation::Float2{20.0f, 13.0f}, MouseButton::Left);
+    d->InjectMouseUp(foundation::Float2{20.0f, 13.0f}, MouseButton::Left); // open
     REQUIRE(cb->IsOpen());
 
     // Press far away from the combo and its dropdown -> dismissed.
-    d->InjectMouseDown(core::Float2{350.0f, 350.0f}, MouseButton::Left);
+    d->InjectMouseDown(foundation::Float2{350.0f, 350.0f}, MouseButton::Left);
     CHECK_FALSE(cb->IsOpen());
     CHECK(d->GetPopup() == nullptr);
 }
@@ -106,15 +106,15 @@ TEST_CASE("combobox: clicking outside dismisses the dropdown")
 TEST_CASE("combobox: Escape dismisses the dropdown")
 {
     auto root = Make<SceneNode>();
-    root->SetSize(core::Float2{400.0f, 400.0f});
+    root->SetSize(foundation::Float2{400.0f, 400.0f});
     auto cb = MakeCombo(root.Get());
     EventDispatcher* d = root->GetEventDispatcher();
 
-    d->InjectMouseDown(core::Float2{20.0f, 13.0f}, MouseButton::Left);
-    d->InjectMouseUp(core::Float2{20.0f, 13.0f}, MouseButton::Left); // open
+    d->InjectMouseDown(foundation::Float2{20.0f, 13.0f}, MouseButton::Left);
+    d->InjectMouseUp(foundation::Float2{20.0f, 13.0f}, MouseButton::Left); // open
     REQUIRE(cb->IsOpen());
 
-    d->InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
+    d->InjectKeyDown(static_cast<foundation::u32>(KeyCode::Escape));
     CHECK_FALSE(cb->IsOpen());
     CHECK(d->GetPopup() == nullptr);
 }

@@ -3,16 +3,16 @@
 // Registration helper for the distance-field atlas baker.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.fonts.distancefield.baker:init;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.fonts;
 import draconic.fonts.io;
 import :baker;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::fonts
 {

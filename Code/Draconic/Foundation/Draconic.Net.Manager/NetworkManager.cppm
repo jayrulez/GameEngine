@@ -8,18 +8,18 @@
 /// facade resolves the CURRENT script context's endpoint, so each instance's script sees its own.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.net.manager;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.net;
 import draconic.net.replication; // StateReplication / InterpolationBuffer (same draconic::net namespace)
 import draconic.scene;           // Scene (the replicated world)
 import draconic.script;          // Object / IScriptContext / CurrentScriptContext / SetService
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::script; // Object, IScriptContext, CurrentScriptContext (the facade base)
 namespace scene = draconic::scene;
 
@@ -73,9 +73,9 @@ export namespace draconic::net
         // Runtime: OWN an already-opened UDP socket (m_ownedSocket destructs after m_session, which
         // borrows it - declaration order below guarantees it). Used by the HostServer/JoinServer
         // factories; a bare game never constructs this directly.
-        explicit NetworkManager(core::UniquePtr<UdpSocket> ownedSocket,
+        explicit NetworkManager(foundation::UniquePtr<UdpSocket> ownedSocket,
                                 const ReliableConfig& config = {})
-            : m_ownedSocket(static_cast<core::UniquePtr<UdpSocket>&&>(ownedSocket)),
+            : m_ownedSocket(static_cast<foundation::UniquePtr<UdpSocket>&&>(ownedSocket)),
               m_session(*m_ownedSocket, config)
         {
         }
@@ -84,10 +84,10 @@ export namespace draconic::net
         // null if the socket fails to open (the caller logs + runs offline). HostServer binds `port`
         // (0 = OS-assigned; read BoundPort() after); JoinServer binds ephemeral and connects to
         // host:port. These are how a running game goes online (the Net facade calls them - phase 3).
-        [[nodiscard]] static core::UniquePtr<NetworkManager>
+        [[nodiscard]] static foundation::UniquePtr<NetworkManager>
         HostServer(u16 port, bool dedicated = false, const ReliableConfig& config = {});
-        [[nodiscard]] static core::UniquePtr<NetworkManager>
-        JoinServer(core::StringView host, u16 port, const ReliableConfig& config = {});
+        [[nodiscard]] static foundation::UniquePtr<NetworkManager>
+        JoinServer(foundation::StringView host, u16 port, const ReliableConfig& config = {});
 
         // The port this endpoint's owned UDP socket is bound to (0 when borrowing a sim/shared socket).
         // A HostServer opened with port 0 reports its OS-assigned port here so a client can reach it.
@@ -204,7 +204,7 @@ export namespace draconic::net
         // Declared FIRST so it constructs before (and destructs after) m_session, which borrows it.
         // Null when the manager borrows an external socket (the sim/test ctor); non-null when it owns
         // a UDP socket (the HostServer/JoinServer factories).
-        core::UniquePtr<UdpSocket> m_ownedSocket;
+        foundation::UniquePtr<UdpSocket> m_ownedSocket;
         NetSession m_session;
         RpcTable m_rpc;
         StateReplication m_replication;
@@ -365,8 +365,8 @@ export namespace draconic::net
     {
         NetworkRole role = NetworkRole::None;
         u16 listenPort = 0; // server: bind port; client: 0 = OS-assigned
-        core::String serverHost =
-            core::String(u8"127.0.0.1"); // client: server address to connect to
+        foundation::String serverHost =
+            foundation::String(u8"127.0.0.1"); // client: server address to connect to
         u16 serverPort = 0;              // client: the server's port
         bool dedicated = false;          // server: dedicated (no local player) vs listen-server
         ReliableConfig reliable = {};    // protocol tuning (keepalive/timeout/resend)
@@ -378,8 +378,8 @@ export namespace draconic::net
     // caller logs). Bundled so the socket-open + role-entry logic stays in this lib.
     struct NetworkRuntime
     {
-        core::UniquePtr<UdpSocket> socket;
-        core::UniquePtr<NetworkManager> manager;
+        foundation::UniquePtr<UdpSocket> socket;
+        foundation::UniquePtr<NetworkManager> manager;
 
         [[nodiscard]] bool IsActive() const noexcept { return manager.Get() != nullptr; }
     };

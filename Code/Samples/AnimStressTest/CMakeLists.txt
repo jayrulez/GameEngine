@@ -5,7 +5,7 @@
 add_executable(AnimStressTest main.cpp)
 
 target_link_libraries(AnimStressTest PRIVATE
-    Draconic::Core
+    Draconic::Foundation
     Draconic::Runtime
     Draconic::Runtime.Client
     Draconic::Shell.Desktop Draconic::Runtime.Desktop

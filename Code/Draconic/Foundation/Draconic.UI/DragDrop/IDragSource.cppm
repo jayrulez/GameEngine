@@ -7,14 +7,14 @@
 // DragDropManager); View/DragData forward-declared (only used behind pointers/RefPtr).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:idrag_source;
 
-import draconic.core;
+import draconic.foundation;
 import :drag_drop_effects;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

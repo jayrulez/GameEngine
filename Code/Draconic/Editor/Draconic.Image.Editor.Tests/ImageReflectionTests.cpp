@@ -1,12 +1,12 @@
 // Reflection track P1: ImageAsset's reflected surface (its colorSpace enum property).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
+import draconic.foundation;
 import draconic.image;
 import draconic.image.editor;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 TEST_CASE("reflection-p1: ImageAsset exposes colorSpace as a reflected enum")
 {

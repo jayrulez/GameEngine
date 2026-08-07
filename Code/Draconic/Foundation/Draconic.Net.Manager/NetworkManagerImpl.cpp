@@ -2,17 +2,17 @@
 // the registration (kept out of the interface unit per the GCC gcm-cluster rule).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 module draconic.net.manager;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.net;
 import draconic.script;
 import draconic.script.facades; // RegisterExtraFacadeName (the Wren prelude hook)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::script;
 
 namespace draconic::net
@@ -46,7 +46,7 @@ namespace draconic::net
         (void)once;
     }
 
-    core::UniquePtr<NetworkManager> NetworkManager::HostServer(u16 port, bool dedicated,
+    foundation::UniquePtr<NetworkManager> NetworkManager::HostServer(u16 port, bool dedicated,
                                                                const ReliableConfig& config)
     {
         UniquePtr<UdpSocket> socket = MakeUnique<UdpSocket>(DefaultAllocator(), port);
@@ -60,7 +60,7 @@ namespace draconic::net
         return manager;
     }
 
-    core::UniquePtr<NetworkManager> NetworkManager::JoinServer(StringView host, u16 port,
+    foundation::UniquePtr<NetworkManager> NetworkManager::JoinServer(StringView host, u16 port,
                                                                const ReliableConfig& config)
     {
         UniquePtr<UdpSocket> socket =

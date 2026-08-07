@@ -5,7 +5,7 @@ add_library(Draconic::Editor.Input ALIAS Draconic.Editor.Input)
 
 target_link_libraries(Draconic.Editor.Input
     PUBLIC
-        Draconic::Core Draconic::Content Draconic::Shell
+        Draconic::Foundation Draconic::Content Draconic::Shell
         Draconic::Runtime Draconic::Runtime.Client
         Draconic::Input Draconic::Input.Resource Draconic::Input.Editor
         Draconic::UI Draconic::UI.Runtime Draconic::UI.Toolkit

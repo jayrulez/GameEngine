@@ -5,14 +5,14 @@
 // data - no View reference - so they can sit below :view in the module graph.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:event_args;
 
-import draconic.core; // Float2
+import draconic.foundation; // Float2
 import :input_enums;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

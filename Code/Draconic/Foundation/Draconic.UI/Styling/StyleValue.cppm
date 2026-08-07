@@ -9,15 +9,15 @@
 // StyleValue is correct with no manual refcounting.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:style_value;
 
-import draconic.core; // Color, Optional, RefPtr, String, StringView
+import draconic.foundation; // Color, Optional, RefPtr, String, StringView
 import :thickness;
 import :drawable;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {
@@ -37,7 +37,7 @@ export namespace draconic::ui
 
         StyleValue() = default; // None
 
-        [[nodiscard]] static StyleValue ColorVal(core::Color c)
+        [[nodiscard]] static StyleValue ColorVal(foundation::Color c)
         {
             StyleValue v;
             v.m_kind = Kind::Color;
@@ -84,7 +84,7 @@ export namespace draconic::ui
         [[nodiscard]] Kind GetKind() const noexcept { return m_kind; }
 
         /// Try to get as Color / Float / Thickness / Bool (empty Optional if the kind differs).
-        [[nodiscard]] Optional<core::Color> AsColor() const
+        [[nodiscard]] Optional<foundation::Color> AsColor() const
         {
             if (m_kind == Kind::Color)
             {
@@ -134,7 +134,7 @@ export namespace draconic::ui
 
     private:
         Kind m_kind = Kind::None;
-        core::Color m_color{};
+        foundation::Color m_color{};
         f32 m_float = 0.0f;
         Thickness m_thickness{};
         RefPtr<Drawable> m_drawable;

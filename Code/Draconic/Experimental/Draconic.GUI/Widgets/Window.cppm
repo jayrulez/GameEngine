@@ -9,12 +9,12 @@
 // are treated as parent-local) - fine for top-level windows under an untransformed root.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:window;
 
-import draconic.core;  // RefPtr, MakeRef, Function, Move, Max, Float2
+import draconic.foundation;  // RefPtr, MakeRef, Function, Move, Max, Float2
 import draconic.fonts; // CachedFont
 import :rect;
 import :event;
@@ -25,8 +25,8 @@ import :label;
 import :ui_widget;
 import :event_dispatcher;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace fonts = draconic::fonts;
 
 export namespace draconic::gui
@@ -37,8 +37,8 @@ export namespace draconic::gui
     {
         DRACONIC_OBJECT(DragHandle, UIWidget)
     public:
-        core::Function<void(core::Float2)> OnDrag; // incremental cursor delta
-        core::Function<void()> OnPressed;
+        foundation::Function<void(foundation::Float2)> OnDrag; // incremental cursor delta
+        foundation::Function<void()> OnPressed;
 
     protected:
         void OnMouseDown(const MouseEvent& event) override
@@ -55,7 +55,7 @@ export namespace draconic::gui
         {
             if (!m_dragging)
                 return;
-            const core::Float2 delta{event.Position.x - m_last.x, event.Position.y - m_last.y};
+            const foundation::Float2 delta{event.Position.x - m_last.x, event.Position.y - m_last.y};
             m_last = event.Position;
             if (OnDrag)
                 OnDrag(delta);
@@ -68,7 +68,7 @@ export namespace draconic::gui
 
     private:
         bool m_dragging = false;
-        core::Float2 m_last{0.0f, 0.0f};
+        foundation::Float2 m_last{0.0f, 0.0f};
     };
 
     class Window : public UIWidget
@@ -77,36 +77,36 @@ export namespace draconic::gui
     public:
         Window()
         {
-            SetTag(core::StringView(u8"window"));
+            SetTag(foundation::StringView(u8"window"));
             SetClipChildren(true);
-            SetBackground(core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), m_bodyColor));
+            SetBackground(foundation::MakeRef<RectangleDrawable>(foundation::DefaultAllocator(), m_bodyColor));
 
-            m_titleBar = core::MakeRef<DragHandle>(core::DefaultAllocator());
+            m_titleBar = foundation::MakeRef<DragHandle>(foundation::DefaultAllocator());
             m_titleBar->SetBackground(
-                core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), m_titleColor));
+                foundation::MakeRef<RectangleDrawable>(foundation::DefaultAllocator(), m_titleColor));
             Window* self = this;
-            m_titleBar->OnDrag = [self](core::Float2 d)
+            m_titleBar->OnDrag = [self](foundation::Float2 d)
             {
                 self->SetPosition(
-                    core::Float2{self->GetPosition().x + d.x, self->GetPosition().y + d.y});
+                    foundation::Float2{self->GetPosition().x + d.x, self->GetPosition().y + d.y});
             };
             m_titleBar->OnPressed = [self]() { self->ToFront(); };
             AddChild(m_titleBar.Get());
 
-            m_title = core::MakeRef<Label>(core::DefaultAllocator());
+            m_title = foundation::MakeRef<Label>(foundation::DefaultAllocator());
             m_title->SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
             m_title->SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
             m_title->SetHitTestVisible(false); // clicks fall through to the draggable title bar
             m_titleBar->AddChild(m_title.Get());
 
-            m_contentHost = core::MakeRef<UIWidget>(core::DefaultAllocator());
+            m_contentHost = foundation::MakeRef<UIWidget>(foundation::DefaultAllocator());
             m_contentHost->SetClipChildren(true);
             AddChild(m_contentHost.Get());
 
-            m_resizeGrip = core::MakeRef<DragHandle>(core::DefaultAllocator());
+            m_resizeGrip = foundation::MakeRef<DragHandle>(foundation::DefaultAllocator());
             m_resizeGrip->SetBackground(
-                core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), m_gripColor));
-            m_resizeGrip->OnDrag = [self](core::Float2 d) { self->ResizeBy(d); };
+                foundation::MakeRef<RectangleDrawable>(foundation::DefaultAllocator(), m_gripColor));
+            m_resizeGrip->OnDrag = [self](foundation::Float2 d) { self->ResizeBy(d); };
             m_resizeGrip->OnPressed = [self]() { self->ToFront(); };
             AddChild(m_resizeGrip.Get());
         }
@@ -114,29 +114,29 @@ export namespace draconic::gui
         // The area for window content (add your widgets here).
         [[nodiscard]] Node* GetContent() const noexcept { return m_contentHost.Get(); }
 
-        void SetTitle(core::StringView text) { m_title->SetText(text); }
+        void SetTitle(foundation::StringView text) { m_title->SetText(text); }
         void SetFont(fonts::CachedFont* font) { m_title->SetFont(font); }
-        void SetMinSize(core::Float2 size) { m_minSize = size; }
+        void SetMinSize(foundation::Float2 size) { m_minSize = size; }
         void SetTitleBarHeight(f32 height)
         {
-            m_titleBarHeight = core::Max(1.0f, height);
+            m_titleBarHeight = foundation::Max(1.0f, height);
             Relayout();
         }
 
         void SetBodyColor(Color color)
         {
             m_bodyColor = color;
-            SetBackground(core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), color));
+            SetBackground(foundation::MakeRef<RectangleDrawable>(foundation::DefaultAllocator(), color));
         }
         void SetTitleColor(Color color)
         {
             m_titleColor = color;
             m_titleBar->SetBackground(
-                core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), color));
+                foundation::MakeRef<RectangleDrawable>(foundation::DefaultAllocator(), color));
         }
 
         // Fired when the window is closed via Close().
-        void SetOnClose(core::Function<void()> callback) { m_onClose = core::Move(callback); }
+        void SetOnClose(foundation::Function<void()> callback) { m_onClose = foundation::Move(callback); }
 
         // Show centered in `root` as a MODAL window: a dim scrim covers everything behind it and
         // the dispatcher confines input to this window until Close() (clicks outside are ignored,
@@ -172,19 +172,19 @@ export namespace draconic::gui
         void SetScrimColor(Color color) { m_scrimColor = color; }
 
         // Theming parts: window::title (header bar) / ::grip (resize handle).
-        void CollectStyleParts(core::Array<core::StringView>& out) const override
+        void CollectStyleParts(foundation::Array<foundation::StringView>& out) const override
         {
-            out.PushBack(core::StringView(u8"title"));
-            out.PushBack(core::StringView(u8"grip"));
+            out.PushBack(foundation::StringView(u8"title"));
+            out.PushBack(foundation::StringView(u8"grip"));
         }
-        void SetThemePartColor(core::StringView part, Color color) override
+        void SetThemePartColor(foundation::StringView part, Color color) override
         {
-            if (part == core::StringView(u8"title"))
+            if (part == foundation::StringView(u8"title"))
                 m_titleBar->SetBackground(
-                    core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), color));
-            else if (part == core::StringView(u8"grip"))
+                    foundation::MakeRef<RectangleDrawable>(foundation::DefaultAllocator(), color));
+            else if (part == foundation::StringView(u8"grip"))
                 m_resizeGrip->SetBackground(
-                    core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), color));
+                    foundation::MakeRef<RectangleDrawable>(foundation::DefaultAllocator(), color));
         }
 
     protected:
@@ -198,10 +198,10 @@ export namespace draconic::gui
             m_modal = modal;
             if (modal)
             {
-                m_scrim = core::MakeRef<UIWidget>(core::DefaultAllocator());
+                m_scrim = foundation::MakeRef<UIWidget>(foundation::DefaultAllocator());
                 m_scrim->SetSize(root.GetSize());
                 m_scrim->SetBackground(
-                    core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), m_scrimColor));
+                    foundation::MakeRef<RectangleDrawable>(foundation::DefaultAllocator(), m_scrimColor));
                 root.AddChild(m_scrim.Get()); // below the window (added first)
             }
             root.AddChild(this); // on top of the scrim
@@ -218,30 +218,30 @@ export namespace draconic::gui
 
         void CenterIn(Node& root)
         {
-            const core::Float2 r = root.GetSize();
-            const core::Float2 s = GetSize();
-            SetPosition(core::Float2{(r.x - s.x) * 0.5f, (r.y - s.y) * 0.5f});
+            const foundation::Float2 r = root.GetSize();
+            const foundation::Float2 s = GetSize();
+            SetPosition(foundation::Float2{(r.x - s.x) * 0.5f, (r.y - s.y) * 0.5f});
         }
 
-        void ResizeBy(core::Float2 delta)
+        void ResizeBy(foundation::Float2 delta)
         {
-            const core::Float2 s = GetSize();
-            SetSize(core::Float2{core::Max(m_minSize.x, s.x + delta.x),
-                                 core::Max(m_minSize.y, s.y + delta.y)});
+            const foundation::Float2 s = GetSize();
+            SetSize(foundation::Float2{foundation::Max(m_minSize.x, s.x + delta.x),
+                                 foundation::Max(m_minSize.y, s.y + delta.y)});
         }
 
         void Relayout()
         {
-            const core::Float2 s = GetSize();
-            m_titleBar->SetPosition(core::Float2{0.0f, 0.0f});
-            m_titleBar->SetSize(core::Float2{s.x, m_titleBarHeight});
-            m_title->SetSize(core::Float2{s.x, m_titleBarHeight});
+            const foundation::Float2 s = GetSize();
+            m_titleBar->SetPosition(foundation::Float2{0.0f, 0.0f});
+            m_titleBar->SetSize(foundation::Float2{s.x, m_titleBarHeight});
+            m_title->SetSize(foundation::Float2{s.x, m_titleBarHeight});
 
-            m_contentHost->SetPosition(core::Float2{0.0f, m_titleBarHeight});
-            m_contentHost->SetSize(core::Float2{s.x, core::Max(0.0f, s.y - m_titleBarHeight)});
+            m_contentHost->SetPosition(foundation::Float2{0.0f, m_titleBarHeight});
+            m_contentHost->SetSize(foundation::Float2{s.x, foundation::Max(0.0f, s.y - m_titleBarHeight)});
 
-            m_resizeGrip->SetSize(core::Float2{m_gripSize, m_gripSize});
-            m_resizeGrip->SetPosition(core::Float2{s.x - m_gripSize, s.y - m_gripSize});
+            m_resizeGrip->SetSize(foundation::Float2{m_gripSize, m_gripSize});
+            m_resizeGrip->SetPosition(foundation::Float2{s.x - m_gripSize, s.y - m_gripSize});
         }
 
         RefPtr<DragHandle> m_titleBar;
@@ -249,11 +249,11 @@ export namespace draconic::gui
         RefPtr<UIWidget> m_contentHost;
         RefPtr<DragHandle> m_resizeGrip;
         RefPtr<UIWidget> m_scrim; // dim overlay behind a modal (owned while open)
-        core::Function<void()> m_onClose;
+        foundation::Function<void()> m_onClose;
         bool m_open = false;
         bool m_modal = false;
         Color m_scrimColor{0.0f, 0.0f, 0.0f, 0.45f};
-        core::Float2 m_minSize{120.0f, 60.0f};
+        foundation::Float2 m_minSize{120.0f, 60.0f};
         f32 m_titleBarHeight = 28.0f;
         f32 m_gripSize = 14.0f;
         Color m_bodyColor{0.16f, 0.17f, 0.21f, 1.0f};

@@ -1,24 +1,24 @@
 // Draconic::EditorCore - :log_buffer partition.
 //
 // EditorLogBuffer: the editor's log capture (docs/design/editor.md §3.10). ONE thread-safe
-// bounded ILogSink on core's GlobalLogger replaces Sedulous's logger+listener+buffer trio -
+// bounded ILogSink on foundation's GlobalLogger replaces Sedulous's logger+listener+buffer trio -
 // the editor never swaps the logger, it just adds a sink, so every DRACONIC_LOG_* call across
 // the engine is captured for free. Register it FIRST THING in main (before shell/device
 // creation) so early startup logs land in the console panel.
 //
-// Entries keep full-fidelity heap strings (core's RingLogSink truncates messages to 192 chars -
+// Entries keep full-fidelity heap strings (foundation's RingLogSink truncates messages to 192 chars -
 // useless for build errors and file paths) and carry a monotonic sequence so main-thread
 // consumers poll incrementally with CollectSince; when the ring is full the oldest entry drops
 // but sequences keep advancing, so a consumer can tell (and report) that it missed entries.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.editor.core:log_buffer;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {

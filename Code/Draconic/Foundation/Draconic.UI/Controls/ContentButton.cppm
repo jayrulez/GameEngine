@@ -6,12 +6,12 @@
 // OnMeasure so it can resolve fonts - same content pattern as ToggleButton.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:content_button;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import :button_base;
 import :view;
@@ -21,8 +21,8 @@ import :thickness;
 import :box_constraints;
 import :draw_context;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::ui
 {

@@ -5,14 +5,14 @@
 // Function<void(f32)> (value type, RAII).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:float_animation;
 
-import draconic.core;
+import draconic.foundation;
 import :animation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

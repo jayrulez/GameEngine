@@ -7,12 +7,12 @@
 // must not link importer/editor libraries for its cooked types.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.model.resource;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.geometry;
 import draconic.geometry.resource;
 import draconic.materials;
@@ -24,7 +24,7 @@ import draconic.animation.resource;
 import draconic.resource;
 import draconic.content;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::resource;
 namespace geometry = draconic::geometry;
 namespace materials = draconic::materials;
@@ -47,12 +47,12 @@ export namespace draconic::model
     // Free Serialize for ModelNode (ADL-found by the generic Array<T> serializer).
     inline void Serialize(ISerializer& ar, ModelNode& n)
     {
-        draconic::core::Serialize(ar, "name", n.name);
-        draconic::core::Serialize(ar, "parent", n.parentIndex);
-        draconic::core::Serialize(ar, "t", n.localTransform.position);
-        draconic::core::Serialize(ar, "r", n.localTransform.rotation);
-        draconic::core::Serialize(ar, "s", n.localTransform.scale);
-        draconic::core::Serialize(ar, "mesh", n.meshIndex);
+        draconic::foundation::Serialize(ar, "name", n.name);
+        draconic::foundation::Serialize(ar, "parent", n.parentIndex);
+        draconic::foundation::Serialize(ar, "t", n.localTransform.position);
+        draconic::foundation::Serialize(ar, "r", n.localTransform.rotation);
+        draconic::foundation::Serialize(ar, "s", n.localTransform.scale);
+        draconic::foundation::Serialize(ar, "mesh", n.meshIndex);
     }
 
     // Authored/cooked manifest: the leaf resource Guids + the node hierarchy.
@@ -76,17 +76,17 @@ export namespace draconic::model
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "meshGuids", meshGuids);
-            draconic::core::Serialize(ar, "meshSkinned", meshSkinned);
-            draconic::core::Serialize(ar, "meshMaterial", meshMaterial);
-            draconic::core::Serialize(ar, "collisionGuids", collisionGuids);
-            draconic::core::Serialize(ar, "materialGuids", materialGuids);
-            draconic::core::Serialize(ar, "materialAlbedo", materialAlbedo);
-            draconic::core::Serialize(ar, "nodes", nodes);
-            draconic::core::Serialize(ar, "skeletonGuid", skeletonGuid);
-            draconic::core::Serialize(ar, "animationGuids", animationGuids);
-            draconic::core::Serialize(ar, "boundsMin", boundsMin);
-            draconic::core::Serialize(ar, "boundsMax", boundsMax);
+            draconic::foundation::Serialize(ar, "meshGuids", meshGuids);
+            draconic::foundation::Serialize(ar, "meshSkinned", meshSkinned);
+            draconic::foundation::Serialize(ar, "meshMaterial", meshMaterial);
+            draconic::foundation::Serialize(ar, "collisionGuids", collisionGuids);
+            draconic::foundation::Serialize(ar, "materialGuids", materialGuids);
+            draconic::foundation::Serialize(ar, "materialAlbedo", materialAlbedo);
+            draconic::foundation::Serialize(ar, "nodes", nodes);
+            draconic::foundation::Serialize(ar, "skeletonGuid", skeletonGuid);
+            draconic::foundation::Serialize(ar, "animationGuids", animationGuids);
+            draconic::foundation::Serialize(ar, "boundsMin", boundsMin);
+            draconic::foundation::Serialize(ar, "boundsMax", boundsMax);
         }
     };
 

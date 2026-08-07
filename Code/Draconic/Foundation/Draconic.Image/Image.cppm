@@ -3,7 +3,7 @@
 /// Ported from Sedulous.Images.Image.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include <algorithm>
 #include <cmath>
@@ -12,16 +12,16 @@ module;
 
 export module draconic.image:image;
 
-import draconic.core;
+import draconic.foundation;
 import :pixel_format;
 import :image_data;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::image
 {
 
-    // Pixel access uses the engine's packed byte color, core::Color32 (the image
+    // Pixel access uses the engine's packed byte color, foundation::Color32 (the image
     // library previously defined its own duplicate `Color` - unified away).
 
     /// Image that owns a pixel buffer. Inherits ImageData for polymorphic use.

@@ -5,16 +5,16 @@
 // Object + DRACONIC_OBJECT so the layout algorithms can Cast<T> down to their param subclasses.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:layout_params;
 
-import draconic.core; // Object
+import draconic.foundation; // Object
 import :thickness;
 import :size_spec;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

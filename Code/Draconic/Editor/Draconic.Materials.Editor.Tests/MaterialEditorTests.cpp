@@ -3,10 +3,10 @@
 // and verify the cooked MaterialSource carries the shader id, declared properties, and
 // default uniforms. No GPU/DXC - pure authoring data.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.editor;
@@ -14,7 +14,7 @@ import draconic.materials;
 import draconic.materials.resource;
 import draconic.materials.editor;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::vfs;
 using namespace draconic::materials;
 
@@ -42,7 +42,7 @@ TEST_CASE("material editor: cooks a MaterialAsset -> MaterialSource")
     // --- cook: author a material, import into an asset, build into the output DB ---
     {
         draconic::content::ContentDatabase outDb(
-            outMount, draconic::core::BinarySerializerFactory(), u8".rasset");
+            outMount, draconic::foundation::BinarySerializerFactory(), u8".rasset");
         auto* inst = outDb.RootGroup()->CreateInstance(u8"lit", MaterialSource::StaticType());
         id = inst->Id();
 
@@ -67,7 +67,7 @@ TEST_CASE("material editor: cooks a MaterialAsset -> MaterialSource")
     // --- verify: read back the cooked MaterialSource ---
     {
         draconic::content::ContentDatabase outDb(
-            outMount, draconic::core::BinarySerializerFactory(), u8".rasset");
+            outMount, draconic::foundation::BinarySerializerFactory(), u8".rasset");
         RefPtr<ISerializable> object = outDb.ReadObject(id);
         MaterialSource* cooked = Cast<MaterialSource>(object.Get());
         REQUIRE(cooked != nullptr);

@@ -5,15 +5,15 @@
 // declares RegisterInputScriptFacade(); this unit defines it and Input::StaticType().
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 module draconic.engine.input;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.script.facades; // RegisterExtraFacadeName (Input into the behavior prelude)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::input
 {

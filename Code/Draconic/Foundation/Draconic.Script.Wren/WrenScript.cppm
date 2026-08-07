@@ -14,17 +14,17 @@
 // instance) come next.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include "WrenInclude.h"
 #include <utility>
 
 export module draconic.script.wren;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.script;
 import draconic.script.facades; // BehaviorFacadeNames() - the prelude's import list
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 namespace draconic::script::wren
 {
@@ -34,7 +34,7 @@ namespace draconic::script::wren
     // waitUntil(fn); plain classes that do not extend it are untouched. The base owns the
     // instance's coroutine-id list and routes register/unregister to the manager's
     // host-side scheduler through two foreign methods (bound by name, below).
-    inline constexpr core::StringView kBehaviorBaseSource =
+    inline constexpr foundation::StringView kBehaviorBaseSource =
         u8"class Behavior {\n"
         u8"  construct new(entity) {\n"
         u8"    _entity = entity\n"
@@ -69,14 +69,14 @@ namespace draconic::script::wren
     // Reflected classes live in the "main" module; behavior modules are separate, so the
     // module is framed with ONE prelude line importing the facade names (built from the
     // neutral BehaviorFacadeNames list) followed by the Behavior base. Appended to `out`.
-    inline void AppendBehaviorPrelude(core::String& out)
+    inline void AppendBehaviorPrelude(foundation::String& out)
     {
         out += u8"import \"main\" for ";
-        const core::Span<const core::StringView> facades = BehaviorFacadeNames();
-        const core::Span<const core::StringView> extras =
+        const foundation::Span<const foundation::StringView> facades = BehaviorFacadeNames();
+        const foundation::Span<const foundation::StringView> extras =
             ExtraFacadeNames(); // out-of-tree facades (e.g. Net)
         bool first = true;
-        for (core::usize i = 0; i < facades.Size(); ++i)
+        for (foundation::usize i = 0; i < facades.Size(); ++i)
         {
             if (!first)
             {
@@ -85,7 +85,7 @@ namespace draconic::script::wren
             out += facades[i];
             first = false;
         }
-        for (core::usize i = 0; i < extras.Size(); ++i)
+        for (foundation::usize i = 0; i < extras.Size(); ++i)
         {
             if (!first)
             {
@@ -98,17 +98,17 @@ namespace draconic::script::wren
         out += kBehaviorBaseSource;
     }
 
-    inline const char* CStr(const core::String& s) noexcept
+    inline const char* CStr(const foundation::String& s) noexcept
     {
         return reinterpret_cast<const char*>(s.CStr());
     }
 
-    inline void AppendAscii(core::String& s, const char* text)
+    inline void AppendAscii(foundation::String& s, const char* text)
     {
-        s.Append(core::StringView(reinterpret_cast<const core::utf8char*>(text)));
+        s.Append(foundation::StringView(reinterpret_cast<const foundation::utf8char*>(text)));
     }
 
-    inline void AppendUint(core::String& s, core::u32 n)
+    inline void AppendUint(foundation::String& s, foundation::u32 n)
     {
         char buf[16];
         int i = 0;
@@ -136,7 +136,7 @@ namespace draconic::script::wren
 
     inline bool NameEq(const char* a, const char* b) noexcept
     {
-        core::usize i = 0;
+        foundation::usize i = 0;
         while (a[i] != '\0' && a[i] == b[i])
         {
             ++i;
@@ -144,29 +144,29 @@ namespace draconic::script::wren
         return a[i] == b[i];
     }
 
-    inline void WriteUtf8(void (*sink)(core::StringView) noexcept, const char* text)
+    inline void WriteUtf8(void (*sink)(foundation::StringView) noexcept, const char* text)
     {
         if (text != nullptr)
         {
-            sink(core::StringView(reinterpret_cast<const core::utf8char*>(text)));
+            sink(foundation::StringView(reinterpret_cast<const foundation::utf8char*>(text)));
         }
     }
 
     // --- marshalling -------------------------------------------------------
     inline constexpr const char* kModule = "main"; // module the foreign classes live in
 
-    inline core::StringView AsciiView(const char* text) noexcept
+    inline foundation::StringView AsciiView(const char* text) noexcept
     {
-        return (text != nullptr) ? core::StringView(reinterpret_cast<const core::utf8char*>(text))
-                                 : core::StringView{};
+        return (text != nullptr) ? foundation::StringView(reinterpret_cast<const foundation::utf8char*>(text))
+                                 : foundation::StringView{};
     }
 
     // The Wren call spelling of a method: `name(_,_,...)` with one `_` per parameter.
-    inline core::String WrenCallSignatureOf(const char* name, core::u32 paramCount)
+    inline foundation::String WrenCallSignatureOf(const char* name, foundation::u32 paramCount)
     {
-        core::String sig(AsciiView(name));
+        foundation::String sig(AsciiView(name));
         sig += u8"(";
-        for (core::u32 i = 0; i < paramCount; ++i)
+        for (foundation::u32 i = 0; i < paramCount; ++i)
         {
             if (i != 0)
             {
@@ -181,48 +181,48 @@ namespace draconic::script::wren
     // A script function argument (a Wren Fn/closure) -> a WrenScriptDelegate wrapping it,
     // as an object-mode Variant. Defined after WrenContext (it registers with the owning
     // context for lifetime); forward-declared so MarshalIn can wrap a delegate parameter.
-    core::Variant WrapWrenDelegateArg(WrenVM* vm, int slot);
+    foundation::Variant WrapWrenDelegateArg(WrenVM* vm, int slot);
 
     // Engine value -> Wren slot for primitives; true if handled (slot untouched
     // and false otherwise, so the caller can try a foreign wrap).
-    inline bool TryPrimitiveOut(WrenVM* vm, int slot, const core::Variant& value)
+    inline bool TryPrimitiveOut(WrenVM* vm, int slot, const foundation::Variant& value)
     {
         if (const bool* b = value.TryGet<bool>())
         {
             wrenSetSlotBool(vm, slot, *b);
             return true;
         }
-        if (const core::f64* d = value.TryGet<core::f64>())
+        if (const foundation::f64* d = value.TryGet<foundation::f64>())
         {
             wrenSetSlotDouble(vm, slot, *d);
             return true;
         }
-        if (const core::f32* f = value.TryGet<core::f32>())
+        if (const foundation::f32* f = value.TryGet<foundation::f32>())
         {
             wrenSetSlotDouble(vm, slot, static_cast<double>(*f));
             return true;
         }
-        if (const core::i32* i = value.TryGet<core::i32>())
+        if (const foundation::i32* i = value.TryGet<foundation::i32>())
         {
             wrenSetSlotDouble(vm, slot, static_cast<double>(*i));
             return true;
         }
-        if (const core::i64* i = value.TryGet<core::i64>())
+        if (const foundation::i64* i = value.TryGet<foundation::i64>())
         {
             wrenSetSlotDouble(vm, slot, static_cast<double>(*i));
             return true;
         }
-        if (const core::u32* u = value.TryGet<core::u32>())
+        if (const foundation::u32* u = value.TryGet<foundation::u32>())
         {
             wrenSetSlotDouble(vm, slot, static_cast<double>(*u));
             return true;
         }
-        if (const core::u64* u = value.TryGet<core::u64>())
+        if (const foundation::u64* u = value.TryGet<foundation::u64>())
         {
             wrenSetSlotDouble(vm, slot, static_cast<double>(*u));
             return true;
         }
-        if (const core::String* s = value.TryGet<core::String>())
+        if (const foundation::String* s = value.TryGet<foundation::String>())
         {
             // Engine String is UTF-8, as are Wren strings - pass bytes directly.
             wrenSetSlotBytes(vm, slot, CStr(*s), s->Size());
@@ -234,14 +234,14 @@ namespace draconic::script::wren
     // Engine value -> Wren slot. Primitives go directly; a reflected value/object
     // is wrapped into a new Wren foreign instance of its class (if one is bound),
     // sharing/copying the Variant; otherwise null.
-    inline void MarshalOut(WrenVM* vm, int slot, const core::Variant& value)
+    inline void MarshalOut(WrenVM* vm, int slot, const foundation::Variant& value)
     {
         if (TryPrimitiveOut(vm, slot, value))
         {
             return;
         }
 
-        const core::TypeInfo* type = value.Type();
+        const foundation::TypeInfo* type = value.Type();
         // An enum crosses to Wren as its underlying number (Wren has no enum type; enums are excluded
         // from foreign-class emission). The author compares/assigns integers (0, 1, ...).
         if (type != nullptr && type->enumeratorCount > 0)
@@ -255,44 +255,44 @@ namespace draconic::script::wren
             const int classSlot = wrenGetSlotCount(vm);
             wrenEnsureSlots(vm, classSlot + 1);
             wrenGetVariable(vm, kModule, type->name, classSlot);
-            void* data = wrenSetSlotNewForeign(vm, slot, classSlot, sizeof(core::Variant*));
-            *static_cast<core::Variant**>(data) =
-                core::DefaultAllocator().New<core::Variant>(value);
+            void* data = wrenSetSlotNewForeign(vm, slot, classSlot, sizeof(foundation::Variant*));
+            *static_cast<foundation::Variant**>(data) =
+                foundation::DefaultAllocator().New<foundation::Variant>(value);
             return;
         }
         wrenSetSlotNull(vm, slot);
     }
 
-    inline core::Variant SlotToVariant(WrenVM* vm, int slot)
+    inline foundation::Variant SlotToVariant(WrenVM* vm, int slot)
     {
         switch (wrenGetSlotType(vm, slot))
         {
         case WREN_TYPE_BOOL:
-            return core::Variant::From<bool>(wrenGetSlotBool(vm, slot));
+            return foundation::Variant::From<bool>(wrenGetSlotBool(vm, slot));
         case WREN_TYPE_NUM:
-            return core::Variant::From<core::f64>(wrenGetSlotDouble(vm, slot));
+            return foundation::Variant::From<foundation::f64>(wrenGetSlotDouble(vm, slot));
         case WREN_TYPE_FOREIGN:
-            return **static_cast<core::Variant**>(wrenGetSlotForeign(vm, slot));
+            return **static_cast<foundation::Variant**>(wrenGetSlotForeign(vm, slot));
         case WREN_TYPE_STRING:
         {
             int length = 0;
             const char* bytes = wrenGetSlotBytes(vm, slot, &length);
-            return core::Variant::From<core::String>(core::String(core::StringView(
-                reinterpret_cast<const core::utf8char*>(bytes), static_cast<core::usize>(length))));
+            return foundation::Variant::From<foundation::String>(foundation::String(foundation::StringView(
+                reinterpret_cast<const foundation::utf8char*>(bytes), static_cast<foundation::usize>(length))));
         }
         default:
-            return core::Variant{};
+            return foundation::Variant{};
         }
     }
 
     // Wren slot -> engine Variant of the expected reflected type (coerces Wren
     // numbers to the target scalar; foreign slots carry a Variant already).
-    inline core::Variant MarshalIn(WrenVM* vm, int slot, const core::TypeInfo* expected)
+    inline foundation::Variant MarshalIn(WrenVM* vm, int slot, const foundation::TypeInfo* expected)
     {
         // A delegate parameter (RefPtr<IScriptDelegate>): the argument is a Wren fn/closure,
         // not a reflected foreign value - wrap it into a WrenScriptDelegate holding a handle
         // to the fn (grabbed regardless of slot type, the coroutine-registration recipe).
-        if (expected != nullptr && core::IsDerivedFrom(expected, &IScriptDelegate::StaticType()))
+        if (expected != nullptr && foundation::IsDerivedFrom(expected, &IScriptDelegate::StaticType()))
         {
             return WrapWrenDelegateArg(vm, slot);
         }
@@ -301,56 +301,56 @@ namespace draconic::script::wren
         if (expected != nullptr && expected->enumeratorCount > 0 &&
             wrenGetSlotType(vm, slot) == WREN_TYPE_NUM)
         {
-            return core::Variant::From<core::i64>(static_cast<core::i64>(wrenGetSlotDouble(vm, slot)));
+            return foundation::Variant::From<foundation::i64>(static_cast<foundation::i64>(wrenGetSlotDouble(vm, slot)));
         }
         switch (wrenGetSlotType(vm, slot))
         {
         case WREN_TYPE_FOREIGN:
-            return **static_cast<core::Variant**>(wrenGetSlotForeign(vm, slot)); // boxed Variant*
+            return **static_cast<foundation::Variant**>(wrenGetSlotForeign(vm, slot)); // boxed Variant*
         case WREN_TYPE_BOOL:
-            return core::Variant::From<bool>(wrenGetSlotBool(vm, slot));
+            return foundation::Variant::From<bool>(wrenGetSlotBool(vm, slot));
         case WREN_TYPE_NUM:
         {
             const double d = wrenGetSlotDouble(vm, slot);
-            if (expected == &core::TypeOf<core::f32>())
+            if (expected == &foundation::TypeOf<foundation::f32>())
             {
-                return core::Variant::From<core::f32>(static_cast<core::f32>(d));
+                return foundation::Variant::From<foundation::f32>(static_cast<foundation::f32>(d));
             }
-            if (expected == &core::TypeOf<core::i32>())
+            if (expected == &foundation::TypeOf<foundation::i32>())
             {
-                return core::Variant::From<core::i32>(static_cast<core::i32>(d));
+                return foundation::Variant::From<foundation::i32>(static_cast<foundation::i32>(d));
             }
-            if (expected == &core::TypeOf<core::i64>())
+            if (expected == &foundation::TypeOf<foundation::i64>())
             {
-                return core::Variant::From<core::i64>(static_cast<core::i64>(d));
+                return foundation::Variant::From<foundation::i64>(static_cast<foundation::i64>(d));
             }
-            if (expected == &core::TypeOf<core::u32>())
+            if (expected == &foundation::TypeOf<foundation::u32>())
             {
-                return core::Variant::From<core::u32>(static_cast<core::u32>(d));
+                return foundation::Variant::From<foundation::u32>(static_cast<foundation::u32>(d));
             }
-            if (expected == &core::TypeOf<core::u64>())
+            if (expected == &foundation::TypeOf<foundation::u64>())
             {
-                return core::Variant::From<core::u64>(static_cast<core::u64>(d));
+                return foundation::Variant::From<foundation::u64>(static_cast<foundation::u64>(d));
             }
-            return core::Variant::From<core::f64>(d);
+            return foundation::Variant::From<foundation::f64>(d);
         }
         case WREN_TYPE_STRING:
         {
             int length = 0;
             const char* bytes = wrenGetSlotBytes(vm, slot, &length);
             (void)expected; // engine String is UTF-8, like Wren strings
-            return core::Variant::From<core::String>(core::String(core::StringView(
-                reinterpret_cast<const core::utf8char*>(bytes), static_cast<core::usize>(length))));
+            return foundation::Variant::From<foundation::String>(foundation::String(foundation::StringView(
+                reinterpret_cast<const foundation::utf8char*>(bytes), static_cast<foundation::usize>(length))));
         }
         default:
-            return core::Variant{};
+            return foundation::Variant{};
         }
     }
 
     // Builds a Wren call signature "name(_,_,...)" with `argc` parameter slots.
-    inline void BuildSignature(char* out, core::usize capacity, const char* name, core::usize argc)
+    inline void BuildSignature(char* out, foundation::usize capacity, const char* name, foundation::usize argc)
     {
-        core::usize pos = 0;
+        foundation::usize pos = 0;
         for (const char* p = name; *p != '\0' && pos + 1 < capacity; ++p)
         {
             out[pos++] = *p;
@@ -359,7 +359,7 @@ namespace draconic::script::wren
         {
             out[pos++] = '(';
         }
-        for (core::usize i = 0; i < argc && pos + 2 < capacity; ++i)
+        for (foundation::usize i = 0; i < argc && pos + 2 < capacity; ++i)
         {
             out[pos++] = '_';
             if (i + 1 < argc)
@@ -376,12 +376,12 @@ namespace draconic::script::wren
 
     // --- overload resolution (by argument type) ----------------------------
     // Is the value in arg slot `p+1` acceptable for parameter type `pt`?
-    inline bool SlotMatchesParam(WrenVM* vm, int slot, const core::TypeInfo* pt)
+    inline bool SlotMatchesParam(WrenVM* vm, int slot, const foundation::TypeInfo* pt)
     {
         // A Variant parameter is the generic payload sink: it accepts ANY script value (number,
         // string, bool, or a boxed reflected value), which MarshalIn boxes straight into a Variant.
         // Declared last among overloads, so a specific typed overload still wins when one matches.
-        if (pt == &core::TypeOf<core::Variant>())
+        if (pt == &foundation::TypeOf<foundation::Variant>())
         {
             return true;
         }
@@ -394,33 +394,33 @@ namespace draconic::script::wren
         {
         case WREN_TYPE_FOREIGN:
         {
-            const core::Variant* v = *static_cast<core::Variant**>(wrenGetSlotForeign(vm, slot));
-            return core::IsDerivedFrom(v->Type(), pt); // exact, or object covariance
+            const foundation::Variant* v = *static_cast<foundation::Variant**>(wrenGetSlotForeign(vm, slot));
+            return foundation::IsDerivedFrom(v->Type(), pt); // exact, or object covariance
         }
         case WREN_TYPE_NUM:
-            return pt == &core::TypeOf<core::f32>() || pt == &core::TypeOf<core::f64>() ||
-                   pt == &core::TypeOf<core::i32>() || pt == &core::TypeOf<core::i64>() ||
-                   pt == &core::TypeOf<core::u32>() || pt == &core::TypeOf<core::u64>();
+            return pt == &foundation::TypeOf<foundation::f32>() || pt == &foundation::TypeOf<foundation::f64>() ||
+                   pt == &foundation::TypeOf<foundation::i32>() || pt == &foundation::TypeOf<foundation::i64>() ||
+                   pt == &foundation::TypeOf<foundation::u32>() || pt == &foundation::TypeOf<foundation::u64>();
         case WREN_TYPE_BOOL:
-            return pt == &core::TypeOf<bool>();
+            return pt == &foundation::TypeOf<bool>();
         case WREN_TYPE_STRING:
-            return pt == &core::TypeOf<core::String>() || pt == &core::TypeOf<core::String>();
+            return pt == &foundation::TypeOf<foundation::String>() || pt == &foundation::TypeOf<foundation::String>();
         default:
             // A Fn/closure (WREN_TYPE_UNKNOWN) matches a delegate parameter.
-            return pt != nullptr && core::IsDerivedFrom(pt, &IScriptDelegate::StaticType());
+            return pt != nullptr && foundation::IsDerivedFrom(pt, &IScriptDelegate::StaticType());
         }
     }
 
     // Among `type`'s methods sharing the bound method's name/arity/static-ness,
     // pick the first whose parameters match the actual argument slots. Falls
     // back to the bound method (e.g. when nothing matches better).
-    inline const core::MethodInfo*
-    ResolveOverload(const core::TypeInfo& type, const core::MethodInfo& bound, WrenVM* vm, int argc)
+    inline const foundation::MethodInfo*
+    ResolveOverload(const foundation::TypeInfo& type, const foundation::MethodInfo& bound, WrenVM* vm, int argc)
     {
-        for (core::usize i = 0; i < core::MethodCount(type); ++i)
+        for (foundation::usize i = 0; i < foundation::MethodCount(type); ++i)
         {
-            const core::MethodInfo& m = core::MethodAt(type, i);
-            if (m.isStatic != bound.isStatic || m.paramCount != static_cast<core::u32>(argc) ||
+            const foundation::MethodInfo& m = foundation::MethodAt(type, i);
+            if (m.isStatic != bound.isStatic || m.paramCount != static_cast<foundation::u32>(argc) ||
                 !NameEq(m.name, bound.name))
             {
                 continue;
@@ -474,9 +474,9 @@ namespace draconic::script::wren
     struct Binding
     {
         BindKind kind;
-        const core::TypeInfo* type;
-        const core::PropertyInfo* property;
-        const core::MethodInfo* method;
+        const foundation::TypeInfo* type;
+        const foundation::PropertyInfo* property;
+        const foundation::MethodInfo* method;
     };
 
     Binding g_bindings[kMaxBindings];
@@ -511,14 +511,14 @@ namespace draconic::script::wren
     // A foreign instance stores a POINTER to a heap-allocated Variant: Wren's
     // foreign storage isn't aligned to alignof(Variant) (max_align_t), so the
     // Variant itself can't live there. The pointer is properly aligned.
-    inline core::Variant* SelfOf(WrenVM* vm)
+    inline foundation::Variant* SelfOf(WrenVM* vm)
     {
-        return *static_cast<core::Variant**>(wrenGetSlotForeign(vm, 0));
+        return *static_cast<foundation::Variant**>(wrenGetSlotForeign(vm, 0));
     }
 
     inline void FinalizeVariant(void* data)
     {
-        core::DefaultAllocator().Delete(*static_cast<core::Variant**>(data));
+        foundation::DefaultAllocator().Delete(*static_cast<foundation::Variant**>(data));
     }
 
     // Reserve a trampoline for a binding. Identical bindings (same kind/type/
@@ -548,10 +548,10 @@ namespace draconic::script::wren
 
     // A reflected type has a "bindable surface" (worth an emitted foreign class) if it carries any
     // constructor, property, or method. Scalars/strings that slipped into the registry have none.
-    [[nodiscard]] inline bool HasBindableSurface(const core::TypeInfo& t) noexcept
+    [[nodiscard]] inline bool HasBindableSurface(const foundation::TypeInfo& t) noexcept
     {
-        return core::ConstructorCount(t) > 0 || core::PropertyCount(t) > 0 ||
-               core::MethodCount(t) > 0;
+        return foundation::ConstructorCount(t) > 0 || foundation::PropertyCount(t) > 0 ||
+               foundation::MethodCount(t) > 0;
     }
 
     // The object types worth emitting as Wren foreign classes: those a script can actually receive a
@@ -561,17 +561,17 @@ namespace draconic::script::wren
     // hold any of them). This bounds the emitted set - and the binding pool - to the reachable
     // surface instead of the whole registry (enums / containers / primitives never qualify). `out`
     // is the emit order (seeds first). Used by both the source emitter and the API-describe mirror.
-    inline void CollectEmittableTypes(core::Span<const core::TypeInfo* const> allTypes,
-                                      core::Array<const core::TypeInfo*>& out)
+    inline void CollectEmittableTypes(foundation::Span<const foundation::TypeInfo* const> allTypes,
+                                      foundation::Array<const foundation::TypeInfo*>& out)
     {
-        auto managed = [&](const core::TypeInfo* t) -> bool
+        auto managed = [&](const foundation::TypeInfo* t) -> bool
         {
             if (t == nullptr || t->name == nullptr || t->enumeratorCount > 0 ||
                 t->container != nullptr || !HasBindableSurface(*t))
             {
                 return false;
             }
-            for (const core::TypeInfo* e : allTypes)
+            for (const foundation::TypeInfo* e : allTypes)
             {
                 if (e == t)
                 {
@@ -580,9 +580,9 @@ namespace draconic::script::wren
             }
             return false;
         };
-        auto has = [&](const core::TypeInfo* t) -> bool
+        auto has = [&](const foundation::TypeInfo* t) -> bool
         {
-            for (const core::TypeInfo* e : out)
+            for (const foundation::TypeInfo* e : out)
             {
                 if (e == t)
                 {
@@ -591,8 +591,8 @@ namespace draconic::script::wren
             }
             return false;
         };
-        core::Array<const core::TypeInfo*> work;
-        auto push = [&](const core::TypeInfo* t)
+        foundation::Array<const foundation::TypeInfo*> work;
+        auto push = [&](const foundation::TypeInfo* t)
         {
             if (managed(t) && !has(t))
             {
@@ -600,9 +600,9 @@ namespace draconic::script::wren
                 work.PushBack(t);
             }
         };
-        for (const core::TypeInfo* t : allTypes)
+        for (const foundation::TypeInfo* t : allTypes)
         {
-            if (t != nullptr && core::ConstructorCount(*t) > 0)
+            if (t != nullptr && foundation::ConstructorCount(*t) > 0)
             {
                 push(t);
             }
@@ -610,11 +610,11 @@ namespace draconic::script::wren
         // Additional emission roots registered by other modules: types reached only via a factory
         // whose DECLARED return is that type (e.g. component types via RigidBody.of(entity)), which
         // no static signature names. Seed them exactly like constructor-seeded types.
-        for (const core::TypeInfo* t : draconic::script::ExtraScriptRootTypes())
+        for (const foundation::TypeInfo* t : draconic::script::ExtraScriptRootTypes())
         {
             push(t);
         }
-        auto edge = [&](const core::TypeInfo* u)
+        auto edge = [&](const foundation::TypeInfo* u)
         {
             if (u == nullptr)
             {
@@ -622,13 +622,13 @@ namespace draconic::script::wren
             }
             if (u->container != nullptr) // a container-typed member: reach its element type(s)
             {
-                const core::TypeInfo* el = u->container->elementType;
+                const foundation::TypeInfo* el = u->container->elementType;
                 push(el);
                 if (el != nullptr)
                 {
-                    core::Array<const core::TypeInfo*> derived;
-                    core::EnumerateDerived(*el, derived);
-                    for (const core::TypeInfo* d : derived)
+                    foundation::Array<const foundation::TypeInfo*> derived;
+                    foundation::EnumerateDerived(*el, derived);
+                    for (const foundation::TypeInfo* d : derived)
                     {
                         push(d);
                     }
@@ -639,20 +639,20 @@ namespace draconic::script::wren
         };
         while (!work.IsEmpty())
         {
-            const core::TypeInfo* t = work[work.Size() - 1];
+            const foundation::TypeInfo* t = work[work.Size() - 1];
             work.RemoveAt(work.Size() - 1);
-            for (core::usize i = 0; i < core::MethodCount(*t); ++i)
+            for (foundation::usize i = 0; i < foundation::MethodCount(*t); ++i)
             {
-                const core::MethodInfo& m = core::MethodAt(*t, i);
+                const foundation::MethodInfo& m = foundation::MethodAt(*t, i);
                 edge(m.returnType != nullptr ? m.returnType() : nullptr);
-                for (core::u32 p = 0; p < m.paramCount; ++p)
+                for (foundation::u32 p = 0; p < m.paramCount; ++p)
                 {
                     edge(m.params[p].type());
                 }
             }
-            for (core::usize i = 0; i < core::PropertyCount(*t); ++i)
+            for (foundation::usize i = 0; i < foundation::PropertyCount(*t); ++i)
             {
-                edge(core::PropertyAt(*t, i).type);
+                edge(foundation::PropertyAt(*t, i).type);
             }
         }
     }
@@ -662,18 +662,18 @@ namespace draconic::script::wren
 
     // Resolve a polymorphic container's add-by-name to a concrete derived type: match the given name
     // against each creatable derived type's `displayName` attribute, then its bare type name.
-    inline const core::TypeInfo* ResolveElementType(const core::TypeInfo& base, core::StringView name)
+    inline const foundation::TypeInfo* ResolveElementType(const foundation::TypeInfo& base, foundation::StringView name)
     {
-        core::Array<const core::TypeInfo*> derived;
-        core::EnumerateDerived(base, derived);
-        for (const core::TypeInfo* t : derived)
+        foundation::Array<const foundation::TypeInfo*> derived;
+        foundation::EnumerateDerived(base, derived);
+        for (const foundation::TypeInfo* t : derived)
         {
-            if (core::TypeAttrString(*t, "displayName", core::StringView{}) == name)
+            if (foundation::TypeAttrString(*t, "displayName", foundation::StringView{}) == name)
             {
                 return t;
             }
         }
-        for (const core::TypeInfo* t : derived)
+        for (const foundation::TypeInfo* t : derived)
         {
             if (AsciiView(t->name) == name)
             {
@@ -683,9 +683,9 @@ namespace draconic::script::wren
         return nullptr;
     }
 
-    inline core::usize AsciiLen(const char* s) noexcept
+    inline foundation::usize AsciiLen(const char* s) noexcept
     {
-        core::usize n = 0;
+        foundation::usize n = 0;
         while (s[n] != '\0')
         {
             ++n;
@@ -696,17 +696,17 @@ namespace draconic::script::wren
     // The Variant to hand a script for container element `index`: an object / value element via getAt
     // (owned); a NON-Object value element (getAt empty) via a BORROW over its address, pinned to the
     // container owner `parent` and generation-guarded. Empty if out of range / no element.
-    inline core::Variant ContainerElementVariant(const core::ContainerInfo& ci,
-                                                 const core::Instance& container, core::usize index,
-                                                 const core::Variant& parent)
+    inline foundation::Variant ContainerElementVariant(const foundation::ContainerInfo& ci,
+                                                 const foundation::Instance& container, foundation::usize index,
+                                                 const foundation::Variant& parent)
     {
-        core::Variant element = core::ContainerGetAt(ci, container, index);
+        foundation::Variant element = foundation::ContainerGetAt(ci, container, index);
         if (element.IsEmpty())
         {
-            const core::Instance addr = core::ContainerAddressAt(ci, container, index);
+            const foundation::Instance addr = foundation::ContainerAddressAt(ci, container, index);
             if (addr.Pointer() != nullptr)
             {
-                element = core::Variant::Borrow(addr.Pointer(), addr.Type(), parent);
+                element = foundation::Variant::Borrow(addr.Pointer(), addr.Type(), parent);
             }
         }
         return element;
@@ -715,7 +715,7 @@ namespace draconic::script::wren
     // A synthesized container-op method name ("behaviors_at") decodes to {op, container property}.
     // The suffix identifies the op; the prefix must name a container property on `type` (else this is
     // an ordinary member and we fall through). "_removeAt" is tested before "_at" (distinct anchors).
-    inline const core::PropertyInfo* MatchContainerOp(const core::TypeInfo& type, const char* name,
+    inline const foundation::PropertyInfo* MatchContainerOp(const foundation::TypeInfo& type, const char* name,
                                                       BindKind& outKind)
     {
         struct Op
@@ -728,16 +728,16 @@ namespace draconic::script::wren
                                  {"_at", BindKind::ContainerAt},
                                  {"_add", BindKind::ContainerAdd},
                                  {"_move", BindKind::ContainerMove}};
-        const core::usize nlen = AsciiLen(name);
+        const foundation::usize nlen = AsciiLen(name);
         for (const Op& op : ops)
         {
-            const core::usize slen = AsciiLen(op.suffix);
+            const foundation::usize slen = AsciiLen(op.suffix);
             if (nlen <= slen)
             {
                 continue;
             }
             bool match = true;
-            for (core::usize i = 0; i < slen; ++i)
+            for (foundation::usize i = 0; i < slen; ++i)
             {
                 if (name[nlen - slen + i] != op.suffix[i])
                 {
@@ -750,17 +750,17 @@ namespace draconic::script::wren
                 continue;
             }
             char base[64];
-            const core::usize blen = nlen - slen;
+            const foundation::usize blen = nlen - slen;
             if (blen >= sizeof(base))
             {
                 return nullptr;
             }
-            for (core::usize i = 0; i < blen; ++i)
+            for (foundation::usize i = 0; i < blen; ++i)
             {
                 base[i] = name[i];
             }
             base[blen] = '\0';
-            const core::PropertyInfo* prop = core::FindProperty(type, base);
+            const foundation::PropertyInfo* prop = foundation::FindProperty(type, base);
             if (prop != nullptr && prop->type != nullptr && prop->type->container != nullptr)
             {
                 outKind = op.kind;
@@ -781,61 +781,61 @@ namespace draconic::script::wren
         case BindKind::Constructor:
         {
             const int argc = wrenGetSlotCount(vm) - 1;
-            const core::ConstructorInfo* ctor = nullptr;
-            for (core::usize i = 0; i < core::ConstructorCount(*binding.type); ++i)
+            const foundation::ConstructorInfo* ctor = nullptr;
+            for (foundation::usize i = 0; i < foundation::ConstructorCount(*binding.type); ++i)
             {
-                const core::ConstructorInfo& candidate = core::ConstructorAt(*binding.type, i);
+                const foundation::ConstructorInfo& candidate = foundation::ConstructorAt(*binding.type, i);
                 if (static_cast<int>(candidate.paramCount) == argc)
                 {
                     ctor = &candidate;
                     break;
                 }
             }
-            core::Variant args[kMaxArgs];
+            foundation::Variant args[kMaxArgs];
             for (int i = 0; i < argc && i < kMaxArgs; ++i)
             {
-                const core::TypeInfo* expected =
+                const foundation::TypeInfo* expected =
                     (ctor != nullptr) ? ctor->params[i].type() : nullptr;
                 args[i] = MarshalIn(vm, i + 1, expected);
             }
-            core::Result<core::Variant> created = core::Construct(
-                *binding.type, core::Span<core::Variant>{args, static_cast<core::usize>(argc)});
-            core::Variant* boxed = core::DefaultAllocator().New<core::Variant>(
-                created.HasValue() ? core::Move(created.Value()) : core::Variant{});
-            void* data = wrenSetSlotNewForeign(vm, 0, 0, sizeof(core::Variant*));
-            *static_cast<core::Variant**>(data) = boxed;
+            foundation::Result<foundation::Variant> created = foundation::Construct(
+                *binding.type, foundation::Span<foundation::Variant>{args, static_cast<foundation::usize>(argc)});
+            foundation::Variant* boxed = foundation::DefaultAllocator().New<foundation::Variant>(
+                created.HasValue() ? foundation::Move(created.Value()) : foundation::Variant{});
+            void* data = wrenSetSlotNewForeign(vm, 0, 0, sizeof(foundation::Variant*));
+            *static_cast<foundation::Variant**>(data) = boxed;
             break;
         }
         case BindKind::PropertyGet:
         {
-            core::Instance instance = core::ToInstance(*SelfOf(vm));
-            const core::Variant result = core::GetProperty(*binding.property, instance);
+            foundation::Instance instance = foundation::ToInstance(*SelfOf(vm));
+            const foundation::Variant result = foundation::GetProperty(*binding.property, instance);
             MarshalOut(vm, 0, result);
             break;
         }
         case BindKind::PropertySet:
         {
-            core::Instance instance = core::ToInstance(*SelfOf(vm));
-            const core::Variant value = MarshalIn(vm, 1, binding.property->type);
-            (void)core::SetProperty(*binding.property, instance, value);
+            foundation::Instance instance = foundation::ToInstance(*SelfOf(vm));
+            const foundation::Variant value = MarshalIn(vm, 1, binding.property->type);
+            (void)foundation::SetProperty(*binding.property, instance, value);
             break;
         }
         case BindKind::Method:
         {
             const int argc = wrenGetSlotCount(vm) - 1;
-            const core::MethodInfo* method =
+            const foundation::MethodInfo* method =
                 ResolveOverload(*binding.type, *binding.method, vm, argc);
-            core::Variant args[kMaxArgs];
+            foundation::Variant args[kMaxArgs];
             for (int i = 0; i < argc && i < kMaxArgs; ++i)
             {
-                const core::TypeInfo* expected =
+                const foundation::TypeInfo* expected =
                     (i < static_cast<int>(method->paramCount)) ? method->params[i].type() : nullptr;
                 args[i] = MarshalIn(vm, i + 1, expected);
             }
-            const core::Span<core::Variant> argSpan{args, static_cast<core::usize>(argc)};
+            const foundation::Span<foundation::Variant> argSpan{args, static_cast<foundation::usize>(argc)};
             if (method->isStatic)
             {
-                const core::Result<core::Variant> r = core::InvokeStatic(*method, argSpan);
+                const foundation::Result<foundation::Variant> r = foundation::InvokeStatic(*method, argSpan);
                 if (r.HasValue())
                 {
                     MarshalOut(vm, 0, r.Value());
@@ -847,8 +847,8 @@ namespace draconic::script::wren
             }
             else
             {
-                const core::Result<core::Variant> r =
-                    core::InvokeMethod(*method, core::ToInstance(*SelfOf(vm)), argSpan);
+                const foundation::Result<foundation::Variant> r =
+                    foundation::InvokeMethod(*method, foundation::ToInstance(*SelfOf(vm)), argSpan);
                 if (r.HasValue())
                 {
                     MarshalOut(vm, 0, r.Value());
@@ -866,10 +866,10 @@ namespace draconic::script::wren
         case BindKind::ContainerRemoveAt:
         case BindKind::ContainerMove:
         {
-            const core::Instance owner = core::ToInstance(*SelfOf(vm));
-            const core::Instance container(binding.property->address(owner), binding.property->type);
-            const core::ContainerInfo& ci = *binding.property->type->container;
-            const core::usize size = core::ContainerSize(ci, container);
+            const foundation::Instance owner = foundation::ToInstance(*SelfOf(vm));
+            const foundation::Instance container(binding.property->address(owner), binding.property->type);
+            const foundation::ContainerInfo& ci = *binding.property->type->container;
+            const foundation::usize size = foundation::ContainerSize(ci, container);
             switch (binding.kind)
             {
             case BindKind::ContainerCount:
@@ -877,31 +877,31 @@ namespace draconic::script::wren
                 break;
             case BindKind::ContainerAt:
             {
-                const core::usize idx = static_cast<core::usize>(wrenGetSlotDouble(vm, 1));
+                const foundation::usize idx = static_cast<foundation::usize>(wrenGetSlotDouble(vm, 1));
                 MarshalOut(vm, 0,
                            idx < size
                                ? ContainerElementVariant(ci, container, idx, *SelfOf(vm))
-                               : core::Variant{});
+                               : foundation::Variant{});
                 break;
             }
             case BindKind::ContainerAdd:
             {
-                if (core::IsPolymorphicContainer(ci)) // add by element-type name
+                if (foundation::IsPolymorphicContainer(ci)) // add by element-type name
                 {
-                    const core::Variant nameV = MarshalIn(vm, 1, &core::TypeOf<core::String>());
-                    const core::String* typeName = nameV.TryGet<core::String>();
-                    const core::TypeInfo* elem =
+                    const foundation::Variant nameV = MarshalIn(vm, 1, &foundation::TypeOf<foundation::String>());
+                    const foundation::String* typeName = nameV.TryGet<foundation::String>();
+                    const foundation::TypeInfo* elem =
                         (typeName != nullptr && ci.elementType != nullptr)
                             ? ResolveElementType(*ci.elementType, typeName->AsView())
                             : nullptr;
                     if (elem == nullptr ||
-                        core::ContainerCreateElement(ci, container, size, *elem).Pointer() == nullptr)
+                        foundation::ContainerCreateElement(ci, container, size, *elem).Pointer() == nullptr)
                     {
                         wrenSetSlotNull(vm, 0);
                         break;
                     }
                 }
-                else if (core::ContainerEmplaceDefault(ci, container, size).Pointer() == nullptr)
+                else if (foundation::ContainerEmplaceDefault(ci, container, size).Pointer() == nullptr)
                 {
                     wrenSetSlotNull(vm, 0);
                     break;
@@ -910,14 +910,14 @@ namespace draconic::script::wren
                 break;
             }
             case BindKind::ContainerRemoveAt:
-                (void)core::ContainerRemoveAt(ci, container,
-                                              static_cast<core::usize>(wrenGetSlotDouble(vm, 1)));
+                (void)foundation::ContainerRemoveAt(ci, container,
+                                              static_cast<foundation::usize>(wrenGetSlotDouble(vm, 1)));
                 wrenSetSlotNull(vm, 0);
                 break;
             case BindKind::ContainerMove:
-                (void)core::ContainerMoveElement(ci, container,
-                                                 static_cast<core::usize>(wrenGetSlotDouble(vm, 1)),
-                                                 static_cast<core::usize>(wrenGetSlotDouble(vm, 2)));
+                (void)foundation::ContainerMoveElement(ci, container,
+                                                 static_cast<foundation::usize>(wrenGetSlotDouble(vm, 1)),
+                                                 static_cast<foundation::usize>(wrenGetSlotDouble(vm, 2)));
                 wrenSetSlotNull(vm, 0);
                 break;
             default:
@@ -927,13 +927,13 @@ namespace draconic::script::wren
         }
         case BindKind::NestedGet:
         {
-            core::Variant* self = SelfOf(vm);
-            const core::Instance owner = core::ToInstance(*self);
+            foundation::Variant* self = SelfOf(vm);
+            const foundation::Instance owner = foundation::ToInstance(*self);
             void* addr = (owner.Pointer() != nullptr) ? binding.property->address(owner) : nullptr;
             MarshalOut(vm, 0,
                        addr != nullptr
-                           ? core::Variant::Borrow(addr, binding.property->type, *self)
-                           : core::Variant{});
+                           ? foundation::Variant::Borrow(addr, binding.property->type, *self)
+                           : foundation::Variant{});
             break;
         }
         }
@@ -991,9 +991,9 @@ namespace draconic::script::wren
     class WrenScriptObject final : public ScriptObject
     {
     public:
-        WrenScriptObject(core::RefPtr<IScriptContext> owner, WrenVM* vm,
+        WrenScriptObject(foundation::RefPtr<IScriptContext> owner, WrenVM* vm,
                          WrenHandle* instance) noexcept
-            : m_owner(core::Move(owner)), m_vm(vm), m_instance(instance)
+            : m_owner(foundation::Move(owner)), m_vm(vm), m_instance(instance)
         {
         }
 
@@ -1008,18 +1008,18 @@ namespace draconic::script::wren
         WrenScriptObject(const WrenScriptObject&) = delete;
         WrenScriptObject& operator=(const WrenScriptObject&) = delete;
 
-        [[nodiscard]] core::Result<core::Variant> Invoke(core::StringView method,
-                                                         core::Span<core::Variant> args) override
+        [[nodiscard]] foundation::Result<foundation::Variant> Invoke(foundation::StringView method,
+                                                         foundation::Span<foundation::Variant> args) override
         {
-            const core::usize argc = args.Size();
+            const foundation::usize argc = args.Size();
             wrenEnsureSlots(m_vm, static_cast<int>(argc) + 1);
             wrenSetSlotHandle(m_vm, 0, m_instance); // receiver
-            for (core::usize i = 0; i < argc; ++i)
+            for (foundation::usize i = 0; i < argc; ++i)
             {
                 MarshalOut(m_vm, static_cast<int>(i) + 1, args[i]);
             }
 
-            const core::String name(method);
+            const foundation::String name(method);
             char signature[96];
             BuildSignature(signature, sizeof(signature), CStr(name), argc);
             WrenHandle* call = wrenMakeCallHandle(m_vm, signature);
@@ -1027,13 +1027,13 @@ namespace draconic::script::wren
             wrenReleaseHandle(m_vm, call);
             if (result != WREN_RESULT_SUCCESS)
             {
-                return core::Err(core::ErrorCode::Internal);
+                return foundation::Err(foundation::ErrorCode::Internal);
             }
             return SlotToVariant(m_vm, 0);
         }
 
     private:
-        core::RefPtr<IScriptContext> m_owner;
+        foundation::RefPtr<IScriptContext> m_owner;
         WrenVM* m_vm;
         WrenHandle* m_instance;
     };
@@ -1044,11 +1044,11 @@ namespace draconic::script::wren
     class WrenContext final : public IScriptContext
     {
     public:
-        WrenContext(core::Span<const core::TypeInfo* const> types,
-                    core::RefPtr<IScriptManager> manager)
-            : m_manager(core::Move(manager))
+        WrenContext(foundation::Span<const foundation::TypeInfo* const> types,
+                    foundation::RefPtr<IScriptManager> manager)
+            : m_manager(foundation::Move(manager))
         {
-            for (const core::TypeInfo* t : types)
+            for (const foundation::TypeInfo* t : types)
             {
                 m_types.PushBack(t);
             }
@@ -1062,7 +1062,7 @@ namespace draconic::script::wren
             m_vm = wrenNewVM(&config);
             wrenSetUserData(m_vm, this); // OwningContext() maps a vm back to us
 
-            m_module = core::String(reinterpret_cast<const core::utf8char*>("main"));
+            m_module = foundation::String(reinterpret_cast<const foundation::utf8char*>("main"));
             GenerateForeignClasses();
         }
 
@@ -1083,7 +1083,7 @@ namespace draconic::script::wren
         void RegisterDelegate(WrenScriptDelegate* delegate) { m_delegates.PushBack(delegate); }
         void UnregisterDelegate(WrenScriptDelegate* delegate)
         {
-            for (core::usize i = 0; i < m_delegates.Size(); ++i)
+            for (foundation::usize i = 0; i < m_delegates.Size(); ++i)
             {
                 if (m_delegates[i] == delegate)
                 {
@@ -1093,9 +1093,9 @@ namespace draconic::script::wren
             }
         }
 
-        [[nodiscard]] const core::TypeInfo* FindType(const char* className) const
+        [[nodiscard]] const foundation::TypeInfo* FindType(const char* className) const
         {
-            for (const core::TypeInfo* t : m_types)
+            for (const foundation::TypeInfo* t : m_types)
             {
                 if (t != nullptr && t->name != nullptr && NameEq(t->name, className))
                 {
@@ -1105,22 +1105,22 @@ namespace draconic::script::wren
             return nullptr;
         }
 
-        core::Status Load(core::StringView source, core::StringView chunkName) override
+        foundation::Status Load(foundation::StringView source, foundation::StringView chunkName) override
         {
-            const core::String src(source);
-            const core::String name(chunkName);
+            const foundation::String src(source);
+            const foundation::String name(chunkName);
             const WrenInterpretResult result = wrenInterpret(m_vm, CStr(name), CStr(src));
             switch (result)
             {
             case WREN_RESULT_SUCCESS:
                 m_module = name;
-                return core::Status{};
+                return foundation::Status{};
             case WREN_RESULT_COMPILE_ERROR:
-                return core::Status{core::ErrorCode::InvalidArgument};
+                return foundation::Status{foundation::ErrorCode::InvalidArgument};
             case WREN_RESULT_RUNTIME_ERROR:
-                return core::Status{core::ErrorCode::Internal};
+                return foundation::Status{foundation::ErrorCode::Internal};
             }
-            return core::Status{core::ErrorCode::Unknown};
+            return foundation::Status{foundation::ErrorCode::Unknown};
         }
 
         // Wren has no debug API (its debugger is deferred - script-debugger.md P1), so the
@@ -1128,42 +1128,42 @@ namespace draconic::script::wren
         // the manager frames the facade prelude + coroutine base + concatenated sources, and
         // it loads as one chunk named `moduleName`, exactly as before. Defined out-of-line
         // (below WrenManager) because it dereferences the manager.
-        core::Status LoadBehaviorModule(core::Span<const BehaviorModuleClass> classes,
-                                        core::StringView moduleName) override;
+        foundation::Status LoadBehaviorModule(foundation::Span<const BehaviorModuleClass> classes,
+                                        foundation::StringView moduleName) override;
 
         void SetErrorHandler(IScriptErrorHandler* handler) override { m_errorHandler = handler; }
 
-        void SetGlobal(core::StringView, const core::Variant&) override {}
+        void SetGlobal(foundation::StringView, const foundation::Variant&) override {}
 
-        [[nodiscard]] core::Variant GetGlobal(core::StringView name) override
+        [[nodiscard]] foundation::Variant GetGlobal(foundation::StringView name) override
         {
             if (!HasVariable(name))
             {
-                return core::Variant{};
+                return foundation::Variant{};
             }
-            const core::String nm(name);
+            const foundation::String nm(name);
             wrenEnsureSlots(m_vm, 1);
             wrenGetVariable(m_vm, CStr(m_module), CStr(nm), 0);
             return SlotToVariant(m_vm, 0);
         }
 
-        [[nodiscard]] bool HasFunction(core::StringView name) const override
+        [[nodiscard]] bool HasFunction(foundation::StringView name) const override
         {
             return HasVariable(name);
         }
 
-        [[nodiscard]] core::Result<core::Variant> Call(core::StringView function,
-                                                       core::Span<core::Variant> args) override
+        [[nodiscard]] foundation::Result<foundation::Variant> Call(foundation::StringView function,
+                                                       foundation::Span<foundation::Variant> args) override
         {
             if (!HasVariable(function))
             {
-                return core::Err(core::ErrorCode::NotFound);
+                return foundation::Err(foundation::ErrorCode::NotFound);
             }
-            const core::usize argc = args.Size();
+            const foundation::usize argc = args.Size();
             wrenEnsureSlots(m_vm, static_cast<int>(argc) + 1);
-            const core::String nm(function);
+            const foundation::String nm(function);
             wrenGetVariable(m_vm, CStr(m_module), CStr(nm), 0);
-            for (core::usize i = 0; i < argc; ++i)
+            for (foundation::usize i = 0; i < argc; ++i)
             {
                 MarshalOut(m_vm, static_cast<int>(i) + 1, args[i]);
             }
@@ -1175,24 +1175,24 @@ namespace draconic::script::wren
             wrenReleaseHandle(m_vm, handle);
             if (result != WREN_RESULT_SUCCESS)
             {
-                return core::Err(core::ErrorCode::Internal);
+                return foundation::Err(foundation::ErrorCode::Internal);
             }
             return SlotToVariant(m_vm, 0);
         }
 
-        [[nodiscard]] core::RefPtr<ScriptObject>
-        CreateInstance(core::StringView className, core::Span<core::Variant> args) override
+        [[nodiscard]] foundation::RefPtr<ScriptObject>
+        CreateInstance(foundation::StringView className, foundation::Span<foundation::Variant> args) override
         {
             if (!HasVariable(className))
             {
                 return nullptr;
             }
 
-            const core::usize argc = args.Size();
+            const foundation::usize argc = args.Size();
             wrenEnsureSlots(m_vm, static_cast<int>(argc) + 1);
-            const core::String cls(className);
+            const foundation::String cls(className);
             wrenGetVariable(m_vm, CStr(m_module), CStr(cls), 0); // class object -> slot 0
-            for (core::usize i = 0; i < argc; ++i)
+            for (foundation::usize i = 0; i < argc; ++i)
             {
                 MarshalOut(m_vm, static_cast<int>(i) + 1, args[i]);
             }
@@ -1208,19 +1208,19 @@ namespace draconic::script::wren
             }
 
             WrenHandle* instance = wrenGetSlotHandle(m_vm, 0);
-            return core::RefPtr<ScriptObject>(core::MakeRef<WrenScriptObject>(
-                core::DefaultAllocator(), core::RefPtr<IScriptContext>(this), m_vm, instance));
+            return foundation::RefPtr<ScriptObject>(foundation::MakeRef<WrenScriptObject>(
+                foundation::DefaultAllocator(), foundation::RefPtr<IScriptContext>(this), m_vm, instance));
         }
 
     private:
-        static void BuildCallSignature(char* out, core::usize capacity, core::usize argc)
+        static void BuildCallSignature(char* out, foundation::usize capacity, foundation::usize argc)
         {
-            core::usize pos = 0;
+            foundation::usize pos = 0;
             for (const char* p = "call("; *p != '\0' && pos + 1 < capacity; ++p)
             {
                 out[pos++] = *p;
             }
-            for (core::usize i = 0; i < argc && pos + 2 < capacity; ++i)
+            for (foundation::usize i = 0; i < argc && pos + 2 < capacity; ++i)
             {
                 out[pos++] = '_';
                 if (i + 1 < argc)
@@ -1239,12 +1239,12 @@ namespace draconic::script::wren
         // into the "main" module so user scripts can use the reflected types.
         void GenerateForeignClasses()
         {
-            core::String src;
-            core::Array<const core::TypeInfo*> emit;
-            CollectEmittableTypes(core::Span<const core::TypeInfo* const>{m_types.Data(),
+            foundation::String src;
+            foundation::Array<const foundation::TypeInfo*> emit;
+            CollectEmittableTypes(foundation::Span<const foundation::TypeInfo* const>{m_types.Data(),
                                                                          m_types.Size()},
                                   emit);
-            for (const core::TypeInfo* t : emit)
+            for (const foundation::TypeInfo* t : emit)
             {
                 AppendClass(src, *t);
             }
@@ -1258,9 +1258,9 @@ namespace draconic::script::wren
         // `<name>_add(name)` for a polymorphic list / `<name>_add()` for a homogeneous one,
         // `<name>_removeAt(i)`, `<name>_move(from, to)`. Named methods (Wren foreign classes have no
         // subscript operator); a script wrapper can dress them up if desired.
-        static void AppendContainerMethods(core::String& src, const core::PropertyInfo& prop)
+        static void AppendContainerMethods(foundation::String& src, const foundation::PropertyInfo& prop)
         {
-            const bool polymorphic = core::IsPolymorphicContainer(*prop.type->container);
+            const bool polymorphic = foundation::IsPolymorphicContainer(*prop.type->container);
             AppendAscii(src, "  foreign ");
             AppendAscii(src, prop.name);
             AppendAscii(src, "_count\n");
@@ -1278,16 +1278,16 @@ namespace draconic::script::wren
             AppendAscii(src, "_move(a0, a1)\n");
         }
 
-        static void AppendClass(core::String& src, const core::TypeInfo& type)
+        static void AppendClass(foundation::String& src, const foundation::TypeInfo& type)
         {
             AppendAscii(src, "foreign class ");
             AppendAscii(src, type.name);
             AppendAscii(src, " {\n");
-            for (core::usize i = 0; i < core::ConstructorCount(type); ++i)
+            for (foundation::usize i = 0; i < foundation::ConstructorCount(type); ++i)
             {
-                const core::u32 arity = core::ConstructorAt(type, i).paramCount;
+                const foundation::u32 arity = foundation::ConstructorAt(type, i).paramCount;
                 AppendAscii(src, "  construct new(");
-                for (core::u32 p = 0; p < arity; ++p)
+                for (foundation::u32 p = 0; p < arity; ++p)
                 {
                     AppendAscii(src, "a");
                     AppendUint(src, p);
@@ -1298,10 +1298,10 @@ namespace draconic::script::wren
                 }
                 AppendAscii(src, ") {}\n");
             }
-            for (core::usize i = 0; i < core::PropertyCount(type); ++i)
+            for (foundation::usize i = 0; i < foundation::PropertyCount(type); ++i)
             {
-                const core::PropertyInfo& prop = core::PropertyAt(type, i);
-                if (core::IsNested(prop))
+                const foundation::PropertyInfo& prop = foundation::PropertyAt(type, i);
+                if (foundation::IsNested(prop))
                 {
                     // A container member is bound as synthesized ops on the owner (count / at / add /
                     // removeAt / move); a plain nested-VALUE member gets a getter that returns a borrow
@@ -1325,15 +1325,15 @@ namespace draconic::script::wren
                 AppendAscii(src, prop.name);
                 AppendAscii(src, "=(value)\n");
             }
-            for (core::usize i = 0; i < core::MethodCount(type); ++i)
+            for (foundation::usize i = 0; i < foundation::MethodCount(type); ++i)
             {
-                const core::MethodInfo& method = core::MethodAt(type, i);
+                const foundation::MethodInfo& method = foundation::MethodAt(type, i);
                 // Wren overloads only by name+arity, so a same-(name,arity,static)
                 // overload is emitted once; the binding picks the first match.
                 bool duplicate = false;
-                for (core::usize j = 0; j < i; ++j)
+                for (foundation::usize j = 0; j < i; ++j)
                 {
-                    const core::MethodInfo& earlier = core::MethodAt(type, j);
+                    const foundation::MethodInfo& earlier = foundation::MethodAt(type, j);
                     if (earlier.paramCount == method.paramCount &&
                         earlier.isStatic == method.isStatic && NameEq(earlier.name, method.name))
                     {
@@ -1353,7 +1353,7 @@ namespace draconic::script::wren
                 }
                 AppendAscii(src, method.name);
                 AppendAscii(src, "(");
-                for (core::u32 p = 0; p < method.paramCount; ++p)
+                for (foundation::u32 p = 0; p < method.paramCount; ++p)
                 {
                     AppendAscii(src, "a");
                     AppendUint(src, p);
@@ -1367,17 +1367,17 @@ namespace draconic::script::wren
             AppendAscii(src, "}\n");
         }
 
-        [[nodiscard]] bool HasVariable(core::StringView name) const
+        [[nodiscard]] bool HasVariable(foundation::StringView name) const
         {
             if (m_module.IsEmpty() || !wrenHasModule(m_vm, CStr(m_module)))
             {
                 return false;
             }
-            const core::String nm(name);
+            const foundation::String nm(name);
             return wrenHasVariable(m_vm, CStr(m_module), CStr(nm));
         }
 
-        static void OnWrite(WrenVM*, const char* text) { WriteUtf8(&core::ConsoleWrite, text); }
+        static void OnWrite(WrenVM*, const char* text) { WriteUtf8(&foundation::ConsoleWrite, text); }
         static void OnError(WrenVM* vm, WrenErrorType type, const char* module, int line,
                             const char* message)
         {
@@ -1387,22 +1387,22 @@ namespace draconic::script::wren
                 // Stack-trace frames follow a runtime error; surface the message kinds.
                 if (type == WREN_ERROR_COMPILE || type == WREN_ERROR_RUNTIME)
                 {
-                    const core::StringView mod =
+                    const foundation::StringView mod =
                         (module != nullptr)
-                            ? core::StringView(reinterpret_cast<const core::utf8char*>(module))
-                            : core::StringView{};
-                    const core::StringView msg =
+                            ? foundation::StringView(reinterpret_cast<const foundation::utf8char*>(module))
+                            : foundation::StringView{};
+                    const foundation::StringView msg =
                         (message != nullptr)
-                            ? core::StringView(reinterpret_cast<const core::utf8char*>(message))
-                            : core::StringView{};
+                            ? foundation::StringView(reinterpret_cast<const foundation::utf8char*>(message))
+                            : foundation::StringView{};
                     const ScriptError error{(type == WREN_ERROR_COMPILE) ? ScriptErrorKind::Compile
                                                                          : ScriptErrorKind::Runtime,
-                                            mod, static_cast<core::i32>(line), msg};
+                                            mod, static_cast<foundation::i32>(line), msg};
                     self->m_errorHandler->OnError(error);
                 }
                 return;
             }
-            WriteUtf8(&core::ConsoleWriteError, message);
+            WriteUtf8(&foundation::ConsoleWriteError, message);
         }
 
         // Detach every live delegate (defined after WrenScriptDelegate); called from the
@@ -1411,10 +1411,10 @@ namespace draconic::script::wren
 
         WrenVM* m_vm = nullptr;
         IScriptErrorHandler* m_errorHandler = nullptr;
-        core::String m_module;
-        core::Array<const core::TypeInfo*> m_types;
-        core::RefPtr<IScriptManager> m_manager; // keeps the manager (scheduler) alive
-        core::Array<WrenScriptDelegate*>
+        foundation::String m_module;
+        foundation::Array<const foundation::TypeInfo*> m_types;
+        foundation::RefPtr<IScriptManager> m_manager; // keeps the manager (scheduler) alive
+        foundation::Array<WrenScriptDelegate*>
             m_delegates; // live delegates (non-owning; detached on teardown)
     };
 
@@ -1423,7 +1423,7 @@ namespace draconic::script::wren
     {
         WrenForeignClassMethods methods{};
         const WrenContext* ctx = static_cast<const WrenContext*>(wrenGetUserData(vm));
-        const core::TypeInfo* type = (ctx != nullptr) ? ctx->FindType(className) : nullptr;
+        const foundation::TypeInfo* type = (ctx != nullptr) ? ctx->FindType(className) : nullptr;
         if (type != nullptr)
         {
             // Constructor-less handle types (reachable but not script-constructable) still need a
@@ -1431,7 +1431,7 @@ namespace draconic::script::wren
             // and Wren GCs them like any other. allocate is bound only when a reflected constructor
             // exists (else `Type.new(...)` correctly has no allocator and stays unconstructable).
             methods.finalize = &FinalizeVariant;
-            if (core::ConstructorCount(*type) > 0)
+            if (foundation::ConstructorCount(*type) > 0)
             {
                 methods.allocate = Reserve(Binding{BindKind::Constructor, type, nullptr, nullptr});
             }
@@ -1440,12 +1440,12 @@ namespace draconic::script::wren
     }
 
     // First method on `type` matching name + static-ness (Wren tells us which).
-    inline const core::MethodInfo* FindMethodMatching(const core::TypeInfo& type, const char* name,
+    inline const foundation::MethodInfo* FindMethodMatching(const foundation::TypeInfo& type, const char* name,
                                                       bool isStatic)
     {
-        for (core::usize i = 0; i < core::MethodCount(type); ++i)
+        for (foundation::usize i = 0; i < foundation::MethodCount(type); ++i)
         {
-            const core::MethodInfo& m = core::MethodAt(type, i);
+            const foundation::MethodInfo& m = foundation::MethodAt(type, i);
             if (m.isStatic == isStatic && NameEq(m.name, name))
             {
                 return &m;
@@ -1475,7 +1475,7 @@ namespace draconic::script::wren
         }
 
         const WrenContext* ctx = static_cast<const WrenContext*>(wrenGetUserData(vm));
-        const core::TypeInfo* type = (ctx != nullptr) ? ctx->FindType(className) : nullptr;
+        const foundation::TypeInfo* type = (ctx != nullptr) ? ctx->FindType(className) : nullptr;
         if (type == nullptr)
         {
             return nullptr;
@@ -1484,30 +1484,30 @@ namespace draconic::script::wren
         // A synthesized container op (`<container>_at`, `_count`, ...) - matched before the ordinary
         // property/method routing since `_count` is a bare-name getter that would otherwise miss.
         BindKind containerKind;
-        if (const core::PropertyInfo* containerProp = MatchContainerOp(*type, name, containerKind))
+        if (const foundation::PropertyInfo* containerProp = MatchContainerOp(*type, name, containerKind))
         {
             return Reserve(Binding{containerKind, type, containerProp, nullptr});
         }
 
         if (IsSetterSig(signature))
         {
-            const core::PropertyInfo* prop = core::FindProperty(*type, name);
+            const foundation::PropertyInfo* prop = foundation::FindProperty(*type, name);
             return (prop != nullptr) ? Reserve(Binding{BindKind::PropertySet, type, prop, nullptr})
                                      : nullptr;
         }
         if (!HasParens(signature))
         {
-            const core::PropertyInfo* prop = core::FindProperty(*type, name);
+            const foundation::PropertyInfo* prop = foundation::FindProperty(*type, name);
             if (prop == nullptr)
             {
                 return nullptr;
             }
             // A nested-value member's getter returns a borrow handle; a leaf property reads by value.
             const BindKind kind =
-                core::IsNested(*prop) ? BindKind::NestedGet : BindKind::PropertyGet;
+                foundation::IsNested(*prop) ? BindKind::NestedGet : BindKind::PropertyGet;
             return Reserve(Binding{kind, type, prop, nullptr});
         }
-        const core::MethodInfo* method = FindMethodMatching(*type, name, isStatic);
+        const foundation::MethodInfo* method = FindMethodMatching(*type, name, isStatic);
         return (method != nullptr) ? Reserve(Binding{BindKind::Method, type, nullptr, method})
                                    : nullptr;
     }
@@ -1524,13 +1524,13 @@ namespace draconic::script::wren
             m_coroutines.Clear();
         }
 
-        void RegisterType(const core::TypeInfo& type) override { m_types.PushBack(&type); }
+        void RegisterType(const foundation::TypeInfo& type) override { m_types.PushBack(&type); }
 
-        [[nodiscard]] core::RefPtr<IScriptContext> CreateContext() override
+        [[nodiscard]] foundation::RefPtr<IScriptContext> CreateContext() override
         {
-            const core::Span<const core::TypeInfo* const> types{m_types.Data(), m_types.Size()};
-            return core::RefPtr<IScriptContext>(core::MakeRef<WrenContext>(
-                core::DefaultAllocator(), types, core::RefPtr<IScriptManager>(this)));
+            const foundation::Span<const foundation::TypeInfo* const> types{m_types.Data(), m_types.Size()};
+            return foundation::RefPtr<IScriptContext>(foundation::MakeRef<WrenContext>(
+                foundation::DefaultAllocator(), types, foundation::RefPtr<IScriptManager>(this)));
         }
 
         [[nodiscard]] ScriptCapabilities Capabilities() const override
@@ -1541,43 +1541,43 @@ namespace draconic::script::wren
 
         // The ACTUAL Wren-callable surface: one entry per constructible reflected type (the
         // foreign classes GenerateForeignClasses emits), with Wren-spelled member signatures.
-        [[nodiscard]] core::Array<ScriptApiType> DescribeBoundApi() const override
+        [[nodiscard]] foundation::Array<ScriptApiType> DescribeBoundApi() const override
         {
-            core::Array<ScriptApiType> result;
-            core::Array<const core::TypeInfo*> emit;
-            CollectEmittableTypes(core::Span<const core::TypeInfo* const>{m_types.Data(),
+            foundation::Array<ScriptApiType> result;
+            foundation::Array<const foundation::TypeInfo*> emit;
+            CollectEmittableTypes(foundation::Span<const foundation::TypeInfo* const>{m_types.Data(),
                                                                           m_types.Size()},
                                   emit);
-            for (const core::TypeInfo* t : emit)
+            for (const foundation::TypeInfo* t : emit)
             {
                 ScriptApiType api;
-                api.scriptName = core::String(AsciiView(t->name));
+                api.scriptName = foundation::String(AsciiView(t->name));
                 api.typeId = t->id;
                 api.isNamespace = false;
-                for (core::usize i = 0; i < core::PropertyCount(*t); ++i)
+                for (foundation::usize i = 0; i < foundation::PropertyCount(*t); ++i)
                 {
-                    const core::PropertyInfo& p = core::PropertyAt(*t, i);
-                    if (core::IsNested(p))
+                    const foundation::PropertyInfo& p = foundation::PropertyAt(*t, i);
+                    if (foundation::IsNested(p))
                     {
                         continue; // nested structures are recursed by tooling, not scriptable
                     }
                     ScriptApiMember member;
-                    member.name = core::String(AsciiView(p.name));
+                    member.name = foundation::String(AsciiView(p.name));
                     member.signature = member.name; // Wren getter/setter share the bare name
                     member.kind = ScriptApiMemberKind::Property;
-                    api.members.PushBack(core::Move(member));
+                    api.members.PushBack(foundation::Move(member));
                 }
-                for (core::usize i = 0; i < core::MethodCount(*t); ++i)
+                for (foundation::usize i = 0; i < foundation::MethodCount(*t); ++i)
                 {
-                    const core::MethodInfo& m = core::MethodAt(*t, i);
+                    const foundation::MethodInfo& m = foundation::MethodAt(*t, i);
                     ScriptApiMember member;
-                    member.name = core::String(AsciiView(m.name));
+                    member.name = foundation::String(AsciiView(m.name));
                     member.signature = WrenCallSignatureOf(m.name, m.paramCount);
                     member.isStatic = m.isStatic;
                     member.kind = ScriptApiMemberKind::Method;
-                    api.members.PushBack(core::Move(member));
+                    api.members.PushBack(foundation::Move(member));
                 }
-                result.PushBack(core::Move(api));
+                result.PushBack(foundation::Move(api));
             }
             return result;
         }
@@ -1585,12 +1585,12 @@ namespace draconic::script::wren
         // The Wren behavior module: the facade `import "main" for ...` prelude + the
         // coroutine Behavior base, then the concatenated class sources. This is the ONLY
         // place the Wren behavior-module syntax lives (scripting.md §7.5).
-        [[nodiscard]] core::String
-        AssembleBehaviorModuleSource(core::Span<const core::StringView> classSources) const override
+        [[nodiscard]] foundation::String
+        AssembleBehaviorModuleSource(foundation::Span<const foundation::StringView> classSources) const override
         {
-            core::String moduleSource;
+            foundation::String moduleSource;
             AppendBehaviorPrelude(moduleSource);
-            for (const core::StringView& source : classSources)
+            for (const foundation::StringView& source : classSources)
             {
                 moduleSource += source;
                 moduleSource += u8"\n";
@@ -1604,25 +1604,25 @@ namespace draconic::script::wren
         /// seconds still to wait before the next resume.
         struct WrenCoroutine
         {
-            core::i32 id = 0;
+            foundation::i32 id = 0;
             WrenVM* vm = nullptr;
             WrenHandle* fiber = nullptr;
-            core::f64 wait = 0.0;
+            foundation::f64 wait = 0.0;
         };
 
         /// Foreign `__registerCoroutine`: takes ownership of the fiber handle, stores it
         /// with its initial wait, returns the id the Behavior base records.
-        [[nodiscard]] core::i32 RegisterCoroutine(WrenVM* vm, WrenHandle* fiber, core::f64 wait)
+        [[nodiscard]] foundation::i32 RegisterCoroutine(WrenVM* vm, WrenHandle* fiber, foundation::f64 wait)
         {
-            const core::i32 id = ++m_nextCoroutineId;
+            const foundation::i32 id = ++m_nextCoroutineId;
             m_coroutines.PushBack(WrenCoroutine{id, vm, fiber, wait});
             return id;
         }
 
         /// Foreign `__unregisterCoroutine`: cancel by id (releases the fiber handle).
-        void UnregisterCoroutine(core::i32 id)
+        void UnregisterCoroutine(foundation::i32 id)
         {
-            for (core::usize i = 0; i < m_coroutines.Size(); ++i)
+            for (foundation::usize i = 0; i < m_coroutines.Size(); ++i)
             {
                 if (m_coroutines[i].id == id)
                 {
@@ -1640,7 +1640,7 @@ namespace draconic::script::wren
         /// fiber handles (wrenFreeVM frees them - releasing here would double-free).
         void ForgetCoroutinesForVm(WrenVM* vm)
         {
-            for (core::usize i = m_coroutines.Size(); i-- > 0;)
+            for (foundation::usize i = m_coroutines.Size(); i-- > 0;)
             {
                 if (m_coroutines[i].vm == vm)
                 {
@@ -1649,7 +1649,7 @@ namespace draconic::script::wren
             }
         }
 
-        void AdvanceCoroutines(core::f64 deltaSeconds) override
+        void AdvanceCoroutines(foundation::f64 deltaSeconds) override
         {
             // Snapshot the due ids first: a resumed fiber may start MORE coroutines
             // (append) - those are not advanced this frame - and by resuming through the
@@ -1666,15 +1666,15 @@ namespace draconic::script::wren
                     m_dueScratch.PushBack(co.id);
                 }
             }
-            for (const core::i32 id : m_dueScratch)
+            for (const foundation::i32 id : m_dueScratch)
             {
-                const core::i32 index = FindCoroutineIndex(id);
+                const foundation::i32 index = FindCoroutineIndex(id);
                 if (index < 0)
                 {
                     continue;
                 }
-                WrenVM* vm = m_coroutines[static_cast<core::usize>(index)].vm;
-                WrenHandle* fiber = m_coroutines[static_cast<core::usize>(index)].fiber;
+                WrenVM* vm = m_coroutines[static_cast<foundation::usize>(index)].vm;
+                WrenHandle* fiber = m_coroutines[static_cast<foundation::usize>(index)].fiber;
 
                 // Resume: fiber.call(dt) runs it to its next Fiber.yield(seconds); the
                 // yielded number lands in slot 0 as the next wait.
@@ -1686,7 +1686,7 @@ namespace draconic::script::wren
                 wrenReleaseHandle(vm, call);
 
                 bool drop = false;
-                core::f64 nextWait = 0.0;
+                foundation::f64 nextWait = 0.0;
                 if (result != WREN_RESULT_SUCCESS)
                 {
                     drop = true; // the fiber faulted; the error already went to the sink
@@ -1709,20 +1709,20 @@ namespace draconic::script::wren
                     wrenReleaseHandle(vm, done);
                 }
 
-                const core::i32 after = FindCoroutineIndex(id);
+                const foundation::i32 after = FindCoroutineIndex(id);
                 if (after < 0)
                 {
                     continue;
                 } // a nested cancel already removed it
                 if (drop)
                 {
-                    wrenReleaseHandle(m_coroutines[static_cast<core::usize>(after)].vm,
-                                      m_coroutines[static_cast<core::usize>(after)].fiber);
-                    m_coroutines.RemoveAt(static_cast<core::usize>(after));
+                    wrenReleaseHandle(m_coroutines[static_cast<foundation::usize>(after)].vm,
+                                      m_coroutines[static_cast<foundation::usize>(after)].fiber);
+                    m_coroutines.RemoveAt(static_cast<foundation::usize>(after));
                 }
                 else
                 {
-                    m_coroutines[static_cast<core::usize>(after)].wait = nextWait;
+                    m_coroutines[static_cast<foundation::usize>(after)].wait = nextWait;
                 }
             }
         }
@@ -1732,28 +1732,28 @@ namespace draconic::script::wren
             // The Behavior base owns its own id list; asking it to cancel routes back
             // through drUnregisterCoroutine (which releases each fiber). Missing method
             // (a non-Behavior instance) just returns an error - a safe no-op.
-            (void)instance.Invoke(u8"drCancelCoroutines", core::Span<core::Variant>{});
+            (void)instance.Invoke(u8"drCancelCoroutines", foundation::Span<foundation::Variant>{});
         }
 
     private:
-        [[nodiscard]] core::i32 FindCoroutineIndex(core::i32 id) const
+        [[nodiscard]] foundation::i32 FindCoroutineIndex(foundation::i32 id) const
         {
-            for (core::usize i = 0; i < m_coroutines.Size(); ++i)
+            for (foundation::usize i = 0; i < m_coroutines.Size(); ++i)
             {
                 if (m_coroutines[i].id == id)
                 {
-                    return static_cast<core::i32>(i);
+                    return static_cast<foundation::i32>(i);
                 }
             }
             return -1;
         }
 
-        static constexpr core::f64 kDueEpsilon = 1e-4;
+        static constexpr foundation::f64 kDueEpsilon = 1e-4;
 
-        core::Array<const core::TypeInfo*> m_types;
-        core::Array<WrenCoroutine> m_coroutines;
-        core::Array<core::i32> m_dueScratch; // reused per-frame due-id snapshot
-        core::i32 m_nextCoroutineId = 0;
+        foundation::Array<const foundation::TypeInfo*> m_types;
+        foundation::Array<WrenCoroutine> m_coroutines;
+        foundation::Array<foundation::i32> m_dueScratch; // reused per-frame due-id snapshot
+        foundation::i32 m_nextCoroutineId = 0;
     };
 
     // ---- script delegate (a Wren fn held as a native callback) ----
@@ -1798,17 +1798,17 @@ namespace draconic::script::wren
             m_fn = nullptr;
         }
 
-        [[nodiscard]] core::Result<core::Variant> Invoke(core::Span<core::Variant> args) override
+        [[nodiscard]] foundation::Result<foundation::Variant> Invoke(foundation::Span<foundation::Variant> args) override
         {
             if (m_context == nullptr || m_fn == nullptr)
             {
-                return core::Err(core::ErrorCode::Internal);
+                return foundation::Err(foundation::ErrorCode::Internal);
             }
             WrenVM* vm = m_context->Vm();
-            const core::usize argc = args.Size();
+            const foundation::usize argc = args.Size();
             wrenEnsureSlots(vm, static_cast<int>(argc) + 1);
             wrenSetSlotHandle(vm, 0, m_fn); // the receiver is the fn itself
-            for (core::usize i = 0; i < argc; ++i)
+            for (foundation::usize i = 0; i < argc; ++i)
             {
                 MarshalOut(vm, static_cast<int>(i) + 1, args[i]);
             }
@@ -1820,7 +1820,7 @@ namespace draconic::script::wren
             wrenReleaseHandle(vm, call);
             if (result != WREN_RESULT_SUCCESS)
             {
-                return core::Err(core::ErrorCode::Internal);
+                return foundation::Err(foundation::ErrorCode::Internal);
             }
             return SlotToVariant(vm, 0);
         }
@@ -1830,14 +1830,14 @@ namespace draconic::script::wren
         WrenHandle* m_fn;
     };
 
-    core::Variant WrapWrenDelegateArg(WrenVM* vm, int slot)
+    foundation::Variant WrapWrenDelegateArg(WrenVM* vm, int slot)
     {
         WrenContext* context = static_cast<WrenContext*>(OwningContext(vm));
         // A Fn is not a reflected foreign type; grab its handle regardless of slot type.
         WrenHandle* fn = wrenGetSlotHandle(vm, slot);
-        core::RefPtr<IScriptDelegate> delegate(
-            core::MakeRef<WrenScriptDelegate>(core::DefaultAllocator(), context, fn));
-        return core::Variant::From(delegate);
+        foundation::RefPtr<IScriptDelegate> delegate(
+            foundation::MakeRef<WrenScriptDelegate>(foundation::DefaultAllocator(), context, fn));
+        return foundation::Variant::From(delegate);
     }
 
     void WrenContext::DetachAllDelegates()
@@ -1851,17 +1851,17 @@ namespace draconic::script::wren
 
     // ---- coroutine foreign callbacks (defined after WrenManager) ----
 
-    core::Status WrenContext::LoadBehaviorModule(core::Span<const BehaviorModuleClass> classes,
-                                                 core::StringView moduleName)
+    foundation::Status WrenContext::LoadBehaviorModule(foundation::Span<const BehaviorModuleClass> classes,
+                                                 foundation::StringView moduleName)
     {
-        core::Array<core::StringView> sources;
+        foundation::Array<foundation::StringView> sources;
         sources.Reserve(classes.Size());
         for (const BehaviorModuleClass& entry : classes)
         {
             sources.PushBack(entry.source);
         }
-        const core::String moduleSource = Manager().AssembleBehaviorModuleSource(
-            core::Span<const core::StringView>{sources.Data(), sources.Size()});
+        const foundation::String moduleSource = Manager().AssembleBehaviorModuleSource(
+            foundation::Span<const foundation::StringView>{sources.Data(), sources.Size()});
         return Load(moduleSource.AsView(), moduleName);
     }
 
@@ -1888,17 +1888,17 @@ namespace draconic::script::wren
         // A Fiber is not a reflected foreign type, so grab its handle regardless of the
         // slot type (the documented recipe). Slot 2 is the initial wait (seconds).
         WrenHandle* fiber = wrenGetSlotHandle(vm, 1);
-        const core::f64 wait =
+        const foundation::f64 wait =
             (wrenGetSlotType(vm, 2) == WREN_TYPE_NUM) ? wrenGetSlotDouble(vm, 2) : 0.0;
-        const core::i32 id = ctx->Manager().RegisterCoroutine(vm, fiber, wait);
+        const foundation::i32 id = ctx->Manager().RegisterCoroutine(vm, fiber, wait);
         wrenSetSlotDouble(vm, 0, static_cast<double>(id));
     }
 
     void CoroutineUnregisterForeign(WrenVM* vm)
     {
         WrenContext* ctx = static_cast<WrenContext*>(wrenGetUserData(vm));
-        const core::i32 id = (wrenGetSlotType(vm, 1) == WREN_TYPE_NUM)
-                                 ? static_cast<core::i32>(wrenGetSlotDouble(vm, 1))
+        const foundation::i32 id = (wrenGetSlotType(vm, 1) == WREN_TYPE_NUM)
+                                 ? static_cast<foundation::i32>(wrenGetSlotDouble(vm, 1))
                                  : -1;
         ctx->Manager().UnregisterCoroutine(id);
         wrenSetSlotNull(vm, 0);
@@ -1912,9 +1912,9 @@ namespace draconic::script::wren
 
 export namespace draconic::script::wren
 {
-    [[nodiscard]] core::RefPtr<IScriptManager> CreateScriptManager()
+    [[nodiscard]] foundation::RefPtr<IScriptManager> CreateScriptManager()
     {
-        return core::RefPtr<IScriptManager>(core::MakeRef<WrenManager>(core::DefaultAllocator()));
+        return foundation::RefPtr<IScriptManager>(foundation::MakeRef<WrenManager>(foundation::DefaultAllocator()));
     }
 
     /// Registers Wren with the backend registry (scripting.md B1) - the ONE line that
@@ -1922,10 +1922,10 @@ export namespace draconic::script::wren
     inline void RegisterWrenScriptBackend()
     {
         ScriptBackendDesc desc;
-        desc.languageId = core::String(u8"wren");
-        desc.displayName = core::String(u8"Wren");
-        desc.fileExtensions.PushBack(core::String(u8"wren"));
+        desc.languageId = foundation::String(u8"wren");
+        desc.displayName = foundation::String(u8"Wren");
+        desc.fileExtensions.PushBack(foundation::String(u8"wren"));
         desc.create = []() { return CreateScriptManager(); };
-        ScriptBackendRegistry::Get().Register(core::Move(desc));
+        ScriptBackendRegistry::Get().Register(foundation::Move(desc));
     }
 }

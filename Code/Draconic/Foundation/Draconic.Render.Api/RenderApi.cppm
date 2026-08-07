@@ -20,15 +20,15 @@
 /// renderer isn't ready yet, so a frame bracket may be driven unconditionally.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.render.api;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.scene;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 
 export namespace draconic::render

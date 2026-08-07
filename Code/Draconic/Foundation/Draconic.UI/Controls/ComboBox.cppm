@@ -7,12 +7,12 @@
 // RefPtr-owned by PopupLayer (ownsView) and closed via a deferred MutationQueue action.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:combo_box;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import draconic.fonts;
 import :view;
@@ -31,8 +31,8 @@ import :palette;
 import :ipopup_owner;
 import :popup_layer; // ShowPopup/ClosePopup on the RootView's PopupLayer
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace fonts = draconic::fonts;
 
 export namespace draconic::ui

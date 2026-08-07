@@ -7,12 +7,12 @@
 // IScriptContext surface.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 module draconic.script.wren.editor;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.editor.core; // FileStemOf
 import draconic.script;
 import draconic.script.resource;
@@ -20,7 +20,7 @@ import draconic.script.facades;
 import draconic.script.editor;
 import draconic.script.wren;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::script
 {
@@ -376,9 +376,9 @@ namespace draconic::script
                     return false;
                 }
                 // The cook VM registers the SAME "main"-module surface the runtime does
-                // (core math + the behavior facades), so the framing and explicit imports
+                // (foundation math + the behavior facades), so the framing and explicit imports
                 // compile identically here. All idempotent.
-                RegisterCoreTypes();
+                RegisterFoundationTypes();
                 RegisterScriptFacadeReflection();
                 RegisterReflectedTypes(*manager);
                 RefPtr<IScriptContext> context = manager->CreateContext();

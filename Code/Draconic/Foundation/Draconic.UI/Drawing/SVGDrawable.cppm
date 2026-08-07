@@ -8,18 +8,18 @@
 // RefPtr<SVGDrawable> (empty on parse failure) instead of a raw pointer/null.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:svg_drawable;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.image;   // Color, Rectangle, Float2, Optional, Result, RefPtr, String
 import draconic.vg.svg; // SVGDocument, SVGLoader, SVGRenderer
 import :drawable;
 import :draw_context;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace vg = draconic::vg;
 
 export namespace draconic::ui

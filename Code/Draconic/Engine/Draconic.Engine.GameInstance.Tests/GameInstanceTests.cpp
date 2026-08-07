@@ -1,13 +1,12 @@
 // draconic.engine.gameinstance - the extracted run bracket owns the script run state + time scale.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.engine.gameinstance;
 import draconic.scene;
 import draconic.scene.resource;    // SceneDocument + LoadScene round-trip
-import draconic.scene.editor;      // SaveScene (test fixture authoring only)
 import draconic.content;           // ContentDatabase / Instance
 import draconic.resource;          // ResourceManager
 import draconic.vfs;               // NativeFileSystem
@@ -20,7 +19,7 @@ import draconic.net.manager; // NetworkManager (the endpoint the instance owns)
 import draconic.input;       // ActionRuntime / IInputSourceProvider (per-instance input)
 import draconic.shell;       // IKeyboard / KeyCode (a minimal fake device)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace runtime = draconic::runtime;
 namespace script = draconic::script; // raw manager/context for the SceneLoader facade battery
 namespace scene = draconic::scene;
@@ -191,7 +190,7 @@ TEST_CASE("game-instance: each instance owns an independent networked endpoint (
 
 TEST_CASE("game-instance: fallback path starts, ticks, and stops a Game script")
 {
-    RegisterCoreTypes();
+    RegisterFoundationTypes();
     draconic::script::wren::RegisterWrenScriptBackend();
 
     runtime::GameInstance gi;
@@ -224,7 +223,7 @@ TEST_CASE("game-instance: fallback path starts, ticks, and stops a Game script")
 TEST_CASE("game-instance: Scene/SceneLoader facades are null-scene-safe from a pre-scene "
           "orchestrator (Wren)")
 {
-    RegisterCoreTypes();
+    RegisterFoundationTypes();
     draconic::script::RegisterScriptFacadeReflection();
     runtime::RegisterSceneLoaderScriptFacade(); // SceneLoader facade (owned by this project)
     draconic::script::wren::RegisterWrenScriptBackend();
@@ -260,7 +259,7 @@ TEST_CASE("game-instance: Scene/SceneLoader facades are null-scene-safe from a p
 TEST_CASE("game-instance: Scene/SceneLoader facades are null-scene-safe from a pre-scene "
           "orchestrator (AngelScript)")
 {
-    RegisterCoreTypes();
+    RegisterFoundationTypes();
     draconic::script::RegisterScriptFacadeReflection();
     runtime::RegisterSceneLoaderScriptFacade(); // SceneLoader facade (owned by this project)
     draconic::script::angelscript::RegisterAngelScriptBackend();
@@ -329,7 +328,7 @@ namespace
 
 TEST_CASE("game-instance: SceneLoader.loadSceneAsync -> ticket, polled to completion (Wren)")
 {
-    RegisterCoreTypes();
+    RegisterFoundationTypes();
     runtime::RegisterSceneLoaderScriptFacade();
 
     RefPtr<script::IScriptManager> manager = draconic::script::wren::CreateScriptManager();
@@ -358,7 +357,7 @@ TEST_CASE("game-instance: SceneLoader.loadSceneAsync -> ticket, polled to comple
 
 TEST_CASE("game-instance: SceneLoader.loadSceneAsync -> ticket, polled to completion (AngelScript)")
 {
-    RegisterCoreTypes();
+    RegisterFoundationTypes();
     runtime::RegisterSceneLoaderScriptFacade();
 
     RefPtr<script::IScriptManager> manager = draconic::script::angelscript::CreateScriptManager();
@@ -389,7 +388,7 @@ TEST_CASE("game-instance: SceneLoader.loadSceneAsync -> ticket, polled to comple
 
 TEST_CASE("game-instance: a debugger suspension in update is not a fault - the script survives")
 {
-    RegisterCoreTypes();
+    RegisterFoundationTypes();
     draconic::script::angelscript::RegisterAngelScriptBackend();
 
     runtime::GameInstance gi;
@@ -470,7 +469,7 @@ TEST_CASE("game-instance: a debugger suspension in update is not a fault - the s
 
 TEST_CASE("game-instance: two instances own separate, isolated run-host contexts")
 {
-    RegisterCoreTypes();
+    RegisterFoundationTypes();
     draconic::script::wren::RegisterWrenScriptBackend();
 
     const char8_t* src =
@@ -497,7 +496,7 @@ TEST_CASE("game-instance: two instances own separate, isolated run-host contexts
 
 TEST_CASE("game-instance: a missing Game class fails to start cleanly")
 {
-    RegisterCoreTypes();
+    RegisterFoundationTypes();
     draconic::script::wren::RegisterWrenScriptBackend();
 
     runtime::GameInstance gi;

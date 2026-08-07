@@ -4,11 +4,11 @@
 
 export module draconic.samples.framework:shader_helpers;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.shaders;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::samples::framework
 {

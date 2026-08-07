@@ -9,13 +9,13 @@
 
 module;
 #define _CRT_SECURE_NO_WARNINGS
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 #include <cstdlib>
 
 module draconic.editor.app;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.shell;
 import draconic.graphics;
 import draconic.fonts;
@@ -46,7 +46,7 @@ import :preferences_dialog;
 import :shell;
 import :ui_page;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::editor::app
 {
@@ -248,7 +248,7 @@ namespace draconic::editor::app
             if (icons.close)
             {
                 icons.close->TintColor =
-                    draconic::core::Color{palette.Text.r, palette.Text.g, palette.Text.b,
+                    draconic::foundation::Color{palette.Text.r, palette.Text.g, palette.Text.b,
                                           190.0f / 255.0f};
                 const draconic::ui::DrawablePtr closeIcon(icons.close.Get());
                 m_styleSheet
@@ -2587,11 +2587,11 @@ namespace draconic::editor::app
     {
         EditorIcons& icons = EditorIcons::Get();
         const f32 scale = (contentScale > 0.1f) ? contentScale : 1.0f;
-        const draconic::core::u32 kBaseSizes[] = {10, 12, 14, 16, 20, 24, 32};
-        draconic::core::Array<draconic::core::u32> sizes;
-        for (draconic::core::u32 base : kBaseSizes)
+        const draconic::foundation::u32 kBaseSizes[] = {10, 12, 14, 16, 20, 24, 32};
+        draconic::foundation::Array<draconic::foundation::u32> sizes;
+        for (draconic::foundation::u32 base : kBaseSizes)
         {
-            const draconic::core::u32 scaled = static_cast<draconic::core::u32>(
+            const draconic::foundation::u32 scaled = static_cast<draconic::foundation::u32>(
                 static_cast<f32>(base) * scale + 0.5f);
             if (sizes.IsEmpty() || sizes[sizes.Size() - 1] != scaled)
             {
@@ -2600,9 +2600,9 @@ namespace draconic::editor::app
         }
         const auto bakeable = icons.Bakeable();
         (void)m_uiHost->BakeSvgDrawables(
-            draconic::core::Span<draconic::ui::BakedSVGDrawable* const>(bakeable.Data(),
+            draconic::foundation::Span<draconic::ui::BakedSVGDrawable* const>(bakeable.Data(),
                                                                         bakeable.Size()),
-            draconic::core::Span<const draconic::core::u32>(sizes.Data(), sizes.Size()));
+            draconic::foundation::Span<const draconic::foundation::u32>(sizes.Data(), sizes.Size()));
         m_iconBakeScale = scale;
     }
 

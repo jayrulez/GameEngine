@@ -9,17 +9,17 @@
 // through the abstract IShell interface, so it is windowing-backend agnostic; the concrete shell
 // (a canvas-backed web shell) is constructed by the entry point and handed in.
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include <emscripten/emscripten.h>
 
 export module draconic.runtime.web;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.shell;          // IShell (interface only - the concrete shell is handed in)
 import draconic.graphics;       // GraphicsDevice (handed to the app)
 import draconic.runtime.client; // IApplication + ApplicationHost (the runner drives these)
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 using namespace draconic::graphics; // GraphicsDevice (moved from draconic::runtime)
 
 namespace draconic::runtime
@@ -31,7 +31,7 @@ namespace draconic::runtime
     {
         ApplicationHost* host = nullptr;
         shell::IShell* shell = nullptr;
-        core::TimePoint previous;
+        foundation::TimePoint previous;
     };
 
     // One page hosts one app: the host and loop state outlive RunApplication's return (the browser
@@ -60,8 +60,8 @@ namespace draconic::runtime
             return;
         }
         state->shell->ProcessEvents();
-        const core::TimePoint now = core::Clock::Now();
-        core::f32 dt = (now - state->previous).AsSecondsF();
+        const foundation::TimePoint now = foundation::Clock::Now();
+        foundation::f32 dt = (now - state->previous).AsSecondsF();
         state->previous = now;
         if (dt > state->host->Settings().maxFrameTime)
         {
@@ -86,7 +86,7 @@ export namespace draconic::runtime
         WebLoopState& state = WebLoop();
         state.host = &host;
         state.shell = &shell;
-        state.previous = core::Clock::Now();
+        state.previous = foundation::Clock::Now();
         emscripten_set_main_loop_arg(&WebFrame, &state, 0, 0);
         return 0;
     }

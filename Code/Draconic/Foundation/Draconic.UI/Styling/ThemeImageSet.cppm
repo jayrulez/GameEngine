@@ -10,15 +10,15 @@
 // GetImages()/GetStateGroups() enumerators become const-ref accessors to the backing maps.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:theme_image_set;
 
-import draconic.core;  // HashMap, Array, String, StringView, Optional
+import draconic.foundation;  // HashMap, Array, String, StringView, Optional
 import draconic.image; // ImageData, NineSlice
 import :control_state;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace image = draconic::image;
 
 export namespace draconic::ui

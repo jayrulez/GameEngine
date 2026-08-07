@@ -5,7 +5,7 @@
 add_executable(RenderStressTest main.cpp)
 
 target_link_libraries(RenderStressTest PRIVATE
-    Draconic::Core
+    Draconic::Foundation
     Draconic::Runtime
     Draconic::Runtime.Client
     Draconic::Shell.Desktop Draconic::Runtime.Desktop

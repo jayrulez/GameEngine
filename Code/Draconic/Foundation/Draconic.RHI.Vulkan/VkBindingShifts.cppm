@@ -3,10 +3,10 @@
 
 export module draconic.rhi.vulkan:binding_shifts;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::vk
 {

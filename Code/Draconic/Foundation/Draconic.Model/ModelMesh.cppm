@@ -2,7 +2,7 @@
 /// Ported from Sedulous.Models/ModelMesh.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include <cstring>
 #include <limits>
@@ -11,11 +11,11 @@ module;
 
 export module draconic.model:model_mesh;
 
-import draconic.core;
+import draconic.foundation;
 import :vertex_format;
 import :mesh_part;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::model
 {

@@ -1,18 +1,18 @@
 // Smoke test for MenuBar: constructs, adds menus, tracks count, returns usable ContextMenus.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 import draconic.ui.toolkit;
 
 using namespace draconic::ui;
 using namespace draconic::ui::toolkit;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 TEST_CASE("toolkit-menubar: AddsMenus")
 {
-    auto bar = core::MakeRef<MenuBar>(core::DefaultAllocator());
+    auto bar = foundation::MakeRef<MenuBar>(foundation::DefaultAllocator());
     CHECK(bar->MenuCount() == 0u);
 
     ContextMenu* fileMenu = bar->AddMenu(u8"File");

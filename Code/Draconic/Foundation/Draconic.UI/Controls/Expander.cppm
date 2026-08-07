@@ -5,12 +5,12 @@
 // text is live now that the Fonts service is wired; chevron/header chrome kept.)
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:expander;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import draconic.fonts; // CachedFont, TextAlignment, VerticalAlignment
 import :view;
@@ -26,8 +26,8 @@ import :event_args;
 import :input_enums;
 import :enums;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace fonts = draconic::fonts;
 
 export namespace draconic::ui

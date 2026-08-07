@@ -2,18 +2,18 @@
 // caching, and invalidation. Compiles real SPIR-V via DXC; creates modules on the
 // Null RHI backend (so distinct compiles yield distinct module objects).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include <filesystem>
 #include <fstream>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.rhi.null;
 import draconic.shaders;
 import draconic.shaders.system;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::shaders;
 namespace rhi = draconic::rhi;
 

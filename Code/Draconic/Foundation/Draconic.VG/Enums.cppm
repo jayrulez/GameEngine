@@ -4,15 +4,15 @@
 // Sedulous.VG (FillRule/VGBlendMode/VGClipMode/VGLineCap/VGLineJoin).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.vg:enums;
 
-import draconic.core;
+import draconic.foundation;
 
 export namespace draconic::vg
 {
-    using draconic::core::u8;
+    using draconic::foundation::u8;
 
     /// Determines how the interior of a path is calculated.
     enum class FillRule

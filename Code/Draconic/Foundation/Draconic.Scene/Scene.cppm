@@ -12,19 +12,19 @@
 ///     deferred-during-update destroy lands with the update loop in a later phase.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include <type_traits>
 
 export module draconic.scene:scene;
 
-import draconic.core;
+import draconic.foundation;
 import :entity;
 import :phase;
 import :system;
 import :component;
 import :events;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::scene
 {
@@ -488,7 +488,7 @@ export namespace draconic::scene
         bool m_started = false;
         bool m_simulationEnabled = true;
         f32 m_timeScale = 1.0f;
-        core::FixedStepper m_stepper;
+        foundation::FixedStepper m_stepper;
         f32 m_fixedAlpha = 0.0f;
     };
 

@@ -3,10 +3,10 @@
 // FontFactory and verify the rasterizer-free product (glyphs, kerning, atlas regions,
 // RGBA expansion, MSDF metadata).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.resource;
@@ -14,7 +14,7 @@ import draconic.fonts;
 import draconic.fonts.resource;
 import draconic.image;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::vfs;
 using namespace draconic::resource;
 using namespace draconic::fonts;

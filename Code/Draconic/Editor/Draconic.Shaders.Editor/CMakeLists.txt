@@ -4,7 +4,7 @@ add_library(Draconic.Shaders.Editor STATIC)
 add_library(Draconic::Shaders.Editor ALIAS Draconic.Shaders.Editor)
 
 target_link_libraries(Draconic.Shaders.Editor
-    PUBLIC Draconic::Core Draconic::Editor Draconic::VFS Draconic::Shaders.Resource
+    PUBLIC Draconic::Foundation Draconic::Editor Draconic::VFS Draconic::Shaders.Resource
            Draconic::Content Draconic::Policy)
 
 target_sources(Draconic.Shaders.Editor

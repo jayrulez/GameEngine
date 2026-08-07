@@ -8,15 +8,15 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h" // <new> reachability for reflection containers (GCC)
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h" // <new> reachability for reflection containers (GCC)
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.script;
 import draconic.script.angelscript;
 import draconic.script.wren;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::script;
 
 // A reflected Object-derived type to exercise object classes in AngelScript.
@@ -325,7 +325,7 @@ TEST_CASE("angelscript: reflected value types support value assignment (Float3 p
 {
     // All reflected types register as asOBJ_REF boxes; without a registered opAssign, `Float3 p = q;`
     // failed with "no appropriate opAssign". The generic opAssign copies the boxed value.
-    RegisterCoreTypes();
+    RegisterFoundationTypes();
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager();
     RegisterReflectedTypes(*manager);
     RefPtr<IScriptContext> ctx = manager->CreateContext();
@@ -529,7 +529,7 @@ TEST_CASE("angelscript: SetGlobal writes typed module globals")
 
 TEST_CASE("angelscript: reflected value types are usable from script (construct + properties)")
 {
-    RegisterCoreTypes();
+    RegisterFoundationTypes();
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager();
     RegisterReflectedTypes(*manager); // collect + FinalizeTypes (two-phase)
     RefPtr<IScriptContext> ctx = manager->CreateContext();
@@ -555,7 +555,7 @@ TEST_CASE("angelscript: reflected value types are usable from script (construct 
 
 TEST_CASE("angelscript: call reflected methods (static, instance, struct return, object args)")
 {
-    RegisterCoreTypes();
+    RegisterFoundationTypes();
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager();
     RegisterReflectedTypes(*manager);
     RefPtr<IScriptContext> ctx = manager->CreateContext();
@@ -596,7 +596,7 @@ TEST_CASE("angelscript: call reflected methods (static, instance, struct return,
 
 TEST_CASE("angelscript: same-name overloads register per exact signature")
 {
-    RegisterCoreTypes();
+    RegisterFoundationTypes();
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager();
     RegisterReflectedTypes(*manager);
     RefPtr<IScriptContext> ctx = manager->CreateContext();
@@ -648,7 +648,7 @@ TEST_CASE("angelscript: Object-derived type as a script-visible class")
 
 TEST_CASE("angelscript: a default-constructed reflected type")
 {
-    RegisterCoreTypes();
+    RegisterFoundationTypes();
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager();
     RegisterReflectedTypes(*manager);
     RefPtr<IScriptContext> ctx = manager->CreateContext();

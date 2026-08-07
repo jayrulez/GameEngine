@@ -17,11 +17,11 @@
 #include <cstring>
 #include <filesystem>
 
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.resource;
@@ -62,7 +62,7 @@ import draconic.script.resource;
 import draconic.script.editor;
 import draconic.engine.physics;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace editor = draconic::editor;
 namespace scene = draconic::scene;
 namespace vfs = draconic::vfs;

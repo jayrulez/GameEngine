@@ -13,14 +13,14 @@
 // loaded model straight into a runtime DB.)
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 #include <initializer_list>
 
 export module draconic.modelimporter:file_import;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.model;
 import draconic.model.io;
 import draconic.model.gltf;
@@ -47,7 +47,7 @@ import :anim_convert;
 import draconic.model.resource;
 import :cook; // IsSkinnedMesh + the conversion helpers' home
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::modelimporter
 {
@@ -174,12 +174,12 @@ export namespace draconic::modelimporter
             u8 prefab = generatePrefab ? 1u : 0u;
             u8 collision = generateCollision ? 1u : 0u;
             u8 convex = collisionConvex ? 1u : 0u;
-            draconic::core::Serialize(ar, "textures", textures);
-            draconic::core::Serialize(ar, "materials", materials);
-            draconic::core::Serialize(ar, "animations", animations);
-            draconic::core::Serialize(ar, "prefab", prefab);
-            draconic::core::Serialize(ar, "collision", collision);
-            draconic::core::Serialize(ar, "collisionConvex", convex);
+            draconic::foundation::Serialize(ar, "textures", textures);
+            draconic::foundation::Serialize(ar, "materials", materials);
+            draconic::foundation::Serialize(ar, "animations", animations);
+            draconic::foundation::Serialize(ar, "prefab", prefab);
+            draconic::foundation::Serialize(ar, "collision", collision);
+            draconic::foundation::Serialize(ar, "collisionConvex", convex);
             importTextures = textures != 0;
             importMaterials = materials != 0;
             importAnimations = animations != 0;

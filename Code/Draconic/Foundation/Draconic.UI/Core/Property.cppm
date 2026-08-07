@@ -8,16 +8,16 @@
 // Requires T to be equality-comparable (Beef's `where bool : operator T == T`).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:property;
 
-import draconic.core;
+import draconic.foundation;
 import :enums;
 import :event;
 import :property_owner;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

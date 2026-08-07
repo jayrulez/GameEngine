@@ -7,16 +7,16 @@
 /// scene-agnostic renderer - it consumes geometry, not a scene. Skinning streams are later.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.render:gpu_mesh;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.geometry;
 import :resources;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 
 export namespace draconic::render

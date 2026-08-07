@@ -1,22 +1,22 @@
 /// Draconic::Animation - the `:easing` partition.
 ///
-/// EasingType: a serializable enum mapping 1:1 to the core easing functions (draconic.core :easings).
-/// Ported faithfully from Sedulous.Animation.EasingType. The functions themselves live in core math;
+/// EasingType: a serializable enum mapping 1:1 to the foundation easing functions (Draconic.Foundation :easings).
+/// Ported faithfully from Sedulous.Animation.EasingType. The functions themselves live in foundation math;
 /// this is the animation-facing enum + lookup.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.animation:easing;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::animation
 {
 
-    // Serializable easing type (1:1 with the core Easings family). Order matters - it's the serialized
+    // Serializable easing type (1:1 with the foundation Easings family). Order matters - it's the serialized
     // value and several tools index by it.
     enum class EasingType : i32
     {
@@ -54,75 +54,75 @@ export namespace draconic::animation
         Count
     };
 
-    // Maps EasingType -> the corresponding core easing function (never null).
-    [[nodiscard]] inline core::EasingFunction ToFunction(EasingType type) noexcept
+    // Maps EasingType -> the corresponding foundation easing function (never null).
+    [[nodiscard]] inline foundation::EasingFunction ToFunction(EasingType type) noexcept
     {
         switch (type)
         {
         case EasingType::Linear:
-            return core::EaseInLinear;
+            return foundation::EaseInLinear;
         case EasingType::EaseInQuadratic:
-            return core::EaseInQuadratic;
+            return foundation::EaseInQuadratic;
         case EasingType::EaseOutQuadratic:
-            return core::EaseOutQuadratic;
+            return foundation::EaseOutQuadratic;
         case EasingType::EaseInOutQuadratic:
-            return core::EaseInOutQuadratic;
+            return foundation::EaseInOutQuadratic;
         case EasingType::EaseInCubic:
-            return core::EaseInCubic;
+            return foundation::EaseInCubic;
         case EasingType::EaseOutCubic:
-            return core::EaseOutCubic;
+            return foundation::EaseOutCubic;
         case EasingType::EaseInOutCubic:
-            return core::EaseInOutCubic;
+            return foundation::EaseInOutCubic;
         case EasingType::EaseInQuartic:
-            return core::EaseInQuartic;
+            return foundation::EaseInQuartic;
         case EasingType::EaseOutQuartic:
-            return core::EaseOutQuartic;
+            return foundation::EaseOutQuartic;
         case EasingType::EaseInOutQuartic:
-            return core::EaseInOutQuartic;
+            return foundation::EaseInOutQuartic;
         case EasingType::EaseInQuintic:
-            return core::EaseInQuintic;
+            return foundation::EaseInQuintic;
         case EasingType::EaseOutQuintic:
-            return core::EaseOutQuintic;
+            return foundation::EaseOutQuintic;
         case EasingType::EaseInOutQuintic:
-            return core::EaseInOutQuintic;
+            return foundation::EaseInOutQuintic;
         case EasingType::EaseInSin:
-            return core::EaseInSin;
+            return foundation::EaseInSin;
         case EasingType::EaseOutSin:
-            return core::EaseOutSin;
+            return foundation::EaseOutSin;
         case EasingType::EaseInOutSin:
-            return core::EaseInOutSin;
+            return foundation::EaseInOutSin;
         case EasingType::EaseInExponential:
-            return core::EaseInExponential;
+            return foundation::EaseInExponential;
         case EasingType::EaseOutExponential:
-            return core::EaseOutExponential;
+            return foundation::EaseOutExponential;
         case EasingType::EaseInOutExponential:
-            return core::EaseInOutExponential;
+            return foundation::EaseInOutExponential;
         case EasingType::EaseInCircular:
-            return core::EaseInCircular;
+            return foundation::EaseInCircular;
         case EasingType::EaseOutCircular:
-            return core::EaseOutCircular;
+            return foundation::EaseOutCircular;
         case EasingType::EaseInOutCircular:
-            return core::EaseInOutCircular;
+            return foundation::EaseInOutCircular;
         case EasingType::EaseInBack:
-            return core::EaseInBack;
+            return foundation::EaseInBack;
         case EasingType::EaseOutBack:
-            return core::EaseOutBack;
+            return foundation::EaseOutBack;
         case EasingType::EaseInOutBack:
-            return core::EaseInOutBack;
+            return foundation::EaseInOutBack;
         case EasingType::EaseInElastic:
-            return core::EaseInElastic;
+            return foundation::EaseInElastic;
         case EasingType::EaseOutElastic:
-            return core::EaseOutElastic;
+            return foundation::EaseOutElastic;
         case EasingType::EaseInOutElastic:
-            return core::EaseInOutElastic;
+            return foundation::EaseInOutElastic;
         case EasingType::EaseInBounce:
-            return core::EaseInBounce;
+            return foundation::EaseInBounce;
         case EasingType::EaseOutBounce:
-            return core::EaseOutBounce;
+            return foundation::EaseOutBounce;
         case EasingType::EaseInOutBounce:
-            return core::EaseInOutBounce;
+            return foundation::EaseInOutBounce;
         default:
-            return core::EaseInLinear;
+            return foundation::EaseInLinear;
         }
     }
 

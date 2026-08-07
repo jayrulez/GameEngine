@@ -5,16 +5,16 @@
 // from Sedulous.Textures/TextureData.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.texture:data;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.image;
 import :format_utils;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::texture
 {

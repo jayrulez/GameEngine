@@ -4,13 +4,13 @@
 // which overloads Rectf's Left/Top/Right/Bottom for this; a dedicated type is clearer.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:thickness;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::gui
 {

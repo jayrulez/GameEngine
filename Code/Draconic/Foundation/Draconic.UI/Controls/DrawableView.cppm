@@ -6,12 +6,12 @@
 // is unnecessary). The `Drawable` field name shadows the Drawable type, so the RefPtr uses an alias.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:drawable_view;
 
-import draconic.core;
+import draconic.foundation;
 import :view;
 import :property;
 import :control_state;
@@ -19,8 +19,8 @@ import :box_constraints;
 import :draw_context;
 import :drawable;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::ui
 {

@@ -8,17 +8,17 @@
 // it, ownsView:true); source/drop-target views are borrowed raw pointers cleared by OnViewDeleted.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:drag_drop_manager;
 
-import draconic.core;
+import draconic.foundation;
 import :drag_drop_effects;
 import :drag_data;   // RefPtr<DragData> member (complete type -> no incomplete-RefPtr gcc issue)
 import :input_enums; // MouseButton
 import :enums;       // CursorType
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

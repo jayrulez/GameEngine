@@ -4,14 +4,14 @@
 // StrokeStyle (width/cap/join/miter/dash). Ported from Sedulous.VG.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.vg:style;
 
-import draconic.core;
+import draconic.foundation;
 import :enums;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::vg
 {

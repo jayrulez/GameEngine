@@ -4,7 +4,7 @@
 /// Ported from Sedulous.RHI.DX12/DX12Device.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include "DxIncludes.h"
 
@@ -17,7 +17,7 @@ module;
 
 export module draconic.rhi.dx12:device;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :conversions;
 import :adapter;
@@ -48,7 +48,7 @@ import :compute_pass_encoder;
 import :queue;
 import :swap_chain;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::dx12
 {

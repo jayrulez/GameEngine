@@ -7,8 +7,8 @@
 // UITypeRegistry.bf RegisterBuiltins (a `static class` method); run-once guarded (the map is global).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 module draconic.ui;
 

@@ -4,15 +4,15 @@
 // from Sedulous.Xml/XmlNamespace.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.xml:ns;
 
-import draconic.core;
+import draconic.foundation;
 import :result;
 import :lexer;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::xml
 {

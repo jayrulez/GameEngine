@@ -5,19 +5,19 @@
 // child-constraint helper is renamed to avoid hiding ViewGroup::MakeChildConstraints.)
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:absolute_layout;
 
-import draconic.core; // Max, RefPtr, kFloatMax
+import draconic.foundation; // Max, RefPtr, kFloatMax
 import :view;
 import :layout_params;
 import :box_constraints;
 import :size_spec;
 import :thickness;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

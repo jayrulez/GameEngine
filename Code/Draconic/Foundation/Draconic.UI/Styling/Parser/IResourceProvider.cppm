@@ -10,14 +10,14 @@
 // provider owns the returned image's lifetime.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:iresource_provider;
 
-import draconic.core;  // StringView, String
+import draconic.foundation;  // StringView, String
 import draconic.image; // ImageData
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace image = draconic::image;
 
 export namespace draconic::ui

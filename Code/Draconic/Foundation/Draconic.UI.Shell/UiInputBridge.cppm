@@ -9,15 +9,15 @@
 // here, never in the core.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui.shell;
 
-import draconic.core;  // Float2, StringView, DecodeUtf8
+import draconic.foundation;  // Float2, StringView, DecodeUtf8
 import draconic.ui;    // UIContext, InputManager, KeyCode, MouseButton, KeyModifiers
 import draconic.shell; // InputEvent, InputSurface, IMouse, IWindow
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace shell = draconic::shell;
 
 export namespace draconic::ui

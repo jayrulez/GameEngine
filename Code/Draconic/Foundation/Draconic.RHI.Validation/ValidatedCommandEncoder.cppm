@@ -2,17 +2,17 @@
 /// Ported from Sedulous.RHI.Validation/ValidatedCommandEncoder.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.rhi.validation:validated_command_encoder;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :validated_render_pass_encoder;
 import :validated_compute_pass_encoder;
 import :validated_render_bundle_encoder;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::validation
 {

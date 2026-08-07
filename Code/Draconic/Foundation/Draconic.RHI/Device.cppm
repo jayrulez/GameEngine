@@ -12,7 +12,7 @@ module;
 
 export module draconic.rhi:device;
 
-import draconic.core;
+import draconic.foundation;
 import :enums;
 import :texture_format;
 import :types;
@@ -23,7 +23,7 @@ import :commands;
 import :queue;
 import :swapchain;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi
 {

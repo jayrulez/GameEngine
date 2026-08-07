@@ -19,14 +19,14 @@
 //     u64 offset | u64 storedSize | u64 originalSize | u16 compression
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.vfs.pak;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::vfs
 {

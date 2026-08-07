@@ -1,11 +1,11 @@
 // Ported from Sedulous.VG.Tests/CurveUtilsTests.bf. Mirrors the Sedulous
 // assertions (Test.Assert -> CHECK; Float2 -> Float2; List -> Array; .X/.Y -> .x/.y).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.vg;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::vg;
 
 TEST_CASE("curveutils: flatten quadratic straight line -> few points")

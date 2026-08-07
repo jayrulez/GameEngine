@@ -6,14 +6,14 @@
 // one. DragData forward-declared (used behind a pointer).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:idrop_target;
 
-import draconic.core;
+import draconic.foundation;
 import :drag_drop_effects;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

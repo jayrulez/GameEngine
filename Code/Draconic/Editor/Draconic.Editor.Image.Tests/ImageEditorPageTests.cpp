@@ -3,16 +3,16 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.image;
 import draconic.image.editor;
 import draconic.vfs;
 import draconic.editor.image;
 import draconic.editor.core;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace image = draconic::image;
 
 TEST_CASE("ImageEditorPageFactory reports the ImageAsset primary type")

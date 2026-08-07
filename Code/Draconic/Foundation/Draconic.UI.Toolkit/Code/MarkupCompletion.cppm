@@ -11,16 +11,16 @@
 // belongs to the per-language editor-UI modules.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui.toolkit:markup_completion;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.ui;
 import :code_document;
 import :code_edit_view;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui::toolkit
 {

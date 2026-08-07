@@ -5,11 +5,11 @@ module;
 
 export module draconic.rhi:types;
 
-import draconic.core;
+import draconic.foundation;
 import :enums;
 import :texture_format;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi
 {

@@ -4,11 +4,11 @@
 // ConvertFormat returns Image directly so no `.Value`; Sedulous Color32.Lime
 // (0,255,0) maps to our Color32::Green).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.image;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::image;
 
 TEST_CASE("image.manip: creation")

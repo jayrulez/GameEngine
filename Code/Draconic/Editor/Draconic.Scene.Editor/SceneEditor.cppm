@@ -7,17 +7,17 @@
 // runtime LoadScene). Never linked by the runtime.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.scene.editor;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.scene;
 import draconic.scene.resource;
 import draconic.xml.serialization;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::scene
 {

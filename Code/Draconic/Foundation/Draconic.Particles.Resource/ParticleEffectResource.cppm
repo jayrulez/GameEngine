@@ -7,20 +7,20 @@
 // See docs/design/particles-authoring.md.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 #include <utility> // std::move
 
 export module draconic.particles.resource;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.particles;
 import draconic.content;
 import draconic.resource;
 import draconic.texture;
 import draconic.texture.resource;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace content = draconic::content;
 namespace resource = draconic::resource;
 namespace texture = draconic::texture;
@@ -42,7 +42,7 @@ export namespace draconic::particles
             ar.BeginObject();
             ParticleInitializer* mod = reading ? nullptr : sys.GetInitializer(static_cast<i32>(i));
             u64 typeId = reading ? 0ull : mod->GetType()->id;
-            core::Serialize(ar, "type", typeId);
+            foundation::Serialize(ar, "type", typeId);
             RefPtr<ParticleInitializer> created;
             if (reading)
             {
@@ -77,7 +77,7 @@ export namespace draconic::particles
             ar.BeginObject();
             ParticleBehavior* mod = reading ? nullptr : sys.GetBehavior(static_cast<i32>(i));
             u64 typeId = reading ? 0ull : mod->GetType()->id;
-            core::Serialize(ar, "type", typeId);
+            foundation::Serialize(ar, "type", typeId);
             RefPtr<ParticleBehavior> created;
             if (reading)
             {
@@ -106,37 +106,37 @@ export namespace draconic::particles
         const bool reading = ar.Mode() == SerializeMode::Read;
         i32 maxParticles = reading ? 0 : fx.GetSystem(index)->MaxParticles();
         u64 seed = reading ? 0ull : fx.GetSystem(index)->Seed();
-        core::Serialize(ar, "maxParticles", maxParticles);
-        core::Serialize(ar, "seed", seed);
+        foundation::Serialize(ar, "maxParticles", maxParticles);
+        foundation::Serialize(ar, "seed", seed);
         ParticleSystem* sys = reading ? &fx.AddSystem(maxParticles, seed) : fx.GetSystem(index);
 
-        core::Serialize(ar, "name", sys->name);
-        core::Serialize(ar, "desiredMode", sys->desiredMode);
-        core::Serialize(ar, "simSpace", sys->simulationSpace);
-        core::Serialize(ar, "blend", sys->blendMode);
-        core::Serialize(ar, "render", sys->renderMode);
-        core::Serialize(ar, "textureRef",
+        foundation::Serialize(ar, "name", sys->name);
+        foundation::Serialize(ar, "desiredMode", sys->desiredMode);
+        foundation::Serialize(ar, "simSpace", sys->simulationSpace);
+        foundation::Serialize(ar, "blend", sys->blendMode);
+        foundation::Serialize(ar, "render", sys->renderMode);
+        foundation::Serialize(ar, "textureRef",
                         sys->textureRef); // cooked texture GUID (null = untextured)
-        core::Serialize(ar, "sort", sys->sortParticles);
-        core::Serialize(ar, "soft", sys->softParticles);
-        core::Serialize(ar, "softDistance", sys->softDistance);
-        core::Serialize(ar, "trail", sys->trail);
-        core::Serialize(ar, "flipbook", sys->flipbook);
-        core::Serialize(ar, "prewarm", sys->prewarmTime);
-        core::Serialize(ar, "lodStart", sys->lodStartDistance);
-        core::Serialize(ar, "lodCull", sys->lodCullDistance);
-        core::Serialize(ar, "lodMinRate", sys->lodMinRate);
+        foundation::Serialize(ar, "sort", sys->sortParticles);
+        foundation::Serialize(ar, "soft", sys->softParticles);
+        foundation::Serialize(ar, "softDistance", sys->softDistance);
+        foundation::Serialize(ar, "trail", sys->trail);
+        foundation::Serialize(ar, "flipbook", sys->flipbook);
+        foundation::Serialize(ar, "prewarm", sys->prewarmTime);
+        foundation::Serialize(ar, "lodStart", sys->lodStartDistance);
+        foundation::Serialize(ar, "lodCull", sys->lodCullDistance);
+        foundation::Serialize(ar, "lodMinRate", sys->lodMinRate);
 
         ar.Key("emitter");
         ar.BeginObject();
-        core::Serialize(ar, "mode", sys->emitter.mode);
-        core::Serialize(ar, "spawnRate", sys->emitter.spawnRate);
-        core::Serialize(ar, "burstCount", sys->emitter.burstCount);
-        core::Serialize(ar, "burstInterval", sys->emitter.burstInterval);
-        core::Serialize(ar, "burstCycles", sys->emitter.burstCycles);
-        core::Serialize(ar, "isEmitting", sys->emitter.isEmitting);
-        core::Serialize(ar, "duration", sys->emitter.duration);
-        core::Serialize(ar, "looping", sys->emitter.looping);
+        foundation::Serialize(ar, "mode", sys->emitter.mode);
+        foundation::Serialize(ar, "spawnRate", sys->emitter.spawnRate);
+        foundation::Serialize(ar, "burstCount", sys->emitter.burstCount);
+        foundation::Serialize(ar, "burstInterval", sys->emitter.burstInterval);
+        foundation::Serialize(ar, "burstCycles", sys->emitter.burstCycles);
+        foundation::Serialize(ar, "isEmitting", sys->emitter.isEmitting);
+        foundation::Serialize(ar, "duration", sys->emitter.duration);
+        foundation::Serialize(ar, "looping", sys->emitter.looping);
         ar.EndObject();
 
         SerializeInitializers(ar, *sys);
@@ -146,7 +146,7 @@ export namespace draconic::particles
     inline void SerializeEffect(ISerializer& ar, ParticleEffect& fx)
     {
         const bool reading = ar.Mode() == SerializeMode::Read;
-        core::Serialize(ar, "name", fx.name);
+        foundation::Serialize(ar, "name", fx.name);
 
         u32 systemCount = reading ? 0u : static_cast<u32>(fx.SystemCount());
         ar.Key("systems");

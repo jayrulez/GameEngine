@@ -9,17 +9,17 @@
 // ToolbarButton/ToolbarToggle OnDraw are defined out-of-line (need the complete Toolbar type).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui.toolkit:toolbar;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import draconic.fonts;
 import draconic.ui;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::ui::toolkit
 {

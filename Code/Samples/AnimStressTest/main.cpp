@@ -3,11 +3,11 @@
 // scene with two spinning cube grids (instanced + distinct), and lets the engine draw it.
 // As the renderer grows, this is where we exercise it.
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include "Draconic.Profiler/Profiler.h" // DRACONIC_PROFILE_SCOPE (isolate animation-drive cost)
 #include "imgui.h"             // Dear ImGui (HUD) - used directly; integration is draconic.imgui
 
-import draconic.core;
+import draconic.foundation;
 import draconic.profiler;
 import draconic.rhi; // offscreen render target (Texture / ResourceState / Blit)
 import draconic.runtime;
@@ -46,7 +46,7 @@ import draconic.engine.animation; // SkeletalAnimationComponent(Manager) - engin
 #define DRACONIC_SANDBOX_OUTPUT_DIR ""
 #endif
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace samples = draconic::samples;
 namespace rhi = draconic::rhi;
 namespace runtime = draconic::runtime;
@@ -68,11 +68,11 @@ namespace animation = draconic::animation;
 namespace
 {
     // How many characters each +/- press adds or removes (and the initial spawn).
-    static constexpr core::u32 kBatchSize = 25;
-    static constexpr core::f32 kCharacterSpacing = 8.0f; // grid spacing (world units)
-    static constexpr core::f32 kCharacterSize = 6.0f; // auto-fit target height (matches CookModel)
-    static constexpr core::f32 kFloorY = -7.0f;
-    static constexpr core::f32 kFloorBaseSize =
+    static constexpr foundation::u32 kBatchSize = 25;
+    static constexpr foundation::f32 kCharacterSpacing = 8.0f; // grid spacing (world units)
+    static constexpr foundation::f32 kCharacterSize = 6.0f; // auto-fit target height (matches CookModel)
+    static constexpr foundation::f32 kFloorY = -7.0f;
+    static constexpr foundation::f32 kFloorBaseSize =
         120.0f; // base floor-plane size (scaled to cover the grid)
 
     class AnimStressTestApp final : public runtime::DefaultApplication
@@ -111,7 +111,7 @@ namespace
             // Per-scene environment ambient (a dim cool indirect term; IBL replaces it later).
             if (auto* env = m_scene->GetSystem<render::EnvironmentSystem>())
             {
-                env->Environment().ambientColor = core::Color{0.12f, 0.16f, 0.28f, 1.0f};
+                env->Environment().ambientColor = foundation::Color{0.12f, 0.16f, 0.28f, 1.0f};
                 env->Environment().ambientIntensity = 0.35f;
             }
 
@@ -120,15 +120,15 @@ namespace
             // with the cube grids standing on it. Pitch ~28 deg below horizontal (looks toward the
             // scene center). Default camera looks down -Z; rotating about +X by -pitch tilts it down.
             m_camera = m_scene->CreateEntity(u8"camera");
-            m_scene->SetLocalPosition(m_camera, core::Float3{0.0f, 14.0f, 30.0f});
-            core::Transform camT = m_scene->GetLocalTransform(m_camera);
-            camT.rotation = core::Quaternion::FromAxisAngle(core::Float3{1.0f, 0.0f, 0.0f}, -0.48f);
+            m_scene->SetLocalPosition(m_camera, foundation::Float3{0.0f, 14.0f, 30.0f});
+            foundation::Transform camT = m_scene->GetLocalTransform(m_camera);
+            camT.rotation = foundation::Quaternion::FromAxisAngle(foundation::Float3{1.0f, 0.0f, 0.0f}, -0.48f);
             m_scene->SetLocalTransform(m_camera, camT);
             if (auto* cameras = m_scene->GetSystem<render::CameraComponentManager>())
             {
                 render::CameraComponent& cam = cameras->Add(m_camera); // default 60deg perspective
                 cam.clearColor =
-                    core::Color{0.02f, 0.02f, 0.03f, 1.0f}; // dark backdrop so the lit scene reads
+                    foundation::Color{0.02f, 0.02f, 0.03f, 1.0f}; // dark backdrop so the lit scene reads
             }
 
             // A large horizontal floor (Plane normal = +Y) under the scene - the animated models stand
@@ -136,10 +136,10 @@ namespace
             if (auto* meshes = m_scene->GetSystem<render::MeshComponentManager>())
             {
                 m_floor = m_scene->CreateEntity(u8"floor");
-                m_scene->SetLocalPosition(m_floor, core::Float3{0.0f, -7.0f, 0.0f});
+                m_scene->SetLocalPosition(m_floor, foundation::Float3{0.0f, -7.0f, 0.0f});
                 render::MeshComponent& fmc = meshes->Add(m_floor);
                 fmc.mesh = geometry::Primitives::Plane(kFloorBaseSize, kFloorBaseSize);
-                fmc.SetMaterial(materials::CreatePBR(u8"lit", core::Float4{0.5f, 0.5f, 0.53f, 1.0f},
+                fmc.SetMaterial(materials::CreatePBR(u8"lit", foundation::Float4{0.5f, 0.5f, 0.53f, 1.0f},
                                                      0.0f, 0.65f));
             }
 
@@ -148,14 +148,14 @@ namespace
             if (auto* lights = m_scene->GetSystem<render::LightComponentManager>())
             {
                 scene::EntityHandle key = m_scene->CreateEntity(u8"keyLight");
-                core::Transform kt = m_scene->GetLocalTransform(key);
+                foundation::Transform kt = m_scene->GetLocalTransform(key);
                 kt.rotation =
-                    core::Quaternion::FromAxisAngle(core::Float3{1.0f, 0.0f, 0.0f}, -0.9f) *
-                    core::Quaternion::FromAxisAngle(core::Float3{0.0f, 1.0f, 0.0f}, 0.5f);
+                    foundation::Quaternion::FromAxisAngle(foundation::Float3{1.0f, 0.0f, 0.0f}, -0.9f) *
+                    foundation::Quaternion::FromAxisAngle(foundation::Float3{0.0f, 1.0f, 0.0f}, 0.5f);
                 m_scene->SetLocalTransform(key, kt);
                 render::LightComponent& kl = lights->Add(key);
                 kl.type = render::LightType::Directional;
-                kl.color = core::Color{1.0f, 0.97f, 0.92f, 1.0f};
+                kl.color = foundation::Color{1.0f, 0.97f, 0.92f, 1.0f};
                 kl.intensity = 2.5f;
                 kl.castsShadows = true; // directional CSM
             }
@@ -168,7 +168,7 @@ namespace
                 render->SetExposure(0.5f);
             }
 
-            core::ConsoleWrite(u8"AnimStressTest: [Space] add batch  [Backspace] remove batch  [P] "
+            foundation::ConsoleWrite(u8"AnimStressTest: [Space] add batch  [Backspace] remove batch  [P] "
                                u8"profiler  [Esc] exit\n");
         }
 
@@ -179,10 +179,10 @@ namespace
         // wiring (factory -> Bind -> render) is identical.
         void LoadImportedModel(runtime::IApplicationHost& host)
         {
-            const core::StringView outputDir(
-                reinterpret_cast<const core::utf8char*>(DRACONIC_SANDBOX_OUTPUT_DIR));
-            const core::StringView modelDir(
-                reinterpret_cast<const core::utf8char*>(DRACONIC_SANDBOX_MODEL_DIR));
+            const foundation::StringView outputDir(
+                reinterpret_cast<const foundation::utf8char*>(DRACONIC_SANDBOX_OUTPUT_DIR));
+            const foundation::StringView modelDir(
+                reinterpret_cast<const foundation::utf8char*>(DRACONIC_SANDBOX_MODEL_DIR));
             if (outputDir.IsEmpty() || modelDir.IsEmpty())
             {
                 return;
@@ -191,12 +191,12 @@ namespace
             // Output DB (cooked resources) + resource manager + the factories. ModelFactory builds the
             // manifest into a ModelResource, resolving its meshes/materials/textures (dependency edges).
             m_contentFs =
-                core::MakeUnique<vfs::NativeFileSystem>(core::DefaultAllocator(), outputDir);
-            m_contentDb = core::MakeUnique<content::ContentDatabase>(
-                core::DefaultAllocator(), *m_contentFs, core::BinarySerializerFactory(),
+                foundation::MakeUnique<vfs::NativeFileSystem>(foundation::DefaultAllocator(), outputDir);
+            m_contentDb = foundation::MakeUnique<content::ContentDatabase>(
+                foundation::DefaultAllocator(), *m_contentFs, foundation::BinarySerializerFactory(),
                 u8".rasset");
             m_resources =
-                core::MakeUnique<resource::ResourceManager>(core::DefaultAllocator(), *m_contentDb);
+                foundation::MakeUnique<resource::ResourceManager>(foundation::DefaultAllocator(), *m_contentDb);
             m_resources->AddFactory(&m_meshFactory);
             m_resources->AddFactory(&m_skinnedMeshFactory);
             m_resources->AddFactory(&m_modelFactory);
@@ -205,8 +205,8 @@ namespace
             m_resources->AddFactory(&m_clipFactory);
             if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
             {
-                m_textureFactory = core::MakeUnique<texture::TextureFactory>(
-                    core::DefaultAllocator(), *gfx->Raw());
+                m_textureFactory = foundation::MakeUnique<texture::TextureFactory>(
+                    foundation::DefaultAllocator(), *gfx->Raw());
                 m_resources->AddFactory(m_textureFactory.Get());
             }
             model::RegisterModelResourceTypes(); // make the cooked types deserializable
@@ -214,7 +214,7 @@ namespace
             // Cook the Quaternius humanoid once, then replicate it across a grid (each instance gets its
             // own AnimationPlayer; all share the cooked mesh/skeleton/clips/materials).
             if (!CookModel(u8"Char",
-                           core::Format(u8"{}/QuaterniusCharacter/glTF/Character.gltf", modelDir)
+                           foundation::Format(u8"{}/QuaterniusCharacter/glTF/Character.gltf", modelDir)
                                .AsView()))
             {
                 return;
@@ -227,39 +227,39 @@ namespace
         // nodes get a MeshComponent referencing the cooked StaticMesh + material.
         // Cook + bind the model ONCE. Every spawned instance shares these resources (mesh/skeleton/
         // clips/materials); only the per-entity transform + AnimationPlayer differ. Returns true on success.
-        bool CookModel(core::StringView prefix, core::StringView path)
+        bool CookModel(foundation::StringView prefix, foundation::StringView path)
         {
             if (m_contentDb.Get() == nullptr)
             {
                 return false;
             }
-            core::Guid modelGuid;
+            foundation::Guid modelGuid;
             const model::ModelLoadResult r =
                 modelimporter::LoadAndCook(path, *m_contentDb, prefix, modelGuid);
             if (r != model::ModelLoadResult::Ok)
             {
-                core::ConsoleWrite(core::Format(u8"AnimStressTest: model import failed ({})\n",
-                                                static_cast<core::u32>(r)));
+                foundation::ConsoleWrite(foundation::Format(u8"AnimStressTest: model import failed ({})\n",
+                                                static_cast<foundation::u32>(r)));
                 return false;
             }
             m_model = m_resources->Bind<model::ModelResource>(modelGuid);
             if (!m_model)
             {
-                core::ConsoleWrite(u8"AnimStressTest: model bind failed\n");
+                foundation::ConsoleWrite(u8"AnimStressTest: model bind failed\n");
                 return false;
             }
 
             // Auto-fit: scale the model's largest extent to a target size.
-            constexpr core::f32 kTargetSize = 6.0f;
-            const core::Float3 extent = m_model->boundsMax - m_model->boundsMin;
-            const core::f32 maxExtent = core::Max(extent.x, core::Max(extent.y, extent.z));
+            constexpr foundation::f32 kTargetSize = 6.0f;
+            const foundation::Float3 extent = m_model->boundsMax - m_model->boundsMin;
+            const foundation::f32 maxExtent = foundation::Max(extent.x, foundation::Max(extent.y, extent.z));
             m_fit = (maxExtent > 0.0001f) ? (kTargetSize / maxExtent) : 1.0f;
 
             // All materials, indexed by SubMesh::materialIndex (multi-material).
             m_modelMats.Reserve(m_model->materials.Size());
             for (auto& mp : m_model->materials)
             {
-                m_modelMats.PushBack(core::RefPtr<materials::Material>(mp.Get()));
+                m_modelMats.PushBack(foundation::RefPtr<materials::Material>(mp.Get()));
             }
 
             // Clips available for random per-instance selection (variety so the herd never lockstep).
@@ -276,7 +276,7 @@ namespace
         // Spawn one instance of the cooked model at `position`: its own node hierarchy under a scaled
         // root (mesh nodes get MeshComponents referencing the SHARED cooked meshes/materials), plus its
         // own AnimationPlayer over the shared skeleton.
-        void SpawnInstance(core::Float3 position)
+        void SpawnInstance(foundation::Float3 position)
         {
             auto* meshes = m_scene->GetSystem<render::MeshComponentManager>();
             if (meshes == nullptr || !m_model)
@@ -285,15 +285,15 @@ namespace
             }
 
             scene::EntityHandle modelRoot = m_scene->CreateEntity(u8"char");
-            core::Transform rootT;
+            foundation::Transform rootT;
             rootT.position = position;
-            rootT.scale = core::Float3{m_fit, m_fit, m_fit};
+            rootT.scale = foundation::Float3{m_fit, m_fit, m_fit};
             m_scene->SetLocalTransform(modelRoot, rootT);
             Instance inst;
             inst.root = modelRoot;
 
-            core::Array<scene::EntityHandle> entities;
-            core::Array<scene::EntityHandle> skinnedEntities;
+            foundation::Array<scene::EntityHandle> entities;
+            foundation::Array<scene::EntityHandle> skinnedEntities;
             entities.Reserve(m_model->nodes.Size());
             for (const modelimporter::ModelNode& node : m_model->nodes)
             {
@@ -301,14 +301,14 @@ namespace
                 m_scene->SetLocalTransform(e, node.localTransform);
                 entities.PushBack(e);
             }
-            for (core::usize i = 0; i < m_model->nodes.Size(); ++i)
+            for (foundation::usize i = 0; i < m_model->nodes.Size(); ++i)
             {
                 const modelimporter::ModelNode& node = m_model->nodes[i];
                 if (node.parentIndex >= 0 &&
-                    static_cast<core::usize>(node.parentIndex) < entities.Size())
+                    static_cast<foundation::usize>(node.parentIndex) < entities.Size())
                 {
                     m_scene->SetParent(entities[i],
-                                       entities[static_cast<core::usize>(node.parentIndex)]);
+                                       entities[static_cast<foundation::usize>(node.parentIndex)]);
                 }
                 else
                 {
@@ -316,19 +316,19 @@ namespace
                                        modelRoot); // top-level node -> the scaled model root
                 }
                 if (node.meshIndex < 0 ||
-                    static_cast<core::usize>(node.meshIndex) >= m_model->meshes.Size())
+                    static_cast<foundation::usize>(node.meshIndex) >= m_model->meshes.Size())
                 {
                     continue;
                 }
                 geometry::StaticMesh* mesh =
-                    m_model->meshes[static_cast<core::usize>(node.meshIndex)].Get();
+                    m_model->meshes[static_cast<foundation::usize>(node.meshIndex)].Get();
                 if (mesh == nullptr)
                 {
                     continue;
                 }
                 render::MeshComponent& mc = meshes->Add(entities[i]);
-                mc.mesh = core::RefPtr<geometry::StaticMesh>(mesh);
-                mc.color = core::Color{1.0f, 1.0f, 1.0f, 1.0f};
+                mc.mesh = foundation::RefPtr<geometry::StaticMesh>(mesh);
+                mc.color = foundation::Color{1.0f, 1.0f, 1.0f, 1.0f};
                 mc.SetMaterials(m_modelMats); // unified list; slot 0 covers out-of-range
                 if (mesh->IsSkinned())
                 {
@@ -344,13 +344,13 @@ namespace
                 if (auto* anims =
                         m_scene->GetSystem<animation::SkeletalAnimationComponentManager>())
                 {
-                    animation::AnimationClip* clip = m_clips[static_cast<core::usize>(
-                        m_rng.NextInt(0, static_cast<core::i32>(m_clips.Size()) - 1))];
+                    animation::AnimationClip* clip = m_clips[static_cast<foundation::usize>(
+                        m_rng.NextInt(0, static_cast<foundation::i32>(m_clips.Size()) - 1))];
                     animation::SkeletalAnimationComponent& a = anims->Add(modelRoot);
                     a.skeleton = m_model->skeleton.Get();
                     a.clip = clip;
                     a.meshEntities =
-                        static_cast<core::Array<scene::EntityHandle>&&>(skinnedEntities);
+                        static_cast<foundation::Array<scene::EntityHandle>&&>(skinnedEntities);
                     a.speed = 0.85f + m_rng.NextFloat() * 0.3f;
                     a.startTime = (clip != nullptr && clip->duration > 0.0f)
                                       ? m_rng.NextFloat() * clip->duration
@@ -362,7 +362,7 @@ namespace
 
         // Rebuild the whole grid to `count` characters: destroy the current instances, then spawn a fresh
         // square grid (side = ceil(sqrt(count))) centered on the origin, and re-frame the camera on it.
-        void RebuildToCount(core::u32 count)
+        void RebuildToCount(foundation::u32 count)
         {
             for (Instance& inst : m_instances)
             {
@@ -370,42 +370,42 @@ namespace
             } // recurses -> frees comps
             m_instances.Clear(); // frees the per-instance players
 
-            const core::u32 side =
+            const foundation::u32 side =
                 (count == 0)
                     ? 1u
-                    : static_cast<core::u32>(core::Ceil(core::Sqrt(static_cast<core::f32>(count))));
-            const core::f32 half = (static_cast<core::f32>(side) - 1.0f) * 0.5f;
-            for (core::u32 i = 0; i < count; ++i)
+                    : static_cast<foundation::u32>(foundation::Ceil(foundation::Sqrt(static_cast<foundation::f32>(count))));
+            const foundation::f32 half = (static_cast<foundation::f32>(side) - 1.0f) * 0.5f;
+            for (foundation::u32 i = 0; i < count; ++i)
             {
-                const core::f32 px = (static_cast<core::f32>(i % side) - half) * kCharacterSpacing;
-                const core::f32 pz = (static_cast<core::f32>(i / side) - half) * kCharacterSpacing;
-                SpawnInstance(core::Float3{px, kFloorY, pz});
+                const foundation::f32 px = (static_cast<foundation::f32>(i % side) - half) * kCharacterSpacing;
+                const foundation::f32 pz = (static_cast<foundation::f32>(i / side) - half) * kCharacterSpacing;
+                SpawnInstance(foundation::Float3{px, kFloorY, pz});
             }
             AutoFrame(side);
             m_frameTimeMs =
                 16.6f; // reset the smoother so the rebuild hitch doesn't skew the reading
-            core::ConsoleWrite(
-                core::Format(u8"AnimStressTest: characters={}\n", m_instances.Size()));
+            foundation::ConsoleWrite(
+                foundation::Format(u8"AnimStressTest: characters={}\n", m_instances.Size()));
         }
 
         // Position the fly camera so the whole side×side grid is in frame + grow the floor under it (called
         // on every batch change).
-        void AutoFrame(core::u32 side)
+        void AutoFrame(foundation::u32 side)
         {
-            const core::f32 extent =
-                (static_cast<core::f32>(side) - 1.0f) * kCharacterSpacing * 0.5f + kCharacterSize;
+            const foundation::f32 extent =
+                (static_cast<foundation::f32>(side) - 1.0f) * kCharacterSpacing * 0.5f + kCharacterSize;
             // Floor: scale the base plane so it covers the whole grid + margin (uniform XZ; Y stays flat).
-            const core::f32 fscale = core::Max(1.0f, (extent * 2.0f + 40.0f) / kFloorBaseSize);
-            core::Transform ft = m_scene->GetLocalTransform(m_floor);
-            ft.scale = core::Float3{fscale, 1.0f, fscale};
+            const foundation::f32 fscale = foundation::Max(1.0f, (extent * 2.0f + 40.0f) / kFloorBaseSize);
+            foundation::Transform ft = m_scene->GetLocalTransform(m_floor);
+            ft.scale = foundation::Float3{fscale, 1.0f, fscale};
             m_scene->SetLocalTransform(m_floor, ft);
-            const core::Float3 target{0.0f, kFloorY + kCharacterSize * 0.5f, 0.0f}; // grid center
-            const core::f32 dist = extent / core::Tan(0.5236f) +
+            const foundation::Float3 target{0.0f, kFloorY + kCharacterSize * 0.5f, 0.0f}; // grid center
+            const foundation::f32 dist = extent / foundation::Tan(0.5236f) +
                                    kCharacterSize * 2.0f; // fit 60° FOV horizontally + margin
-            const core::f32 camY = extent * 0.55f + kCharacterSize;
-            m_fly.position = core::Float3{target.x, target.y + camY, target.z + dist};
+            const foundation::f32 camY = extent * 0.55f + kCharacterSize;
+            m_fly.position = foundation::Float3{target.x, target.y + camY, target.z + dist};
             m_fly.yaw = 0.0f;
-            m_fly.pitch = -core::Atan2(camY, dist); // look down onto the grid center
+            m_fly.pitch = -foundation::Atan2(camY, dist); // look down onto the grid center
             // Extend the far plane to cover the whole grid from this distance, so no characters get
             // frustum-far-culled (which would make the throughput measurement cheaper than it is).
             if (auto* cameras = m_scene->GetSystem<render::CameraComponentManager>())
@@ -418,10 +418,10 @@ namespace
             }
         }
 
-        void AddBatch() { RebuildToCount(static_cast<core::u32>(m_instances.Size()) + kBatchSize); }
+        void AddBatch() { RebuildToCount(static_cast<foundation::u32>(m_instances.Size()) + kBatchSize); }
         void RemoveBatch()
         {
-            const core::u32 n = static_cast<core::u32>(m_instances.Size());
+            const foundation::u32 n = static_cast<foundation::u32>(m_instances.Size());
             RebuildToCount(n > kBatchSize ? n - kBatchSize : 0u);
         }
 
@@ -435,8 +435,8 @@ namespace
                 {
                     if (render::CameraComponent* cam = cameras->Get(m_camera))
                     {
-                        cam->aspect = static_cast<core::f32>(frame.width) /
-                                      static_cast<core::f32>(frame.height);
+                        cam->aspect = static_cast<foundation::f32>(frame.width) /
+                                      static_cast<foundation::f32>(frame.height);
                     }
                 }
             }
@@ -449,7 +449,7 @@ namespace
             }
         }
 
-        void OnUpdate(runtime::IApplicationHost& host, core::f32 deltaTime) override
+        void OnUpdate(runtime::IApplicationHost& host, foundation::f32 deltaTime) override
         {
             runtime::DefaultApplication::OnUpdate(host, deltaTime); // keep the P-key profiling dump
 
@@ -484,7 +484,7 @@ namespace
                         {
                             const bool on = !render->InstanceSharing();
                             render->SetInstanceSharing(on);
-                            core::ConsoleWrite(on ? u8"Instance sharing: ON\n"
+                            foundation::ConsoleWrite(on ? u8"Instance sharing: ON\n"
                                                   : u8"Instance sharing: OFF (forward re-fills)\n");
                         }
                     }
@@ -497,7 +497,7 @@ namespace
             }
             if (m_scene != nullptr)
             {
-                core::Transform camT = m_scene->GetLocalTransform(m_camera);
+                foundation::Transform camT = m_scene->GetLocalTransform(m_camera);
                 camT.position = m_fly.position;
                 camT.rotation = m_fly.Rotation();
                 m_scene->SetLocalTransform(m_camera, camT);
@@ -522,17 +522,17 @@ namespace
                 m_profileElapsed += deltaTime;
                 if (m_profileElapsed >= 5.0f)
                 {
-                    const core::f32 fps =
+                    const foundation::f32 fps =
                         (m_frameTimeMs > 0.001f) ? (1000.0f / m_frameTimeMs) : 0.0f;
-                    core::ConsoleWrite(core::Format(
+                    foundation::ConsoleWrite(foundation::Format(
                         u8"=== AnimStressTest PROFILE: chars={}  fps={}  frame={} ms ===\n",
-                        m_instances.Size(), static_cast<core::u32>(fps + 0.5f), m_frameTimeMs));
-                    core::ConsoleWrite(draconic::profiler::Profiler::Get().BuildReport().AsView());
+                        m_instances.Size(), static_cast<foundation::u32>(fps + 0.5f), m_frameTimeMs));
+                    foundation::ConsoleWrite(draconic::profiler::Profiler::Get().BuildReport().AsView());
                     if (auto* renderer = host.Ctx().GetSubsystem<render::RenderSubsystem>())
                     {
-                        core::String gpu;
+                        foundation::String gpu;
                         renderer->BuildGpuProfileReport(gpu);
-                        core::ConsoleWrite(gpu.AsView());
+                        foundation::ConsoleWrite(gpu.AsView());
                     }
                     host.RequestExit(0);
                     return;
@@ -547,19 +547,19 @@ namespace
                 if (m_rampSettle >= 1.3f)
                 {
                     m_rampSettle = 0.0f;
-                    const core::f32 fps =
+                    const foundation::f32 fps =
                         (m_frameTimeMs > 0.001f) ? (1000.0f / m_frameTimeMs) : 0.0f;
-                    const core::u32 n = static_cast<core::u32>(m_instances.Size());
+                    const foundation::u32 n = static_cast<foundation::u32>(m_instances.Size());
                     if (fps <= 50.0f)
                     {
-                        core::ConsoleWrite(core::Format(
+                        foundation::ConsoleWrite(foundation::Format(
                             u8"AnimStressTest: THRESHOLD chars={}  fps={}  frame={} ms\n", n,
-                            static_cast<core::u32>(fps + 0.5f), m_frameTimeMs));
+                            static_cast<foundation::u32>(fps + 0.5f), m_frameTimeMs));
                         host.RequestExit(0);
                         return;
                     }
-                    const core::u32 next =
-                        (fps > 60.0f) ? core::Max(n + 50u, n + n / 4u) : (n + kBatchSize);
+                    const foundation::u32 next =
+                        (fps > 60.0f) ? foundation::Max(n + 50u, n + n / 4u) : (n + kBatchSize);
                     RebuildToCount(next);
                 }
             }
@@ -602,7 +602,7 @@ namespace
                 }
                 if (cull)
                 {
-                    core::u32 culled = 0, total = 0;
+                    foundation::u32 culled = 0, total = 0;
                     render->ViewCullStats(culled, total);
                     ImGui::SameLine();
                     ImGui::TextDisabled("(%u/%u culled)", culled, total);
@@ -643,33 +643,33 @@ namespace
             {
                 gfx->Raw()->WaitIdle();
             }
-            core::ConsoleWrite(u8"AnimStressTest: shutting down.\n");
+            foundation::ConsoleWrite(u8"AnimStressTest: shutting down.\n");
         }
 
     private:
         scene::Scene* m_scene = nullptr;
         scene::EntityHandle m_camera{};
         scene::EntityHandle m_floor{};
-        samples::FlyCamera m_fly{.position = core::Float3{0.0f, 10.0f, 26.0f}, .pitch = -0.25f};
+        samples::FlyCamera m_fly{.position = foundation::Float3{0.0f, 10.0f, 26.0f}, .pitch = -0.25f};
 
         // Model-import pipeline state (must outlive the spawned entities - the resource manager owns
         // the cooked products' handles; the content DB + its filesystem mount back the manager).
-        core::UniquePtr<vfs::NativeFileSystem> m_contentFs;
-        core::UniquePtr<content::ContentDatabase> m_contentDb;
-        core::UniquePtr<resource::ResourceManager> m_resources;
+        foundation::UniquePtr<vfs::NativeFileSystem> m_contentFs;
+        foundation::UniquePtr<content::ContentDatabase> m_contentDb;
+        foundation::UniquePtr<resource::ResourceManager> m_resources;
         geometry::StaticMeshFactory m_meshFactory;
         geometry::SkinnedMeshFactory m_skinnedMeshFactory;
         materials::MaterialFactory m_materialFactory;
         animation::SkeletonFactory m_skeletonFactory;
         animation::AnimationClipFactory m_clipFactory;
-        core::UniquePtr<texture::TextureFactory> m_textureFactory; // needs the device
+        foundation::UniquePtr<texture::TextureFactory> m_textureFactory; // needs the device
         model::ModelFactory m_modelFactory;
         resource::Proxy<model::ModelResource>
             m_model; // the one cooked model, shared by every instance
-        core::Array<core::RefPtr<materials::Material>>
+        foundation::Array<foundation::RefPtr<materials::Material>>
             m_modelMats; // its materials (indexed by submesh material index)
-        core::Array<animation::AnimationClip*> m_clips; // clips for random per-instance selection
-        core::f32 m_fit = 1.0f;                         // auto-fit scale
+        foundation::Array<animation::AnimationClip*> m_clips; // clips for random per-instance selection
+        foundation::f32 m_fit = 1.0f;                         // auto-fit scale
 
         // One spawned character: just its root entity (DestroyEntity recurses to free the hierarchy +
         // its SkeletalAnimationComponent). The component (engine-driven) owns the player + targets.
@@ -677,20 +677,20 @@ namespace
         {
             scene::EntityHandle root{};
         };
-        core::Array<Instance> m_instances;
-        core::Random m_rng{0x9e3779b97f4a7c15ull};
-        core::f32 m_frameTimeMs = 16.6f;
+        foundation::Array<Instance> m_instances;
+        foundation::Random m_rng{0x9e3779b97f4a7c15ull};
+        foundation::f32 m_frameTimeMs = 16.6f;
         bool m_showHud = true; // HUD visibility (H)
 
         // Measurement aid (off by default): auto-ramp the character count until FPS <= 50, then
         // report + exit. Flip to true for a headless throughput baseline; normal use is interactive.
         static constexpr bool kAutoRamp = false;
-        core::f32 m_rampSettle = 0.0f;
+        foundation::f32 m_rampSettle = 0.0f;
         // Measurement aid (off by default): hold a fixed count, then dump the CPU+GPU profiler
         // breakdown and exit. Flip true to re-capture the baseline frame breakdown headless.
         static constexpr bool kAutoProfile = false;
-        static constexpr core::u32 kProfileCount = 1000;
-        core::f32 m_profileElapsed = 0.0f;
+        static constexpr foundation::u32 kProfileCount = 1000;
+        foundation::f32 m_profileElapsed = 0.0f;
     };
 }
 

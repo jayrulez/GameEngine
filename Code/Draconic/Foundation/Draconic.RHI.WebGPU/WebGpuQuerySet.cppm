@@ -5,17 +5,17 @@
 /// WebGPU shape - honest NotSupported.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include "WebGpuIncludes.h"
 
 export module draconic.rhi.webgpu:query_set;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :api;
 import :conversions;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::webgpu
 {

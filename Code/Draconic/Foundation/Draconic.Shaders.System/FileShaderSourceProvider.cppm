@@ -14,16 +14,16 @@
 /// O(files) per Poll, so polls are throttled here, not in callers.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.shaders.system:file_provider;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.shaders;
 import :shader_system;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace vfs = draconic::vfs;
 
 export namespace draconic::shaders
@@ -33,24 +33,24 @@ export namespace draconic::shaders
     public:
         /// PollChanges is called once per frame; only every Nth call actually stat-sweeps
         /// (the sweep is O(files)). ~1 second at 60 fps - dev hot reload, not a race.
-        static constexpr core::u32 PollEveryNCalls = 60;
+        static constexpr foundation::u32 PollEveryNCalls = 60;
 
         /// Mounts `rootDirectory` and scans the manifest. NotFound when the root
         /// does not exist (callers fall back to registered strings, loudly).
-        core::Status Initialize(core::StringView rootDirectory)
+        foundation::Status Initialize(foundation::StringView rootDirectory)
         {
-            if (!core::DirectoryExists(rootDirectory))
+            if (!foundation::DirectoryExists(rootDirectory))
             {
-                return core::ErrorCode::NotFound;
+                return foundation::ErrorCode::NotFound;
             }
-            m_root = core::String(rootDirectory);
-            m_mount = core::MakeUnique<vfs::NativeFileSystem>(core::DefaultAllocator(),
+            m_root = foundation::String(rootDirectory);
+            m_mount = foundation::MakeUnique<vfs::NativeFileSystem>(foundation::DefaultAllocator(),
                                                               rootDirectory);
 
-            core::Array<vfs::DirEntry> entries;
+            foundation::Array<vfs::DirEntry> entries;
             if (!m_mount->Enumerate(u8"", entries).IsOk())
             {
-                return core::ErrorCode::Unknown;
+                return foundation::ErrorCode::Unknown;
             }
             for (const vfs::DirEntry& entry : entries)
             {
@@ -59,28 +59,28 @@ export namespace draconic::shaders
                     continue; // flat root for now; sub-trees can come with growth
                 }
                 ShaderStage stage;
-                core::StringView stem;
+                foundation::StringView stem;
                 if (!ParseFileName(entry.name.AsView(), stage, stem))
                 {
                     continue; // .hlsli and unrelated files
                 }
                 Entry mapped;
-                mapped.name = core::String(stem);
+                mapped.name = foundation::String(stem);
                 mapped.stage = stage;
-                mapped.fileName = core::String(entry.name.AsView());
-                m_entries.PushBack(core::Move(mapped));
+                mapped.fileName = foundation::String(entry.name.AsView());
+                m_entries.PushBack(foundation::Move(mapped));
             }
 
             m_changes = m_mount->AsWatchable()->ChangeSource();
             m_changes->Track(u8""); // whole mount, recursive - catches .hlsli too
-            return core::ErrorCode::Ok;
+            return foundation::ErrorCode::Ok;
         }
 
-        [[nodiscard]] core::StringView RootDirectory() const noexcept { return m_root.AsView(); }
-        [[nodiscard]] core::usize ShaderFileCount() const noexcept { return m_entries.Size(); }
+        [[nodiscard]] foundation::StringView RootDirectory() const noexcept { return m_root.AsView(); }
+        [[nodiscard]] foundation::usize ShaderFileCount() const noexcept { return m_entries.Size(); }
 
-        bool FetchSource(core::StringView name, ShaderStage stage,
-                         core::String& outSource) override
+        bool FetchSource(foundation::StringView name, ShaderStage stage,
+                         foundation::String& outSource) override
         {
             for (const Entry& entry : m_entries)
             {
@@ -92,7 +92,7 @@ export namespace draconic::shaders
             return false;
         }
 
-        void CollectShaderNames(core::Array<core::String>& out) override
+        void CollectShaderNames(foundation::Array<foundation::String>& out) override
         {
             for (const Entry& entry : m_entries)
             {
@@ -100,19 +100,19 @@ export namespace draconic::shaders
             }
         }
 
-        bool PollChanges(core::Array<core::String>& outChangedNames) override
+        bool PollChanges(foundation::Array<foundation::String>& outChangedNames) override
         {
             if (m_changes == nullptr)
             {
                 return false;
             }
-            core::Array<core::String> changedFiles;
+            foundation::Array<foundation::String> changedFiles;
             if (!ThrottleElapsed() || !m_changes->Poll(changedFiles))
             {
                 return false;
             }
             bool any = false;
-            for (const core::String& file : changedFiles)
+            for (const foundation::String& file : changedFiles)
             {
                 if (EndsWith(file.AsView(), u8".hlsli"))
                 {
@@ -140,12 +140,12 @@ export namespace draconic::shaders
     private:
         struct Entry
         {
-            core::String name;     // shader name = file stem ("tonemap")
+            foundation::String name;     // shader name = file stem ("tonemap")
             ShaderStage stage;     // from the double extension
-            core::String fileName; // mount-relative ("tonemap.ps.hlsl")
+            foundation::String fileName; // mount-relative ("tonemap.ps.hlsl")
         };
 
-        static bool EndsWith(core::StringView text, core::StringView suffix)
+        static bool EndsWith(foundation::StringView text, foundation::StringView suffix)
         {
             if (text.Size() < suffix.Size())
             {
@@ -154,23 +154,23 @@ export namespace draconic::shaders
             return text.SubStr(text.Size() - suffix.Size(), suffix.Size()) == suffix;
         }
 
-        static void AppendUnique(core::Array<core::String>& out, core::StringView name)
+        static void AppendUnique(foundation::Array<foundation::String>& out, foundation::StringView name)
         {
-            for (const core::String& existing : out)
+            for (const foundation::String& existing : out)
             {
                 if (existing.AsView() == name)
                 {
                     return;
                 }
             }
-            out.PushBack(core::String(name));
+            out.PushBack(foundation::String(name));
         }
 
         /// "tonemap.ps.hlsl" -> (Fragment, "tonemap"); false for anything else.
-        static bool ParseFileName(core::StringView fileName, ShaderStage& outStage,
-                                  core::StringView& outStem)
+        static bool ParseFileName(foundation::StringView fileName, ShaderStage& outStage,
+                                  foundation::StringView& outStem)
         {
-            core::StringView suffix;
+            foundation::StringView suffix;
             if (EndsWith(fileName, u8".vs.hlsl"))
             {
                 outStage = ShaderStage::Vertex;
@@ -194,28 +194,28 @@ export namespace draconic::shaders
             return !outStem.IsEmpty();
         }
 
-        bool ReadWholeFile(core::StringView fileName, core::String& outSource)
+        bool ReadWholeFile(foundation::StringView fileName, foundation::String& outSource)
         {
-            core::UniquePtr<core::IStream> stream =
-                m_mount->Open(fileName, core::FileMode::Read);
+            foundation::UniquePtr<foundation::IStream> stream =
+                m_mount->Open(fileName, foundation::FileMode::Read);
             if (!stream)
             {
                 return false;
             }
-            const core::i64 size = stream->Size();
+            const foundation::i64 size = stream->Size();
             if (size < 0)
             {
                 return false;
             }
-            core::Array<core::u8> bytes;
-            bytes.Resize(static_cast<core::usize>(size));
+            foundation::Array<foundation::u8> bytes;
+            bytes.Resize(static_cast<foundation::usize>(size));
             if (!bytes.IsEmpty() &&
-                stream->Read(bytes.Data(), bytes.Size()) != static_cast<core::u64>(bytes.Size()))
+                stream->Read(bytes.Data(), bytes.Size()) != static_cast<foundation::u64>(bytes.Size()))
             {
                 return false;
             }
-            outSource = core::String(core::StringView(
-                reinterpret_cast<const core::utf8char*>(bytes.Data()), bytes.Size()));
+            outSource = foundation::String(foundation::StringView(
+                reinterpret_cast<const foundation::utf8char*>(bytes.Data()), bytes.Size()));
             return true;
         }
 
@@ -229,10 +229,10 @@ export namespace draconic::shaders
             return true;
         }
 
-        core::String m_root;
-        core::UniquePtr<vfs::NativeFileSystem> m_mount;
+        foundation::String m_root;
+        foundation::UniquePtr<vfs::NativeFileSystem> m_mount;
         vfs::IChangeSource* m_changes = nullptr; // owned by the mount
-        core::Array<Entry> m_entries;
-        core::u32 m_callsSinceSweep = 0;
+        foundation::Array<Entry> m_entries;
+        foundation::u32 m_callsSinceSweep = 0;
     };
 }

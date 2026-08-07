@@ -16,17 +16,17 @@
 // keep the local untouched.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.editor.scene:edit;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.resource;
 import draconic.scene;
 import draconic.scene.resource; // ResolveSceneResources (pasted/restored refs bind immediately)
 import draconic.editor.core;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {
@@ -568,7 +568,7 @@ export namespace draconic::editor
                 (void)buffer.Write(m_blob.Data(), m_blob.Size());
                 (void)buffer.Seek(0, SeekOrigin::Begin);
                 BinarySerializer ar(buffer, SerializeMode::Read);
-                draconic::core::Serialize(ar, "type", m_typeId);
+                draconic::foundation::Serialize(ar, "type", m_typeId);
                 scene::ComponentManagerBase* mgr =
                     scene.FindManagerBySerializationId(m_typeId.AsView());
                 if (mgr == nullptr || !ar.IsOk())

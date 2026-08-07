@@ -11,15 +11,15 @@
 // stays out of this interface), and exposes the engine-global one-shot API.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.engine.audio;
 
 export import :components;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.runtime;
 import draconic.scene;
 import draconic.engine.scene;
@@ -33,7 +33,7 @@ import draconic.content;  // Instance lookup by content path
 // (a module implementation unit), keeping heavyweight imports out of the interface for
 // GCC's -fno-module-lazy consumers.
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::audio
 {
@@ -78,12 +78,12 @@ export namespace draconic::audio
         void Serialize(ISerializer& ar) override
         {
             u32 busCount = static_cast<u32>(AudioBus::Count);
-            draconic::core::Serialize(ar, "busCount", busCount);
+            draconic::foundation::Serialize(ar, "busCount", busCount);
             const u32 buses = Min(busCount, static_cast<u32>(AudioBus::Count));
             for (u32 bus = 0; bus < buses; ++bus)
             {
-                draconic::core::Serialize(ar, "volume", volumes[bus]);
-                draconic::core::Serialize(ar, "muted", muted[bus]);
+                draconic::foundation::Serialize(ar, "volume", volumes[bus]);
+                draconic::foundation::Serialize(ar, "muted", muted[bus]);
             }
         }
     };

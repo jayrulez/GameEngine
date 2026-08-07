@@ -1,12 +1,12 @@
 // Ported from Sedulous.UI.Tests/src/PropertyTests.bf (faithful; Beef `Value` property -> Value()/
-// SetValue(), Beef delegate -> core::Function, scope Property -> stack Property).
+// SetValue(), Beef delegate -> foundation::Function, scope Property -> stack Property).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 
 using namespace draconic::ui;
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 TEST_CASE("property: InitialValue")
 {

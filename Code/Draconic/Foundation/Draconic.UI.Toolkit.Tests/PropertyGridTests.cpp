@@ -1,27 +1,27 @@
 // Smoke test for the toolkit PropertyGrid: add editors, query by name/count, remove and clear.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 import draconic.ui.toolkit;
 
 using namespace draconic::ui;
 using namespace draconic::ui::toolkit;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 TEST_CASE("toolkit-propertygrid: AddQueryRemoveClear")
 {
-    auto grid = core::MakeRef<PropertyGrid>(core::DefaultAllocator());
+    auto grid = foundation::MakeRef<PropertyGrid>(foundation::DefaultAllocator());
     // Constructed with a ScrollView child.
     CHECK(grid->ChildCount() == 1u);
     CHECK(grid->PropertyCount() == 0u);
 
     grid->AddProperty(
-        core::MakeRef<BoolEditor>(core::DefaultAllocator(), StringView(u8"Visible"), true));
+        foundation::MakeRef<BoolEditor>(foundation::DefaultAllocator(), StringView(u8"Visible"), true));
     grid->AddProperty(
-        core::MakeRef<FloatEditor>(core::DefaultAllocator(), StringView(u8"Mass"), 1.0));
-    grid->AddProperty(core::MakeRef<IntEditor>(core::DefaultAllocator(), StringView(u8"Layer"), 0));
+        foundation::MakeRef<FloatEditor>(foundation::DefaultAllocator(), StringView(u8"Mass"), 1.0));
+    grid->AddProperty(foundation::MakeRef<IntEditor>(foundation::DefaultAllocator(), StringView(u8"Layer"), 0));
     CHECK(grid->PropertyCount() == 3u);
 
     PropertyEditor* mass = grid->GetProperty(StringView(u8"Mass"));
@@ -39,8 +39,8 @@ TEST_CASE("toolkit-propertygrid: AddQueryRemoveClear")
 
 TEST_CASE("toolkit-propertygrid: CategoriesAndDisplayName")
 {
-    auto grid = core::MakeRef<PropertyGrid>(core::DefaultAllocator());
-    auto ed = core::MakeRef<BoolEditor>(core::DefaultAllocator(), StringView(u8"CastsShadows"),
+    auto grid = foundation::MakeRef<PropertyGrid>(foundation::DefaultAllocator());
+    auto ed = foundation::MakeRef<BoolEditor>(foundation::DefaultAllocator(), StringView(u8"CastsShadows"),
                                         false, Function<void(bool)>{}, StringView(u8"Rendering"));
     ed->SetDisplayName(StringView(u8"Casts Shadows"));
     CHECK(ed->DisplayName() == StringView(u8"Casts Shadows"));
@@ -52,13 +52,13 @@ TEST_CASE("toolkit-propertygrid: CategoriesAndDisplayName")
 
 TEST_CASE("toolkit-propertyeditor: TooltipAndRowVisibility")
 {
-    auto ed = core::MakeRef<FloatEditor>(core::DefaultAllocator(), StringView(u8"Turbidity"), 3.0);
+    auto ed = foundation::MakeRef<FloatEditor>(foundation::DefaultAllocator(), StringView(u8"Turbidity"), 3.0);
     CHECK(ed->Tooltip().IsEmpty());
     ed->SetTooltip(StringView(u8"Preetham haze"));
     CHECK(ed->Tooltip() == StringView(u8"Preetham haze"));
 
     // Visibility state applies to the wired row view (PropertyGrid wires it on build).
-    auto row = core::MakeRef<Label>(core::DefaultAllocator());
+    auto row = foundation::MakeRef<Label>(foundation::DefaultAllocator());
     CHECK(ed->RowVisible());
     ed->SetRowVisible(false); // before wiring: state only
     CHECK(!ed->RowVisible());
@@ -74,8 +74,8 @@ TEST_CASE("toolkit-propertyeditor: display-name changes reach the bound label si
     // PropertyGrid binds each row's label view through BindDisplayNameSink so a later
     // SetDisplayName (e.g. the inspector's prefab-override dot) updates the LIVE label
     // instead of a string nobody re-reads.
-    auto editor = core::MakeRef<ButtonEditor>(
-        core::DefaultAllocator(), StringView(u8"Revert to Prefab"), core::Function<void()>{});
+    auto editor = foundation::MakeRef<ButtonEditor>(
+        foundation::DefaultAllocator(), StringView(u8"Revert to Prefab"), foundation::Function<void()>{});
     String seen;
     editor->BindDisplayNameSink([&seen](StringView text) { seen = String(text); });
     editor->SetDisplayName(StringView(u8"Revert to Prefab \u25cf"));

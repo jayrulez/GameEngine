@@ -7,18 +7,18 @@
 // See docs/design/particles-authoring.md.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.particles.editor;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.editor;
 import draconic.particles;
 import draconic.particles.resource;
 import draconic.content;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace content = draconic::content;
 
 export namespace draconic::particles
@@ -59,7 +59,7 @@ export namespace draconic::particles
         {
             draconic::editor::Asset::Serialize(ar); // fileName (unused for authored effects)
             SerializeEffect(ar, m_effect);          // the authored effect graph
-            core::Serialize(ar, "texturePaths", m_systemTexturePaths); // edit-time soft refs
+            foundation::Serialize(ar, "texturePaths", m_systemTexturePaths); // edit-time soft refs
         }
 
     private:

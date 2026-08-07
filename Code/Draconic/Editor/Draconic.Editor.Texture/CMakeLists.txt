@@ -5,7 +5,7 @@ add_library(Draconic::Editor.Texture ALIAS Draconic.Editor.Texture)
 
 target_link_libraries(Draconic.Editor.Texture
     PUBLIC
-        Draconic::Core Draconic::Content
+        Draconic::Foundation Draconic::Content
         Draconic::Image Draconic::Image.IO
         Draconic::Texture Draconic::Texture.Editor
         Draconic::UI Draconic::UI.Toolkit

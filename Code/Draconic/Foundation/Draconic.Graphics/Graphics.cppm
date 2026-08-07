@@ -20,11 +20,11 @@
 // renders a list of RenderWindows, each independent, sharing one GraphicsDevice.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.graphics;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.shell;
 // Backend factories live in sibling modules so this core host imports only the
@@ -33,14 +33,14 @@ import draconic.shell;
 //   draconic.graphics.null - CreateNullGraphicsDevice (headless)
 //   draconic.graphics.gpu  - CreateGraphicsDevice (Vulkan/DX12)
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 using namespace draconic::shell; // IShell + input/window types (moved from draconic::runtime)
 namespace rhi = draconic::rhi;
 
 export namespace draconic::graphics
 {
     // Null is a real headless option (CI / servers / tests) - no GPU required.
-    enum class BackendType : core::u8
+    enum class BackendType : foundation::u8
     {
         Vulkan,
         DX12,
@@ -100,7 +100,7 @@ export namespace draconic::graphics
 #else
         bool enableValidation = true;
 #endif
-        core::u32 framesInFlight = 2; // CPU-ahead ring depth
+        foundation::u32 framesInFlight = 2; // CPU-ahead ring depth
         rhi::DeviceFeatures requiredFeatures = {};
     };
 
@@ -108,7 +108,7 @@ export namespace draconic::graphics
     {
         rhi::TextureFormat format = rhi::TextureFormat::BGRA8UnormSrgb;
         rhi::PresentMode presentMode = rhi::PresentMode::Fifo;
-        core::u32 bufferCount = 2; // swapchain images
+        foundation::u32 bufferCount = 2; // swapchain images
     };
 
     class GraphicsDevice; // forward (RenderWindow refs it; defined complete below)
@@ -128,9 +128,9 @@ export namespace draconic::graphics
     {
         bool valid = false;             // false => skip (minimized/acquire failed)
         RenderWindow* window = nullptr; // which window this frame targets
-        core::u32 frameIndex = 0;       // device ring index (0..framesInFlight-1)
-        core::u32 width = 0;
-        core::u32 height = 0;
+        foundation::u32 frameIndex = 0;       // device ring index (0..framesInFlight-1)
+        foundation::u32 width = 0;
+        foundation::u32 height = 0;
         rhi::CommandEncoder* encoder = nullptr; // primary, host-created
         rhi::CommandPool* pool = nullptr;       // this frame's pool (extra encoders)
         rhi::Texture* backbuffer = nullptr;
@@ -164,7 +164,7 @@ export namespace draconic::graphics
         // One-call clear of the backbuffer (open a clear pass, close it). For
         // minimal apps that just want a visible, cleared window without touching
         // RHI types.
-        void Clear(core::f32 r, core::f32 g, core::f32 b, core::f32 a = 1.0f)
+        void Clear(foundation::f32 r, foundation::f32 g, foundation::f32 b, foundation::f32 a = 1.0f)
         {
             rhi::ClearColor c;
             c.r = r;
@@ -188,11 +188,11 @@ export namespace draconic::graphics
         // Built by GraphicsDevice::CreateRenderWindow; takes ownership of the RHI
         // objects. Arrays are sized to framesInFlight.
         RenderWindow(GraphicsDevice& device, IWindow& window, rhi::Surface* surface,
-                     rhi::SwapChain* swapChain, core::Array<rhi::CommandPool*>&& pools,
-                     core::Array<rhi::Fence*>&& fences) noexcept
+                     rhi::SwapChain* swapChain, foundation::Array<rhi::CommandPool*>&& pools,
+                     foundation::Array<rhi::Fence*>&& fences) noexcept
             : m_device(&device), m_window(&window), m_surface(surface), m_swapChain(swapChain),
-              m_pools(static_cast<core::Array<rhi::CommandPool*>&&>(pools)),
-              m_fences(static_cast<core::Array<rhi::Fence*>&&>(fences)), m_width(window.Width()),
+              m_pools(static_cast<foundation::Array<rhi::CommandPool*>&&>(pools)),
+              m_fences(static_cast<foundation::Array<rhi::Fence*>&&>(fences)), m_width(window.Width()),
               m_height(window.Height())
         {
             m_fenceValues.Resize(m_fences.Size(), 0ull);
@@ -221,9 +221,9 @@ export namespace draconic::graphics
         void EndFrame(FrameContext& frame);
 
         [[nodiscard]] IRenderWindowData* Data() noexcept { return m_data.Get(); }
-        void SetData(core::UniquePtr<IRenderWindowData> data) noexcept
+        void SetData(foundation::UniquePtr<IRenderWindowData> data) noexcept
         {
-            m_data = static_cast<core::UniquePtr<IRenderWindowData>&&>(data);
+            m_data = static_cast<foundation::UniquePtr<IRenderWindowData>&&>(data);
         }
 
     private:
@@ -231,12 +231,12 @@ export namespace draconic::graphics
         IWindow* m_window;                      // borrowed
         rhi::Surface* m_surface;                // owned
         rhi::SwapChain* m_swapChain;            // owned
-        core::Array<rhi::CommandPool*> m_pools; // owned, one per frame-in-flight
-        core::Array<rhi::Fence*> m_fences;      // owned, one per frame-in-flight
-        core::Array<core::u64> m_fenceValues;
-        core::u32 m_width;
-        core::u32 m_height;
-        core::UniquePtr<IRenderWindowData> m_data; // optional typed payload
+        foundation::Array<rhi::CommandPool*> m_pools; // owned, one per frame-in-flight
+        foundation::Array<rhi::Fence*> m_fences;      // owned, one per frame-in-flight
+        foundation::Array<foundation::u64> m_fenceValues;
+        foundation::u32 m_width;
+        foundation::u32 m_height;
+        foundation::UniquePtr<IRenderWindowData> m_data; // optional typed payload
     };
 
     class GraphicsDevice
@@ -247,22 +247,22 @@ export namespace draconic::graphics
         // queue. Backend-agnostic - GPU backends (Vulkan/DX12) are built by the
         // `draconic.graphics.gpu` factory, which then calls this. On failure
         // the backend is destroyed.
-        static core::Result<core::UniquePtr<GraphicsDevice>>
-        FromBackend(rhi::Backend* backend, core::u32 framesInFlight,
+        static foundation::Result<foundation::UniquePtr<GraphicsDevice>>
+        FromBackend(rhi::Backend* backend, foundation::u32 framesInFlight,
                     const rhi::DeviceFeatures& features = {})
         {
             if (backend == nullptr)
             {
                 rhi::LogError("GraphicsDevice::FromBackend: null backend (creation failed)");
-                return core::Err(core::ErrorCode::Unknown);
+                return foundation::Err(foundation::ErrorCode::Unknown);
             }
 
-            core::Span<rhi::Adapter* const> adapters = backend->EnumerateAdapters();
+            foundation::Span<rhi::Adapter* const> adapters = backend->EnumerateAdapters();
             if (adapters.Size() == 0)
             {
                 rhi::LogError("GraphicsDevice::FromBackend: no adapters enumerated");
                 backend->Destroy();
-                return core::Err(core::ErrorCode::Unknown);
+                return foundation::Err(foundation::ErrorCode::Unknown);
             }
 
             rhi::DeviceDesc dd{};
@@ -273,7 +273,7 @@ export namespace draconic::graphics
             {
                 rhi::LogError("GraphicsDevice::FromBackend: CreateDevice failed");
                 backend->Destroy();
-                return core::Err(core::ErrorCode::Unknown);
+                return foundation::Err(foundation::ErrorCode::Unknown);
             }
 
             rhi::Queue* queue = device->GetQueue(rhi::QueueType::Graphics);
@@ -282,7 +282,7 @@ export namespace draconic::graphics
                 rhi::LogError("GraphicsDevice::FromBackend: no graphics queue");
                 device->Destroy();
                 backend->Destroy();
-                return core::Err(core::ErrorCode::Unknown);
+                return foundation::Err(foundation::ErrorCode::Unknown);
             }
 
 #if DRACONIC_PLATFORM_WEB
@@ -293,19 +293,19 @@ export namespace draconic::graphics
             // Dawn drops that submit (which silently killed the one-shot IBL env bake -> black sky).
             // Serialize to a single frame in flight: BeginFrame's fence wait then guarantees a frame's
             // submit has completed before the next acquire releases the surface texture.
-            const core::u32 frames = 1u;
+            const foundation::u32 frames = 1u;
             (void)framesInFlight;
 #else
-            const core::u32 frames = framesInFlight == 0 ? 1 : framesInFlight;
+            const foundation::u32 frames = framesInFlight == 0 ? 1 : framesInFlight;
 #endif
-            auto gd = core::MakeUnique<GraphicsDevice>(core::DefaultAllocator(), backend, device,
+            auto gd = foundation::MakeUnique<GraphicsDevice>(foundation::DefaultAllocator(), backend, device,
                                                        queue, frames);
-            return core::Result<core::UniquePtr<GraphicsDevice>>(
-                static_cast<core::UniquePtr<GraphicsDevice>&&>(gd));
+            return foundation::Result<foundation::UniquePtr<GraphicsDevice>>(
+                static_cast<foundation::UniquePtr<GraphicsDevice>&&>(gd));
         }
 
         GraphicsDevice(rhi::Backend* backend, rhi::Device* device, rhi::Queue* queue,
-                       core::u32 framesInFlight) noexcept
+                       foundation::u32 framesInFlight) noexcept
             : m_backend(backend), m_device(device), m_queue(queue), m_framesInFlight(framesInFlight)
         {
         }
@@ -330,7 +330,7 @@ export namespace draconic::graphics
 
         // Create a presentation target (surface + swapchain + per-frame pools/
         // fences) for a window. The window must outlive the RenderWindow.
-        core::Result<core::UniquePtr<RenderWindow>> CreateRenderWindow(IWindow& window,
+        foundation::Result<foundation::UniquePtr<RenderWindow>> CreateRenderWindow(IWindow& window,
                                                                        const RenderWindowDesc& desc)
         {
             const NativeWindow nw = window.Native();
@@ -357,7 +357,7 @@ export namespace draconic::graphics
             rhi::Surface* surface = nullptr;
             if (!m_backend->CreateSurface(nw.window, nw.display, surface, plat).IsOk())
             {
-                return core::Err(core::ErrorCode::Unknown);
+                return foundation::Err(foundation::ErrorCode::Unknown);
             }
 
             rhi::SwapChainDesc sd{};
@@ -371,12 +371,12 @@ export namespace draconic::graphics
             if (!m_device->CreateSwapChain(surface, sd, swapChain).IsOk())
             {
                 m_device->DestroySurface(surface);
-                return core::Err(core::ErrorCode::Unknown);
+                return foundation::Err(foundation::ErrorCode::Unknown);
             }
 
-            core::Array<rhi::CommandPool*> pools;
-            core::Array<rhi::Fence*> fences;
-            for (core::u32 i = 0; i < m_framesInFlight; ++i)
+            foundation::Array<rhi::CommandPool*> pools;
+            foundation::Array<rhi::Fence*> fences;
+            for (foundation::u32 i = 0; i < m_framesInFlight; ++i)
             {
                 rhi::CommandPool* pool = nullptr;
                 rhi::Fence* fence = nullptr;
@@ -397,24 +397,24 @@ export namespace draconic::graphics
                     }
                     m_device->DestroySwapChain(swapChain);
                     m_device->DestroySurface(surface);
-                    return core::Err(core::ErrorCode::Unknown);
+                    return foundation::Err(foundation::ErrorCode::Unknown);
                 }
                 pools.PushBack(pool);
                 fences.PushBack(fence);
             }
 
-            auto rw = core::MakeUnique<RenderWindow>(
-                core::DefaultAllocator(), *this, window, surface, swapChain,
-                static_cast<core::Array<rhi::CommandPool*>&&>(pools),
-                static_cast<core::Array<rhi::Fence*>&&>(fences));
-            return core::Result<core::UniquePtr<RenderWindow>>(
-                static_cast<core::UniquePtr<RenderWindow>&&>(rw));
+            auto rw = foundation::MakeUnique<RenderWindow>(
+                foundation::DefaultAllocator(), *this, window, surface, swapChain,
+                static_cast<foundation::Array<rhi::CommandPool*>&&>(pools),
+                static_cast<foundation::Array<rhi::Fence*>&&>(fences));
+            return foundation::Result<foundation::UniquePtr<RenderWindow>>(
+                static_cast<foundation::UniquePtr<RenderWindow>&&>(rw));
         }
 
         [[nodiscard]] rhi::Device* Raw() noexcept { return m_device; }
         [[nodiscard]] rhi::Queue* GfxQueue() noexcept { return m_queue; }
-        [[nodiscard]] core::u32 FramesInFlight() const noexcept { return m_framesInFlight; }
-        [[nodiscard]] core::u32 CurrentFrame() const noexcept { return m_currentFrame; }
+        [[nodiscard]] foundation::u32 FramesInFlight() const noexcept { return m_framesInFlight; }
+        [[nodiscard]] foundation::u32 CurrentFrame() const noexcept { return m_currentFrame; }
 
         // Advance the CPU frame ring once per app frame (after all windows are
         // rendered). Consumers key per-frame GPU resources on CurrentFrame().
@@ -424,8 +424,8 @@ export namespace draconic::graphics
         rhi::Backend* m_backend; // owned
         rhi::Device* m_device;   // owned
         rhi::Queue* m_queue;     // borrowed from device
-        core::u32 m_framesInFlight;
-        core::u32 m_currentFrame = 0;
+        foundation::u32 m_framesInFlight;
+        foundation::u32 m_currentFrame = 0;
     };
 
     // ----- RenderWindow out-of-line defs (need GraphicsDevice complete) -----
@@ -465,8 +465,8 @@ export namespace draconic::graphics
 
     inline bool RenderWindow::SyncSize()
     {
-        const core::u32 nw = m_window->Width();
-        const core::u32 nh = m_window->Height();
+        const foundation::u32 nw = m_window->Width();
+        const foundation::u32 nh = m_window->Height();
         if (nw == 0 || nh == 0)
         {
             return false;
@@ -497,7 +497,7 @@ export namespace draconic::graphics
             return FrameContext{};
         }
 
-        const core::u32 fi = m_device->CurrentFrame();
+        const foundation::u32 fi = m_device->CurrentFrame();
         // Guard reuse of this slot's pool/backbuffer: wait the GPU's last
         // submission against this window's fence at this ring slot.
         if (m_fenceValues[fi] > 0)
@@ -545,7 +545,7 @@ export namespace draconic::graphics
         {
             return;
         }
-        const core::u32 fi = frame.frameIndex;
+        const foundation::u32 fi = frame.frameIndex;
 
         frame.encoder->TransitionTexture(m_swapChain->CurrentTexture(),
                                          rhi::ResourceState::RenderTarget,
@@ -554,7 +554,7 @@ export namespace draconic::graphics
 
         ++m_fenceValues[fi];
         rhi::CommandBuffer* cbs[1] = {cb};
-        m_device->GfxQueue()->Submit(core::Span<rhi::CommandBuffer* const>(cbs, 1), m_fences[fi],
+        m_device->GfxQueue()->Submit(foundation::Span<rhi::CommandBuffer* const>(cbs, 1), m_fences[fi],
                                      m_fenceValues[fi]);
 
         m_swapChain->Present(m_device->GfxQueue());

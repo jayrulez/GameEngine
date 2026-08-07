@@ -5,17 +5,17 @@
 /// faithfully from Sedulous.Animation.AnimationPlayer. The skeleton + clip are borrowed (not owned).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.animation:player;
 
-import draconic.core;
+import draconic.foundation;
 import :skeleton;
 import :clip;
 import :sampler;
 import :pose;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::animation
 {

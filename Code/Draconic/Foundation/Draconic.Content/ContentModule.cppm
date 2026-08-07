@@ -14,14 +14,14 @@
 // The database never imports a concrete serializer module.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.content;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::vfs;
 
 export namespace draconic::content

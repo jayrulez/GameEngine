@@ -7,16 +7,16 @@
 // the text phase lands.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:draw_context;
 
-import draconic.core; // Float4x4
+import draconic.foundation; // Float4x4
 import draconic.vg;   // VGContext
 import :rect;
 import :transform2d;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace vg = draconic::vg;
 
 export namespace draconic::gui

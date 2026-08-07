@@ -1,12 +1,12 @@
 // Draconic::EditorImage - the `draconic.editor.image` module (implementation).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 module draconic.editor.image;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.image;
 import draconic.image.io;
@@ -16,7 +16,7 @@ import draconic.ui.toolkit;
 import draconic.editor.core;
 import draconic.editor.app;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::editor
 {

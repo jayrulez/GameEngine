@@ -1,16 +1,16 @@
 /// draconic.rhi.webgpu:surface - Surface over WGPUSurface.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include "WebGpuIncludes.h"
 
 export module draconic.rhi.webgpu:surface;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :api;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::webgpu
 {

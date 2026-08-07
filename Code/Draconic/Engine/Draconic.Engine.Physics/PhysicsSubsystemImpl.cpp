@@ -5,13 +5,13 @@
 // unreadable cluster (every -fno-module-lazy consumer then failed to import the module).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 #include <cmath>
 
 module draconic.engine.physics;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.runtime;
 import draconic.scene;
 import draconic.resource;
@@ -21,7 +21,7 @@ import draconic.render;
 import draconic.engine.render;
 import draconic.script.facades; // RegisterExtraFacadeName (Physics into the behavior prelude)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::physics
 {
@@ -350,9 +350,9 @@ namespace draconic::physics
         // Surface the physics COMPONENTS to script (OPTION 1: RigidBodyComponent.of(entity), ...):
         // register them (both backends emit registry types), seed Wren emission roots (reachability),
         // and make their class names import-visible in behavior preludes.
-        const core::TypeInfo* components[] = {&core::TypeOf<RigidBodyComponent>(),
-                                              &core::TypeOf<CharacterComponent>()};
-        for (const core::TypeInfo* component : components)
+        const foundation::TypeInfo* components[] = {&foundation::TypeOf<RigidBodyComponent>(),
+                                              &foundation::TypeOf<CharacterComponent>()};
+        for (const foundation::TypeInfo* component : components)
         {
             GlobalTypeRegistry().Register(*component);
             draconic::script::RegisterExtraScriptRootType(component);
@@ -363,8 +363,8 @@ namespace draconic::physics
         // The scene-bound physics handle (ScenePhysics.of(scene)): reflect it, register it, seed the
         // Wren emission root (nothing else reaches it), and make the class name prelude-visible.
         DraconicRegisterValue_ScenePhysics();
-        GlobalTypeRegistry().Register(core::TypeOf<ScenePhysics>());
-        draconic::script::RegisterExtraScriptRootType(&core::TypeOf<ScenePhysics>());
+        GlobalTypeRegistry().Register(foundation::TypeOf<ScenePhysics>());
+        draconic::script::RegisterExtraScriptRootType(&foundation::TypeOf<ScenePhysics>());
         draconic::script::RegisterExtraFacadeName(u8"ScenePhysics");
     }
 

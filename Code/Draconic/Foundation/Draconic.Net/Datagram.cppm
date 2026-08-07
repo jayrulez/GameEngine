@@ -2,19 +2,19 @@
 ///
 /// The UNRELIABLE datagram substrate the reliability layer is built on (docs/design/networking.md
 /// §4). `IDatagramSocket` is a connectionless send/recv over an opaque `DatagramEndpoint`; its
-/// backends are a real UDP socket (Core/System, a later slice) and the in-memory `SimDatagramNetwork`
+/// backends are a real UDP socket (Foundation/System, a later slice) and the in-memory `SimDatagramNetwork`
 /// here. Splitting reliability from the socket is what lets the reliable-UDP protocol be tested
 /// against deterministic packet loss/reorder with no OS sockets.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.net:datagram;
 
-import draconic.core;
+import draconic.foundation;
 import :transport; // SimConditions (shared sim knobs)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::net
 {

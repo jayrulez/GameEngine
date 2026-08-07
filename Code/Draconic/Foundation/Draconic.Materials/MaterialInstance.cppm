@@ -8,16 +8,16 @@
 /// breaking the partition cycle.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.materials:instance;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :types;
 import :material;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 
 export namespace draconic::materials

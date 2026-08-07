@@ -4,7 +4,7 @@
 add_library(Draconic.RHI.Validation STATIC)
 add_library(Draconic::RHI.Validation ALIAS Draconic.RHI.Validation)
 
-target_link_libraries(Draconic.RHI.Validation PUBLIC Draconic::RHI Draconic::Core Draconic::Policy)
+target_link_libraries(Draconic.RHI.Validation PUBLIC Draconic::RHI Draconic::Foundation Draconic::Policy)
 
 target_sources(Draconic.RHI.Validation
     PUBLIC

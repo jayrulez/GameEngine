@@ -2,10 +2,10 @@
 
 export module draconic.samples.framework:depth_buffer;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::samples::framework
 {

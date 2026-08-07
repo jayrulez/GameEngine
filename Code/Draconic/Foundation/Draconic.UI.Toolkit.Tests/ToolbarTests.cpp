@@ -1,18 +1,18 @@
 // Smoke test for Toolbar: constructs, adds buttons/separators/toggles, toggle round-trips + fires event.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 import draconic.ui.toolkit;
 
 using namespace draconic::ui;
 using namespace draconic::ui::toolkit;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 TEST_CASE("toolkit-toolbar: AddsItemsAndToggles")
 {
-    auto bar = core::MakeRef<Toolbar>(core::DefaultAllocator());
+    auto bar = foundation::MakeRef<Toolbar>(foundation::DefaultAllocator());
     CHECK(bar->Direction == Orientation::Horizontal);
 
     ToolbarButton* btn = bar->AddButton(u8"File");

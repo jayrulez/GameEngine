@@ -5,19 +5,19 @@
 // header + "pixels" stream into the output DB). Never linked by the runtime.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.image.editor;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.editor;
 import draconic.image;
 import draconic.image.io;
 import draconic.image.resource;
 import draconic.content;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::image
 {
@@ -31,7 +31,7 @@ export namespace draconic::image
         void Serialize(ISerializer& ar) override
         {
             draconic::editor::Asset::Serialize(ar); // fileName
-            draconic::core::Serialize(ar, "colorSpace", colorSpace);
+            draconic::foundation::Serialize(ar, "colorSpace", colorSpace);
         }
     };
 

@@ -16,12 +16,12 @@
 // decode; font.Shaper/font.Font -> CachedFont::shaper/::font.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:edit_text;
 
-import draconic.core; // String, StringView, RefPtr, Array, Span, Utf8Length, DecodeUtf8, Clamp, Max, Min
+import draconic.foundation; // String, StringView, RefPtr, Array, Span, Utf8Length, DecodeUtf8, Clamp, Max, Min
 import draconic.vg;
 import draconic.fonts; // CachedFont, GlyphPosition, SelectionRange, Rectangle, TextAlignment, VerticalAlignment
 import :view;
@@ -43,8 +43,8 @@ import :input_filter;
 import :palette;
 import :context_menu;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace fonts = draconic::fonts;
 
 export namespace draconic::ui

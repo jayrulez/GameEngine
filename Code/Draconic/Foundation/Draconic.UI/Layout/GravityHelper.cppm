@@ -4,15 +4,15 @@
 // Sedulous.UI/src/Layout/GravityHelper.bf (Beef static class -> struct with a static method).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:gravity_helper;
 
-import draconic.core; // Rectangle, Max
+import draconic.foundation; // Rectangle, Max
 import :thickness;
 import :gravity;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

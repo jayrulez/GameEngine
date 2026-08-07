@@ -7,14 +7,14 @@
 // Sedulous's Matrix); colors are float Color.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.vg.svg:types;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::vg::svg
 {

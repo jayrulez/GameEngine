@@ -6,18 +6,18 @@
 // type's namespace+name. Load/Save go through the ISerializer/SerializerFactory abstraction - the
 // CALLER picks the backend (XML for hand-editable files, binary for tests): the store is not tied to
 // any one. Streams only (no VFS): the caller opens the file (e.g. via VFS at
-// core::GetUserDataDirectory()) and hands over the stream. Sits just above Core so the runtime and
+// foundation::GetUserDataDirectory()) and hands over the stream. Sits just above Core so the runtime and
 // the editor can both use it.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h" // warn on a preserved/dropped unknown section
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h" // warn on a preserved/dropped unknown section
 
 export module draconic.settings;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::settings
 {

@@ -4,14 +4,14 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include <cmath>
 #include <cstdio>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.physics;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::physics;
 
 namespace

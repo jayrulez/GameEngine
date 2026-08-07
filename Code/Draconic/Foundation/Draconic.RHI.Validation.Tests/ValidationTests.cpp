@@ -1,13 +1,13 @@
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.rhi.null;
 import draconic.rhi.validation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::rhi;
 
 TEST_CASE("rhi.validation: wraps a backend and forwards valid calls")

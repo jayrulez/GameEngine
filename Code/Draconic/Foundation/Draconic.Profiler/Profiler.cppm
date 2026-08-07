@@ -2,19 +2,19 @@
 ///
 /// A lightweight hierarchical CPU scope profiler (the design ported from Sedulous.Profiler, made
 /// C++-idiomatic). Scopes nest into a per-thread tree; at frame end every thread's samples merge
-/// into the completed-frame snapshot. Timing uses core::GetTicks (the high-res monotonic counter).
+/// into the completed-frame snapshot. Timing uses foundation::GetTicks (the high-res monotonic counter).
 /// Instrument with the DRACONIC_PROFILE_SCOPE macro (Profiler.h) - it compiles to nothing when
 /// DRACONIC_PROFILING is off. Thread-safe: scopes touch only thread-local state; the registry +
 /// frame swap are mutex-guarded, and the merge runs at frame end when workers are idle.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.profiler;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::profiler
 {
@@ -23,7 +23,7 @@ export namespace draconic::profiler
     struct ProfileSample
     {
         const char* name = "";
-        u64 startTick = 0; // core::GetTicks() at scope entry
+        u64 startTick = 0; // foundation::GetTicks() at scope entry
         u64 durationTicks = 0;
         u32 depth = 0; // nesting depth within its thread
         u32 threadIndex = 0;

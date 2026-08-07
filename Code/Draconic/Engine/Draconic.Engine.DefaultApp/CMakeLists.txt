@@ -8,7 +8,7 @@ add_library(Draconic.Engine.DefaultApp STATIC)
 add_library(Draconic::Engine.DefaultApp ALIAS Draconic.Engine.DefaultApp)
 
 target_link_libraries(Draconic.Engine.DefaultApp
-    PUBLIC Draconic::Core Draconic::RHI Draconic::Runtime.Client Draconic::Engine.GameInstance Draconic::Shell Draconic::Graphics
+    PUBLIC Draconic::Foundation Draconic::RHI Draconic::Runtime.Client Draconic::Engine.GameInstance Draconic::Shell Draconic::Graphics
            Draconic::Scene Draconic::Engine.Scene Draconic::Engine.Render Draconic::Engine.Animation
            Draconic::Engine.Particles Draconic::Physics Draconic::Engine.Physics
            Draconic::Audio Draconic::Audio.Resource Draconic::Engine.Audio

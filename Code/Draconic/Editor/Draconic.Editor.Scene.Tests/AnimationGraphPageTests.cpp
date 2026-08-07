@@ -5,15 +5,15 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.animation;
 import draconic.animation.resource;
 import draconic.animation.editor;
 import draconic.editor.scene;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace anim = draconic::animation;
 
 TEST_CASE("animation graph page: default seed = one layer, Idle default state, Speed param")

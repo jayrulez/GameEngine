@@ -2,30 +2,30 @@
 // the EventDispatcher's InjectText (routed to the focused node), editing keys via InjectKeyDown.
 // A mock font (6px/byte advance) drives caret-placement measurement.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.fonts;
 import draconic.vg;
 import draconic.gui;
 
 using namespace draconic::gui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace fonts = draconic::fonts;
 namespace vg = draconic::vg;
 
 namespace
 {
     template <typename T>
-    core::RefPtr<T> Make()
+    foundation::RefPtr<T> Make()
     {
-        return core::MakeRef<T>(core::DefaultAllocator());
+        return foundation::MakeRef<T>(foundation::DefaultAllocator());
     }
 
     // 6px advance per byte, 12px line height (mirrors the Text-test mock).
     class MockFont : public fonts::IFont
     {
     public:
-        core::StringView FamilyName() const override { return core::StringView(u8"mock"); }
+        foundation::StringView FamilyName() const override { return foundation::StringView(u8"mock"); }
         fonts::FontMetrics Metrics() const override
         {
             fonts::FontMetrics m;
@@ -37,52 +37,52 @@ namespace
             m.scale = 1.0f;
             return m;
         }
-        core::f32 PixelHeight() const override { return 10.0f; }
-        fonts::GlyphInfo GetGlyphInfo(core::i32 cp) const override
+        foundation::f32 PixelHeight() const override { return 10.0f; }
+        fonts::GlyphInfo GetGlyphInfo(foundation::i32 cp) const override
         {
             fonts::GlyphInfo g;
             g.codepoint = cp;
             g.advanceWidth = 6.0f;
             return g;
         }
-        core::f32 GetKerning(core::i32, core::i32) const override { return 0.0f; }
-        bool HasGlyph(core::i32) const override { return true; }
-        core::f32 MeasureString(core::StringView text) const override
+        foundation::f32 GetKerning(foundation::i32, foundation::i32) const override { return 0.0f; }
+        bool HasGlyph(foundation::i32) const override { return true; }
+        foundation::f32 MeasureString(foundation::StringView text) const override
         {
-            return static_cast<core::f32>(text.Size()) * 6.0f;
+            return static_cast<foundation::f32>(text.Size()) * 6.0f;
         }
-        core::f32 MeasureString(core::StringView text,
-                                core::Array<fonts::GlyphPosition>& out) const override
+        foundation::f32 MeasureString(foundation::StringView text,
+                                foundation::Array<fonts::GlyphPosition>& out) const override
         {
             (void)out;
-            return static_cast<core::f32>(text.Size()) * 6.0f;
+            return static_cast<foundation::f32>(text.Size()) * 6.0f;
         }
     };
 
-    MockFont* NewMock() { return core::DefaultAllocator().New<MockFont>(); }
+    MockFont* NewMock() { return foundation::DefaultAllocator().New<MockFont>(); }
 
     // u32 view of a gui::KeyCode, since InjectKeyDown takes a raw code.
-    core::u32 Key(KeyCode k) { return static_cast<core::u32>(k); }
+    foundation::u32 Key(KeyCode k) { return static_cast<foundation::u32>(k); }
 
     // In-memory clipboard so the cut/copy/paste path is testable without a shell.
     class MemClipboard : public IClipboard
     {
     public:
         bool HasText() const override { return m_text.Size() > 0; }
-        core::String GetText() const override { return m_text; }
-        void SetText(core::StringView text) override { m_text = core::String(text); }
+        foundation::String GetText() const override { return m_text; }
+        void SetText(foundation::StringView text) override { m_text = foundation::String(text); }
 
     private:
-        core::String m_text;
+        foundation::String m_text;
     };
 }
 
 TEST_CASE("textfield: typed text is inserted at the caret and the caret advances")
 {
     auto root = Make<SceneNode>();
-    root->SetSize(core::Float2{200.0f, 100.0f});
+    root->SetSize(foundation::Float2{200.0f, 100.0f});
     auto f = Make<TextField>();
-    f->SetSize(core::Float2{100.0f, 24.0f});
+    f->SetSize(foundation::Float2{100.0f, 24.0f});
     root->AddChild(f.Get());
     EventDispatcher* d = root->GetEventDispatcher();
 
@@ -90,46 +90,46 @@ TEST_CASE("textfield: typed text is inserted at the caret and the caret advances
     f->RequestFocus();
     CHECK(f->IsFocused());
 
-    d->InjectText(core::StringView(u8"Hi"));
-    CHECK(f->GetText() == core::StringView(u8"Hi"));
+    d->InjectText(foundation::StringView(u8"Hi"));
+    CHECK(f->GetText() == foundation::StringView(u8"Hi"));
     CHECK(f->GetCaret() == 2);
 
     // Move the caret to the start and insert there.
     d->InjectKeyDown(Key(KeyCode::Home));
     CHECK(f->GetCaret() == 0);
-    d->InjectText(core::StringView(u8"Oh "));
-    CHECK(f->GetText() == core::StringView(u8"Oh Hi"));
+    d->InjectText(foundation::StringView(u8"Oh "));
+    CHECK(f->GetText() == foundation::StringView(u8"Oh Hi"));
     CHECK(f->GetCaret() == 3);
 }
 
 TEST_CASE("textfield: text only reaches a focused field")
 {
     auto root = Make<SceneNode>();
-    root->SetSize(core::Float2{200.0f, 100.0f});
+    root->SetSize(foundation::Float2{200.0f, 100.0f});
     auto f = Make<TextField>();
-    f->SetSize(core::Float2{100.0f, 24.0f});
+    f->SetSize(foundation::Float2{100.0f, 24.0f});
     root->AddChild(f.Get());
     EventDispatcher* d = root->GetEventDispatcher();
 
-    d->InjectText(core::StringView(u8"nope")); // not focused -> dropped
+    d->InjectText(foundation::StringView(u8"nope")); // not focused -> dropped
     CHECK(f->GetText().Size() == 0);
 }
 
 TEST_CASE("textfield: backspace and delete remove whole codepoints (UTF-8)")
 {
     auto root = Make<SceneNode>();
-    root->SetSize(core::Float2{200.0f, 100.0f});
+    root->SetSize(foundation::Float2{200.0f, 100.0f});
     auto f = Make<TextField>();
-    f->SetSize(core::Float2{100.0f, 24.0f});
+    f->SetSize(foundation::Float2{100.0f, 24.0f});
     root->AddChild(f.Get());
     EventDispatcher* d = root->GetEventDispatcher();
     f->RequestFocus();
 
-    f->SetText(core::StringView(u8"aé")); // 'a'(1) + 'é'(2 bytes), caret at end (3)
+    f->SetText(foundation::StringView(u8"aé")); // 'a'(1) + 'é'(2 bytes), caret at end (3)
     CHECK(f->GetCaret() == 3);
 
     d->InjectKeyDown(Key(KeyCode::Backspace)); // removes the whole 'é'
-    CHECK(f->GetText() == core::StringView(u8"a"));
+    CHECK(f->GetText() == foundation::StringView(u8"a"));
     CHECK(f->GetCaret() == 1);
 
     d->InjectKeyDown(Key(KeyCode::Home));
@@ -146,13 +146,13 @@ TEST_CASE("textfield: backspace and delete remove whole codepoints (UTF-8)")
 TEST_CASE("textfield: caret navigation steps by codepoint and clamps")
 {
     auto f = Make<TextField>();
-    f->SetSize(core::Float2{100.0f, 24.0f});
+    f->SetSize(foundation::Float2{100.0f, 24.0f});
     auto root = Make<SceneNode>();
     root->AddChild(f.Get());
     EventDispatcher* d = root->GetEventDispatcher();
     f->RequestFocus();
 
-    f->SetText(core::StringView(u8"é€")); // 2 bytes + 3 bytes = 5 bytes, caret at 5
+    f->SetText(foundation::StringView(u8"é€")); // 2 bytes + 3 bytes = 5 bytes, caret at 5
     d->InjectKeyDown(Key(KeyCode::Home));
     CHECK(f->GetCaret() == 0);
     d->InjectKeyDown(Key(KeyCode::Right)); // over 'é'
@@ -170,24 +170,24 @@ TEST_CASE("textfield: caret navigation steps by codepoint and clamps")
 TEST_CASE("textfield: change callback fires on edits")
 {
     auto f = Make<TextField>();
-    f->SetSize(core::Float2{100.0f, 24.0f});
+    f->SetSize(foundation::Float2{100.0f, 24.0f});
     auto root = Make<SceneNode>();
     root->AddChild(f.Get());
     EventDispatcher* d = root->GetEventDispatcher();
     f->RequestFocus();
 
     int changes = 0;
-    core::String last;
+    foundation::String last;
     f->SetOnTextChanged(
-        [&](core::StringView v)
+        [&](foundation::StringView v)
         {
             ++changes;
-            last = core::String(v);
+            last = foundation::String(v);
         });
 
-    d->InjectText(core::StringView(u8"x"));
+    d->InjectText(foundation::StringView(u8"x"));
     CHECK(changes == 1);
-    CHECK(last.AsView() == core::StringView(u8"x"));
+    CHECK(last.AsView() == foundation::StringView(u8"x"));
     d->InjectKeyDown(Key(KeyCode::Backspace));
     CHECK(changes == 2);
     CHECK(last.Size() == 0);
@@ -202,25 +202,25 @@ TEST_CASE("textfield: mouse press focuses and places the caret at the nearest bo
 {
     fonts::CachedFont cf(NewMock(), nullptr, nullptr); // 6px/byte
     auto root = Make<SceneNode>();
-    root->SetSize(core::Float2{200.0f, 100.0f});
+    root->SetSize(foundation::Float2{200.0f, 100.0f});
     auto f = Make<TextField>();
-    f->SetSize(core::Float2{100.0f, 24.0f});
+    f->SetSize(foundation::Float2{100.0f, 24.0f});
     f->SetFont(&cf);
-    f->SetText(core::StringView(u8"abcd")); // widths at boundaries: 0,6,12,18,24
+    f->SetText(foundation::StringView(u8"abcd")); // widths at boundaries: 0,6,12,18,24
     root->AddChild(f.Get());
     EventDispatcher* d = root->GetEventDispatcher();
 
     // Click near x=13 (content x, no padding) -> closest boundary is offset 2 (width 12).
-    d->InjectMouseDown(core::Float2{13.0f, 12.0f}, MouseButton::Left);
+    d->InjectMouseDown(foundation::Float2{13.0f, 12.0f}, MouseButton::Left);
     CHECK(f->IsFocused());
     CHECK(f->GetCaret() == 2);
 
     // Click past the end -> caret at end.
-    d->InjectMouseDown(core::Float2{90.0f, 12.0f}, MouseButton::Left);
+    d->InjectMouseDown(foundation::Float2{90.0f, 12.0f}, MouseButton::Left);
     CHECK(f->GetCaret() == 4);
 
     // Click at the far left -> caret at start.
-    d->InjectMouseDown(core::Float2{0.0f, 12.0f}, MouseButton::Left);
+    d->InjectMouseDown(foundation::Float2{0.0f, 12.0f}, MouseButton::Left);
     CHECK(f->GetCaret() == 0);
 }
 
@@ -228,7 +228,7 @@ TEST_CASE("textfield: caret draws only while focused")
 {
     fonts::CachedFont cf(NewMock(), nullptr, nullptr);
     auto f = Make<TextField>();
-    f->SetSize(core::Float2{100.0f, 24.0f});
+    f->SetSize(foundation::Float2{100.0f, 24.0f});
     f->SetFont(&cf);
 
     // Not focused: no caret geometry (empty text, no font-service atlas -> no glyph geometry).
@@ -254,11 +254,11 @@ TEST_CASE("textfield: caret draws only while focused")
 TEST_CASE("textfield: WantsTextInput drives the dispatcher's text-input wish by focus")
 {
     auto root = Make<SceneNode>();
-    root->SetSize(core::Float2{200.0f, 100.0f});
+    root->SetSize(foundation::Float2{200.0f, 100.0f});
     auto f = Make<TextField>();
-    f->SetSize(core::Float2{100.0f, 24.0f});
+    f->SetSize(foundation::Float2{100.0f, 24.0f});
     auto plain = Make<Button>(); // a non-editing widget
-    plain->SetSize(core::Float2{100.0f, 24.0f});
+    plain->SetSize(foundation::Float2{100.0f, 24.0f});
     root->AddChild(f.Get());
     root->AddChild(plain.Get());
     EventDispatcher* d = root->GetEventDispatcher();
@@ -303,14 +303,14 @@ namespace
     // A focused field holding `value`, wired under a scene so it has a dispatcher.
     struct Fixture
     {
-        core::RefPtr<SceneNode> root = Make<SceneNode>();
-        core::RefPtr<TextField> field = Make<TextField>();
+        foundation::RefPtr<SceneNode> root = Make<SceneNode>();
+        foundation::RefPtr<TextField> field = Make<TextField>();
         fonts::CachedFont font{NewMock(), nullptr, nullptr};
 
-        explicit Fixture(core::StringView value = {})
+        explicit Fixture(foundation::StringView value = {})
         {
-            root->SetSize(core::Float2{400.0f, 100.0f});
-            field->SetSize(core::Float2{200.0f, 24.0f});
+            root->SetSize(foundation::Float2{400.0f, 100.0f});
+            field->SetSize(foundation::Float2{200.0f, 24.0f});
             field->SetFont(&font);
             root->AddChild(field.Get());
             if (value.Size() > 0)
@@ -327,11 +327,11 @@ TEST_CASE("textfield: shift+arrows extend a selection; the selection reports its
     fx.field->SetCaret(0);
     CHECK_FALSE(fx.field->HasSelection());
 
-    const core::u32 shift = static_cast<core::u32>(KeyModShift);
+    const foundation::u32 shift = static_cast<foundation::u32>(KeyModShift);
     fx.d()->InjectKeyDown(Key(KeyCode::Right), shift);
     fx.d()->InjectKeyDown(Key(KeyCode::Right), shift);
     CHECK(fx.field->HasSelection());
-    CHECK(fx.field->SelectedText() == core::StringView(u8"he"));
+    CHECK(fx.field->SelectedText() == foundation::StringView(u8"he"));
     CHECK(fx.field->GetCaret() == 2);
 
     // A plain (no-shift) Right collapses the selection to its right edge.
@@ -344,9 +344,9 @@ TEST_CASE("textfield: shift+Home selects to the start; plain Left collapses to s
 {
     Fixture fx(u8"hello");
     fx.field->SetCaret(5);
-    const core::u32 shift = static_cast<core::u32>(KeyModShift);
+    const foundation::u32 shift = static_cast<foundation::u32>(KeyModShift);
     fx.d()->InjectKeyDown(Key(KeyCode::Home), shift);
-    CHECK(fx.field->SelectedText() == core::StringView(u8"hello"));
+    CHECK(fx.field->SelectedText() == foundation::StringView(u8"hello"));
 
     // Plain Left with a selection jumps the caret to the selection start (offset 0).
     fx.d()->InjectKeyDown(Key(KeyCode::Left));
@@ -358,9 +358,9 @@ TEST_CASE("textfield: typing over a selection replaces it")
 {
     Fixture fx(u8"hello");
     fx.field->SelectAll();
-    CHECK(fx.field->SelectedText() == core::StringView(u8"hello"));
-    fx.d()->InjectText(core::StringView(u8"X"));
-    CHECK(fx.field->GetText() == core::StringView(u8"X"));
+    CHECK(fx.field->SelectedText() == foundation::StringView(u8"hello"));
+    fx.d()->InjectText(foundation::StringView(u8"X"));
+    CHECK(fx.field->GetText() == foundation::StringView(u8"X"));
     CHECK(fx.field->GetCaret() == 1);
     CHECK_FALSE(fx.field->HasSelection());
 }
@@ -369,13 +369,13 @@ TEST_CASE("textfield: backspace and delete remove the whole selection")
 {
     Fixture fx(u8"hello");
     fx.field->SetCaret(1);
-    const core::u32 shift = static_cast<core::u32>(KeyModShift);
+    const foundation::u32 shift = static_cast<foundation::u32>(KeyModShift);
     fx.d()->InjectKeyDown(Key(KeyCode::Right), shift);
     fx.d()->InjectKeyDown(Key(KeyCode::Right), shift);
     fx.d()->InjectKeyDown(Key(KeyCode::Right), shift); // "ell" selected
-    CHECK(fx.field->SelectedText() == core::StringView(u8"ell"));
+    CHECK(fx.field->SelectedText() == foundation::StringView(u8"ell"));
     fx.d()->InjectKeyDown(Key(KeyCode::Backspace));
-    CHECK(fx.field->GetText() == core::StringView(u8"ho"));
+    CHECK(fx.field->GetText() == foundation::StringView(u8"ho"));
     CHECK(fx.field->GetCaret() == 1);
 }
 
@@ -387,19 +387,19 @@ TEST_CASE("textfield: Ctrl+C / Ctrl+V copy and paste a selection through the cli
     Fixture fx(u8"hello");
     fx.d()->SetClipboard(&clip);
 
-    const core::u32 ctrl = static_cast<core::u32>(KeyModCtrl);
-    const core::u32 shift = static_cast<core::u32>(KeyModShift);
+    const foundation::u32 ctrl = static_cast<foundation::u32>(KeyModCtrl);
+    const foundation::u32 shift = static_cast<foundation::u32>(KeyModShift);
 
     fx.field->SetCaret(0);
     fx.d()->InjectKeyDown(Key(KeyCode::Right), shift);
     fx.d()->InjectKeyDown(Key(KeyCode::Right), shift); // select "he"
     fx.d()->InjectKeyDown(Key(KeyCode::C), ctrl);
-    CHECK(clip.GetText() == core::StringView(u8"he"));
+    CHECK(clip.GetText() == foundation::StringView(u8"he"));
 
     // Paste at the end.
     fx.d()->InjectKeyDown(Key(KeyCode::End));
     fx.d()->InjectKeyDown(Key(KeyCode::V), ctrl);
-    CHECK(fx.field->GetText() == core::StringView(u8"hellohe"));
+    CHECK(fx.field->GetText() == foundation::StringView(u8"hellohe"));
 }
 
 TEST_CASE("textfield: Ctrl+X cuts the selection to the clipboard")
@@ -409,29 +409,29 @@ TEST_CASE("textfield: Ctrl+X cuts the selection to the clipboard")
     fx.d()->SetClipboard(&clip);
 
     fx.field->SelectAll();
-    const core::u32 ctrl = static_cast<core::u32>(KeyModCtrl);
+    const foundation::u32 ctrl = static_cast<foundation::u32>(KeyModCtrl);
     fx.d()->InjectKeyDown(Key(KeyCode::X), ctrl);
-    CHECK(clip.GetText() == core::StringView(u8"hello"));
+    CHECK(clip.GetText() == foundation::StringView(u8"hello"));
     CHECK(fx.field->GetText().Size() == 0);
 }
 
 TEST_CASE("textfield: paste with no clipboard configured is a safe no-op")
 {
     Fixture fx(u8"hi");
-    const core::u32 ctrl = static_cast<core::u32>(KeyModCtrl);
+    const foundation::u32 ctrl = static_cast<foundation::u32>(KeyModCtrl);
     fx.d()->InjectKeyDown(Key(KeyCode::V), ctrl); // no clipboard set -> nothing happens
-    CHECK(fx.field->GetText() == core::StringView(u8"hi"));
+    CHECK(fx.field->GetText() == foundation::StringView(u8"hi"));
 }
 
 TEST_CASE("textfield: pasted newlines are stripped to keep the value single-line")
 {
     MemClipboard clip;
-    clip.SetText(core::StringView(u8"a\nb\r\nc"));
+    clip.SetText(foundation::StringView(u8"a\nb\r\nc"));
     Fixture fx;
     fx.d()->SetClipboard(&clip);
-    const core::u32 ctrl = static_cast<core::u32>(KeyModCtrl);
+    const foundation::u32 ctrl = static_cast<foundation::u32>(KeyModCtrl);
     fx.d()->InjectKeyDown(Key(KeyCode::V), ctrl);
-    CHECK(fx.field->GetText() == core::StringView(u8"abc"));
+    CHECK(fx.field->GetText() == foundation::StringView(u8"abc"));
 }
 
 // ===================== Placeholder / max-length =====================
@@ -439,37 +439,37 @@ TEST_CASE("textfield: pasted newlines are stripped to keep the value single-line
 TEST_CASE("textfield: placeholder is stored and reported")
 {
     auto f = Make<TextField>();
-    f->SetPlaceholder(core::StringView(u8"Search..."));
-    CHECK(f->GetPlaceholder() == core::StringView(u8"Search..."));
+    f->SetPlaceholder(foundation::StringView(u8"Search..."));
+    CHECK(f->GetPlaceholder() == foundation::StringView(u8"Search..."));
 }
 
 TEST_CASE("textfield: max-length caps typed input and truncates a paste")
 {
     Fixture fx;
     fx.field->SetMaxLength(3);
-    fx.d()->InjectText(core::StringView(u8"ab"));
-    fx.d()->InjectText(core::StringView(u8"cd")); // only 'c' fits (cap of 3)
-    CHECK(fx.field->GetText() == core::StringView(u8"abc"));
+    fx.d()->InjectText(foundation::StringView(u8"ab"));
+    fx.d()->InjectText(foundation::StringView(u8"cd")); // only 'c' fits (cap of 3)
+    CHECK(fx.field->GetText() == foundation::StringView(u8"abc"));
 
     // Further input past the cap is dropped.
-    fx.d()->InjectText(core::StringView(u8"z"));
-    CHECK(fx.field->GetText() == core::StringView(u8"abc"));
+    fx.d()->InjectText(foundation::StringView(u8"z"));
+    CHECK(fx.field->GetText() == foundation::StringView(u8"abc"));
 
     // A paste is likewise truncated to the remaining room (here: none).
     MemClipboard clip;
-    clip.SetText(core::StringView(u8"XYZ"));
+    clip.SetText(foundation::StringView(u8"XYZ"));
     fx.d()->SetClipboard(&clip);
-    const core::u32 ctrl = static_cast<core::u32>(KeyModCtrl);
+    const foundation::u32 ctrl = static_cast<foundation::u32>(KeyModCtrl);
     fx.d()->InjectKeyDown(Key(KeyCode::V), ctrl);
-    CHECK(fx.field->GetText() == core::StringView(u8"abc"));
+    CHECK(fx.field->GetText() == foundation::StringView(u8"abc"));
 }
 
 TEST_CASE("textfield: max-length counts codepoints, not bytes (UTF-8)")
 {
     Fixture fx;
     fx.field->SetMaxLength(2);
-    fx.d()->InjectText(core::StringView(u8"ééé")); // three 2-byte 'é'
-    CHECK(fx.field->GetText() == core::StringView(u8"éé"));
+    fx.d()->InjectText(foundation::StringView(u8"ééé")); // three 2-byte 'é'
+    CHECK(fx.field->GetText() == foundation::StringView(u8"éé"));
 }
 
 // ===================== Mouse selection =====================
@@ -478,34 +478,34 @@ TEST_CASE("textfield: a double-click selects the word under the cursor")
 {
     Fixture fx(u8"foo bar baz"); // words at 0-3, 4-7, 8-11 (6px/byte)
     // Two presses at the same spot with no time advance = a double-click. x within "bar".
-    const core::Float2 pos{5.0f * 6.0f + 3.0f, 12.0f}; // ~ byte 5, inside "bar"
+    const foundation::Float2 pos{5.0f * 6.0f + 3.0f, 12.0f}; // ~ byte 5, inside "bar"
     fx.d()->InjectMouseDown(pos, MouseButton::Left);
     fx.d()->InjectMouseUp(pos, MouseButton::Left);
     fx.d()->InjectMouseDown(pos, MouseButton::Left);
-    CHECK(fx.field->SelectedText() == core::StringView(u8"bar"));
+    CHECK(fx.field->SelectedText() == foundation::StringView(u8"bar"));
 }
 
 TEST_CASE("textfield: dragging the mouse extends the selection")
 {
     Fixture fx(u8"hello");
     // Press at the start, move right to ~offset 3, release.
-    fx.d()->InjectMouseDown(core::Float2{0.0f, 12.0f}, MouseButton::Left);
+    fx.d()->InjectMouseDown(foundation::Float2{0.0f, 12.0f}, MouseButton::Left);
     CHECK_FALSE(fx.field->HasSelection());
-    fx.d()->InjectMouseMove(core::Float2{3.0f * 6.0f, 12.0f}); // captured by the pressed field
+    fx.d()->InjectMouseMove(foundation::Float2{3.0f * 6.0f, 12.0f}); // captured by the pressed field
     CHECK(fx.field->HasSelection());
-    CHECK(fx.field->SelectedText() == core::StringView(u8"hel"));
-    fx.d()->InjectMouseUp(core::Float2{3.0f * 6.0f, 12.0f}, MouseButton::Left);
+    CHECK(fx.field->SelectedText() == foundation::StringView(u8"hel"));
+    fx.d()->InjectMouseUp(foundation::Float2{3.0f * 6.0f, 12.0f}, MouseButton::Left);
     // A move after release no longer extends.
-    fx.d()->InjectMouseMove(core::Float2{5.0f * 6.0f, 12.0f});
-    CHECK(fx.field->SelectedText() == core::StringView(u8"hel"));
+    fx.d()->InjectMouseMove(foundation::Float2{5.0f * 6.0f, 12.0f});
+    CHECK(fx.field->SelectedText() == foundation::StringView(u8"hel"));
 }
 
 TEST_CASE("textfield: shift+click extends the selection from the caret")
 {
     Fixture fx(u8"hello");
     fx.field->SetCaret(1); // after 'h'
-    const core::u32 shift = static_cast<core::u32>(KeyModShift);
-    fx.d()->InjectMouseDown(core::Float2{4.0f * 6.0f, 12.0f}, MouseButton::Left, shift);
+    const foundation::u32 shift = static_cast<foundation::u32>(KeyModShift);
+    fx.d()->InjectMouseDown(foundation::Float2{4.0f * 6.0f, 12.0f}, MouseButton::Left, shift);
     CHECK(fx.field->HasSelection());
-    CHECK(fx.field->SelectedText() == core::StringView(u8"ell"));
+    CHECK(fx.field->SelectedText() == foundation::StringView(u8"ell"));
 }

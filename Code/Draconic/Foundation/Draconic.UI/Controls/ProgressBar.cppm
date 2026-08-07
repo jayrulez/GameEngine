@@ -3,12 +3,12 @@
 // Progress indicator showing a filled bar from 0 to 1. Ported from Sedulous.UI/src/Controls/ProgressBar.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:progress_bar;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import :view;
 import :event;
@@ -19,7 +19,7 @@ import :control_state;
 import :draw_context;
 import :drawable;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

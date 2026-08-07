@@ -1,11 +1,11 @@
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.profiler;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::profiler;
 
 TEST_CASE("profiler: a single scope is recorded")

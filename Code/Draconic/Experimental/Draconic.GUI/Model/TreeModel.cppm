@@ -7,17 +7,17 @@
 // view can track selection/expansion by id across expand/collapse.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:tree_model;
 
-import draconic.core; // Array, String, StringView, i32, i64
+import draconic.foundation; // Array, String, StringView, i32, i64
 import :variant;
 import :model_index;
 import :model;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -29,10 +29,10 @@ export namespace draconic::gui
         TreeModel() = default;
 
         // Add a node under `parentId` (kRoot for a top level node); returns the new node's id.
-        i32 AddNode(i32 parentId, core::StringView text)
+        i32 AddNode(i32 parentId, foundation::StringView text)
         {
             const i32 id = static_cast<i32>(m_nodes.Size());
-            m_nodes.PushBack(Node{core::String(text), parentId, {}});
+            m_nodes.PushBack(Node{foundation::String(text), parentId, {}});
             if (parentId == kRoot)
                 m_roots.PushBack(id);
             else
@@ -47,11 +47,11 @@ export namespace draconic::gui
         }
         void Refresh() { DidUpdate(); } // call after a batch of AddNode
 
-        [[nodiscard]] core::StringView TextOf(i32 nodeId) const
+        [[nodiscard]] foundation::StringView TextOf(i32 nodeId) const
         {
             return (nodeId >= 0 && static_cast<usize>(nodeId) < m_nodes.Size())
                        ? m_nodes[static_cast<usize>(nodeId)].Text.AsView()
-                       : core::StringView{};
+                       : foundation::StringView{};
         }
 
         [[nodiscard]] usize ColumnCount() const override { return 1; }
@@ -105,7 +105,7 @@ export namespace draconic::gui
     private:
         struct Node
         {
-            core::String Text;
+            foundation::String Text;
             i32 Parent = kRoot;
             Array<i32> Children;
         };

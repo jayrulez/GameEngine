@@ -7,7 +7,7 @@
 //
 // Adapted (NOT a faithful port) from Sedulous.UI.Viewport/ViewportView.bf on two axes, per design
 // sign-off:
-//   * Fit math is core::ContentFit (Stretch/Letterbox/Crop/IntegerScale) - the same value type used
+//   * Fit math is foundation::ContentFit (Stretch/Letterbox/Crop/IntegerScale) - the same value type used
 //     for input hit-testing - instead of a bespoke ComputeContentRect/ScreenToTexture. Draw (DstRect/
 //     SrcRect) and input (ToContent) share one computation so they can never drift.
 //   * Input is a shell::InputSurface (gated, content-space IMouse/IKeyboard), NOT Sedulous's
@@ -21,12 +21,12 @@
 // UI pass samples) on one queue, so submission order serializes frame N+1's write after frame N's read.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui.viewport;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.image;
 import draconic.vg;
@@ -34,7 +34,7 @@ import draconic.vg.renderer;
 import draconic.ui;
 import draconic.shell;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui::viewport
 {
@@ -255,7 +255,7 @@ export namespace draconic::ui::viewport
             // scale != 100%. The CONTENT resolution stays the RT's own size (MakeMouseRay divides
             // the content mouse by RenderWidth), so only the region-space conversion is needed here.
             f32 dpi = 1.0f;
-            if (draconic::ui::RootView* rv = draconic::core::Cast<draconic::ui::RootView>(root))
+            if (draconic::ui::RootView* rv = draconic::foundation::Cast<draconic::ui::RootView>(root))
             {
                 dpi = Max(rv->DpiScale, 0.01f);
             }

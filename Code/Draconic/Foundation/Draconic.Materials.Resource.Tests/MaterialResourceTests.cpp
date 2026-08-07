@@ -4,10 +4,10 @@
 // name + properties + default uniforms, and that binding the shader mid-build recorded
 // a material->shader dependency edge (so a shader reload propagates). Real DXC + Null RHI.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.resource;
@@ -19,7 +19,7 @@ import draconic.shaders.resource;
 import draconic.materials;
 import draconic.materials.resource;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::vfs;
 using namespace draconic::resource;
 using namespace draconic::materials;
@@ -61,7 +61,7 @@ TEST_CASE("material resource: built via the manager; resolves shader + records t
 
     Guid shaderId, matId;
     {
-        draconic::content::ContentDatabase db(mount, draconic::core::BinarySerializerFactory(),
+        draconic::content::ContentDatabase db(mount, draconic::foundation::BinarySerializerFactory(),
                                               u8".rasset");
 
         auto* shaderInst =
@@ -89,7 +89,7 @@ TEST_CASE("material resource: built via the manager; resolves shader + records t
         REQUIRE(matInst->WriteObject(ms).IsOk());
     }
 
-    draconic::content::ContentDatabase db(mount, draconic::core::BinarySerializerFactory(),
+    draconic::content::ContentDatabase db(mount, draconic::foundation::BinarySerializerFactory(),
                                           u8".rasset");
     rhi::null::NullDevice device{DefaultAllocator()};
     shaders::ShaderSystem system(*compiler, device);
@@ -241,7 +241,7 @@ TEST_CASE("material source: sampler address modes round-trip (v2)")
 
     Guid id;
     {
-        draconic::content::ContentDatabase db(mount, draconic::core::BinarySerializerFactory(),
+        draconic::content::ContentDatabase db(mount, draconic::foundation::BinarySerializerFactory(),
                                               u8".rasset");
         MaterialSource source;
         source.name = u8"wrapped";
@@ -253,7 +253,7 @@ TEST_CASE("material source: sampler address modes round-trip (v2)")
         REQUIRE(inst->WriteObject(source).IsOk());
     }
     {
-        draconic::content::ContentDatabase db(mount, draconic::core::BinarySerializerFactory(),
+        draconic::content::ContentDatabase db(mount, draconic::foundation::BinarySerializerFactory(),
                                               u8".rasset");
         RefPtr<ISerializable> object = db.ReadObject(id);
         auto* read = Cast<MaterialSource>(object.Get());

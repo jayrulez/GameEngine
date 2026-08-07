@@ -7,20 +7,20 @@
 // round handle. Horizontal only (vertical is a follow-up).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:slider;
 
-import draconic.core; // Color, Function, Move, Max, Min, Float2, Rectangle
+import draconic.foundation; // Color, Function, Move, Max, Min, Float2, Rectangle
 import draconic.vg;   // CornerRadii
 import :rect;
 import :event;
 import :draw_context;
 import :ui_widget;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace vg = draconic::vg;
 
 export namespace draconic::gui
@@ -31,14 +31,14 @@ export namespace draconic::gui
     public:
         Slider()
         {
-            SetTag(core::StringView(u8"slider"));
+            SetTag(foundation::StringView(u8"slider"));
             SetTabFocusable(true);
         }
 
         [[nodiscard]] f32 GetValue() const noexcept { return m_value; }
         void SetValue(f32 value)
         {
-            value = core::Max(0.0f, core::Min(1.0f, value));
+            value = foundation::Max(0.0f, foundation::Min(1.0f, value));
             if (value == m_value)
                 return;
             m_value = value;
@@ -47,9 +47,9 @@ export namespace draconic::gui
                 m_onChanged(m_value);
         }
 
-        void SetOnValueChanged(core::Function<void(f32)> callback)
+        void SetOnValueChanged(foundation::Function<void(f32)> callback)
         {
-            m_onChanged = core::Move(callback);
+            m_onChanged = foundation::Move(callback);
         }
 
         void SetTrackColor(Color color)
@@ -69,19 +69,19 @@ export namespace draconic::gui
         }
 
         // Theming parts: slider::track / ::fill / ::thumb.
-        void CollectStyleParts(core::Array<core::StringView>& out) const override
+        void CollectStyleParts(foundation::Array<foundation::StringView>& out) const override
         {
-            out.PushBack(core::StringView(u8"track"));
-            out.PushBack(core::StringView(u8"fill"));
-            out.PushBack(core::StringView(u8"thumb"));
+            out.PushBack(foundation::StringView(u8"track"));
+            out.PushBack(foundation::StringView(u8"fill"));
+            out.PushBack(foundation::StringView(u8"thumb"));
         }
-        void SetThemePartColor(core::StringView part, Color color) override
+        void SetThemePartColor(foundation::StringView part, Color color) override
         {
-            if (part == core::StringView(u8"track"))
+            if (part == foundation::StringView(u8"track"))
                 SetTrackColor(color);
-            else if (part == core::StringView(u8"fill"))
+            else if (part == foundation::StringView(u8"fill"))
                 SetFillColor(color);
-            else if (part == core::StringView(u8"thumb"))
+            else if (part == foundation::StringView(u8"thumb"))
                 SetHandleColor(color);
         }
 
@@ -122,11 +122,11 @@ export namespace draconic::gui
             const f32 x1 = b.x + b.width - handleR;
             const f32 handleX = x0 + (x1 - x0) * m_value;
 
-            ctx.VG().FillRoundedRect(core::Rectangle{b.x, trackTop, b.width, trackH},
+            ctx.VG().FillRoundedRect(foundation::Rectangle{b.x, trackTop, b.width, trackH},
                                      vg::CornerRadii(trackH * 0.5f), m_trackColor);
-            ctx.VG().FillRoundedRect(core::Rectangle{b.x, trackTop, handleX - b.x, trackH},
+            ctx.VG().FillRoundedRect(foundation::Rectangle{b.x, trackTop, handleX - b.x, trackH},
                                      vg::CornerRadii(trackH * 0.5f), m_fillColor);
-            ctx.VG().FillCircle(core::Float2{handleX, cy}, handleR, m_handleColor);
+            ctx.VG().FillCircle(foundation::Float2{handleX, cy}, handleR, m_handleColor);
         }
 
     private:
@@ -134,7 +134,7 @@ export namespace draconic::gui
         {
             const Rect b = GetContentBounds();
             const f32 handleR = b.height * 0.5f;
-            const core::Float2 local = ConvertToNodeSpace(event.Position);
+            const foundation::Float2 local = ConvertToNodeSpace(event.Position);
             const f32 x0 = b.x + handleR;
             const f32 x1 = b.x + b.width - handleR;
             SetValue((x1 > x0) ? (local.x - x0) / (x1 - x0) : 0.0f);
@@ -145,7 +145,7 @@ export namespace draconic::gui
         Color m_trackColor{0.28f, 0.30f, 0.35f, 1.0f};
         Color m_fillColor{0.31f, 0.63f, 0.85f, 1.0f};
         Color m_handleColor{0.86f, 0.89f, 0.93f, 1.0f};
-        core::Function<void(f32)> m_onChanged;
+        foundation::Function<void(f32)> m_onChanged;
     };
 
     DRACONIC_DEFINE_OBJECT(Slider, "draconic::gui")

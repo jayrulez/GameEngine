@@ -3,9 +3,9 @@
 // back through the ResourceManager + factory and confirm it round-trips + simulates. Mirrors
 // TexturePipelineTests, adapted for an AUTHORED (not imported) asset.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.resource;
@@ -18,7 +18,7 @@ import draconic.particles;
 import draconic.particles.resource;
 import draconic.particles.editor;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::vfs;
 using namespace draconic::resource;
 using namespace draconic::particles;
@@ -43,7 +43,7 @@ TEST_CASE("particles.pipeline: authored asset -> Build() -> cooked resource -> B
 
     // Author the effect in an asset, then cook it via the builder into the DB instance.
     {
-        draconic::content::ContentDatabase db(mount, draconic::core::BinarySerializerFactory(),
+        draconic::content::ContentDatabase db(mount, draconic::foundation::BinarySerializerFactory(),
                                               u8".rasset");
         auto* inst =
             db.RootGroup()->CreateInstance(u8"smoke", ParticleEffectResource::StaticType());
@@ -69,7 +69,7 @@ TEST_CASE("particles.pipeline: authored asset -> Build() -> cooked resource -> B
     }
 
     // Load the cooked resource back.
-    draconic::content::ContentDatabase db(mount, draconic::core::BinarySerializerFactory(),
+    draconic::content::ContentDatabase db(mount, draconic::foundation::BinarySerializerFactory(),
                                           u8".rasset");
     ParticleEffectFactory factory;
     ResourceManager manager(db);
@@ -109,7 +109,7 @@ TEST_CASE("particles.pipeline: Build resolves a texture path ref -> cooked GUID 
     Guid effectId, texId;
 
     {
-        draconic::content::ContentDatabase db(mount, draconic::core::BinarySerializerFactory(),
+        draconic::content::ContentDatabase db(mount, draconic::foundation::BinarySerializerFactory(),
                                               u8".rasset");
 
         // Cook a texture the effect will reference.
@@ -146,7 +146,7 @@ TEST_CASE("particles.pipeline: Build resolves a texture path ref -> cooked GUID 
 
     // Load with both factories so the effect's Create can Bind the referenced texture.
     rhi::null::NullDevice device{DefaultAllocator()};
-    draconic::content::ContentDatabase db(mount, draconic::core::BinarySerializerFactory(),
+    draconic::content::ContentDatabase db(mount, draconic::foundation::BinarySerializerFactory(),
                                           u8".rasset");
     ParticleEffectFactory pfxFactory;
     draconic::texture::TextureFactory texFactory(device);

@@ -16,10 +16,10 @@
 //
 // Fly with WASD / hold RMB to look. No input needed - the cubes move themselves.
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include "Draconic.Runtime.Client/AppMain.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.runtime;
 import draconic.runtime.client;
 import draconic.engine.defaultapp;
@@ -41,7 +41,7 @@ import draconic.engine.script;
 
 #include "../Common/FlyCamera.h"
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace runtime = draconic::runtime;
 namespace graphics = draconic::graphics;
 namespace shell = draconic::shell;
@@ -51,14 +51,14 @@ namespace geometry = draconic::geometry;
 namespace materials = draconic::materials;
 namespace script = draconic::script;
 
-using core::f32;
+using foundation::f32;
 
 namespace
 {
     // ---- the two behavior classes (the cook harvests these `static properties`; here
     // we build the metadata by hand to match, since the sample links no cooker) ----
 
-    constexpr core::StringView kMoverSource =
+    constexpr foundation::StringView kMoverSource =
         u8"import \"main\" for Float3\n"
         u8"class Mover {\n"
         u8"    static properties { {\n"
@@ -90,7 +90,7 @@ namespace
         u8"    }\n"
         u8"}\n";
 
-    constexpr core::StringView kSpinnerSource =
+    constexpr foundation::StringView kSpinnerSource =
         u8"class Spinner {\n"
         u8"    static properties { {\n"
         u8"        \"speed\": [\"float\", 90.0, \"degrees per second\"],\n"
@@ -107,46 +107,46 @@ namespace
         u8"    }\n"
         u8"}\n";
 
-    [[nodiscard]] script::ScriptPropertyDesc FloatProp(core::StringView name, f32 value,
-                                                       core::StringView description)
+    [[nodiscard]] script::ScriptPropertyDesc FloatProp(foundation::StringView name, f32 value,
+                                                       foundation::StringView description)
     {
         script::ScriptPropertyDesc desc;
-        desc.name = core::String(name);
+        desc.name = foundation::String(name);
         desc.hash = script::ScriptPropertyNameHash(name);
         desc.type = script::ScriptPropertyType::Float;
         desc.defaultValue.kind = script::ScriptPropertyType::Float;
-        desc.defaultValue.number = static_cast<core::f64>(value);
-        desc.description = core::String(description);
+        desc.defaultValue.number = static_cast<foundation::f64>(value);
+        desc.description = foundation::String(description);
         return desc;
     }
 
-    [[nodiscard]] core::RefPtr<script::ScriptClass> MakeMover()
+    [[nodiscard]] foundation::RefPtr<script::ScriptClass> MakeMover()
     {
-        auto cls = core::MakeRef<script::ScriptClass>(core::DefaultAllocator());
-        cls->language = core::String(u8"wren");
-        cls->className = core::String(u8"Mover");
-        cls->source = core::String(kMoverSource);
+        auto cls = foundation::MakeRef<script::ScriptClass>(foundation::DefaultAllocator());
+        cls->language = foundation::String(u8"wren");
+        cls->className = foundation::String(u8"Mover");
+        cls->source = foundation::String(kMoverSource);
         cls->properties.PushBack(FloatProp(u8"speed", 2.0f, u8"units per second"));
         script::ScriptPropertyDesc target;
-        target.name = core::String(u8"target");
+        target.name = foundation::String(u8"target");
         target.hash = script::ScriptPropertyNameHash(u8"target");
         target.type = script::ScriptPropertyType::Entity;
         target.defaultValue.kind = script::ScriptPropertyType::Entity;
-        cls->properties.PushBack(core::Move(target));
-        cls->handlers.PushBack(core::String(u8"onStart"));
-        cls->handlers.PushBack(core::String(u8"onUpdate"));
+        cls->properties.PushBack(foundation::Move(target));
+        cls->handlers.PushBack(foundation::String(u8"onStart"));
+        cls->handlers.PushBack(foundation::String(u8"onUpdate"));
         cls->BuildProfileName();
         return cls;
     }
 
-    [[nodiscard]] core::RefPtr<script::ScriptClass> MakeSpinner()
+    [[nodiscard]] foundation::RefPtr<script::ScriptClass> MakeSpinner()
     {
-        auto cls = core::MakeRef<script::ScriptClass>(core::DefaultAllocator());
-        cls->language = core::String(u8"wren");
-        cls->className = core::String(u8"Spinner");
-        cls->source = core::String(kSpinnerSource);
+        auto cls = foundation::MakeRef<script::ScriptClass>(foundation::DefaultAllocator());
+        cls->language = foundation::String(u8"wren");
+        cls->className = foundation::String(u8"Spinner");
+        cls->source = foundation::String(kSpinnerSource);
         cls->properties.PushBack(FloatProp(u8"speed", 90.0f, u8"degrees per second"));
-        cls->handlers.PushBack(core::String(u8"onUpdate"));
+        cls->handlers.PushBack(foundation::String(u8"onUpdate"));
         cls->BuildProfileName();
         return cls;
     }
@@ -157,7 +157,7 @@ namespace
         ScriptApp()
         {
 #ifdef DRACONIC_PLAYGROUND_FONT
-            SetUIFontPath(reinterpret_cast<const core::utf8char*>(DRACONIC_PLAYGROUND_FONT));
+            SetUIFontPath(reinterpret_cast<const foundation::utf8char*>(DRACONIC_PLAYGROUND_FONT));
 #endif
         }
 
@@ -165,7 +165,7 @@ namespace
         {
             // Route script logs (Log.info from behaviors, faults) to the console so the
             // sample self-reports (Mover onStart lines, any behavior fault).
-            core::GlobalLogger().AddSink(&m_consoleSink);
+            foundation::GlobalLogger().AddSink(&m_consoleSink);
 
             auto* scenes = host.Ctx().GetSubsystem<scene::SceneSubsystem>();
             if (scenes == nullptr)
@@ -179,7 +179,7 @@ namespace
             {
                 cameras->Add(m_camera);
             }
-            m_fly.position = core::Float3{0.0f, 6.0f, 16.0f};
+            m_fly.position = foundation::Float3{0.0f, 6.0f, 16.0f};
             m_fly.pitch = -0.25f;
 
             m_mover = MakeMover();
@@ -188,7 +188,7 @@ namespace
 
             m_scene->Start();
             m_scene->SetSimulationEnabled(true);
-            core::ConsoleWrite(u8"ScriptPlayground: cubes driven by Wren Mover/Spinner "
+            foundation::ConsoleWrite(u8"ScriptPlayground: cubes driven by Wren Mover/Spinner "
                                u8"behaviors. WASD/RMB fly.\n");
         }
 
@@ -230,37 +230,37 @@ namespace
                 return;
             }
 
-            core::RefPtr<geometry::StaticMesh> cube = geometry::Primitives::Cube(0.5f);
+            foundation::RefPtr<geometry::StaticMesh> cube = geometry::Primitives::Cube(0.5f);
 
             // A ground slab (static) for a sense of place.
             {
                 scene::EntityHandle ground = m_scene->CreateEntity(u8"ground");
-                m_scene->SetLocalPosition(ground, core::Float3{0.0f, -0.6f, 0.0f});
-                core::RefPtr<geometry::StaticMesh> slab = geometry::Primitives::Cube(1.0f);
+                m_scene->SetLocalPosition(ground, foundation::Float3{0.0f, -0.6f, 0.0f});
+                foundation::RefPtr<geometry::StaticMesh> slab = geometry::Primitives::Cube(1.0f);
                 render::MeshComponent& mc = meshes->Add(ground);
                 mc.mesh = slab;
                 mc.SetMaterial(materials::CreatePBR(
-                    u8"lit", core::Float4{0.15f, 0.16f, 0.19f, 1.0f}, 0.0f, 0.8f));
+                    u8"lit", foundation::Float4{0.15f, 0.16f, 0.19f, 1.0f}, 0.0f, 0.8f));
                 scene::EntityHandle g = ground;
-                core::Transform t = m_scene->GetLocalTransform(g);
-                t.scale = core::Float3{30.0f, 0.2f, 30.0f};
+                foundation::Transform t = m_scene->GetLocalTransform(g);
+                t.scale = foundation::Float3{30.0f, 0.2f, 30.0f};
                 m_scene->SetLocalTransform(g, t);
             }
 
             // The Mover's TARGET (a spinning beacon the movers chase).
             m_beacon = m_scene->CreateEntity(u8"beacon");
-            m_scene->SetLocalPosition(m_beacon, core::Float3{0.0f, 0.5f, 0.0f});
+            m_scene->SetLocalPosition(m_beacon, foundation::Float3{0.0f, 0.5f, 0.0f});
             {
                 render::MeshComponent& mc = meshes->Add(m_beacon);
                 mc.mesh = cube;
-                mc.SetMaterial(materials::CreatePBR(u8"lit", core::Float4{1.0f, 0.85f, 0.2f, 1.0f},
+                mc.SetMaterial(materials::CreatePBR(u8"lit", foundation::Float4{1.0f, 0.85f, 0.2f, 1.0f},
                                                     0.0f, 0.3f));
-                mc.color = core::Color{1.0f, 0.85f, 0.2f, 1.0f};
+                mc.color = foundation::Color{1.0f, 0.85f, 0.2f, 1.0f};
                 // The beacon SPINS (Spinner behavior, default 90 deg/s).
                 script::ScriptComponent& sc = scripts->Add(m_beacon);
                 script::ScriptBehavior spin;
                 spin.script.SetDirect(m_spinner);
-                sc.behaviors.PushBack(core::Move(spin));
+                sc.behaviors.PushBack(foundation::Move(spin));
             }
 
             // A ring of movers chasing the beacon, each with a distinct speed override.
@@ -270,12 +270,12 @@ namespace
                 const f32 angle = static_cast<f32>(i) / kMovers * 6.2831853f;
                 scene::EntityHandle e = m_scene->CreateEntity(u8"mover");
                 m_scene->SetLocalPosition(
-                    e, core::Float3{core::Cos(angle) * 8.0f, 0.5f, core::Sin(angle) * 8.0f});
+                    e, foundation::Float3{foundation::Cos(angle) * 8.0f, 0.5f, foundation::Sin(angle) * 8.0f});
                 render::MeshComponent& mc = meshes->Add(e);
                 mc.mesh = cube;
                 const f32 hue = static_cast<f32>(i) / kMovers;
                 mc.SetMaterial(materials::CreatePBR(
-                    u8"lit", core::Float4{0.3f + 0.6f * hue, 0.4f, 1.0f - 0.6f * hue, 1.0f}, 0.0f,
+                    u8"lit", foundation::Float4{0.3f + 0.6f * hue, 0.4f, 1.0f - 0.6f * hue, 1.0f}, 0.0f,
                     0.4f));
 
                 script::ScriptComponent& sc = scripts->Add(e);
@@ -290,7 +290,7 @@ namespace
                 target.kind = script::ScriptPropertyType::Entity;
                 target.guid = m_scene->GetEntityId(m_beacon);
                 mover.SetOverride(script::ScriptPropertyNameHash(u8"target"), target);
-                sc.behaviors.PushBack(core::Move(mover));
+                sc.behaviors.PushBack(foundation::Move(mover));
                 // Behavior 2 (ordered after the mover): Spinner, slower.
                 script::ScriptBehavior spin;
                 spin.script.SetDirect(m_spinner);
@@ -298,7 +298,7 @@ namespace
                 spinSpeed.kind = script::ScriptPropertyType::Float;
                 spinSpeed.number = 45.0;
                 spin.SetOverride(script::ScriptPropertyNameHash(u8"speed"), spinSpeed);
-                sc.behaviors.PushBack(core::Move(spin));
+                sc.behaviors.PushBack(foundation::Move(spin));
             }
         }
 
@@ -308,7 +308,7 @@ namespace
             {
                 return;
             }
-            core::Transform t;
+            foundation::Transform t;
             t.position = m_fly.position;
             t.rotation = m_fly.Rotation();
             m_scene->SetLocalTransform(m_camera, t);
@@ -317,9 +317,9 @@ namespace
         scene::Scene* m_scene = nullptr;
         scene::EntityHandle m_camera{};
         scene::EntityHandle m_beacon{};
-        core::RefPtr<script::ScriptClass> m_mover;
-        core::RefPtr<script::ScriptClass> m_spinner;
-        core::ConsoleSink m_consoleSink;
+        foundation::RefPtr<script::ScriptClass> m_mover;
+        foundation::RefPtr<script::ScriptClass> m_spinner;
+        foundation::ConsoleSink m_consoleSink;
         draconic::samples::FlyCamera m_fly;
     };
 }

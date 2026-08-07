@@ -6,14 +6,14 @@
 // (our RAII ownership; Beef returned a raw owned View).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:ilist_adapter;
 
-import draconic.core; // RefPtr
+import draconic.foundation; // RefPtr
 import :view;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

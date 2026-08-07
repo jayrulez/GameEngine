@@ -13,16 +13,16 @@
 
 module;
 #include <cmath>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui.toolkit:color_picker;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import draconic.ui;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui::toolkit
 {
@@ -122,8 +122,8 @@ export namespace draconic::ui::toolkit
 
         static void RGBToHSV(f32 r, f32 g, f32 b, f32& h, f32& s, f32& v)
         {
-            const f32 cMax = core::Max(r, core::Max(g, b));
-            const f32 cMin = core::Min(r, core::Min(g, b));
+            const f32 cMax = foundation::Max(r, foundation::Max(g, b));
+            const f32 cMin = foundation::Min(r, foundation::Min(g, b));
             const f32 delta = cMax - cMin;
 
             v = cMax;
@@ -314,7 +314,7 @@ export namespace draconic::ui::toolkit
             (void)top;
             const f32 h = height;
             const f32 w = width;
-            const f32 sqSize = core::Min(m_squareSize, h);
+            const f32 sqSize = foundation::Min(m_squareSize, h);
             f32 x = 0;
 
             m_svSquare->Measure(BoxConstraints::Tight(sqSize, sqSize));
@@ -329,7 +329,7 @@ export namespace draconic::ui::toolkit
             m_alphaStrip->Layout(x, 0, m_stripWidth, sqSize);
             x += m_stripWidth + m_gap;
 
-            const f32 inputW = core::Max(w - x, 70.0f);
+            const f32 inputW = foundation::Max(w - x, 70.0f);
             const f32 inputH = 24.0f;
             f32 y = 0;
 
@@ -597,8 +597,8 @@ export namespace draconic::ui::toolkit
 
     inline void ColorPicker::SVSquare::UpdateFromMouse(f32 x, f32 y)
     {
-        m_picker->m_saturation = core::Clamp(x / Width(), 0.0f, 1.0f);
-        m_picker->m_value = core::Clamp(1.0f - y / Height(), 0.0f, 1.0f);
+        m_picker->m_saturation = foundation::Clamp(x / Width(), 0.0f, 1.0f);
+        m_picker->m_value = foundation::Clamp(1.0f - y / Height(), 0.0f, 1.0f);
         m_picker->SyncFromHSV();
     }
 
@@ -624,7 +624,7 @@ export namespace draconic::ui::toolkit
 
     inline void ColorPicker::HueStripView::UpdateFromMouse(f32 y)
     {
-        m_picker->m_hue = core::Clamp(y / Height(), 0.0f, 1.0f) * 360.0f;
+        m_picker->m_hue = foundation::Clamp(y / Height(), 0.0f, 1.0f) * 360.0f;
         m_picker->SyncFromHSV();
     }
 
@@ -643,8 +643,8 @@ export namespace draconic::ui::toolkit
             {
                 const Color c = ((ry + cx) % 2 == 0) ? light : dark;
                 ctx.VG().FillRect(Rectangle{cx * checkSize, ry * checkSize,
-                                            core::Min(checkSize, Width() - cx * checkSize),
-                                            core::Min(checkSize, Height() - ry * checkSize)},
+                                            foundation::Min(checkSize, Width() - cx * checkSize),
+                                            foundation::Min(checkSize, Height() - ry * checkSize)},
                                   c);
             }
         }
@@ -671,7 +671,7 @@ export namespace draconic::ui::toolkit
 
     inline void ColorPicker::AlphaStripView::UpdateFromMouse(f32 y)
     {
-        m_picker->m_alpha = core::Clamp(1.0f - y / Height(), 0.0f, 1.0f);
+        m_picker->m_alpha = foundation::Clamp(1.0f - y / Height(), 0.0f, 1.0f);
         m_picker->SyncFromHSV();
     }
 

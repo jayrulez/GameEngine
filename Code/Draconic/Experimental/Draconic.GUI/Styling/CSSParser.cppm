@@ -6,24 +6,24 @@
 // @media / @keyframes / @import, custom properties (--var), nesting, !important.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:css_parser;
 
-import draconic.core; // String, StringView, Move
+import draconic.foundation; // String, StringView, Move
 import :style_rule;
 import :style_sheet;
 import :media_query;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 namespace draconic::gui
 {
     // Remove /* ... */ comments (run-copied so indices in the result are contiguous).
-    [[nodiscard]] inline core::String StripComments(core::StringView s)
+    [[nodiscard]] inline foundation::String StripComments(foundation::StringView s)
     {
-        core::String out;
+        foundation::String out;
         const usize n = s.Size();
         usize runStart = 0, i = 0;
         while (i < n)
@@ -53,9 +53,9 @@ export namespace draconic::gui
     {
     public:
         // Parse CSS source into a StyleSheet.
-        [[nodiscard]] static StyleSheet Parse(core::StringView css)
+        [[nodiscard]] static StyleSheet Parse(foundation::StringView css)
         {
-            const core::String cleaned = StripComments(css);
+            const foundation::String cleaned = StripComments(css);
             StyleSheet sheet;
             ParseBlock(sheet, cleaned.AsView(), MediaQuery{});
             return sheet;
@@ -63,7 +63,7 @@ export namespace draconic::gui
 
     private:
         // Parse a run of rules (and nested @media blocks), attaching `media` to each rule.
-        static void ParseBlock(StyleSheet& sheet, core::StringView src, const MediaQuery& media)
+        static void ParseBlock(StyleSheet& sheet, foundation::StringView src, const MediaQuery& media)
         {
             const usize n = src.Size();
             usize i = 0;
@@ -80,7 +80,7 @@ export namespace draconic::gui
                     const usize atStart = i;
                     while (i < n && src[i] != u8'{' && src[i] != u8';')
                         ++i;
-                    const core::StringView prelude = Trim(src.SubStr(atStart, i - atStart));
+                    const foundation::StringView prelude = Trim(src.SubStr(atStart, i - atStart));
                     if (i < n && src[i] == u8';')
                     {
                         ++i;
@@ -105,13 +105,13 @@ export namespace draconic::gui
                         }
                         ++i;
                     }
-                    const core::StringView inner = src.SubStr(blockStart, i - blockStart);
+                    const foundation::StringView inner = src.SubStr(blockStart, i - blockStart);
                     if (i < n)
                         ++i; // consume '}'
 
                     if (IsMedia(prelude))
                     {
-                        const core::StringView condition =
+                        const foundation::StringView condition =
                             Trim(prelude.SubStr(6, prelude.Size() - 6));
                         ParseBlock(sheet, inner,
                                    MediaQuery{condition}); // v1: inner media replaces outer
@@ -131,13 +131,13 @@ export namespace draconic::gui
                     ++i;
                 if (i >= n || src[i] != u8'{')
                     break;
-                const core::StringView selectorList = src.SubStr(selStart, i - selStart);
+                const foundation::StringView selectorList = src.SubStr(selStart, i - selStart);
                 ++i; // consume '{'
 
                 const usize blockStart = i;
                 while (i < n && src[i] != u8'}')
                     ++i;
-                const core::StringView block = src.SubStr(blockStart, i - blockStart);
+                const foundation::StringView block = src.SubStr(blockStart, i - blockStart);
                 if (i < n)
                     ++i; // consume '}'
 
@@ -145,22 +145,22 @@ export namespace draconic::gui
             }
         }
 
-        [[nodiscard]] static bool IsMedia(core::StringView prelude) noexcept
+        [[nodiscard]] static bool IsMedia(foundation::StringView prelude) noexcept
         {
-            return prelude.Size() >= 6 && prelude.SubStr(0, 6) == core::StringView(u8"@media");
+            return prelude.Size() >= 6 && prelude.SubStr(0, 6) == foundation::StringView(u8"@media");
         }
-        [[nodiscard]] static bool IsKeyframes(core::StringView prelude) noexcept
+        [[nodiscard]] static bool IsKeyframes(foundation::StringView prelude) noexcept
         {
             return prelude.Size() >= 10 &&
-                   prelude.SubStr(0, 10) == core::StringView(u8"@keyframes");
+                   prelude.SubStr(0, 10) == foundation::StringView(u8"@keyframes");
         }
 
         // Parse the inner of @keyframes: a run of `<offset-list> { decls }` stops (offset is a
         // percentage, or from/to). Comma-separated offsets share a block.
-        static void ParseKeyframes(StyleSheet& sheet, core::StringView name, core::StringView inner)
+        static void ParseKeyframes(StyleSheet& sheet, foundation::StringView name, foundation::StringView inner)
         {
             Keyframes keyframes;
-            keyframes.Name = core::String(name);
+            keyframes.Name = foundation::String(name);
 
             const usize n = inner.Size();
             usize i = 0;
@@ -176,12 +176,12 @@ export namespace draconic::gui
                     ++i;
                 if (i >= n)
                     break;
-                const core::StringView offsetList = inner.SubStr(selStart, i - selStart);
+                const foundation::StringView offsetList = inner.SubStr(selStart, i - selStart);
                 ++i; // consume '{'
                 const usize blockStart = i;
                 while (i < n && inner[i] != u8'}')
                     ++i;
-                const core::StringView block = inner.SubStr(blockStart, i - blockStart);
+                const foundation::StringView block = inner.SubStr(blockStart, i - blockStart);
                 if (i < n)
                     ++i; // consume '}'
 
@@ -192,31 +192,31 @@ export namespace draconic::gui
                 {
                     if (k == on || offsetList[k] == u8',')
                     {
-                        const core::StringView spec = Trim(offsetList.SubStr(s, k - s));
+                        const foundation::StringView spec = Trim(offsetList.SubStr(s, k - s));
                         f32 offset = 0.0f;
                         if (ParseKeyframeOffset(spec, offset))
                         {
                             KeyframeStop stop;
                             stop.Offset = offset;
                             stop.Properties = ParseDeclList(block);
-                            keyframes.Stops.PushBack(core::Move(stop));
+                            keyframes.Stops.PushBack(foundation::Move(stop));
                         }
                         s = k + 1;
                     }
                 }
             }
-            sheet.AddKeyframes(core::Move(keyframes));
+            sheet.AddKeyframes(foundation::Move(keyframes));
         }
 
         // "0%".."100%" -> 0..1; "from" -> 0; "to" -> 1. Returns false if unrecognized.
-        [[nodiscard]] static bool ParseKeyframeOffset(core::StringView spec, f32& out) noexcept
+        [[nodiscard]] static bool ParseKeyframeOffset(foundation::StringView spec, f32& out) noexcept
         {
-            if (spec == core::StringView(u8"from"))
+            if (spec == foundation::StringView(u8"from"))
             {
                 out = 0.0f;
                 return true;
             }
-            if (spec == core::StringView(u8"to"))
+            if (spec == foundation::StringView(u8"to"))
             {
                 out = 1.0f;
                 return true;
@@ -254,8 +254,8 @@ export namespace draconic::gui
         }
 
         // One rule per comma-separated selector, each carrying the block's declarations + media.
-        static void EmitRules(StyleSheet& sheet, core::StringView selectorList,
-                              core::StringView block, const MediaQuery& media)
+        static void EmitRules(StyleSheet& sheet, foundation::StringView selectorList,
+                              foundation::StringView block, const MediaQuery& media)
         {
             usize start = 0;
             const usize n = selectorList.Size();
@@ -263,14 +263,14 @@ export namespace draconic::gui
             {
                 if (i == n || selectorList[i] == u8',')
                 {
-                    const core::StringView selector = Trim(selectorList.SubStr(start, i - start));
+                    const foundation::StringView selector = Trim(selectorList.SubStr(start, i - start));
                     if (selector.Size() != 0)
                     {
                         StyleRule rule{selector};
                         ApplyDeclarations(rule, block);
                         if (!media.IsEmpty())
                             rule.SetMedia(media);
-                        sheet.AddRule(core::Move(rule));
+                        sheet.AddRule(foundation::Move(rule));
                     }
                     start = i + 1;
                 }
@@ -278,14 +278,14 @@ export namespace draconic::gui
         }
 
         // Split `name: value;` declarations into the rule (later same-name wins via SetProperty).
-        static void ApplyDeclarations(StyleRule& rule, core::StringView block)
+        static void ApplyDeclarations(StyleRule& rule, foundation::StringView block)
         {
             for (const StyleProperty& p : ParseDeclList(block))
                 rule.SetProperty(p.Name.AsView(), p.Value.AsView(), p.Important);
         }
 
         // Parse `name: value;` declarations into a flat property list (in source order).
-        [[nodiscard]] static Array<StyleProperty> ParseDeclList(core::StringView block)
+        [[nodiscard]] static Array<StyleProperty> ParseDeclList(foundation::StringView block)
         {
             Array<StyleProperty> out;
             usize start = 0;
@@ -294,17 +294,17 @@ export namespace draconic::gui
             {
                 if (i == n || block[i] == u8';')
                 {
-                    const core::StringView decl = block.SubStr(start, i - start);
+                    const foundation::StringView decl = block.SubStr(start, i - start);
                     const usize colon = FindChar(decl, u8':');
                     if (colon != kNotFound)
                     {
-                        const core::StringView name = Trim(decl.SubStr(0, colon));
-                        core::StringView value =
+                        const foundation::StringView name = Trim(decl.SubStr(0, colon));
+                        foundation::StringView value =
                             Trim(decl.SubStr(colon + 1, decl.Size() - colon - 1));
 
                         // Trailing !important.
                         bool important = false;
-                        const core::StringView flag(u8"!important");
+                        const foundation::StringView flag(u8"!important");
                         if (value.Size() >= flag.Size() &&
                             value.SubStr(value.Size() - flag.Size(), flag.Size()) == flag)
                         {
@@ -322,7 +322,7 @@ export namespace draconic::gui
         }
 
         static constexpr usize kNotFound = static_cast<usize>(-1);
-        [[nodiscard]] static usize FindChar(core::StringView s, char8_t c) noexcept
+        [[nodiscard]] static usize FindChar(foundation::StringView s, char8_t c) noexcept
         {
             for (usize i = 0; i < s.Size(); ++i)
                 if (s[i] == c)

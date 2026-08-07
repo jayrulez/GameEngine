@@ -15,12 +15,12 @@
 /// pass-group through draconic.rendergraph (MRT + automatic barriers + transient aliasing).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include "Draconic.Profiler/Profiler.h"
 
 export module draconic.render:pipeline;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.rendergraph;
 import draconic.profiler;
@@ -41,7 +41,7 @@ import :debug_pass;
 import :decal_pass;
 import :sky;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 
 export namespace draconic::render

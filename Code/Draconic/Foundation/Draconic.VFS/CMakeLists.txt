@@ -4,7 +4,7 @@
 add_library(Draconic.VFS STATIC)
 add_library(Draconic::VFS ALIAS Draconic.VFS)
 
-target_link_libraries(Draconic.VFS PUBLIC Draconic::Core Draconic::Policy)
+target_link_libraries(Draconic.VFS PUBLIC Draconic::Foundation Draconic::Policy)
 
 target_sources(Draconic.VFS
     PRIVATE

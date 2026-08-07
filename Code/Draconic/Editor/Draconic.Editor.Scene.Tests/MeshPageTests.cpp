@@ -5,13 +5,13 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.geometry;
 import draconic.editor.scene;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace geometry = draconic::geometry;
 
 TEST_CASE("MeshStatLines reports counts, bounds, skinning, and per-submesh rows")

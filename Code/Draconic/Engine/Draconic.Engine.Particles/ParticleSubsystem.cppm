@@ -7,11 +7,11 @@
 // ExtractInto delegates to the scene's manager, which packs the live billboards.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.engine.particles:subsystem;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.shaders.system;
 import draconic.runtime;          // Subsystem, Context
@@ -22,7 +22,7 @@ import draconic.engine.render; // RenderSubsystem + IRenderExtractor seam
 import :renderer;
 import :components;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 namespace shaders = draconic::shaders;
 namespace scene = draconic::scene;

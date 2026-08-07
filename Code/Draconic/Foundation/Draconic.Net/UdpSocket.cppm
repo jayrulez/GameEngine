@@ -1,19 +1,19 @@
 /// Draconic::Net - `draconic.net:udp_socket` partition.
 ///
-/// The REAL UDP IDatagramSocket backend: wraps the Core/System UDP primitives (docs/design/
-/// networking.md §3.1 - sockets live in Core/System) so ReliableTransport, proven against the
+/// The REAL UDP IDatagramSocket backend: wraps the Foundation/System UDP primitives (docs/design/
+/// networking.md §3.1 - sockets live in Foundation/System) so ReliableTransport, proven against the
 /// deterministic sim, runs over an actual network with zero protocol changes. IPv4 for v1; a
 /// DatagramEndpoint packs (ip << 16) | port in host order.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.net:udp_socket;
 
-import draconic.core;
+import draconic.foundation;
 import :datagram;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::net
 {
@@ -36,14 +36,14 @@ export namespace draconic::net
     [[nodiscard]] inline DatagramEndpoint ResolveEndpoint(StringView dottedQuad, u16 port)
     {
         u32 ip = 0;
-        if (!core::ParseIPv4(dottedQuad, ip))
+        if (!foundation::ParseIPv4(dottedQuad, ip))
         {
             return DatagramEndpoint{};
         }
         return MakeEndpoint(ip, port);
     }
 
-    // A real UDP socket presented as an IDatagramSocket. Non-blocking; owns one Core/System handle and
+    // A real UDP socket presented as an IDatagramSocket. Non-blocking; owns one Foundation/System handle and
     // a refcount on the platform networking layer.
     class UdpSocket final : public IDatagramSocket
     {
@@ -51,43 +51,43 @@ export namespace draconic::net
         // Bind to `port` (0 = OS-assigned). Check IsOpen() afterwards.
         explicit UdpSocket(u16 port = 0)
         {
-            core::InitializeNetworking();
-            m_handle = core::UdpOpen(port, &m_boundPort);
+            foundation::InitializeNetworking();
+            m_handle = foundation::UdpOpen(port, &m_boundPort);
         }
         ~UdpSocket() override
         {
-            if (m_handle != core::kInvalidSocket)
+            if (m_handle != foundation::kInvalidSocket)
             {
-                core::SocketClose(m_handle);
+                foundation::SocketClose(m_handle);
             }
-            core::ShutdownNetworking();
+            foundation::ShutdownNetworking();
         }
         UdpSocket(const UdpSocket&) = delete;
         UdpSocket& operator=(const UdpSocket&) = delete;
 
-        [[nodiscard]] bool IsOpen() const noexcept { return m_handle != core::kInvalidSocket; }
+        [[nodiscard]] bool IsOpen() const noexcept { return m_handle != foundation::kInvalidSocket; }
         [[nodiscard]] u16 BoundPort() const noexcept { return m_boundPort; }
 
         void Send(const DatagramEndpoint& to, Span<const byte> data) override
         {
-            if (m_handle == core::kInvalidSocket)
+            if (m_handle == foundation::kInvalidSocket)
             {
                 return;
             }
-            (void)core::UdpSendTo(m_handle, EndpointIp(to), EndpointPort(to), data.Data(),
+            (void)foundation::UdpSendTo(m_handle, EndpointIp(to), EndpointPort(to), data.Data(),
                                   data.Size());
         }
 
         [[nodiscard]] bool Receive(DatagramEndpoint& from, Array<byte>& out) override
         {
-            if (m_handle == core::kInvalidSocket)
+            if (m_handle == foundation::kInvalidSocket)
             {
                 return false;
             }
             out.Resize(kMaxDatagram);
             u32 ip = 0;
             u16 port = 0;
-            const i64 n = core::UdpRecvFrom(m_handle, out.Data(), out.Size(), ip, port);
+            const i64 n = foundation::UdpRecvFrom(m_handle, out.Data(), out.Size(), ip, port);
             if (n <= 0)
             {
                 out.Clear();
@@ -103,13 +103,13 @@ export namespace draconic::net
         [[nodiscard]] DatagramEndpoint LocalEndpoint() const override
         {
             u32 loopback = 0;
-            (void)core::ParseIPv4(u8"127.0.0.1", loopback);
+            (void)foundation::ParseIPv4(u8"127.0.0.1", loopback);
             return MakeEndpoint(loopback, m_boundPort);
         }
 
     private:
         static constexpr usize kMaxDatagram = 2048; // > the reliable transport's maxPacketBytes
-        core::SocketHandle m_handle = core::kInvalidSocket;
+        foundation::SocketHandle m_handle = foundation::kInvalidSocket;
         u16 m_boundPort = 0;
     };
 

@@ -9,18 +9,18 @@
 // are deferred (add via composition when needed).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:button;
 
-import draconic.core; // Function, Move
+import draconic.foundation; // Function, Move
 import :event;        // MouseEvent
 import :text;         // TextHAlign / TextVAlign
 import :label;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -30,13 +30,13 @@ export namespace draconic::gui
     public:
         Button()
         {
-            SetTag(core::StringView(u8"button")); // CSS `button { ... }` targets it by default
+            SetTag(foundation::StringView(u8"button")); // CSS `button { ... }` targets it by default
             SetTextAlignment(TextHAlign::Center, TextVAlign::Middle);
             SetTabFocusable(true);
         }
 
         // Invoked on a click (press + release on the button).
-        void SetOnClick(core::Function<void()> callback) { m_onClick = core::Move(callback); }
+        void SetOnClick(foundation::Function<void()> callback) { m_onClick = foundation::Move(callback); }
         [[nodiscard]] bool HasOnClick() const noexcept { return static_cast<bool>(m_onClick); }
 
     protected:
@@ -47,7 +47,7 @@ export namespace draconic::gui
                 m_onClick();
         }
 
-        core::Function<void()> m_onClick;
+        foundation::Function<void()> m_onClick;
     };
 
     DRACONIC_DEFINE_OBJECT(Button, "draconic::gui")

@@ -13,18 +13,18 @@
 // manifest backup that prompt offers ("back up Project.xml, then open with this engine").
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.editor.core:project_registry;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.settings;
 import draconic.xml.serialization;
 import draconic.engine.project;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {
@@ -42,9 +42,9 @@ export namespace draconic::editor
 
         void Serialize(ISerializer& ar)
         {
-            draconic::core::Serialize(ar, "path", path);
-            draconic::core::Serialize(ar, "name", name);
-            draconic::core::Serialize(ar, "engineVersion", engineVersion);
+            draconic::foundation::Serialize(ar, "path", path);
+            draconic::foundation::Serialize(ar, "name", name);
+            draconic::foundation::Serialize(ar, "engineVersion", engineVersion);
         }
     };
 
@@ -66,7 +66,7 @@ export namespace draconic::editor
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "entries", entries);
+            draconic::foundation::Serialize(ar, "entries", entries);
         }
 
         [[nodiscard]] const RecentProjectEntry* Find(StringView path) const

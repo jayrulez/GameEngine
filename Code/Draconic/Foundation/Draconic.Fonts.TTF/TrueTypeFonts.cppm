@@ -6,16 +6,16 @@
 // free them) and deletes them. Idempotent.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.fonts.ttf:init;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.fonts.io;
 import :parser;
 import :atlas_baker;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::fonts
 {

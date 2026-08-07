@@ -9,14 +9,14 @@
 // OnUnload, before the backing library is closed.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.runtime:plugin;
 
-import draconic.core;
+import draconic.foundation;
 import :context;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::runtime
 {
@@ -26,7 +26,7 @@ export namespace draconic::runtime
         virtual ~IRuntimePlugin() = default;
 
         // Human-readable identifier (for logging/diagnostics).
-        [[nodiscard]] virtual core::StringView Name() const noexcept = 0;
+        [[nodiscard]] virtual foundation::StringView Name() const noexcept = 0;
 
         // Register the plugin's subsystems/services into the Context.
         virtual void OnLoad(Context& context) = 0;
@@ -43,5 +43,5 @@ export namespace draconic::runtime
     using CreatePluginFn = IRuntimePlugin* (*)();
 
     // The exported symbol name PluginHost::Load resolves in a plugin library.
-    inline constexpr core::StringView CreatePluginSymbol = u8"DraconicCreatePlugin";
+    inline constexpr foundation::StringView CreatePluginSymbol = u8"DraconicCreatePlugin";
 }

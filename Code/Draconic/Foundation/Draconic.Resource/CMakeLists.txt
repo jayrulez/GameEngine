@@ -4,7 +4,7 @@
 add_library(Draconic.Resource STATIC)
 add_library(Draconic::Resource ALIAS Draconic.Resource)
 
-target_link_libraries(Draconic.Resource PUBLIC Draconic::Core Draconic::Content Draconic::Policy)
+target_link_libraries(Draconic.Resource PUBLIC Draconic::Foundation Draconic::Content Draconic::Policy)
 
 target_sources(Draconic.Resource
     PUBLIC

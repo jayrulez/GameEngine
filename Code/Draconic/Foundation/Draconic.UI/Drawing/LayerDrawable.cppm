@@ -4,18 +4,18 @@
 // Sedulous.UI/src/Drawing/LayerDrawable.bf. Layers own a RefPtr<Drawable> (auto-released).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:layer_drawable;
 
-import draconic.core; // Array, RefPtr, Rectangle, Max
+import draconic.foundation; // Array, RefPtr, Rectangle, Max
 import :thickness;
 import :control_state;
 import :drawable;
 import :draw_context;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

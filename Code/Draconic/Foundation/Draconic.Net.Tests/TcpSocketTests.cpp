@@ -1,11 +1,11 @@
 // draconic.net:socket - the TCP stream backend over localhost (integration: uses the OS TCP stack).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.net;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace net = draconic::net;
 
 TEST_CASE("tcp: connect + accept + bidirectional stream over localhost")

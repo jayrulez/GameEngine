@@ -4,7 +4,7 @@
 add_library(Draconic.Script.Editor STATIC)
 add_library(Draconic::Script.Editor ALIAS Draconic.Script.Editor)
 target_link_libraries(Draconic.Script.Editor PUBLIC
-    Draconic::Core Draconic::Editor Draconic::Editor.Core Draconic::Content
+    Draconic::Foundation Draconic::Editor Draconic::Editor.Core Draconic::Content
     Draconic::Script Draconic::Script.Resource Draconic::Policy)
 target_sources(Draconic.Script.Editor
     PRIVATE

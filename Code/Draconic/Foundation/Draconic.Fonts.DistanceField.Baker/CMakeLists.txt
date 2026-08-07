@@ -5,7 +5,7 @@ add_library(Draconic.Fonts.DistanceField.Baker STATIC)
 add_library(Draconic::Fonts.DistanceField.Baker ALIAS Draconic.Fonts.DistanceField.Baker)
 
 target_link_libraries(Draconic.Fonts.DistanceField.Baker
-    PUBLIC  Draconic::Core Draconic::Fonts Draconic::Fonts.DistanceField Draconic::Fonts.IO Draconic::Fonts.TTF Draconic::Policy
+    PUBLIC  Draconic::Foundation Draconic::Fonts Draconic::Fonts.DistanceField Draconic::Fonts.IO Draconic::Fonts.TTF Draconic::Policy
     PRIVATE Draconic::MsdfgenCore Draconic::Stb)
 
 # msdfgen_impl.cpp includes msdfgen headers which may use exceptions.

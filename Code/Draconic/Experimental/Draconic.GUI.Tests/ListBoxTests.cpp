@@ -1,25 +1,25 @@
 // Draconic GUI - ListBox tests: add/clear items, click + keyboard selection, the selection
 // callback, and scroll-into-view for an off-screen selection.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.gui;
 
 using namespace draconic::gui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 namespace
 {
     template <typename T>
-    core::RefPtr<T> Make()
+    foundation::RefPtr<T> Make()
     {
-        return core::MakeRef<T>(core::DefaultAllocator());
+        return foundation::MakeRef<T>(foundation::DefaultAllocator());
     }
 
-    core::RefPtr<ListBox> MakeList(SceneNode* root, float w, float h)
+    foundation::RefPtr<ListBox> MakeList(SceneNode* root, float w, float h)
     {
-        auto lb = core::MakeRef<ListBox>(core::DefaultAllocator());
-        lb->SetSize(core::Float2{w, h});
+        auto lb = foundation::MakeRef<ListBox>(foundation::DefaultAllocator());
+        lb->SetSize(foundation::Float2{w, h});
         lb->SetItemHeight(24.0f);
         root->AddChild(lb.Get());
         return lb;
@@ -29,13 +29,13 @@ namespace
 TEST_CASE("listbox: add / count / get / clear items")
 {
     auto lb = Make<ListBox>();
-    lb->SetSize(core::Float2{200.0f, 100.0f});
-    lb->AddItem(core::StringView(u8"Alpha"));
-    lb->AddItem(core::StringView(u8"Beta"));
-    lb->AddItem(core::StringView(u8"Gamma"));
+    lb->SetSize(foundation::Float2{200.0f, 100.0f});
+    lb->AddItem(foundation::StringView(u8"Alpha"));
+    lb->AddItem(foundation::StringView(u8"Beta"));
+    lb->AddItem(foundation::StringView(u8"Gamma"));
 
     CHECK(lb->ItemCount() == 3);
-    CHECK(lb->GetItem(1) == core::StringView(u8"Beta"));
+    CHECK(lb->GetItem(1) == foundation::StringView(u8"Beta"));
     CHECK(lb->GetSelectedIndex() == -1);
 
     lb->Clear();
@@ -46,9 +46,9 @@ TEST_CASE("listbox: add / count / get / clear items")
 TEST_CASE("listbox: SetSelectedIndex highlights and fires the callback, only on change")
 {
     auto lb = Make<ListBox>();
-    lb->SetSize(core::Float2{200.0f, 100.0f});
+    lb->SetSize(foundation::Float2{200.0f, 100.0f});
     for (int i = 0; i < 5; ++i)
-        lb->AddItem(core::StringView(u8"item"));
+        lb->AddItem(foundation::StringView(u8"item"));
 
     int changes = 0, last = -99;
     lb->SetOnSelectionChanged(
@@ -75,48 +75,48 @@ TEST_CASE("listbox: SetSelectedIndex highlights and fires the callback, only on 
 TEST_CASE("listbox: clicking a row selects it")
 {
     auto root = Make<SceneNode>();
-    root->SetSize(core::Float2{300.0f, 300.0f});
+    root->SetSize(foundation::Float2{300.0f, 300.0f});
     auto lb = MakeList(root.Get(), 200.0f, 100.0f);
     for (int i = 0; i < 10; ++i)
-        lb->AddItem(core::StringView(u8"row"));
+        lb->AddItem(foundation::StringView(u8"row"));
     EventDispatcher* d = root->GetEventDispatcher();
 
     // Row 2 spans y in [48, 72); click it.
-    d->InjectMouseDown(core::Float2{10.0f, 60.0f}, MouseButton::Left);
-    d->InjectMouseUp(core::Float2{10.0f, 60.0f}, MouseButton::Left);
+    d->InjectMouseDown(foundation::Float2{10.0f, 60.0f}, MouseButton::Left);
+    d->InjectMouseUp(foundation::Float2{10.0f, 60.0f}, MouseButton::Left);
     CHECK(lb->GetSelectedIndex() == 2);
 }
 
 TEST_CASE("listbox: keyboard navigation moves the selection")
 {
     auto root = Make<SceneNode>();
-    root->SetSize(core::Float2{300.0f, 300.0f});
+    root->SetSize(foundation::Float2{300.0f, 300.0f});
     auto lb = MakeList(root.Get(), 200.0f, 100.0f);
     for (int i = 0; i < 6; ++i)
-        lb->AddItem(core::StringView(u8"row"));
+        lb->AddItem(foundation::StringView(u8"row"));
     EventDispatcher* d = root->GetEventDispatcher();
     lb->RequestFocus();
 
-    d->InjectKeyDown(static_cast<core::u32>(KeyCode::Down)); // -1 -> 0
+    d->InjectKeyDown(static_cast<foundation::u32>(KeyCode::Down)); // -1 -> 0
     CHECK(lb->GetSelectedIndex() == 0);
-    d->InjectKeyDown(static_cast<core::u32>(KeyCode::Down)); // -> 1
+    d->InjectKeyDown(static_cast<foundation::u32>(KeyCode::Down)); // -> 1
     CHECK(lb->GetSelectedIndex() == 1);
-    d->InjectKeyDown(static_cast<core::u32>(KeyCode::End)); // -> last (5)
+    d->InjectKeyDown(static_cast<foundation::u32>(KeyCode::End)); // -> last (5)
     CHECK(lb->GetSelectedIndex() == 5);
-    d->InjectKeyDown(static_cast<core::u32>(KeyCode::Down)); // clamps at last
+    d->InjectKeyDown(static_cast<foundation::u32>(KeyCode::Down)); // clamps at last
     CHECK(lb->GetSelectedIndex() == 5);
-    d->InjectKeyDown(static_cast<core::u32>(KeyCode::Home)); // -> 0
+    d->InjectKeyDown(static_cast<foundation::u32>(KeyCode::Home)); // -> 0
     CHECK(lb->GetSelectedIndex() == 0);
-    d->InjectKeyDown(static_cast<core::u32>(KeyCode::Up)); // clamps at 0
+    d->InjectKeyDown(static_cast<foundation::u32>(KeyCode::Up)); // clamps at 0
     CHECK(lb->GetSelectedIndex() == 0);
 }
 
 TEST_CASE("listbox: selecting an off-screen row scrolls it into view")
 {
     auto lb = Make<ListBox>();
-    lb->SetSize(core::Float2{200.0f, 100.0f}); // viewport 100 tall
+    lb->SetSize(foundation::Float2{200.0f, 100.0f}); // viewport 100 tall
     for (int i = 0; i < 10; ++i)
-        lb->AddItem(core::StringView(u8"row")); // content 240 tall, range 140
+        lb->AddItem(foundation::StringView(u8"row")); // content 240 tall, range 140
 
     CHECK(lb->GetScrollView()->GetScrollOffset().y == doctest::Approx(0.0f));
     lb->SetSelectedIndex(

@@ -4,23 +4,23 @@
 // InputFilter class is an Editing/text-field concern, not yet ported). Directional MoveFocus tests use
 // a focusable TestView in place of Beef's Button (which is only used there as a default-focusable view).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
+import draconic.foundation;
 import draconic.ui;
 #include "TestHelpers.h"
 
 using namespace draconic::ui;
 using namespace draconic::ui::tests;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 namespace
 {
-    core::RefPtr<RootView> MakeRoot() { return core::MakeRef<RootView>(core::DefaultAllocator()); }
-    core::RefPtr<TestView> Focusable(f32 w = 50, f32 h = 30)
+    foundation::RefPtr<RootView> MakeRoot() { return foundation::MakeRef<RootView>(foundation::DefaultAllocator()); }
+    foundation::RefPtr<TestView> Focusable(f32 w = 50, f32 h = 30)
     {
-        auto v = core::MakeRef<TestView>(core::DefaultAllocator(), w, h);
+        auto v = foundation::MakeRef<TestView>(foundation::DefaultAllocator(), w, h);
         v->IsFocusable = true;
         v->IsTabStop = true;
         return v;
@@ -139,7 +139,7 @@ namespace
     {
         DRACONIC_OBJECT(CancelTrackingGroup, ViewGroup)
     public:
-        core::Function<void()> OnCancelCalled;
+        foundation::Function<void()> OnCancelCalled;
         void OnCancel() override
         {
             if (OnCancelCalled)
@@ -342,7 +342,7 @@ TEST_CASE("focus: IsFocusWithin_AncestorOfFocused")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get());
-    auto group = core::MakeRef<TestGroup>(core::DefaultAllocator());
+    auto group = foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
     auto child = Focusable();
     root->AddView(group.Get());
     group->AddView(child.Get());
@@ -359,8 +359,8 @@ TEST_CASE("capture: MouseDown_CapturePhase_ParentSeesFirst")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get());
-    auto parent = core::MakeRef<PhaseTrackingGroup>(core::DefaultAllocator());
-    auto child = core::MakeRef<PhaseTrackingView>(core::DefaultAllocator());
+    auto parent = foundation::MakeRef<PhaseTrackingGroup>(foundation::DefaultAllocator());
+    auto child = foundation::MakeRef<PhaseTrackingView>(foundation::DefaultAllocator());
     child->IsFocusable = true;
     parent->AddView(child.Get());
     root->AddView(parent.Get());
@@ -376,9 +376,9 @@ TEST_CASE("capture: MouseDown_CaptureBlocks_TargetNotReached")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get());
-    auto parent = core::MakeRef<PhaseTrackingGroup>(core::DefaultAllocator());
+    auto parent = foundation::MakeRef<PhaseTrackingGroup>(foundation::DefaultAllocator());
     parent->BlockInCapture = true;
-    auto child = core::MakeRef<PhaseTrackingView>(core::DefaultAllocator());
+    auto child = foundation::MakeRef<PhaseTrackingView>(foundation::DefaultAllocator());
     child->IsFocusable = true;
     parent->AddView(child.Get());
     root->AddView(parent.Get());
@@ -395,7 +395,7 @@ TEST_CASE("capture: MouseDown_PhaseFieldSet")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get());
-    auto child = core::MakeRef<PhaseTrackingView>(core::DefaultAllocator());
+    auto child = foundation::MakeRef<PhaseTrackingView>(foundation::DefaultAllocator());
     child->IsFocusable = true;
     root->AddView(child.Get());
     LayoutPass(ctx, root.Get());
@@ -408,8 +408,8 @@ TEST_CASE("capture: KeyDown_CapturePhase_Works")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get());
-    auto parent = core::MakeRef<PhaseTrackingGroup>(core::DefaultAllocator());
-    auto child = core::MakeRef<PhaseTrackingView>(core::DefaultAllocator());
+    auto parent = foundation::MakeRef<PhaseTrackingGroup>(foundation::DefaultAllocator());
+    auto child = foundation::MakeRef<PhaseTrackingView>(foundation::DefaultAllocator());
     child->IsFocusable = true;
     parent->AddView(child.Get());
     root->AddView(parent.Get());
@@ -426,9 +426,9 @@ TEST_CASE("capture: KeyDown_CaptureBlocks")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get());
-    auto parent = core::MakeRef<PhaseTrackingGroup>(core::DefaultAllocator());
+    auto parent = foundation::MakeRef<PhaseTrackingGroup>(foundation::DefaultAllocator());
     parent->BlockInCapture = true;
-    auto child = core::MakeRef<PhaseTrackingView>(core::DefaultAllocator());
+    auto child = foundation::MakeRef<PhaseTrackingView>(foundation::DefaultAllocator());
     child->IsFocusable = true;
     parent->AddView(child.Get());
     root->AddView(parent.Get());
@@ -445,9 +445,9 @@ TEST_CASE("capture: DeepHierarchy_CaptureOrder")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get());
-    auto grandparent = core::MakeRef<PhaseTrackingGroup>(core::DefaultAllocator());
-    auto parent = core::MakeRef<PhaseTrackingGroup>(core::DefaultAllocator());
-    auto child = core::MakeRef<PhaseTrackingView>(core::DefaultAllocator());
+    auto grandparent = foundation::MakeRef<PhaseTrackingGroup>(foundation::DefaultAllocator());
+    auto parent = foundation::MakeRef<PhaseTrackingGroup>(foundation::DefaultAllocator());
+    auto child = foundation::MakeRef<PhaseTrackingView>(foundation::DefaultAllocator());
     child->IsFocusable = true;
     grandparent->AddView(parent.Get());
     parent->AddView(child.Get());
@@ -466,10 +466,10 @@ TEST_CASE("capture: DeepHierarchy_MidCapture_Blocks")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get());
-    auto grandparent = core::MakeRef<PhaseTrackingGroup>(core::DefaultAllocator());
-    auto parent = core::MakeRef<PhaseTrackingGroup>(core::DefaultAllocator());
+    auto grandparent = foundation::MakeRef<PhaseTrackingGroup>(foundation::DefaultAllocator());
+    auto parent = foundation::MakeRef<PhaseTrackingGroup>(foundation::DefaultAllocator());
     parent->BlockInCapture = true;
-    auto child = core::MakeRef<PhaseTrackingView>(core::DefaultAllocator());
+    auto child = foundation::MakeRef<PhaseTrackingView>(foundation::DefaultAllocator());
     child->IsFocusable = true;
     grandparent->AddView(parent.Get());
     parent->AddView(child.Get());
@@ -524,7 +524,7 @@ TEST_CASE("shortcut: Scoped_FiresWhenInScope")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get());
-    auto panel = core::MakeRef<TestGroup>(core::DefaultAllocator());
+    auto panel = foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
     auto child = Focusable();
     root->AddView(panel.Get());
     panel->AddView(child.Get());
@@ -541,8 +541,8 @@ TEST_CASE("shortcut: Scoped_DoesNotFireWhenOutOfScope")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get());
-    auto panelA = core::MakeRef<TestGroup>(core::DefaultAllocator());
-    auto panelB = core::MakeRef<TestGroup>(core::DefaultAllocator());
+    auto panelA = foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
+    auto panelB = foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
     auto child = Focusable();
     root->AddView(panelA.Get());
     root->AddView(panelB.Get());
@@ -573,7 +573,7 @@ TEST_CASE("shortcut: ScopedRemoved_OnViewDelete")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get());
-    auto panel = core::MakeRef<TestGroup>(core::DefaultAllocator());
+    auto panel = foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
     root->AddView(panel.Get());
     bool fired = false;
     ctx.GetShortcuts()->AddScoped(
@@ -588,7 +588,7 @@ TEST_CASE("shortcut: Scoped_PriorityOverGlobal")
     UIContext ctx;
     auto root = MakeRoot();
     Init(ctx, root.Get());
-    auto panel = core::MakeRef<TestGroup>(core::DefaultAllocator());
+    auto panel = foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
     auto child = Focusable();
     root->AddView(panel.Get());
     panel->AddView(child.Get());
@@ -723,7 +723,7 @@ TEST_CASE("directional: OnCancel_BubblesToParent")
     auto root = MakeRoot();
     Init(ctx, root.Get());
     bool parentCancelCalled = false;
-    auto parent = core::MakeRef<CancelTrackingGroup>(core::DefaultAllocator());
+    auto parent = foundation::MakeRef<CancelTrackingGroup>(foundation::DefaultAllocator());
     parent->OnCancelCalled = [&parentCancelCalled]() { parentCancelCalled = true; };
     auto child = Focusable();
     parent->AddView(child.Get());
@@ -756,9 +756,9 @@ TEST_CASE("keys: Return_DispatchesBeforeActivation")
     };
 
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     ctx.AddRootView(root.Get());
-    auto probe = core::MakeRef<ReturnProbe>(core::DefaultAllocator());
+    auto probe = foundation::MakeRef<ReturnProbe>(foundation::DefaultAllocator());
     root->AddView(probe.Get());
     ctx.GetFocusManager()->SetFocus(probe.Get());
 
@@ -797,10 +797,10 @@ TEST_CASE("keys: Tab_DispatchesToWantsTabKeyViews")
     };
 
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     ctx.AddRootView(root.Get());
-    auto editor = core::MakeRef<TabProbe>(core::DefaultAllocator());
-    auto next = core::MakeRef<TabProbe>(core::DefaultAllocator());
+    auto editor = foundation::MakeRef<TabProbe>(foundation::DefaultAllocator());
+    auto next = foundation::MakeRef<TabProbe>(foundation::DefaultAllocator());
     root->AddView(editor.Get());
     root->AddView(next.Get());
     ctx.GetFocusManager()->SetFocus(editor.Get());

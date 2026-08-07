@@ -10,11 +10,11 @@
 // center tab group alive when all pages close).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.editor.app:shell;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.ui;
 import draconic.settings;
 import draconic.ui.toolkit;
@@ -22,7 +22,7 @@ import draconic.editor.core;
 import :layout;
 import :log_view;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor::app
 {

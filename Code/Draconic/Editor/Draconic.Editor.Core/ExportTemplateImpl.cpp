@@ -7,19 +7,19 @@
 // directory (Bin/...), so a dev export for the current platform needs zero setup.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 #include <filesystem> // recursive dir copy when importing a template bundle
 
 module draconic.editor.core;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.xml.serialization;
 import draconic.engine.project;
 import :export_preset; // ExportPreset, ExportPresetSet
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::editor
 {
@@ -30,21 +30,21 @@ namespace draconic::editor
 
     void ExportTemplate::Serialize(ISerializer& ar)
     {
-        draconic::core::Serialize(ar, "id", id);
-        draconic::core::Serialize(ar, "name", name);
-        draconic::core::Serialize(ar, "platform", platform);
-        draconic::core::Serialize(ar, "engineVersion", engineVersion);
-        draconic::core::Serialize(ar, "playerBinary", playerBinary);
-        draconic::core::Serialize(ar, "sidecars", sidecars);
-        draconic::core::Serialize(ar, "notes", notes);
+        draconic::foundation::Serialize(ar, "id", id);
+        draconic::foundation::Serialize(ar, "name", name);
+        draconic::foundation::Serialize(ar, "platform", platform);
+        draconic::foundation::Serialize(ar, "engineVersion", engineVersion);
+        draconic::foundation::Serialize(ar, "playerBinary", playerBinary);
+        draconic::foundation::Serialize(ar, "sidecars", sidecars);
+        draconic::foundation::Serialize(ar, "notes", notes);
         // v2 added the (platform, config) axis: config + compiler metadata + a parallel symbols
         // group. A v1 template.xml lacks these fields, so gate them on the stored data version -
         // reading an old manifest leaves config empty (normalized to Release below) and works.
         if (ar.Version() >= 2)
         {
-            draconic::core::Serialize(ar, "config", config);
-            draconic::core::Serialize(ar, "compiler", compiler);
-            draconic::core::Serialize(ar, "symbols", symbols);
+            draconic::foundation::Serialize(ar, "config", config);
+            draconic::foundation::Serialize(ar, "compiler", compiler);
+            draconic::foundation::Serialize(ar, "symbols", symbols);
         }
         if (ar.Mode() == SerializeMode::Read && config.IsEmpty())
         {

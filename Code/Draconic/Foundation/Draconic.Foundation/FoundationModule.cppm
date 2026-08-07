@@ -1,0 +1,87 @@
+// Draconic Foundation - primary module interface unit
+//
+// `Draconic.Foundation` is one named module composed of partitions (one per subsystem).
+// This unit re-exports them so consumers write a single `import draconic.foundation;`.
+// As subsystems land, add an `export import :partition;` line here.
+
+export module draconic.foundation;
+
+export import :base;
+export import :allocator;
+export import :linear_allocator;
+export import :stack_allocator;
+export import :pool_allocator;
+export import :frame_allocator;
+export import :tracking_allocator;
+export import :memory_tag;
+export import :ref_counted;
+export import :unique_ptr;
+export import :function;
+export import :system;
+export import :time;
+export import :span;
+export import :array;
+export import :fixed_array;
+export import :ring_buffer;
+export import :intrusive_list;
+export import :string;
+export import :string_hash;
+export import :string_util;
+export import :hash;
+export import :hash_map;
+export import :hash_set;
+export import :format;
+export import :logger;
+export import :console_sink;
+export import :file_sink;
+export import :ring_log_sink;
+export import :math;
+export import :float2;
+export import :float3;
+export import :float4;
+export import :color;
+export import :random;
+export import :guid;
+export import :fixed_stepper;
+export import :float4x4;
+export import :float3x3;
+export import :simd;
+export import :simd_vector;
+export import :simd_matrix;
+export import :quaternion;
+export import :transform;
+export import :easings;
+export import :aabb;
+export import :plane;
+export import :bounds;
+export import :rectangle;
+export import :content_fit;
+export import :type_info;
+export import :type_registry;
+export import :object;
+export import :variant;
+export import :instance;
+export import :reflection;
+export import :enum_reflection;
+export import :constant_registry;
+export import :foundation_reflection;
+export import :io;
+export import :binary_io;
+export import :path;
+export import :filesystem;
+export import :iserializer;
+export import :iserializable;
+export import :serializable_registry;
+export import :serializer;
+export import :binary_serializer;
+export import :serialize;
+export import :atomic;
+export import :thread;
+export import :mutex;
+export import :scoped_lock;
+export import :spin_lock;
+export import :condition_variable;
+export import :semaphore;
+export import :shared_mutex;
+export import :job_system;
+export import :library;

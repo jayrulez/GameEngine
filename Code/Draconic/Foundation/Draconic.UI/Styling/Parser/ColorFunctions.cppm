@@ -7,14 +7,14 @@
 // Divergence (language): Math.Clamp -> Max(lo, Min(v, hi)); Color fields R/G/B/A -> r/g/b/a.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:color_functions;
 
-import draconic.core; // Color, Min, Max
+import draconic.foundation; // Color, Min, Max
 import :palette;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

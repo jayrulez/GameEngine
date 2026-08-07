@@ -12,11 +12,11 @@
 /// per-frame work - the endpoint drives replication over the manager the subsystem installed.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.engine.net;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.runtime;         // Subsystem, Context
 import draconic.scene;           // Scene, ISceneAware
 import draconic.engine.scene; // SceneSubsystem (to register as scene-aware)

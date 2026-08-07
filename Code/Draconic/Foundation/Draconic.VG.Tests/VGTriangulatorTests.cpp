@@ -1,10 +1,10 @@
 // Ported from Sedulous.VG.Tests/TriangulatorTests.bf.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.vg;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::vg;
 
 TEST_CASE("triangulator: convex polygon -> correct triangle count")

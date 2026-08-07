@@ -4,22 +4,22 @@
 // UniquePtr<NodeGraphNode>, so tests build a node via MakeUnique, keep the raw pointer for later
 // assertions (the canvas keeps a stable address), and Move the owner into AddNode.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 import draconic.ui.toolkit;
 
 using namespace draconic::ui;
 using namespace draconic::ui::toolkit;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 namespace
 {
-    // Beef byte `Color(r,g,b,a)` literal -> float core::Color.
-    [[nodiscard]] core::Color Rgb(u8 r, u8 g, u8 b, u8 a = 255)
+    // Beef byte `Color(r,g,b,a)` literal -> float foundation::Color.
+    [[nodiscard]] foundation::Color Rgb(u8 r, u8 g, u8 b, u8 a = 255)
     {
-        return core::Color{r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
+        return foundation::Color{r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
     }
 
     // Build an owned node with an optional title.

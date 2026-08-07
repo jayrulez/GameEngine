@@ -1,19 +1,19 @@
 // Draconic GUI - :parse_util partition
 //
 // CSS-specific identifier scanning for the styling parsers. The generic helpers
-// (IsWhiteSpace / IsDigit / IsHexDigit / HexValue / Trim) now live in draconic.core
+// (IsWhiteSpace / IsDigit / IsHexDigit / HexValue / Trim) now live in Draconic.Foundation
 // (:string_util); what remains here is the CSS identifier grammar ([A-Za-z0-9_-], which
 // includes '-' for kebab-case names), which is CSS-flavored rather than generic.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:parse_util;
 
-import draconic.core; // StringView
+import draconic.foundation; // StringView
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -25,7 +25,7 @@ export namespace draconic::gui
     }
 
     // Read an identifier starting at i, advancing i past it.
-    [[nodiscard]] inline core::StringView ReadIdent(core::StringView s, usize& i) noexcept
+    [[nodiscard]] inline foundation::StringView ReadIdent(foundation::StringView s, usize& i) noexcept
     {
         const usize start = i;
         while (i < s.Size() && IsIdentChar(s[i]))

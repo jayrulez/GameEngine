@@ -3,17 +3,17 @@
 // Decoupled selection state: tracks selected indices independently of the data view (multiple views can
 // share one). Ported from Sedulous.UI/src/Data/SelectionModel.bf. Self-contained (no View). HashSet<i32>
 // backing; Beef `mSelected.Add` -> HashSet::Insert (both return true if newly added); Math.Min/Max ->
-// core::Min/Max.
+// foundation::Min/Max.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:selection_model;
 
-import draconic.core; // HashSet, Array, Event? (Event is a UI partition)
+import draconic.foundation; // HashSet, Array, Event? (Event is a UI partition)
 import :event;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

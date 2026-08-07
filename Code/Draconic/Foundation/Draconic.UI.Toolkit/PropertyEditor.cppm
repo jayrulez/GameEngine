@@ -9,20 +9,20 @@
 // Drawable). Beef owned `View mEditorView` (owned by the view tree once added) -> a RefPtr<View> the editor
 // holds so its borrowed child pointers stay valid across PropertyGrid rebuilds. `Event<delegate
 // void(PropertyEditor)>` -> Event<void(PropertyEditor*)>; `delegate void(StringView) OnLabelRenamed` ->
-// Function<void(StringView)>. Beef `String` fields with "null == unset" -> core::String with "empty ==
+// Function<void(StringView)>. Beef `String` fields with "null == unset" -> foundation::String with "empty ==
 // unset".
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui.toolkit:property_editor;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import draconic.ui;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui::toolkit
 {

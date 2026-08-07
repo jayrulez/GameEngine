@@ -18,17 +18,17 @@
 // persistence shape (:export_preset) - versioned XML payload, project-local, CLI-loadable.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.editor.core:export_roots;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.xml.serialization;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {
@@ -47,8 +47,8 @@ export namespace draconic::editor
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "instances", instances);
-            draconic::core::Serialize(ar, "groups", groups);
+            draconic::foundation::Serialize(ar, "instances", instances);
+            draconic::foundation::Serialize(ar, "groups", groups);
         }
 
         [[nodiscard]] bool IsEmpty() const noexcept

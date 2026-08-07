@@ -15,20 +15,20 @@
 /// deserializes into them.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.scene.resource;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.resource;
 import draconic.content;
 import draconic.scene;
 import draconic.xml;
 import draconic.xml.serialization;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::scene
 {
@@ -40,7 +40,7 @@ export namespace draconic::scene
         DRACONIC_OBJECT(SceneDocument, ISerializable)
     public:
         String name;
-        void Serialize(ISerializer& ar) override { draconic::core::Serialize(ar, "name", name); }
+        void Serialize(ISerializer& ar) override { draconic::foundation::Serialize(ar, "name", name); }
     };
 
     namespace detail
@@ -64,12 +64,12 @@ export namespace draconic::scene
         {
             if (version >= 3)
             {
-                draconic::core::Serialize(ar, key, g); // ISerializer::GuidValue
+                draconic::foundation::Serialize(ar, key, g); // ISerializer::GuidValue
                 return;
             }
             ar.Key(key);
-            draconic::core::Serialize(ar, "hi", g.high);
-            draconic::core::Serialize(ar, "lo", g.low);
+            draconic::foundation::Serialize(ar, "hi", g.high);
+            draconic::foundation::Serialize(ar, "lo", g.low);
         }
 
         // Peek the stream version. Leaves the stream positioned AFTER the header (v2+) or back
@@ -170,22 +170,22 @@ export namespace draconic::scene
         {
             u32 magic = kSceneStreamMagic;
             u32 version = kSceneStreamVersion;
-            draconic::core::Serialize(ar, "magic", magic);
-            draconic::core::Serialize(ar, "version", version);
+            draconic::foundation::Serialize(ar, "magic", magic);
+            draconic::foundation::Serialize(ar, "version", version);
         }
 
         void SerializeTransform(ISerializer& ar, Transform& t, u32 version = kSceneStreamVersion)
         {
             if (version >= 3)
             {
-                draconic::core::Serialize(ar, "position", t.position);
-                draconic::core::Serialize(ar, "rotation", t.rotation);
-                draconic::core::Serialize(ar, "scale", t.scale);
+                draconic::foundation::Serialize(ar, "position", t.position);
+                draconic::foundation::Serialize(ar, "rotation", t.rotation);
+                draconic::foundation::Serialize(ar, "scale", t.scale);
                 return;
             }
-            draconic::core::Serialize(ar, "pos", t.position);
-            draconic::core::Serialize(ar, "rot", t.rotation);
-            draconic::core::Serialize(ar, "scl", t.scale);
+            draconic::foundation::Serialize(ar, "pos", t.position);
+            draconic::foundation::Serialize(ar, "rot", t.rotation);
+            draconic::foundation::Serialize(ar, "scl", t.scale);
         }
         // Pre-order subtree walk (parents before children, siblings in list order).
         void CollectSubtree(Scene& scene, EntityHandle root, Array<EntityHandle>& out)
@@ -245,7 +245,7 @@ export namespace draconic::scene
             {
                 ar.BeginObject();
                 SerializeGuid(ar, "owner", ownerId);
-                draconic::core::Serialize(ar, "type", typeId);
+                draconic::foundation::Serialize(ar, "type", typeId);
                 ar.Key("data");
                 ar.BeginObject();
                 m.WriteComponent(ar, owner);
@@ -254,10 +254,10 @@ export namespace draconic::scene
                 return;
             }
             SerializeGuid(ar, "owner", ownerId);
-            draconic::core::Serialize(ar, "type", typeId);
+            draconic::foundation::Serialize(ar, "type", typeId);
             Array<u8> blob;
             ComponentToBlob(m, owner, blob);
-            draconic::core::Serialize(ar, "data", blob);
+            draconic::foundation::Serialize(ar, "data", blob);
         }
 
         [[nodiscard]] inline bool BlobsEqual(Span<const u8> a, Span<const u8> b)
@@ -521,7 +521,7 @@ export namespace draconic::scene
             SerializeGuid(ar, "nestedSrcRoot", d.nestedRootSourceId);
             SerializeGuid(ar, "nextSibling", d.nextSiblingId);
             u8 placement = d.applyPlacement ? 1u : 0u;
-            draconic::core::Serialize(ar, "placement", placement);
+            draconic::foundation::Serialize(ar, "placement", placement);
 
             u32 memberCount = static_cast<u32>(d.sourceIds.Size());
             ar.Key("members");
@@ -562,14 +562,14 @@ export namespace draconic::scene
                 {
                     ar.BeginObject();
                     SerializeGuid(ar, "src", op.sourceEntity);
-                    draconic::core::Serialize(ar, "type", op.typeId);
-                    draconic::core::Serialize(ar, "op", op.op);
+                    draconic::foundation::Serialize(ar, "type", op.typeId);
+                    draconic::foundation::Serialize(ar, "op", op.op);
                     if (op.op != 2u)
                     { // remove ops carry no payload
                         ComponentManagerBase* m =
                             scene.FindManagerBySerializationId(op.typeId.AsView());
                         u8 form = (m != nullptr) ? 1u : 0u;
-                        draconic::core::Serialize(ar, "form", form);
+                        draconic::foundation::Serialize(ar, "form", form);
                         if (m != nullptr)
                         {
                             if (!scratch.IsAssigned())
@@ -586,16 +586,16 @@ export namespace draconic::scene
                         }
                         else
                         {
-                            draconic::core::Serialize(ar, "blob", op.blob);
+                            draconic::foundation::Serialize(ar, "blob", op.blob);
                         }
                     }
                     ar.EndObject();
                     continue;
                 }
                 SerializeGuid(ar, "src", op.sourceEntity);
-                draconic::core::Serialize(ar, "type", op.typeId);
-                draconic::core::Serialize(ar, "op", op.op);
-                draconic::core::Serialize(ar, "blob", op.blob);
+                draconic::foundation::Serialize(ar, "type", op.typeId);
+                draconic::foundation::Serialize(ar, "op", op.op);
+                draconic::foundation::Serialize(ar, "blob", op.blob);
             }
             if (scratch.IsAssigned())
             {
@@ -623,7 +623,7 @@ export namespace draconic::scene
                 SerializeGuid(ar, "nestedSrcRoot", pending.nestedRootSourceId, version);
                 SerializeGuid(ar, "nextSibling", pending.nextSiblingId, version);
                 u8 placement = 1;
-                draconic::core::Serialize(ar, "placement", placement);
+                draconic::foundation::Serialize(ar, "placement", placement);
                 pending.applyPlacement = placement != 0;
             }
 
@@ -692,13 +692,13 @@ export namespace draconic::scene
                 {
                     ar.BeginObject();
                     SerializeGuid(ar, "src", op.sourceEntity, version);
-                    draconic::core::Serialize(ar, "type", op.typeId);
-                    draconic::core::Serialize(ar, "op", op.op);
+                    draconic::foundation::Serialize(ar, "type", op.typeId);
+                    draconic::foundation::Serialize(ar, "op", op.op);
                     bool keep = true;
                     if (op.op != 2u)
                     {
                         u8 form = 0;
-                        draconic::core::Serialize(ar, "form", form);
+                        draconic::foundation::Serialize(ar, "form", form);
                         if (form == 1u)
                         {
                             ComponentManagerBase* m =
@@ -728,7 +728,7 @@ export namespace draconic::scene
                         }
                         else
                         {
-                            draconic::core::Serialize(ar, "blob", op.blob);
+                            draconic::foundation::Serialize(ar, "blob", op.blob);
                         }
                     }
                     ar.EndObject();
@@ -740,9 +740,9 @@ export namespace draconic::scene
                     continue;
                 }
                 SerializeGuid(ar, "src", op.sourceEntity, version);
-                draconic::core::Serialize(ar, "type", op.typeId);
-                draconic::core::Serialize(ar, "op", op.op);
-                draconic::core::Serialize(ar, "blob", op.blob);
+                draconic::foundation::Serialize(ar, "type", op.typeId);
+                draconic::foundation::Serialize(ar, "op", op.op);
+                draconic::foundation::Serialize(ar, "blob", op.blob);
                 pending.componentOps.PushBack(static_cast<Scene::PendingPrefabComponentOp&&>(op));
             }
             if (scratch.IsAssigned())
@@ -893,7 +893,7 @@ export namespace draconic::scene
         DRACONIC_OBJECT(PrefabDocument, ISerializable)
     public:
         String name;
-        void Serialize(ISerializer& ar) override { draconic::core::Serialize(ar, "name", name); }
+        void Serialize(ISerializer& ar) override { draconic::foundation::Serialize(ar, "name", name); }
     };
 
     /// Captures `root`'s subtree into a LoadScene-compatible stream (entities + components + an
@@ -919,7 +919,7 @@ export namespace draconic::scene
             detail::WriteSceneStreamHeader(ar);
 
             String name = String(scene.GetEntityName(root));
-            draconic::core::Serialize(ar, "name", name);
+            draconic::foundation::Serialize(ar, "name", name);
 
             Array<Scene::PrefabInstanceState*> contained;
             HashMap<Guid, u8> nestedMembers;
@@ -948,8 +948,8 @@ export namespace draconic::scene
                 Guid parentId = (e == root) ? Guid{} : scene.GetEntityId(scene.GetParent(e));
                 Transform t = scene.GetLocalTransform(e);
                 detail::SerializeGuid(ar, "id", id);
-                draconic::core::Serialize(ar, "name", ename);
-                draconic::core::Serialize(ar, "active", active);
+                draconic::foundation::Serialize(ar, "name", ename);
+                draconic::foundation::Serialize(ar, "active", active);
                 detail::SerializeGuid(ar, "parent", parentId);
                 detail::SerializeTransform(ar, t);
             }
@@ -1000,7 +1000,7 @@ export namespace draconic::scene
             // payload's namespace (live guids ARE the namespace ids here; a previously-nested
             // instance keeps its stable identity so existing spawns keep matching).
             u8 sectionMode = detail::kPrefabWireReferenced3;
-            draconic::core::Serialize(ar, "prefabMode", sectionMode);
+            draconic::foundation::Serialize(ar, "prefabMode", sectionMode);
             u32 recordCount = static_cast<u32>(contained.Size());
             ar.Key("prefabInstances");
             ar.BeginArray(recordCount);
@@ -1119,7 +1119,7 @@ export namespace draconic::scene
 
             detail::WriteSceneStreamHeader(ar);
             String name = String(scene.GetEntityName(root));
-            draconic::core::Serialize(ar, "name", name);
+            draconic::foundation::Serialize(ar, "name", name);
 
             // Instances inside the subtree become nested RECORDS (owner-linked ones keep their
             // stable identity; a user-spawned instance inside gets ABSORBED as a new record).
@@ -1164,8 +1164,8 @@ export namespace draconic::scene
                     (e == root) ? Guid{} : substituted(scene.GetEntityId(scene.GetParent(e)));
                 Transform t = (e == root) ? rootTemplateTransform : scene.GetLocalTransform(e);
                 detail::SerializeGuid(ar, "id", id);
-                draconic::core::Serialize(ar, "name", ename);
-                draconic::core::Serialize(ar, "active", active);
+                draconic::foundation::Serialize(ar, "name", ename);
+                draconic::foundation::Serialize(ar, "active", active);
                 detail::SerializeGuid(ar, "parent", parentId);
                 detail::SerializeTransform(ar, t);
             }
@@ -1207,7 +1207,7 @@ export namespace draconic::scene
                 {
                     ar.BeginObject();
                     detail::SerializeGuid(ar, "owner", ownerId);
-                    draconic::core::Serialize(ar, "type", typeId);
+                    draconic::foundation::Serialize(ar, "type", typeId);
                     ar.Key("data");
                     ar.BeginObject();
                     r.manager->WriteComponent(ar, r.owner);
@@ -1216,10 +1216,10 @@ export namespace draconic::scene
                     continue;
                 }
                 detail::SerializeGuid(ar, "owner", ownerId);
-                draconic::core::Serialize(ar, "type", typeId);
+                draconic::foundation::Serialize(ar, "type", typeId);
                 Array<u8> blob;
                 detail::ComponentToBlob(*r.manager, r.owner, blob);
-                draconic::core::Serialize(ar, "data", blob);
+                draconic::foundation::Serialize(ar, "data", blob);
             }
             ar.EndArray();
 
@@ -1232,7 +1232,7 @@ export namespace draconic::scene
             // instance's baselines already absorbed this owner's customization - a baseline diff
             // would silently drop it); baseline diff is the degraded fallback.
             u8 sectionMode = detail::kPrefabWireReferenced3;
-            draconic::core::Serialize(ar, "prefabMode", sectionMode);
+            draconic::foundation::Serialize(ar, "prefabMode", sectionMode);
             u32 recordCount = static_cast<u32>(contained.Size());
             ar.Key("prefabInstances");
             ar.BeginArray(recordCount);

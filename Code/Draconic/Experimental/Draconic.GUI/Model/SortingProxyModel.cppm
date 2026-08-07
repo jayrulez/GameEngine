@@ -10,17 +10,17 @@
 // re-sorts and refreshes the view with no view-side changes.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:sorting_proxy_model;
 
-import draconic.core; // Array, i32, usize
+import draconic.foundation; // Array, i32, usize
 import :variant;
 import :model_index;
 import :model;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -105,9 +105,9 @@ export namespace draconic::gui
         {
             return m_source != nullptr ? m_source->ColumnCount() : 0;
         }
-        [[nodiscard]] core::String ColumnName(usize column) const override
+        [[nodiscard]] foundation::String ColumnName(usize column) const override
         {
-            return m_source != nullptr ? m_source->ColumnName(column) : core::String{};
+            return m_source != nullptr ? m_source->ColumnName(column) : foundation::String{};
         }
         [[nodiscard]] Variant Data(const ModelIndex& index,
                                    ModelRole role = ModelRole::Display) const override

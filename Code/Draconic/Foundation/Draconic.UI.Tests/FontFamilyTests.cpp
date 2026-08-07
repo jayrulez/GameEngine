@@ -6,9 +6,9 @@
 // Beef `sheet.ForType(typeof(TestView))` -> ForType(&TestView::StaticType()); `ctx.FontService = x`
 // -> ctx.SetFontService(&x).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
+import draconic.foundation;
 import draconic.ui;
 import draconic.fonts;
 import draconic.image; // ImageData (StubFontService::GetAtlasTexture return type)
@@ -16,8 +16,8 @@ import draconic.image; // ImageData (StubFontService::GetAtlasTexture return typ
 
 using namespace draconic::ui;
 using namespace draconic::ui::tests;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace fonts = draconic::fonts;
 
 namespace
@@ -41,12 +41,12 @@ namespace
         [[nodiscard]] StringView DefaultFontFamily() const override { return u8"StubDefault"; }
     };
 
-    core::RefPtr<RootView> MakeRoot() { return core::MakeRef<RootView>(core::DefaultAllocator()); }
+    foundation::RefPtr<RootView> MakeRoot() { return foundation::MakeRef<RootView>(foundation::DefaultAllocator()); }
 
     // Give ctx a fresh empty stylesheet (Sedulous SetupSheet). Returns a borrowed pointer.
     StyleSheet* SetupSheet(UIContext& ctx)
     {
-        core::RefPtr<StyleSheet> sheet = core::MakeRef<StyleSheet>(core::DefaultAllocator());
+        foundation::RefPtr<StyleSheet> sheet = foundation::MakeRef<StyleSheet>(foundation::DefaultAllocator());
         StyleSheet* raw = sheet.Get();
         ctx.SetStyleSheet(Move(sheet));
         return raw;
@@ -63,7 +63,7 @@ TEST_CASE("font-family: ResolveStyleFontFamily_Fallback_UsesFontServiceDefault")
     ctx.SetFontService(&fontService);
     SetupSheet(ctx);
 
-    auto view = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto view = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(view.Get());
 
     CHECK(view->ResolveStyleFontFamily() == u8"StubDefault");
@@ -80,7 +80,7 @@ TEST_CASE("font-family: ResolveStyleFontFamily_CascadeWinsOverFontServiceDefault
     StyleSheet* sheet = SetupSheet(ctx);
     sheet->ForType(&TestView::StaticType()).Set(StyleProperty::FontFamily, StringView{u8"Roboto"});
 
-    auto view = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto view = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(view.Get());
 
     CHECK(view->ResolveStyleFontFamily() == u8"Roboto");
@@ -94,7 +94,7 @@ TEST_CASE("font-family: ResolveStyleFontFamily_InstanceOverride_Wins")
     StyleSheet* sheet = SetupSheet(ctx);
     sheet->ForType(&TestView::StaticType()).Set(StyleProperty::FontFamily, StringView{u8"Roboto"});
 
-    auto view = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto view = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(view.Get());
 
     CHECK(view->ResolveStyleFontFamily(StringView{u8"CustomFamily"}) == u8"CustomFamily");
@@ -109,7 +109,7 @@ TEST_CASE("font-family: ResolveStyleFontFamily_EmptyOverride_DefersToCascade")
     StyleSheet* sheet = SetupSheet(ctx);
     sheet->ForType(&TestView::StaticType()).Set(StyleProperty::FontFamily, StringView{u8"Roboto"});
 
-    auto view = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto view = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(view.Get());
 
     CHECK(view->ResolveStyleFontFamily(StringView{}) == u8"Roboto");
@@ -123,7 +123,7 @@ TEST_CASE("font-family: Resolution_InlineFontFamilyBeatsContextSheet")
     StyleSheet* sheet = SetupSheet(ctx);
     sheet->ForType(&TestView::StaticType()).Set(StyleProperty::FontFamily, StringView{u8"Roboto"});
 
-    auto view = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto view = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(view.Get());
     view->SetStyle(StyleProperty::FontFamily, StringView{u8"JungleAdventurer"});
 

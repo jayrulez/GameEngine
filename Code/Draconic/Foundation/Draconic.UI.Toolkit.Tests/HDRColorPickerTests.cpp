@@ -1,18 +1,18 @@
 // Smoke test for the toolkit HDRColorPicker: constructs, round-trips an HDR color, decomposes intensity.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 import draconic.ui.toolkit;
 
 using namespace draconic::ui;
 using namespace draconic::ui::toolkit;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 TEST_CASE("toolkit-hdrcolorpicker: ConstructAndRoundTrip")
 {
-    auto picker = core::MakeRef<HDRColorPicker>(core::DefaultAllocator());
+    auto picker = foundation::MakeRef<HDRColorPicker>(foundation::DefaultAllocator());
     // 10 children: SV square, hue strip, alpha strip, 2 previews, intensity, R/G/B/A.
     CHECK(picker->ChildCount() == 10u);
 

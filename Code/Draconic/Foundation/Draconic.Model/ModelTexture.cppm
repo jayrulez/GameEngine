@@ -2,16 +2,16 @@
 /// Ported from Sedulous.Models/ModelTexture.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include <cstring>
 #include <string>
 
 export module draconic.model:model_texture;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::model
 {

@@ -6,12 +6,12 @@
 // Multi-selection is inherited (SetSelectionMode(Multi) + Ctrl/Shift).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:list_view;
 
-import draconic.core;  // RefPtr, MakeRef, Move
+import draconic.foundation;  // RefPtr, MakeRef, Move
 import draconic.fonts; // CachedFont
 import :rect;
 import :label;
@@ -19,8 +19,8 @@ import :model_index;
 import :model;
 import :abstract_item_view;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace fonts = draconic::fonts;
 
 export namespace draconic::gui
@@ -32,9 +32,9 @@ export namespace draconic::gui
     public:
         ListRow()
         {
-            SetTag(core::StringView(u8"listviewrow"));
-            m_label = core::MakeRef<Label>(core::DefaultAllocator());
-            m_label->SetTag(core::StringView(u8"listcell")); // container-owned, not a generic label
+            SetTag(foundation::StringView(u8"listviewrow"));
+            m_label = foundation::MakeRef<Label>(foundation::DefaultAllocator());
+            m_label->SetTag(foundation::StringView(u8"listcell")); // container-owned, not a generic label
             m_label->SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
             m_label->SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
             m_label->SetHitTestVisible(false);
@@ -50,7 +50,7 @@ export namespace draconic::gui
     {
         DRACONIC_OBJECT(ListView, AbstractItemView)
     public:
-        ListView() { SetTag(core::StringView(u8"listview")); }
+        ListView() { SetTag(foundation::StringView(u8"listview")); }
 
         void SetFont(fonts::CachedFont* font)
         {
@@ -76,7 +76,7 @@ export namespace draconic::gui
     protected:
         [[nodiscard]] RefPtr<ItemRow> CreateItemRow() override
         {
-            auto row = core::MakeRef<ListRow>(core::DefaultAllocator());
+            auto row = foundation::MakeRef<ListRow>(foundation::DefaultAllocator());
             row->GetLabel()->SetFont(m_font);
             row->GetLabel()->SetTextColor(m_textColor);
             return row;
@@ -85,8 +85,8 @@ export namespace draconic::gui
         {
             Label* label = static_cast<ListRow&>(row).GetLabel();
             label->SetText(GetModel()->Data(MakeModelIndex(item)).ToString().AsView());
-            label->SetPosition(core::Float2{0.0f, 0.0f});
-            label->SetSize(core::Float2{rowWidth, GetRowHeight()});
+            label->SetPosition(foundation::Float2{0.0f, 0.0f});
+            label->SetSize(foundation::Float2{rowWidth, GetRowHeight()});
         }
 
     private:

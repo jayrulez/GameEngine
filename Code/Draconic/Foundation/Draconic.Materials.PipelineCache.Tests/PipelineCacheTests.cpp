@@ -3,9 +3,9 @@
 // path - invalidating the shader makes GetPipeline rebuild and retire the stale PSO.
 // Real DXC + Null RHI.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.rhi.null;
 import draconic.shaders;
@@ -13,7 +13,7 @@ import draconic.shaders.system;
 import draconic.materials;
 import draconic.materials.pipelinecache;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::materials;
 namespace rhi = draconic::rhi;
 namespace shaders = draconic::shaders;

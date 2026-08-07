@@ -4,17 +4,17 @@
 // auto-reverse. Ported from Sedulous.UI/src/Animation/Animation.bf. Animations are single-owner (Beef
 // `delete` -> UniquePtr held by AnimationManager / parent Storyboard); this base is a plain polymorphic
 // class (not an Object - not scripted, no Cast). EasingFunction + the easing functions come from
-// draconic.core (:easings). Target is a borrowed View* (forward-declared; only pointer-compared).
+// Draconic.Foundation (:easings). Target is a borrowed View* (forward-declared; only pointer-compared).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:animation;
 
-import draconic.core;
+import draconic.foundation;
 import :event;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

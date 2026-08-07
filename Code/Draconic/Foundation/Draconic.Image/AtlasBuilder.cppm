@@ -6,15 +6,15 @@
 // Sedulous.Images/ImageAtlasBuilder.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.image:atlas_builder;
 
-import draconic.core;
+import draconic.foundation;
 import :pixel_format;
 import :image_data;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::image
 {

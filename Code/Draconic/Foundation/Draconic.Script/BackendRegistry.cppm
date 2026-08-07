@@ -7,15 +7,15 @@
 // registration call, exactly how the Wren backend is added.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 export module draconic.script:backend_registry;
 
-import draconic.core;
+import draconic.foundation;
 import :script_manager;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::script
 {

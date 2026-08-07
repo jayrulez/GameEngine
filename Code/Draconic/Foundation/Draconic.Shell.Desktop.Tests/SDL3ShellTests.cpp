@@ -1,19 +1,19 @@
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include <cstdlib> // setenv
 #define SDL_MAIN_HANDLED
 #include <SDL3/SDL.h> // synthetic events + window id (tests exercise the close path)
 
-import draconic.core;
+import draconic.foundation;
 import draconic.runtime;
 import draconic.shell;
 import draconic.runtime.client;
 import draconic.runtime.desktop; // RunApplication (the desktop runner)
 import draconic.shell.desktop;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::runtime;
 using namespace draconic::shell;
 

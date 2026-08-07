@@ -10,7 +10,7 @@ if(EMSCRIPTEN)
     # --- Browser player: WebMain.cpp + the web platform trio + preloaded content ---
     add_executable(Draconic.Engine.Player WebMain.cpp)
     target_link_libraries(Draconic.Engine.Player PRIVATE
-        Draconic::Core
+        Draconic::Foundation
         Draconic::Runtime Draconic::Runtime.Client Draconic::Runtime.Web Draconic::Engine.DefaultApp
         Draconic::Shell.Web Draconic::Shell Draconic::Graphics Draconic::Graphics.Gpu
         Draconic::Engine.Scene Draconic::Scene.Resource
@@ -59,7 +59,7 @@ else()
     # --- Desktop player: Main.cpp + SDL shell + a device + the blocking runner ---
     add_executable(Draconic.Engine.Player Main.cpp)
     target_link_libraries(Draconic.Engine.Player PRIVATE
-        Draconic::Core
+        Draconic::Foundation
         Draconic::Runtime Draconic::Runtime.Client Draconic::Runtime.Desktop Draconic::Engine.DefaultApp
         Draconic::Shell.Desktop Draconic::Shell Draconic::Graphics Draconic::Graphics.Gpu
         Draconic::Engine.Scene Draconic::Scene.Resource

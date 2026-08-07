@@ -18,17 +18,17 @@
 // version mismatch degrades to a full re-plan - never wrong output, only wasted work.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 module draconic.editor.cook;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.vfs;
 import draconic.editor;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::editor
 {

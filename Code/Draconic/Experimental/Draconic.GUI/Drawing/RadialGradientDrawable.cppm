@@ -6,19 +6,19 @@
 // (0.5,0.5 = middle); RadiusScale multiplies the farthest-corner distance (CSS default).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:radial_gradient_drawable;
 
-import draconic.core; // Color, Float2, Array, Distance, Max
+import draconic.foundation; // Color, Float2, Array, Distance, Max
 import draconic.vg;   // VGRadialGradientFill, GradientStop, PathBuilder
 import :rect;
 import :draw_context;
 import :drawable;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace vg = draconic::vg;
 
 export namespace draconic::gui
@@ -27,7 +27,7 @@ export namespace draconic::gui
     {
         DRACONIC_OBJECT(RadialGradientDrawable, Drawable)
     public:
-        core::Float2 Center{0.5f, 0.5f}; ///< Center as a fraction of the bounds.
+        foundation::Float2 Center{0.5f, 0.5f}; ///< Center as a fraction of the bounds.
         f32 RadiusScale = 1.0f;          ///< Radius = RadiusScale * farthest-corner distance.
 
         RadialGradientDrawable() = default;
@@ -41,7 +41,7 @@ export namespace draconic::gui
             if (m_stops.Size() == 0)
                 return;
 
-            const core::Float2 centerPx{dest.x + Center.x * dest.width,
+            const foundation::Float2 centerPx{dest.x + Center.x * dest.width,
                                         dest.y + Center.y * dest.height};
             const f32 radius = RadiusScale * FarthestCornerDistance(dest, centerPx);
 
@@ -53,13 +53,13 @@ export namespace draconic::gui
         }
 
     private:
-        [[nodiscard]] static f32 FarthestCornerDistance(const Rect& r, core::Float2 c)
+        [[nodiscard]] static f32 FarthestCornerDistance(const Rect& r, foundation::Float2 c)
         {
-            const f32 d0 = core::Distance(c, core::Float2{r.Left(), r.Top()});
-            const f32 d1 = core::Distance(c, core::Float2{r.Right(), r.Top()});
-            const f32 d2 = core::Distance(c, core::Float2{r.Left(), r.Bottom()});
-            const f32 d3 = core::Distance(c, core::Float2{r.Right(), r.Bottom()});
-            return core::Max(core::Max(d0, d1), core::Max(d2, d3));
+            const f32 d0 = foundation::Distance(c, foundation::Float2{r.Left(), r.Top()});
+            const f32 d1 = foundation::Distance(c, foundation::Float2{r.Right(), r.Top()});
+            const f32 d2 = foundation::Distance(c, foundation::Float2{r.Left(), r.Bottom()});
+            const f32 d3 = foundation::Distance(c, foundation::Float2{r.Right(), r.Bottom()});
+            return foundation::Max(foundation::Max(d0, d1), foundation::Max(d2, d3));
         }
 
         [[nodiscard]] static vg::Path RectPath(const Rect& r)

@@ -13,12 +13,12 @@
 // factory, and the "Scene" asset creator (File > New Scene).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 export module draconic.editor.scene:page;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.rhi;
 import draconic.graphics;
@@ -50,7 +50,7 @@ import :component_gizmos;
 import :hierarchy;
 import :inspector;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {

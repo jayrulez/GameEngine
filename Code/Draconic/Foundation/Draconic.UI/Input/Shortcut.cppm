@@ -4,15 +4,15 @@
 // Object (RefCounted) so ShortcutManager can own them via RefPtr and hand back stable pointers.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:shortcut;
 
-import draconic.core; // Function, String, Object
+import draconic.foundation; // Function, String, Object
 import :input_enums;  // KeyCode, KeyModifiers
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

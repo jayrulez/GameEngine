@@ -4,18 +4,18 @@
 // PumpReloads hot reload (including the .hlsli -> reload-everything fallback). File shaders
 // compile real SPIR-V via DXC on the Null RHI backend, same as ShaderSystemTests.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include <filesystem>
 #include <fstream>
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.rhi.null;
 import draconic.shaders;
 import draconic.shaders.system;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::shaders;
 namespace rhi = draconic::rhi;
 

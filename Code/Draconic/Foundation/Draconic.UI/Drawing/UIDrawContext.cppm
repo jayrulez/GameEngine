@@ -5,16 +5,16 @@
 // Beef `VGContext mVG` (class = by ref) -> stored VGContext* (VG() returns the ref).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:draw_context;
 
-import draconic.core;  // Rectangle
+import draconic.foundation;  // Rectangle
 import draconic.vg;    // VGContext
 import draconic.fonts; // IFontService
 import :debug_settings;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace vg = draconic::vg;
 namespace fonts = draconic::fonts;
 

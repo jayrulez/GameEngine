@@ -22,20 +22,20 @@
 // Never linked by the runtime.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 export module draconic.script.editor;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.editor;
 import draconic.editor.core;
 import draconic.content;
 import draconic.script;
 import draconic.script.resource;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::script
 {
@@ -51,7 +51,7 @@ export namespace draconic::script
         void Serialize(ISerializer& ar) override
         {
             draconic::editor::Asset::Serialize(ar); // fileName
-            draconic::core::Serialize(ar, "language", language);
+            draconic::foundation::Serialize(ar, "language", language);
         }
     };
 

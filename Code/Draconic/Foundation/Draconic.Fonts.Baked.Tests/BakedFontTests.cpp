@@ -2,13 +2,13 @@
 // BakedFont + BakedFontAtlas (no rasterizer / no TTF).
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.fonts;
 import draconic.fonts.baked;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::fonts;
 
 TEST_CASE("baked.font: metrics round-trip")

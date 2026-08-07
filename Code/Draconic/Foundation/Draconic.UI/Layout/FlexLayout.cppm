@@ -6,12 +6,12 @@
 // field/type name clash.)
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:flex_layout;
 
-import draconic.core; // Max, Optional, RefPtr
+import draconic.foundation; // Max, Optional, RefPtr
 import :view;
 import :layout_params;
 import :box_constraints;
@@ -21,7 +21,7 @@ import :thickness;
 import :enums; // Orientation
 import :gravity;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

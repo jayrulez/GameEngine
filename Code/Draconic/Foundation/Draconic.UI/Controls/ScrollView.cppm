@@ -9,12 +9,12 @@
 // properties -> methods; the `ScrollBarMode` Property field shadows its enum type -> aliased.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:scroll_view;
 
-import draconic.core;
+import draconic.foundation;
 import :view;
 import :property;
 import :event;
@@ -27,8 +27,8 @@ import :enums;
 import :scroll_bar;
 import :momentum_helper;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::ui
 {
@@ -86,7 +86,7 @@ export namespace draconic::ui
         [[nodiscard]] f32 ScrollX() const noexcept { return m_scrollX; }
         void SetScrollX(f32 value)
         {
-            const f32 c = core::Clamp(value, 0.0f, MaxScrollX());
+            const f32 c = foundation::Clamp(value, 0.0f, MaxScrollX());
             if (m_scrollX == c)
             {
                 return;
@@ -97,7 +97,7 @@ export namespace draconic::ui
         [[nodiscard]] f32 ScrollY() const noexcept { return m_scrollY; }
         void SetScrollY(f32 value)
         {
-            const f32 c = core::Clamp(value, 0.0f, MaxScrollY());
+            const f32 c = foundation::Clamp(value, 0.0f, MaxScrollY());
             if (m_scrollY == c)
             {
                 return;
@@ -108,11 +108,11 @@ export namespace draconic::ui
 
         [[nodiscard]] f32 MaxScrollX() const
         {
-            return core::Max(0.0f, m_contentWidth - ViewportWidth());
+            return foundation::Max(0.0f, m_contentWidth - ViewportWidth());
         }
         [[nodiscard]] f32 MaxScrollY() const
         {
-            return core::Max(0.0f, m_contentHeight - ViewportHeight());
+            return foundation::Max(0.0f, m_contentHeight - ViewportHeight());
         }
         [[nodiscard]] f32 ContentWidth() const noexcept { return m_contentWidth; }
         [[nodiscard]] f32 ContentHeight() const noexcept { return m_contentHeight; }
@@ -123,7 +123,7 @@ export namespace draconic::ui
                 (ScrollBarMode.Value() == ScrollBarModeValue::Reserved && NeedsVBar())
                     ? ScrollBarThickness.Value()
                     : 0.0f;
-            return core::Max(0.0f, Width() - Padding.TotalHorizontal() - barSpace);
+            return foundation::Max(0.0f, Width() - Padding.TotalHorizontal() - barSpace);
         }
         [[nodiscard]] f32 ViewportHeight() const
         {
@@ -131,7 +131,7 @@ export namespace draconic::ui
                 (ScrollBarMode.Value() == ScrollBarModeValue::Reserved && NeedsHBar())
                     ? ScrollBarThickness.Value()
                     : 0.0f;
-            return core::Max(0.0f, Height() - Padding.TotalVertical() - barSpace);
+            return foundation::Max(0.0f, Height() - Padding.TotalVertical() - barSpace);
         }
 
         // === Scroll commands ===
@@ -363,8 +363,8 @@ export namespace draconic::ui
     protected:
         void OnMeasure(BoxConstraints constraints) override
         {
-            const f32 fullW = core::Max(0.0f, constraints.MaxWidth - Padding.TotalHorizontal());
-            const f32 fullH = core::Max(0.0f, constraints.MaxHeight - Padding.TotalVertical());
+            const f32 fullW = foundation::Max(0.0f, constraints.MaxWidth - Padding.TotalHorizontal());
+            const f32 fullH = foundation::Max(0.0f, constraints.MaxHeight - Padding.TotalVertical());
 
             const f32 childMaxW =
                 (HScrollBarPolicy.Value() == ScrollBarPolicy::Always) ? kFloatMax : fullW;
@@ -388,9 +388,9 @@ export namespace draconic::ui
                 if (needsVBar || needsHBar)
                 {
                     const f32 adjustedW =
-                        core::Max(0.0f, fullW - (needsVBar ? ScrollBarThickness.Value() : 0.0f));
+                        foundation::Max(0.0f, fullW - (needsVBar ? ScrollBarThickness.Value() : 0.0f));
                     const f32 adjustedH =
-                        core::Max(0.0f, fullH - (needsHBar ? ScrollBarThickness.Value() : 0.0f));
+                        foundation::Max(0.0f, fullH - (needsHBar ? ScrollBarThickness.Value() : 0.0f));
                     const f32 adjChildMaxW = (HScrollBarPolicy.Value() == ScrollBarPolicy::Always)
                                                  ? kFloatMax
                                                  : adjustedW;
@@ -433,8 +433,8 @@ export namespace draconic::ui
             m_vBar->Visibility = NeedsVBar() ? VisibilityValue::Visible : VisibilityValue::Gone;
             m_hBar->Visibility = NeedsHBar() ? VisibilityValue::Visible : VisibilityValue::Gone;
 
-            m_scrollX = core::Clamp(m_scrollX, 0.0f, MaxScrollX());
-            m_scrollY = core::Clamp(m_scrollY, 0.0f, MaxScrollY());
+            m_scrollX = foundation::Clamp(m_scrollX, 0.0f, MaxScrollX());
+            m_scrollY = foundation::Clamp(m_scrollY, 0.0f, MaxScrollY());
 
             m_vBar->Parent = this;
             m_hBar->Parent = this;
@@ -457,7 +457,7 @@ export namespace draconic::ui
                 const Thickness margin =
                     child->LayoutParams ? child->LayoutParams->Margin : Thickness{};
                 const f32 childW =
-                    core::Max(child->MeasuredSize.x, ViewportWidth() - margin.TotalHorizontal());
+                    foundation::Max(child->MeasuredSize.x, ViewportWidth() - margin.TotalHorizontal());
                 const f32 childH = child->MeasuredSize.y;
                 child->Layout(Padding.Left + margin.Left - m_scrollX,
                               Padding.Top + margin.Top - m_scrollY, childW, childH);
@@ -522,8 +522,8 @@ export namespace draconic::ui
                 const Thickness margin =
                     child->LayoutParams ? child->LayoutParams->Margin : Thickness{};
                 child->Measure(childConstraints.Deflate(margin));
-                maxW = core::Max(maxW, child->MeasuredSize.x + margin.TotalHorizontal());
-                maxH = core::Max(maxH, child->MeasuredSize.y + margin.TotalVertical());
+                maxW = foundation::Max(maxW, child->MeasuredSize.x + margin.TotalHorizontal());
+                maxH = foundation::Max(maxH, child->MeasuredSize.y + margin.TotalVertical());
             }
         }
 

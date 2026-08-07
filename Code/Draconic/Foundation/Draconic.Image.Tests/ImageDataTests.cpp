@@ -3,11 +3,11 @@
 // the ported lib inherits that suite's coverage. (Test.Assert -> CHECK; Beef
 // scope/new -> stack/Array; nullable RectangleI -> const RectI*.)
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.image;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::image;
 
 // ============================================================ OwnedImageData

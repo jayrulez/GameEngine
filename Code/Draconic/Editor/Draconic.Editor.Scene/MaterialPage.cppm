@@ -16,13 +16,13 @@
 // custom shader-backed materials come later with the shader-asset story).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.editor.scene:material_page;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.settings;
 import draconic.content;
@@ -52,7 +52,7 @@ import draconic.editor.app;
 import :camera;    // EditorCamera (fly camera on the preview viewport)
 import :inspector; // ResourceRefEditor (the picker row)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {
@@ -346,7 +346,7 @@ export namespace draconic::editor
         {
             ar.Key("asset");
             ar.GuidValue(asset);
-            draconic::core::Serialize(ar, "shape", shape);
+            draconic::foundation::Serialize(ar, "shape", shape);
             ar.Key("mesh");
             ar.GuidValue(mesh);
         }
@@ -367,7 +367,7 @@ export namespace draconic::editor
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "prefs", prefs);
+            draconic::foundation::Serialize(ar, "prefs", prefs);
         }
     };
 

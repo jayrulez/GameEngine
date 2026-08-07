@@ -8,11 +8,11 @@
 /// (SceneSystems) do, driven by the scene.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.engine.animation:subsystem;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.runtime;         // Subsystem, Context
 import draconic.scene;           // Scene, ISceneAware
 import draconic.engine.scene; // SceneSubsystem (to register as scene-aware)

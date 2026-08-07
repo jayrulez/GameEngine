@@ -8,7 +8,7 @@ add_library(Draconic::Graphics ALIAS Draconic.Graphics)
 
 target_link_libraries(Draconic.Graphics
     PUBLIC
-        Draconic::Core
+        Draconic::Foundation
         Draconic::RHI
         Draconic::Shell
         Draconic::Policy)
@@ -25,7 +25,7 @@ add_library(Draconic::Graphics.Null ALIAS Draconic.Graphics.Null)
 
 target_link_libraries(Draconic.Graphics.Null
     PUBLIC
-        Draconic::Core
+        Draconic::Foundation
         Draconic::RHI
         Draconic::RHI.Null
         Draconic::Graphics
@@ -46,7 +46,7 @@ if(TARGET Draconic::RHI.Vulkan OR TARGET Draconic::RHI.DX12 OR TARGET Draconic::
 
     target_link_libraries(Draconic.Graphics.Gpu
         PUBLIC
-            Draconic::Core
+            Draconic::Foundation
             Draconic::RHI
             Draconic::RHI.Validation
             Draconic::Graphics

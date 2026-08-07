@@ -15,14 +15,14 @@
 /// bumps a generation so a consumer can rebuild the bind group it created over `Buffer()`.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.render:resources;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 
 export namespace draconic::render

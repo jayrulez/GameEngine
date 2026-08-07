@@ -16,18 +16,18 @@
 /// shared snapshot. (§5/§9 of docs/design/renderer.md.)
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include <new>
 #include <type_traits>
 
 export module draconic.render:data;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.geometry;
 import draconic.materials;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::render
 {

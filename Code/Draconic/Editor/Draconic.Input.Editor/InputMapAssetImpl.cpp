@@ -7,16 +7,16 @@
 // DRACONIC_REFLECT out of the interface (GCC module hygiene). Reflection track P2.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 module draconic.input.editor;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.editor;
 import draconic.input; // InputMap (the nested reflected type)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::input
 {

@@ -8,7 +8,7 @@
 //     | b  d  ty |          y' = b*x + d*y + ty
 //     | 0  0  1  |
 //
-// ToMatrix() lays those into a core::Float4x4 in the exact convention VG's
+// ToMatrix() lays those into a foundation::Float4x4 in the exact convention VG's
 // TransformPoint2D reads (row-vector, translation in row 3), so a subtree transform
 // feeds DrawContext losslessly and rotation matches Float4x4::RotationZ.
 //
@@ -16,16 +16,16 @@
 // convention, not eepp's degrees); camelCase -> Draconic PascalCase.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:transform2d;
 
-import draconic.core; // Float2, Float4x4, Cos/Sin, NearlyEqual
+import draconic.foundation; // Float2, Float4x4, Cos/Sin, NearlyEqual
 
 import :rect;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 namespace draconic::gui
 {
@@ -66,22 +66,22 @@ export namespace draconic::gui
         }
 
         // === Point / rect application ===
-        [[nodiscard]] constexpr core::Float2 TransformPoint(core::Float2 p) const noexcept
+        [[nodiscard]] constexpr foundation::Float2 TransformPoint(foundation::Float2 p) const noexcept
         {
-            return core::Float2{a * p.x + c * p.y + tx, b * p.x + d * p.y + ty};
+            return foundation::Float2{a * p.x + c * p.y + tx, b * p.x + d * p.y + ty};
         }
-        [[nodiscard]] constexpr core::Float2 TransformPoint(f32 px, f32 py) const noexcept
+        [[nodiscard]] constexpr foundation::Float2 TransformPoint(f32 px, f32 py) const noexcept
         {
-            return core::Float2{a * px + c * py + tx, b * px + d * py + ty};
+            return foundation::Float2{a * px + c * py + tx, b * px + d * py + ty};
         }
 
         // Axis-aligned bounding box of the four transformed corners.
         [[nodiscard]] constexpr Rect TransformRect(const Rect& r) const noexcept
         {
-            const core::Float2 p0 = TransformPoint(r.Left(), r.Top());
-            const core::Float2 p1 = TransformPoint(r.Right(), r.Top());
-            const core::Float2 p2 = TransformPoint(r.Left(), r.Bottom());
-            const core::Float2 p3 = TransformPoint(r.Right(), r.Bottom());
+            const foundation::Float2 p0 = TransformPoint(r.Left(), r.Top());
+            const foundation::Float2 p1 = TransformPoint(r.Right(), r.Top());
+            const foundation::Float2 p2 = TransformPoint(r.Left(), r.Bottom());
+            const foundation::Float2 p3 = TransformPoint(r.Right(), r.Bottom());
             const f32 minX = Min4(p0.x, p1.x, p2.x, p3.x);
             const f32 maxX = Max4(p0.x, p1.x, p2.x, p3.x);
             const f32 minY = Min4(p0.y, p1.y, p2.y, p3.y);
@@ -102,23 +102,23 @@ export namespace draconic::gui
         {
             return Combine(Transform2D{1.0f, 0.0f, 0.0f, 1.0f, x, y});
         }
-        constexpr Transform2D& Translate(core::Float2 offset) noexcept
+        constexpr Transform2D& Translate(foundation::Float2 offset) noexcept
         {
             return Translate(offset.x, offset.y);
         }
 
         Transform2D& Rotate(f32 radians) noexcept
         {
-            const f32 cs = core::Cos(radians), sn = core::Sin(radians);
+            const f32 cs = foundation::Cos(radians), sn = foundation::Sin(radians);
             return Combine(Transform2D{cs, sn, -sn, cs, 0.0f, 0.0f});
         }
         Transform2D& Rotate(f32 radians, f32 centerX, f32 centerY) noexcept
         {
-            const f32 cs = core::Cos(radians), sn = core::Sin(radians);
+            const f32 cs = foundation::Cos(radians), sn = foundation::Sin(radians);
             return Combine(Transform2D{cs, sn, -sn, cs, centerX * (1.0f - cs) + centerY * sn,
                                        -centerX * sn + centerY * (1.0f - cs)});
         }
-        Transform2D& Rotate(f32 radians, core::Float2 center) noexcept
+        Transform2D& Rotate(f32 radians, foundation::Float2 center) noexcept
         {
             return Rotate(radians, center.x, center.y);
         }
@@ -127,7 +127,7 @@ export namespace draconic::gui
         {
             return Combine(Transform2D{sx, 0.0f, 0.0f, sy, 0.0f, 0.0f});
         }
-        constexpr Transform2D& Scale(core::Float2 factors) noexcept
+        constexpr Transform2D& Scale(foundation::Float2 factors) noexcept
         {
             return Scale(factors.x, factors.y);
         }
@@ -136,7 +136,7 @@ export namespace draconic::gui
             return Combine(
                 Transform2D{sx, 0.0f, 0.0f, sy, centerX * (1.0f - sx), centerY * (1.0f - sy)});
         }
-        constexpr Transform2D& Scale(core::Float2 factors, core::Float2 center) noexcept
+        constexpr Transform2D& Scale(foundation::Float2 factors, foundation::Float2 center) noexcept
         {
             return Scale(factors.x, factors.y, center.x, center.y);
         }
@@ -145,7 +145,7 @@ export namespace draconic::gui
         [[nodiscard]] Transform2D GetInverse() const noexcept
         {
             const f32 det = a * d - c * b;
-            if (core::NearlyZero(det))
+            if (foundation::NearlyZero(det))
             {
                 return Transform2D::Identity();
             }
@@ -156,9 +156,9 @@ export namespace draconic::gui
         }
 
         // === Float4x4 for the VG DrawContext (row-vector, translation in row 3) ===
-        [[nodiscard]] constexpr core::Float4x4 ToMatrix() const noexcept
+        [[nodiscard]] constexpr foundation::Float4x4 ToMatrix() const noexcept
         {
-            core::Float4x4 m = core::Float4x4::Identity();
+            foundation::Float4x4 m = foundation::Float4x4::Identity();
             m.m[0][0] = a;
             m.m[0][1] = b;
             m.m[1][0] = c;
@@ -189,8 +189,8 @@ export namespace draconic::gui
     [[nodiscard]] inline bool NearlyEqual(const Transform2D& x, const Transform2D& y,
                                           f32 epsilon = kEpsilon) noexcept
     {
-        return core::NearlyEqual(x.a, y.a, epsilon) && core::NearlyEqual(x.b, y.b, epsilon) &&
-               core::NearlyEqual(x.c, y.c, epsilon) && core::NearlyEqual(x.d, y.d, epsilon) &&
-               core::NearlyEqual(x.tx, y.tx, epsilon) && core::NearlyEqual(x.ty, y.ty, epsilon);
+        return foundation::NearlyEqual(x.a, y.a, epsilon) && foundation::NearlyEqual(x.b, y.b, epsilon) &&
+               foundation::NearlyEqual(x.c, y.c, epsilon) && foundation::NearlyEqual(x.d, y.d, epsilon) &&
+               foundation::NearlyEqual(x.tx, y.tx, epsilon) && foundation::NearlyEqual(x.ty, y.ty, epsilon);
     }
 }

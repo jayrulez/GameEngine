@@ -7,12 +7,12 @@
 // get/set props -> methods; the (_, dy) momentum tuple -> Float2.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:grid_view;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import :view;
 import :property;
@@ -31,8 +31,8 @@ import :ilist_adapter;
 import :selection_model;
 import :view_recycler;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::ui
 {
@@ -94,12 +94,12 @@ export namespace draconic::ui
 
         [[nodiscard]] f32 MaxScrollY() const
         {
-            return core::Max(0.0f, m_totalContentHeight - (Height() - Padding.TotalVertical()));
+            return foundation::Max(0.0f, m_totalContentHeight - (Height() - Padding.TotalVertical()));
         }
 
         void ScrollBy(f32 dy)
         {
-            m_scrollY = core::Clamp(m_scrollY + dy, 0.0f, MaxScrollY());
+            m_scrollY = foundation::Clamp(m_scrollY + dy, 0.0f, MaxScrollY());
             Invalidate();
         }
 
@@ -343,7 +343,7 @@ export namespace draconic::ui
             {
                 m_scrollY = rowY + CellHeight.Value() - viewportH;
             }
-            m_scrollY = core::Clamp(m_scrollY, 0.0f, MaxScrollY());
+            m_scrollY = foundation::Clamp(m_scrollY, 0.0f, MaxScrollY());
             Invalidate();
         }
 
@@ -398,7 +398,7 @@ export namespace draconic::ui
             const f32 viewportH = height - Padding.TotalVertical();
 
             m_columnsCount =
-                core::Max(1, static_cast<i32>((viewportW + CellSpacing.Value()) /
+                foundation::Max(1, static_cast<i32>((viewportW + CellSpacing.Value()) /
                                               (CellWidth.Value() + CellSpacing.Value())));
             const i32 itemCount = (m_adapter != nullptr) ? m_adapter->ItemCount() : 0;
             m_rowCount = (itemCount > 0) ? (itemCount + m_columnsCount - 1) / m_columnsCount : 0;
@@ -410,7 +410,7 @@ export namespace draconic::ui
             m_scrollBarVisible = MaxScrollY() > 0;
             m_scrollBar->Visibility =
                 m_scrollBarVisible ? VisibilityValue::Visible : VisibilityValue::Gone;
-            m_scrollY = core::Clamp(m_scrollY, 0.0f, MaxScrollY());
+            m_scrollY = foundation::Clamp(m_scrollY, 0.0f, MaxScrollY());
 
             if (m_adapter == nullptr || itemCount == 0)
             {

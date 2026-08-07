@@ -2,12 +2,12 @@
 // skinning-matrix correctness (identity at bind pose). No Sedulous test existed; this covers the
 // ported math directly.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.animation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::animation;
 
 // A 3-bone chain root(0) -> child(1) -> grandchild(2), each translated +Y from its parent.

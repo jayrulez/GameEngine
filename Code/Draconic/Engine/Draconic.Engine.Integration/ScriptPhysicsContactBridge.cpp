@@ -3,11 +3,11 @@
 // hygiene: cross-partition inline virtuals are not reliably emitted).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 module draconic.engine.integration;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.physics;
 import draconic.engine.physics;
 import draconic.engine.script;

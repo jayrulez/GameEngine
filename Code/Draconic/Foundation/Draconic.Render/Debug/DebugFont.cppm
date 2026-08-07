@@ -6,13 +6,13 @@
 /// white block (used for filled rects). Lives inside the renderer under Debug - not a separate library.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.render:debug_font;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::render::debug
 {

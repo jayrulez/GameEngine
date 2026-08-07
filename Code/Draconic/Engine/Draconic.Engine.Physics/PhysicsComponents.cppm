@@ -7,17 +7,17 @@
 // interpolation) are transient - never serialized.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.engine.physics:components;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.scene;
 import draconic.resource;
 import draconic.physics;
 import draconic.physics.resource;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::physics
 {
@@ -71,24 +71,24 @@ export namespace draconic::physics
         u8 motion = static_cast<u8>(c.motion);
         u8 layer = static_cast<u8>(c.layer);
         u8 shape = static_cast<u8>(c.shape);
-        draconic::core::Serialize(ar, "motion", motion);
-        draconic::core::Serialize(ar, "layer", layer);
-        draconic::core::Serialize(ar, "shape", shape);
+        draconic::foundation::Serialize(ar, "motion", motion);
+        draconic::foundation::Serialize(ar, "layer", layer);
+        draconic::foundation::Serialize(ar, "shape", shape);
         c.motion = static_cast<MotionKind>(motion);
         c.layer = static_cast<PhysicsLayer>(layer);
         c.shape = static_cast<ShapeKind>(shape);
-        draconic::core::Serialize(ar, "halfExtents", c.halfExtents);
-        draconic::core::Serialize(ar, "radius", c.radius);
-        draconic::core::Serialize(ar, "halfHeight", c.halfHeight);
-        draconic::core::Serialize(ar, "planeHalfExtent", c.planeHalfExtent);
-        draconic::core::Serialize(ar, "friction", c.friction);
-        draconic::core::Serialize(ar, "restitution", c.restitution);
-        draconic::core::Serialize(ar, "linearDamping", c.linearDamping);
-        draconic::core::Serialize(ar, "angularDamping", c.angularDamping);
-        draconic::core::Serialize(ar, "isTrigger", c.isTrigger);
-        draconic::core::Serialize(ar, "collisionGroup", c.collisionGroup);
-        draconic::core::Serialize(ar, "collisionShape", c.collisionShape);
-        draconic::core::Serialize(ar, "material", c.material);
+        draconic::foundation::Serialize(ar, "halfExtents", c.halfExtents);
+        draconic::foundation::Serialize(ar, "radius", c.radius);
+        draconic::foundation::Serialize(ar, "halfHeight", c.halfHeight);
+        draconic::foundation::Serialize(ar, "planeHalfExtent", c.planeHalfExtent);
+        draconic::foundation::Serialize(ar, "friction", c.friction);
+        draconic::foundation::Serialize(ar, "restitution", c.restitution);
+        draconic::foundation::Serialize(ar, "linearDamping", c.linearDamping);
+        draconic::foundation::Serialize(ar, "angularDamping", c.angularDamping);
+        draconic::foundation::Serialize(ar, "isTrigger", c.isTrigger);
+        draconic::foundation::Serialize(ar, "collisionGroup", c.collisionGroup);
+        draconic::foundation::Serialize(ar, "collisionShape", c.collisionShape);
+        draconic::foundation::Serialize(ar, "material", c.material);
     }
 
     inline void ResolveResources(draconic::resource::ResourceManager& manager,
@@ -101,13 +101,13 @@ export namespace draconic::physics
     inline void Serialize(ISerializer& ar, ColliderComponent& c)
     {
         u8 shape = static_cast<u8>(c.shape);
-        draconic::core::Serialize(ar, "shape", shape);
+        draconic::foundation::Serialize(ar, "shape", shape);
         c.shape = static_cast<ShapeKind>(shape);
-        draconic::core::Serialize(ar, "halfExtents", c.halfExtents);
-        draconic::core::Serialize(ar, "radius", c.radius);
-        draconic::core::Serialize(ar, "halfHeight", c.halfHeight);
-        draconic::core::Serialize(ar, "planeHalfExtent", c.planeHalfExtent);
-        draconic::core::Serialize(ar, "collisionShape", c.collisionShape);
+        draconic::foundation::Serialize(ar, "halfExtents", c.halfExtents);
+        draconic::foundation::Serialize(ar, "radius", c.radius);
+        draconic::foundation::Serialize(ar, "halfHeight", c.halfHeight);
+        draconic::foundation::Serialize(ar, "planeHalfExtent", c.planeHalfExtent);
+        draconic::foundation::Serialize(ar, "collisionShape", c.collisionShape);
     }
 
     inline void ResolveResources(draconic::resource::ResourceManager& manager, ColliderComponent& c)
@@ -175,13 +175,13 @@ export namespace draconic::physics
 
     inline void Serialize(ISerializer& ar, CharacterComponent& c)
     {
-        draconic::core::Serialize(ar, "radius", c.radius);
-        draconic::core::Serialize(ar, "halfHeight", c.halfHeight);
-        draconic::core::Serialize(ar, "maxSlopeDegrees", c.maxSlopeDegrees);
-        draconic::core::Serialize(ar, "mass", c.mass);
-        draconic::core::Serialize(ar, "maxStrength", c.maxStrength);
-        draconic::core::Serialize(ar, "stepUp", c.stepUp);
-        draconic::core::Serialize(ar, "stepDown", c.stepDown);
+        draconic::foundation::Serialize(ar, "radius", c.radius);
+        draconic::foundation::Serialize(ar, "halfHeight", c.halfHeight);
+        draconic::foundation::Serialize(ar, "maxSlopeDegrees", c.maxSlopeDegrees);
+        draconic::foundation::Serialize(ar, "mass", c.mass);
+        draconic::foundation::Serialize(ar, "maxStrength", c.maxStrength);
+        draconic::foundation::Serialize(ar, "stepUp", c.stepUp);
+        draconic::foundation::Serialize(ar, "stepDown", c.stepDown);
     }
 
     class CharacterComponentManager final
@@ -219,18 +219,18 @@ export namespace draconic::physics
     inline void Serialize(ISerializer& ar, JointComponent& c)
     {
         u8 kind = static_cast<u8>(c.kind);
-        draconic::core::Serialize(ar, "kind", kind);
+        draconic::foundation::Serialize(ar, "kind", kind);
         c.kind = static_cast<JointKind>(kind);
-        draconic::core::Serialize(ar, "targetEntity", c.targetEntity);
-        draconic::core::Serialize(ar, "localAnchor", c.localAnchor);
-        draconic::core::Serialize(ar, "localAxis", c.localAxis);
-        draconic::core::Serialize(ar, "limitMin", c.limitMin);
-        draconic::core::Serialize(ar, "limitMax", c.limitMax);
-        draconic::core::Serialize(ar, "minDistance", c.minDistance);
-        draconic::core::Serialize(ar, "maxDistance", c.maxDistance);
-        draconic::core::Serialize(ar, "motorEnabled", c.motorEnabled);
-        draconic::core::Serialize(ar, "motorTargetVelocity", c.motorTargetVelocity);
-        draconic::core::Serialize(ar, "motorLimit", c.motorLimit);
+        draconic::foundation::Serialize(ar, "targetEntity", c.targetEntity);
+        draconic::foundation::Serialize(ar, "localAnchor", c.localAnchor);
+        draconic::foundation::Serialize(ar, "localAxis", c.localAxis);
+        draconic::foundation::Serialize(ar, "limitMin", c.limitMin);
+        draconic::foundation::Serialize(ar, "limitMax", c.limitMax);
+        draconic::foundation::Serialize(ar, "minDistance", c.minDistance);
+        draconic::foundation::Serialize(ar, "maxDistance", c.maxDistance);
+        draconic::foundation::Serialize(ar, "motorEnabled", c.motorEnabled);
+        draconic::foundation::Serialize(ar, "motorTargetVelocity", c.motorTargetVelocity);
+        draconic::foundation::Serialize(ar, "motorLimit", c.motorLimit);
     }
 
     class JointComponentManager final
@@ -259,11 +259,11 @@ export namespace draconic::physics
     // code (the whole-block undo command replays these exact bytes).
     inline void SerializePhysicsSceneSettings(ISerializer& ar, PhysicsSceneSettings& settings)
     {
-        draconic::core::Serialize(ar, "gravity", settings.gravity);
-        draconic::core::Serialize(ar, "collisionSteps", settings.collisionSteps);
-        draconic::core::Serialize(ar, "debugDraw", settings.debugDraw);
-        draconic::core::Serialize(ar, "groupNames", settings.groupNames);
-        draconic::core::Serialize(ar, "groupCollides", settings.groupCollides);
+        draconic::foundation::Serialize(ar, "gravity", settings.gravity);
+        draconic::foundation::Serialize(ar, "collisionSteps", settings.collisionSteps);
+        draconic::foundation::Serialize(ar, "debugDraw", settings.debugDraw);
+        draconic::foundation::Serialize(ar, "groupNames", settings.groupNames);
+        draconic::foundation::Serialize(ar, "groupCollides", settings.groupCollides);
     }
 
     // Defined in SubsystemImpl.cpp: the DRACONIC_REFLECT_* bodies live there because

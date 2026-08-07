@@ -6,16 +6,16 @@
 // (Button/CheckBox/ButtonBase: DrawableFactory_StateColors/StateRounded/Svg*, SubtypeMatching_*, Icon_*)
 // remain DEFERRED until those controls are ported.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 import draconic.image;
 #include "TestHelpers.h"
 
 using namespace draconic::ui;
 using namespace draconic::ui::tests;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace image = draconic::image;
 
 // Register the drawable factories + the element types these parser tests reference.
@@ -34,24 +34,24 @@ static void EnsureGlobals()
 struct Fixture
 {
     UIContext ctx;
-    core::RefPtr<RootView> root = core::MakeRef<RootView>(core::DefaultAllocator());
+    foundation::RefPtr<RootView> root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
 
-    explicit Fixture(core::RefPtr<StyleSheet> sheet)
+    explicit Fixture(foundation::RefPtr<StyleSheet> sheet)
     {
         EnsureGlobals();
         Init(ctx, root.Get());
         ctx.SetStyleSheet(Move(sheet));
     }
 
-    core::RefPtr<TestView> AddView()
+    foundation::RefPtr<TestView> AddView()
     {
-        core::RefPtr<TestView> v = core::MakeRef<TestView>(core::DefaultAllocator(), 50.0f, 30.0f);
+        foundation::RefPtr<TestView> v = foundation::MakeRef<TestView>(foundation::DefaultAllocator(), 50.0f, 30.0f);
         root->AddView(v.Get());
         return v;
     }
 };
 
-static core::RefPtr<StyleSheet> LoadSSS(StringView src)
+static foundation::RefPtr<StyleSheet> LoadSSS(StringView src)
 {
     StyleSheetLoader loader;
     return loader.Load(src);
@@ -60,7 +60,7 @@ static core::RefPtr<StyleSheet> LoadSSS(StringView src)
 namespace
 {
     // Byte Color(r,g,b,a) -> float Color helper (mirrors the Beef Color(r,g,b,255) ctor).
-    Color Rgb(core::u8 r, core::u8 g, core::u8 b, core::u8 a = 255)
+    Color Rgb(foundation::u8 r, foundation::u8 g, foundation::u8 b, foundation::u8 a = 255)
     {
         return Color{r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
     }
@@ -89,7 +89,7 @@ namespace
 
         const image::ImageData* LoadImage(StringView path) override
         {
-            for (core::usize i = 0; i < m_imagePaths.Size(); ++i)
+            for (foundation::usize i = 0; i < m_imagePaths.Size(); ++i)
             {
                 if (m_imagePaths[i] == path)
                 {
@@ -102,17 +102,17 @@ namespace
     private:
         void AddImagePath(StringView path)
         {
-            const core::u8 pixels[16] = {255, 255, 255, 255, 255, 255, 255, 255,
+            const foundation::u8 pixels[16] = {255, 255, 255, 255, 255, 255, 255, 255,
                                          255, 255, 255, 255, 255, 255, 255, 255};
             m_imagePaths.PushBack(String(path));
-            m_images.PushBack(core::MakeUnique<image::OwnedImageData>(
-                core::DefaultAllocator(), 2u, 2u, image::PixelFormat::RGBA8,
-                core::Span<const core::u8>(pixels, 16)));
+            m_images.PushBack(foundation::MakeUnique<image::OwnedImageData>(
+                foundation::DefaultAllocator(), 2u, 2u, image::PixelFormat::RGBA8,
+                foundation::Span<const foundation::u8>(pixels, 16)));
         }
 
-        core::HashMap<String, String> m_texts;
-        core::Array<String> m_imagePaths;                             // parallel to m_images
-        core::Array<core::UniquePtr<image::OwnedImageData>> m_images; // owns each image
+        foundation::HashMap<String, String> m_texts;
+        foundation::Array<String> m_imagePaths;                             // parallel to m_images
+        foundation::Array<foundation::UniquePtr<image::OwnedImageData>> m_images; // owns each image
     };
 } // namespace
 
@@ -120,7 +120,7 @@ namespace
 
 TEST_CASE("sss: HexColor_6Digit")
 {
-    core::Optional<Color> c = StyleValueParser::ParseHexColor(u8"#4a8eff");
+    foundation::Optional<Color> c = StyleValueParser::ParseHexColor(u8"#4a8eff");
     REQUIRE(c.HasValue());
     CHECK(c.Value().r == doctest::Approx(0x4a / 255.0f));
     CHECK(c.Value().g == doctest::Approx(0x8e / 255.0f));
@@ -130,7 +130,7 @@ TEST_CASE("sss: HexColor_6Digit")
 
 TEST_CASE("sss: HexColor_8Digit")
 {
-    core::Optional<Color> c = StyleValueParser::ParseHexColor(u8"#4a8effcc");
+    foundation::Optional<Color> c = StyleValueParser::ParseHexColor(u8"#4a8effcc");
     REQUIRE(c.HasValue());
     CHECK(c.Value().r == doctest::Approx(0x4a / 255.0f));
     CHECK(c.Value().a == doctest::Approx(0xcc / 255.0f));
@@ -149,7 +149,7 @@ TEST_CASE("sss: Palette_Derivation")
 TEST_CASE("sss: CompoundStateRule")
 {
     EnsureGlobals();
-    core::RefPtr<StyleSheet> sheet = LoadSSS(u8R"(
+    foundation::RefPtr<StyleSheet> sheet = LoadSSS(u8R"(
         View { text-color: #ffffff; }
         View:checked:hover { text-color: #ff0000; }
     )");
@@ -164,7 +164,7 @@ TEST_CASE("sss: CompoundStateRule")
 TEST_CASE("sss: AllDrawableProperties_Parse")
 {
     EnsureGlobals();
-    core::RefPtr<StyleSheet> sheet = LoadSSS(u8R"(
+    foundation::RefPtr<StyleSheet> sheet = LoadSSS(u8R"(
         View { background: color(#111); checked-background: color(#222); menu-item-hover-drawable: color(#333); }
     )");
     CHECK(sheet->RuleCount() == 1);
@@ -174,7 +174,7 @@ TEST_CASE("sss: AllDrawableProperties_Parse")
 TEST_CASE("sss: AllColorProperties_Parse")
 {
     EnsureGlobals();
-    core::RefPtr<StyleSheet> sheet = LoadSSS(u8R"(
+    foundation::RefPtr<StyleSheet> sheet = LoadSSS(u8R"(
         View { text-color: #111; text-dim-color: #222; placeholder-color: #333; border-color: #444;
                cursor-color: #555; selection-color: #666; accent-color: #777; }
     )");
@@ -184,7 +184,7 @@ TEST_CASE("sss: AllColorProperties_Parse")
 TEST_CASE("sss: AllFloatProperties_Parse")
 {
     EnsureGlobals();
-    core::RefPtr<StyleSheet> sheet = LoadSSS(u8R"(
+    foundation::RefPtr<StyleSheet> sheet = LoadSSS(u8R"(
         View { font-size: 16; corner-radius: 4; border-width: 1; spacing: 8; opacity: 0.5; width: 100; height: 50; }
     )");
     CHECK(sheet->GetRule(0).PropertyCount() == 7);
@@ -193,7 +193,7 @@ TEST_CASE("sss: AllFloatProperties_Parse")
 TEST_CASE("sss: Comments_Ignored")
 {
     EnsureGlobals();
-    core::RefPtr<StyleSheet> sheet = LoadSSS(u8R"(
+    foundation::RefPtr<StyleSheet> sheet = LoadSSS(u8R"(
         /* comment */
         View { font-size: 14; /* inline */ }
     )");
@@ -205,7 +205,7 @@ TEST_CASE("sss: Comments_Ignored")
 TEST_CASE("sss: SimpleTypeRule")
 {
     Fixture f(LoadSSS(u8"View { text-color: #ff0000; font-size: 16; }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
 
     const Color color = view->ResolveStyleColor(StyleProperty::TextColor);
     CHECK(color.r == 1.0f);
@@ -217,7 +217,7 @@ TEST_CASE("sss: SimpleTypeRule")
 TEST_CASE("sss: ClassRule")
 {
     Fixture f(LoadSSS(u8".primary { font-size: 24; }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     view->AddClass(u8"primary");
     CHECK(view->ResolveStyleFloat(StyleProperty::FontSize) == 24.0f);
 }
@@ -225,7 +225,7 @@ TEST_CASE("sss: ClassRule")
 TEST_CASE("sss: StateRule")
 {
     Fixture f(LoadSSS(u8"View { font-size: 12; } View:disabled { font-size: 10; }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     view->IsEnabled = false;
     CHECK(view->ResolveStyleFloat(StyleProperty::FontSize) == doctest::Approx(10));
 }
@@ -236,7 +236,7 @@ TEST_CASE("sss: PaletteVariable")
         @palette dark { text: #e0e0ee; }
         View { text-color: $text; }
     )"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     CHECK(view->ResolveStyleColor(StyleProperty::TextColor).r == doctest::Approx(0xe0 / 255.0f));
 }
 
@@ -245,21 +245,21 @@ TEST_CASE("sss: SetPalette_ThemePalette")
     StyleSheetLoader loader;
     loader.SetPalette(ThemePalette::Dark());
     Fixture f(loader.Load(u8"View { text-color: $text; }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     CHECK(view->ResolveStyleColor(StyleProperty::TextColor).r == doctest::Approx(220 / 255.0f));
 }
 
 TEST_CASE("sss: ColorFunction_Lighten")
 {
     Fixture f(LoadSSS(u8"View { text-color: lighten(#000000, 50%); }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     CHECK(view->ResolveStyleColor(StyleProperty::TextColor).r > 100 / 255.0f);
 }
 
 TEST_CASE("sss: ColorFunction_Alpha")
 {
     Fixture f(LoadSSS(u8"View { text-color: alpha(#ff0000, 0.5); }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     const Color c = view->ResolveStyleColor(StyleProperty::TextColor);
     CHECK(c.r == 1.0f);
     CHECK(c.a == doctest::Approx(0.5f));
@@ -268,7 +268,7 @@ TEST_CASE("sss: ColorFunction_Alpha")
 TEST_CASE("sss: ColorFunction_Mix")
 {
     Fixture f(LoadSSS(u8"View { text-color: mix(#000000, #ffffff, 0.5); }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     const f32 r = view->ResolveStyleColor(StyleProperty::TextColor).r;
     CHECK((r > 100 / 255.0f && r < 160 / 255.0f));
 }
@@ -276,7 +276,7 @@ TEST_CASE("sss: ColorFunction_Mix")
 TEST_CASE("sss: NamedColor")
 {
     Fixture f(LoadSSS(u8"View { text-color: white; }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     const Color c = view->ResolveStyleColor(StyleProperty::TextColor);
     CHECK((c.r == 1.0f && c.g == 1.0f && c.b == 1.0f));
 }
@@ -284,7 +284,7 @@ TEST_CASE("sss: NamedColor")
 TEST_CASE("sss: RgbFunction")
 {
     Fixture f(LoadSSS(u8"View { text-color: rgb(100, 150, 200); }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     const Color c = view->ResolveStyleColor(StyleProperty::TextColor);
     CHECK(c.r == doctest::Approx(100 / 255.0f));
     CHECK(c.g == doctest::Approx(150 / 255.0f));
@@ -294,7 +294,7 @@ TEST_CASE("sss: RgbFunction")
 TEST_CASE("sss: RgbaFunction")
 {
     Fixture f(LoadSSS(u8"View { text-color: rgba(100, 150, 200, 0.5); }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     const Color c = view->ResolveStyleColor(StyleProperty::TextColor);
     CHECK(c.r == doctest::Approx(100 / 255.0f));
     CHECK(c.a == doctest::Approx(0.5f));
@@ -305,20 +305,20 @@ TEST_CASE("sss: RgbaFunction")
 TEST_CASE("sss: DrawableFactory_Color")
 {
     Fixture f(LoadSSS(u8"View { background: color(#336699); }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     Drawable* bg = view->ResolveStyleDrawable(StyleProperty::Background);
     REQUIRE(bg != nullptr);
-    CHECK(core::Cast<ColorDrawable>(bg) != nullptr);
+    CHECK(foundation::Cast<ColorDrawable>(bg) != nullptr);
 }
 
 TEST_CASE("sss: DrawableFactory_RoundedRect")
 {
     Fixture f(LoadSSS(
         u8"View { background: rounded-rect(#336699, radius=6, border=#555555, border-width=1); }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     Drawable* bg = view->ResolveStyleDrawable(StyleProperty::Background);
     REQUIRE(bg != nullptr);
-    RoundedRectDrawable* rrd = core::Cast<RoundedRectDrawable>(bg);
+    RoundedRectDrawable* rrd = foundation::Cast<RoundedRectDrawable>(bg);
     REQUIRE(rrd != nullptr);
     CHECK(rrd->FillColor.r == doctest::Approx(0x33 / 255.0f));
     CHECK(rrd->BorderWidth == 1.0f);
@@ -327,10 +327,10 @@ TEST_CASE("sss: DrawableFactory_RoundedRect")
 TEST_CASE("sss: DrawableFactory_Gradient")
 {
     Fixture f(LoadSSS(u8"View { background: gradient(left-to-right, #000000, #ffffff); }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     Drawable* bg = view->ResolveStyleDrawable(StyleProperty::Background);
     REQUIRE(bg != nullptr);
-    GradientDrawable* gd = core::Cast<GradientDrawable>(bg);
+    GradientDrawable* gd = foundation::Cast<GradientDrawable>(bg);
     REQUIRE(gd != nullptr);
     CHECK(gd->Direction == GradientDirection::LeftToRight);
 }
@@ -340,28 +340,28 @@ TEST_CASE("sss: DrawableFactory_StateList")
     Fixture f(LoadSSS(u8R"(
         View { background: state-list(normal=color(#111111), hover=color(#222222), pressed=color(#333333)); }
     )"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     Drawable* bg = view->ResolveStyleDrawable(StyleProperty::Background);
     REQUIRE(bg != nullptr);
-    CHECK(core::Cast<StateListDrawable>(bg) != nullptr);
+    CHECK(foundation::Cast<StateListDrawable>(bg) != nullptr);
 }
 
 TEST_CASE("sss: DrawableFactory_Layer")
 {
     Fixture f(LoadSSS(u8"View { background: layer(color(#111111), color(#222222)); }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     Drawable* bg = view->ResolveStyleDrawable(StyleProperty::Background);
     REQUIRE(bg != nullptr);
-    CHECK(core::Cast<LayerDrawable>(bg) != nullptr);
+    CHECK(foundation::Cast<LayerDrawable>(bg) != nullptr);
 }
 
 TEST_CASE("sss: DrawableFactory_Inset")
 {
     Fixture f(LoadSSS(u8"View { background: inset(color(#336699), 4, 4, 4, 4); }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     Drawable* bg = view->ResolveStyleDrawable(StyleProperty::Background);
     REQUIRE(bg != nullptr);
-    InsetDrawable* id = core::Cast<InsetDrawable>(bg);
+    InsetDrawable* id = foundation::Cast<InsetDrawable>(bg);
     REQUIRE(id != nullptr);
     CHECK(id->Inset.Top == 4);
 }
@@ -369,10 +369,10 @@ TEST_CASE("sss: DrawableFactory_Inset")
 TEST_CASE("sss: ColorLiteral_AsDrawable")
 {
     Fixture f(LoadSSS(u8"View { background: #336699; }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     Drawable* bg = view->ResolveStyleDrawable(StyleProperty::Background);
     REQUIRE(bg != nullptr);
-    ColorDrawable* cd = core::Cast<ColorDrawable>(bg);
+    ColorDrawable* cd = foundation::Cast<ColorDrawable>(bg);
     REQUIRE(cd != nullptr);
     CHECK(cd->Color.r == doctest::Approx(0x33 / 255.0f));
 }
@@ -383,9 +383,9 @@ TEST_CASE("sss: Variable_InDrawable")
         @palette dark { surface: #24242c; border: #3a3a45; }
         View { background: rounded-rect($surface, radius=6, border=$border, border-width=1); }
     )"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     Drawable* bg = view->ResolveStyleDrawable(StyleProperty::Background);
-    RoundedRectDrawable* rrd = core::Cast<RoundedRectDrawable>(bg);
+    RoundedRectDrawable* rrd = foundation::Cast<RoundedRectDrawable>(bg);
     REQUIRE(rrd != nullptr);
     CHECK(rrd->FillColor.r == doctest::Approx(0x24 / 255.0f));
     CHECK(rrd->BorderColor.r == doctest::Approx(0x3a / 255.0f));
@@ -396,7 +396,7 @@ TEST_CASE("sss: Variable_InDrawable")
 TEST_CASE("sss: ThicknessProperty_SingleValue")
 {
     Fixture f(LoadSSS(u8"View { padding: 8; }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     const Thickness pad = view->ResolveStyleThickness(StyleProperty::Padding);
     CHECK((pad.Left == 8 && pad.Top == 8 && pad.Right == 8 && pad.Bottom == 8));
 }
@@ -404,7 +404,7 @@ TEST_CASE("sss: ThicknessProperty_SingleValue")
 TEST_CASE("sss: ThicknessProperty_TwoValues")
 {
     Fixture f(LoadSSS(u8"View { padding: 8 12; }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     const Thickness pad = view->ResolveStyleThickness(StyleProperty::Padding);
     CHECK(pad.Top == 8);
     CHECK(pad.Left == 12);
@@ -413,7 +413,7 @@ TEST_CASE("sss: ThicknessProperty_TwoValues")
 TEST_CASE("sss: ThicknessProperty_FourValues")
 {
     Fixture f(LoadSSS(u8"View { padding: 1 2 3 4; }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     const Thickness pad = view->ResolveStyleThickness(StyleProperty::Padding);
     CHECK((pad.Top == 1 && pad.Right == 2 && pad.Bottom == 3 && pad.Left == 4));
 }
@@ -421,8 +421,8 @@ TEST_CASE("sss: ThicknessProperty_FourValues")
 TEST_CASE("sss: BoolProperty")
 {
     Fixture f(LoadSSS(u8"View { word-wrap: true; }"));
-    core::RefPtr<TestView> view = f.AddView();
-    core::Optional<bool> b = view->ResolveStyle(StyleProperty::WordWrap).AsBool();
+    foundation::RefPtr<TestView> view = f.AddView();
+    foundation::Optional<bool> b = view->ResolveStyle(StyleProperty::WordWrap).AsBool();
     REQUIRE(b.HasValue());
     CHECK(b.Value() == true);
 }
@@ -430,17 +430,17 @@ TEST_CASE("sss: BoolProperty")
 TEST_CASE("sss: FloatProperty")
 {
     Fixture f(LoadSSS(u8"View { corner-radius: 6; }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     CHECK(view->ResolveStyleFloat(StyleProperty::CornerRadius) == 6.0f);
 }
 
 TEST_CASE("sss: FontFamily_QuotedString")
 {
     Fixture f(LoadSSS(u8"View { font-family: \"Attack Of Monster\"; }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     const StyleValue v =
         view->ResolveStyle(StyleProperty::FontFamily); // hold alive: AsString borrows its String
-    core::Optional<StringView> s = v.AsString();
+    foundation::Optional<StringView> s = v.AsString();
     REQUIRE(s.HasValue());
     CHECK(s.Value() == StringView(u8"Attack Of Monster"));
 }
@@ -450,7 +450,7 @@ TEST_CASE("sss: FontFamily_QuotedString")
 TEST_CASE("sss: Cascade_ClassBeatsType")
 {
     Fixture f(LoadSSS(u8"View { font-size: 12; } .big { font-size: 24; }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     view->AddClass(u8"big");
     CHECK(view->ResolveStyleFloat(StyleProperty::FontSize) == 24.0f);
 }
@@ -458,7 +458,7 @@ TEST_CASE("sss: Cascade_ClassBeatsType")
 TEST_CASE("sss: Cascade_TypeStateBeatsType")
 {
     Fixture f(LoadSSS(u8"View { text-color: #cccccc; } View:disabled { text-color: #333333; }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     view->IsEnabled = false;
     CHECK(view->ResolveStyleColor(StyleProperty::TextColor).r == doctest::Approx(0x33 / 255.0f));
 }
@@ -466,9 +466,9 @@ TEST_CASE("sss: Cascade_TypeStateBeatsType")
 TEST_CASE("sss: Inheritance_TextColor")
 {
     Fixture f(LoadSSS(u8"View { text-color: #aabbcc; }"));
-    core::RefPtr<TestGroup> group = core::MakeRef<TestGroup>(core::DefaultAllocator());
+    foundation::RefPtr<TestGroup> group = foundation::MakeRef<TestGroup>(foundation::DefaultAllocator());
     f.root->AddView(group.Get());
-    core::RefPtr<TestView> child = core::MakeRef<TestView>(core::DefaultAllocator(), 50.0f, 30.0f);
+    foundation::RefPtr<TestView> child = foundation::MakeRef<TestView>(foundation::DefaultAllocator(), 50.0f, 30.0f);
     group->AddView(child.Get());
     // Child inherits text-color from the View rule + inheritance walk.
     CHECK(child->ResolveStyleColor(StyleProperty::TextColor).r == doctest::Approx(0xaa / 255.0f));
@@ -477,7 +477,7 @@ TEST_CASE("sss: Inheritance_TextColor")
 TEST_CASE("sss: MultipleRules_SameType")
 {
     Fixture f(LoadSSS(u8"View { font-size: 12; } View { text-color: #ff0000; }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     CHECK(view->ResolveStyleFloat(StyleProperty::FontSize) == 12.0f);
     CHECK(view->ResolveStyleColor(StyleProperty::TextColor).r == 1.0f);
 }
@@ -487,7 +487,7 @@ TEST_CASE("sss: MultipleRules_SameType")
 TEST_CASE("sss: SubtypeMatching_ButtonMatchesButtonBase")
 {
     Fixture f(LoadSSS(u8"ButtonBase { padding: 10 20; }"));
-    auto btn = core::MakeRef<Button>(core::DefaultAllocator(), StringView(u8"Test"));
+    auto btn = foundation::MakeRef<Button>(foundation::DefaultAllocator(), StringView(u8"Test"));
     f.root->AddView(btn.Get());
     const Thickness pad = btn->ResolveStyleThickness(StyleProperty::Padding);
     CHECK(pad.Top == 10);
@@ -497,8 +497,8 @@ TEST_CASE("sss: SubtypeMatching_ButtonMatchesButtonBase")
 TEST_CASE("sss: SubtypeMatching_ViewMatchesAll")
 {
     Fixture f(LoadSSS(u8"View { font-size: 13; }"));
-    auto btn = core::MakeRef<Button>(core::DefaultAllocator(), StringView(u8"B"));
-    auto cb = core::MakeRef<CheckBox>(core::DefaultAllocator(), StringView(u8"C"));
+    auto btn = foundation::MakeRef<Button>(foundation::DefaultAllocator(), StringView(u8"B"));
+    auto cb = foundation::MakeRef<CheckBox>(foundation::DefaultAllocator(), StringView(u8"C"));
     f.root->AddView(btn.Get());
     f.root->AddView(cb.Get());
     CHECK(btn->ResolveStyleFloat(StyleProperty::FontSize) == 13.0f);
@@ -508,21 +508,21 @@ TEST_CASE("sss: SubtypeMatching_ViewMatchesAll")
 TEST_CASE("sss: DrawableFactory_StateColors")
 {
     Fixture f(LoadSSS(u8"ButtonBase { background: state-colors(#334455); }"));
-    auto btn = core::MakeRef<Button>(core::DefaultAllocator(), StringView(u8"Test"));
+    auto btn = foundation::MakeRef<Button>(foundation::DefaultAllocator(), StringView(u8"Test"));
     f.root->AddView(btn.Get());
     Drawable* bg = btn->ResolveStyleDrawable(StyleProperty::Background);
     REQUIRE(bg != nullptr);
-    CHECK(core::Cast<StateListDrawable>(bg) != nullptr);
+    CHECK(foundation::Cast<StateListDrawable>(bg) != nullptr);
 }
 
 TEST_CASE("sss: DrawableFactory_StateRounded")
 {
     Fixture f(LoadSSS(u8"ButtonBase { background: state-rounded(#334455, radius=4); }"));
-    auto btn = core::MakeRef<Button>(core::DefaultAllocator(), StringView(u8"Test"));
+    auto btn = foundation::MakeRef<Button>(foundation::DefaultAllocator(), StringView(u8"Test"));
     f.root->AddView(btn.Get());
     Drawable* bg = btn->ResolveStyleDrawable(StyleProperty::Background);
     REQUIRE(bg != nullptr);
-    CHECK(core::Cast<StateListDrawable>(bg) != nullptr);
+    CHECK(foundation::Cast<StateListDrawable>(bg) != nullptr);
 }
 
 // Inline style="..." with a drawable function (regression: ApplyInlineStyle must register the drawable
@@ -531,14 +531,14 @@ TEST_CASE("sss: DrawableFactory_StateRounded")
 TEST_CASE("sss: InlineStyle_RoundedRectFunction")
 {
     EnsureGlobals();
-    auto view = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto view = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     SSSParser::ApplyInlineStyle(view.Get(),
                                 StringView(u8"background: rounded-rect(rgb(35, 38, 48), radius=12, "
                                            u8"border-width=2, border=rgb(80, 90, 110));"));
 
     Drawable* bg = view->ResolveStyleDrawable(StyleProperty::Background);
     REQUIRE(bg != nullptr);
-    auto* rr = core::Cast<RoundedRectDrawable>(bg);
+    auto* rr = foundation::Cast<RoundedRectDrawable>(bg);
     REQUIRE(rr != nullptr); // not a fallback ColorDrawable
     CHECK(rr->FillColor.r == doctest::Approx(35 / 255.0f));
     CHECK(rr->FillColor.g == doctest::Approx(38 / 255.0f));
@@ -569,12 +569,12 @@ TEST_CASE("sss: TypeSelectors_DoNotLeakAcrossControls")
     Fixture f(
         LoadSSS(u8"ButtonBase { background: rounded-rect(rgb(10,20,30), radius=2); }"
                 u8" ComboBox::arrow { background: rounded-rect(rgb(200,100,50), radius=2); }"));
-    auto btn = core::MakeRef<Button>(core::DefaultAllocator(), StringView(u8"x"));
+    auto btn = foundation::MakeRef<Button>(foundation::DefaultAllocator(), StringView(u8"x"));
     f.root->AddView(btn.Get());
 
     Drawable* bg = btn->ResolveStyleDrawable(StyleProperty::Background);
     REQUIRE(bg != nullptr);
-    auto* rr = core::Cast<RoundedRectDrawable>(bg);
+    auto* rr = foundation::Cast<RoundedRectDrawable>(bg);
     REQUIRE(rr != nullptr);
     // The button resolves the ButtonBase background, NOT the ComboBox::arrow drawable.
     CHECK(rr->FillColor.r == doctest::Approx(10 / 255.0f));
@@ -586,7 +586,7 @@ TEST_CASE("sss: TypeSelectors_DoNotLeakAcrossControls")
 TEST_CASE("sss: ColorFunction_Darken")
 {
     Fixture f(LoadSSS(u8"View { text-color: darken(#ffffff, 50%); }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     // darken white by 50% -> ~(128, 128, 128)
     const f32 r = view->ResolveStyleColor(StyleProperty::TextColor).r;
     CHECK((r < 200 / 255.0f && r > 100 / 255.0f));
@@ -595,10 +595,10 @@ TEST_CASE("sss: ColorFunction_Darken")
 TEST_CASE("sss: DrawableFactory_GradientWithDirection")
 {
     Fixture f(LoadSSS(u8"View { background: gradient(left-to-right, #000000, #ffffff); }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     Drawable* bg = view->ResolveStyleDrawable(StyleProperty::Background);
     REQUIRE(bg != nullptr);
-    GradientDrawable* gd = core::Cast<GradientDrawable>(bg);
+    GradientDrawable* gd = foundation::Cast<GradientDrawable>(bg);
     REQUIRE(gd != nullptr);
     CHECK(gd->Direction == GradientDirection::LeftToRight);
 }
@@ -611,12 +611,12 @@ TEST_CASE("sss: DrawableFactory_Svg")
   <path d="M3 8 L6.5 11.5 L13 5" fill="none" stroke="white" stroke-width="2"/>
 </svg>)");
     Fixture f(loader.Load(u8"CheckBox::checkmark { background: svg(checkmark); }"));
-    auto cb = core::MakeRef<CheckBox>(core::DefaultAllocator(), StringView(u8"Test"));
+    auto cb = foundation::MakeRef<CheckBox>(foundation::DefaultAllocator(), StringView(u8"Test"));
     f.root->AddView(cb.Get());
     Drawable* icon =
         cb->ResolvePartDrawable(u8"checkmark", StyleProperty::Background, ControlState::Normal);
     REQUIRE(icon != nullptr);
-    CHECK(core::Cast<SVGDrawable>(icon) != nullptr);
+    CHECK(foundation::Cast<SVGDrawable>(icon) != nullptr);
 }
 
 TEST_CASE("sss: DrawableFactory_SvgWithTint")
@@ -627,12 +627,12 @@ TEST_CASE("sss: DrawableFactory_SvgWithTint")
   <path d="M3 8 L6.5 11.5 L13 5" fill="none" stroke="white" stroke-width="2"/>
 </svg>)");
     Fixture f(loader.Load(u8"CheckBox::checkmark { background: svg(checkmark, tint=#ff0000); }"));
-    auto cb = core::MakeRef<CheckBox>(core::DefaultAllocator(), StringView(u8"Test"));
+    auto cb = foundation::MakeRef<CheckBox>(foundation::DefaultAllocator(), StringView(u8"Test"));
     f.root->AddView(cb.Get());
     Drawable* icon =
         cb->ResolvePartDrawable(u8"checkmark", StyleProperty::Background, ControlState::Normal);
     REQUIRE(icon != nullptr);
-    SVGDrawable* svgd = core::Cast<SVGDrawable>(icon);
+    SVGDrawable* svgd = foundation::Cast<SVGDrawable>(icon);
     REQUIRE(svgd != nullptr);
     REQUIRE(svgd->TintColor.HasValue());
     CHECK(svgd->TintColor.Value().r == 1.0f);
@@ -641,9 +641,9 @@ TEST_CASE("sss: DrawableFactory_SvgWithTint")
 TEST_CASE("sss: FontFamily_BareIdentifier")
 {
     Fixture f(LoadSSS(u8"View { font-family: JungleAdventurer; }"));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     const StyleValue v = view->ResolveStyle(StyleProperty::FontFamily);
-    core::Optional<StringView> s = v.AsString();
+    foundation::Optional<StringView> s = v.AsString();
     REQUIRE(s.HasValue());
     CHECK(s.Value() == StringView(u8"JungleAdventurer"));
 }
@@ -651,7 +651,7 @@ TEST_CASE("sss: FontFamily_BareIdentifier")
 TEST_CASE("sss: TypePlusClassRule")
 {
     Fixture f(LoadSSS(u8"View { font-size: 12; } ButtonBase.primary { font-size: 24; }"));
-    auto btn = core::MakeRef<Button>(core::DefaultAllocator(), StringView(u8"Test"));
+    auto btn = foundation::MakeRef<Button>(foundation::DefaultAllocator(), StringView(u8"Test"));
     btn->AddClass(u8"primary");
     f.root->AddView(btn.Get());
     // Type+class (specificity 11) beats type-only (specificity 1)
@@ -663,12 +663,12 @@ TEST_CASE("sss: PaletteExtends")
     EnsureGlobals();
     StyleSheetLoader loader;
     loader.SetPaletteVariable(u8"base-color", Rgb(100, 100, 100));
-    core::RefPtr<StyleSheet> sheet = loader.Load(u8R"(
+    foundation::RefPtr<StyleSheet> sheet = loader.Load(u8R"(
         @palette custom extends base { accent: #ff0000; }
         View { text-color: $base-color; accent-color: $accent; }
     )");
     Fixture f(Move(sheet));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     // base-color came from loader pre-set
     CHECK(view->ResolveStyleColor(StyleProperty::TextColor).r == doctest::Approx(100 / 255.0f));
     // accent came from the @palette block
@@ -683,12 +683,12 @@ TEST_CASE("sss: PaletteExtends_InheritsLoaderValues")
     StyleSheetLoader loader;
     loader.SetPaletteVariable(u8"base-bg", Rgb(40, 40, 50));
     loader.SetPaletteVariable(u8"base-text", Rgb(220, 220, 230));
-    core::RefPtr<StyleSheet> sheet = loader.Load(u8R"(
+    foundation::RefPtr<StyleSheet> sheet = loader.Load(u8R"(
         @palette custom extends base { accent: #ff8800; }
         View { text-color: $base-text; accent-color: $accent; background: color($base-bg); }
     )");
     Fixture f(Move(sheet));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     // base-text came from loader
     CHECK(view->ResolveStyleColor(StyleProperty::TextColor).r == doctest::Approx(220 / 255.0f));
     // accent came from the @palette block
@@ -698,7 +698,7 @@ TEST_CASE("sss: PaletteExtends_InheritsLoaderValues")
     // base-bg came from loader, used in a drawable
     Drawable* bg = view->ResolveStyleDrawable(StyleProperty::Background);
     REQUIRE(bg != nullptr);
-    ColorDrawable* cd = core::Cast<ColorDrawable>(bg);
+    ColorDrawable* cd = foundation::Cast<ColorDrawable>(bg);
     REQUIRE(cd != nullptr);
     CHECK(cd->Color.r == doctest::Approx(40 / 255.0f));
 }
@@ -712,14 +712,14 @@ TEST_CASE("sss: Import_LoadsFromProvider")
     provider.AddText(u8"buttons.sss", u8"ButtonBase { padding: 6 12; }");
     StyleSheetLoader loader;
     loader.ResourceProvider = &provider;
-    core::RefPtr<StyleSheet> sheet = loader.Load(u8R"(
+    foundation::RefPtr<StyleSheet> sheet = loader.Load(u8R"(
         View { font-size: 14; }
         @import "buttons.sss";
     )");
     // Should have 2 rules: View from main, ButtonBase from import
     CHECK(sheet->RuleCount() == 2);
     Fixture f(Move(sheet));
-    auto btn = core::MakeRef<Button>(core::DefaultAllocator(), StringView(u8"Test"));
+    auto btn = foundation::MakeRef<Button>(foundation::DefaultAllocator(), StringView(u8"Test"));
     f.root->AddView(btn.Get());
     const Thickness pad = btn->ResolveStyleThickness(StyleProperty::Padding);
     CHECK(pad.Top == 6);
@@ -730,7 +730,7 @@ TEST_CASE("sss: Import_NoProvider_Graceful")
 {
     EnsureGlobals();
     // No resource provider -> @import should be silently skipped
-    core::RefPtr<StyleSheet> sheet = LoadSSS(u8R"(
+    foundation::RefPtr<StyleSheet> sheet = LoadSSS(u8R"(
         @import "nonexistent.sss";
         View { font-size: 14; }
     )");
@@ -746,17 +746,17 @@ TEST_CASE("sss: Icon_LoadsFromProvider")
 </svg>)");
     StyleSheetLoader loader;
     loader.ResourceProvider = &provider;
-    core::RefPtr<StyleSheet> sheet = loader.Load(u8R"(
+    foundation::RefPtr<StyleSheet> sheet = loader.Load(u8R"(
         @icon checkmark "icons/check.svg";
         CheckBox::checkmark { background: svg(checkmark); }
     )");
     Fixture f(Move(sheet));
-    auto cb = core::MakeRef<CheckBox>(core::DefaultAllocator(), StringView(u8"Test"));
+    auto cb = foundation::MakeRef<CheckBox>(foundation::DefaultAllocator(), StringView(u8"Test"));
     f.root->AddView(cb.Get());
     Drawable* icon =
         cb->ResolvePartDrawable(u8"checkmark", StyleProperty::Background, ControlState::Normal);
     REQUIRE(icon != nullptr);
-    CHECK(core::Cast<SVGDrawable>(icon) != nullptr);
+    CHECK(foundation::Cast<SVGDrawable>(icon) != nullptr);
 }
 
 TEST_CASE("sss: Icon_PreRegisteredBeatsFile")
@@ -768,12 +768,12 @@ TEST_CASE("sss: Icon_PreRegisteredBeatsFile")
   <path d="M3 8 L6.5 11.5 L13 5" fill="none" stroke="white" stroke-width="2"/>
 </svg>)");
     Fixture f(loader.Load(u8"CheckBox::checkmark { background: svg(checkmark); }"));
-    auto cb = core::MakeRef<CheckBox>(core::DefaultAllocator(), StringView(u8"Test"));
+    auto cb = foundation::MakeRef<CheckBox>(foundation::DefaultAllocator(), StringView(u8"Test"));
     f.root->AddView(cb.Get());
     Drawable* icon =
         cb->ResolvePartDrawable(u8"checkmark", StyleProperty::Background, ControlState::Normal);
     REQUIRE(icon != nullptr);
-    CHECK(core::Cast<SVGDrawable>(icon) != nullptr);
+    CHECK(foundation::Cast<SVGDrawable>(icon) != nullptr);
 }
 
 TEST_CASE("sss: Icon_NoProvider_SvgReturnsNull")
@@ -781,7 +781,7 @@ TEST_CASE("sss: Icon_NoProvider_SvgReturnsNull")
     EnsureGlobals();
     // No resource provider, no pre-registered SVG -> svg() returns null gracefully (no crash).
     Fixture f(LoadSSS(u8"CheckBox::checkmark { background: svg(missing); }"));
-    auto cb = core::MakeRef<CheckBox>(core::DefaultAllocator(), StringView(u8"Test"));
+    auto cb = foundation::MakeRef<CheckBox>(foundation::DefaultAllocator(), StringView(u8"Test"));
     f.root->AddView(cb.Get());
     Drawable* icon =
         cb->ResolvePartDrawable(u8"checkmark", StyleProperty::Background, ControlState::Normal);
@@ -798,15 +798,15 @@ TEST_CASE("sss: Image_LoadsFromProvider")
     provider.AddImage(u8"textures/bg.png");
     StyleSheetLoader loader;
     loader.ResourceProvider = &provider;
-    core::RefPtr<StyleSheet> sheet = loader.Load(u8R"(
+    foundation::RefPtr<StyleSheet> sheet = loader.Load(u8R"(
         @image bg "textures/bg.png";
         View { background: image(bg); }
     )");
     Fixture f(Move(sheet));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     Drawable* bg = view->ResolveStyleDrawable(StyleProperty::Background);
     REQUIRE(bg != nullptr);
-    CHECK(core::Cast<ImageDrawable>(bg) != nullptr);
+    CHECK(foundation::Cast<ImageDrawable>(bg) != nullptr);
 }
 
 TEST_CASE("sss: NineSlice_LoadsFromProvider")
@@ -816,31 +816,31 @@ TEST_CASE("sss: NineSlice_LoadsFromProvider")
     provider.AddImage(u8"textures/panel.png");
     StyleSheetLoader loader;
     loader.ResourceProvider = &provider;
-    core::RefPtr<StyleSheet> sheet = loader.Load(u8R"(
+    foundation::RefPtr<StyleSheet> sheet = loader.Load(u8R"(
         @image panel "textures/panel.png";
         View { background: nine-slice(panel, 4 4 4 4); }
     )");
     Fixture f(Move(sheet));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     Drawable* bg = view->ResolveStyleDrawable(StyleProperty::Background);
     REQUIRE(bg != nullptr);
-    CHECK(core::Cast<NineSliceDrawable>(bg) != nullptr);
+    CHECK(foundation::Cast<NineSliceDrawable>(bg) != nullptr);
 }
 
 TEST_CASE("sss: Image_PreRegistered")
 {
     EnsureGlobals();
-    const core::u8 pixels[16] = {255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255};
+    const foundation::u8 pixels[16] = {255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255};
     image::OwnedImageData imageData(2, 2, image::PixelFormat::RGBA8,
-                                    core::Span<const core::u8>(pixels, 16));
+                                    foundation::Span<const foundation::u8>(pixels, 16));
     StyleSheetLoader loader;
     loader.RegisterImage(u8"test-img", &imageData);
-    core::RefPtr<StyleSheet> sheet = loader.Load(u8"View { background: image(test-img); }");
+    foundation::RefPtr<StyleSheet> sheet = loader.Load(u8"View { background: image(test-img); }");
     Fixture f(Move(sheet));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     Drawable* bg = view->ResolveStyleDrawable(StyleProperty::Background);
     REQUIRE(bg != nullptr);
-    CHECK(core::Cast<ImageDrawable>(bg) != nullptr);
+    CHECK(foundation::Cast<ImageDrawable>(bg) != nullptr);
 }
 
 TEST_CASE("sss: NineSlice_SingleSliceValue")
@@ -850,15 +850,15 @@ TEST_CASE("sss: NineSlice_SingleSliceValue")
     provider.AddImage(u8"textures/btn.png");
     StyleSheetLoader loader;
     loader.ResourceProvider = &provider;
-    core::RefPtr<StyleSheet> sheet = loader.Load(u8R"(
+    foundation::RefPtr<StyleSheet> sheet = loader.Load(u8R"(
         @image btn "textures/btn.png";
         View { background: nine-slice(btn, 8); }
     )");
     Fixture f(Move(sheet));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     Drawable* bg = view->ResolveStyleDrawable(StyleProperty::Background);
     REQUIRE(bg != nullptr);
-    CHECK(core::Cast<NineSliceDrawable>(bg) != nullptr);
+    CHECK(foundation::Cast<NineSliceDrawable>(bg) != nullptr);
 }
 
 TEST_CASE("sss: Image_WithTint")
@@ -868,15 +868,15 @@ TEST_CASE("sss: Image_WithTint")
     provider.AddImage(u8"textures/icon.png");
     StyleSheetLoader loader;
     loader.ResourceProvider = &provider;
-    core::RefPtr<StyleSheet> sheet = loader.Load(u8R"(
+    foundation::RefPtr<StyleSheet> sheet = loader.Load(u8R"(
         @image icon "textures/icon.png";
         View { background: image(icon, tint=#ff0000); }
     )");
     Fixture f(Move(sheet));
-    core::RefPtr<TestView> view = f.AddView();
+    foundation::RefPtr<TestView> view = f.AddView();
     Drawable* bg = view->ResolveStyleDrawable(StyleProperty::Background);
     REQUIRE(bg != nullptr);
-    ImageDrawable* id = core::Cast<ImageDrawable>(bg);
+    ImageDrawable* id = foundation::Cast<ImageDrawable>(bg);
     REQUIRE(id != nullptr);
     CHECK(id->Tint.r == 1.0f);
     CHECK(id->Tint.g == 0);

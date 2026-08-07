@@ -14,13 +14,13 @@
 // UISubsystemImpl.cpp (implementation unit), same split as physics.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.engine.ui;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.runtime;
 import draconic.scene;
 import draconic.engine.scene;
@@ -39,7 +39,7 @@ import draconic.ui.resource;
 import draconic.script;         // Object / IScriptContext / IScriptDelegate / the run-context service
 import draconic.script.facades; // RegisterExtraFacadeName (the behavior-module prelude hook)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {
@@ -60,7 +60,7 @@ export namespace draconic::ui
     // pointers (the app fills them, backed by the UISubsystem). Null pointers = safe no-ops.
     struct UiScriptBinding
     {
-        Function<i32(const core::Guid&)> pushOverlay;                 // cooked document -> handle
+        Function<i32(const foundation::Guid&)> pushOverlay;                 // cooked document -> handle
         Function<void(i32)> popOverlay;                               // handle
         Function<void(i32, StringView, StringView)> setText;         // handle, id, text
         Function<void(i32, StringView, f64)> setProgress;            // handle, id, 0..1
@@ -102,7 +102,7 @@ export namespace draconic::ui
                        : nullptr;
         }
 
-        [[nodiscard]] static i32 pushOverlay(core::Guid document)
+        [[nodiscard]] static i32 pushOverlay(foundation::Guid document)
         {
             UiScriptBinding* binding = Resolve();
             return (binding != nullptr && binding->pushOverlay && !document.IsNil())
@@ -163,14 +163,14 @@ export namespace draconic::ui
     {
     public:
         void Attach(UISubsystem& ui) noexcept { m_ui = &ui; }
-        void SetDocumentResolver(Function<RefPtr<UIDocument>(const core::Guid&)> resolver)
+        void SetDocumentResolver(Function<RefPtr<UIDocument>(const foundation::Guid&)> resolver)
         {
             m_resolve = Move(resolver);
         }
         // Route the six Ui.* facade ops into this host.
         void Install(UiScriptBinding& binding);
 
-        [[nodiscard]] i32 PushOverlay(const core::Guid& document);
+        [[nodiscard]] i32 PushOverlay(const foundation::Guid& document);
         void PopOverlay(i32 handle);
         void SetText(i32 handle, StringView id, StringView text);
         void SetProgress(i32 handle, StringView id, f64 value);
@@ -186,7 +186,7 @@ export namespace draconic::ui
         [[nodiscard]] View* FindControl(i32 handle, StringView id) const;
 
         UISubsystem* m_ui = nullptr;
-        Function<RefPtr<UIDocument>(const core::Guid&)> m_resolve;
+        Function<RefPtr<UIDocument>(const foundation::Guid&)> m_resolve;
         HashMap<i32, RefPtr<View>> m_overlays;
         i32 m_next = 0;
     };
@@ -234,22 +234,22 @@ export namespace draconic::ui
 
     inline void Serialize(ISerializer& ar, UICanvasComponent& c)
     {
-        draconic::core::Serialize(ar, "document", c.document);
-        draconic::core::Serialize(ar, "theme", c.theme);
-        draconic::core::Serialize(ar, "order", c.order);
-        draconic::core::Serialize(ar, "visible", c.visible);
+        draconic::foundation::Serialize(ar, "document", c.document);
+        draconic::foundation::Serialize(ar, "theme", c.theme);
+        draconic::foundation::Serialize(ar, "order", c.order);
+        draconic::foundation::Serialize(ar, "visible", c.visible);
         u8 scaler = static_cast<u8>(c.scalerMode);
-        draconic::core::Serialize(ar, "scalerMode", scaler);
+        draconic::foundation::Serialize(ar, "scalerMode", scaler);
         c.scalerMode = static_cast<CanvasScalerMode>(scaler);
-        draconic::core::Serialize(ar, "referenceResolution", c.referenceResolution);
-        draconic::core::Serialize(ar, "interactive", c.interactive);
+        draconic::foundation::Serialize(ar, "referenceResolution", c.referenceResolution);
+        draconic::foundation::Serialize(ar, "interactive", c.interactive);
         if (ar.Version() >= 2) // v2 added the RenderTexture canvas mode
         {
             u8 render = static_cast<u8>(c.renderMode);
-            draconic::core::Serialize(ar, "renderMode", render);
+            draconic::foundation::Serialize(ar, "renderMode", render);
             c.renderMode = static_cast<CanvasRenderMode>(render);
-            draconic::core::Serialize(ar, "renderTextureWidth", c.renderTextureWidth);
-            draconic::core::Serialize(ar, "renderTextureHeight", c.renderTextureHeight);
+            draconic::foundation::Serialize(ar, "renderTextureWidth", c.renderTextureWidth);
+            draconic::foundation::Serialize(ar, "renderTextureHeight", c.renderTextureHeight);
         }
     }
 
@@ -303,18 +303,18 @@ export namespace draconic::ui
 
     inline void Serialize(ISerializer& ar, UIBillboardComponent& c)
     {
-        draconic::core::Serialize(ar, "document", c.document);
-        draconic::core::Serialize(ar, "offset", c.offset);
+        draconic::foundation::Serialize(ar, "document", c.document);
+        draconic::foundation::Serialize(ar, "offset", c.offset);
         u8 orientation = static_cast<u8>(c.orientation);
-        draconic::core::Serialize(ar, "orientation", orientation);
+        draconic::foundation::Serialize(ar, "orientation", orientation);
         c.orientation = static_cast<BillboardOrientation>(orientation);
         u8 scale = static_cast<u8>(c.scaleMode);
-        draconic::core::Serialize(ar, "scaleMode", scale);
+        draconic::foundation::Serialize(ar, "scaleMode", scale);
         c.scaleMode = static_cast<BillboardScale>(scale);
-        draconic::core::Serialize(ar, "referenceDistance", c.referenceDistance);
-        draconic::core::Serialize(ar, "minScale", c.minScale);
-        draconic::core::Serialize(ar, "maxScale", c.maxScale);
-        draconic::core::Serialize(ar, "visible", c.visible);
+        draconic::foundation::Serialize(ar, "referenceDistance", c.referenceDistance);
+        draconic::foundation::Serialize(ar, "minScale", c.minScale);
+        draconic::foundation::Serialize(ar, "maxScale", c.maxScale);
+        draconic::foundation::Serialize(ar, "visible", c.visible);
     }
 
     inline void ResolveResources(draconic::resource::ResourceManager& manager,
@@ -364,12 +364,12 @@ export namespace draconic::ui
 
     inline void Serialize(ISerializer& ar, UIWorldPanelComponent& c)
     {
-        draconic::core::Serialize(ar, "document", c.document);
-        draconic::core::Serialize(ar, "theme", c.theme);
-        draconic::core::Serialize(ar, "sizeMeters", c.sizeMeters);
-        draconic::core::Serialize(ar, "pixelsPerMeter", c.pixelsPerMeter);
-        draconic::core::Serialize(ar, "interactive", c.interactive);
-        draconic::core::Serialize(ar, "visible", c.visible);
+        draconic::foundation::Serialize(ar, "document", c.document);
+        draconic::foundation::Serialize(ar, "theme", c.theme);
+        draconic::foundation::Serialize(ar, "sizeMeters", c.sizeMeters);
+        draconic::foundation::Serialize(ar, "pixelsPerMeter", c.pixelsPerMeter);
+        draconic::foundation::Serialize(ar, "interactive", c.interactive);
+        draconic::foundation::Serialize(ar, "visible", c.visible);
     }
 
     inline void ResolveResources(draconic::resource::ResourceManager& manager,

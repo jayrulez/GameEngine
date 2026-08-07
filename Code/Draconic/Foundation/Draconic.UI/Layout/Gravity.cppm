@@ -4,13 +4,13 @@
 // Ported from Sedulous.UI/src/Layout/Gravity.bf (Beef flags enum -> enum class + bitwise operators).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:gravity;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

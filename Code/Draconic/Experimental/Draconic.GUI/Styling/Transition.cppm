@@ -11,11 +11,11 @@
 // (easing) are parsed-but-ignored for now.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:transition;
 
-import draconic.core;  // String, StringView, Array, Optional, f32, Duration, MakeRef, Move
+import draconic.foundation;  // String, StringView, Array, Optional, f32, Duration, MakeRef, Move
 import :style_sheet;   // ResolvedStyle
 import :style_applier; // ApplyStyle
 import :css_values;    // ParseLength
@@ -26,20 +26,20 @@ import :resource_provider;
 
 namespace fonts = draconic::fonts;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
     struct TransitionDefinition
     {
-        core::String Property;
+        foundation::String Property;
         f32 Duration = 0.0f; // seconds
         f32 Delay = 0.0f;    // seconds
     };
 
     // Parse the `transition` shorthand into definitions (comma-separated list).
-    [[nodiscard]] inline Array<TransitionDefinition> ParseTransitions(core::StringView value)
+    [[nodiscard]] inline Array<TransitionDefinition> ParseTransitions(foundation::StringView value)
     {
         Array<TransitionDefinition> out;
         usize start = 0;
@@ -47,14 +47,14 @@ export namespace draconic::gui
         {
             if (i == value.Size() || value[i] == u8',')
             {
-                const core::StringView part = core::Trim(value.SubStr(start, i - start));
+                const foundation::StringView part = foundation::Trim(value.SubStr(start, i - start));
                 if (part.Size() != 0)
                 {
-                    core::StringView tokens[4];
+                    foundation::StringView tokens[4];
                     usize count = 0, s = 0;
                     for (usize k = 0; k <= part.Size() && count < 4; ++k)
                     {
-                        const bool boundary = (k == part.Size()) || core::IsWhiteSpace(part[k]);
+                        const bool boundary = (k == part.Size()) || foundation::IsWhiteSpace(part[k]);
                         if (boundary)
                         {
                             if (k > s)
@@ -68,7 +68,7 @@ export namespace draconic::gui
                         d.Property = tokens[0];
                         d.Duration = count >= 2 ? ParseLength(tokens[1]).ValueOr(0.0f) : 0.0f;
                         d.Delay = count >= 4 ? ParseLength(tokens[3]).ValueOr(0.0f) : 0.0f;
-                        out.PushBack(core::Move(d));
+                        out.PushBack(foundation::Move(d));
                     }
                 }
                 start = i + 1;
@@ -78,7 +78,7 @@ export namespace draconic::gui
     }
 
     [[nodiscard]] inline const TransitionDefinition*
-    FindTransition(const Array<TransitionDefinition>& list, core::StringView property)
+    FindTransition(const Array<TransitionDefinition>& list, foundation::StringView property)
     {
         for (const TransitionDefinition& d : list)
             if (d.Property == property)
@@ -99,18 +99,18 @@ export namespace draconic::gui
         ApplyStyle(node, newStyle, resources, fontService, lengths);
 
         const Array<TransitionDefinition> transitions =
-            ParseTransitions(newStyle.Get(core::StringView(u8"transition")));
+            ParseTransitions(newStyle.Get(foundation::StringView(u8"transition")));
         if (const TransitionDefinition* opacity =
-                FindTransition(transitions, core::StringView(u8"opacity")))
+                FindTransition(transitions, foundation::StringView(u8"opacity")))
         {
             const Optional<f32> from =
-                ParseLength(oldStyle.Get(core::StringView(u8"opacity"), core::StringView(u8"1")));
+                ParseLength(oldStyle.Get(foundation::StringView(u8"opacity"), foundation::StringView(u8"1")));
             const Optional<f32> to =
-                ParseLength(newStyle.Get(core::StringView(u8"opacity"), core::StringView(u8"1")));
+                ParseLength(newStyle.Get(foundation::StringView(u8"opacity"), foundation::StringView(u8"1")));
             if (from.HasValue() && to.HasValue() && from.Value() != to.Value())
                 node.RunAction(
-                    core::MakeRef<FadeAction>(core::DefaultAllocator(), from.Value(), to.Value(),
-                                              core::Duration::FromSeconds(opacity->Duration)));
+                    foundation::MakeRef<FadeAction>(foundation::DefaultAllocator(), from.Value(), to.Value(),
+                                              foundation::Duration::FromSeconds(opacity->Duration)));
         }
     }
 }

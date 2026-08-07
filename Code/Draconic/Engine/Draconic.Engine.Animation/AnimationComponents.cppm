@@ -11,18 +11,18 @@
 /// components); neither of those depends back on it.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.engine.animation:components;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.resource;
 import draconic.scene;
 import draconic.animation; // Skeleton, AnimationClip, AnimationPlayer, AnimationGraph(+Player)
 import draconic.engine.render; // MeshComponentManager / MeshComponent (the feed target)
 import draconic.script.facades; // script::Entity/Scene + CurrentRunResources (the SceneAnimation handle)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace scene = draconic::scene;
 namespace animation = draconic::animation;
 
@@ -55,11 +55,11 @@ export namespace draconic::animation
     // once entity-reference serialization exists.)
     inline void Serialize(ISerializer& ar, SkeletalAnimationComponent& c)
     {
-        draconic::core::Serialize(ar, "skeleton", c.skeleton);
-        draconic::core::Serialize(ar, "clip", c.clip);
-        draconic::core::Serialize(ar, "speed", c.speed);
-        draconic::core::Serialize(ar, "startTime", c.startTime);
-        draconic::core::Serialize(ar, "autoPlay", c.autoPlay);
+        draconic::foundation::Serialize(ar, "skeleton", c.skeleton);
+        draconic::foundation::Serialize(ar, "clip", c.clip);
+        draconic::foundation::Serialize(ar, "speed", c.speed);
+        draconic::foundation::Serialize(ar, "startTime", c.startTime);
+        draconic::foundation::Serialize(ar, "autoPlay", c.autoPlay);
     }
 
     inline void ResolveResources(draconic::resource::ResourceManager& manager,
@@ -184,9 +184,9 @@ export namespace draconic::animation
 
     inline void Serialize(ISerializer& ar, AnimationGraphComponent& c)
     {
-        draconic::core::Serialize(ar, "skeleton", c.skeleton);
-        draconic::core::Serialize(ar, "graph", c.graph);
-        draconic::core::Serialize(ar, "active", c.active);
+        draconic::foundation::Serialize(ar, "skeleton", c.skeleton);
+        draconic::foundation::Serialize(ar, "graph", c.graph);
+        draconic::foundation::Serialize(ar, "active", c.active);
     }
 
     inline void ResolveResources(draconic::resource::ResourceManager& manager,

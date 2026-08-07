@@ -5,17 +5,17 @@
 // Ported from Sedulous.UI/src/Drawing/StateListDrawable.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:state_list_drawable;
 
-import draconic.core; // HashMap, RefPtr, Rectangle
+import draconic.foundation; // HashMap, RefPtr, Rectangle
 import :control_state;
 import :drawable;
 import :draw_context;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

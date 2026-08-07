@@ -14,19 +14,19 @@
 // editor) that would otherwise exhaust clang's per-TU source-location budget.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.graphics.gpu;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.graphics;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::graphics
 {
     // Create a GraphicsDevice for the requested backend. Returns an error if the
     // backend is unavailable (e.g. DX12 off this platform) or bring-up fails.
-    core::Result<core::UniquePtr<GraphicsDevice>>
+    foundation::Result<foundation::UniquePtr<GraphicsDevice>>
     CreateGraphicsDevice(const GraphicsDeviceDesc& desc);
 }

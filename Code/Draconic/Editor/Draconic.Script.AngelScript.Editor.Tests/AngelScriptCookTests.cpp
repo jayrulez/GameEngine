@@ -4,15 +4,15 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.script;
 import draconic.script.resource;
 import draconic.script.editor;
 import draconic.script.angelscript.editor;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::script;
 
 namespace

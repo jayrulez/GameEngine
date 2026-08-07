@@ -9,16 +9,16 @@
 // interface, so it is windowing-backend agnostic; the concrete shell is constructed by the entry
 // point and passed in.
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.runtime.desktop;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.shell;          // IShell (interface only - the concrete shell is handed in)
 import draconic.graphics;       // GraphicsDevice (handed to the app)
 import draconic.runtime.client; // IApplication + ApplicationHost (the runner drives these)
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 using namespace draconic::graphics; // GraphicsDevice (moved from draconic::runtime)
 
 export namespace draconic::runtime
@@ -30,12 +30,12 @@ export namespace draconic::runtime
     {
         ApplicationHost host;
         host.Start(app, &shell, graphics);
-        core::TimePoint previous = core::Clock::Now();
+        foundation::TimePoint previous = foundation::Clock::Now();
         while (shell.IsRunning() && host.IsRunning())
         {
             shell.ProcessEvents();
-            const core::TimePoint now = core::Clock::Now();
-            core::f32 dt = (now - previous).AsSecondsF();
+            const foundation::TimePoint now = foundation::Clock::Now();
+            foundation::f32 dt = (now - previous).AsSecondsF();
             previous = now;
             if (dt > host.Settings().maxFrameTime)
             {

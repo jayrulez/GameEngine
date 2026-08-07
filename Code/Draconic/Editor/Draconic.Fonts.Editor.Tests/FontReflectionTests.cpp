@@ -2,13 +2,13 @@
 // authored scalar/enum/string fields enumerate with attributes, round-trip through get/set, and
 // that the bake-mode enum resolves named values. The `sizes` ramp is intentionally unreflected.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 #include <initializer_list>
-import draconic.core;
+import draconic.foundation;
 import draconic.fonts.editor;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace
 {

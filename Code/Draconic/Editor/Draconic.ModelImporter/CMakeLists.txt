@@ -9,7 +9,7 @@ add_library(Draconic::ModelImporter ALIAS Draconic.ModelImporter)
 
 target_link_libraries(Draconic.ModelImporter
     PUBLIC
-        Draconic::Core Draconic::Editor.Core Draconic::Policy
+        Draconic::Foundation Draconic::Editor.Core Draconic::Policy
         Draconic::Model     Draconic::Model.IO  Draconic::Model.GLTF  Draconic::Model.FBX
         Draconic::Geometry  Draconic::Geometry.Resource     Draconic::Geometry.Editor
         Draconic::Materials Draconic::Materials.Resource Draconic::Materials.Editor

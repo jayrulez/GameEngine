@@ -7,11 +7,11 @@
 // (it implicitly imports the primary interface) and is outside the interface dependency graph.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 module draconic.ui;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::ui
 {

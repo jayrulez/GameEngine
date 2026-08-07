@@ -9,12 +9,12 @@
 // name shadows the enum type).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:frame_layout;
 
-import draconic.core; // Max, RefPtr, Rectangle
+import draconic.foundation; // Max, RefPtr, Rectangle
 import :view;         // View, ViewGroup, LayoutParamsPtr
 import :layout_params;
 import :box_constraints;
@@ -22,7 +22,7 @@ import :thickness;
 import :gravity;
 import :gravity_helper;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

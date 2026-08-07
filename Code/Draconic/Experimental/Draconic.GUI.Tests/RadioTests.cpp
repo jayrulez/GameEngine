@@ -1,21 +1,21 @@
 // Draconic GUI - RadioButton + RadioGroup tests: mutual exclusion, click-to-select, group
 // callback, and standalone (no-group) behavior.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.vg;
 import draconic.gui;
 
 using namespace draconic::gui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace vg = draconic::vg;
 
 namespace
 {
     template <typename T>
-    core::RefPtr<T> Make()
+    foundation::RefPtr<T> Make()
     {
-        return core::MakeRef<T>(core::DefaultAllocator());
+        return foundation::MakeRef<T>(foundation::DefaultAllocator());
     }
 }
 
@@ -74,12 +74,12 @@ TEST_CASE("radio: group callback fires with the selected index, only on change")
 TEST_CASE("radio: click selects and fires OnSelected")
 {
     auto root = Make<SceneNode>();
-    root->SetSize(core::Float2{200.0f, 200.0f});
+    root->SetSize(foundation::Float2{200.0f, 200.0f});
     auto a = Make<RadioButton>();
     auto b = Make<RadioButton>();
-    a->SetSize(core::Float2{20.0f, 20.0f});
-    b->SetSize(core::Float2{20.0f, 20.0f});
-    b->SetPosition(core::Float2{0.0f, 40.0f});
+    a->SetSize(foundation::Float2{20.0f, 20.0f});
+    b->SetSize(foundation::Float2{20.0f, 20.0f});
+    b->SetPosition(foundation::Float2{0.0f, 40.0f});
     root->AddChild(a.Get());
     root->AddChild(b.Get());
     RadioGroup group;
@@ -90,13 +90,13 @@ TEST_CASE("radio: click selects and fires OnSelected")
     a->SetOnSelected([&]() { ++aSelected; });
 
     EventDispatcher* d = root->GetEventDispatcher();
-    d->InjectMouseDown(core::Float2{10.0f, 10.0f}, MouseButton::Left);
-    d->InjectMouseUp(core::Float2{10.0f, 10.0f}, MouseButton::Left); // click a
+    d->InjectMouseDown(foundation::Float2{10.0f, 10.0f}, MouseButton::Left);
+    d->InjectMouseUp(foundation::Float2{10.0f, 10.0f}, MouseButton::Left); // click a
     CHECK(a->IsSelected());
     CHECK(aSelected == 1);
 
-    d->InjectMouseDown(core::Float2{10.0f, 50.0f}, MouseButton::Left);
-    d->InjectMouseUp(core::Float2{10.0f, 50.0f}, MouseButton::Left); // click b
+    d->InjectMouseDown(foundation::Float2{10.0f, 50.0f}, MouseButton::Left);
+    d->InjectMouseUp(foundation::Float2{10.0f, 50.0f}, MouseButton::Left); // click b
     CHECK(b->IsSelected());
     CHECK_FALSE(a->IsSelected());
     CHECK(aSelected == 1); // a was not re-selected
@@ -117,13 +117,13 @@ TEST_CASE("radio: a button with no group selects standalone")
 TEST_CASE("radio: draws ring, plus a dot when selected")
 {
     auto a = Make<RadioButton>();
-    a->SetSize(core::Float2{20.0f, 20.0f});
+    a->SetSize(foundation::Float2{20.0f, 20.0f});
 
     {
         vg::VGContext ctx;
         DrawContext dc{ctx};
         a->Draw(dc);
-        const core::usize ringOnly = ctx.GetBatch().vertices.Size();
+        const foundation::usize ringOnly = ctx.GetBatch().vertices.Size();
         CHECK(ringOnly > 0);
     }
     a->Select();

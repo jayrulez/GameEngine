@@ -5,9 +5,9 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.ui;
 import draconic.ui.toolkit;
 import draconic.xml.serialization;
@@ -15,7 +15,7 @@ import draconic.settings;
 import draconic.editor.core;
 import draconic.editor.app;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::editor;
 using namespace draconic::editor::app;
 

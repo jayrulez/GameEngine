@@ -5,16 +5,16 @@
 // fill/stroke colors. Ported from Sedulous.VG.SVG/SVGRenderer.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.vg.svg:renderer;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import draconic.fonts;
 import :types;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::vg::svg
 {

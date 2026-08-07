@@ -7,11 +7,11 @@
 // Beef's "Family@Height" string keys become explicit family + size fields.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.fonts.ttf:service;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.fonts;
 import draconic.fonts.io;
 import draconic.image;
@@ -19,7 +19,7 @@ import draconic.vfs;
 import :text_shaper;
 import :init;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::fonts
 {

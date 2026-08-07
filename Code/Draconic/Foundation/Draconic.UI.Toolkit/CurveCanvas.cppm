@@ -15,17 +15,17 @@
 module;
 #include <cstdio>
 #include <limits>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui.toolkit:curve_canvas;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import draconic.fonts;
 import draconic.ui;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui::toolkit
 {
@@ -59,7 +59,7 @@ export namespace draconic::ui::toolkit
         /// Short identifier shown in legend strips (e.g. "X", "R", "Gain").
         String Name;
         /// Stroke color used for the polyline and key markers.
-        core::Color StrokeColor{0, 0, 0, 0};
+        foundation::Color StrokeColor{0, 0, 0, 0};
         /// Value used when a key is added to this channel implicitly (LinkedTime fallback value).
         f32 DefaultValue = 0.0f;
         /// When true, the channel is hidden (not rendered or hit-tested). Inverted polarity: zero-init = visible.
@@ -513,8 +513,8 @@ export namespace draconic::ui::toolkit
 
             // Grid: 4 divisions on each axis (5 lines).
             constexpr i32 DIVS = 4;
-            const core::Color gridColor = Rgb(50, 50, 58, 255);
-            const core::Color labelColor = Rgb(120, 122, 132, 255);
+            const foundation::Color gridColor = Rgb(50, 50, 58, 255);
+            const foundation::Color labelColor = Rgb(120, 122, 132, 255);
             fonts::CachedFont* font =
                 (ctx.FontService() != nullptr) ? ctx.FontService()->GetFont(9.0f) : nullptr;
 
@@ -526,7 +526,7 @@ export namespace draconic::ui::toolkit
             for (i32 i = 0; i <= DIVS; i++)
             {
                 const f32 y = (i / static_cast<f32>(DIVS)) * Height();
-                ctx.VG().FillRect(Rectangle{0, core::Min(y, Height() - 1), Width(), 1}, gridColor);
+                ctx.VG().FillRect(Rectangle{0, foundation::Min(y, Height() - 1), Width(), 1}, gridColor);
             }
 
             if (font != nullptr)
@@ -627,7 +627,7 @@ export namespace draconic::ui::toolkit
                         ctx.VG().BeginPath();
                         for (i32 a = 0; a <= 32; a++)
                         {
-                            const f32 theta = (a / 32.0f) * core::kTwoPi;
+                            const f32 theta = (a / 32.0f) * foundation::kTwoPi;
                             const f32 px = cx + (KeyDrawRadius + 2) * Cos(theta);
                             const f32 py = cy + (KeyDrawRadius + 2) * Sin(theta);
                             if (a == 0)
@@ -652,8 +652,8 @@ export namespace draconic::ui::toolkit
                     const f32 kx = TimeToX(k.Time);
                     const f32 ky = ValueToY(k.Value);
 
-                    core::Color colIn{0, 0, 0, 0};
-                    core::Color colOut{0, 0, 0, 0};
+                    foundation::Color colIn{0, 0, 0, 0};
+                    foundation::Color colOut{0, 0, 0, 0};
                     switch (k.Mode)
                     {
                     case TangentMode::Mirrored:
@@ -710,9 +710,9 @@ export namespace draconic::ui::toolkit
             Array<Key> Keys;
         };
 
-        [[nodiscard]] static core::Color Rgb(u8 r, u8 g, u8 b, u8 a = 255) noexcept
+        [[nodiscard]] static foundation::Color Rgb(u8 r, u8 g, u8 b, u8 a = 255) noexcept
         {
-            return core::Color{r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
+            return foundation::Color{r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
         }
 
         // Format a float as up to 2 decimals with trailing zeros (and a trailing dot) trimmed - the Beef
@@ -896,7 +896,7 @@ export namespace draconic::ui::toolkit
             const f32 span = hi - lo;
 
             // No nominal range declared: auto-fit with a span floor (avoids collapse when keys cluster).
-            const f32 minSpan = core::Max(0.5f, Abs(center) * 0.5f);
+            const f32 minSpan = foundation::Max(0.5f, Abs(center) * 0.5f);
             if (span < minSpan)
             {
                 ValueMin = center - minSpan * 0.5f;
@@ -922,10 +922,10 @@ export namespace draconic::ui::toolkit
             }
             return Height() * (1.0f - (v - ValueMin) / denom);
         }
-        [[nodiscard]] f32 XToTime(f32 x) const { return core::Clamp(x / Width(), 0.0f, 1.0f); }
+        [[nodiscard]] f32 XToTime(f32 x) const { return foundation::Clamp(x / Width(), 0.0f, 1.0f); }
         [[nodiscard]] f32 YToValue(f32 y) const
         {
-            const f32 r = core::Clamp(y / Height(), 0.0f, 1.0f);
+            const f32 r = foundation::Clamp(y / Height(), 0.0f, 1.0f);
             return ValueMax - r * (ValueMax - ValueMin);
         }
 
@@ -1180,7 +1180,7 @@ export namespace draconic::ui::toolkit
             {
                 return v;
             }
-            return core::Clamp(v, d.MinValue, d.MaxValue);
+            return foundation::Clamp(v, d.MinValue, d.MaxValue);
         }
 
         // In LinkedTime mode after a drag, sort the driver in place and apply the same permutation

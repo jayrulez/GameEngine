@@ -6,14 +6,14 @@
 // Shared by the baked font and the TTF text shaper.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.fonts:text_util;
 
-import draconic.core;
+import draconic.foundation;
 import :interfaces; // IFont (MeasureString) for TruncateToWidth
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::fonts
 {

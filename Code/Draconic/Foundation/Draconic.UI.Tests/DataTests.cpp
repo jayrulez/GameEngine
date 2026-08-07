@@ -3,15 +3,15 @@
 // returns RefPtr<View>; recycle/acquire move refs (RAII, no `delete`); `===` ref-equality -> pointer ==.
 // SimpleListAdapter / SimpleTreeAdapter test doubles live in TestHelpers.h.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 #include "TestHelpers.h"
 
 using namespace draconic::ui;
 using namespace draconic::ui::tests;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 // SimpleListAdapter test double lives in TestHelpers.h (shared with ListViewTests).
 
@@ -26,7 +26,7 @@ TEST_CASE("data: ViewRecycler_AcquireReturnsNull_WhenEmpty")
 TEST_CASE("data: ViewRecycler_RecycleAndAcquire_ReusesView")
 {
     ViewRecycler recycler;
-    auto view = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto view = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     View* raw = view.Get();
     recycler.Recycle(Move(view), 0);
     auto reused = recycler.Acquire(0);

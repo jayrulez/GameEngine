@@ -6,12 +6,12 @@
 // Clicking a tab (or SelectTab) swaps the visible panel and highlights the active tab.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:tab_widget;
 
-import draconic.core;  // RefPtr, MakeRef, Array, Function, Move, Max
+import draconic.foundation;  // RefPtr, MakeRef, Array, Function, Move, Max
 import draconic.fonts; // CachedFont
 import :rect;
 import :node;
@@ -19,8 +19,8 @@ import :button;
 import :linear_layout;
 import :ui_widget;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace fonts = draconic::fonts;
 
 export namespace draconic::gui
@@ -31,29 +31,29 @@ export namespace draconic::gui
     public:
         TabWidget()
         {
-            SetTag(core::StringView(u8"tabwidget"));
-            m_tabBar = core::MakeRef<LinearLayout>(core::DefaultAllocator());
+            SetTag(foundation::StringView(u8"tabwidget"));
+            m_tabBar = foundation::MakeRef<LinearLayout>(foundation::DefaultAllocator());
             m_tabBar->SetOrientation(Orientation::Horizontal);
             m_tabBar->SetSpacing(2.0f);
             AddChild(m_tabBar.Get());
 
-            m_contentHost = core::MakeRef<UIWidget>(core::DefaultAllocator());
+            m_contentHost = foundation::MakeRef<UIWidget>(foundation::DefaultAllocator());
             m_contentHost->SetClipChildren(true);
             AddChild(m_contentHost.Get());
         }
 
         // Add a tab with a title and its content panel (added to the content host, which takes
         // ownership). The first tab added becomes selected.
-        void AddTab(core::StringView title, Node* content)
+        void AddTab(foundation::StringView title, Node* content)
         {
             const i32 index = static_cast<i32>(m_tabs.Size());
 
-            auto button = core::MakeRef<Button>(core::DefaultAllocator());
+            auto button = foundation::MakeRef<Button>(foundation::DefaultAllocator());
             button->SetText(title);
             button->SetFont(m_font);
             button->AddClass(
-                core::StringView(u8"tab")); // styled as a tab; `.tab.selected` = active
-            button->SetSize(core::Float2{m_tabWidth, m_tabBarHeight});
+                foundation::StringView(u8"tab")); // styled as a tab; `.tab.selected` = active
+            button->SetSize(foundation::Float2{m_tabWidth, m_tabBarHeight});
             TabWidget* self = this;
             button->SetOnClick([self, index]() { self->SelectTab(index); });
             m_tabBar->AddChild(button.Get());
@@ -86,16 +86,16 @@ export namespace draconic::gui
                 // The active tab carries a `selected` class so the theme distinguishes it
                 // (`.tab.selected`), surviving the per-frame style re-apply.
                 if (active)
-                    m_tabs[i].TabButton->AddClass(core::StringView(u8"selected"));
+                    m_tabs[i].TabButton->AddClass(foundation::StringView(u8"selected"));
                 else
-                    m_tabs[i].TabButton->RemoveClass(core::StringView(u8"selected"));
+                    m_tabs[i].TabButton->RemoveClass(foundation::StringView(u8"selected"));
             }
             if (m_onChanged)
                 m_onChanged(index);
         }
-        void SetOnTabChanged(core::Function<void(i32)> callback)
+        void SetOnTabChanged(foundation::Function<void(i32)> callback)
         {
-            m_onChanged = core::Move(callback);
+            m_onChanged = foundation::Move(callback);
         }
 
         // The content panel of a tab (for populating it after AddTab).
@@ -112,14 +112,14 @@ export namespace draconic::gui
         }
         void SetTabBarHeight(f32 height)
         {
-            m_tabBarHeight = core::Max(1.0f, height);
+            m_tabBarHeight = foundation::Max(1.0f, height);
             Relayout();
         }
         void SetTabWidth(f32 width)
         {
-            m_tabWidth = core::Max(1.0f, width);
+            m_tabWidth = foundation::Max(1.0f, width);
             for (const Tab& t : m_tabs)
-                t.TabButton->SetSize(core::Float2{width, m_tabBarHeight});
+                t.TabButton->SetSize(foundation::Float2{width, m_tabBarHeight});
             Relayout();
         }
 
@@ -130,17 +130,17 @@ export namespace draconic::gui
         void Relayout()
         {
             const Rect box = GetContentBounds();
-            m_tabBar->SetPosition(core::Float2{box.x, box.y});
-            m_tabBar->SetSize(core::Float2{box.width, m_tabBarHeight});
+            m_tabBar->SetPosition(foundation::Float2{box.x, box.y});
+            m_tabBar->SetSize(foundation::Float2{box.width, m_tabBarHeight});
 
-            m_contentHost->SetPosition(core::Float2{box.x, box.y + m_tabBarHeight});
-            const core::Float2 hostSize{box.width, core::Max(0.0f, box.height - m_tabBarHeight)};
+            m_contentHost->SetPosition(foundation::Float2{box.x, box.y + m_tabBarHeight});
+            const foundation::Float2 hostSize{box.width, foundation::Max(0.0f, box.height - m_tabBarHeight)};
             m_contentHost->SetSize(hostSize);
             for (const Tab& t : m_tabs)
             {
                 if (t.Content == nullptr)
                     continue;
-                t.Content->SetPosition(core::Float2{0.0f, 0.0f});
+                t.Content->SetPosition(foundation::Float2{0.0f, 0.0f});
                 t.Content->SetSize(hostSize);
             }
         }
@@ -158,7 +158,7 @@ export namespace draconic::gui
         i32 m_selected = -1;
         f32 m_tabBarHeight = 32.0f;
         f32 m_tabWidth = 100.0f;
-        core::Function<void(i32)> m_onChanged;
+        foundation::Function<void(i32)> m_onChanged;
     };
 
     DRACONIC_DEFINE_OBJECT(TabWidget, "draconic::gui")

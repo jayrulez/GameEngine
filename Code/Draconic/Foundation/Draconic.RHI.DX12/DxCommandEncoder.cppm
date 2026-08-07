@@ -3,7 +3,7 @@
 /// Ported from Sedulous.RHI.DX12/DX12CommandEncoder.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include "DxIncludes.h"
 
@@ -12,7 +12,7 @@ module;
 
 export module draconic.rhi.dx12:command_encoder;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :conversions;
 import :buffer;
@@ -35,7 +35,7 @@ import :ray_tracing_pipeline;
 import :render_pass_encoder;
 import :compute_pass_encoder;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::dx12
 {

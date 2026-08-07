@@ -8,17 +8,17 @@
 // everywhere; -fno-rtti). Drawables are not reflection-registered/scripted.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:drawable;
 
-import draconic.core; // Object, Optional, Float2, Rectangle
+import draconic.foundation; // Object, Optional, Float2, Rectangle
 import :thickness;
 import :control_state;
 import :draw_context;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

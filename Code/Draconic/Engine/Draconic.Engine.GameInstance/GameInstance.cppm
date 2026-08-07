@@ -12,12 +12,12 @@
 // (never owns them).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h" // the SceneLoader facade (DRACONIC_OBJECT)
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h" // the SceneLoader facade (DRACONIC_OBJECT)
 
 export module draconic.engine.gameinstance;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.scene;
 import draconic.scene.resource; // LoadScene / ResolveSceneResources / ResolveScenePrefabs
 import draconic.content;        // content::Instance (the cooked scene record)
@@ -28,7 +28,7 @@ import draconic.script.facades; // RegisterExtraFacadeName (the SceneLoader beha
 import draconic.net.manager; // NetworkManager + INetworkController + NetScriptBinding
 import draconic.input;       // ActionRuntime + IInputSourceProvider + InputMap (per-instance input)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::runtime
 {
@@ -41,7 +41,7 @@ export namespace draconic::runtime
     // A hook the app sets once and GameInstance fires on every go-online, passing the freshly created
     // endpoint. The app uses it to wire per-endpoint setup that needs app state (e.g. the prefab
     // net-spawn resolver, which needs the content DB) - fresh each time, so reconnect stays correct.
-    using EndpointOnlineHook = core::Function<void(net::NetworkManager&)>;
+    using EndpointOnlineHook = foundation::Function<void(net::NetworkManager&)>;
 
     // ---- SceneLoader.* script facade (task #123): the running instance's LEVEL-LOAD control surfaced
     // to scripts. Owned HERE (the project that owns load orchestration), NOT the neutral Foundation
@@ -57,13 +57,13 @@ export namespace draconic::runtime
     // pointers (backed by the owning GameInstance + content DB). Null pointers = safe no-ops.
     struct SceneLoaderScriptBinding
     {
-        core::Function<i32(const core::Guid&)> loadSceneAsync; // -> ticket (0 = failed to start)
-        core::Function<f64(i32)> loadProgress;                 // ticket -> 0..1
-        core::Function<bool(i32)> loadComplete;                // ticket -> complete?
-        core::Function<bool(i32)> loadFailed;                  // ticket -> failed?
-        core::Function<bool(const core::Guid&)> loadScene;     // sync load -> success
-        core::Function<bool()> sceneReady;                     // current scene loaded + active?
-        core::Function<scene::Scene*()> currentScene;          // the instance's live scene (or null)
+        foundation::Function<i32(const foundation::Guid&)> loadSceneAsync; // -> ticket (0 = failed to start)
+        foundation::Function<f64(i32)> loadProgress;                 // ticket -> 0..1
+        foundation::Function<bool(i32)> loadComplete;                // ticket -> complete?
+        foundation::Function<bool(i32)> loadFailed;                  // ticket -> failed?
+        foundation::Function<bool(const foundation::Guid&)> loadScene;     // sync load -> success
+        foundation::Function<bool()> sceneReady;                     // current scene loaded + active?
+        foundation::Function<scene::Scene*()> currentScene;          // the instance's live scene (or null)
     };
 
     inline void InstallSceneLoaderScriptService(script::IScriptContext& context,
@@ -96,7 +96,7 @@ export namespace draconic::runtime
                                             context->GetService(kSceneLoaderScriptService))
                                       : nullptr;
         }
-        [[nodiscard]] static i32 loadSceneAsync(core::Guid scene)
+        [[nodiscard]] static i32 loadSceneAsync(foundation::Guid scene)
         {
             SceneLoaderScriptBinding* b = Resolve();
             return (b != nullptr && b->loadSceneAsync && !scene.IsNil()) ? b->loadSceneAsync(scene)
@@ -117,7 +117,7 @@ export namespace draconic::runtime
             SceneLoaderScriptBinding* b = Resolve();
             return (b != nullptr && b->loadFailed) ? b->loadFailed(ticket) : false;
         }
-        [[nodiscard]] static bool loadScene(core::Guid scene)
+        [[nodiscard]] static bool loadScene(foundation::Guid scene)
         {
             SceneLoaderScriptBinding* b = Resolve();
             return (b != nullptr && b->loadScene && !scene.IsNil()) ? b->loadScene(scene) : false;
@@ -164,26 +164,26 @@ export namespace draconic::runtime
             return m_failed || m_resources == nullptr || m_resources->PendingCount() == 0;
         }
         // 0..1; 1 when complete or failed.
-        [[nodiscard]] core::f32 Progress() const noexcept
+        [[nodiscard]] foundation::f32 Progress() const noexcept
         {
             if (m_failed || m_resources == nullptr || m_total == 0)
             {
                 return 1.0f;
             }
-            const core::usize remaining = m_resources->PendingCount();
+            const foundation::usize remaining = m_resources->PendingCount();
             if (remaining == 0)
             {
                 return 1.0f;
             }
-            const core::usize done = (remaining >= m_total) ? 0u : (m_total - remaining);
-            return static_cast<core::f32>(done) / static_cast<core::f32>(m_total);
+            const foundation::usize done = (remaining >= m_total) ? 0u : (m_total - remaining);
+            return static_cast<foundation::f32>(done) / static_cast<foundation::f32>(m_total);
         }
 
     private:
         friend class GameInstance;
         scene::Scene* m_scene = nullptr;
         resource::ResourceManager* m_resources = nullptr;
-        core::usize m_total = 0;
+        foundation::usize m_total = 0;
         bool m_failed = false;
     };
 
@@ -227,7 +227,7 @@ export namespace draconic::runtime
         /// run host (game-instance.md §11.10). The host must be configured first (the app's
         /// ScriptSubsystem::ConfigureRunHost exposes the facades + routing); a bare test just needs a
         /// backend registered. Idempotent start (stops a prior run first). false on compile / no-`Game`.
-        bool StartScript(core::StringView source, core::StringView name);
+        bool StartScript(foundation::StringView source, foundation::StringView name);
 
         /// exit() the `Game` + release the game-script hold (idempotent; the update-fault path lands here).
         /// The run host tears down when nothing else pins it (the scene-stop observer drives that).
@@ -237,14 +237,14 @@ export namespace draconic::runtime
         /// (game-instance.md §11.10). Use this instead of Scenes().CreateScene so the re-bind happens.
         /// `activate` (default true) matches the classic behavior; false creates it inactive for an
         /// async load (see LoadSceneAsync).
-        scene::Scene* CreateScene(core::StringView name, bool activate = true);
+        scene::Scene* CreateScene(foundation::StringView name, bool activate = true);
         /// Destroy a scene in this instance's group. Drops any tracked async load whose pending
         /// target IS this scene BEFORE freeing it, so PumpScriptLoads can never activate a dangling
         /// Scene* (Fable review finding: the handle holds a raw Scene*). A dropped ticket then reads
         /// terminal-safe (complete=true, failed=false) via the unknown-ticket fallback.
         void DestroyScene(scene::Scene* scene)
         {
-            for (core::usize i = m_scriptLoads.Size(); i > 0; --i)
+            for (foundation::usize i = m_scriptLoads.Size(); i > 0; --i)
             {
                 if (m_scriptLoads[i - 1].handle.Scene() == scene)
                 {
@@ -264,14 +264,14 @@ export namespace draconic::runtime
         /// `prefabProvider` reads a nested-prefab payload by guid (empty function = no prefabs).
         scene::Scene*
         LoadScene(content::Instance& sceneInstance, resource::ResourceManager& resources,
-                  core::Function<core::UniquePtr<core::IStream>(const core::Guid&)> prefabProvider);
+                  foundation::Function<foundation::UniquePtr<foundation::IStream>(const foundation::Guid&)> prefabProvider);
 
         /// Async load: creates the scene INACTIVE, deserializes it, and kicks its resource binds onto
         /// workers (BindAsync). Returns a SceneLoadHandle - poll IsComplete()/Progress() (loading
         /// screen), then ActivateLoadedScene(). The scene never ticks/renders while loading.
         [[nodiscard]] SceneLoadHandle LoadSceneAsync(
             content::Instance& sceneInstance, resource::ResourceManager& resources,
-            core::Function<core::UniquePtr<core::IStream>(const core::Guid&)> prefabProvider);
+            foundation::Function<foundation::UniquePtr<foundation::IStream>(const foundation::Guid&)> prefabProvider);
 
         /// Activate a COMPLETED async-loaded scene (add to the active/render set + make current).
         /// Returns the now-active scene, or null if the handle failed or is not yet complete. The
@@ -288,10 +288,10 @@ export namespace draconic::runtime
         /// The post-activation policy the APP owns (EnsureCamera, Start, SetSimulationEnabled - the
         /// render/sim half; SetScene is the instance's own bookkeeping and runs first). Set once by
         /// the app; PumpScriptLoads invokes it on a scene the moment its tracked load completes.
-        using SceneActivationPolicy = core::Function<void(scene::Scene*)>;
+        using SceneActivationPolicy = foundation::Function<void(scene::Scene*)>;
         void SetSceneActivationPolicy(SceneActivationPolicy policy)
         {
-            m_activatePolicy = core::Move(policy);
+            m_activatePolicy = foundation::Move(policy);
         }
 
         /// Register an in-flight async load under a fresh ticket (1-based; 0 is never issued, so it
@@ -396,7 +396,7 @@ export namespace draconic::runtime
         // and enter the role (returning false if it fails); StopNetworking drops the endpoint. The live
         // endpoint replicates THIS instance's current scene.
         bool StartServer(u16 port, bool dedicated) override;
-        bool Connect(core::StringView host, u16 port) override;
+        bool Connect(foundation::StringView host, u16 port) override;
         void StopNetworking() override;
         [[nodiscard]] net::NetworkManager* NetEndpoint() const override { return m_net.Get(); }
 
@@ -411,11 +411,11 @@ export namespace draconic::runtime
         script::IScriptErrorHandler* m_errorHandler = nullptr;
         bool m_headless = false;
         f32 m_instanceTimeScale = 1.0f;
-        core::RefPtr<script::IScriptContext>
+        foundation::RefPtr<script::IScriptContext>
             m_scriptContext; // the game script's ref to the run host's context
-        core::RefPtr<script::ScriptObject> m_game;
+        foundation::RefPtr<script::ScriptObject> m_game;
 
-        core::UniquePtr<net::NetworkManager> m_net; // this instance's endpoint (null = offline)
+        foundation::UniquePtr<net::NetworkManager> m_net; // this instance's endpoint (null = offline)
         net::NetScriptBinding m_netBinding;         // stable; the facade resolves controller=this
         SceneLoaderScriptBinding
             m_sceneLoaderBinding; // stable; app fills its pointers, installed per context (StartScript)
@@ -437,7 +437,7 @@ export namespace draconic::runtime
             i32 ticket = 0;
             SceneLoadHandle handle;
         };
-        core::Array<TrackedScriptLoad> m_scriptLoads;
+        foundation::Array<TrackedScriptLoad> m_scriptLoads;
         i32 m_nextScriptTicket = 0;
         SceneActivationPolicy m_activatePolicy; // app-set render/sim policy, run on completion
     };

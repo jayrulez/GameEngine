@@ -2,14 +2,14 @@
 /// Ported from Sedulous.RHI.Validation/ValidatedAdapter.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.rhi.validation:validated_adapter;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::validation
 {

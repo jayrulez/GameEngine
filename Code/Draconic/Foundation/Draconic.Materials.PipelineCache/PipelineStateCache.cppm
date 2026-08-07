@@ -14,17 +14,17 @@
 /// graveyard and freed by ReleaseRetired() once the GPU is done with them.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.materials.pipelinecache;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.shaders;
 import draconic.shaders.system;
 import draconic.materials;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 
 export namespace draconic::materials

@@ -10,7 +10,7 @@ add_library(DraconicSamplesFramework STATIC)
 add_library(Draconic::SamplesFramework ALIAS DraconicSamplesFramework)
 
 target_link_libraries(DraconicSamplesFramework PUBLIC
-    Draconic::Core
+    Draconic::Foundation
     Draconic::RHI
     Draconic::RHI.Vulkan
     Draconic::RHI.Validation

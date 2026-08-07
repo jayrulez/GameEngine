@@ -6,20 +6,20 @@
 // Full CSS background-position/size/repeat/origin lands with the CSS phase.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:layer_drawable;
 
-import draconic.core; // Array, RefPtr, Move, Max
+import draconic.foundation; // Array, RefPtr, Move, Max
 import :rect;
 import :thickness;
 import :control_state;
 import :drawable;
 import :draw_context;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -62,8 +62,8 @@ export namespace draconic::gui
         [[nodiscard]] static Rect LayerBounds(const Rect& b, const Thickness& inset) noexcept
         {
             return Rect{b.x + inset.Left, b.y + inset.Top,
-                        core::Max(0.0f, b.width - inset.TotalHorizontal()),
-                        core::Max(0.0f, b.height - inset.TotalVertical())};
+                        foundation::Max(0.0f, b.width - inset.TotalHorizontal()),
+                        foundation::Max(0.0f, b.height - inset.TotalVertical())};
         }
 
         Array<Layer> m_layers;

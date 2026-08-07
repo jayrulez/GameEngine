@@ -3,21 +3,21 @@
 // BreadcrumbBar), ColorPicker (+ static HSV<->RGB), PropertyGrid, and every PropertyEditor. No UIContext
 // needed. Beef `scope X()`/`new X()` -> MakeRef<X>(DefaultAllocator()); ref-equality `===` -> pointer ==.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 import draconic.ui.toolkit;
 
 using namespace draconic::ui;
 using namespace draconic::ui::toolkit;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 namespace
 {
-    [[nodiscard]] core::Color Rgb(u8 r, u8 g, u8 b, u8 a = 255)
+    [[nodiscard]] foundation::Color Rgb(u8 r, u8 g, u8 b, u8 a = 255)
     {
-        return core::Color{r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
+        return foundation::Color{r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
     }
 
     // Exposes PropertyEditor's protected BeginEdit/EndEdit for the transaction test (Beef `[Friend]`).
@@ -169,7 +169,7 @@ TEST_CASE("toolkit: BreadcrumbBar_OnSegmentClicked")
 TEST_CASE("toolkit: ColorPicker_DefaultColor")
 {
     auto picker = MakeRef<ColorPicker>(DefaultAllocator());
-    const core::Color color = picker->CurrentColor();
+    const foundation::Color color = picker->CurrentColor();
     CHECK(color.a == 1.0f);
 }
 
@@ -177,7 +177,7 @@ TEST_CASE("toolkit: ColorPicker_SetColor")
 {
     auto picker = MakeRef<ColorPicker>(DefaultAllocator());
     picker->SetColor(Rgb(128, 64, 32, 255));
-    const core::Color c = picker->CurrentColor();
+    const foundation::Color c = picker->CurrentColor();
     // Should round-trip approximately (HSV conversion may lose precision).
     CHECK(Abs(c.r - 128 / 255.0f) <= 2 / 255.0f);
     CHECK(Abs(c.g - 64 / 255.0f) <= 2 / 255.0f);
@@ -197,7 +197,7 @@ TEST_CASE("toolkit: ColorPicker_OnColorChanged")
     auto picker = MakeRef<ColorPicker>(DefaultAllocator());
 
     bool fired = false;
-    picker->OnColorChanged.Add([&fired](ColorPicker*, core::Color) { fired = true; });
+    picker->OnColorChanged.Add([&fired](ColorPicker*, foundation::Color) { fired = true; });
 
     // Programmatic SetColor does NOT fire OnColorChanged (avoids feedback loops).
     picker->SetColor(Rgb(0, 255, 0, 255));
@@ -206,7 +206,7 @@ TEST_CASE("toolkit: ColorPicker_OnColorChanged")
 
 TEST_CASE("toolkit: ColorPicker_HSVToRGB_Red")
 {
-    const core::Color c = ColorPicker::HSVToRGB(0, 1, 1);
+    const foundation::Color c = ColorPicker::HSVToRGB(0, 1, 1);
     CHECK(c.r == 1.0f);
     CHECK(c.g == 0);
     CHECK(c.b == 0);
@@ -214,7 +214,7 @@ TEST_CASE("toolkit: ColorPicker_HSVToRGB_Red")
 
 TEST_CASE("toolkit: ColorPicker_HSVToRGB_Green")
 {
-    const core::Color c = ColorPicker::HSVToRGB(120, 1, 1);
+    const foundation::Color c = ColorPicker::HSVToRGB(120, 1, 1);
     CHECK(c.r == 0);
     CHECK(c.g == 1.0f);
     CHECK(c.b == 0);
@@ -222,7 +222,7 @@ TEST_CASE("toolkit: ColorPicker_HSVToRGB_Green")
 
 TEST_CASE("toolkit: ColorPicker_HSVToRGB_Blue")
 {
-    const core::Color c = ColorPicker::HSVToRGB(240, 1, 1);
+    const foundation::Color c = ColorPicker::HSVToRGB(240, 1, 1);
     CHECK(c.r == 0);
     CHECK(c.g == 0);
     CHECK(c.b == 1.0f);
@@ -230,7 +230,7 @@ TEST_CASE("toolkit: ColorPicker_HSVToRGB_Blue")
 
 TEST_CASE("toolkit: ColorPicker_HSVToRGB_White")
 {
-    const core::Color c = ColorPicker::HSVToRGB(0, 0, 1);
+    const foundation::Color c = ColorPicker::HSVToRGB(0, 0, 1);
     CHECK(c.r == 1.0f);
     CHECK(c.g == 1.0f);
     CHECK(c.b == 1.0f);
@@ -238,7 +238,7 @@ TEST_CASE("toolkit: ColorPicker_HSVToRGB_White")
 
 TEST_CASE("toolkit: ColorPicker_HSVToRGB_Black")
 {
-    const core::Color c = ColorPicker::HSVToRGB(0, 0, 0);
+    const foundation::Color c = ColorPicker::HSVToRGB(0, 0, 0);
     CHECK(c.r == 0);
     CHECK(c.g == 0);
     CHECK(c.b == 0);
@@ -248,7 +248,7 @@ TEST_CASE("toolkit: ColorPicker_RGBToHSV_Roundtrip")
 {
     f32 h = 0, s = 0, v = 0;
     ColorPicker::RGBToHSV(1.0f, 0.5f, 0.25f, h, s, v);
-    const core::Color c = ColorPicker::HSVToRGB(h, s, v);
+    const foundation::Color c = ColorPicker::HSVToRGB(h, s, v);
     CHECK(Abs(c.r - 1.0f) <= 1.0f / 255.0f);
     CHECK(Abs(c.g - 0.5f) <= 1.0f / 255.0f);
     CHECK(Abs(c.b - 0.25f) <= 1.0f / 255.0f);

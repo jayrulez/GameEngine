@@ -7,11 +7,11 @@
 // host, kept off every consumer's module closure.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 module draconic.graphics.gpu;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 #ifdef DRACONIC_HAS_VULKAN
 import draconic.rhi.vulkan;
@@ -26,12 +26,12 @@ import draconic.rhi.validation;
 import draconic.graphics;
 import draconic.graphics.null; // Null backend delegation
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace rhi = draconic::rhi;
 
 namespace draconic::graphics
 {
-    core::Result<core::UniquePtr<GraphicsDevice>>
+    foundation::Result<foundation::UniquePtr<GraphicsDevice>>
     CreateGraphicsDevice(const GraphicsDeviceDesc& desc)
     {
         if (desc.backend == BackendType::Null)
@@ -49,10 +49,10 @@ namespace draconic::graphics
             bd.enableValidation = desc.enableValidation;
             if (!rhi::vk::CreateBackend(bd, raw).IsOk())
             {
-                return core::Err(core::ErrorCode::Unknown);
+                return foundation::Err(foundation::ErrorCode::Unknown);
             }
 #else
-            return core::Err(core::ErrorCode::Unknown); // Vulkan RHI not built (e.g. web)
+            return foundation::Err(foundation::ErrorCode::Unknown); // Vulkan RHI not built (e.g. web)
 #endif
             break;
         }
@@ -63,10 +63,10 @@ namespace draconic::graphics
             bd.enableValidation = desc.enableValidation;
             if (!rhi::dx12::CreateDxBackend(bd, raw).IsOk())
             {
-                return core::Err(core::ErrorCode::Unknown);
+                return foundation::Err(foundation::ErrorCode::Unknown);
             }
 #else
-            return core::Err(core::ErrorCode::Unknown);
+            return foundation::Err(foundation::ErrorCode::Unknown);
 #endif
             break;
         }
@@ -77,10 +77,10 @@ namespace draconic::graphics
             if (!rhi::webgpu::CreateBackend(bd, raw).IsOk())
             {
                 rhi::LogError("CreateGraphicsDevice: WebGPU CreateBackend failed");
-                return core::Err(core::ErrorCode::Unknown);
+                return foundation::Err(foundation::ErrorCode::Unknown);
             }
 #else
-            return core::Err(core::ErrorCode::Unknown);
+            return foundation::Err(foundation::ErrorCode::Unknown);
 #endif
             break;
         }

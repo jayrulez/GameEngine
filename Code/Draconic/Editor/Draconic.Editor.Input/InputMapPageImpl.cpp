@@ -8,14 +8,14 @@
 // Save validates first: a kind-mismatched map never reaches the cook.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
+#include "Draconic.Foundation/Log/Log.h"
 #include <cstdlib>
 
 module draconic.editor.input;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.shell;
 import draconic.runtime;
@@ -28,7 +28,7 @@ import draconic.ui.runtime;
 import draconic.editor.core;
 import draconic.editor.app;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::editor
 {

@@ -6,18 +6,18 @@
 // StrokeRoundedRect; per-side colors/widths are a refinement for the skin/CSS phase.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:border_drawable;
 
-import draconic.core; // Color
+import draconic.foundation; // Color
 import draconic.vg;   // CornerRadii
 import :rect;
 import :draw_context;
 import :drawable;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace vg = draconic::vg;
 
 export namespace draconic::gui

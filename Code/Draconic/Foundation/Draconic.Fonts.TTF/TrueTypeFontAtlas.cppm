@@ -6,16 +6,16 @@
 // Sedulous.Fonts.TTF/TrueTypeFontAtlas.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include "stb_truetype.h"
 
 export module draconic.fonts.ttf:atlas;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.fonts;
 import :font;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::fonts
 {

@@ -14,17 +14,17 @@
 // model; free-form named trees are a later migration).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.audio.resource;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.resource;
 import draconic.content;
 import draconic.audio;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace resource = draconic::resource;
 
 export namespace draconic::audio
@@ -48,17 +48,17 @@ export namespace draconic::audio
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "channels", channels);
-            draconic::core::Serialize(ar, "sampleRate", sampleRate);
-            draconic::core::Serialize(ar, "frameCount", frameCount);
-            draconic::core::Serialize(ar, "durationSeconds", durationSeconds);
-            draconic::core::Serialize(ar, "gain", gain);
-            draconic::core::Serialize(ar, "loop", loop);
-            draconic::core::Serialize(ar, "loopStartFrame", loopStartFrame);
-            draconic::core::Serialize(ar, "loopEndFrame", loopEndFrame);
-            draconic::core::Serialize(ar, "stream", stream);
-            draconic::core::Serialize(ar, "keepCompressed", keepCompressed);
-            draconic::core::Serialize(ar, "containerExtension", containerExtension);
+            draconic::foundation::Serialize(ar, "channels", channels);
+            draconic::foundation::Serialize(ar, "sampleRate", sampleRate);
+            draconic::foundation::Serialize(ar, "frameCount", frameCount);
+            draconic::foundation::Serialize(ar, "durationSeconds", durationSeconds);
+            draconic::foundation::Serialize(ar, "gain", gain);
+            draconic::foundation::Serialize(ar, "loop", loop);
+            draconic::foundation::Serialize(ar, "loopStartFrame", loopStartFrame);
+            draconic::foundation::Serialize(ar, "loopEndFrame", loopEndFrame);
+            draconic::foundation::Serialize(ar, "stream", stream);
+            draconic::foundation::Serialize(ar, "keepCompressed", keepCompressed);
+            draconic::foundation::Serialize(ar, "containerExtension", containerExtension);
         }
     };
 
@@ -180,10 +180,10 @@ export namespace draconic::audio
         {
             auto serializeSettings = [&ar](AudioBusSettings& settings)
             {
-                draconic::core::Serialize(ar, "volume", settings.volume);
-                draconic::core::Serialize(ar, "muted", settings.muted);
+                draconic::foundation::Serialize(ar, "volume", settings.volume);
+                draconic::foundation::Serialize(ar, "muted", settings.muted);
                 u32 effectCount = static_cast<u32>(settings.effects.Size());
-                draconic::core::Serialize(ar, "effectCount", effectCount);
+                draconic::foundation::Serialize(ar, "effectCount", effectCount);
                 if (ar.Mode() == SerializeMode::Read)
                 {
                     settings.effects.Resize(effectCount);
@@ -192,19 +192,19 @@ export namespace draconic::audio
                 {
                     AudioBusEffectDesc& effect = settings.effects[i];
                     u8 kind = static_cast<u8>(effect.kind);
-                    draconic::core::Serialize(ar, "kind", kind);
+                    draconic::foundation::Serialize(ar, "kind", kind);
                     effect.kind = static_cast<AudioBusEffectKind>(kind);
-                    draconic::core::Serialize(ar, "frequencyHz", effect.frequencyHz);
-                    draconic::core::Serialize(ar, "delaySeconds", effect.delaySeconds);
-                    draconic::core::Serialize(ar, "delayDecay", effect.delayDecay);
-                    draconic::core::Serialize(ar, "roomSize", effect.roomSize);
-                    draconic::core::Serialize(ar, "damping", effect.damping);
-                    draconic::core::Serialize(ar, "wetLevel", effect.wetLevel);
+                    draconic::foundation::Serialize(ar, "frequencyHz", effect.frequencyHz);
+                    draconic::foundation::Serialize(ar, "delaySeconds", effect.delaySeconds);
+                    draconic::foundation::Serialize(ar, "delayDecay", effect.delayDecay);
+                    draconic::foundation::Serialize(ar, "roomSize", effect.roomSize);
+                    draconic::foundation::Serialize(ar, "damping", effect.damping);
+                    draconic::foundation::Serialize(ar, "wetLevel", effect.wetLevel);
                 }
             };
 
             u32 busCount = static_cast<u32>(AudioBus::Count);
-            draconic::core::Serialize(ar, "busCount", busCount);
+            draconic::foundation::Serialize(ar, "busCount", busCount);
             const u32 buses = Min(busCount, static_cast<u32>(AudioBus::Count));
             for (u32 bus = 0; bus < buses; ++bus)
             {
@@ -214,7 +214,7 @@ export namespace draconic::audio
             if (ar.Version() >= 2) // v2: named custom buses (generic, growable)
             {
                 u32 customCount = static_cast<u32>(layout.customBuses.Size());
-                draconic::core::Serialize(ar, "customBusCount", customCount);
+                draconic::foundation::Serialize(ar, "customBusCount", customCount);
                 if (ar.Mode() == SerializeMode::Read)
                 {
                     layout.customBuses.Resize(customCount);
@@ -222,8 +222,8 @@ export namespace draconic::audio
                 for (u32 i = 0; i < customCount; ++i)
                 {
                     AudioNamedBus& named = layout.customBuses[i];
-                    draconic::core::Serialize(ar, "name", named.name);
-                    draconic::core::Serialize(ar, "parent", named.parent);
+                    draconic::foundation::Serialize(ar, "name", named.name);
+                    draconic::foundation::Serialize(ar, "parent", named.parent);
                     serializeSettings(named.settings);
                 }
             }
@@ -283,7 +283,7 @@ export namespace draconic::audio
         void Serialize(ISerializer& ar) override
         {
             u32 count = static_cast<u32>(variants.Size());
-            draconic::core::Serialize(ar, "variantCount", count);
+            draconic::foundation::Serialize(ar, "variantCount", count);
             if (ar.Mode() == SerializeMode::Read)
             {
                 variants.Resize(count);
@@ -292,13 +292,13 @@ export namespace draconic::audio
             {
                 ar.Key("clip");
                 ar.GuidValue(variants[i].clipId);
-                draconic::core::Serialize(ar, "weight", variants[i].weight);
+                draconic::foundation::Serialize(ar, "weight", variants[i].weight);
             }
-            draconic::core::Serialize(ar, "mode", mode);
-            draconic::core::Serialize(ar, "pitchMin", pitchMin);
-            draconic::core::Serialize(ar, "pitchMax", pitchMax);
-            draconic::core::Serialize(ar, "volumeMin", volumeMin);
-            draconic::core::Serialize(ar, "volumeMax", volumeMax);
+            draconic::foundation::Serialize(ar, "mode", mode);
+            draconic::foundation::Serialize(ar, "pitchMin", pitchMin);
+            draconic::foundation::Serialize(ar, "pitchMax", pitchMax);
+            draconic::foundation::Serialize(ar, "volumeMin", volumeMin);
+            draconic::foundation::Serialize(ar, "volumeMax", volumeMax);
         }
     };
 

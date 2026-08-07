@@ -5,14 +5,14 @@
 /// Sedulous.Animation.AnimationPose.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.animation:pose;
 
-import draconic.core;
+import draconic.foundation;
 import :skeleton; // BoneTransform
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::animation
 {

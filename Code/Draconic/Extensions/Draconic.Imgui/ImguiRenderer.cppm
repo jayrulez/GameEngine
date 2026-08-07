@@ -6,18 +6,18 @@
 /// The font atlas upload is deferred to the first Render (we get a command encoder there, not at init).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include "imgui.h"
 #include <cstring>
 
 export module draconic.imgui:renderer;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.shaders;
 import draconic.shaders.system;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace rhi = draconic::rhi;
 
 export namespace draconic::imgui

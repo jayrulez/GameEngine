@@ -1,22 +1,22 @@
 // Draconic GUI - :rect partition
 //
-// Rect: 2D float rectangle stored as (x, y, width, height) - matching core::Rectangle
+// Rect: 2D float rectangle stored as (x, y, width, height) - matching foundation::Rectangle
 // and the VG render surface, so it converts losslessly for DrawContext. Adapts eepp's
 // Rectf (which stores Left/Right/Top/Bottom): the edge accessors Left/Top/Right/Bottom
 // reproduce eepp's field reads, while storage stays x/y/w/h for the render path.
 //
-// Derived from eepp include/eepp/math/rect.hpp; eepp Vector2f -> core::Float2,
+// Derived from eepp include/eepp/math/rect.hpp; eepp Vector2f -> foundation::Float2,
 // camelCase -> Draconic PascalCase.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:rect;
 
-import draconic.core; // Float2, Rectangle
+import draconic.foundation; // Float2, Rectangle
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -33,7 +33,7 @@ export namespace draconic::gui
             : x(inX), y(inY), width(inWidth), height(inHeight)
         {
         }
-        constexpr Rect(core::Float2 position, core::Float2 size) noexcept
+        constexpr Rect(foundation::Float2 position, foundation::Float2 size) noexcept
             : x(position.x), y(position.y), width(size.x), height(size.y)
         {
         }
@@ -44,11 +44,11 @@ export namespace draconic::gui
         {
             return Rect{left, top, right - left, bottom - top};
         }
-        [[nodiscard]] static constexpr Rect FromMinMax(core::Float2 min, core::Float2 max) noexcept
+        [[nodiscard]] static constexpr Rect FromMinMax(foundation::Float2 min, foundation::Float2 max) noexcept
         {
             return Rect{min.x, min.y, max.x - min.x, max.y - min.y};
         }
-        [[nodiscard]] static constexpr Rect FromRectangle(const core::Rectangle& r) noexcept
+        [[nodiscard]] static constexpr Rect FromRectangle(const foundation::Rectangle& r) noexcept
         {
             return Rect{r.x, r.y, r.width, r.height};
         }
@@ -59,17 +59,17 @@ export namespace draconic::gui
         [[nodiscard]] constexpr f32 Right() const noexcept { return x + width; }
         [[nodiscard]] constexpr f32 Bottom() const noexcept { return y + height; }
 
-        [[nodiscard]] constexpr core::Float2 Position() const noexcept
+        [[nodiscard]] constexpr foundation::Float2 Position() const noexcept
         {
-            return core::Float2{x, y};
+            return foundation::Float2{x, y};
         }
-        [[nodiscard]] constexpr core::Float2 Size() const noexcept
+        [[nodiscard]] constexpr foundation::Float2 Size() const noexcept
         {
-            return core::Float2{width, height};
+            return foundation::Float2{width, height};
         }
-        [[nodiscard]] constexpr core::Float2 Center() const noexcept
+        [[nodiscard]] constexpr foundation::Float2 Center() const noexcept
         {
-            return core::Float2{x + width * 0.5f, y + height * 0.5f};
+            return foundation::Float2{x + width * 0.5f, y + height * 0.5f};
         }
 
         [[nodiscard]] constexpr bool IsEmpty() const noexcept
@@ -77,7 +77,7 @@ export namespace draconic::gui
             return width <= 0.0f || height <= 0.0f;
         }
 
-        [[nodiscard]] constexpr bool Contains(core::Float2 p) const noexcept
+        [[nodiscard]] constexpr bool Contains(foundation::Float2 p) const noexcept
         {
             return p.x >= x && p.x <= x + width && p.y >= y && p.y <= y + height;
         }
@@ -92,9 +92,9 @@ export namespace draconic::gui
                    Bottom() > other.y;
         }
 
-        [[nodiscard]] constexpr core::Rectangle ToRectangle() const noexcept
+        [[nodiscard]] constexpr foundation::Rectangle ToRectangle() const noexcept
         {
-            return core::Rectangle{x, y, width, height};
+            return foundation::Rectangle{x, y, width, height};
         }
 
         // The overlapping rectangle of two rects; empty (zero size) if disjoint.

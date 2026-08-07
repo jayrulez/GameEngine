@@ -7,10 +7,10 @@
 #include <doctest/doctest.h>
 #include <filesystem>
 
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.vfs.pak;
 import draconic.content;
@@ -32,7 +32,7 @@ import draconic.script.wren.editor; // RegisterWrenScriptCook
 import draconic.script.editor;      // ScriptClassAsset + ScriptClassAssetBuilder
 import draconic.script.resource;    // RegisterScriptResource + ScriptClass + ScriptClassFactory
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace editor = draconic::editor;
 namespace project = draconic::project;
 namespace scene = draconic::scene;

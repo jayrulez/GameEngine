@@ -5,7 +5,7 @@
 // generates per-glyph MSDF bitmaps, and packs them into a DFFontAtlas.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include "msdfgen_impl.h"
 
 #define STBTT_DEF extern
@@ -16,13 +16,13 @@ module;
 
 export module draconic.fonts.distancefield.baker:baker;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.fonts;
 import draconic.fonts.io;
 import draconic.fonts.distancefield;
 import draconic.fonts.ttf;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace
 {

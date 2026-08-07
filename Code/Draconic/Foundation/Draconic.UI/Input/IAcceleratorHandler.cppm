@@ -6,14 +6,14 @@
 // is a plain abstract base; a View exposes it via a virtual AsAcceleratorHandler() capability query.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:iaccelerator_handler;
 
-import draconic.core;
+import draconic.foundation;
 import :input_enums; // KeyCode, KeyModifiers
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

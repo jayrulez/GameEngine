@@ -2,12 +2,12 @@
 // detection, persistent-Guid <-> handle mapping, active/name state. These encode the
 // entity-lifecycle/validity behaviors pinned from the Sedulous test suite.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.scene;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::scene;
 
 TEST_CASE("entity create: unique valid handles + count")

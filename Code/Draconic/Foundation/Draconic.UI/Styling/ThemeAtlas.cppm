@@ -10,12 +10,12 @@
 // Span<const StateImageEntry>.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:theme_atlas;
 
-import draconic.core;  // Color, RefPtr, Span, StringView, Rectangle
+import draconic.foundation;  // Color, RefPtr, Span, StringView, Rectangle
 import draconic.image; // ImageAtlasBuilder, ImageData, NineSlice, RectI
 import :thickness;
 import :control_state;
@@ -24,7 +24,7 @@ import :atlas_image_drawable;
 import :atlas_nine_slice_drawable;
 import :state_list_drawable;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace image = draconic::image;
 
 export namespace draconic::ui

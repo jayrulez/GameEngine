@@ -5,7 +5,7 @@ add_library(Draconic.UI.Viewport STATIC)
 add_library(Draconic::UI.Viewport ALIAS Draconic.UI.Viewport)
 
 target_link_libraries(Draconic.UI.Viewport
-    PUBLIC Draconic::Core Draconic::RHI Draconic::Image Draconic::VG Draconic::VG.Renderer Draconic::UI Draconic::Shell)
+    PUBLIC Draconic::Foundation Draconic::RHI Draconic::Image Draconic::VG Draconic::VG.Renderer Draconic::UI Draconic::Shell)
 
 target_sources(Draconic.UI.Viewport
     PUBLIC

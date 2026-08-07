@@ -3,11 +3,11 @@
 
 export module draconic.rhi:queue;
 
-import draconic.core;
+import draconic.foundation;
 import :enums;
 import :resources;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi
 {

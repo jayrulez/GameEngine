@@ -14,12 +14,12 @@
 // reaches it through EditorContext's import listeners.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 export module draconic.editor.scene:model_prefab;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.resource;
 import draconic.materials;
@@ -32,7 +32,7 @@ import draconic.engine.physics;
 import draconic.modelimporter;
 import draconic.editor.core;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {

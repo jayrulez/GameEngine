@@ -5,25 +5,25 @@
 // purely through ITextEditHost - so this partition is View-independent (no cycle). Ported from
 // Sedulous.UI/src/Editing/TextEditingBehavior.bf.
 //
-// Port taxes: Beef `for (c in host.Text.DecodedChars)` codepoint iteration -> core::DecodeUtf8
-// over the host's UTF-8 Text(); `charStr.Append(char32)` -> core::AppendUtf8. The owned heap
+// Port taxes: Beef `for (c in host.Text.DecodedChars)` codepoint iteration -> foundation::DecodeUtf8
+// over the host's UTF-8 Text(); `charStr.Append(char32)` -> foundation::AppendUtf8. The owned heap
 // `InputFilter` becomes an Optional<InputFilter> (value type). char32.IsLetterOrDigit is approximated
 // (ASCII alnum plus any codepoint >= 0x80 treated as a word char); faithful enough for the ported
 // tests, noted for later. The host accessors GetMaxLength()/GetIsReadOnly() are the `Get`-prefixed
 // ITextEditHost members (see :itext_edit_host).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:text_editing_behavior;
 
-import draconic.core; // String, StringView, Array, Clamp, Min, Max, DecodeUtf8, AppendUtf8, Optional
+import draconic.foundation; // String, StringView, Array, Clamp, Min, Max, DecodeUtf8, AppendUtf8, Optional
 import :itext_edit_host;
 import :undo_stack;
 import :input_filter;
 import :input_enums; // KeyCode, KeyModifiers, HasFlag
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

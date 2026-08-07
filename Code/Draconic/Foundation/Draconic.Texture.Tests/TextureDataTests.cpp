@@ -1,11 +1,11 @@
 // Tests for draconic.texture: descriptor factories, format conversion, mip sizes.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.rhi;
 import draconic.image;
 import draconic.texture;
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::texture;
 namespace rhi = draconic::rhi;
 namespace image = draconic::image;

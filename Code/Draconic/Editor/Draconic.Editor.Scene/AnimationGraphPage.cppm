@@ -19,11 +19,11 @@
 // through the UI mutation queue and reselect by identity. Save writes the asset + recooks.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.editor.scene:animation_graph_page;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.rhi;
 import draconic.graphics;
@@ -47,7 +47,7 @@ import draconic.editor.core;
 import draconic.editor.app;
 import :camera;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {

@@ -1,11 +1,11 @@
 // AnimationPose view. Ported from Sedulous.Animation.Tests.AnimationPoseTests.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.animation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::animation;
 
 TEST_CASE("pose: constructor with bone transforms sets bone count")

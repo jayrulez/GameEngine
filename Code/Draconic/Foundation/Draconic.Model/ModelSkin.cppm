@@ -2,16 +2,16 @@
 /// Ported from Sedulous.Models/ModelSkin.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include <string>
 #include <vector>
 
 export module draconic.model:model_skin;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::model
 {

@@ -1,13 +1,13 @@
 // Ported from Sedulous.RenderGraph.Tests/DependencyTests.bf
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.rendergraph;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::rendergraph;
 namespace rhi = draconic::rhi;
 

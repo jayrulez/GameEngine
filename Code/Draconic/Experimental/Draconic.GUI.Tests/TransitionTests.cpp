@@ -1,22 +1,22 @@
 // Draconic GUI - CSS transition tests: parse the `transition` shorthand, and animate a
 // transitioned opacity change through the ActionManager (CSS -> Action-system integration).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.gui;
 
 using namespace draconic::gui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 namespace
 {
     template <typename T>
-    core::RefPtr<T> Make()
+    foundation::RefPtr<T> Make()
     {
-        return core::MakeRef<T>(core::DefaultAllocator());
+        return foundation::MakeRef<T>(foundation::DefaultAllocator());
     }
-    core::StringView SV(const char8_t* s) { return core::StringView(s); }
-    core::Duration Sec(double s) { return core::Duration::FromSeconds(s); }
+    foundation::StringView SV(const char8_t* s) { return foundation::StringView(s); }
+    foundation::Duration Sec(double s) { return foundation::Duration::FromSeconds(s); }
 
     ResolvedStyle Style(const char8_t* name, const char8_t* value)
     {
@@ -28,12 +28,12 @@ namespace
 
 TEST_CASE("transition: parse shorthand")
 {
-    core::Array<TransitionDefinition> ts = ParseTransitions(SV(u8"opacity 0.3s"));
+    foundation::Array<TransitionDefinition> ts = ParseTransitions(SV(u8"opacity 0.3s"));
     REQUIRE(ts.Size() == 1);
     CHECK(ts[0].Property == SV(u8"opacity"));
     CHECK(ts[0].Duration == doctest::Approx(0.3f));
 
-    core::Array<TransitionDefinition> multi =
+    foundation::Array<TransitionDefinition> multi =
         ParseTransitions(SV(u8"opacity 0.3s ease 0.1s, color 1s"));
     REQUIRE(multi.Size() == 2);
     CHECK(multi[0].Property == SV(u8"opacity"));

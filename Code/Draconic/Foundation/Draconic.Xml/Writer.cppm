@@ -5,15 +5,15 @@
 // complete). Ported from Sedulous.Xml/XmlWriter.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.xml:writer;
 
-import draconic.core;
+import draconic.foundation;
 import :nodes;
 import :escape;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::xml
 {

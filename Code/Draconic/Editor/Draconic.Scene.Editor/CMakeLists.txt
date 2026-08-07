@@ -4,7 +4,7 @@ add_library(Draconic.Scene.Editor STATIC)
 add_library(Draconic::Scene.Editor ALIAS Draconic.Scene.Editor)
 
 target_link_libraries(Draconic.Scene.Editor
-    PUBLIC Draconic::Core Draconic::Content Draconic::Scene Draconic::Scene.Resource Draconic::Policy
+    PUBLIC Draconic::Foundation Draconic::Content Draconic::Scene Draconic::Scene.Resource Draconic::Policy
            Draconic::Xml.Serialization)
 
 target_sources(Draconic.Scene.Editor

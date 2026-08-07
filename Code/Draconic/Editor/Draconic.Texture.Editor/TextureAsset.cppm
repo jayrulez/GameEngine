@@ -13,13 +13,13 @@
 // combines 6 face files; cooking a cubemap TextureResource through the builder is still deferred.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 #include <initializer_list>
 
 export module draconic.texture.editor;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.editor;
 import draconic.editor.core;
 import draconic.rhi;
@@ -29,7 +29,7 @@ import draconic.image;
 import draconic.image.io;
 import draconic.content;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::texture
 {
@@ -58,17 +58,17 @@ export namespace draconic::texture
         void Serialize(ISerializer& ar) override
         {
             draconic::editor::Asset::Serialize(ar); // fileName
-            draconic::core::Serialize(ar, "colorSpace", colorSpace);
-            draconic::core::Serialize(ar, "embeddedWidth", embeddedWidth);
-            draconic::core::Serialize(ar, "embeddedHeight", embeddedHeight);
-            draconic::core::Serialize(ar, "shape", shape);
-            draconic::core::Serialize(ar, "minFilter", minFilter);
-            draconic::core::Serialize(ar, "magFilter", magFilter);
-            draconic::core::Serialize(ar, "wrapU", wrapU);
-            draconic::core::Serialize(ar, "wrapV", wrapV);
-            draconic::core::Serialize(ar, "wrapW", wrapW);
-            draconic::core::Serialize(ar, "generateMipmaps", generateMipmaps);
-            draconic::core::Serialize(ar, "anisotropy", anisotropy);
+            draconic::foundation::Serialize(ar, "colorSpace", colorSpace);
+            draconic::foundation::Serialize(ar, "embeddedWidth", embeddedWidth);
+            draconic::foundation::Serialize(ar, "embeddedHeight", embeddedHeight);
+            draconic::foundation::Serialize(ar, "shape", shape);
+            draconic::foundation::Serialize(ar, "minFilter", minFilter);
+            draconic::foundation::Serialize(ar, "magFilter", magFilter);
+            draconic::foundation::Serialize(ar, "wrapU", wrapU);
+            draconic::foundation::Serialize(ar, "wrapV", wrapV);
+            draconic::foundation::Serialize(ar, "wrapW", wrapW);
+            draconic::foundation::Serialize(ar, "generateMipmaps", generateMipmaps);
+            draconic::foundation::Serialize(ar, "anisotropy", anisotropy);
         }
 
         // Presets (subset of Sedulous's).

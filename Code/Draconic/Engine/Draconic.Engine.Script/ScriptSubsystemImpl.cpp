@@ -5,18 +5,18 @@
 // emitted by either compiler).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 module draconic.engine.script;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.scene;
 import draconic.resource; // resource::Ref (SceneScriptSettings.script)
 import draconic.script;
 import draconic.script.resource;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::script
 {

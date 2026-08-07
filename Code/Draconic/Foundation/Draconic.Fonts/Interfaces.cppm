@@ -6,15 +6,15 @@
 // and delete them.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.fonts:interfaces;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.image;
 import :types;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::fonts
 {

@@ -5,17 +5,17 @@
 
 #include <doctest/doctest.h>
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.scene;
 import draconic.engine.render;
 import draconic.editor.core;
 import draconic.editor.scene;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::editor;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 namespace
 {
@@ -268,7 +268,7 @@ TEST_CASE("gizmo-controller: world drags convert into a rotated parent's space")
     const Guid parentId = edit.CreateEntity(u8"Parent");
     const Guid childId = edit.CreateEntity(u8"Child", parentId);
     {
-        core::Transform t;
+        foundation::Transform t;
         t.rotation = Quaternion::FromAxisAngle(Float3{0, 1, 0}, kPi * 0.5f);
         scene.SetLocalTransform(edit.Resolve(parentId), t);
     }
@@ -292,7 +292,7 @@ TEST_CASE("gizmo-controller: world drags convert into a rotated parent's space")
     CHECK(world.m[3][2] == doctest::Approx(0.0f).epsilon(0.05f));
 
     // ... which means the LOCAL delta was conjugated into the parent's frame (not x).
-    const core::Transform local = scene.GetLocalTransform(edit.Resolve(childId));
+    const foundation::Transform local = scene.GetLocalTransform(edit.Resolve(childId));
     CHECK(Abs(local.position.x) < 0.05f);
     CHECK(Abs(local.position.z) == doctest::Approx(1.0f).epsilon(0.05f));
 }
@@ -306,7 +306,7 @@ TEST_CASE("gizmo-controller: mode keys, space toggle, and scale forcing local")
 
     const Guid id = edit.CreateEntity(u8"Thing");
     {
-        core::Transform t;
+        foundation::Transform t;
         t.rotation = Quaternion::FromAxisAngle(Float3{0, 1, 0}, 0.7f);
         scene.SetLocalTransform(edit.Resolve(id), t);
     }
@@ -374,7 +374,7 @@ TEST_CASE("gizmo-controller: pose tracks selection even while the pointer is off
     const Guid a = edit.CreateEntity(u8"A");
     const Guid b = edit.CreateEntity(u8"B");
     {
-        core::Transform t;
+        foundation::Transform t;
         t.position = Float3{5.0f, 0.0f, 0.0f};
         scene.SetLocalTransform(edit.Resolve(b), t);
     }
@@ -440,7 +440,7 @@ TEST_CASE("gizmo-controller: a pointer-less update follows an entity the simulat
     CHECK(ctl.Gizmo().position.y == doctest::Approx(0.0f));
 
     // "Physics" moves the entity (runtime transform write, no command).
-    core::Transform t;
+    foundation::Transform t;
     t.position = Float3{0.0f, -3.0f, 2.0f};
     scene.SetLocalTransform(edit.Resolve(box), t);
 

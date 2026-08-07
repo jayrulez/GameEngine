@@ -3,7 +3,7 @@ add_library(Draconic.Input.Editor STATIC)
 add_library(Draconic::Input.Editor ALIAS Draconic.Input.Editor)
 
 target_link_libraries(Draconic.Input.Editor
-    PUBLIC Draconic::Core Draconic::Content Draconic::Editor Draconic::Input
+    PUBLIC Draconic::Foundation Draconic::Content Draconic::Editor Draconic::Input
            Draconic::Input.Resource Draconic::Policy)
 
 target_sources(Draconic.Input.Editor

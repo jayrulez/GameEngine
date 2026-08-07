@@ -3,15 +3,15 @@
 // layout inferred from the property list) against the Null RHI, and check instance
 // overrides + dirty notification.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.rhi.null;
 import draconic.shaders;
 import draconic.materials;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::materials;
 namespace rhi = draconic::rhi;
 namespace shaders = draconic::shaders;

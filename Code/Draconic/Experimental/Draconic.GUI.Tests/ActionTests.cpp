@@ -1,21 +1,21 @@
 // Draconic GUI - Action tests: Move/Fade/Scale/Delay/Runnable/Sequence driven through a
 // SceneNode's ActionManager. Derived from eepp scene/actions behavior.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.gui;
 
 using namespace draconic::gui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 namespace
 {
-    core::RefPtr<SceneNode> MakeScene()
+    foundation::RefPtr<SceneNode> MakeScene()
     {
-        return core::MakeRef<SceneNode>(core::DefaultAllocator());
+        return foundation::MakeRef<SceneNode>(foundation::DefaultAllocator());
     }
-    core::RefPtr<Node> MakeNode() { return core::MakeRef<Node>(core::DefaultAllocator()); }
-    core::Duration Sec(double s) { return core::Duration::FromSeconds(s); }
+    foundation::RefPtr<Node> MakeNode() { return foundation::MakeRef<Node>(foundation::DefaultAllocator()); }
+    foundation::Duration Sec(double s) { return foundation::Duration::FromSeconds(s); }
 }
 
 TEST_CASE("action: move interpolates position and completes")
@@ -24,8 +24,8 @@ TEST_CASE("action: move interpolates position and completes")
     auto node = MakeNode();
     root->AddChild(node.Get());
 
-    node->RunAction(core::MakeRef<MoveAction>(core::DefaultAllocator(), core::Float2{0.0f, 0.0f},
-                                              core::Float2{100.0f, 0.0f}, Sec(1.0)));
+    node->RunAction(foundation::MakeRef<MoveAction>(foundation::DefaultAllocator(), foundation::Float2{0.0f, 0.0f},
+                                              foundation::Float2{100.0f, 0.0f}, Sec(1.0)));
     CHECK(root->GetActionManager()->Count() == 1);
 
     root->Update(Sec(0.5));
@@ -42,7 +42,7 @@ TEST_CASE("action: fade interpolates alpha")
     auto node = MakeNode();
     root->AddChild(node.Get());
 
-    node->RunAction(core::MakeRef<FadeAction>(core::DefaultAllocator(), 1.0f, 0.0f, Sec(1.0)));
+    node->RunAction(foundation::MakeRef<FadeAction>(foundation::DefaultAllocator(), 1.0f, 0.0f, Sec(1.0)));
     root->Update(Sec(0.25));
     CHECK(node->GetAlpha() == doctest::Approx(0.75f));
     root->Update(Sec(0.75));
@@ -55,8 +55,8 @@ TEST_CASE("action: scale interpolates")
     auto node = MakeNode();
     root->AddChild(node.Get());
 
-    node->RunAction(core::MakeRef<ScaleAction>(core::DefaultAllocator(), core::Float2{1.0f, 1.0f},
-                                               core::Float2{3.0f, 3.0f}, Sec(1.0)));
+    node->RunAction(foundation::MakeRef<ScaleAction>(foundation::DefaultAllocator(), foundation::Float2{1.0f, 1.0f},
+                                               foundation::Float2{3.0f, 3.0f}, Sec(1.0)));
     root->Update(Sec(0.5));
     CHECK(node->GetScale().x == doctest::Approx(2.0f));
 }
@@ -69,7 +69,7 @@ TEST_CASE("action: runnable fires once after delay")
 
     int calls = 0;
     node->RunAction(
-        core::MakeRef<RunnableAction>(core::DefaultAllocator(), [&calls]() { ++calls; }, Sec(0.5)));
+        foundation::MakeRef<RunnableAction>(foundation::DefaultAllocator(), [&calls]() { ++calls; }, Sec(0.5)));
 
     root->Update(Sec(0.25));
     CHECK(calls == 0); // not yet
@@ -85,11 +85,11 @@ TEST_CASE("action: sequence runs children in order")
     auto node = MakeNode();
     root->AddChild(node.Get());
 
-    auto seq = core::MakeRef<SequenceAction>(core::DefaultAllocator());
-    seq->Add(core::MakeRef<MoveAction>(core::DefaultAllocator(), core::Float2{0.0f, 0.0f},
-                                       core::Float2{100.0f, 0.0f}, Sec(1.0)));
-    seq->Add(core::MakeRef<MoveAction>(core::DefaultAllocator(), core::Float2{100.0f, 0.0f},
-                                       core::Float2{100.0f, 50.0f}, Sec(1.0)));
+    auto seq = foundation::MakeRef<SequenceAction>(foundation::DefaultAllocator());
+    seq->Add(foundation::MakeRef<MoveAction>(foundation::DefaultAllocator(), foundation::Float2{0.0f, 0.0f},
+                                       foundation::Float2{100.0f, 0.0f}, Sec(1.0)));
+    seq->Add(foundation::MakeRef<MoveAction>(foundation::DefaultAllocator(), foundation::Float2{100.0f, 0.0f},
+                                       foundation::Float2{100.0f, 50.0f}, Sec(1.0)));
     node->RunAction(seq);
 
     root->Update(Sec(1.0)); // first move completes
@@ -104,8 +104,8 @@ TEST_CASE("action: sequence runs children in order")
 TEST_CASE("action: run on unattached node is a no-op")
 {
     auto node = MakeNode(); // no SceneNode root
-    node->RunAction(core::MakeRef<MoveAction>(core::DefaultAllocator(), core::Float2{0.0f, 0.0f},
-                                              core::Float2{100.0f, 0.0f}, Sec(1.0)));
+    node->RunAction(foundation::MakeRef<MoveAction>(foundation::DefaultAllocator(), foundation::Float2{0.0f, 0.0f},
+                                              foundation::Float2{100.0f, 0.0f}, Sec(1.0)));
     CHECK(node->GetActionManager() == nullptr);
     CHECK(node->GetPosition().x == doctest::Approx(0.0f)); // unchanged
 }

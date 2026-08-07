@@ -13,13 +13,13 @@
 // them across a socket. Every one has a round-trip test in the Script test suite.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.script:script_debug;
 
-import draconic.core;
+import draconic.foundation;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::script
 {
@@ -28,9 +28,9 @@ export namespace draconic::script
     /// One frame of a captured call stack.
     struct ScriptStackFrame
     {
-        core::String file;
-        core::String function;
-        core::i32 line = -1;
+        foundation::String file;
+        foundation::String function;
+        foundation::i32 line = -1;
     };
 
     /// One captured named value (local, argument, or object member). `value` is the
@@ -38,52 +38,52 @@ export namespace draconic::script
     /// members are fetched with IScriptDebugger::CaptureObject(objectRef).
     struct ScriptVariable
     {
-        core::String name;
-        core::String typeName;
-        core::String value;
-        core::u64 objectRef = 0; // 0 = a leaf scalar; non-zero = expandable object handle
+        foundation::String name;
+        foundation::String typeName;
+        foundation::String value;
+        foundation::u64 objectRef = 0; // 0 = a leaf scalar; non-zero = expandable object handle
     };
 
     /// A lazily-expandable object handle in a capture: its opaque reference id (stable for
     /// the duration of a break) plus a short display text.
     struct ScriptValueObject
     {
-        core::u64 ref = 0;
-        core::String text;
+        foundation::u64 ref = 0;
+        foundation::String text;
     };
 
     // Wire symmetry: one description, both directions. ADL finds these for Serialize(ar, x).
-    inline void Serialize(core::ISerializer& ar, ScriptStackFrame& frame)
+    inline void Serialize(foundation::ISerializer& ar, ScriptStackFrame& frame)
     {
         ar.BeginObject();
-        core::Serialize(ar, "file", frame.file);
-        core::Serialize(ar, "function", frame.function);
-        core::Serialize(ar, "line", frame.line);
+        foundation::Serialize(ar, "file", frame.file);
+        foundation::Serialize(ar, "function", frame.function);
+        foundation::Serialize(ar, "line", frame.line);
         ar.EndObject();
     }
 
-    inline void Serialize(core::ISerializer& ar, ScriptVariable& variable)
+    inline void Serialize(foundation::ISerializer& ar, ScriptVariable& variable)
     {
         ar.BeginObject();
-        core::Serialize(ar, "name", variable.name);
-        core::Serialize(ar, "typeName", variable.typeName);
-        core::Serialize(ar, "value", variable.value);
-        core::Serialize(ar, "objectRef", variable.objectRef);
+        foundation::Serialize(ar, "name", variable.name);
+        foundation::Serialize(ar, "typeName", variable.typeName);
+        foundation::Serialize(ar, "value", variable.value);
+        foundation::Serialize(ar, "objectRef", variable.objectRef);
         ar.EndObject();
     }
 
-    inline void Serialize(core::ISerializer& ar, ScriptValueObject& object)
+    inline void Serialize(foundation::ISerializer& ar, ScriptValueObject& object)
     {
         ar.BeginObject();
-        core::Serialize(ar, "ref", object.ref);
-        core::Serialize(ar, "text", object.text);
+        foundation::Serialize(ar, "ref", object.ref);
+        foundation::Serialize(ar, "text", object.text);
         ar.EndObject();
     }
 
     // ---- debugger ----------------------------------------------------------------
 
     /// How the debugger's execution state moved (delivered asynchronously to a listener).
-    enum class ScriptDebuggerState : core::u8
+    enum class ScriptDebuggerState : foundation::u8
     {
         Running,
         Breakpoint, // stopped at a breakpoint
@@ -108,8 +108,8 @@ export namespace draconic::script
     public:
         virtual ~IScriptDebugger() = default;
 
-        virtual void SetBreakpoint(core::StringView file, core::i32 line) = 0;
-        virtual void RemoveBreakpoint(core::StringView file, core::i32 line) = 0;
+        virtual void SetBreakpoint(foundation::StringView file, foundation::i32 line) = 0;
+        virtual void RemoveBreakpoint(foundation::StringView file, foundation::i32 line) = 0;
 
         virtual void Break() = 0;
         virtual void Continue() = 0;
@@ -117,11 +117,11 @@ export namespace draconic::script
         virtual void StepOver() = 0;
 
         /// Capture the call stack, innermost frame first.
-        [[nodiscard]] virtual core::Array<ScriptStackFrame> CaptureStackFrames() = 0;
+        [[nodiscard]] virtual foundation::Array<ScriptStackFrame> CaptureStackFrames() = 0;
         /// Capture the locals visible in the frame at `depth` (0 = innermost).
-        [[nodiscard]] virtual core::Array<ScriptVariable> CaptureLocals(core::u32 depth) = 0;
+        [[nodiscard]] virtual foundation::Array<ScriptVariable> CaptureLocals(foundation::u32 depth) = 0;
         /// Lazily expand the members of a captured object handle.
-        [[nodiscard]] virtual core::Array<ScriptVariable> CaptureObject(core::u64 objectRef) = 0;
+        [[nodiscard]] virtual foundation::Array<ScriptVariable> CaptureObject(foundation::u64 objectRef) = 0;
 
         virtual void SetListener(IScriptDebuggerListener* listener) = 0;
     };
@@ -131,11 +131,11 @@ export namespace draconic::script
     /// One measured script call, delivered to the profiler listener.
     struct ScriptCallMeasurement
     {
-        core::u32 scriptId = 0;
-        core::String function;
-        core::u32 callCount = 0;
-        core::f64 inclusiveSeconds = 0.0; // time in this call and everything it invoked
-        core::f64 exclusiveSeconds = 0.0; // time in this call alone
+        foundation::u32 scriptId = 0;
+        foundation::String function;
+        foundation::u32 callCount = 0;
+        foundation::f64 inclusiveSeconds = 0.0; // time in this call and everything it invoked
+        foundation::f64 exclusiveSeconds = 0.0; // time in this call alone
     };
 
     /// VM-level profiling sink. Non-owning.
@@ -163,12 +163,12 @@ export namespace draconic::script
     /// backend produces one yet (ScriptCapabilities::Bytecode is absent everywhere;
     /// IScriptManager::CompileToBlob returns an error and IScriptContext::LoadBlob returns
     /// NotSupported). The blob serializes so a cook can store it and the runtime load it.
-    class IScriptBlob : public core::Object
+    class IScriptBlob : public foundation::Object
     {
         // Object-derived only for RefPtr lifetime; it is never a registry type, so it
         // keeps Object's default type identity (no DRACONIC_OBJECT needed).
     public:
         /// Move the blob's opaque bytes in whichever direction `ar` runs.
-        virtual void Serialize(core::ISerializer& ar) = 0;
+        virtual void Serialize(foundation::ISerializer& ar) = 0;
     };
 }

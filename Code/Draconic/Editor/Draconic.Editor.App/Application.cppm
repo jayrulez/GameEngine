@@ -9,13 +9,13 @@
 
 module;
 #define _CRT_SECURE_NO_WARNINGS
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 #include <cstdlib>
 
 export module draconic.editor.app:application;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.shell;
 import draconic.graphics;
 import draconic.fonts;
@@ -45,7 +45,7 @@ import :project_manager_view;
 import :shell;
 import :ui_page;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor::app
 {

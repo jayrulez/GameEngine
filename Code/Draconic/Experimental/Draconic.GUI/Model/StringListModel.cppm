@@ -5,17 +5,17 @@
 // (SetItems/AddItem/Clear) notifies attached views via DidUpdate.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:string_list_model;
 
-import draconic.core; // Array, String, StringView, Move
+import draconic.foundation; // Array, String, StringView, Move
 import :variant;
 import :model_index;
 import :model;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -23,16 +23,16 @@ export namespace draconic::gui
     {
     public:
         StringListModel() = default;
-        explicit StringListModel(Array<core::String> items) : m_items(core::Move(items)) {}
+        explicit StringListModel(Array<foundation::String> items) : m_items(foundation::Move(items)) {}
 
-        void SetItems(Array<core::String> items)
+        void SetItems(Array<foundation::String> items)
         {
-            m_items = core::Move(items);
+            m_items = foundation::Move(items);
             DidUpdate();
         }
-        void AddItem(core::StringView item)
+        void AddItem(foundation::StringView item)
         {
-            m_items.PushBack(core::String(item));
+            m_items.PushBack(foundation::String(item));
             DidUpdate();
         }
         void Clear()
@@ -41,9 +41,9 @@ export namespace draconic::gui
             DidUpdate();
         }
 
-        [[nodiscard]] core::StringView ItemAt(usize row) const
+        [[nodiscard]] foundation::StringView ItemAt(usize row) const
         {
-            return row < m_items.Size() ? m_items[row].AsView() : core::StringView{};
+            return row < m_items.Size() ? m_items[row].AsView() : foundation::StringView{};
         }
 
         [[nodiscard]] usize RowCount(const ModelIndex& parent = {}) const override
@@ -62,6 +62,6 @@ export namespace draconic::gui
         }
 
     private:
-        Array<core::String> m_items;
+        Array<foundation::String> m_items;
     };
 }

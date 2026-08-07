@@ -7,18 +7,18 @@
 // cell and weighted columns are deferred. Re-runs on size change and child add/remove.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:grid_layout;
 
-import draconic.core; // Float2, Max
+import draconic.foundation; // Float2, Max
 import :rect;
 import :node;
 import :ui_widget;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -50,7 +50,7 @@ export namespace draconic::gui
         {
             const f32 total =
                 GetContentBounds().width - static_cast<f32>(m_columns - 1u) * m_hSpacing;
-            return core::Max(0.0f, total / static_cast<f32>(m_columns));
+            return foundation::Max(0.0f, total / static_cast<f32>(m_columns));
         }
 
         void PerformLayout()
@@ -68,8 +68,8 @@ export namespace draconic::gui
                     continue;
 
                 const f32 x = content.x + static_cast<f32>(col) * (cellW + m_hSpacing);
-                child->SetPosition(core::Float2{x, rowY});
-                rowMaxH = core::Max(rowMaxH, child->GetSize().y);
+                child->SetPosition(foundation::Float2{x, rowY});
+                rowMaxH = foundation::Max(rowMaxH, child->GetSize().y);
 
                 if (++col >= m_columns) // row complete -> advance
                 {

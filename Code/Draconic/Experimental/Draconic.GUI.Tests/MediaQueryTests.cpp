@@ -1,23 +1,23 @@
 // Draconic GUI - @media query tests: condition evaluation against a MediaContext, and
 // end-to-end parsing + media-gated resolution.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.gui;
 
 using namespace draconic::gui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 namespace
 {
     template <typename T>
-    core::RefPtr<T> Make()
+    foundation::RefPtr<T> Make()
     {
-        return core::MakeRef<T>(core::DefaultAllocator());
+        return foundation::MakeRef<T>(foundation::DefaultAllocator());
     }
-    core::StringView SV(const char8_t* s) { return core::StringView(s); }
+    foundation::StringView SV(const char8_t* s) { return foundation::StringView(s); }
 
-    core::RefPtr<UIWidget> Widget(const char8_t* tag)
+    foundation::RefPtr<UIWidget> Widget(const char8_t* tag)
     {
         auto w = Make<UIWidget>();
         w->SetTag(SV(tag));

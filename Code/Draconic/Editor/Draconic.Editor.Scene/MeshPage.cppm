@@ -16,11 +16,11 @@
 // like MaterialPage's preview-mesh pref) + a "create entity / save-as-prefab" action.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.editor.scene:mesh_page;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.rhi;
 import draconic.graphics;
@@ -42,7 +42,7 @@ import draconic.editor.core;
 import draconic.editor.app;
 import :camera; // EditorCamera (orbit/fly camera on the preview viewport)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {

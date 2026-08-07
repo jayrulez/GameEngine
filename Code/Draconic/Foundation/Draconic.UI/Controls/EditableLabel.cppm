@@ -7,17 +7,17 @@
 // In label mode: read-only, not focusable, draws plain (optionally ellipsized) text. In edit mode:
 // editable, focusable, draws EditText's text content + accent border. Port taxes: Beef `new SetText`
 // (hiding) -> a same-named method calling EditText::SetText; `newText.IsWhiteSpace`/Length==0 ->
-// core::Trimmed(newText).IsEmpty(); ValidateRename delegate -> Function<bool(StringView)>; Text.RawChars
+// foundation::Trimmed(newText).IsEmpty(); ValidateRename delegate -> Function<bool(StringView)>; Text.RawChars
 // ellipsis loop -> byte-tracked codepoint decode. EditText::DrawTextContent is protected for reuse here.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:editable_label;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import draconic.fonts;
 import :edit_text;
@@ -32,8 +32,8 @@ import :event_args;
 import :input_enums;
 import :enums;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace fonts = draconic::fonts;
 
 export namespace draconic::ui
@@ -47,7 +47,7 @@ export namespace draconic::ui
         Property<bool> Ellipsis{false};
         Property<Optional<f32>> FontSize;
         Property<String> FontFamily;
-        Property<Optional<core::Color>> TextColor;
+        Property<Optional<foundation::Color>> TextColor;
         Property<bool> DoubleClickToEdit{true};
         Property<bool> SlowClickToEdit{true};
 

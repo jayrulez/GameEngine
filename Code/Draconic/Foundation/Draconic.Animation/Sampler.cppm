@@ -4,15 +4,15 @@
 /// faithfully from Sedulous.Animation.AnimationSampler.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.animation:sampler;
 
-import draconic.core;
+import draconic.foundation;
 import :skeleton; // BoneTransform, Skeleton
 import :clip;     // AnimationTrack, AnimationClip, InterpolationMode
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::animation
 {

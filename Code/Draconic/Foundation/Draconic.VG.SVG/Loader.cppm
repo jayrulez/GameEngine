@@ -6,16 +6,16 @@
 // Sedulous.VG.SVG/SVGLoader.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.vg.svg:loader;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import :types;
 import :parsers;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::vg::svg
 {

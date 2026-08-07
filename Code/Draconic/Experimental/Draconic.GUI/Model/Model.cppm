@@ -7,16 +7,16 @@
 // follow-ups; this is the flat list/table foundation.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:model;
 
-import draconic.core; // Array, String, usize
+import draconic.foundation; // Array, String, usize
 import :variant;
 import :model_index;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -37,9 +37,9 @@ export namespace draconic::gui
         // ignore the parent (they only have a top level).
         [[nodiscard]] virtual usize RowCount(const ModelIndex& parent = {}) const = 0;
         [[nodiscard]] virtual usize ColumnCount() const = 0;
-        [[nodiscard]] virtual core::String ColumnName(usize /*column*/) const
+        [[nodiscard]] virtual foundation::String ColumnName(usize /*column*/) const
         {
-            return core::String{};
+            return foundation::String{};
         }
         [[nodiscard]] virtual Variant Data(const ModelIndex& index,
                                            ModelRole role = ModelRole::Display) const = 0;

@@ -4,17 +4,17 @@
 // line/column when space runs out. Ported from Sedulous.UI/src/Layout/FlowLayout.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:flow_layout;
 
-import draconic.core; // Max, kFloatMax
+import draconic.foundation; // Max, kFloatMax
 import :view;
 import :box_constraints;
 import :enums; // Orientation
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

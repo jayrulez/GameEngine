@@ -7,15 +7,15 @@
 // / comma lists, `not`, resolution units.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:media_query;
 
-import draconic.core; // StringView, Array, f32
+import draconic.foundation; // StringView, Array, f32
 import :css_values;   // ParseLength
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -48,7 +48,7 @@ export namespace draconic::gui
     {
     public:
         MediaQuery() = default;
-        explicit MediaQuery(core::StringView text) { Parse(text); }
+        explicit MediaQuery(foundation::StringView text) { Parse(text); }
 
         [[nodiscard]] bool IsEmpty() const noexcept { return m_features.Size() == 0; }
         [[nodiscard]] usize FeatureCount() const noexcept { return m_features.Size(); }
@@ -83,7 +83,7 @@ export namespace draconic::gui
             return true;
         }
 
-        void Parse(core::StringView text)
+        void Parse(foundation::StringView text)
         {
             // Scan parenthesized "(feature: value)" groups; `and` between them is implicit.
             usize i = 0;
@@ -104,7 +104,7 @@ export namespace draconic::gui
             }
         }
 
-        void ParseFeature(core::StringView group)
+        void ParseFeature(foundation::StringView group)
         {
             usize colon = group.Size();
             for (usize i = 0; i < group.Size(); ++i)
@@ -116,24 +116,24 @@ export namespace draconic::gui
             if (colon >= group.Size())
                 return;
 
-            const core::StringView name = core::Trim(group.SubStr(0, colon));
+            const foundation::StringView name = foundation::Trim(group.SubStr(0, colon));
             const Optional<f32> value =
-                ParseLength(core::Trim(group.SubStr(colon + 1, group.Size() - colon - 1)));
+                ParseLength(foundation::Trim(group.SubStr(colon + 1, group.Size() - colon - 1)));
             if (!value.HasValue())
                 return;
 
             MediaFeatureType type;
-            if (name == core::StringView(u8"min-width"))
+            if (name == foundation::StringView(u8"min-width"))
                 type = MediaFeatureType::MinWidth;
-            else if (name == core::StringView(u8"max-width"))
+            else if (name == foundation::StringView(u8"max-width"))
                 type = MediaFeatureType::MaxWidth;
-            else if (name == core::StringView(u8"min-height"))
+            else if (name == foundation::StringView(u8"min-height"))
                 type = MediaFeatureType::MinHeight;
-            else if (name == core::StringView(u8"max-height"))
+            else if (name == foundation::StringView(u8"max-height"))
                 type = MediaFeatureType::MaxHeight;
-            else if (name == core::StringView(u8"width"))
+            else if (name == foundation::StringView(u8"width"))
                 type = MediaFeatureType::Width;
-            else if (name == core::StringView(u8"height"))
+            else if (name == foundation::StringView(u8"height"))
                 type = MediaFeatureType::Height;
             else
                 return; // unknown feature ignored

@@ -2,12 +2,12 @@
 // type + member order, signature-or-name labels, member-name insert text, and the
 // case-insensitive filter (type match keeps the whole type; member match keeps its type row).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.script;
 import draconic.editor.script;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::editor;
 namespace script = draconic::script;
 

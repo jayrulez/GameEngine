@@ -25,11 +25,11 @@
 #include <cstdlib>
 #include <filesystem>
 
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.resource;
@@ -84,7 +84,7 @@ import draconic.vfs.pak; // dist mode: one Content.pak holds products + scenes +
 
 #include "PlayerApplication.h" // the shared runner (uses the imports above)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace runtime = draconic::runtime;
 namespace shell = draconic::shell;
 namespace graphics = draconic::graphics;

@@ -24,8 +24,8 @@
 #ifndef DRACONIC_RUNTIME_CLIENT_APPMAIN_H
 #define DRACONIC_RUNTIME_CLIENT_APPMAIN_H
 
-#include "Draconic.Core/Prelude.h" // DRACONIC_PLATFORM_WEB (picks the desktop vs browser entry body)
-#include "Draconic.Core/Log/Log.h"  // the build-stamp startup line
+#include "Draconic.Foundation/Prelude.h" // DRACONIC_PLATFORM_WEB (picks the desktop vs browser entry body)
+#include "Draconic.Foundation/Log/Log.h"  // the build-stamp startup line
 
 // The build identity compiled into Runtime.Client (GenerateBuildStamp.cmake): git short
 // hash + dirty flag + build minute. Logged first thing by DRACONIC_APP_MAIN so a running
@@ -44,9 +44,9 @@ extern "C" const char* DraconicBuildStamp();
 #define DRACONIC_APP_MAIN(AppType)                                                                 \
     int main()                                                                                     \
     {                                                                                              \
-        static ::draconic::core::ConsoleSink draconicConsoleSink;                                  \
-        ::draconic::core::GlobalLogger().AddSink(&draconicConsoleSink);                            \
-        ::draconic::core::GlobalLogger().SetMinLevel(::draconic::core::LogLevel::Info);            \
+        static ::draconic::foundation::ConsoleSink draconicConsoleSink;                                  \
+        ::draconic::foundation::GlobalLogger().AddSink(&draconicConsoleSink);                            \
+        ::draconic::foundation::GlobalLogger().SetMinLevel(::draconic::foundation::LogLevel::Info);            \
         DRACONIC_LOG_INFO(u8"Build", u8"Draconic build {}",                                        \
                           reinterpret_cast<const char8_t*>(DraconicBuildStamp()));                 \
         static ::draconic::shell::WebShell draconicShell;                                          \
@@ -68,8 +68,8 @@ extern "C" const char* DraconicBuildStamp();
 #define DRACONIC_APP_MAIN(AppType)                                                                 \
     int main(int argc, char** argv)                                                                \
     {                                                                                              \
-        static ::draconic::core::ConsoleSink draconicConsoleSink;                                  \
-        ::draconic::core::GlobalLogger().AddSink(&draconicConsoleSink);                            \
+        static ::draconic::foundation::ConsoleSink draconicConsoleSink;                                  \
+        ::draconic::foundation::GlobalLogger().AddSink(&draconicConsoleSink);                            \
         DRACONIC_LOG_INFO(u8"Build", u8"Draconic build {}",                                        \
                           reinterpret_cast<const char8_t*>(DraconicBuildStamp()));                 \
         auto shell = ::draconic::shell::CreateShell();                                             \

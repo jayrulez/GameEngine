@@ -4,10 +4,10 @@
 // (docs/design/particles.md): CPU sim on the existing extract->resolve->draw pipeline. GPU-compute sim,
 // trails, mesh particles, and the cooked resource/editor land in later phases.
 
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include "imgui.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import draconic.runtime;
 import draconic.runtime.client;
@@ -35,7 +35,7 @@ import draconic.resource;            // ResourceManager + Proxy
 
 #include "../Common/FlyCamera.h"
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace samples = draconic::samples;
 namespace rhi = draconic::rhi;
 namespace runtime = draconic::runtime;
@@ -87,47 +87,47 @@ namespace
             // Dim cool ambient so the (unlit) additive particles pop against the lit floor.
             if (auto* env = m_scene->GetSystem<render::EnvironmentSystem>())
             {
-                env->Environment().ambientColor = core::Color{0.10f, 0.12f, 0.18f, 1.0f};
+                env->Environment().ambientColor = foundation::Color{0.10f, 0.12f, 0.18f, 1.0f};
                 env->Environment().ambientIntensity = 0.4f;
             }
 
             // Camera: high + pulled back to frame the whole 4x4 showcase grid.
             m_camera = m_scene->CreateEntity(u8"camera");
-            m_scene->SetLocalPosition(m_camera, core::Float3{0.0f, 34.0f, 52.0f});
+            m_scene->SetLocalPosition(m_camera, foundation::Float3{0.0f, 34.0f, 52.0f});
             if (auto* cameras = m_scene->GetSystem<render::CameraComponentManager>())
             {
                 render::CameraComponent& cam = cameras->Add(m_camera);
-                cam.clearColor = core::Color{0.02f, 0.02f, 0.04f, 1.0f};
+                cam.clearColor = foundation::Color{0.02f, 0.02f, 0.04f, 1.0f};
             }
-            m_fly.position = core::Float3{0.0f, 34.0f, 52.0f};
+            m_fly.position = foundation::Float3{0.0f, 34.0f, 52.0f};
             m_fly.pitch = -0.55f;
 
             // A floor for spatial context.
             if (auto* meshes = m_scene->GetSystem<render::MeshComponentManager>())
             {
                 scene::EntityHandle floor = m_scene->CreateEntity(u8"floor");
-                m_scene->SetLocalPosition(floor, core::Float3{0.0f, 0.0f, 0.0f});
+                m_scene->SetLocalPosition(floor, foundation::Float3{0.0f, 0.0f, 0.0f});
                 render::MeshComponent& mc = meshes->Add(floor);
                 mc.mesh = geometry::Primitives::Plane(80.0f, 80.0f);
                 mc.SetMaterial(materials::CreatePBR(
-                    u8"floor", core::Float4{0.20f, 0.22f, 0.26f, 1.0f}, 0.0f, 0.8f));
+                    u8"floor", foundation::Float4{0.20f, 0.22f, 0.26f, 1.0f}, 0.0f, 0.8f));
             }
             if (auto* lights = m_scene->GetSystem<render::LightComponentManager>())
             {
                 scene::EntityHandle key = m_scene->CreateEntity(u8"key");
-                core::Transform kt = m_scene->GetLocalTransform(key);
+                foundation::Transform kt = m_scene->GetLocalTransform(key);
                 kt.rotation =
-                    core::Quaternion::FromAxisAngle(core::Float3{1.0f, 0.0f, 0.0f}, -0.9f);
+                    foundation::Quaternion::FromAxisAngle(foundation::Float3{1.0f, 0.0f, 0.0f}, -0.9f);
                 m_scene->SetLocalTransform(key, kt);
                 render::LightComponent& lc = lights->Add(key);
                 lc.type = render::LightType::Directional;
-                lc.color = core::Color{0.6f, 0.7f, 0.95f,
+                lc.color = foundation::Color{0.6f, 0.7f, 0.95f,
                                        1.0f}; // cool + dim so the warm ember point-lights read
                 lc.intensity = 1.0f;
             }
 
-            const core::Float3 obstacle = CellPos(6) + core::Float3{0.0f, 1.4f, 0.0f};
-            const core::f32 obRadius = 1.4f;
+            const foundation::Float3 obstacle = CellPos(6) + foundation::Float3{0.0f, 1.4f, 0.0f};
+            const foundation::f32 obRadius = 1.4f;
             BuildFountain(m_effect);
             BuildMeshShards(m_debris);   // cell 1: opaque material (set below)
             BuildMeshShards(m_meshGlow); // cell 2: additive material (set below) - identical sim
@@ -163,7 +163,7 @@ namespace
                 dc.SetEffect(m_debris);
                 dc.mesh = geometry::Primitives::Cube(1.0f);
                 dc.material = materials::CreatePBR(
-                    u8"shards-solid", core::Float4{0.35f, 0.6f, 0.9f, 1.0f}, 0.1f, 0.5f);
+                    u8"shards-solid", foundation::Float4{0.35f, 0.6f, 0.9f, 1.0f}, 0.1f, 0.5f);
                 dc.meshScale = 0.5f;
 
                 m_glowEmitter = m_scene->CreateEntity(u8"shards-glow");
@@ -175,7 +175,7 @@ namespace
                 {
                     // Additive PBR material -> the extractor routes these to the Transparent pass.
                     auto glow = materials::CreatePBR(
-                        u8"shards-glow", core::Float4{0.4f, 0.8f, 1.0f, 1.0f}, 0.0f, 0.4f);
+                        u8"shards-glow", foundation::Float4{0.4f, 0.8f, 1.0f, 1.0f}, 0.0f, 0.4f);
                     glow->pipeline.blendMode = materials::BlendMode::Additive;
                     glow->pipeline.depthMode = materials::DepthMode::ReadOnly;
                     gc.material = glow;
@@ -193,7 +193,7 @@ namespace
                 // Cell 4: ground haze - the soft-particle A/B showcase.
                 m_hazeEmitter = m_scene->CreateEntity(u8"haze");
                 m_scene->SetLocalPosition(m_hazeEmitter,
-                                          CellPos(4) + core::Float3{0.0f, 0.4f, 0.0f});
+                                          CellPos(4) + foundation::Float3{0.0f, 0.4f, 0.0f});
                 pmgr->Add(m_hazeEmitter).SetEffect(m_haze);
 
                 // Cell 5: trail sparks (camera-facing ribbons).
@@ -204,7 +204,7 @@ namespace
                 // Cell 6: collision rain bouncing off a rendered sphere obstacle + the world ground.
                 m_collideEmitter = m_scene->CreateEntity(u8"rain");
                 m_scene->SetLocalPosition(m_collideEmitter,
-                                          CellPos(6) + core::Float3{0.0f, 6.0f, 0.0f});
+                                          CellPos(6) + foundation::Float3{0.0f, 6.0f, 0.0f});
                 pmgr->Add(m_collideEmitter).SetEffect(m_collide);
                 if (auto* meshes = m_scene->GetSystem<render::MeshComponentManager>())
                 {
@@ -213,7 +213,7 @@ namespace
                     render::MeshComponent& omc = meshes->Add(ob);
                     omc.mesh = geometry::Primitives::Sphere(obRadius);
                     omc.SetMaterial(materials::CreatePBR(
-                        u8"obstacle", core::Float4{0.7f, 0.7f, 0.72f, 1.0f}, 0.1f, 0.4f));
+                        u8"obstacle", foundation::Float4{0.7f, 0.7f, 0.72f, 1.0f}, 0.1f, 0.4f));
                 }
 
                 // Cell 7: local-space puff - orbits its emitter (animated in OnUpdate); cloud follows rigidly.
@@ -307,7 +307,7 @@ namespace
             runtime::DefaultApplication::OnShutdown(host);
         }
 
-        void OnUpdate(runtime::IApplicationHost& host, core::f32 deltaTime) override
+        void OnUpdate(runtime::IApplicationHost& host, foundation::f32 deltaTime) override
         {
             runtime::DefaultApplication::OnUpdate(host, deltaTime);
             m_frameSmooth = m_frameSmooth * 0.9f + deltaTime * 0.1f;
@@ -320,37 +320,37 @@ namespace
             m_fly.Update(host, deltaTime);
             if (m_scene != nullptr)
             {
-                core::Transform camT = m_scene->GetLocalTransform(m_camera);
+                foundation::Transform camT = m_scene->GetLocalTransform(m_camera);
                 camT.position = m_fly.position;
                 camT.rotation = m_fly.Rotation();
                 m_scene->SetLocalTransform(m_camera, camT);
 
                 // Orbit the local-space emitter so its (Local) cloud visibly rides along as a rigid body.
                 m_orbitTime += deltaTime;
-                const core::Float3 c = CellPos(7);
+                const foundation::Float3 c = CellPos(7);
                 m_scene->SetLocalPosition(
-                    m_localEmitter, c + core::Float3{2.5f * core::Cos(m_orbitTime * 1.5f), 1.5f,
-                                                     2.5f * core::Sin(m_orbitTime * 1.5f)});
+                    m_localEmitter, c + foundation::Float3{2.5f * foundation::Cos(m_orbitTime * 1.5f), 1.5f,
+                                                     2.5f * foundation::Sin(m_orbitTime * 1.5f)});
 
                 // A floor label under each cell (debug-draw 3D text), so every system is identified.
                 if (auto* rs = host.Ctx().GetSubsystem<render::RenderSubsystem>())
                 {
-                    static const core::StringView kNames[16] = {
+                    static const foundation::StringView kNames[16] = {
                         u8"fountain", u8"mesh solid", u8"mesh glow",    u8"embers",
                         u8"haze",     u8"trail",      u8"collision",    u8"orbit (local)",
                         u8"smoke",    u8"fire",       u8"campfire",     u8"fireworks",
                         u8"tornado",  u8"explosion",  u8"magic circle", u8"fireflies"};
                     auto& dd = rs->DebugScene(*m_scene);
-                    for (core::i32 i = 0; i < 16; ++i)
+                    for (foundation::i32 i = 0; i < 16; ++i)
                     {
-                        dd.DrawText3D(CellPos(i) + core::Float3{0.0f, 0.15f, kCellSpacing * 0.42f},
-                                      kNames[i], core::Color{0.85f, 0.9f, 1.0f, 1.0f});
+                        dd.DrawText3D(CellPos(i) + foundation::Float3{0.0f, 0.15f, kCellSpacing * 0.42f},
+                                      kNames[i], foundation::Color{0.85f, 0.9f, 1.0f, 1.0f});
                     }
                     if (m_cookedProxy)
                     {
-                        dd.DrawText3D(core::Float3{0.0f, 0.3f, 37.0f},
+                        dd.DrawText3D(foundation::Float3{0.0f, 0.3f, 37.0f},
                                       u8"COOKED: asset -> bake -> load",
-                                      core::Color{0.4f, 1.0f, 0.9f, 1.0f});
+                                      foundation::Color{0.4f, 1.0f, 0.9f, 1.0f});
                     }
                 }
             }
@@ -359,20 +359,20 @@ namespace
     private:
         // 4x4 showcase grid, centered on the origin. Cells are indexed row-major (0..15); each holds one
         // particle system. Returns the cell's floor-level center (callers add any per-system y offset).
-        static constexpr core::f32 kCellSpacing = 15.0f;
-        static constexpr core::i32 kGridCols = 4;
-        static core::Float3 CellPos(core::i32 index)
+        static constexpr foundation::f32 kCellSpacing = 15.0f;
+        static constexpr foundation::i32 kGridCols = 4;
+        static foundation::Float3 CellPos(foundation::i32 index)
         {
-            const core::f32 half = (kGridCols - 1) * 0.5f;
-            const core::f32 col = static_cast<core::f32>(index % kGridCols);
-            const core::f32 row = static_cast<core::f32>(index / kGridCols);
-            return core::Float3{(col - half) * kCellSpacing, 0.2f, (row - half) * kCellSpacing};
+            const foundation::f32 half = (kGridCols - 1) * 0.5f;
+            const foundation::f32 col = static_cast<foundation::f32>(index % kGridCols);
+            const foundation::f32 row = static_cast<foundation::f32>(index / kGridCols);
+            return foundation::Float3{(col - half) * kCellSpacing, 0.2f, (row - half) * kCellSpacing};
         }
 
         static void BuildFountain(particles::ParticleEffect& effect)
         {
             particles::ParticleSystem& sys = effect.AddSystem(30000);
-            sys.name = core::String{u8"fountain"};
+            sys.name = foundation::String{u8"fountain"};
             sys.blendMode = particles::ParticleBlendMode::Additive;
             sys.renderMode = particles::ParticleRenderMode::Billboard;
             sys.emitter.mode = particles::EmissionMode::Continuous;
@@ -385,24 +385,24 @@ namespace
             {
                 particles::VelocityInitializer& v =
                     sys.AddInitializer<particles::VelocityInitializer>();
-                v.baseVelocity = core::Float3{0.0f, 13.0f, 0.0f};
-                v.randomness = core::Float3{3.0f, 2.0f, 3.0f};
+                v.baseVelocity = foundation::Float3{0.0f, 13.0f, 0.0f};
+                v.randomness = foundation::Float3{3.0f, 2.0f, 3.0f};
                 v.shape = particles::EmissionShape::Cone(0.4f, 0.35f);
                 v.shapeDirectionSpeed = 4.0f;
             }
             sys.AddInitializer<particles::SizeInitializer>().size =
-                particles::RangeFloat2::Constant(core::Float2{0.35f, 0.35f});
+                particles::RangeFloat2::Constant(foundation::Float2{0.35f, 0.35f});
             sys.AddInitializer<particles::ColorInitializer>().color = particles::RangeColor(
-                core::Float4{1.0f, 0.55f, 0.15f, 1.0f}, core::Float4{1.0f, 0.85f, 0.4f, 1.0f});
+                foundation::Float4{1.0f, 0.55f, 0.15f, 1.0f}, foundation::Float4{1.0f, 0.85f, 0.4f, 1.0f});
 
             sys.AddBehavior<particles::GravityBehavior>().multiplier = 1.4f;
             sys.AddBehavior<particles::DragBehavior>().drag = 0.25f;
             sys.AddBehavior<particles::ColorOverLifetimeBehavior>().curve =
-                particles::ParticleCurveColor::FadeAlpha(core::Float4{1.0f, 0.5f, 0.12f, 1.0f},
+                particles::ParticleCurveColor::FadeAlpha(foundation::Float4{1.0f, 0.5f, 0.12f, 1.0f},
                                                          0.35f);
             sys.AddBehavior<particles::SizeOverLifetimeBehavior>().curve =
-                particles::ParticleCurveFloat2::Linear(core::Float2{0.4f, 0.4f},
-                                                       core::Float2{0.04f, 0.04f});
+                particles::ParticleCurveFloat2::Linear(foundation::Float2{0.4f, 0.4f},
+                                                       foundation::Float2{0.04f, 0.04f});
         }
 
         // Light-mode particles: slow warm embers drifting up; each contributes a point light so they
@@ -411,7 +411,7 @@ namespace
         {
             particles::ParticleSystem& sys =
                 effect.AddSystem(400); // few: sparse enough not to saturate clusters
-            sys.name = core::String{u8"embers"};
+            sys.name = foundation::String{u8"embers"};
             sys.renderMode = particles::ParticleRenderMode::Light;
             sys.blendMode = particles::ParticleBlendMode::Additive;
             sys.emitter.mode = particles::EmissionMode::Continuous;
@@ -419,19 +419,19 @@ namespace
                 12.0f; // ~45 alive: all fit under the cap (stable, no popping) + light cluster load
 
             sys.AddInitializer<particles::PositionInitializer>().shape =
-                particles::EmissionShape::Box(core::Float3{4.0f, 0.1f, 4.0f});
+                particles::EmissionShape::Box(foundation::Float3{4.0f, 0.1f, 4.0f});
             sys.AddInitializer<particles::LifetimeInitializer>().lifetime =
                 particles::RangeFloat(2.5f, 4.5f);
             {
                 particles::VelocityInitializer& v =
                     sys.AddInitializer<particles::VelocityInitializer>();
-                v.baseVelocity = core::Float3{0.0f, 1.4f, 0.0f};
-                v.randomness = core::Float3{0.5f, 0.3f, 0.5f};
+                v.baseVelocity = foundation::Float3{0.0f, 1.4f, 0.0f};
+                v.randomness = foundation::Float3{0.5f, 0.3f, 0.5f};
             }
             sys.AddInitializer<particles::SizeInitializer>().size =
-                particles::RangeFloat2::Constant(core::Float2{0.6f, 0.6f});
+                particles::RangeFloat2::Constant(foundation::Float2{0.6f, 0.6f});
             sys.AddInitializer<particles::ColorInitializer>().color = particles::RangeColor(
-                core::Float4{1.0f, 0.5f, 0.15f, 1.0f}, core::Float4{1.0f, 0.75f, 0.3f, 1.0f});
+                foundation::Float4{1.0f, 0.5f, 0.15f, 1.0f}, foundation::Float4{1.0f, 0.75f, 0.3f, 1.0f});
             sys.AddBehavior<particles::DragBehavior>().drag = 0.5f;
             sys.AddBehavior<particles::AlphaOverLifetimeBehavior>().curve =
                 particles::ParticleCurveFloat::FadeOut(1.0f, 0.55f); // bright, then fade
@@ -442,7 +442,7 @@ namespace
         static void BuildHaze(particles::ParticleEffect& effect)
         {
             particles::ParticleSystem& sys = effect.AddSystem(300);
-            sys.name = core::String{u8"haze"};
+            sys.name = foundation::String{u8"haze"};
             sys.renderMode = particles::ParticleRenderMode::Billboard;
             sys.blendMode = particles::ParticleBlendMode::Additive;
             sys.softDistance = 2.0f; // wide fade band, obvious in the A/B
@@ -450,16 +450,16 @@ namespace
             sys.emitter.spawnRate = 14.0f;
 
             sys.AddInitializer<particles::PositionInitializer>().shape =
-                particles::EmissionShape::Box(core::Float3{3.5f, 0.05f, 3.5f});
+                particles::EmissionShape::Box(foundation::Float3{3.5f, 0.05f, 3.5f});
             sys.AddInitializer<particles::LifetimeInitializer>().lifetime =
                 particles::RangeFloat(4.0f, 6.0f);
             sys.AddInitializer<particles::VelocityInitializer>().baseVelocity =
-                core::Float3{0.0f, 0.25f, 0.0f};
+                foundation::Float3{0.0f, 0.25f, 0.0f};
             sys.AddInitializer<particles::SizeInitializer>().size =
                 particles::RangeFloat2::Constant(
-                    core::Float2{2.0f, 2.0f}); // straddles the floor for the A/B
+                    foundation::Float2{2.0f, 2.0f}); // straddles the floor for the A/B
             sys.AddInitializer<particles::ColorInitializer>().color =
-                particles::RangeColor::Constant(core::Float4{0.35f, 0.28f, 0.45f, 1.0f});
+                particles::RangeColor::Constant(foundation::Float4{0.35f, 0.28f, 0.45f, 1.0f});
             sys.AddBehavior<particles::DragBehavior>().drag = 0.6f;
             sys.AddBehavior<particles::AlphaOverLifetimeBehavior>().curve =
                 particles::ParticleCurveFloat::FadeOut(1.0f, 0.4f);
@@ -469,7 +469,7 @@ namespace
         static void BuildTrail(particles::ParticleEffect& effect)
         {
             particles::ParticleSystem& sys = effect.AddSystem(2000);
-            sys.name = core::String{u8"sparks"};
+            sys.name = foundation::String{u8"sparks"};
             sys.renderMode = particles::ParticleRenderMode::Trail;
             sys.blendMode = particles::ParticleBlendMode::Additive;
             sys.emitter.mode = particles::EmissionMode::Continuous;
@@ -482,21 +482,21 @@ namespace
             {
                 particles::VelocityInitializer& v =
                     sys.AddInitializer<particles::VelocityInitializer>();
-                v.baseVelocity = core::Float3{0.0f, 8.0f, 0.0f};
+                v.baseVelocity = foundation::Float3{0.0f, 8.0f, 0.0f};
                 v.randomness =
-                    core::Float3{6.0f, 3.0f, 6.0f}; // spray sideways so the ribbons curve
+                    foundation::Float3{6.0f, 3.0f, 6.0f}; // spray sideways so the ribbons curve
                 v.shape = particles::EmissionShape::Cone(0.5f, 0.2f);
                 v.shapeDirectionSpeed = 3.0f;
             }
             sys.AddInitializer<particles::SizeInitializer>().size =
-                particles::RangeFloat2::Constant(core::Float2{0.2f, 0.2f});
+                particles::RangeFloat2::Constant(foundation::Float2{0.2f, 0.2f});
             sys.AddInitializer<particles::ColorInitializer>().color = particles::RangeColor(
-                core::Float4{0.2f, 0.7f, 1.0f, 1.0f}, core::Float4{0.9f, 0.4f, 1.0f, 1.0f});
+                foundation::Float4{0.2f, 0.7f, 1.0f, 1.0f}, foundation::Float4{0.9f, 0.4f, 1.0f, 1.0f});
 
             sys.AddBehavior<particles::GravityBehavior>().multiplier =
                 1.5f; // arc back down -> curved ribbons
             sys.AddBehavior<particles::ColorOverLifetimeBehavior>().curve =
-                particles::ParticleCurveColor::FadeAlpha(core::Float4{0.5f, 0.6f, 1.0f, 1.0f},
+                particles::ParticleCurveColor::FadeAlpha(foundation::Float4{0.5f, 0.6f, 1.0f, 1.0f},
                                                          0.3f);
 
             sys.trail.enabled = true;
@@ -512,31 +512,31 @@ namespace
         // Collision showcase: rain that spawns high and bounces off both the world ground plane (y=0) and a
         // rendered sphere obstacle at `obstacle` (radius `obRadius`). World-space, so the collider centre
         // is a world position matching the drawn sphere.
-        static void BuildCollision(particles::ParticleEffect& effect, core::Float3 obstacle,
-                                   core::f32 obRadius)
+        static void BuildCollision(particles::ParticleEffect& effect, foundation::Float3 obstacle,
+                                   foundation::f32 obRadius)
         {
             particles::ParticleSystem& sys = effect.AddSystem(4000);
-            sys.name = core::String{u8"rain"};
+            sys.name = foundation::String{u8"rain"};
             sys.renderMode = particles::ParticleRenderMode::Billboard;
             sys.blendMode = particles::ParticleBlendMode::Alpha;
             sys.emitter.mode = particles::EmissionMode::Continuous;
             sys.emitter.spawnRate = 500.0f;
 
             sys.AddInitializer<particles::PositionInitializer>().shape =
-                particles::EmissionShape::Box(core::Float3{3.0f, 0.1f, 3.0f});
+                particles::EmissionShape::Box(foundation::Float3{3.0f, 0.1f, 3.0f});
             sys.AddInitializer<particles::LifetimeInitializer>().lifetime =
                 particles::RangeFloat(3.0f, 4.0f);
             sys.AddInitializer<particles::VelocityInitializer>().baseVelocity =
-                core::Float3{0.0f, -1.0f, 0.0f};
+                foundation::Float3{0.0f, -1.0f, 0.0f};
             sys.AddInitializer<particles::SizeInitializer>().size =
-                particles::RangeFloat2::Constant(core::Float2{0.12f, 0.12f});
+                particles::RangeFloat2::Constant(foundation::Float2{0.12f, 0.12f});
             sys.AddInitializer<particles::ColorInitializer>().color =
-                particles::RangeColor::Constant(core::Float4{0.5f, 0.75f, 1.0f, 0.9f});
+                particles::RangeColor::Constant(foundation::Float4{0.5f, 0.75f, 1.0f, 0.9f});
             sys.AddBehavior<particles::GravityBehavior>().multiplier = 1.0f;
             {
                 particles::CollisionBehavior& col = sys.AddBehavior<particles::CollisionBehavior>();
                 col.planes[0] =
-                    particles::CollisionPlane{core::Float3{0.0f, 1.0f, 0.0f}, 0.0f}; // world ground
+                    particles::CollisionPlane{foundation::Float3{0.0f, 1.0f, 0.0f}, 0.0f}; // world ground
                 col.planeCount = 1;
                 col.spheres[0] =
                     particles::CollisionSphere{obstacle, obRadius}; // the drawn obstacle
@@ -549,9 +549,9 @@ namespace
         }
 
         // A single fire system (billboard additive): fast rising, shrinking, colour-graded white->red.
-        static void ConfigureFire(particles::ParticleSystem& sys, core::f32 scale)
+        static void ConfigureFire(particles::ParticleSystem& sys, foundation::f32 scale)
         {
-            sys.name = core::String{u8"fire"};
+            sys.name = foundation::String{u8"fire"};
             sys.renderMode = particles::ParticleRenderMode::Billboard;
             sys.blendMode = particles::ParticleBlendMode::Additive;
             sys.emitter.mode = particles::EmissionMode::Continuous;
@@ -564,31 +564,31 @@ namespace
             {
                 particles::VelocityInitializer& v =
                     sys.AddInitializer<particles::VelocityInitializer>();
-                v.baseVelocity = core::Float3{0.0f, 3.2f * scale, 0.0f};
-                v.randomness = core::Float3{0.7f, 0.6f, 0.7f};
+                v.baseVelocity = foundation::Float3{0.0f, 3.2f * scale, 0.0f};
+                v.randomness = foundation::Float3{0.7f, 0.6f, 0.7f};
             }
             sys.AddInitializer<particles::SizeInitializer>().size =
-                particles::RangeFloat2::Constant(core::Float2{1.0f * scale, 1.0f * scale});
+                particles::RangeFloat2::Constant(foundation::Float2{1.0f * scale, 1.0f * scale});
             sys.AddInitializer<particles::ColorInitializer>().color =
-                particles::RangeColor::Constant(core::Float4{1.0f, 0.9f, 0.5f, 1.0f});
+                particles::RangeColor::Constant(foundation::Float4{1.0f, 0.9f, 0.5f, 1.0f});
             sys.AddBehavior<particles::TurbulenceBehavior>().strength = 1.5f; // flicker/curl
             sys.AddBehavior<particles::SizeOverLifetimeBehavior>().curve =
-                particles::ParticleCurveFloat2::Linear(core::Float2{1.0f * scale, 1.0f * scale},
-                                                       core::Float2{0.15f * scale, 0.15f * scale});
+                particles::ParticleCurveFloat2::Linear(foundation::Float2{1.0f * scale, 1.0f * scale},
+                                                       foundation::Float2{0.15f * scale, 0.15f * scale});
             // Colour ramp: white-hot -> yellow -> orange -> red, fading out at the tip.
             particles::ParticleCurveColor ramp;
-            ramp.AddKey(0.0f, core::Float4{1.0f, 0.95f, 0.7f, 1.0f});
-            ramp.AddKey(0.35f, core::Float4{1.0f, 0.6f, 0.2f, 0.9f});
-            ramp.AddKey(0.7f, core::Float4{0.9f, 0.2f, 0.05f, 0.5f});
-            ramp.AddKey(1.0f, core::Float4{0.4f, 0.05f, 0.02f, 0.0f});
+            ramp.AddKey(0.0f, foundation::Float4{1.0f, 0.95f, 0.7f, 1.0f});
+            ramp.AddKey(0.35f, foundation::Float4{1.0f, 0.6f, 0.2f, 0.9f});
+            ramp.AddKey(0.7f, foundation::Float4{0.9f, 0.2f, 0.05f, 0.5f});
+            ramp.AddKey(1.0f, foundation::Float4{0.4f, 0.05f, 0.02f, 0.0f});
             sys.AddBehavior<particles::ColorOverLifetimeBehavior>().curve = ramp;
         }
 
         // A single smoke system (billboard alpha): slow rise, expanding, drifting, fading. Soft particles
         // are OFF - the soft-depth fade against the floor behind it would zero the alpha of a rising column.
-        static void ConfigureSmoke(particles::ParticleSystem& sys, core::f32 scale, core::f32 rise)
+        static void ConfigureSmoke(particles::ParticleSystem& sys, foundation::f32 scale, foundation::f32 rise)
         {
-            sys.name = core::String{u8"smoke"};
+            sys.name = foundation::String{u8"smoke"};
             sys.renderMode = particles::ParticleRenderMode::Billboard;
             sys.blendMode = particles::ParticleBlendMode::Alpha;
             sys.softParticles = false;
@@ -600,19 +600,19 @@ namespace
             sys.AddInitializer<particles::LifetimeInitializer>().lifetime =
                 particles::RangeFloat(3.0f, 5.0f);
             sys.AddInitializer<particles::VelocityInitializer>().baseVelocity =
-                core::Float3{0.0f, rise, 0.0f};
+                foundation::Float3{0.0f, rise, 0.0f};
             sys.AddInitializer<particles::SizeInitializer>().size =
-                particles::RangeFloat2::Constant(core::Float2{1.0f * scale, 1.0f * scale});
+                particles::RangeFloat2::Constant(foundation::Float2{1.0f * scale, 1.0f * scale});
             // Near-white ambient-lit grey: light enough to read against the (grey) floor it starts over AND
             // the dark sky it rises into. Grey-on-grey-floor was the reason earlier smoke was invisible.
             sys.AddInitializer<particles::ColorInitializer>().color =
-                particles::RangeColor::Constant(core::Float4{0.78f, 0.78f, 0.82f, 1.0f});
+                particles::RangeColor::Constant(foundation::Float4{0.78f, 0.78f, 0.82f, 1.0f});
             sys.AddBehavior<particles::TurbulenceBehavior>().strength = 0.8f; // lazy drift
             sys.AddBehavior<particles::DragBehavior>().drag =
                 0.12f; // light drag -> the column keeps climbing off the floor
             sys.AddBehavior<particles::SizeOverLifetimeBehavior>().curve =
-                particles::ParticleCurveFloat2::Linear(core::Float2{1.0f * scale, 1.0f * scale},
-                                                       core::Float2{3.5f * scale, 3.5f * scale});
+                particles::ParticleCurveFloat2::Linear(foundation::Float2{1.0f * scale, 1.0f * scale},
+                                                       foundation::Float2{3.5f * scale, 3.5f * scale});
             // Fade in from nothing, hold fairly opaque, fade out (billows appear then dissipate).
             particles::ParticleCurveFloat a;
             a.AddKey(0.0f, 0.0f);
@@ -648,7 +648,7 @@ namespace
         {
             // System 0: rockets - launch up, short life, additive with a trail.
             particles::ParticleSystem& rocket = effect.AddSystem(64);
-            rocket.name = core::String{u8"rocket"};
+            rocket.name = foundation::String{u8"rocket"};
             rocket.renderMode = particles::ParticleRenderMode::Trail;
             rocket.blendMode = particles::ParticleBlendMode::Additive;
             rocket.emitter.mode = particles::EmissionMode::Continuous;
@@ -660,15 +660,15 @@ namespace
             {
                 particles::VelocityInitializer& v =
                     rocket.AddInitializer<particles::VelocityInitializer>();
-                v.baseVelocity = core::Float3{0.0f, 13.0f, 0.0f};
-                v.randomness = core::Float3{1.5f, 1.5f, 1.5f};
+                v.baseVelocity = foundation::Float3{0.0f, 13.0f, 0.0f};
+                v.randomness = foundation::Float3{1.5f, 1.5f, 1.5f};
             }
             rocket.AddInitializer<particles::SizeInitializer>().size =
-                particles::RangeFloat2::Constant(core::Float2{0.25f, 0.25f});
+                particles::RangeFloat2::Constant(foundation::Float2{0.25f, 0.25f});
             // Vivid warm hues (gold -> hot magenta) so the bursts pop against the dark sky - blues would
             // wash out. Sparks inherit this colour via the sub-emitter link.
             rocket.AddInitializer<particles::ColorInitializer>().color = particles::RangeColor(
-                core::Float4{1.0f, 0.85f, 0.2f, 1.0f}, core::Float4{1.0f, 0.25f, 0.7f, 1.0f});
+                foundation::Float4{1.0f, 0.85f, 0.2f, 1.0f}, foundation::Float4{1.0f, 0.25f, 0.7f, 1.0f});
             rocket.AddBehavior<particles::GravityBehavior>().multiplier =
                 1.0f; // arc to an apex, then die
             rocket.trail.enabled = true;
@@ -680,7 +680,7 @@ namespace
 
             // System 1: sparks - spawned by rocket deaths (no self-emission); explode outward, gravity, fade.
             particles::ParticleSystem& sparks = effect.AddSystem(6000);
-            sparks.name = core::String{u8"sparks"};
+            sparks.name = foundation::String{u8"sparks"};
             sparks.renderMode = particles::ParticleRenderMode::Billboard;
             sparks.blendMode = particles::ParticleBlendMode::Additive;
             sparks.emitter.isEmitting = false;
@@ -696,12 +696,12 @@ namespace
                     sparks.AddInitializer<particles::VelocityInitializer>();
                 v.shape = particles::EmissionShape::Sphere(1.0f, /*shell*/ true); // radial burst
                 v.shapeDirectionSpeed = 7.0f;
-                v.randomness = core::Float3{1.0f, 1.0f, 1.0f};
+                v.randomness = foundation::Float3{1.0f, 1.0f, 1.0f};
             }
             sparks.AddInitializer<particles::SizeInitializer>().size =
-                particles::RangeFloat2::Constant(core::Float2{0.16f, 0.16f});
+                particles::RangeFloat2::Constant(foundation::Float2{0.16f, 0.16f});
             sparks.AddInitializer<particles::ColorInitializer>().color =
-                particles::RangeColor::Constant(core::Float4{1.0f, 1.0f, 1.0f, 1.0f});
+                particles::RangeColor::Constant(foundation::Float4{1.0f, 1.0f, 1.0f, 1.0f});
             sparks.AddBehavior<particles::GravityBehavior>().multiplier = 1.3f;
             sparks.AddBehavior<particles::DragBehavior>().drag = 0.6f;
             sparks.AddBehavior<particles::AlphaOverLifetimeBehavior>().curve =
@@ -723,7 +723,7 @@ namespace
         static void BuildTornado(particles::ParticleEffect& effect)
         {
             particles::ParticleSystem& sys = effect.AddSystem(4000);
-            sys.name = core::String{u8"tornado"};
+            sys.name = foundation::String{u8"tornado"};
             sys.renderMode = particles::ParticleRenderMode::Billboard;
             sys.blendMode = particles::ParticleBlendMode::Additive;
             sys.softParticles = false;
@@ -737,11 +737,11 @@ namespace
             sys.AddInitializer<particles::LifetimeInitializer>().lifetime =
                 particles::RangeFloat(1.6f, 2.8f);
             sys.AddInitializer<particles::VelocityInitializer>().baseVelocity =
-                core::Float3{0.0f, 4.5f, 0.0f};
+                foundation::Float3{0.0f, 4.5f, 0.0f};
             sys.AddInitializer<particles::SizeInitializer>().size =
-                particles::RangeFloat2::Constant(core::Float2{0.4f, 0.4f});
+                particles::RangeFloat2::Constant(foundation::Float2{0.4f, 0.4f});
             sys.AddInitializer<particles::ColorInitializer>().color = particles::RangeColor(
-                core::Float4{0.55f, 0.5f, 0.42f, 1.0f}, core::Float4{0.4f, 0.36f, 0.3f, 1.0f});
+                foundation::Float4{0.55f, 0.5f, 0.42f, 1.0f}, foundation::Float4{0.4f, 0.36f, 0.3f, 1.0f});
             sys.AddBehavior<particles::VortexBehavior>().strength =
                 12.0f; // tangential swirl about local Y
             sys.AddBehavior<particles::AttractorBehavior>().strength =
@@ -755,7 +755,7 @@ namespace
         static void BuildExplosionBlast(particles::ParticleEffect& effect)
         {
             particles::ParticleSystem& sys = effect.AddSystem(200);
-            sys.name = core::String{u8"blast"};
+            sys.name = foundation::String{u8"blast"};
             sys.renderMode = particles::ParticleRenderMode::Billboard;
             sys.blendMode = particles::ParticleBlendMode::Additive;
             sys.softParticles = true; // soften where the fireballs meet the ground/obstacles
@@ -771,13 +771,13 @@ namespace
             {
                 particles::VelocityInitializer& v =
                     sys.AddInitializer<particles::VelocityInitializer>();
-                v.baseVelocity = core::Float3{0.0f, 1.5f, 0.0f};
-                v.randomness = core::Float3{2.0f, 1.0f, 2.0f};
+                v.baseVelocity = foundation::Float3{0.0f, 1.5f, 0.0f};
+                v.randomness = foundation::Float3{2.0f, 1.0f, 2.0f};
             }
             sys.AddInitializer<particles::SizeInitializer>().size =
-                particles::RangeFloat2::Constant(core::Float2{3.5f, 3.5f});
+                particles::RangeFloat2::Constant(foundation::Float2{3.5f, 3.5f});
             sys.AddInitializer<particles::ColorInitializer>().color =
-                particles::RangeColor::Constant(core::Float4{1.0f, 1.0f, 1.0f, 1.0f});
+                particles::RangeColor::Constant(foundation::Float4{1.0f, 1.0f, 1.0f, 1.0f});
             sys.AddBehavior<particles::RadialForceBehavior>().strength =
                 5.0f; // spread the cluster outward
             sys.AddBehavior<particles::DragBehavior>().drag = 1.5f;
@@ -793,7 +793,7 @@ namespace
         {
             // Debris streaks (StretchedBillboard: the quad stretches along the particle velocity).
             particles::ParticleSystem& deb = effect.AddSystem(1200);
-            deb.name = core::String{u8"debris"};
+            deb.name = foundation::String{u8"debris"};
             deb.renderMode = particles::ParticleRenderMode::StretchedBillboard;
             deb.blendMode = particles::ParticleBlendMode::Additive;
             deb.softParticles = false;
@@ -810,12 +810,12 @@ namespace
                     deb.AddInitializer<particles::VelocityInitializer>();
                 v.shape = particles::EmissionShape::Sphere(1.0f, /*shell*/ true); // radial burst
                 v.shapeDirectionSpeed = 13.0f;
-                v.randomness = core::Float3{2.0f, 2.0f, 2.0f};
+                v.randomness = foundation::Float3{2.0f, 2.0f, 2.0f};
             }
             deb.AddInitializer<particles::SizeInitializer>().size =
-                particles::RangeFloat2::Constant(core::Float2{0.14f, 0.14f});
+                particles::RangeFloat2::Constant(foundation::Float2{0.14f, 0.14f});
             deb.AddInitializer<particles::ColorInitializer>().color = particles::RangeColor(
-                core::Float4{1.0f, 0.85f, 0.35f, 1.0f}, core::Float4{1.0f, 0.35f, 0.1f, 1.0f});
+                foundation::Float4{1.0f, 0.85f, 0.35f, 1.0f}, foundation::Float4{1.0f, 0.35f, 0.1f, 1.0f});
             deb.AddBehavior<particles::GravityBehavior>().multiplier = 1.4f;
             deb.AddBehavior<particles::DragBehavior>().drag = 1.0f;
             deb.AddBehavior<particles::AlphaOverLifetimeBehavior>().curve =
@@ -823,7 +823,7 @@ namespace
 
             // Shockwave: a single flat disc that expands and fades on the ground each boom.
             particles::ParticleSystem& ring = effect.AddSystem(16);
-            ring.name = core::String{u8"shock"};
+            ring.name = foundation::String{u8"shock"};
             ring.renderMode = particles::ParticleRenderMode::HorizontalBillboard; // ground-flat
             ring.blendMode = particles::ParticleBlendMode::Additive;
             ring.softParticles = false;
@@ -835,12 +835,12 @@ namespace
             ring.AddInitializer<particles::LifetimeInitializer>().lifetime =
                 particles::RangeFloat(0.6f, 0.6f);
             ring.AddInitializer<particles::SizeInitializer>().size =
-                particles::RangeFloat2::Constant(core::Float2{1.0f, 1.0f});
+                particles::RangeFloat2::Constant(foundation::Float2{1.0f, 1.0f});
             ring.AddInitializer<particles::ColorInitializer>().color =
-                particles::RangeColor::Constant(core::Float4{1.0f, 0.7f, 0.3f, 1.0f});
+                particles::RangeColor::Constant(foundation::Float4{1.0f, 0.7f, 0.3f, 1.0f});
             ring.AddBehavior<particles::SizeOverLifetimeBehavior>().curve =
-                particles::ParticleCurveFloat2::Linear(core::Float2{1.0f, 1.0f},
-                                                       core::Float2{9.0f, 9.0f});
+                particles::ParticleCurveFloat2::Linear(foundation::Float2{1.0f, 1.0f},
+                                                       foundation::Float2{9.0f, 9.0f});
             ring.AddBehavior<particles::AlphaOverLifetimeBehavior>().curve =
                 particles::ParticleCurveFloat::FadeOut(1.0f, 0.0f);
         }
@@ -851,7 +851,7 @@ namespace
         {
             // Ground rune glyphs on a ring, lying flat, spinning.
             particles::ParticleSystem& rune = effect.AddSystem(400);
-            rune.name = core::String{u8"rune"};
+            rune.name = foundation::String{u8"rune"};
             rune.renderMode = particles::ParticleRenderMode::HorizontalBillboard;
             rune.blendMode = particles::ParticleBlendMode::Additive;
             rune.softParticles = false;
@@ -863,9 +863,9 @@ namespace
             rune.AddInitializer<particles::LifetimeInitializer>().lifetime =
                 particles::RangeFloat(1.4f, 1.8f);
             rune.AddInitializer<particles::SizeInitializer>().size =
-                particles::RangeFloat2::Constant(core::Float2{0.5f, 0.5f});
+                particles::RangeFloat2::Constant(foundation::Float2{0.5f, 0.5f});
             rune.AddInitializer<particles::ColorInitializer>().color =
-                particles::RangeColor::Constant(core::Float4{0.3f, 0.8f, 1.0f, 1.0f});
+                particles::RangeColor::Constant(foundation::Float4{0.3f, 0.8f, 1.0f, 1.0f});
             rune.AddInitializer<particles::RotationInitializer>();
             rune.AddBehavior<particles::RotationOverLifetimeBehavior>(); // slow spin
             rune.AddBehavior<particles::AlphaOverLifetimeBehavior>().curve =
@@ -873,7 +873,7 @@ namespace
 
             // Glyph sparks rising off the ring.
             particles::ParticleSystem& spark = effect.AddSystem(600);
-            spark.name = core::String{u8"glyph"};
+            spark.name = foundation::String{u8"glyph"};
             spark.renderMode = particles::ParticleRenderMode::Billboard;
             spark.blendMode = particles::ParticleBlendMode::Additive;
             spark.softParticles = false;
@@ -884,11 +884,11 @@ namespace
             spark.AddInitializer<particles::LifetimeInitializer>().lifetime =
                 particles::RangeFloat(1.0f, 1.8f);
             spark.AddInitializer<particles::VelocityInitializer>().baseVelocity =
-                core::Float3{0.0f, 1.6f, 0.0f};
+                foundation::Float3{0.0f, 1.6f, 0.0f};
             spark.AddInitializer<particles::SizeInitializer>().size =
-                particles::RangeFloat2::Constant(core::Float2{0.18f, 0.18f});
+                particles::RangeFloat2::Constant(foundation::Float2{0.18f, 0.18f});
             spark.AddInitializer<particles::ColorInitializer>().color =
-                particles::RangeColor::Constant(core::Float4{0.4f, 0.9f, 1.0f, 1.0f});
+                particles::RangeColor::Constant(foundation::Float4{0.4f, 0.9f, 1.0f, 1.0f});
             spark.AddBehavior<particles::AlphaOverLifetimeBehavior>().curve =
                 particles::ParticleCurveFloat::FadeOut(1.0f, 0.2f);
         }
@@ -898,7 +898,7 @@ namespace
         static void BuildFireflies(particles::ParticleEffect& effect)
         {
             particles::ParticleSystem& sys = effect.AddSystem(700);
-            sys.name = core::String{u8"fireflies"};
+            sys.name = foundation::String{u8"fireflies"};
             sys.renderMode = particles::ParticleRenderMode::Billboard;
             sys.blendMode = particles::ParticleBlendMode::Additive;
             sys.softParticles = false;
@@ -906,18 +906,18 @@ namespace
             sys.emitter.mode = particles::EmissionMode::Continuous;
             sys.emitter.spawnRate = 40.0f;
             sys.AddInitializer<particles::PositionInitializer>().shape =
-                particles::EmissionShape::Box(core::Float3{3.0f, 2.0f, 3.0f});
+                particles::EmissionShape::Box(foundation::Float3{3.0f, 2.0f, 3.0f});
             sys.AddInitializer<particles::LifetimeInitializer>().lifetime =
                 particles::RangeFloat(2.5f, 4.0f);
             sys.AddInitializer<particles::VelocityInitializer>().baseVelocity =
-                core::Float3{0.0f, 0.2f, 0.0f};
+                foundation::Float3{0.0f, 0.2f, 0.0f};
             sys.AddInitializer<particles::SizeInitializer>().size =
-                particles::RangeFloat2::Constant(core::Float2{0.16f, 0.16f});
+                particles::RangeFloat2::Constant(foundation::Float2{0.16f, 0.16f});
             sys.AddInitializer<particles::ColorInitializer>().color = particles::RangeColor(
-                core::Float4{0.8f, 1.0f, 0.3f, 1.0f}, core::Float4{1.0f, 0.9f, 0.2f, 1.0f});
+                foundation::Float4{0.8f, 1.0f, 0.3f, 1.0f}, foundation::Float4{1.0f, 0.9f, 0.2f, 1.0f});
             {
                 particles::WindBehavior& w = sys.AddBehavior<particles::WindBehavior>();
-                w.force = core::Float3{0.5f, 0.0f, 0.3f};
+                w.force = foundation::Float3{0.5f, 0.0f, 0.3f};
                 w.turbulence = 1.5f;
             }
             sys.AddBehavior<particles::TurbulenceBehavior>().strength = 1.2f; // wander
@@ -939,38 +939,38 @@ namespace
         // texture/view on the app and returns the view to bind on the blast component.
         rhi::TextureView* MakeBlastAtlas(rhi::Device& dev)
         {
-            constexpr core::u32 kCols = 4, kRows = 4, kF = 64;
-            constexpr core::u32 W = kCols * kF, H = kRows * kF;
-            core::Array<core::u8> px(core::DefaultAllocator());
-            px.Resize(static_cast<core::usize>(W) * H * 4);
-            for (core::u32 f = 0; f < kCols * kRows; ++f)
+            constexpr foundation::u32 kCols = 4, kRows = 4, kF = 64;
+            constexpr foundation::u32 W = kCols * kF, H = kRows * kF;
+            foundation::Array<foundation::u8> px(foundation::DefaultAllocator());
+            px.Resize(static_cast<foundation::usize>(W) * H * 4);
+            for (foundation::u32 f = 0; f < kCols * kRows; ++f)
             {
-                const core::u32 fc = f % kCols, fr = f / kCols;
-                const core::f32 t =
-                    static_cast<core::f32>(f) / static_cast<core::f32>(kCols * kRows - 1);
-                const core::f32 rad = 0.18f + 0.85f * t;
-                const core::f32 fade = core::Pow(1.0f - t, 0.6f);
-                for (core::u32 y = 0; y < kF; ++y)
-                    for (core::u32 x = 0; x < kF; ++x)
+                const foundation::u32 fc = f % kCols, fr = f / kCols;
+                const foundation::f32 t =
+                    static_cast<foundation::f32>(f) / static_cast<foundation::f32>(kCols * kRows - 1);
+                const foundation::f32 rad = 0.18f + 0.85f * t;
+                const foundation::f32 fade = foundation::Pow(1.0f - t, 0.6f);
+                for (foundation::u32 y = 0; y < kF; ++y)
+                    for (foundation::u32 x = 0; x < kF; ++x)
                     {
-                        const core::f32 nx = (static_cast<core::f32>(x) + 0.5f) / kF * 2.0f - 1.0f;
-                        const core::f32 ny = (static_cast<core::f32>(y) + 0.5f) / kF * 2.0f - 1.0f;
-                        core::f32 d = core::Sqrt(nx * nx + ny * ny);
-                        d += 0.11f * core::Sin(nx * 9.0f + static_cast<core::f32>(f) * 0.8f) +
-                             0.11f * core::Cos(ny * 9.0f - static_cast<core::f32>(f) *
+                        const foundation::f32 nx = (static_cast<foundation::f32>(x) + 0.5f) / kF * 2.0f - 1.0f;
+                        const foundation::f32 ny = (static_cast<foundation::f32>(y) + 0.5f) / kF * 2.0f - 1.0f;
+                        foundation::f32 d = foundation::Sqrt(nx * nx + ny * ny);
+                        d += 0.11f * foundation::Sin(nx * 9.0f + static_cast<foundation::f32>(f) * 0.8f) +
+                             0.11f * foundation::Cos(ny * 9.0f - static_cast<foundation::f32>(f) *
                                                                0.6f); // break the circle
-                        core::f32 core = core::Clamp(1.0f - d / core::Max(rad, 1e-3f), 0.0f, 1.0f);
+                        foundation::f32 core = foundation::Clamp(1.0f - d / foundation::Max(rad, 1e-3f), 0.0f, 1.0f);
                         core *= core;
-                        const core::f32 a = core * fade;
-                        const core::f32 g = core::Clamp(0.35f + 0.65f * core, 0.0f,
+                        const foundation::f32 a = core * fade;
+                        const foundation::f32 g = foundation::Clamp(0.35f + 0.65f * core, 0.0f,
                                                         1.0f); // white-hot core -> orange rim
-                        const core::f32 b = core::Clamp(0.12f * core * core, 0.0f, 1.0f);
-                        const core::usize i =
-                            (static_cast<core::usize>(fr * kF + y) * W + (fc * kF + x)) * 4;
+                        const foundation::f32 b = foundation::Clamp(0.12f * core * core, 0.0f, 1.0f);
+                        const foundation::usize i =
+                            (static_cast<foundation::usize>(fr * kF + y) * W + (fc * kF + x)) * 4;
                         px[i + 0] = 255;
-                        px[i + 1] = static_cast<core::u8>(g * 255.0f);
-                        px[i + 2] = static_cast<core::u8>(b * 255.0f);
-                        px[i + 3] = static_cast<core::u8>(a * 255.0f);
+                        px[i + 1] = static_cast<foundation::u8>(g * 255.0f);
+                        px[i + 2] = static_cast<foundation::u8>(b * 255.0f);
+                        px[i + 3] = static_cast<foundation::u8>(a * 255.0f);
                     }
             }
             rhi::TextureDesc td{};
@@ -998,7 +998,7 @@ namespace
                     rhi::TextureDataLayout layout{};
                     layout.bytesPerRow = W * 4;
                     layout.rowsPerImage = H;
-                    tb->WriteTexture(m_blastTex, core::Span<const core::u8>{px.Data(), px.Size()},
+                    tb->WriteTexture(m_blastTex, foundation::Span<const foundation::u8>{px.Data(), px.Size()},
                                      layout, rhi::Extent3D{W, H, 1});
                     (void)tb->Submit();
                     q->DestroyTransferBatch(tb);
@@ -1011,7 +1011,7 @@ namespace
         static void BuildLocal(particles::ParticleEffect& effect)
         {
             particles::ParticleSystem& sys = effect.AddSystem(2000);
-            sys.name = core::String{u8"orbit"};
+            sys.name = foundation::String{u8"orbit"};
             sys.renderMode = particles::ParticleRenderMode::Billboard;
             sys.blendMode = particles::ParticleBlendMode::Additive;
             sys.simulationSpace =
@@ -1025,11 +1025,11 @@ namespace
             sys.AddInitializer<particles::LifetimeInitializer>().lifetime =
                 particles::RangeFloat(1.0f, 1.6f);
             sys.AddInitializer<particles::VelocityInitializer>().baseVelocity =
-                core::Float3{0.0f, 0.4f, 0.0f};
+                foundation::Float3{0.0f, 0.4f, 0.0f};
             sys.AddInitializer<particles::SizeInitializer>().size =
-                particles::RangeFloat2::Constant(core::Float2{0.18f, 0.18f});
+                particles::RangeFloat2::Constant(foundation::Float2{0.18f, 0.18f});
             sys.AddInitializer<particles::ColorInitializer>().color = particles::RangeColor(
-                core::Float4{1.0f, 0.8f, 0.3f, 1.0f}, core::Float4{1.0f, 0.4f, 0.1f, 1.0f});
+                foundation::Float4{1.0f, 0.8f, 0.3f, 1.0f}, foundation::Float4{1.0f, 0.4f, 0.1f, 1.0f});
             sys.AddBehavior<particles::AlphaOverLifetimeBehavior>().curve =
                 particles::ParticleCurveFloat::FadeOut(1.0f, 0.2f);
         }
@@ -1040,7 +1040,7 @@ namespace
         static void BuildMeshShards(particles::ParticleEffect& effect)
         {
             particles::ParticleSystem& sys = effect.AddSystem(2000);
-            sys.name = core::String{u8"shards"};
+            sys.name = foundation::String{u8"shards"};
             sys.renderMode = particles::ParticleRenderMode::Mesh;
             sys.emitter.mode = particles::EmissionMode::Continuous;
             sys.emitter.spawnRate = 80.0f;
@@ -1052,13 +1052,13 @@ namespace
             {
                 particles::VelocityInitializer& v =
                     sys.AddInitializer<particles::VelocityInitializer>();
-                v.baseVelocity = core::Float3{0.0f, 3.5f, 0.0f};
-                v.randomness = core::Float3{1.5f, 1.0f, 1.5f};
+                v.baseVelocity = foundation::Float3{0.0f, 3.5f, 0.0f};
+                v.randomness = foundation::Float3{1.5f, 1.0f, 1.5f};
             }
             sys.AddInitializer<particles::SizeInitializer>().size =
-                particles::RangeFloat2::Constant(core::Float2{0.3f, 0.3f});
+                particles::RangeFloat2::Constant(foundation::Float2{0.3f, 0.3f});
             sys.AddInitializer<particles::ColorInitializer>().color = particles::RangeColor(
-                core::Float4{0.3f, 0.9f, 1.0f, 1.0f}, core::Float4{0.5f, 0.3f, 1.0f, 1.0f});
+                foundation::Float4{0.3f, 0.9f, 1.0f, 1.0f}, foundation::Float4{0.5f, 0.3f, 1.0f, 1.0f});
             sys.AddInitializer<particles::RotationInitializer>();
             sys.AddInitializer<particles::MeshOrientationInitializer>();
             sys.AddBehavior<particles::RotationOverLifetimeBehavior>(); // tumble
@@ -1071,7 +1071,7 @@ namespace
         static void BuildCookedEffect(particles::ParticleEffect& fx)
         {
             particles::ParticleSystem& sys = fx.AddSystem(4000);
-            sys.name = core::String{u8"cooked"};
+            sys.name = foundation::String{u8"cooked"};
             sys.blendMode = particles::ParticleBlendMode::Additive;
             sys.renderMode = particles::ParticleRenderMode::Billboard;
             sys.emitter.mode = particles::EmissionMode::Continuous;
@@ -1083,13 +1083,13 @@ namespace
             {
                 particles::VelocityInitializer& v =
                     sys.AddInitializer<particles::VelocityInitializer>();
-                v.baseVelocity = core::Float3{0.0f, 10.0f, 0.0f};
-                v.randomness = core::Float3{2.5f, 1.0f, 2.5f};
+                v.baseVelocity = foundation::Float3{0.0f, 10.0f, 0.0f};
+                v.randomness = foundation::Float3{2.5f, 1.0f, 2.5f};
             }
             sys.AddInitializer<particles::SizeInitializer>().size =
-                particles::RangeFloat2::Constant(core::Float2{0.3f, 0.3f});
+                particles::RangeFloat2::Constant(foundation::Float2{0.3f, 0.3f});
             sys.AddInitializer<particles::ColorInitializer>().color = particles::RangeColor(
-                core::Float4{0.2f, 1.0f, 0.9f, 1.0f}, core::Float4{0.4f, 0.6f, 1.0f, 1.0f});
+                foundation::Float4{0.2f, 1.0f, 0.9f, 1.0f}, foundation::Float4{0.4f, 0.6f, 1.0f, 1.0f});
             sys.AddBehavior<particles::GravityBehavior>().multiplier = 1.2f;
             sys.AddBehavior<particles::AlphaOverLifetimeBehavior>().curve =
                 particles::ParticleCurveFloat::FadeOut(1.0f, 0.3f);
@@ -1101,8 +1101,8 @@ namespace
         // path (an editor would bake offline; here we bake at startup), proving it end to end in the app.
         void SetupCookedDemo(particles::ParticleEffectComponentManager& pmgr)
         {
-            const core::StringView outputDir(
-                reinterpret_cast<const core::utf8char*>(DRACONIC_PARTICLEFX_OUTPUT_DIR));
+            const foundation::StringView outputDir(
+                reinterpret_cast<const foundation::utf8char*>(DRACONIC_PARTICLEFX_OUTPUT_DIR));
             if (outputDir.IsEmpty())
             {
                 return;
@@ -1111,9 +1111,9 @@ namespace
                 RegisterParticleEffectAsset(); // register cooked/asset/module types + serializable factories
 
             m_contentFs =
-                core::MakeUnique<vfs::NativeFileSystem>(core::DefaultAllocator(), outputDir);
-            m_contentDb = core::MakeUnique<content::ContentDatabase>(
-                core::DefaultAllocator(), *m_contentFs, core::BinarySerializerFactory(),
+                foundation::MakeUnique<vfs::NativeFileSystem>(foundation::DefaultAllocator(), outputDir);
+            m_contentDb = foundation::MakeUnique<content::ContentDatabase>(
+                foundation::DefaultAllocator(), *m_contentFs, foundation::BinarySerializerFactory(),
                 u8".rasset");
 
             // AUTHOR -> BAKE: cook the authored asset into a content-DB ParticleEffectResource.
@@ -1132,7 +1132,7 @@ namespace
 
             // LOAD: bind the cooked resource back through the manager + factory (runtime path).
             m_resources =
-                core::MakeUnique<resource::ResourceManager>(core::DefaultAllocator(), *m_contentDb);
+                foundation::MakeUnique<resource::ResourceManager>(foundation::DefaultAllocator(), *m_contentDb);
             m_resources->AddFactory(&m_pfxFactory);
             m_cookedProxy = m_resources->Bind<particles::ParticleEffectResource>(inst->Id());
             if (!m_cookedProxy)
@@ -1142,14 +1142,14 @@ namespace
 
             // DEMO: a component driven by the cooked resource (in front of the grid).
             m_cookedEmitter = m_scene->CreateEntity(u8"cooked");
-            m_scene->SetLocalPosition(m_cookedEmitter, core::Float3{0.0f, 0.2f, 34.0f});
+            m_scene->SetLocalPosition(m_cookedEmitter, foundation::Float3{0.0f, 0.2f, 34.0f});
             pmgr.Add(m_cookedEmitter).SetEffect(m_cookedProxy);
         }
 
         // Push the current soft-particle distance to every system in an effect (0 => disabled).
         void ApplySoft(particles::ParticleEffect& fx)
         {
-            for (core::i32 i = 0; i < fx.SystemCount(); ++i)
+            for (foundation::i32 i = 0; i < fx.SystemCount(); ++i)
             {
                 if (particles::ParticleSystem* s = fx.GetSystem(i))
                 {
@@ -1166,7 +1166,7 @@ namespace
             {
                 particles::ParticleSystem* sys = m_effect.GetSystem(0);
                 ImGui::Text("alive: %d", sys != nullptr ? sys->AliveCount() : 0);
-                ImGui::Text("fps: %.0f", 1.0f / core::Max(m_frameSmooth, 0.0001f));
+                ImGui::Text("fps: %.0f", 1.0f / foundation::Max(m_frameSmooth, 0.0001f));
                 if (sys != nullptr)
                 {
                     bool emit = sys->emitter.isEmitting;
@@ -1241,17 +1241,17 @@ namespace
         rhi::Texture* m_blastTex = nullptr; // flipbook atlas for the explosion (owned)
         rhi::TextureView* m_blastView = nullptr;
         // Cooked-pipeline demo: content DB + manager + factory + the bound cooked effect.
-        core::UniquePtr<vfs::NativeFileSystem> m_contentFs;
-        core::UniquePtr<content::ContentDatabase> m_contentDb;
-        core::UniquePtr<resource::ResourceManager> m_resources;
+        foundation::UniquePtr<vfs::NativeFileSystem> m_contentFs;
+        foundation::UniquePtr<content::ContentDatabase> m_contentDb;
+        foundation::UniquePtr<resource::ResourceManager> m_resources;
         particles::ParticleEffectFactory m_pfxFactory;
         resource::Proxy<particles::ParticleEffectResource> m_cookedProxy;
         scene::EntityHandle m_cookedEmitter;
         samples::FlyCamera m_fly;
-        core::f32 m_frameSmooth = 0.016f;
-        core::f32 m_orbitTime = 0.0f;    // drives the local-space emitter orbit
+        foundation::f32 m_frameSmooth = 0.016f;
+        foundation::f32 m_orbitTime = 0.0f;    // drives the local-space emitter orbit
         bool m_softOn = true;            // soft-particle on/off (HUD checkbox)
-        core::f32 m_softDistance = 2.0f; // soft-particle fade band (HUD slider)
+        foundation::f32 m_softDistance = 2.0f; // soft-particle fade band (HUD slider)
     };
 }
 

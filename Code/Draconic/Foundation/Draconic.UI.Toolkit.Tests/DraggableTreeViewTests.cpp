@@ -3,15 +3,15 @@
 // gating on format + adapter.CanMove; OnDrop invokes MoveItem + fires OnItemReordered). No rendering, no
 // full drag-manager cycle. A flat 3-item test-double implements IReorderableTreeAdapter minimally.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 import draconic.ui.toolkit;
 
 using namespace draconic::ui;
 using namespace draconic::ui::toolkit;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 namespace
 {
@@ -46,7 +46,7 @@ namespace
 
 TEST_CASE("toolkit-draggabletreeview: construct + property round-trips")
 {
-    auto view = core::MakeRef<DraggableTreeView>(core::DefaultAllocator());
+    auto view = foundation::MakeRef<DraggableTreeView>(foundation::DefaultAllocator());
 
     CHECK(view->DragEnabled()); // default true
     view->SetDragEnabled(false);
@@ -62,7 +62,7 @@ TEST_CASE("toolkit-draggabletreeview: construct + property round-trips")
 
 TEST_CASE("toolkit-draggabletreeview: SetAdapter wires without crash")
 {
-    auto view = core::MakeRef<DraggableTreeView>(core::DefaultAllocator());
+    auto view = foundation::MakeRef<DraggableTreeView>(foundation::DefaultAllocator());
     FlatReorderAdapter adapter;
     view->SetAdapter(&adapter);
     CHECK(view->InternalTreeView()->TreeAdapter == &adapter);
@@ -70,7 +70,7 @@ TEST_CASE("toolkit-draggabletreeview: SetAdapter wires without crash")
 
 TEST_CASE("toolkit-draggabletreeview: CanAcceptDrop gating")
 {
-    auto view = core::MakeRef<DraggableTreeView>(core::DefaultAllocator());
+    auto view = foundation::MakeRef<DraggableTreeView>(foundation::DefaultAllocator());
     FlatReorderAdapter adapter;
     view->SetAdapter(&adapter);
     view->SetItemHeight(20.0f);
@@ -79,17 +79,17 @@ TEST_CASE("toolkit-draggabletreeview: CanAcceptDrop gating")
     REQUIRE(target != nullptr);
 
     // Valid tree/reorder payload at a valid localY -> Move (adapter.CanMove true).
-    auto dragData = core::MakeRef<TreeDragData>(core::DefaultAllocator(), 0);
+    auto dragData = foundation::MakeRef<TreeDragData>(foundation::DefaultAllocator(), 0);
     CHECK(target->CanAcceptDrop(dragData.Get(), 5.0f, 25.0f) == DragDropEffects::Move);
 
     // A non-"tree/reorder" payload -> None.
-    auto otherData = core::MakeRef<DragData>(core::DefaultAllocator(), StringView(u8"text/plain"));
+    auto otherData = foundation::MakeRef<DragData>(foundation::DefaultAllocator(), StringView(u8"text/plain"));
     CHECK(target->CanAcceptDrop(otherData.Get(), 5.0f, 25.0f) == DragDropEffects::None);
 }
 
 TEST_CASE("toolkit-draggabletreeview: OnDrop invokes MoveItem + fires OnItemReordered")
 {
-    auto view = core::MakeRef<DraggableTreeView>(core::DefaultAllocator());
+    auto view = foundation::MakeRef<DraggableTreeView>(foundation::DefaultAllocator());
     FlatReorderAdapter adapter;
     view->SetAdapter(&adapter);
     view->SetItemHeight(20.0f);
@@ -106,7 +106,7 @@ TEST_CASE("toolkit-draggabletreeview: OnDrop invokes MoveItem + fires OnItemReor
                                                            }});
 
     IDropTarget* target = view->AsDropTarget();
-    auto dragData = core::MakeRef<TreeDragData>(core::DefaultAllocator(), 0);
+    auto dragData = foundation::MakeRef<TreeDragData>(foundation::DefaultAllocator(), 0);
 
     // localY 45 / itemHeight 20 -> targetPos 2.
     const DragDropEffects effect = target->OnDrop(dragData.Get(), 5.0f, 45.0f);

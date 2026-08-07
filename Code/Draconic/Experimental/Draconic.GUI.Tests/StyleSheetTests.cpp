@@ -1,29 +1,29 @@
 // Draconic GUI - StyleRule / StyleSheet cascade tests: property blocks and specificity-
 // ordered resolution against a UIWidget.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.gui;
 
 using namespace draconic::gui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 namespace
 {
     template <typename T>
-    core::RefPtr<T> Make()
+    foundation::RefPtr<T> Make()
     {
-        return core::MakeRef<T>(core::DefaultAllocator());
+        return foundation::MakeRef<T>(foundation::DefaultAllocator());
     }
 
-    core::RefPtr<UIWidget> Widget(const char8_t* tag)
+    foundation::RefPtr<UIWidget> Widget(const char8_t* tag)
     {
         auto w = Make<UIWidget>();
-        w->SetTag(core::StringView(tag));
+        w->SetTag(foundation::StringView(tag));
         return w;
     }
-    StyleRule Rule(const char8_t* selector) { return StyleRule(core::StringView(selector)); }
-    core::StringView SV(const char8_t* s) { return core::StringView(s); }
+    StyleRule Rule(const char8_t* selector) { return StyleRule(foundation::StringView(selector)); }
+    foundation::StringView SV(const char8_t* s) { return foundation::StringView(s); }
 }
 
 TEST_CASE("style-rule: set and override declarations")
@@ -60,8 +60,8 @@ TEST_CASE("stylesheet: higher specificity wins")
     tagRule.SetProperty(SV(u8"padding"), SV(u8"4"));
     StyleRule classRule = Rule(u8".primary");
     classRule.SetProperty(SV(u8"color"), SV(u8"white")); // class (1024) beats tag (1)
-    sheet.AddRule(core::Move(tagRule));
-    sheet.AddRule(core::Move(classRule));
+    sheet.AddRule(foundation::Move(tagRule));
+    sheet.AddRule(foundation::Move(classRule));
 
     ResolvedStyle rs = sheet.Resolve(*w.Get());
     CHECK(rs.Get(SV(u8"color")) == SV(u8"white")); // from .primary
@@ -82,9 +82,9 @@ TEST_CASE("stylesheet: id beats class beats tag")
     c.SetProperty(SV(u8"color"), SV(u8"class"));
     StyleRule i = Rule(u8"#ok");
     i.SetProperty(SV(u8"color"), SV(u8"id"));
-    sheet.AddRule(core::Move(t));
-    sheet.AddRule(core::Move(i)); // add id before class to prove ordering is by specificity
-    sheet.AddRule(core::Move(c));
+    sheet.AddRule(foundation::Move(t));
+    sheet.AddRule(foundation::Move(i)); // add id before class to prove ordering is by specificity
+    sheet.AddRule(foundation::Move(c));
 
     ResolvedStyle rs = sheet.Resolve(*w.Get());
     CHECK(rs.Get(SV(u8"color")) == SV(u8"id"));
@@ -100,8 +100,8 @@ TEST_CASE("stylesheet: equal specificity resolves by source order (last wins)")
     a.SetProperty(SV(u8"color"), SV(u8"red"));
     StyleRule b = Rule(u8".x");
     b.SetProperty(SV(u8"color"), SV(u8"blue"));
-    sheet.AddRule(core::Move(a));
-    sheet.AddRule(core::Move(b));
+    sheet.AddRule(foundation::Move(a));
+    sheet.AddRule(foundation::Move(b));
 
     ResolvedStyle rs = sheet.Resolve(*w.Get());
     CHECK(rs.Get(SV(u8"color")) == SV(u8"blue")); // later source wins the tie
@@ -113,7 +113,7 @@ TEST_CASE("stylesheet: non-matching rules contribute nothing")
     StyleSheet sheet;
     StyleRule other = Rule(u8"span");
     other.SetProperty(SV(u8"color"), SV(u8"nope"));
-    sheet.AddRule(core::Move(other));
+    sheet.AddRule(foundation::Move(other));
 
     ResolvedStyle rs = sheet.Resolve(*w.Get());
     CHECK(rs.Count() == 0);

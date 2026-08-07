@@ -8,11 +8,11 @@
 // calls are retained for faithfulness. Drawables are RefPtr (no manual AddRef).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:dark_theme;
 
-import draconic.core;
+import draconic.foundation;
 import :style_sheet;
 import :style_rule;
 import :style_property;
@@ -47,7 +47,7 @@ import :list_view;
 import :tree_view;
 import :grid_view;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

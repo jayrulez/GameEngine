@@ -2,9 +2,9 @@
 // hot-reload rebuild, visibility/interactivity sync, serialization round-trip. No GPU -
 // RenderOverlay untested here (the sample + editor smoke cover it on-screen).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.runtime;
 import draconic.scene;
 import draconic.engine.scene;
@@ -21,7 +21,7 @@ import draconic.rhi.null;
 import draconic.input;
 import draconic.engine.input;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::ui;
 namespace scene = draconic::scene;
 namespace runtime = draconic::runtime;

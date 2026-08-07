@@ -1,7 +1,7 @@
 /// Draconic::Animation - `draconic.animation`, the engine's skeletal-animation foundation.
 ///
 /// A faithful port of Sedulous.Animation (foundation only - no rendering dependency; the renderer
-/// consumes evaluated skinning matrices). Depends solely on Core (math + containers). Aggregates the
+/// consumes evaluated skinning matrices). Depends solely on Foundation (math + containers). Aggregates the
 /// partitions: easing (:easing), the skeleton hierarchy (:skeleton), and the pose view (:pose).
 /// The clip/sampler/player and the animation graph land in later partitions.
 

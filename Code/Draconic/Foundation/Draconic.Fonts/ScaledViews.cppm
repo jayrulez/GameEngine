@@ -12,16 +12,16 @@
 // outlive the views); a CachedFont may own the view wrappers themselves.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.fonts:scaled_views;
 
-import draconic.core;
+import draconic.foundation;
 import :types;
 import :interfaces;
 import :text_util;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::fonts
 {

@@ -4,16 +4,16 @@
 // `queue.HasPending` (property) -> queue.HasPending() (method); `new [&] () => {}` delegate -> a bare
 // C++ lambda (QueueAction takes a Function<void()>); `ctx.MutationQueue.X` -> ctx.MutationQueueRef().X.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
+import draconic.foundation;
 import draconic.ui;
 #include "TestHelpers.h"
 
 using namespace draconic::ui;
 using namespace draconic::ui::tests;
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 TEST_CASE("mutation-queue: Empty_HasNoPending")
 {
@@ -82,10 +82,10 @@ TEST_CASE("mutation-queue: Drain_IntegratedWithBeginFrame")
 TEST_CASE("mutation-queue: QueueDelete_PreventsDoubleDelete")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
     Init(ctx, root.Get());
 
-    auto view = core::MakeRef<TestView>(core::DefaultAllocator());
+    auto view = foundation::MakeRef<TestView>(foundation::DefaultAllocator());
     root->AddView(view.Get());
 
     ctx.MutationQueueRef().QueueDelete(view.Get());

@@ -4,7 +4,7 @@ add_library(Draconic.Materials.Editor STATIC)
 add_library(Draconic::Materials.Editor ALIAS Draconic.Materials.Editor)
 
 target_link_libraries(Draconic.Materials.Editor
-    PUBLIC Draconic::Core Draconic::Editor Draconic::Content
+    PUBLIC Draconic::Foundation Draconic::Editor Draconic::Content
            Draconic::Materials Draconic::Materials.Resource Draconic::Policy)
 
 target_sources(Draconic.Materials.Editor

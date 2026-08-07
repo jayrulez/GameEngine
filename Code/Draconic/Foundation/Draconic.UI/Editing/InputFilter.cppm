@@ -6,13 +6,13 @@
 // factory methods return by value (no heap).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:input_filter;
 
-import draconic.core; // Function
+import draconic.foundation; // Function
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

@@ -8,12 +8,12 @@
 // very large lists) is a follow-up - here every item is a real row widget.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:list_box;
 
-import draconic.core;  // RefPtr, MakeRef, Array, Function, Move, String, Max, Min
+import draconic.foundation;  // RefPtr, MakeRef, Array, Function, Move, String, Max, Min
 import draconic.fonts; // CachedFont
 import :rect;
 import :event;
@@ -23,8 +23,8 @@ import :label;
 import :ui_widget;
 import :scroll_view;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace fonts = draconic::fonts;
 
 export namespace draconic::gui
@@ -38,23 +38,23 @@ export namespace draconic::gui
 
         void SetIndex(i32 index) noexcept { m_index = index; }
         [[nodiscard]] i32 GetIndex() const noexcept { return m_index; }
-        void SetOnPicked(core::Function<void(i32)> callback) { m_onPicked = core::Move(callback); }
+        void SetOnPicked(foundation::Function<void(i32)> callback) { m_onPicked = foundation::Move(callback); }
 
         void SetSelectedRow(bool selected)
         {
             if (selected == m_selected)
                 return;
             m_selected = selected;
-            SetBackground(selected ? core::RefPtr<Drawable>(core::MakeRef<RectangleDrawable>(
-                                         core::DefaultAllocator(), m_highlight))
-                                   : core::RefPtr<Drawable>());
+            SetBackground(selected ? foundation::RefPtr<Drawable>(foundation::MakeRef<RectangleDrawable>(
+                                         foundation::DefaultAllocator(), m_highlight))
+                                   : foundation::RefPtr<Drawable>());
             Invalidate();
         }
         void SetHighlightColor(Color color)
         {
             m_highlight = color;
             if (m_selected)
-                SetBackground(core::MakeRef<RectangleDrawable>(core::DefaultAllocator(),
+                SetBackground(foundation::MakeRef<RectangleDrawable>(foundation::DefaultAllocator(),
                                                                color)); // refresh live
         }
 
@@ -69,7 +69,7 @@ export namespace draconic::gui
         i32 m_index = -1;
         bool m_selected = false;
         Color m_highlight{0.24f, 0.40f, 0.62f, 1.0f};
-        core::Function<void(i32)> m_onPicked;
+        foundation::Function<void(i32)> m_onPicked;
     };
 
     class ListBox : public UIWidget
@@ -78,12 +78,12 @@ export namespace draconic::gui
     public:
         ListBox()
         {
-            SetTag(core::StringView(u8"listbox"));
+            SetTag(foundation::StringView(u8"listbox"));
             SetTabFocusable(true);
             // Opaque panel background so the list (and any dropdown built on it) paints over
             // whatever is behind it. Override with SetBackground for a themed look.
-            SetBackground(core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), m_panelColor));
-            m_scroll = core::MakeRef<ScrollView>(core::DefaultAllocator());
+            SetBackground(foundation::MakeRef<RectangleDrawable>(foundation::DefaultAllocator(), m_panelColor));
+            m_scroll = foundation::MakeRef<ScrollView>(foundation::DefaultAllocator());
             AddChild(m_scroll.Get());
         }
 
@@ -95,14 +95,14 @@ export namespace draconic::gui
         }
         void SetItemHeight(f32 height)
         {
-            m_itemHeight = core::Max(1.0f, height);
+            m_itemHeight = foundation::Max(1.0f, height);
             Relayout();
         }
         [[nodiscard]] f32 GetItemHeight() const noexcept { return m_itemHeight; }
 
-        void AddItem(core::StringView text)
+        void AddItem(foundation::StringView text)
         {
-            auto item = core::MakeRef<ListBoxItem>(core::DefaultAllocator());
+            auto item = foundation::MakeRef<ListBoxItem>(foundation::DefaultAllocator());
             item->SetText(text);
             item->SetFont(m_font);
             item->SetTextColor(m_textColor);
@@ -125,9 +125,9 @@ export namespace draconic::gui
         }
 
         [[nodiscard]] usize ItemCount() const noexcept { return m_items.Size(); }
-        [[nodiscard]] core::StringView GetItem(usize index) const
+        [[nodiscard]] foundation::StringView GetItem(usize index) const
         {
-            return index < m_items.Size() ? m_items[index]->GetText() : core::StringView{};
+            return index < m_items.Size() ? m_items[index]->GetText() : foundation::StringView{};
         }
 
         [[nodiscard]] i32 GetSelectedIndex() const noexcept { return m_selected; }
@@ -148,9 +148,9 @@ export namespace draconic::gui
             if (m_onChanged)
                 m_onChanged(m_selected);
         }
-        void SetOnSelectionChanged(core::Function<void(i32)> callback)
+        void SetOnSelectionChanged(foundation::Function<void(i32)> callback)
         {
-            m_onChanged = core::Move(callback);
+            m_onChanged = foundation::Move(callback);
         }
 
         void SetTextColor(Color color)
@@ -162,13 +162,13 @@ export namespace draconic::gui
 
         // Theming: text color for all rows; listbox::selection = the row-selection highlight.
         void SetThemeTextColor(Color color) override { SetTextColor(color); }
-        void CollectStyleParts(core::Array<core::StringView>& out) const override
+        void CollectStyleParts(foundation::Array<foundation::StringView>& out) const override
         {
-            out.PushBack(core::StringView(u8"selection"));
+            out.PushBack(foundation::StringView(u8"selection"));
         }
-        void SetThemePartColor(core::StringView part, Color color) override
+        void SetThemePartColor(foundation::StringView part, Color color) override
         {
-            if (part != core::StringView(u8"selection"))
+            if (part != foundation::StringView(u8"selection"))
                 return;
             m_highlightColor = color;
             for (ListBoxItem* it : m_items)
@@ -187,11 +187,11 @@ export namespace draconic::gui
             case KeyCode::Down:
                 if (!m_items.IsEmpty())
                     SetSelectedIndex(
-                        core::Min(m_selected + 1, static_cast<i32>(m_items.Size()) - 1));
+                        foundation::Min(m_selected + 1, static_cast<i32>(m_items.Size()) - 1));
                 break;
             case KeyCode::Up:
                 if (!m_items.IsEmpty())
-                    SetSelectedIndex(core::Max(m_selected <= 0 ? 0 : m_selected - 1, 0));
+                    SetSelectedIndex(foundation::Max(m_selected <= 0 ? 0 : m_selected - 1, 0));
                 break;
             case KeyCode::Home:
                 if (!m_items.IsEmpty())
@@ -210,17 +210,17 @@ export namespace draconic::gui
         void Relayout()
         {
             const Rect box = GetContentBounds();
-            m_scroll->SetPosition(core::Float2{box.x, box.y});
-            m_scroll->SetSize(core::Float2{box.width, box.height});
+            m_scroll->SetPosition(foundation::Float2{box.x, box.y});
+            m_scroll->SetSize(foundation::Float2{box.width, box.height});
 
             const f32 rowW = m_scroll->Viewport().width;
             for (usize i = 0; i < m_items.Size(); ++i)
             {
-                m_items[i]->SetPosition(core::Float2{0.0f, static_cast<f32>(i) * m_itemHeight});
-                m_items[i]->SetSize(core::Float2{rowW, m_itemHeight});
+                m_items[i]->SetPosition(foundation::Float2{0.0f, static_cast<f32>(i) * m_itemHeight});
+                m_items[i]->SetSize(foundation::Float2{rowW, m_itemHeight});
             }
             m_scroll->SetContentSize(
-                core::Float2{rowW, static_cast<f32>(m_items.Size()) * m_itemHeight});
+                foundation::Float2{rowW, static_cast<f32>(m_items.Size()) * m_itemHeight});
         }
 
         void ScrollIntoView(i32 index)
@@ -228,11 +228,11 @@ export namespace draconic::gui
             const f32 top = static_cast<f32>(index) * m_itemHeight;
             const f32 bottom = top + m_itemHeight;
             const f32 viewH = m_scroll->Viewport().height;
-            const core::Float2 off = m_scroll->GetScrollOffset();
+            const foundation::Float2 off = m_scroll->GetScrollOffset();
             if (top < off.y)
-                m_scroll->SetScrollOffset(core::Float2{off.x, top});
+                m_scroll->SetScrollOffset(foundation::Float2{off.x, top});
             else if (bottom > off.y + viewH)
-                m_scroll->SetScrollOffset(core::Float2{off.x, bottom - viewH});
+                m_scroll->SetScrollOffset(foundation::Float2{off.x, bottom - viewH});
         }
 
         RefPtr<ScrollView> m_scroll;
@@ -243,7 +243,7 @@ export namespace draconic::gui
         Color m_panelColor{0.13f, 0.14f, 0.17f, 1.0f};
         Color m_textColor{0.88f, 0.90f, 0.94f, 1.0f};
         Color m_highlightColor{0.24f, 0.40f, 0.62f, 1.0f};
-        core::Function<void(i32)> m_onChanged;
+        foundation::Function<void(i32)> m_onChanged;
     };
 
     DRACONIC_DEFINE_OBJECT(ListBoxItem, "draconic::gui")

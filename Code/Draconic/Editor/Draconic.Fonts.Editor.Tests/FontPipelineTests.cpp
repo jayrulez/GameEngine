@@ -3,10 +3,10 @@
 // ResourceManager with the device-free FontFactory and verify the rasterizer-free product.
 // Covers both bake modes (coverage size ramp + msdfgen MSDF) and the importer's file claim.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.content;
 import draconic.resource;
@@ -17,7 +17,7 @@ import draconic.image;
 import draconic.fonts.resource;
 import draconic.fonts.editor;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::vfs;
 using namespace draconic::resource;
 using namespace draconic::fonts;
@@ -52,7 +52,7 @@ TEST_CASE("font.pipeline: FontAsset raster ramp -> cook -> rasterizer-free Font"
     Guid id;
     {
         draconic::content::ContentDatabase outDb(
-            outMount, draconic::core::BinarySerializerFactory(), u8".rasset");
+            outMount, draconic::foundation::BinarySerializerFactory(), u8".rasset");
         auto* inst = outDb.RootGroup()->CreateInstance(u8"uifont", FontResource::StaticType());
         id = inst->Id();
 
@@ -77,7 +77,7 @@ TEST_CASE("font.pipeline: FontAsset raster ramp -> cook -> rasterizer-free Font"
         REQUIRE(builder.Build(asset, ctx).IsOk());
     }
 
-    draconic::content::ContentDatabase outDb(outMount, draconic::core::BinarySerializerFactory(),
+    draconic::content::ContentDatabase outDb(outMount, draconic::foundation::BinarySerializerFactory(),
                                              u8".rasset");
     FontFactory factory;
     ResourceManager manager(outDb);
@@ -123,7 +123,7 @@ TEST_CASE("font.pipeline: MSDF bake cooks a DistanceField resource")
     Guid id;
     {
         draconic::content::ContentDatabase outDb(
-            outMount, draconic::core::BinarySerializerFactory(), u8".rasset");
+            outMount, draconic::foundation::BinarySerializerFactory(), u8".rasset");
         auto* inst = outDb.RootGroup()->CreateInstance(u8"uifont", FontResource::StaticType());
         id = inst->Id();
 
@@ -144,7 +144,7 @@ TEST_CASE("font.pipeline: MSDF bake cooks a DistanceField resource")
         REQUIRE(builder.Build(asset, ctx).IsOk());
     }
 
-    draconic::content::ContentDatabase outDb(outMount, draconic::core::BinarySerializerFactory(),
+    draconic::content::ContentDatabase outDb(outMount, draconic::foundation::BinarySerializerFactory(),
                                              u8".rasset");
     FontFactory factory;
     ResourceManager manager(outDb);
@@ -179,7 +179,7 @@ TEST_CASE("font.pipeline: builder fails on a missing source file")
     RegisterFontAsset();
     RemoveTree();
     NativeFileSystem outMount(u8"draconic_fontpipe_out_db");
-    draconic::content::ContentDatabase outDb(outMount, draconic::core::BinarySerializerFactory(),
+    draconic::content::ContentDatabase outDb(outMount, draconic::foundation::BinarySerializerFactory(),
                                              u8".rasset");
     auto* inst = outDb.RootGroup()->CreateInstance(u8"uifont", FontResource::StaticType());
 

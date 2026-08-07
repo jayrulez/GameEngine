@@ -4,14 +4,14 @@
 // char literals; block comments do not nest, no preprocessor lines.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 module draconic.script.angelscript.editor.ui;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.ui.toolkit;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::script::angelscript
 {

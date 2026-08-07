@@ -6,17 +6,17 @@
 // subsystems land): drag-drop priority + IDragSource init, tooltip hide/hover, popup click-outside.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:input_manager;
 
-import draconic.core;
+import draconic.foundation;
 import :view_id;
 import :input_enums; // MouseButton, KeyCode, KeyModifiers
 import :event_args;
 import :enums; // CursorType
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

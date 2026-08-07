@@ -2,12 +2,12 @@
 // and a graph-player smoke test. Ports Sedulous.Animation.Tests (AnimationGraph*, BlendTree*,
 // BoneMask, AnimationLayer) + adds a state-machine integration check.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.animation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::animation;
 
 static IAnimationStateNode* kNullNode = static_cast<IAnimationStateNode*>(nullptr);

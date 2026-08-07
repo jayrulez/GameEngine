@@ -1,11 +1,11 @@
 // draconic.net:wire - bit-level pack/unpack, varints, ranged-float quantization, overflow safety.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.net;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace net = draconic::net;
 
 TEST_CASE("wire: arbitrary bit widths round-trip in order")

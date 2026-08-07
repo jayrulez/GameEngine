@@ -7,17 +7,17 @@
 // drawables get Cast<T> for downcasts; not reflection-registered/scripted.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:drawable;
 
-import draconic.core; // Object, Optional, Float2, Color
+import draconic.foundation; // Object, Optional, Float2, Color
 import :rect;
 import :draw_context;
 import :control_state;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::gui
 {

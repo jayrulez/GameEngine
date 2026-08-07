@@ -21,9 +21,9 @@
 // the documented v1 contract).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
+#include "Draconic.Foundation/Log/Log.h"
 #include "Draconic.Profiler/Profiler.h"
 
 export module draconic.engine.script;
@@ -31,7 +31,7 @@ export module draconic.engine.script;
 export import :components;
 export import draconic.script.facades; // Entity/Log/Time/Random + the run-service binding
 
-import draconic.core;
+import draconic.foundation;
 import draconic.runtime;
 import draconic.scene;
 import draconic.engine.scene;
@@ -40,7 +40,7 @@ import draconic.script;
 import draconic.script.resource;
 import draconic.profiler;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::script
 {
@@ -293,10 +293,10 @@ export namespace draconic::script
                 WarnLanguageMismatchOnce(languageId);
                 return nullptr;
             }
-            // The full curated surface: core math + the behavior facades, so a backend's
+            // The full curated surface: foundation math + the behavior facades, so a backend's
             // behavior-module framing and any explicit engine-type imports a script writes
             // resolve identically at cook and at runtime. Both idempotent.
-            RegisterCoreTypes();
+            RegisterFoundationTypes();
             RegisterScriptFacadeReflection();
             m_manager = CreateScriptManagerForLanguage(languageId);
             if (m_manager.Get() == nullptr)
@@ -314,7 +314,7 @@ export namespace draconic::script
             m_language = String(languageId);
             m_binding.timeSeconds = 0.0;
             m_binding.deltaSeconds = 0.0f;
-            m_binding.random = core::Random{}; // fresh per-run RNG
+            m_binding.random = foundation::Random{}; // fresh per-run RNG
             m_context->SetErrorHandler(&m_errorSink);
             m_context->SetService(kScriptRuntimeService, &m_binding);
             if (m_configurator)
@@ -1161,8 +1161,8 @@ export namespace draconic::script
 
     inline void SerializeSceneScriptSettings(ISerializer& ar, SceneScriptSettings& s)
     {
-        draconic::core::Serialize(ar, "script", s.script);
-        draconic::core::Serialize(ar, "enabled", s.enabled);
+        draconic::foundation::Serialize(ar, "script", s.script);
+        draconic::foundation::Serialize(ar, "enabled", s.enabled);
     }
 
     /// The scene-root script tier (Unreal Level Blueprint / Godot scene script). One `Level` object

@@ -7,14 +7,14 @@
 // (IFontParser.bf, IFontAtlasBaker.bf).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.fonts.io:interfaces;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.fonts;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::fonts
 {

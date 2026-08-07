@@ -6,7 +6,7 @@ add_library(Draconic.Engine.Script STATIC)
 add_library(Draconic::Engine.Script ALIAS Draconic.Engine.Script)
 
 target_link_libraries(Draconic.Engine.Script
-    PUBLIC Draconic::Core Draconic::Runtime Draconic::Scene Draconic::Engine.Scene
+    PUBLIC Draconic::Foundation Draconic::Runtime Draconic::Scene Draconic::Engine.Scene
            Draconic::Script Draconic::Script.Resource Draconic::Script.Facades
            Draconic::Resource Draconic::Content
            Draconic::Profiler Draconic::Policy)

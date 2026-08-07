@@ -11,11 +11,11 @@
 // Node* - call Forget()/Clear() when widgets are destroyed (lifecycle wiring deferred).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:style_manager;
 
-import draconic.core;  // HashMap, Cast, Move, Array, StringView, Float2, Duration, MakeRef
+import draconic.foundation;  // HashMap, Cast, Move, Array, StringView, Float2, Duration, MakeRef
 import draconic.fonts; // IFontService
 import :node;
 import :ui_node;
@@ -29,8 +29,8 @@ import :resource_provider;
 import :css_values; // ParseLength
 import :actions;    // KeyframeAction
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace fonts = draconic::fonts;
 
 export namespace draconic::gui
@@ -39,11 +39,11 @@ export namespace draconic::gui
     {
     public:
         StyleManager() = default;
-        explicit StyleManager(StyleSheet sheet) : m_sheet(core::Move(sheet)) {}
+        explicit StyleManager(StyleSheet sheet) : m_sheet(foundation::Move(sheet)) {}
 
         void SetStyleSheet(StyleSheet sheet)
         {
-            m_sheet = core::Move(sheet);
+            m_sheet = foundation::Move(sheet);
             m_cache = {};
         } // hot-reload: drop cache
         [[nodiscard]] const StyleSheet& GetStyleSheet() const noexcept { return m_sheet; }
@@ -82,7 +82,7 @@ export namespace draconic::gui
             lengths.ViewportWidth = m_context.Width;
             lengths.ViewportHeight = m_context.Height;
             lengths.ElementFontSize =
-                ParseLength(resolved.Get(core::StringView(u8"font-size"), core::StringView(u8"")))
+                ParseLength(resolved.Get(foundation::StringView(u8"font-size"), foundation::StringView(u8"")))
                     .ValueOr(m_rootFontSize);
 
             if (const ResolvedStyle* previous = m_cache.Find(&widget))
@@ -90,12 +90,12 @@ export namespace draconic::gui
                                    lengths);
             else
                 ApplyStyle(widget, resolved, m_resources, m_fontService, lengths);
-            m_cache.InsertOrAssign(&widget, core::Move(resolved));
+            m_cache.InsertOrAssign(&widget, foundation::Move(resolved));
 
             // Pseudo-element parts (tag::part): resolve + apply each part the widget declares.
-            Array<core::StringView> parts;
+            Array<foundation::StringView> parts;
             widget.CollectStyleParts(parts);
-            for (const core::StringView part : parts)
+            for (const foundation::StringView part : parts)
             {
                 const ResolvedStyle partStyle = m_sheet.Resolve(widget, m_context, true, part);
                 ApplyPartStyle(widget, part, partStyle);
@@ -109,7 +109,7 @@ export namespace draconic::gui
         // Apply to every UIWidget in the subtree.
         void ApplyTree(Node& root)
         {
-            if (UIWidget* widget = core::Cast<UIWidget>(&root))
+            if (UIWidget* widget = foundation::Cast<UIWidget>(&root))
                 ApplyTo(*widget);
             for (usize i = 0; i < root.ChildCount(); ++i)
                 if (Node* child = root.GetChildAt(i))
@@ -132,34 +132,34 @@ export namespace draconic::gui
         // Spawn the @keyframes animation named by the `animation` property (if any), once.
         void ApplyAnimation(UIWidget& widget, const ResolvedStyle& style)
         {
-            if (!style.Has(core::StringView(u8"animation")))
+            if (!style.Has(foundation::StringView(u8"animation")))
             {
                 m_animations.Remove(
                     &widget); // (a running loop keeps going; re-appearance re-spawns)
                 return;
             }
-            core::String name;
+            foundation::String name;
             f32 durationSecs = 0.0f;
             bool loop = false;
-            if (!ParseAnimation(style.Get(core::StringView(u8"animation")), name, durationSecs,
+            if (!ParseAnimation(style.Get(foundation::StringView(u8"animation")), name, durationSecs,
                                 loop))
                 return;
 
-            const core::String* running = m_animations.Find(&widget);
+            const foundation::String* running = m_animations.Find(&widget);
             if (running != nullptr && running->AsView() == name.AsView())
                 return; // already running this one
 
             const Keyframes* kf = m_sheet.FindKeyframes(name.AsView());
             if (kf == nullptr)
                 return;
-            widget.RunAction(core::MakeRef<KeyframeAction>(
-                core::DefaultAllocator(), ExtractOpacityTrack(*kf), ExtractColorTrack(*kf),
-                core::Duration::FromSeconds(static_cast<f64>(durationSecs)), loop));
-            m_animations.InsertOrAssign(&widget, core::Move(name));
+            widget.RunAction(foundation::MakeRef<KeyframeAction>(
+                foundation::DefaultAllocator(), ExtractOpacityTrack(*kf), ExtractColorTrack(*kf),
+                foundation::Duration::FromSeconds(static_cast<f64>(durationSecs)), loop));
+            m_animations.InsertOrAssign(&widget, foundation::Move(name));
         }
 
         // Parse `animation: name duration [infinite]` (timing/direction/etc. ignored for v1).
-        [[nodiscard]] static bool ParseAnimation(core::StringView value, core::String& name,
+        [[nodiscard]] static bool ParseAnimation(foundation::StringView value, foundation::String& name,
                                                  f32& durationSecs, bool& loop)
         {
             bool haveName = false;
@@ -171,13 +171,13 @@ export namespace draconic::gui
                 {
                     if (i > start)
                     {
-                        const core::StringView tok = value.SubStr(start, i - start);
+                        const foundation::StringView tok = value.SubStr(start, i - start);
                         if (!haveName)
                         {
-                            name = core::String(tok);
+                            name = foundation::String(tok);
                             haveName = true;
                         }
-                        else if (tok == core::StringView(u8"infinite"))
+                        else if (tok == foundation::StringView(u8"infinite"))
                             loop = true;
                         else if (Optional<f32> d = ParseLength(tok); d.HasValue())
                             durationSecs = d.Value();
@@ -189,18 +189,18 @@ export namespace draconic::gui
         }
 
         // Pull the opacity track {offset, opacity} from a keyframes definition, sorted by offset.
-        [[nodiscard]] static Array<core::Float2> ExtractOpacityTrack(const Keyframes& kf)
+        [[nodiscard]] static Array<foundation::Float2> ExtractOpacityTrack(const Keyframes& kf)
         {
-            Array<core::Float2> track;
+            Array<foundation::Float2> track;
             for (const KeyframeStop& stop : kf.Stops)
                 for (const StyleProperty& p : stop.Properties)
-                    if (p.Name.AsView() == core::StringView(u8"opacity"))
+                    if (p.Name.AsView() == foundation::StringView(u8"opacity"))
                         if (Optional<f32> o = ParseLength(p.Value.AsView()); o.HasValue())
-                            track.PushBack(core::Float2{stop.Offset, o.Value()});
+                            track.PushBack(foundation::Float2{stop.Offset, o.Value()});
 
             for (usize a = 1; a < track.Size(); ++a) // insertion sort by offset
             {
-                const core::Float2 key = track[a];
+                const foundation::Float2 key = track[a];
                 usize b = a;
                 while (b > 0 && track[b - 1].x > key.x)
                 {
@@ -218,7 +218,7 @@ export namespace draconic::gui
             Array<ColorKey> track;
             for (const KeyframeStop& stop : kf.Stops)
                 for (const StyleProperty& p : stop.Properties)
-                    if (p.Name.AsView() == core::StringView(u8"background-color"))
+                    if (p.Name.AsView() == foundation::StringView(u8"background-color"))
                         if (Optional<Color> c = ParseColor(p.Value.AsView()); c.HasValue())
                             track.PushBack(ColorKey{stop.Offset, c.Value()});
 
@@ -242,6 +242,6 @@ export namespace draconic::gui
         fonts::IFontService* m_fontService = nullptr; // non-owning; resolves font-family
         f32 m_rootFontSize = 16.0f;                   // CSS `rem` base
         HashMap<Node*, ResolvedStyle> m_cache; // last-applied style per widget (non-owning keys)
-        HashMap<Node*, core::String> m_animations; // widget -> running @keyframes animation name
+        HashMap<Node*, foundation::String> m_animations; // widget -> running @keyframes animation name
     };
 }

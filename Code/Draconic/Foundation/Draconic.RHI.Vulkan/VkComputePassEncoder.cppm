@@ -2,13 +2,13 @@
 /// Ported from Sedulous.RHI.Vulkan/VulkanComputePassEncoder.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include "VkIncludes.h"
 
 export module draconic.rhi.vulkan:compute_pass_encoder;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :conversions;
 import :buffer;
@@ -17,7 +17,7 @@ import :compute_pipeline;
 import :pipeline_layout;
 import :query_set;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::vk
 {

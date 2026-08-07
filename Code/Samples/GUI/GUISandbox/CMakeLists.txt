@@ -1,7 +1,7 @@
 # GUI Sandbox - first on-screen test of draconic.gui (widgets + CSS on the VG renderer).
 add_executable(GUISandbox Main.cpp)
 target_link_libraries(GUISandbox PRIVATE
-    Draconic::Core Draconic::RHI Draconic::RHI.Vulkan Draconic::Shaders Draconic::Shaders.System
+    Draconic::Foundation Draconic::RHI Draconic::RHI.Vulkan Draconic::Shaders Draconic::Shaders.System
     Draconic::SamplesFramework
     Draconic::Shell Draconic::Image Draconic::Fonts Draconic::Fonts.TTF
     Draconic::VG Draconic::VG.Renderer Draconic::GUI Draconic::GUI.Shell)

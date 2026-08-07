@@ -1,12 +1,12 @@
 // Draconic::EditorScene - :mesh_page partition (implementation).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 module draconic.editor.scene;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.rhi;
 import draconic.graphics;
@@ -30,7 +30,7 @@ import draconic.editor.core;
 import draconic.editor.app;
 import :camera;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::editor
 {
@@ -193,7 +193,7 @@ namespace draconic::editor
         if (mesh != nullptr && mesh->VertexCount() > 0)
         {
             center = mesh->bounds.Center();
-            radius = core::Max(0.25f, Length(mesh->bounds.Extents()));
+            radius = foundation::Max(0.25f, Length(mesh->bounds.Extents()));
         }
         m_camera.position = center + Float3{0.0f, 0.4f, 1.0f} * (radius * 2.6f);
         m_camera.LookAt(center);

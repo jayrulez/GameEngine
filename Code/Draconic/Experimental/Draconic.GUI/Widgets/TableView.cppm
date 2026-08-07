@@ -8,12 +8,12 @@
 // columns. Multi-selection is inherited.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:table_view;
 
-import draconic.core;  // RefPtr, MakeRef, Array, Function, Move, Max, Float2
+import draconic.foundation;  // RefPtr, MakeRef, Array, Function, Move, Max, Float2
 import draconic.fonts; // CachedFont
 import :rect;
 import :event;
@@ -24,8 +24,8 @@ import :model_index;
 import :model;
 import :abstract_item_view;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace fonts = draconic::fonts;
 
 export namespace draconic::gui
@@ -37,14 +37,14 @@ export namespace draconic::gui
     public:
         TableHeaderCell()
         {
-            SetTag(core::StringView(u8"tableheadercell"));
+            SetTag(foundation::StringView(u8"tableheadercell"));
             SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
             SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
         }
         void SetColumn(usize column) noexcept { m_column = column; }
-        void SetOnClicked(core::Function<void(usize)> callback)
+        void SetOnClicked(foundation::Function<void(usize)> callback)
         {
-            m_onClicked = core::Move(callback);
+            m_onClicked = foundation::Move(callback);
         }
 
     protected:
@@ -56,7 +56,7 @@ export namespace draconic::gui
 
     private:
         usize m_column = 0;
-        core::Function<void(usize)> m_onClicked;
+        foundation::Function<void(usize)> m_onClicked;
     };
 
     // A table row: an ItemRow with one hit-transparent cell Label per column.
@@ -64,7 +64,7 @@ export namespace draconic::gui
     {
         DRACONIC_OBJECT(TableRow, ItemRow)
     public:
-        TableRow() { SetTag(core::StringView(u8"tablerow")); }
+        TableRow() { SetTag(foundation::StringView(u8"tablerow")); }
 
         [[nodiscard]] usize CellCount() const noexcept { return m_cells.Size(); }
         [[nodiscard]] Label* CellAt(usize i) const
@@ -75,16 +75,16 @@ export namespace draconic::gui
         {
             while (m_cells.Size() < count)
             {
-                auto cell = core::MakeRef<Label>(core::DefaultAllocator());
+                auto cell = foundation::MakeRef<Label>(foundation::DefaultAllocator());
                 cell->SetTag(
-                    core::StringView(u8"tablecell")); // container-owned, not a generic label
+                    foundation::StringView(u8"tablecell")); // container-owned, not a generic label
                 cell->SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
                 cell->SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
                 cell->SetFont(font);
                 cell->SetTextColor(textColor);
                 cell->SetHitTestVisible(false); // clicks fall through to the row
                 AddChild(cell.Get());
-                m_cells.PushBack(core::Move(cell));
+                m_cells.PushBack(foundation::Move(cell));
             }
         }
 
@@ -98,11 +98,11 @@ export namespace draconic::gui
     public:
         TableView()
         {
-            SetTag(core::StringView(u8"tableview"));
-            m_header = core::MakeRef<UIWidget>(core::DefaultAllocator());
-            m_header->SetTag(core::StringView(u8"tableheader"));
+            SetTag(foundation::StringView(u8"tableview"));
+            m_header = foundation::MakeRef<UIWidget>(foundation::DefaultAllocator());
+            m_header->SetTag(foundation::StringView(u8"tableheader"));
             m_header->SetBackground(
-                core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), m_headerColor));
+                foundation::MakeRef<RectangleDrawable>(foundation::DefaultAllocator(), m_headerColor));
             AddChild(m_header.Get());
         }
 
@@ -121,7 +121,7 @@ export namespace draconic::gui
         }
         void SetHeaderHeight(f32 height)
         {
-            m_headerHeight = core::Max(0.0f, height);
+            m_headerHeight = foundation::Max(0.0f, height);
             RequestRelayout();
         }
         void SetColumnWidth(usize column, f32 width)
@@ -145,9 +145,9 @@ export namespace draconic::gui
         void SetThemeFont(fonts::CachedFont* font) override { SetFont(font); }
 
         // Header clicks (a column index) - a SortingProxyModel wires this to sort.
-        void SetOnColumnHeaderClicked(core::Function<void(usize)> callback)
+        void SetOnColumnHeaderClicked(foundation::Function<void(usize)> callback)
         {
-            m_onHeaderClicked = core::Move(callback);
+            m_onHeaderClicked = foundation::Move(callback);
         }
 
         // Back-compat row-oriented aliases.
@@ -160,7 +160,7 @@ export namespace draconic::gui
 
         [[nodiscard]] RefPtr<ItemRow> CreateItemRow() override
         {
-            return core::MakeRef<TableRow>(core::DefaultAllocator());
+            return foundation::MakeRef<TableRow>(foundation::DefaultAllocator());
         }
 
         void OnBeforeLayout(f32 contentWidth) override
@@ -182,8 +182,8 @@ export namespace draconic::gui
                                   ->Data(MakeModelIndex(item, static_cast<i32>(c)))
                                   .ToString()
                                   .AsView());
-                cell->SetPosition(core::Float2{x, 0.0f});
-                cell->SetSize(core::Float2{w, GetRowHeight()});
+                cell->SetPosition(foundation::Float2{x, 0.0f});
+                cell->SetSize(foundation::Float2{w, GetRowHeight()});
                 x += w;
             }
         }
@@ -191,14 +191,14 @@ export namespace draconic::gui
         void OnLayoutDecorations() override
         {
             m_header->SetVisible(m_headerHeight > 0.0f);
-            m_header->SetPosition(core::Float2{0.0f, 0.0f});
-            m_header->SetSize(core::Float2{ContentWidth(), m_headerHeight});
+            m_header->SetPosition(foundation::Float2{0.0f, 0.0f});
+            m_header->SetSize(foundation::Float2{ContentWidth(), m_headerHeight});
             f32 x = 0.0f;
             for (usize c = 0; c < m_headerCells.Size(); ++c)
             {
                 const f32 w = c < m_widths.Size() ? m_widths[c] : 0.0f;
-                m_headerCells[c]->SetPosition(core::Float2{x, 0.0f});
-                m_headerCells[c]->SetSize(core::Float2{w, m_headerHeight});
+                m_headerCells[c]->SetPosition(foundation::Float2{x, 0.0f});
+                m_headerCells[c]->SetSize(foundation::Float2{w, m_headerHeight});
                 x += w;
             }
             m_header->ToFront(); // over rows scrolled up under it
@@ -221,7 +221,7 @@ export namespace draconic::gui
             TableView* self = this;
             for (usize c = 0; c < columns; ++c)
             {
-                auto cell = core::MakeRef<TableHeaderCell>(core::DefaultAllocator());
+                auto cell = foundation::MakeRef<TableHeaderCell>(foundation::DefaultAllocator());
                 cell->SetColumn(c);
                 cell->SetFont(m_font);
                 cell->SetTextColor(m_headerTextColor);
@@ -233,7 +233,7 @@ export namespace draconic::gui
                             self->m_onHeaderClicked(col);
                     });
                 m_header->AddChild(cell.Get());
-                m_headerCells.PushBack(core::Move(cell));
+                m_headerCells.PushBack(foundation::Move(cell));
             }
         }
 
@@ -254,7 +254,7 @@ export namespace draconic::gui
             }
             const f32 autoWidth =
                 autoCount > 0
-                    ? core::Max(0.0f, (bodyWidth - explicitTotal) / static_cast<f32>(autoCount))
+                    ? foundation::Max(0.0f, (bodyWidth - explicitTotal) / static_cast<f32>(autoCount))
                     : 0.0f;
             for (usize c = 0; c < columns; ++c)
             {
@@ -268,7 +268,7 @@ export namespace draconic::gui
         Array<f32> m_columnWidths; // 0 = auto
         Array<f32> m_widths;       // resolved widths for the current layout pass
         fonts::CachedFont* m_font = nullptr;
-        core::Function<void(usize)> m_onHeaderClicked;
+        foundation::Function<void(usize)> m_onHeaderClicked;
         f32 m_headerHeight = 26.0f;
         Color m_headerColor{0.20f, 0.22f, 0.27f, 1.0f};
         Color m_headerTextColor{0.86f, 0.89f, 0.94f, 1.0f};

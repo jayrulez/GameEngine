@@ -2,22 +2,22 @@
 //
 // Horizontal path display with clickable segments and separator arrows. Ported from
 // Sedulous.UI.Toolkit/src/BreadcrumbBar.bf. Beef `List<String>` owned -> Array<String>;
-// `path.Split(sep)` + Trim -> a manual char-scan split using core::Trim; `Event<delegate void(
+// `path.Split(sep)` + Trim -> a manual char-scan split using foundation::Trim; `Event<delegate void(
 // BreadcrumbBar, int32)>` -> Event<void(BreadcrumbBar*, i32)>; `Context.InputManager.MouseX` ->
 // Context->GetInputManager()->MouseX(); `bg as RoundedRectDrawable` -> Cast<RoundedRectDrawable>(bg).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui.toolkit:breadcrumb_bar;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import draconic.fonts;
 import draconic.ui;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui::toolkit
 {

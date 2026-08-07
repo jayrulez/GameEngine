@@ -9,15 +9,15 @@
 // stylesheets from files.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:resource_provider;
 
-import draconic.core;  // StringView
+import draconic.foundation;  // StringView
 import draconic.image; // ImageData
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace image = draconic::image;
 
 export namespace draconic::gui
@@ -29,6 +29,6 @@ export namespace draconic::gui
 
         // Load image data for a path (background-image: url(path)). Returns a borrowed pointer
         // owned by the provider (valid until the provider releases it), or null if not found.
-        [[nodiscard]] virtual const image::ImageData* LoadImage(core::StringView path) = 0;
+        [[nodiscard]] virtual const image::ImageData* LoadImage(foundation::StringView path) = 0;
     };
 }

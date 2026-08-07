@@ -1,7 +1,7 @@
 add_executable(DraconicSmoketest Main.cpp)
 target_link_libraries(DraconicSmoketest PRIVATE
     Draconic::RHI.Vulkan Draconic::RHI.Null Draconic::RHI.Validation Draconic::Shaders
-    Draconic::Shell.Desktop Draconic::Runtime.Desktop Draconic::Core Draconic::Policy)
+    Draconic::Shell.Desktop Draconic::Runtime.Desktop Draconic::Foundation Draconic::Policy)
 target_compile_definitions(DraconicSmoketest PRIVATE DRACONIC_HAS_SHADERS)
 
 # DX12 backend - Windows only.

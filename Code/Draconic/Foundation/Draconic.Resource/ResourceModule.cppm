@@ -8,18 +8,18 @@
 // data (node positions, comments) lives on the source and never reaches the
 // product.
 //
-// Sits at the top of the asset stack: Core/VFS -> content -> resource.
+// Sits at the top of the asset stack: Foundation/VFS -> content -> resource.
 
 module;
-#include "Draconic.Core/Debug/Assert.h"
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Debug/Assert.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.resource;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::resource
 {
@@ -196,7 +196,7 @@ export namespace draconic::resource
     void Serialize(ISerializer& ar, Ref<T>& ref)
     {
         const Guid before = ref.id;
-        draconic::core::Serialize(ar, ref.id);
+        draconic::foundation::Serialize(ar, ref.id);
         if (ref.id != before)
         {
             ref.ClearBinding();

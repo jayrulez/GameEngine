@@ -6,14 +6,14 @@
 // ColorUtils). Colors are the engine's float Color (Sedulous used byte Color).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.vg:fills;
 
-import draconic.core;
+import draconic.foundation;
 import :enums; // VGGradientSpread
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::vg
 {

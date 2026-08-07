@@ -6,34 +6,34 @@
 // generalized to arbitrary deferred ops (same shape as draconic.ui's MutationQueue).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:mutation_queue;
 
-import draconic.core; // Function, Array, Move
+import draconic.foundation; // Function, Array, Move
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
     class MutationQueue
     {
     public:
-        void Enqueue(core::Function<void()> op) { m_ops.PushBack(core::Move(op)); }
+        void Enqueue(foundation::Function<void()> op) { m_ops.PushBack(foundation::Move(op)); }
 
         [[nodiscard]] bool IsEmpty() const noexcept { return m_ops.Size() == 0; }
 
         // Run and clear all queued ops. Ops enqueued during draining run on the next drain.
         void Drain()
         {
-            Array<core::Function<void()>> batch = core::Move(m_ops);
-            m_ops = Array<core::Function<void()>>{};
-            for (core::Function<void()>& op : batch)
+            Array<foundation::Function<void()>> batch = foundation::Move(m_ops);
+            m_ops = Array<foundation::Function<void()>>{};
+            for (foundation::Function<void()>& op : batch)
                 op();
         }
 
     private:
-        Array<core::Function<void()>> m_ops;
+        Array<foundation::Function<void()>> m_ops;
     };
 }

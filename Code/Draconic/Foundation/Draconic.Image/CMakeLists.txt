@@ -1,7 +1,7 @@
 # Draconic::Image - `draconic.image` (CPU-side image data + manipulation).
 add_library(Draconic.Image STATIC)
 add_library(Draconic::Image ALIAS Draconic.Image)
-target_link_libraries(Draconic.Image PUBLIC Draconic::Core Draconic::Policy)
+target_link_libraries(Draconic.Image PUBLIC Draconic::Foundation Draconic::Policy)
 target_sources(Draconic.Image
     PRIVATE
         ImageReflectionImpl.cpp

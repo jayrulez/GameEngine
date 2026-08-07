@@ -5,7 +5,7 @@ add_library(Draconic.Fonts.TTF STATIC)
 add_library(Draconic::Fonts.TTF ALIAS Draconic.Fonts.TTF)
 
 target_link_libraries(Draconic.Fonts.TTF
-    PUBLIC Draconic::Core Draconic::Fonts Draconic::Fonts.IO Draconic::Image Draconic::VFS Draconic::Policy
+    PUBLIC Draconic::Foundation Draconic::Fonts Draconic::Fonts.IO Draconic::Image Draconic::VFS Draconic::Policy
     PRIVATE Draconic::Stb)
 
 target_sources(Draconic.Fonts.TTF

@@ -6,17 +6,17 @@
 // loading arrive with the layout and CSS phases.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:ui_widget;
 
-import draconic.core; // String, StringView, Array
+import draconic.foundation; // String, StringView, Array
 import :thickness;
 import :ui_node;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -27,29 +27,29 @@ export namespace draconic::gui
         UIWidget() = default;
 
         // === CSS identity (selector surface) ===
-        void SetTag(core::StringView tag)
+        void SetTag(foundation::StringView tag)
         {
             m_tag = tag;
             Invalidate();
         }
-        [[nodiscard]] core::StringView GetTag() const { return m_tag.AsView(); }
+        [[nodiscard]] foundation::StringView GetTag() const { return m_tag.AsView(); }
 
-        void SetId(core::StringView id)
+        void SetId(foundation::StringView id)
         {
             m_id = id;
             Invalidate();
         }
-        [[nodiscard]] core::StringView GetId() const { return m_id.AsView(); }
+        [[nodiscard]] foundation::StringView GetId() const { return m_id.AsView(); }
 
-        void AddClass(core::StringView cls)
+        void AddClass(foundation::StringView cls)
         {
             if (cls.Size() != 0 && !HasClass(cls))
             {
-                m_classes.PushBack(core::String(cls));
+                m_classes.PushBack(foundation::String(cls));
                 Invalidate();
             }
         }
-        void RemoveClass(core::StringView cls)
+        void RemoveClass(foundation::StringView cls)
         {
             for (usize i = 0; i < m_classes.Size(); ++i)
                 if (m_classes[i] == cls)
@@ -59,14 +59,14 @@ export namespace draconic::gui
                     return;
                 }
         }
-        [[nodiscard]] bool HasClass(core::StringView cls) const
+        [[nodiscard]] bool HasClass(foundation::StringView cls) const
         {
-            for (const core::String& c : m_classes)
+            for (const foundation::String& c : m_classes)
                 if (c == cls)
                     return true;
             return false;
         }
-        void ToggleClass(core::StringView cls)
+        void ToggleClass(foundation::StringView cls)
         {
             if (HasClass(cls))
                 RemoveClass(cls);
@@ -74,7 +74,7 @@ export namespace draconic::gui
                 AddClass(cls);
         }
         [[nodiscard]] usize ClassCount() const noexcept { return m_classes.Size(); }
-        [[nodiscard]] const Array<core::String>& Classes() const noexcept { return m_classes; }
+        [[nodiscard]] const Array<foundation::String>& Classes() const noexcept { return m_classes; }
 
         // === Layout margin ===
         void SetMargin(Thickness margin)
@@ -85,18 +85,18 @@ export namespace draconic::gui
         [[nodiscard]] Thickness GetMargin() const noexcept { return m_margin; }
 
         // === Hover tooltip ===
-        void SetTooltip(core::StringView text) { m_tooltip = text; }
-        [[nodiscard]] core::StringView GetTooltipText() const override
+        void SetTooltip(foundation::StringView text) { m_tooltip = text; }
+        [[nodiscard]] foundation::StringView GetTooltipText() const override
         {
             return m_tooltip.AsView();
         }
 
     private:
-        core::String m_tag;
-        core::String m_id;
-        Array<core::String> m_classes;
+        foundation::String m_tag;
+        foundation::String m_id;
+        Array<foundation::String> m_classes;
         Thickness m_margin{};
-        core::String m_tooltip;
+        foundation::String m_tooltip;
     };
 
     DRACONIC_DEFINE_OBJECT(UIWidget, "draconic::gui")

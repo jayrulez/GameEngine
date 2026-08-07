@@ -5,12 +5,12 @@
 // no-service path); the button label is centered in the padded content rect.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:button;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.fonts; // CachedFont, TextAlignment, VerticalAlignment
 import :button_base;
 import :view;
@@ -22,7 +22,7 @@ import :draw_context;
 import :control_state;
 import :palette;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace fonts = draconic::fonts;
 
 export namespace draconic::ui

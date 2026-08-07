@@ -1,14 +1,14 @@
 // Draconic GUI - gradient + image/nine-slice drawable tests. Metadata + GPU-free geometry
 // checks (VGContext tessellates into a CPU vertex batch).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.vg;
 import draconic.image;
 import draconic.gui;
 
 using namespace draconic::gui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace vg = draconic::vg;
 namespace image = draconic::image;
 
@@ -17,11 +17,11 @@ namespace
     // A tiny 2x2 RGBA image for image-drawable tests (owns its pixels).
     image::OwnedImageData MakeImage()
     {
-        static const core::u8 pixels[16] = {
+        static const foundation::u8 pixels[16] = {
             255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255,
         };
         return image::OwnedImageData(2, 2, image::PixelFormat::RGBA8,
-                                     core::Span<const core::u8>(pixels, 16));
+                                     foundation::Span<const foundation::u8>(pixels, 16));
     }
 }
 
@@ -31,8 +31,8 @@ TEST_CASE("gradient: linear stops and geometry")
 {
     LinearGradientDrawable g;
     CHECK(g.StopCount() == 0);
-    g.AddStop(0.0f, core::Color::Red);
-    g.AddStop(1.0f, core::Color::Blue);
+    g.AddStop(0.0f, foundation::Color::Red);
+    g.AddStop(1.0f, foundation::Color::Blue);
     CHECK(g.StopCount() == 2);
 
     vg::VGContext ctx;
@@ -58,8 +58,8 @@ TEST_CASE("gradient: radial defaults and geometry")
     CHECK(g.Center.x == doctest::Approx(0.5f));
     CHECK(g.Center.y == doctest::Approx(0.5f));
     CHECK(g.RadiusScale == doctest::Approx(1.0f));
-    g.AddStop(0.0f, core::Color::White);
-    g.AddStop(1.0f, core::Color::Red);
+    g.AddStop(0.0f, foundation::Color::White);
+    g.AddStop(1.0f, foundation::Color::Red);
 
     vg::VGContext ctx;
     DrawContext dc{ctx};

@@ -5,17 +5,17 @@
 // -> Array<f32>; Math.Clamp -> local clamp helpers.)
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui:grid_layout;
 
-import draconic.core; // Max, Min, Array
+import draconic.foundation; // Max, Min, Array
 import :view;
 import :layout_params;
 import :box_constraints;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::ui::detail
 {

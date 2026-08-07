@@ -8,20 +8,20 @@
 // The seam is backend-neutral: each backend subclasses IScriptDelegate to wrap its
 // own callable primitive (Wren fn handle, AngelScript function handle), and marshals
 // a script function argument into one when a reflected method parameter is typed
-// RefPtr<IScriptDelegate>. Because IScriptDelegate derives core::Object, the existing
+// RefPtr<IScriptDelegate>. Because IScriptDelegate derives foundation::Object, the existing
 // reflection object-argument marshalling (ParamTypeOf / AcceptArg / ConvertArg)
 // already recognizes RefPtr<IScriptDelegate> as an object parameter - the only
 // backend-specific work is wrapping the callable slot into a delegate.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.script:script_delegate;
 
-import draconic.core;
+import draconic.foundation;
 
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::script
 {
@@ -30,12 +30,12 @@ export namespace draconic::script
     /// alive across garbage collection. Invoke marshals `args` into the script call and
     /// returns its result (empty Variant for a void callback), or an error if the call
     /// faults or the owning context is gone.
-    class IScriptDelegate : public core::Object
+    class IScriptDelegate : public foundation::Object
     {
-        DRACONIC_OBJECT(IScriptDelegate, core::Object)
+        DRACONIC_OBJECT(IScriptDelegate, foundation::Object)
     public:
-        [[nodiscard]] virtual core::Result<core::Variant>
-        Invoke(core::Span<core::Variant> args) = 0;
+        [[nodiscard]] virtual foundation::Result<foundation::Variant>
+        Invoke(foundation::Span<foundation::Variant> args) = 0;
     };
 }
 

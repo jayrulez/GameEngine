@@ -2,14 +2,14 @@
 /// Useful for headless testing, CI, or when no GPU is available.
 
 module;
-#include "Draconic.Core/Prelude.h" // <new> reachability for placement-new in core templates (GCC)
+#include "Draconic.Foundation/Prelude.h" // <new> reachability for placement-new in core templates (GCC)
 
 export module draconic.rhi.null;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::null
 {

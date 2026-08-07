@@ -12,18 +12,18 @@
 // via the VFS). Never linked by the runtime.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.shaders.editor;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.editor;
 import draconic.vfs;
 import draconic.shaders.resource;
 import draconic.content;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::shaders
 {
@@ -43,8 +43,8 @@ export namespace draconic::shaders
         void Serialize(ISerializer& ar) override
         {
             draconic::editor::Asset::Serialize(ar); // fileName (vertex source)
-            draconic::core::Serialize(ar, "name", name);
-            draconic::core::Serialize(ar, "fragmentFile", fragmentFile);
+            draconic::foundation::Serialize(ar, "name", name);
+            draconic::foundation::Serialize(ar, "fragmentFile", fragmentFile);
         }
     };
 

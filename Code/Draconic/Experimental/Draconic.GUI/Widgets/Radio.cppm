@@ -7,19 +7,19 @@
 // Label in a horizontal LinearLayout for the usual "(o) caption" look.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.gui:radio;
 
-import draconic.core; // Color, Function, Move, Array
+import draconic.foundation; // Color, Function, Move, Array
 import :rect;
 import :event;
 import :draw_context;
 import :ui_widget;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 
 export namespace draconic::gui
 {
@@ -33,7 +33,7 @@ export namespace draconic::gui
     public:
         RadioButton()
         {
-            SetTag(core::StringView(u8"radio"));
+            SetTag(foundation::StringView(u8"radio"));
             SetTabFocusable(true);
         }
 
@@ -51,7 +51,7 @@ export namespace draconic::gui
         }
 
         // Fired when this button becomes selected.
-        void SetOnSelected(core::Function<void()> callback) { m_onSelected = core::Move(callback); }
+        void SetOnSelected(foundation::Function<void()> callback) { m_onSelected = foundation::Move(callback); }
 
         void SetRingColor(Color color)
         {
@@ -65,16 +65,16 @@ export namespace draconic::gui
         }
 
         // Theming parts: radio::ring (outline) / ::dot (inner fill).
-        void CollectStyleParts(core::Array<core::StringView>& out) const override
+        void CollectStyleParts(foundation::Array<foundation::StringView>& out) const override
         {
-            out.PushBack(core::StringView(u8"ring"));
-            out.PushBack(core::StringView(u8"dot"));
+            out.PushBack(foundation::StringView(u8"ring"));
+            out.PushBack(foundation::StringView(u8"dot"));
         }
-        void SetThemePartColor(core::StringView part, Color color) override
+        void SetThemePartColor(foundation::StringView part, Color color) override
         {
-            if (part == core::StringView(u8"ring"))
+            if (part == foundation::StringView(u8"ring"))
                 SetRingColor(color);
-            else if (part == core::StringView(u8"dot"))
+            else if (part == foundation::StringView(u8"dot"))
                 SetDotColor(color);
         }
 
@@ -89,8 +89,8 @@ export namespace draconic::gui
         {
             (void)localBounds;
             const Rect box = GetContentBounds();
-            const f32 r = core::Min(box.width, box.height) * 0.5f;
-            const core::Float2 c{box.x + box.width * 0.5f, box.y + box.height * 0.5f};
+            const f32 r = foundation::Min(box.width, box.height) * 0.5f;
+            const foundation::Float2 c{box.x + box.width * 0.5f, box.y + box.height * 0.5f};
             ctx.VG().StrokeCircle(c, r - 1.0f, m_ringColor, 2.0f);
             if (m_selected)
                 ctx.VG().FillCircle(c, r * 0.5f, m_dotColor);
@@ -113,7 +113,7 @@ export namespace draconic::gui
         bool m_selected = false;
         Color m_ringColor{0.60f, 0.65f, 0.72f, 1.0f};
         Color m_dotColor{0.31f, 0.63f, 0.85f, 1.0f};
-        core::Function<void(void)> m_onSelected;
+        foundation::Function<void(void)> m_onSelected;
     };
 
     // Controller (not a Node) that keeps exactly one of its member buttons selected.
@@ -158,15 +158,15 @@ export namespace draconic::gui
         }
         [[nodiscard]] usize Count() const noexcept { return m_buttons.Size(); }
 
-        void SetOnSelectionChanged(core::Function<void(i32)> callback)
+        void SetOnSelectionChanged(foundation::Function<void(i32)> callback)
         {
-            m_onChanged = core::Move(callback);
+            m_onChanged = foundation::Move(callback);
         }
 
     private:
-        core::Array<RadioButton*> m_buttons; // non-owning (the tree owns the buttons)
+        foundation::Array<RadioButton*> m_buttons; // non-owning (the tree owns the buttons)
         i32 m_selectedIndex = -1;
-        core::Function<void(i32)> m_onChanged;
+        foundation::Function<void(i32)> m_onChanged;
     };
 
     inline void RadioButton::Select()

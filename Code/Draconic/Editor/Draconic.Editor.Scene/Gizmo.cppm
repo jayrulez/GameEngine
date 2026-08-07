@@ -26,18 +26,18 @@
 // GizmoFrameInput struct - both fully scriptable in headless tests.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include <initializer_list>
 
 export module draconic.editor.scene:gizmo;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.scene;
 import draconic.render;
 import draconic.editor.core;
 import :edit;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {
@@ -290,7 +290,7 @@ export namespace draconic::editor
 
         // Drag session capture.
         Guid m_dragEntity;
-        core::Transform m_dragStartLocal;
+        foundation::Transform m_dragStartLocal;
         Float4x4 m_parentInverseWorld = Float4x4::Identity();
         Quaternion m_parentRotation = Quaternion::Identity;
     };

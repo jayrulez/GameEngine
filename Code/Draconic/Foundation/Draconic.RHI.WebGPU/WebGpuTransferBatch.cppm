@@ -7,19 +7,19 @@
 /// SubmitAsync signals the fence from OnSubmittedWorkDone instead.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 #include "WebGpuIncludes.h"
 
 export module draconic.rhi.webgpu:transfer_batch;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.rhi;
 import :api;
 import :buffer;
 import :texture;
 import :fence;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::rhi::webgpu
 {

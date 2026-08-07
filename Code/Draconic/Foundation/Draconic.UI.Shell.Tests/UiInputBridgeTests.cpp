@@ -2,16 +2,16 @@
 // rule. Synthetic shell::InputEvents drive a UIContext through the bridge; a mock IWindow verifies the
 // focus-driven text-input (IME) sync.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 import draconic.ui.shell;
 import draconic.shell;
 import draconic.shell.null;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::ui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 namespace shell = draconic::shell;
 
 namespace
@@ -19,7 +19,7 @@ namespace
     // A RootView-filling focusable/hittable EditText is created directly; no TestHelpers needed here.
     void SetupRoot(UIContext& ctx, RefPtr<RootView>& root)
     {
-        root = core::MakeRef<RootView>(core::DefaultAllocator());
+        root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
         root->ViewportSize = Float2{800, 600};
         ctx.AddRootView(root.Get());
     }
@@ -58,14 +58,14 @@ namespace
     {
     public:
         bool active = false;
-        [[nodiscard]] core::u32 Id() const noexcept override { return 1; }
-        [[nodiscard]] core::u32 Width() const noexcept override { return 800; }
-        [[nodiscard]] core::u32 Height() const noexcept override { return 600; }
-        [[nodiscard]] core::i32 X() const noexcept override { return 0; }
-        [[nodiscard]] core::i32 Y() const noexcept override { return 0; }
-        void SetPosition(core::i32, core::i32) override {}
-        void SetSize(core::u32, core::u32) override {}
-        [[nodiscard]] core::f32 ContentScale() const noexcept override { return 1.0f; }
+        [[nodiscard]] foundation::u32 Id() const noexcept override { return 1; }
+        [[nodiscard]] foundation::u32 Width() const noexcept override { return 800; }
+        [[nodiscard]] foundation::u32 Height() const noexcept override { return 600; }
+        [[nodiscard]] foundation::i32 X() const noexcept override { return 0; }
+        [[nodiscard]] foundation::i32 Y() const noexcept override { return 0; }
+        void SetPosition(foundation::i32, foundation::i32) override {}
+        void SetSize(foundation::u32, foundation::u32) override {}
+        [[nodiscard]] foundation::f32 ContentScale() const noexcept override { return 1.0f; }
         [[nodiscard]] shell::NativeWindow Native() const noexcept override { return {}; }
         [[nodiscard]] bool IsOpen() const noexcept override { return true; }
         [[nodiscard]] bool IsMinimized() const noexcept override { return false; }
@@ -81,7 +81,7 @@ TEST_CASE("ui-shell: click focuses and typed text reaches the field")
     UIContext ctx;
     RefPtr<RootView> root;
     SetupRoot(ctx, root);
-    auto edit = core::MakeRef<EditText>(core::DefaultAllocator());
+    auto edit = foundation::MakeRef<EditText>(foundation::DefaultAllocator());
     root->AddView(edit.Get());
     LayoutPass(ctx, root.Get());
 
@@ -99,9 +99,9 @@ TEST_CASE("ui-shell: text input target follows focus (IME sync)")
     UIContext ctx;
     RefPtr<RootView> root;
     SetupRoot(ctx, root);
-    auto edit = core::MakeRef<EditText>(core::DefaultAllocator());
+    auto edit = foundation::MakeRef<EditText>(foundation::DefaultAllocator());
     edit->IsReadOnly.SetValue(true); // read-only -> does NOT want text input
-    auto edit2 = core::MakeRef<EditText>(core::DefaultAllocator());
+    auto edit2 = foundation::MakeRef<EditText>(foundation::DefaultAllocator());
     root->AddView(edit.Get());
     root->AddView(edit2.Get());
     LayoutPass(ctx, root.Get());
@@ -155,8 +155,8 @@ TEST_CASE("ui-shell: ShellClipboard with null shell is graceful")
 TEST_CASE("ui-shell: function and digit keys map through the bridge")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
-    root->ViewportSize = core::Float2{800, 600};
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
+    root->ViewportSize = foundation::Float2{800, 600};
     ctx.AddRootView(root.Get());
 
     // A focusable probe recording the keys it receives.
@@ -171,7 +171,7 @@ TEST_CASE("ui-shell: function and digit keys map through the bridge")
             e.Handled = true;
         }
     };
-    auto probe = core::MakeRef<KeyProbe>(core::DefaultAllocator());
+    auto probe = foundation::MakeRef<KeyProbe>(foundation::DefaultAllocator());
     root->AddView(probe.Get());
     ctx.GetFocusManager()->SetFocus(probe.Get());
 
@@ -202,8 +202,8 @@ TEST_CASE("ui-shell: function and digit keys map through the bridge")
 TEST_CASE("ui-shell: keypad enter maps to Return")
 {
     UIContext ctx;
-    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
-    root->ViewportSize = core::Float2{800, 600};
+    auto root = foundation::MakeRef<RootView>(foundation::DefaultAllocator());
+    root->ViewportSize = foundation::Float2{800, 600};
     ctx.AddRootView(root.Get());
 
     class KeyProbe final : public View
@@ -217,7 +217,7 @@ TEST_CASE("ui-shell: keypad enter maps to Return")
             e.Handled = true;
         }
     };
-    auto probe = core::MakeRef<KeyProbe>(core::DefaultAllocator());
+    auto probe = foundation::MakeRef<KeyProbe>(foundation::DefaultAllocator());
     root->AddView(probe.Get());
     ctx.GetFocusManager()->SetFocus(probe.Get());
 

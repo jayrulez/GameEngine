@@ -4,14 +4,14 @@
 // Ported from Sedulous.UI/src/Layout/BoxConstraints.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:box_constraints;
 
-import draconic.core; // Max, Min, kFloatMax
+import draconic.foundation; // Max, Min, kFloatMax
 import :thickness;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

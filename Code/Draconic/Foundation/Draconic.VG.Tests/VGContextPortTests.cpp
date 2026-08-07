@@ -1,11 +1,11 @@
 // Ported from Sedulous.VG.Tests/VGContextTests.bf. (Sedulous Color32.Yellow is
 // inlined; Float4x4 != uses the C++20 rewrite of operator==.)
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.vg;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::vg;
 
 TEST_CASE("vgcontext: FillRect produces vertices and indices")

@@ -1,23 +1,23 @@
 // Draconic GUI - CSS value parsers + typed property application: parse value strings into
 // Color/length/bool/Thickness, and apply a resolved (or parsed) stylesheet onto a widget.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.gui;
 
 using namespace draconic::gui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 namespace
 {
     template <typename T>
-    core::RefPtr<T> Make()
+    foundation::RefPtr<T> Make()
     {
-        return core::MakeRef<T>(core::DefaultAllocator());
+        return foundation::MakeRef<T>(foundation::DefaultAllocator());
     }
-    core::StringView SV(const char8_t* s) { return core::StringView(s); }
+    foundation::StringView SV(const char8_t* s) { return foundation::StringView(s); }
 
-    core::RefPtr<UIWidget> Widget(const char8_t* tag)
+    foundation::RefPtr<UIWidget> Widget(const char8_t* tag)
     {
         auto w = Make<UIWidget>();
         w->SetTag(SV(tag));
@@ -91,7 +91,7 @@ TEST_CASE("style-applier: background-color / padding / opacity")
     ApplyStyle(*w.Get(), sheet.Resolve(*w.Get()));
 
     REQUIRE(w->GetBackground() != nullptr);
-    auto* bg = core::Cast<RectangleDrawable>(w->GetBackground());
+    auto* bg = foundation::Cast<RectangleDrawable>(w->GetBackground());
     REQUIRE(bg != nullptr);
     CHECK(bg->GetColor().b == doctest::Approx(1.0f)); // blue
     CHECK(w->GetPadding().Left == doctest::Approx(4.0f));
@@ -121,7 +121,7 @@ TEST_CASE("style-applier: cascade drives the applied value")
     w->AddClass(SV(u8"primary"));
     ApplyStyle(*w.Get(), sheet.Resolve(*w.Get()));
 
-    auto* bg = core::Cast<RectangleDrawable>(w->GetBackground());
+    auto* bg = foundation::Cast<RectangleDrawable>(w->GetBackground());
     REQUIRE(bg != nullptr);
     CHECK(bg->GetColor().r == doctest::Approx(1.0f)); // .primary (red) beats button (black)
     CHECK(bg->GetColor().g == doctest::Approx(0.0f));
@@ -157,12 +157,12 @@ TEST_CASE("style-applier: min/max-width/height clamp the applied size")
 TEST_CASE("node: SetSize clamps to min/max size constraints")
 {
     auto w = Make<UIWidget>();
-    w->SetMaxSize(core::Float2{100.0f, 100.0f});
-    w->SetSize(core::Float2{200.0f, 50.0f});
+    w->SetMaxSize(foundation::Float2{100.0f, 100.0f});
+    w->SetSize(foundation::Float2{200.0f, 50.0f});
     CHECK(w->GetSize().x == doctest::Approx(100.0f)); // clamped to max
     CHECK(w->GetSize().y == doctest::Approx(50.0f));  // within bounds
 
-    w->SetMinSize(core::Float2{60.0f, 60.0f});
+    w->SetMinSize(foundation::Float2{60.0f, 60.0f});
     CHECK(w->GetSize().y == doctest::Approx(60.0f)); // re-clamped up when the min grows
 }
 
@@ -206,12 +206,12 @@ TEST_CASE("style-applier: border + border-radius round the background and set a 
     ApplyStyle(*w.Get(), sheet.Resolve(*w.Get(), MediaContext{}, /*applyPseudo*/ false));
 
     // Background rounded.
-    auto* bg = core::Cast<RectangleDrawable>(w->GetBackground());
+    auto* bg = foundation::Cast<RectangleDrawable>(w->GetBackground());
     REQUIRE(bg != nullptr);
     CHECK(bg->GetCornerRadii().topLeft == doctest::Approx(6.0f));
 
     // Border foreground: width + color + radii.
-    auto* border = core::Cast<BorderDrawable>(w->GetForeground());
+    auto* border = foundation::Cast<BorderDrawable>(w->GetForeground());
     REQUIRE(border != nullptr);
     CHECK(border->GetWidth() == doctest::Approx(2.0f));
     CHECK(border->GetColor().r == doctest::Approx(1.0f));
@@ -223,7 +223,7 @@ TEST_CASE("style-applier: border-color / border-width overrides without the shor
     StyleSheet sheet = CSSParser::Parse(SV(u8"box { border-width: 4; border-color: blue; }"));
     auto w = Widget(u8"box");
     ApplyStyle(*w.Get(), sheet.Resolve(*w.Get(), MediaContext{}, /*applyPseudo*/ false));
-    auto* border = core::Cast<BorderDrawable>(w->GetForeground());
+    auto* border = foundation::Cast<BorderDrawable>(w->GetForeground());
     REQUIRE(border != nullptr);
     CHECK(border->GetWidth() == doctest::Approx(4.0f));
     CHECK(border->GetColor().b == doctest::Approx(1.0f));

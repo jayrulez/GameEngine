@@ -6,14 +6,14 @@
 // names pass through. Ported from Sedulous.Xml/XmlLexer.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.xml:lexer;
 
-import draconic.core;
+import draconic.foundation;
 import :result;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::xml
 {

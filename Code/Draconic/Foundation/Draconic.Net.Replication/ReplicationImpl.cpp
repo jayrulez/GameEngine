@@ -3,18 +3,18 @@
 // static layout cache + the type-dispatch table live in one TU.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 module draconic.net.replication;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.net;
 import draconic.scene;
 import draconic.script.facades; // ComponentOf<T> + RegisterExtra* (the script `.of` surface, Track A)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::net
 {

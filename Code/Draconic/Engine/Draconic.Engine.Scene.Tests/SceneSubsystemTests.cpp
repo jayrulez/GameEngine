@@ -2,14 +2,14 @@
 // subsystem registers with the broker and injects a per-scene system into each new
 // scene; the SceneSubsystem owns scenes, ticks them, and notifies create/ready/destroy.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
-import draconic.core;
+import draconic.foundation;
 import draconic.runtime;
 import draconic.scene;
 import draconic.engine.scene;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::scene;
 namespace runtime = draconic::runtime;
 

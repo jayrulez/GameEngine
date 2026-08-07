@@ -1,12 +1,12 @@
 // Draconic GUI - Rect tests. Derived from eepp Rectf behavior (Left/Top/Right/Bottom,
 // contains/intersect), adapted to the x/y/w/h storage.
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.gui;
 
 using namespace draconic::gui;
-namespace core = draconic::core;
+namespace foundation = draconic::foundation;
 
 TEST_CASE("rect: default is zero")
 {
@@ -25,9 +25,9 @@ TEST_CASE("rect: edges and accessors")
     CHECK(r.Top() == 20.0f);
     CHECK(r.Right() == 40.0f);
     CHECK(r.Bottom() == 60.0f);
-    CHECK(r.Position() == core::Float2{10.0f, 20.0f});
-    CHECK(r.Size() == core::Float2{30.0f, 40.0f});
-    CHECK(r.Center() == core::Float2{25.0f, 40.0f});
+    CHECK(r.Position() == foundation::Float2{10.0f, 20.0f});
+    CHECK(r.Size() == foundation::Float2{30.0f, 40.0f});
+    CHECK(r.Center() == foundation::Float2{25.0f, 40.0f});
     CHECK_FALSE(r.IsEmpty());
 }
 
@@ -39,18 +39,18 @@ TEST_CASE("rect: FromLTRB matches edges")
 
 TEST_CASE("rect: FromMinMax")
 {
-    Rect r = Rect::FromMinMax(core::Float2{1.0f, 2.0f}, core::Float2{5.0f, 8.0f});
+    Rect r = Rect::FromMinMax(foundation::Float2{1.0f, 2.0f}, foundation::Float2{5.0f, 8.0f});
     CHECK(r == Rect{1.0f, 2.0f, 4.0f, 6.0f});
 }
 
 TEST_CASE("rect: Contains point")
 {
     Rect r{0.0f, 0.0f, 100.0f, 50.0f};
-    CHECK(r.Contains(core::Float2{50.0f, 25.0f}));
-    CHECK(r.Contains(core::Float2{0.0f, 0.0f}));    // edge inclusive
-    CHECK(r.Contains(core::Float2{100.0f, 50.0f})); // edge inclusive
-    CHECK_FALSE(r.Contains(core::Float2{101.0f, 25.0f}));
-    CHECK_FALSE(r.Contains(core::Float2{50.0f, -1.0f}));
+    CHECK(r.Contains(foundation::Float2{50.0f, 25.0f}));
+    CHECK(r.Contains(foundation::Float2{0.0f, 0.0f}));    // edge inclusive
+    CHECK(r.Contains(foundation::Float2{100.0f, 50.0f})); // edge inclusive
+    CHECK_FALSE(r.Contains(foundation::Float2{101.0f, 25.0f}));
+    CHECK_FALSE(r.Contains(foundation::Float2{50.0f, -1.0f}));
 }
 
 TEST_CASE("rect: Contains rect")
@@ -92,7 +92,7 @@ TEST_CASE("rect: Merge union")
 TEST_CASE("rect: Rectangle round-trip")
 {
     Rect r{3.0f, 4.0f, 5.0f, 6.0f};
-    core::Rectangle cr = r.ToRectangle();
+    foundation::Rectangle cr = r.ToRectangle();
     CHECK(cr.x == 3.0f);
     CHECK(cr.width == 5.0f);
     CHECK(Rect::FromRectangle(cr) == r);

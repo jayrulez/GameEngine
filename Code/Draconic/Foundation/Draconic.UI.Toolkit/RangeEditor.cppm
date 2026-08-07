@@ -10,17 +10,17 @@
 
 module;
 #include <cmath>
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.ui.toolkit:range_editor;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vg;
 import draconic.ui;
 import :property_editor;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui::toolkit
 {
@@ -166,15 +166,15 @@ export namespace draconic::ui::toolkit
         /// integer digits + dot + decimals, adds a sign slot if the range can go negative, plus padding.
         [[nodiscard]] f32 ComputeNumericFieldWidth() const
         {
-            const f32 absMax = core::Max(Abs(m_min), Abs(m_max));
+            const f32 absMax = foundation::Max(Abs(m_min), Abs(m_max));
             i32 intDigits = (absMax >= 1) ? static_cast<i32>(std::log10(absMax)) + 1 : 1;
             i32 chars = intDigits + 1 + 2; // int + dot + 2 decimals
             if (m_min < 0)
             {
                 chars++;
             } // negative sign
-            chars = core::Min(chars, 6);
-            return core::Max(60.0f, static_cast<f32>(chars) * 12.0f + 16.0f);
+            chars = foundation::Min(chars, 6);
+            return foundation::Max(60.0f, static_cast<f32>(chars) * 12.0f + 16.0f);
         }
 
         f32 m_value;

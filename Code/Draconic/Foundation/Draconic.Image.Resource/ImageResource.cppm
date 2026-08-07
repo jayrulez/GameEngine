@@ -7,17 +7,17 @@
 // object; pixels are the heavy "pixels" data stream.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.image.resource;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.image;
 import draconic.content;
 import draconic.resource;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::resource;
 
 export namespace draconic::image
@@ -34,10 +34,10 @@ export namespace draconic::image
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "width", width);
-            draconic::core::Serialize(ar, "height", height);
-            draconic::core::Serialize(ar, "format", format);
-            draconic::core::Serialize(ar, "colorSpace", colorSpace);
+            draconic::foundation::Serialize(ar, "width", width);
+            draconic::foundation::Serialize(ar, "height", height);
+            draconic::foundation::Serialize(ar, "format", format);
+            draconic::foundation::Serialize(ar, "colorSpace", colorSpace);
         }
 
         [[nodiscard]] Span<const u8> Pixels() const noexcept

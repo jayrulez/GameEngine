@@ -9,15 +9,15 @@
 // because the PopupLayer may outlive this manager (the view is shown ownsView:false).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:tooltip_manager;
 
-import draconic.core;
+import draconic.foundation;
 import :view_id;
 import :tooltip_placement;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

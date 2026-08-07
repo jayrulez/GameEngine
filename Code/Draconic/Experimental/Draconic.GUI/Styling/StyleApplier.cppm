@@ -7,11 +7,11 @@
 // Font* via a resource provider) arrive with the resource-wiring increment.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.gui:style_applier;
 
-import draconic.core;  // Cast, Optional, Color, Float2, MakeRef, DefaultAllocator
+import draconic.foundation;  // Cast, Optional, Color, Float2, MakeRef, DefaultAllocator
 import draconic.fonts; // CachedFont, IFontService
 import draconic.image; // ImageData
 import draconic.vg;    // CornerRadii
@@ -28,8 +28,8 @@ import :style_sheet; // ResolvedStyle
 import :css_values;
 import :resource_provider;
 
-using namespace draconic::core;
-namespace core = draconic::core;
+using namespace draconic::foundation;
+namespace foundation = draconic::foundation;
 namespace fonts = draconic::fonts;
 namespace image = draconic::image;
 
@@ -37,12 +37,12 @@ export namespace draconic::gui
 {
     // Strip a CSS url(...) wrapper (and any quotes) to the inner resource name; returns the
     // value unchanged if it is not a url() form.
-    [[nodiscard]] inline core::StringView ParseUrl(core::StringView value)
+    [[nodiscard]] inline foundation::StringView ParseUrl(foundation::StringView value)
     {
-        core::StringView v = core::Trim(value);
-        if (v.Size() >= 5 && v.SubStr(0, 4) == core::StringView(u8"url(") &&
+        foundation::StringView v = foundation::Trim(value);
+        if (v.Size() >= 5 && v.SubStr(0, 4) == foundation::StringView(u8"url(") &&
             v[v.Size() - 1] == u8')')
-            v = core::Trim(v.SubStr(4, v.Size() - 5));
+            v = foundation::Trim(v.SubStr(4, v.Size() - 5));
         if (v.Size() >= 2 && (v[0] == u8'"' || v[0] == u8'\'') && v[v.Size() - 1] == v[0])
             v = v.SubStr(1, v.Size() - 2);
         return v;
@@ -56,10 +56,10 @@ export namespace draconic::gui
                            fonts::IFontService* fontService = nullptr,
                            const LengthContext& lengths = {})
     {
-        using core::StringView;
+        using foundation::StringView;
 
         // The containing dimensions percentages resolve against (the parent's size).
-        core::Float2 percentBase{0.0f, 0.0f};
+        foundation::Float2 percentBase{0.0f, 0.0f};
         if (Node* parent = node.GetParent())
             percentBase = parent->GetSize();
 
@@ -67,7 +67,7 @@ export namespace draconic::gui
             if (Optional<Color> c = ParseColor(style.Get(StringView(u8"background-color")));
                 c.HasValue())
                 node.SetBackground(
-                    core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), c.Value()));
+                    foundation::MakeRef<RectangleDrawable>(foundation::DefaultAllocator(), c.Value()));
 
         if (style.Has(StringView(u8"padding")))
             if (Optional<Thickness> t =
@@ -82,7 +82,7 @@ export namespace draconic::gui
         // min/max-width/height: set the size constraints before width/height so the applied
         // size is clamped to them.
         {
-            core::Float2 mn = node.GetMinSize();
+            foundation::Float2 mn = node.GetMinSize();
             bool changedMin = false;
             if (style.Has(StringView(u8"min-width")))
                 if (Optional<f32> v =
@@ -103,7 +103,7 @@ export namespace draconic::gui
             if (changedMin)
                 node.SetMinSize(mn);
 
-            core::Float2 mx = node.GetMaxSize();
+            foundation::Float2 mx = node.GetMaxSize();
             bool changedMax = false;
             if (style.Has(StringView(u8"max-width")))
                 if (Optional<f32> v =
@@ -127,7 +127,7 @@ export namespace draconic::gui
 
         // width / height (combined into one SetSize; clamped by any min/max above).
         {
-            core::Float2 size = node.GetSize();
+            foundation::Float2 size = node.GetSize();
             bool changed = false;
             if (style.Has(StringView(u8"width")))
                 if (Optional<f32> w =
@@ -163,7 +163,7 @@ export namespace draconic::gui
         }
 
         if (style.Has(StringView(u8"margin")))
-            if (UIWidget* widget = core::Cast<UIWidget>(&node))
+            if (UIWidget* widget = foundation::Cast<UIWidget>(&node))
                 if (Optional<Thickness> t =
                         ResolveThickness(style.Get(StringView(u8"margin")), lengths);
                     t.HasValue())
@@ -205,7 +205,7 @@ export namespace draconic::gui
             const StringView path = ParseUrl(style.Get(StringView(u8"background-image")));
             if (path.Size() != 0)
                 if (const image::ImageData* img = resources->LoadImage(path))
-                    node.SetBackground(core::MakeRef<ImageDrawable>(core::DefaultAllocator(), img));
+                    node.SetBackground(foundation::MakeRef<ImageDrawable>(foundation::DefaultAllocator(), img));
         }
 
         // border-radius: round the background rectangle; the border (below) reuses the radii.
@@ -217,7 +217,7 @@ export namespace draconic::gui
                 r.HasValue())
             {
                 radii = r.Value();
-                if (RectangleDrawable* bg = core::Cast<RectangleDrawable>(node.GetBackground()))
+                if (RectangleDrawable* bg = foundation::Cast<RectangleDrawable>(node.GetBackground()))
                     bg->SetCornerRadii(radii);
             }
 
@@ -245,12 +245,12 @@ export namespace draconic::gui
 
             if (borderWidth.HasValue() || borderColor.HasValue())
             {
-                auto border = core::MakeRef<BorderDrawable>(
-                    core::DefaultAllocator(), borderColor.ValueOr(Color{0.0f, 0.0f, 0.0f, 1.0f}),
+                auto border = foundation::MakeRef<BorderDrawable>(
+                    foundation::DefaultAllocator(), borderColor.ValueOr(Color{0.0f, 0.0f, 0.0f, 1.0f}),
                     borderWidth.ValueOr(1.0f));
                 if (hasRadius)
                     border->SetCornerRadii(radii);
-                node.SetForeground(core::Move(border));
+                node.SetForeground(foundation::Move(border));
             }
         }
 
@@ -271,10 +271,10 @@ export namespace draconic::gui
 
     // Apply a resolved pseudo-element style to a widget part: its background-color becomes the
     // part's color (slider::fill, window::title, scrollbar::thumb, ...).
-    inline void ApplyPartStyle(UINode& node, core::StringView part, const ResolvedStyle& style)
+    inline void ApplyPartStyle(UINode& node, foundation::StringView part, const ResolvedStyle& style)
     {
-        if (style.Has(core::StringView(u8"background-color")))
-            if (Optional<Color> c = ParseColor(style.Get(core::StringView(u8"background-color")));
+        if (style.Has(foundation::StringView(u8"background-color")))
+            if (Optional<Color> c = ParseColor(style.Get(foundation::StringView(u8"background-color")));
                 c.HasValue())
                 node.SetThemePartColor(part, c.Value());
     }

@@ -3,12 +3,12 @@
 // have their own nested field subclasses - a field created without the class silently keeps the
 // theme's default size (the "labels shrank but the numbers didn't" bug).
 #include <doctest/doctest.h>
-#include "Draconic.Core/Prelude.h"
-import draconic.core;
+#include "Draconic.Foundation/Prelude.h"
+import draconic.foundation;
 import draconic.ui;
 import draconic.ui.toolkit;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 using namespace draconic::ui;
 namespace ui = draconic::ui;
 

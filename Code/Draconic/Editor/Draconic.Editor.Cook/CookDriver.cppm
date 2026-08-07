@@ -18,17 +18,17 @@
 // version mismatch degrades to a full re-plan - never wrong output, only wasted work.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 export module draconic.editor.cook;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.vfs;
 import draconic.editor;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor
 {
@@ -59,10 +59,10 @@ export namespace draconic::editor
 
     inline void Serialize(ISerializer& ar, CookFileMemo& m)
     {
-        draconic::core::Serialize(ar, "path", m.path);
-        draconic::core::Serialize(ar, "size", m.size);
-        draconic::core::Serialize(ar, "mtime", m.modifiedTime);
-        draconic::core::Serialize(ar, "hash", m.contentHash);
+        draconic::foundation::Serialize(ar, "path", m.path);
+        draconic::foundation::Serialize(ar, "size", m.size);
+        draconic::foundation::Serialize(ar, "mtime", m.modifiedTime);
+        draconic::foundation::Serialize(ar, "hash", m.contentHash);
     }
 
     /// The persisted pipeline state (.cache/cook.db): source Guid -> CookRecord.

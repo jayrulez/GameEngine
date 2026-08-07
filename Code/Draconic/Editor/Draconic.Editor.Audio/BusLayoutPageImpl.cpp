@@ -1,12 +1,12 @@
 // Draconic::EditorAudio - the `:bus_layout_page` partition (implementation).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Log/Log.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Log/Log.h"
 
 module draconic.editor.audio;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.content;
 import draconic.runtime.client;
 import draconic.audio;
@@ -16,7 +16,7 @@ import draconic.ui.toolkit;
 import draconic.editor.core;
 import draconic.editor.app;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::editor
 {
@@ -683,9 +683,9 @@ namespace draconic::editor
         BinarySerializer ar(stream, SerializeMode::Write);
         // The asset gates its custom-slot bank on ar.Version() >= 2, so the snapshot MUST ride
         // a versioned payload (a raw serializer reports version 0 and silently drops the bank).
-        draconic::core::BeginVersionedPayload(ar, audio::AudioBusLayoutAsset::StaticType());
+        draconic::foundation::BeginVersionedPayload(ar, audio::AudioBusLayoutAsset::StaticType());
         m_asset->Serialize(ar);
-        draconic::core::EndVersionedPayload(ar);
+        draconic::foundation::EndVersionedPayload(ar);
         const Span<const byte> bytes = stream.Bytes();
         blob.Reserve(bytes.Size());
         for (byte b : bytes)
@@ -722,9 +722,9 @@ namespace draconic::editor
         (void)stream.Write(blob.Data(), blob.Size());
         (void)stream.Seek(0, SeekOrigin::Begin);
         BinarySerializer ar(stream, SerializeMode::Read);
-        draconic::core::BeginVersionedPayload(ar, audio::AudioBusLayoutAsset::StaticType());
+        draconic::foundation::BeginVersionedPayload(ar, audio::AudioBusLayoutAsset::StaticType());
         m_asset->Serialize(ar);
-        draconic::core::EndVersionedPayload(ar);
+        draconic::foundation::EndVersionedPayload(ar);
         m_undoBaseline = blob;
         AudioBusLayoutEditorPage* self = this;
         if (ui::UIContext* ctx = Ctx())

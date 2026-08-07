@@ -6,7 +6,7 @@ add_library(Draconic::Editor.Scene ALIAS Draconic.Editor.Scene)
 
 target_link_libraries(Draconic.Editor.Scene
     PUBLIC
-        Draconic::Core Draconic::Content Draconic::RHI Draconic::Shell Draconic::Graphics
+        Draconic::Foundation Draconic::Content Draconic::RHI Draconic::Shell Draconic::Graphics
         Draconic::Runtime Draconic::Runtime.Client Draconic::Engine.DefaultApp
         Draconic::Scene Draconic::Engine.Scene Draconic::Scene.Resource Draconic::Scene.Editor
         Draconic::Render Draconic::Engine.Render Draconic::Animation Draconic::Engine.Animation

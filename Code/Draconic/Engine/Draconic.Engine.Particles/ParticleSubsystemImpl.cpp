@@ -5,15 +5,15 @@
 // ParticleComponents.cppm declares RegisterParticleComponentReflection(); this unit defines it.
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 module draconic.engine.particles;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.script.facades; // ComponentOf<T> + RegisterExtra* (the script `.of` surface, Track A)
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 namespace draconic::particles
 {
@@ -62,14 +62,14 @@ namespace draconic::particles
     {
         RegisterParticleComponentReflection(); // ensure component TypeData (incl `of`) is built first
         // Surface the particle component (ParticleEffectComponent.of(entity)): register + seed root + name.
-        GlobalTypeRegistry().Register(core::TypeOf<ParticleEffectComponent>());
-        draconic::script::RegisterExtraScriptRootType(&core::TypeOf<ParticleEffectComponent>());
+        GlobalTypeRegistry().Register(foundation::TypeOf<ParticleEffectComponent>());
+        draconic::script::RegisterExtraScriptRootType(&foundation::TypeOf<ParticleEffectComponent>());
         draconic::script::RegisterExtraFacadeName(u8"ParticleEffectComponent");
 
         // The scene-bound particles handle (SceneParticles.of(scene)): reflect + register + seed + name.
         DraconicRegisterValue_SceneParticles();
-        GlobalTypeRegistry().Register(core::TypeOf<SceneParticles>());
-        draconic::script::RegisterExtraScriptRootType(&core::TypeOf<SceneParticles>());
+        GlobalTypeRegistry().Register(foundation::TypeOf<SceneParticles>());
+        draconic::script::RegisterExtraScriptRootType(&foundation::TypeOf<SceneParticles>());
         draconic::script::RegisterExtraFacadeName(u8"SceneParticles");
     }
 }

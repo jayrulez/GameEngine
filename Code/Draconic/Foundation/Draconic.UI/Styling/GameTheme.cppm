@@ -6,17 +6,17 @@
 // palette tuned for over-scene legibility; it diverges further as game controls demand.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.ui:game_theme;
 
-import draconic.core;
+import draconic.foundation;
 import :style_sheet;
 import :theme_palette;
 import :dark_theme;
 import :light_theme;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::ui
 {

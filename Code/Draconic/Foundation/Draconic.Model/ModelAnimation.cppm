@@ -2,16 +2,16 @@
 /// Ported from Sedulous.Models/ModelAnimation.bf.
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 #include <string>
 #include <vector>
 
 export module draconic.model:model_animation;
 
-import draconic.core;
+import draconic.foundation;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::model
 {

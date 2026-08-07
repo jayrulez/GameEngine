@@ -7,16 +7,16 @@
 /// bone indices into joint indices (NodeToBoneMapping).
 
 module;
-#include "Draconic.Core/Prelude.h"
+#include "Draconic.Foundation/Prelude.h"
 
 export module draconic.modelimporter:anim_convert;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.model;
 import draconic.animation;
 import draconic.animation.resource;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 namespace model = draconic::model;
 namespace animation = draconic::animation;
 

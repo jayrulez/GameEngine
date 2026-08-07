@@ -16,19 +16,19 @@
 // belongs in each RegisterXxxEditor).
 
 module;
-#include "Draconic.Core/Prelude.h"
-#include "Draconic.Core/Reflection/Reflect.h"
+#include "Draconic.Foundation/Prelude.h"
+#include "Draconic.Foundation/Reflection/Reflect.h"
 
 export module draconic.editor.app:layout;
 
-import draconic.core;
+import draconic.foundation;
 import draconic.vfs;
 import draconic.settings;
 import draconic.xml.serialization;
 import draconic.editor.core; // EditorContext (favorites)
 import draconic.ui.toolkit;
 
-using namespace draconic::core;
+using namespace draconic::foundation;
 
 export namespace draconic::editor::app
 {
@@ -42,16 +42,16 @@ export namespace draconic::editor::app
     inline void SerializeLayoutNode(ISerializer& ar, ui::toolkit::DockLayoutNode& node)
     {
         ar.BeginObject();
-        draconic::core::Serialize(ar, "type", node.Type);
-        draconic::core::Serialize(ar, "direction", node.Direction);
-        draconic::core::Serialize(ar, "ratio", node.SplitRatio);
-        draconic::core::Serialize(ar, "activeTab", node.ActiveTabIndex);
-        draconic::core::Serialize(ar, "panels", node.PanelIds);
+        draconic::foundation::Serialize(ar, "type", node.Type);
+        draconic::foundation::Serialize(ar, "direction", node.Direction);
+        draconic::foundation::Serialize(ar, "ratio", node.SplitRatio);
+        draconic::foundation::Serialize(ar, "activeTab", node.ActiveTabIndex);
+        draconic::foundation::Serialize(ar, "panels", node.PanelIds);
 
         bool hasFirst = static_cast<bool>(node.First);
         bool hasSecond = static_cast<bool>(node.Second);
-        draconic::core::Serialize(ar, "hasFirst", hasFirst);
-        draconic::core::Serialize(ar, "hasSecond", hasSecond);
+        draconic::foundation::Serialize(ar, "hasFirst", hasFirst);
+        draconic::foundation::Serialize(ar, "hasSecond", hasSecond);
         if (hasFirst)
         {
             if (ar.Mode() == SerializeMode::Read)
@@ -83,7 +83,7 @@ export namespace draconic::editor::app
         void Serialize(ISerializer& ar) override
         {
             bool hasRoot = static_cast<bool>(root);
-            draconic::core::Serialize(ar, "hasRoot", hasRoot);
+            draconic::foundation::Serialize(ar, "hasRoot", hasRoot);
             if (hasRoot)
             {
                 if (ar.Mode() == SerializeMode::Read)
@@ -104,7 +104,7 @@ export namespace draconic::editor::app
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "favorites", favorites);
+            draconic::foundation::Serialize(ar, "favorites", favorites);
         }
     };
 
@@ -117,7 +117,7 @@ export namespace draconic::editor::app
 
         void Serialize(ISerializer& ar) override
         {
-            draconic::core::Serialize(ar, "pages", pages);
+            draconic::foundation::Serialize(ar, "pages", pages);
             ar.Key("active");
             ar.GuidValue(active);
         }

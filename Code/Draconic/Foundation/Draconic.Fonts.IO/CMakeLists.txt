@@ -4,7 +4,7 @@
 add_library(Draconic.Fonts.IO STATIC)
 add_library(Draconic::Fonts.IO ALIAS Draconic.Fonts.IO)
 
-target_link_libraries(Draconic.Fonts.IO PUBLIC Draconic::Core Draconic::Fonts Draconic::Policy)
+target_link_libraries(Draconic.Fonts.IO PUBLIC Draconic::Foundation Draconic::Fonts Draconic::Policy)
 
 target_sources(Draconic.Fonts.IO
     PUBLIC

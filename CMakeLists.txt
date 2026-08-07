@@ -203,7 +203,7 @@ endif()
 # not-yet-moved modules keep their legacy "Runtime/..."/"Shell/..." prefixes until their role lands.
 include_directories(
     ${CMAKE_SOURCE_DIR}/Code/Draconic            # transitional: unmigrated modules' legacy prefixes
-    ${CMAKE_SOURCE_DIR}/Code/Draconic/Foundation
+    ${CMAKE_SOURCE_DIR}/Code/Draconic/Core
     ${CMAKE_SOURCE_DIR}/Code/Draconic/Engine
     ${CMAKE_SOURCE_DIR}/Code/Draconic/Editor
     ${CMAKE_SOURCE_DIR}/Code/Draconic/Tools

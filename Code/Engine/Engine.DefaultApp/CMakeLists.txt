@@ -20,8 +20,8 @@ target_link_libraries(Engine.DefaultApp
            Foundation::PropertyAnimation.Resource
            Foundation::Particles.Resource Foundation::Input.Resource Foundation::Physics.Resource
            Foundation::Texture.Resource Foundation::Image.Resource Foundation::Model.Resource Foundation::UI.Resource Engine::UI Engine::UI.Script Foundation::UI.Gamekit
-           Foundation::Net Foundation::Net.Manager Engine::Net
-           Foundation::Profiler Foundation::Policy)
+            Foundation::Net Foundation::Net.Manager Engine::Net
+            Foundation::Profiler Foundation::Policy Engine::SceneSurface)
 
 # Script VM backends - AngelScript and Luau. Each is independently toggleable via
 # its option; a run resolves the backend by the game script's LANGUAGE, so with both ON a project can

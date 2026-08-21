@@ -92,7 +92,8 @@ export namespace engine::render
     class RenderSubsystem final : public foundation::runtime::Subsystem,
                                   public ISceneRenderer,
                                   public IScreenRenderer,
-                                  public scene::ISceneAware
+                                  public scene::ISceneAware,
+                                  public scene::ISceneObserver
     {
     public:
         RenderSubsystem(rhi::Device& device, u32 framesInFlight) noexcept
@@ -114,11 +115,11 @@ export namespace engine::render
 
         [[nodiscard]] i32 UpdateOrder() const noexcept override;
 
-        // Injects the render component managers into each new scene.
+        // Assembly (the render component managers). Provider setup rides ISceneObserver (below).
         void OnSceneCreated(scene::Scene& scene) override;
 
         // Drop any render-data providers registered for a scene that's going away (borrowed pointers).
-        void OnSceneDestroyed(scene::Scene& scene) override;
+        void OnDestroying(scene::Scene& scene) override;
 
         [[nodiscard]] bool IsReady() const noexcept { return m_frame.Get() != nullptr; }
 

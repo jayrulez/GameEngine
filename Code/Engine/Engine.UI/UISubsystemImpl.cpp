@@ -520,6 +520,8 @@ namespace engine::ui
             if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
             {
                 scenes->RegisterSceneAware(this); // injects the canvas manager per scene
+                scenes->RegisterObserver(this, scene::SceneLifecycleStage::SystemsReady);
+                scenes->RegisterObserver(this, scene::SceneLifecycleStage::Destroying);
             }
             // The overlay roles: scene tier draws inside the compose per view; screen
             // tier draws when the host calls RenderOverlays per window target. Headless
@@ -554,6 +556,7 @@ namespace engine::ui
             if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
             {
                 scenes->UnregisterSceneAware(this);
+                scenes->UnregisterObserver(this);
             }
         }
         for (SceneUI& ui : m_sceneUIs)

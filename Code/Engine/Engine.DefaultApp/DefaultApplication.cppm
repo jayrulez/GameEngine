@@ -63,6 +63,7 @@ import foundation.fonts.resource; // FontFactory (cooked default-UI font)
 import engine.ui;        // the game screen tier (canvases + overlay + consumption)
 import engine.ui.script;   // the `ui` script facade + its per-context service binding
 import foundation.ui.gamekit; // ScreenStack (the binding points at UISubsystem::Screens())
+import engine.scenesurface; // FullSceneComposition (the single source of truth for scene assembly)
 import foundation.audio;               // AudioEngine (owned by the audio subsystem)
 import foundation.audio.resource;      // cooked audio clips + factory
 import engine.audio;     // AudioSubsystem (voices/buses/one-shots + scene sync)

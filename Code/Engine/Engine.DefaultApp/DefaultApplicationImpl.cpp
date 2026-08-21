@@ -17,6 +17,7 @@ import foundation.shell;                // IShell, IKeyboard, KeyCode (the profi
 import foundation.graphics;             // GraphicsDevice, FrameContext
 import foundation.scene;                // Scene
 import engine.scene;      // SceneSubsystem (the standard scene driver)
+import engine.scenesurface; // FullSceneComposition (the single source of truth for scene assembly)
 import engine.render;     // RenderSubsystem (the standard renderer)
 import engine.animation; // AnimationSubsystem (drives skeletal animation from the scene)
 import engine.particles; // ParticleSubsystem (scene-driven CPU sim)
@@ -122,6 +123,10 @@ namespace engine::runtime
     {
         m_host = &host; // stable for the app's lifetime; extra instances route run.requestExit through it
         m_scenes = host.Ctx().AddSubsystem<engine::scene::SceneSubsystem>();
+        // The scene-assembly blueprint (scene-composition.md): every registered manager's CreateScene
+        // now assembles from the full composition (with ISceneAware injection still layered on top for
+        // custom/plugin subsystems) instead of the per-subsystem ISceneAware two-pass alone.
+        m_scenes->SetComposition(engine::FullSceneComposition());
         // The run's scene group lives on the GameInstance (game-instance.md §11): wire it to the
         // app-wide aware registry and register it so it ticks on the Context lane beside the default
         // (editor/loose) group. WireInstance centralizes this so extra instances wire the same way.

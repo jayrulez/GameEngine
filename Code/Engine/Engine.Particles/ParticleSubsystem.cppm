@@ -41,15 +41,17 @@ export namespace engine::particles
         scene.AddSystem<ParticleEffectComponentManager>();
     }
 
-    class ParticleSubsystem final : public foundation::runtime::Subsystem, public scene::ISceneAware
+    class ParticleSubsystem final : public foundation::runtime::Subsystem, public scene::ISceneAware,
+                                    public scene::ISceneObserver
     {
     public:
-        // Inject the particle manager into each new scene, then register it (as the scene's render-data
-        // provider) and hand it the renderer's dispatch id so its billboards route correctly.
-        void OnSceneCreated(scene::Scene& scene) override
+        // Assembly (the particle manager). Renderer wiring (dispatch id + provider registration) rides
+        // the observer stage so a scratch/headless scene assembles with an unwired, inert manager.
+        void OnSceneCreated(scene::Scene& scene) override { AddParticleSceneManagers(scene); }
+
+        void OnSystemsReady(scene::Scene& scene) override
         {
             EnsureRenderer();
-            AddParticleSceneManagers(scene);
             ParticleEffectComponentManager* mgr = scene.GetSystem<ParticleEffectComponentManager>();
             if (mgr == nullptr)
             {
@@ -78,12 +80,25 @@ export namespace engine::particles
             if (auto* scenes = ctx->GetSubsystem<engine::scene::SceneSubsystem>())
             {
                 scenes->RegisterSceneAware(this);
+                scenes->RegisterObserver(this, scene::SceneLifecycleStage::SystemsReady);
             }
             m_render = ctx->GetSubsystem<engine::render::RenderSubsystem>();
             EnsureRenderer(); // GPU systems are up by OnReady (RenderSubsystem::OnInit ran first)
         }
 
     private:
+        void OnShutdown() override
+        {
+            if (foundation::runtime::Context* ctx = GetContext())
+            {
+                if (auto* scenes = ctx->GetSubsystem<engine::scene::SceneSubsystem>())
+                {
+                    scenes->UnregisterSceneAware(this);
+                    scenes->UnregisterObserver(this);
+                }
+            }
+        }
+
         // Create + register the ParticleRenderer once the render GPU systems exist (idempotent).
         void EnsureRenderer()
         {

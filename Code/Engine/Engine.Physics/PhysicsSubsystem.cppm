@@ -876,7 +876,8 @@ export namespace engine::physics
         scene.AddSystem<PhysicsSceneSystem>(); // carries the per-scene settings block
     }
 
-    class PhysicsSubsystem final : public foundation::runtime::Subsystem, public scene::ISceneAware
+    class PhysicsSubsystem final : public foundation::runtime::Subsystem, public scene::ISceneAware,
+                                   public scene::ISceneObserver
     {
     public:
         /// Register a consumer of resolved contacts (the script subsystem). Duplicates are
@@ -913,14 +914,17 @@ export namespace engine::physics
         // extracts world matrices) would lag the physics poses by a frame.
         [[nodiscard]] i32 UpdateOrder() const noexcept override { return -600; }
 
-        void OnSceneCreated(scene::Scene& scene) override
+        // Assembly (the physics managers). Reactive wiring (contact listeners + tracking) rides the
+        // observer stages so a scratch/headless scene assembles without any subsystem-side wiring.
+        void OnSceneCreated(scene::Scene& scene) override { AddPhysicsSceneManagers(scene); }
+
+        void OnSystemsReady(scene::Scene& scene) override
         {
-            AddPhysicsSceneManagers(scene);
             PhysicsSceneSystem* system = scene.GetSystem<PhysicsSceneSystem>();
             system->SetContactListeners(&m_contactListeners); // shared list, stable address
             m_systems.PushBack(SceneEntry{&scene, system});
         }
-        void OnSceneDestroyed(scene::Scene& scene) override
+        void OnDestroying(scene::Scene& scene) override
         {
             for (usize i = 0; i < m_systems.Size(); ++i)
             {
@@ -945,6 +949,8 @@ export namespace engine::physics
                 if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
                 {
                     scenes->RegisterSceneAware(this);
+                    scenes->RegisterObserver(this, scene::SceneLifecycleStage::SystemsReady);
+                    scenes->RegisterObserver(this, scene::SceneLifecycleStage::Destroying);
                 }
             }
         }
@@ -955,6 +961,7 @@ export namespace engine::physics
                 if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
                 {
                     scenes->UnregisterSceneAware(this);
+                    scenes->UnregisterObserver(this);
                 }
             }
         }

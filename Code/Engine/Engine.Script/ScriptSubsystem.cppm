@@ -1422,7 +1422,8 @@ export namespace engine::script
         scene.AddSystem<SceneScriptSystem>(); // scene-root script (the Level tier)
     }
 
-    class ScriptSubsystem final : public foundation::runtime::Subsystem, public scene::ISceneAware
+    class ScriptSubsystem final : public foundation::runtime::Subsystem, public scene::ISceneAware,
+                                  public scene::ISceneObserver
     {
     public:
         /// The DEFAULT run host - the one for the editor's editing/loose scenes (game-instance.md
@@ -1573,9 +1574,12 @@ export namespace engine::script
 
         // ---- scene integration ----
 
-        void OnSceneCreated(scene::Scene& scene) override
+        // Assembly (the behavior + level script systems). Reactive wiring (run-host binding + tracking)
+        // rides the observer stages so a scratch/headless scene assembles with inert, host-less systems.
+        void OnSceneCreated(scene::Scene& scene) override { AddScriptSceneManagers(scene); }
+
+        void OnSystemsReady(scene::Scene& scene) override
         {
-            AddScriptSceneManagers(scene);
             ScriptSceneSystem* system = scene.GetSystem<ScriptSceneSystem>();
             // Bind to the DEFAULT run host; a GameInstance re-binds ITS scenes to its own host on adopt
             // (game-instance.md §11.10). The teardown observer checks the system's CURRENT host.
@@ -1594,7 +1598,7 @@ export namespace engine::script
             // Scene-root script (the Level tier) shares the same run host + re-bind path.
             scene.GetSystem<SceneScriptSystem>()->SetRunHost(&m_ownedRunHost);
         }
-        void OnSceneDestroyed(scene::Scene& scene) override
+        void OnDestroying(scene::Scene& scene) override
         {
             ScriptRunHost* host = nullptr;
             for (usize i = 0; i < m_systems.Size(); ++i)
@@ -1641,6 +1645,8 @@ export namespace engine::script
                 if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
                 {
                     scenes->RegisterSceneAware(this);
+                    scenes->RegisterObserver(this, scene::SceneLifecycleStage::SystemsReady);
+                    scenes->RegisterObserver(this, scene::SceneLifecycleStage::Destroying);
                 }
             }
         }
@@ -1651,6 +1657,7 @@ export namespace engine::script
                 if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
                 {
                     scenes->UnregisterSceneAware(this);
+                    scenes->UnregisterObserver(this);
                 }
             }
             for (const SceneEntry& entry : m_systems)

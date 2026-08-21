@@ -76,7 +76,7 @@ namespace engine::render
         AddRenderSceneManagers(scene);
     }
 
-    void RenderSubsystem::OnSceneDestroyed(scene::Scene& scene)
+    void RenderSubsystem::OnDestroying(scene::Scene& scene)
     {
         usize w = 0;
         for (usize r = 0; r < m_providers.Size(); ++r)
@@ -826,12 +826,13 @@ namespace engine::render
 
     void RenderSubsystem::OnReady()
     {
-        // Register as scene-aware so we inject our managers into scenes the app creates.
+        // Register as scene-aware (assembly) + observer (reactive provider cleanup).
         if (foundation::runtime::Context* ctx = GetContext())
         {
             if (auto* scenes = ctx->GetSubsystem<engine::scene::SceneSubsystem>())
             {
                 scenes->RegisterSceneAware(this);
+                scenes->RegisterObserver(this, scene::SceneLifecycleStage::Destroying);
             }
         }
     }
@@ -843,6 +844,7 @@ namespace engine::render
             if (auto* scenes = ctx->GetSubsystem<engine::scene::SceneSubsystem>())
             {
                 scenes->UnregisterSceneAware(this);
+                scenes->UnregisterObserver(this);
             }
         }
         m_device->WaitIdle();     // GPU must finish before we free its buffers/PSOs/descriptors

@@ -344,6 +344,7 @@ export namespace engine::ui
 
     class UISubsystem final : public foundation::runtime::Subsystem,
                               public scene::ISceneAware,
+                              public scene::ISceneObserver,
                               public foundation::render::ISceneOverlay,
                               public foundation::render::IScreenOverlay
     {
@@ -476,9 +477,12 @@ export namespace engine::ui
         void OnReady() override;
         void BeginFrame(f32 deltaTime) override;
 
-        void OnSceneCreated(scene::Scene& scene) override
+        // Assembly (the UI managers). The scene tier's root-view plumbing rides the observer
+        // stages so a scratch/headless scene assembles with no context roots.
+        void OnSceneCreated(scene::Scene& scene) override { AddUISceneManagers(scene); }
+
+        void OnSystemsReady(scene::Scene& scene) override
         {
-            AddUISceneManagers(scene);
             // The scene tier: each scene gets its own root (billboard layer BELOW its
             // canvases) that the scene-overlay pass draws wherever this scene renders.
             SceneUI ui;
@@ -491,7 +495,7 @@ export namespace engine::ui
             m_context.AddRootView(ui.root.Get());
             m_sceneUIs.PushBack(Move(ui));
         }
-        void OnSceneDestroyed(scene::Scene& scene) override
+        void OnDestroying(scene::Scene& scene) override
         {
             for (usize i = 0; i < m_sceneUIs.Size(); ++i)
             {

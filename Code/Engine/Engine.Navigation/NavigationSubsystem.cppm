@@ -270,15 +270,20 @@ export namespace engine::navigation
     // managers into every scene (via ISceneAware) and registers the component reflection once.
     // The per-scene tick lives in NavigationSceneSystem; this type owns no cross-scene state.
     class NavigationSubsystem final : public foundation::runtime::Subsystem,
-                                      public scene::ISceneAware
+                                      public scene::ISceneAware,
+                                      public scene::ISceneObserver
     {
     public:
-        void OnSceneCreated(scene::Scene& scene) override
+        // Assembly (a navigation scene's managers). The reactive cross-scene tracking now rides the
+        // observer stages below, so scratch/headless scenes assemble without any subsystem wiring.
+        void OnSceneCreated(scene::Scene& scene) override { AddNavigationSceneManagers(scene); }
+
+        // Reactive: track the scene's NavigationSceneSystem for the debug-draw scan.
+        void OnSystemsReady(scene::Scene& scene) override
         {
-            AddNavigationSceneManagers(scene);
             m_scenes.PushBack(SceneEntry{&scene, scene.GetSystem<NavigationSceneSystem>()});
         }
-        void OnSceneDestroyed(scene::Scene& scene) override
+        void OnDestroying(scene::Scene& scene) override
         {
             for (usize i = 0; i < m_scenes.Size(); ++i)
             {
@@ -304,6 +309,8 @@ export namespace engine::navigation
                 if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
                 {
                     scenes->RegisterSceneAware(this);
+                    scenes->RegisterObserver(this, scene::SceneLifecycleStage::SystemsReady);
+                    scenes->RegisterObserver(this, scene::SceneLifecycleStage::Destroying);
                 }
             }
         }
@@ -314,6 +321,7 @@ export namespace engine::navigation
                 if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
                 {
                     scenes->UnregisterSceneAware(this);
+                    scenes->UnregisterObserver(this);
                 }
             }
         }

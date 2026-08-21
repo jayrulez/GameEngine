@@ -1,6 +1,6 @@
 # Scene composition & observation
 
-> Status: IN PROGRESS (foundation shipped; domain port + tripwire removal + FrameTime cutover pending)
+> Status: IN PROGRESS (composition foundation + headless unify + script-tick cutover shipped; scene-lane + input/net FrameTime cutover + ISceneAware migration pending)
 > Track: [[game-instance-track]]
 
 The scene layer of the engine is a "world model + systems" foundation (`foundation.scene`) driven by the
@@ -27,11 +27,20 @@ The foundation is shipped and green (`Scene.Tests`, `Engine.Scene.Tests`, `Engin
   `CreateScene` assembles via the installer when set, and otherwise falls back to the legacy
   `ISceneAware` two-pass. This keeps the runtime layer's scene creation behavior unchanged until the
   runtime path adopts a composition.
+- **The headless full set is one composition** (`Engine.SceneSurface::FullSceneComposition()`): the
+  per-domain `Add<Domain>SceneManagers`/`Register<Domain>ComponentReflection` functions are declared as a
+  single module list, so `AddAllSceneManagers`/`RegisterAllSceneComponentReflection` are thin wrappers and
+  the `kSceneSystemCount` count tripwire is deleted (its drift failure mode is structurally impossible
+  now). `Engine.SceneSurface.Tests` now guards the domain count (`ModuleCount() == 9`) plus the
+  historically-dropped managers.
+- **`GameInstance::TickScript` uses `FrameTime::SceneDt()`** for the game script's update dt, removing one
+  of the three hand-rolled `host × context × instance × scene` computations.
 
-Still open (the remaining migration steps below): create the per-domain `SceneModule` objects, unify the
-runtime + headless paths through one composition so the `AddAllSceneManagers` parallel list and
-`kSceneSystemCount` tripwire can be deleted, migrate `ISceneAware` observers to `ISceneObserver`, and cut
-the time lanes over to `FrameTime`.
+Still open (the remaining migration steps below): migrate the running runtime path onto its own
+per-configuration `SceneComposition` and migrate `ISceneAware` observers to `ISceneObserver`; cut the
+`SceneManager`/`SceneRegistry` lane fan-out, the `PhysicsSubsystem` interp read, and the input/net drives
+over to sharing one `FrameTime` (the host-loop ownership question in `ApplicationHost::Tick` is recorded
+under Why #4 and still needs deciding before the lane signatures change).
 
 ## Why (the strains in the current design)
 

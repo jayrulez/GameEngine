@@ -414,8 +414,9 @@ namespace engine::runtime
             return;
         }
         const f32 sceneScale = m_scene != nullptr ? m_scene->TimeScale() : 1.0f;
-        core::Variant dt = core::Variant::From(hostDeltaTime * contextTimeScale *
-                                               m_instanceTimeScale * sceneScale);
+        const scene::FrameTime frame(hostDeltaTime, contextTimeScale, m_instanceTimeScale,
+                                     sceneScale);
+        core::Variant dt = core::Variant::From(frame.SceneDt());
         if (auto result = m_game->Invoke(u8"update", core::Span<core::Variant>{&dt, 1});
             !result.HasValue())
         {

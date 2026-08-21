@@ -7,6 +7,7 @@ add_executable(Scene.Tests
     ComponentTests.cpp
     SceneSystemTests.cpp
     SceneManagerTests.cpp
+    SceneCompositionTests.cpp
     EventBusTests.cpp)
 
 target_link_libraries(Scene.Tests PRIVATE

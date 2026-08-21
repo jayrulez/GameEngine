@@ -20,6 +20,7 @@ target_sources(Scene
             EventBus.cppm
             Scene.cppm
             SceneManager.cppm
+            SceneComposition.cppm
             SceneModule.cppm)
 
 # The Context-level scene driver + ISceneAware broker (bridges Scene + Runtime). Links only the

@@ -7,9 +7,10 @@
 /// The point of the abstraction (the linchpin of the GameInstance model): a `GameInstance` (runtime
 /// layer) OWNS a SceneManager, so the dependency points DOWN - the scene lib never learns about the
 /// runtime layer. A SceneManager reads only its OWN group config; it never reaches up to an instance.
-/// SceneSubsystem owns the app-wide SceneAwareRegistry + a DEFAULT SceneManager (loose / editor scenes);
-/// instances own their own. Context-agnostic: the driver passes the context time-scale + fixed-step in
-/// (no runtime dependency, so foundation.scene stays runtime-free).
+/// SceneSubsystem owns the app-wide SceneAwareRegistry; instances own their own managers. Context-agnostic:
+/// the driver passes the context time-scale + fixed-step in (no runtime dependency, so foundation.scene
+/// stays runtime-free). Scene assembly itself is pluggable: a composition installer (scene-composition.md)
+/// or the legacy ISceneAware two-pass.
 
 module;
 #include "Core/Prelude.h"
@@ -26,9 +27,9 @@ export namespace foundation::scene
 {
 
     /// The app-wide list of scene-aware subsystems (physics/audio/render/script). Owned once by
-    /// SceneSubsystem; every SceneManager (default + per-instance) fans lifecycle out through the SAME
-    /// registry, so a subsystem registered once is injected into every scene regardless of which group
-    /// owns it. (Extracted from the old SceneSubsystem broker; behaviour identical.)
+    /// SceneSubsystem; every SceneManager fans lifecycle out through the SAME registry, so a subsystem
+    /// registered once is injected into every scene regardless of which group owns it. (Extracted from
+    /// the old SceneSubsystem broker; behaviour identical.)
     class SceneAwareRegistry
     {
     public:
@@ -84,11 +85,21 @@ export namespace foundation::scene
     class SceneManager
     {
     public:
+        /// Type-erased scene assembler (the composition path). Invoked on CreateScene in place of the
+        /// legacy ISceneAware two-pass when set. Type-erased so :manager does not import :composition
+        /// (that would be a partition cycle: :composition imports :manager). The caller owns the
+        /// composition the installer closes over.
+        using SceneInstaller = Function<void(Scene&)>;
+
         explicit SceneManager(SceneAwareRegistry* registry = nullptr) noexcept
             : m_registry(registry)
         {
         }
         void SetAwareRegistry(SceneAwareRegistry* registry) noexcept { m_registry = registry; }
+
+        /// Install a composition installer: CreateScene assembles via `installer(scene)` while set.
+        void SetSceneInstaller(SceneInstaller installer) { m_installer = Move(installer); }
+        void ClearSceneInstaller() { m_installer.Reset(); }
 
         /// The GROUP time scale - the `instance` term of dt = host x context x GROUP x scene (§5). Default
         /// 1.0, so the editor / default manager reproduces the previous two-level behaviour exactly.
@@ -120,9 +131,14 @@ export namespace foundation::scene
                     m_current = scene;
                 }
             }
-            // Aware state (component managers etc.) is set up regardless of active, so LoadScene can
-            // populate an inactive scene before it is activated.
-            if (m_registry != nullptr)
+            // Scene assembly happens regardless of active, so LoadScene can populate an inactive scene
+            // before it is activated. With an installer (the composition path) the declarative blueprint
+            // builds the scene; otherwise the legacy ISceneAware two-pass injects per-scene systems.
+            if (m_installer)
+            {
+                m_installer(*scene);
+            }
+            else if (m_registry != nullptr)
             {
                 m_registry->NotifyCreated(*scene);
             }
@@ -304,7 +320,8 @@ export namespace foundation::scene
             m_pendingRemove.Clear();
         }
 
-        SceneAwareRegistry* m_registry = nullptr; // shared, app-wide (not owned)
+        SceneAwareRegistry* m_registry = nullptr; // shared, app-wide (not owned; the legacy path)
+        SceneInstaller m_installer;               // composition path (type-erased; owned, callable or empty)
         f32 m_timeScale = 1.0f;                   // the group / instance term
         Scene* m_current = nullptr;               // the group's current scene
         Array<UniquePtr<Scene>> m_scenes;         // ownership

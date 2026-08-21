@@ -1,6 +1,6 @@
 # Scene composition & observation
 
-> Status: PROPOSED
+> Status: IN PROGRESS (foundation shipped; domain port + tripwire removal + FrameTime cutover pending)
 > Track: [[game-instance-track]]
 
 The scene layer of the engine is a "world model + systems" foundation (`foundation.scene`) driven by the
@@ -11,6 +11,27 @@ and replaces the **imperative, duplicated, partially-ordered** wiring between th
 scene tier with **declarative composition + ordered observation**.
 
 Related: [[game-instance]], [[runtime-host]], [[scripting]] (the one-context rule, now per instance).
+
+## Implementation status
+
+The foundation is shipped and green (`Scene.Tests`, `Engine.Scene.Tests`, `Engine.GameInstance.Tests`,
+`Engine.SceneSurface.Tests` all pass):
+
+- **`foundation.scene:composition`** (`Code/Foundation/Scene/SceneComposition.cppm`) defines `FrameTime`,
+  `SceneLifecycleStage`/`ISceneObserver`, `SceneModule`, `SceneComposition` (topological `Build` +
+  `Instantiate` + `RegisterReflection`), and the pure `SceneRegistry`. Covered by
+  `Code/Foundation/Scene.Tests/SceneCompositionTests.cpp` (a new test TU registered in CMake).
+- **`SceneSubsystem` delegates** its manager list, cross-scene sweeps, and lane fan-out to the pure
+  `SceneRegistry`, and exposes `SetComposition`/`Composition()`.
+- **`SceneManager` gained a type-erased `SceneInstaller`** (`SetSceneInstaller`/`ClearSceneInstaller`);
+  `CreateScene` assembles via the installer when set, and otherwise falls back to the legacy
+  `ISceneAware` two-pass. This keeps the runtime layer's scene creation behavior unchanged until the
+  runtime path adopts a composition.
+
+Still open (the remaining migration steps below): create the per-domain `SceneModule` objects, unify the
+runtime + headless paths through one composition so the `AddAllSceneManagers` parallel list and
+`kSceneSystemCount` tripwire can be deleted, migrate `ISceneAware` observers to `ISceneObserver`, and cut
+the time lanes over to `FrameTime`.
 
 ## Why (the strains in the current design)
 

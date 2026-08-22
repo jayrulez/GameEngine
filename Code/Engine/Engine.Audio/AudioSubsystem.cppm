@@ -44,8 +44,6 @@ export namespace engine::audio
     namespace scene = foundation::scene;
     namespace script = foundation::script;
 
-    namespace scene = foundation::scene;
-
     class AudioSubsystem; // forward (the script binding carries it)
 
     /// The service key ExposeToScript binds and the scripting Audio facade resolves.
@@ -852,11 +850,11 @@ export namespace engine::audio
         {
             if (foundation::runtime::Context* context = GetContext())
             {
-            if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
-            {
-                scenes->RegisterObserver(this, scene::SceneLifecycleStage::SystemsReady);
-                scenes->RegisterObserver(this, scene::SceneLifecycleStage::Destroying);
-            }
+                if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
+                {
+                    scenes->RegisterObserver(this, scene::SceneLifecycleStage::SystemsReady);
+                    scenes->RegisterObserver(this, scene::SceneLifecycleStage::Destroying);
+                }
             }
         }
         void OnShutdown() override

@@ -10,10 +10,12 @@
 // `kSceneSystemCount` count tripwire (see scene-composition.md).
 //
 // Managers are plain value pools and the settings systems construct inert (no device, no engine,
-// no run host), so the aggregate is safe in a fully headless process. The RUNTIME keeps
-// per-subsystem injection - a game's manager set is exactly what its subsystems create; this is
-// the deliberate superset for consumers that must understand ANY scene stream. (A later step has
-// the runtime adopt per-configuration compositions built from the same per-domain modules.)
+// no run host), so the aggregate is safe in a fully headless process. The RUNTIME assembles from
+// THIS SAME composition (DefaultApplication::SetComposition(FullSceneComposition()) - the sole
+// assembly path since the ISceneAware removal): every scene carries the full system set whether
+// or not the matching subsystem exists, and absent subsystems simply leave their systems unwired
+// (inert value pools / no-op ticks). Per-configuration compositions (a minimal headless server, an
+// editor-only set) build from the same per-domain modules when a consumer wants a subset.
 //
 // The wide subsystem imports live in the implementation unit, keeping this interface BMI lean
 // (GCC module-interface hygiene).

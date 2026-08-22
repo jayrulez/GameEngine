@@ -83,6 +83,10 @@ export namespace engine::scene
             SceneManager::SceneInstaller installer{
                 [this](Scene& scene)
                 {
+                    // Composing fires BEFORE assembly (the stage's documented meaning - a
+                    // pre-install hook; it was declared but never fired until the 2026-08-19
+                    // review), SystemsReady after every module installed.
+                    m_scenes.Notify(SceneLifecycleStage::Composing, scene);
                     m_scenes.Composition().Instantiate(scene);
                     m_scenes.Notify(SceneLifecycleStage::SystemsReady, scene);
                 }};

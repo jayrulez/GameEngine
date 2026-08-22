@@ -232,3 +232,26 @@ TEST_CASE("scene-registry: lane fan-out ticks every registered manager's scenes"
     CHECK(pa->lastUpdate == doctest::Approx(1.0f / 60.0f));
     CHECK(pb->lastUpdate == doctest::Approx(1.0f / 60.0f));
 }
+TEST_CASE("composition: OWNS its module copies - source modules may die after Build")
+{
+    // The 2026-08-19 review regression: the pointer-retaining first version stored the
+    // caller's SceneModule* and dereferenced a DEAD stack module at Instantiate time
+    // (GCC caught it in the UI subsystem tests; clang passed on stack-layout luck).
+    // Build must copy by value so block-scoped/temporary modules are legal callers.
+    ResetProbes();
+    SceneComposition comp;
+    {
+        const SceneModule localA{u8"a", &InstallA, &ReflectA};
+        const SceneModule* deps[] = {&localA};
+        const SceneModule localB{u8"b", &InstallB, &ReflectB, deps};
+        const SceneModule* modules[] = {&localB, &localA};
+        comp = SceneComposition::Build(modules);
+    } // both modules + the deps array are DEAD here
+
+    CHECK(comp.ModuleCount() == 2u);
+    Scene scene(u8"lifetime");
+    comp.Instantiate(scene);            // dereferences the stored copies, not the corpses
+    CHECK(g_installOrder == u8"ab");    // dependency order also survived the copy
+    comp.RegisterReflection();
+    CHECK(g_reflections == 2);
+}

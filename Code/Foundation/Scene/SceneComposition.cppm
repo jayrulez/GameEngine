@@ -15,6 +15,7 @@
 
 module;
 #include "Core/Prelude.h"
+#include "Core/Log/Log.h"
 
 export module foundation.scene:composition;
 
@@ -110,6 +111,12 @@ export namespace foundation::scene
         [[nodiscard]] StringView Id() const noexcept { return m_id; }
         [[nodiscard]] Span<const SceneModule*> DependsOn() const noexcept { return m_dependsOn; }
         [[nodiscard]] bool HasInstall() const noexcept { return m_install != nullptr; }
+        // Raw accessors for SceneComposition's stored-by-value copy (which strips dependsOn).
+        [[nodiscard]] InstallFn InstallFunction() const noexcept { return m_install; }
+        [[nodiscard]] RegisterReflectionFn RegisterReflectionFunction() const noexcept
+        {
+            return m_registerReflection;
+        }
 
         void Install(Scene& scene) const
         {
@@ -139,10 +146,17 @@ export namespace foundation::scene
     public:
         SceneComposition() = default;
 
-        // Builds the topologically sorted module order from `modules`. A module whose dependency is
-        // absent from `modules` treats that dependency as satisfied (it is out of scope for this
-        // composition). A dependency cycle is broken by emitting the first remaining module, so Build
-        // always terminates and contains every module exactly once.
+        // Builds the topologically sorted module order from `modules`. The composition COPIES each
+        // module BY VALUE (a SceneModule is a StringView id + two function pointers) and drops its
+        // `dependsOn` span - dependency pointers are BUILD-TIME data only, consulted here and never
+        // retained. That makes the composition self-contained: callers may build from stack-local /
+        // temporary module objects (the 2026-08-19 review found the pointer-retaining version
+        // dereferencing a dead stack module - the exact dangling-pointer strain #5 this redesign set
+        // out to remove, reintroduced; GCC caught it, clang passed on stack-layout luck).
+        // A module whose dependency is absent from `modules` treats that dependency as satisfied (it
+        // is out of scope for this composition). A dependency CYCLE is broken LOUDLY: the first
+        // remaining module is emitted with an error log naming it, so Build always terminates and
+        // contains every module exactly once - and the authoring mistake is visible, not silent.
         static SceneComposition Build(Span<const SceneModule*> modules)
         {
             SceneComposition comp;
@@ -158,9 +172,16 @@ export namespace foundation::scene
                 }
                 return false;
             };
+
+            Array<const SceneModule*> remaining; // build-time working set (caller's pointers)
+            Array<const SceneModule*> placedPtrs; // caller-pointer identity for the dep check
+            for (const SceneModule* m : modules)
+            {
+                remaining.PushBack(m);
+            }
             auto placed = [&](const SceneModule* m) noexcept
             {
-                for (const SceneModule* x : comp.m_order)
+                for (const SceneModule* x : placedPtrs)
                 {
                     if (x == m)
                     {
@@ -169,12 +190,6 @@ export namespace foundation::scene
                 }
                 return false;
             };
-
-            Array<const SceneModule*> remaining;
-            for (const SceneModule* m : modules)
-            {
-                remaining.PushBack(m);
-            }
 
             while (!remaining.IsEmpty())
             {
@@ -199,9 +214,18 @@ export namespace foundation::scene
                 }
                 if (pick == remaining.Size())
                 {
-                    pick = 0; // cycle: make progress by emitting the first remaining module
+                    pick = 0; // cycle: make progress - but never silently (house rule)
+                    LOG_ERROR(u8"Scene",
+                              u8"scene-module dependency CYCLE - emitting '{}' out of order; fix "
+                              u8"the dependsOn declarations",
+                              remaining[0]->Id());
                 }
-                comp.m_order.PushBack(remaining[pick]);
+                const SceneModule* src = remaining[pick];
+                placedPtrs.PushBack(src);
+                // Stored copy: id + the two functions. dependsOn is deliberately NOT carried
+                // (build-time-only; a retained span would dangle exactly like the module ptr did).
+                comp.m_order.PushBack(SceneModule{src->Id(), src->InstallFunction(),
+                                                  src->RegisterReflectionFunction()});
                 remaining.RemoveAt(pick);
             }
             return comp;
@@ -210,25 +234,25 @@ export namespace foundation::scene
         // Adds every module's declared systems to `scene`, in dependency order.
         void Instantiate(Scene& scene) const
         {
-            for (const SceneModule* m : m_order)
+            for (const SceneModule& m : m_order)
             {
-                m->Install(scene);
+                m.Install(scene);
             }
         }
 
         // Registers every module's component reflection (idempotent aggregate; call once at startup).
         void RegisterReflection() const
         {
-            for (const SceneModule* m : m_order)
+            for (const SceneModule& m : m_order)
             {
-                m->RegisterReflection();
+                m.RegisterReflection();
             }
         }
 
         [[nodiscard]] usize ModuleCount() const noexcept { return m_order.Size(); }
 
     private:
-        Array<const SceneModule*> m_order; // topologically sorted
+        Array<SceneModule> m_order; // topologically sorted; OWNED copies (self-contained)
     };
 
     // ---- SceneRegistry: the pure scene-hardware state (testable with no Context) --------------------

@@ -261,3 +261,44 @@ registry.AddObserver(&kRenderObserver, SceneLifecycleStage::Destroying);
 ## Deferred
 
 - Rename primary module interface units to `Module.cppm` (mechanical, out of scope for this change).
+## FABLE REVIEW of the implementation (2026-08-19) - ADOPTED with a fix pass
+
+The DeepSeek-built implementation on this branch is structurally faithful to the
+proposal and ~85% right: all nine domains migrated, FullSceneComposition() is the
+single shared source (runtime + headless + MCP all consume it - the crux), the
+FrameTime ambition was correctly scoped down to the scale-chain value type with
+the lane cutover deferred, and a module-count check survives in
+SceneSurfaceTests. Four defects found and FIXED in-review:
+
+1. **CRITICAL - the composition retained caller pointers.** SceneComposition
+   stored `const SceneModule*`; the branch's own UI tests built modules in a
+   block scope, so CreateScene dereferenced a dead stack object -
+   reintroducing the exact dangling-pointer strain (#5) the redesign exists to
+   remove. GCC segfaulted (Engine.UI.Tests); clang passed on stack-layout luck,
+   which also shows the branch was never validated on the full two-compiler
+   battery. FIX: Build() copies modules BY VALUE and drops `dependsOn` (build-
+   time-only data); compositions are self-contained. Regression test added
+   (build from block-scoped modules, destroy them, Instantiate).
+2. The dependency-cycle break was SILENT (emit-in-arbitrary-order, no
+   diagnostic) - against the house fail-loudly rule. FIX: LOG_ERROR naming the
+   module.
+3. The `Composing` stage was declared but never fired (a dead stage). FIX: the
+   installer notifies Composing before Instantiate, SystemsReady after.
+4. Doc/comment drift: SceneSurface's interface still claimed "the RUNTIME keeps
+   per-subsystem injection" - false since the ISceneAware removal made the
+   composition the sole assembly path. Rewritten to state the real contract
+   (full set everywhere; absent subsystems leave their systems unwired/inert).
+   Plus an alias duplication + mangled indent in AudioSubsystem from the edit.
+
+Verified after the fix pass: full two-compiler battery ALL_GREEN (the GCC
+segfault gone) + ASAN clean over Scene/Engine.Scene/Engine.UI/SceneSurface.
+
+Behavior change to be aware of (accepted): every scene now carries the FULL
+system set regardless of which subsystems exist; absent subsystems leave their
+systems unwired (inert pools / no-op ticks). Per-configuration compositions
+remain the designed escape hatch when a consumer wants a subset.
+
+Remaining deferred (unchanged from the plan): the FrameTime LANE cutover
+(SceneManager/input/net consuming FrameTime end-to-end) - its own phase with
+determinism criteria; and the PMIU Module.cppm rename, which rides the
+reorg/role-grouping branch.

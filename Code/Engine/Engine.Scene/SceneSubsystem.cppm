@@ -1,20 +1,21 @@
 /// Engine::Scene - `engine.scene`.
 ///
-/// The Context-level scene driver (game-instance.md §11 final): it owns the app-wide ISceneAware
-/// registry and the pure scene registry (foundation.scene:composition's `SceneRegistry`), and drives
-/// every registered manager's per-frame update + fixed update (UpdateOrder -500, so scenes tick before
-/// rendering reads them). It owns NO scenes itself - there is no implicit "default" group. Every owner
-/// of scenes (a GameInstance, an editor page) creates its OWN SceneManager over the shared registry and
-/// registers it here. The scene lifecycle + tick logic live in SceneManager; this class only fans the
-/// Context time-scale / fixed-step to the managers (foundation.scene stays runtime-free - the manager
-/// takes those as params).
+/// The Context-level scene driver (game-instance.md §11 final): it owns the pure scene registry
+/// (foundation.scene:composition's `SceneRegistry`) and drives every registered manager's per-frame
+/// update + fixed update (UpdateOrder -500, so scenes tick before rendering reads them). It owns NO
+/// scenes itself - there is no implicit "default" group. Every owner of scenes (a GameInstance, an
+/// editor page) creates its OWN SceneManager and registers it here. The scene lifecycle + tick logic
+/// live in SceneManager; this class only fans the Context time-scale / fixed-step to the managers
+/// (foundation.scene stays runtime-free - the manager takes those as params).
 ///
-/// Scene ASSEMBLY is pluggable: each registered manager gets an installer that assembles new scenes from
-/// the registry's `SceneComposition` when one is configured, and otherwise falls back to the legacy
-/// ISceneAware two-pass (pure assembly). Reactive wiring (cross-subsystem per-scene state) is delivered
-/// through the observer stages (SystemsReady / Destroying) AFTER assembly in BOTH paths, so a scene built
-/// either way is wired identically. Unregistered scratch managers (the editor's transcode/scan) keep the
-/// legacy ISceneAware assembly-only path and never fan observers - inert scenes need no wiring.
+/// Scene ASSEMBLY is declarative: each registered manager gets an installer that assembles new scenes
+/// from the registry's `SceneComposition` (the single source of truth), then fans the `SystemsReady`
+/// observer stage; teardown fans `Destroying`. Reactive wiring (cross-subsystem per-scene state) is
+/// delivered through the observer stages - there is no other injection path.
+///
+/// Scratch / headless consumers that never tick on the Context lane (the editor's export transcode /
+/// reachability scan) build a Scene directly via `Engine.SceneSurface::FullSceneComposition()`, not this
+/// subsystem.
 
 module;
 #include "Core/Prelude.h"
@@ -39,16 +40,7 @@ export namespace engine::scene
             return -500;
         } // scenes tick early
 
-        // ---- ISceneAware broker (the registry is app-wide; the legacy assembly path) ----
-
-        void RegisterSceneAware(ISceneAware* aware) { m_awareRegistry.Register(aware); }
-        void UnregisterSceneAware(ISceneAware* aware) { m_awareRegistry.Unregister(aware); }
-
-        /// The shared aware registry, so an owner can build its own SceneManager over the same app-wide
-        /// aware list (game-instance.md §11): `SceneManager sm(&scenes->AwareRegistry());`.
-        [[nodiscard]] SceneAwareRegistry& AwareRegistry() noexcept { return m_awareRegistry; }
-
-        // ---- observer broker (the reactive scene-lifecycle stages; the composition path) ----
+        // ---- observer broker (reactive scene-lifecycle stages) ----
 
         void RegisterObserver(ISceneObserver* observer, SceneLifecycleStage stage)
         {
@@ -56,12 +48,12 @@ export namespace engine::scene
         }
         void UnregisterObserver(ISceneObserver* observer) { m_scenes.RemoveObserver(observer); }
 
-        // ---- composition (the declarative single source of truth, empty until the app sets it) ----
+        // ---- composition (the declarative single source of truth) ----
 
-        /// Install the declarative assignment of modules the app wants every scene built from. Once set,
-        /// newly created scenes on every registered manager are assembled through it; scenes created
-        /// BEFORE SetComposition used the legacy ISceneAware path (a composition is applied at
-        /// CreateScene time, not retroactively).
+        /// Install the declarative assignment of modules every registered manager's CreateScene assembles
+        /// from. A manager registered BEFORE SetComposition reads the LIVE composition at create time, so
+        /// ordering is irrelevant; scenes created before the composition was set are not retroactively
+        /// rebuilt.
         void SetComposition(SceneComposition composition) { m_scenes.SetComposition(Move(composition)); }
         [[nodiscard]] SceneComposition& Composition() noexcept { return m_scenes.Composition(); }
         [[nodiscard]] const SceneComposition& Composition() const noexcept
@@ -72,11 +64,10 @@ export namespace engine::scene
         // ---- manager registry (delegated to the pure SceneRegistry) ----
 
         /// Register a SceneManager (borrowed) so it ticks on the Context-driven lane. Wires the manager's
-        /// install/uninstall hooks so CreateScene assembles from the composition (fallback: legacy aware
-        /// two-pass when no composition is configured) and ALWAYS fans the observer stages after assembly,
-        /// while destroy/clear fans Destroying. The subsystem holds a `SceneManager*` (scene-lib type) -
-        /// it never learns about its OWNER (GameInstance / editor page), so the dependency stays down.
-        /// The owner unregisters before destroying the manager.
+        /// install/uninstall hooks: CreateScene assembles from the live composition then fans SystemsReady;
+        /// destroy/clear fans Destroying. The subsystem holds a `SceneManager*` (scene-lib type) - it never
+        /// learns about its OWNER (GameInstance / editor page), so the dependency stays down. The owner
+        /// unregisters before destroying the manager.
         void RegisterManager(SceneManager* manager)
         {
             if (manager == nullptr)
@@ -85,39 +76,20 @@ export namespace engine::scene
             }
             m_scenes.RegisterManager(manager); // dedups; adds to the tick list
 
-            // The closure reads the LIVE composition at create time, with the legacy aware registry as the
-            // assembly fallback. Observer stages fire in BOTH paths (reactive wiring is source-agnostic).
-            // The subsystem outlives every registered manager (the owner unregisters + clears its scenes
-            // before subsystem teardown), so the `this` capture is safe under the same borrowed-pointer
-            // discipline the manager list already relies on.
+            // The installer closes over this subsystem: read the LIVE composition at create time. The
+            // subsystem outlives every registered manager (the owner unregisters + clears its scenes before
+            // subsystem teardown), so the `this` capture is safe under the same borrowed-pointer discipline
+            // the manager list already relies on.
             SceneManager::SceneInstaller installer{
                 [this](Scene& scene)
                 {
-                    // Assembly is composition XOR legacy: a configured composition already covers every
-                    // built-in domain (Render/Physics/Audio/Script/Particles/UI/Navigation/Animation/Net),
-                    // so firing the legacy ISceneAware two-pass too would double-add each manager.
-                    // Custom/plugin subsystems adopt the composition by registering their own SceneModule.
-                    if (m_scenes.Composition().ModuleCount() > 0)
-                    {
-                        m_scenes.Composition().Instantiate(scene);
-                    }
-                    else
-                    {
-                        m_awareRegistry.NotifyCreated(scene); // legacy two-pass (assembly + ready)
-                    }
-                    // Reactive wiring (observers) runs after assembly in BOTH paths.
+                    m_scenes.Composition().Instantiate(scene);
                     m_scenes.Notify(SceneLifecycleStage::SystemsReady, scene);
                 }};
             manager->SetSceneInstaller(Move(installer));
 
             SceneManager::SceneUninstaller uninstaller{
-                [this](Scene& scene)
-                {
-                    // Reactive (migrated observers) + legacy (unmigrated ISceneAware) teardown. Migrated
-                    // subsystems leave OnSceneDestroyed a no-op, so this never double-fires cleanup.
-                    m_scenes.Notify(SceneLifecycleStage::Destroying, scene);
-                    m_awareRegistry.NotifyDestroyed(scene);
-                }};
+                [this](Scene& scene) { m_scenes.Notify(SceneLifecycleStage::Destroying, scene); }};
             manager->SetSceneUninstaller(Move(uninstaller));
         }
         void UnregisterManager(SceneManager* manager) { m_scenes.UnregisterManager(manager); }
@@ -160,8 +132,7 @@ export namespace engine::scene
         // OnShutdown: nothing to clear - every manager is cleared by its owner.
 
     private:
-        SceneAwareRegistry m_awareRegistry; // app-wide aware list (the ISceneAware broker + fallback)
-        SceneRegistry m_scenes;             // pure manager/observer/sweep state (foundation.scene:composition)
+        SceneRegistry m_scenes; // pure manager/observer/sweep state (foundation.scene:composition)
     };
 
 } // namespace engine::scene

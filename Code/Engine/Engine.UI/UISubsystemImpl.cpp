@@ -519,7 +519,6 @@ namespace engine::ui
             m_input = context->GetSubsystem<engine::input::InputSubsystem>();
             if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
             {
-                scenes->RegisterSceneAware(this); // injects the canvas manager per scene
                 scenes->RegisterObserver(this, scene::SceneLifecycleStage::SystemsReady);
                 scenes->RegisterObserver(this, scene::SceneLifecycleStage::Destroying);
             }
@@ -555,7 +554,6 @@ namespace engine::ui
         {
             if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
             {
-                scenes->UnregisterSceneAware(this);
                 scenes->UnregisterObserver(this);
             }
         }

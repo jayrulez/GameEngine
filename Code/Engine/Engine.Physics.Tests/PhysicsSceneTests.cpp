@@ -699,8 +699,13 @@ TEST_CASE("physics.scene: the editor simulate cycle (capture/start/stop/restore)
     namespace runtime = foundation::runtime;
     runtime::Context ctx;
     auto* scenes = ctx.AddSubsystem<engine::scene::SceneSubsystem>();
-    scene::SceneManager sm(&scenes->AwareRegistry());
+    scene::SceneManager sm;
     scenes->RegisterManager(&sm);
+    {
+        const scene::SceneModule physicsModule{u8"physics", &AddPhysicsSceneManagers, nullptr};
+        const scene::SceneModule* modules[] = {&physicsModule};
+        scenes->SetComposition(scene::SceneComposition::Build(modules));
+    }
     ctx.AddSubsystem<PhysicsSubsystem>();
     ctx.Startup();
 

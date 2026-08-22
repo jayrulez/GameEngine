@@ -3,7 +3,7 @@
 /// RenderSubsystem: the Context-level driver that connects scenes to the (scene-agnostic)
 /// renderer. It owns the GPU systems - the DXC compiler, ShaderSystem, PipelineStateCache,
 /// the MeshRenderer + RendererRegistry, and the per-frame RenderFrame driver - and, as an
-/// ISceneAware, injects the mesh/camera component managers into each scene on creation.
+/// As an ISceneObserver it reacts to scene teardown; assembly via the scene composition.
 ///
 /// It implements ISceneRenderer (Begin/RenderScene×N/End): the app's render callback brackets
 /// the frame with BeginRendering/EndRendering and calls RenderScene per active scene. Each
@@ -22,7 +22,7 @@ import foundation.core;
 import foundation.rhi;
 import foundation.profiler;
 import foundation.runtime;         // Subsystem, Context
-import foundation.scene;           // Scene, ISceneAware
+import foundation.scene; // Scene
 import engine.scene; // SceneSubsystem (to register as scene-aware)
 import foundation.shaders.system;  // ShaderSystem (borrowed from the host)
 import foundation.materials;       // MaterialSystem
@@ -69,11 +69,6 @@ namespace engine::render
         scene.AddSystem<ReflectionProbeComponentManager>();
         scene.AddSystem<EnvironmentSystem>();
         scene.AddSystem<PostProcessSystem>();
-    }
-
-    void RenderSubsystem::OnSceneCreated(scene::Scene& scene)
-    {
-        AddRenderSceneManagers(scene);
     }
 
     void RenderSubsystem::OnDestroying(scene::Scene& scene)
@@ -826,12 +821,11 @@ namespace engine::render
 
     void RenderSubsystem::OnReady()
     {
-        // Register as scene-aware (assembly) + observer (reactive provider cleanup).
+        // Register as a scene observer (reactive provider cleanup).
         if (foundation::runtime::Context* ctx = GetContext())
         {
             if (auto* scenes = ctx->GetSubsystem<engine::scene::SceneSubsystem>())
             {
-                scenes->RegisterSceneAware(this);
                 scenes->RegisterObserver(this, scene::SceneLifecycleStage::Destroying);
             }
         }
@@ -843,7 +837,6 @@ namespace engine::render
         {
             if (auto* scenes = ctx->GetSubsystem<engine::scene::SceneSubsystem>())
             {
-                scenes->UnregisterSceneAware(this);
                 scenes->UnregisterObserver(this);
             }
         }

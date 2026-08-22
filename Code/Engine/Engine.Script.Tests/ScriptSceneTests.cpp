@@ -2321,9 +2321,19 @@ namespace
             scenes = ctx.AddSubsystem<engine::scene::SceneSubsystem>();
             physics = ctx.AddSubsystem<engine::physics::PhysicsSubsystem>();
             scripts = ctx.AddSubsystem<ScriptSubsystem>();
+            {
+                const scene::SceneModule scriptModule{u8"script",
+                                                      &engine::script::AddScriptSceneManagers,
+                                                      nullptr};
+                const scene::SceneModule physicsModule{u8"physics",
+                                                       &engine::physics::AddPhysicsSceneManagers,
+                                                       nullptr};
+                const scene::SceneModule* modules[] = {&scriptModule, &physicsModule};
+                scenes->SetComposition(scene::SceneComposition::Build(modules));
+            }
             ctx.Startup();
             bridge.Install(*physics, *scripts); // the composition-root bridge (the real adapter)
-            sm = MakeUnique<scene::SceneManager>(DefaultAllocator(), &scenes->AwareRegistry());
+            sm = MakeUnique<scene::SceneManager>(DefaultAllocator());
             scenes->RegisterManager(sm.Get());
             scene = sm->CreateScene(u8"level");
         }
@@ -2464,8 +2474,14 @@ TEST_CASE("script.scene: behaviors tick without error when no physics subsystem 
     namespace runtime = foundation::runtime;
     runtime::Context ctx;
     auto* scenes = ctx.AddSubsystem<engine::scene::SceneSubsystem>();
-    scene::SceneManager sm(&scenes->AwareRegistry());
+    scene::SceneManager sm;
     scenes->RegisterManager(&sm);
+    {
+        const scene::SceneModule scriptModule{u8"script", &engine::script::AddScriptSceneManagers,
+                                              nullptr};
+        const scene::SceneModule* modules[] = {&scriptModule};
+        scenes->SetComposition(scene::SceneComposition::Build(modules));
+    }
     ctx.AddSubsystem<ScriptSubsystem>(); // NO physics subsystem
     foundation::script::angelscript::RegisterAngelScriptBackend();
     RegisterCoreTypes();

@@ -20,7 +20,7 @@ export module foundation.scene:composition;
 
 import foundation.core;
 import :scene;   // Scene (the observers/composition reference it by value)
-import :manager; // SceneManager + SceneAwareRegistry (SceneRegistry drives managers on the lanes)
+import :manager; // SceneManager (SceneRegistry drives managers on the lanes)
 
 using namespace foundation::core;
 
@@ -75,7 +75,7 @@ export namespace foundation::scene
 
     // An observer reacts to ONE stage of a scene's lifecycle. Register it on a SceneRegistry with
     // AddObserver(observer, stage). Order() (lower first) breaks ties within a stage - the replacement
-    // for the old ISceneAware flow that leaked ordering into Subsystem::UpdateOrder().
+    // the explicit, data-driven replacement for the old injection flow.
     class ISceneObserver
     {
     public:

@@ -1422,8 +1422,7 @@ export namespace engine::script
         scene.AddSystem<SceneScriptSystem>(); // scene-root script (the Level tier)
     }
 
-    class ScriptSubsystem final : public foundation::runtime::Subsystem, public scene::ISceneAware,
-                                  public scene::ISceneObserver
+    class ScriptSubsystem final : public foundation::runtime::Subsystem, public scene::ISceneObserver
     {
     public:
         /// The DEFAULT run host - the one for the editor's editing/loose scenes (game-instance.md
@@ -1570,13 +1569,9 @@ export namespace engine::script
         }
         // The game-script run context is no longer acquired here (game-instance.md §11.10): a
         // GameInstance owns its run host and drives its own game script through it. This subsystem is
-        // machinery (routing + ISceneAware + reflection + Configure/MaybeTeardownRunHost).
+        // machinery (routing + ISceneObserver + reflection + Configure/MaybeTeardownRunHost).
 
         // ---- scene integration ----
-
-        // Assembly (the behavior + level script systems). Reactive wiring (run-host binding + tracking)
-        // rides the observer stages so a scratch/headless scene assembles with inert, host-less systems.
-        void OnSceneCreated(scene::Scene& scene) override { AddScriptSceneManagers(scene); }
 
         void OnSystemsReady(scene::Scene& scene) override
         {
@@ -1642,23 +1637,21 @@ export namespace engine::script
             ConfigureRunHost(m_ownedRunHost); // wire the default (editor-scene) run host once
             if (foundation::runtime::Context* context = GetContext())
             {
-                if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
-                {
-                    scenes->RegisterSceneAware(this);
-                    scenes->RegisterObserver(this, scene::SceneLifecycleStage::SystemsReady);
-                    scenes->RegisterObserver(this, scene::SceneLifecycleStage::Destroying);
-                }
+            if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
+            {
+                scenes->RegisterObserver(this, scene::SceneLifecycleStage::SystemsReady);
+                scenes->RegisterObserver(this, scene::SceneLifecycleStage::Destroying);
+            }
             }
         }
         void OnShutdown() override
         {
             if (foundation::runtime::Context* context = GetContext())
             {
-                if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
-                {
-                    scenes->UnregisterSceneAware(this);
-                    scenes->UnregisterObserver(this);
-                }
+            if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
+            {
+                scenes->UnregisterObserver(this);
+            }
             }
             for (const SceneEntry& entry : m_systems)
             {

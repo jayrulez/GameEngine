@@ -11,7 +11,7 @@
 /// owning manager (the typed manager is the serializer - value components carry no
 /// vtable) and routed back on load by a stable string type id. The thin "component
 /// type -> manager" routing is the only scene-specific registry; the managers
-/// themselves already exist on the target scene (injected via ISceneAware), so load
+/// themselves already exist on the target scene (installed via the composition), so load
 /// deserializes into them.
 
 module;
@@ -1294,7 +1294,7 @@ export namespace foundation::scene
 
     /// Export staging: re-encode a scene/prefab SOURCE stream (text or binary) to the BINARY
     /// wire the player loads. `scratch` must be an EMPTY scene carrying the app's FULL manager
-    /// set (create it through the SceneSubsystem so ISceneAware injection covers every
+    /// set (assemble it from the full composition so every component type is covered);
     /// component type - a hand-listed set would silently drop components). Parked prefab
     /// pendings re-emit verbatim (SerializeScene write), so no resolver/spawn is needed.
     /// The caller clears `scratch` afterwards.

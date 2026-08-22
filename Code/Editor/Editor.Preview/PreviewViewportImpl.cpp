@@ -66,7 +66,6 @@ namespace editor
 
         if (m_impl->scenes != nullptr)
         {
-            m_impl->sceneManager.SetAwareRegistry(&m_impl->scenes->AwareRegistry());
             m_impl->scenes->RegisterManager(&m_impl->sceneManager);
             m_impl->scene = m_impl->sceneManager.CreateScene(sceneName);
             m_impl->scene->SetSimulationEnabled(false);

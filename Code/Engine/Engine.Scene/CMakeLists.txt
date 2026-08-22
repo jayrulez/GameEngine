@@ -1,5 +1,5 @@
 # Engine::Scene - `engine.scene` (the Context-level scene driver +
-# ISceneAware broker). Bridges foundation.scene and foundation.runtime; keeps scene core
+# the scene-composition registry). Bridges foundation.scene and foundation.runtime; keeps
 # runtime-free.
 add_library(Engine.Scene STATIC)
 add_library(Engine::Scene ALIAS Engine.Scene)

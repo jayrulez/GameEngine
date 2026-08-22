@@ -3,7 +3,7 @@
 /// RenderSubsystem: the Context-level driver that connects scenes to the (scene-agnostic)
 /// renderer. It owns the GPU systems - the DXC compiler, ShaderSystem, PipelineStateCache,
 /// the MeshRenderer + RendererRegistry, and the per-frame RenderFrame driver - and, as an
-/// ISceneAware, injects the mesh/camera component managers into each scene on creation.
+/// As an ISceneObserver it reacts to scene teardown; assembly happens via the scene composition.
 ///
 /// It implements ISceneRenderer (Begin/RenderScene×N/End): the app's render callback brackets
 /// the frame with BeginRendering/EndRendering and calls RenderScene per active scene. Each
@@ -21,7 +21,7 @@ import foundation.core;
 import foundation.rhi;
 import foundation.profiler;
 import foundation.runtime;         // Subsystem, Context
-import foundation.scene;           // Scene, ISceneAware
+import foundation.scene; // Scene
 import engine.scene; // SceneSubsystem (to register as scene-aware)
 import foundation.shaders.system;  // ShaderSystem, ShaderSystemHost
 import foundation.materials;       // MaterialSystem
@@ -92,7 +92,6 @@ export namespace engine::render
     class RenderSubsystem final : public foundation::runtime::Subsystem,
                                   public ISceneRenderer,
                                   public IScreenRenderer,
-                                  public scene::ISceneAware,
                                   public scene::ISceneObserver
     {
     public:
@@ -114,9 +113,6 @@ export namespace engine::render
         [[nodiscard]] u32 FramesInFlight() const noexcept { return m_framesInFlight; }
 
         [[nodiscard]] i32 UpdateOrder() const noexcept override;
-
-        // Assembly (the render component managers). Provider setup rides ISceneObserver (below).
-        void OnSceneCreated(scene::Scene& scene) override;
 
         // Drop any render-data providers registered for a scene that's going away (borrowed pointers).
         void OnDestroying(scene::Scene& scene) override;

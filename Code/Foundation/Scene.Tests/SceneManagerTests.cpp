@@ -1,5 +1,6 @@
-// foundation.scene :manager - SceneManager owns a group of scenes, fans out ISceneAware via a shared
-// registry, and ticks its own group (the linchpin of the GameInstance model; game-instance.md §11).
+// foundation.scene :manager - SceneManager owns a group of scenes, assembles them through a
+// type-erased installer, tears them down through a type-erased uninstaller, and ticks its own group
+// (the linchpin of the GameInstance model; game-instance.md §11).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -11,13 +12,11 @@ using namespace foundation::scene;
 
 namespace
 {
-    // Records lifecycle notifications so a test can assert the registry fanned them out.
-    struct RecordingAware final : public ISceneAware
+    // Records assembly/teardown notifications so a test can assert the hooks fired.
+    struct Recording
     {
-        int created = 0, ready = 0, destroyed = 0;
-        void OnSceneCreated(Scene&) override { ++created; }
-        void OnSceneReady(Scene&) override { ++ready; }
-        void OnSceneDestroyed(Scene&) override { ++destroyed; }
+        int installed = 0;
+        int removed = 0;
     };
 }
 
@@ -49,30 +48,20 @@ TEST_CASE("scene-manager: create/active/current + destroy")
     CHECK(mgr.CurrentScene() == nullptr); // destroying the current scene clears it
 }
 
-TEST_CASE("scene-manager: fans ISceneAware lifecycle out through the shared registry")
+TEST_CASE("scene-manager: fans install/uninstall hooks around each scene")
 {
-    SceneAwareRegistry registry;
-    RecordingAware aware;
-    registry.Register(&aware);
-    registry.Register(&aware); // idempotent
+    Recording rec;
+    SceneManager mgr;
+    // Type-erased: the caller owns whatever the hooks close over (a composition / observer list).
+    mgr.SetSceneInstaller([&rec](Scene&) { ++rec.installed; });
+    mgr.SetSceneUninstaller([&rec](Scene&) { ++rec.removed; });
 
-    SceneManager mgr(&registry);
     Scene* s = mgr.CreateScene(u8"S");
-    CHECK(aware.created == 1);
-    CHECK(aware.ready == 1); // two-pass notify
-    CHECK(aware.destroyed == 0);
+    CHECK(rec.installed == 1);
+    CHECK(rec.removed == 0);
 
     mgr.DestroyScene(s);
-    CHECK(aware.destroyed == 1);
-
-    // A second manager over the SAME registry also notifies the same aware subsystem.
-    SceneManager other(&registry);
-    (void)other.CreateScene(u8"T");
-    CHECK(aware.created == 2);
-
-    registry.Unregister(&aware);
-    (void)mgr.CreateScene(u8"U");
-    CHECK(aware.created == 2); // no longer notified after unregister
+    CHECK(rec.removed == 1);
 }
 
 TEST_CASE("scene-manager: group time scale folds into the tick (identity at 1.0)")
@@ -96,18 +85,18 @@ TEST_CASE("scene-manager: group time scale folds into the tick (identity at 1.0)
 
 TEST_CASE("scene-manager: Clear destroys the whole group and notifies")
 {
-    SceneAwareRegistry registry;
-    RecordingAware aware;
-    registry.Register(&aware);
+    Recording rec;
+    SceneManager mgr;
+    mgr.SetSceneInstaller([&rec](Scene&) { ++rec.installed; });
+    mgr.SetSceneUninstaller([&rec](Scene&) { ++rec.removed; });
 
-    SceneManager mgr(&registry);
     (void)mgr.CreateScene(u8"A");
     (void)mgr.CreateScene(u8"B");
-    CHECK(aware.created == 2);
+    CHECK(rec.installed == 2);
 
     mgr.Clear();
     CHECK(mgr.SceneCount() == 0u);
-    CHECK(aware.destroyed == 2);
+    CHECK(rec.removed == 2);
     CHECK(mgr.CurrentScene() == nullptr);
 }
 

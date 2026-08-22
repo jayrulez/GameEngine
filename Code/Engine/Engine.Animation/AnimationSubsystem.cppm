@@ -1,8 +1,8 @@
 /// Engine::Animation - the `:subsystem` partition.
 ///
-/// AnimationSubsystem: a Context-level subsystem that injects the animation component managers
-/// (skeletal single-clip + animation-graph) into every scene (via ISceneAware), so attaching a
-/// SkeletalAnimationComponent or AnimationGraphComponent is all an app needs - the SceneSubsystem's
+/// AnimationSubsystem: a Context-level subsystem that registers the animation component reflection and
+/// contributes the per-scene animation managers to the declarative scene composition (SceneModule). So
+/// attaching a SkeletalAnimationComponent or AnimationGraphComponent is all an app needs - the scene's
 /// per-scene tick then advances the players (PostUpdate) and feeds the skinning matrices to the mesh
 /// components, before render extraction. The subsystem itself does no per-frame work; the managers
 /// (SceneSystems) do, driven by the scene.
@@ -14,7 +14,7 @@ export module engine.animation:subsystem;
 
 import foundation.core;
 import foundation.runtime;         // Subsystem, Context
-import foundation.scene;           // Scene, ISceneAware
+import foundation.scene; // Scene
 import engine.scene; // SceneSubsystem (to register as scene-aware)
 import :components;
 import :propertyanimator;
@@ -33,43 +33,12 @@ export namespace engine::animation
         scene.AddSystem<PropertyAnimatorComponentManager>();  // reflected property-curve animation
     }
 
-    class AnimationSubsystem final : public foundation::runtime::Subsystem,
-                                     public foundation::scene::ISceneAware
+    class AnimationSubsystem final : public foundation::runtime::Subsystem
     {
-    public:
-        // Injects the animation managers into each new scene (they tick in PostUpdate): the graph
-        // manager (state machines / blend trees) runs first, then the simple single-clip manager.
-        void OnSceneCreated(foundation::scene::Scene& scene) override
-        {
-            AddAnimationSceneManagers(scene);
-        }
-
     protected:
         void OnInit() override
         {
             RegisterAnimationComponentReflection(); // tooling: reflected components (idempotent)
-        }
-
-        void OnReady() override
-        {
-            if (foundation::runtime::Context* ctx = GetContext())
-            {
-                if (auto* scenes = ctx->GetSubsystem<engine::scene::SceneSubsystem>())
-                {
-                    scenes->RegisterSceneAware(this);
-                }
-            }
-        }
-
-        void OnShutdown() override
-        {
-            if (foundation::runtime::Context* ctx = GetContext())
-            {
-                if (auto* scenes = ctx->GetSubsystem<engine::scene::SceneSubsystem>())
-                {
-                    scenes->UnregisterSceneAware(this);
-                }
-            }
         }
     };
 

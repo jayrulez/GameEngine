@@ -44,14 +44,19 @@ TEST_CASE("ui.subsystem: canvases instantiate, hot-reload, and sync visibility")
 {
     runtime::Context ctx;
     auto* scenes = ctx.AddSubsystem<engine::scene::SceneSubsystem>();
-    scene::SceneManager sm(&scenes->AwareRegistry());
+    scene::SceneManager sm;
     scenes->RegisterManager(&sm);
+    {
+        const scene::SceneModule uiModule{u8"ui", &AddUISceneManagers, nullptr};
+        const scene::SceneModule* modules[] = {&uiModule};
+        scenes->SetComposition(scene::SceneComposition::Build(modules));
+    }
     auto* ui = ctx.AddSubsystem<UISubsystem>();
     ctx.Startup();
 
     scene::Scene* scene = sm.CreateScene(u8"menu");
     auto* canvases = scene->GetSystem<UICanvasComponentManager>();
-    REQUIRE(canvases != nullptr); // injected by the subsystem (ISceneAware)
+    REQUIRE(canvases != nullptr); // installed by the scene composition
 
     scene::EntityHandle e = scene->CreateEntity(u8"pause");
     UICanvasComponent& canvas = canvases->Add(e);
@@ -99,8 +104,13 @@ TEST_CASE("ui.subsystem: an effectively-inactive entity's canvas goes Gone (and 
 {
     runtime::Context ctx;
     auto* scenes = ctx.AddSubsystem<engine::scene::SceneSubsystem>();
-    scene::SceneManager sm(&scenes->AwareRegistry());
+    scene::SceneManager sm;
     scenes->RegisterManager(&sm);
+    {
+        const scene::SceneModule uiModule{u8"ui", &AddUISceneManagers, nullptr};
+        const scene::SceneModule* modules[] = {&uiModule};
+        scenes->SetComposition(scene::SceneComposition::Build(modules));
+    }
     auto* ui = ctx.AddSubsystem<UISubsystem>();
     ctx.Startup();
 
@@ -181,8 +191,13 @@ TEST_CASE("ui.subsystem: billboards project through the scene camera and park be
 {
     runtime::Context ctx;
     auto* scenes = ctx.AddSubsystem<engine::scene::SceneSubsystem>();
-    scene::SceneManager sm(&scenes->AwareRegistry());
+    scene::SceneManager sm;
     scenes->RegisterManager(&sm);
+    {
+        const scene::SceneModule uiModule{u8"ui", &AddUISceneManagers, nullptr};
+        const scene::SceneModule* modules[] = {&uiModule};
+        scenes->SetComposition(scene::SceneComposition::Build(modules));
+    }
     auto* ui = ctx.AddSubsystem<UISubsystem>();
     (void)ui;
     // The camera manager comes from the render subsystem normally; add it directly here.
@@ -262,8 +277,13 @@ TEST_CASE("ui.subsystem: the scene-less screen tier survives scene swaps and sta
 {
     runtime::Context ctx;
     auto* scenes = ctx.AddSubsystem<engine::scene::SceneSubsystem>();
-    scene::SceneManager sm(&scenes->AwareRegistry());
+    scene::SceneManager sm;
     scenes->RegisterManager(&sm);
+    {
+        const scene::SceneModule uiModule{u8"ui", &AddUISceneManagers, nullptr};
+        const scene::SceneModule* modules[] = {&uiModule};
+        scenes->SetComposition(scene::SceneComposition::Build(modules));
+    }
     auto* ui = ctx.AddSubsystem<UISubsystem>();
     ctx.Startup();
 
@@ -302,8 +322,13 @@ TEST_CASE("ui.subsystem: an EMPTY overlay layer never blocks canvas hit-testing"
 {
     runtime::Context ctx;
     auto* scenes = ctx.AddSubsystem<engine::scene::SceneSubsystem>();
-    scene::SceneManager sm(&scenes->AwareRegistry());
+    scene::SceneManager sm;
     scenes->RegisterManager(&sm);
+    {
+        const scene::SceneModule uiModule{u8"ui", &AddUISceneManagers, nullptr};
+        const scene::SceneModule* modules[] = {&uiModule};
+        scenes->SetComposition(scene::SceneComposition::Build(modules));
+    }
     auto* ui = ctx.AddSubsystem<UISubsystem>();
     ctx.Startup();
     scene::Scene* scene = sm.CreateScene(u8"level");
@@ -348,8 +373,13 @@ TEST_CASE("ui.subsystem: a PASSIVE screen overlay (badge) never turns the layer 
 {
     runtime::Context ctx;
     auto* scenes = ctx.AddSubsystem<engine::scene::SceneSubsystem>();
-    scene::SceneManager sm(&scenes->AwareRegistry());
+    scene::SceneManager sm;
     scenes->RegisterManager(&sm);
+    {
+        const scene::SceneModule uiModule{u8"ui", &AddUISceneManagers, nullptr};
+        const scene::SceneModule* modules[] = {&uiModule};
+        scenes->SetComposition(scene::SceneComposition::Build(modules));
+    }
     auto* ui = ctx.AddSubsystem<UISubsystem>();
     ctx.Startup();
 
@@ -429,8 +459,13 @@ TEST_CASE("ui.subsystem: gamepad dpad moves focus with hold-repeat; South activa
 {
     runtime::Context ctx;
     auto* scenes = ctx.AddSubsystem<engine::scene::SceneSubsystem>();
-    scene::SceneManager sm(&scenes->AwareRegistry());
+    scene::SceneManager sm;
     scenes->RegisterManager(&sm);
+    {
+        const scene::SceneModule uiModule{u8"ui", &AddUISceneManagers, nullptr};
+        const scene::SceneModule* modules[] = {&uiModule};
+        scenes->SetComposition(scene::SceneComposition::Build(modules));
+    }
     auto* input = ctx.AddSubsystem<engine::input::InputSubsystem>(nullptr);
     auto* ui = ctx.AddSubsystem<UISubsystem>();
     ctx.Startup();
@@ -536,8 +571,13 @@ TEST_CASE("ui.subsystem: canvases stack by order; billboard layer stays below; d
 {
     runtime::Context ctx;
     auto* scenes = ctx.AddSubsystem<engine::scene::SceneSubsystem>();
-    scene::SceneManager sm(&scenes->AwareRegistry());
+    scene::SceneManager sm;
     scenes->RegisterManager(&sm);
+    {
+        const scene::SceneModule uiModule{u8"ui", &AddUISceneManagers, nullptr};
+        const scene::SceneModule* modules[] = {&uiModule};
+        scenes->SetComposition(scene::SceneComposition::Build(modules));
+    }
     auto* ui = ctx.AddSubsystem<UISubsystem>();
     ctx.Startup();
 
@@ -624,8 +664,13 @@ TEST_CASE(
 {
     runtime::Context ctx;
     auto* scenes = ctx.AddSubsystem<engine::scene::SceneSubsystem>();
-    scene::SceneManager sm(&scenes->AwareRegistry());
+    scene::SceneManager sm;
     scenes->RegisterManager(&sm);
+    {
+        const scene::SceneModule uiModule{u8"ui", &AddUISceneManagers, nullptr};
+        const scene::SceneModule* modules[] = {&uiModule};
+        scenes->SetComposition(scene::SceneComposition::Build(modules));
+    }
     auto* ui = ctx.AddSubsystem<UISubsystem>();
     ctx.Startup();
     scene::Scene* scene = sm.CreateScene(u8"menu");
@@ -722,8 +767,13 @@ TEST_CASE("ui.subsystem: key/text events reach a focused game EditText; IME foll
 {
     runtime::Context ctx;
     auto* scenes = ctx.AddSubsystem<engine::scene::SceneSubsystem>();
-    scene::SceneManager sm(&scenes->AwareRegistry());
+    scene::SceneManager sm;
     scenes->RegisterManager(&sm);
+    {
+        const scene::SceneModule uiModule{u8"ui", &AddUISceneManagers, nullptr};
+        const scene::SceneModule* modules[] = {&uiModule};
+        scenes->SetComposition(scene::SceneComposition::Build(modules));
+    }
     auto* input = ctx.AddSubsystem<engine::input::InputSubsystem>(nullptr);
     auto* ui = ctx.AddSubsystem<UISubsystem>();
     ctx.Startup();
@@ -790,8 +840,13 @@ TEST_CASE("ui.subsystem: RenderTexture canvases own an offscreen target and stay
 {
     runtime::Context ctx;
     auto* scenes = ctx.AddSubsystem<engine::scene::SceneSubsystem>();
-    scene::SceneManager sm(&scenes->AwareRegistry());
+    scene::SceneManager sm;
     scenes->RegisterManager(&sm);
+    {
+        const scene::SceneModule uiModule{u8"ui", &AddUISceneManagers, nullptr};
+        const scene::SceneModule* modules[] = {&uiModule};
+        scenes->SetComposition(scene::SceneComposition::Build(modules));
+    }
     auto* ui = ctx.AddSubsystem<UISubsystem>();
     ctx.Startup();
 
@@ -921,8 +976,13 @@ TEST_CASE("ui.subsystem: removing a canvas or billboard COMPONENT sweeps its tre
     // layer needed its own sweep.
     runtime::Context ctx;
     auto* scenes = ctx.AddSubsystem<engine::scene::SceneSubsystem>();
-    scene::SceneManager sm(&scenes->AwareRegistry());
+    scene::SceneManager sm;
     scenes->RegisterManager(&sm);
+    {
+        const scene::SceneModule uiModule{u8"ui", &AddUISceneManagers, nullptr};
+        const scene::SceneModule* modules[] = {&uiModule};
+        scenes->SetComposition(scene::SceneComposition::Build(modules));
+    }
     auto* ui = ctx.AddSubsystem<UISubsystem>();
     ctx.Startup();
     scene::Scene* scene = sm.CreateScene(u8"level");
@@ -1030,8 +1090,13 @@ TEST_CASE(
 {
     runtime::Context ctx;
     auto* scenes = ctx.AddSubsystem<engine::scene::SceneSubsystem>();
-    scene::SceneManager sm(&scenes->AwareRegistry());
+    scene::SceneManager sm;
     scenes->RegisterManager(&sm);
+    {
+        const scene::SceneModule uiModule{u8"ui", &AddUISceneManagers, nullptr};
+        const scene::SceneModule* modules[] = {&uiModule};
+        scenes->SetComposition(scene::SceneComposition::Build(modules));
+    }
     auto* input = ctx.AddSubsystem<engine::input::InputSubsystem>(nullptr);
     auto* ui = ctx.AddSubsystem<UISubsystem>();
     ctx.Startup();
@@ -1123,8 +1188,13 @@ TEST_CASE("ui.subsystem: ScreenTierOnly keeps un-bound input out of scene UI (ed
 {
     runtime::Context ctx;
     auto* scenes = ctx.AddSubsystem<engine::scene::SceneSubsystem>();
-    scene::SceneManager sm(&scenes->AwareRegistry());
+    scene::SceneManager sm;
     scenes->RegisterManager(&sm);
+    {
+        const scene::SceneModule uiModule{u8"ui", &AddUISceneManagers, nullptr};
+        const scene::SceneModule* modules[] = {&uiModule};
+        scenes->SetComposition(scene::SceneComposition::Build(modules));
+    }
     auto* input = ctx.AddSubsystem<engine::input::InputSubsystem>(nullptr);
     auto* ui = ctx.AddSubsystem<UISubsystem>();
     ctx.Startup();
@@ -1196,8 +1266,13 @@ TEST_CASE("ui.subsystem: RT canvases auto-bind the entity's sprite/decal texture
 {
     runtime::Context ctx;
     auto* scenes = ctx.AddSubsystem<engine::scene::SceneSubsystem>();
-    scene::SceneManager sm(&scenes->AwareRegistry());
+    scene::SceneManager sm;
     scenes->RegisterManager(&sm);
+    {
+        const scene::SceneModule uiModule{u8"ui", &AddUISceneManagers, nullptr};
+        const scene::SceneModule* modules[] = {&uiModule};
+        scenes->SetComposition(scene::SceneComposition::Build(modules));
+    }
     auto* ui = ctx.AddSubsystem<UISubsystem>();
     ctx.Startup();
 
@@ -1303,8 +1378,13 @@ TEST_CASE("ui.worldpanel: instantiates, renders to its target, drives the sprite
 {
     runtime::Context ctx;
     auto* scenes = ctx.AddSubsystem<engine::scene::SceneSubsystem>();
-    scene::SceneManager sm(&scenes->AwareRegistry());
+    scene::SceneManager sm;
     scenes->RegisterManager(&sm);
+    {
+        const scene::SceneModule uiModule{u8"ui", &AddUISceneManagers, nullptr};
+        const scene::SceneModule* modules[] = {&uiModule};
+        scenes->SetComposition(scene::SceneComposition::Build(modules));
+    }
     auto* input = ctx.AddSubsystem<engine::input::InputSubsystem>(nullptr);
     auto* ui = ctx.AddSubsystem<UISubsystem>();
     ctx.Startup();
@@ -1427,8 +1507,13 @@ TEST_CASE("ui.subsystem: a stretched full-screen canvas does NOT swallow the poi
     // empty space (crate clicks die) and the scene root outbids every world panel.
     runtime::Context ctx;
     auto* scenes = ctx.AddSubsystem<engine::scene::SceneSubsystem>();
-    scene::SceneManager sm(&scenes->AwareRegistry());
+    scene::SceneManager sm;
     scenes->RegisterManager(&sm);
+    {
+        const scene::SceneModule uiModule{u8"ui", &AddUISceneManagers, nullptr};
+        const scene::SceneModule* modules[] = {&uiModule};
+        scenes->SetComposition(scene::SceneComposition::Build(modules));
+    }
     auto* input = ctx.AddSubsystem<engine::input::InputSubsystem>(nullptr);
     auto* ui = ctx.AddSubsystem<UISubsystem>();
     ctx.Startup();
@@ -1501,8 +1586,13 @@ TEST_CASE("ui.subsystem: a press over EMPTY space never consumes the pointer "
     // frame, so it was gated 100% of the time while the HUD kept working).
     runtime::Context ctx;
     auto* scenes = ctx.AddSubsystem<engine::scene::SceneSubsystem>();
-    scene::SceneManager sm(&scenes->AwareRegistry());
+    scene::SceneManager sm;
     scenes->RegisterManager(&sm);
+    {
+        const scene::SceneModule uiModule{u8"ui", &AddUISceneManagers, nullptr};
+        const scene::SceneModule* modules[] = {&uiModule};
+        scenes->SetComposition(scene::SceneComposition::Build(modules));
+    }
     auto* input = ctx.AddSubsystem<engine::input::InputSubsystem>(nullptr);
     auto* ui = ctx.AddSubsystem<UISubsystem>();
     ctx.Startup();

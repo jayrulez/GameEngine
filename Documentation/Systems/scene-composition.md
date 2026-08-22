@@ -1,6 +1,6 @@
 # Scene composition & observation
 
-> Status: IN PROGRESS (composition foundation + headless unify + script-tick cutover shipped; scene-lane + input/net FrameTime cutover + ISceneAware migration pending)
+> Status: SHIPPED (composition + observation shipped; `FrameTime` lane cutover deferred)
 > Track: [[game-instance-track]]
 
 The scene layer of the engine is a "world model + systems" foundation (`foundation.scene`) driven by the
@@ -14,33 +14,38 @@ Related: [[game-instance]], [[runtime-host]], [[scripting]] (the one-context rul
 
 ## Implementation status
 
-The foundation is shipped and green (`Scene.Tests`, `Engine.Scene.Tests`, `Engine.GameInstance.Tests`,
-`Engine.SceneSurface.Tests` all pass):
+The design is shipped end-to-end and green across every affected test suite (`Scene.Tests`,
+`Engine.Scene.Tests`, `Engine.Navigation.Tests`, `Engine.Physics.Tests`, `Engine.Audio.Tests`,
+`Engine.Script.Tests`, `Engine.UI.Tests`, `Engine.GameInstance.Tests`, `Engine.Render.Tests`,
+`Engine.SceneSurface.Tests`, `Engine.Net.Tests`, `Engine.DefaultApp.Tests`, `Integration.Mcp` — zero
+failures):
 
-- **`foundation.scene:composition`** (`Code/Foundation/Scene/SceneComposition.cppm`) defines `FrameTime`,
+- **`foundation.scene:composition`** (`Code/Foundation/Scene/SceneComposition.cppm`) defines
   `SceneLifecycleStage`/`ISceneObserver`, `SceneModule`, `SceneComposition` (topological `Build` +
-  `Instantiate` + `RegisterReflection`), and the pure `SceneRegistry`. Covered by
-  `Code/Foundation/Scene.Tests/SceneCompositionTests.cpp` (a new test TU registered in CMake).
-- **`SceneSubsystem` delegates** its manager list, cross-scene sweeps, and lane fan-out to the pure
-  `SceneRegistry`, and exposes `SetComposition`/`Composition()`.
-- **`SceneManager` gained a type-erased `SceneInstaller`** (`SetSceneInstaller`/`ClearSceneInstaller`);
-  `CreateScene` assembles via the installer when set, and otherwise falls back to the legacy
-  `ISceneAware` two-pass. This keeps the runtime layer's scene creation behavior unchanged until the
-  runtime path adopts a composition.
-- **The headless full set is one composition** (`Engine.SceneSurface::FullSceneComposition()`): the
-  per-domain `Add<Domain>SceneManagers`/`Register<Domain>ComponentReflection` functions are declared as a
-  single module list, so `AddAllSceneManagers`/`RegisterAllSceneComponentReflection` are thin wrappers and
-  the `kSceneSystemCount` count tripwire is deleted (its drift failure mode is structurally impossible
-  now). `Engine.SceneSurface.Tests` now guards the domain count (`ModuleCount() == 9`) plus the
-  historically-dropped managers.
-- **`GameInstance::TickScript` uses `FrameTime::SceneDt()`** for the game script's update dt, removing one
-  of the three hand-rolled `host × context × instance × scene` computations.
+  `Instantiate` + `RegisterReflection`), and the pure `SceneRegistry` — plus `FrameTime` for the time
+  model. Covered by `Code/Foundation/Scene.Tests/SceneCompositionTests.cpp`.
+- **`SceneManager` owns ONLY type-erased install/uninstall hooks** (`SceneInstaller`/`SceneUninstaller`).
+  There is no `SceneAwareRegistry` member and no legacy fallback: `CreateScene` assembles via the installer,
+  teardown notifies via the uninstaller.
+- **`SceneSubsystem` is a thin adapter over `SceneRegistry`.** It exposes an `ISceneObserver` broker
+  (`RegisterObserver`/`UnregisterObserver`), owns the composition (`SetComposition`/`Composition()`),
+  and wires each registered manager with an installer (composition assembly → `SystemsReady`) and an
+  uninstaller (`Destroying`). The old `ISceneAware` broker and `AwareRegistry()` accessor are **deleted**.
+- **Every engine domain contributes a `SceneModule`** to `FullSceneComposition()` (Render, Animation,
+  Particles, Physics, Navigation, Audio, Script, UI, Net). Their subsystems are now either pure reflection
+  registrars (Animation, Net) or `ISceneObserver`s that wire reactive per-scene state at `SystemsReady` /
+  `Destroying` (Render, Physics, Audio, Script, Particles, UI, Navigation). `OnSceneCreated` no longer
+  exists anywhere.
+- **The runtime path adopts the composition.** `DefaultApplication::Configure` calls
+  `SetComposition(engine::FullSceneComposition())`; the editor's scratch scenes (export transcode/
+  reachability scan) are assembled via `engine::AddAllSceneManagers` (the same composition). The
+  `ISceneAware`/`SceneAwareRegistry` types are removed from `foundation.scene` entirely (the partition was
+  deleted), not merely deprecated.
+- **`GameInstance::TickScript` uses `FrameTime::SceneDt()`** for the game script's update dt.
 
-Still open (the remaining migration steps below): migrate the running runtime path onto its own
-per-configuration `SceneComposition` and migrate `ISceneAware` observers to `ISceneObserver`; cut the
-`SceneManager`/`SceneRegistry` lane fan-out, the `PhysicsSubsystem` interp read, and the input/net drives
-over to sharing one `FrameTime` (the host-loop ownership question in `ApplicationHost::Tick` is recorded
-under Why #4 and still needs deciding before the lane signatures change).
+Still deferred (Why #4's host-loop decision): cut the `SceneManager`/`SceneRegistry` lane fan-out, the
+`PhysicsSubsystem` interp read, and the input/net drives over to sharing one `FrameTime` (the host-loop
+ownership question in `ApplicationHost::Tick` needs deciding before the lane signatures change).
 
 ## Why (the strains in the current design)
 

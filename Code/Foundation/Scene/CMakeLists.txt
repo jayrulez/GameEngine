@@ -16,12 +16,11 @@ target_sources(Scene
             Phase.cppm
             SceneSystem.cppm
             Component.cppm
-            Aware.cppm
             EventBus.cppm
             Scene.cppm
             SceneManager.cppm
             SceneComposition.cppm
             SceneModule.cppm)
 
-# The Context-level scene driver + ISceneAware broker (bridges Scene + Runtime). Links only the
+# The Context-level scene driver (bridges Scene + Runtime - the scene-composition registry).
 

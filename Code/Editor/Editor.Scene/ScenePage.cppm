@@ -26,6 +26,7 @@ import foundation.shell;
 import foundation.runtime;
 import foundation.runtime.client;
 import engine.defaultapp;
+import engine.scenesurface; // AddAllSceneManagers (the full composition for headless scratch scenes)
 import engine.gameinstance; // GameInstance (the Game tab's run; multi-instance factory)
 import foundation.scene;
 import engine.scene;
@@ -80,7 +81,6 @@ export namespace editor
             // so it ticks on the Context lane; there is no shared default manager).
             if (m_scenes != nullptr)
             {
-                m_sceneManager.SetAwareRegistry(&m_scenes->AwareRegistry());
                 m_scenes->RegisterManager(&m_sceneManager);
                 m_scene = m_sceneManager.CreateScene(instance.Name());
                 m_scene->SetSimulationEnabled(false); // edit mode is frozen; Simulate un-freezes
@@ -746,11 +746,10 @@ export namespace editor
         };
 
         // Export seam: scene/prefab TEXT sources transcode to the binary wire on the main
-        // thread before the pack job. The scratch scene comes from the SceneSubsystem so
-        // ISceneAware injection gives it the app's FULL manager set - a hand-listed set
-        // would silently drop component types.
-        context.SceneStreamStager = [appHost](foundation::content::Instance& instance,
-                                              Array<byte>& out) -> bool
+        // thread before the pack job. The scratch scene is assembled from the full
+        // composition - a hand-listed set would silently drop component types.
+        context.SceneStreamStager = [](foundation::content::Instance& instance,
+                                       Array<byte>& out) -> bool
         {
             const bool isScene = instance.TypeName() == StringView(u8"SceneDocument");
             const bool isPrefab = instance.TypeName() == StringView(u8"PrefabDocument");
@@ -763,22 +762,12 @@ export namespace editor
             {
                 return false;
             }
-            auto* scenes = appHost->Ctx().GetSubsystem<engine::scene::SceneSubsystem>();
-            if (scenes == nullptr)
-            {
-                return false;
-            }
-            // A transient scratch group over the app's aware registry, so OnSceneCreated injects the
-            // FULL component-manager set (no type silently skipped). Destructs at scope end.
-            scene::SceneManager scratchMgr(&scenes->AwareRegistry());
-            scene::Scene* scratch = scratchMgr.CreateScene(u8"__export_transcode");
-            if (scratch == nullptr)
-            {
-                return false;
-            }
+            // A transient scratch scene assembled from the full composition (no component type
+            // silently skipped by a hand-listed set).
+            scene::Scene scratch(u8"__export_transcode");
+            engine::AddAllSceneManagers(scratch);
             Result<Array<byte>> bytes =
-                scene::TranscodeSceneStreamToBinary(*stream, *scratch, /*includeSettings=*/isScene);
-            scratchMgr.DestroyScene(scratch);
+                scene::TranscodeSceneStreamToBinary(*stream, scratch, /*includeSettings=*/isScene);
             if (!bytes.HasValue())
             {
                 return false;
@@ -789,13 +778,13 @@ export namespace editor
 
         // Export reachability seam (docs/design/export-reachability.md): collect the assets a
         // scene/prefab references so the export closure can chase the scene->asset edges the cook's
-        // read-dep graph can't see. Same SceneSubsystem-scratch pattern as the stager above (the full
-        // manager set via ISceneAware, so no component type is silently skipped); resolves the scene's
-        // Refs through a factory-less ResourceManager (nothing builds, so every bound id lands in
-        // CollectUnresolved) and reads back the parked prefab instances. MAIN-THREAD only.
+        // read-dep graph can't see. Same full-composition scratch pattern as the stager above (the full
+        // manager set, so no component type is silently skipped); resolves the scene's Refs through a
+        // factory-less ResourceManager (nothing builds, so every bound id lands in CollectUnresolved)
+        // and reads back the parked prefab instances. MAIN-THREAD only.
         context.SceneRefScanner =
-            [appHost](foundation::content::Instance& instance, foundation::content::ContentDatabase& db,
-                      Array<Guid>& outResources, Array<Guid>& outPrefabs) -> bool
+            [](foundation::content::Instance& instance, foundation::content::ContentDatabase& db,
+               Array<Guid>& outResources, Array<Guid>& outPrefabs) -> bool
         {
             const bool isScene = instance.TypeName() == StringView(u8"SceneDocument");
             const bool isPrefab = instance.TypeName() == StringView(u8"PrefabDocument");
@@ -803,30 +792,21 @@ export namespace editor
             {
                 return false;
             }
-            auto* scenes = appHost->Ctx().GetSubsystem<engine::scene::SceneSubsystem>();
-            if (scenes == nullptr)
-            {
-                return false;
-            }
-            scene::SceneManager scratchMgr(
-                &scenes->AwareRegistry()); // full manager set via ISceneAware
-            scene::Scene* scratch = scratchMgr.CreateScene(u8"__export_scan");
-            if (scratch == nullptr)
-            {
-                return false;
-            }
-            const bool loaded = scene::LoadScene(instance, *scratch).IsOk();
+            // A transient scratch scene assembled from the full composition (no component type
+            // silently skipped by a hand-listed set).
+            scene::Scene scratch(u8"__export_scan");
+            engine::AddAllSceneManagers(scratch);
+            const bool loaded = scene::LoadScene(instance, scratch).IsOk();
             if (loaded)
             {
                 foundation::resource::ResourceManager collector(
                     db); // no factories -> all binds unresolved
-                scene::ResolveSceneResources(*scratch, collector);
+                scene::ResolveSceneResources(scratch, collector);
                 collector.CollectUnresolved(outResources);
-                scratch->ForEachPendingPrefabInstance(
+                scratch.ForEachPendingPrefabInstance(
                     [&outPrefabs](scene::Scene::PendingPrefabInstance& pending)
                     { outPrefabs.PushBack(pending.prefabId); });
             }
-            scratchMgr.DestroyScene(scratch);
             return loaded;
         };
 

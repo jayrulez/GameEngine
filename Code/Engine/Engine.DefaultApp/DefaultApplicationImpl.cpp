@@ -124,14 +124,11 @@ namespace engine::runtime
         m_host = &host; // stable for the app's lifetime; extra instances route run.requestExit through it
         m_scenes = host.Ctx().AddSubsystem<engine::scene::SceneSubsystem>();
         // The scene-assembly blueprint (scene-composition.md): every registered manager's CreateScene
-        // now assembles from the full composition (with ISceneAware injection still layered on top for
-        // custom/plugin subsystems) instead of the per-subsystem ISceneAware two-pass alone.
+        // assembles from the full composition (the single source of truth).
         m_scenes->SetComposition(engine::FullSceneComposition());
-        // The run's scene group lives on the GameInstance (game-instance.md §11): wire it to the
-        // app-wide aware registry and register it so it ticks on the Context lane beside the default
-        // (editor/loose) group. WireInstance centralizes this so extra instances wire the same way.
+        // The run's scene group lives on the GameInstance (game-instance.md §11): register it so it
+        // ticks on the Context lane. WireInstance centralizes this so extra instances wire the same way.
         m_scenes->RegisterManager(&m_instance.Scenes());
-        m_instance.Scenes().SetAwareRegistry(&m_scenes->AwareRegistry());
         if (GraphicsDevice* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
         {
             host.Ctx().AddSubsystem<engine::render::RenderSubsystem>(*gfx->Raw(),
@@ -308,7 +305,6 @@ namespace engine::runtime
             core::MakeUnique<GameInstance>(core::DefaultAllocator());
         GameInstance* gi = owned.Get();
         gi->SetHeadless(headless);
-        gi->Scenes().SetAwareRegistry(&m_scenes->AwareRegistry());
         m_scenes->RegisterManager(&gi->Scenes());
         m_scripts->ConfigureRunHost(gi->RunHost());
         InstallInstanceLoadFacade(*gi, *m_host); // run.* level-load facade for this extra instance

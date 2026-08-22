@@ -267,17 +267,12 @@ export namespace engine::navigation
     }
 
     // Runtime subsystem: the DefaultApp-registered broker that injects the per-scene navigation
-    // managers into every scene (via ISceneAware) and registers the component reflection once.
+    // managers into every scene (via the composition) and registers the component reflection once.
     // The per-scene tick lives in NavigationSceneSystem; this type owns no cross-scene state.
     class NavigationSubsystem final : public foundation::runtime::Subsystem,
-                                      public scene::ISceneAware,
                                       public scene::ISceneObserver
     {
     public:
-        // Assembly (a navigation scene's managers). The reactive cross-scene tracking now rides the
-        // observer stages below, so scratch/headless scenes assemble without any subsystem wiring.
-        void OnSceneCreated(scene::Scene& scene) override { AddNavigationSceneManagers(scene); }
-
         // Reactive: track the scene's NavigationSceneSystem for the debug-draw scan.
         void OnSystemsReady(scene::Scene& scene) override
         {
@@ -306,23 +301,21 @@ export namespace engine::navigation
         {
             if (foundation::runtime::Context* context = GetContext())
             {
-                if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
-                {
-                    scenes->RegisterSceneAware(this);
-                    scenes->RegisterObserver(this, scene::SceneLifecycleStage::SystemsReady);
-                    scenes->RegisterObserver(this, scene::SceneLifecycleStage::Destroying);
-                }
+            if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
+            {
+                scenes->RegisterObserver(this, scene::SceneLifecycleStage::SystemsReady);
+                scenes->RegisterObserver(this, scene::SceneLifecycleStage::Destroying);
+            }
             }
         }
         void OnShutdown() override
         {
             if (foundation::runtime::Context* context = GetContext())
             {
-                if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
-                {
-                    scenes->UnregisterSceneAware(this);
-                    scenes->UnregisterObserver(this);
-                }
+            if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
+            {
+                scenes->UnregisterObserver(this);
+            }
             }
         }
 

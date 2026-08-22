@@ -602,7 +602,7 @@ export namespace engine::audio
     };
 
     // The runtime subsystem: owns the ONE AudioEngine, injects the managers + system
-    // into every scene (ISceneAware), pushes the winning listener, and exposes the
+    // into every scene (via the composition), pushes the winning listener, and exposes the
     // engine-global one-shot API (docs/design/audio.md §6).
     // THE audio manager set for a scene - injected by the subsystem at runtime AND by headless
     // scene consumers (Engine.SceneSurface). Runtime-only wiring (SetEngine) stays with the
@@ -616,8 +616,7 @@ export namespace engine::audio
         scene.AddSystem<AudioSceneSystem>();
     }
 
-    class AudioSubsystem final : public foundation::runtime::Subsystem, public scene::ISceneAware,
-                                 public scene::ISceneObserver
+    class AudioSubsystem final : public foundation::runtime::Subsystem, public scene::ISceneObserver
     {
     public:
         explicit AudioSubsystem(const AudioEngineSettings& engineSettings = {})
@@ -630,10 +629,6 @@ export namespace engine::audio
         // AFTER the scene subsystem (-500): voice/listener sync ran during the scene's
         // PostTransform phase; here the engine reaps + pumps and the listener lands.
         [[nodiscard]] i32 UpdateOrder() const noexcept override { return -100; }
-
-        // Assembly (the audio managers). Reactive wiring (SetEngine) + tracking ride the observer
-        // stages so a scratch/headless scene assembles engine-less and silent.
-        void OnSceneCreated(scene::Scene& scene) override { AddAudioSceneManagers(scene); }
 
         void OnSystemsReady(scene::Scene& scene) override
         {
@@ -857,23 +852,21 @@ export namespace engine::audio
         {
             if (foundation::runtime::Context* context = GetContext())
             {
-                if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
-                {
-                    scenes->RegisterSceneAware(this);
-                    scenes->RegisterObserver(this, scene::SceneLifecycleStage::SystemsReady);
-                    scenes->RegisterObserver(this, scene::SceneLifecycleStage::Destroying);
-                }
+            if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
+            {
+                scenes->RegisterObserver(this, scene::SceneLifecycleStage::SystemsReady);
+                scenes->RegisterObserver(this, scene::SceneLifecycleStage::Destroying);
+            }
             }
         }
         void OnShutdown() override
         {
             if (foundation::runtime::Context* context = GetContext())
             {
-                if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
-                {
-                    scenes->UnregisterSceneAware(this);
-                    scenes->UnregisterObserver(this);
-                }
+            if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
+            {
+                scenes->UnregisterObserver(this);
+            }
             }
             m_engine = nullptr;
         }

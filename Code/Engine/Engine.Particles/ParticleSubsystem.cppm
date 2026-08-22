@@ -15,7 +15,7 @@ import foundation.core;
 import foundation.rhi;
 import foundation.shaders.system;
 import foundation.runtime;          // Subsystem, Context
-import foundation.scene;            // Scene, ISceneAware
+import foundation.scene; // Scene
 import engine.scene;  // SceneSubsystem
 import foundation.render;           // ExtractedScene
 import engine.render; // RenderSubsystem + IRenderExtractor seam
@@ -41,14 +41,9 @@ export namespace engine::particles
         scene.AddSystem<ParticleEffectComponentManager>();
     }
 
-    class ParticleSubsystem final : public foundation::runtime::Subsystem, public scene::ISceneAware,
-                                    public scene::ISceneObserver
+    class ParticleSubsystem final : public foundation::runtime::Subsystem, public scene::ISceneObserver
     {
     public:
-        // Assembly (the particle manager). Renderer wiring (dispatch id + provider registration) rides
-        // the observer stage so a scratch/headless scene assembles with an unwired, inert manager.
-        void OnSceneCreated(scene::Scene& scene) override { AddParticleSceneManagers(scene); }
-
         void OnSystemsReady(scene::Scene& scene) override
         {
             EnsureRenderer();
@@ -79,7 +74,6 @@ export namespace engine::particles
             }
             if (auto* scenes = ctx->GetSubsystem<engine::scene::SceneSubsystem>())
             {
-                scenes->RegisterSceneAware(this);
                 scenes->RegisterObserver(this, scene::SceneLifecycleStage::SystemsReady);
             }
             m_render = ctx->GetSubsystem<engine::render::RenderSubsystem>();
@@ -93,7 +87,6 @@ export namespace engine::particles
             {
                 if (auto* scenes = ctx->GetSubsystem<engine::scene::SceneSubsystem>())
                 {
-                    scenes->UnregisterSceneAware(this);
                     scenes->UnregisterObserver(this);
                 }
             }

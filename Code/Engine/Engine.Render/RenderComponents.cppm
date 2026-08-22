@@ -4,7 +4,7 @@
 /// renderer (foundation.render itself stays scene-agnostic). A MeshComponent references a
 /// mesh + material to draw at its entity's transform; a CameraComponent describes a
 /// view frustum (its view comes from the entity's world transform). The RenderSubsystem
-/// injects these managers into each scene (via ISceneAware); extraction (:extract) reads
+/// declares these managers for the scene composition; extraction (:extract) reads
 /// them into a engine::render::ExtractedView that gets pushed to the renderer.
 
 module;

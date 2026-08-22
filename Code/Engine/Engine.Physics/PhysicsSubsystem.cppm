@@ -862,7 +862,7 @@ export namespace engine::physics
         const Array<IContactListener*>* m_listeners = nullptr; // owned by the subsystem
     };
 
-    // The runtime subsystem: injects the managers + system into every scene (ISceneAware)
+    // The runtime subsystem: contributes the managers + system to the scene composition
     // and drives render-frame interpolation + debug draw with the engine's fixed alpha.
     // THE physics manager set for a scene - injected by the subsystem at runtime AND by headless
     // scene consumers (Engine.SceneSurface). Runtime wiring (contact listeners) stays with the
@@ -876,8 +876,7 @@ export namespace engine::physics
         scene.AddSystem<PhysicsSceneSystem>(); // carries the per-scene settings block
     }
 
-    class PhysicsSubsystem final : public foundation::runtime::Subsystem, public scene::ISceneAware,
-                                   public scene::ISceneObserver
+    class PhysicsSubsystem final : public foundation::runtime::Subsystem, public scene::ISceneObserver
     {
     public:
         /// Register a consumer of resolved contacts (the script subsystem). Duplicates are
@@ -914,10 +913,6 @@ export namespace engine::physics
         // extracts world matrices) would lag the physics poses by a frame.
         [[nodiscard]] i32 UpdateOrder() const noexcept override { return -600; }
 
-        // Assembly (the physics managers). Reactive wiring (contact listeners + tracking) rides the
-        // observer stages so a scratch/headless scene assembles without any subsystem-side wiring.
-        void OnSceneCreated(scene::Scene& scene) override { AddPhysicsSceneManagers(scene); }
-
         void OnSystemsReady(scene::Scene& scene) override
         {
             PhysicsSceneSystem* system = scene.GetSystem<PhysicsSceneSystem>();
@@ -946,23 +941,21 @@ export namespace engine::physics
         {
             if (foundation::runtime::Context* context = GetContext())
             {
-                if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
-                {
-                    scenes->RegisterSceneAware(this);
-                    scenes->RegisterObserver(this, scene::SceneLifecycleStage::SystemsReady);
-                    scenes->RegisterObserver(this, scene::SceneLifecycleStage::Destroying);
-                }
+            if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
+            {
+                scenes->RegisterObserver(this, scene::SceneLifecycleStage::SystemsReady);
+                scenes->RegisterObserver(this, scene::SceneLifecycleStage::Destroying);
+            }
             }
         }
         void OnShutdown() override
         {
             if (foundation::runtime::Context* context = GetContext())
             {
-                if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
-                {
-                    scenes->UnregisterSceneAware(this);
-                    scenes->UnregisterObserver(this);
-                }
+            if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
+            {
+                scenes->UnregisterObserver(this);
+            }
             }
         }
 

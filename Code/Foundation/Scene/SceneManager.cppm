@@ -2,17 +2,15 @@
 ///
 /// SceneManager: a GROUP of scenes as a first-class scene-lib object (docs/design/game-instance.md
 /// §11). It owns its scenes + a current scene + the group's time scale, ticks its own group's variable
-/// + fixed lanes, and fans out scene lifecycle through a pluggable install/uninstall pair. Scene
-/// ASSEMBLY (building a scene's per-scene systems) and scene TEARDOWN are both type-erased hooks the
-/// driver (SceneSubsystem) wires: the composition path assembles from a declarative blueprint and
-/// notifies observers, the legacy path fans the ISceneAware registry.
+/// + fixed lanes, and assembles/tears down each scene through type-erased install/uninstall hooks the
+/// driver (SceneSubsystem) wires: assembly instantiates from a declarative composition, teardown notifies
+/// observers. SceneManager itself stays composition- and runtime-agnostic.
 ///
 /// The point of the abstraction (the linchpin of the GameInstance model): a `GameInstance` (runtime
 /// layer) OWNS a SceneManager, so the dependency points DOWN - the scene lib never learns about the
 /// runtime layer. A SceneManager reads only its OWN group config; it never reaches up to an instance.
-/// SceneSubsystem owns the app-wide SceneAwareRegistry; instances own their own managers. Context-agnostic:
-/// the driver passes the context time-scale + fixed-step in (no runtime dependency, so foundation.scene
-/// stays runtime-free).
+/// Context-agnostic: the driver passes the context time-scale + fixed-step in (no runtime dependency,
+/// so foundation.scene stays runtime-free).
 
 module;
 #include "Core/Prelude.h"
@@ -21,89 +19,27 @@ export module foundation.scene:manager;
 
 import foundation.core;
 import :scene;
-import :aware;
 
 using namespace foundation::core;
 
 export namespace foundation::scene
 {
 
-    /// The app-wide list of scene-aware subsystems (physics/audio/render/script). Owned once by
-    /// SceneSubsystem; every SceneManager fans lifecycle out through the SAME registry, so a subsystem
-    /// registered once is injected into every scene regardless of which group owns it. (Extracted from
-    /// the old SceneSubsystem broker; behaviour identical.) This is the LEGACY path - the composition
-    /// path (scene-composition.md) replays it via type-erased install/uninstall hooks.
-    class SceneAwareRegistry
-    {
-    public:
-        void Register(ISceneAware* aware)
-        {
-            if (aware == nullptr)
-            {
-                return;
-            }
-            for (ISceneAware* a : m_aware)
-            {
-                if (a == aware)
-                {
-                    return;
-                }
-            }
-            m_aware.PushBack(aware);
-        }
-        void Unregister(ISceneAware* aware)
-        {
-            for (usize i = 0; i < m_aware.Size(); ++i)
-            {
-                if (m_aware[i] == aware)
-                {
-                    m_aware.RemoveAt(i);
-                    return;
-                }
-            }
-        }
-        void NotifyCreated(Scene& scene)
-        {
-            for (ISceneAware* a : m_aware)
-            {
-                a->OnSceneCreated(scene);
-            } // pass 1: inject systems
-            for (ISceneAware* a : m_aware)
-            {
-                a->OnSceneReady(scene);
-            } // pass 2: cross-subsystem safe
-        }
-        void NotifyDestroyed(Scene& scene)
-        {
-            for (ISceneAware* a : m_aware)
-            {
-                a->OnSceneDestroyed(scene);
-            }
-        }
-
-    private:
-        Array<ISceneAware*> m_aware;
-    };
-
     class SceneManager
     {
     public:
-        /// Type-erased scene assembler (the composition path). Invoked on CreateScene in place of the
-        /// legacy ISceneAware two-pass when set. Type-erased so :manager does not import :composition
-        /// (that would be a partition cycle: :composition imports :manager). The caller owns the
-        /// composition the installer closes over.
+        /// Type-erased scene assembler (the composition path). Invoked on CreateScene to build the
+        /// scene's per-scene systems. Type-erased so :manager does not import :composition (that would
+        /// be a partition cycle: :composition imports :manager). The caller owns the composition the
+        /// installer closes over.
         using SceneInstaller = Function<void(Scene&)>;
-        /// Type-erased scene teardown (the observer path's Destroying stage). Invoked on destroy/clear
-        /// when set; mirrors the installer.
+        /// Type-erased scene teardown (the observer path's Destroying stage). Invoked on destroy/clear.
         using SceneUninstaller = Function<void(Scene&)>;
 
-        explicit SceneManager(SceneAwareRegistry* registry = nullptr) noexcept
-            : m_registry(registry)
-        {
-        }
-        void SetAwareRegistry(SceneAwareRegistry* registry) noexcept { m_registry = registry; }
+        SceneManager() = default;
 
-        /// Install a composition installer: CreateScene assembles via `installer(scene)` while set.
+        /// Install a composition installer: CreateScene assembles via `installer(scene)` while set (the
+        /// only assembly path - there is no legacy fallback).
         void SetSceneInstaller(SceneInstaller installer) { m_installer = Move(installer); }
         void ClearSceneInstaller() { m_installer.Reset(); }
         /// Install a teardown hook: DestroyScene/Clear notify via `uninstaller(scene)` while set.
@@ -141,15 +77,10 @@ export namespace foundation::scene
                 }
             }
             // Scene assembly happens regardless of active, so LoadScene can populate an inactive scene
-            // before it is activated. With an installer (the composition path) the declarative blueprint
-            // builds the scene; otherwise the legacy ISceneAware two-pass injects per-scene systems.
+            // before it is activated.
             if (m_installer)
             {
                 m_installer(*scene);
-            }
-            else if (m_registry != nullptr)
-            {
-                m_registry->NotifyCreated(*scene);
             }
             return scene;
         }
@@ -278,10 +209,6 @@ export namespace foundation::scene
             {
                 m_uninstaller(scene);
             }
-            else if (m_registry != nullptr)
-            {
-                m_registry->NotifyDestroyed(scene);
-            }
         }
 
         void DestroyImmediate(Scene* scene)
@@ -335,13 +262,12 @@ export namespace foundation::scene
             m_pendingRemove.Clear();
         }
 
-        SceneAwareRegistry* m_registry = nullptr; // shared, app-wide (not owned; the legacy path)
-        SceneInstaller m_installer;               // composition path (type-erased; owned, callable or empty)
-        SceneUninstaller m_uninstaller;           // teardown path (type-erased; owned, callable or empty)
-        f32 m_timeScale = 1.0f;                   // the group / instance term
-        Scene* m_current = nullptr;               // the group's current scene
-        Array<UniquePtr<Scene>> m_scenes;         // ownership
-        Array<Scene*> m_active;                   // active (non-owning)
+        SceneInstaller m_installer;   // composition path (type-erased; owned, callable or empty)
+        SceneUninstaller m_uninstaller; // teardown path (type-erased; owned, callable or empty)
+        f32 m_timeScale = 1.0f;       // the group / instance term
+        Scene* m_current = nullptr;   // the group's current scene
+        Array<UniquePtr<Scene>> m_scenes; // ownership
+        Array<Scene*> m_active;       // active (non-owning)
         Array<Scene*> m_pendingRemove;
         bool m_updating = false;
     };

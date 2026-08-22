@@ -1,5 +1,5 @@
 # Engine::Net - `engine.net`: the once-per-context NetworkSubsystem that
-# injects the NetworkComponentManager into scenes (ISceneAware) + registers replicated-component
+# contributes the NetworkComponentManager to the scene composition + registers replicated-component
 # reflection. The scene-integration half of networking; the per-instance endpoint is NetManager.
 add_library(Engine.Net STATIC)
 add_library(Engine::Net ALIAS Engine.Net)

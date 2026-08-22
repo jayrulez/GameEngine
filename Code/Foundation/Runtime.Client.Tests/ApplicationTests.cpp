@@ -38,13 +38,15 @@ namespace
         String clipboard;
     };
 
-    // Counts the frame phases the host drives into the Context.
+    // Counts the frame phases the host drives into the Context. NOTE no FixedUpdate: the
+    // context-level fixed lane was deleted in the FrameTime cutover (zero overriders existed);
+    // the host's fixed accumulator now drives ONLY the app-level OnFixedUpdate hook (counted
+    // on the apps below) - fixed-rate engine work lives per scene.
     class CountingSys final : public Subsystem
     {
     public:
-        int begin = 0, fixed = 0, update = 0, post = 0, end = 0, inits = 0, shutdowns = 0;
+        int begin = 0, update = 0, post = 0, end = 0, inits = 0, shutdowns = 0;
         void BeginFrame(f32) override { ++begin; }
-        void FixedUpdate(f32) override { ++fixed; }
         void Update(f32) override { ++update; }
         void PostUpdate(f32) override { ++post; }
         void EndFrame() override { ++end; }
@@ -62,6 +64,7 @@ namespace
     public:
         Array<int> order;
         CountingSys* sys = nullptr;
+        int fixed = 0; // OnFixedUpdate count (the app-level fixed hook - see CountingSys note)
         bool sysLiveAtStartup = false;
 
         ApplicationSettings Settings() const override
@@ -81,6 +84,7 @@ namespace
             sysLiveAtStartup = sys->IsInitialized();
         }
         void OnLaunch(IApplicationHost&) override { order.PushBack(3); }
+        void OnFixedUpdate(IApplicationHost&, f32) override { ++fixed; }
         void OnUpdate(IApplicationHost&, f32) override { order.PushBack(4); }
         void OnExit(IApplicationHost&) override { order.PushBack(5); }
         void OnShutdown(IApplicationHost&) override { order.PushBack(6); }
@@ -117,14 +121,14 @@ TEST_CASE("client: Tick drives Context phases with a fixed-step accumulator")
     CHECK(app.sys->update == 1);
     CHECK(app.sys->post == 1);
     CHECK(app.sys->end == 1);
-    CHECK(app.sys->fixed == 0);
+    CHECK(app.fixed == 0);
 
     host.Tick(0.25f); // reaches 0.5 -> exactly one fixed step
-    CHECK(app.sys->fixed == 1);
+    CHECK(app.fixed == 1);
     CHECK(app.sys->update == 2);
 
     host.Tick(0.5f); // another full step
-    CHECK(app.sys->fixed == 2);
+    CHECK(app.fixed == 2);
 
     // OnUpdate fired once per Tick, after Context::Update each time.
     int updates = 0;
@@ -146,6 +150,7 @@ namespace
     {
     public:
         CountingSys* sys = nullptr;
+        int fixed = 0;
         ApplicationSettings Settings() const override
         {
             ApplicationSettings s;
@@ -157,6 +162,7 @@ namespace
         {
             sys = host.Ctx().AddSubsystem<CountingSys>();
         }
+        void OnFixedUpdate(IApplicationHost&, f32) override { ++fixed; }
     };
 }
 
@@ -173,7 +179,7 @@ TEST_CASE("client: maxFrameTime clamps a large delta")
         dt = host.Settings().maxFrameTime;
     }
     host.Tick(dt); // 0.25 / 0.1 -> 2 fixed steps, not 100
-    CHECK(app.sys->fixed == 2);
+    CHECK(app.fixed == 2);
 
     host.Stop();
 }

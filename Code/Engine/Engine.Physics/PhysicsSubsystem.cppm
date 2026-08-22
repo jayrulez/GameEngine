@@ -508,7 +508,13 @@ export namespace engine::physics
         }
 
         // Explicit-target readiness: nil target = world/ancestor attachment (always ready);
-        // otherwise the target entity must resolve and its body must be live.
+        // otherwise the target entity must resolve, be EFFECTIVELY ACTIVE, and have a live
+        // body. The effective-active term matters because joints reconcile BEFORE bodies:
+        // on the tick a target deactivates its body is still alive during the joint pass -
+        // gating on body validity alone would keep the joint one tick past its dying body
+        // (a Jolt constraint referencing a removed body). Activation is symmetric: the
+        // rebuilt body appears a pass later, so the joint returns on the following tick
+        // (the silent-retry path, as designed).
         [[nodiscard]] bool JointTargetReady(JointComponent& c)
         {
             if (c.targetEntity.IsNil())
@@ -516,9 +522,12 @@ export namespace engine::physics
                 return true;
             }
             scene::EntityHandle t = m_scene->FindEntity(c.targetEntity.id);
+            if (!t.IsAssigned() || !m_scene->IsEffectivelyActive(t))
+            {
+                return false;
+            }
             auto* bodies = m_scene->GetSystem<RigidBodyComponentManager>();
-            RigidBodyComponent* tb =
-                (t.IsAssigned() && bodies != nullptr) ? bodies->Get(t) : nullptr;
+            RigidBodyComponent* tb = (bodies != nullptr) ? bodies->Get(t) : nullptr;
             return tb != nullptr && tb->body.IsValid();
         }
 
@@ -530,6 +539,39 @@ export namespace engine::physics
         void ReconcileActiveState()
         {
             scene::Scene& scene = *m_scene;
+            // JOINTS FIRST (teardown dependency order - the reverse of scene-start's
+            // bodies-then-joints build): a joint referencing an entity whose body dies THIS
+            // reconcile must be destroyed while both bodies are still alive, so the
+            // surviving side gets its release-wake. (The foundation DestroyJoint is also
+            // ID-safe against any ordering since the 2026-08-19 ASAN fix; this order keeps
+            // the semantics right, that fix keeps any order memory-safe.)
+            if (auto* joints = scene.GetSystem<JointComponentManager>())
+            {
+                // Joints reconcile on the full want/have compare (not just the own-entity
+                // edge): an ACTIVE entity's joint must also drop when its explicit target
+                // deactivates (that body is gone) and return when the target does.
+                joints->ForEach(
+                    [&](JointComponent& c, scene::EntityHandle e)
+                    {
+                        const bool eff = scene.IsEffectivelyActive(e);
+                        c.simActive = eff;
+                        const bool want = eff && JointTargetReady(c);
+                        const bool have = c.joint.IsValid();
+                        if (want == have)
+                        {
+                            return;
+                        }
+                        if (!want)
+                        {
+                            m_world->DestroyJoint(c.joint);
+                            c.joint = JointId{};
+                        }
+                        else
+                        {
+                            CreateJointForEntity(c, e, /*logFailures=*/false);
+                        }
+                    });
+            }
             if (auto* bodies = scene.GetSystem<RigidBodyComponentManager>())
             {
                 bodies->ForEach(
@@ -577,33 +619,6 @@ export namespace engine::physics
                         else if (!c.character.IsValid())
                         {
                             CreateCharacterForEntity(c, e);
-                        }
-                    });
-            }
-            if (auto* joints = scene.GetSystem<JointComponentManager>())
-            {
-                // Joints reconcile on the full want/have compare (not just the own-entity
-                // edge): an ACTIVE entity's joint must also drop when its explicit target
-                // deactivates (that body is gone) and return when the target does.
-                joints->ForEach(
-                    [&](JointComponent& c, scene::EntityHandle e)
-                    {
-                        const bool eff = scene.IsEffectivelyActive(e);
-                        c.simActive = eff;
-                        const bool want = eff && JointTargetReady(c);
-                        const bool have = c.joint.IsValid();
-                        if (want == have)
-                        {
-                            return;
-                        }
-                        if (!want)
-                        {
-                            m_world->DestroyJoint(c.joint);
-                            c.joint = JointId{};
-                        }
-                        else
-                        {
-                            CreateJointForEntity(c, e, /*logFailures=*/false);
                         }
                     });
             }

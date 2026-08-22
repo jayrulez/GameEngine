@@ -14,4 +14,5 @@ export import :component;
 export import :events;
 export import :scene;
 export import :manager;
+export import :frame_time;
 export import :composition;

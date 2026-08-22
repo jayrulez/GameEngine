@@ -482,7 +482,18 @@ namespace foundation::physics
         UniquePtr<JPH::TempAllocatorImpl> tempAllocator;
         UniquePtr<JPH::JobSystemThreadPool> jobSystem;
         UniquePtr<JPH::PhysicsSystem> system;
-        Array<JPH::Ref<JPH::Constraint>> joints;           // JointId = slot index; null = freed
+        // JointId = slot index; null joint = freed. The two body IDs ride the slot so
+        // DestroyJoint can wake the SURVIVING bodies BY ID through the body manager - the
+        // constraint's raw Body pointers dangle if a connected body was destroyed first
+        // (heap-use-after-free found by ASAN 2026-08-19: entity-active reconcile destroyed a
+        // deactivated target's body, then the joint teardown read the corpse via GetBody1/2).
+        struct JointSlot
+        {
+            JPH::Ref<JPH::Constraint> joint;
+            JPH::BodyID bodyA;
+            JPH::BodyID bodyB; // invalid = world attachment
+        };
+        Array<JointSlot> joints;
         Array<JPH::Ref<JPH::CharacterVirtual>> characters; // CharacterId = slot; null = freed
         Array<Float2> characterSteps;                      // (stepUp, stepDown) per slot
     };
@@ -914,39 +925,44 @@ namespace foundation::physics
         }
         m_impl->system->AddConstraint(joint.GetPtr());
 
+        const JPH::BodyID idA(desc.bodyA.value);
+        const JPH::BodyID idB = desc.bodyB.IsValid() ? JPH::BodyID(desc.bodyB.value) : JPH::BodyID();
         for (usize i = 0; i < m_impl->joints.Size(); ++i)
         {
-            if (m_impl->joints[i] == nullptr)
+            if (m_impl->joints[i].joint == nullptr)
             {
-                m_impl->joints[i] = joint;
+                m_impl->joints[i] = Impl::JointSlot{joint, idA, idB};
                 return JointId{static_cast<u32>(i)};
             }
         }
-        m_impl->joints.PushBack(joint);
+        m_impl->joints.PushBack(Impl::JointSlot{joint, idA, idB});
         return JointId{static_cast<u32>(m_impl->joints.Size() - 1)};
     }
 
     void PhysicsWorld::DestroyJoint(JointId id)
     {
         if (!id.IsValid() || id.value >= m_impl->joints.Size() ||
-            m_impl->joints[id.value] == nullptr)
+            m_impl->joints[id.value].joint == nullptr)
         {
             return;
         }
-        JPH::Constraint* joint = m_impl->joints[id.value].GetPtr();
-        // Wake the connected bodies: a body held asleep by the joint must respond to
-        // gravity again once released (RemoveConstraint alone leaves it sleeping).
-        auto* twoBody = static_cast<JPH::TwoBodyConstraint*>(joint);
+        Impl::JointSlot& slot = m_impl->joints[id.value];
+        // Wake the connected bodies: a body held asleep by the joint must respond to gravity
+        // again once released (RemoveConstraint alone leaves it sleeping). BY ID through the
+        // body manager - NEVER via the constraint's Body pointers, which dangle if a connected
+        // body was destroyed before the joint (the ASAN-found UAF; IsAdded rejects dead IDs,
+        // GetMotionType goes through the manager, both safe on any ID).
         JPH::BodyInterface& bodies = m_impl->system->GetBodyInterface();
-        for (JPH::Body* body : {twoBody->GetBody1(), twoBody->GetBody2()})
+        for (const JPH::BodyID bodyId : {slot.bodyA, slot.bodyB})
         {
-            if (body != nullptr && body != &JPH::Body::sFixedToWorld && !body->IsStatic())
+            if (!bodyId.IsInvalid() && bodies.IsAdded(bodyId) &&
+                bodies.GetMotionType(bodyId) != JPH::EMotionType::Static)
             {
-                bodies.ActivateBody(body->GetID());
+                bodies.ActivateBody(bodyId);
             }
         }
-        m_impl->system->RemoveConstraint(joint);
-        m_impl->joints[id.value] = nullptr;
+        m_impl->system->RemoveConstraint(slot.joint.GetPtr());
+        slot = Impl::JointSlot{};
     }
 
     void PhysicsWorld::SetJointMotor(JointId id, bool enabled, f32 targetVelocity)
@@ -955,7 +971,7 @@ namespace foundation::physics
         {
             return;
         }
-        JPH::Constraint* joint = m_impl->joints[id.value].GetPtr();
+        JPH::Constraint* joint = m_impl->joints[id.value].joint.GetPtr();
         if (joint == nullptr)
         {
             return;

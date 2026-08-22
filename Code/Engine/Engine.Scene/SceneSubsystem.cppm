@@ -125,18 +125,25 @@ export namespace engine::scene
         // RAW host dt (context scale applied inside the manager); Update gets context-scaled dt.
         void BeginFrame(f32 deltaTime) override
         {
-            const f32 contextScale = GetContext() != nullptr ? GetContext()->TimeScale() : 1.0f;
-            const f32 contextStep = GetContext() != nullptr ? GetContext()->FixedTimeStep() : 0.0f;
-            m_scenes.BeginFrame(deltaTime, contextScale, contextStep);
+            // THE bridge: the one legal crossing point between the runtime Context (plain
+            // floats) and scene::FrameTime (scene-composition.md layering rules - runtime
+            // never sees FrameTime; the bridge constructs it and hands it DOWN). Captured for
+            // Update so both lanes see one consistent chain per frame.
+            m_frameTime = FrameTime(deltaTime,
+                                    GetContext() != nullptr ? GetContext()->TimeScale() : 1.0f,
+                                    /*group*/ 1.0f, /*scene*/ 1.0f,
+                                    GetContext() != nullptr ? GetContext()->FixedTimeStep() : 0.0f);
+            m_scenes.BeginFrame(m_frameTime);
         }
-        void Update(f32 deltaTime) override
+        void Update(f32 /*contextScaledDt - superseded by the captured FrameTime*/) override
         {
-            m_scenes.Update(deltaTime);
+            m_scenes.Update(m_frameTime);
         }
         // OnShutdown: nothing to clear - every manager is cleared by its owner.
 
     private:
-        SceneRegistry m_scenes; // pure manager/observer/sweep state (foundation.scene:composition)
+        SceneRegistry m_scenes;
+        FrameTime m_frameTime; // built in BeginFrame; Update reuses the same chain // pure manager/observer/sweep state (foundation.scene:composition)
     };
 
 } // namespace engine::scene

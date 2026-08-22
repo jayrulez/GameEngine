@@ -73,13 +73,13 @@ TEST_CASE("scene-manager: group time scale folds into the tick (identity at 1.0)
     REQUIRE(mgr.TimeScale() == doctest::Approx(1.0f));
 
     // Default group scale = 1.0: BeginFrame/Update tick without faulting (identity path).
-    mgr.BeginFrame(0.016f, 1.0f, 0.0f);
-    mgr.Update(0.016f);
+    mgr.BeginFrame(FrameTime(0.016f, 1.0f, 1.0f, 1.0f, 0.0f));
+    mgr.Update(FrameTime(0.016f, 1.0f, 1.0f, 1.0f, 0.0f));
 
     // A 0 group scale freezes the group (dt reaching scenes is 0) - still must not fault.
     mgr.SetTimeScale(0.0f);
-    mgr.BeginFrame(0.016f, 1.0f, 0.0f);
-    mgr.Update(0.016f);
+    mgr.BeginFrame(FrameTime(0.016f, 1.0f, 1.0f, 1.0f, 0.0f));
+    mgr.Update(FrameTime(0.016f, 1.0f, 1.0f, 1.0f, 0.0f));
     CHECK(mgr.TimeScale() == doctest::Approx(0.0f));
 }
 

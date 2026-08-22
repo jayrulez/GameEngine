@@ -99,28 +99,19 @@ export namespace foundation::runtime
         void SetTimeScale(core::f32 scale) noexcept { m_timeScale = scale < 0.0f ? 0.0f : scale; }
         [[nodiscard]] core::f32 TimeScale() const noexcept { return m_timeScale; }
 
-        // Fixed-lane timing, published by the host each frame AFTER the fixed steps ran:
-        // subsystems interpolating fixed-rate state (physics poses) blend with FixedAlpha().
-        void SetFixedTiming(core::f32 step, core::f32 alpha) noexcept
-        {
-            m_fixedStep = step;
-            m_fixedAlpha = alpha;
-        }
+        // The app's configured fixed step - plain CONFIG (a float), not an execution lane.
+        // The scene bridge reads it to seed per-scene fixed steppers; fixed-rate interpolation
+        // is PER SCENE (Scene::FixedAlpha). The old context-level fixed lane (FixedUpdate fan +
+        // FixedAlpha) was deleted in the FrameTime cutover: zero subsystems overrode FixedUpdate
+        // and zero readers consumed the context alpha (scene-composition.md, 2026-08-19).
+        void SetFixedTimeStep(core::f32 step) noexcept { m_fixedStep = step; }
         [[nodiscard]] core::f32 FixedTimeStep() const noexcept { return m_fixedStep; }
-        [[nodiscard]] core::f32 FixedAlpha() const noexcept { return m_fixedAlpha; }
 
         void BeginFrame(core::f32 dt)
         {
             for (Subsystem* s : m_sorted)
             {
                 s->BeginFrame(dt);
-            }
-        }
-        void FixedUpdate(core::f32 dt)
-        {
-            for (Subsystem* s : m_sorted)
-            {
-                s->FixedUpdate(dt);
             }
         }
         void Update(core::f32 dt)
@@ -249,7 +240,6 @@ export namespace foundation::runtime
         core::Array<core::UniquePtr<Subsystem>> m_owned; // ownership
         bool m_running = false;
         core::f32 m_fixedStep = 1.0f / 60.0f;
-        core::f32 m_fixedAlpha = 0.0f;
         core::f32 m_timeScale = 1.0f;
         bool m_disposed = false;
     };

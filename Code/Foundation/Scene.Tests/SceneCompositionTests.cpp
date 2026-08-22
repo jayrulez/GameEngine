@@ -38,7 +38,7 @@ namespace
 
     struct RecordingObserver final : public ISceneObserver
     {
-        int composing = 0, ready = 0, started = 0, stopped = 0, destroying = 0;
+        int composing = 0, ready = 0, destroying = 0;
         i32 order = 0;
         utf8char tag = u8'?';
         RecordingObserver(utf8char t, i32 o = 0) : order(o), tag(t) {}
@@ -47,8 +47,6 @@ namespace
 
         void OnComposing(Scene&) override { ++composing; }
         void OnSystemsReady(Scene&) override { ++ready; }
-        void OnStarted(Scene&) override { ++started; }
-        void OnStopped(Scene&) override { ++stopped; }
         void OnDestroying(Scene&) override
         {
             ++destroying;
@@ -170,9 +168,9 @@ TEST_CASE("scene-registry: observers fire at their stage, lower Order() first")
     CHECK(g_obsOrder == u8"ba"); // lower Order (-10) ran before higher Order (10)
 
     // Other stages did not fire for Destroying-registered observers.
-    registry.Notify(SceneLifecycleStage::Started, scene);
-    CHECK(a.started == 0);
-    CHECK(b.started == 0);
+    registry.Notify(SceneLifecycleStage::SystemsReady, scene);
+    CHECK(a.ready == 0);
+    CHECK(b.ready == 0);
 
     registry.RemoveObserver(&a);
     g_obsOrder = String{};
@@ -224,8 +222,8 @@ TEST_CASE("scene-registry: lane fan-out ticks every registered manager's scenes"
     DeltaProbeSystem* pa = a->AddSystem<DeltaProbeSystem>();
     DeltaProbeSystem* pb = b->AddSystem<DeltaProbeSystem>();
 
-    registry.BeginFrame(1.0f / 60.0f, 1.0f, 1.0f / 60.0f);
-    registry.Update(1.0f / 60.0f);
+    registry.BeginFrame(FrameTime(1.0f / 60.0f, 1.0f, 1.0f, 1.0f, 1.0f / 60.0f));
+    registry.Update(FrameTime(1.0f / 60.0f));
 
     CHECK(pa->fixedSteps == 1u);
     CHECK(pb->fixedSteps == 1u);
@@ -254,4 +252,29 @@ TEST_CASE("composition: OWNS its module copies - source modules may die after Bu
     CHECK(g_installOrder == u8"ab");    // dependency order also survived the copy
     comp.RegisterReflection();
     CHECK(g_reflections == 2);
+}
+
+TEST_CASE("frame-time cutover: the manager lanes fold the FULL chain from one FrameTime")
+{
+    // The strain-#4 unification: the bridge builds ONE FrameTime (host x context + step);
+    // the manager contributes the GROUP term, the scene its own term. Assert the composed
+    // dt reaching a scene's variable lane equals raw x context x group x scene, and the
+    // fixed lane steps at the configured step under the same chain.
+    SceneManager mgr;
+    mgr.SetTimeScale(0.5f); // the group term
+    Scene* s = mgr.CreateScene(u8"chain");
+    s->Start();
+    s->SetSimulationEnabled(true);
+    s->SetTimeScale(0.5f); // the scene term
+    DeltaProbeSystem* probe = s->AddSystem<DeltaProbeSystem>();
+
+    const FrameTime time(/*raw*/ 0.032f, /*context*/ 0.5f, 1.0f, 1.0f, /*step*/ 1.0f / 250.0f);
+    mgr.BeginFrame(time); // seeds the scene stepper to the lane step + advances fixed time
+    mgr.Update(time);
+
+    // 0.032 x 0.5 (context) x 0.5 (group) x 0.5 (scene) = 0.004
+    CHECK(probe->lastUpdate == doctest::Approx(0.004f));
+    // Fixed lane: 0.004s of scene time at a 4ms step = exactly one step.
+    CHECK(probe->fixedSteps == 1u);
+    CHECK(s->FixedTimeStep() == doctest::Approx(1.0f / 250.0f)); // seeded from the lane config
 }

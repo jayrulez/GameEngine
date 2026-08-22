@@ -20,54 +20,27 @@ module;
 export module foundation.scene:composition;
 
 import foundation.core;
-import :scene;   // Scene (the observers/composition reference it by value)
-import :manager; // SceneManager (SceneRegistry drives managers on the lanes)
+import :scene;      // Scene (the observers/composition reference it by value)
+import :manager;    // SceneManager (SceneRegistry drives managers on the lanes)
+import :frame_time; // FrameTime (the lane fan-out hands it to every manager)
 
 using namespace foundation::core;
 
 export namespace foundation::scene
 {
 
-    // ---- FrameTime: the time-scale chain (host x context x group x scene) --------------------------
-    // One value type carrying the raw host delta and every scale multiplier a scene lane needs, so a
-    // caller computes the effective dt in ONE place instead of hand-multiplying in SceneManager,
-    // GameInstance::TickScript, and the input/net drives (the drift scene-composition.md §strains #4
-    // identifies). The fixed-step accumulator itself stays per-scene (each Scene owns its FixedStepper);
-    // `fixedStep` here is just the lane's configured step, published alongside the scales.
-    struct FrameTime
-    {
-        f32 rawDt = 0.0f;         // host dt, unscaled
-        f32 contextScale = 1.0f;  // app-wide term
-        f32 groupScale = 1.0f;    // the group / instance term
-        f32 sceneScale = 1.0f;    // the per-scene term
-        f32 fixedStep = 1.0f / 60.0f;
-
-        FrameTime() = default;
-        FrameTime(f32 raw, f32 context = 1.0f, f32 group = 1.0f, f32 scene = 1.0f,
-                  f32 step = 1.0f / 60.0f) noexcept
-            : rawDt(raw), contextScale(context), groupScale(group), sceneScale(scene), fixedStep(step)
-        {
-        }
-
-        // The dt a context-level subsystem sees for the variable lane (host x context).
-        [[nodiscard]] f32 ContextDt() const noexcept { return rawDt * contextScale; }
-
-        // The dt a scene's variable lane sees (host x context x group x scene).
-        [[nodiscard]] f32 SceneDt() const noexcept
-        {
-            return rawDt * contextScale * groupScale * sceneScale;
-        }
-    };
-
     // ---- Lifecycle stage + observer -----------------------------------------------------------------
     // The explicit, ordered lifecycle a scene walks. Assembly no longer happens through observation:
     // a module installs systems (SceneComposition), and an observer reacts at one of these stages.
+    // NOTE deliberately NO Started/Stopped stages: they were declared in the first cut and
+    // never fired anywhere (Scene::Start/Stop are invoked directly on the Scene, out of the
+    // registry's sight), and domain logic already has SceneSystem::OnSceneStarted/Stopped.
+    // Re-add WITH wiring if an app-level observer ever genuinely needs them (2026-08-19
+    // review: ship only stages that fire).
     enum class SceneLifecycleStage : u8
     {
         Composing = 0, // a scene object exists; systems are being installed into it
         SystemsReady,  // all modules installed their systems; cross-system state is now reachable
-        Started,       // the scene entered play/simulation
-        Stopped,       // the scene left play/simulation
         Destroying,    // the scene is being torn down (drop references here)
         Count,
     };
@@ -84,8 +57,6 @@ export namespace foundation::scene
 
         virtual void OnComposing(Scene& /*scene*/) {}
         virtual void OnSystemsReady(Scene& /*scene*/) {}
-        virtual void OnStarted(Scene& /*scene*/) {}
-        virtual void OnStopped(Scene& /*scene*/) {}
         virtual void OnDestroying(Scene& /*scene*/) {}
 
         [[nodiscard]] virtual i32 Order() const noexcept { return 0; }
@@ -320,8 +291,6 @@ export namespace foundation::scene
                 {
                 case SceneLifecycleStage::Composing: e.observer->OnComposing(scene); break;
                 case SceneLifecycleStage::SystemsReady: e.observer->OnSystemsReady(scene); break;
-                case SceneLifecycleStage::Started: e.observer->OnStarted(scene); break;
-                case SceneLifecycleStage::Stopped: e.observer->OnStopped(scene); break;
                 case SceneLifecycleStage::Destroying: e.observer->OnDestroying(scene); break;
                 case SceneLifecycleStage::Count: break;
                 }
@@ -378,18 +347,20 @@ export namespace foundation::scene
         }
 
         // ---- lane drive (the fan-out a thin SceneSubsystem performs each frame) ----
-        void BeginFrame(f32 rawDt, f32 contextScale, f32 contextStep)
+        // The bridge builds ONE FrameTime (raw dt + context scale + fixed step); each manager
+        // folds in its group term and each scene its own term (the chain in :frame_time).
+        void BeginFrame(const FrameTime& time)
         {
             for (SceneManager* m : m_managers)
             {
-                m->BeginFrame(rawDt, contextScale, contextStep);
+                m->BeginFrame(time);
             }
         }
-        void Update(f32 contextScaledDt)
+        void Update(const FrameTime& time)
         {
             for (SceneManager* m : m_managers)
             {
-                m->Update(contextScaledDt);
+                m->Update(time);
             }
         }
 

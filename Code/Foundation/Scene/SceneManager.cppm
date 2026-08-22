@@ -19,6 +19,7 @@ export module foundation.scene:manager;
 
 import foundation.core;
 import :scene;
+import :frame_time;
 
 using namespace foundation::core;
 
@@ -166,24 +167,28 @@ export namespace foundation::scene
 
         // Fixed lane. `rawHostDt` = un-context-scaled dt; applies context x group x scene. `contextStep`
         // sets each scene's fixed timing (the fixed accumulator itself is per-scene, already).
-        void BeginFrame(f32 rawHostDt, f32 contextScale, f32 contextStep)
+        // Fixed lane: seed each active scene's stepper from the lane's configured step, then
+        // advance per-scene fixed time on the FULL chain. `time` carries host x context (built
+        // by the driver); THIS manager contributes the group term, each scene its own term -
+        // the one place the chain is composed (FrameTime, scene-composition.md strain #4).
+        void BeginFrame(const FrameTime& time)
         {
             for (Scene* s : m_active)
             {
-                if (contextStep > 0.0f && s->FixedTimeStep() != contextStep)
+                if (time.fixedStep > 0.0f && s->FixedTimeStep() != time.fixedStep)
                 {
-                    s->SetFixedTiming(contextStep, 4);
+                    s->SetFixedTiming(time.fixedStep, 4);
                 }
-                (void)s->AdvanceTime(rawHostDt * contextScale * m_timeScale * s->TimeScale());
+                (void)s->AdvanceTime(time.ContextDt() * m_timeScale * s->TimeScale());
             }
         }
-        // Variable lane. `contextScaledDt` is already context-scaled by the caller; applies group x scene.
-        void Update(f32 contextScaledDt)
+        // Variable lane: same chain, same single composition point.
+        void Update(const FrameTime& time)
         {
             m_updating = true;
             for (Scene* s : m_active)
             {
-                s->Update(contextScaledDt * m_timeScale * s->TimeScale());
+                s->Update(time.ContextDt() * m_timeScale * s->TimeScale());
             }
             m_updating = false;
             ProcessPendingRemoves();

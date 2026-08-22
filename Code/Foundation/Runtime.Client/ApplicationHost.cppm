@@ -104,17 +104,18 @@ export namespace foundation::runtime
                 // Simulation lanes run on SCALED time (slow-mo/pause); the app hook and
                 // frame bookkeeping keep the raw dt.
                 const core::f32 scaledDelta = deltaTime * m_context.TimeScale();
+                // The fixed step is CONFIG on the context (the scene bridge seeds per-scene
+                // steppers from it); the context-level fixed EXECUTION lane is gone (FrameTime
+                // cutover - nothing overrode it). The host stepper survives for the APP-level
+                // fixed hook (networking: DriveNetwork per instance).
+                m_context.SetFixedTimeStep(m_settings.fixedTimeStep);
                 m_stepper.step = m_settings.fixedTimeStep;
                 m_stepper.maxSteps = m_settings.maxFixedStepsPerFrame;
                 const core::u32 fixedSteps = m_stepper.Advance(scaledDelta);
                 for (core::u32 i = 0; i < fixedSteps; ++i)
                 {
-                    m_context.FixedUpdate(m_settings.fixedTimeStep);
                     m_app->OnFixedUpdate(*this, m_settings.fixedTimeStep);
                 }
-                // Interpolation weight for render consumers (physics pose smoothing):
-                // published AFTER the steps so it reflects this frame's leftover time.
-                m_context.SetFixedTiming(m_settings.fixedTimeStep, m_stepper.Alpha());
 
                 m_context.Update(scaledDelta);
                 m_app->OnUpdate(*this, deltaTime);

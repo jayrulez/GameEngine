@@ -326,3 +326,47 @@ Remaining deferred (unchanged from the plan): the FrameTime LANE cutover
 (SceneManager/input/net consuming FrameTime end-to-end) - its own phase with
 determinism criteria; and the PMIU Module.cppm rename, which rides the
 reorg/role-grouping branch.
+
+## FrameTime lane cutover: DONE (Fable, 2026-08-19)
+
+Built to the recorded layering rules. What landed:
+
+- `FrameTime` moved to its own `:frame_time` partition (both `:manager` and
+  `:composition` consume it; `:composition` already imports `:manager`, so a
+  shared leaf avoids the partition cycle).
+- `SceneManager::BeginFrame/Update` and the `SceneRegistry` lane fan-out take
+  a `FrameTime`; the manager contributes the GROUP term and each scene its own
+  term - the chain is composed in ONE place. `SceneSubsystem` is THE bridge:
+  it builds one FrameTime per frame from the Context's plain floats
+  (TimeScale/FixedTimeStep) and both lanes reuse it. foundation.runtime never
+  sees the type (verified: no scene import anywhere under Runtime).
+- The DEAD context-level fixed lane is deleted: `Subsystem::FixedUpdate` (zero
+  overriders), `Context::FixedUpdate` fan, `Context::FixedAlpha` (zero
+  readers). `SetFixedTiming(step, alpha)` became `SetFixedTimeStep(step)` -
+  the step survives as plain CONFIG the scene bridge reads. The HOST's fixed
+  accumulator survives untouched: it drives the app-level OnFixedUpdate hook,
+  which is LIVE (networking - DriveNetwork per instance). input/net needed no
+  conversion - their dt paths never duplicated the chain (the proposal's
+  "input/net consume it" over-reached; the three real duplications are gone:
+  SceneManager, TickScript, the bridge).
+- `Started`/`Stopped` observer stages DROPPED per the wire-or-drop review note
+  (never fired in production; domain logic already has
+  SceneSystem::OnSceneStarted/Stopped). Re-add WITH wiring if an app-level
+  observer ever needs them.
+- Tests: the manager-lane chain identity (raw x context x group x scene on
+  both lanes + fixed-step seeding from the lane config), and the
+  runtime-client fixed-accumulator tests retargeted from the deleted
+  subsystem lane to the app hook they actually drive.
+
+BONUS FIX (ASAN over the physics blast radius): a heap-use-after-free from
+the entity-active reconcile, predating this cutover - deactivating a joint's
+TARGET destroyed the Jolt body first, then DestroyJoint read the corpse
+through the constraint's raw Body pointers (the wake-on-release path). The
+plain battery never saw it (stale heap bytes read plausibly). Fixed at two
+layers: PhysicsWorld joint slots now store the two BodyIDs and wake BY ID
+through the body manager (IsAdded + motion-type checks - safe on any ID, any
+ordering), and the engine reconcile tears down JOINTS BEFORE BODIES (the
+reverse of scene-start's build order) with JointTargetReady consulting the
+target's EFFECTIVE-ACTIVE state so a joint never outlives its dying body
+inside Jolt even within a tick. Consequence: a reactivated target's joint
+returns one tick after its body (documented silent-retry; test updated).

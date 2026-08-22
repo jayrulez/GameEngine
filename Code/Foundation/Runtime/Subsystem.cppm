@@ -54,7 +54,6 @@ export namespace foundation::runtime
 
         // --- per-frame phases ---
         virtual void BeginFrame(core::f32 /*deltaTime*/) {}
-        virtual void FixedUpdate(core::f32 /*fixedDeltaTime*/) {}
         virtual void Update(core::f32 /*deltaTime*/) {}
         virtual void PostUpdate(core::f32 /*deltaTime*/) {}
         virtual void EndFrame() {}

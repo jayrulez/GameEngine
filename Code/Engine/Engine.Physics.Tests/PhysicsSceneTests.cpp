@@ -838,6 +838,9 @@ TEST_CASE("physics.active: a joint drops when its explicit target deactivates an
     CHECK(play.scene.GetSystem<RigidBodyComponentManager>()->Get(right)->body.IsValid());
 
     play.scene.SetActive(left, true); // target returns -> the joint rebuilds
-    play.Step(1);
+    // TWO steps: joints reconcile BEFORE bodies (teardown dependency order), so the
+    // reactivation tick recreates the BODY and the following tick rebuilds the joint
+    // (the documented one-tick silent-retry).
+    play.Step(2);
     CHECK(play.scene.GetSystem<JointComponentManager>()->Get(right)->joint.IsValid());
 }

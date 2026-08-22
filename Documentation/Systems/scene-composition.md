@@ -298,6 +298,30 @@ system set regardless of which subsystems exist; absent subsystems leave their
 systems unwired (inert pools / no-op ticks). Per-configuration compositions
 remain the designed escape hatch when a consumer wants a subset.
 
+ADDENDUM (same review, found while answering the layering question): the
+`Started`/`Stopped` stages are ALSO never fired in production - only the
+registry unit tests call Notify with them directly. Scene::Start/Stop are
+invoked by pages/instances straight on the Scene, where the registry cannot
+see them. Either wire them (a SceneManager start/stop hook -> registry
+Notify, the uninstaller pattern) or drop the two stages until a consumer
+exists. Queue this WITH the FrameTime lane cutover - same seam.
+
+FrameTime cutover LAYERING RULES (user question 2026-08-19, verified against
+the import graph): foundation.scene and foundation.runtime are strict
+SIBLINGS - zero imports in either direction - and must stay that way.
+Context/Subsystem never see scene::FrameTime; foundation.runtime keeps
+exporting plain floats (TimeScale/FixedTimeStep). FrameTime is CONSTRUCTED at
+the engine bridge (SceneSubsystem / GameInstance - they already import both
+sides) and handed DOWN. No `import foundation.scene` may ever appear under
+Code/Foundation/Runtime. The `contextScale` FIELD NAME is established scene
+vocabulary (SceneManager::BeginFrame's parameter + the documented
+host x context x group x scene chain), not a dependency - acceptable as-is.
+Deletion side is safe: the Context fixed lane is written each frame
+(ApplicationHost::SetFixedTiming) but only SceneSubsystem reads
+FixedTimeStep; NOBODY reads Context::FixedAlpha and NO subsystem overrides
+the runtime FixedUpdate lane - the step config moves to the scene side and
+the runtime plumbing can go.
+
 Remaining deferred (unchanged from the plan): the FrameTime LANE cutover
 (SceneManager/input/net consuming FrameTime end-to-end) - its own phase with
 determinism criteria; and the PMIU Module.cppm rename, which rides the

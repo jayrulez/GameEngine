@@ -14,12 +14,15 @@ Needs terrain.py <course> and importall.py <course> first: it places what they m
 - the gems (Gem.as on each, the Gem model under it): a row of GEM_ROW between each pair of gates,
   GEM_OFFSET metres out on the side of the gate before them, past the packed course, so taking
   them means holding a wider line than the gates ask for;
+- the medal ghosts (Ghost.as, a path_follow on the course line, the rider model under it in a
+  medal's see-through colour, ghosts.py's materials): one per medal, each riding to the finish at
+  its medal's time;
 - the chase camera (FollowCamera.as).
 """
 import json, math, os, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from scenegen import Doc, mcp, yaw, num, vec, component_removed, component_added, settings
+from scenegen import Doc, mcp, yaw, num, vec, component_removed, component_added, component_modified, settings
 from look import look
 
 name = sys.argv[1] if len(sys.argv) > 1 else "Meadow"
@@ -65,6 +68,7 @@ ROCK_MATERIALS = model_materials("Rock")
 BOARD = asset("ScriptClassAsset", "Board")
 GATE = asset("ScriptClassAsset", "Gate")
 FINISH = asset("ScriptClassAsset", "Finish")
+GHOST = asset("ScriptClassAsset", "Ghost")
 GEM = asset("ScriptClassAsset", "Gem")
 GEM_MODEL = next(a["guid"] for a in ASSETS if a["type"] == "PrefabDocument"
                  and a.get("group", "") == "Models/Props/GemModel")
@@ -150,23 +154,53 @@ def aim_bone(name, share):
     return '<string name="bone">%s</string><f32 name="share">%r</f32>' % (name, share)
 
 
-def rider_ops():
-    """The rider model's import plays one clip; the board drives an animation graph (graph.py)
-    instead. Its prefab's root loses the clip animator, and the skinned mesh gains the graph (an
-    animator with no mesh entities of its own feeds its own entity's mesh)."""
+def rider_parts():
+    """The rider model prefab's clip animator (its entity and skeleton) and skinned mesh (its
+    entity, mesh and material slots)."""
     import xml.etree.ElementTree as ET
     root = ET.fromstring(mcp("prefab_read", {"guid": RIDER_MODEL})["xml"])
-    animator = mesh_owner = skeleton = None
+    parts = {}
     for comp in root.find("array[@name='components']"):
         kind = comp.find("string[@name='type']").text
         owner = comp.find("string[@name='owner']").text
+        data = comp.find("object[@name='data']")
         if kind == "skeletal_animation":
-            animator = owner
-            skeleton = comp.find("object[@name='data']/string[@name='skeleton']").text
+            parts["animator"] = owner
+            parts["skeleton"] = data.find("string[@name='skeleton']").text
         elif kind == "mesh":
-            mesh_owner = owner
-    return [component_removed(animator, "skeletal_animation"),
-            component_added(mesh_owner, "animation_graph", skeleton=skeleton, graph=RIDER_GRAPH)]
+            parts["meshOwner"] = owner
+            parts["mesh"] = data.find("string[@name='mesh']").text
+            parts["slots"] = len(list(data.find("array[@name='materials']")))
+    return parts
+
+
+def rider_ops(material=None):
+    """The rider model's import plays one clip; the board drives an animation graph (graph.py)
+    instead. Its prefab's root loses the clip animator, and the skinned mesh gains the graph (an
+    animator with no mesh entities of its own feeds its own entity's mesh). With a `material`, the
+    mesh takes it in every slot (a ghost)."""
+    parts = rider_parts()
+    ops = [component_removed(parts["animator"], "skeletal_animation"),
+           component_added(parts["meshOwner"], "animation_graph", skeleton=parts["skeleton"], graph=RIDER_GRAPH)]
+    if material:
+        ops.append(component_modified(parts["meshOwner"], "mesh", mesh=parts["mesh"],
+                                      materials=["<string>%s</string>" % material] * parts["slots"]))
+    return ops
+
+
+# The medal ghosts, in Ghost.as's order (0 gold, 1 silver, 2 bronze), each with its material.
+GHOSTS = (("GhostGold", 0), ("GhostSilver", 1), ("GhostBronze", 2))
+
+
+def ghosts(d, course, length):
+    """A ghost per medal: on the course line from its top (path_follow, stopped until Ghost.as sets
+    its pace), the rider model under it in the medal's material. The follower turns its -Z down
+    the line; the model faces +Z, so it is turned about."""
+    for label, medal in GHOSTS:
+        e = d.entity(label, tuple(info["course"][0]))
+        d.add(e, "path_follow", spline=course, speed=0.0, loop=False, playing=True, alignToTangent=True)
+        d.script(e, (GHOST, {"medal": medal, "finishDistance": length - FINISH_BEFORE}))
+        d.instance(RIDER_MODEL, rot=yaw(180), parent=e, ops=rider_ops(asset("MaterialAsset", label)))
 
 # The sun: low and from the side, so the slope's relief reads.
 SUN_ROT = (-0.4229, 0.2418, 0.1162, 0.8653)
@@ -260,6 +294,7 @@ def build():
           volume=0.0)
 
     print("gates", gates(d, info["course"], info["course_length"]))
+    ghosts(d, course, info["course_length"])
 
     cam = d.entity("Camera", (top[0], top[1] + 4.0, top[2] - 8.0))
     d.add(cam, "camera", farZ=1200.0, fovYRadians=1.05)

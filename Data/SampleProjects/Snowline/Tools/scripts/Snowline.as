@@ -4,7 +4,8 @@
 // The gates announce themselves ("GateRegistered") and report each crossing ("GatePassed",
 // "GateMissed": round the outside costs kMissPenalty seconds); the finish line holds the course's
 // medal times ("MedalGold", "MedalSilver", "MedalBronze", in hundredths) and ends the run
-// ("RunFinished"). The gems announce themselves too ("GemRegistered") and report being taken
+// ("RunFinished"). The clock starts when the rider does ("RunStarted", from Board.as), with the
+// medal ghosts, not while the scene is still coming in. The gems announce themselves too ("GemRegistered") and report being taken
 // ("GemCollected"), each with how many it counts for.
 //
 // The results tally the run a row at a time (the ride, the gates, the gems, the time bonus), then
@@ -28,6 +29,7 @@ const float kTallyGap = 0.45f;    // between the rows (s)
 class Game
 {
     private bool m_running = true;
+    private bool m_started = false; // the rider's first frame has come (the clock runs from it)
     private float m_time = 0.0f;    // seconds on the clock this run
     private float m_penalty = 0.0f; // seconds added for missed gates
     private int m_gates = 0;        // how many the course has
@@ -58,6 +60,10 @@ class Game
     {
         if (m_running)
         {
+            if (!m_started)
+            {
+                return;
+            }
             m_time += dt;
             ui::findLabel("hud-time").setText(clock(m_time + m_penalty));
             if (m_flash > 0.0f)
@@ -110,6 +116,11 @@ class Game
     void onMedalGold(int hundredths) { m_gold = float(hundredths) / 100.0f; }
     void onMedalSilver(int hundredths) { m_silver = float(hundredths) / 100.0f; }
     void onMedalBronze(int hundredths) { m_bronze = float(hundredths) / 100.0f; }
+
+    void onRunStarted(int unused)
+    {
+        m_started = true;
+    }
 
     void onRunFinished(int unused)
     {

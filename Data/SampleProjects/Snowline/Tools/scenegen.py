@@ -150,8 +150,9 @@ class Doc:
                                       overrides=[override(k, v) for k, v in overrides.items()]))
 
     def instance(self, prefab, pos=(0, 0, 0), rot=(0, 0, 0, 1), scale=(1, 1, 1), parent=None, ops=()):
-        """A prefab instance; `ops` its component overrides (component_removed / component_added),
-        as the editor writes them when a component is removed from or added to an instance."""
+        """A prefab instance; `ops` its component overrides (component_removed / component_added /
+        component_modified), as the editor writes them when a component is removed from, added to or
+        changed on an instance."""
         self.instances.append(
             '<string name="prefab">%s</string><string name="parent">%s</string>%s%s%s'
             '<string name="rootLive">%s</string><string name="owner">%s</string>'
@@ -203,6 +204,12 @@ def component_added(src, wire, **values):
     return ('<object><string name="src">%s</string><string name="type">%s</string><u8 name="op">1</u8>'
             '<u8 name="form">1</u8><object name="data"><array name="dataVersions" count="1"><u64 name="type">%s</u64>'
             '<u32 name="version">%s</u32></array>%s</object></object>' % (src, wire, dv["type"], dv["version"], body))
+
+
+def component_modified(src, wire, **values):
+    """An instance override: the prefab's entity `src` has its `wire` component replaced by one with
+    `values` (the rest at the schema's defaults: give every field the instance should keep)."""
+    return component_added(src, wire, **values).replace('<u8 name="op">1</u8>', '<u8 name="op">0</u8>', 1)
 
 
 def yaw(degrees):

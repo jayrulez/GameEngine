@@ -53,6 +53,9 @@ class Board
     {
         m_start = self.position();
         m_startRotation = self.rotation();
+        // The run starts with the rider's first frame: the clock (Snowline.as) and the medal ghosts
+        // count from here, so a rider level with a ghost crosses the line on its medal's time.
+        self.scene.events.emit("RunStarted", 0);
     }
 
     // The skinned mesh the graph sits on: the model's root, its rig, the mesh under it. Found on

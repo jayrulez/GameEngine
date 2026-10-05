@@ -2598,8 +2598,42 @@ namespace editor
                                                }});
     }
 
+    namespace
+    {
+        // The list a list editor edits: the component's own property or, for a list inside a
+        // container's element (a vegetation layer's materials), that property on the element the
+        // path names. Empty when the element is gone (removed under the editor).
+        Instance ListIn(const Instance& component, const PropertyInfo* list, ComponentPropertyPath path)
+        {
+            Instance owner = component;
+            if (!path.IsEmpty())
+            {
+                const PropertyInfo* outer =
+                    component.Type() != nullptr ? FindProperty(*component.Type(), path.container) : nullptr;
+                if (outer == nullptr || outer->type == nullptr || outer->type->container == nullptr ||
+                    outer->address == nullptr)
+                {
+                    return {};
+                }
+                const ContainerInfo& ci = *outer->type->container;
+                const Instance elements(outer->address(component), outer->type);
+                if (elements.Pointer() == nullptr || path.index >= ContainerSize(ci, elements))
+                {
+                    return {};
+                }
+                owner = ContainerAddressAt(ci, elements, path.index);
+            }
+            if (owner.Pointer() == nullptr || list->address == nullptr)
+            {
+                return {};
+            }
+            return Instance(list->address(owner), list->type);
+        }
+    }
+
     void SceneInspectorView::BuildContainerRows(const Guid& id, const TypeInfo* type,
-                                                const PropertyInfo& prop, StringView category)
+                                                const PropertyInfo& prop, StringView category,
+                                                ComponentPropertyPath path)
     {
         if (prop.type == nullptr || prop.type->container == nullptr)
         {
@@ -2611,7 +2645,7 @@ namespace editor
 
         // Per-slot display text from the live container: a material Ref shows its asset name / "None";
         // a struct element shows its type label. Recomputed by the refresher to detect changes.
-        auto computeNames = [self, id, type, propPtr]() -> Array<String>
+        auto computeNames = [self, id, type, propPtr, path]() -> Array<String>
         {
             Array<String> names;
             scene::ComponentManagerBase* mgr = self->m_edit->FindManager(type);
@@ -2625,7 +2659,11 @@ namespace editor
             {
                 return names;
             }
-            const Instance container(propPtr->address(comp), propPtr->type);
+            const Instance container = ListIn(comp, propPtr, path);
+            if (container.Pointer() == nullptr)
+            {
+                return names; // the slot holding the list is gone
+            }
             const ContainerInfo& ci = *propPtr->type->container;
             const usize n = ContainerSize(ci, container);
             for (usize i = 0; i < n; ++i)
@@ -2696,34 +2734,46 @@ namespace editor
         rawList->slotNames = computeNames();
 
         // Add a default element (homogeneous). The polymorphic add-by-type menu is the next pass.
-        rawList->OnAdd = [self, id, type, propPtr]()
+        rawList->OnAdd = [self, id, type, propPtr, path]()
         {
             (void)self->m_edit->MutateComponent(id, type,
-                                  [propPtr](const Instance& comp)
+                                  [propPtr, path](const Instance& comp)
                                   {
-                                      const Instance container(propPtr->address(comp), propPtr->type);
+                                      const Instance container = ListIn(comp, propPtr, path);
+                                      if (container.Pointer() == nullptr)
+                                      {
+                                          return; // the slot holding the list is gone
+                                      }
                                       const ContainerInfo& ci = *propPtr->type->container;
                                       (void)ContainerEmplaceDefault(ci, container,
                                                                     ContainerSize(ci, container));
                                   });
             self->m_forceRebuild = true;
         };
-        rawList->OnRemoveSlot = [self, id, type, propPtr](usize i)
+        rawList->OnRemoveSlot = [self, id, type, propPtr, path](usize i)
         {
             (void)self->m_edit->MutateComponent(id, type,
-                                  [propPtr, i](const Instance& comp)
+                                  [propPtr, path, i](const Instance& comp)
                                   {
-                                      const Instance container(propPtr->address(comp), propPtr->type);
+                                      const Instance container = ListIn(comp, propPtr, path);
+                                      if (container.Pointer() == nullptr)
+                                      {
+                                          return; // the slot holding the list is gone
+                                      }
                                       (void)ContainerRemoveAt(*propPtr->type->container, container, i);
                                   });
             self->m_forceRebuild = true;
         };
-        rawList->OnMoveSlot = [self, id, type, propPtr](usize i, bool up)
+        rawList->OnMoveSlot = [self, id, type, propPtr, path](usize i, bool up)
         {
             (void)self->m_edit->MutateComponent(id, type,
-                                  [propPtr, i, up](const Instance& comp)
+                                  [propPtr, path, i, up](const Instance& comp)
                                   {
-                                      const Instance container(propPtr->address(comp), propPtr->type);
+                                      const Instance container = ListIn(comp, propPtr, path);
+                                      if (container.Pointer() == nullptr)
+                                      {
+                                          return; // the slot holding the list is gone
+                                      }
                                       const ContainerInfo& ci = *propPtr->type->container;
                                       const usize n = ContainerSize(ci, container);
                                       if (up && i > 0)
@@ -2742,13 +2792,17 @@ namespace editor
         if (prop.type->container->elementType == &TypeOf<foundation::scene::EntityRef>())
         {
             // One write for a slot, whether the entity came from the picker or a hierarchy drag.
-            auto assignEntity = [self, id, type, propPtr](usize i, const Guid& target)
+            auto assignEntity = [self, id, type, propPtr, path](usize i, const Guid& target)
             {
                 (void)self->m_edit->MutateComponent(
                     id, type,
-                    [propPtr, i, target](const Instance& comp)
+                    [propPtr, path, i, target](const Instance& comp)
                     {
-                        const Instance container(propPtr->address(comp), propPtr->type);
+                        const Instance container = ListIn(comp, propPtr, path);
+                                      if (container.Pointer() == nullptr)
+                                      {
+                                          return; // the slot holding the list is gone
+                                      }
                         const ContainerInfo& ci = *propPtr->type->container;
                         if (i >= ContainerSize(ci, container))
                         {
@@ -2762,7 +2816,7 @@ namespace editor
                     });
                 self->m_forceRebuild = true;
             };
-            rawList->OnPickSlot = [self, id, type, propPtr, assignEntity](usize i)
+            rawList->OnPickSlot = [self, id, type, propPtr, path, assignEntity](usize i)
             {
                 if (self->Context == nullptr)
                 {
@@ -2777,7 +2831,11 @@ namespace editor
                                               : Instance{};
                     if (!comp.IsEmpty())
                     {
-                        const Instance container(propPtr->address(comp), propPtr->type);
+                        const Instance container = ListIn(comp, propPtr, path);
+                                      if (container.Pointer() == nullptr)
+                                      {
+                                          return; // the slot holding the list is gone
+                                      }
                         const ContainerInfo& ci = *propPtr->type->container;
                         if (i < ContainerSize(ci, container))
                         {
@@ -2801,13 +2859,17 @@ namespace editor
             accepted.PushBack(String(editor::app::AssetPickerSlot::EntityType()));
             rawList->SetAcceptedTypes(Move(accepted));
             rawList->OnAssignSlot = assignEntity;
-            rawList->OnAppendDropped = [self, id, type, propPtr](const Guid& target)
+            rawList->OnAppendDropped = [self, id, type, propPtr, path](const Guid& target)
             {
                 (void)self->m_edit->MutateComponent(
                     id, type,
-                    [propPtr, target](const Instance& comp)
+                    [propPtr, path, target](const Instance& comp)
                     {
-                        const Instance container(propPtr->address(comp), propPtr->type);
+                        const Instance container = ListIn(comp, propPtr, path);
+                                      if (container.Pointer() == nullptr)
+                                      {
+                                          return; // the slot holding the list is gone
+                                      }
                         const ContainerInfo& ci = *propPtr->type->container;
                         const Instance el =
                             ContainerEmplaceDefault(ci, container, ContainerSize(ci, container));
@@ -2847,13 +2909,17 @@ namespace editor
             return;
         }
         // One write for a material slot, whether the material came from the picker or a drop.
-        auto assignSlot = [self, id, type, propPtr](usize i, const Guid& target)
+        auto assignSlot = [self, id, type, propPtr, path](usize i, const Guid& target)
         {
             (void)self->m_edit->MutateComponent(
                 id, type,
-                [propPtr, i, target](const Instance& comp)
+                [propPtr, path, i, target](const Instance& comp)
                 {
-                    const Instance container(propPtr->address(comp), propPtr->type);
+                    const Instance container = ListIn(comp, propPtr, path);
+                                      if (container.Pointer() == nullptr)
+                                      {
+                                          return; // the slot holding the list is gone
+                                      }
                     const ContainerInfo& ci = *propPtr->type->container;
                     if (i >= ContainerSize(ci, container))
                     {
@@ -2890,13 +2956,17 @@ namespace editor
             accepted.PushBack(String(u8"MaterialAsset"));
             rawList->SetAcceptedTypes(Move(accepted));
             rawList->OnAssignSlot = assignSlot;
-            rawList->OnAppendDropped = [self, id, type, propPtr](const Guid& target)
+            rawList->OnAppendDropped = [self, id, type, propPtr, path](const Guid& target)
             {
                 (void)self->m_edit->MutateComponent(
                     id, type,
-                    [propPtr, target](const Instance& comp)
+                    [propPtr, path, target](const Instance& comp)
                     {
-                        const Instance container(propPtr->address(comp), propPtr->type);
+                        const Instance container = ListIn(comp, propPtr, path);
+                                      if (container.Pointer() == nullptr)
+                                      {
+                                          return; // the slot holding the list is gone
+                                      }
                         const ContainerInfo& ci = *propPtr->type->container;
                         const Instance el =
                             ContainerEmplaceDefault(ci, container, ContainerSize(ci, container));
@@ -2941,12 +3011,13 @@ namespace editor
         // A struct element (a reflected value type with properties - a vegetation layer): every
         // slot gets its own expander of leaf rows right after the list, "<List> N: <name>", each
         // row addressed through the slot path so it reads, writes and undoes like a component
-        // field (the pickers included). Nested containers inside the element wait for a need.
+        // field (the pickers included). A list inside the element (a layer's materials) is a list
+        // editor of its own in the slot's expander, reached through the same path; one level deep.
         const TypeInfo* elementType = prop.type->container->elementType;
         const bool structElement = elementType != nullptr && elementType != &TypeOf<MatRef>() &&
                                    elementType != &TypeOf<foundation::scene::EntityRef>() &&
                                    !Properties(*elementType).IsEmpty();
-        if (structElement)
+        if (structElement && path.IsEmpty())
         {
             for (usize i = 0; i < rawList->slotNames.Size(); ++i)
             {
@@ -2956,7 +3027,13 @@ namespace editor
                         : Format(u8"{} {}: {}", label, i + 1, rawList->slotNames[i]);
                 for (const PropertyInfo& sub : Properties(*elementType))
                 {
-                    if ((sub.type != nullptr && IsContainer(*sub.type)) || IsNested(sub))
+                    if (sub.type != nullptr && IsContainer(*sub.type))
+                    {
+                        BuildContainerRows(id, type, sub, slotCategory.AsView(),
+                                           ComponentPropertyPath{prop.name, i});
+                        continue;
+                    }
+                    if (IsNested(sub))
                     {
                         continue;
                     }

@@ -524,8 +524,9 @@ void ApplyPropertyPresentation(ui::toolkit::PropertyGrid& grid,
         // rebuild when the list changes (which Signature() does not track). Element pick is currently
         // specialized to Ref<Material>; struct-element leaf editing + the polymorphic add-by-type menu
         // are a follow-up.
+        // `path` set: the list is a field of that container element (a slot's own list).
         void BuildContainerRows(const Guid& id, const TypeInfo* type, const PropertyInfo& prop,
-                                StringView category);
+                                StringView category, ComponentPropertyPath path = {});
 
         // Current target Guid of a Ref<T> property (nil when unset/unresolvable).
         template <typename T>

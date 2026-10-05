@@ -793,6 +793,24 @@ TEST_CASE("inspector: a list of reflected structs gets a per-slot expander of le
     CHECK(slot1Density);
     CHECK(slot1Mesh);
 
+    // A list inside a slot (the layer's materials, one per mesh slot) is a list editor of its own
+    // in that slot's expander, and edits reach that layer's list alone.
+    editor::app::ContainerListEditor* slot1Materials = nullptr;
+    for (usize i = 0; i < inspector.Grid()->PropertyCount(); ++i)
+    {
+        foundation::ui::toolkit::PropertyEditor* row = inspector.Grid()->PropertyAt(i);
+        if (row->Category() == u8"Procedural Layers 1: Grass" && row->Name() == u8"Materials")
+        {
+            slot1Materials = foundation::core::Cast<editor::app::ContainerListEditor>(row);
+        }
+    }
+    REQUIRE(slot1Materials != nullptr);
+    CHECK(slot1Materials->slotNames.IsEmpty());
+    REQUIRE(slot1Materials->OnAdd);
+    slot1Materials->OnAdd();
+    CHECK(c.proceduralLayers[0].materials.Size() == 1u);
+    CHECK(c.proceduralLayers[1].materials.IsEmpty());
+
     // A path edit shows up on the next refresh through the same rows (the refresher pulls the
     // owner by path), and removing a slot rebuilds the grid without its expander.
     edit.SetComponentProperty(terrain, &TypeOf<TerrainVegetationComponent>(),

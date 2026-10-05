@@ -15,6 +15,10 @@
 > under a parent, positions and yaw alike are model space only while its ancestors neither move
 > nor turn. A re-import keeps the root motion authored on a clip; the import option "Root motion"
 > sets horizontal and yaw on clips new to it.
+> P1 BUILT 2026-10-05: `:rootmotion` (RootMotionDelta, Compose, BlendRootMotion, ClipRootMotion
+> over unwrapped times), the players' ConsumeRootMotion, each graph node's RootMotion blended as its
+> pose. A delta's translation is in the frame the character faces at its start (model space when
+> the clip extracts no turn), so composed deltas draw the authored path.
 > Seeded in weekly_backlog.md (2026-08-26). User ruling 2026-10-05: after Snowline's P1, before
 > its P2, spec first. Companion: inverse-kinematics.md (P0 there, the space and the pose seam, is
 > this spec's prerequisite). Read CONVENTIONS.md first.

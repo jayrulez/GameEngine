@@ -19,6 +19,7 @@ import foundation.core;
 import :skeleton; // Skeleton, Bone, BoneTransform
 import :clip;     // AnimationClip, AnimationEventHandler
 import :sampler;  // SampleClip, BlendPoses
+import :rootmotion;
 import :modifier; // PoseModifierStack (the stage after the layers combine)
 
 using namespace foundation::core;
@@ -83,7 +84,24 @@ export namespace foundation::animation
         [[nodiscard]] virtual f32 Duration() const noexcept = 0;
         virtual void FireEvents(f32 prevNormalizedTime, f32 currentNormalizedTime, bool looping,
                                 const AnimationEventHandler& handler) const = 0;
+        /// The root motion the node carries from `from` to `to`, normalized and UNWRAPPED (past 1
+        /// is a later loop), blended as the node blends its poses (root-motion.md P1).
+        [[nodiscard]] virtual RootMotionDelta RootMotion(f32 from, f32 to, bool looping) const
+        {
+            (void)from;
+            (void)to;
+            (void)looping;
+            return RootMotionDelta{};
+        }
     };
+
+    /// A clip's root motion over normalized, unwrapped times.
+    [[nodiscard]] inline RootMotionDelta ClipRootMotionNormalized(const AnimationClip* clip, f32 from, f32 to,
+                                                                  bool looping)
+    {
+        return clip != nullptr ? ClipRootMotion(*clip, from * clip->duration, to * clip->duration, looping)
+                               : RootMotionDelta{};
+    }
 
     // Wraps a single AnimationClip (borrowed).
     class ClipStateNode final : public IAnimationStateNode
@@ -114,6 +132,10 @@ export namespace foundation::animation
             {
                 FireClipEvents(*m_clip, prevNorm, currentNorm, looping, handler);
             }
+        }
+        [[nodiscard]] RootMotionDelta RootMotion(f32 from, f32 to, bool looping) const override
+        {
+            return ClipRootMotionNormalized(m_clip, from, to, looping);
         }
 
     private:
@@ -305,6 +327,43 @@ export namespace foundation::animation
             }
         }
 
+        /// The two entries around the parameter, by the same weights the pose blends them with.
+        [[nodiscard]] RootMotionDelta RootMotion(f32 from, f32 to, bool looping) const override
+        {
+            if (m_entries.IsEmpty())
+            {
+                return RootMotionDelta{};
+            }
+            if (m_entries.Size() == 1 || parameter <= m_entries[0].threshold)
+            {
+                return ClipRootMotionNormalized(m_entries[0].clip, from, to, looping);
+            }
+            if (parameter >= m_entries[m_entries.Size() - 1].threshold)
+            {
+                return ClipRootMotionNormalized(m_entries[m_entries.Size() - 1].clip, from, to, looping);
+            }
+            usize lowIdx = 0, highIdx = 1;
+            for (usize i = 0; i + 1 < m_entries.Size(); ++i)
+            {
+                if (parameter >= m_entries[i].threshold && parameter <= m_entries[i + 1].threshold)
+                {
+                    lowIdx = i;
+                    highIdx = i + 1;
+                    break;
+                }
+            }
+            const AnimationClip* a = m_entries[lowIdx].clip;
+            const AnimationClip* b = m_entries[highIdx].clip;
+            if (a == nullptr || b == nullptr)
+            {
+                return ClipRootMotionNormalized(a != nullptr ? a : b, from, to, looping);
+            }
+            const f32 range = m_entries[highIdx].threshold - m_entries[lowIdx].threshold;
+            const f32 blend = (range > 0.0f) ? (parameter - m_entries[lowIdx].threshold) / range : 0.0f;
+            return BlendRootMotion(ClipRootMotionNormalized(a, from, to, looping),
+                                   ClipRootMotionNormalized(b, from, to, looping), blend);
+        }
+
     private:
         [[nodiscard]] const AnimationClip* DominantClip() const noexcept
         {
@@ -479,6 +538,37 @@ export namespace foundation::animation
             {
                 FireClipEvents(*best, prevNorm, currentNorm, looping, handler);
             }
+        }
+
+        /// Every entry by its inverse-distance weight, as the pose (on an entry: that one alone).
+        [[nodiscard]] RootMotionDelta RootMotion(f32 from, f32 to, bool looping) const override
+        {
+            const Float2 paramPos{parameterX, parameterY};
+            f32 total = 0.0f;
+            RootMotionDelta sum;
+            for (const BlendTree2DEntry& e : m_entries)
+            {
+                if (e.clip == nullptr)
+                {
+                    continue;
+                }
+                const f32 dist = Length(paramPos - e.position);
+                if (dist < 0.0001f)
+                {
+                    return ClipRootMotionNormalized(e.clip, from, to, looping);
+                }
+                const f32 w = 1.0f / dist;
+                const RootMotionDelta d = ClipRootMotionNormalized(e.clip, from, to, looping);
+                sum.translation = sum.translation + d.translation * w;
+                sum.yaw += d.yaw * w;
+                total += w;
+            }
+            if (total > 0.0f)
+            {
+                sum.translation = sum.translation * (1.0f / total);
+                sum.yaw /= total;
+            }
+            return sum;
         }
 
     private:
@@ -963,7 +1053,8 @@ export namespace foundation::animation
             SyncBlendTreeParameters();
             for (usize i = 0; i < m_graph->Layers().Size() && i < m_layerRuntimes.Size(); ++i)
             {
-                UpdateLayer(*m_graph->Layers()[i], m_layerRuntimes[i], deltaTime);
+                // Only the base layer moves the character: an override or additive layer moves bones.
+                UpdateLayer(*m_graph->Layers()[i], m_layerRuntimes[i], deltaTime, i == 0);
             }
             for (AnimationGraphParameter& p : m_parameters)
             {
@@ -977,6 +1068,16 @@ export namespace foundation::animation
 
         /// The pose modifiers run after the layers combine and before the palette, borrowed.
         [[nodiscard]] PoseModifierStack& Modifiers() noexcept { return m_modifiers; }
+
+        /// The root motion the base layer carried since the last call (root-motion.md P1): its
+        /// state's, or during a crossfade both states' blended by the fade, composed over every
+        /// Update between. Reading it resets it.
+        [[nodiscard]] RootMotionDelta ConsumeRootMotion() noexcept
+        {
+            const RootMotionDelta delta = m_rootMotion;
+            m_rootMotion = RootMotionDelta{};
+            return delta;
+        }
 
         [[nodiscard]] Span<const Float4x4> GetSkinningMatrices()
         {
@@ -1051,7 +1152,7 @@ export namespace foundation::animation
             return {m_parameters.Data(), m_parameters.Size()};
         }
 
-        void UpdateLayer(AnimationLayer& layer, AnimationGraphLayerRuntime& rt, f32 deltaTime)
+        void UpdateLayer(AnimationLayer& layer, AnimationGraphLayerRuntime& rt, f32 deltaTime, bool base)
         {
             if (rt.currentStateIndex < 0 ||
                 static_cast<usize>(rt.currentStateIndex) >= layer.States().Size())
@@ -1068,11 +1169,14 @@ export namespace foundation::animation
             if (rt.isTransitioning)
             {
                 const f32 prevNorm = rt.currentTime;
-                AdvanceStateTime(*currentState, rt.currentTime, deltaTime);
+                const RootMotionDelta into = StepRootMotion(*currentState, rt.currentTime, deltaTime, base);
+                RootMotionDelta outOf;
                 if (AnimationGraphState* prevState = layer.GetState(rt.previousStateIndex))
                 {
+                    outOf = StepRootMotion(*prevState, rt.previousTime, deltaTime, base);
                     AdvanceStateTime(*prevState, rt.previousTime, deltaTime);
                 }
+                AdvanceStateTime(*currentState, rt.currentTime, deltaTime);
                 currentState = layer.GetState(rt.currentStateIndex); // (re-fetch; index unchanged)
                 if (m_eventHandler && currentState != nullptr && currentState->Node() != nullptr)
                 {
@@ -1080,6 +1184,12 @@ export namespace foundation::animation
                                                      m_eventHandler);
                 }
                 rt.transitionElapsed += deltaTime;
+                if (base)
+                {
+                    // The fade blends the motion as it blends the poses.
+                    const f32 fade = Clamp(rt.transitionElapsed / rt.transitionDuration, 0.0f, 1.0f);
+                    m_rootMotion = Compose(m_rootMotion, BlendRootMotion(outOf, into, fade));
+                }
                 if (rt.transitionElapsed >= rt.transitionDuration)
                 {
                     rt.isTransitioning = false;
@@ -1089,6 +1199,10 @@ export namespace foundation::animation
             else
             {
                 const f32 prevNorm = rt.currentTime;
+                if (base)
+                {
+                    m_rootMotion = Compose(m_rootMotion, StepRootMotion(*currentState, rt.currentTime, deltaTime, true));
+                }
                 AdvanceStateTime(*currentState, rt.currentTime, deltaTime);
                 if (m_eventHandler && currentState->Node() != nullptr)
                 {
@@ -1097,6 +1211,23 @@ export namespace foundation::animation
                 }
             }
             SampleLayerPoses(layer, rt);
+        }
+
+        /// The root motion a state carries over the step AdvanceStateTime is about to take (zero
+        /// off the base layer): from its time to the unwrapped time the step reaches.
+        [[nodiscard]] static RootMotionDelta StepRootMotion(const AnimationGraphState& state, f32 normalizedTime,
+                                                            f32 deltaTime, bool base)
+        {
+            if (!base || state.Node() == nullptr || state.Duration() <= 0.0f)
+            {
+                return RootMotionDelta{};
+            }
+            f32 to = normalizedTime + (deltaTime * state.speed) / state.Duration();
+            if (!state.loop)
+            {
+                to = Clamp(to, 0.0f, 1.0f);
+            }
+            return state.Node()->RootMotion(normalizedTime, to, state.loop);
         }
 
         void AdvanceStateTime(AnimationGraphState& state, f32& normalizedTime, f32 deltaTime)
@@ -1303,6 +1434,7 @@ export namespace foundation::animation
         Array<AnimationGraphParameter> m_parameters; // runtime copy
         Array<BoneTransform> m_finalPoses;
         PoseModifierStack m_modifiers;
+        RootMotionDelta m_rootMotion; // the base layer's, since the last ConsumeRootMotion
         Array<Float4x4> m_skinningMatrices;
         Array<Float4x4> m_prevSkinningMatrices;
         bool m_matricesDirty = true;

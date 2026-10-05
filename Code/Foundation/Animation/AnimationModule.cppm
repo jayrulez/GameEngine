@@ -15,6 +15,7 @@ export import :skeleton;
 export import :pose;
 export import :clip;
 export import :sampler;
+export import :rootmotion;
 export import :modifier;
 export import :ik;
 export import :player;

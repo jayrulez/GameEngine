@@ -18,6 +18,7 @@ import :clip;
 import :sampler;
 import :pose;
 import :modifier;
+import :rootmotion;
 
 using namespace foundation::core;
 
@@ -138,7 +139,11 @@ export namespace foundation::animation
             }
 
             const f32 prevTime = m_prevTime;
+            const f32 startTime = m_currentTime;
             m_currentTime += deltaTime * speed;
+            // Root motion over the step, from the unwrapped times (a wrap is split at the end).
+            m_rootMotion = Compose(m_rootMotion, ClipRootMotion(*m_currentClip, startTime, m_currentTime,
+                                                                m_currentClip->isLooping));
 
             // Fire events before wrapping (so loop crossings are detected).
             if (m_eventHandler && !m_currentClip->Events().IsEmpty())
@@ -212,6 +217,15 @@ export namespace foundation::animation
 
         /// The pose modifiers run between the sample and the palette (inverse kinematics), borrowed.
         [[nodiscard]] PoseModifierStack& Modifiers() noexcept { return m_modifiers; }
+
+        /// The root motion the clip carried since the last call (root-motion.md P1), composed over
+        /// every Update between: zero when the clip extracts none. Reading it resets it.
+        [[nodiscard]] RootMotionDelta ConsumeRootMotion() noexcept
+        {
+            const RootMotionDelta delta = m_rootMotion;
+            m_rootMotion = RootMotionDelta{};
+            return delta;
+        }
 
         /// The pose the palette was last built from: the sampled pose changed by the modifiers (the
         /// sampled pose itself when there are none).
@@ -294,6 +308,7 @@ export namespace foundation::animation
         Array<BoneTransform> m_localPoses;
         Array<BoneTransform> m_finalPoses; // the sampled pose after the modifiers
         PoseModifierStack m_modifiers;
+        RootMotionDelta m_rootMotion; // since the last ConsumeRootMotion
         Array<Float4x4> m_skinningMatrices;
         Array<Float4x4> m_prevSkinningMatrices;
         AnimationEventHandler m_eventHandler;

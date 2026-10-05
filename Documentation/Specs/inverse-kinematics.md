@@ -1,9 +1,9 @@
 # Inverse kinematics - bones that reach, look and stand on the ground
 
-> STATUS: PROPOSED 2026-10-05; reviewed by the Sedulous session the same day (its points folded
+> STATUS: APPROVED 2026-10-05 by the user (the proposals as written, open questions taken as the
+> spec answers them); reviewed by the Sedulous session the same day (its points folded
 > in: the root correction per root, P0 split, model space with several meshes, instanced skinning,
-> how a component finds its animator, the hinge fallback, the bone-name attribute). Awaits the
-> user.
+> how a component finds its animator, the hinge fallback, the bone-name attribute).
 > Seeded in weekly_backlog.md (2026-08-26). User ruling 2026-10-05: after Snowline's P1, before
 > its P2, spec first, and "when doing IK, it must be solid". Companion: root-motion.md (the two
 > share the pose seam of P0). Read CONVENTIONS.md first.

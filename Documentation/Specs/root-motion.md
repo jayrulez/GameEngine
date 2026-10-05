@@ -1,8 +1,9 @@
 # Root motion - clips that carry their own travel
 
-> STATUS: PROPOSED 2026-10-05; reviewed by the Sedulous session the same day (its points folded
+> STATUS: APPROVED 2026-10-05 by the user (the proposals as written, open questions taken as the
+> spec answers them); reviewed by the Sedulous session the same day (its points folded
 > in: settings off by default, the baked curve kept, Character mode through `move` and its
-> stickiness, no new script type, instanced skinning). Awaits the user.
+> stickiness, no new script type, instanced skinning).
 > Seeded in weekly_backlog.md (2026-08-26). User ruling 2026-10-05: after Snowline's P1, before
 > its P2, spec first. Companion: inverse-kinematics.md (P0 there, the space and the pose seam, is
 > this spec's prerequisite). Read CONVENTIONS.md first.

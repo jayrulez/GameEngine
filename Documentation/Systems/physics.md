@@ -46,7 +46,11 @@ abstraction seam (deliberate - see the design history).
   collider components on a body compound (hierarchy walk stops at nested bodies). Deviation from the
   original plan: one collider component with a kind, not per-primitive `BoxShapeComponent` etc.
 - **`CharacterComponent`** - Jolt `CharacterVirtual`. Scriptable directly: reflected `move(velocityX,
-  velocityZ)` + `jump(speed)` methods (caller-owned velocity).
+  velocityZ)` + `jump(speed)` + `launch(speed)` methods (caller-owned velocity). The standard recipe
+  moves a grounded character only by its input, so it stands still on a slope; `drive(x, y, z)`
+  hands the whole velocity to the script (gravity included) until the next `move`, and the
+  read-only `velocity` (the motion over the last step) and `groundNormal` (up in the air) let a
+  board or a sled integrate momentum along the ground.
 - **`JointComponent`** - ONE component with a `JointKind` enum (Fixed / Point / Hinge / Slider /
   Distance) referencing a second entity; `motorEnabled` + `motorTargetVelocity` + `motorLimit`
   motors are actually applied. Deviation: one joint component with a kind, not five component types;

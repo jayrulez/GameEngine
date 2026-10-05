@@ -198,6 +198,11 @@ export namespace engine::physics
         bool launchPending = false;  // consumed at the next step, grounded or not
         Float3 teleportTo{0.0f, 0.0f, 0.0f};
         bool teleportPending = false; // consumed (snap) at the next step, then cleared
+        // Driven (drive): the script owns the whole velocity, gravity included, until the next
+        // move. What a board or a sled needs: momentum along a slope, which the standard recipe
+        // (a grounded character moves only by its input) cannot keep.
+        bool driving = false;
+        Float3 driveVelocity{0.0f, 0.0f, 0.0f};
 
         // Runtime (transient):
         CharacterId character;
@@ -207,12 +212,29 @@ export namespace engine::physics
         CharacterGround ground = CharacterGround::InAir;
         Float3 prevPosition{0, 0, 0};
         Float3 currPosition{0, 0, 0};
+        Float3 velocity{0, 0, 0};       // how fast it moved over the last step (m/s)
+        Float3 groundNormal{0, 1, 0};   // the ground under it after the last step; up in the air
 
         // ---- script gameplay surface (Character.of(entity).<op>): pure component-data ops, no
         // world access - the physics tick reads moveVelocity/jumpSpeed and writes ground/currPosition,
         // so per-entity character control works via reflection (fixes the static facade's "first
         // character only" limitation). ----
-        void move(f32 velocityX, f32 velocityZ) { moveVelocity = Float3{velocityX, 0.0f, velocityZ}; }
+        void move(f32 velocityX, f32 velocityZ)
+        {
+            moveVelocity = Float3{velocityX, 0.0f, velocityZ};
+            driving = false;
+        }
+        // The whole velocity for the coming steps, gravity included, replacing the standard recipe
+        // (move, jump, launch) until the next move. Read velocity and groundNormal to integrate it:
+        // gravity along a slope is gravity less its part along the ground normal.
+        void drive(f32 x, f32 y, f32 z)
+        {
+            driveVelocity = Float3{x, y, z};
+            driving = true;
+        }
+        void drive(Float3 v) { drive(v.x, v.y, v.z); }
+        [[nodiscard]] Float3 currentVelocity() const { return velocity; }
+        [[nodiscard]] Float3 currentGroundNormal() const { return groundNormal; }
         void jump(f32 speed) { jumpSpeed = speed; }
         // Sets the vertical speed at the next step, on the ground OR in the air, replacing what
         // gravity had built up: a bounce off an enemy, a spring pad, a double jump. Negative

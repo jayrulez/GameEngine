@@ -952,6 +952,77 @@ TEST_CASE("physics.scene: a launch works in the air, where a jump waits for the 
     CHECK(heightNow() == doctest::Approx(0.9f).epsilon(0.03));
 }
 
+TEST_CASE("physics.scene: a driven character keeps momentum down a slope (a board's recipe)")
+{
+    // The standard recipe stands still on a slope (a grounded character moves only by its input);
+    // a board drives the whole velocity, integrating gravity along the ground's normal.
+    PlayScene play;
+    play.scene.AddSystem<CharacterComponentManager>();
+    const f32 tilt = 15.0f * 3.14159265f / 180.0f;
+    scene::EntityHandle slope = play.scene.CreateEntity(u8"slope");
+    Transform tilted;
+    tilted.rotation = Quaternion::FromAxisAngle(Float3{0.0f, 0.0f, 1.0f}, tilt); // rises to +x
+    play.scene.SetLocalTransform(slope, tilted);
+    RigidBodyComponent& body = play.scene.GetSystem<RigidBodyComponentManager>()->Add(slope);
+    body.motion = MotionKind::Static;
+    body.layer = PhysicsLayer::Static;
+    body.halfExtents = Float3{40.0f, 0.5f, 5.0f};
+    scene::EntityHandle rider = play.scene.CreateEntity(u8"rider");
+    play.scene.SetLocalPosition(rider, Float3{15.0f, 15.0f * std::tan(tilt) + 1.6f, 0.0f});
+    CharacterComponent& character = play.scene.GetSystem<CharacterComponentManager>()->Add(rider);
+    play.Start();
+    play.Step(60); // falls onto the slope and settles
+
+    REQUIRE(character.ground == CharacterGround::OnGround);
+    CHECK(character.groundNormal.x == doctest::Approx(-std::sin(tilt)).epsilon(0.02));
+    CHECK(character.groundNormal.y == doctest::Approx(std::cos(tilt)).epsilon(0.02));
+    const f32 standing = character.currPosition.x;
+    play.Step(30);
+    CHECK(character.currPosition.x == doctest::Approx(standing).epsilon(0.01)); // the standard recipe holds
+    CHECK(character.velocity.x == doctest::Approx(0.0f).scale(1.0).epsilon(0.05));
+
+    // Driven: each step, gravity less its part along the normal, added to the velocity it has,
+    // which is kept along the ground.
+    const Float3 gravity{0.0f, -9.81f, 0.0f};
+    const f32 dt = 1.0f / 60.0f;
+    for (int i = 0; i < 60; ++i)
+    {
+        const Float3 n = character.groundNormal;
+        Float3 v = character.velocity;
+        if (character.grounded())
+        {
+            const Float3 along = gravity - n * Dot(gravity, n);
+            v = v - n * Dot(v, n) + along * dt;
+        }
+        else
+        {
+            v = v + gravity * dt;
+        }
+        character.drive(v);
+        play.Step();
+    }
+    // One second down a 15 degree slope, frictionless: about g sin 15 = 2.5 m/s, downhill (-x).
+    CHECK(character.grounded());
+    CHECK(character.velocity.x < -2.0f);
+    CHECK(character.velocity.x > -3.0f);
+    CHECK(character.currPosition.x < standing - 1.0f);
+
+    // A move hands control back to the standard recipe, which stops it.
+    character.move(0.0f, 0.0f);
+    CHECK_FALSE(character.driving);
+    play.Step(2);
+    const f32 stopped = character.currPosition.x;
+    play.Step(30);
+    CHECK(character.currPosition.x == doctest::Approx(stopped).epsilon(0.01));
+
+    // A teleport drops a driven character's momentum as well.
+    character.drive(Float3{-5.0f, 0.0f, 0.0f});
+    character.setPosition(15.0f, 15.0f * std::tan(tilt) + 1.6f, 0.0f);
+    play.Step(1);
+    CHECK(character.driveVelocity.x == doctest::Approx(0.0f));
+    CHECK(character.velocity.x == doctest::Approx(0.0f));
+}
+
 TEST_CASE("physics.scene: CharacterComponent.setPosition teleports the character (respawn)")
 {
     PlayScene play;

@@ -495,6 +495,13 @@ namespace engine::physics
         // Per-entity character control (component-data ops - fixes the static facade's first-character
         // limitation): Character.of(entity).move(x, z) / .jump(speed) / .grounded() / .positionY().
         builder.Method<&CharacterComponent::move>("move", {"velocityX", "velocityZ"});
+        builder.Method<static_cast<void (CharacterComponent::*)(f32, f32, f32)>(&CharacterComponent::drive)>(
+            "drive", {"x", "y", "z"});
+        builder.Method<static_cast<void (CharacterComponent::*)(Float3)>(&CharacterComponent::drive)>(
+            "drive", {"velocity"});
+        // Read-only: the motion over the last step and the ground under it (up in the air).
+        builder.ComputedProperty<&CharacterComponent::currentVelocity>("velocity");
+        builder.ComputedProperty<&CharacterComponent::currentGroundNormal>("groundNormal");
         builder.Method<&CharacterComponent::jump>("jump", {"speed"});
         builder.Method<&CharacterComponent::launch>("launch", {"speed"});
         builder.Method<static_cast<void (CharacterComponent::*)(f32, f32, f32)>(

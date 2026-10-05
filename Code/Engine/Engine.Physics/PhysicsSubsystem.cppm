@@ -277,6 +277,9 @@ export namespace engine::physics
                             m_world->SetCharacterPosition(c.character, c.teleportTo);
                             m_world->SetCharacterVelocity(c.character, Float3{0, 0, 0});
                             c.moveVelocity = Float3{0, 0, 0};
+                            c.driveVelocity = Float3{0, 0, 0};
+                            c.velocity = Float3{0, 0, 0};
+                            c.groundNormal = Float3{0, 1, 0};
                             c.jumpSpeed = 0.0f;
                             c.launchPending = false;
                             c.prevPosition = c.teleportTo;
@@ -287,7 +290,13 @@ export namespace engine::physics
                         }
                         const Float3 current = m_world->CharacterVelocity(c.character);
                         Float3 velocity{c.moveVelocity.x, 0.0f, c.moveVelocity.z};
-                        if (c.launchPending)
+                        if (c.driving)
+                        {
+                            velocity = c.driveVelocity;
+                            c.launchPending = false;
+                            c.jumpSpeed = 0.0f;
+                        }
+                        else if (c.launchPending)
                         {
                             // A launch sets the vertical speed wherever the character is.
                             velocity.y = c.launchSpeed;
@@ -312,6 +321,11 @@ export namespace engine::physics
                         c.ground = m_world->GetCharacterGround(c.character);
                         c.prevPosition = c.currPosition;
                         c.currPosition = m_world->CharacterPosition(c.character);
+                        c.groundNormal = m_world->CharacterGroundNormal(c.character);
+                        // The motion the sweep allowed, not the velocity asked for: a wall or a
+                        // slope bends it, and a script integrating momentum needs what happened.
+                        const Float3 moved = c.currPosition - c.prevPosition;
+                        c.velocity = moved * (1.0f / fixedDeltaTime);
                     });
             }
 

@@ -3299,6 +3299,42 @@ TEST_CASE("script.scene: CharacterComponent.of(entity).move/jump - per-entity co
     CHECK(characters->Get(e)->launchSpeed == doctest::Approx(4.0f));
 }
 
+// A board's surface: read the motion and the ground under the character (read-only properties),
+// drive the whole velocity. The tick measures velocity and groundNormal; here they are seeded.
+TEST_CASE("script.scene: CharacterComponent velocity, groundNormal and drive (AngelScript)")
+{
+    foundation::script::angelscript::RegisterAngelScriptBackend();
+    engine::physics::RegisterPhysicsScriptFacade();
+    ScriptedScene bed;
+    auto* characters = bed.scene.AddSystem<engine::physics::CharacterComponentManager>();
+
+    RefPtr<ScriptClass> board =
+        MakeClassLang(u8"angelscript", u8"Board",
+                      u8"class Board {\n"
+                      u8"    private Entity@ self;\n"
+                      u8"    Board(Entity@ entity) { @self = entity; }\n"
+                      u8"    void onStart() {\n"
+                      u8"        CharacterComponent@ c = CharacterComponent::of(self);\n"
+                      u8"        Float3 v = c.velocity;\n"
+                      u8"        Float3 n = c.groundNormal;\n"
+                      u8"        c.drive(v.x + n.x, v.y + n.y, v.z + n.z);\n"
+                      u8"    }\n"
+                      u8"}\n",
+                      {u8"onStart"});
+    const scene::EntityHandle e = bed.AddScripted(board, u8"e");
+    engine::physics::CharacterComponent& character = characters->Add(e);
+    character.velocity = Float3{1.0f, 2.0f, 3.0f};
+    character.groundNormal = Float3{0.0f, 0.0f, 1.0f};
+
+    bed.Start();
+    bed.Frame();
+    REQUIRE(characters->Get(e) != nullptr);
+    CHECK(characters->Get(e)->driving);
+    CHECK(characters->Get(e)->driveVelocity.x == doctest::Approx(1.0f));
+    CHECK(characters->Get(e)->driveVelocity.y == doctest::Approx(2.0f));
+    CHECK(characters->Get(e)->driveVelocity.z == doctest::Approx(4.0f));
+}
+
 // The scriptable-impulse gameplay op (Roll Call finding #1: "no scriptable impulse on a dynamic
 // body"), now available: ScenePhysics.of(scene).applyImpulse(entity, x, y, z). A world op, keyed
 // by entity. The upward impulse gives the dynamic body positive Y velocity.

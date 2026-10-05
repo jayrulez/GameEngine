@@ -19,6 +19,7 @@ def P(x, fwd, up):
 
 # ---------------------------------------------------------------- materials
 PALETTE = {}  # material name -> linear RGB; each model script fills in its own
+GLOW = {}     # material name -> emission strength: a material that lights itself (its own colour)
 _materials = {}
 
 
@@ -31,6 +32,9 @@ def material(name):
         bsdf.inputs["Base Color"].default_value = (r, g, b, 1.0)
         bsdf.inputs["Roughness"].default_value = 0.7 if name != "Metal" else 0.35
         bsdf.inputs["Metallic"].default_value = 0.6 if name == "Metal" else 0.0
+        if name in GLOW:
+            bsdf.inputs["Emission Color"].default_value = (r, g, b, 1.0)
+            bsdf.inputs["Emission Strength"].default_value = GLOW[name]
         _materials[name] = m
     return _materials[name]
 

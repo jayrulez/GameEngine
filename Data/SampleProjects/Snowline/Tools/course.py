@@ -11,6 +11,9 @@ Needs terrain.py <course> and importall.py <course> first: it places what they m
 - the slalom gates (Gate.as on each, Prefabs/GateRed and GateBlue in turn under them) every
   GATE_SPACING metres down the course, swinging side to side of the line, standing on the snow
   (terrain.py's mountain), and the finish (Finish.as, Prefabs/FinishLine) at the line's end;
+- the gems (Gem.as on each, the Gem model under it): a row of GEM_ROW between each pair of gates,
+  GEM_OFFSET metres out on the side of the gate before them, past the packed course, so taking
+  them means holding a wider line than the gates ask for;
 - the chase camera (FollowCamera.as).
 """
 import json, math, os, sys
@@ -62,6 +65,9 @@ ROCK_MATERIALS = model_materials("Rock")
 BOARD = asset("ScriptClassAsset", "Board")
 GATE = asset("ScriptClassAsset", "Gate")
 FINISH = asset("ScriptClassAsset", "Finish")
+GEM = asset("ScriptClassAsset", "Gem")
+GEM_MODEL = next(a["guid"] for a in ASSETS if a["type"] == "PrefabDocument"
+                 and a.get("group", "") == "Models/Props/GemModel")
 CAMERA = asset("ScriptClassAsset", "FollowCamera")
 RIDER_MODEL = next(a["guid"] for a in ASSETS if a["type"] == "PrefabDocument"
                    and a.get("group") == "Models/Rider/RiderModel")
@@ -72,6 +78,10 @@ GATE_SPACING = 45.0   # metres down the course between gates
 GATE_FIRST = 40.0     # the first gate's distance from the top
 GATE_SWING = 3.5      # how far each gate stands off the course line, side to side (m)
 FINISH_BEFORE = 6.0   # the finish's distance before the line's end (m)
+GEM_ROW = 3           # gems in a row
+GEM_GAP = 4.0         # metres down the course between a row's gems
+GEM_OFFSET = 11.0     # how far a row stands off the course line (m): the packed course is 9 m
+GEM_HEIGHT = 1.0      # a gem's centre above the snow (m): about the rider's centre
 
 
 def along_course(points, distance):
@@ -104,11 +114,29 @@ def gates(d, points, length):
         d.instance(prefabs["GateRed" if index % 2 == 0 else "GateBlue"], parent=e)
         index += 1
         distance += GATE_SPACING
+    gems(d, points, mountain, index)
     p, heading = along_course(points, length - FINISH_BEFORE)
     e = d.entity("Finish", (p[0], mountain.height(p[0], p[2]), p[2]), yaw(math.degrees(heading)))
     d.script(e, (FINISH, {"heading": heading}))
     d.instance(prefabs["FinishLine"], parent=e)
     return index
+
+
+def gems(d, points, mountain, gate_count):
+    """A row of gems in each gap between gates, out on the side of the gate before it."""
+    count = 0
+    for gap in range(gate_count - 1):
+        side = 1 if gap % 2 == 0 else -1  # the side gate `gap` stands on (gates() swings the same way)
+        middle = GATE_FIRST + GATE_SPACING * (gap + 0.5)
+        for k in range(GEM_ROW):
+            p, heading = along_course(points, middle + (k - (GEM_ROW - 1) / 2) * GEM_GAP)
+            x = p[0] + math.cos(heading) * GEM_OFFSET * side
+            z = p[2] - math.sin(heading) * GEM_OFFSET * side
+            e = d.entity("Gem%d" % count, (x, mountain.height(x, z) + GEM_HEIGHT, z))
+            d.script(e, (GEM, {}))
+            d.instance(GEM_MODEL, parent=e)
+            count += 1
+    print("gems", count)
 
 
 def aim_bone(name, share):

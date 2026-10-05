@@ -38,12 +38,31 @@ def wind(path, seconds=4.0, fade=0.5):
         w.writeframes(b"".join(struct.pack("<h", int(v / peak * 0.8 * 32767)) for v in out))
 
 
+def chime(path, notes=((1318.5, 0.0), (1975.5, 0.07)), seconds=0.7):
+    total = int(seconds * RATE)
+    out = [0.0] * total
+    for freq, start in notes:
+        for i in range(int(start * RATE), total):
+            t = i / RATE - start
+            ring = math.exp(-t * 7.0) * min(1.0, t / 0.003)  # a quick strike, then the ring dies
+            out[i] += ring * (math.sin(2 * math.pi * freq * t) + 0.3 * math.sin(4 * math.pi * freq * t))
+    peak = max(abs(v) for v in out) or 1.0
+    with wave.open(path, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(RATE)
+        w.writeframes(b"".join(struct.pack("<h", int(v / peak * 0.8 * 32767)) for v in out))
+
+
 def main():
     out = os.path.join(HERE, "generated", "Audio")
     os.makedirs(out, exist_ok=True)
     path = os.path.join(out, "Wind.wav")
     wind(path)
     print("Wind", mcp("asset_import", {"source": path, "group": "Audio", "importer": "Audio"})["guid"])
+    path = os.path.join(out, "GemChime.wav")
+    chime(path)
+    print("GemChime", mcp("asset_import", {"source": path, "group": "Audio", "importer": "Audio"})["guid"])
 
 
 main()

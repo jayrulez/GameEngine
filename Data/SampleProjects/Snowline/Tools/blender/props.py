@@ -1,4 +1,4 @@
-"""Snowline's props: the mountain's trees and rocks, the slalom gates and the finish, modelled in
+"""Snowline's props: the mountain's trees and rocks, the slalom gates, the finish and the gems, modelled in
 Blender on the shared kit.
 
     blender --background --factory-startup --python props.py -- <out dir> [preview] [names]
@@ -23,7 +23,10 @@ kit3d.PALETTE.update({
     "Snow": (0.86, 0.90, 0.95), "Rock": (0.32, 0.33, 0.36),
     "Pole": (0.92, 0.92, 0.90), "PoleBand": (0.06, 0.06, 0.07),
     "FlagRed": (0.80, 0.07, 0.05), "FlagBlue": (0.04, 0.18, 0.72), "Banner": (0.85, 0.15, 0.10),
+    "Gem": (0.05, 0.55, 0.85), "GemCore": (0.15, 0.75, 1.0),
 })
+# The gem lights itself a little, so it reads against the snow in the shade and from far off.
+kit3d.GLOW.update({"Gem": 0.5, "GemCore": 0.9})
 
 
 def pine():
@@ -70,8 +73,16 @@ def finish():
     kit3d.box("Banner", (10.0, 0.06, 0.7), P(0, 0, 3.2), "Banner", bevel=0.02)
 
 
+def gem():
+    """A gem about 0.85 m tall (big enough to pick out down the slope): an eight-sided double cone,
+    its centre at the origin (Gem.as spins and bobs it there), a brighter band round its waist."""
+    tube("Crown", P(0, 0, 0), P(0, 0, 0.36), 0.31, "Gem", "root", 8, 0.0)
+    tube("Pavilion", P(0, 0, 0), P(0, 0, -0.48), 0.31, "Gem", "root", 8, 0.0)
+    tube("Girdle", P(0, 0, -0.03), P(0, 0, 0.03), 0.318, "GemCore", "root", 8)
+
+
 MODELS = {"Pine": pine, "Rock": rock, "GatePole": gate_pole, "GateFlagRed": gate_flag("FlagRed"),
-          "GateFlagBlue": gate_flag("FlagBlue"), "Finish": finish}
+          "GateFlagBlue": gate_flag("FlagBlue"), "Finish": finish, "Gem": gem}
 
 
 def main():

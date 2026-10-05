@@ -4,6 +4,7 @@ helpers kept): a soft round sprite (a texture made here) and the board's snow:
 - Spray: powder thrown off the board's edge while it carves hard (continuous; Board.as plays and
   stops it on the rider's Spray entity).
 - Powder: a burst of snow as the board lands (Board.as restarts it on the rider's Powder entity).
+- GemSparkle: a gem taken, a bright burst of glints (Prefabs/GemSparkle, gems.py, plays it once).
 
 Each effect starts from the engine's own new effect (asset_create, then asset_data_read), so the
 fields this does not set keep the engine's defaults. Initializers and behaviors are stored by their
@@ -212,5 +213,15 @@ def powder(t):
                    texture=DOT)]
 
 
-for n, b in (("Spray", spray), ("Powder", powder)):
+# GemSparkle: glints thrown out in every direction, additive so they shine, falling a little.
+def gem_sparkle(t):
+    return [system(t, "Glints", 26,
+                   [position(kind=1, radius=0.15), lifetime(0.4, 0.8),
+                    velocity((0, 1.0, 0), (0.6, 0.6, 0.6), outward=3.2, kind=1, radius=0.15),
+                    size((0.12, 0.12), (0.22, 0.22)), color((0.55, 0.95, 1.0, 1.0), (1.0, 1.0, 1.0, 1.0))],
+                   [gravity(0.5), drag(2.0), size_over_life((0, 1.0), (1, 0.3)), alpha_over_life((0, 1), (1, 0))],
+                   texture=DOT, blend=ADDITIVE, soft=False)]
+
+
+for n, b in (("Spray", spray), ("Powder", powder), ("GemSparkle", gem_sparkle)):
     effect(n, b)

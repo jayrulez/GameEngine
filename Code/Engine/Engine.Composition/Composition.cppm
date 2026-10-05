@@ -89,5 +89,6 @@ export namespace engine
     // 36 = + SplineHit + SceneSplines.
     // 37 = +SceneScripts: SceneScripts.of(scene), the scene's script time, send/emit, addBehavior.
     // 38 = +Save: Save.getInt/setInt/..., the run's save data (kept between runs).
-    inline constexpr usize kSubsystemFacadeNameCount = 38;
+    // 40 = + TwoBoneIkComponent + AimIkComponent (inverse kinematics on scene entities).
+    inline constexpr usize kSubsystemFacadeNameCount = 40;
 }

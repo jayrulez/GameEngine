@@ -9,6 +9,11 @@
 > P0a BUILT 2026-10-05: decided for the importer's prefab, no skeleton correction (below).
 > P1 BUILT 2026-10-05: `:ik` (SolveTwoBone, SolveAim) with the solver tests below. Two
 > refinements of the text: bone lengths are the pose's own, and the aim's pole is an up direction.
+> P2 BUILT 2026-10-05: TwoBoneIkComponent and AimIkComponent (`engine.animation:ik`), their
+> managers before the animation managers, fades, order, the three script calls, debugDraw while a
+> scene runs. Two notes: world matrices are cached only after PostUpdate, so the managers compose
+> the targets' and the mesh's worlds fresh; the aim's `up` is an entity the up axis leans toward.
+> The editor's gizmo for a selected IK component moves to P4 with the bone pickers.
 > Seeded in weekly_backlog.md (2026-08-26). User ruling 2026-10-05: after Snowline's P1, before
 > its P2, spec first, and "when doing IK, it must be solid". Companion: root-motion.md (the two
 > share the pose seam of P0). Read CONVENTIONS.md first.

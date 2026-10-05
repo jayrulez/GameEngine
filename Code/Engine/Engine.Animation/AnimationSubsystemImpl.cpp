@@ -20,6 +20,8 @@ import foundation.propertyanimation.resource;
 import foundation.core;
 import foundation.script;
 import foundation.script.facades; // ComponentOf<T> + RegisterExtra* (the script `.of` surface, Track A)
+import foundation.runtime;
+import engine.render; // RenderSubsystem::DebugScene (the IK components' debugDraw)
 
 using namespace foundation::core;
 using namespace foundation::animation;
@@ -79,8 +81,85 @@ namespace engine::animation
         builder.Method<&SceneAnimation::setFloat>("setFloat", {"entity", "name", "value"});
         builder.Method<&SceneAnimation::setBool>("setBool", {"entity", "name", "value"});
         builder.Method<&SceneAnimation::setTrigger>("setTrigger", {"entity", "name"});
+        builder.Method<&SceneAnimation::setIkTarget>("setIkTarget", {"entity", "worldPosition"});
+        builder.Method<&SceneAnimation::ikReached>("ikReached", {"entity"});
+        builder.Method<&SceneAnimation::ikError>("ikError", {"entity"});
         builder.Method<&SceneAnimation::of>("of", {"scene"});
         builder.Constructor(); // some backends only materialize constructible foreign classes
+    }
+
+    // Inverse kinematics (inverse-kinematics.md P2). The bone fields carry `boneName` (the same
+    // attribute in both engines): the inspector offers the animator's bones for them.
+    REFLECT_VALUE(TwoBoneIkComponent, "rtti::engine::animation")
+    {
+        builder.Attribute("displayName", String(u8"Two Bone IK"))
+            .Attribute("category", String(u8"Animation"))
+            .Method<&foundation::script::ComponentOf<TwoBoneIkComponent>, TwoBoneIkComponent>("of")
+            .Property<&TwoBoneIkComponent::startBone>("startBone")
+            .PropAttribute("boneName", true)
+            .PropAttribute("description", String(u8"The chain's first bone (a thigh, an upper arm)."))
+            .Property<&TwoBoneIkComponent::midBone>("midBone")
+            .PropAttribute("boneName", true)
+            .PropAttribute("description", String(u8"The joint that bends (a knee, an elbow)."))
+            .Property<&TwoBoneIkComponent::endBone>("endBone")
+            .PropAttribute("boneName", true)
+            .PropAttribute("description", String(u8"The bone that reaches the target (a foot, a hand)."))
+            .Property<&TwoBoneIkComponent::target>("target")
+            .PropAttribute("description",
+                           String(u8"The entity to reach. Empty: the point a script sets, else this entity."))
+            .Property<&TwoBoneIkComponent::matchRotation>("matchRotation")
+            .PropAttribute("description", String(u8"The end bone takes the target's rotation as well."))
+            .Property<&TwoBoneIkComponent::pole>("pole")
+            .PropAttribute("description", String(u8"Optional: the joint bends toward this entity."))
+            .Property<&TwoBoneIkComponent::hingeAxis>("hingeAxis")
+            .PropAttribute("description",
+                           String(u8"The joint's axis in the first bone's space, for a chain that is straight "
+                                  u8"with no pole and a straight bind pose."))
+            .Property<&TwoBoneIkComponent::weight>("weight")
+            .PropAttribute("range", Float4{0.0f, 1.0f, 0.01f, 0.0f})
+            .Property<&TwoBoneIkComponent::fadeSeconds>("fadeSeconds")
+            .PropAttribute("range", Float4{0.0f, 4.0f, 0.05f, 0.0f})
+            .Property<&TwoBoneIkComponent::active>("active")
+            .Property<&TwoBoneIkComponent::order>("order")
+            .PropAttribute("description", String(u8"Lower runs first, across the animator's IK components."))
+            .Property<&TwoBoneIkComponent::debugDraw>("debugDraw")
+            .PropAttribute("description", String(u8"Draw the chain and its target while the scene runs."));
+    }
+
+    REFLECT_VALUE(AimIkBone, "rtti::engine::animation")
+    {
+        builder.Property<&AimIkBone::bone>("bone")
+            .PropAttribute("boneName", true)
+            .Property<&AimIkBone::share>("share")
+            .PropAttribute("range", Float4{0.0f, 1.0f, 0.01f, 0.0f})
+            .PropAttribute("description", String(u8"This bone's part of the turn still to go (the last: 1)."));
+    }
+
+    REFLECT_VALUE(AimIkComponent, "rtti::engine::animation")
+    {
+        builder.Attribute("displayName", String(u8"Aim IK"))
+            .Attribute("category", String(u8"Animation"))
+            .Method<&foundation::script::ComponentOf<AimIkComponent>, AimIkComponent>("of")
+            .Property<&AimIkComponent::bones>("bones")
+            .PropAttribute("description", String(u8"Root first; the last bone aims (a spine: 0.3, 0.5, 1)."))
+            .Property<&AimIkComponent::target>("target")
+            .PropAttribute("description",
+                           String(u8"The entity to aim at. Empty: the point a script sets, else this entity."))
+            .Property<&AimIkComponent::up>("up")
+            .PropAttribute("description",
+                           String(u8"Optional: the up axis leans toward this entity (else the animated up)."))
+            .Property<&AimIkComponent::aimAxis>("aimAxis")
+            .Property<&AimIkComponent::upAxis>("upAxis")
+            .Property<&AimIkComponent::maxAngle>("maxAngle")
+            .PropAttribute("range", Float4{0.0f, 180.0f, 1.0f, 0.0f})
+            .PropAttribute("description", String(u8"Degrees from the animated direction."))
+            .Property<&AimIkComponent::weight>("weight")
+            .PropAttribute("range", Float4{0.0f, 1.0f, 0.01f, 0.0f})
+            .Property<&AimIkComponent::fadeSeconds>("fadeSeconds")
+            .PropAttribute("range", Float4{0.0f, 4.0f, 0.05f, 0.0f})
+            .Property<&AimIkComponent::active>("active")
+            .Property<&AimIkComponent::order>("order")
+            .Property<&AimIkComponent::debugDraw>("debugDraw");
     }
 
     REFLECT_VALUE(InstancedSkinningComponent, "rtti::engine::animation")
@@ -140,6 +219,10 @@ namespace engine::animation
             RttiRegisterValue_SkeletalAnimationComponent();
             RttiRegisterValue_AnimationGraphComponent();
             RttiRegisterValue_InstancedSkinningComponent();
+            RttiRegisterValue_TwoBoneIkComponent();
+            RttiRegisterValue_AimIkBone();
+            core::RegisterArrayType<AimIkBone>(); // the bone list (list editor + scripts)
+            RttiRegisterValue_AimIkComponent();
             RttiRegisterEnum_PropertyLoopMode();
             RttiRegisterValue_PropertyAnimatorComponent();
             return true;
@@ -161,7 +244,9 @@ namespace engine::animation
             {&core::TypeOf<SkeletalAnimationComponent>(), u8"SkeletalAnimationComponent"},
             {&core::TypeOf<AnimationGraphComponent>(), u8"AnimationGraphComponent"},
             {&core::TypeOf<InstancedSkinningComponent>(), u8"InstancedSkinningComponent"},
-            {&core::TypeOf<PropertyAnimatorComponent>(), u8"PropertyAnimatorComponent"}};
+            {&core::TypeOf<PropertyAnimatorComponent>(), u8"PropertyAnimatorComponent"},
+            {&core::TypeOf<TwoBoneIkComponent>(), u8"TwoBoneIkComponent"},
+            {&core::TypeOf<AimIkComponent>(), u8"AimIkComponent"}};
         for (const Entry& component : components)
         {
             GlobalTypeRegistry().Register(*component.type);
@@ -179,6 +264,99 @@ namespace engine::animation
 
 namespace engine::animation
 {
+    // The IK components on an entity, as the script calls see them.
+    namespace
+    {
+        template <typename F>
+        void ForEachIk(foundation::scene::Scene* scene, foundation::scene::EntityHandle entity, F&& visit)
+        {
+            if (scene == nullptr)
+            {
+                return;
+            }
+            if (auto* twoBone = scene->GetSystem<TwoBoneIkComponentManager>())
+            {
+                if (TwoBoneIkComponent* c = twoBone->Get(entity))
+                {
+                    visit(c->runtime);
+                }
+            }
+            if (auto* aim = scene->GetSystem<AimIkComponentManager>())
+            {
+                if (AimIkComponent* c = aim->Get(entity))
+                {
+                    visit(c->runtime);
+                }
+            }
+        }
+    }
+
+    void SceneAnimation::setIkTarget(foundation::script::Entity entity, Float3 worldPosition) const
+    {
+        ForEachIk(scene, entity.Handle(),
+                  [&](IkRuntime& rt)
+                  {
+                      rt.hasScriptTarget = true;
+                      rt.scriptTarget = worldPosition;
+                  });
+    }
+
+    bool SceneAnimation::ikReached(foundation::script::Entity entity) const
+    {
+        bool any = false;
+        bool all = true;
+        ForEachIk(scene, entity.Handle(),
+                  [&](IkRuntime& rt)
+                  {
+                      any = true;
+                      all = all && rt.status == IkStatus::Solving && rt.modifier.Get() != nullptr &&
+                            rt.modifier->solved && rt.modifier->result.reached;
+                  });
+        return any && all;
+    }
+
+    f32 SceneAnimation::ikError(foundation::script::Entity entity) const
+    {
+        f32 worst = 0.0f;
+        ForEachIk(scene, entity.Handle(),
+                  [&](IkRuntime& rt)
+                  {
+                      if (rt.modifier.Get() != nullptr && rt.modifier->solved)
+                      {
+                          worst = Max(worst, rt.modifier->result.error);
+                      }
+                  });
+        return worst;
+    }
+
+    void AnimationSubsystem::Update(f32)
+    {
+        foundation::runtime::Context* context = GetContext();
+        auto* render = context != nullptr ? context->GetSubsystem<engine::render::RenderSubsystem>() : nullptr;
+        if (render == nullptr)
+        {
+            return;
+        }
+        for (foundation::scene::Scene* scene : m_scenes)
+        {
+            auto* twoBone = scene->GetSystem<TwoBoneIkComponentManager>();
+            auto* aim = scene->GetSystem<AimIkComponentManager>();
+            if ((twoBone == nullptr || twoBone->Count() == 0) && (aim == nullptr || aim->Count() == 0))
+            {
+                continue;
+            }
+            foundation::render::debug::DebugDraw& draw = render->DebugScene(*scene);
+            if (twoBone != nullptr)
+            {
+                twoBone->DrawDebug(draw);
+            }
+            if (aim != nullptr)
+            {
+                aim->DrawDebug(draw);
+            }
+        }
+    }
+
     const engine::DomainModule& AnimationDomain() noexcept
     {
         static const foundation::resource::ResourceModule* const kResources[] = {

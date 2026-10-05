@@ -547,6 +547,15 @@ export namespace engine::animation
             }
         }
 
+        // --- inverse kinematics (TwoBoneIkComponent / AimIkComponent on the entity) ---
+        // The world point the entity's IK components reach for while they name no target entity.
+        // Defined in the implementation unit (this partition cannot see :ik).
+        void setIkTarget(foundation::script::Entity entity, Float3 worldPosition) const;
+        // Whether every IK component on the entity reached its target on the last solve, and the
+        // largest miss (metres for a two-bone chain, radians for an aim).
+        [[nodiscard]] bool ikReached(foundation::script::Entity entity) const;
+        [[nodiscard]] f32 ikError(foundation::script::Entity entity) const;
+
         [[nodiscard]] static SceneAnimation of(foundation::script::Scene sceneHandle)
         {
             return SceneAnimation{sceneHandle.scene};

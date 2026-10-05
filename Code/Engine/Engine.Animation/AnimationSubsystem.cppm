@@ -22,6 +22,9 @@ import foundation.scene; // Scene
 import engine.scene; // SceneSubsystem (to register as scene-aware)
 import :components;
 import :propertyanimator;
+import :ik;
+
+using namespace foundation::core;
 
 export namespace engine::animation
 {
@@ -34,15 +37,59 @@ export namespace engine::animation
         scene.AddSystem<SkeletalAnimationComponentManager>();
         scene.AddSystem<InstancedSkinningComponentManager>(); // crowd skinning (shared pose pool)
         scene.AddSystem<PropertyAnimatorComponentManager>();  // reflected property-curve animation
+        AddIkSceneManagers(scene); // inverse kinematics: pose modifiers on the players above
     }
 
-    class AnimationSubsystem final : public foundation::runtime::Subsystem
+    // Registers the reflection, and draws the IK components that ask for it (debugDraw) into each
+    // running scene's debug list (the navigation and physics precedent).
+    class AnimationSubsystem final : public foundation::runtime::Subsystem,
+                                     public foundation::scene::ISceneObserver
     {
+    public:
+        void OnSystemsReady(foundation::scene::Scene& scene) override { m_scenes.PushBack(&scene); }
+        void OnDestroying(foundation::scene::Scene& scene) override
+        {
+            for (usize i = 0; i < m_scenes.Size(); ++i)
+            {
+                if (m_scenes[i] == &scene)
+                {
+                    m_scenes.RemoveAt(i);
+                    return;
+                }
+            }
+        }
+        // Defined in the implementation unit (the render subsystem stays out of this interface).
+        void Update(f32 deltaTime) override;
+
     protected:
         void OnInit() override
         {
             RegisterAnimationComponentReflection(); // tooling: reflected components (idempotent)
         }
+        void OnReady() override
+        {
+            if (foundation::runtime::Context* context = GetContext())
+            {
+                if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
+                {
+                    scenes->RegisterObserver(this, foundation::scene::SceneLifecycleStage::SystemsReady);
+                    scenes->RegisterObserver(this, foundation::scene::SceneLifecycleStage::Destroying);
+                }
+            }
+        }
+        void OnShutdown() override
+        {
+            if (foundation::runtime::Context* context = GetContext())
+            {
+                if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
+                {
+                    scenes->UnregisterObserver(this);
+                }
+            }
+        }
+
+    private:
+        Array<foundation::scene::Scene*> m_scenes;
     };
 
 } // namespace foundation::animation

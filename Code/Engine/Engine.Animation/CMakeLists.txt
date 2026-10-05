@@ -15,6 +15,7 @@ target_sources(Engine.Animation
         FILE_SET animation_subsystem_modules TYPE CXX_MODULES FILES
             AnimationComponents.cppm
             PropertyAnimatorComponent.cppm
+            IkComponents.cppm
             AnimationSubsystem.cppm
             AnimationSubsystemModule.cppm)
 

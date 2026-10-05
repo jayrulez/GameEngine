@@ -2,6 +2,7 @@
 
 add_executable(Engine.Animation.Tests
     ResourceRefTests.cpp
+    IkComponentTests.cpp
     PropertyAnimatorTests.cpp
     TestsMain.cpp)
 

@@ -29,6 +29,12 @@
 > every solve (foot IK takes it before the pelvis moves), never from the bind pose: it keeps any
 > gap the baked rig left between the shin and the foot instead of snapping it shut. An end the
 > start carries but the mid does not, or one above the chain, is refused (no meeting point).
+> P4 (proof) BUILT 2026-10-05: Sky Hopper's hero (FootIk with its detached feet, off in the air;
+> the head follows the nearest coin) and Snowline's rider (the head looks down the course line;
+> the next gate once P2 adds gates), authored through MCP; component_set learned lists of
+> structures for it. The graph page's preview running a selected entity's IK is DEFERRED: the
+> graph page previews an asset, with no entity to take IK from; seed it with the page's own IK
+> preview controls when a game needs one.
 > Seeded in weekly_backlog.md (2026-08-26). User ruling 2026-10-05: after Snowline's P1, before
 > its P2, spec first, and "when doing IK, it must be solid". Companion: root-motion.md (the two
 > share the pose seam of P0). Read CONVENTIONS.md first.

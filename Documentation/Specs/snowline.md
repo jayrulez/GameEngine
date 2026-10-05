@@ -1,7 +1,8 @@
 # Snowline - a downhill snowboard time trial with tricks, the third demo game
 
-> STATUS: PLAN 2026-10-04, agreed in outline by the user, who named it Snowline; P0 under way
-> (gap 1, a board's momentum on a slope, closed in 9c9fa4a2 and c73ba3e9).
+> STATUS: PLAN 2026-10-04, agreed in outline by the user, who named it Snowline; P0 built
+> 2026-10-05 and runs in the editor and the browser (measurements below; the Deck's to come).
+> Gap 1, a board's momentum on a slope, closed in 9c9fa4a2 and c73ba3e9.
 >
 > Picked for what it proves about the engine (user and the Sedulous session, 2026-10-04): Sky
 > Hopper covers the character controller, scripts, UI, save, audio and the web; PaperKid covers
@@ -129,24 +130,32 @@ The scene as built:
 
 | | Value |
 |---|---|
-| Heightfield samples, spacing, height range | |
-| Course length (m) | |
-| Vegetation layer(s), instance count | |
+| Heightfield samples, spacing, height range | 513 x 513, 1 m (513 m square), 0 to 120 m |
+| Course length (m) | 438 along the line (400 straight down), 72 m of drop, 21 points |
+| Vegetation layer(s), instance count | pines (splat layer 2, 0.025/m2), rocks (base layer, 0.0015/m2); count not measured |
 
 The cooked pack, by entry (packs are stored uncompressed; the web gets GitHub Pages' gzip):
 
 | Entry | Raw | Gzipped |
 |---|---|---|
-| Heightfield | | |
-| Splatmap | | |
-| Vegetation (mask, instances, meshes) | | |
-| Rider | | |
-| Everything else | | |
+| Heightfield | 0.79 MB | 0.47 MB |
+| Splatmap (512 x 512, top-K weights and indices) | 2.10 MB | 0.14 MB |
+| Terrain layers (four 256 x 256 textures, the palette arrays) | 1.22 MB | 0.36 MB |
+| Vegetation (pine and rock meshes; the layers ride the scene) | 0.04 MB | 0.01 MB |
+| Rider (a stand-in cylinder) and everything else | 0.03 MB | 0.01 MB |
+| The pack (Content-bc.pak) | 4.19 MB | 1.00 MB |
 
 Running:
 
 | | Web (Chrome) | Steam Deck |
 |---|---|---|
-| Download, raw / gzipped (pack + wasm) | | |
-| Memory | | |
-| Frame time | | |
+| Download, raw / gzipped (pack + wasm) | 16.3 MB / 4.6 MB (wasm 11.9 / 3.5) | 4.2 MB pack + the player |
+| Memory | 142 MB (the tab, Chrome's Task Manager) | |
+| Frame time | about 57 fps (GTX 1060, Chrome on D3D12) | |
+
+Measured 2026-10-05. The first web run found an engine bug: a compressed texture's mip tail went
+up in texels where WebGPU takes whole blocks (a2f2d5dc), the refused uploads ending in a GPU hang
+on D3D12; with the fix it runs. Also found by P0, all fixed with tests: the run clock stood still
+without a game script (3c7f0dc8), and a spline hit gave no distance along the curve
+(1a82bf77, b18ea40a). Open: the pines render white close up and speckle blue far off; the
+course's packed snow barely shows; the scene has no environment or post settings yet.

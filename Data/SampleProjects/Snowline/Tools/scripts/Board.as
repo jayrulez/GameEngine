@@ -28,12 +28,19 @@ class Board
     [0.5, "Turning in a tuck (share of the full carve)"] float tuckTurn;
     [5.5, "Upward speed of a jump (m/s)"] float jumpSpeed;
     [6.0, "Distance before the end of the course line that counts as the finish (m)"] float finishMargin;
+    ["asset:Prefab", "The board's mark in the snow (Prefabs/TrackMark)"] Guid@ trackMark;
+    [1.5, "Distance between the track's marks (m)"] float trackSpacing;
+    [2.0, "Slowest speed that leaves a track (m/s)"] float trackSpeed;
+    [0.45, "Carve (share of a full one) above which the board throws spray"] float sprayCarve;
+    [6.0, "Slowest speed that throws spray (m/s)"] float spraySpeed;
 
     private Float3 m_start;
     private float m_yaw = 0.0f;   // radians; 0 faces +Z
     private float m_lean = 0.0f;  // the eased carve, -1 heel .. +1 toe
     private bool m_airborne = false;
     private Entity@ m_figure;     // the skinned mesh the graph drives
+    private float m_sinceMark = 0.0f; // metres ridden since the last mark of the track
+    private bool m_spraying = false;
 
     Board(Entity@ entity) { @self = entity; }
 
@@ -117,6 +124,8 @@ class Board
         }
         c.drive(v);
         face(v, d);
+        track(at, v, grounded, d);
+        snow(v, steer, grounded);
         animate(steer, tuck, !grounded, grab && !grounded, d);
 
         if (course !is null && course.isValid() &&
@@ -170,6 +179,63 @@ class Board
         }
         SplineHit@ here = SceneSplines::of(self.scene).closestPoint(course, at);
         return (here !is null && here.valid) ? here.distance : 0.0f;
+    }
+
+    // The board's track: a mark every `trackSpacing` metres on the snow, under the board, along the
+    // heading. None in the air, nor at a crawl.
+    private void track(Float3 at, Float3 v, bool grounded, float d)
+    {
+        float speed = Math::Sqrt(v.x * v.x + v.z * v.z);
+        if (!grounded || speed < trackSpeed || trackMark is null || trackMark.IsNil())
+        {
+            m_sinceMark = trackSpacing; // the first mark on touching down lands at once
+            return;
+        }
+        m_sinceMark += speed * d;
+        if (m_sinceMark < trackSpacing)
+        {
+            return;
+        }
+        m_sinceMark = 0.0f;
+        // The character's position is its capsule's centre; the board is 0.9 m below it.
+        Entity@ mark = ScenePrefabs::of(self.scene).spawn(trackMark, Float3(at.x, at.y - 0.9f, at.z));
+        if (mark !is null && mark.isValid())
+        {
+            mark.setRotationEuler(0.0f, Math::RadiansToDegrees(Math::Atan2(v.x, v.z)), 0.0f);
+        }
+    }
+
+    // The board's snow: spray off its edge while it carves hard and fast (the Spray child, played
+    // and stopped only on a change), and a burst of powder as it lands (the Powder child).
+    private void snow(Float3 v, float steer, bool grounded)
+    {
+        SceneParticles@ particles = SceneParticles::of(self.scene);
+        float speed = Math::Sqrt(v.x * v.x + v.z * v.z);
+        bool spraying = grounded && Math::Abs(steer) > sprayCarve && speed > spraySpeed;
+        if (spraying != m_spraying)
+        {
+            Entity@ spray = self.findChildByName("Spray");
+            if (spray !is null && spray.isValid())
+            {
+                if (spraying)
+                {
+                    particles.play(spray);
+                }
+                else
+                {
+                    particles.stop(spray);
+                }
+            }
+            m_spraying = spraying;
+        }
+        if (grounded && m_airborne)
+        {
+            Entity@ powder = self.findChildByName("Powder");
+            if (powder !is null && powder.isValid())
+            {
+                particles.restart(powder);
+            }
+        }
     }
 
     // The rider faces where it goes, easing round.

@@ -1,0 +1,26 @@
+<root>
+	<string name="guid">47956253-d6c2-4230-800d-2134bd5e2f32</string>
+	<string name="typeNamespace">rtti::pipeline::texture</string>
+	<string name="typeName">TextureAsset</string>
+	<array name="dataVersions" count="1">
+		<u64 name="type">18429015988889570204</u64>
+		<u32 name="version">3</u32>
+	</array>
+	<object name="payload">
+		<string name="fileName">SoftDot.png</string>
+		<u32 name="colorSpace">0</u32>
+		<u8 name="usage">0</u8>
+		<u8 name="compression">0</u8>
+		<u32 name="embeddedWidth">0</u32>
+		<u32 name="embeddedHeight">0</u32>
+		<u8 name="shape">0</u8>
+		<u8 name="minFilter">3</u8>
+		<u8 name="magFilter">1</u8>
+		<u8 name="wrapU">0</u8>
+		<u8 name="wrapV">0</u8>
+		<u8 name="wrapW">0</u8>
+		<bool name="generateMipmaps">true</bool>
+		<f32 name="anisotropy">16</f32>
+		<string name="sourceHint"/>
+	</object>
+</root>

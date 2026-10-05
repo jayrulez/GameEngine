@@ -149,10 +149,15 @@ def build():
     heading = math.degrees(math.atan2(nxt[0] - top[0], nxt[2] - top[2]))
     rider = d.entity("Rider", (top[0], top[1] + 1.0, top[2]), yaw(heading))
     d.add(rider, "physics.Character", radius=0.35, halfHeight=0.55, maxSlopeDegrees=60.0)
-    d.script(rider, (BOARD, {"course": ("entity", course), "autopilot": AUTOPILOT}))
+    d.script(rider, (BOARD, {"course": ("entity", course), "autopilot": AUTOPILOT,
+                             "trackMark": ("asset", asset("PrefabDocument", "TrackMark", "Prefabs"))}))
     # The model (blender/rider.py): its origin is the snow under the board, the character's is its
     # capsule's centre, 0.9 m up.
     d.instance(RIDER_MODEL, (0, -0.9, 0), parent=rider, ops=rider_ops())
+    # The board's snow (particles.py), at the board: spray off its edge, powder as it lands.
+    for fx in ("Spray", "Powder"):
+        e = d.entity(fx, (0, -0.85, 0), parent=rider)
+        d.add(e, "particle_effect", effect=asset("ParticleEffectAsset", fx))
 
     cam = d.entity("Camera", (top[0], top[1] + 4.0, top[2] - 8.0))
     d.add(cam, "camera", farZ=1200.0, fovYRadians=1.05)

@@ -1,0 +1,327 @@
+<root>
+	<string name="guid">83bc268f-723e-4578-ab6f-0026f089357a</string>
+	<string name="typeNamespace">rtti::pipeline::animation</string>
+	<string name="typeName">AnimationGraphAsset</string>
+	<array name="dataVersions" count="1">
+		<u64 name="type">11629658473614327302</u64>
+		<u32 name="version">0</u32>
+	</array>
+	<object name="payload">
+		<string name="fileName"/>
+		<array name="paramNames" count="5">
+			<string>Lean</string>
+			<string>Tuck</string>
+			<string>Airborne</string>
+			<string>Grab</string>
+			<string>Crashed</string>
+		</array>
+		<array name="paramTypes" count="5">
+			<u8>0</u8>
+			<u8>2</u8>
+			<u8>2</u8>
+			<u8>2</u8>
+			<u8>2</u8>
+		</array>
+		<array name="paramFloats" count="5">
+			<f32>0</f32>
+			<f32>0</f32>
+			<f32>0</f32>
+			<f32>0</f32>
+			<f32>0</f32>
+		</array>
+		<array name="paramInts" count="5">
+			<i32>0</i32>
+			<i32>0</i32>
+			<i32>0</i32>
+			<i32>0</i32>
+			<i32>0</i32>
+		</array>
+		<array name="paramBools" count="5">
+			<u8>0</u8>
+			<u8>0</u8>
+			<u8>0</u8>
+			<u8>0</u8>
+			<u8>0</u8>
+		</array>
+		<array name="layers" count="1">
+			<string name="name">Base</string>
+			<i32 name="defaultState">0</i32>
+			<u8 name="blendMode">0</u8>
+			<f32 name="weight">1</f32>
+			<array name="maskWeights" count="0"/>
+			<array name="states" count="6">
+				<string name="name">Ride</string>
+				<f32 name="speed">1</f32>
+				<bool name="loop">true</bool>
+				<u8 name="kind">1</u8>
+				<string name="clipRef">00000000-0000-0000-0000-000000000000</string>
+				<i32 name="paramIndex">0</i32>
+				<i32 name="paramIndexX">-1</i32>
+				<i32 name="paramIndexY">-1</i32>
+				<array name="entryThresholds" count="3">
+					<f32>-1</f32>
+					<f32>0</f32>
+					<f32>1</f32>
+				</array>
+				<array name="entryPositions" count="0"/>
+				<array name="entryClips" count="3">
+					<string>b75d7d08-816d-4a8d-985f-3c8fc9a6184c</string>
+					<string>889f1178-25db-4e6f-b22a-1609f6517509</string>
+					<string>58cab22c-9526-4595-ba58-7f6f87d9b2f6</string>
+				</array>
+				<string name="name">Tuck</string>
+				<f32 name="speed">1</f32>
+				<bool name="loop">true</bool>
+				<u8 name="kind">0</u8>
+				<string name="clipRef">ee4ceb74-f4aa-4a5e-8dc2-f77c3350f71f</string>
+				<i32 name="paramIndex">-1</i32>
+				<i32 name="paramIndexX">-1</i32>
+				<i32 name="paramIndexY">-1</i32>
+				<array name="entryThresholds" count="0"/>
+				<array name="entryPositions" count="0"/>
+				<array name="entryClips" count="0"/>
+				<string name="name">Air</string>
+				<f32 name="speed">1</f32>
+				<bool name="loop">true</bool>
+				<u8 name="kind">0</u8>
+				<string name="clipRef">ef098e98-9eb0-4eec-8fc4-69f6bbd9bdf9</string>
+				<i32 name="paramIndex">-1</i32>
+				<i32 name="paramIndexX">-1</i32>
+				<i32 name="paramIndexY">-1</i32>
+				<array name="entryThresholds" count="0"/>
+				<array name="entryPositions" count="0"/>
+				<array name="entryClips" count="0"/>
+				<string name="name">Grab</string>
+				<f32 name="speed">1</f32>
+				<bool name="loop">true</bool>
+				<u8 name="kind">0</u8>
+				<string name="clipRef">d19eb512-6a86-4d13-b6dc-e33e38639f0e</string>
+				<i32 name="paramIndex">-1</i32>
+				<i32 name="paramIndexX">-1</i32>
+				<i32 name="paramIndexY">-1</i32>
+				<array name="entryThresholds" count="0"/>
+				<array name="entryPositions" count="0"/>
+				<array name="entryClips" count="0"/>
+				<string name="name">Land</string>
+				<f32 name="speed">1</f32>
+				<bool name="loop">false</bool>
+				<u8 name="kind">0</u8>
+				<string name="clipRef">9d098f70-f503-4445-9143-3ae2f13f6949</string>
+				<i32 name="paramIndex">-1</i32>
+				<i32 name="paramIndexX">-1</i32>
+				<i32 name="paramIndexY">-1</i32>
+				<array name="entryThresholds" count="0"/>
+				<array name="entryPositions" count="0"/>
+				<array name="entryClips" count="0"/>
+				<string name="name">Crash</string>
+				<f32 name="speed">1</f32>
+				<bool name="loop">false</bool>
+				<u8 name="kind">0</u8>
+				<string name="clipRef">aaae57d8-6519-49ee-98ab-c145b483a4b4</string>
+				<i32 name="paramIndex">-1</i32>
+				<i32 name="paramIndexX">-1</i32>
+				<i32 name="paramIndexY">-1</i32>
+				<array name="entryThresholds" count="0"/>
+				<array name="entryPositions" count="0"/>
+				<array name="entryClips" count="0"/>
+			</array>
+			<array name="transitions" count="15">
+				<i32 name="src">0</i32>
+				<i32 name="dst">5</i32>
+				<f32 name="duration">0.12</f32>
+				<bool name="hasExitTime">false</bool>
+				<f32 name="exitTime">1</f32>
+				<i32 name="priority">0</i32>
+				<array name="conditions" count="1">
+					<i32 name="paramIndex">4</i32>
+					<u8 name="op">0</u8>
+					<f32 name="threshold">1</f32>
+				</array>
+				<i32 name="src">1</i32>
+				<i32 name="dst">5</i32>
+				<f32 name="duration">0.12</f32>
+				<bool name="hasExitTime">false</bool>
+				<f32 name="exitTime">1</f32>
+				<i32 name="priority">0</i32>
+				<array name="conditions" count="1">
+					<i32 name="paramIndex">4</i32>
+					<u8 name="op">0</u8>
+					<f32 name="threshold">1</f32>
+				</array>
+				<i32 name="src">2</i32>
+				<i32 name="dst">5</i32>
+				<f32 name="duration">0.12</f32>
+				<bool name="hasExitTime">false</bool>
+				<f32 name="exitTime">1</f32>
+				<i32 name="priority">0</i32>
+				<array name="conditions" count="1">
+					<i32 name="paramIndex">4</i32>
+					<u8 name="op">0</u8>
+					<f32 name="threshold">1</f32>
+				</array>
+				<i32 name="src">3</i32>
+				<i32 name="dst">5</i32>
+				<f32 name="duration">0.12</f32>
+				<bool name="hasExitTime">false</bool>
+				<f32 name="exitTime">1</f32>
+				<i32 name="priority">0</i32>
+				<array name="conditions" count="1">
+					<i32 name="paramIndex">4</i32>
+					<u8 name="op">0</u8>
+					<f32 name="threshold">1</f32>
+				</array>
+				<i32 name="src">4</i32>
+				<i32 name="dst">5</i32>
+				<f32 name="duration">0.12</f32>
+				<bool name="hasExitTime">false</bool>
+				<f32 name="exitTime">1</f32>
+				<i32 name="priority">0</i32>
+				<array name="conditions" count="1">
+					<i32 name="paramIndex">4</i32>
+					<u8 name="op">0</u8>
+					<f32 name="threshold">1</f32>
+				</array>
+				<i32 name="src">5</i32>
+				<i32 name="dst">0</i32>
+				<f32 name="duration">0.25</f32>
+				<bool name="hasExitTime">false</bool>
+				<f32 name="exitTime">1</f32>
+				<i32 name="priority">0</i32>
+				<array name="conditions" count="1">
+					<i32 name="paramIndex">4</i32>
+					<u8 name="op">0</u8>
+					<f32 name="threshold">0</f32>
+				</array>
+				<i32 name="src">0</i32>
+				<i32 name="dst">2</i32>
+				<f32 name="duration">0.15</f32>
+				<bool name="hasExitTime">false</bool>
+				<f32 name="exitTime">1</f32>
+				<i32 name="priority">0</i32>
+				<array name="conditions" count="1">
+					<i32 name="paramIndex">2</i32>
+					<u8 name="op">0</u8>
+					<f32 name="threshold">1</f32>
+				</array>
+				<i32 name="src">1</i32>
+				<i32 name="dst">2</i32>
+				<f32 name="duration">0.15</f32>
+				<bool name="hasExitTime">false</bool>
+				<f32 name="exitTime">1</f32>
+				<i32 name="priority">0</i32>
+				<array name="conditions" count="1">
+					<i32 name="paramIndex">2</i32>
+					<u8 name="op">0</u8>
+					<f32 name="threshold">1</f32>
+				</array>
+				<i32 name="src">0</i32>
+				<i32 name="dst">1</i32>
+				<f32 name="duration">0.2</f32>
+				<bool name="hasExitTime">false</bool>
+				<f32 name="exitTime">1</f32>
+				<i32 name="priority">0</i32>
+				<array name="conditions" count="1">
+					<i32 name="paramIndex">1</i32>
+					<u8 name="op">0</u8>
+					<f32 name="threshold">1</f32>
+				</array>
+				<i32 name="src">1</i32>
+				<i32 name="dst">0</i32>
+				<f32 name="duration">0.2</f32>
+				<bool name="hasExitTime">false</bool>
+				<f32 name="exitTime">1</f32>
+				<i32 name="priority">0</i32>
+				<array name="conditions" count="1">
+					<i32 name="paramIndex">1</i32>
+					<u8 name="op">0</u8>
+					<f32 name="threshold">0</f32>
+				</array>
+				<i32 name="src">2</i32>
+				<i32 name="dst">3</i32>
+				<f32 name="duration">0.15</f32>
+				<bool name="hasExitTime">false</bool>
+				<f32 name="exitTime">1</f32>
+				<i32 name="priority">0</i32>
+				<array name="conditions" count="1">
+					<i32 name="paramIndex">3</i32>
+					<u8 name="op">0</u8>
+					<f32 name="threshold">1</f32>
+				</array>
+				<i32 name="src">3</i32>
+				<i32 name="dst">2</i32>
+				<f32 name="duration">0.2</f32>
+				<bool name="hasExitTime">false</bool>
+				<f32 name="exitTime">1</f32>
+				<i32 name="priority">0</i32>
+				<array name="conditions" count="1">
+					<i32 name="paramIndex">3</i32>
+					<u8 name="op">0</u8>
+					<f32 name="threshold">0</f32>
+				</array>
+				<i32 name="src">2</i32>
+				<i32 name="dst">4</i32>
+				<f32 name="duration">0.06</f32>
+				<bool name="hasExitTime">false</bool>
+				<f32 name="exitTime">1</f32>
+				<i32 name="priority">0</i32>
+				<array name="conditions" count="1">
+					<i32 name="paramIndex">2</i32>
+					<u8 name="op">0</u8>
+					<f32 name="threshold">0</f32>
+				</array>
+				<i32 name="src">3</i32>
+				<i32 name="dst">4</i32>
+				<f32 name="duration">0.06</f32>
+				<bool name="hasExitTime">false</bool>
+				<f32 name="exitTime">1</f32>
+				<i32 name="priority">0</i32>
+				<array name="conditions" count="1">
+					<i32 name="paramIndex">2</i32>
+					<u8 name="op">0</u8>
+					<f32 name="threshold">0</f32>
+				</array>
+				<i32 name="src">4</i32>
+				<i32 name="dst">0</i32>
+				<f32 name="duration">0.15</f32>
+				<bool name="hasExitTime">true</bool>
+				<f32 name="exitTime">0.9</f32>
+				<i32 name="priority">0</i32>
+				<array name="conditions" count="0"/>
+			</array>
+		</array>
+		<array name="layerStatePositions" count="1">
+			<array count="6">
+				<object>
+					<f32 name="x">280</f32>
+					<f32 name="y">120</f32>
+				</object>
+				<object>
+					<f32 name="x">500</f32>
+					<f32 name="y">120</f32>
+				</object>
+				<object>
+					<f32 name="x">720</f32>
+					<f32 name="y">120</f32>
+				</object>
+				<object>
+					<f32 name="x">280</f32>
+					<f32 name="y">280</f32>
+				</object>
+				<object>
+					<f32 name="x">500</f32>
+					<f32 name="y">280</f32>
+				</object>
+				<object>
+					<f32 name="x">720</f32>
+					<f32 name="y">280</f32>
+				</object>
+			</array>
+		</array>
+		<array name="layerAnyStatePositions" count="1">
+			<object>
+				<f32 name="x">60</f32>
+				<f32 name="y">40</f32>
+			</object>
+		</array>
+	</object>
+</root>

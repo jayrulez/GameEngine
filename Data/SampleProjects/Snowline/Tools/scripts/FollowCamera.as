@@ -12,6 +12,7 @@ class FollowCamera
     [4.5, "Position spring rate (higher = snappier)"] float positionSmoothing;
     [0.35, "How long a crash shakes the camera (s)"] float shakeTime;
     [0.35, "How far a crash shakes it at first (m)"] float shakeAmount;
+    [40.0, "A target this far from the seat has jumped: the camera snaps to it (m)"] float snapDistance;
 
     // The follow works on an unshaken position; a crash's shake is added only to where the camera
     // is drawn, dying away, so it never pulls the follow off course.
@@ -63,6 +64,15 @@ class FollowCamera
             flat = 1.0f;
         }
         Float3 seat = Float3(at.x + backX / flat * distance, at.y + height, at.z + backZ / flat * distance);
+        // A jump of the target (a respawn back at the top) snaps the seat rather than flying the
+        // camera the length of the course behind it.
+        float jx = seat.x - cam.x;
+        float jy = seat.y - cam.y;
+        float jz = seat.z - cam.z;
+        if (jx * jx + jy * jy + jz * jz > snapDistance * snapDistance)
+        {
+            cam = seat;
+        }
         Float3 next = Float3::Lerp(cam, seat, clamp01(positionSmoothing * d));
         m_base = next;
         if (m_shake > 0.0f)

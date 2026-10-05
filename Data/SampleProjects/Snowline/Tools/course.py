@@ -7,16 +7,18 @@ Needs terrain.py <course> and importall.py <course> first: it places what they m
   forest floor's splat layer, rocks scattered thinly on open snow);
 - the course line: a spline down the middle of the course (terrain.py's points, with Catmull-Rom
   handles, stored as written);
-- the rider (P0: a stand-in, a capsule on the board script, Board.as) at the top gate;
+- the rider (Board.as on a character, the modelled rider and board under it) at the top gate;
 - the chase camera (FollowCamera.as).
 """
 import json, math, os, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from scenegen import Doc, mcp, yaw, num, vec
+from scenegen import Doc, mcp, yaw, num, vec, component_removed, component_added
 from look import look
 
 name = sys.argv[1] if len(sys.argv) > 1 else "Meadow"
+# course.py <course> autopilot: the rider steers itself (playtests and measurements).
+AUTOPILOT = "autopilot" in sys.argv[2:]
 info = json.load(open(os.path.join(HERE, "generated", name, name + ".json")))
 ASSETS = mcp("asset_list", {})["assets"]
 
@@ -56,7 +58,28 @@ PINE_MATERIALS = model_materials("Pine")
 ROCK_MATERIALS = model_materials("Rock")
 BOARD = asset("ScriptClassAsset", "Board")
 CAMERA = asset("ScriptClassAsset", "FollowCamera")
-CYLINDER = primitive("Cylinder")
+RIDER_MODEL = next(a["guid"] for a in ASSETS if a["type"] == "PrefabDocument"
+                   and a.get("group") == "Models/Rider/RiderModel")
+RIDER_GRAPH = asset("AnimationGraphAsset", "RiderGraph")
+
+
+def rider_ops():
+    """The rider model's import plays one clip; the board drives an animation graph (graph.py)
+    instead. Its prefab's root loses the clip animator, and the skinned mesh gains the graph (an
+    animator with no mesh entities of its own feeds its own entity's mesh)."""
+    import xml.etree.ElementTree as ET
+    root = ET.fromstring(mcp("prefab_read", {"guid": RIDER_MODEL})["xml"])
+    animator = mesh_owner = skeleton = None
+    for comp in root.find("array[@name='components']"):
+        kind = comp.find("string[@name='type']").text
+        owner = comp.find("string[@name='owner']").text
+        if kind == "skeletal_animation":
+            animator = owner
+            skeleton = comp.find("object[@name='data']/string[@name='skeleton']").text
+        elif kind == "mesh":
+            mesh_owner = owner
+    return [component_removed(animator, "skeletal_animation"),
+            component_added(mesh_owner, "animation_graph", skeleton=skeleton, graph=RIDER_GRAPH)]
 
 # The sun: low and from the side, so the slope's relief reads.
 SUN_ROT = (-0.4229, 0.2418, 0.1162, 0.8653)
@@ -126,13 +149,14 @@ def build():
     heading = math.degrees(math.atan2(nxt[0] - top[0], nxt[2] - top[2]))
     rider = d.entity("Rider", (top[0], top[1] + 1.0, top[2]), yaw(heading))
     d.add(rider, "physics.Character", radius=0.35, halfHeight=0.55, maxSlopeDegrees=60.0)
-    d.script(rider, (BOARD, {"course": ("entity", course)}))
-    body = d.entity("RiderBody", (0, 0, 0), scale=(0.7, 0.9, 0.7), parent=rider)
-    d.add(body, "mesh", mesh=CYLINDER, color={"r": 0.85, "g": 0.25, "b": 0.2, "a": 1.0})
+    d.script(rider, (BOARD, {"course": ("entity", course), "autopilot": AUTOPILOT}))
+    # The model (blender/rider.py): its origin is the snow under the board, the character's is its
+    # capsule's centre, 0.9 m up.
+    d.instance(RIDER_MODEL, (0, -0.9, 0), parent=rider, ops=rider_ops())
 
     cam = d.entity("Camera", (top[0], top[1] + 4.0, top[2] - 8.0))
     d.add(cam, "camera", farZ=1200.0, fovYRadians=1.05)
-    d.script(cam, (CAMERA, {"target": ("entity", rider), "distance": 7.0, "height": 3.0, "lookHeight": 1.0}))
+    d.script(cam, (CAMERA, {"target": ("entity", rider), "distance": 5.5, "height": 2.0, "lookHeight": 0.9}))
     return d
 
 

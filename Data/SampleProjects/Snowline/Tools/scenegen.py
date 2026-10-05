@@ -91,11 +91,14 @@ def fnv(name):
 
 
 def override(name, value):
-    """A script property override: a float, an int, or ('entity'|'asset', guid)."""
+    """A script property override: a bool, a float, an int, or ('entity'|'asset', guid)."""
     h = fnv(name)
     if isinstance(value, tuple):
         kind = {"entity": 7, "asset": 8}[value[0]]
         return '<u64 name="nameHash">%d</u64><u8 name="kind">%d</u8><string name="guid">%s</string>' % (h, kind, value[1])
+    if isinstance(value, bool):
+        return '<u64 name="nameHash">%d</u64><u8 name="kind">3</u8><bool name="boolean">%s</bool>' % (
+            h, "true" if value else "false")
     if isinstance(value, int) and not isinstance(value, bool):
         return '<u64 name="nameHash">%d</u64><u8 name="kind">2</u8><f64 name="number">%s</f64>' % (h, float(value))
     return '<u64 name="nameHash">%d</u64><u8 name="kind">1</u8><f64 name="number">%s</f64>' % (h, float(value))
@@ -146,15 +149,17 @@ class Doc:
         self.settings.append(settings("sceneScript", script=guid,
                                       overrides=[override(k, v) for k, v in overrides.items()]))
 
-    def instance(self, prefab, pos=(0, 0, 0), rot=(0, 0, 0, 1), scale=(1, 1, 1), parent=None):
+    def instance(self, prefab, pos=(0, 0, 0), rot=(0, 0, 0, 1), scale=(1, 1, 1), parent=None, ops=()):
+        """A prefab instance; `ops` its component overrides (component_removed / component_added),
+        as the editor writes them when a component is removed from or added to an instance."""
         self.instances.append(
             '<string name="prefab">%s</string><string name="parent">%s</string>%s%s%s'
             '<string name="rootLive">%s</string><string name="owner">%s</string>'
             '<string name="nestedSrcRoot">%s</string><string name="nextSibling">%s</string>'
             '<u8 name="placement">1</u8><array name="members" count="0"/><array name="destroyed" count="0"/>'
-            '<array name="transformOverrides" count="0"/><array name="componentOps" count="0"/>' % (
+            '<array name="transformOverrides" count="0"/><array name="componentOps" count="%d">%s</array>' % (
                 prefab, parent or NIL, vec("position", pos), vec("rotation", rot, "xyzw"), vec("scale", scale),
-                self.stable_id("instance"), NIL, NIL, NIL))
+                self.stable_id("instance"), NIL, NIL, NIL, len(ops), "".join(ops)))
 
     def xml(self):
         return ('<root><u32 name="magic">3586350318</u32><u32 name="version">3</u32><string name="name">%s</string>'
@@ -181,6 +186,23 @@ class Doc:
         for w in v.get("warnings", []):
             print("  warning:", w)
         return r.get("guid", guid)
+
+
+def component_removed(src, wire):
+    """An instance override: the prefab's entity `src` (its id in the prefab) loses its `wire`."""
+    return '<object><string name="src">%s</string><string name="type">%s</string><u8 name="op">2</u8></object>' % (
+        src, wire)
+
+
+def component_added(src, wire, **values):
+    """An instance override: the prefab's entity `src` gains a `wire` component with `values` (the
+    rest at the schema's defaults)."""
+    sch = schema(wire)
+    dv = sch["dataVersions"][0]
+    body = "".join(field_xml(f, values.get(f["key"])) for f in sch["fields"])
+    return ('<object><string name="src">%s</string><string name="type">%s</string><u8 name="op">1</u8>'
+            '<u8 name="form">1</u8><object name="data"><array name="dataVersions" count="1"><u64 name="type">%s</u64>'
+            '<u32 name="version">%s</u32></array>%s</object></object>' % (src, wire, dv["type"], dv["version"], body))
 
 
 def yaw(degrees):

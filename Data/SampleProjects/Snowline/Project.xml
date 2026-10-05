@@ -9,7 +9,7 @@
 	<string name="defaultScene">Scenes/Meadow</string>
 	<string name="startupScript"/>
 	<string name="nativeModule"/>
-	<string name="defaultInputMapId">00000000-0000-0000-0000-000000000000</string>
+	<string name="defaultInputMapId">5491dfd0-1003-49dc-8875-3c2a1848b2ef</string>
 	<string name="defaultBusLayoutId">00000000-0000-0000-0000-000000000000</string>
 	<string name="defaultUiThemeId">00000000-0000-0000-0000-000000000000</string>
 	<string name="startupScriptId">00000000-0000-0000-0000-000000000000</string>

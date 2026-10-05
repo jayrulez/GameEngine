@@ -102,10 +102,13 @@ export namespace pipeline
     }
 
     // Build an AnimationClipSource from a model animation: each channel becomes a dense track keyed by
-    // JOINT index (channels targeting bones outside the skin, or morph-weight channels, are skipped).
+    // JOINT index. A channel on `modelNode` (the node the skeleton hangs from: Blender's armature
+    // object) becomes a MODEL track, bone -1: the pose never plays it, root motion may take the
+    // armature's travel from it (root-motion.md P0). Other channels on bones outside the skin, and
+    // morph-weight channels, are skipped.
     inline void AnimationClipSourceFromModel(const model::ModelAnimation& animation,
                                              const HashMap<i32, i32>& boneToJoint, StringView name,
-                                             animation::AnimationClipSource& out)
+                                             animation::AnimationClipSource& out, i32 modelNode = -2)
     {
         out.name = String(name);
         out.duration = animation.duration;
@@ -118,10 +121,15 @@ export namespace pipeline
                 continue;
             }
             const i32* pj = boneToJoint.Find(ch->targetBone);
+            const i32 modelTrack = -1;
+            if (pj == nullptr && (modelNode < 0 || ch->targetBone != modelNode))
+            {
+                continue; // channel targets a bone not in this skin
+            }
             if (pj == nullptr)
             {
-                continue;
-            } // channel targets a bone not in this skin
+                pj = &modelTrack;
+            }
 
             u8 kind = 0;
             switch (ch->path)

@@ -138,8 +138,23 @@ export namespace foundation::animation
 
     // ---- animation clip ------------------------------------------------------------------------
 
+    // What a clip extracts for root motion (root-motion.md), authored on the clip: the root (a bone
+    // name; empty = the armature's own channels when the clip has them, else the skeleton's first
+    // root) and which parts of its travel. Every part is OFF by default.
+    struct RootMotionSettings
+    {
+        String rootBone;
+        bool horizontal = false; // the ground-plane translation
+        bool vertical = false;   // height (a climb; off for a walk, which keeps its bob)
+        bool yaw = false;        // the turn about up (never pitch or roll)
+
+        [[nodiscard]] bool Any() const noexcept { return horizontal || vertical || yaw; }
+    };
+
     // Cooked clip: per-track metadata + a dense keyframe pool (times + Float4 values: xyz for
-    // position/scale, xyzw for rotation), plus events.
+    // position/scale, xyzw for rotation), plus events. A track whose bone is -1 is a MODEL track:
+    // the armature node's own channels (the importer keeps them for root motion); the pose never
+    // plays it. Appended last: the root motion settings and the curve the cook baked.
     class AnimationClipSource : public ISerializable
     {
         RTTI_OBJECT(AnimationClipSource, ISerializable)
@@ -163,6 +178,10 @@ export namespace foundation::animation
         Array<Float4> keyValues; // position/scale in xyz; rotation in xyzw
         Array<f32> eventTimes;
         Array<String> eventNames;
+        RootMotionSettings rootMotion;
+        Array<f32> rootTimes;       // baked at cook (empty unless rootMotion.Any())
+        Array<Float3> rootPositions;
+        Array<f32> rootYaws;
 
         void Serialize(ISerializer& ar) override
         {
@@ -178,6 +197,38 @@ export namespace foundation::animation
             foundation::core::Serialize(ar, "keyValues", keyValues);
             foundation::core::Serialize(ar, "eventTimes", eventTimes);
             foundation::core::Serialize(ar, "eventNames", eventNames);
+            // Appended (root-motion.md P0): a text clip from before them reads with root motion
+            // off. Cooked (binary, positional) clips re-cook: the clip builder's version moved.
+            // Each its own key: a structure writes its fields flat, with no key of its own to test.
+            SerializeAppended(ar, "rootBone", rootMotion.rootBone);
+            SerializeAppended(ar, "rootHorizontal", rootMotion.horizontal);
+            SerializeAppended(ar, "rootVertical", rootMotion.vertical);
+            SerializeAppended(ar, "rootYaw", rootMotion.yaw);
+            SerializeAppended(ar, "rootTimes", rootTimes);
+            SerializeAppended(ar, "rootPositions", rootPositions);
+            SerializeAppended(ar, "rootYaws", rootYaws);
+        }
+
+        /// Every field of `other` (a cook's working copy: the builder bakes and strips it, the
+        /// authored asset stays as it was).
+        void CopyFrom(const AnimationClipSource& other)
+        {
+            name = other.name;
+            duration = other.duration;
+            isLooping = other.isLooping;
+            trackBone = other.trackBone;
+            trackKind = other.trackKind;
+            trackInterp = other.trackInterp;
+            trackStart = other.trackStart;
+            trackCount = other.trackCount;
+            keyTimes = other.keyTimes;
+            keyValues = other.keyValues;
+            eventTimes = other.eventTimes;
+            eventNames = other.eventNames;
+            rootMotion = other.rootMotion;
+            rootTimes = other.rootTimes;
+            rootPositions = other.rootPositions;
+            rootYaws = other.rootYaws;
         }
 
         static void FromClip(const AnimationClip& clip, AnimationClipSource& out)
@@ -211,6 +262,12 @@ export namespace foundation::animation
                 out.eventTimes.PushBack(e.time);
                 out.eventNames.PushBack(String(e.name.AsView()));
             }
+            out.rootMotion.horizontal = clip.rootMotion.horizontal;
+            out.rootMotion.vertical = clip.rootMotion.vertical;
+            out.rootMotion.yaw = clip.rootMotion.yaw;
+            out.rootTimes = clip.rootMotion.times;
+            out.rootPositions = clip.rootMotion.positions;
+            out.rootYaws = clip.rootMotion.yaws;
         }
 
         /// Rebuilds `clip` in place. False - and the clip left EMPTY - when the record is
@@ -240,6 +297,10 @@ export namespace foundation::animation
             clip.isLooping = isLooping;
             for (usize i = 0; i < trackTotal; ++i)
             {
+                if (trackBone[i] < 0)
+                {
+                    continue; // a model track: root motion's (baked into the curve), never the pose's
+                }
                 const TrackKind kind =
                     static_cast<TrackKind>(i < trackKind.Size() ? trackKind[i] : 0);
                 const InterpolationMode interp =
@@ -274,6 +335,16 @@ export namespace foundation::animation
                 clip.AddEvent(eventTimes[i],
                               (i < eventNames.Size()) ? eventNames[i].AsView() : StringView{});
             }
+            const usize roots = Min(rootTimes.Size(), Min(rootPositions.Size(), rootYaws.Size()));
+            for (usize i = 0; i < roots; ++i)
+            {
+                clip.rootMotion.times.PushBack(rootTimes[i]);
+                clip.rootMotion.positions.PushBack(rootPositions[i]);
+                clip.rootMotion.yaws.PushBack(rootYaws[i]);
+            }
+            clip.rootMotion.horizontal = roots > 0 && rootMotion.horizontal;
+            clip.rootMotion.vertical = roots > 0 && rootMotion.vertical;
+            clip.rootMotion.yaw = roots > 0 && rootMotion.yaw;
             return true;
         }
 
@@ -307,6 +378,188 @@ export namespace foundation::animation
             }
         }
     };
+
+    /// The rate root motion is baked at, beside the root's own keys: a cubic or step track keeps
+    /// its shape between sparse keys (the runtime reads the curve linearly).
+    inline constexpr f32 kRootMotionBakeRate = 30.0f;
+
+    namespace root_motion
+    {
+        [[nodiscard]] inline f32 YawOf(Quaternion q) noexcept
+        {
+            const Float3 forward = RotateVector(q, Float3{0.0f, 0.0f, 1.0f});
+            return Atan2(forward.x, forward.z);
+        }
+
+        /// The clip's track of `kind` for `bone` (-1: a model track), or -1.
+        [[nodiscard]] inline i32 FindTrack(const AnimationClipSource& clip, i32 bone,
+                                           AnimationClipSource::TrackKind kind) noexcept
+        {
+            for (usize i = 0; i < clip.trackBone.Size() && i < clip.trackKind.Size(); ++i)
+            {
+                if (clip.trackBone[i] == bone && clip.trackKind[i] == static_cast<u8>(kind))
+                {
+                    return static_cast<i32>(i);
+                }
+            }
+            return -1;
+        }
+
+        /// One track of the record as a runtime track (sampled exactly as the pose samples it).
+        inline void ReadTrack(const AnimationClipSource& clip, i32 track, AnimationTrack<Float3>& out)
+        {
+            if (track < 0)
+            {
+                return;
+            }
+            const usize t = static_cast<usize>(track);
+            out.interpolation = static_cast<InterpolationMode>(t < clip.trackInterp.Size() ? clip.trackInterp[t] : 1);
+            for (u32 k = 0; k < clip.trackCount[t] && clip.trackStart[t] + k < clip.keyTimes.Size(); ++k)
+            {
+                const Float4 v = clip.keyValues[clip.trackStart[t] + k];
+                out.AddKeyframe(clip.keyTimes[clip.trackStart[t] + k], Float3{v.x, v.y, v.z});
+            }
+        }
+        inline void ReadTrack(const AnimationClipSource& clip, i32 track, AnimationTrack<Quaternion>& out)
+        {
+            if (track < 0)
+            {
+                return;
+            }
+            const usize t = static_cast<usize>(track);
+            out.interpolation = static_cast<InterpolationMode>(t < clip.trackInterp.Size() ? clip.trackInterp[t] : 1);
+            for (u32 k = 0; k < clip.trackCount[t] && clip.trackStart[t] + k < clip.keyTimes.Size(); ++k)
+            {
+                const Float4 v = clip.keyValues[clip.trackStart[t] + k];
+                out.AddKeyframe(clip.keyTimes[clip.trackStart[t] + k], Quaternion{v.x, v.y, v.z, v.w});
+            }
+        }
+    }
+
+    /// The root motion cook (root-motion.md P0): bakes the root's travel into the clip's curve and,
+    /// for a root BONE, strips what was extracted from its own tracks so the pose plays in place,
+    /// keeping frame 0 (a walk keeps its bob when `vertical` is off). `root` is a bone index in the
+    /// clip's tracks, or -1 for the armature's own channels (model tracks: converted into model
+    /// space by the inverse of the armature's rest transform `modelRest`, and never stripped, as the
+    /// pose never plays them). The curve is the root's transform in its parent's space, which is
+    /// model space for a skeleton root and for a model track; for a root under a parent it is model
+    /// space only while its ancestors neither move nor turn (positions and yaw alike). Up is +Y;
+    /// pitch and roll are never extracted. False, and nothing changed, when the root has no track.
+    inline bool BakeRootMotion(AnimationClipSource& clip, i32 root, const Transform& modelRest = Transform{})
+    {
+        using Kind = AnimationClipSource::TrackKind;
+        clip.rootTimes.Clear();
+        clip.rootPositions.Clear();
+        clip.rootYaws.Clear();
+        if (!clip.rootMotion.Any())
+        {
+            return true;
+        }
+        const i32 positionTrack = root_motion::FindTrack(clip, root, Kind::Position);
+        const i32 rotationTrack = root_motion::FindTrack(clip, root, Kind::Rotation);
+        if (positionTrack < 0 && rotationTrack < 0)
+        {
+            return false;
+        }
+        AnimationTrack<Float3> position;
+        AnimationTrack<Quaternion> rotation;
+        root_motion::ReadTrack(clip, positionTrack, position);
+        root_motion::ReadTrack(clip, rotationTrack, rotation);
+
+        // The times: the root's keys and a fixed rate across the clip, in order, once each.
+        Array<f32> times;
+        const f32 duration = Max(clip.duration, 0.0f);
+        const u32 steps = static_cast<u32>(Ceil(duration * kRootMotionBakeRate));
+        for (u32 i = 0; i <= steps; ++i)
+        {
+            times.PushBack(Min(duration, static_cast<f32>(i) / kRootMotionBakeRate));
+        }
+        for (const Keyframe<Float3>& k : position.Keyframes())
+        {
+            times.PushBack(Clamp(k.time, 0.0f, duration));
+        }
+        for (const Keyframe<Quaternion>& k : rotation.Keyframes())
+        {
+            times.PushBack(Clamp(k.time, 0.0f, duration));
+        }
+        times.Sort([](f32 a, f32 b) { return a < b; });
+        const Float4x4 fromRest = Inverse(modelRest.ToMatrix());
+        f32 previousYaw = 0.0f;
+        for (usize i = 0; i < times.Size(); ++i)
+        {
+            if (i > 0 && times[i] - times[i - 1] < 1.0e-5f)
+            {
+                continue;
+            }
+            Float3 p = SampleVec3(&position, times[i], Float3::Zero);
+            Quaternion q = SampleQuat(&rotation, times[i], Quaternion::Identity);
+            if (root < 0)
+            {
+                // The armature moved within its parent; model space is the armature at rest.
+                BoneTransform moved;
+                moved.position = p;
+                moved.rotation = q;
+                Float3 scale;
+                (void)Decompose(moved.ToMatrix() * fromRest, p, q, scale);
+            }
+            // Yaw unwrapped, so a turn past half a circle keeps counting.
+            f32 yaw = root_motion::YawOf(q);
+            if (!clip.rootTimes.IsEmpty())
+            {
+                while (yaw - previousYaw > kPi)
+                {
+                    yaw -= kTwoPi;
+                }
+                while (yaw - previousYaw < -kPi)
+                {
+                    yaw += kTwoPi;
+                }
+            }
+            previousYaw = yaw;
+            clip.rootTimes.PushBack(times[i]);
+            clip.rootPositions.PushBack(p);
+            clip.rootYaws.PushBack(yaw);
+        }
+
+        if (root >= 0)
+        {
+            // Strip from the bone's own keys what was extracted, relative to frame 0.
+            const Float3 first = clip.rootPositions[0];
+            const f32 firstYaw = clip.rootYaws[0];
+            if (positionTrack >= 0 && (clip.rootMotion.horizontal || clip.rootMotion.vertical))
+            {
+                const usize t = static_cast<usize>(positionTrack);
+                for (u32 k = 0; k < clip.trackCount[t]; ++k)
+                {
+                    Float4& v = clip.keyValues[clip.trackStart[t] + k];
+                    if (clip.rootMotion.horizontal)
+                    {
+                        v.x = first.x;
+                        v.z = first.z;
+                    }
+                    if (clip.rootMotion.vertical)
+                    {
+                        v.y = first.y;
+                    }
+                }
+            }
+            if (rotationTrack >= 0 && clip.rootMotion.yaw)
+            {
+                const usize t = static_cast<usize>(rotationTrack);
+                for (u32 k = 0; k < clip.trackCount[t]; ++k)
+                {
+                    Float4& v = clip.keyValues[clip.trackStart[t] + k];
+                    const Quaternion q{v.x, v.y, v.z, v.w};
+                    const Quaternion back = Quaternion::FromAxisAngle(Float3{0.0f, 1.0f, 0.0f},
+                                                                      -(root_motion::YawOf(q) - firstYaw));
+                    const Quaternion kept = Normalized(back * q);
+                    v = Float4{kept.x, kept.y, kept.z, kept.w};
+                }
+            }
+        }
+        return true;
+    }
+
 
     class AnimationClipFactory final : public resource::IResourceFactory
     {

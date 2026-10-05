@@ -7,6 +7,7 @@
 
 #include "Core/Prelude.h"
 #include <doctest/doctest.h>
+#include <cmath>
 #include <initializer_list>
 
 import foundation.core;
@@ -979,7 +980,7 @@ TEST_CASE("model-import: options gate textures/materials/animations")
     CHECK_FALSE(options->generateScene); // opt-in
     CHECK_FALSE(options->generateCollision); // opt-in
     CHECK_FALSE(options->collisionConvex);
-    CHECK(options->Toggles().Size() == 8u); // +Generate LODs
+    CHECK(options->Toggles().Size() == 9u); // + Root motion // +Generate LODs
 
     // Geometry-only import: no textures, no materials, no skeleton/clips in the fan-out.
     options->importTextures = false;
@@ -2119,4 +2120,130 @@ TEST_CASE("model-import: the skeleton's parent node is the skin's root joint's p
     // No joints: unknown (-2), and the prefab keeps the file's placement.
     model::ModelSkin empty;
     CHECK(pipeline::SkeletonParentNode(m, empty, pipeline::BuildBoneToJoint(empty)) == -2);
+}
+
+TEST_CASE("model-import: a clip keeps the armature's channels, its skeleton and rest, and a re-import keeps its root motion")
+{
+    // root-motion.md P0: the armature node (the skeleton's parent) animated in the file keeps its
+    // channels as model tracks (bone -1), the clip names its skeleton and the armature's rest for
+    // the root motion cook, and root motion settings authored on the clip survive a re-import.
+    using namespace editor;
+    pipeline::RegisterModelManifestAsset();
+    pipeline::RegisterAnimationAssets();
+    model::RegisterModelResourceTypes();
+
+    const StringView dir = u8"scratch_model_rootmotion_project";
+    for (StringView f : {u8"Content/walker/Walk.xasset", u8"Content/walker/walker.xasset",
+                         u8"Content/walker/skeleton.xasset", u8"Content/walker/Run.xasset"})
+    {
+        FileDelete(PathJoin(dir, f));
+    }
+    (void)RemoveDirectory(PathJoin(dir, u8"Content/walker"));
+    FileDelete(PathJoin(dir, u8"Sources/walker.glb"));
+    for (StringView sub : {u8"Content", u8"Cooked", u8"Sources", u8".cache", u8"Editor"})
+    {
+        (void)RemoveDirectory(PathJoin(dir, sub));
+    }
+    FileDelete(PathJoin(dir, u8"Project.xml"));
+    (void)RemoveDirectory(dir);
+    REQUIRE(EditorProject::Create(DefaultAllocator(), dir, u8"P").IsOk());
+    UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
+    REQUIRE(static_cast<bool>(project));
+    const String fakeSource = PathJoin(dir, u8"walker.glb");
+    const byte junk[4] = {byte{1}, byte{2}, byte{3}, byte{4}};
+    REQUIRE(WriteFile(fakeSource.AsView(), Span<const byte>(junk, 4)).IsOk());
+
+    const Quaternion turn = Quaternion::FromAxisAngle(Float3{0, 1, 0}, 0.5f);
+    const auto prepare = [&](bool withRun)
+    {
+        auto prepared = MakeRef<pipeline::LoadedModel>(DefaultAllocator());
+        auto* armature = new model::ModelBone();
+        armature->setName(u8"Armature");
+        armature->rotation = turn;
+        (void)prepared->model.addBone(armature);
+        auto* hips = new model::ModelBone();
+        hips->setName(u8"Hips");
+        hips->parentIndex = 0;
+        (void)prepared->model.addBone(hips);
+        auto* skin = new model::ModelSkin();
+        skin->setName(u8"skeleton");
+        skin->addJoint(1, Float4x4::Identity());
+        (void)prepared->model.addSkin(skin);
+        for (StringView name : {StringView(u8"Walk"), StringView(u8"Run")})
+        {
+            if (name == StringView(u8"Run") && !withRun)
+            {
+                continue;
+            }
+            auto* animation = new model::ModelAnimation();
+            animation->setName(name);
+            animation->duration = 1.0f;
+            auto* onHips = new model::AnimationChannel();
+            onHips->targetBone = 1;
+            onHips->path = model::AnimationPath::Translation;
+            onHips->addKeyframe(0.0f, Float4{0, 1, 0, 0});
+            onHips->addKeyframe(1.0f, Float4{0, 1, 0.1f, 0});
+            animation->addChannel(onHips);
+            auto* onArmature = new model::AnimationChannel();
+            onArmature->targetBone = 0;
+            onArmature->path = model::AnimationPath::Translation;
+            onArmature->addKeyframe(0.0f, Float4{0, 0, 0, 0});
+            onArmature->addKeyframe(1.0f, Float4{0, 0, 2, 0});
+            animation->addChannel(onArmature);
+            (void)prepared->model.addAnimation(animation);
+        }
+        return prepared;
+    };
+
+    pipeline::ModelFileImporter importer;
+    auto prepared = prepare(false);
+    Result<foundation::content::Instance*> imported = importer.Import(
+        fakeSource.AsView(), pipeline::ImportContext{DefaultAllocator(), project->SourcesRoot()},
+        *project->SourceDb().RootGroup(), nullptr, prepared.Get(), nullptr);
+    REQUIRE(imported.HasValue());
+    foundation::content::Group& group = imported.Value()->OwningGroup();
+    const auto readClip = [&](StringView name) -> RefPtr<ISerializable>
+    {
+        foundation::content::Instance* clip = group.GetInstance(name);
+        REQUIRE(clip != nullptr);
+        return clip->ReadObject();
+    };
+    RefPtr<ISerializable> walkObject = readClip(u8"Walk");
+    auto* walk = Cast<pipeline::AnimationClipAsset>(walkObject.Get());
+    REQUIRE(walk != nullptr);
+    usize modelTracks = 0;
+    for (const i32 bone : walk->source.trackBone)
+    {
+        modelTracks += bone < 0 ? 1u : 0u;
+    }
+    CHECK(modelTracks == 1u);          // the armature's translation
+    CHECK(walk->source.trackBone.Size() == 2u);
+    CHECK_FALSE(walk->skeleton.IsNil());
+    CHECK(group.GetInstance(u8"skeleton") != nullptr);
+    CHECK(walk->skeleton == group.GetInstance(u8"skeleton")->Id());
+    CHECK(std::abs(Dot(walk->modelRest.rotation, turn)) > 1.0f - 1.0e-5f);
+    CHECK_FALSE(walk->source.rootMotion.Any()); // off unless asked
+
+    // Authored on the clip, kept by a re-import; a clip new in the file takes the import option.
+    walk->source.rootMotion.horizontal = true;
+    walk->source.rootMotion.rootBone = String(u8"Hips");
+    REQUIRE(group.GetInstance(u8"Walk")->WriteObject(*walk).IsOk());
+    pipeline::ModelImportOptions options;
+    options.rootMotion = true;
+    auto again = prepare(true);
+    Result<foundation::content::Instance*> reimported = importer.Import(
+        fakeSource.AsView(), pipeline::ImportContext{DefaultAllocator(), project->SourcesRoot()},
+        *project->SourceDb().RootGroup(), &options, again.Get(), nullptr);
+    REQUIRE(reimported.HasValue());
+    RefPtr<ISerializable> walkAgain = readClip(u8"Walk");
+    auto* kept = Cast<pipeline::AnimationClipAsset>(walkAgain.Get());
+    REQUIRE(kept != nullptr);
+    CHECK(kept->source.rootMotion.horizontal);
+    CHECK_FALSE(kept->source.rootMotion.yaw); // the clip's, not the option's
+    CHECK(kept->source.rootMotion.rootBone == StringView(u8"Hips"));
+    RefPtr<ISerializable> runObject = readClip(u8"Run");
+    auto* run = Cast<pipeline::AnimationClipAsset>(runObject.Get());
+    REQUIRE(run != nullptr);
+    CHECK(run->source.rootMotion.horizontal);
+    CHECK(run->source.rootMotion.yaw);
 }

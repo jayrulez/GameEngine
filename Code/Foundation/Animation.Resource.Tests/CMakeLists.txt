@@ -2,10 +2,11 @@
 
 add_executable(Animation.Resource.Tests
     TestsMain.cpp
-    AnimationResourceTests.cpp)
+    AnimationResourceTests.cpp
+    RootMotionTests.cpp)
 
 target_link_libraries(Animation.Resource.Tests PRIVATE
-    Foundation::Animation.Resource Foundation::VFS doctest::doctest)
+    Foundation::Animation.Resource Foundation::VFS Foundation::Xml Foundation::Xml.Serialization doctest::doctest)
 
 target_compile_definitions(Animation.Resource.Tests PRIVATE
     DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS)

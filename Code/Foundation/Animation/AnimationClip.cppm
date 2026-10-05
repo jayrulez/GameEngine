@@ -150,6 +150,28 @@ export namespace foundation::animation
         AnimationEvent(f32 t, StringView n) : time(t), name(n) {}
     };
 
+    // The travel a clip carries for root motion (root-motion.md), baked at cook: the root's position
+    // and its turn about +Y at each time, in the space the motion is applied in (model space for a
+    // skeleton root or the armature's own channels). Empty when the clip extracts none.
+    struct RootMotionCurve
+    {
+        Array<f32> times;
+        Array<Float3> positions;
+        Array<f32> yaws; // radians about +Y
+        bool horizontal = false; // which parts were extracted (and stripped from the pose)
+        bool vertical = false;
+        bool yaw = false;
+
+        [[nodiscard]] bool IsEmpty() const noexcept { return times.IsEmpty(); }
+        void Clear()
+        {
+            times.Clear();
+            positions.Clear();
+            yaws.Clear();
+            horizontal = vertical = yaw = false;
+        }
+    };
+
     // All tracks + events for one animation. A resource product (Object) so a cooked AnimationClipSource
     // can build into it via the resource system.
     class AnimationClip : public Object
@@ -167,6 +189,7 @@ export namespace foundation::animation
 
         f32 duration = 0.0f;
         bool isLooping = false;
+        RootMotionCurve rootMotion;
 
         [[nodiscard]] String& Name() noexcept { return m_name; }
         [[nodiscard]] const String& Name() const noexcept { return m_name; }
@@ -337,6 +360,7 @@ export namespace foundation::animation
             m_events.Clear();
             duration = 0.0f;
             isLooping = false;
+            rootMotion.Clear();
             m_name.Clear();
         }
 

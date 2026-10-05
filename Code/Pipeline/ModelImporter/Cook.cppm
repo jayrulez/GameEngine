@@ -354,7 +354,7 @@ export namespace pipeline
                     Format(u8"{}.{}", namePrefix,
                            ImportedAssetName(animations[a]->name(), u8"anim", a))
                         .AsView(),
-                    clipAsset.source);
+                    clipAsset.source, manifest.skeletonParentNode);
                 content::Instance* clipInst = root->CreateInstance(
                     Format(u8"{}.{}", namePrefix,
                            ImportedAssetName(animations[a]->name(), u8"anim", a))

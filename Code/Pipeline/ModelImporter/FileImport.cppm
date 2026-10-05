@@ -148,6 +148,7 @@ export namespace pipeline
         bool generateCollision = false; // CollisionShapeAsset per mesh + colliders on the prefab
         bool collisionConvex = false;   // hull (dynamic-capable) instead of exact triangle mesh
         bool generateLods = true;       // auto-LOD chains for big static meshes (authored _LODn wins)
+        bool rootMotion = false; // new clips extract their root's travel and turn (root-motion.md)
 
         [[nodiscard]] Array<Toggle> Toggles() override
         {
@@ -177,6 +178,11 @@ export namespace pipeline
                 u8"authored _LOD1/_LOD2 levels keep those instead",
                 &generateLods});
             toggles.PushBack(Toggle{
+                u8"Root motion",
+                u8"New clips move the character by their root's travel and turn, and play in place "
+                u8"(each clip's page can change it; a re-import keeps what the clip says)",
+                &rootMotion});
+            toggles.PushBack(Toggle{
                 u8"Convex collision",
                 u8"Simplified convex hulls (dynamic-capable) instead of exact triangle meshes",
                 &collisionConvex});
@@ -201,6 +207,8 @@ export namespace pipeline
             foundation::core::Serialize(ar, "collisionConvex", convex);
             foundation::core::Serialize(ar, "scene", sceneOut);
             foundation::core::Serialize(ar, "generateLods", lods);
+            u8 motion = rootMotion ? 1u : 0u;
+            SerializeAppended(ar, "rootMotion", motion); // options saved before it read as off
             importTextures = textures != 0;
             importMaterials = materials != 0;
             importAnimations = animations != 0;
@@ -209,6 +217,7 @@ export namespace pipeline
             generateCollision = collision != 0;
             collisionConvex = convex != 0;
             generateLods = lods != 0;
+            rootMotion = motion != 0;
         }
     };
 
@@ -1086,7 +1095,7 @@ export namespace pipeline
         static void ImportSkeletonAndClips(const foundation::model::Model& model,
                                            content::Group& group, ModelManifestSource& manifest,
                                            Array<String>& claimed,
-                                           const pipeline::ImportOptions& sel)
+                                           const ModelImportOptions& sel)
         {
             if (model.skins().Size() == 0)
             {
@@ -1128,7 +1137,35 @@ export namespace pipeline
                 pipeline::AnimationClipAsset clip;
                 AnimationClipSourceFromModel(
                     *animations[a], boneToJoint,
-                    (clipInst != nullptr) ? clipInst->Name() : StringView(u8"anim"), clip.source);
+                    (clipInst != nullptr) ? clipInst->Name() : StringView(u8"anim"), clip.source,
+                    manifest.skeletonParentNode);
+                // For the root motion cook: the skeleton, and the armature's rest (its own channels
+                // are the clip's model tracks).
+                clip.skeleton = manifest.skeletonGuid;
+                const Span<foundation::model::ModelBone* const> nodes = model.bones();
+                if (manifest.skeletonParentNode >= 0 &&
+                    static_cast<usize>(manifest.skeletonParentNode) < nodes.Size())
+                {
+                    const foundation::model::ModelBone& armature =
+                        *nodes[static_cast<usize>(manifest.skeletonParentNode)];
+                    clip.modelRest.position = armature.translation;
+                    clip.modelRest.rotation = armature.rotation;
+                    clip.modelRest.scale = armature.scale;
+                }
+                // A re-import keeps what was authored on the clip (its root motion settings).
+                if (clipInst != nullptr)
+                {
+                    RefPtr<ISerializable> previous = clipInst->ReadObject();
+                    if (const auto* before = Cast<pipeline::AnimationClipAsset>(previous.Get()))
+                    {
+                        clip.source.rootMotion = before->source.rootMotion;
+                    }
+                    else if (sel.rootMotion)
+                    {
+                        clip.source.rootMotion.horizontal = true;
+                        clip.source.rootMotion.yaw = true;
+                    }
+                }
                 if (clipInst != nullptr && clipInst->WriteObject(clip).IsOk())
                 {
                     manifest.animationGuids.PushBack(clipInst->Id());

@@ -4,6 +4,17 @@
 > spec answers them); reviewed by the Sedulous session the same day (its points folded
 > in: settings off by default, the baked curve kept, Character mode through `move` and its
 > stickiness, no new script type, instanced skinning).
+> P0 BUILT 2026-10-05, with Sedulous's review folded in. The clip's new fields are APPENDED (text
+> clip assets from before read with root motion off; the clip builder's version moved, so binary
+> cooks re-cook), not a data version: the strict reader has no way to read version 0 of a type
+> that declares 1. The bake runs at the root's keys plus 30 Hz with the clip's own interpolation
+> (a cubic or step root keeps its shape). The armature's own channels are kept as MODEL tracks
+> (bone -1, never in the pose) and converted into model space by the inverse of the armature's
+> rest, which the importer records on the clip with its skeleton. The curve is the root's
+> transform in its parent's space: model space for a skeleton root or a model track; for a root
+> under a parent, positions and yaw alike are model space only while its ancestors neither move
+> nor turn. A re-import keeps the root motion authored on a clip; the import option "Root motion"
+> sets horizontal and yaw on clips new to it.
 > Seeded in weekly_backlog.md (2026-08-26). User ruling 2026-10-05: after Snowline's P1, before
 > its P2, spec first. Companion: inverse-kinematics.md (P0 there, the space and the pose seam, is
 > this spec's prerequisite). Read CONVENTIONS.md first.

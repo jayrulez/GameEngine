@@ -11,6 +11,7 @@
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
+#include "Core/Log/Log.h"
 
 export module animation.pipeline;
 
@@ -42,10 +43,20 @@ export namespace pipeline{
         RTTI_OBJECT(AnimationClipAsset, pipeline::Asset)
     public:
         AnimationClipSource source;
+        // Appended (root-motion.md P0), for the root motion cook: the skeleton the clip's bone
+        // indices address (a named root resolves against it), and the armature's rest transform
+        // (its own channels, the clip's model tracks, are turned into model space by its inverse).
+        // The importer sets both.
+        Guid skeleton;
+        Transform modelRest;
         void Serialize(ISerializer& ar) override
         {
             pipeline::Asset::Serialize(ar);
             source.Serialize(ar);
+            SerializeAppended(ar, "skeleton", skeleton);
+            SerializeAppended(ar, "restPosition", modelRest.position);
+            SerializeAppended(ar, "restRotation", modelRest.rotation);
+            SerializeAppended(ar, "restScale", modelRest.scale);
         }
     };
 
@@ -99,11 +110,83 @@ export namespace pipeline{
         {
             return &AnimationClipSource::StaticType();
         }
+        // v2 (root-motion.md P0): the root motion bake and strip; every clip re-cooks.
+        [[nodiscard]] u32 Version() const override { return 2; }
+
+        void ScanDependencies(const pipeline::Asset& asset, pipeline::AssetBuildContext&,
+                              pipeline::AssetDependencies& out) override
+        {
+            const AnimationClipAsset& a = static_cast<const AnimationClipAsset&>(asset);
+            if (a.source.rootMotion.Any() && !a.skeleton.IsNil())
+            {
+                out.reads.PushBack(a.skeleton); // a renamed or rebuilt skeleton re-cooks the clip
+            }
+        }
+
         [[nodiscard]] Status Build(const pipeline::Asset& asset,
                                    pipeline::AssetBuildContext& ctx) override
         {
             const AnimationClipAsset& a = static_cast<const AnimationClipAsset&>(asset);
-            return ctx.output->WriteObject(const_cast<AnimationClipSource&>(a.source));
+            if (!a.source.rootMotion.Any())
+            {
+                return ctx.output->WriteObject(const_cast<AnimationClipSource&>(a.source));
+            }
+            AnimationClipSource cooked;
+            cooked.CopyFrom(a.source);
+            const i32 root = RootMotionRoot(a, ctx);
+            if (root < -1)
+            {
+                return Status{ErrorCode::InvalidArgument};
+            }
+            if (!BakeRootMotion(cooked, root, a.modelRest))
+            {
+                LOG_ERROR(u8"Animation", u8"clip '{}': root motion has no track to take from its root",
+                          a.source.name.AsView());
+                return Status{ErrorCode::InvalidArgument};
+            }
+            return ctx.output->WriteObject(cooked);
+        }
+
+    private:
+        /// The root the clip's travel is taken from: the named bone, else the armature's own
+        /// channels (model tracks) when the clip has them, else the skeleton's first root. -2 (and
+        /// a logged reason) when it cannot be found.
+        [[nodiscard]] static i32 RootMotionRoot(const AnimationClipAsset& a, pipeline::AssetBuildContext& ctx)
+        {
+            const StringView name = a.source.rootMotion.rootBone.AsView();
+            if (name.IsEmpty())
+            {
+                for (const i32 bone : a.source.trackBone)
+                {
+                    if (bone < 0)
+                    {
+                        return -1;
+                    }
+                }
+            }
+            foundation::content::Instance* instance =
+                (ctx.sourceDb != nullptr && !a.skeleton.IsNil()) ? ctx.sourceDb->GetInstance(a.skeleton) : nullptr;
+            RefPtr<ISerializable> object = instance != nullptr ? instance->ReadObject() : RefPtr<ISerializable>{};
+            const auto* skeleton = Cast<SkeletonAsset>(object.Get());
+            if (skeleton == nullptr)
+            {
+                LOG_ERROR(u8"Animation", u8"clip '{}': root motion needs its skeleton, which it does not name",
+                          a.source.name.AsView());
+                return -2;
+            }
+            const SkeletonSource& bones = skeleton->source;
+            for (usize i = 0; i < bones.boneNames.Size(); ++i)
+            {
+                const bool match = name.IsEmpty() ? (i < bones.parentIndices.Size() && bones.parentIndices[i] < 0)
+                                                  : bones.boneNames[i].AsView() == name;
+                if (match)
+                {
+                    return static_cast<i32>(i);
+                }
+            }
+            LOG_ERROR(u8"Animation", u8"clip '{}': root motion's root bone '{}' is not in its skeleton",
+                      a.source.name.AsView(), name);
+            return -2;
         }
     };
 

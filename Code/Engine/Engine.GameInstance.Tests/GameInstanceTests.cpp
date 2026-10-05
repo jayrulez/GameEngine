@@ -1332,6 +1332,23 @@ TEST_CASE("game-instance: the run clock counts frames without a game script")
     CHECK(gi.RunTime() == 0.0);
 }
 
+// A project with no game script runs its behaviors on the run's host all the same, and they need
+// the run's services: Snowline's board read Input on a context that only a game script's start
+// had given the run's input runtime, so no action ever fired (it read the shared runtime, which has
+// no project map). Every context the run's host makes now takes them.
+TEST_CASE("game-instance: a context for behaviors gets the run's input, run and save services without a game script")
+{
+    RegisterCoreTypes();
+    foundation::script::angelscript::RegisterAngelScriptBackend();
+    engine::runtime::GameInstance gi;
+    CHECK_FALSE(gi.ScriptRunning());
+    foundation::script::IScriptContext* context = gi.RunHost().EnsureContextForFile(u8"behaviors.as");
+    REQUIRE(context != nullptr);
+    CHECK(context->GetService(foundation::input::kInputScriptService) == &gi.InputRuntime());
+    CHECK(context->GetService(engine::runtime::kRunScriptService) != nullptr);
+    CHECK(context->GetService(engine::runtime::kSaveScriptService) == &gi.Saves());
+}
+
 // agent-playtesting-and-asset-creation.md P4 (Sedulous aaf5ff78): the run clock is the host's
 // unscaled delta, so it keeps going while the game pauses its scene (behind a menu) and a
 // playtest's timeline goes on; and a playtest reads the running game script's properties.

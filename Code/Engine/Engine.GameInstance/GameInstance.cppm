@@ -302,7 +302,15 @@ export namespace engine::runtime
             // run-scoped systems (audio) group them by it.
             m_sceneManager.SetSceneRun(this);
             m_runHost.Binding().run = this;
+            // Every context of this run reads THIS run's services (run.*, its input, its save), the
+            // behaviors' as much as a game script's: a project with no game script still has input.
+            m_runHost.SetOwnerServices(core::Function<void(script::IScriptContext&)>{
+                [this](script::IScriptContext& context) { InstallRunServices(context); }});
         }
+
+        /// This run's services on a script context: run.* (and its event bus), the run's own
+        /// input runtime (over the shared one the app's configurator installs) and its save.
+        void InstallRunServices(script::IScriptContext& context);
 
         void SetScene(scene::Scene* scene) noexcept
         {

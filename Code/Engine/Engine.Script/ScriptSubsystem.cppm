@@ -270,6 +270,18 @@ export namespace engine::script
         {
             m_configurator = Move(configurator);
         }
+        /// The host's OWNER's services (a game instance: its run.*, its input runtime, its save),
+        /// applied after the app's configurator to every context this host makes, so its behaviors
+        /// read the run's services whether or not a game script ever starts. A context that
+        /// already exists takes them at once.
+        void SetOwnerServices(Function<void(IScriptContext&)> services)
+        {
+            m_ownerServices = Move(services);
+            if (m_context.Get() != nullptr && m_ownerServices)
+            {
+                m_ownerServices(*m_context);
+            }
+        }
         void SetExternalErrorSink(IScriptErrorHandler* sink) noexcept
         {
             m_errorSink.external = sink;
@@ -355,6 +367,10 @@ export namespace engine::script
             if (m_configurator)
             {
                 m_configurator(*m_context);
+            }
+            if (m_ownerServices)
+            {
+                m_ownerServices(*m_context); // the owner's own, over the app's shared ones
             }
             m_moduleCurrent = false;
             EnsureDebugger(); // a debugger requested before the context existed attaches now
@@ -568,6 +584,7 @@ export namespace engine::script
         ScriptRuntimeBinding m_binding;
         foundation::core::IAllocator* m_allocator;
         Function<void(IScriptContext&)> m_configurator;
+        Function<void(IScriptContext&)> m_ownerServices; // SetOwnerServices
         Array<RefPtr<ScriptClass>> m_loadedClasses; // the behaviors module's content
         Array<BehaviorModuleClass>
             m_classSourceScratch;              // reused per-rebuild {sourceName, source} list

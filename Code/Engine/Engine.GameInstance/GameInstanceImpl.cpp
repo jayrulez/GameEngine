@@ -95,6 +95,16 @@ namespace engine::runtime
         (void)once;
     }
 
+    void GameInstance::InstallRunServices(script::IScriptContext& context)
+    {
+        m_runBinding.runEvents = &m_runEvents;            // run.events() -> THIS run's bus
+        InstallRunScriptService(context, m_runBinding);   // run.* -> this instance's registry
+        // THIS instance's input runtime as the context's Input service (overriding the shared editor
+        // runtime the run-host configurator installed), so the run reads only ITS own source.
+        context.SetService(input::kInputScriptService, &m_inputRuntime);
+        InstallSaveScriptService(context, m_save); // Save.* -> this run's save
+    }
+
     bool GameInstance::StartScript(core::StringView source, core::StringView name,
                                    core::Span<const core::String> gameHandlers)
     {
@@ -114,13 +124,7 @@ namespace engine::runtime
         m_runHost.SetGameScriptHold(true);
         // The game script (its menu) can now call Net.startServer()/connect() - resolve the controller.
         m_network.InstallScriptBinding(m_scriptContext.Get());
-        m_runBinding.runEvents = &m_runEvents; // run.events() -> THIS run's bus
-        InstallRunScriptService(
-            *m_scriptContext, m_runBinding); // run.* -> this instance's registry
-        // Install THIS instance's input runtime as the context's Input service (overriding the shared
-        // editor runtime the run-host configurator installed), so the game reads only ITS own source.
-        context->SetService(input::kInputScriptService, &m_inputRuntime);
-        InstallSaveScriptService(*context, m_save); // Save.* -> this run's save
+        InstallRunServices(*context); // the host's owner services did this at creation; idempotent
 
         const bool loaded = m_scriptContext->Load(source, name).IsOk();
         m_runHost

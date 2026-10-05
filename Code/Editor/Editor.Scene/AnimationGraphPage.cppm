@@ -248,6 +248,11 @@ export namespace editor
         scene::EntityHandle m_meshEntity;
         bool m_showSkeleton = true; // draw the bone wireframe
         bool m_showMesh = true;     // draw the skinned mesh (when one is picked)
+        // Travel: the preview walks by the graph's root motion (back to the middle past a few
+        // metres), off: it plays in place.
+        bool m_showTravel = false;
+        Float3 m_travelPosition{};
+        f32 m_travelYaw = 0.0f;
 
         bool m_previewPlaying = true;
         i32 m_lastHighlightedNode = -1; // canvas node with the active-state ring
@@ -273,10 +278,12 @@ export namespace editor
     // Draw a skeleton as a bone wireframe (parent->joint lines + joint crosses) into a debug
     // lane. `worldScratch` is the caller's reusable world-pose buffer. Shared by the animation
     // graph + clip preview pages.
+    // `base` places the whole rig (a preview travelling by its root motion).
     void DrawSkeletonWireframe(foundation::render::debug::DebugDraw& draw,
                                animation::Skeleton& skeleton,
                                Span<const animation::BoneTransform> localPoses,
-                               Array<Float4x4>& worldScratch);
+                               Array<Float4x4>& worldScratch,
+                               const Float4x4& base = Float4x4::Identity());
 
 
     // Registers the AnimationGraph page factory + an "Animation Graph" New-Asset creator.

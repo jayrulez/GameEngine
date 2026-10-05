@@ -220,3 +220,51 @@ TEST_CASE("root motion: a v1 animator record reads with root motion off")
     CHECK(c.speed == doctest::Approx(1.5f));
     CHECK(c.rootMotion == RootMotionMode::Ignore);
 }
+
+TEST_CASE("root motion: a pet turned by its script each frame walks the way it faces")
+{
+    // PaperKid's pet: the Pet entity (a scene root) is turned by its script every frame; its model
+    // under it plays a Walk whose root travels 0.55 m over 1.0417 s, at speed 1.45, in Entity mode
+    // aimed at the Pet. It must walk the way the Pet faces, at about 0.8 m/s.
+    scene::Scene level{DefaultAllocator(), u8"pet"};
+    level.AddSystem<engine::render::MeshComponentManager>();
+    engine::animation::AddAnimationSceneManagers(level);
+    RefPtr<animation::Skeleton> skeleton = MakeRef<animation::Skeleton>(DefaultAllocator(), 1);
+    skeleton->Bones()[0].index = 0;
+    skeleton->Bones()[0].parentIndex = -1;
+    skeleton->FindRootBones();
+    skeleton->BuildChildIndices();
+    RefPtr<animation::AnimationClip> walk = MakeRef<animation::AnimationClip>(DefaultAllocator(), u8"Walk", 1.0416666f, true);
+    walk->rootMotion.horizontal = true;
+    for (i32 i = 0; i <= 50; ++i)
+    {
+        const f32 t = 1.0416666f * static_cast<f32>(i) / 50.0f;
+        walk->rootMotion.times.PushBack(t);
+        walk->rootMotion.positions.PushBack(Float3{0, 0, 0.55f * t / 1.0416666f});
+        walk->rootMotion.yaws.PushBack(0.0f);
+    }
+    walk->GetOrCreatePositionTrack(0)->AddKeyframe(0.0f, Float3{});
+    walk->GetOrCreatePositionTrack(0)->AddKeyframe(1.0416666f, Float3{});
+    const scene::EntityHandle pet = level.CreateEntity(u8"Dog");
+    const scene::EntityHandle model = level.CreateEntity(u8"DogModel");
+    level.SetParent(model, pet);
+    auto& a = level.GetSystem<engine::animation::SkeletalAnimationComponentManager>()->Add(model);
+    a.skeleton.SetDirect(skeleton);
+    a.clip.SetDirect(walk);
+    a.speed = 1.45f;
+    a.rootMotion = RootMotionMode::Entity;
+    a.rootMotionTarget = level.GetEntityId(pet);
+    level.UpdateTransforms();
+    const f32 yaw = -88.0f * kDegToRad;
+    const Float3 start = level.GetWorldPosition(pet);
+    for (i32 frame = 0; frame < 120; ++frame)
+    {
+        Transform t = level.GetLocalTransform(pet); // the script turns it, every frame
+        t.rotation = Quaternion::FromAxisAngle(Float3{0, 1, 0}, yaw);
+        level.SetLocalTransform(pet, t);
+        level.Update(1.0f / 60.0f);
+    }
+    const Float3 moved = level.GetWorldPosition(pet) - start;
+    CHECK(Length(moved) == doctest::Approx(0.55f / 1.0416666f * 1.45f * 2.0f).epsilon(0.02));
+    CHECK(moved.x < -1.5f); // facing -88 degrees: toward -X
+}

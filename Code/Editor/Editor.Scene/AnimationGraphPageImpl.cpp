@@ -571,6 +571,14 @@ namespace editor
             mesh->SetIsChecked(m_showMesh);
             mesh->OnCheckedChanged.Add([self](ui::toolkit::ToolbarToggle*, bool on)
                                        { self->m_showMesh = on; });
+            ui::toolkit::ToolbarToggle* travel = m_toolbar->AddToggle(u8"Travel");
+            travel->SetIsChecked(m_showTravel);
+            travel->OnCheckedChanged.Add([self](ui::toolkit::ToolbarToggle*, bool on)
+                                         {
+                                             self->m_showTravel = on;
+                                             self->m_travelPosition = Float3{};
+                                             self->m_travelYaw = 0.0f;
+                                         });
         }
         m_content = app::PageToolbar::Frame(Allocator(), *m_toolbar, *rightSplit);
 
@@ -2039,6 +2047,22 @@ namespace editor
         {
             m_player->Update(dt);
         }
+        // Root motion: read every frame (so it never piles up), applied while Travel is on.
+        const animation::RootMotionDelta moved = m_player->ConsumeRootMotion();
+        if (m_showTravel)
+        {
+            m_travelPosition = m_travelPosition +
+                               RotateVector(Quaternion::FromAxisAngle(Float3{0.0f, 1.0f, 0.0f}, m_travelYaw),
+                                            moved.translation);
+            m_travelYaw += moved.yaw;
+            if (Length(Float3{m_travelPosition.x, 0.0f, m_travelPosition.z}) > 6.0f)
+            {
+                m_travelPosition = Float3{}; // back to the middle of the grid
+            }
+        }
+        const Float4x4 travel =
+            RotationMatrix(Quaternion::FromAxisAngle(Float3{0.0f, 1.0f, 0.0f}, m_travelYaw)) *
+            Float4x4::Translation(m_travelPosition);
 
         // Status readout + ACTIVE-state ring on the canvas.
         const i32 current = m_player->GetCurrentStateIndex(
@@ -2084,6 +2108,10 @@ namespace editor
         {
             const bool meshVisible = m_showMesh && m_previewMesh.Get() != nullptr;
             scenePtr->SetActive(m_meshEntity, meshVisible);
+            Transform at;
+            at.position = m_travelPosition;
+            at.rotation = Quaternion::FromAxisAngle(Float3{0.0f, 1.0f, 0.0f}, m_travelYaw);
+            scenePtr->SetLocalTransform(m_meshEntity, at);
             if (meshVisible)
             {
                 const Span<const Float4x4> mats = m_player->GetSkinningMatrices();
@@ -2103,14 +2131,14 @@ namespace editor
         draw.DrawGrid(Float3{0.0f, 0.0f, 0.0f}, 4.0f, 8, Color{0.25f, 0.25f, 0.28f, 1.0f});
         if (m_showSkeleton)
         {
-            DrawSkeletonWireframe(draw, *m_playerSkeleton, m_player->GetLocalPoses(), m_worldScratch);
+            DrawSkeletonWireframe(draw, *m_playerSkeleton, m_player->GetLocalPoses(), m_worldScratch, travel);
         }
     }
 
     void DrawSkeletonWireframe(foundation::render::debug::DebugDraw& draw,
                                animation::Skeleton& skeleton,
                                Span<const animation::BoneTransform> localPoses,
-                               Array<Float4x4>& worldScratch)
+                               Array<Float4x4>& worldScratch, const Float4x4& base)
     {
         const usize boneCount = static_cast<usize>(skeleton.BoneCount());
         if (boneCount == 0 || localPoses.Size() < boneCount)
@@ -2119,6 +2147,10 @@ namespace editor
         }
         worldScratch.Resize(boneCount);
         skeleton.ComputeWorldPoses(localPoses, Span<Float4x4>{worldScratch.Data(), boneCount});
+        for (usize b = 0; b < boneCount; ++b)
+        {
+            worldScratch[b] = worldScratch[b] * base;
+        }
         const Color boneColor{0.35f, 0.85f, 1.0f, 1.0f};
         for (usize b = 0; b < boneCount; ++b)
         {

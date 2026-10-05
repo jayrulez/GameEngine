@@ -385,6 +385,26 @@ namespace editor
         animation::SampleClip(*clip, *skeleton, m_time,
                               Span<animation::BoneTransform>{m_poseScratch.Data(), boneCount});
 
+        // Root motion: the cooked pose plays in place; with Show travel the rig goes where the
+        // clip's extracted travel takes it from its start (one loop's worth).
+        Float4x4 travel = Float4x4::Identity();
+        if (m_showTravel && !clip->rootMotion.IsEmpty())
+        {
+            const animation::RootMotionDelta moved = animation::ClipRootMotion(*clip, 0.0f, m_time, false);
+            travel = RotationMatrix(Quaternion::FromAxisAngle(Float3{0.0f, 1.0f, 0.0f}, moved.yaw)) *
+                     Float4x4::Translation(moved.translation);
+        }
+        if (auto* meshes = scenePtr->GetSystem<engine::render::MeshComponentManager>())
+        {
+            if (meshes->Get(m_meshEntity) != nullptr)
+            {
+                Transform at;
+                at.position = Float3{travel.m[3][0], travel.m[3][1], travel.m[3][2]};
+                at.rotation = QuaternionFromRotationMatrix(travel);
+                scenePtr->SetLocalTransform(m_meshEntity, at);
+            }
+        }
+
         // Skinned preview mesh: drive the player to the SAME m_time and push its skinning matrices
         // onto the MeshComponent (borrowed for this frame's render).
         if (m_previewMesh.Get() != nullptr)
@@ -418,7 +438,27 @@ namespace editor
         draw.DrawGrid(Float3{0.0f, 0.0f, 0.0f}, 4.0f, 8, Color{0.25f, 0.25f, 0.28f, 1.0f});
         DrawSkeletonWireframe(draw, *skeleton,
                               Span<const animation::BoneTransform>{m_poseScratch.Data(), boneCount},
-                              m_worldScratch);
+                              m_worldScratch, travel);
+
+        // The extracted path on the ground (height too when the clip extracts it), and where the
+        // clip is along it now.
+        const animation::RootMotionCurve& curve = clip->rootMotion;
+        if (!curve.IsEmpty())
+        {
+            const Color path{1.0f, 0.75f, 0.2f, 1.0f};
+            const auto onGround = [&](Float3 p)
+            {
+                const Float3 start = curve.positions[0];
+                return Float3{curve.horizontal ? p.x - start.x : 0.0f, curve.vertical ? p.y - start.y : 0.0f,
+                              curve.horizontal ? p.z - start.z : 0.0f};
+            };
+            for (usize i = 0; i + 1 < curve.positions.Size(); ++i)
+            {
+                draw.DrawLine(onGround(curve.positions[i]), onGround(curve.positions[i + 1]), path, true);
+            }
+            const animation::RootMotionDelta now = animation::ClipRootMotion(*clip, 0.0f, m_time, false);
+            draw.DrawWireSphere(now.translation, 0.04f, path, 10, true);
+        }
     }
 
     // ============================ Inspector =================================================
@@ -456,6 +496,42 @@ namespace editor
                                                                           self->CommitEdit(
                                                                               u8"clip-loop");
                                                                       }},
+                                                 cat)
+                    .Get()));
+        }
+
+        // --- root motion (root-motion.md): what the cook extracts; the preview shows its path ---
+        {
+            const StringView cat = u8"Root Motion";
+            g.AddProperty(RefPtr<ui::toolkit::PropertyEditor>(
+                MakeRef<ui::toolkit::StringEditor>(
+                    Allocator(), u8"Root bone", source.rootMotion.rootBone.AsView(),
+                    Function<void(StringView)>{[self, &source](StringView v)
+                                               {
+                                                   source.rootMotion.rootBone = String(v);
+                                                   self->CommitEdit(u8"clip-rootbone");
+                                               }},
+                    cat)
+                    .Get()));
+            const auto toggle = [&](StringView name, bool& field)
+            {
+                bool* target = &field;
+                g.AddProperty(RefPtr<ui::toolkit::PropertyEditor>(
+                    MakeRef<ui::toolkit::BoolEditor>(Allocator(), name, field,
+                                                     Function<void(bool)>{[self, target](bool v)
+                                                                          {
+                                                                              *target = v;
+                                                                              self->CommitEdit(u8"clip-rootmotion");
+                                                                          }},
+                                                     cat)
+                        .Get()));
+            };
+            toggle(u8"Horizontal", source.rootMotion.horizontal);
+            toggle(u8"Vertical", source.rootMotion.vertical);
+            toggle(u8"Yaw", source.rootMotion.yaw);
+            g.AddProperty(RefPtr<ui::toolkit::PropertyEditor>(
+                MakeRef<ui::toolkit::BoolEditor>(Allocator(), u8"Show travel", m_showTravel,
+                                                 Function<void(bool)>{[self](bool v) { self->m_showTravel = v; }},
                                                  cat)
                     .Get()));
         }

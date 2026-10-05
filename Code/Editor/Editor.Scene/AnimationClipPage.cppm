@@ -169,6 +169,9 @@ export namespace editor
         f32 m_time = 0.0f; // seconds into the clip
         bool m_playing = true;
         bool m_scrubbing = false; // slider writes m_time; playback writes the slider
+        // The preview plays a clip's stripped pose in place; on, it travels by the clip's root
+        // motion instead (page state, not the clip's).
+        bool m_showTravel = false;
     };
 
     class AnimationClipPageFactory final : public IEditorPageFactory

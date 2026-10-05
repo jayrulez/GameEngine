@@ -24,6 +24,7 @@ import editor.app; // ContainerListEditor (the generic reflected-list row)
 import editor.core;
 import editor.scene;
 import engine.animation;
+import foundation.animation; // Skeleton (the bone picker's source)
 import engine.script; // ScriptComponent: the behaviours section list
 import engine.spline; // PathFollowComponent: an entity reference field
 import engine.vegetation; // TerrainVegetationComponent: a reflected list of structs
@@ -1075,4 +1076,66 @@ TEST_CASE("inspector: a hierarchy row drops on an entity slot")
     CHECK(list()->EditorView()->AsDropTarget()->OnDrop(drag.Get(), 0, 0) ==
           foundation::ui::DragDropEffects::Link);
     CHECK(anims->Get(scene.FindEntity(cart))->meshEntities.Size() == 2u);
+}
+
+// inverse-kinematics.md P4: a `boneName` field lists the bones of the animator above the entity,
+// so a chain is picked, not typed; a name the skeleton lacks stays listed and says so.
+TEST_CASE("inspector: a bone name field picks from the animator's skeleton")
+{
+    engine::animation::RegisterAnimationComponentReflection();
+    scene::Scene scene{DefaultAllocator()};
+    scene.AddSystem<engine::render::MeshComponentManager>();
+    engine::animation::AddAnimationSceneManagers(scene);
+    EditorCommandStack commands;
+    SceneEditContext edit(scene, commands);
+    EditorContext editor{DefaultAllocator()};
+    auto inspectorRef = foundation::core::MakeRef<SceneInspectorView>(DefaultAllocator(), editor, edit);
+    SceneInspectorView& inspector = *inspectorRef;
+
+    RefPtr<foundation::animation::Skeleton> skeleton = MakeRef<foundation::animation::Skeleton>(DefaultAllocator(), 3);
+    {
+        Array<foundation::animation::Bone>& bones = skeleton->Bones();
+        const char8_t* names[] = {u8"Thigh", u8"Shin", u8"Foot"};
+        for (i32 i = 0; i < 3; ++i)
+        {
+            bones[static_cast<usize>(i)].index = i;
+            bones[static_cast<usize>(i)].name = String(names[i]);
+            bones[static_cast<usize>(i)].parentIndex = i - 1;
+        }
+        skeleton->BuildNameMap();
+    }
+    const Guid rider = edit.CreateEntity(u8"Rider");
+    const Guid leg = edit.CreateEntity(u8"LegIk", rider);
+    scene.GetSystem<engine::animation::SkeletalAnimationComponentManager>()
+        ->Add(scene.FindEntity(rider))
+        .skeleton.SetDirect(skeleton);
+    auto* legs = scene.GetSystem<engine::animation::TwoBoneIkComponentManager>();
+    legs->Add(scene.FindEntity(leg)).midBone = String(u8"Knee");
+    auto live = [&]() -> engine::animation::TwoBoneIkComponent& { return *legs->Get(scene.FindEntity(leg)); };
+
+    edit.EntitySelection().Set(leg);
+    inspector.Refresh();
+    auto* start = foundation::core::Cast<foundation::ui::toolkit::EnumEditor>(inspector.Grid()->GetProperty(u8"startBone"));
+    REQUIRE(start != nullptr);
+    REQUIRE(start->Items().Size() == 4u); // (none), Thigh, Shin, Foot
+    CHECK(start->Items()[0] == u8"(none)");
+    CHECK(start->Items()[2] == u8"Shin");
+    CHECK(start->Value() == 0);
+    start->Setter(1);
+    CHECK(live().startBone == u8"Thigh");
+    commands.Undo();
+    CHECK(live().startBone.IsEmpty());
+
+    auto* mid = foundation::core::Cast<foundation::ui::toolkit::EnumEditor>(inspector.Grid()->GetProperty(u8"midBone"));
+    REQUIRE(mid != nullptr);
+    REQUIRE(mid->Items().Size() == 5u);
+    CHECK(mid->Items()[4] == u8"Knee (not in the skeleton)");
+    CHECK(mid->Value() == 4);
+
+    // With no animator above, the field is plain text.
+    const Guid stray = edit.CreateEntity(u8"Stray");
+    legs->Add(scene.FindEntity(stray));
+    edit.EntitySelection().Set(stray);
+    inspector.Refresh();
+    CHECK(foundation::core::Cast<foundation::ui::toolkit::StringEditor>(inspector.Grid()->GetProperty(u8"startBone")) != nullptr);
 }

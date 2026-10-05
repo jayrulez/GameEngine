@@ -427,6 +427,65 @@ export namespace engine::animation
         }
     }
 
+    /// What authoring needs of the animator above an IK component, from the component data alone
+    /// (an edit scene has no players): its skeleton, once the resource is loaded, and the entity
+    /// whose world is the skeleton's model space.
+    struct IkAuthoringAnimator
+    {
+        const animation::Skeleton* skeleton = nullptr;
+        scene::EntityHandle modelEntity = scene::EntityHandle::Invalid();
+    };
+
+    /// The nearest animator at or above `from`, for the editor (bone pickers, gizmos). False when
+    /// there is none; `skeleton` stays null until the animator's skeleton has loaded.
+    [[nodiscard]] inline bool FindIkAuthoringAnimator(scene::Scene& scene, scene::EntityHandle from,
+                                                      IkAuthoringAnimator& out)
+    {
+        scene::EntityHandle e = from;
+        auto* graphs = scene.GetSystem<AnimationGraphComponentManager>();
+        auto* clips = scene.GetSystem<SkeletalAnimationComponentManager>();
+        for (u32 depth = 0; scene.IsValid(e) && depth < 1024u; ++depth)
+        {
+            if (AnimationGraphComponent* g = graphs != nullptr ? graphs->Get(e) : nullptr)
+            {
+                out.skeleton = g->skeleton.Get();
+                out.modelEntity = ik_detail::ModelEntity(
+                    scene, Span<const scene::EntityRef>{g->meshEntities.Data(), g->meshEntities.Size()}, e);
+                return true;
+            }
+            if (SkeletalAnimationComponent* s = clips != nullptr ? clips->Get(e) : nullptr)
+            {
+                out.skeleton = s->skeleton.Get();
+                out.modelEntity = ik_detail::ModelEntity(
+                    scene, Span<const scene::EntityRef>{s->meshEntities.Data(), s->meshEntities.Size()}, e);
+                return true;
+            }
+            e = scene.GetParent(e);
+        }
+        return false;
+    }
+
+    /// A bone's bind-pose position in the world, through the model entity (the editor's gizmos
+    /// draw the chain where it stands before any animation). False for a name not in the skeleton.
+    [[nodiscard]] inline bool IkBindBoneWorld(scene::Scene& scene, const IkAuthoringAnimator& animator,
+                                              StringView bone, Float3& out)
+    {
+        if (animator.skeleton == nullptr)
+        {
+            return false;
+        }
+        const i32 index = animator.skeleton->FindBone(bone);
+        const animation::Bone* b = index >= 0 ? animator.skeleton->GetBone(index) : nullptr;
+        if (b == nullptr)
+        {
+            return false;
+        }
+        const Float4x4 model = Inverse(b->inverseBindPose);
+        out = TransformPoint(Float3{model.m[3][0], model.m[3][1], model.m[3][2]},
+                             scene.ComposeWorldMatrix(animator.modelEntity));
+        return true;
+    }
+
     /// The nearest animator at or above `from`.
     [[nodiscard]] inline bool FindIkAnimator(scene::Scene& scene, scene::EntityHandle from, IkAnimatorLink& out)
     {

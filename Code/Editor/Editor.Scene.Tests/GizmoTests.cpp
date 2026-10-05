@@ -17,6 +17,8 @@ import foundation.physics;  // ShapeKind
 import engine.render;
 import engine.navigation;
 import engine.physics;      // RigidBodyComponent + manager
+import engine.animation;    // the IK components and their animator
+import foundation.animation; // Skeleton (the IK gizmo's bind chain)
 import editor.core;
 import editor.scene;
 
@@ -359,7 +361,10 @@ TEST_CASE("gizmo-registry: renderers resolve by component type; unselected entit
 {
     GizmoRendererRegistry registry;
     RegisterBuiltinGizmoRenderers(registry);
-    CHECK(registry.Count() == 11u); // +PhysicsCollider/ChildCollider/Character/Joint (edit-time physics gizmos)
+    CHECK(registry.Count() == 14u); // +PhysicsCollider/ChildCollider/Character/Joint, +the three IK gizmos
+    CHECK(registry.Find(&TypeOf<engine::animation::TwoBoneIkComponent>()) != nullptr);
+    CHECK(registry.Find(&TypeOf<engine::animation::AimIkComponent>()) != nullptr);
+    CHECK(registry.Find(&TypeOf<engine::animation::FootIkComponent>()) != nullptr);
 
     CHECK(registry.Find(&TypeOf<engine::render::LightComponent>()) != nullptr);
     CHECK(registry.Find(&TypeOf<engine::physics::RigidBodyComponent>()) != nullptr);
@@ -665,4 +670,71 @@ TEST_CASE("component-gizmo: the capsule collider draws cap spheres + side lines,
         }
     }
     CHECK(sideVerts >= 8u); // the four side lines' endpoints (plus any coincident ring verts)
+}
+
+// An IK component is seen before it runs: its chain where the bind pose stands (through the
+// animator's model entity), its target, and an orange mark when a bone name is not in the skeleton.
+TEST_CASE("component-gizmo: a two-bone IK chain draws in its bind pose, with its target")
+{
+    foundation::scene::Scene scene{DefaultAllocator()};
+    scene.AddSystem<engine::render::MeshComponentManager>();
+    engine::animation::AddAnimationSceneManagers(scene);
+    RefPtr<foundation::animation::Skeleton> skeleton = MakeRef<foundation::animation::Skeleton>(DefaultAllocator(), 3);
+    {
+        Array<foundation::animation::Bone>& bones = skeleton->Bones();
+        const char8_t* names[] = {u8"Thigh", u8"Shin", u8"Foot"};
+        const f32 ys[] = {1.0f, -0.5f, -0.5f};
+        for (i32 i = 0; i < 3; ++i)
+        {
+            bones[static_cast<usize>(i)].index = i;
+            bones[static_cast<usize>(i)].name = String(names[i]);
+            bones[static_cast<usize>(i)].parentIndex = i - 1;
+            bones[static_cast<usize>(i)].localBindPose.position = Float3{0, ys[i], 0};
+        }
+        skeleton->BuildNameMap();
+        skeleton->FindRootBones();
+        skeleton->BuildChildIndices();
+        skeleton->ComputeInverseBindPoses();
+    }
+    const auto rider = scene.CreateEntity(u8"Rider");
+    scene.SetLocalPosition(rider, Float3{10, 0, 0});
+    scene.GetSystem<engine::animation::SkeletalAnimationComponentManager>()->Add(rider).skeleton.SetDirect(skeleton);
+    const auto leg = scene.CreateEntity(u8"LegIk");
+    scene.SetParent(leg, rider);
+    auto* legs = scene.GetSystem<engine::animation::TwoBoneIkComponentManager>();
+    engine::animation::TwoBoneIkComponent& c = legs->Add(leg);
+    c.startBone = String(u8"Thigh");
+    c.midBone = String(u8"Shin");
+    c.endBone = String(u8"Foot");
+    scene.UpdateTransforms();
+
+    GizmoRendererRegistry registry;
+    RegisterBuiltinGizmoRenderers(registry);
+    foundation::render::debug::DebugDraw dd;
+    GizmoContext ctx;
+    ctx.scene = &scene;
+    ctx.debug = &dd;
+    registry.DrawEntity(leg, /*selected*/ true, ctx);
+    // The chain's joints at x = 10, y 1, 0.5 and 0 (the bind pose through the rider).
+    bool sawFoot = false;
+    bool sawThigh = false;
+    for (const auto& v : dd.OverlayLineVertices())
+    {
+        sawThigh = sawThigh || (Abs(v.position.x - 10.0f) < 1e-4f && Abs(v.position.y - 1.0f) < 1e-4f);
+        sawFoot = sawFoot || (Abs(v.position.x - 10.0f) < 1e-4f && Abs(v.position.y) < 1e-4f);
+    }
+    CHECK(sawThigh);
+    CHECK(sawFoot);
+
+    // A bone the skeleton lacks: the chain breaks and the entity is marked orange (R > G).
+    c.midBone = String(u8"Knee");
+    foundation::render::debug::DebugDraw missing;
+    ctx.debug = &missing;
+    registry.DrawEntity(leg, /*selected*/ true, ctx);
+    bool orange = false;
+    for (const auto& v : missing.OverlayLineVertices())
+    {
+        orange = orange || ((v.color & 0xFFu) > ((v.color >> 8) & 0xFFu) + 40u);
+    }
+    CHECK(orange);
 }

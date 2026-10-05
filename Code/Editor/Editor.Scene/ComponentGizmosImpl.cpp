@@ -25,6 +25,8 @@ import foundation.geometry;
 import engine.render;
 import engine.navigation;
 import engine.spline;
+import engine.animation;
+import foundation.animation; // kMaxAimBones
 import foundation.spline;
 import engine.physics;          // RigidBodyComponent (edit-time collider gizmo)
 import foundation.physics;      // ShapeKind / MotionKind
@@ -580,6 +582,187 @@ namespace editor
             {
                 dir = dir * (1.0f / len);
                 dd.DrawArrow(anchor - dir * 0.5f, anchor + dir * 0.5f, color, 0.1f);
+            }
+        }
+    }
+}
+
+namespace editor
+{
+    namespace
+    {
+        const Color kIkChain{0.3f, 0.7f, 1.0f, 1.0f};
+        const Color kIkTarget{0.2f, 0.9f, 0.3f, 1.0f};
+        const Color kIkPole{0.8f, 0.4f, 1.0f, 1.0f};
+        const Color kIkMissing{1.0f, 0.55f, 0.1f, 1.0f};
+
+        // A chain of named bones where the bind pose stands, joint spheres and links; a name the
+        // skeleton lacks breaks the line there and is marked orange at the entity.
+        void DrawBindChain(GizmoContext& ctx, scene::EntityHandle owner,
+                           const engine::animation::IkAuthoringAnimator& animator, Span<const StringView> bones,
+                           Float3* outLast = nullptr)
+        {
+            bool havePrevious = false;
+            Float3 previous{};
+            for (const StringView bone : bones)
+            {
+                Float3 at;
+                if (!engine::animation::IkBindBoneWorld(*ctx.scene, animator, bone, at))
+                {
+                    ctx.debug->DrawWireSphere(ctx.scene->GetWorldPosition(owner), 0.08f, kIkMissing, 10, true);
+                    havePrevious = false;
+                    continue;
+                }
+                if (havePrevious)
+                {
+                    ctx.debug->DrawLine(previous, at, kIkChain, true);
+                }
+                ctx.debug->DrawWireSphere(at, 0.02f, kIkChain, 8, true);
+                previous = at;
+                havePrevious = true;
+                if (outLast != nullptr)
+                {
+                    *outLast = at;
+                }
+            }
+        }
+
+        bool EntityAt(GizmoContext& ctx, const foundation::scene::EntityRef& ref, Float3& out)
+        {
+            if (ref.IsNil())
+            {
+                return false;
+            }
+            const scene::EntityHandle e = ctx.scene->FindEntity(ref.id);
+            if (!ctx.scene->IsValid(e))
+            {
+                return false;
+            }
+            out = ctx.scene->GetWorldPosition(e);
+            return true;
+        }
+
+        // While the scene runs the component draws its own solve; true when it did.
+        bool DrawSolving(GizmoContext& ctx, const engine::animation::IkRuntime& runtime)
+        {
+            if (runtime.status != engine::animation::IkStatus::Solving || runtime.modifier.Get() == nullptr ||
+                !runtime.modifier->solved)
+            {
+                return false;
+            }
+            engine::animation::DrawIk(*ctx.debug, runtime);
+            return true;
+        }
+    }
+
+    const TypeInfo* TwoBoneIkGizmoRenderer::ComponentType() const
+    {
+        return &TypeOf<engine::animation::TwoBoneIkComponent>();
+    }
+    void TwoBoneIkGizmoRenderer::Draw(const Instance& component, scene::EntityHandle owner, GizmoContext& ctx)
+    {
+        const auto* c = component.TryGet<engine::animation::TwoBoneIkComponent>();
+        if (c == nullptr || DrawSolving(ctx, c->runtime))
+        {
+            return;
+        }
+        engine::animation::IkAuthoringAnimator animator;
+        if (!engine::animation::FindIkAuthoringAnimator(*ctx.scene, owner, animator))
+        {
+            ctx.debug->DrawWireSphere(ctx.scene->GetWorldPosition(owner), 0.08f, kIkMissing, 10, true);
+            return;
+        }
+        const StringView bones[] = {c->startBone.AsView(), c->midBone.AsView(), c->endBone.AsView()};
+        DrawBindChain(ctx, owner, animator, bones);
+        Float3 target;
+        if (!EntityAt(ctx, c->target, target))
+        {
+            target = ctx.scene->GetWorldPosition(owner);
+        }
+        ctx.debug->DrawWireSphere(target, 0.05f, kIkTarget, 12, true);
+        Float3 pole;
+        Float3 mid;
+        if (EntityAt(ctx, c->pole, pole) &&
+            engine::animation::IkBindBoneWorld(*ctx.scene, animator, c->midBone.AsView(), mid))
+        {
+            ctx.debug->DrawLine(mid, pole, kIkPole, true);
+        }
+    }
+
+    const TypeInfo* AimIkGizmoRenderer::ComponentType() const
+    {
+        return &TypeOf<engine::animation::AimIkComponent>();
+    }
+    void AimIkGizmoRenderer::Draw(const Instance& component, scene::EntityHandle owner, GizmoContext& ctx)
+    {
+        const auto* c = component.TryGet<engine::animation::AimIkComponent>();
+        if (c == nullptr || DrawSolving(ctx, c->runtime))
+        {
+            return;
+        }
+        engine::animation::IkAuthoringAnimator animator;
+        if (!engine::animation::FindIkAuthoringAnimator(*ctx.scene, owner, animator))
+        {
+            ctx.debug->DrawWireSphere(ctx.scene->GetWorldPosition(owner), 0.08f, kIkMissing, 10, true);
+            return;
+        }
+        StringView bones[foundation::animation::kMaxAimBones];
+        usize count = 0;
+        for (const engine::animation::AimIkBone& b : c->bones)
+        {
+            if (count < foundation::animation::kMaxAimBones)
+            {
+                bones[count++] = b.bone.AsView();
+            }
+        }
+        Float3 last{};
+        DrawBindChain(ctx, owner, animator, Span<const StringView>{bones, count}, &last);
+        Float3 target;
+        if (!EntityAt(ctx, c->target, target))
+        {
+            target = ctx.scene->GetWorldPosition(owner);
+        }
+        ctx.debug->DrawWireSphere(target, 0.05f, kIkTarget, 12, true);
+        if (count > 0)
+        {
+            ctx.debug->DrawLine(last, target, kIkTarget, true);
+        }
+        Float3 up;
+        if (count > 0 && EntityAt(ctx, c->up, up))
+        {
+            ctx.debug->DrawLine(last, up, kIkPole, true);
+        }
+    }
+
+    const TypeInfo* FootIkGizmoRenderer::ComponentType() const
+    {
+        return &TypeOf<engine::animation::FootIkComponent>();
+    }
+    void FootIkGizmoRenderer::Draw(const Instance& component, scene::EntityHandle owner, GizmoContext& ctx)
+    {
+        const auto* c = component.TryGet<engine::animation::FootIkComponent>();
+        if (c == nullptr || DrawSolving(ctx, c->runtime))
+        {
+            return;
+        }
+        engine::animation::IkAuthoringAnimator animator;
+        if (!engine::animation::FindIkAuthoringAnimator(*ctx.scene, owner, animator))
+        {
+            ctx.debug->DrawWireSphere(ctx.scene->GetWorldPosition(owner), 0.08f, kIkMissing, 10, true);
+            return;
+        }
+        // Each leg, and the reach of its ground probe (above and below the foot, along the
+        // model's up).
+        const Float3 up = Normalized(TransformDirection(Float3{0, 1, 0},
+                                                        ctx.scene->GetWorldMatrix(animator.modelEntity)));
+        for (const engine::animation::FootIkLegBones& leg : c->legs)
+        {
+            const StringView bones[] = {leg.startBone.AsView(), leg.midBone.AsView(), leg.endBone.AsView()};
+            Float3 foot{};
+            DrawBindChain(ctx, owner, animator, bones, &foot);
+            if (engine::animation::IkBindBoneWorld(*ctx.scene, animator, leg.endBone.AsView(), foot))
+            {
+                ctx.debug->DrawLine(foot + up * c->rayUp, foot - up * c->rayDown, kIkTarget, true);
             }
         }
     }

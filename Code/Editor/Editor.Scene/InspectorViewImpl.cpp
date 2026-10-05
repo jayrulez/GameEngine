@@ -42,6 +42,7 @@ import foundation.heightfield; // Ref<Heightfield> picker (heightfield collider)
 import foundation.terrain.resource; // Ref<TerrainResource> picker (TerrainComponent)
 import foundation.vegetation.resource; // Ref<VegetationMask> picker (TerrainVegetationComponent)
 import engine.physics;
+import engine.animation; // the animator above an IK component (bone pickers)
 import foundation.navigation.resource;
 import engine.navigation;
 import editor.navigation;
@@ -1644,6 +1645,11 @@ namespace editor
                 const String* s = v.TryGet<String>();
                 return (s != nullptr) ? String(*s) : String{};
             };
+            if (!readOnly && FindAttribute(prop, u8"boneName") != nullptr &&
+                BuildBoneNameRow(id, type, prop, category, path, value().AsView()))
+            {
+                return;
+            }
             auto editor = MakeRef<ui::toolkit::StringEditor>(
                 MemoryAllocator(), name, value().AsView(),
                 readOnly ? Function<void(StringView)>{}
@@ -2400,6 +2406,84 @@ namespace editor
     // Reflected-component EntityRef picker: the twin of BuildScriptEntityPropertyRow (which serves
     // SCRIPT entity properties), but reading/writing a reflected component field via its property
     // address + an undoable SetComponentEntityRef.
+    // A bone name (the `boneName` attribute): a list of the bones of the animator at or above the
+    // entity, so a chain is picked, not typed. A name the skeleton does not have stays listed and
+    // says so (the component turns itself off for it at run time). False, and the plain text
+    // field, while there is no animator or its skeleton has not loaded.
+    bool SceneInspectorView::BuildBoneNameRow(const Guid& id, const TypeInfo* type, const PropertyInfo& prop,
+                                              StringView category, ComponentPropertyPath path,
+                                              StringView current)
+    {
+        SceneEditContext* edit = m_edit;
+        scene::Scene& scene = edit->Scene();
+        engine::animation::IkAuthoringAnimator animator;
+        if (!engine::animation::FindIkAuthoringAnimator(scene, scene.FindEntity(id), animator) ||
+            animator.skeleton == nullptr)
+        {
+            return false;
+        }
+        // Item 0 is "(none)"; then the bones in skeleton order; then the current name if missing.
+        Array<String> names{MemoryAllocator()};
+        names.PushBack(String());
+        for (i32 i = 0; i < animator.skeleton->BoneCount(); ++i)
+        {
+            names.PushBack(animator.skeleton->GetBone(i)->name);
+        }
+        Array<String> labels{MemoryAllocator()};
+        labels.PushBack(String(u8"(none)"));
+        for (usize i = 1; i < names.Size(); ++i)
+        {
+            labels.PushBack(names[i]);
+        }
+        if (!current.IsEmpty() && animator.skeleton->FindBone(current) < 0)
+        {
+            names.PushBack(String(current));
+            labels.PushBack(Format(u8"{} (not in the skeleton)", current));
+        }
+        Array<StringView> items{MemoryAllocator()};
+        for (const String& label : labels)
+        {
+            items.PushBack(label.AsView());
+        }
+        auto indexOf = [names](StringView name) -> i32
+        {
+            for (usize i = 0; i < names.Size(); ++i)
+            {
+                if (names[i].AsView() == name)
+                {
+                    return static_cast<i32>(i);
+                }
+            }
+            return 0;
+        };
+        const char* propName = prop.name;
+        auto editor = MakeRef<ui::toolkit::EnumEditor>(
+            MemoryAllocator(), StringView(reinterpret_cast<const utf8char*>(prop.name)), indexOf(current),
+            Span<const StringView>{items.Data(), items.Size()},
+            Function<void(i32)>{[edit, id, type, propName, path, names](i32 index)
+                                {
+                                    if (index >= 0 && static_cast<usize>(index) < names.Size())
+                                    {
+                                        edit->SetComponentProperty(
+                                            id, type, path, propName,
+                                            Variant::From<String>(String(names[static_cast<usize>(index)])));
+                                    }
+                                }},
+            category);
+        auto read = [edit, id, type, propName, path]() -> String
+        {
+            const TypeInfo* ownerType = nullptr;
+            const Instance owner = edit->ResolvePropertyOwner(id, type, path, &ownerType);
+            const PropertyInfo* p =
+                (owner.IsEmpty() || ownerType == nullptr) ? nullptr : FindProperty(*ownerType, propName);
+            const Variant v = (p != nullptr) ? GetProperty(*p, owner) : Variant{};
+            const String* s = v.TryGet<String>();
+            return (s != nullptr) ? String(*s) : String{};
+        };
+        AddEditor(editor.Get(), [read, indexOf, raw = editor.Get()]() { raw->SetValue(indexOf(read().AsView())); });
+        return true;
+    }
+
     void SceneInspectorView::BuildEntityRefRow(const Guid& id, const TypeInfo* type,
                                                const PropertyInfo& prop, StringView category,
                                                ComponentPropertyPath path)

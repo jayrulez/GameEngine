@@ -635,6 +635,10 @@ void ApplyPropertyPresentation(ui::toolkit::PropertyGrid& grid,
             AddEditor(raw, [raw]() { raw->Refresh(); });
         }
 
+        // A `boneName` string: a list of the animator's bones (false: no animator or skeleton yet,
+        // the caller builds the text field). Defined in the impl.
+        bool BuildBoneNameRow(const Guid& id, const TypeInfo* type, const PropertyInfo& prop,
+                              StringView category, ComponentPropertyPath path, StringView current);
         // Entity-reference row: the entity-picker twin of BuildResourceRefRow. Same ResourceRefEditor
         // widget, but the pick menu lists the CURRENT scene's entities (names; "(none)" clears) and
         // the choice writes the component's EntityRef via SetComponentEntityRef. Defined in the impl.

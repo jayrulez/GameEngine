@@ -24,6 +24,7 @@ import foundation.render;
 import engine.render;
 import engine.navigation;
 import engine.spline;
+import engine.animation;
 
 using namespace foundation::core;
 
@@ -225,6 +226,28 @@ export namespace editor
         void Draw(const Instance& component, scene::EntityHandle owner, GizmoContext& ctx) override;
     };
 
+    /// Inverse kinematics on the selected entity: the solve itself while the scene runs, else the
+    /// chain where the bind pose puts it, its target and its pole (or up), so a chain is seen
+    /// before it is run.
+    class TwoBoneIkGizmoRenderer final : public IGizmoRenderer
+    {
+    public:
+        [[nodiscard]] const TypeInfo* ComponentType() const override;
+        void Draw(const Instance& component, scene::EntityHandle owner, GizmoContext& ctx) override;
+    };
+    class AimIkGizmoRenderer final : public IGizmoRenderer
+    {
+    public:
+        [[nodiscard]] const TypeInfo* ComponentType() const override;
+        void Draw(const Instance& component, scene::EntityHandle owner, GizmoContext& ctx) override;
+    };
+    class FootIkGizmoRenderer final : public IGizmoRenderer
+    {
+    public:
+        [[nodiscard]] const TypeInfo* ComponentType() const override;
+        void Draw(const Instance& component, scene::EntityHandle owner, GizmoContext& ctx) override;
+    };
+
     /// Register the built-in component gizmos (called from RegisterSceneEditor).
     inline void RegisterBuiltinGizmoRenderers(GizmoRendererRegistry& registry)
     {
@@ -250,5 +273,11 @@ export namespace editor
                                                     foundation::core::DefaultAllocator()));
         registry.Register(UniquePtr<IGizmoRenderer>(foundation::core::DefaultAllocator().New<SplineGizmoRenderer>(),
                                                     foundation::core::DefaultAllocator()));
+        registry.Register(UniquePtr<IGizmoRenderer>(
+            foundation::core::DefaultAllocator().New<TwoBoneIkGizmoRenderer>(), foundation::core::DefaultAllocator()));
+        registry.Register(UniquePtr<IGizmoRenderer>(
+            foundation::core::DefaultAllocator().New<AimIkGizmoRenderer>(), foundation::core::DefaultAllocator()));
+        registry.Register(UniquePtr<IGizmoRenderer>(
+            foundation::core::DefaultAllocator().New<FootIkGizmoRenderer>(), foundation::core::DefaultAllocator()));
     }
 }

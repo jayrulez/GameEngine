@@ -41,6 +41,7 @@ export namespace foundation::ui::toolkit
         }
 
         [[nodiscard]] i32 Value() const noexcept { return m_value; }
+        [[nodiscard]] Span<const String> Items() const noexcept { return {m_items.Data(), m_items.Size()}; }
         void SetValue(i32 value)
         {
             m_value = value;

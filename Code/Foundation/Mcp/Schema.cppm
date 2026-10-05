@@ -27,6 +27,7 @@ export namespace foundation::mcp
     {
         JsonValue m_properties = JsonValue::MakeObject();
         JsonValue m_required = JsonValue::MakeArray();
+        bool m_anyFields = false;
 
     public:
         SchemaBuilder& Str(String name, String description = {}, bool required = false)
@@ -93,6 +94,14 @@ export namespace foundation::mcp
             return Add(Move(name), Move(prop), required);
         }
 
+        // The tool takes fields beyond the declared ones (additionalProperties:true): the server
+        // passes them through unchecked instead of refusing them.
+        SchemaBuilder& AnyFields()
+        {
+            m_anyFields = true;
+            return *this;
+        }
+
         // Escape hatch: a fully-formed property schema (nested objects/arrays).
         SchemaBuilder& Property(String name, JsonValue propSchema, bool required = false)
         {
@@ -106,6 +115,10 @@ export namespace foundation::mcp
             schema.Set(u8"type", JsonValue::MakeString(u8"object"));
             schema.Set(u8"properties", m_properties);
             schema.Set(u8"required", m_required);
+            if (m_anyFields)
+            {
+                schema.Set(u8"additionalProperties", JsonValue::MakeBool(true));
+            }
             return schema;
         }
 

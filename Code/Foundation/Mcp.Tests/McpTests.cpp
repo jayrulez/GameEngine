@@ -232,12 +232,7 @@ TEST_CASE("mcp: an argument the schema does not declare is refused, naming the t
 {
     McpServer s;
     Setup(s);
-    s.RegisterTool(u8"open", u8"Takes any field", []()
-                   {
-                       JsonValue schema = SchemaBuilder().Str(u8"name").Build();
-                       schema.Set(u8"additionalProperties", JsonValue::MakeBool(true));
-                       return schema;
-                   }(),
+    s.RegisterTool(u8"open", u8"Takes any field", SchemaBuilder().Str(u8"name").AnyFields().Build(),
                    foundation::mcp::ToolAnnotations::ReadOnly(),
                    [](const JsonValue& args) -> ToolResult
                    {
@@ -258,7 +253,7 @@ TEST_CASE("mcp: an argument the schema does not declare is refused, naming the t
         u8"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"fail\","
         u8"\"arguments\":{\"force\":true}}}"));
     CHECK(r2.Get(u8"error").Get(u8"message").AsString() == StringView(u8"fail: no argument 'force' (it takes none)"));
-    // A schema that declares additionalProperties:true takes any field, and still types the declared ones.
+    // AnyFields (additionalProperties:true) takes any field, and still types the declared ones.
     JsonValue r3 = Response(s.HandleLine(
         u8"{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"open\","
         u8"\"arguments\":{\"name\":\"a\",\"extra\":1}}}"));

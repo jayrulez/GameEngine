@@ -145,4 +145,5 @@ def main():
           round(points[0][1] - points[-1][1], 1), "m")
 
 
-main()
+if __name__ == "__main__":  # course.py imports the mountain to stand things on its snow
+    main()

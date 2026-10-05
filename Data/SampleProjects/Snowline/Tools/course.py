@@ -8,6 +8,9 @@ Needs terrain.py <course> and importall.py <course> first: it places what they m
 - the course line: a spline down the middle of the course (terrain.py's points, with Catmull-Rom
   handles, stored as written);
 - the rider (Board.as on a character, the modelled rider and board under it) at the top gate;
+- the slalom gates (Gate.as on each, Prefabs/GateRed and GateBlue in turn under them) every
+  GATE_SPACING metres down the course, swinging side to side of the line, standing on the snow
+  (terrain.py's mountain), and the finish (Finish.as, Prefabs/FinishLine) at the line's end;
 - the chase camera (FollowCamera.as).
 """
 import json, math, os, sys
@@ -57,10 +60,55 @@ ROCK = asset("StaticMeshAsset", "RockModel.2")
 PINE_MATERIALS = model_materials("Pine")
 ROCK_MATERIALS = model_materials("Rock")
 BOARD = asset("ScriptClassAsset", "Board")
+GATE = asset("ScriptClassAsset", "Gate")
+FINISH = asset("ScriptClassAsset", "Finish")
 CAMERA = asset("ScriptClassAsset", "FollowCamera")
 RIDER_MODEL = next(a["guid"] for a in ASSETS if a["type"] == "PrefabDocument"
                    and a.get("group") == "Models/Rider/RiderModel")
 RIDER_GRAPH = asset("AnimationGraphAsset", "RiderGraph")
+
+
+GATE_SPACING = 45.0   # metres down the course between gates
+GATE_FIRST = 40.0     # the first gate's distance from the top
+GATE_SWING = 3.5      # how far each gate stands off the course line, side to side (m)
+FINISH_BEFORE = 6.0   # the finish's distance before the line's end (m)
+
+
+def along_course(points, distance):
+    """The course line `distance` metres from its top: the point and the heading (radians, 0 runs
+    toward +Z), along the polyline."""
+    for a, b in zip(points, points[1:]):
+        step = math.dist(a, b)
+        if distance <= step or b is points[-1]:
+            t = min(1.0, distance / step) if step > 0 else 0.0
+            p = [a[i] + (b[i] - a[i]) * t for i in range(3)]
+            return p, math.atan2(b[0] - a[0], b[2] - a[2])
+        distance -= step
+    return list(points[-1]), 0.0
+
+
+def gates(d, points, length):
+    """The gates and the finish, each an entity carrying its script with its prefab under it."""
+    import terrain
+    mountain = terrain.Mountain(terrain.COURSES[name])
+    prefabs = {a["name"]: a["guid"] for a in ASSETS if a["type"] == "PrefabDocument" and a.get("group") == "Prefabs"}
+    index = 0
+    distance = GATE_FIRST
+    while distance < length - FINISH_BEFORE - 20.0:
+        p, heading = along_course(points, distance)
+        side = 1 if index % 2 == 0 else -1
+        x = p[0] + math.cos(heading) * GATE_SWING * side  # +X across a heading of 0
+        z = p[2] - math.sin(heading) * GATE_SWING * side
+        e = d.entity("Gate%d" % index, (x, mountain.height(x, z), z), yaw(math.degrees(heading)))
+        d.script(e, (GATE, {"index": index, "heading": heading, "halfWidth": 4.0}))
+        d.instance(prefabs["GateRed" if index % 2 == 0 else "GateBlue"], parent=e)
+        index += 1
+        distance += GATE_SPACING
+    p, heading = along_course(points, length - FINISH_BEFORE)
+    e = d.entity("Finish", (p[0], mountain.height(p[0], p[2]), p[2]), yaw(math.degrees(heading)))
+    d.script(e, (FINISH, {"heading": heading}))
+    d.instance(prefabs["FinishLine"], parent=e)
+    return index
 
 
 def aim_bone(name, share):
@@ -172,6 +220,8 @@ def build():
     wind = d.entity("Wind", parent=rider)
     d.add(wind, "audio.Source", clip=asset("AudioClipAsset", "Wind"), loop=True, spatial=False, autoPlay=True,
           volume=0.0)
+
+    print("gates", gates(d, info["course"], info["course_length"]))
 
     cam = d.entity("Camera", (top[0], top[1] + 4.0, top[2] - 8.0))
     d.add(cam, "camera", farZ=1200.0, fovYRadians=1.05)

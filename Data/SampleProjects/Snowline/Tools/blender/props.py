@@ -1,4 +1,5 @@
-"""Snowline's props: the mountain's trees and rocks, modelled in Blender on the shared kit.
+"""Snowline's props: the mountain's trees and rocks, the slalom gates and the finish, modelled in
+Blender on the shared kit.
 
     blender --background --factory-startup --python props.py -- <out dir> [preview] [names]
 
@@ -20,6 +21,8 @@ WANTED = [a for a in ARGS[1:] if a != "preview"]
 kit3d.PALETTE.update({
     "Bark": (0.20, 0.12, 0.07), "Needles": (0.05, 0.16, 0.09), "NeedlesDark": (0.03, 0.11, 0.07),
     "Snow": (0.86, 0.90, 0.95), "Rock": (0.32, 0.33, 0.36),
+    "Pole": (0.92, 0.92, 0.90), "PoleBand": (0.06, 0.06, 0.07),
+    "FlagRed": (0.80, 0.07, 0.05), "FlagBlue": (0.04, 0.18, 0.72), "Banner": (0.85, 0.15, 0.10),
 })
 
 
@@ -43,7 +46,32 @@ def rock():
     ball("RockSnow", P(0.05, 0, 0.52), 0.55, "Snow", scale=(1.0, 0.8, 0.3), segments=(10, 6), cut_below=0.0)
 
 
-MODELS = {"Pine": pine, "Rock": rock}
+def gate_pole():
+    """A slalom pole 1.9 m tall, white with dark bands, its foot at the origin. A gate is two of
+    them; the flag hangs from each on a hinge (the scene's joint), so it swings when brushed."""
+    tube("Pole", P(0, 0, 0), P(0, 0, 1.9), 0.03, "Pole", "root", 8)
+    for z in (0.5, 1.0):
+        tube("Band", P(0, 0, z), P(0, 0, z + 0.12), 0.034, "PoleBand", "root", 8)
+    ball("Cap", P(0, 0, 1.9), 0.04, "PoleBand", segments=(8, 6))
+
+
+def gate_flag(colour):
+    """A gate's flag: a panel 0.55 m wide and 0.45 m tall, its ORIGIN on the hinge line (the pole's
+    side, half way up the panel), the panel out along +X: the hinge turns it about up."""
+    def build():
+        kit3d.box("Flag", (0.55, 0.015, 0.45), P(0.3, 0, 0), colour, bevel=0.004)
+    return build
+
+
+def finish():
+    """The finish: two posts 10 m apart and a banner across them 3 m up, its foot at the origin."""
+    for side in (-1, 1):
+        tube("Post", P(side * 5.0, 0, 0), P(side * 5.0, 0, 3.6), 0.08, "Pole", "root", 10)
+    kit3d.box("Banner", (10.0, 0.06, 0.7), P(0, 0, 3.2), "Banner", bevel=0.02)
+
+
+MODELS = {"Pine": pine, "Rock": rock, "GatePole": gate_pole, "GateFlagRed": gate_flag("FlagRed"),
+          "GateFlagBlue": gate_flag("FlagBlue"), "Finish": finish}
 
 
 def main():
@@ -53,7 +81,10 @@ def main():
         MODELS[name]()
         if PREVIEW:
             cam = kit3d.studio()
-            eye, target = (P(-6, 9, 4), P(0, 0, 3)) if name == "Pine" else (P(-2, 3, 1.5), P(0, 0, 0.3))
+            eye, target = {"Pine": (P(-6, 9, 4), P(0, 0, 3)), "Finish": (P(-8, 14, 5), P(0, 0, 2)),
+                           "GatePole": (P(-1.5, 2.5, 1.5), P(0, 0, 1.0))}.get(
+                name, (P(-1.2, 2.0, 0.8), P(0.25, 0, 0.0)) if name.startswith("GateFlag") else
+                (P(-2, 3, 1.5), P(0, 0, 0.3)))
             kit3d.shoot(cam, os.path.join(OUT, name + ".png"), eye, target)
         kit3d.export_static(os.path.join(OUT, name + "Model.glb"), name + "Model")
         print("written", name)

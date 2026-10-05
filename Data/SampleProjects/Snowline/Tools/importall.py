@@ -82,7 +82,7 @@ if os.path.exists(rider):
     imported(rider, "Models/Rider", "Model")
 
 props = os.path.join(HERE, "generated", "Props")
-for model in ("Pine", "Rock"):
+for model in ("Pine", "Rock", "GatePole", "GateFlagRed", "GateFlagBlue", "Finish"):
     path = os.path.join(props, model + "Model.glb")
     if os.path.exists(path):
         imported(path, "Models/Props", "Model")

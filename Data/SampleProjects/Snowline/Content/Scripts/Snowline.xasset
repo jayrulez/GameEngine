@@ -1,0 +1,13 @@
+<root>
+	<string name="guid">30d69069-a8dc-4304-8be7-49cb0011428d</string>
+	<string name="typeNamespace">rtti::pipeline::script</string>
+	<string name="typeName">ScriptClassAsset</string>
+	<array name="dataVersions" count="1">
+		<u64 name="type">1265517353284495090</u64>
+		<u32 name="version">0</u32>
+	</array>
+	<object name="payload">
+		<string name="fileName">Snowline.as</string>
+		<string name="language">angelscript</string>
+	</object>
+</root>

@@ -1,0 +1,12 @@
+<root>
+	<string name="guid">409e4cea-20a2-4705-9a54-059fa662850f</string>
+	<string name="typeNamespace">rtti::pipeline::ui</string>
+	<string name="typeName">UIDocumentAsset</string>
+	<array name="dataVersions" count="1">
+		<u64 name="type">6477862957065698361</u64>
+		<u32 name="version">2</u32>
+	</array>
+	<object name="payload">
+		<string name="fileName">Finish.sml</string>
+	</object>
+</root>

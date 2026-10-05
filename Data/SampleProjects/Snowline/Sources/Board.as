@@ -28,7 +28,6 @@ class Board
     [0.45, "Air drag in a tuck (share of the standing drag)"] float tuckDrag;
     [0.5, "Turning in a tuck (share of the full carve)"] float tuckTurn;
     [5.5, "Upward speed of a jump (m/s)"] float jumpSpeed;
-    [6.0, "Distance before the end of the course line that counts as the finish (m)"] float finishMargin;
     ["asset:Prefab", "The board's mark in the snow (Prefabs/TrackMark)"] Guid@ trackMark;
     [1.5, "Distance between the track's marks (m)"] float trackSpacing;
     [2.0, "Slowest speed that leaves a track (m/s)"] float trackSpeed;
@@ -44,6 +43,7 @@ class Board
     private Entity@ m_figure;     // the skinned mesh the graph drives
     private float m_sinceMark = 0.0f; // metres ridden since the last mark of the track
     private bool m_spraying = false;
+    private int m_nextGate = 0;   // the gate the rider looks at next
 
     Board(Entity@ entity) { @self = entity; }
 
@@ -133,12 +133,19 @@ class Board
         animate(steer, tuck, !grounded, grab && !grounded, d);
         look(down);
 
-        if (course !is null && course.isValid() &&
-            down > SceneSplines::of(self.scene).length(course) - finishMargin)
-        {
-            c.setPosition(m_start);
-        }
     }
+
+    // Snowline.as starts the next run (the finish card's Jump): back to the top, the first gate.
+    void onRunRestart(int unused)
+    {
+        CharacterComponent::of(self).setPosition(m_start);
+        m_nextGate = 0;
+        m_lean = 0.0f;
+    }
+
+    // The gate the rider looks at next is the one after the last crossed (passed or missed).
+    void onGatePassed(int index) { m_nextGate = index + 1; }
+    void onGateMissed(int index) { m_nextGate = index + 1; }
 
     // Turns the velocity's ground direction by the carve, keeping its speed. A right turn (steer
     // > 0) turns the heading toward -X when going +Z: the yaw (atan2(x, z)) falls.
@@ -175,12 +182,26 @@ class Board
         return (steer > 1.0f) ? 1.0f : ((steer < -1.0f) ? -1.0f : steer);
     }
 
-    // The rider's head looks down the course line ahead (an AimIkComponent on the board's entity;
-    // the next gate, once the course has gates), held at about eye height above the snow.
+    // The rider's head looks at the next gate (an AimIkComponent on the board's entity), then the
+    // finish; with neither found, down the course line ahead. About eye height above the snow.
     private void look(float down)
     {
         AimIkComponent@ aim = AimIkComponent::of(self);
-        if (aim is null || course is null || !course.isValid())
+        if (aim is null)
+        {
+            return;
+        }
+        Entity@ next = self.scene.find("Gate" + m_nextGate);
+        if (next is null || !next.isValid())
+        {
+            @next = self.scene.find("Finish");
+        }
+        if (next !is null && next.isValid())
+        {
+            SceneAnimation::of(self.scene).setIkTarget(self, next.worldPosition() + Float3(0.0f, 1.2f, 0.0f));
+            return;
+        }
+        if (course is null || !course.isValid())
         {
             return;
         }

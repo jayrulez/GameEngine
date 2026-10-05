@@ -423,10 +423,6 @@ namespace engine::runtime
 
     void GameInstance::TickScript(f32 hostDeltaTime, f32 contextTimeScale)
     {
-        if (m_game.Get() == nullptr)
-        {
-            return;
-        }
         // Debug-paused: the debugger holds a suspended update mid-call. Starting a NEW
         // update each frame would re-hit the breakpoint per frame (pause-event spam, locals
         // flicker) and orphan the held context. Hold script time still, like the scene sim.
@@ -434,12 +430,19 @@ namespace engine::runtime
         {
             return;
         }
-        const f32 sceneScale = m_scene != nullptr ? m_scene->TimeScale() : 1.0f;
-        const scene::FrameTime frame(hostDeltaTime, contextTimeScale, m_instanceTimeScale,
-                                     sceneScale);
+        // The run's clock counts its frames whether or not the project has a game script: a
+        // playtest times its run by it, and a scene of behaviours alone runs as surely as one
+        // a game script drives.
         m_runTime += static_cast<f64>(hostDeltaTime);
         m_runBinding.realDeltaSeconds = hostDeltaTime;
         m_runBinding.realSeconds = m_runTime;
+        if (m_game.Get() == nullptr)
+        {
+            return;
+        }
+        const f32 sceneScale = m_scene != nullptr ? m_scene->TimeScale() : 1.0f;
+        const scene::FrameTime frame(hostDeltaTime, contextTimeScale, m_instanceTimeScale,
+                                     sceneScale);
         core::Variant dt = core::Variant::From(frame.SceneDt());
         if (auto result = m_game->Invoke(u8"update", core::Span<core::Variant>{&dt, 1});
             !result.HasValue())

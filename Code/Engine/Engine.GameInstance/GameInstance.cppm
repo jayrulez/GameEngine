@@ -636,7 +636,7 @@ export namespace engine::runtime
             m_scriptContext; // the game script's ref to the run host's context
         core::RefPtr<script::ScriptObject> m_game;
         core::String m_scriptFault; // why the game script stopped on its own (ScriptFault)
-        f64 m_runTime = 0.0;        // unscaled seconds of script frames (RunTime)
+        f64 m_runTime = 0.0;        // unscaled seconds of the run's frames, game script or not (RunTime)
         engine::script::ScriptEventSubscriptions m_gameEventSubs; // Game tier's run-bus on<Event> inbox
 
         NetworkController m_network; // this run's networking (endpoint + INetworkController), composed

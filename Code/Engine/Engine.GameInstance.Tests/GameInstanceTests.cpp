@@ -1315,6 +1315,23 @@ TEST_CASE("game-instance: a faulted game script says where and why, and the run 
     CHECK(other.ScriptFault().ContainsIgnoreCase(u8"did not instantiate"));
 }
 
+// A project with no game script (a scene of behaviours alone) still runs, and a playtest times its
+// run by this clock: it counts the frames either way (Snowline's first scene had none, and every
+// pie_run on it waited out its timeout at run time 0).
+TEST_CASE("game-instance: the run clock counts frames without a game script")
+{
+    RegisterCoreTypes();
+    engine::runtime::GameInstance gi;
+    CHECK_FALSE(gi.ScriptRunning());
+    for (int i = 0; i < 5; ++i)
+    {
+        gi.TickScript(1.0f / 60.0f, 1.0f);
+    }
+    CHECK(gi.RunTime() == doctest::Approx(5.0 / 60.0).epsilon(1e-5));
+    gi.ResetRunClock();
+    CHECK(gi.RunTime() == 0.0);
+}
+
 // agent-playtesting-and-asset-creation.md P4 (Sedulous aaf5ff78): the run clock is the host's
 // unscaled delta, so it keeps going while the game pauses its scene (behind a menu) and a
 // playtest's timeline goes on; and a playtest reads the running game script's properties.

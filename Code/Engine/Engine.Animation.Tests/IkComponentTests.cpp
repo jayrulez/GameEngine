@@ -291,3 +291,113 @@ TEST_CASE("ik component: the script calls set a point and read the result; remov
     s.Tick(); // and the player runs on with nothing dangling
     CHECK_FALSE(animation.ikReached(headEntity));
 }
+
+namespace
+{
+    // Flat ground at `height` everywhere, answered as the scene's solid-surface ray query (the seam
+    // physics fills in a running game); counts the rays it is asked.
+    class FlatGround final : public scene::SceneSystem, public scene::ISceneRayQuery
+    {
+    public:
+        [[nodiscard]] scene::ISceneRayQuery* AsRayQuery() noexcept override { return this; }
+        bool CastRay(Float3 origin, Float3 direction, f32 maxDistance, u32, scene::SceneRayHit& out) override
+        {
+            ++casts;
+            if (direction.y >= -1.0e-6f)
+            {
+                return false;
+            }
+            const f32 t = (origin.y - height) / -direction.y;
+            if (t < 0.0f || t > maxDistance)
+            {
+                return false;
+            }
+            out.distance = t;
+            out.position = origin + direction * t;
+            out.normal = Float3{0, 1, 0};
+            return true;
+        }
+        f32 height = 0.0f;
+        usize casts = 0;
+    };
+
+    // A biped's hips and legs (origin at its feet, ankles 0.1 up) under an animator on Walker.
+    RefPtr<animation::Skeleton> MakeBiped()
+    {
+        RefPtr<animation::Skeleton> s = MakeRef<animation::Skeleton>(DefaultAllocator(), 7);
+        Array<animation::Bone>& bones = s->Bones();
+        const char8_t* names[] = {u8"Hips", u8"ThighL", u8"ShinL", u8"FootL", u8"ThighR", u8"ShinR", u8"FootR"};
+        const i32 parents[] = {-1, 0, 1, 2, 0, 4, 5};
+        const Float3 offsets[] = {{0, 1, 0},          {0.15f, 0, 0},      {0, -0.45f, 0.02f}, {0, -0.45f, -0.02f},
+                                  {-0.15f, 0, 0},     {0, -0.45f, 0.02f}, {0, -0.45f, -0.02f}};
+        for (i32 i = 0; i < 7; ++i)
+        {
+            bones[static_cast<usize>(i)].index = i;
+            bones[static_cast<usize>(i)].name = String(names[i]);
+            bones[static_cast<usize>(i)].parentIndex = parents[i];
+            bones[static_cast<usize>(i)].localBindPose.position = offsets[i];
+        }
+        s->BuildNameMap();
+        s->FindRootBones();
+        s->BuildChildIndices();
+        s->ComputeInverseBindPoses();
+        return s;
+    }
+}
+
+TEST_CASE("ik foot component: feet stand on the ground the scene's ray query finds, probed once a frame")
+{
+    scene::Scene level{DefaultAllocator(), u8"feet"};
+    level.AddSystem<engine::render::MeshComponentManager>();
+    engine::animation::AddAnimationSceneManagers(level);
+    FlatGround* ground = level.AddSystem<FlatGround>();
+    RefPtr<animation::Skeleton> skeleton = MakeBiped();
+
+    const scene::EntityHandle walker = level.CreateEntity(u8"Walker");
+    Transform at;
+    at.position = Float3{2, 0, 1};
+    at.rotation = Quaternion::FromAxisAngle(Float3{0, 1, 0}, 0.6f);
+    level.SetLocalTransform(walker, at);
+    auto& animator = level.GetSystem<engine::animation::SkeletalAnimationComponentManager>()->Add(walker);
+    animator.skeleton.SetDirect(skeleton);
+    const scene::EntityHandle feet = level.CreateEntity(u8"FeetIk");
+    level.SetParent(feet, walker);
+    auto& foot = level.GetSystem<engine::animation::FootIkComponentManager>()->Add(feet);
+    foot.legs.PushBack(engine::animation::FootIkLegBones{String(u8"ThighL"), String(u8"ShinL"), String(u8"FootL"), {}});
+    foot.legs.PushBack(engine::animation::FootIkLegBones{String(u8"ThighR"), String(u8"ShinR"), String(u8"FootR"), {}});
+    foot.pelvisBone = String(u8"Hips");
+    foot.fadeSeconds = 0.0f;
+
+    animation::AnimationPlayer* player = nullptr;
+    auto footWorldY = [&](i32 bone)
+    {
+        (void)player->GetSkinningMatrices();
+        animation::ModelPoseCache cache;
+        cache.Build(*skeleton, player->GetFinalPoses());
+        const Float4x4& m = cache.At(bone);
+        return TransformPoint(Float3{m.m[3][0], m.m[3][1], m.m[3][2]}, level.GetWorldMatrix(walker)).y;
+    };
+
+    ground->height = 0.25f; // a raised floor: both feet rise onto it, the pelvis stays
+    level.Update(1.0f / 60.0f);
+    player = animator.player.Get();
+    REQUIRE(player != nullptr);
+    level.Update(1.0f / 60.0f);
+    const usize castsBefore = ground->casts;
+    CHECK(footWorldY(3) == doctest::Approx(0.35f).epsilon(1e-4));
+    CHECK(footWorldY(6) == doctest::Approx(0.35f).epsilon(1e-4));
+    // Each read above evaluated the player again: the hits were reused, no ray cast twice.
+    CHECK(ground->casts == castsBefore);
+    level.Update(1.0f / 60.0f);
+    (void)player->GetSkinningMatrices();
+    CHECK(ground->casts == castsBefore + 2u); // one per foot per frame
+
+    // A floor below the animation's: the pelvis drops to it (clamped at pelvisDropMax 0.3).
+    ground->height = -0.2f;
+    for (i32 frame = 0; frame < 120; ++frame)
+    {
+        level.Update(1.0f / 60.0f);
+    }
+    CHECK(footWorldY(3) == doctest::Approx(-0.1f).epsilon(1e-3));
+    CHECK(footWorldY(0) == doctest::Approx(0.8f).epsilon(1e-3));
+}

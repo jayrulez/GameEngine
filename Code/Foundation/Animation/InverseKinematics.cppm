@@ -241,8 +241,8 @@ export namespace foundation::animation
     }
 
     /// Bends a two-bone chain so its end reaches `settings.target`: exactly when the target is in
-    /// reach, else stopped at kTwoBoneMaxReach of full reach (or the chain's shortest fold) and
-    /// pointed at it. Bone lengths are the pose's own (a rotation keeps them; the bind pose's would
+    /// reach, else stopped at kTwoBoneMaxReach of full reach (or the span the pose already has, if
+    /// the animation holds it straighter; or the chain's shortest fold) and pointed at it. Bone lengths are the pose's own (a rotation keeps them; the bind pose's would
     /// miss when an animation moved a bone). The mid joint stays in the bend plane, so it never
     /// rolls or flips between frames. Writes the start and mid local rotations, and the end's with
     /// matchRotation.
@@ -282,7 +282,10 @@ export namespace foundation::animation
         const Float3 side = ik::BendSide(skeleton, model, chain, settings, along, upper);
         const Float3 hinge = Normalized(Cross(along, side));
         const f32 shortest = Max(Abs(upper - lower), 1.0e-4f * reach);
-        const f32 span = Clamp(Length(target - a), shortest, kTwoBoneMaxReach * reach);
+        // Short of locking straight, unless the animation already holds the chain straighter: IK
+        // never pulls a nearly straight standing leg up off the ground it already reaches.
+        const f32 longest = Max(kTwoBoneMaxReach * reach, Min(Length(c - a), reach));
+        const f32 span = Clamp(Length(target - a), shortest, longest);
         const f32 cosWanted =
             Clamp((upper * upper + lower * lower - span * span) / (2.0f * upper * lower), -1.0f, 1.0f);
         // The interior angle measured about the hinge (a turn about it opens the joint), so a
@@ -443,6 +446,179 @@ export namespace foundation::animation
 
         result.error = missed();
         result.reached = result.error <= kIkReachTolerance;
+        return result;
+    }
+
+    /// The most legs one foot solve plants (a biped 2, a quadruped 4).
+    inline constexpr usize kMaxFootIkLegs = 4;
+
+    /// One leg of a foot solve: its two-bone chain (the end bone is the foot) and the hinge for a
+    /// straight chain with a straight bind pose.
+    struct FootIkLeg
+    {
+        TwoBoneIkChain chain;
+        Float3 hingeAxis = Float3::Zero;
+    };
+
+    /// What is under a foot, found by the caller (a physics probe, in the engine): model space.
+    struct FootGround
+    {
+        bool hit = false;
+        Float3 point = Float3::Zero;
+        Float3 normal{0.0f, 1.0f, 0.0f};
+    };
+
+    struct FootIkSettings
+    {
+        Float3 up{0.0f, 1.0f, 0.0f}; // model space
+        // The height along up of the ground the animation was made on: 0 when the model's origin
+        // is at its feet (every imported sample rig); a rig whose origin is elsewhere says where.
+        f32 groundHeight = 0.0f;
+        f32 pelvisDropMax = 0.3f;     // the most the pelvis lowers to let the lower foot reach
+        f32 maxTilt = 30.0f * kDegToRad; // a foot turns to its ground's slope up to this
+        f32 liftHeight = 0.15f; // a foot animated higher than this is swinging: it fades out by twice it
+        f32 raiseRate = 20.0f;  // easing per second while a foot or the pelvis rises
+        f32 lowerRate = 8.0f;   // and while it lowers (slower: a foot settles onto the ground)
+        f32 weight = 1.0f;
+    };
+
+    /// The eased corrections a foot solve carries from one frame to the next (the caller keeps one
+    /// per character). The first solve takes its goals at once.
+    struct FootIkState
+    {
+        bool primed = false;
+        f32 pelvis = 0.0f;
+        f32 offset[kMaxFootIkLegs] = {}; // how far each foot rises (or falls) to its ground
+        f32 plant[kMaxFootIkLegs] = {};  // how planted each foot is (0 swinging or no ground, 1 down)
+    };
+
+    struct FootIkResult
+    {
+        bool valid = false;
+        f32 pelvisOffset = 0.0f;                // along up (0 or below)
+        f32 footError[kMaxFootIkLegs] = {};     // each foot's miss after its solve
+    };
+
+    /// Where each foot stands in the animated pose (model space): the points a caller probes the
+    /// ground under, before the solve changes anything. Fills `out` up to the legs' count.
+    inline void FootIkAnimatedFeet(const ModelPoseCache& model, Span<const FootIkLeg> legs, Span<Float3> out)
+    {
+        for (usize i = 0; i < legs.Size() && i < out.Size(); ++i)
+        {
+            out[i] = ik::Position(model.At(legs[i].chain.end));
+        }
+    }
+
+    /// Feet that stand on the ground under them (inverse-kinematics.md P3): each planted foot rises
+    /// or falls by the ground's height under it (measured from the animation's ground, groundHeight
+    /// along up) and turns to the slope within maxTilt; the pelvis lowers by the deepest
+    /// correction, clamped, so the lower foot can reach; a foot the animation lifts above
+    /// liftHeight is swinging and is left to the animation. In order: the pelvis, its rebuild, then
+    /// each leg. The corrections ease by `deltaSeconds` through `state`.
+    inline FootIkResult SolveFootIk(const Skeleton& skeleton, Span<BoneTransform> local, ModelPoseCache& model,
+                                    i32 pelvis, Span<const FootIkLeg> legs, Span<const FootGround> grounds,
+                                    const FootIkSettings& settings, FootIkState& state, f32 deltaSeconds)
+    {
+        FootIkResult result;
+        if (legs.IsEmpty() || legs.Size() > kMaxFootIkLegs || grounds.Size() != legs.Size() ||
+            LengthSquared(settings.up) < 1.0e-12f)
+        {
+            return result;
+        }
+        for (const FootIkLeg& leg : legs)
+        {
+            if (!ik::InPose(skeleton, local, leg.chain.start) || !ik::InPose(skeleton, local, leg.chain.mid) ||
+                !ik::InPose(skeleton, local, leg.chain.end) || !ik::IsBelow(skeleton, leg.chain.mid, leg.chain.start) ||
+                !ik::IsBelow(skeleton, leg.chain.end, leg.chain.mid))
+            {
+                return result;
+            }
+        }
+        const bool movesPelvis = ik::InPose(skeleton, local, pelvis);
+        ik::EnsureModel(skeleton, local, model);
+        result.valid = true;
+        const Float3 up = Normalized(settings.up);
+
+        // The goals, from the animated pose.
+        Float3 feet[kMaxFootIkLegs];
+        Quaternion footTurn[kMaxFootIkLegs];
+        f32 offsetGoal[kMaxFootIkLegs] = {};
+        f32 plantGoal[kMaxFootIkLegs] = {};
+        for (usize i = 0; i < legs.Size(); ++i)
+        {
+            feet[i] = ik::Position(model.At(legs[i].chain.end));
+            footTurn[i] = ik::RotationOf(model.At(legs[i].chain.end));
+            if (!grounds[i].hit)
+            {
+                continue; // no ground: the animation keeps the foot
+            }
+            const f32 lift = Dot(feet[i], up) - settings.groundHeight;
+            const f32 band = Max(settings.liftHeight, 1.0e-4f);
+            plantGoal[i] = Clamp(1.0f - (lift - settings.liftHeight) / band, 0.0f, 1.0f);
+            offsetGoal[i] = Dot(grounds[i].point, up) - settings.groundHeight;
+        }
+
+        // Ease toward them (the first solve takes them at once; a zero step, a paused scene still
+        // evaluating, holds them).
+        const auto ease = [&](f32& value, f32 goal)
+        {
+            if (!state.primed)
+            {
+                value = goal;
+                return;
+            }
+            const f32 rate = goal > value ? settings.raiseRate : settings.lowerRate;
+            value += (goal - value) * (1.0f - Exp(-Max(rate, 0.0f) * Max(deltaSeconds, 0.0f)));
+        };
+        f32 deepest = 0.0f;
+        for (usize i = 0; i < legs.Size(); ++i)
+        {
+            ease(state.offset[i], offsetGoal[i]);
+            ease(state.plant[i], plantGoal[i]);
+            deepest = Min(deepest, state.offset[i] * state.plant[i]);
+        }
+        ease(state.pelvis, Max(deepest, -Max(settings.pelvisDropMax, 0.0f)));
+        state.primed = true;
+        result.pelvisOffset = state.pelvis;
+
+        const f32 weight = Clamp(settings.weight, 0.0f, 1.0f);
+        if (weight <= 0.0f)
+        {
+            return result;
+        }
+        if (movesPelvis && state.pelvis != 0.0f)
+        {
+            // The pelvis lowers along model up, turned into its parent's space.
+            const Bone* b = skeleton.GetBone(pelvis);
+            const Float4x4 parent = b->parentIndex >= 0 ? model.At(b->parentIndex) : b->rootCorrection;
+            local[static_cast<usize>(pelvis)].position +=
+                TransformDirection(up * (state.pelvis * weight), Inverse(parent));
+            ik::Rebuild(skeleton, local, model, pelvis);
+        }
+        for (usize i = 0; i < legs.Size(); ++i)
+        {
+            const f32 legWeight = weight * state.plant[i];
+            if (legWeight <= 0.0f)
+            {
+                result.footError[i] = 0.0f;
+                continue; // swinging: the animation's (only the pelvis carried it)
+            }
+            TwoBoneIkSettings leg;
+            leg.target = feet[i] + up * state.offset[i];
+            leg.hingeAxis = legs[i].hingeAxis;
+            leg.weight = legWeight;
+            leg.matchRotation = true;
+            Quaternion tilt = Quaternion::Identity;
+            const Float3 normal = LengthSquared(grounds[i].normal) > 1.0e-12f ? Normalized(grounds[i].normal) : up;
+            const f32 slope = Acos(Clamp(Dot(up, normal), -1.0f, 1.0f));
+            const Float3 axis = Cross(up, normal);
+            if (slope > 1.0e-5f && LengthSquared(axis) > 1.0e-12f)
+            {
+                tilt = Quaternion::FromAxisAngle(Normalized(axis), Min(slope, Max(settings.maxTilt, 0.0f)));
+            }
+            leg.targetRotation = tilt * footTurn[i];
+            result.footError[i] = SolveTwoBone(skeleton, local, model, legs[i].chain, leg).error;
+        }
         return result;
     }
 }

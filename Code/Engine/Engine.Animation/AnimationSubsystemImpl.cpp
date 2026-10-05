@@ -162,6 +162,59 @@ namespace engine::animation
             .Property<&AimIkComponent::debugDraw>("debugDraw");
     }
 
+    REFLECT_VALUE(FootIkLegBones, "rtti::engine::animation")
+    {
+        builder.Property<&FootIkLegBones::startBone>("startBone")
+            .PropAttribute("boneName", true)
+            .PropAttribute("description", String(u8"The thigh."))
+            .Property<&FootIkLegBones::midBone>("midBone")
+            .PropAttribute("boneName", true)
+            .PropAttribute("description", String(u8"The shin (the knee bends)."))
+            .Property<&FootIkLegBones::endBone>("endBone")
+            .PropAttribute("boneName", true)
+            .PropAttribute("description", String(u8"The foot."))
+            .Property<&FootIkLegBones::hingeAxis>("hingeAxis")
+            .PropAttribute("description",
+                           String(u8"The knee's axis in the thigh's space, for a straight leg with a straight "
+                                  u8"bind pose."));
+    }
+
+    REFLECT_VALUE(FootIkComponent, "rtti::engine::animation")
+    {
+        builder.Attribute("displayName", String(u8"Foot IK"))
+            .Attribute("category", String(u8"Animation"))
+            .Method<&foundation::script::ComponentOf<FootIkComponent>, FootIkComponent>("of")
+            .Property<&FootIkComponent::legs>("legs")
+            .PropAttribute("description", String(u8"Up to four legs, each thigh, shin, foot."))
+            .Property<&FootIkComponent::pelvisBone>("pelvisBone")
+            .PropAttribute("boneName", true)
+            .PropAttribute("description", String(u8"Lowers so the lower foot can reach (empty: it stays)."))
+            .Property<&FootIkComponent::rayUp>("rayUp")
+            .PropAttribute("description", String(u8"The ground probe starts this far above the foot."))
+            .Property<&FootIkComponent::rayDown>("rayDown")
+            .PropAttribute("description", String(u8"And looks this far below it."))
+            .Property<&FootIkComponent::groupMask>("groupMask")
+            .PropAttribute("description", String(u8"The collision groups that count as ground."))
+            .Property<&FootIkComponent::pelvisDropMax>("pelvisDropMax")
+            .Property<&FootIkComponent::maxTilt>("maxTilt")
+            .PropAttribute("range", Float4{0.0f, 90.0f, 1.0f, 0.0f})
+            .PropAttribute("description", String(u8"Degrees a foot turns to its ground's slope."))
+            .Property<&FootIkComponent::liftHeight>("liftHeight")
+            .PropAttribute("description", String(u8"A foot animated higher than this is swinging and left alone."))
+            .Property<&FootIkComponent::groundHeight>("groundHeight")
+            .PropAttribute("description",
+                           String(u8"The animation's ground along up: 0 when the model's origin is at its feet."))
+            .Property<&FootIkComponent::raiseRate>("raiseRate")
+            .Property<&FootIkComponent::lowerRate>("lowerRate")
+            .Property<&FootIkComponent::weight>("weight")
+            .PropAttribute("range", Float4{0.0f, 1.0f, 0.01f, 0.0f})
+            .Property<&FootIkComponent::fadeSeconds>("fadeSeconds")
+            .PropAttribute("range", Float4{0.0f, 4.0f, 0.05f, 0.0f})
+            .Property<&FootIkComponent::active>("active")
+            .Property<&FootIkComponent::order>("order")
+            .Property<&FootIkComponent::debugDraw>("debugDraw");
+    }
+
     REFLECT_VALUE(InstancedSkinningComponent, "rtti::engine::animation")
     {
         // Script (Track A): InstancedSkinningComponent.of(entity) -> live poseCount/speed (the crowd
@@ -223,6 +276,9 @@ namespace engine::animation
             RttiRegisterValue_AimIkBone();
             core::RegisterArrayType<AimIkBone>(); // the bone list (list editor + scripts)
             RttiRegisterValue_AimIkComponent();
+            RttiRegisterValue_FootIkLegBones();
+            core::RegisterArrayType<FootIkLegBones>();
+            RttiRegisterValue_FootIkComponent();
             RttiRegisterEnum_PropertyLoopMode();
             RttiRegisterValue_PropertyAnimatorComponent();
             return true;
@@ -246,7 +302,8 @@ namespace engine::animation
             {&core::TypeOf<InstancedSkinningComponent>(), u8"InstancedSkinningComponent"},
             {&core::TypeOf<PropertyAnimatorComponent>(), u8"PropertyAnimatorComponent"},
             {&core::TypeOf<TwoBoneIkComponent>(), u8"TwoBoneIkComponent"},
-            {&core::TypeOf<AimIkComponent>(), u8"AimIkComponent"}};
+            {&core::TypeOf<AimIkComponent>(), u8"AimIkComponent"},
+            {&core::TypeOf<FootIkComponent>(), u8"FootIkComponent"}};
         for (const Entry& component : components)
         {
             GlobalTypeRegistry().Register(*component.type);
@@ -284,6 +341,13 @@ namespace engine::animation
             if (auto* aim = scene->GetSystem<AimIkComponentManager>())
             {
                 if (AimIkComponent* c = aim->Get(entity))
+                {
+                    visit(c->runtime);
+                }
+            }
+            if (auto* feet = scene->GetSystem<FootIkComponentManager>())
+            {
+                if (FootIkComponent* c = feet->Get(entity))
                 {
                     visit(c->runtime);
                 }
@@ -341,7 +405,9 @@ namespace engine::animation
         {
             auto* twoBone = scene->GetSystem<TwoBoneIkComponentManager>();
             auto* aim = scene->GetSystem<AimIkComponentManager>();
-            if ((twoBone == nullptr || twoBone->Count() == 0) && (aim == nullptr || aim->Count() == 0))
+            auto* feet = scene->GetSystem<FootIkComponentManager>();
+            if ((twoBone == nullptr || twoBone->Count() == 0) && (aim == nullptr || aim->Count() == 0) &&
+                (feet == nullptr || feet->Count() == 0))
             {
                 continue;
             }
@@ -353,6 +419,10 @@ namespace engine::animation
             if (aim != nullptr)
             {
                 aim->DrawDebug(draw);
+            }
+            if (feet != nullptr)
+            {
+                feet->DrawDebug(draw);
             }
         }
     }

@@ -55,11 +55,17 @@ export namespace engine::animation
         {
             TwoBone,
             Aim,
+            Foot,
         };
 
         void Apply(const animation::Skeleton& skeleton, Span<animation::BoneTransform> local,
                    animation::ModelPoseCache& model) override
         {
+            if (kind == Kind::Foot)
+            {
+                ApplyFoot(skeleton, local, model);
+                return;
+            }
             if (kind == Kind::TwoBone)
             {
                 result = animation::SolveTwoBone(skeleton, local, model, chain, twoBone);
@@ -84,13 +90,83 @@ export namespace engine::animation
                     drawn[i] = aimBones[i];
                 }
             }
+            DrawnToWorld(model);
+            solved = true;
+        }
+
+        void DrawnToWorld(const animation::ModelPoseCache& model)
+        {
             for (usize i = 0; i < drawnCount; ++i)
             {
                 const Float4x4& m = model.At(drawn[i]);
                 chainWorld[i] = TransformPoint(Float3{m.m[3][0], m.m[3][1], m.m[3][2]}, modelToWorld);
             }
+        }
+
+        // Feet: probe the ground under the animated feet once a frame (a second evaluation in the
+        // same frame reuses the hits and holds the easing: no extra rays, no double step), then
+        // solve.
+        void ApplyFoot(const animation::Skeleton& skeleton, Span<animation::BoneTransform> local,
+                       animation::ModelPoseCache& model)
+        {
+            const usize legs = Min(footLegs.Size(), animation::kMaxFootIkLegs);
+            f32 step = 0.0f;
+            if (footNewFrame)
+            {
+                footNewFrame = false;
+                step = footStep;
+                Float3 feet[animation::kMaxFootIkLegs];
+                animation::FootIkAnimatedFeet(model, Span<const animation::FootIkLeg>{footLegs.Data(), legs},
+                                              Span<Float3>{feet, legs});
+                const Float3 up = Normalized(foot.up);
+                const Float3 downWorld = TransformDirection(-up, modelToWorld);
+                const f32 scale = Length(downWorld); // model to world length
+                for (usize i = 0; i < legs; ++i)
+                {
+                    footGrounds[i] = animation::FootGround{};
+                    footHitWorld[i] = false;
+                    scene::SceneRayHit hit;
+                    if (rays == nullptr || scale <= kEpsilon)
+                    {
+                        continue;
+                    }
+                    const Float3 origin = TransformPoint(feet[i] + up * footRayUp, modelToWorld);
+                    if (rays->CastRay(origin, downWorld * (1.0f / scale), (footRayUp + footRayDown) * scale,
+                                      footGroupMask, hit))
+                    {
+                        footGrounds[i].hit = true;
+                        footGrounds[i].point = TransformPoint(hit.position, worldToModel);
+                        footGrounds[i].normal = Normalized(TransformDirection(hit.normal, worldToModel));
+                        footHitWorld[i] = true;
+                        footGroundWorld[i] = hit.position;
+                    }
+                }
+            }
+            footResult = animation::SolveFootIk(skeleton, local, model, footPelvis,
+                                                Span<const animation::FootIkLeg>{footLegs.Data(), legs},
+                                                Span<const animation::FootGround>{footGrounds, legs}, foot,
+                                                footState, step);
+            result.valid = footResult.valid;
+            result.error = 0.0f;
+            for (usize i = 0; i < legs; ++i)
+            {
+                result.error = Max(result.error, footResult.footError[i]);
+            }
+            result.reached = result.valid && result.error <= kFootReachTolerance;
+            drawnCount = 0;
+            for (usize i = 0; i < legs; ++i)
+            {
+                drawn[drawnCount++] = footLegs[i].chain.start;
+                drawn[drawnCount++] = footLegs[i].chain.mid;
+                drawn[drawnCount++] = footLegs[i].chain.end;
+            }
+            drawnStride = 3;
+            DrawnToWorld(model);
             solved = true;
         }
+
+        /// A planted foot within this of its ground counts as reached (metres).
+        static constexpr f32 kFootReachTolerance = 1.0e-3f;
 
         Kind kind = Kind::TwoBone;
         animation::TwoBoneIkChain chain;
@@ -101,12 +177,30 @@ export namespace engine::animation
         bool aimUpIsPoint = false;  // aim.up is computed from this point and the last bone
         Float3 aimUpPoint{};        // model space
         Float4x4 modelToWorld = Float4x4::Identity();
+        Float4x4 worldToModel = Float4x4::Identity();
+
+        // Feet (Kind::Foot).
+        Array<animation::FootIkLeg> footLegs;
+        i32 footPelvis = -1;
+        animation::FootIkSettings foot;
+        animation::FootIkState footState;
+        animation::FootIkResult footResult;
+        animation::FootGround footGrounds[animation::kMaxFootIkLegs];
+        bool footHitWorld[animation::kMaxFootIkLegs] = {};
+        Float3 footGroundWorld[animation::kMaxFootIkLegs] = {};
+        f32 footRayUp = 0.5f;
+        f32 footRayDown = 0.75f;
+        u32 footGroupMask = 0xFFFFFFFFu;
+        f32 footStep = 0.0f;        // this frame's seconds, handed over once
+        bool footNewFrame = false;  // the next evaluation probes and steps
+        scene::ISceneRayQuery* rays = nullptr; // the scene's solid-surface rays (null: no ground)
 
         animation::IkResult result; // the last solve
         bool solved = false;
         i32 drawn[animation::kMaxAimBones] = {};
         Float3 chainWorld[animation::kMaxAimBones] = {};
         usize drawnCount = 0;
+        usize drawnStride = 0; // points per polyline (0: one polyline through them all)
     };
 
     /// A component's runtime side (none of it is saved).
@@ -199,6 +293,68 @@ export namespace engine::animation
         foundation::core::Serialize(ar, "aimAxis", c.aimAxis);
         foundation::core::Serialize(ar, "upAxis", c.upAxis);
         foundation::core::Serialize(ar, "maxAngle", c.maxAngle);
+        foundation::core::Serialize(ar, "weight", c.weight);
+        foundation::core::Serialize(ar, "fadeSeconds", c.fadeSeconds);
+        foundation::core::Serialize(ar, "active", c.active);
+        foundation::core::Serialize(ar, "order", c.order);
+        foundation::core::Serialize(ar, "debugDraw", c.debugDraw);
+    }
+
+    /// One leg of a FootIkComponent: its chain by bone names (the end bone is the foot).
+    struct FootIkLegBones
+    {
+        String startBone;
+        String midBone;
+        String endBone;
+        Float3 hingeAxis{}; // for a straight leg with a straight bind pose (the knee's axis)
+    };
+
+    inline void Serialize(ISerializer& ar, FootIkLegBones& l)
+    {
+        foundation::core::Serialize(ar, "startBone", l.startBone);
+        foundation::core::Serialize(ar, "midBone", l.midBone);
+        foundation::core::Serialize(ar, "endBone", l.endBone);
+        foundation::core::Serialize(ar, "hingeAxis", l.hingeAxis);
+    }
+
+    /// Feet that stand on the ground under them: each planted foot finds its ground with a ray
+    /// (through the scene's ray query: physics, solid surfaces only), rises or falls to it and turns
+    /// to its slope; the pelvis lowers so the lower foot reaches; a foot the animation lifts is
+    /// swinging and left alone.
+    struct FootIkComponent
+    {
+        Array<FootIkLegBones> legs; // up to four
+        String pelvisBone;          // lowers to let the lower foot reach (empty: it stays)
+        f32 rayUp = 0.5f;           // the probe starts this far above the animated foot
+        f32 rayDown = 0.75f;        // and looks this far below it
+        u32 groupMask = 0xFFFFFFFFu; // the collision groups that are ground
+        f32 pelvisDropMax = 0.3f;
+        f32 maxTilt = 30.0f;     // degrees a foot turns to its ground's slope
+        f32 liftHeight = 0.15f;  // a foot animated higher than this is swinging
+        f32 groundHeight = 0.0f; // the animation's ground along up (0: the model's origin is at its feet)
+        f32 raiseRate = 20.0f;   // how fast a correction eases while it rises, per second
+        f32 lowerRate = 8.0f;    // and while it lowers
+        f32 weight = 1.0f;
+        f32 fadeSeconds = 0.2f;
+        bool active = true;
+        i32 order = 0;
+        bool debugDraw = false;
+        IkRuntime runtime;
+    };
+
+    inline void Serialize(ISerializer& ar, FootIkComponent& c)
+    {
+        foundation::core::Serialize(ar, "legs", c.legs);
+        foundation::core::Serialize(ar, "pelvisBone", c.pelvisBone);
+        foundation::core::Serialize(ar, "rayUp", c.rayUp);
+        foundation::core::Serialize(ar, "rayDown", c.rayDown);
+        foundation::core::Serialize(ar, "groupMask", c.groupMask);
+        foundation::core::Serialize(ar, "pelvisDropMax", c.pelvisDropMax);
+        foundation::core::Serialize(ar, "maxTilt", c.maxTilt);
+        foundation::core::Serialize(ar, "liftHeight", c.liftHeight);
+        foundation::core::Serialize(ar, "groundHeight", c.groundHeight);
+        foundation::core::Serialize(ar, "raiseRate", c.raiseRate);
+        foundation::core::Serialize(ar, "lowerRate", c.lowerRate);
         foundation::core::Serialize(ar, "weight", c.weight);
         foundation::core::Serialize(ar, "fadeSeconds", c.fadeSeconds);
         foundation::core::Serialize(ar, "active", c.active);
@@ -313,11 +469,32 @@ export namespace engine::animation
         const Color missed{1.0f, 0.55f, 0.1f, 1.0f};
         for (usize i = 0; i + 1 < m->drawnCount; ++i)
         {
-            draw.DrawLine(m->chainWorld[i], m->chainWorld[i + 1], chain, true);
+            if (m->drawnStride == 0 || (i + 1) % m->drawnStride != 0)
+            {
+                draw.DrawLine(m->chainWorld[i], m->chainWorld[i + 1], chain, true);
+            }
         }
         for (usize i = 0; i < m->drawnCount; ++i)
         {
             draw.DrawWireSphere(m->chainWorld[i], 0.02f, chain, 8, true);
+        }
+        if (m->kind == IkModifier::Kind::Foot)
+        {
+            // Each leg's ground: green where a planted foot found it, orange where none was found.
+            for (usize i = 0; i < m->footLegs.Size() && i < animation::kMaxFootIkLegs; ++i)
+            {
+                const Float3 foot = m->chainWorld[i * 3 + 2];
+                if (m->footHitWorld[i])
+                {
+                    draw.DrawLine(foot, m->footGroundWorld[i], reached, true);
+                    draw.DrawWireSphere(m->footGroundWorld[i], 0.04f, reached, 10, true);
+                }
+                else
+                {
+                    draw.DrawWireSphere(foot, 0.04f, missed, 10, true);
+                }
+            }
+            return;
         }
         draw.DrawWireSphere(runtime.targetWorld, 0.05f, m->result.reached ? reached : missed, 12, true);
         if (runtime.hasPoleWorld && m->drawnCount > 1)
@@ -446,7 +623,8 @@ export namespace engine::animation
             const Float4x4 modelToWorld = m_scene->ComposeWorldMatrix(link.modelEntity);
             const Float4x4 worldToModel = Inverse(modelToWorld);
             rt.modifier->modelToWorld = modelToWorld;
-            if (!static_cast<Derived*>(this)->Fill(c, owner, worldToModel))
+            rt.modifier->worldToModel = worldToModel;
+            if (!static_cast<Derived*>(this)->Fill(c, owner, worldToModel, deltaTime))
             {
                 DetachIk(*m_scene, rt); // the target entity is gone: nothing to reach this frame
                 return;
@@ -520,7 +698,7 @@ export namespace engine::animation
             return IkStatus::Solving;
         }
 
-        [[nodiscard]] bool Fill(TwoBoneIkComponent& c, scene::EntityHandle owner, const Float4x4& worldToModel)
+        [[nodiscard]] bool Fill(TwoBoneIkComponent& c, scene::EntityHandle owner, const Float4x4& worldToModel, f32)
         {
             IkRuntime& rt = c.runtime;
             Float4x4 targetWorld;
@@ -592,7 +770,7 @@ export namespace engine::animation
             return IkStatus::Solving;
         }
 
-        [[nodiscard]] bool Fill(AimIkComponent& c, scene::EntityHandle owner, const Float4x4& worldToModel)
+        [[nodiscard]] bool Fill(AimIkComponent& c, scene::EntityHandle owner, const Float4x4& worldToModel, f32)
         {
             IkRuntime& rt = c.runtime;
             Float4x4 targetWorld;
@@ -632,9 +810,96 @@ export namespace engine::animation
         }
     };
 
+    class FootIkComponentManager final : public IkComponentManagerBase<FootIkComponent, FootIkComponentManager>
+    {
+    public:
+        FootIkComponentManager() : IkComponentManagerBase(u8"foot_ik") {}
+
+        [[nodiscard]] IkStatus Resolve(FootIkComponent& c, const animation::Skeleton& skeleton, String& failed)
+        {
+            if (c.legs.IsEmpty() || c.legs.Size() > animation::kMaxFootIkLegs)
+            {
+                failed = Format(u8"foot IK takes 1 to {} legs, it lists {}", animation::kMaxFootIkLegs,
+                                c.legs.Size());
+                return IkStatus::NotAChain;
+            }
+            IkModifier& m = *c.runtime.modifier;
+            m.kind = IkModifier::Kind::Foot;
+            m.footLegs.Clear();
+            for (const FootIkLegBones& leg : c.legs)
+            {
+                const String* names[3] = {&leg.startBone, &leg.midBone, &leg.endBone};
+                i32 bones[3] = {-1, -1, -1};
+                for (usize i = 0; i < 3; ++i)
+                {
+                    bones[i] = skeleton.FindBone(names[i]->AsView());
+                    if (bones[i] < 0)
+                    {
+                        failed = Format(u8"no bone named '{}' in its animator's skeleton", names[i]->AsView());
+                        return IkStatus::UnknownBone;
+                    }
+                }
+                if (!animation::ik::IsBelow(skeleton, bones[1], bones[0]) ||
+                    !animation::ik::IsBelow(skeleton, bones[2], bones[1]))
+                {
+                    failed = Format(u8"'{}', '{}', '{}' are not a chain (each below the one before)",
+                                    leg.startBone.AsView(), leg.midBone.AsView(), leg.endBone.AsView());
+                    return IkStatus::NotAChain;
+                }
+                m.footLegs.PushBack(animation::FootIkLeg{animation::TwoBoneIkChain{bones[0], bones[1], bones[2]},
+                                                         leg.hingeAxis});
+            }
+            m.footPelvis = -1;
+            if (!c.pelvisBone.IsEmpty())
+            {
+                m.footPelvis = skeleton.FindBone(c.pelvisBone.AsView());
+                if (m.footPelvis < 0)
+                {
+                    failed = Format(u8"no bone named '{}' in its animator's skeleton", c.pelvisBone.AsView());
+                    return IkStatus::UnknownBone;
+                }
+            }
+            m.footState = animation::FootIkState{}; // a new chain starts from its goals
+            return IkStatus::Solving;
+        }
+
+        [[nodiscard]] bool Fill(FootIkComponent& c, scene::EntityHandle, const Float4x4&, f32 deltaTime)
+        {
+            IkModifier& m = *c.runtime.modifier;
+            for (usize i = 0; i < m.footLegs.Size() && i < c.legs.Size(); ++i)
+            {
+                m.footLegs[i].hingeAxis = c.legs[i].hingeAxis;
+            }
+            animation::FootIkSettings& s = m.foot;
+            s.pelvisDropMax = c.pelvisDropMax;
+            s.maxTilt = c.maxTilt * kDegToRad;
+            s.liftHeight = c.liftHeight;
+            s.groundHeight = c.groundHeight;
+            s.raiseRate = c.raiseRate;
+            s.lowerRate = c.lowerRate;
+            s.weight = c.runtime.weight;
+            m.footRayUp = Max(c.rayUp, 0.0f);
+            m.footRayDown = Max(c.rayDown, 0.0f);
+            m.footGroupMask = c.groupMask;
+            m.footStep = deltaTime;
+            m.footNewFrame = true;
+            m.rays = nullptr;
+            m_scene->ForEachSystem(
+                [&](scene::SceneSystem& system)
+                {
+                    if (m.rays == nullptr)
+                    {
+                        m.rays = system.AsRayQuery();
+                    }
+                });
+            return true;
+        }
+    };
+
     inline void AddIkSceneManagers(scene::Scene& scene)
     {
         scene.AddSystem<TwoBoneIkComponentManager>();
         scene.AddSystem<AimIkComponentManager>();
+        scene.AddSystem<FootIkComponentManager>();
     }
 }

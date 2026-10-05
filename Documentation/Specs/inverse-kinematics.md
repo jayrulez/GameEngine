@@ -14,6 +14,12 @@
 > scene runs. Two notes: world matrices are cached only after PostUpdate, so the managers compose
 > the targets' and the mesh's worlds fresh; the aim's `up` is an entity the up axis leans toward.
 > The editor's gizmo for a selected IK component moves to P4 with the bone pickers.
+> P3 BUILT 2026-10-05: SolveFootIk (Foundation, given grounds) and FootIkComponent, probing
+> through a new scene seam, ISceneRayQuery (SceneSystem::AsRayQuery; PhysicsSceneSystem answers,
+> triggers skipped), so animation needs no physics link. Folded in from Sedulous's review: one
+> probe and one easing step a frame (a second evaluation reuses the hits; a zero step holds),
+> `groundHeight` for a rig whose origin is not at its feet, the order pelvis, rebuild, legs. The
+> camera cull distance is deferred (no main camera at this layer; a script-set viewer point later).
 > Seeded in weekly_backlog.md (2026-08-26). User ruling 2026-10-05: after Snowline's P1, before
 > its P2, spec first, and "when doing IK, it must be solid". Companion: root-motion.md (the two
 > share the pose seam of P0). Read CONVENTIONS.md first.
@@ -91,7 +97,8 @@ of model-space transforms; no physics, no scene.
   too, a hinge axis the caller gives (a knee and an elbow bend opposite ways, so no fixed default);
   weight 0..1. Law of cosines with the POSE's bone lengths (a rotation keeps them, so a bind
   length would miss whenever an animation moved a bone), reach clamped to
-  `[|l1-l2|, 0.995 (l1+l2)]`. Two steps: the mid joint turns about the hinge (the bend plane's
+  `[|l1-l2|, 0.995 (l1+l2)]`, the upper bound raised to the pose's own span when the animation
+  already holds the chain straighter (P3 found a standing leg pulled up 4 mm otherwise). Two steps: the mid joint turns about the hinge (the bend plane's
   normal) to span the distance, then the start swings the end onto the target and the bend side
   onto the pole's (or carried with the swing), so the mid joint stays in its plane. Writes the start and
   mid LOCAL rotations (a correction quaternion in model space, converted through the parent's
@@ -124,7 +131,14 @@ of model-space transforms; no physics, no scene.
   `EntityRef` (its world position, and rotation if `matchRotation`) or, empty, the component's own
   entity; pole an `EntityRef` (optional); `weight` and `fadeSeconds` (the weight eases toward
   `active ? weight : 0`); `order` (lower first; ez's ordering, so a look-at runs after the legs).
-- **`FootIkComponent`**: two (or more) legs by bone names, the pelvis bone, ray settings (up and
+- **`FootIkComponent`** (as built): the animation's ground is the plane through the model origin
+  across up, offset by `groundHeight` (0 for every imported sample rig: P0a measured their origins
+  at the floor). A planted foot moves by the ground's height under it; the pelvis lowers by the
+  deepest weighted correction, clamped to `pelvisDropMax`; then each leg is a two-bone solve with
+  the foot turned to the slope within `maxTilt`. Corrections ease with `1 - exp(-rate dt)`, faster
+  rising than lowering. The probe: one ray per foot a frame, from above the animated foot down,
+  through ISceneRayQuery (solid surfaces only).
+- **`FootIkComponent`** (as proposed): two (or more) legs by bone names, the pelvis bone, ray settings (up and
   down range from the sole, collision mask), `pelvisDropMax`, `maxTilt` (30 degrees), smoothing
   rates (lifting a foot settles faster than lowering it), `liftHeight` (a foot the animation has
   lifted above it is swinging: its weight fades to 0), a cull distance with a fade band (traktor's

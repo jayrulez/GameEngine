@@ -448,3 +448,197 @@ TEST_CASE("ik: no allocation once the cache is sized")
     }
     CHECK(counting.TotalAllocations() == sized);
 }
+
+namespace
+{
+    // A biped's hips and legs, its origin at its feet: Pelvis(0) at 1; per side a Thigh at the hip,
+    // a Shin 0.45 below (the knee bound a little forward) and a Foot 0.45 below that, the ankle
+    // 0.1 above the ground.
+    enum Biped : i32
+    {
+        kHips = 0,
+        kThighL,
+        kShinL,
+        kFootL,
+        kThighR,
+        kShinR,
+        kFootR,
+        kBipedBones
+    };
+
+    void BuildBiped(Skeleton& s)
+    {
+        Array<Bone>& bones = s.Bones();
+        const i32 parents[] = {-1, kHips, kThighL, kShinL, kHips, kThighR, kShinR};
+        const Float3 offsets[] = {{0, 1, 0},          {0.15f, 0, 0},  {0, -0.45f, 0.02f}, {0, -0.45f, -0.02f},
+                                  {-0.15f, 0, 0},     {0, -0.45f, 0.02f}, {0, -0.45f, -0.02f}};
+        for (i32 i = 0; i < kBipedBones; ++i)
+        {
+            bones[static_cast<usize>(i)].index = i;
+            bones[static_cast<usize>(i)].parentIndex = parents[i];
+            bones[static_cast<usize>(i)].localBindPose.position = offsets[i];
+        }
+        s.BuildNameMap();
+        s.FindRootBones();
+        s.BuildChildIndices();
+        s.ComputeInverseBindPoses();
+    }
+
+    constexpr FootIkLeg kLegs[] = {{TwoBoneIkChain{kThighL, kShinL, kFootL}, Float3::Zero},
+                                   {TwoBoneIkChain{kThighR, kShinR, kFootR}, Float3::Zero}};
+
+    FootGround Ground(f32 x, f32 height, Float3 normal = Float3{0, 1, 0})
+    {
+        return FootGround{true, Float3{x, height, 0}, Normalized(normal)};
+    }
+
+    struct FootRun
+    {
+        Skeleton skel{kBipedBones};
+        Array<BoneTransform> pose;
+        ModelPoseCache cache;
+        FootIkState state;
+        FootIkSettings settings;
+
+        FootRun()
+        {
+            BuildBiped(skel);
+            Reset();
+        }
+        void Reset()
+        {
+            pose = BindPose(skel);
+            cache.Build(skel, All(pose));
+        }
+        FootIkResult Solve(FootGround left, FootGround right, f32 seconds = 0.0f)
+        {
+            Reset();
+            const FootGround grounds[] = {left, right};
+            return SolveFootIk(skel, All(pose), cache, kHips, kLegs, grounds, settings, state, seconds);
+        }
+    };
+}
+
+TEST_CASE("ik foot: flat ground at the animation's own leaves the pose; a step up raises that foot")
+{
+    FootRun run;
+    Array<BoneTransform> bind = BindPose(run.skel);
+    ModelPoseCache bound;
+    bound.Build(run.skel, All(bind));
+    const FootIkResult flat = run.Solve(Ground(0.15f, 0.0f), Ground(-0.15f, 0.0f));
+    CHECK(flat.valid);
+    CHECK(flat.pelvisOffset == 0.0f);
+    for (i32 i = 0; i < kBipedBones; ++i)
+    {
+        CHECK(Length(At(run.cache, i) - At(bound, i)) < 1.0e-5f);
+    }
+
+    FootRun step;
+    const FootIkResult up = step.Solve(Ground(0.15f, 0.2f), Ground(-0.15f, 0.0f));
+    CHECK(up.pelvisOffset == 0.0f); // nothing lower than the animation's ground
+    CHECK(At(step.cache, kFootL).y == doctest::Approx(0.3f).epsilon(1e-4)); // the ankle 0.1 above
+    CHECK(At(step.cache, kFootR).y == doctest::Approx(0.1f).epsilon(1e-4));
+    CHECK(up.footError[0] < 1.0e-3f);
+}
+
+TEST_CASE("ik foot: a step down lowers the pelvis by the deepest correction, clamped")
+{
+    FootRun run;
+    const FootIkResult down = run.Solve(Ground(0.15f, -0.2f), Ground(-0.15f, 0.0f));
+    CHECK(down.pelvisOffset == doctest::Approx(-0.2f));
+    CHECK(At(run.cache, kHips).y == doctest::Approx(0.8f));
+    CHECK(At(run.cache, kFootL).y == doctest::Approx(-0.1f).epsilon(1e-4)); // on the lower ground
+    CHECK(At(run.cache, kFootR).y == doctest::Approx(0.1f).epsilon(1e-4));  // the other knee bends
+    CHECK(down.footError[0] < 1.0e-3f);
+    CHECK(down.footError[1] < 1.0e-3f);
+
+    FootRun deep;
+    deep.settings.pelvisDropMax = 0.3f;
+    const FootIkResult clamped = deep.Solve(Ground(0.15f, -0.6f), Ground(-0.15f, 0.0f));
+    CHECK(clamped.pelvisOffset == doctest::Approx(-0.3f));
+    CHECK(At(deep.cache, kHips).y == doctest::Approx(0.7f));
+    CHECK(clamped.footError[0] > 0.0f); // the leg reaches as far as it can
+    CHECK(Finite(All(deep.pose)));
+}
+
+TEST_CASE("ik foot: a lifted foot is the animation's; no ground leaves a foot alone")
+{
+    FootRun run;
+    run.Reset();
+    // The animation swings the left leg forward and up: its foot is well above liftHeight.
+    run.pose[kThighL].rotation = Quaternion::FromAxisAngle(Float3{1, 0, 0}, -0.9f);
+    run.cache.Build(run.skel, All(run.pose));
+    BoneTransform swung[kBipedBones];
+    for (i32 i = 0; i < kBipedBones; ++i)
+    {
+        swung[i] = run.pose[i];
+    }
+    REQUIRE(At(run.cache, kFootL).y > 2.0f * run.settings.liftHeight);
+    const FootGround grounds[] = {Ground(0.15f, 0.2f), Ground(-0.15f, 0.1f)};
+    const FootIkResult r =
+        SolveFootIk(run.skel, All(run.pose), run.cache, kHips, kLegs, grounds, run.settings, run.state, 0.0f);
+    CHECK(r.valid);
+    for (const i32 bone : {i32{kThighL}, i32{kShinL}, i32{kFootL}})
+    {
+        CHECK(std::memcmp(&run.pose[bone], &swung[bone], sizeof(BoneTransform)) == 0);
+    }
+    CHECK(At(run.cache, kFootR).y == doctest::Approx(0.2f).epsilon(1e-4)); // the planted one still stands
+
+    FootRun bare;
+    const FootIkResult none = bare.Solve(FootGround{}, FootGround{});
+    CHECK(none.valid);
+    CHECK(At(bare.cache, kFootL).y == doctest::Approx(0.1f).epsilon(1e-4));
+}
+
+TEST_CASE("ik foot: a foot turns to its slope, up to maxTilt")
+{
+    const f32 slope = 20.0f * kDegToRad;
+    FootRun run;
+    (void)run.Solve(Ground(0.15f, 0.0f, Float3{0, std::cos(slope), std::sin(slope)}), Ground(-0.15f, 0.0f));
+    const Float3 footUp = Normalized(RotateVector(ik::RotationOf(run.cache.At(kFootL)), Float3{0, 1, 0}));
+    CHECK(Dot(footUp, Float3{0, std::cos(slope), std::sin(slope)}) > 1.0f - 1.0e-5f);
+
+    const f32 steep = 50.0f * kDegToRad;
+    FootRun limited;
+    (void)limited.Solve(Ground(0.15f, 0.0f, Float3{0, std::cos(steep), std::sin(steep)}), Ground(-0.15f, 0.0f));
+    const Float3 tilted = Normalized(RotateVector(ik::RotationOf(limited.cache.At(kFootL)), Float3{0, 1, 0}));
+    CHECK(std::acos(Clamp(Dot(tilted, Float3{0, 1, 0}), -1.0f, 1.0f)) == doctest::Approx(30.0f * kDegToRad).epsilon(1e-3));
+}
+
+TEST_CASE("ik foot: corrections ease at their rates, and a zero step holds them")
+{
+    FootRun run;
+    (void)run.Solve(Ground(0.15f, 0.0f), Ground(-0.15f, 0.0f)); // primed on flat ground
+    const f32 dt = 1.0f / 60.0f;
+    (void)run.Solve(Ground(0.15f, 0.2f), Ground(-0.15f, 0.0f), dt);
+    const f32 risen = 0.2f * (1.0f - std::exp(-run.settings.raiseRate * dt));
+    CHECK(run.state.offset[0] == doctest::Approx(risen));
+    CHECK(At(run.cache, kFootL).y == doctest::Approx(0.1f + risen).epsilon(1e-4));
+
+    (void)run.Solve(Ground(0.15f, 0.2f), Ground(-0.15f, 0.0f), 0.0f); // paused: held
+    CHECK(run.state.offset[0] == doctest::Approx(risen));
+
+    (void)run.Solve(Ground(0.15f, 0.0f), Ground(-0.15f, 0.0f), dt); // lowering is slower
+    CHECK(run.state.offset[0] == doctest::Approx(risen * std::exp(-run.settings.lowerRate * dt)));
+}
+
+TEST_CASE("ik two-bone: a chain the animation holds straighter than the clamp keeps its own span")
+{
+    // A standing leg is nearly straight: the clamp short of locking must not pull it up off the
+    // ground it already reaches, toward a target where it stands or one beyond it.
+    Skeleton skel{kBoneCount};
+    BuildBody(skel);
+    const Float3 hip{1, 10, 0};
+    Array<BoneTransform> pose = BindPose(skel);
+    pose[kShin].rotation = Quaternion::FromAxisAngle(Float3{1, 0, 0}, -0.05f); // 0.9998 of full reach
+    ModelPoseCache cache;
+    cache.Build(skel, All(pose));
+    const f32 span = Length(At(cache, kFoot) - hip);
+    REQUIRE(span > kTwoBoneMaxReach * kReach);
+    TwoBoneIkSettings settings;
+    settings.target = At(cache, kFoot);
+    CHECK(SolveTwoBone(skel, All(pose), cache, kLeg, settings).reached);
+    settings.target = hip + Normalized(At(cache, kFoot) - hip) * 20.0f;
+    (void)SolveTwoBone(skel, All(pose), cache, kLeg, settings);
+    CHECK(Length(At(cache, kFoot) - hip) == doctest::Approx(span).epsilon(1e-5));
+}

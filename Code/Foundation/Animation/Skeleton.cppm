@@ -212,14 +212,18 @@ export namespace foundation::animation
             }
         }
 
-    private:
-        [[nodiscard]] bool InBounds(i32 i) const noexcept
+        /// Bones in an order that puts every parent before its children (empty until
+        /// BuildChildIndices); a partial rebuild walks it.
+        [[nodiscard]] Span<const i32> HierarchicalOrder() const noexcept
         {
-            return i >= 0 && static_cast<usize>(i) < m_bones.Size();
+            return {m_hierarchicalOrder.Data(), m_hierarchicalOrder.Size()};
         }
 
+        /// One bone's world (model-space) matrix from its local transform and its parent's world
+        /// matrix, already in `outWorldPoses` (a root takes its root correction instead). The step
+        /// ComputeWorldPoses repeats; public so a partial rebuild uses the same formula.
         void ComputeBoneWorldPose(i32 boneIndex, Span<const BoneTransform> localPoses,
-                                  Span<Float4x4> outWorldPoses)
+                                  Span<Float4x4> outWorldPoses) const
         {
             const usize bi = static_cast<usize>(boneIndex);
             if (!InBounds(boneIndex) || bi >= outWorldPoses.Size())
@@ -243,6 +247,12 @@ export namespace foundation::animation
             {
                 outWorldPoses[bi] = localMatrix * bone.rootCorrection;
             }
+        }
+
+    private:
+        [[nodiscard]] bool InBounds(i32 i) const noexcept
+        {
+            return i >= 0 && static_cast<usize>(i) < m_bones.Size();
         }
 
         // BFS over the hierarchy so parents precede children; orphans appended at the end.

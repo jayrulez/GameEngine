@@ -15,5 +15,6 @@ export import :skeleton;
 export import :pose;
 export import :clip;
 export import :sampler;
+export import :modifier;
 export import :player;
 export import :graph;

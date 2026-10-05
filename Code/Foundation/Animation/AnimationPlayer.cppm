@@ -17,6 +17,7 @@ import :skeleton;
 import :clip;
 import :sampler;
 import :pose;
+import :modifier;
 
 using namespace foundation::core;
 
@@ -38,6 +39,7 @@ export namespace foundation::animation
         {
             const usize boneCount = static_cast<usize>(skeleton.BoneCount());
             m_localPoses.Resize(boneCount);
+            m_finalPoses.Resize(boneCount);
             m_skinningMatrices.Resize(boneCount);
             m_prevSkinningMatrices.Resize(boneCount);
             ResetToBind();
@@ -177,22 +179,46 @@ export namespace foundation::animation
             m_matricesDirty = true;
         }
 
-        // Samples the current clip + computes skinning matrices (only if dirty). Call before rendering.
+        // Samples the current clip (when its time changed), runs the pose modifiers over a copy of
+        // it, and computes the skinning matrices. Call before rendering. With modifiers it runs
+        // every call: their targets move whether or not the clip does. The sampled pose stays as
+        // sampled (GetLocalPoses); the modified one is GetFinalPoses.
         void Evaluate()
         {
-            if (!m_matricesDirty)
+            const bool modifying = !m_modifiers.IsEmpty();
+            if (!m_matricesDirty && !modifying)
             {
                 return;
             }
-            if (m_currentClip != nullptr)
+            if (m_matricesDirty && m_currentClip != nullptr)
             {
                 SampleClip(*m_currentClip, *m_skeleton, m_currentTime,
                            Span<BoneTransform>{m_localPoses.Data(), m_localPoses.Size()});
             }
+            Span<const BoneTransform> palettePose{m_localPoses.Data(), m_localPoses.Size()};
+            if (modifying)
+            {
+                for (usize i = 0; i < m_localPoses.Size(); ++i)
+                {
+                    m_finalPoses[i] = m_localPoses[i];
+                }
+                m_modifiers.Apply(*m_skeleton, Span<BoneTransform>{m_finalPoses.Data(), m_finalPoses.Size()});
+                palettePose = Span<const BoneTransform>{m_finalPoses.Data(), m_finalPoses.Size()};
+            }
             m_skeleton->ComputeSkinningMatrices(
-                Span<const BoneTransform>{m_localPoses.Data(), m_localPoses.Size()},
-                Span<Float4x4>{m_skinningMatrices.Data(), m_skinningMatrices.Size()});
+                palettePose, Span<Float4x4>{m_skinningMatrices.Data(), m_skinningMatrices.Size()});
             m_matricesDirty = false;
+        }
+
+        /// The pose modifiers run between the sample and the palette (inverse kinematics), borrowed.
+        [[nodiscard]] PoseModifierStack& Modifiers() noexcept { return m_modifiers; }
+
+        /// The pose the palette was last built from: the sampled pose changed by the modifiers (the
+        /// sampled pose itself when there are none).
+        [[nodiscard]] Span<const BoneTransform> GetFinalPoses() const noexcept
+        {
+            return m_modifiers.IsEmpty() ? Span<const BoneTransform>{m_localPoses.Data(), m_localPoses.Size()}
+                                         : Span<const BoneTransform>{m_finalPoses.Data(), m_finalPoses.Size()};
         }
 
         // Current skinning matrices for GPU upload (evaluates if needed).
@@ -266,6 +292,8 @@ export namespace foundation::animation
         bool m_matricesDirty = true;
 
         Array<BoneTransform> m_localPoses;
+        Array<BoneTransform> m_finalPoses; // the sampled pose after the modifiers
+        PoseModifierStack m_modifiers;
         Array<Float4x4> m_skinningMatrices;
         Array<Float4x4> m_prevSkinningMatrices;
         AnimationEventHandler m_eventHandler;

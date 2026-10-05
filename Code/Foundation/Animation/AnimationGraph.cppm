@@ -19,6 +19,7 @@ import foundation.core;
 import :skeleton; // Skeleton, Bone, BoneTransform
 import :clip;     // AnimationClip, AnimationEventHandler
 import :sampler;  // SampleClip, BlendPoses
+import :modifier; // PoseModifierStack (the stage after the layers combine)
 
 using namespace foundation::core;
 
@@ -969,8 +970,13 @@ export namespace foundation::animation
                 p.ConsumeTrigger();
             }
             CombineLayers();
+            // The pose modifiers (inverse kinematics) over the combined pose, before the palette.
+            m_modifiers.Apply(*m_skeleton, Span<BoneTransform>{m_finalPoses.Data(), m_finalPoses.Size()});
             m_matricesDirty = true;
         }
+
+        /// The pose modifiers run after the layers combine and before the palette, borrowed.
+        [[nodiscard]] PoseModifierStack& Modifiers() noexcept { return m_modifiers; }
 
         [[nodiscard]] Span<const Float4x4> GetSkinningMatrices()
         {
@@ -1296,6 +1302,7 @@ export namespace foundation::animation
         Array<AnimationGraphLayerRuntime> m_layerRuntimes;
         Array<AnimationGraphParameter> m_parameters; // runtime copy
         Array<BoneTransform> m_finalPoses;
+        PoseModifierStack m_modifiers;
         Array<Float4x4> m_skinningMatrices;
         Array<Float4x4> m_prevSkinningMatrices;
         bool m_matricesDirty = true;

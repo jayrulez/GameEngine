@@ -13,6 +13,7 @@ target_sources(Animation
             AnimationPose.cppm
             AnimationClip.cppm
             Sampler.cppm
+            PoseModifier.cppm
             AnimationPlayer.cppm
             AnimationGraph.cppm
             AnimationModule.cppm)

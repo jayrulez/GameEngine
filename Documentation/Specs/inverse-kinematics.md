@@ -4,6 +4,8 @@
 > spec answers them); reviewed by the Sedulous session the same day (its points folded
 > in: the root correction per root, P0 split, model space with several meshes, instanced skinning,
 > how a component finds its animator, the hinge fallback, the bone-name attribute).
+> P0b BUILT 2026-10-05: the pose modifier stage (`:modifier` - ModelPoseCache, IPoseModifier,
+> PoseModifierStack) in both players, between the pose and the palette.
 > Seeded in weekly_backlog.md (2026-08-26). User ruling 2026-10-05: after Snowline's P1, before
 > its P2, spec first, and "when doing IK, it must be solid". Companion: root-motion.md (the two
 > share the pose seam of P0). Read CONVENTIONS.md first.

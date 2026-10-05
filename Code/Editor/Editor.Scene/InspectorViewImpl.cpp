@@ -2799,10 +2799,10 @@ namespace editor
                     [propPtr, path, i, target](const Instance& comp)
                     {
                         const Instance container = ListIn(comp, propPtr, path);
-                                      if (container.Pointer() == nullptr)
-                                      {
-                                          return; // the slot holding the list is gone
-                                      }
+                        if (container.Pointer() == nullptr)
+                        {
+                            return; // the slot holding the list is gone
+                        }
                         const ContainerInfo& ci = *propPtr->type->container;
                         if (i >= ContainerSize(ci, container))
                         {
@@ -2832,10 +2832,10 @@ namespace editor
                     if (!comp.IsEmpty())
                     {
                         const Instance container = ListIn(comp, propPtr, path);
-                                      if (container.Pointer() == nullptr)
-                                      {
-                                          return; // the slot holding the list is gone
-                                      }
+                        if (container.Pointer() == nullptr)
+                        {
+                            return; // the slot holding the list is gone
+                        }
                         const ContainerInfo& ci = *propPtr->type->container;
                         if (i < ContainerSize(ci, container))
                         {
@@ -2866,10 +2866,10 @@ namespace editor
                     [propPtr, path, target](const Instance& comp)
                     {
                         const Instance container = ListIn(comp, propPtr, path);
-                                      if (container.Pointer() == nullptr)
-                                      {
-                                          return; // the slot holding the list is gone
-                                      }
+                        if (container.Pointer() == nullptr)
+                        {
+                            return; // the slot holding the list is gone
+                        }
                         const ContainerInfo& ci = *propPtr->type->container;
                         const Instance el =
                             ContainerEmplaceDefault(ci, container, ContainerSize(ci, container));
@@ -2916,10 +2916,10 @@ namespace editor
                 [propPtr, path, i, target](const Instance& comp)
                 {
                     const Instance container = ListIn(comp, propPtr, path);
-                                      if (container.Pointer() == nullptr)
-                                      {
-                                          return; // the slot holding the list is gone
-                                      }
+                    if (container.Pointer() == nullptr)
+                    {
+                        return; // the slot holding the list is gone
+                    }
                     const ContainerInfo& ci = *propPtr->type->container;
                     if (i >= ContainerSize(ci, container))
                     {
@@ -2963,10 +2963,10 @@ namespace editor
                     [propPtr, path, target](const Instance& comp)
                     {
                         const Instance container = ListIn(comp, propPtr, path);
-                                      if (container.Pointer() == nullptr)
-                                      {
-                                          return; // the slot holding the list is gone
-                                      }
+                        if (container.Pointer() == nullptr)
+                        {
+                            return; // the slot holding the list is gone
+                        }
                         const ContainerInfo& ci = *propPtr->type->container;
                         const Instance el =
                             ContainerEmplaceDefault(ci, container, ContainerSize(ci, container));

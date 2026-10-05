@@ -6,6 +6,8 @@ Tools/generated/Props). Imports, each once (a re-run re-imports over the same as
 - Terrain/<Course>: the heightfield (sized from <course>.json), the splatmap, and the terrain
   asset that ties them to the layers' textures (base snow, then the course, rock and forest).
 - Terrain/Textures: the layers' textures.
+- Models/Rider/RiderModel: the rider on the board, rigged, with its clips (blender/rider.py, into
+  Tools/generated/Rider).
 - Models/Props/<Name>Model: the props (a prefab and its mesh each).
 Then cooks.
 """
@@ -74,6 +76,10 @@ write_fields(terrain, {"heightfieldId": height, "weightsId": splat, "baseAlbedoI
                        # and ships the extra texels.
                        "paletteTextureSize": 256})
 print("terrain", terrain)
+
+rider = os.path.join(HERE, "generated", "Rider", "RiderModel.glb")  # blender/rider.py
+if os.path.exists(rider):
+    imported(rider, "Models/Rider", "Model")
 
 props = os.path.join(HERE, "generated", "Props")
 for model in ("Pine", "Rock"):

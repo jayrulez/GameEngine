@@ -19,6 +19,7 @@ class Board
     [null, "The course line (an entity with a spline)"] Entity@ course;
     [false, "Steer down the course line on its own (playtests)"] bool autopilot;
     [15.0, "How far down the course line the autopilot aims (m)"] float lookAhead;
+    [12.0, "How far down the course line the rider looks (m)"] float gazeAhead;
     [80.0, "Fastest turn of the velocity, a full carve (degrees a second)"] float carveRate;
     [0.35, "Speed a full carve scrubs off (share of gravity's pull into the slope)"] float carveScrub;
     [12.0, "Speed at which a carve scrubs in full; slower, in proportion (m/s)"] float scrubSpeed;
@@ -130,6 +131,7 @@ class Board
         snow(v, steer, grounded);
         wind(v);
         animate(steer, tuck, !grounded, grab && !grounded, d);
+        look(down);
 
         if (course !is null && course.isValid() &&
             down > SceneSplines::of(self.scene).length(course) - finishMargin)
@@ -171,6 +173,25 @@ class Board
         // A turn to the left (the yaw rising) is a negative steer; full lock past 35 degrees off.
         float steer = -turn / Math::DegreesToRadians(35.0f);
         return (steer > 1.0f) ? 1.0f : ((steer < -1.0f) ? -1.0f : steer);
+    }
+
+    // The rider's head looks down the course line ahead (an AimIkComponent on the board's entity;
+    // the next gate, once the course has gates), held at about eye height above the snow.
+    private void look(float down)
+    {
+        AimIkComponent@ aim = AimIkComponent::of(self);
+        if (aim is null || course is null || !course.isValid())
+        {
+            return;
+        }
+        SceneSplines@ splines = SceneSplines::of(self.scene);
+        float length = splines.length(course);
+        float ahead = down + gazeAhead;
+        SplineHit@ point = splines.sampleAtDistance(course, (ahead < length) ? ahead : length);
+        if (point !is null && point.valid)
+        {
+            SceneAnimation::of(self.scene).setIkTarget(self, point.position + Float3(0.0f, 1.2f, 0.0f));
+        }
     }
 
     // How far down the course line the rider is (m): the closest point's distance along it.

@@ -63,6 +63,11 @@ RIDER_MODEL = next(a["guid"] for a in ASSETS if a["type"] == "PrefabDocument"
 RIDER_GRAPH = asset("AnimationGraphAsset", "RiderGraph")
 
 
+def aim_bone(name, share):
+    """One AimIkBone, as a list element's fields (written flat in the array)."""
+    return '<string name="bone">%s</string><f32 name="share">%r</f32>' % (name, share)
+
+
 def rider_ops():
     """The rider model's import plays one clip; the board drives an animation graph (graph.py)
     instead. Its prefab's root loses the clip animator, and the skinned mesh gains the graph (an
@@ -151,6 +156,10 @@ def build():
     d.add(rider, "physics.Character", radius=0.35, halfHeight=0.55, maxSlopeDegrees=60.0)
     d.script(rider, (BOARD, {"course": ("entity", course), "autopilot": AUTOPILOT,
                              "trackMark": ("asset", asset("PrefabDocument", "TrackMark", "Prefabs"))}))
+    # The rider's head looks down the course line ahead (Board.as sets the point each frame; the
+    # next gate once the course has gates): an aim on the rider, which drives the graph below it.
+    # The rig's spine and head face +Z, up +Y (blender/rider.py), the aim's defaults.
+    d.add(rider, "aim_ik", bones=[aim_bone("spine", 0.3), aim_bone("head", 1.0)], maxAngle=70.0, fadeSeconds=0.5)
     # The model (blender/rider.py): its origin is the snow under the board, the character's is its
     # capsule's centre, 0.9 m up.
     d.instance(RIDER_MODEL, (0, -0.9, 0), parent=rider, ops=rider_ops())

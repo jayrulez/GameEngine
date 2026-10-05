@@ -53,9 +53,22 @@ export namespace foundation::rhi::webgpu
         void WriteTexture(Texture* dst, Span<const u8> data, const TextureDataLayout& layout,
                           Extent3D extent, u32 mipLevel, u32 arrayLayer) override
         {
+            const WebGpuTexture* texture = static_cast<WebGpuTexture*>(dst);
             TextureWrite write;
-            write.destination = static_cast<WebGpuTexture*>(dst)->Handle();
+            write.destination = texture->Handle();
             write.layout = layout;
+            // The RHI's extent is the level's size in texels; WebGPU copies a block-compressed
+            // texture in whole blocks only, so a level smaller than a block (a 2x2 or 1x1 mip of a
+            // 4x4-block format) is written as one block. Vulkan takes the texel size as it is;
+            // the browser refused it, and the mip chain's tail stayed unwritten.
+            const TextureFormat format = texture->desc.format;
+            if (IsCompressed(format))
+            {
+                const u32 bw = BlockWidth(format);
+                const u32 bh = BlockHeight(format);
+                extent.width = (extent.width + bw - 1) / bw * bw;
+                extent.height = (extent.height + bh - 1) / bh * bh;
+            }
             write.extent = extent;
             write.mipLevel = mipLevel;
             write.arrayLayer = arrayLayer;

@@ -644,6 +644,76 @@ TEST_CASE("rhi.webgpu: transfer batch uploads verify through GPU readback")
     backend->Destroy();
 }
 
+namespace
+{
+    // Counts the WebGPU errors the device reports: the backend logs each uncaptured one through
+    // the RHI's log sink. Lines still reach the console.
+    bool CountWebGpuErrors(void* context, bool error, const char* utf8)
+    {
+        if (error && StringView(reinterpret_cast<const utf8char*>(utf8)).StartsWith(StringView(u8"[webgpu]")))
+        {
+            ++*static_cast<u32*>(context);
+        }
+        return false;
+    }
+}
+
+// Snowline's first web run: a block-compressed texture's mip tail (its 2x2 and 1x1 levels) was
+// written at its size in texels, which WebGPU refuses ("copySize.width (2) is not a multiple of
+// compressed texture format block width (4)"); every level must go up in whole blocks.
+TEST_CASE("rhi.webgpu: a compressed texture's whole mip chain uploads, the tail in whole blocks")
+{
+    Backend* backend = TryCreateBackend();
+    if (backend == nullptr)
+    {
+        return;
+    }
+    u32 errors = 0;
+    SetLogSink(&CountWebGpuErrors, &errors);
+    Device* device = nullptr;
+    REQUIRE(backend->EnumerateAdapters()[0]->CreateDevice(DeviceDesc{}, device).IsOk());
+    Queue* queue = device->GetQueue(QueueType::Transfer);
+    TransferBatch* batch = nullptr;
+    REQUIRE(queue->CreateTransferBatch(batch).IsOk());
+
+    const TextureFormat format = TextureFormat::BC1RGBAUnorm;
+    TextureDesc desc;
+    desc.format = format;
+    desc.width = 16;
+    desc.height = 16;
+    desc.mipLevelCount = 5; // 16, 8, 4, 2, 1
+    desc.usage = TextureUsage::CopyDst | TextureUsage::Sampled;
+    Texture* texture = nullptr;
+    REQUIRE(device->CreateTexture(desc, texture).IsOk());
+
+    // Each level as the texture resource lays it out: texel extent, block-row pitch and count.
+    u8 blocks[16 * 16];
+    for (u32 i = 0; i < sizeof(blocks); ++i)
+    {
+        blocks[i] = static_cast<u8>(i);
+    }
+    for (u32 level = 0; level < desc.mipLevelCount; ++level)
+    {
+        const u32 w = Max(desc.width >> level, 1u);
+        const u32 h = Max(desc.height >> level, 1u);
+        TextureDataLayout layout;
+        layout.bytesPerRow = CompressedRowPitch(format, w);
+        layout.rowsPerImage = (h + BlockHeight(format) - 1) / BlockHeight(format);
+        const usize bytes = CompressedLevelBytes(format, w, h);
+        batch->WriteTexture(texture, Span<const u8>(blocks, bytes), layout, Extent3D{w, h, 1}, level, 0);
+    }
+    REQUIRE(batch->Submit().IsOk());
+    device->WaitIdle(); // the error callbacks arrive through the event pump
+
+    CHECK(errors == 0);
+    CHECK(!device->IsLost());
+    SetLogSink(nullptr, nullptr);
+    queue->DestroyTransferBatch(batch);
+    device->DestroyTexture(texture);
+    device->Destroy();
+    backend->Destroy();
+}
+
 TEST_CASE("rhi.webgpu: per-frame map/unmap/resubmit cycle stays valid")
 {
     // Sample024's frame shape: read back last frame's results (map + unmap), then

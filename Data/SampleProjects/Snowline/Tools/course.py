@@ -78,6 +78,11 @@ GATE_SPACING = 45.0   # metres down the course between gates
 GATE_FIRST = 40.0     # the first gate's distance from the top
 GATE_SWING = 3.5      # how far each gate stands off the course line, side to side (m)
 FINISH_BEFORE = 6.0   # the finish's distance before the line's end (m)
+# Each course's medal times (s, penalties included): gold, silver, bronze. Snowline.as judges a
+# run by them and the medal ghosts will ride at their pace. Meadow's: the autopilot, which rides
+# the course line without tucking and misses two gates, finishes in 35.7 s (31.7 s riding): a
+# bronze. Silver asks for the gates; gold for the gates and a tucked line.
+MEDALS = {"Meadow": (30.0, 34.0, 40.0)}
 GEM_ROW = 3           # gems in a row
 GEM_GAP = 4.0         # metres down the course between a row's gems
 GEM_OFFSET = 11.0     # how far a row stands off the course line (m): the packed course is 9 m
@@ -117,7 +122,8 @@ def gates(d, points, length):
     gems(d, points, mountain, index)
     p, heading = along_course(points, length - FINISH_BEFORE)
     e = d.entity("Finish", (p[0], mountain.height(p[0], p[2]), p[2]), yaw(math.degrees(heading)))
-    d.script(e, (FINISH, {"heading": heading}))
+    gold, silver, bronze = MEDALS[name]
+    d.script(e, (FINISH, {"heading": heading, "gold": gold, "silver": silver, "bronze": bronze}))
     d.instance(prefabs["FinishLine"], parent=e)
     return index
 

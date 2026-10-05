@@ -29,6 +29,7 @@ import foundation.heightfield;
 import foundation.terrain;
 import foundation.terrain.resource;
 import foundation.vegetation;
+import foundation.resource; // Ref (a layer's materials)
 import engine.terrain;
 import engine.vegetation;
 
@@ -160,7 +161,7 @@ namespace
             engine::vegetation::ProceduralVegetationLayer layer;
             layer.name = String(u8"Grass");
             layer.mesh = tuft.Get();
-            layer.material = green.Get();
+            layer.materials.PushBack(foundation::resource::Ref<materials::Material>(green));
             layer.placement = veg::VegetationPlacement::Splat;
             layer.splatLayer = 0;
             layer.density = 0.5f;

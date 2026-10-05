@@ -203,7 +203,7 @@ TEST_CASE("engine.vegetation: the component reflects (two lists of reflected lay
     CHECK(ProceduralVegetationLayer{}.ToScatterLayer().placement == veg::VegetationPlacement::Mask);
     CHECK(PropVegetationLayer{}.ToScatterLayer().density == 0.0f); // rules only, no scatter
     const TypeInfo& grownType = TypeOf<ProceduralVegetationLayer>();
-    for (const char* name : {"name", "mesh", "material", "placement", "splatLayer",
+    for (const char* name : {"name", "mesh", "materials", "placement", "splatLayer",
                              "splatThreshold", "maskPlane", "density", "scaleRange",
                              "maxSlopeDegrees", "heightRange", "alignToNormal", "fadeStart",
                              "fadeEnd", "castShadows", "maxInstancesPerChunk", "visible"})
@@ -212,7 +212,7 @@ TEST_CASE("engine.vegetation: the component reflects (two lists of reflected lay
         CHECK(FindProperty(grownType, name) != nullptr);
     }
     const TypeInfo& propType = TypeOf<PropVegetationLayer>();
-    for (const char* name : {"name", "mesh", "material", "scaleRange", "maxSlopeDegrees",
+    for (const char* name : {"name", "mesh", "materials", "scaleRange", "maxSlopeDegrees",
                              "heightRange", "alignToNormal", "fadeStart", "fadeEnd",
                              "castShadows", "maxInstancesPerChunk", "visible"})
     {
@@ -225,7 +225,7 @@ TEST_CASE("engine.vegetation: the component reflects (two lists of reflected lay
     CHECK(FindProperty(type, "proceduralLayers") != nullptr);
     CHECK(FindProperty(type, "propLayers") != nullptr);
     CHECK(FindProperty(type, "layers") == nullptr); // the one list is gone (data version 2)
-    CHECK(type.dataVersion == 2u);
+    CHECK(type.dataVersion == 3u); // 3: a material per slot
     CHECK(type.minReadDataVersion == 1u); // the legacy reader for the one-list layout
 
     TerrainVegetationComponent authored;
@@ -408,7 +408,7 @@ TEST_CASE("engine.vegetation: the legacy reader splits a data-version-1 one-list
     CHECK(loaded.propLayers[0].instances[1].m[3][0] == -5.0f);
     CHECK(loaded.mask.id == Guid{0x55u, 0x66u});
     CHECK(loaded.visible);
-    // The same body under the CURRENT version writes and reads the two lists (version 2).
+    // The same body under the CURRENT version writes and reads the two lists (version 3).
     MemoryStream again;
     {
         BinarySerializer ar(again, SerializeMode::Write);
@@ -422,7 +422,7 @@ TEST_CASE("engine.vegetation: the legacy reader splits a data-version-1 one-list
     {
         BinarySerializer ar(again, SerializeMode::Read);
         BeginVersionedPayload(ar, type);
-        CHECK(ar.Version() == 2u);
+        CHECK(ar.Version() == 3u);
         Serialize(ar, resaved);
         EndVersionedPayload(ar);
         REQUIRE(ar.IsOk());
@@ -430,6 +430,147 @@ TEST_CASE("engine.vegetation: the legacy reader splits a data-version-1 one-list
     CHECK(resaved.proceduralLayers.Size() == 1u);
     CHECK(resaved.propLayers.Size() == 1u);
     CHECK(resaved.propLayers[0].instances.Size() == 2u);
+}
+
+namespace
+{
+    // A procedural layer in the data-version-2 layout (one optional `material`), as a scene saved
+    // before 2026-10-05 stored it.
+    void WriteLayerV2(ISerializer& ar, const Guid& meshId, const Guid& materialId)
+    {
+        String name(u8"Pines");
+        foundation::resource::Ref<geometry::StaticMesh> mesh;
+        mesh.SetId(meshId);
+        foundation::resource::Ref<foundation::materials::Material> material;
+        material.SetId(materialId);
+        Float2 scaleRange{0.8f, 1.2f};
+        f32 maxSlopeDegrees = 35.0f;
+        Float2 heightRange{-1.0e6f, 1.0e6f};
+        bool alignToNormal = false;
+        f32 fadeStart = 40.0f;
+        f32 fadeEnd = 80.0f;
+        bool castShadows = true;
+        u32 maxInstancesPerChunk = 4096;
+        bool visible = true;
+        u8 placement = 1; // Splat
+        u32 splatLayer = 2;
+        f32 splatThreshold = 0.5f;
+        u32 maskPlane = 0;
+        f32 density = 0.025f;
+        foundation::core::Serialize(ar, "name", name);
+        foundation::core::Serialize(ar, "mesh", mesh);
+        foundation::core::Serialize(ar, "material", material);
+        foundation::core::Serialize(ar, "scaleRange", scaleRange);
+        foundation::core::Serialize(ar, "maxSlopeDegrees", maxSlopeDegrees);
+        foundation::core::Serialize(ar, "heightRange", heightRange);
+        foundation::core::Serialize(ar, "alignToNormal", alignToNormal);
+        foundation::core::Serialize(ar, "fadeStart", fadeStart);
+        foundation::core::Serialize(ar, "fadeEnd", fadeEnd);
+        foundation::core::Serialize(ar, "castShadows", castShadows);
+        foundation::core::Serialize(ar, "maxInstancesPerChunk", maxInstancesPerChunk);
+        foundation::core::Serialize(ar, "visible", visible);
+        foundation::core::Serialize(ar, "placement", placement);
+        foundation::core::Serialize(ar, "splatLayer", splatLayer);
+        foundation::core::Serialize(ar, "splatThreshold", splatThreshold);
+        foundation::core::Serialize(ar, "maskPlane", maskPlane);
+        foundation::core::Serialize(ar, "density", density);
+    }
+}
+
+TEST_CASE("engine.vegetation: a data-version-2 layer's one material reads as its list's one entry")
+{
+    engine::vegetation::RegisterVegetationComponentReflection();
+    const TypeInfo& type = TypeOf<TerrainVegetationComponent>();
+    MemoryStream stream;
+    {
+        BinarySerializer ar(stream, SerializeMode::Write);
+        const SerializedDataVersion chain[] = {{type.id, 2u}};
+        u32 n = 1;
+        ar.Key("dataVersions");
+        ar.BeginArray(n);
+        SerializedDataVersion entry = chain[0];
+        ar.Key("type");
+        ar.Scalar(&entry.typeId, ScalarKind::UInt64);
+        ar.Key("version");
+        ar.Scalar(&entry.version, ScalarKind::UInt32);
+        ar.EndArray();
+        ar.PushVersionScope(chain, 1);
+        u32 count = 2;
+        ar.Key("proceduralLayers");
+        ar.BeginArray(count);
+        WriteLayerV2(ar, Guid{0x11u, 0x22u}, Guid{0x33u, 0x44u});
+        WriteLayerV2(ar, Guid{0x11u, 0x22u}, Guid{}); // no material: an empty list
+        ar.EndArray();
+        Array<PropVegetationLayer> none;
+        foundation::core::Serialize(ar, "propLayers", none);
+        foundation::resource::Ref<veg::VegetationMask> mask;
+        foundation::core::Serialize(ar, "mask", mask);
+        bool visible = true;
+        foundation::core::Serialize(ar, "visible", visible);
+        ar.PopVersionScope();
+        REQUIRE(ar.IsOk());
+    }
+    REQUIRE(stream.Seek(0, SeekOrigin::Begin) == 0);
+    TerrainVegetationComponent loaded;
+    {
+        BinarySerializer ar(stream, SerializeMode::Read);
+        BeginVersionedPayload(ar, type);
+        CHECK(ar.Version() == 2u);
+        Serialize(ar, loaded);
+        EndVersionedPayload(ar);
+        REQUIRE(ar.IsOk());
+    }
+    REQUIRE(loaded.proceduralLayers.Size() == 2u);
+    REQUIRE(loaded.proceduralLayers[0].materials.Size() == 1u);
+    CHECK(loaded.proceduralLayers[0].materials[0].id == Guid{0x33u, 0x44u});
+    CHECK(loaded.proceduralLayers[0].density == 0.025f); // the fields after it still line up
+    CHECK(loaded.proceduralLayers[0].splatLayer == 2u);
+    CHECK(loaded.proceduralLayers[1].materials.IsEmpty());
+}
+
+// Snowline's pines (bark, two needle greens, snow) drew white: a layer had one material and the
+// renderer was never told the mesh's slots. One entry covers the mesh; more route the submeshes.
+TEST_CASE("engine.vegetation: a layer's materials reach the renderer per slot, one covering the mesh")
+{
+    Fixture f;
+    f.mgr->SetBuildBudget(100);
+    render::ExtractedScene snapshot{DefaultAllocator()};
+    RefPtr<foundation::materials::Material> bark =
+        foundation::materials::CreatePBR(u8"bark", Float4{0.2f, 0.1f, 0.05f, 1.0f}, 0.0f, 0.9f);
+    RefPtr<foundation::materials::Material> needles =
+        foundation::materials::CreatePBR(u8"needles", Float4{0.05f, 0.2f, 0.1f, 1.0f}, 0.0f, 0.9f);
+
+    // One material: the whole-mesh path, no submesh routing (batching kept).
+    f.Layer().materials.PushBack(foundation::resource::Ref<foundation::materials::Material>(bark));
+    Array<const render::MultiMeshRenderData*> sets = f.Extract(snapshot, nullptr);
+    REQUIRE(!sets.IsEmpty());
+    for (const render::MultiMeshRenderData* s : sets)
+    {
+        CHECK(s->material == bark.Get());
+        CHECK(s->submeshMaterials == nullptr);
+        CHECK(s->submeshMaterialCount == 0u);
+    }
+
+    // Two: slot 0 is the primary, and the renderer gets the list per slot.
+    f.Layer().materials.PushBack(foundation::resource::Ref<foundation::materials::Material>(needles));
+    sets = f.Extract(snapshot, nullptr);
+    REQUIRE(!sets.IsEmpty());
+    for (const render::MultiMeshRenderData* s : sets)
+    {
+        CHECK(s->material == bark.Get());
+        REQUIRE(s->submeshMaterialCount == 2u);
+        CHECK(s->submeshMaterials[0].Get() == bark.Get());
+        CHECK(s->submeshMaterials[1].Get() == needles.Get());
+    }
+
+    // None: the default material (null), as before.
+    f.Layer().materials.Clear();
+    sets = f.Extract(snapshot, nullptr);
+    for (const render::MultiMeshRenderData* s : sets)
+    {
+        CHECK(s->material == nullptr);
+        CHECK(s->submeshMaterials == nullptr);
+    }
 }
 
 TEST_CASE("engine.vegetation: one set per (layer, chunk) in range; the splat picks the chunks; shadows follow the layer")

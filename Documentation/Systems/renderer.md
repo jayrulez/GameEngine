@@ -458,13 +458,16 @@ MultiMesh path - no renderer of their own. Spec: `Documentation/Specs/terrain-ve
   2026-09-23 (user: "the same component, but with multiple lists"). `proceduralLayers`
   (`ProceduralVegetationLayer`): placement Uniform / Splat / Mask / SplatTimesMask, splat layer
   + threshold, mask plane, density. `propLayers` (`PropVegetationLayer`): the authored
-  `instances` the Paint Props brush places. Both over `VegetationLayerBase`: name, mesh, an
-  optional material, scale, slope and height rules, alignToNormal, fade start / end,
+  `instances` the Paint Props brush places. Both over `VegetationLayerBase`: name, mesh, its
+  `materials` (one per mesh slot, as a mesh component's: one covers the whole mesh, more route
+  each submesh to its slot's through the MultiMesh path's `submeshMaterials`; none = the
+  default), scale, slope and height rules, alignToNormal, fade start / end,
   castShadows, maxInstancesPerChunk, visible. A new procedural layer defaults to Mask (it grows
   nothing until the component's mask has paint on its plane; the 2026-09-22 "no unasked-for
   scatter" ruling kept); a new prop layer holds nothing. The inspector edits each layer in its
-  own expander under its list (editor.md 3.5). Wire: data version 2 with a legacy reader for
-  the one-list version 1 (`TypeBuilder::ReadsDataVersionsFrom(1)`: `placement` 3 = Scattered
+  own expander under its list (editor.md 3.5). Wire: data version 3 (2026-10-05: a material
+  per slot; a version-2 layer's one optional `material` reads as the list's one entry), with a
+  legacy reader for the one-list version 1 (`TypeBuilder::ReadsDataVersionsFrom(1)`: `placement` 3 = Scattered
   becomes a prop layer, the rest procedural; the retired enumerator's value is not reused). The
   manager keys its caches and chunk seeds by SLOT (the list index, the prop list flagged in the
   top bit, `kPropSlotBit`), so the two lists never collide on a persistent-buffer key.

@@ -63,7 +63,10 @@ export namespace engine::vegetation
     {
         String name; // the inspector's slot label ("Grass")
         foundation::resource::Ref<foundation::geometry::StaticMesh> mesh;   // a card, a tuft, a rock
-        foundation::resource::Ref<foundation::materials::Material> material; // nil = the mesh's own
+        // One per mesh slot, as a mesh component's list: a single entry covers the whole mesh, more
+        // route each submesh to its slot's (a modelled tree's bark, needles and snow); none = the
+        // default material.
+        Array<foundation::resource::Ref<foundation::materials::Material>> materials;
         Float2 scaleRange{0.8f, 1.2f};
         f32 maxSlopeDegrees = 35.0f;
         Float2 heightRange{-1.0e6f, 1.0e6f}; // terrain-local Y window
@@ -133,11 +136,30 @@ export namespace engine::vegetation
         }
     };
 
+    // A layer of data version 2 carried one optional material: it is the whole list's one entry.
+    inline void ReadSingleMaterial(ISerializer& ar, VegetationLayerBase& l)
+    {
+        foundation::resource::Ref<foundation::materials::Material> material;
+        foundation::core::Serialize(ar, "material", material);
+        l.materials.Clear();
+        if (!material.id.IsNil())
+        {
+            l.materials.PushBack(Move(material));
+        }
+    }
+
     inline void SerializeLayerBase(ISerializer& ar, VegetationLayerBase& l)
     {
         foundation::core::Serialize(ar, "name", l.name);
         foundation::core::Serialize(ar, "mesh", l.mesh);
-        foundation::core::Serialize(ar, "material", l.material);
+        if (ar.Mode() == SerializeMode::Read && ar.Version() == 2) // the one-material layout
+        {
+            ReadSingleMaterial(ar, l);
+        }
+        else
+        {
+            foundation::core::Serialize(ar, "materials", l.materials);
+        }
         foundation::core::Serialize(ar, "scaleRange", l.scaleRange);
         foundation::core::Serialize(ar, "maxSlopeDegrees", l.maxSlopeDegrees);
         foundation::core::Serialize(ar, "heightRange", l.heightRange);
@@ -197,7 +219,7 @@ export namespace engine::vegetation
         {
             foundation::core::Serialize(ar, "name", l.base.name);
             foundation::core::Serialize(ar, "mesh", l.base.mesh);
-            foundation::core::Serialize(ar, "material", l.base.material);
+            ReadSingleMaterial(ar, l.base);
             foundation::core::Serialize(ar, "placement", l.placement);
             foundation::core::Serialize(ar, "splatLayer", l.splatLayer);
             foundation::core::Serialize(ar, "splatThreshold", l.splatThreshold);
@@ -267,15 +289,21 @@ export namespace engine::vegetation
     inline void ResolveResources(foundation::resource::ResourceManager& manager,
                                  TerrainVegetationComponent& c)
     {
-        for (ProceduralVegetationLayer& layer : c.proceduralLayers)
+        const auto bind = [&](VegetationLayerBase& layer)
         {
             layer.mesh.Bind(manager);
-            layer.material.Bind(manager);
+            for (foundation::resource::Ref<foundation::materials::Material>& material : layer.materials)
+            {
+                material.Bind(manager);
+            }
+        };
+        for (ProceduralVegetationLayer& layer : c.proceduralLayers)
+        {
+            bind(layer);
         }
         for (PropVegetationLayer& layer : c.propLayers)
         {
-            layer.mesh.Bind(manager);
-            layer.material.Bind(manager);
+            bind(layer);
         }
         c.mask.Bind(manager);
     }
@@ -362,6 +390,9 @@ export namespace engine::vegetation
             bool seenThisFrame = false;
             bool warnedClamp = false;  // the over-budget warning fires once per layer
             bool warnedNoMesh = false; // the unresolved-mesh warning fires once per layer
+            // The layer's materials as the renderer borrows them, refreshed from the refs each
+            // extraction (a late cook or a hot reload heals live, as a mesh component's do).
+            Array<RefPtr<foundation::materials::Material>> materials;
         };
 
         [[nodiscard]] static u64 CacheKey(scene::EntityHandle owner, u32 slot) noexcept;

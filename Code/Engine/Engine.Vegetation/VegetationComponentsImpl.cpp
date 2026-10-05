@@ -87,8 +87,9 @@ namespace engine::vegetation
             .template Property<&Layer::mesh>("mesh")
             .PropAttribute("description",
                            String(u8"The instanced mesh: a grass card, a tuft, a rock."))
-            .template Property<&Layer::material>("material")
-            .PropAttribute("description", String(u8"Optional override; none = the mesh's own."))
+            .template Property<&Layer::materials>("materials")
+            .PropAttribute("description",
+                           String(u8"One per mesh slot, as on a mesh: one covers the whole mesh."))
             .template Property<&Layer::scaleRange>("scaleRange")
             .PropAttribute("displayName", String(u8"Scale Range"))
             .template Property<&Layer::maxSlopeDegrees>("maxSlopeDegrees")
@@ -158,7 +159,8 @@ namespace engine::vegetation
     {
         builder.Attribute("displayName", String(u8"Terrain Vegetation"))
             .Attribute("category", String(u8"Terrain"))
-            .DataVersion(2)          // 2026-09-23: two layer lists (was one list + placement)
+            .DataVersion(3)          // 2026-10-05: a material per slot (was one material);
+                                     // 2026-09-23: two layer lists (was one list + placement)
             .ReadsDataVersionsFrom(1) // the legacy reader splits a V1 list (remove after re-saves)
             .Property<&TerrainVegetationComponent::proceduralLayers>("proceduralLayers")
             .PropAttribute("displayName", String(u8"Procedural Layers"))
@@ -520,7 +522,16 @@ namespace engine::vegetation
         const bool hasOrigin = snapshot.HasViewOrigin();
         const Float3 origin = snapshot.ViewOrigin();
         const f32 entityScale = MaxAxisScale(entityWorld);
-        foundation::materials::Material* material = base.material.Get();
+        cache.materials.Resize(base.materials.Size());
+        for (usize m = 0; m < base.materials.Size(); ++m)
+        {
+            cache.materials[m] = RefPtr<foundation::materials::Material>(base.materials[m].Get());
+        }
+        foundation::materials::Material* material =
+            cache.materials.IsEmpty() ? nullptr : cache.materials[0].Get();
+        // Submesh routing only for a genuinely multi-material list (a mesh component's rule): one
+        // entry is the whole-mesh path, which keeps batching.
+        const bool perSlot = cache.materials.Size() > 1;
         for (u32 i = 0; i < cache.sets.Size(); ++i)
         {
             ChunkSet& set = cache.sets[i];
@@ -588,6 +599,8 @@ namespace engine::vegetation
             rd->version = set.version;         // the scatter (re-upload only on change)
             rd->mesh = mesh;
             rd->material = material;
+            rd->submeshMaterials = perSlot ? cache.materials.Data() : nullptr;
+            rd->submeshMaterialCount = perSlot ? static_cast<u32>(cache.materials.Size()) : 0u;
             rd->worldCenter = set.worldCenter;
             rd->worldRadius = set.worldRadius;
             rd->entityId = engine::render::PackEntity(owner);

@@ -249,6 +249,111 @@ namespace editor
             return StringView();
         }
 
+        /// component_set on a LIST: every element's shape checked first (a reference's asset guid or
+        /// null, an entity reference's guid or null, a leaf's shape), then one write replacing the
+        /// whole list through MutateComponent (one undo step). A list of structures is refused.
+        Result<Function<void()>, String> ShapeListWrite(SceneEditContext& edit, const Guid& entity,
+                                                       const TypeInfo& componentType,
+                                                       const PropertyInfo& list, const JsonValue& value,
+                                                       StringView name)
+        {
+            const ContainerInfo& ci = *list.type->container;
+            const TypeInfo* element = ci.elementType;
+            if (element == nullptr)
+            {
+                return Err(Format(u8"list '{}' has no reflected element type", name));
+            }
+            const bool reference = IsReferenceType(*element) && element->reference != nullptr;
+            const bool entityRef = element == &TypeOf<scene::EntityRef>();
+            if (!reference && !entityRef && element->enumeratorCount == 0 && element->propertyCount > 0)
+            {
+                return Err(Format(u8"list '{}' holds structures - not writable through component_set "
+                                  u8"(scene_write edits the source)",
+                                  name));
+            }
+            if (!value.IsArray())
+            {
+                return Err(Format(u8"property '{}' is a list - `value` is an array of its elements",
+                                  name));
+            }
+            Array<Guid> ids;
+            Array<Variant> leaves;
+            const usize count = static_cast<usize>(value.Count());
+            for (usize i = 0; i < count; ++i)
+            {
+                const JsonValue item = value.At(static_cast<i64>(i));
+                if (reference || entityRef)
+                {
+                    Guid target;
+                    if (!item.IsNull() &&
+                        (!item.IsString() || !Guid::TryParse(item.AsString().AsView(), target)))
+                    {
+                        return Err(Format(u8"element {} of '{}' is not {} guid or null", i, name,
+                                          reference ? StringView(u8"an asset") : StringView(u8"an entity")));
+                    }
+                    ids.PushBack(target);
+                }
+                else
+                {
+                    Variant leaf = LeafVariant(*element, item);
+                    if (leaf.IsEmpty())
+                    {
+                        const StringView shape = LeafShape(*element);
+                        return Err(Format(u8"element {} of '{}' has the wrong shape{}{}", i, name,
+                                          shape.IsEmpty() ? StringView{} : StringView(u8" - it takes "),
+                                          shape));
+                    }
+                    leaves.PushBack(Move(leaf));
+                }
+            }
+            SceneEditContext* editPtr = &edit;
+            const TypeInfo* typePtr = &componentType;
+            const PropertyInfo* listPtr = &list;
+            return Function<void()>{[editPtr, entity, typePtr, listPtr, count, reference, entityRef,
+                                     ids = Move(ids), leaves = Move(leaves)]()
+            {
+                (void)editPtr->MutateComponent(
+                    entity, typePtr,
+                    [&](const Instance& component)
+                    {
+                        const Instance container(listPtr->address(component), listPtr->type);
+                        const ContainerInfo& c = *listPtr->type->container;
+                        while (ContainerSize(c, container) > count)
+                        {
+                            (void)ContainerRemoveAt(c, container, ContainerSize(c, container) - 1);
+                        }
+                        while (ContainerSize(c, container) < count)
+                        {
+                            (void)ContainerEmplaceDefault(c, container, ContainerSize(c, container));
+                        }
+                        for (usize i = 0; i < count; ++i)
+                        {
+                            if (reference || entityRef)
+                            {
+                                const Instance at = ContainerAddressAt(c, container, i);
+                                if (at.Pointer() == nullptr)
+                                {
+                                    continue;
+                                }
+                                if (reference)
+                                {
+                                    c.elementType->reference->SetId(at.Pointer(), ids[i]);
+                                    c.elementType->reference->ClearBinding(at.Pointer());
+                                }
+                                else
+                                {
+                                    static_cast<scene::EntityRef*>(at.Pointer())->id = ids[i];
+                                }
+                            }
+                            else
+                            {
+                                (void)ContainerSetAt(c, container, i, leaves[i]);
+                            }
+                        }
+                    });
+            }};
+        }
+
         /// An enumerator by name or by number; false when neither names one.
         bool EnumValueOf(const TypeInfo& type, const JsonValue& value, i64& out)
         {
@@ -671,10 +776,12 @@ namespace editor
             u8"nothing saved (file.save / the page's Save does that). `value` takes the shape "
             u8"entity_inspect shows: numbers, booleans, strings, [x,y,z] vectors, [r,g,b,a] "
             u8"colors (sRGB, as a colour picker shows them), [x,y,z,w] quaternions, an enumerator's name, an asset guid for a "
-            u8"reference, an entity guid (or null) for an entity reference. REFUSED while the "
-            u8"page simulates, on a read-only property, on a nested structure or a list (not "
-            u8"writable here yet), and on a value of the wrong shape - nothing changes then. "
-            u8"Returns the property as entity_inspect reads it after the write.",
+            u8"reference, an entity guid (or null) for an entity reference, and for a list an "
+            u8"array of its elements in those shapes, the whole list (a mesh's materials, an "
+            u8"animator's mesh entities). REFUSED while the page simulates, on a read-only "
+            u8"property, on a nested structure or a list of them (scene_write edits those), and "
+            u8"on a value of the wrong shape - nothing changes then. Returns the property as "
+            u8"entity_inspect reads it after the write.",
             SchemaBuilder()
                 .Str(u8"page", kPageArgument)
                 .Str(u8"entity", u8"the entity: a guid, a name or a slash path (default: the "
@@ -756,6 +863,37 @@ namespace editor
                     return Err(Format(u8"property '{}' of '{}' is read-only", property.AsView(),
                                       component.AsView()));
                 }
+                const JsonValue value = args.Get(u8"value");
+                if (prop->type->container != nullptr)
+                {
+                    Result<Function<void()>, String> listWrite =
+                        ShapeListWrite(edit, id, type, *prop, value, property.AsView());
+                    if (!listWrite.HasValue())
+                    {
+                        return Err(Move(listWrite.Error()));
+                    }
+                    EditorCommandStack& listCommands = edit.Commands();
+                    const i64 listBefore = listCommands.UndoIndex();
+                    listCommands.BeginGroup(u8"mcp");
+                    listWrite.Value()();
+                    listCommands.EndGroup();
+                    listCommands.LockGroup();
+                    if (listCommands.UndoIndex() == listBefore)
+                    {
+                        return Err(Format(u8"list '{}' of '{}' could not be set (the command was "
+                                          u8"refused; see log_read)",
+                                          property.AsView(), component.AsView()));
+                    }
+                    JsonValue out = JsonValue::MakeObject();
+                    out.Set(u8"page", PageJson(*addressed.Value().page));
+                    out.Set(u8"entity", GuidJson(id));
+                    out.Set(u8"component",
+                            JsonValue::MakeString(String(manager->SerializationTypeId())));
+                    out.Set(u8"property", JsonValue::MakeString(property));
+                    out.Set(u8"value", PropertyJson(*prop, manager->GetComponentInstance(handle)));
+                    out.Set(u8"undoSteps", JsonValue::MakeNumber(1));
+                    return out;
+                }
                 if (IsNested(*prop))
                 {
                     return Err(Format(u8"property '{}' of '{}' is a {} - not writable through "
@@ -764,7 +902,6 @@ namespace editor
                                       prop->type->container != nullptr ? StringView(u8"list")
                                                                        : StringView(u8"structure")));
                 }
-                const JsonValue value = args.Get(u8"value");
                 const TypeInfo& propType = *prop->type;
 
                 // Shape the value first, so a refusal touches nothing; then ONE command in a

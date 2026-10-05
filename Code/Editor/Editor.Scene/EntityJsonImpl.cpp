@@ -168,7 +168,10 @@ namespace editor
     /// container as an array of its elements (each a leaf or a structure).
     JsonValue PropertyJson(const PropertyInfo& property, const Instance& instance)
     {
-        if (!IsNested(property))
+        // A list reads as its elements whether or not it is flagged nested (an animator's list of
+        // entity references is a plain container property).
+        const bool list = property.type != nullptr && property.type->container != nullptr;
+        if (!IsNested(property) && !list)
         {
             return ValueJson(GetProperty(property, instance));
         }

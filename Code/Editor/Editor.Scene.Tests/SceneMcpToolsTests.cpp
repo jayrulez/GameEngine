@@ -26,6 +26,7 @@ import engine.navigation;     // NavMeshZoneComponent (navigation_bake)
 import foundation.content;    // Instance (the zone asset)
 import navigation.pipeline;   // NavigationZoneAsset
 import engine.physics;        // RigidBodyComponent (the static ground navigation_bake collects)
+import engine.animation;      // SkeletalAnimationComponent (a list of entity references)
 import foundation.physics;    // MotionKind
 
 using namespace foundation::core;
@@ -608,9 +609,12 @@ TEST_CASE("scene-mcp-tools: component_set writes one property through the undo p
     got = set(u8"physics.RigidBody", u8"mass", u8"1");
     CHECK_FALSE(got.ok);
     CHECK(got.error.AsView().StartsWith(u8"entity 'Lamp' has no reflected component"));
-    got = set(u8"mesh", u8"materials", u8"[]");
+    got = set(u8"mesh", u8"materials", u8"\"one\"");
     CHECK_FALSE(got.ok);
-    CHECK(got.error.AsView().StartsWith(u8"property 'materials' of 'mesh' is a list"));
+    CHECK(got.error.AsView().StartsWith(u8"property 'materials' is a list - `value` is an array"));
+    got = set(u8"mesh", u8"materials", u8"[\"not-a-guid\"]");
+    CHECK_FALSE(got.ok);
+    CHECK(got.error.AsView().StartsWith(u8"element 0 of 'materials' is not an asset guid"));
     got = set(u8"mesh", u8"mesh", u8"\"not-a-guid\"");
     CHECK_FALSE(got.ok);
     CHECK(got.error.AsView().StartsWith(u8"property 'mesh' is a reference"));
@@ -667,6 +671,81 @@ REFLECT_VALUE(PlaqueComponent, "rtti::editor::scene::test")
         .Property<&PlaqueComponent::target>("target")
         .Property<&PlaqueComponent::mood>("mood")
         .Property<&PlaqueComponent::serial>("serial", PropertyFlags::ReadOnly);
+}
+
+// Snowline's rider: an imported model's animator feeds its skinned mesh through a list of entity
+// references, and a vegetation layer's materials are a list; component_set refused every list, so
+// an agent could only reach them by writing the scene's source.
+TEST_CASE("scene-mcp-tools: component_set writes a whole list - references by guid, entity references "
+          "- in one undo step, and entity_inspect reads a list of entity references")
+{
+    engine::render::RegisterRenderComponentReflection();
+    engine::animation::RegisterAnimationComponentReflection();
+    Random rng(41);
+    const Guid sceneId = Guid::Generate(rng);
+    EditorContext context{DefaultAllocator()};
+    auto* page = static_cast<HeadlessScenePage*>(context.AdoptPage(UniquePtr<EditorPage>(
+        DefaultAllocator().New<HeadlessScenePage>(u8"Rider", sceneId), DefaultAllocator())));
+    SceneEditContext& edit = page->EditContext();
+    scene::Scene& scene = edit.Scene();
+    auto* meshes = scene.AddSystem<engine::render::MeshComponentManager>();
+    auto* animators = scene.AddSystem<engine::animation::SkeletalAnimationComponentManager>();
+    const Guid riderId = edit.CreateEntity(u8"Rider");
+    const Guid bodyId = edit.CreateEntity(u8"Body");
+    const scene::EntityHandle rider = edit.Resolve(riderId);
+    (void)meshes->Add(rider);
+    (void)animators->Add(rider);
+    edit.Commands().Clear();
+
+    McpServer server;
+    RegisterSceneLiveTools(server, context);
+    const String pageGuid = GuidText(sceneId);
+    const String riderGuid = GuidText(riderId);
+    const auto set = [&](StringView component, StringView property, StringView valueJson)
+    {
+        return Call(server, u8"component_set",
+                    Format(u8"{{\"page\":\"{}\",\"entity\":\"{}\",\"component\":\"{}\",\"property\":\"{}\","
+                           u8"\"value\":{}}}",
+                           pageGuid.AsView(), riderGuid.AsView(), component, property, valueJson)
+                        .AsView());
+    };
+
+    // A list of references: two material guids and an empty slot, read back as written.
+    const Guid bark = Guid::Generate(rng);
+    const Guid needles = Guid::Generate(rng);
+    Answer got = set(u8"mesh", u8"materials",
+                     Format(u8"[\"{}\", null, \"{}\"]", GuidText(bark).AsView(), GuidText(needles).AsView())
+                         .AsView());
+    REQUIRE(got.ok);
+    REQUIRE(meshes->Get(rider)->materials.Size() == 3u);
+    CHECK(meshes->Get(rider)->materials[0].id == bark);
+    CHECK(meshes->Get(rider)->materials[1].id.IsNil());
+    CHECK(meshes->Get(rider)->materials[2].id == needles);
+    REQUIRE(got.payload.Get(u8"value").Count() == 3);
+    CHECK(got.payload.Get(u8"value").At(2).AsString() == GuidText(needles).AsView());
+    // A shorter list shrinks it.
+    REQUIRE(set(u8"mesh", u8"materials", Format(u8"[\"{}\"]", GuidText(needles).AsView()).AsView()).ok);
+    REQUIRE(meshes->Get(rider)->materials.Size() == 1u);
+    CHECK(meshes->Get(rider)->materials[0].id == needles);
+
+    // A list of entity references, and entity_inspect reads it (it showed "unreadable").
+    got = set(u8"skeletal_animation", u8"meshEntities",
+              Format(u8"[\"{}\"]", GuidText(bodyId).AsView()).AsView());
+    REQUIRE(got.ok);
+    REQUIRE(animators->Get(rider)->meshEntities.Size() == 1u);
+    CHECK(animators->Get(rider)->meshEntities[0].id == bodyId);
+    CHECK(got.payload.Get(u8"value").At(0).AsString() == GuidText(bodyId).AsView());
+
+    // One undo step per call: the entity list, then the shrink, then the first write.
+    edit.Commands().Undo();
+    CHECK(animators->Get(rider)->meshEntities.IsEmpty());
+    edit.Commands().Undo();
+    CHECK(meshes->Get(rider)->materials.Size() == 3u);
+    edit.Commands().Undo();
+    CHECK(meshes->Get(rider)->materials.IsEmpty());
+    CHECK_FALSE(edit.Commands().CanUndo());
+
+    context.ClosePage(page);
 }
 
 TEST_CASE("scene-mcp-tools: component_set writes a string, a vector, a quaternion, an entity reference "

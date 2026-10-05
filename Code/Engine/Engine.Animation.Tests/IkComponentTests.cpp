@@ -401,3 +401,101 @@ TEST_CASE("ik foot component: feet stand on the ground the scene's ray query fin
     CHECK(footWorldY(3) == doctest::Approx(-0.1f).epsilon(1e-3));
     CHECK(footWorldY(0) == doctest::Approx(0.8f).epsilon(1e-3));
 }
+
+TEST_CASE("ik component: a chain whose end is a detached IK-target bone moves it and meets it")
+{
+    // The asset-pack shape: the Foot is a child of the Root (Blender's IK target), the Shin has no
+    // child. A component naming Thigh, Shin, Foot puts the foot on its target and bends the leg to it.
+    scene::Scene level{DefaultAllocator(), u8"detached"};
+    level.AddSystem<engine::render::MeshComponentManager>();
+    engine::animation::AddAnimationSceneManagers(level);
+    RefPtr<animation::Skeleton> skeleton = MakeRef<animation::Skeleton>(DefaultAllocator(), 5);
+    {
+        Array<animation::Bone>& bones = skeleton->Bones();
+        const char8_t* names[] = {u8"Root", u8"Hips", u8"Thigh", u8"Shin", u8"Foot"};
+        const i32 parents[] = {-1, 0, 1, 2, 0};
+        const Float3 offsets[] = {{0, 0, 0}, {0, 1, 0}, {0.15f, 0, 0}, {0, -0.45f, 0.02f}, {0.15f, 0.1f, 0}};
+        for (i32 i = 0; i < 5; ++i)
+        {
+            bones[static_cast<usize>(i)].index = i;
+            bones[static_cast<usize>(i)].name = String(names[i]);
+            bones[static_cast<usize>(i)].parentIndex = parents[i];
+            bones[static_cast<usize>(i)].localBindPose.position = offsets[i];
+        }
+        skeleton->BuildNameMap();
+        skeleton->FindRootBones();
+        skeleton->BuildChildIndices();
+        skeleton->ComputeInverseBindPoses();
+    }
+    const scene::EntityHandle hero = level.CreateEntity(u8"Hero");
+    auto& animator = level.GetSystem<engine::animation::SkeletalAnimationComponentManager>()->Add(hero);
+    animator.skeleton.SetDirect(skeleton);
+    const scene::EntityHandle step = level.CreateEntity(u8"Step");
+    Transform at;
+    at.position = Float3{0.25f, 0.3f, 0.2f};
+    level.SetLocalTransform(step, at);
+    const scene::EntityHandle legIk = level.CreateEntity(u8"LegIk");
+    level.SetParent(legIk, hero);
+    auto* legs = level.GetSystem<engine::animation::TwoBoneIkComponentManager>();
+    auto& leg = legs->Add(legIk);
+    leg.startBone = String(u8"Thigh");
+    leg.midBone = String(u8"Shin");
+    leg.endBone = String(u8"Foot");
+    leg.target = level.GetEntityId(step);
+    leg.fadeSeconds = 0.0f;
+
+    level.Update(1.0f / 60.0f);
+    level.Update(1.0f / 60.0f);
+    CHECK(legs->Get(legIk)->runtime.status == IkStatus::Solving);
+    animation::AnimationPlayer& player = *animator.player;
+    (void)player.GetSkinningMatrices();
+    animation::ModelPoseCache cache;
+    cache.Build(*skeleton, player.GetFinalPoses());
+    const Float4x4& foot = cache.At(4);
+    CHECK(Length(Float3{foot.m[3][0], foot.m[3][1], foot.m[3][2]} - at.position) < 1.0e-3f);
+    // The shin's tip, where it met the foot in the bind pose (0.45 below the shin), meets it again.
+    const Float3 tip = TransformPoint(Float3{0, -0.45f, -0.02f}, cache.At(3));
+    CHECK(Length(tip - at.position) < 1.0e-3f);
+    const foundation::script::Entity entity{&level, legIk.index, legIk.generation};
+    CHECK(engine::animation::SceneAnimation{&level}.ikReached(entity));
+}
+
+TEST_CASE("ik component: on a gameplay root, it drives the first animator below it")
+{
+    // Player (the gameplay root) holds the IK; its child Model holds the animator (an imported
+    // model's prefab the game does not edit). Nothing at or above: the first animator below.
+    Stage s;
+    const scene::EntityHandle player = s.level.CreateEntity(u8"Player");
+    const scene::EntityHandle decoy = s.level.CreateEntity(u8"Hat"); // a child without an animator
+    s.level.SetParent(decoy, player);
+    s.level.SetParent(s.rider, player);
+    const scene::EntityHandle target = s.Target(u8"Step", Float3{6, 4, 0});
+    auto& leg = s.level.GetSystem<engine::animation::TwoBoneIkComponentManager>()->Add(player);
+    leg.startBone = String(u8"Thigh");
+    leg.midBone = String(u8"Shin");
+    leg.endBone = String(u8"Foot");
+    leg.target = s.level.GetEntityId(target);
+    leg.fadeSeconds = 0.0f;
+    s.Tick();
+    s.Tick();
+    CHECK(leg.runtime.status == IkStatus::Solving);
+    CHECK(leg.runtime.animator == s.rider);
+    CHECK(Length(s.BoneWorld(3) - Float3{6, 4, 0}) < 1.0e-3f);
+
+    // A second animated child (a pet, a held prop): which one is meant is no longer clear, and
+    // child order must not decide it. The component turns off with one log line.
+    CountingSink sink;
+    GlobalLogger().AddSink(&sink);
+    const scene::EntityHandle pet = s.level.CreateEntity(u8"Pet");
+    s.level.SetParent(pet, player);
+    s.level.GetSystem<engine::animation::SkeletalAnimationComponentManager>()->Add(pet).skeleton.SetDirect(s.skeleton);
+    for (i32 frame = 0; frame < 5; ++frame)
+    {
+        s.Tick();
+    }
+    auto* legs = s.level.GetSystem<engine::animation::TwoBoneIkComponentManager>();
+    CHECK(legs->Get(player)->runtime.status == IkStatus::NoAnimator);
+    CHECK(sink.lines == 1u);
+    CHECK(s.Player().Modifiers().IsEmpty());
+    GlobalLogger().RemoveSink(&sink);
+}

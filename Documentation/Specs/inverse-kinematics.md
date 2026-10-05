@@ -20,6 +20,15 @@
 > probe and one easing step a frame (a second evaluation reuses the hits; a zero step holds),
 > `groundHeight` for a rig whose origin is not at its feet, the order pelvis, rebuild, legs. The
 > camera cull distance is deferred (no main camera at this layer; a script-set viewer point later).
+> P4 (editor) BUILT 2026-10-05: bone pickers (`boneName` lists the animator's bones; a missing name
+> is listed as such) and gizmos for the three IK components. Sky Hopper's hero (an asset-pack rig)
+> has DETACHED feet: IK-target bones off the root, the shin with no child. SolveTwoBone now takes
+> a detached end (any chain, so a hand on such a rig too): the end bone moves to the target itself
+> (blended by the weight, turned with matchRotation) and the chain bends all the way to meet it
+> with its TIP, the point of the mid bone that met the end. The tip is taken from the animated pose
+> every solve (foot IK takes it before the pelvis moves), never from the bind pose: it keeps any
+> gap the baked rig left between the shin and the foot instead of snapping it shut. An end the
+> start carries but the mid does not, or one above the chain, is refused (no meeting point).
 > Seeded in weekly_backlog.md (2026-08-26). User ruling 2026-10-05: after Snowline's P1, before
 > its P2, spec first, and "when doing IK, it must be solid". Companion: root-motion.md (the two
 > share the pose seam of P0). Read CONVENTIONS.md first.
@@ -124,7 +133,10 @@ of model-space transforms; no physics, no scene.
 ### Engine: components and the frame
 
 - **Finding the animator**: a component drives the nearest ancestor-or-self with a skeletal
-  animation or animation graph component; with neither, it disables itself with one log line.
+  animation or animation graph component, else (P4) the ONE below it, so IK can sit on a gameplay
+  root whose model is a child (an importer's prefab the game does not edit). Several below is
+  ambiguous (a pet, a held prop): reordering children must never retarget the IK silently, so the
+  component stays off with one log line, as it does with none.
 - **`TwoBoneIkComponent`**, **`AimIkComponent`**, on an entity under the animated model (or on it):
   the chain by BONE NAMES (resolved to indices against the animator's skeleton, cached, re-resolved
   when the skeleton changes; an unknown name logs once and disables the component), the target an

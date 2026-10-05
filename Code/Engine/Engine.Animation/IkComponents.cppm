@@ -425,6 +425,60 @@ export namespace engine::animation
         {
             return Float3{m.m[3][0], m.m[3][1], m.m[3][2]};
         }
+
+        enum class Lookup : u8
+        {
+            None,
+            Found,
+            Ambiguous, // nothing at or above, several below
+        };
+
+        /// The animator an IK component on `from` drives, by `isAnimator(entity)` (which records the
+        /// match): the nearest at or above it (a component under the model, or on it), else the ONE
+        /// below it (a component on a gameplay root whose model is a child, the importer's prefab).
+        /// Several below is ambiguous: reordering children must never retarget the IK silently.
+        template <typename IsAnimator>
+        [[nodiscard]] Lookup FindAnimatorFrom(scene::Scene& scene, scene::EntityHandle from, IsAnimator&& isAnimator)
+        {
+            scene::EntityHandle e = from;
+            for (u32 depth = 0; scene.IsValid(e) && depth < 1024u; ++depth)
+            {
+                if (isAnimator(e))
+                {
+                    return Lookup::Found;
+                }
+                e = scene.GetParent(e);
+            }
+            // Every entity below `from`, depth first; the first match is kept, a second is ambiguous.
+            scene::EntityHandle found = scene::EntityHandle::Invalid();
+            e = scene.IsValid(from) ? scene.GetFirstChild(from) : scene::EntityHandle::Invalid();
+            for (u32 visited = 0; scene.IsValid(e) && visited < 65536u; ++visited)
+            {
+                if (isAnimator(e))
+                {
+                    if (scene.IsValid(found))
+                    {
+                        return Lookup::Ambiguous;
+                    }
+                    found = e;
+                }
+                if (scene.IsValid(scene.GetFirstChild(e)))
+                {
+                    e = scene.GetFirstChild(e);
+                    continue;
+                }
+                while (scene.IsValid(e) && e != from && !scene.IsValid(scene.GetNextSibling(e)))
+                {
+                    e = scene.GetParent(e);
+                }
+                if (!scene.IsValid(e) || e == from)
+                {
+                    break;
+                }
+                e = scene.GetNextSibling(e);
+            }
+            return scene.IsValid(found) ? Lookup::Found : Lookup::None; // `found` recorded itself
+        }
     }
 
     /// What authoring needs of the animator above an IK component, from the component data alone
@@ -441,28 +495,28 @@ export namespace engine::animation
     [[nodiscard]] inline bool FindIkAuthoringAnimator(scene::Scene& scene, scene::EntityHandle from,
                                                       IkAuthoringAnimator& out)
     {
-        scene::EntityHandle e = from;
         auto* graphs = scene.GetSystem<AnimationGraphComponentManager>();
         auto* clips = scene.GetSystem<SkeletalAnimationComponentManager>();
-        for (u32 depth = 0; scene.IsValid(e) && depth < 1024u; ++depth)
-        {
-            if (AnimationGraphComponent* g = graphs != nullptr ? graphs->Get(e) : nullptr)
+        return ik_detail::Lookup::Found == ik_detail::FindAnimatorFrom(
+            scene, from,
+            [&](scene::EntityHandle e)
             {
-                out.skeleton = g->skeleton.Get();
-                out.modelEntity = ik_detail::ModelEntity(
-                    scene, Span<const scene::EntityRef>{g->meshEntities.Data(), g->meshEntities.Size()}, e);
-                return true;
-            }
-            if (SkeletalAnimationComponent* s = clips != nullptr ? clips->Get(e) : nullptr)
-            {
-                out.skeleton = s->skeleton.Get();
-                out.modelEntity = ik_detail::ModelEntity(
-                    scene, Span<const scene::EntityRef>{s->meshEntities.Data(), s->meshEntities.Size()}, e);
-                return true;
-            }
-            e = scene.GetParent(e);
-        }
-        return false;
+                if (AnimationGraphComponent* g = graphs != nullptr ? graphs->Get(e) : nullptr)
+                {
+                    out.skeleton = g->skeleton.Get();
+                    out.modelEntity = ik_detail::ModelEntity(
+                        scene, Span<const scene::EntityRef>{g->meshEntities.Data(), g->meshEntities.Size()}, e);
+                    return true;
+                }
+                if (SkeletalAnimationComponent* sc = clips != nullptr ? clips->Get(e) : nullptr)
+                {
+                    out.skeleton = sc->skeleton.Get();
+                    out.modelEntity = ik_detail::ModelEntity(
+                        scene, Span<const scene::EntityRef>{sc->meshEntities.Data(), sc->meshEntities.Size()}, e);
+                    return true;
+                }
+                return false;
+            });
     }
 
     /// A bone's bind-pose position in the world, through the model entity (the editor's gizmos
@@ -486,19 +540,12 @@ export namespace engine::animation
         return true;
     }
 
-    /// The nearest animator at or above `from`.
-    [[nodiscard]] inline bool FindIkAnimator(scene::Scene& scene, scene::EntityHandle from, IkAnimatorLink& out)
+    /// The animator an IK component drives: the nearest at or above `from`, else the one below it.
+    [[nodiscard]] inline ik_detail::Lookup FindIkAnimator(scene::Scene& scene, scene::EntityHandle from,
+                                                          IkAnimatorLink& out)
     {
-        scene::EntityHandle e = from;
-        for (u32 depth = 0; scene.IsValid(e) && depth < 1024u; ++depth)
-        {
-            if (ik_detail::AnimatorOn(scene, e, out))
-            {
-                return true;
-            }
-            e = scene.GetParent(e);
-        }
-        return false;
+        return ik_detail::FindAnimatorFrom(scene, from,
+                                           [&](scene::EntityHandle e) { return ik_detail::AnimatorOn(scene, e, out); });
     }
 
     /// Takes a component's modifier off its animator's player, if both are still there.
@@ -638,9 +685,16 @@ export namespace engine::animation
                 return;
             }
             IkAnimatorLink link;
-            if (!FindIkAnimator(*m_scene, owner, link))
+            const ik_detail::Lookup lookup = FindIkAnimator(*m_scene, owner, link);
+            if (lookup == ik_detail::Lookup::Ambiguous)
             {
-                Disable(c, owner, IkStatus::NoAnimator, u8"no animation graph or skeletal animation at or above it");
+                Disable(c, owner, IkStatus::NoAnimator,
+                        u8"nothing animated at or above it and several below: put it on or under one model");
+                return;
+            }
+            if (lookup != ik_detail::Lookup::Found)
+            {
+                Disable(c, owner, IkStatus::NoAnimator, u8"no animation graph or skeletal animation at, above or below it");
                 return;
             }
             if (link.entity != rt.animator)
@@ -744,10 +798,16 @@ export namespace engine::animation
                     return IkStatus::UnknownBone;
                 }
             }
+            // The end may be detached (an IK-target bone off the root): not below the mid, and then
+            // neither carried by the start nor above it.
+            const bool endBelowMid = animation::ik::IsBelow(skeleton, bones[2], bones[1]);
             if (!animation::ik::IsBelow(skeleton, bones[1], bones[0]) ||
-                !animation::ik::IsBelow(skeleton, bones[2], bones[1]))
+                (!endBelowMid && (bones[2] == bones[0] || bones[2] == bones[1] ||
+                                  animation::ik::IsBelow(skeleton, bones[2], bones[0]) ||
+                                  animation::ik::IsBelow(skeleton, bones[0], bones[2]))))
             {
-                failed = Format(u8"'{}', '{}', '{}' are not a chain (each below the one before)",
+                failed = Format(u8"'{}', '{}', '{}' are not a chain (the mid below the start, the end below "
+                                u8"the mid or apart from the chain)",
                                 c.startBone.AsView(), c.midBone.AsView(), c.endBone.AsView());
                 return IkStatus::NotAChain;
             }
@@ -898,10 +958,15 @@ export namespace engine::animation
                         return IkStatus::UnknownBone;
                     }
                 }
+                // The foot may be detached (an IK-target bone off the root): not below the shin, and
+                // then not carried by the thigh either.
+                const bool footBelowShin = animation::ik::IsBelow(skeleton, bones[2], bones[1]);
                 if (!animation::ik::IsBelow(skeleton, bones[1], bones[0]) ||
-                    !animation::ik::IsBelow(skeleton, bones[2], bones[1]))
+                    (!footBelowShin && animation::ik::IsBelow(skeleton, bones[2], bones[0])) ||
+                    animation::ik::IsBelow(skeleton, bones[0], bones[2]))
                 {
-                    failed = Format(u8"'{}', '{}', '{}' are not a chain (each below the one before)",
+                    failed = Format(u8"'{}', '{}', '{}' are not a leg (the shin below the thigh, the foot "
+                                    u8"below the shin or apart from the leg)",
                                     leg.startBone.AsView(), leg.midBone.AsView(), leg.endBone.AsView());
                     return IkStatus::NotAChain;
                 }

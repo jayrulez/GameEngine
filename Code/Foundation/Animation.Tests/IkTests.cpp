@@ -642,3 +642,128 @@ TEST_CASE("ik two-bone: a chain the animation holds straighter than the clamp ke
     (void)SolveTwoBone(skel, All(pose), cache, kLeg, settings);
     CHECK(Length(At(cache, kFoot) - hip) == doctest::Approx(span).epsilon(1e-5));
 }
+
+TEST_CASE("ik two-bone: a tip in the mid bone's space ends a chain whose shin has no child")
+{
+    // The body's leg without its foot: the chain ends at a point 3 below the shin, carried by it.
+    Skeleton skel{kBoneCount};
+    BuildBody(skel);
+    const Float3 hip{1, 10, 0};
+    TwoBoneIkSettings settings;
+    settings.useTip = true;
+    settings.tip = Float3{0, -3, -0.0f};
+    for (const Float3 at : {Float3{1, 5, 2}, Float3{3, 6, -1}, Float3{1, 4, 0}})
+    {
+        Array<BoneTransform> pose = BentLeg(skel);
+        ModelPoseCache cache;
+        cache.Build(skel, All(pose));
+        settings.target = at;
+        const IkResult result = SolveTwoBone(skel, All(pose), cache, TwoBoneIkChain{kThigh, kShin, -1}, settings);
+        REQUIRE(result.valid);
+        CHECK(result.reached);
+        CHECK(Length(TransformPoint(settings.tip, cache.At(kShin)) - at) < 1.0e-4f * kReach);
+        CHECK(Length(At(cache, kShin) - hip) == doctest::Approx(4.0f).epsilon(1e-5));
+    }
+}
+
+namespace
+{
+    // The asset-pack shape: Root(0); Hips(1) at 1 under it; per side a Thigh under the hips and a
+    // Shin 0.45 below with no child; the Foot an IK-target bone under the ROOT, 0.1 up, where the
+    // shin's tip (0.45 below it) meets it.
+    enum Detached : i32
+    {
+        kRootD = 0,
+        kHipsD,
+        kThighDL,
+        kShinDL,
+        kFootDL,
+        kThighDR,
+        kShinDR,
+        kFootDR,
+        kDetachedBones
+    };
+
+    void BuildDetached(Skeleton& s)
+    {
+        Array<Bone>& bones = s.Bones();
+        const i32 parents[] = {-1, kRootD, kHipsD, kThighDL, kRootD, kHipsD, kThighDR, kRootD};
+        const Float3 offsets[] = {{0, 0, 0},       {0, 1, 0},          {0.15f, 0, 0},  {0, -0.45f, 0.02f},
+                                  {0.15f, 0.1f, 0}, {-0.15f, 0, 0},    {0, -0.45f, 0.02f}, {-0.15f, 0.1f, 0}};
+        for (i32 i = 0; i < kDetachedBones; ++i)
+        {
+            bones[static_cast<usize>(i)].index = i;
+            bones[static_cast<usize>(i)].parentIndex = parents[i];
+            bones[static_cast<usize>(i)].localBindPose.position = offsets[i];
+        }
+        s.BuildNameMap();
+        s.FindRootBones();
+        s.BuildChildIndices();
+        s.ComputeInverseBindPoses();
+    }
+}
+
+TEST_CASE("ik foot: a detached foot moves itself and the leg bends to meet it")
+{
+    Skeleton skel{kDetachedBones};
+    BuildDetached(skel);
+    const FootIkLeg legs[] = {{TwoBoneIkChain{kThighDL, kShinDL, kFootDL}, Float3::Zero},
+                              {TwoBoneIkChain{kThighDR, kShinDR, kFootDR}, Float3::Zero}};
+    for (const f32 step : {0.2f, -0.2f})
+    {
+        Array<BoneTransform> pose = BindPose(skel);
+        ModelPoseCache cache;
+        cache.Build(skel, All(pose));
+        // Where each shin's tip meets its foot in the animated pose, in the shin's space.
+        const Float3 tipL = TransformPoint(At(cache, kFootDL), Inverse(cache.At(kShinDL)));
+        const Float3 tipR = TransformPoint(At(cache, kFootDR), Inverse(cache.At(kShinDR)));
+        FootIkState state;
+        FootIkSettings settings;
+        const FootGround grounds[] = {Ground(0.15f, step), Ground(-0.15f, 0.0f)};
+        const FootIkResult r = SolveFootIk(skel, All(pose), cache, kHipsD, legs, grounds, settings, state, 0.0f);
+        REQUIRE(r.valid);
+        CHECK(At(cache, kFootDL).y == doctest::Approx(0.1f + step).epsilon(1e-4)); // the foot on its ground
+        CHECK(At(cache, kFootDR).y == doctest::Approx(0.1f).epsilon(1e-4));
+        CHECK(Length(TransformPoint(tipL, cache.At(kShinDL)) - At(cache, kFootDL)) < 1.0e-3f); // the leg meets it
+        CHECK(Length(TransformPoint(tipR, cache.At(kShinDR)) - At(cache, kFootDR)) < 1.0e-3f);
+        CHECK(r.pelvisOffset == doctest::Approx(Min(step, 0.0f)));
+        CHECK(Finite(All(pose)));
+    }
+}
+
+TEST_CASE("ik two-bone: a detached end moves to the target and the chain meets it")
+{
+    Skeleton skel{kDetachedBones};
+    BuildDetached(skel);
+    Array<BoneTransform> pose = BindPose(skel);
+    ModelPoseCache cache;
+    cache.Build(skel, All(pose));
+    const Float3 tip = TransformPoint(At(cache, kFootDL), Inverse(cache.At(kShinDL)));
+    TwoBoneIkSettings settings;
+    settings.target = Float3{0.3f, 0.35f, 0.25f};
+    settings.matchRotation = true;
+    settings.targetRotation = Quaternion::FromAxisAngle(Float3{1, 0, 0}, 0.4f);
+    const TwoBoneIkChain chain{kThighDL, kShinDL, kFootDL};
+    const IkResult r = SolveTwoBone(skel, All(pose), cache, chain, settings);
+    REQUIRE(r.valid);
+    CHECK(r.reached);
+    CHECK(Length(At(cache, kFootDL) - settings.target) < 1.0e-4f);
+    CHECK(Length(TransformPoint(tip, cache.At(kShinDL)) - settings.target) < 1.0e-3f); // the leg meets it
+    CHECK(std::abs(Dot(ik::RotationOf(cache.At(kFootDL)), settings.targetRotation)) > 1.0f - 1.0e-5f);
+
+    // Half weight: the foot goes half way and the leg still meets it.
+    Array<BoneTransform> half = BindPose(skel);
+    ModelPoseCache halfCache;
+    halfCache.Build(skel, All(half));
+    const Float3 from = At(halfCache, kFootDL);
+    settings.weight = 0.5f;
+    (void)SolveTwoBone(skel, All(half), halfCache, chain, settings);
+    CHECK(Length(At(halfCache, kFootDL) - (from + (settings.target - from) * 0.5f)) < 1.0e-4f);
+    CHECK(Length(TransformPoint(tip, halfCache.At(kShinDL)) - At(halfCache, kFootDL)) < 1.0e-3f);
+
+    // An end the start carries but the mid does not, or the mid itself, has no meeting point.
+    settings.weight = 1.0f;
+    CHECK_FALSE(SolveTwoBone(skel, All(pose), cache, TwoBoneIkChain{kHipsD, kThighDL, kThighDR}, settings).valid);
+    CHECK_FALSE(SolveTwoBone(skel, All(pose), cache, TwoBoneIkChain{kThighDL, kShinDL, kShinDL}, settings).valid);
+    CHECK_FALSE(SolveTwoBone(skel, All(pose), cache, TwoBoneIkChain{kThighDL, kShinDL, -1}, settings).valid);
+}

@@ -59,6 +59,14 @@ export namespace foundation::animation
         Float3 pole = Float3::Zero; // model space
         Float3 hingeAxis = Float3::Zero;
         f32 weight = 1.0f; // 0 leaves the pose as it was, byte for byte
+        // A DETACHED end (an end bone not below the mid: asset-pack rigs export feet and hands as
+        // IK-target bones off the root, the shin or forearm with no child) is moved to the target
+        // itself (blended by the weight, turned with matchRotation), and the chain bends all the way
+        // to meet it with its tip: the point of the mid bone that met the end, by default where the
+        // pose this solve receives has them (keeping any gap the baked rig left), or `tip` (in the
+        // mid bone's space) with useTip. With no end bone (-1) and useTip, the tip is the end.
+        bool useTip = false;
+        Float3 tip = Float3::Zero;
     };
 
     /// An aim (a head, a spine sharing a turn, a weapon): the last bone's aim axis points at the
@@ -212,11 +220,12 @@ export namespace foundation::animation
             }
             const Quaternion startNow = RotationOf(model.At(chain.start));
             const Bone* bones[3] = {skeleton.GetBone(chain.start), skeleton.GetBone(chain.mid),
-                                    skeleton.GetBone(chain.end)};
+                                    s.useTip ? nullptr : skeleton.GetBone(chain.end)};
             const Float4x4 bindStart = Inverse(bones[0]->inverseBindPose);
             const Float3 bindA = Position(bindStart);
             const Float3 bindB = Position(Inverse(bones[1]->inverseBindPose));
-            const Float3 bindC = Position(Inverse(bones[2]->inverseBindPose));
+            const Float3 bindC = s.useTip ? TransformPoint(s.tip, Inverse(bones[1]->inverseBindPose))
+                                          : Position(Inverse(bones[2]->inverseBindPose));
             const Float3 bindAlong = Normalized(bindC - bindA);
             const Float3 bindBend = Perpendicular(bindB - bindA, bindAlong);
             if (Length(bindAlong) > 0.5f && Length(bindBend) > straight)
@@ -240,6 +249,52 @@ export namespace foundation::animation
         }
     }
 
+    inline IkResult SolveTwoBone(const Skeleton& skeleton, Span<BoneTransform> local, ModelPoseCache& model,
+                                 const TwoBoneIkChain& chain, const TwoBoneIkSettings& settings);
+
+    namespace ik
+    {
+        /// A detached end: moved itself, then met by the chain's tip (see TwoBoneIkSettings).
+        inline IkResult SolveDetached(const Skeleton& skeleton, Span<BoneTransform> local, ModelPoseCache& model,
+                                      const TwoBoneIkChain& chain, const TwoBoneIkSettings& settings)
+        {
+            IkResult result;
+            result.valid = true;
+            const Float3 end = Position(model.At(chain.end));
+            const f32 reach = Length(Position(model.At(chain.mid)) - Position(model.At(chain.start))) +
+                              Length(end - Position(model.At(chain.mid)));
+            const f32 weight = Clamp(settings.weight, 0.0f, 1.0f);
+            if (weight <= 0.0f)
+            {
+                result.error = Length(end - settings.target);
+                result.reached = result.error <= kIkReachTolerance * reach;
+                return result;
+            }
+            const Float3 tip = settings.useTip ? settings.tip : TransformPoint(end, Inverse(model.At(chain.mid)));
+            const Quaternion turn = RotationOf(model.At(chain.end));
+            const Bone* b = skeleton.GetBone(chain.end);
+            const Float4x4 parent = b->parentIndex >= 0 ? model.At(b->parentIndex) : b->rootCorrection;
+            const Float3 goal = end + (settings.target - end) * weight;
+            const Quaternion goalTurn = settings.matchRotation ? Slerp(turn, settings.targetRotation, weight) : turn;
+            BoneTransform& t = local[static_cast<usize>(chain.end)];
+            t.position = TransformPoint(goal, Inverse(parent));
+            t.rotation = Normalized(Inverse(RotationOf(parent)) * goalTurn);
+            Rebuild(skeleton, local, model, chain.end);
+
+            TwoBoneIkSettings meet = settings;
+            meet.useTip = true;
+            meet.tip = tip;
+            meet.target = Position(model.At(chain.end));
+            meet.matchRotation = false;
+            meet.weight = 1.0f;
+            const IkResult met = SolveTwoBone(skeleton, local, model, TwoBoneIkChain{chain.start, chain.mid, -1}, meet);
+            // Reached when the end is on the target and the chain met it.
+            result.error = Max(Length(Position(model.At(chain.end)) - settings.target), met.error);
+            result.reached = result.error <= kIkReachTolerance * Max(reach, kEpsilon);
+            return result;
+        }
+    }
+
     /// Bends a two-bone chain so its end reaches `settings.target`: exactly when the target is in
     /// reach, else stopped at kTwoBoneMaxReach of full reach (or the span the pose already has, if
     /// the animation holds it straighter; or the chain's shortest fold) and pointed at it. Bone lengths are the pose's own (a rotation keeps them; the bind pose's would
@@ -250,18 +305,32 @@ export namespace foundation::animation
                                  const TwoBoneIkChain& chain, const TwoBoneIkSettings& settings)
     {
         IkResult result;
+        const bool hasEnd = ik::InPose(skeleton, local, chain.end);
+        const bool detached = hasEnd && !ik::IsBelow(skeleton, chain.end, chain.mid);
+        const bool tip = !hasEnd; // the end is the tip itself
         if (!ik::InPose(skeleton, local, chain.start) || !ik::InPose(skeleton, local, chain.mid) ||
-            !ik::InPose(skeleton, local, chain.end) || !ik::IsBelow(skeleton, chain.mid, chain.start) ||
-            !ik::IsBelow(skeleton, chain.end, chain.mid))
+            !ik::IsBelow(skeleton, chain.mid, chain.start) || (!hasEnd && !settings.useTip) ||
+            (detached && (chain.end == chain.start || chain.end == chain.mid ||
+                          ik::IsBelow(skeleton, chain.end, chain.start) ||
+                          ik::IsBelow(skeleton, chain.start, chain.end))))
         {
-            return result;
+            return result; // a detached end the chain carries, or one above it, has no meeting point
         }
         ik::EnsureModel(skeleton, local, model);
         result.valid = true;
+        if (detached)
+        {
+            return ik::SolveDetached(skeleton, local, model, chain, settings);
+        }
+        // Where the chain ends: the end bone, or the tip carried by the mid bone.
+        const auto endNow = [&]()
+        {
+            return tip ? TransformPoint(settings.tip, model.At(chain.mid)) : ik::Position(model.At(chain.end));
+        };
 
         const Float3 a = ik::Position(model.At(chain.start));
         const Float3 b = ik::Position(model.At(chain.mid));
-        const Float3 c = ik::Position(model.At(chain.end));
+        const Float3 c = endNow();
         const Float3 target = settings.target;
         const f32 upper = Length(b - a);
         const f32 lower = Length(c - b);
@@ -272,9 +341,9 @@ export namespace foundation::animation
             result.reached = result.error <= kIkReachTolerance * reach;
             return result;
         }
-        const BoneTransform before[3] = {local[static_cast<usize>(chain.start)],
-                                         local[static_cast<usize>(chain.mid)],
-                                         local[static_cast<usize>(chain.end)]};
+        const i32 bones[3] = {chain.start, chain.mid, tip ? chain.mid : chain.end};
+        const BoneTransform before[3] = {local[static_cast<usize>(bones[0])], local[static_cast<usize>(bones[1])],
+                                         local[static_cast<usize>(bones[2])]};
 
         // 1. Open or close the mid joint, in the chain's bend plane, to the distance it must span.
         Float3 along = c - a;
@@ -297,7 +366,7 @@ export namespace foundation::animation
 
         // 2. Swing the whole chain from the start: its end direction onto the target's, and its
         //    bend side onto the pole's (or carried along with the swing, without one).
-        const Float3 bent = ik::Position(model.At(chain.end));
+        const Float3 bent = endNow();
         const Float3 alongNow = Normalized(bent - a);
         const Float3 sideNow = Normalized(ik::Perpendicular(b - a, alongNow));
         const Float3 toTarget = Length(target - a) > kEpsilon * reach ? Normalized(target - a) : alongNow;
@@ -317,7 +386,7 @@ export namespace foundation::animation
         ik::TurnInModel(skeleton, local, model, chain.start, twist * swing);
         ik::Rebuild(skeleton, local, model, chain.start);
 
-        if (settings.matchRotation)
+        if (settings.matchRotation && !tip)
         {
             const Quaternion parent = ik::ParentModelRotation(skeleton, model, chain.end);
             local[static_cast<usize>(chain.end)].rotation =
@@ -327,8 +396,7 @@ export namespace foundation::animation
 
         if (settings.weight < 1.0f)
         {
-            const i32 bones[3] = {chain.start, chain.mid, chain.end};
-            for (usize i = 0; i < 3; ++i)
+            for (usize i = 0; i < (tip ? 2u : 3u); ++i)
             {
                 BoneTransform& t = local[static_cast<usize>(bones[i])];
                 t.rotation = Slerp(before[i].rotation, t.rotation, settings.weight);
@@ -336,7 +404,7 @@ export namespace foundation::animation
             ik::Rebuild(skeleton, local, model, chain.start);
         }
 
-        result.error = Length(ik::Position(model.At(chain.end)) - target);
+        result.error = Length(endNow() - target);
         result.reached = result.error <= kIkReachTolerance * reach;
         return result;
     }
@@ -525,13 +593,23 @@ export namespace foundation::animation
         {
             return result;
         }
-        for (const FootIkLeg& leg : legs)
+        // A foot below its shin is the chain's end; a foot elsewhere (an IK-target bone off the
+        // root, as asset-pack rigs export it) is DETACHED: it is moved itself and the leg bent to
+        // meet it with the point of the shin that met it in the animated pose.
+        bool detached[kMaxFootIkLegs] = {};
+        for (usize i = 0; i < legs.Size(); ++i)
         {
-            if (!ik::InPose(skeleton, local, leg.chain.start) || !ik::InPose(skeleton, local, leg.chain.mid) ||
-                !ik::InPose(skeleton, local, leg.chain.end) || !ik::IsBelow(skeleton, leg.chain.mid, leg.chain.start) ||
-                !ik::IsBelow(skeleton, leg.chain.end, leg.chain.mid))
+            const TwoBoneIkChain& chain = legs[i].chain;
+            if (!ik::InPose(skeleton, local, chain.start) || !ik::InPose(skeleton, local, chain.mid) ||
+                !ik::InPose(skeleton, local, chain.end) || !ik::IsBelow(skeleton, chain.mid, chain.start) ||
+                chain.end == chain.mid || chain.end == chain.start || ik::IsBelow(skeleton, chain.start, chain.end))
             {
                 return result;
+            }
+            detached[i] = !ik::IsBelow(skeleton, chain.end, chain.mid);
+            if (detached[i] && ik::IsBelow(skeleton, chain.end, chain.start))
+            {
+                return result; // a foot the thigh carries but the shin does not: no meeting point
             }
         }
         const bool movesPelvis = ik::InPose(skeleton, local, pelvis);
@@ -542,12 +620,17 @@ export namespace foundation::animation
         // The goals, from the animated pose.
         Float3 feet[kMaxFootIkLegs];
         Quaternion footTurn[kMaxFootIkLegs];
+        Float3 tips[kMaxFootIkLegs];
         f32 offsetGoal[kMaxFootIkLegs] = {};
         f32 plantGoal[kMaxFootIkLegs] = {};
         for (usize i = 0; i < legs.Size(); ++i)
         {
             feet[i] = ik::Position(model.At(legs[i].chain.end));
             footTurn[i] = ik::RotationOf(model.At(legs[i].chain.end));
+            if (detached[i])
+            {
+                tips[i] = TransformPoint(feet[i], Inverse(model.At(legs[i].chain.mid)));
+            }
             if (!grounds[i].hit)
             {
                 continue; // no ground: the animation keeps the foot
@@ -617,6 +700,13 @@ export namespace foundation::animation
                 tilt = Quaternion::FromAxisAngle(Normalized(axis), Min(slope, Max(settings.maxTilt, 0.0f)));
             }
             leg.targetRotation = tilt * footTurn[i];
+            if (detached[i])
+            {
+                // The foot moves itself and the leg meets it with the tip it had in the animated
+                // pose (taken before the pelvis moved the shin).
+                leg.useTip = true;
+                leg.tip = tips[i];
+            }
             result.footError[i] = SolveTwoBone(skeleton, local, model, legs[i].chain, leg).error;
         }
         return result;

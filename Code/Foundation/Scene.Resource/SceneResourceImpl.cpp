@@ -881,6 +881,17 @@ namespace foundation::scene
         }
     }
 
+    void detail::RemapOverrideEntityRefs(ComponentManagerBase& manager, EntityHandle owner,
+                                         const Scene::PrefabInstanceState& state)
+    {
+        HashMap<Guid, Guid> liveBySource;
+        for (usize i = 0; i < state.sourceIds.Size() && i < state.liveIds.Size(); ++i)
+        {
+            liveBySource.InsertOrAssign(state.sourceIds[i], state.liveIds[i]);
+        }
+        RemapPrefabEntityRefs(manager, owner, liveBySource);
+    }
+
     EntityHandle SpawnPrefab(Scene& scene, IStream& payload, const Guid& prefabId,
                              EntityHandle parent, const HashMap<Guid, Guid>* preassigned,
                              const PrefabPayloadResolver* resolver,
@@ -2193,6 +2204,7 @@ namespace foundation::scene
                             detail::ComponentFromBlob(*manager, live,
                                                       Span<const u8>{op.blob.Data(),
                                                                      op.blob.Size()});
+                            detail::RemapOverrideEntityRefs(*manager, live, state);
                         }
                     }
                     state.unresolvedComponentOps.RemoveAt(i);

@@ -387,6 +387,12 @@ export namespace foundation::scene
             return pending;
         }
 
+        // An override's component read onto an instance member: its EntityRefs that name one of
+        // the prefab's own members (source ids, as a generator writes them) now name this
+        // instance's copy, as a spawned component's do; others (live ids, the editor's) stay.
+        void RemapOverrideEntityRefs(ComponentManagerBase& manager, EntityHandle owner,
+                                     const Scene::PrefabInstanceState& state);
+
         // Re-applies a pending descriptor's DELTAS onto a freshly spawned instance (`state` is
         // the spawn's registered state - its member map routes source ids to live entities).
         void ApplyPendingDeltas(Scene& scene, Scene::PrefabInstanceState* state,
@@ -450,6 +456,10 @@ export namespace foundation::scene
                 else
                 {
                     ComponentFromBlob(*manager, e, Span<const u8>{op.blob.Data(), op.blob.Size()});
+                    if (state != nullptr)
+                    {
+                        RemapOverrideEntityRefs(*manager, e, *state);
+                    }
                 }
             }
         }

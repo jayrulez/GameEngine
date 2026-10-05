@@ -2238,3 +2238,67 @@ TEST_CASE("unresolved: prefab-instance overrides of an absent plugin type surviv
                                { cleared = st.unresolvedComponentOps.IsEmpty(); });
     CHECK(cleared);
 }
+
+TEST_CASE("prefab: an override naming a prefab member by its source id points at the instance's copy")
+{
+    // A tool that writes scenes (PaperKid's pkgen) overrides an instance's component with the
+    // prefab's own data, its EntityRefs in the prefab's id space. Applied, they must name THIS
+    // instance's members, as a spawned component's do: left as source ids they resolved to
+    // whatever else held that id (a road's asphalt, which then gave a pet's root motion its frame).
+    Scene author(DefaultAllocator(), u8"author");
+    RttiRegisterValue_Link();
+    LinkManager* authorLinks = author.AddSystem<LinkManager>();
+    const Guid rootSource{0x7700, 0x1};
+    const Guid otherSource{0x7700, 0x2};
+    EntityHandle root = author.CreateEntity(rootSource, u8"Root");
+    EntityHandle other = author.CreateEntity(otherSource, u8"Other");
+    author.SetParent(other, root);
+    authorLinks->Add(root); // no link in the template
+    MemoryStream payload;
+    REQUIRE(CapturePrefab(author, root, payload).IsOk());
+
+    Scene level(DefaultAllocator(), u8"level");
+    LinkManager* links = level.AddSystem<LinkManager>();
+    const Guid prefabId{0x7700, 0x99};
+    (void)payload.Seek(0, SeekOrigin::Begin);
+    EntityHandle inst = SpawnPrefab(level, payload, prefabId);
+    REQUIRE(inst.IsAssigned());
+    links->Get(inst)->target = otherSource; // the override, in the prefab's id space
+    const Guid instId = level.GetEntityId(inst);
+    const Guid otherLive = level.GetEntityId(level.GetFirstChild(inst));
+    REQUIRE(otherLive != otherSource);
+    MemoryStream saved;
+    {
+        BinarySerializer w(saved, SerializeMode::Write);
+        SerializeScene(w, level);
+        REQUIRE(w.IsOk());
+    }
+
+    Scene loaded(DefaultAllocator(), u8"loaded");
+    LinkManager* loadedLinks = loaded.AddSystem<LinkManager>();
+    (void)saved.Seek(0, SeekOrigin::Begin);
+    {
+        BinarySerializer r(saved, SerializeMode::Read);
+        SerializeScene(r, loaded);
+        REQUIRE(r.IsOk());
+    }
+    const Span<const byte> payloadBytes = payload.Bytes();
+    ResolveScenePrefabs(loaded,
+                        Function<UniquePtr<IStream>(const Guid&)>{
+                            [&payloadBytes, prefabId](const Guid& id) -> UniquePtr<IStream>
+                            {
+                                if (id != prefabId)
+                                {
+                                    return UniquePtr<IStream>{};
+                                }
+                                auto stream = MakeUnique<MemoryStream>(DefaultAllocator());
+                                (void)stream->Write(payloadBytes.Data(), payloadBytes.Size());
+                                (void)stream->Seek(0, SeekOrigin::Begin);
+                                return UniquePtr<IStream>(stream.Release(), DefaultAllocator());
+                            }});
+    EntityHandle lInst = loaded.FindEntity(instId);
+    REQUIRE(lInst.IsAssigned());
+    REQUIRE(loadedLinks->Has(lInst));
+    CHECK(loadedLinks->Get(lInst)->target.id == loaded.GetEntityId(loaded.GetFirstChild(lInst)));
+    CHECK(loadedLinks->Get(lInst)->target.id == otherLive);
+}

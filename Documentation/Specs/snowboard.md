@@ -86,12 +86,19 @@ reaches it; the plan is checked against the code, not guessed.
 1. **A board needs momentum on a slope.** A grounded character moves only by its input
    (gravity acts in the air), and script can read neither its velocity nor the ground's normal.
    The game needs the slope's normal under the rider and the rider's velocity, so the board
-   script can integrate gravity along the slope, carve and brake. Likely: `groundNormal()` and
-   `velocity()` on the character, and a way to drive its full velocity. Decided at P0 against
-   what the character controller allows.
+   script can integrate gravity along the slope, carve and brake. Shaped as reflected,
+   scriptable properties on the character component (read-only `velocity` and `groundNormal`,
+   and a full-velocity drive), not only facade functions, so Sedulous mirrors it as fields.
+   Decided at P0 against what the character controller allows.
 2. **A height or normal under a point**, for placing gems, gates and ghosts on the snow. A
    `rayCast` works today; a terrain query facade is the cleaner fix if the game needs many.
-3. **Authoring by raw records**: spline points, vegetation layers and the animation graph go
+3. **The player's ghost does not fit Save.** Save holds typed scalars by key (int, float,
+   bool, text). A ghost is a run sampled at 10 Hz (position, yaw and the rider's pose state per
+   sample, interpolated on playback): about 600 samples for a 60 s run. Decided at P2 between
+   (a) a list or blob value kind in the save format (a version change, in both engines), (b) the
+   script encoding the ghost into one text value, and (c) a ghost file through a new script API.
+   (a) or (b) preferred.
+4. **Authoring by raw records**: spline points, vegetation layers and the animation graph go
    through `component_set` and `asset_data_write`. Acceptable for a generator script; if one
    is awkward or unsafe, that is a finding.
 
@@ -99,9 +106,11 @@ reaches it; the plan is checked against the code, not guessed.
 
 - **P0 First scene, measured.** One short slope from `terrain.py`, one vegetation layer, the
   course spline, a placeholder rider sliding down it on the board script (gap 1 closed).
-  Exported to web and the Deck. Recorded below: web download (pack and wasm, raw and
-  gzipped), browser memory, frame time on the Deck and in Chrome. Self-contained, for
-  Sedulous's first terrain web build.
+  Exported to web and the Deck. Self-contained, for Sedulous's first terrain web build, which
+  reproduces it from the numbers below rather than approximating it. Targets: a 513 x 513
+  heightfield at 1 m spacing (513 m square, heights 0 to 120 m), a 400 m course from the top
+  gate to the finish, one procedural vegetation layer (pines) off the course. The values used
+  are written into the table, adjusted if the importer or the terrain needs otherwise.
 - **P1 Riding.** The board controller (gravity along the slope, carve, tuck, brake, jump), the
   chase camera, the Blender rider and board with their animation graph, track decals, snow
   spray, wind audio rising with speed. Playtested with `pie_run`.
@@ -116,8 +125,28 @@ reaches it; the plan is checked against the code, not guessed.
 
 ## P0 measurements
 
+The scene as built:
+
+| | Value |
+|---|---|
+| Heightfield samples, spacing, height range | |
+| Course length (m) | |
+| Vegetation layer(s), instance count | |
+
+The cooked pack, by entry (packs are stored uncompressed; the web gets GitHub Pages' gzip):
+
+| Entry | Raw | Gzipped |
+|---|---|---|
+| Heightfield | | |
+| Splatmap | | |
+| Vegetation (mask, instances, meshes) | | |
+| Rider | | |
+| Everything else | | |
+
+Running:
+
 | | Web (Chrome) | Steam Deck |
 |---|---|---|
-| Download, raw / gzipped | | |
+| Download, raw / gzipped (pack + wasm) | | |
 | Memory | | |
 | Frame time | | |

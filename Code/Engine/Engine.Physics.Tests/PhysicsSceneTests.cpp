@@ -1334,3 +1334,36 @@ TEST_CASE("physics.scene: static geometry is the static, solid bodies, compounds
     CHECK(floor > 0);
     CHECK(raised == 20); // two boxes' tops and sides
 }
+
+TEST_CASE("physics.scene: the scene ray query finds solid ground and passes through a trigger")
+{
+    // What foot IK asks (inverse-kinematics.md P3): the ground under a foot. A checkpoint trigger
+    // standing on the floor is not a floor.
+    PlayScene play;
+    (void)play.AddFloor(); // top at y = 0
+    const scene::EntityHandle checkpoint = play.AddBox(0.5f, MotionKind::Static);
+    RigidBodyComponent* sensor = play.scene.GetSystem<RigidBodyComponentManager>()->Get(checkpoint);
+    sensor->isTrigger = true;
+    sensor->halfExtents = Float3{1.0f, 0.5f, 1.0f}; // y 0 to 1, right under the probe
+    const scene::EntityHandle crate = play.AddBox(0.5f, MotionKind::Static);
+    play.scene.SetLocalPosition(crate, Float3{4.0f, 0.5f, 0.0f}); // a solid box beside it, top at 1
+    play.Start();
+
+    scene::ISceneRayQuery* rays = play.physics->AsRayQuery();
+    REQUIRE(rays != nullptr);
+    scene::SceneRayHit hit;
+    REQUIRE(rays->CastRay(Float3{0, 3, 0}, Float3{0, -1, 0}, 10.0f, 0xFFFFFFFFu, hit));
+    CHECK(hit.position.y == doctest::Approx(0.0f).epsilon(1e-3)); // through the trigger, onto the floor
+    CHECK(hit.distance == doctest::Approx(3.0f).epsilon(1e-3));
+    CHECK(hit.normal.y == doctest::Approx(1.0f).epsilon(1e-3));
+
+    REQUIRE(rays->CastRay(Float3{4, 3, 0}, Float3{0, -1, 0}, 10.0f, 0xFFFFFFFFu, hit));
+    CHECK(hit.position.y == doctest::Approx(1.0f).epsilon(1e-3)); // a solid box is ground
+
+    CHECK_FALSE(rays->CastRay(Float3{0, 3, 0}, Float3{0, -1, 0}, 2.0f, 0xFFFFFFFFu, hit)); // out of reach
+
+    // The script ray still sees triggers (what a game may ask for on purpose).
+    RayHit raw;
+    REQUIRE(play.physics->World()->RayCast(Float3{0, 3, 0}, Float3{0, -1, 0}, 10.0f, raw));
+    CHECK(raw.position.y == doctest::Approx(1.0f).epsilon(1e-3));
+}

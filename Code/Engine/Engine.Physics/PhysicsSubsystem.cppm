@@ -110,10 +110,28 @@ export namespace engine::physics
         virtual void OnContact(const EntityContact& contact) = 0;
     };
 
-    class PhysicsSceneSystem final : public scene::SceneSystem
+    class PhysicsSceneSystem final : public scene::SceneSystem, public scene::ISceneRayQuery
     {
     public:
         [[nodiscard]] bool IsSimulationOnly() const noexcept override { return true; }
+
+        // Rays against the world's solid bodies for systems that do not depend on physics (foot IK
+        // finds the ground under a foot): triggers are skipped, a checkpoint is not a floor.
+        [[nodiscard]] scene::ISceneRayQuery* AsRayQuery() noexcept override { return this; }
+        [[nodiscard]] bool CastRay(Float3 origin, Float3 direction, f32 maxDistance, u32 groupMask,
+                                   scene::SceneRayHit& out) override
+        {
+            RayHit hit;
+            if (m_world.Get() == nullptr ||
+                !m_world->RayCast(origin, direction, maxDistance, hit, groupMask, true))
+            {
+                return false;
+            }
+            out.distance = hit.fraction * maxDistance;
+            out.position = hit.position;
+            out.normal = hit.normal;
+            return true;
+        }
 
         void OnSceneCreate(scene::Scene& scene) override { m_scene = &scene; }
 

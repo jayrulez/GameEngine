@@ -49,6 +49,28 @@ export namespace foundation::scene
                                            Array<Float3>& outTriangles) = 0;
     };
 
+    // What a ray found on a solid surface (world space).
+    struct SceneRayHit
+    {
+        f32 distance = 0.0f;
+        Float3 position{};
+        Float3 normal{0.0f, 1.0f, 0.0f};
+    };
+
+    // A system that can answer a ray against the scene's solid surfaces (physics: its bodies,
+    // triggers never). Lets a system that does not depend on the one that owns the surfaces ask
+    // what is there: foot IK finds the ground under a foot through it.
+    class ISceneRayQuery
+    {
+    public:
+        virtual ~ISceneRayQuery() = default;
+
+        // The closest solid hit along unit `direction` from `origin` within `maxDistance`, among
+        // the collision groups in `groupMask` (bit g = group g). False on a miss.
+        [[nodiscard]] virtual bool CastRay(Float3 origin, Float3 direction, f32 maxDistance, u32 groupMask,
+                                           SceneRayHit& out) = 0;
+    };
+
     class SceneSystem
     {
     public:
@@ -66,6 +88,8 @@ export namespace foundation::scene
         {
             return nullptr;
         }
+        // And for a system that answers rays against solid surfaces (ISceneRayQuery).
+        [[nodiscard]] virtual ISceneRayQuery* AsRayQuery() noexcept { return nullptr; }
 
         // --- lifecycle (Scene calls these) ---
         virtual void OnSceneCreate(Scene& /*scene*/) {} // added to a scene

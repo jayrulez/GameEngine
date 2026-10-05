@@ -342,9 +342,10 @@ export namespace foundation::physics
         [[nodiscard]] u64 UserData(BodyId id) const;
 
         // ---- queries ----
-        /// `groupMask`: bit g = consider bodies in group g (default: all groups).
+        /// `groupMask`: bit g = consider bodies in group g (default: all groups). Triggers are hit
+        /// unless `skipTriggers` (a probe for ground wants solid surfaces only).
         [[nodiscard]] bool RayCast(Float3 from, Float3 direction, f32 maxDistance, RayHit& out,
-                                   u32 groupMask = 0xFFFFFFFFu) const;
+                                   u32 groupMask = 0xFFFFFFFFu, bool skipTriggers = false) const;
         /// Bodies whose shapes contain `point` (triggers included). `out` is FILLED (cleared
         /// first), like ShapeOverlap, so a reused array never mixes results across queries.
         void QueryPoint(Float3 point, Array<BodyId>& out, u32 groupMask = 0xFFFFFFFFu) const;

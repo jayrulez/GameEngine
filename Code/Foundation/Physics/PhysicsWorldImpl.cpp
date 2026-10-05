@@ -172,6 +172,16 @@ namespace foundation::physics
             u32 m_mask;
         };
 
+        // Passes solid bodies only: a trigger (a Jolt sensor) is not a surface.
+        class SolidBodyFilter final : public JPH::BodyFilter
+        {
+        public:
+            [[nodiscard]] bool ShouldCollideLocked(const JPH::Body& body) const override
+            {
+                return !body.IsSensor();
+            }
+        };
+
         [[nodiscard]] JPH::Vec3 ToJph(Float3 v) { return JPH::Vec3(v.x, v.y, v.z); }
         [[nodiscard]] JPH::Quat ToJph(Quaternion q) { return JPH::Quat(q.x, q.y, q.z, q.w); }
         [[nodiscard]] Float3 FromJph(JPH::Vec3 v) { return Float3{v.GetX(), v.GetY(), v.GetZ()}; }
@@ -885,12 +895,16 @@ namespace foundation::physics
     }
 
     bool PhysicsWorld::RayCast(Float3 from, Float3 direction, f32 maxDistance, RayHit& out,
-                               u32 groupMask) const
+                               u32 groupMask, bool skipTriggers) const
     {
         const JPH::RRayCast ray{ToJph(from), ToJph(direction) * maxDistance};
         JPH::RayCastResult hit;
         const GroupMaskFilter filter(groupMask);
-        if (!m_impl->system->GetNarrowPhaseQuery().CastRay(ray, hit, {}, filter))
+        const SolidBodyFilter solid;
+        const JPH::BodyFilter anyBody;
+        if (!m_impl->system->GetNarrowPhaseQuery().CastRay(ray, hit, {}, filter,
+                                                            skipTriggers ? static_cast<const JPH::BodyFilter&>(solid)
+                                                                         : anyBody))
         {
             return false;
         }

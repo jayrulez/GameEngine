@@ -71,6 +71,20 @@ export namespace foundation::scene
                                            SceneRayHit& out) = 0;
     };
 
+    // A system that moves characters (physics: its character controllers), for a system that does
+    // not depend on it: an animator walking its character by the clip's root motion.
+    class ISceneCharacterMotion
+    {
+    public:
+        virtual ~ISceneCharacterMotion() = default;
+
+        // Whether `entity` has a character this system moves.
+        [[nodiscard]] virtual bool HasCharacter(EntityHandle entity) const = 0;
+        // Its walking velocity (world, m/s; the horizontal part) until the next call: it keeps
+        // colliding and sliding, and gravity and jumps stay its own. Zero stops it.
+        virtual void MoveCharacter(EntityHandle entity, Float3 velocity) = 0;
+    };
+
     class SceneSystem
     {
     public:
@@ -90,6 +104,8 @@ export namespace foundation::scene
         }
         // And for a system that answers rays against solid surfaces (ISceneRayQuery).
         [[nodiscard]] virtual ISceneRayQuery* AsRayQuery() noexcept { return nullptr; }
+        // And for one that moves characters (ISceneCharacterMotion).
+        [[nodiscard]] virtual ISceneCharacterMotion* AsCharacterMotion() noexcept { return nullptr; }
 
         // --- lifecycle (Scene calls these) ---
         virtual void OnSceneCreate(Scene& /*scene*/) {} // added to a scene

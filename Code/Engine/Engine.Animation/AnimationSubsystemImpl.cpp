@@ -34,7 +34,8 @@ namespace engine::animation
     {
         builder.Attribute("displayName", String(u8"Skeletal Animation"))
             .Attribute("category", String(u8"Animation"))
-            .DataVersion(1) // v1: meshEntities persist (EntityRef list, prefab-remapped)
+            .DataVersion(2) // v1: meshEntities persist; v2: rootMotion
+            .ReadsDataVersionsFrom(1) // a v1 record reads with root motion off
             // Script (Track A): SkeletalAnimationComponent.of(entity) -> live speed/startTime/autoPlay.
             // play/stop/setClip are player ops -> SceneAnimation.of(scene) (world ops keyed by entity).
             .Method<&foundation::script::ComponentOf<SkeletalAnimationComponent>,
@@ -45,14 +46,23 @@ namespace engine::animation
             .PropAttribute("displayName", String(u8"Mesh Entities"))
             .Property<&SkeletalAnimationComponent::speed>("speed")
             .Property<&SkeletalAnimationComponent::startTime>("startTime")
-            .Property<&SkeletalAnimationComponent::autoPlay>("autoPlay");
+            .Property<&SkeletalAnimationComponent::autoPlay>("autoPlay")
+            .Property<&SkeletalAnimationComponent::rootMotionTarget>("rootMotionTarget")
+            .PropAttribute("description",
+                           String(u8"What Entity mode moves: a gameplay root holding the model (empty: this "
+                                  u8"entity)."))
+            .Property<&SkeletalAnimationComponent::rootMotion>("rootMotion")
+            .PropAttribute("description",
+                           String(u8"What the clip's root motion moves: nothing, this entity, the character at "
+                                  u8"or above it, or a script's reading."));
     }
 
     REFLECT_VALUE(AnimationGraphComponent, "rtti::engine::animation")
     {
         builder.Attribute("displayName", String(u8"Animation Graph"))
             .Attribute("category", String(u8"Animation"))
-            .DataVersion(1) // v1: meshEntities persist (EntityRef list, prefab-remapped)
+            .DataVersion(2) // v1: meshEntities persist; v2: rootMotion
+            .ReadsDataVersionsFrom(1) // a v1 record reads with root motion off
             // Script (Track A): AnimationGraphComponent.of(entity) -> live `active`; graph params
             // (setFloat/setBool/setTrigger) are player ops -> SceneAnimation.of(scene).
             .Method<&foundation::script::ComponentOf<AnimationGraphComponent>, AnimationGraphComponent>(
@@ -61,7 +71,15 @@ namespace engine::animation
             .Property<&AnimationGraphComponent::graph>("graph")
             .Property<&AnimationGraphComponent::meshEntities>("meshEntities")
             .PropAttribute("displayName", String(u8"Mesh Entities"))
-            .Property<&AnimationGraphComponent::active>("active");
+            .Property<&AnimationGraphComponent::active>("active")
+            .Property<&AnimationGraphComponent::rootMotionTarget>("rootMotionTarget")
+            .PropAttribute("description",
+                           String(u8"What Entity mode moves: a gameplay root holding the model (empty: this "
+                                  u8"entity)."))
+            .Property<&AnimationGraphComponent::rootMotion>("rootMotion")
+            .PropAttribute("description",
+                           String(u8"What the graph's root motion moves: nothing, this entity, the character at "
+                                  u8"or above it, or a script's reading."));
     }
 
     // The scene-bound animation handle: SceneAnimation.of(scene).play/stop/setClip (single clip) +
@@ -84,6 +102,8 @@ namespace engine::animation
         builder.Method<&SceneAnimation::setIkTarget>("setIkTarget", {"entity", "worldPosition"});
         builder.Method<&SceneAnimation::ikReached>("ikReached", {"entity"});
         builder.Method<&SceneAnimation::ikError>("ikError", {"entity"});
+        builder.Method<&SceneAnimation::rootMotionTranslation>("rootMotionTranslation", {"entity"});
+        builder.Method<&SceneAnimation::rootMotionYaw>("rootMotionYaw", {"entity"});
         builder.Method<&SceneAnimation::of>("of", {"scene"});
         builder.Constructor(); // some backends only materialize constructible foreign classes
     }
@@ -228,6 +248,14 @@ namespace engine::animation
             .Property<&InstancedSkinningComponent::speed>("speed");
     }
 
+    REFLECT_ENUM(RootMotionMode, "rtti::engine::animation")
+    {
+        builder.Value("Ignore", RootMotionMode::Ignore);
+        builder.Value("Entity", RootMotionMode::Entity);
+        builder.Value("Character", RootMotionMode::Character);
+        builder.Value("Script", RootMotionMode::Script);
+    }
+
     REFLECT_ENUM(PropertyLoopMode, "rtti::engine::animation")
     {
         builder.Value("Once", PropertyLoopMode::Once);
@@ -269,6 +297,7 @@ namespace engine::animation
             // The meshEntities lists reflect as containers (inspector list editor + the prefab
             // spawn's EntityRef remap walker both introspect through ContainerInfo).
             core::RegisterArrayType<foundation::scene::EntityRef>();
+            RttiRegisterEnum_RootMotionMode();
             RttiRegisterValue_SkeletalAnimationComponent();
             RttiRegisterValue_AnimationGraphComponent();
             RttiRegisterValue_InstancedSkinningComponent();

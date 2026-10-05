@@ -19,6 +19,19 @@
 > over unwrapped times), the players' ConsumeRootMotion, each graph node's RootMotion blended as its
 > pose. A delta's translation is in the frame the character faces at its start (model space when
 > the clip extracts no turn), so composed deltas draw the authored path.
+> P2 BUILT 2026-10-05: `rootMotion` (RootMotionMode) on both animators (component data version
+> 2, a v1 record reads Ignore). Entity mode moves the animator's entity in its parent's space and
+> turns it about its own up; Character mode walks the nearest character at or above it through a
+> new scene capability, ISceneCharacterMotion (physics' character manager answers; neither
+> domain links the other), one fixed step late, turning the character's entity, and sends one zero
+> move when it stops supplying motion; Script mode holds the WORLD delta for
+> SceneAnimation.rootMotionTranslation and rootMotionYaw. A script's own move on a character an
+> animator walks is overwritten each frame while the animator owns it. From Sedulous's review: the
+> delta is carried into the world through the model entity (an armature at rest between them
+> turns nothing sideways) and the turn is about the model's up; Entity mode moves
+> `rootMotionTarget` when set (a gameplay root holding the model), else the animator's entity;
+> Script mode's reading is one frame late (animation runs after scripts), as Character mode's
+> motion is one physics step late; Character mode walks, it does not climb (vertical is ignored).
 > Seeded in weekly_backlog.md (2026-08-26). User ruling 2026-10-05: after Snowline's P1, before
 > its P2, spec first. Companion: inverse-kinematics.md (P0 there, the space and the pose seam, is
 > this spec's prerequisite). Read CONVENTIONS.md first.

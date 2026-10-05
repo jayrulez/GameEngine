@@ -271,12 +271,31 @@ export namespace engine::physics
     }
 
     class CharacterComponentManager final
-        : public foundation::scene::SerializableComponentManager<CharacterComponent>
+        : public foundation::scene::SerializableComponentManager<CharacterComponent>,
+          public foundation::scene::ISceneCharacterMotion
     {
     public:
         CharacterComponentManager()
             : SerializableComponentManager<CharacterComponent>(u8"physics.Character")
         {
+        }
+
+        // An animator walks its character by root motion through this (no physics dependency):
+        // move, which keeps gravity, jumps and collisions the controller's.
+        [[nodiscard]] foundation::scene::ISceneCharacterMotion* AsCharacterMotion() noexcept override
+        {
+            return this;
+        }
+        [[nodiscard]] bool HasCharacter(foundation::scene::EntityHandle entity) const override
+        {
+            return Get(entity) != nullptr;
+        }
+        void MoveCharacter(foundation::scene::EntityHandle entity, Float3 velocity) override
+        {
+            if (CharacterComponent* c = Get(entity))
+            {
+                c->move(velocity.x, velocity.z);
+            }
         }
     };
 

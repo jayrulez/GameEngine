@@ -808,6 +808,8 @@ if(OPTION_BUILD_TESTS)
     util_test_suite(Code/Integration/Integration.Mcp                Editor::Mcp)  # golden: create->open->inspect a project
     # Engine composition x pipeline registration: every factory description's cooked form has a builder.
     util_test_suite(Code/Integration/Integration.Composition        Pipeline::Registration)
+    # Animation x physics in a running scene: root motion walking a character, which still collides.
+    util_test_suite(Code/Integration/Integration.Runtime            Engine::Animation)
     # BC-texture cook-encoder x render: upload + sample block-compressed textures on real GPUs.
     util_test_suite(Code/Integration/Integration.TextureCompression Pipeline::Texture.Compression)
 endif()

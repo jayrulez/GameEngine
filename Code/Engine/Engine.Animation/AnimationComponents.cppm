@@ -38,6 +38,155 @@ export namespace engine::animation
     using namespace foundation::animation; // bare foundation animation types (BoneTransform, ...)
 
 
+    // What an animator does with the root motion its clips carry (root-motion.md P2).
+    enum class RootMotionMode : u8
+    {
+        Ignore,    // nothing: the character stays where its game puts it (the default)
+        Entity,    // the animator's entity moves and turns by it (a non-physics actor)
+        Character, // the nearest character at or above it walks by it (it still collides) and turns
+        Script,    // held for SceneAnimation.rootMotionTranslation / rootMotionYaw
+    };
+
+    // An animator's root motion as of its last tick (Script mode reads it; the others use it).
+    struct RootMotionRuntime
+    {
+        Float3 worldTranslation{}; // the last tick's travel, in the world
+        f32 yaw = 0.0f;            // and its turn about up, radians
+        bool drivingCharacter = false; // a character's move is ours to zero when we stop
+        scene::EntityHandle character = scene::EntityHandle::Invalid();
+    };
+
+    namespace root_motion_apply
+    {
+        [[nodiscard]] inline scene::ISceneCharacterMotion* Mover(scene::Scene& scene)
+        {
+            scene::ISceneCharacterMotion* found = nullptr;
+            scene.ForEachSystem(
+                [&](scene::SceneSystem& system)
+                {
+                    if (found == nullptr)
+                    {
+                        found = system.AsCharacterMotion();
+                    }
+                });
+            return found;
+        }
+
+        /// A character we were walking stops: one zero move, so it does not walk on by our last.
+        inline void Release(scene::Scene& scene, RootMotionRuntime& rt)
+        {
+            if (rt.drivingCharacter && scene.IsValid(rt.character))
+            {
+                if (scene::ISceneCharacterMotion* mover = Mover(scene))
+                {
+                    mover->MoveCharacter(rt.character, Float3{});
+                }
+            }
+            rt.drivingCharacter = false;
+            rt.character = scene::EntityHandle::Invalid();
+        }
+
+        /// The entity whose world is the skeleton's model space (the first mesh it feeds, else its own).
+        [[nodiscard]] inline scene::EntityHandle ModelEntity(scene::Scene& scene, Span<const scene::EntityRef> meshes,
+                                                             scene::EntityHandle owner)
+        {
+            for (const scene::EntityRef& r : meshes)
+            {
+                const scene::EntityHandle e = scene.FindEntity(r.id);
+                if (scene.IsValid(e))
+                {
+                    return e;
+                }
+            }
+            return owner;
+        }
+
+        /// Turns `entity` by `yaw` about the model's up (`upWorld`), seen in its own frame.
+        inline void Turn(scene::Scene& scene, scene::EntityHandle entity, f32 yaw, Float3 upWorld)
+        {
+            if (yaw == 0.0f)
+            {
+                return;
+            }
+            Float3 axis = TransformDirection(upWorld, Inverse(scene.ComposeWorldMatrix(entity)));
+            axis = LengthSquared(axis) > 1.0e-12f ? Normalized(axis) : Float3{0.0f, 1.0f, 0.0f};
+            Transform t = scene.GetLocalTransform(entity);
+            t.rotation = Normalized(t.rotation * Quaternion::FromAxisAngle(axis, yaw));
+            scene.SetLocalTransform(entity, t);
+        }
+
+        /// An animator's tick of root motion, by its mode (root-motion.md P2). The delta is in the
+        /// skeleton's model space (the first mesh entity's world), so it is carried into the world
+        /// through that, whatever lies between the animator and its mesh (an armature at rest).
+        inline void Apply(scene::Scene& scene, scene::EntityHandle owner, Span<const scene::EntityRef> meshes,
+                          const scene::EntityRef& target, RootMotionMode mode, RootMotionRuntime& rt,
+                          const animation::RootMotionDelta& delta, f32 deltaTime)
+        {
+            const Float4x4 model = scene.ComposeWorldMatrix(ModelEntity(scene, meshes, owner));
+            const Float3 upWorld = TransformDirection(Float3{0.0f, 1.0f, 0.0f}, model);
+            rt.worldTranslation = TransformDirection(delta.translation, model);
+            rt.yaw = delta.yaw;
+            if (mode != RootMotionMode::Character)
+            {
+                Release(scene, rt);
+            }
+            if (mode == RootMotionMode::Entity)
+            {
+                // The named entity (a gameplay root holding the model), else the animator's own:
+                // moved in its parent's space, turned about the model's up.
+                scene::EntityHandle moved = owner;
+                if (!target.IsNil())
+                {
+                    const scene::EntityHandle named = scene.FindEntity(target.id);
+                    if (!scene.IsValid(named))
+                    {
+                        return;
+                    }
+                    moved = named;
+                }
+                const scene::EntityHandle parent = scene.GetParent(moved);
+                const Float3 local = scene.IsValid(parent)
+                                         ? TransformDirection(rt.worldTranslation, Inverse(scene.ComposeWorldMatrix(parent)))
+                                         : rt.worldTranslation;
+                Transform t = scene.GetLocalTransform(moved);
+                t.position = t.position + local;
+                scene.SetLocalTransform(moved, t);
+                Turn(scene, moved, delta.yaw, upWorld);
+                return;
+            }
+            if (mode != RootMotionMode::Character)
+            {
+                return;
+            }
+            scene::ISceneCharacterMotion* mover = Mover(scene);
+            scene::EntityHandle e = owner;
+            for (u32 depth = 0; mover != nullptr && scene.IsValid(e) && depth < 1024u; ++depth)
+            {
+                if (mover->HasCharacter(e))
+                {
+                    break;
+                }
+                e = scene.GetParent(e);
+            }
+            if (mover == nullptr || !scene.IsValid(e) || !mover->HasCharacter(e))
+            {
+                Release(scene, rt);
+                return;
+            }
+            if (rt.drivingCharacter && rt.character != e)
+            {
+                Release(scene, rt);
+            }
+            // A velocity for the next fixed step (the controller collides and slides; one step late).
+            Float3 velocity = deltaTime > 0.0f ? rt.worldTranslation * (1.0f / deltaTime) : Float3{};
+            velocity.y = 0.0f;
+            mover->MoveCharacter(e, velocity);
+            rt.drivingCharacter = true;
+            rt.character = e;
+            Turn(scene, e, delta.yaw, upWorld);
+        }
+    }
+
     // Skeletal animation on an entity: a player over a (borrowed, shared) skeleton plays a clip and
     // produces per-bone skinning matrices each frame. The manager owns the player's lifetime + tick.
     // `meshEntities` are the entities whose MeshComponent receives the matrices (a character's skinned
@@ -59,6 +208,9 @@ export namespace engine::animation
         f32 speed = 1.0f;
         f32 startTime = 0.0f; // initial clock (desync a herd); applied on first tick
         bool autoPlay = true; // Play(clip) on first tick
+        RootMotionMode rootMotion = RootMotionMode::Ignore; // v2
+        scene::EntityRef rootMotionTarget; // v2: what Entity mode moves (empty: this entity)
+        RootMotionRuntime rootMotionState; // runtime
     };
 
     // Persist the refs + tunables; the player and per-frame feed state are runtime-only.
@@ -70,6 +222,11 @@ export namespace engine::animation
         foundation::core::Serialize(ar, "startTime", c.startTime);
         foundation::core::Serialize(ar, "autoPlay", c.autoPlay);
         foundation::core::Serialize(ar, "meshEntities", c.meshEntities);
+        if (ar.Mode() == SerializeMode::Write || ar.Version() >= 2) // v1 records read as Ignore
+        {
+            foundation::core::Serialize(ar, "rootMotion", c.rootMotion);
+            foundation::core::Serialize(ar, "rootMotionTarget", c.rootMotionTarget);
+        }
     }
 
     inline void ResolveResources(foundation::resource::ResourceManager& manager,
@@ -95,6 +252,17 @@ export namespace engine::animation
 
         void OnSceneCreate(scene::Scene& scene) override { m_scene = &scene; }
 
+    protected:
+        // A character this animator was walking stops with it.
+        void OnComponentDestroyed(SkeletalAnimationComponent& c, scene::EntityHandle) override
+        {
+            if (m_scene != nullptr)
+            {
+                root_motion_apply::Release(*m_scene, c.rootMotionState);
+            }
+        }
+
+    public:
         // SIMULATION-GATED (user ruling 2026-08-18): animation is gameplay-side state and must
         // not advance in a non-simulating scene - watching things animate in the editor's edit
         // mode was distracting and wrong. Consumers that want live animation in a paused-looking
@@ -121,11 +289,13 @@ export namespace engine::animation
                 {
                     if (!m_scene->IsEffectivelyActive(owner))
                     {
+                        root_motion_apply::Release(*m_scene, a.rootMotionState);
                         return; // frozen: time does not advance
                     }
                     animation::Skeleton* skeleton = a.skeleton.Get();
                     if (skeleton == nullptr)
                     {
+                        root_motion_apply::Release(*m_scene, a.rootMotionState);
                         return;
                     }
                     // (Re)build the player when the skeleton object changed - first tick, an editor
@@ -155,6 +325,9 @@ export namespace engine::animation
                     }
                     a.player->speed = a.speed;
                     a.player->Update(deltaTime);
+                    root_motion_apply::Apply(
+                        *m_scene, owner, Span<const scene::EntityRef>{a.meshEntities.Data(), a.meshEntities.Size()},
+                        a.rootMotionTarget, a.rootMotion, a.rootMotionState, a.player->ConsumeRootMotion(), deltaTime);
                     const Span<const Float4x4> mats = a.player->GetSkinningMatrices();
                     const Span<const Float4x4> prev = a.player->GetPrevSkinningMatrices();
                     const auto feed = [&](scene::EntityHandle e)
@@ -199,6 +372,9 @@ export namespace engine::animation
         animation::AnimationGraph* playerGraph = nullptr;
         Array<scene::EntityRef> meshEntities; // feed targets by stable guid (empty => own entity)
         bool active = true;                   // evaluate this frame?
+        RootMotionMode rootMotion = RootMotionMode::Ignore; // v2
+        scene::EntityRef rootMotionTarget; // v2: what Entity mode moves (empty: this entity)
+        RootMotionRuntime rootMotionState; // runtime
     };
 
     inline void Serialize(ISerializer& ar, AnimationGraphComponent& c)
@@ -207,6 +383,11 @@ export namespace engine::animation
         foundation::core::Serialize(ar, "graph", c.graph);
         foundation::core::Serialize(ar, "active", c.active);
         foundation::core::Serialize(ar, "meshEntities", c.meshEntities);
+        if (ar.Mode() == SerializeMode::Write || ar.Version() >= 2) // v1 records read as Ignore
+        {
+            foundation::core::Serialize(ar, "rootMotion", c.rootMotion);
+            foundation::core::Serialize(ar, "rootMotionTarget", c.rootMotionTarget);
+        }
     }
 
     inline void ResolveResources(foundation::resource::ResourceManager& manager,
@@ -231,6 +412,16 @@ export namespace engine::animation
 
         void OnSceneCreate(scene::Scene& scene) override { m_scene = &scene; }
 
+    protected:
+        void OnComponentDestroyed(AnimationGraphComponent& c, scene::EntityHandle) override
+        {
+            if (m_scene != nullptr)
+            {
+                root_motion_apply::Release(*m_scene, c.rootMotionState);
+            }
+        }
+
+    public:
         // Simulation-gated like the clip manager (see its comment).
         [[nodiscard]] bool IsSimulationOnly() const noexcept override { return true; }
 
@@ -255,12 +446,14 @@ export namespace engine::animation
                 {
                     if (!m_scene->IsEffectivelyActive(owner))
                     {
+                        root_motion_apply::Release(*m_scene, a.rootMotionState);
                         return; // frozen
                     }
                     animation::Skeleton* skeleton = a.skeleton.Get();
                     animation::AnimationGraph* graph = a.graph.Get();
                     if (skeleton == nullptr || graph == nullptr)
                     {
+                        root_motion_apply::Release(*m_scene, a.rootMotionState);
                         return;
                     }
                     // (Re)build the player when either object changed - first tick, a pick, a reload.
@@ -274,9 +467,13 @@ export namespace engine::animation
                     }
                     if (!a.active)
                     {
+                        root_motion_apply::Release(*m_scene, a.rootMotionState);
                         return;
                     }
                     a.player->Update(deltaTime);
+                    root_motion_apply::Apply(
+                        *m_scene, owner, Span<const scene::EntityRef>{a.meshEntities.Data(), a.meshEntities.Size()},
+                        a.rootMotionTarget, a.rootMotion, a.rootMotionState, a.player->ConsumeRootMotion(), deltaTime);
                     const Span<const Float4x4> mats = a.player->GetSkinningMatrices();
                     const Span<const Float4x4> prev = a.player->GetPrevSkinningMatrices();
                     const auto feed = [&](scene::EntityHandle e)
@@ -556,12 +753,43 @@ export namespace engine::animation
         [[nodiscard]] bool ikReached(foundation::script::Entity entity) const;
         [[nodiscard]] f32 ikError(foundation::script::Entity entity) const;
 
+        // --- root motion (Script mode) ---
+        // The entity's animator's travel over its last tick, in the world, and its turn (radians
+        // about up): a script steering by the clip's own speed (an animator in Script mode moves
+        // nothing itself). Zero for an entity with no animator.
+        [[nodiscard]] Float3 rootMotionTranslation(foundation::script::Entity entity) const
+        {
+            const RootMotionRuntime* rt = RootMotionOf(entity);
+            return rt != nullptr ? rt->worldTranslation : Float3{};
+        }
+        [[nodiscard]] f32 rootMotionYaw(foundation::script::Entity entity) const
+        {
+            const RootMotionRuntime* rt = RootMotionOf(entity);
+            return rt != nullptr ? rt->yaw : 0.0f;
+        }
+
         [[nodiscard]] static SceneAnimation of(foundation::script::Scene sceneHandle)
         {
             return SceneAnimation{sceneHandle.scene};
         }
 
     private:
+        [[nodiscard]] const RootMotionRuntime* RootMotionOf(foundation::script::Entity entity) const
+        {
+            if (scene == nullptr)
+            {
+                return nullptr;
+            }
+            if (auto* graphs = scene->GetSystem<AnimationGraphComponentManager>())
+            {
+                if (const AnimationGraphComponent* g = graphs->Get(entity.Handle()))
+                {
+                    return &g->rootMotionState;
+                }
+            }
+            const SkeletalAnimationComponent* c = Skeletal(entity);
+            return c != nullptr ? &c->rootMotionState : nullptr;
+        }
         [[nodiscard]] SkeletalAnimationComponent* Skeletal(foundation::script::Entity entity) const
         {
             if (scene == nullptr)

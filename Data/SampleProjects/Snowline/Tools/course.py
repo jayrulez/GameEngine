@@ -37,10 +37,22 @@ def primitive(label):
     return guid
 
 
+def model_materials(model):
+    """An imported model's materials in its mesh's slot order, as its prefab's mesh lists them."""
+    import xml.etree.ElementTree as ET
+    prefab = next(a["guid"] for a in ASSETS if a["type"] == "PrefabDocument"
+                  and a.get("group") == "Models/Props/%sModel" % model)
+    root = ET.fromstring(mcp("prefab_read", {"guid": prefab})["xml"])
+    slots = root.find(".//array[@name='materials']")
+    return [e.text for e in slots] if slots is not None else []
+
+
 TERRAIN = asset("TerrainAsset", name + "Terrain")
 HEIGHTFIELD = asset("HeightfieldAsset", name + "Height")
 PINE = asset("StaticMeshAsset", "PineModel.2")
 ROCK = asset("StaticMeshAsset", "RockModel.2")
+PINE_MATERIALS = model_materials("Pine")
+ROCK_MATERIALS = model_materials("Rock")
 BOARD = asset("ScriptClassAsset", "Board")
 CAMERA = asset("ScriptClassAsset", "FollowCamera")
 CYLINDER = primitive("Cylinder")
@@ -66,11 +78,12 @@ def spline_points(points):
     return items
 
 
-def vegetation_layer(label, mesh, placement, density, scale, slope, fade, splat_layer=0, threshold=0.25,
-                     shadows=False):
-    """One procedural layer (the component's ProceduralVegetationLayer, field by field)."""
+def vegetation_layer(label, mesh, materials, placement, density, scale, slope, fade, splat_layer=0,
+                     threshold=0.25, shadows=False):
+    """One procedural layer (the component's ProceduralVegetationLayer, field by field); its
+    materials one per mesh slot, as the model's prefab lists them."""
     return ('<string name="name">%s</string><string name="mesh">%s</string>'
-            '<string name="material">00000000-0000-0000-0000-000000000000</string>'
+            '<array name="materials" count="%d">%s</array>'
             '<object name="scaleRange"><f32 name="x">%s</f32><f32 name="y">%s</f32></object>'
             '<f32 name="maxSlopeDegrees">%s</f32>'
             '<object name="heightRange"><f32 name="x">-1000000</f32><f32 name="y">1000000</f32></object>'
@@ -78,7 +91,7 @@ def vegetation_layer(label, mesh, placement, density, scale, slope, fade, splat_
             '<bool name="castShadows">%s</bool><u32 name="maxInstancesPerChunk">4096</u32><bool name="visible">true</bool>'
             '<u8 name="placement">%d</u8><u32 name="splatLayer">%d</u32><f32 name="splatThreshold">%s</f32>'
             '<u32 name="maskPlane">0</u32><f32 name="density">%s</f32>' % (
-                label, mesh, num(scale[0]), num(scale[1]), num(slope), num(fade[0]), num(fade[1]),
+                label, mesh, len(materials), "".join("<string>%s</string>" % m for m in materials), num(scale[0]), num(scale[1]), num(slope), num(fade[0]), num(fade[1]),
                 num(shadows), placement, splat_layer, num(threshold), num(density)))
 
 
@@ -97,9 +110,9 @@ def build():
     d.add(mountain, "terrainVegetation", proceduralLayers=[
         # Pines where terrain.py laid the forest floor (palette layer 2), sparse enough to ride
         # between; rocks thinly everywhere the slope allows, the course's own splat aside.
-        vegetation_layer("Pines", PINE, SPLAT, 0.025, (0.8, 1.3), 30.0, (250.0, 320.0), splat_layer=2,
+        vegetation_layer("Pines", PINE, PINE_MATERIALS, SPLAT, 0.025, (0.8, 1.3), 30.0, (250.0, 320.0), splat_layer=2,
                          threshold=0.5, shadows=True),
-        vegetation_layer("Rocks", ROCK, SPLAT, 0.0015, (0.6, 1.5), 40.0, (120.0, 160.0), splat_layer=BASE_LAYER,
+        vegetation_layer("Rocks", ROCK, ROCK_MATERIALS, SPLAT, 0.0015, (0.6, 1.5), 40.0, (120.0, 160.0), splat_layer=BASE_LAYER,
                          threshold=0.9),
     ])
 

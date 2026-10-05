@@ -33,6 +33,8 @@ class Board
     [2.0, "Slowest speed that leaves a track (m/s)"] float trackSpeed;
     [0.45, "Carve (share of a full one) above which the board throws spray"] float sprayCarve;
     [6.0, "Slowest speed that throws spray (m/s)"] float spraySpeed;
+    [25.0, "Speed at which the wind is at its loudest (m/s)"] float windSpeed;
+    [0.7, "The wind's loudest volume"] float windVolume;
 
     private Float3 m_start;
     private float m_yaw = 0.0f;   // radians; 0 faces +Z
@@ -126,6 +128,7 @@ class Board
         face(v, d);
         track(at, v, grounded, d);
         snow(v, steer, grounded);
+        wind(v);
         animate(steer, tuck, !grounded, grab && !grounded, d);
 
         if (course !is null && course.isValid() &&
@@ -236,6 +239,23 @@ class Board
                 particles.restart(powder);
             }
         }
+    }
+
+    // The wind in the rider's ears: silent standing, rising with the speed to its loudest at
+    // `windSpeed`, and a little higher in pitch the faster it blows.
+    private void wind(Float3 v)
+    {
+        Entity@ source = self.findChildByName("Wind");
+        if (source is null || !source.isValid())
+        {
+            return;
+        }
+        float speed = Math::Sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+        float k = speed / windSpeed;
+        k = (k > 1.0f) ? 1.0f : k;
+        SceneAudio audio = SceneAudio::of(self.scene);
+        audio.setVolume(source, windVolume * k * k, 0.15f);
+        audio.setPitch(source, 0.8f + 0.5f * k, 0.15f);
     }
 
     // The rider faces where it goes, easing round.

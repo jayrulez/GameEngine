@@ -158,6 +158,11 @@ def build():
     for fx in ("Spray", "Powder"):
         e = d.entity(fx, (0, -0.85, 0), parent=rider)
         d.add(e, "particle_effect", effect=asset("ParticleEffectAsset", fx))
+    # The wind in the rider's ears (sounds.py): looping, not placed, silent until Board.as sets
+    # its volume by the speed.
+    wind = d.entity("Wind", parent=rider)
+    d.add(wind, "audio.Source", clip=asset("AudioClipAsset", "Wind"), loop=True, spatial=False, autoPlay=True,
+          volume=0.0)
 
     cam = d.entity("Camera", (top[0], top[1] + 4.0, top[2] - 8.0))
     d.add(cam, "camera", farZ=1200.0, fovYRadians=1.05)

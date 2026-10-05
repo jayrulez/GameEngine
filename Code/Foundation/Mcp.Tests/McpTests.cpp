@@ -228,6 +228,48 @@ TEST_CASE("mcp: schema-validation failure is a PROTOCOL -32602 naming the field"
     CHECK(r3.Get(u8"error").Get(u8"code").AsInt() == -32602);
 }
 
+TEST_CASE("mcp: an argument the schema does not declare is refused, naming the tool and what it takes")
+{
+    McpServer s;
+    Setup(s);
+    s.RegisterTool(u8"open", u8"Takes any field", []()
+                   {
+                       JsonValue schema = SchemaBuilder().Str(u8"name").Build();
+                       schema.Set(u8"additionalProperties", JsonValue::MakeBool(true));
+                       return schema;
+                   }(),
+                   foundation::mcp::ToolAnnotations::ReadOnly(),
+                   [](const JsonValue& args) -> ToolResult
+                   {
+                       JsonValue out = JsonValue::MakeObject();
+                       out.Set(u8"fields", JsonValue::MakeNumber(static_cast<f64>(args.Count())));
+                       return out;
+                   });
+    // A misspelt argument: refused, not dropped, so the call never runs without it.
+    JsonValue r = Response(s.HandleLine(
+        u8"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"echo\","
+        u8"\"arguments\":{\"message\":\"hi\",\"mesage\":\"hi\"}}}"));
+    REQUIRE(r.Has(u8"error"));
+    CHECK(r.Get(u8"error").Get(u8"code").AsInt() == -32602);
+    CHECK(r.Get(u8"error").Get(u8"message").AsString() ==
+          StringView(u8"echo: no argument 'mesage' (it takes: message)"));
+    // A tool that takes nothing says so.
+    JsonValue r2 = Response(s.HandleLine(
+        u8"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"fail\","
+        u8"\"arguments\":{\"force\":true}}}"));
+    CHECK(r2.Get(u8"error").Get(u8"message").AsString() == StringView(u8"fail: no argument 'force' (it takes none)"));
+    // A schema that declares additionalProperties:true takes any field, and still types the declared ones.
+    JsonValue r3 = Response(s.HandleLine(
+        u8"{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"open\","
+        u8"\"arguments\":{\"name\":\"a\",\"extra\":1}}}"));
+    REQUIRE(r3.Has(u8"result"));
+    CHECK(Contains(r3.Get(u8"result").Get(u8"content").At(0).Get(u8"text").AsString().AsView(), u8"2"));
+    JsonValue r4 = Response(s.HandleLine(
+        u8"{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"open\","
+        u8"\"arguments\":{\"name\":5}}}"));
+    CHECK(r4.Get(u8"error").Get(u8"code").AsInt() == -32602);
+}
+
 // --- Subset rejections -----------------------------------------------------
 
 TEST_CASE("mcp: unknown method is -32601")

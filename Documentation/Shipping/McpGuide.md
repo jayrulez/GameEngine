@@ -117,6 +117,10 @@ entity outside a run, each running behaviour's properties under `live` beside wh
   writers, one set of files.
 - **Validate-first writes.** `scene_write`/`prefab_write` refuse invalid content with the
   full report; a refusal is the tool working, never something to bypass.
+- **Arguments are checked against the tool's schema.** One the schema does not declare is
+  refused (`pie_run: no argument 'timeline' (it takes: pie, duration, input, ...)`), as are a
+  missing required one and one of the wrong type, before the tool runs: a misspelt name never
+  quietly drops what it carried.
 - **Read before destructive changes.** `asset_uses` before deleting anything;
   `project_health` after - dangling references surface later, not at delete time.
 - **Check `known_issues` before re-diagnosing** an odd symptom; if it matches a recorded

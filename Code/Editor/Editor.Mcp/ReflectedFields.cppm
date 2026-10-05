@@ -87,42 +87,6 @@ export namespace editor::mcp::detail
         return names;
     }
 
-    /// The fields' names, comma separated: what a refusal of an unknown one lists.
-    inline String FieldNames(Span<const PropertyInfo* const> fields)
-    {
-        String names;
-        for (const PropertyInfo* field : fields)
-        {
-            names += names.IsEmpty() ? u8"" : u8", ";
-            names += PropertyName(*field);
-        }
-        return names;
-    }
-
-    /// The first argument that names no field (and is not one of `extra`, the tool's own), or
-    /// nothing: a misspelled field is refused, not ignored.
-    inline Optional<String> UnknownField(const JsonValue& args, Span<const PropertyInfo* const> fields,
-                                         Span<const StringView> extra = {})
-    {
-        for (const String& key : args.Keys())
-        {
-            bool known = false;
-            for (const PropertyInfo* field : fields)
-            {
-                known = known || PropertyName(*field) == key.AsView();
-            }
-            for (StringView name : extra)
-            {
-                known = known || name == key.AsView();
-            }
-            if (!known)
-            {
-                return key;
-            }
-        }
-        return {};
-    }
-
     /// An asset a field names as {guid, path}; the path is null when the guid names nothing (or
     /// there is no project to look in).
     inline JsonValue FieldAssetJson(editor::EditorProject* project, const Guid& id)

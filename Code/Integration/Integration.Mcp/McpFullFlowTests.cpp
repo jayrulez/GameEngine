@@ -55,6 +55,25 @@ namespace
             resp.Get(u8"result").Get(u8"content").At(0).Get(u8"text").AsString());
     }
 
+    // A call the server refuses before the tool runs (a -32602): the refusal's message.
+    String FfRefusedArgument(McpServer& s, StringView tool, JsonValue arguments)
+    {
+        JsonValue params = JsonValue::MakeObject();
+        params.Set(u8"name", JsonValue::MakeString(String(tool)));
+        params.Set(u8"arguments", Move(arguments));
+        JsonValue req = JsonValue::MakeObject();
+        req.Set(u8"jsonrpc", JsonValue::MakeString(u8"2.0"));
+        req.Set(u8"id", JsonValue::MakeNumber(1));
+        req.Set(u8"method", JsonValue::MakeString(u8"tools/call"));
+        req.Set(u8"params", Move(params));
+        LineOutcome line = s.HandleLine(req.ToString().AsView());
+        REQUIRE(line.state == LineState::Answered);
+        JsonValue resp = json::Parse(line.response.AsView()).value;
+        REQUIRE(resp.Has(u8"error"));
+        CHECK(resp.Get(u8"error").Get(u8"code").AsInt() == -32602);
+        return resp.Get(u8"error").Get(u8"message").AsString();
+    }
+
     JsonValue FfStr(JsonValue o, StringView k, StringView v)
     {
         o.Set(String(k), JsonValue::MakeString(String(v)));
@@ -758,9 +777,11 @@ TEST_CASE("integration.mcp: an agent sets the project's settings")
                                            u8"defaultSceneId", sceneId.AsView()));
     CHECK(wrongType.AsView().StartsWith(
         u8"`defaultInputMapId` takes an asset of type InputMapAsset; 'Level1' is of type"));
-    CHECK(refused(FfStr(JsonValue::MakeObject(), u8"defaultMap", mapId.AsView()))
+    // A misspelled setting is refused by the server against the tool's schema, before the tool runs.
+    CHECK(FfRefusedArgument(server, u8"project_settings_set",
+                            FfStr(JsonValue::MakeObject(), u8"defaultMap", mapId.AsView()))
               .AsView()
-              .StartsWith(u8"no setting 'defaultMap'; the settings are: name, nativeModule, "));
+              .StartsWith(u8"project_settings_set: no argument 'defaultMap' (it takes: "));
     JsonValue msaa3 = JsonValue::MakeObject();
     msaa3.Set(u8"renderMsaaSamples", JsonValue::MakeNumber(3));
     CHECK(refused(Move(msaa3)).AsView() == StringView(u8"`renderMsaaSamples` takes 1, 2, 4"));
@@ -1059,9 +1080,10 @@ TEST_CASE("integration.mcp: export_presets and export_preset_set")
     CHECK(refused(FfStr(FfStr(JsonValue::MakeObject(), u8"name", u8"Deck"), u8"config", u8"Shipping"))
               .AsView()
               .StartsWith(u8"`config` takes a config this machine has export templates for: "));
-    CHECK(refused(FfStr(FfStr(JsonValue::MakeObject(), u8"name", u8"Deck"), u8"plattform", u8"Linux64"))
+    CHECK(FfRefusedArgument(server, u8"export_preset_set",
+                            FfStr(FfStr(JsonValue::MakeObject(), u8"name", u8"Deck"), u8"plattform", u8"Linux64"))
               .AsView()
-              .StartsWith(u8"no preset field 'plattform'"));
+              .StartsWith(u8"export_preset_set: no argument 'plattform' (it takes: "));
     {
         JsonValue wide = FfStr(JsonValue::MakeObject(), u8"name", u8"Deck");
         wide.Set(u8"windowWidth", JsonValue::MakeNumber(0));

@@ -941,6 +941,7 @@ namespace editor
                                     u8"(\"light\", \"physics.RigidBody\") or `typeName`",
                      true)
                 .Str(u8"property", u8"the property's name, as entity_inspect shows it", true)
+                .Any(u8"value", u8"the new value, in the shape entity_inspect shows the property")
                 .Build(),
             ToolAnnotations::Adjusts(),
             [ctx](const JsonValue& args) -> ToolResult

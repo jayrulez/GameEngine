@@ -186,12 +186,6 @@ export namespace editor::mcp
                 }
                 const Array<const PropertyInfo*> fields = detail::ExportPresetFields();
                 const Span<const PropertyInfo* const> span(fields.Data(), fields.Size());
-                const StringView extra[] = {u8"remove"};
-                if (Optional<String> unknown = detail::UnknownField(args, span, Span<const StringView>(extra, 1)))
-                {
-                    return Err(Format(u8"no preset field '{}'; the fields are: {}, remove", unknown->AsView(),
-                                      detail::FieldNames(span).AsView()));
-                }
                 const String name = args.Get(u8"name").AsString();
                 if (name.IsEmpty())
                 {

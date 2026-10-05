@@ -81,6 +81,18 @@ export namespace foundation::mcp
             return Add(Move(name), Move(prop), required);
         }
 
+        // A field of any JSON shape (no type constraint): declared, so the call may pass it, and
+        // described, so an agent knows what goes there.
+        SchemaBuilder& Any(String name, String description = {}, bool required = false)
+        {
+            JsonValue prop = JsonValue::MakeObject();
+            if (!description.IsEmpty())
+            {
+                prop.Set(u8"description", JsonValue::MakeString(Move(description)));
+            }
+            return Add(Move(name), Move(prop), required);
+        }
+
         // Escape hatch: a fully-formed property schema (nested objects/arrays).
         SchemaBuilder& Property(String name, JsonValue propSchema, bool required = false)
         {
@@ -147,8 +159,10 @@ export namespace foundation::mcp
     }
 
     // Validate `args` against an object `schema`. Returns an empty Optional when valid, else a
-    // human-readable message naming the offending field (destined for a -32602 response). Undeclared
-    // fields are ignored (v1 does not enforce additionalProperties:false).
+    // human-readable message naming the offending field (destined for a -32602 response). A field
+    // the schema does not declare is refused, naming the ones it does: a misspelt argument would
+    // otherwise be dropped without a word and the call run without it. A schema that sets
+    // additionalProperties:true takes any field.
     [[nodiscard]] inline Optional<String> ValidateArgs(const JsonValue& args, const JsonValue& schema)
     {
         if (!args.IsObject())
@@ -165,13 +179,30 @@ export namespace foundation::mcp
             }
         }
         const JsonValue properties = schema.Get(u8"properties");
+        const JsonValue open = schema.Get(u8"additionalProperties");
+        const bool openEnded = open.IsBool() && open.AsBool();
         for (i64 i = 0; i < args.Count(); ++i)
         {
             const String key = args.KeyAt(i);
             const JsonValue prop = properties.Get(key);
             if (prop.IsNull())
             {
-                continue; // undeclared field: not validated
+                if (openEnded)
+                {
+                    continue; // any field goes: not validated
+                }
+                String declared;
+                for (i64 j = 0; j < properties.Count(); ++j)
+                {
+                    if (j > 0)
+                    {
+                        declared.Append(StringView(u8", "));
+                    }
+                    declared.Append(properties.KeyAt(j).AsView());
+                }
+                return properties.Count() == 0
+                           ? Format(u8"no argument '{}' (it takes none)", key.AsView())
+                           : Format(u8"no argument '{}' (it takes: {})", key.AsView(), declared.AsView());
             }
             const JsonValue value = args.Get(key);
             const String type = prop.Get(u8"type").AsString();

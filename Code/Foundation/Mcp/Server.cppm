@@ -460,7 +460,9 @@ export namespace foundation::mcp
                 Optional<String> schemaError = ValidateArgs(args, tool->inputSchema);
                 if (schemaError.HasValue())
                 {
-                    return detail::Answered(detail::MakeError(id, RpcError::InvalidParams, Move(schemaError.Value())));
+                    return detail::Answered(detail::MakeError(
+                        id, RpcError::InvalidParams,
+                        Format(u8"{}: {}", tool->name.AsView(), schemaError.Value().AsView())));
                 }
                 // Run the tool. A tool that is not finished is asked again next pump (same
                 // line, same args). BOTH finished outcomes are successful JSON-RPC responses;

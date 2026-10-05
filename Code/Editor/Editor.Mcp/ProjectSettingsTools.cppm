@@ -87,13 +87,8 @@ export namespace editor::mcp
 
                 const Span<const PropertyInfo* const> fields(properties.Data(), properties.Size());
 
-                // Unknown names first: a misspelled setting is refused, not ignored.
-                if (Optional<String> unknown = detail::UnknownField(args, fields))
-                {
-                    return Err(Format(u8"no setting '{}'; the settings are: {}", unknown->AsView(),
-                                      detail::FieldNames(fields).AsView()));
-                }
-
+                // A misspelled setting never gets here: the schema declares every setting, and the
+                // server refuses an argument it does not declare.
                 // Everything is checked before anything changes: a refusal leaves the settings as
                 // they were. MSAA takes a level of the render subsystem's table besides.
                 Result<Array<detail::FieldChange>, String> checked = detail::CheckFields(args, fields, project);

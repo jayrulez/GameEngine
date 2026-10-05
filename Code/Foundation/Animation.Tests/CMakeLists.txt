@@ -9,7 +9,8 @@ add_executable(Animation.Tests
     SamplerTests.cpp
     PlayerTests.cpp
     GraphTests.cpp
-    ModifierTests.cpp)
+    ModifierTests.cpp
+    IkTests.cpp)
 
 target_link_libraries(Animation.Tests PRIVATE
     Foundation::Animation doctest::doctest)

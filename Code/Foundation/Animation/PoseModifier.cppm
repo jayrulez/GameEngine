@@ -28,6 +28,10 @@ export namespace foundation::animation
     class ModelPoseCache
     {
     public:
+        ModelPoseCache() = default;
+        /// The owner's allocator for the matrices and the rebuild's marks (sized once per skeleton).
+        explicit ModelPoseCache(IAllocator& allocator) noexcept : m_model(allocator), m_touched(allocator) {}
+
         /// Every bone's model-space matrix from the local pose.
         void Build(const Skeleton& skeleton, Span<const BoneTransform> localPoses)
         {

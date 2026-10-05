@@ -16,5 +16,6 @@ export import :pose;
 export import :clip;
 export import :sampler;
 export import :modifier;
+export import :ik;
 export import :player;
 export import :graph;

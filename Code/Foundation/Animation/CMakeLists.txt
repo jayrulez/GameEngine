@@ -14,6 +14,7 @@ target_sources(Animation
             AnimationClip.cppm
             Sampler.cppm
             PoseModifier.cppm
+            InverseKinematics.cppm
             AnimationPlayer.cppm
             AnimationGraph.cppm
             AnimationModule.cppm)

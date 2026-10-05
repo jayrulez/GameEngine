@@ -7,6 +7,8 @@
 > P0b BUILT 2026-10-05: the pose modifier stage (`:modifier` - ModelPoseCache, IPoseModifier,
 > PoseModifierStack) in both players, between the pose and the palette.
 > P0a BUILT 2026-10-05: decided for the importer's prefab, no skeleton correction (below).
+> P1 BUILT 2026-10-05: `:ik` (SolveTwoBone, SolveAim) with the solver tests below. Two
+> refinements of the text: bone lengths are the pose's own, and the aim's pole is an up direction.
 > Seeded in weekly_backlog.md (2026-08-26). User ruling 2026-10-05: after Snowline's P1, before
 > its P2, spec first, and "when doing IK, it must be solid". Companion: root-motion.md (the two
 > share the pose seam of P0). Read CONVENTIONS.md first.
@@ -82,14 +84,18 @@ of model-space transforms; no physics, no scene.
   plane of the animated mid joint (traktor's choice: feet need no pole). When the animated chain
   is straight, the plane of the BIND pose's own bend (usually slightly bent); when that is straight
   too, a hinge axis the caller gives (a knee and an elbow bend opposite ways, so no fixed default);
-  weight 0..1. Law of cosines with BIND-pose bone lengths (an
-  animation may stretch them), reach clamped to `[|l1-l2|, 0.995 (l1+l2)]`. Writes the start and
+  weight 0..1. Law of cosines with the POSE's bone lengths (a rotation keeps them, so a bind
+  length would miss whenever an animation moved a bone), reach clamped to
+  `[|l1-l2|, 0.995 (l1+l2)]`. Two steps: the mid joint turns about the hinge (the bend plane's
+  normal) to span the distance, then the start swings the end onto the target and the bend side
+  onto the pole's (or carried with the swing), so the mid joint stays in its plane. Writes the start and
   mid LOCAL rotations (a correction quaternion in model space, converted through the parent's
   model inverse) and, with an orientation, the end's. Result: reached, and the residual distance.
 - **Aim** (head, spine, a weapon): a list of bones with per-bone weights (a spine shares the turn:
   0.3, 0.5, 1.0), an aim axis and an up axis in the last bone's space, a model-space target, a
   maximum angle from the animated direction (60 degrees default) and weight. Each bone takes its
-  share of the remaining swing, then the up axis is kept toward the pole (no roll drift).
+  share of the remaining swing, then the last bone rolls about its aim so the up axis leans
+  toward an up direction (model space), or back to the animated up without one (no roll drift).
 - **Rebuild**: after a solve, model space is rebuilt from the chain's start downward only (a
   correction lower in the hierarchy never moves a bone above it).
 - **Order and weight are the caller's**: solvers do not fade; the engine owns time.

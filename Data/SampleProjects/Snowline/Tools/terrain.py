@@ -125,7 +125,8 @@ def main():
 
     # The layers' textures: plain, light noise; the course a little compacted, in streaks.
     noise_texture(os.path.join(out, "Snow.png"), (0.93, 0.95, 0.99), 0.025, 11)
-    noise_texture(os.path.join(out, "Course.png"), (0.83, 0.87, 0.94), 0.03, 12, streaks=True)
+    # The groomed course: cooler and greyer than the open snow, in corduroy streaks, so it reads.
+    noise_texture(os.path.join(out, "Course.png"), (0.72, 0.79, 0.90), 0.06, 12, streaks=True)
     noise_texture(os.path.join(out, "Rock.png"), (0.36, 0.37, 0.40), 0.08, 13)
     noise_texture(os.path.join(out, "ForestSnow.png"), (0.86, 0.89, 0.93), 0.035, 14)
 

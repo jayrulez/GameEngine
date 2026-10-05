@@ -14,6 +14,7 @@ import json, math, os, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from scenegen import Doc, mcp, yaw, num, vec
+from look import look
 
 name = sys.argv[1] if len(sys.argv) > 1 else "Meadow"
 info = json.load(open(os.path.join(HERE, "generated", name, name + ".json")))
@@ -101,6 +102,7 @@ BASE_LAYER = 0xFFFFFFFF  # the splat's unpainted base (the vegetation's kSplatBa
 
 def build():
     d = Doc(name)
+    look(d)
     sun = d.entity("Sun", rot=SUN_ROT)
     d.add(sun, "light", type=0, intensity=4.0, castsShadows=True)
 

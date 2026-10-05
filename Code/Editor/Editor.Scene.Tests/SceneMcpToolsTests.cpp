@@ -736,6 +736,38 @@ TEST_CASE("scene-mcp-tools: component_set writes a whole list - references by gu
     CHECK(animators->Get(rider)->meshEntities[0].id == bodyId);
     CHECK(got.payload.Get(u8"value").At(0).AsString() == GuidText(bodyId).AsView());
 
+    // A list of structures: each element an object of the fields it sets, the rest at defaults
+    // (foot IK's legs, which Sky Hopper's hero needs and scene_write was the only way to write).
+    auto* feet = scene.AddSystem<engine::animation::FootIkComponentManager>();
+    (void)feet->Add(rider);
+    const i64 stackBeforeLegs = edit.Commands().UndoIndex();
+    got = set(u8"foot_ik", u8"legs",
+              u8"[{\"startBone\":\"UpperLeg.L\",\"midBone\":\"LowerLeg.L\",\"endBone\":\"Foot.L\"},"
+              u8"{\"startBone\":\"UpperLeg.R\",\"midBone\":\"LowerLeg.R\",\"endBone\":\"Foot.R\","
+              u8"\"hingeAxis\":[1,0,0]}]");
+    REQUIRE(got.ok);
+    REQUIRE(feet->Get(rider)->legs.Size() == 2u);
+    CHECK(feet->Get(rider)->legs[0].midBone == u8"LowerLeg.L");
+    CHECK(feet->Get(rider)->legs[0].hingeAxis.x == 0.0f); // not named: its default
+    CHECK(feet->Get(rider)->legs[1].endBone == u8"Foot.R");
+    CHECK(feet->Get(rider)->legs[1].hingeAxis.x == 1.0f);
+    CHECK(got.payload.Get(u8"value").Count() == 2);
+    // A field the structure lacks, or a shape a field cannot take, is refused and writes nothing.
+    got = set(u8"foot_ik", u8"legs", u8"[{\"thigh\":\"UpperLeg.L\"}]");
+    CHECK_FALSE(got.ok);
+    CHECK(got.error.AsView().StartsWith(u8"element 0 of 'legs' has no field 'thigh' (its fields: startBone"));
+    got = set(u8"foot_ik", u8"legs", u8"[{\"hingeAxis\":\"up\"}]");
+    CHECK_FALSE(got.ok);
+    CHECK(got.error.AsView().StartsWith(u8"element 0 of 'legs': 'hingeAxis' takes [x, y, z]"));
+    got = set(u8"foot_ik", u8"legs", u8"[\"UpperLeg.L\"]");
+    CHECK_FALSE(got.ok);
+    CHECK(got.error.AsView().StartsWith(u8"element 0 of 'legs' is not an object"));
+    CHECK(feet->Get(rider)->legs.Size() == 2u);
+    // The write was one step: one Undo takes it back to where the stack stood before it.
+    edit.Commands().Undo();
+    CHECK(feet->Get(rider)->legs.IsEmpty());
+    CHECK(edit.Commands().UndoIndex() == stackBeforeLegs);
+
     // One undo step per call: the entity list, then the shrink, then the first write.
     edit.Commands().Undo();
     CHECK(animators->Get(rider)->meshEntities.IsEmpty());

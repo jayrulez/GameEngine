@@ -26,7 +26,9 @@ as guids and enums by name - the primary selection by default; `component_set` w
 of those properties through the page's undo path, one labelled step per call, the page dirty
 after and nothing saved, refused while simulating or on a wrong shape (a list takes an array of
 its elements, the whole list at once: a mesh's materials, an animator's mesh entities; a list
-of structures still goes through `scene_write`); `viewport_camera_get` /
+of structures takes an array of objects, each naming the fields it sets, the rest at their
+defaults, foot IK's legs for one; a list or structure inside an element still goes through
+`scene_write`); `viewport_camera_get` /
 `viewport_camera_set` read and move the viewport's editor camera in degrees, position, yaw,
 pitch or a `lookAt` point, editor state only; `viewport_screenshot` writes what the viewport
 shows to a PNG and returns its path and size, bringing the page to front first since a hidden

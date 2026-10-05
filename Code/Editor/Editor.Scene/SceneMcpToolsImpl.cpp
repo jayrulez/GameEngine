@@ -249,9 +249,24 @@ namespace editor
             return StringView();
         }
 
+        /// One field of a structure element, checked and ready to write.
+        struct FieldWrite
+        {
+            const PropertyInfo* property = nullptr;
+            Variant leaf;       // a leaf's value
+            i64 enumerator = 0; // an enum's value
+            Guid id;            // an entity or asset reference's target (nil clears)
+            u8 kind = 0;        // 0 leaf, 1 enum, 2 entity reference, 3 asset reference
+        };
+
+        Result<Function<void()>, String> ShapeStructListWrite(SceneEditContext& edit, const Guid& entity,
+                                                              const TypeInfo& componentType,
+                                                              const PropertyInfo& list, const JsonValue& value,
+                                                              StringView name);
+
         /// component_set on a LIST: every element's shape checked first (a reference's asset guid or
-        /// null, an entity reference's guid or null, a leaf's shape), then one write replacing the
-        /// whole list through MutateComponent (one undo step). A list of structures is refused.
+        /// null, an entity reference's guid or null, a leaf's shape, a structure's fields), then one
+        /// write replacing the whole list through MutateComponent (one undo step).
         Result<Function<void()>, String> ShapeListWrite(SceneEditContext& edit, const Guid& entity,
                                                        const TypeInfo& componentType,
                                                        const PropertyInfo& list, const JsonValue& value,
@@ -267,9 +282,7 @@ namespace editor
             const bool entityRef = element == &TypeOf<scene::EntityRef>();
             if (!reference && !entityRef && element->enumeratorCount == 0 && element->propertyCount > 0)
             {
-                return Err(Format(u8"list '{}' holds structures - not writable through component_set "
-                                  u8"(scene_write edits the source)",
-                                  name));
+                return ShapeStructListWrite(edit, entity, componentType, list, value, name);
             }
             if (!value.IsArray())
             {
@@ -348,6 +361,144 @@ namespace editor
                             else
                             {
                                 (void)ContainerSetAt(c, container, i, leaves[i]);
+                            }
+                        }
+                    });
+            }};
+        }
+
+        bool EnumValueOf(const TypeInfo& type, const JsonValue& value, i64& out);
+        String EnumeratorNames(const TypeInfo& type);
+
+        /// A list of structures (a vegetation layer, an IK leg): each element an object naming the
+        /// fields it sets, the rest at the element's defaults. A field is a leaf, an enumerator (by
+        /// name or number), an entity reference or an asset reference (a guid or null); a list or
+        /// structure inside an element is refused (scene_write edits the source).
+        Result<Function<void()>, String> ShapeStructListWrite(SceneEditContext& edit, const Guid& entity,
+                                                              const TypeInfo& componentType,
+                                                              const PropertyInfo& list, const JsonValue& value,
+                                                              StringView name)
+        {
+            const TypeInfo& element = *list.type->container->elementType;
+            if (!value.IsArray())
+            {
+                return Err(Format(u8"property '{}' is a list of structures - `value` is an array of objects, "
+                                  u8"each naming the fields it sets",
+                                  name));
+            }
+            const usize count = static_cast<usize>(value.Count());
+            Array<Array<FieldWrite>> elements;
+            for (usize i = 0; i < count; ++i)
+            {
+                const JsonValue item = value.At(static_cast<i64>(i));
+                if (!item.IsObject())
+                {
+                    return Err(Format(u8"element {} of '{}' is not an object of its fields", i, name));
+                }
+                Array<FieldWrite> fields;
+                for (const String& key : item.Keys())
+                {
+                    const PropertyInfo* p = FindProperty(element, reinterpret_cast<const char*>(key.CStr()));
+                    if (p == nullptr || p->address == nullptr)
+                    {
+                        String known;
+                        for (const PropertyInfo& q : Properties(element))
+                        {
+                            known += Format(u8"{}{}", known.IsEmpty() ? StringView{} : StringView(u8", "),
+                                            StringView(reinterpret_cast<const utf8char*>(q.name)))
+                                         .AsView();
+                        }
+                        return Err(Format(u8"element {} of '{}' has no field '{}' (its fields: {})", i, name,
+                                          key.AsView(), known.AsView()));
+                    }
+                    const JsonValue field = item.Get(key);
+                    FieldWrite w;
+                    w.property = p;
+                    if (p->type->enumeratorCount > 0)
+                    {
+                        w.kind = 1;
+                        if (!EnumValueOf(*p->type, field, w.enumerator))
+                        {
+                            return Err(Format(u8"element {} of '{}': '{}' takes one of {}", i, name, key.AsView(),
+                                              EnumeratorNames(*p->type).AsView()));
+                        }
+                    }
+                    else if (p->type == &TypeOf<scene::EntityRef>() ||
+                             (IsReferenceType(*p->type) && p->type->reference != nullptr))
+                    {
+                        w.kind = p->type == &TypeOf<scene::EntityRef>() ? 2 : 3;
+                        if (!field.IsNull() &&
+                            (!field.IsString() || !Guid::TryParse(field.AsString().AsView(), w.id)))
+                        {
+                            return Err(Format(u8"element {} of '{}': '{}' takes a guid or null", i, name,
+                                              key.AsView()));
+                        }
+                    }
+                    else
+                    {
+                        w.leaf = LeafVariant(*p->type, field);
+                        if (w.leaf.IsEmpty())
+                        {
+                            const StringView shape = LeafShape(*p->type);
+                            return Err(Format(u8"element {} of '{}': '{}' {}{}", i, name, key.AsView(),
+                                              shape.IsEmpty() ? StringView(u8"is not writable here (scene_write edits "
+                                                                           u8"the source)")
+                                                              : StringView(u8"takes "),
+                                              shape));
+                        }
+                    }
+                    fields.PushBack(Move(w));
+                }
+                elements.PushBack(Move(fields));
+            }
+            SceneEditContext* editPtr = &edit;
+            const TypeInfo* typePtr = &componentType;
+            const PropertyInfo* listPtr = &list;
+            return Function<void()>{[editPtr, entity, typePtr, listPtr, count, elements = Move(elements)]()
+            {
+                (void)editPtr->MutateComponent(
+                    entity, typePtr,
+                    [&](const Instance& component)
+                    {
+                        const Instance container(listPtr->address(component), listPtr->type);
+                        const ContainerInfo& c = *listPtr->type->container;
+                        // Replaced whole: every element starts from its defaults.
+                        while (ContainerSize(c, container) > 0)
+                        {
+                            (void)ContainerRemoveAt(c, container, ContainerSize(c, container) - 1);
+                        }
+                        for (usize i = 0; i < count; ++i)
+                        {
+                            (void)ContainerEmplaceDefault(c, container, i);
+                            const Instance at = ContainerAddressAt(c, container, i);
+                            if (at.Pointer() == nullptr)
+                            {
+                                continue;
+                            }
+                            for (const FieldWrite& w : elements[i])
+                            {
+                                void* address = w.property->address(at);
+                                if (address == nullptr)
+                                {
+                                    continue;
+                                }
+                                if (w.kind == 0)
+                                {
+                                    (void)SetProperty(*w.property, at, w.leaf);
+                                }
+                                else if (w.kind == 1)
+                                {
+                                    WriteEnumValue(address, *w.property->type, w.enumerator);
+                                }
+                                else if (w.kind == 2)
+                                {
+                                    static_cast<scene::EntityRef*>(address)->id = w.id;
+                                }
+                                else
+                                {
+                                    w.property->type->reference->SetId(address, w.id);
+                                    w.property->type->reference->ClearBinding(address);
+                                }
                             }
                         }
                     });

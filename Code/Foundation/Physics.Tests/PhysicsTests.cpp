@@ -893,6 +893,51 @@ TEST_CASE("physics: the character walks, climbs steps, and pushes light bodies")
     CHECK(position.y == doctest::Approx(1.2f).epsilon(0.05)); // still walking the ledge
 }
 
+TEST_CASE("physics: a character reads the normal of the slope it stands on, and up in the air")
+{
+    PhysicsWorld world(DefaultAllocator());
+
+    // A slab tilted 20 degrees about Z: it rises toward +x, so its top faces (-sin 20, cos 20, 0).
+    const f32 tilt = 20.0f * 3.14159265f / 180.0f;
+    BodyDesc slope;
+    slope.motion = MotionKind::Static;
+    slope.layer = PhysicsLayer::Static;
+    ShapeDesc slab;
+    slab.kind = ShapeKind::Box;
+    slab.halfExtents = Float3{20.0f, 0.5f, 5.0f};
+    slope.shapes.PushBack(slab);
+    slope.rotation = Quaternion::FromAxisAngle(Float3{0.0f, 0.0f, 1.0f}, tilt);
+    REQUIRE(world.CreateBody(slope).IsValid());
+
+    CharacterDesc desc;
+    desc.position = Float3{0.0f, 2.5f, 0.0f};
+    const CharacterId character = world.CreateCharacter(desc);
+    REQUIRE(character.IsValid());
+
+    // Falling: in the air, the normal is straight up.
+    world.SetCharacterVelocity(character, Float3{0.0f, -1.0f, 0.0f});
+    world.Step(1.0f / 60.0f);
+    world.UpdateCharacter(character, 1.0f / 60.0f);
+    CHECK(world.GetCharacterGround(character) == CharacterGround::InAir);
+    CHECK(world.CharacterGroundNormal(character).y == doctest::Approx(1.0f));
+
+    // Landed: the slope's own normal (20 degrees is well under the default 50 degree limit).
+    for (int i = 0; i < 90; ++i)
+    {
+        world.SetCharacterVelocity(character, Float3{0.0f, -3.0f, 0.0f});
+        world.Step(1.0f / 60.0f);
+        world.UpdateCharacter(character, 1.0f / 60.0f);
+    }
+    REQUIRE(world.GetCharacterGround(character) == CharacterGround::OnGround);
+    const Float3 normal = world.CharacterGroundNormal(character);
+    CHECK(normal.x == doctest::Approx(-std::sin(tilt)).epsilon(0.02));
+    CHECK(normal.y == doctest::Approx(std::cos(tilt)).epsilon(0.02));
+    CHECK(normal.z == doctest::Approx(0.0f).scale(1.0).epsilon(0.02));
+
+    // An unknown character reads up rather than a zero vector.
+    CHECK(world.CharacterGroundNormal(CharacterId{}).y == doctest::Approx(1.0f));
+}
+
 TEST_CASE("physics: continuous collision stops a fast body a discrete body tunnels through")
 {
     // A thin static wall + a small fast sphere fired straight at it: with discrete stepping

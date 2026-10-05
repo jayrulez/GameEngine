@@ -1125,6 +1125,24 @@ namespace foundation::physics
         m_impl->characters[id.value]->SetPosition(ToJph(position));
     }
 
+    Float3 PhysicsWorld::CharacterGroundNormal(CharacterId id) const
+    {
+        const Float3 up{0.0f, 1.0f, 0.0f};
+        if (!id.IsValid() || id.value >= m_impl->characters.Size() ||
+            m_impl->characters[id.value] == nullptr)
+        {
+            return up;
+        }
+        const JPH::CharacterVirtual& character = *m_impl->characters[id.value];
+        if (character.GetGroundState() == JPH::CharacterBase::EGroundState::InAir)
+        {
+            return up;
+        }
+        const JPH::Vec3 normal = character.GetGroundNormal();
+        // Jolt leaves a zero normal when nothing supports the character.
+        return normal.LengthSq() > 1.0e-6f ? FromJph(normal.Normalized()) : up;
+    }
+
     CharacterGround PhysicsWorld::GetCharacterGround(CharacterId id) const
     {
         if (!id.IsValid() || id.value >= m_impl->characters.Size() ||

@@ -381,6 +381,10 @@ export namespace foundation::physics
         [[nodiscard]] Float3 CharacterPosition(CharacterId id) const;
         void SetCharacterPosition(CharacterId id, Float3 position); // teleport
         [[nodiscard]] CharacterGround GetCharacterGround(CharacterId id) const;
+        /// The normal of the ground the character stands on as of its last update (unit, world
+        /// space): a board or a sled steers by it, gravity along a slope being gravity minus its
+        /// part along the normal. Straight up when the character is in the air.
+        [[nodiscard]] Float3 CharacterGroundNormal(CharacterId id) const;
 
         // ---- contact events ----
         /// Moves the events buffered since the last drain (worker-thread listeners append

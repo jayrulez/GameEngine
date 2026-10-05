@@ -2085,3 +2085,38 @@ TEST_CASE("model-import: a material named like the model leaves the manifest its
     (void)RemoveDirectoryRecursive(dir.AsView());
     (void)RemoveDirectoryRecursive(u8"scratch_gltf_samename_src");
 }
+
+TEST_CASE("model-import: the skeleton's parent node is the skin's root joint's parent")
+{
+    // The prefab puts skinned meshes at identity under this node (inverse-kinematics.md P0a),
+    // so it must be the node the joints hang from: Blender's armature object, not a joint.
+    model::Model m;
+    auto bone = [&](StringView name, i32 parent)
+    {
+        auto* b = new model::ModelBone();
+        b->setName(name);
+        b->parentIndex = parent;
+        return m.addBone(b);
+    };
+    const i32 scene = bone(u8"Scene", -1);
+    const i32 armature = bone(u8"Armature", scene);
+    const i32 hips = bone(u8"Hips", armature);
+    const i32 spine = bone(u8"Spine", hips);
+    (void)bone(u8"Body", armature);
+
+    // Joints listed child first: the root is found by its parent, not by its place in the list.
+    model::ModelSkin skin;
+    skin.addJoint(spine, Float4x4::Identity());
+    skin.addJoint(hips, Float4x4::Identity());
+    CHECK(pipeline::SkeletonParentNode(m, skin, pipeline::BuildBoneToJoint(skin)) == armature);
+
+    // A root joint at the top of the file has no parent node: the scene root (-1).
+    model::ModelSkin top;
+    top.addJoint(scene, Float4x4::Identity());
+    top.addJoint(armature, Float4x4::Identity());
+    CHECK(pipeline::SkeletonParentNode(m, top, pipeline::BuildBoneToJoint(top)) == -1);
+
+    // No joints: unknown (-2), and the prefab keeps the file's placement.
+    model::ModelSkin empty;
+    CHECK(pipeline::SkeletonParentNode(m, empty, pipeline::BuildBoneToJoint(empty)) == -2);
+}

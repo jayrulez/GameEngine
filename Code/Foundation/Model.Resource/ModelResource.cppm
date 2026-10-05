@@ -89,6 +89,11 @@ export namespace foundation::model
             materialAlbedo; // albedo texture per material (nil = none); parallel to materialGuids
         Array<ModelNode> nodes;     // node hierarchy
         Guid skeletonGuid;          // cooked skeleton (nil if the model has no skin)
+        // v3: the node the skeleton hangs from (the skin's root joint's parent: Blender's
+        // armature object), -1 for the scene root, -2 unknown (no skin, or data before v3). A
+        // skin draws in this node's space, so the prefab puts each skinned mesh here at identity
+        // (glTF ignores a skinned mesh node's own transform; inverse-kinematics.md P0a).
+        i32 skeletonParentNode = -2;
         Array<Guid> animationGuids; // cooked animation clips
         Float3 boundsMin{};         // model-space AABB (for spawn-time auto-fit/placement)
         Float3 boundsMax{};
@@ -111,6 +116,10 @@ export namespace foundation::model
             foundation::core::Serialize(ar, "materialAlbedo", materialAlbedo);
             foundation::core::Serialize(ar, "nodes", nodes);
             foundation::core::Serialize(ar, "skeletonGuid", skeletonGuid);
+            if (ar.Mode() == SerializeMode::Write || ar.Version() >= 3)
+            {
+                foundation::core::Serialize(ar, "skeletonParentNode", skeletonParentNode);
+            }
             foundation::core::Serialize(ar, "animationGuids", animationGuids);
             foundation::core::Serialize(ar, "boundsMin", boundsMin);
             foundation::core::Serialize(ar, "boundsMax", boundsMax);
@@ -232,9 +241,11 @@ export namespace foundation::model
     // mesh/material/texture/animation) for by-type-name construction at runtime.
     inline void RegisterModelResourceTypes()
     {
-        // Data version 2: per-mesh material slots (v0 cooked manifests re-cook; the strict
-        // reader refuses them). No REFLECT block owns this type - patched on the TypeInfo.
-        const_cast<TypeInfo&>(ModelManifestSource::StaticType()).dataVersion = 2;
+        // Data version 3: the skeleton's parent node; a v2 cooked manifest still reads (no
+        // parent known, the prefab keeps the file's placement). v0 and v1 re-cook: the strict
+        // reader refuses them. No REFLECT block owns this type - patched on the TypeInfo.
+        const_cast<TypeInfo&>(ModelManifestSource::StaticType()).dataVersion = 3;
+        const_cast<TypeInfo&>(ModelManifestSource::StaticType()).minReadDataVersion = 2;
         GlobalTypeRegistry().Register(ModelManifestSource::StaticType());
         RegisterSerializable<ModelManifestSource>();
         GlobalTypeRegistry().Register(ModelResource::StaticType());

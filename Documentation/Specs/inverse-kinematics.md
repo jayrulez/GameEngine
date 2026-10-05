@@ -6,6 +6,7 @@
 > how a component finds its animator, the hinge fallback, the bone-name attribute).
 > P0b BUILT 2026-10-05: the pose modifier stage (`:modifier` - ModelPoseCache, IPoseModifier,
 > PoseModifierStack) in both players, between the pose and the palette.
+> P0a BUILT 2026-10-05: decided for the importer's prefab, no skeleton correction (below).
 > Seeded in weekly_backlog.md (2026-08-26). User ruling 2026-10-05: after Snowline's P1, before
 > its P2, spec first, and "when doing IK, it must be solid". Companion: root-motion.md (the two
 > share the pose seam of P0). Read CONVENTIONS.md first.
@@ -51,6 +52,17 @@ Solid, as this spec holds it:
   would then apply it twice. P0a checks the real assets (Sky Hopper's hero, PaperKid's kid,
   pedestrian and animals, Snowline's rider) in both engines, before and after, and decides whether
   the fix belongs in the skeleton or in the importer's prefab.
+- **P0a, decided**: measured on all nine animated sample models (Snowline's rider; PaperKid's
+  kid, dog, cat and pedestrian; Sky Hopper's crab, skull, bee and hero with four meshes): each
+  is prefab root, armature entity, skinned mesh entity, all at identity. The skin is drawn as
+  `vertex * inverseBind * jointChain * meshWorld`, correct exactly when the mesh's world is the
+  world of the node the skeleton hangs from; a skeleton correction would apply the armature
+  twice. So: the manifest records `skeletonParentNode` (the parent of the skin's root joint;
+  data version 3, a v2 manifest still reads and keeps the file's placement), and the prefab puts
+  each skinned mesh entity under that node at identity (glTF ignores a skinned mesh node's own
+  transform). Model space is that node's world, reached through the mesh entity as before.
+  Channels animated on the armature node itself are still dropped: keeping them changes the
+  clip's data, which root-motion.md P0 does anyway, so they move there.
 - **Model space with several meshes**: an animator feeds one palette to each of its mesh
   entities, and each draws at its own world. Model space is defined as the FIRST resolved mesh
   entity's world (the animator's own entity when it lists none); the mesh entities of one

@@ -38,6 +38,33 @@ export namespace pipeline
         return map;
     }
 
+    // The model node the skeleton hangs from: the parent of the skin's first root joint (a joint
+    // whose parent is not in the skin), -1 when that root has no parent, -2 for a skin with no
+    // joints. A skin with several roots under different nodes takes the first root's (the
+    // skeleton has one model space).
+    [[nodiscard]] inline i32 SkeletonParentNode(const model::Model& model, const model::ModelSkin& skin,
+                                                const HashMap<i32, i32>& boneToJoint)
+    {
+        const Span<model::ModelBone* const> bones = model.bones();
+        for (const i32 joint : skin.joints())
+        {
+            if (joint < 0 || static_cast<usize>(joint) >= bones.Size())
+            {
+                continue;
+            }
+            const i32 parent = bones[static_cast<usize>(joint)]->parentIndex;
+            if (parent < 0 || static_cast<usize>(parent) >= bones.Size())
+            {
+                return -1;
+            }
+            if (!boneToJoint.Contains(parent))
+            {
+                return parent;
+            }
+        }
+        return -2;
+    }
+
     // Build a SkeletonSource from a skin: one bone per joint (joint order), local bind TRS from the
     // model bone, inverse-bind from the skin, parent remapped into joint space.
     inline void SkeletonSourceFromModel(const model::Model& model, const model::ModelSkin& skin,

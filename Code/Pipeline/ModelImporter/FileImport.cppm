@@ -1094,6 +1094,7 @@ export namespace pipeline
             }
             const foundation::model::ModelSkin& skin = *model.skins()[0];
             const HashMap<i32, i32> boneToJoint = BuildBoneToJoint(skin);
+            manifest.skeletonParentNode = SkeletonParentNode(model, skin, boneToJoint);
 
             const String skelBase = SkeletonBaseName(skin);
             if (sel.SelectionEnabled(pipeline::ImportResourceKind::Skeleton, skelBase.AsView()))
@@ -1528,11 +1529,12 @@ export namespace pipeline
     // Registers the manifest asset type for content-DB construction + deserialization.
     inline void RegisterModelManifestAsset()
     {
-        // Data version 2: per-mesh material slots (v1: importSelection = re-import memory).
-        // A v1 manifest still reads (legacy reader, one version back): its meshes were cooked
-        // with model-wide submesh indices and the prefab builder keeps the whole list for
-        // them. No REFLECT block owns this type - patched directly on the TypeInfo.
-        const_cast<TypeInfo&>(ModelManifestAsset::StaticType()).dataVersion = 2;
+        // Data version 3: the skeleton's parent node (v2: per-mesh material slots; v1:
+        // importSelection = re-import memory). v1 and v2 still read (legacy readers): a v1
+        // manifest's meshes were cooked with model-wide submesh indices and the prefab builder
+        // keeps the whole list for them; a v2 one knows no skeleton parent and its prefab keeps
+        // the file's placement. No REFLECT block owns this type - patched on the TypeInfo.
+        const_cast<TypeInfo&>(ModelManifestAsset::StaticType()).dataVersion = 3;
         const_cast<TypeInfo&>(ModelManifestAsset::StaticType()).minReadDataVersion = 1;
         GlobalTypeRegistry().Register(ModelManifestAsset::StaticType());
         RegisterSerializable<ModelManifestAsset>();

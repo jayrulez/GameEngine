@@ -10,6 +10,8 @@
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
 
+#include <cmath>
+
 import foundation.core;
 import foundation.vfs;
 import foundation.content;
@@ -377,5 +379,134 @@ TEST_CASE("model-prefab: the animator starts on the model's idle")
     CHECK(pipeline::RestingClip(*manifest, asset.manifest) == 1u); // else one containing it
     asset.manifest.animationGuids.RemoveAt(1);
     CHECK(pipeline::RestingClip(*manifest, asset.manifest) == 0u); // else the first
+    RemoveTreeMP(dir);
+}
+
+TEST_CASE("model-prefab: a skinned mesh sits at identity under the skeleton's parent node")
+{
+    // A skin draws in its skeleton's parent's space and glTF ignores a skinned mesh node's own
+    // transform: the prefab puts the mesh entity under that parent at identity, so its world is
+    // the skeleton's model space (inverse-kinematics.md P0a). Nodes: Root; Armature (moved and
+    // turned, the skeleton's parent); Hips (a joint); Skin (the skinned mesh, a sibling of the
+    // armature carrying an offset the file says to ignore); Rig (a node under the mesh).
+    pipeline::RegisterModelManifestAsset();
+    engine::render::RegisterRenderComponentReflection();
+    engine::animation::RegisterAnimationComponentReflection();
+    GlobalTypeRegistry().Register(scene::PrefabDocument::StaticType());
+    RegisterSerializable<scene::PrefabDocument>();
+
+    const StringView dir = u8"scratch_model_prefab_skeleton_space";
+    RemoveTreeMP(dir);
+    (void)CreateDirectory(dir);
+    foundation::vfs::NativeFileSystem mount(dir, foundation::core::DefaultAllocator());
+    foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), mount,
+                                            BinarySerializerFactory(), u8".rasset");
+
+    const Guid meshSkinned{0x52, 0x7};
+    const Quaternion armatureTurn = Quaternion::FromAxisAngle(Float3{0.0f, 1.0f, 0.0f}, 1.5707964f);
+    usize generation = 0;
+    // Generates and spawns the model with `skeletonParentNode`; returns the skinned mesh entity.
+    auto spawn = [&](scene::Scene& level, i32 skeletonParentNode) -> scene::EntityHandle
+    {
+        pipeline::ModelManifestAsset asset;
+        asset.manifest.meshGuids.PushBack(meshSkinned);
+        asset.manifest.meshSkinned.PushBack(1);
+        asset.manifest.meshMaterial.PushBack(-1);
+        asset.manifest.meshMaterialSlots.PushBack(foundation::model::ModelMeshMaterialSlots{});
+        asset.manifest.skeletonGuid = Guid{0x71, 0x7};
+        asset.manifest.animationGuids.PushBack(Guid{0x72, 0x7});
+        asset.manifest.skeletonParentNode = skeletonParentNode;
+        auto node = [&](StringView name, i32 parent, i32 mesh, const Transform& local)
+        {
+            foundation::model::ModelNode n;
+            n.name = String(name);
+            n.parentIndex = parent;
+            n.meshIndex = mesh;
+            n.localTransform = local;
+            asset.manifest.nodes.PushBack(Move(n));
+        };
+        Transform armature;
+        armature.position = Float3{2.0f, 0.0f, 1.0f};
+        armature.rotation = armatureTurn;
+        Transform offset;
+        offset.position = Float3{5.0f, 5.0f, 5.0f};
+        node(u8"Root", -1, -1, Transform{});
+        node(u8"Armature", 0, -1, armature);
+        node(u8"Hips", 1, -1, Transform{});
+        node(u8"Skin", 0, 0, offset);
+        node(u8"Rig", 3, -1, Transform{});
+
+        const String name = Format(u8"Rider{}", generation++);
+        foundation::content::Group* group = db.RootGroup()->CreateGroup(name.AsView());
+        REQUIRE(group != nullptr);
+        foundation::content::Instance* manifestInst =
+            group->CreateInstance(name.AsView(), pipeline::ModelManifestAsset::StaticType());
+        REQUIRE(manifestInst != nullptr);
+        REQUIRE(manifestInst->WriteObject(asset).IsOk());
+        pipeline::ModelPrefabResult generated =
+            pipeline::GenerateModelPrefab(DefaultAllocator(), *manifestInst);
+        REQUIRE(generated.instance != nullptr);
+        UniquePtr<IStream> payload = generated.instance->ReadData(u8"scene");
+        REQUIRE(payload.Get() != nullptr);
+        level.AddSystem<engine::render::MeshComponentManager>();
+        level.AddSystem<engine::animation::SkeletalAnimationComponentManager>();
+        const scene::EntityHandle root = scene::SpawnPrefab(level, *payload, generated.instance->Id());
+        REQUIRE(root.IsAssigned());
+        level.UpdateTransforms();
+        const scene::EntityHandle skin = level.FindEntityByName(u8"Skin");
+        REQUIRE(skin.IsAssigned());
+        return skin;
+    };
+    auto sameMatrix = [](const Float4x4& a, const Float4x4& b)
+    {
+        for (usize r = 0; r < 4; ++r)
+        {
+            for (usize c = 0; c < 4; ++c)
+            {
+                if (std::abs(a.m[r][c] - b.m[r][c]) > 1e-5f)
+                {
+                    return false;
+                }
+            }
+        }
+        return true;
+    };
+
+    SUBCASE("under the armature: the mesh's world is the armature's")
+    {
+        scene::Scene level(DefaultAllocator(), u8"level");
+        const scene::EntityHandle skin = spawn(level, 1);
+        const scene::EntityHandle armature = level.FindEntityByName(u8"Armature");
+        CHECK(level.GetParent(skin) == armature);
+        const Transform local = level.GetLocalTransform(skin);
+        CHECK(local.position.x == 0.0f);
+        CHECK(local.position.y == 0.0f);
+        CHECK(local.position.z == 0.0f);
+        CHECK(sameMatrix(level.GetWorldMatrix(skin), level.GetWorldMatrix(armature)));
+        // The armature itself keeps the file's placement.
+        CHECK(level.GetLocalTransform(armature).position.x == 2.0f);
+    }
+    SUBCASE("a skeleton with no parent: the mesh sits on the prefab root")
+    {
+        scene::Scene level(DefaultAllocator(), u8"level");
+        const scene::EntityHandle skin = spawn(level, -1);
+        const scene::EntityHandle root = level.GetParent(level.FindEntityByName(u8"Root"));
+        CHECK(level.GetParent(skin) == root);
+        CHECK(level.GetLocalTransform(skin).position.y == 0.0f);
+    }
+    SUBCASE("a manifest from before the parent was recorded keeps the file's placement")
+    {
+        scene::Scene level(DefaultAllocator(), u8"level");
+        const scene::EntityHandle skin = spawn(level, -2);
+        CHECK(level.GetParent(skin) == level.FindEntityByName(u8"Root"));
+        CHECK(level.GetLocalTransform(skin).position.y == 5.0f);
+    }
+    SUBCASE("a parent under the mesh itself is left alone (no cycle)")
+    {
+        scene::Scene level(DefaultAllocator(), u8"level");
+        const scene::EntityHandle skin = spawn(level, 4);
+        CHECK(level.GetParent(skin) == level.FindEntityByName(u8"Root"));
+        CHECK(level.GetParent(level.FindEntityByName(u8"Rig")) == skin);
+    }
     RemoveTreeMP(dir);
 }

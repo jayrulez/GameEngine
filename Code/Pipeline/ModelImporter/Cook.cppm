@@ -326,6 +326,7 @@ export namespace pipeline
         {
             const model::ModelSkin& skin = *model.skins()[0];
             boneToJoint = BuildBoneToJoint(skin);
+            manifest.skeletonParentNode = SkeletonParentNode(model, skin, boneToJoint);
 
             pipeline::SkeletonAsset skelAsset;
             SkeletonSourceFromModel(model, skin, boneToJoint, skelAsset.source);

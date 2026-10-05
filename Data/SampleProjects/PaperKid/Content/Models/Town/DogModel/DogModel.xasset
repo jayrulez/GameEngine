@@ -4,7 +4,7 @@
 	<string name="typeName">ModelManifestAsset</string>
 	<array name="dataVersions" count="1">
 		<u64 name="type">2440385714661564817</u64>
-		<u32 name="version">2</u32>
+		<u32 name="version">3</u32>
 	</array>
 	<object name="payload">
 		<string name="fileName">DogModel.glb</string>
@@ -353,6 +353,7 @@
 			<i32 name="mesh">-1</i32>
 		</array>
 		<string name="skeletonGuid">2341b0fb-57f7-4ab5-bf84-c9d4867e0513</string>
+		<i32 name="skeletonParentNode">15</i32>
 		<array name="animationGuids" count="5">
 			<string>d409792c-323d-4b75-967c-3bbaba9ad235</string>
 			<string>f7f93752-d053-4c03-936c-184e7f121941</string>

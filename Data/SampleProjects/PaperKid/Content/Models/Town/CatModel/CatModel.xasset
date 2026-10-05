@@ -4,7 +4,7 @@
 	<string name="typeName">ModelManifestAsset</string>
 	<array name="dataVersions" count="1">
 		<u64 name="type">2440385714661564817</u64>
-		<u32 name="version">2</u32>
+		<u32 name="version">3</u32>
 	</array>
 	<object name="payload">
 		<string name="fileName">CatModel.glb</string>
@@ -353,6 +353,7 @@
 			<i32 name="mesh">-1</i32>
 		</array>
 		<string name="skeletonGuid">ac7e7386-64b5-425f-925b-b0953df53f1a</string>
+		<i32 name="skeletonParentNode">15</i32>
 		<array name="animationGuids" count="5">
 			<string>07cacf77-d23c-4561-adf2-85c072dc85dc</string>
 			<string>cac293f9-7b55-4e05-9d58-f9c24eff788a</string>

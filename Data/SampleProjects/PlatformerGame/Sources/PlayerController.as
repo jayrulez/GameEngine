@@ -121,6 +121,13 @@ class PlayerController
             showModel(true);
         }
         bool grounded = character.grounded();
+        // The feet stand on the ground under them only while the hero stands on it: in the air the
+        // jump pose holds them at the model's ground, and they would reach for the floor below.
+        FootIkComponent@ feet = FootIkComponent::of(self);
+        if (feet !is null)
+        {
+            feet.active = grounded;
+        }
         m_sinceGrounded = grounded ? 0.0f : m_sinceGrounded + dt;
         // A hard landing kicks up dust; a hop off a step does not.
         if (grounded && !m_wasGrounded && (m_airTime > 0.35f))

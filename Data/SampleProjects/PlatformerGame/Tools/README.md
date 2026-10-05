@@ -14,6 +14,11 @@ scripts drive them; none of this is game content.
   settings come from Level3, so every level looks and plays alike. `levels.py Level4` writes one;
   a rewrite keeps the level's asset. The measures a route has to respect are in its docstring.
 
+- `ik.py`: the hero's inverse kinematics in every level: foot IK (the rig's detached feet met by
+  the shins, the pelvis Body) and an aim of the head (Neck, Head) on the Player, which drive the
+  Character model's animator below it. PlayerController turns the feet off in the air; Coin.as
+  points the head at the nearest coin within reach.
+
 Levels 1 to 3 were written from Sedulous's level summaries when the game was recreated; their
 hearts and gems were placed afterwards with the scene page tools (`entity_create`,
 `behavior_add`, `prefab_spawn`).

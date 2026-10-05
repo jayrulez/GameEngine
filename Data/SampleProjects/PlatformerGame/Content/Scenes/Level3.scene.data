@@ -464,7 +464,84 @@
 			<f32 name="z">1</f32>
 		</object>
 	</array>
-	<array name="components" count="25">
+	<array name="components" count="27">
+		<object>
+			<string name="owner">848dffcb-0530-4832-afe9-5758204bec3a</string>
+			<string name="type">aim_ik</string>
+			<object name="data">
+				<array name="dataVersions" count="1">
+					<u64 name="type">8597621584873643612</u64>
+					<u32 name="version">0</u32>
+				</array>
+				<array name="bones" count="2">
+					<string name="bone">Neck</string>
+					<f32 name="share">0.4</f32>
+					<string name="bone">Head</string>
+					<f32 name="share">1</f32>
+				</array>
+				<string name="target">00000000-0000-0000-0000-000000000000</string>
+				<string name="up">00000000-0000-0000-0000-000000000000</string>
+				<object name="aimAxis">
+					<f32 name="x">0</f32>
+					<f32 name="y">0</f32>
+					<f32 name="z">1</f32>
+				</object>
+				<object name="upAxis">
+					<f32 name="x">0</f32>
+					<f32 name="y">1</f32>
+					<f32 name="z">0</f32>
+				</object>
+				<f32 name="maxAngle">70</f32>
+				<f32 name="weight">1</f32>
+				<f32 name="fadeSeconds">0.35</f32>
+				<bool name="active">false</bool>
+				<i32 name="order">0</i32>
+				<bool name="debugDraw">false</bool>
+			</object>
+		</object>
+		<object>
+			<string name="owner">848dffcb-0530-4832-afe9-5758204bec3a</string>
+			<string name="type">foot_ik</string>
+			<object name="data">
+				<array name="dataVersions" count="1">
+					<u64 name="type">16356538492789681747</u64>
+					<u32 name="version">0</u32>
+				</array>
+				<array name="legs" count="2">
+					<string name="startBone">UpperLeg.L</string>
+					<string name="midBone">LowerLeg.L</string>
+					<string name="endBone">Foot.L</string>
+					<object name="hingeAxis">
+						<f32 name="x">0</f32>
+						<f32 name="y">0</f32>
+						<f32 name="z">0</f32>
+					</object>
+					<string name="startBone">UpperLeg.R</string>
+					<string name="midBone">LowerLeg.R</string>
+					<string name="endBone">Foot.R</string>
+					<object name="hingeAxis">
+						<f32 name="x">0</f32>
+						<f32 name="y">0</f32>
+						<f32 name="z">0</f32>
+					</object>
+				</array>
+				<string name="pelvisBone">Body</string>
+				<f32 name="rayUp">0.5</f32>
+				<f32 name="rayDown">0.75</f32>
+				<u32 name="groupMask">4294967295</u32>
+				<f32 name="pelvisDropMax">0.25</f32>
+				<f32 name="maxTilt">30</f32>
+				<f32 name="liftHeight">0.2</f32>
+				<f32 name="groundHeight">0</f32>
+				<f32 name="raiseRate">20</f32>
+				<f32 name="lowerRate">8</f32>
+				<f32 name="weight">1</f32>
+				<f32 name="fadeSeconds">0.2</f32>
+				<bool name="active">true</bool>
+				<i32 name="order">0</i32>
+				<bool name="debugDraw">false</bool>
+			</object>
+		</object>
 		<object>
 			<string name="owner">6eec409e-f081-4a23-86a5-69ab25d9d64c</string>
 			<string name="type">camera</string>

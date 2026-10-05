@@ -96,6 +96,11 @@ export namespace foundation::spline
         /// Global t at `distance` along the curve (clamped; needs RebuildArcLength).
         [[nodiscard]] f32 DistanceToT(f32 distance) const;
 
+        /// Distance along the curve at global t, DistanceToT's inverse (clamped; needs
+        /// RebuildArcLength): how far a closest point is down a course, which t, spread over the
+        /// segments however long each is, does not say.
+        [[nodiscard]] f32 TToDistance(f32 t) const;
+
         /// Position at `distance` along the curve (even spacing; needs RebuildArcLength).
         [[nodiscard]] Float3 EvaluateAtDistance(f32 distance) const
         {

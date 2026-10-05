@@ -186,6 +186,27 @@ namespace foundation::spline
         return (static_cast<f32>(lo) + within) * step;
     }
 
+    f32 SplineCurve::TToDistance(f32 t) const
+    {
+        const u32 segments = SegmentCount();
+        if (segments == 0 || m_arcLength.Size() < 2 || m_totalLength <= 0.0f)
+        {
+            return 0.0f;
+        }
+        // The table holds kSamplesPerSegment chords per segment: t's sample index, then a lerp
+        // inside the chord, as DistanceToT reads it the other way.
+        const f32 sample = Clamp(t, 0.0f, static_cast<f32>(segments)) *
+                           static_cast<f32>(kSamplesPerSegment);
+        const usize last = m_arcLength.Size() - 1;
+        usize lo = static_cast<usize>(sample);
+        if (lo >= last)
+        {
+            return m_totalLength;
+        }
+        const f32 within = sample - static_cast<f32>(lo);
+        return m_arcLength[lo] + (m_arcLength[lo + 1] - m_arcLength[lo]) * within;
+    }
+
     SplineSample SplineCurve::ClosestPoint(Float3 target) const
     {
         SplineSample best;

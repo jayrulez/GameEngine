@@ -108,6 +108,40 @@ TEST_CASE("spline: closest point lands on the nearest segment")
     CHECK(Near(curve.Evaluate(sample.t), sample.position, 0.001f));
 }
 
+TEST_CASE("spline: TToDistance inverts DistanceToT, on segments of different lengths")
+{
+    // A short segment then a long one: t's share of the segments (0.5 at the knot) is far from
+    // the share of the length, which is what a course needs.
+    SplineCurve curve;
+    curve.points.PushBack(SplinePoint{Float3{0, 0, 0}});
+    curve.points.PushBack(SplinePoint{Float3{2, 0, 0}});
+    curve.points.PushBack(SplinePoint{Float3{20, 0, 0}});
+    curve.UpdateAutoHandles();
+    curve.RebuildArcLength();
+
+    CHECK(curve.TToDistance(0.0f) == doctest::Approx(0.0f));
+    CHECK(curve.TToDistance(curve.MaxT()) == doctest::Approx(curve.Length()));
+    // The middle knot: the first segment's own arc (auto handles bow it past the 2 m chord),
+    // measured here by fine chords, independent of the table.
+    f32 firstArc = 0.0f;
+    for (u32 i = 1; i <= 1000; ++i)
+    {
+        firstArc += Length(curve.Evaluate(static_cast<f32>(i) / 1000.0f) -
+                           curve.Evaluate(static_cast<f32>(i - 1) / 1000.0f));
+    }
+    CHECK(curve.TToDistance(1.0f) == doctest::Approx(firstArc).epsilon(0.01));
+    CHECK(curve.TToDistance(1.0f) < 0.5f * curve.Length()); // not t's half of the segments
+    const f32 distances[] = {0.5f, 1.9f, 3.0f, 7.5f, 12.0f, 19.5f};
+    for (f32 d : distances)
+    {
+        CHECK(curve.TToDistance(curve.DistanceToT(d)) == doctest::Approx(d).epsilon(0.001));
+    }
+    // Out of range clamps; an empty curve answers 0.
+    CHECK(curve.TToDistance(-1.0f) == doctest::Approx(0.0f));
+    CHECK(curve.TToDistance(9.0f) == doctest::Approx(curve.Length()));
+    CHECK(SplineCurve{}.TToDistance(0.5f) == 0.0f);
+}
+
 TEST_CASE("spline: distance parameterization spaces samples evenly on a curved path")
 {
     SplineCurve curve;

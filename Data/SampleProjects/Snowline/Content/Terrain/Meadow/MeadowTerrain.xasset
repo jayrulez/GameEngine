@@ -1,0 +1,36 @@
+<root>
+	<string name="guid">6d567f13-6620-4d99-be4b-6181f359ea85</string>
+	<string name="typeNamespace">rtti::pipeline::terrain</string>
+	<string name="typeName">TerrainAsset</string>
+	<array name="dataVersions" count="1">
+		<u64 name="type">3163489150630392692</u64>
+		<u32 name="version">5</u32>
+	</array>
+	<object name="payload">
+		<string name="fileName"/>
+		<string name="heightfieldId">54a498f2-5e7b-40d3-b7ff-abb724ea08d8</string>
+		<string name="weightsId">e2a2d1a9-ef7d-4ae0-8a08-2d6b7f9ef693</string>
+		<string name="baseAlbedoId">c16df1ae-4e3c-4a79-ae7b-65d76f1ff1f5</string>
+		<f32 name="baseTileScale">6</f32>
+		<array name="paletteAlbedoIds" count="3">
+			<string>8323a7f7-805a-4e8c-bea1-a5689b90d8f7</string>
+			<string>f6835836-9db0-4a0f-b45d-b7e4ba75cfe6</string>
+			<string>37632d6c-3d1f-4a9c-8f7c-2920ca91a8c5</string>
+		</array>
+		<array name="paletteTileScales" count="3">
+			<f32>6</f32>
+			<f32>4</f32>
+			<f32>6</f32>
+		</array>
+		<i32 name="paletteTextureSize">256</i32>
+		<string name="baseNormalId">00000000-0000-0000-0000-000000000000</string>
+		<string name="baseOrmId">00000000-0000-0000-0000-000000000000</string>
+		<array name="paletteNormalIds" count="0"/>
+		<array name="paletteOrmIds" count="0"/>
+		<string name="baseHeightId">00000000-0000-0000-0000-000000000000</string>
+		<array name="paletteHeightIds" count="0"/>
+		<f32 name="heightBlendContrast">0.25</f32>
+		<array name="paletteMaskIds" count="0"/>
+		<bool name="castShadows">true</bool>
+	</object>
+</root>

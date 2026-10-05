@@ -1,8 +1,16 @@
 # Snowline - a downhill snowboard time trial with tricks, the third demo game
 
-> STATUS: PLAN 2026-10-04, agreed in outline by the user, who named it Snowline; P0 built
-> 2026-10-05 and runs in the editor and the browser (measurements below; the Deck's to come).
-> Gap 1, a board's momentum on a slope, closed in 9c9fa4a2 and c73ba3e9.
+> STATUS: PLAN 2026-10-04, agreed in outline by the user, who named it Snowline. P0 built
+> 2026-10-05 and runs in the editor and the browser (measurements below; the Deck's to come). P1
+> built 2026-10-05: the Blender rider on an animation graph, the board under the player's stick
+> (carve, tuck, jump, grab), its track (decals), its spray and landing powder, the wind rising
+> with speed, a cold clear look. Next (user, 2026-10-05): IK and root motion, spec first, before
+> P2. Engine work P0 and P1 drove, each with tests: a board's momentum on a slope (9c9fa4a2,
+> c73ba3e9), a spline hit's distance (1a82bf77, b18ea40a), the run clock and the run's services
+> without a game script (3c7f0dc8, f792f764), WebGPU's compressed mip tail (a2f2d5dc), a
+> vegetation layer's material per slot (7df17dab), a playing source's volume and pitch (43c95317).
+> Open tool finding: component_set cannot write a list and entity_inspect cannot read a list of
+> entity references.
 >
 > Picked for what it proves about the engine (user and the Sedulous session, 2026-10-04): Sky
 > Hopper covers the character controller, scripts, UI, save, audio and the web; PaperKid covers

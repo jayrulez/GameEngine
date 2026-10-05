@@ -19,7 +19,7 @@ Needs terrain.py <course> and importall.py <course> first: it places what they m
 import json, math, os, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from scenegen import Doc, mcp, yaw, num, vec, component_removed, component_added
+from scenegen import Doc, mcp, yaw, num, vec, component_removed, component_added, settings
 from look import look
 
 name = sys.argv[1] if len(sys.argv) > 1 else "Meadow"
@@ -207,6 +207,10 @@ BASE_LAYER = 0xFFFFFFFF  # the splat's unpainted base (the vegetation's kSplatBa
 def build():
     d = Doc(name)
     look(d)
+    # Collision groups: 0 everything, 1 the gates' flags (gates.py's FLAG_GROUP), which collide with
+    # nothing. A flag at its hinge's limit would stop the rider dead; Gate.as swings it instead.
+    d.settings.append(settings("physics", groupNames=["<string>Default</string>", "<string>Flags</string>"],
+                               groupCollides=["<u32>%d</u32>" % (0xFFFFFFFF & ~(1 << 1)), "<u32>0</u32>"]))
     sun = d.entity("Sun", rot=SUN_ROT)
     d.add(sun, "light", type=0, intensity=4.0, castsShadows=True)
 

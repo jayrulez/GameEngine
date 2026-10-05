@@ -7,8 +7,10 @@ GatePole, GateFlagRed, GateFlagBlue and Finish, each a model with its prefab.
 - Prefabs/GateRed, Prefabs/GateBlue: two poles HALF_WIDTH either side of the gate's origin (visual
   only: a rider brushing a pole is not stopped dead) and a flag on each, 1.55 m up, out from the
   gate. Each flag is a light dynamic body on a hinge about up anchored in the world (no pole body:
-  the joint's target is nil), limited to about 75 degrees either way: gravity does not swing it, a
-  brush does, and it settles back as its damping takes the swing out.
+  the joint's target is nil), limited to about 75 degrees either way: gravity does not swing it,
+  and its damping takes a swing out. The flags are in collision group FLAG_GROUP, which the scene
+  keeps from colliding with anything (course.py): a flag pinned at its limit is a wall, and a rider
+  riding into one stopped dead. Gate.as swings a flag the rider brushes past instead.
 - Prefabs/FinishLine: the finish arch.
 
 The scene places them (course.py): a gate is an entity with Gate.as and one of these under it.
@@ -20,6 +22,7 @@ from scenegen import Doc, mcp, yaw
 HALF_WIDTH = 4.0      # half the gap between a gate's poles (m); Gate.as's halfWidth
 FLAG_HEIGHT = 1.55    # the hinge's height, half way up the panel (m)
 FLAG_REACH = 0.3      # from the hinge to the panel's centre (m)
+FLAG_GROUP = 1        # the flags' collision group; course.py's matrix has it collide with nothing
 
 ASSETS = mcp("asset_list", {})["assets"]
 
@@ -47,7 +50,8 @@ def gate(name, flag):
         body = d.entity("Flag" + label, (hinge_x + side * FLAG_REACH, FLAG_HEIGHT, 0),
                         yaw(0 if side > 0 else 180), parent=root)
         d.add(body, "physics.RigidBody", motion=2, layer=1, shape=0,
-              halfExtents={"x": 0.275, "y": 0.225, "z": 0.01}, mass=0.3, linearDamping=0.6, angularDamping=3.0)
+              halfExtents={"x": 0.275, "y": 0.225, "z": 0.01}, mass=0.3, linearDamping=0.6, angularDamping=3.0,
+              collisionGroup=FLAG_GROUP)
         d.add(body, "physics.Joint", kind=2, localAnchor={"x": -FLAG_REACH, "y": 0.0, "z": 0.0},
               localAxis={"x": 0.0, "y": 1.0, "z": 0.0}, limitMin=-1.3, limitMax=1.3)
         d.instance(model_prefab(flag), (-FLAG_REACH, 0, 0), parent=body)

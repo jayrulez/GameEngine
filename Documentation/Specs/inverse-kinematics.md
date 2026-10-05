@@ -1,6 +1,9 @@
 # Inverse kinematics - bones that reach, look and stand on the ground
 
-> STATUS: PROPOSED 2026-10-05 for review (the user, and the Sedulous session, which mirrors it).
+> STATUS: PROPOSED 2026-10-05; reviewed by the Sedulous session the same day (its points folded
+> in: the root correction per root, P0 split, model space with several meshes, instanced skinning,
+> how a component finds its animator, the hinge fallback, the bone-name attribute). Awaits the
+> user.
 > Seeded in weekly_backlog.md (2026-08-26). User ruling 2026-10-05: after Snowline's P1, before
 > its P2, spec first, and "when doing IK, it must be solid". Companion: root-motion.md (the two
 > share the pose seam of P0). Read CONVENTIONS.md first.
@@ -37,7 +40,21 @@ Solid, as this spec holds it:
   is the skinned mesh entity's world (`ExtractImpl`: `rd.world = GetWorldMatrix(meshEntity)`).
 - The importer drops a non-joint parent of the skeleton (the Blender armature object) and
   `Skeleton::rootCorrection` is never set: model space silently excludes that node's transform.
-  Fixed in P0 (it is root-motion.md's prerequisite too).
+  P0a finds out what that costs on real assets before anything changes (it is root-motion.md's
+  prerequisite too). The correction is PER ROOT (Sedulous keeps it on each root bone): a skin with
+  two roots under different non-joint parents needs two.
+- **Risk to settle first**: in a Blender glTF the armature node parents both the skinned mesh and
+  the joints. If the prefab keeps the armature as an entity, the mesh entity's world may ALREADY
+  include its transform, which may be why characters draw right today; restoring the correction
+  would then apply it twice. P0a checks the real assets (Sky Hopper's hero, PaperKid's kid,
+  pedestrian and animals, Snowline's rider) in both engines, before and after, and decides whether
+  the fix belongs in the skeleton or in the importer's prefab.
+- **Model space with several meshes**: an animator feeds one palette to each of its mesh
+  entities, and each draws at its own world. Model space is defined as the FIRST resolved mesh
+  entity's world (the animator's own entity when it lists none); the mesh entities of one
+  animator must share a world transform (they do for an imported model: siblings under the rig),
+  which the editor warns about when they do not.
+- **Instanced skinning (crowds)** shares pose phases between instances: IK does not apply there.
 
 ## Design
 
@@ -48,8 +65,10 @@ of model-space transforms; no physics, no scene.
 
 - **TwoBone** (arm, leg): start, mid and end bone indices; a model-space target position; an
   optional target orientation for the end bone; a pole (model-space point) or, without one, the
-  plane of the animated mid joint (traktor's choice: feet need no pole), falling back to a hinge
-  axis when the chain is straight; weight 0..1. Law of cosines with BIND-pose bone lengths (an
+  plane of the animated mid joint (traktor's choice: feet need no pole). When the animated chain
+  is straight, the plane of the BIND pose's own bend (usually slightly bent); when that is straight
+  too, a hinge axis the caller gives (a knee and an elbow bend opposite ways, so no fixed default);
+  weight 0..1. Law of cosines with BIND-pose bone lengths (an
   animation may stretch them), reach clamped to `[|l1-l2|, 0.995 (l1+l2)]`. Writes the start and
   mid LOCAL rotations (a correction quaternion in model space, converted through the parent's
   model inverse) and, with an orientation, the end's. Result: reached, and the residual distance.
@@ -72,6 +91,8 @@ of model-space transforms; no physics, no scene.
 
 ### Engine: components and the frame
 
+- **Finding the animator**: a component drives the nearest ancestor-or-self with a skeletal
+  animation or animation graph component; with neither, it disables itself with one log line.
 - **`TwoBoneIkComponent`**, **`AimIkComponent`**, on an entity under the animated model (or on it):
   the chain by BONE NAMES (resolved to indices against the animator's skeleton, cached, re-resolved
   when the skeleton changes; an unknown name logs once and disables the component), the target an
@@ -96,23 +117,31 @@ of model-space transforms; no physics, no scene.
 ### Scripts
 
 - The components are reflected: `TwoBoneIkComponent.of(e).weight`, `.target`, `active`.
-- `SceneAnimation.setIkTarget(entity, x, y, z)` for a component without a target entity, and
-  `ikReached(entity)` / `ikError(entity)` to read the result.
+- `SceneAnimation.setIkTarget(entity, Float3)` for a component without a target entity, and
+  `ikReached(entity)` (bool) / `ikError(entity)` (float) to read the result: no new script types
+  (both engines keep a tripwire on the bound-type count). Sedulous spells them PascalCase on
+  `scene.Animation`.
 
 ### Editor
 
-- Bone fields pick from the animator's skeleton (a list of bone names), not free text.
+- Bone fields pick from the animator's skeleton (a list of bone names), not free text: the field
+  carries a `boneName` attribute (the same name in both engines) that the inspector turns into
+  that picker.
 - The inspector shows a component whose chain does not resolve as an error row.
 - The animation graph page's preview runs the modifiers of the selected entity's IK components
   (P3).
 
 ## Phases
 
-- **P0 Space and seam.** The importer keeps the skeleton's non-joint parent as the skeleton's
-  root correction (and armature-level channels are not lost: root-motion.md's need), serialized;
-  the players' modifier stage; `ModelPoseCache`. Tests: a skeleton under a moved and rotated
-  armature skins where the source file draws it; a modifier's edit survives an evaluation; one
-  model-space build per evaluation.
+- **P0a Space.** Measure the real assets before and after keeping the armature: where the mesh
+  entity's world comes from, whether the correction double-applies; decide skeleton (a per-root
+  correction, serialized in `SkeletonSource`) or importer prefab; armature-level channels kept
+  (root-motion.md's need); the cooked data's version change and a re-cook of the sample projects
+  (Integration.Mcp checks their data versions). Tests: a skeleton under a moved and rotated
+  armature skins where the source file draws it, exactly once; the sample models draw unchanged.
+- **P0b Seam** (independent of P0a, may land first): the players' modifier stage and
+  `ModelPoseCache`. Tests: a modifier's edit survives an evaluation; one model-space build per
+  evaluation.
 - **P1 Solvers.** TwoBone, Aim, Rebuild, in Foundation, with their tests (below).
 - **P2 Components.** TwoBone and Aim components, the manager wiring, fades, order, script facade,
   debug draw. Tests: a scene where a target entity moves and the hand bone's world position follows

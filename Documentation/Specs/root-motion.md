@@ -1,6 +1,8 @@
 # Root motion - clips that carry their own travel
 
-> STATUS: PROPOSED 2026-10-05 for review (the user, and the Sedulous session, which mirrors it).
+> STATUS: PROPOSED 2026-10-05; reviewed by the Sedulous session the same day (its points folded
+> in: settings off by default, the baked curve kept, Character mode through `move` and its
+> stickiness, no new script type, instanced skinning). Awaits the user.
 > Seeded in weekly_backlog.md (2026-08-26). User ruling 2026-10-05: after Snowline's P1, before
 > its P2, spec first. Companion: inverse-kinematics.md (P0 there, the space and the pose seam, is
 > this spec's prerequisite). Read CONVENTIONS.md first.
@@ -29,15 +31,21 @@ slide, turns and starts and stops that move as they were animated.
   = the skeleton's first root), and what to extract: `horizontal` (the ground-plane translation),
   `vertical` (height: off for a walk, on for a climb), `yaw` (turning about up; no pitch or roll
   ever: summing them across blends is wrong, as ezEngine's comments admit).
-- Set on the clip asset (the clip page's checkboxes; `asset_data_write` for agents), and at
-  import (a Model importer option, "Root motion from the root bone").
+- Every setting is OFF by default: nothing is stripped until someone asks. Set on the clip asset
+  (the clip page's checkboxes; `asset_data_write` for agents), and at import (a Model importer
+  option, "Root motion from the root bone").
 
 ### Cook (Lumix's arrangement)
 
 - At cook, the root bone's motion curve is baked (its model-space translation and yaw at each key
   time), and the extracted components are STRIPPED from the root's track, keeping its frame-0
   offset, so the pose plays in place exactly as much as the clip says (a walk keeps its bob when
-  `vertical` is off).
+  `vertical` is off). The baked curve stays in the cooked clip (the runtime reads it, and the
+  clip page's travel toggle draws it). An animator in `Ignore` playing a stripped clip walks in
+  place: intended.
+- The clip's cooked data changes in both engines; how each engine's reader meets a field it does
+  not have is checked before the data version is settled (Sedulous's clip source is read by
+  reflection with no version field today).
 
 ### Runtime
 
@@ -54,12 +62,20 @@ slide, turns and starts and stops that move as they were animated.
   - `Entity`: the delta, turned into world space by the animator's owner's rotation, moves and
     turns the owner (for a non-physics actor: PaperKid's dog and cat);
   - `Character`: the nearest ancestor (or self) with a `CharacterComponent` gets it as velocity
-    (`delta / dt`, horizontal, through `move` or `drive` keeping gravity) and its yaw as rotation,
-    so the controller still collides and slides;
-  - `Script`: nothing applied; `SceneAnimation.rootMotion(entity)` reads the frame's delta for a
-    script to use (a navigation agent that wants the clip's speed).
+    (`delta / dt`, horizontal) through `move`, which keeps gravity and jumps (`drive` would take
+    gravity over), and its yaw as rotation, so the controller still collides and slides. `move`
+    is sticky (it holds until the next call): the animator OWNS the character's `move` while in
+    this mode (a script's `move` on the same character is overwritten each frame, documented), and
+    sets it to zero when it stops supplying motion (the mode changes, the clip ends, the animator
+    or its entity is deactivated), or the character would walk on;
+  - `Script`: nothing applied; `SceneAnimation.rootMotionTranslation(entity)` (Float3) and
+    `rootMotionYaw(entity)` (float) read the frame's delta for a script to use (a navigation agent
+    that wants the clip's speed). Two calls, no new script type (both engines keep a tripwire on
+    the bound-type count).
 - **Frame order**: extracted in PostUpdate with the pose; applied there to the entity (Entity), or
-  stored for the next fixed step (Character), which is where a character's velocity is consumed.
+  stored for the next fixed step (Character), which is where a character's velocity is consumed:
+  a character answers its clip one physics step late, which a walk does not show.
+- **Instanced skinning (crowds)** shares pose phases between instances: no root motion there.
 
 ### Editor
 

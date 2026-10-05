@@ -14,6 +14,7 @@ target_link_libraries(Engine.Script.Tests PRIVATE
     Foundation::Particles Engine::Particles
     Foundation::Net Foundation::Net.Replication
     Foundation::UI Engine::UI
+    Foundation::Spline Engine::Spline
     Foundation::Script ${SCRIPTLIB_ANGELSCRIPT} ${SCRIPTLIB_LUAU} doctest::doctest)
 target_compile_definitions(Engine.Script.Tests PRIVATE DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS)
 target_compile_options(Engine.Script.Tests PRIVATE

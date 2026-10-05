@@ -91,5 +91,6 @@ export namespace engine
     // 38 = +Save: Save.getInt/setInt/..., the run's save data (kept between runs).
     // 40 = + TwoBoneIkComponent + AimIkComponent (inverse kinematics on scene entities).
     // 41 = + FootIkComponent.
-    inline constexpr usize kSubsystemFacadeNameCount = 41;
+    // 42 = + PathFollowComponent: PathFollowComponent.of(entity), a script drives its follower.
+    inline constexpr usize kSubsystemFacadeNameCount = 42;
 }

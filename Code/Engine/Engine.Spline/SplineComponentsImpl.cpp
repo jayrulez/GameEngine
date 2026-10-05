@@ -121,6 +121,8 @@ namespace engine::spline
             .Property<&PathFollowComponent::playing>("playing")
             .Property<&PathFollowComponent::loop>("loop")
             .Property<&PathFollowComponent::alignToTangent>("alignToTangent");
+        // PathFollowComponent.of(entity): a script drives its follower (a pace, a restart).
+        builder.Method<&foundation::script::ComponentOf<PathFollowComponent>, PathFollowComponent>("of");
     }
 
     void AddSplineSceneManagers(foundation::scene::Scene& scene)
@@ -255,6 +257,11 @@ namespace engine::spline
             GlobalTypeRegistry().Register(TypeOf<SplineHit>());
             foundation::script::RegisterExtraScriptRootType(&TypeOf<SplineHit>());
             foundation::script::RegisterExtraFacadeName(u8"SplineHit");
+            // The follower as a script class (PathFollowComponent.of(entity)): registered, an
+            // emission root (no signature reaches it), its name visible in behaviour preludes.
+            GlobalTypeRegistry().Register(TypeOf<PathFollowComponent>());
+            foundation::script::RegisterExtraScriptRootType(&TypeOf<PathFollowComponent>());
+            foundation::script::RegisterExtraFacadeName(u8"PathFollowComponent");
             RttiRegisterValue_SceneSplines();
             GlobalTypeRegistry().Register(TypeOf<SceneSplines>());
             foundation::script::RegisterExtraScriptRootType(&TypeOf<SceneSplines>());

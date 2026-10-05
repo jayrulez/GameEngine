@@ -46,6 +46,8 @@ import foundation.particles;          // ParticleEffectComponent + manager (part
 import engine.particles;   // *.of + SceneParticles (particle surface)
 import foundation.net.replication;    // NetworkComponent + manager + .of (net surface)
 import engine.ui;          // world-space UI components + managers + .of (UI surface)
+import foundation.spline;             // SplinePoint (the path follow surface)
+import engine.spline;      // PathFollowComponent.of (path follow surface)
 
 using namespace foundation::core;
 using namespace engine::ui;
@@ -3060,6 +3062,55 @@ TEST_CASE("script.scene: OPTION 1 - Component::of(entity).field mutates the live
     bed.Frame();
     REQUIRE(gadgets->Get(e) != nullptr);
     CHECK(gadgets->Get(e)->power == doctest::Approx(5.0f)); // the LIVE component was mutated
+}
+
+// PathFollowComponent.of(entity): a script starts a stopped follower and sets its pace (Snowline's
+// medal ghosts ride the course line this way), and the follower travels at that pace.
+TEST_CASE("script.scene: PathFollowComponent.of(entity) sets a follower's speed and starts it")
+{
+    engine::spline::RegisterSplineScriptFacade(); // the follower as a script class + of() (idempotent)
+
+    ScriptedScene bed;
+    engine::spline::AddSplineSceneManagers(bed.scene);
+    auto* splines = bed.scene.GetSystem<engine::spline::SplineComponentManager>();
+    auto* follows = bed.scene.GetSystem<engine::spline::PathFollowComponentManager>();
+    REQUIRE(splines != nullptr);
+    REQUIRE(follows != nullptr);
+
+    const scene::EntityHandle path = bed.scene.CreateEntity(u8"path");
+    engine::spline::SplineComponent& spline = splines->Add(path);
+    spline.curve.points.PushBack(foundation::spline::SplinePoint{Float3{0, 0, 0}});
+    spline.curve.points.PushBack(foundation::spline::SplinePoint{Float3{100, 0, 0}});
+    spline.curve.UpdateAutoHandles();
+    spline.curve.RebuildArcLength();
+
+    RefPtr<ScriptClass> pacer = MakeClass(u8"Pacer",
+                                          u8"class Pacer {\n"
+                                          u8"    private Entity@ self;\n"
+                                          u8"    Pacer(Entity@ entity) { @self = entity; }\n"
+                                          u8"    void onStart() {\n"
+                                          u8"        PathFollowComponent@ f = PathFollowComponent::of(self);\n"
+                                          u8"        f.speed = 4.0f;\n"
+                                          u8"        f.playing = true;\n"
+                                          u8"    }\n"
+                                          u8"}\n",
+                                          {u8"onStart"});
+    const scene::EntityHandle ghost = bed.AddScripted(pacer, u8"ghost");
+    engine::spline::PathFollowComponent& follow = follows->Add(ghost);
+    follow.spline = bed.scene.GetEntityId(path);
+    follow.loop = false;
+    follow.playing = false; // stopped until the script starts it
+    follow.speed = 0.0f;
+
+    bed.Start();
+    bed.Frame(); // onStart: the script sets the pace and starts it
+    REQUIRE(follows->Get(ghost) != nullptr);
+    CHECK(follows->Get(ghost)->speed == doctest::Approx(4.0f));
+    CHECK(follows->Get(ghost)->playing);
+    const f32 before = follows->Get(ghost)->distance;
+    bed.Frame(); // 0.5 s at 4 m/s
+    CHECK(follows->Get(ghost)->distance - before == doctest::Approx(2.0f).epsilon(0.01));
+    CHECK(bed.scene.GetWorldPosition(ghost).x == doctest::Approx(follows->Get(ghost)->distance).epsilon(0.02));
 }
 
 // OPTION 1 on a REAL engine component: RigidBodyComponent.of(entity).friction, on a live physics

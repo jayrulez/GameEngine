@@ -235,6 +235,31 @@ export namespace engine::audio
             }
         }
 
+        // The source's volume and pitch, kept on the component (a later play starts there) and
+        // eased onto its playing voice over `seconds`: a wind's rise with speed, an engine's pitch.
+        void SetVolume(scene::EntityHandle entity, f32 volume, f32 seconds)
+        {
+            if (AudioSourceComponent* component = Component(entity))
+            {
+                component->volume = volume;
+                if (m_engine != nullptr && m_engine->IsValidHandle(component->voice))
+                {
+                    m_engine->SetVoiceVolume(component->voice, volume, seconds);
+                }
+            }
+        }
+        void SetPitch(scene::EntityHandle entity, f32 pitch, f32 seconds)
+        {
+            if (AudioSourceComponent* component = Component(entity))
+            {
+                component->pitch = pitch;
+                if (m_engine != nullptr && m_engine->IsValidHandle(component->voice))
+                {
+                    m_engine->SetVoicePitch(component->voice, pitch, seconds);
+                }
+            }
+        }
+
         [[nodiscard]] bool IsPlaying(scene::EntityHandle entity)
         {
             AudioSourceComponent* component = Component(entity);
@@ -574,6 +599,23 @@ export namespace engine::audio
             if (AudioSceneSystem* sys = System())
             {
                 sys->SetPaused(entity.Handle(), paused);
+            }
+        }
+        // The source's volume and pitch, eased onto its playing voice over `seconds` (and kept for
+        // its next play). A source's volume and pitch on the component are read when it starts;
+        // these change it while it plays.
+        void setVolume(foundation::script::Entity entity, f32 volume, f32 seconds) const
+        {
+            if (AudioSceneSystem* sys = System())
+            {
+                sys->SetVolume(entity.Handle(), volume, seconds);
+            }
+        }
+        void setPitch(foundation::script::Entity entity, f32 pitch, f32 seconds) const
+        {
+            if (AudioSceneSystem* sys = System())
+            {
+                sys->SetPitch(entity.Handle(), pitch, seconds);
             }
         }
         // True while the entity's source voice is audibly playing.

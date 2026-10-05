@@ -277,6 +277,8 @@ namespace engine::audio
         builder.Method<&SceneAudio::stop>("stop", {"entity"});
         builder.Method<&SceneAudio::pause>("pause", {"entity", "paused"});
         builder.Method<&SceneAudio::isPlaying>("isPlaying", {"entity"});
+        builder.Method<&SceneAudio::setVolume>("setVolume", {"entity", "volume", "seconds"});
+        builder.Method<&SceneAudio::setPitch>("setPitch", {"entity", "pitch", "seconds"});
         builder.Method<&SceneAudio::setClip>("setClip", {"entity", "resourceId"});
         builder.Method<&SceneAudio::of>("of", {"scene"});
         builder.Constructor(); // some backends only materialize constructible foreign classes

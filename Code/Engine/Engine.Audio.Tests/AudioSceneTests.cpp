@@ -230,6 +230,41 @@ TEST_CASE("audio.scene: the component control surface - Play/Stop/SetPaused/IsPl
     CHECK_FALSE(play.audio->IsPlaying(bare));
 }
 
+// A sound that follows the game while it plays (Snowline's wind, rising with the rider's speed): a
+// source's volume and pitch were read only when it started.
+TEST_CASE("audio.scene: a playing source's volume and pitch change live, and keep for its next play")
+{
+    PlayScene play;
+    RefPtr<AudioClip> clip = MakeToneClip(1.0f);
+    const scene::EntityHandle e = play.AddSource(clip, Float3{0, 0, 0}, /*autoPlay=*/false);
+    play.Start();
+    AudioSourceComponent* c = play.scene.GetSystem<AudioSourceComponentManager>()->Get(e);
+    REQUIRE(c != nullptr);
+    const VoiceHandle voice = play.audio->Play(e);
+    REQUIRE(voice.IsValid());
+
+    play.audio->SetVolume(e, 0.25f, 0.0f);
+    play.audio->SetPitch(e, 1.5f, 0.0f);
+    play.Frame();
+    VoiceStatus status;
+    REQUIRE(play.engine.GetVoiceStatus(voice, status));
+    CHECK(status.volume == doctest::Approx(0.25f));
+    CHECK(status.pitch == doctest::Approx(1.5f));
+    CHECK(c->volume == doctest::Approx(0.25f)); // kept for the next play
+    CHECK(c->pitch == doctest::Approx(1.5f));
+
+    // Stopped, it changes only the component; the next play starts there.
+    play.audio->Stop(e);
+    play.audio->SetVolume(e, 0.6f, 0.0f);
+    const VoiceHandle again = play.audio->Play(e);
+    REQUIRE(again.IsValid());
+    REQUIRE(play.engine.GetVoiceStatus(again, status));
+    CHECK(status.volume == doctest::Approx(0.6f));
+
+    // An entity without a source is inert.
+    play.audio->SetVolume(play.scene.CreateEntity(u8"bare"), 0.5f, 0.0f);
+}
+
 TEST_CASE("audio.scene: the first ACTIVE listener component drives the scene's listener "
           "pose (position + forward + velocity)")
 {

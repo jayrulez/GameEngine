@@ -71,6 +71,9 @@ per-voice reverb sends route through a splitter to a wet-only second per-scene F
 
 - **`AudioSourceComponent`** - clip/cue ref, bus (name), volume, pitch, loop, spatial, autoPlay,
   priority, distance + cone + doppler fields; runtime `Play/Stop/Pause/SetPaused` + one-shot helpers.
+  The component's volume and pitch are read when the source starts; `SetVolume`/`SetPitch`
+  (script: `SceneAudio.setVolume(entity, volume, seconds)` / `setPitch`) ease a playing source's
+  voice onto new values and keep them for its next play (a wind rising with speed).
 - **`AudioListenerComponent`** - first active wins; falls back to the active camera transform.
 - **Manager tick** (`ScenePhase::PostTransform`) resolves dirty refs, syncs position/forward/velocity,
   autoplays on simulation start, reaps finished one-shots; scene pause pauses that scene's voices

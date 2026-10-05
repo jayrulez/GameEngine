@@ -34,6 +34,7 @@ import foundation.terrain.resource;
 import engine.terrain;
 import foundation.vegetation; // VegetationPlacement
 import engine.vegetation;     // VegetationLayerComponent (the grass layer over the dome)
+import foundation.resource;   // Ref (the grass layer's materials)
 
 #include "Runtime.Client/AppMain.h"
 #include "TerrainPlaygroundApp.h"

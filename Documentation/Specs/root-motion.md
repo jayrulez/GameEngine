@@ -32,6 +32,12 @@
 > `rootMotionTarget` when set (a gameplay root holding the model), else the animator's entity;
 > Script mode's reading is one frame late (animation runs after scripts), as Character mode's
 > motion is one physics step late; Character mode walks, it does not climb (vertical is ignored).
+> P3 BUILT 2026-10-05: the clip page's Root Motion section (settings, the path drawn on the
+> ground, Show travel) and the graph preview's Travel toggle; PaperKid's dog and cat walk by
+> their Walk clip's root motion (Pet.as steers and paces). The pedestrians stay on their own
+> walking (the Stroller sets their pace), as before: Script mode is there for a walker that wants
+> its clip's speed, not needed by them. Found on the way and fixed (dbe02cfb): an instance
+> override's EntityRefs in the prefab's id space were never remapped to the instance.
 > Seeded in weekly_backlog.md (2026-08-26). User ruling 2026-10-05: after Snowline's P1, before
 > its P2, spec first. Companion: inverse-kinematics.md (P0 there, the space and the pose seam, is
 > this spec's prerequisite). Read CONVENTIONS.md first.

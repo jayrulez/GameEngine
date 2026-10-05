@@ -176,6 +176,7 @@ namespace engine::spline
             SplineHit hit;
             hit.valid = true;
             hit.t = t;
+            hit.distance = curve.TToDistance(t);
             hit.position = TransformPoint(curve.Evaluate(t), world);
             hit.tangent = Normalized(TransformDirection(curve.Tangent(t), world));
             return hit;
@@ -224,6 +225,7 @@ namespace engine::spline
     {
         builder.Property<&SplineHit::valid>("valid");
         builder.Property<&SplineHit::t>("t");
+        builder.Property<&SplineHit::distance>("distance");
         builder.Property<&SplineHit::position>("position");
         builder.Property<&SplineHit::tangent>("tangent");
     }

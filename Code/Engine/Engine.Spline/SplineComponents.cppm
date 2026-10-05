@@ -148,7 +148,8 @@ export namespace engine::spline
     struct SplineHit
     {
         bool valid = false;
-        f32 t = 0.0f;
+        f32 t = 0.0f;        // the curve parameter: segment index + the way along it
+        f32 distance = 0.0f; // how far along the curve that is (m, curve-local, as length())
         Float3 position{};
         Float3 tangent{};
     };

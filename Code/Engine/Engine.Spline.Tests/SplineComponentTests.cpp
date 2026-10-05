@@ -134,6 +134,9 @@ TEST_CASE("spline facade: world-space queries through SceneSplines")
     CHECK(byFloat3.t == doctest::Approx(nearest.t));
     CHECK(nearest.valid);
     CHECK(Length(nearest.position - Float3{3, 5, 0}) < 0.05f);
+    // How far down the line the closest point is, and the distance a sample was asked at.
+    CHECK(nearest.distance == doctest::Approx(3.0f).epsilon(0.02));
+    CHECK(mid.distance == doctest::Approx(5.0f).epsilon(0.001));
 
     // No spline on the entity -> the invalid hit, zeroed.
     const foundation::scene::EntityHandle bare = sceneObj.CreateEntity(u8"bare");

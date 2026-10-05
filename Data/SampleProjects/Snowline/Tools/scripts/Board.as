@@ -44,12 +44,15 @@ class Board
     private float m_sinceMark = 0.0f; // metres ridden since the last mark of the track
     private bool m_spraying = false;
     private int m_nextGate = 0;   // the gate the rider looks at next
+    private Quaternion m_startRotation;
+    private bool m_restarted = false; // a new run began: the next update starts from rest
 
     Board(Entity@ entity) { @self = entity; }
 
     void onStart()
     {
         m_start = self.position();
+        m_startRotation = self.rotation();
     }
 
     // The skinned mesh the graph sits on: the model's root, its rig, the mesh under it. Found on
@@ -74,6 +77,12 @@ class Board
         }
         CharacterComponent@ c = CharacterComponent::of(self);
         Float3 v = c.velocity;
+        if (m_restarted)
+        {
+            // The character still carries the last run's speed until it is driven otherwise.
+            v = Float3(0.0f, 0.0f, 0.0f);
+            m_restarted = false;
+        }
         Float3 at = self.position();
         const float g = 9.81f;
         float down = travelled(at);
@@ -135,10 +144,14 @@ class Board
 
     }
 
-    // Snowline.as starts the next run (the finish card's Jump): back to the top, the first gate.
+    // Snowline.as starts the next run (the finish card's Jump): back to the top, at rest, facing
+    // down the course as at the start, the first gate next.
     void onRunRestart(int unused)
     {
         CharacterComponent::of(self).setPosition(m_start);
+        self.setRotation(m_startRotation);
+        m_yaw = 0.0f;
+        m_restarted = true;
         m_nextGate = 0;
         m_lean = 0.0f;
     }

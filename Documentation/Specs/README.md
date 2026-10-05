@@ -42,7 +42,7 @@ implementing agent's work).
 | [editor-lists-and-asset-slots.md](editor-lists-and-asset-slots.md) | - | L (PROPOSED 2026-09-28: one list widget (ContainerListEditor with element bodies, an add menu and drop) for every editable list, every asset reference an AssetPickerSlot that accepts drops, one entity picker with hierarchy drags, the generic page reflection-first; folds in reflection-track's REMAINING 1 and 2) |
 | [2d-games.md](2d-games.md) | - | L (PROPOSED: 2D inside the 3D world - sprite fixes, an orthographic camera and sort layers, sprite sheets, a plane lock on Jolt, a 2D sample, then tilemaps and the editor tooling; prior art Zero + ezEngine) |
 | [paperkid.md](paperkid.md) | - | game plan |
-| [snowboard.md](snowboard.md) | - | game plan (PLAN 2026-10-04: the third demo, a downhill time trial with tricks on terrain, vegetation, splines, an animation graph, decals and joints) |
+| [snowline.md](snowline.md) | - | game plan (PLAN 2026-10-04: Snowline, the third demo, a downhill snowboard time trial with tricks on terrain, vegetation, splines, an animation graph, decals and joints) |
 | [documentation-system.md](documentation-system.md) | - | process |
 | [scene-prefab-unification.md](scene-prefab-unification.md) | - | WIP design question (needs Fable) |
 | [navigation-editor-ui.md](navigation-editor-ui.md) | - | design question (needs Fable): nav P4b editor UI |

@@ -1,7 +1,7 @@
-# Snowboard - a downhill time trial with tricks, the third demo game
+# Snowline - a downhill snowboard time trial with tricks, the third demo game
 
-> STATUS: PLAN 2026-10-04, agreed in outline by the user; not started. The name is a working
-> title until the user picks one.
+> STATUS: PLAN 2026-10-04, agreed in outline by the user, who named it Snowline; P0 under way
+> (gap 1, a board's momentum on a slope, closed in 9c9fa4a2 and c73ba3e9).
 >
 > Picked for what it proves about the engine (user and the Sedulous session, 2026-10-04): Sky
 > Hopper covers the character controller, scripts, UI, save, audio and the web; PaperKid covers
@@ -13,7 +13,7 @@
 
 ## Where it lives and how it is built
 
-- **Project**: `Data/SampleProjects/Snowboard` (its `Cooked/`, `.cache/`, `Editor/` and `Dist/`
+- **Project**: `Data/SampleProjects/Snowline` (its `Cooked/`, `.cache/`, `Editor/` and `Dist/`
   generated and ignored, as the other samples'). Authoring scripts in its `Tools/`, as
   PaperKid's: an MCP client, scene and prefab generators, and Blender scripts on the shared
   kit (`kit3d.py`, copied in).

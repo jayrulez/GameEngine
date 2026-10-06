@@ -1209,6 +1209,26 @@ namespace foundation::core::detail
         using Pointee = U;
     };
 
+    // An Array<E> parameter: a script hands it a list (an AngelScript array, a Luau table), which
+    // its backend carries as an Array<Variant> of elements already narrowed to E's type; the call
+    // converts it element by element. An Array<E> Variant (a native caller) is taken as it is.
+    template <typename T>
+    struct ArgArray
+    {
+        static constexpr bool value = false;
+    };
+    template <typename E>
+    struct ArgArray<Array<E>>
+    {
+        static constexpr bool value = !std::is_same_v<E, Variant>;
+        using Element = E;
+    };
+
+    template <typename A>
+    [[nodiscard]] bool AcceptArg(const Variant& v) noexcept;
+    template <typename A>
+    [[nodiscard]] decltype(auto) ConvertArg(Variant& v) noexcept;
+
     template <typename A>
     [[nodiscard]] const TypeInfo* ParamTypeOf() noexcept
     {
@@ -1256,6 +1276,26 @@ namespace foundation::core::detail
         {
             return v.IsObject() && v.AsObject<Bare>() != nullptr; // reference: must be non-null
         }
+        else if constexpr (ArgArray<Bare>::value)
+        {
+            if (v.TryGet<Bare>() != nullptr)
+            {
+                return true;
+            }
+            const Array<Variant>* list = v.TryGet<Array<Variant>>();
+            if (list == nullptr)
+            {
+                return false;
+            }
+            for (const Variant& element : *list)
+            {
+                if (!AcceptArg<typename ArgArray<Bare>::Element>(element))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
         else if constexpr (std::is_enum_v<Bare>)
         {
             // An enum arg is its underlying int (i64/f64) or a properly-typed enum Variant - see
@@ -1291,6 +1331,25 @@ namespace foundation::core::detail
         else if constexpr (std::is_class_v<Bare> && std::is_base_of_v<Object, Bare>)
         {
             return *v.AsObject<Bare>();
+        }
+        else if constexpr (ArgArray<Bare>::value)
+        {
+            // BY VALUE (a fresh Array<E> from a script's list, or a copy of a native one), so
+            // decltype(auto) stays consistent across this branch. AcceptArg checked every element.
+            if (const Bare* typed = v.template TryGet<Bare>())
+            {
+                return Bare(*typed);
+            }
+            Bare out;
+            if (Array<Variant>* list = v.template TryGet<Array<Variant>>())
+            {
+                out.Reserve(list->Size());
+                for (Variant& element : *list)
+                {
+                    out.PushBack(ConvertArg<typename ArgArray<Bare>::Element>(element));
+                }
+            }
+            return out;
         }
         else if constexpr (std::is_enum_v<Bare>)
         {

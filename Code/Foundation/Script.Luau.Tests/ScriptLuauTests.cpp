@@ -270,6 +270,32 @@ namespace
             out.PushBack(String(u8"cde"));
             return out;
         }
+        f32 sum(Array<f32> values) const
+        {
+            f32 total = 0.0f;
+            for (f32 v : values)
+            {
+                total += v;
+            }
+            return total;
+        }
+        i32 letters(Array<String> words) const
+        {
+            i32 total = 0;
+            for (const String& w : words)
+            {
+                total += static_cast<i32>(w.Size());
+            }
+            return total;
+        }
+        Array<f32> doubled(Array<f32> values) const
+        {
+            for (f32& v : values)
+            {
+                v *= 2.0f;
+            }
+            return values;
+        }
     };
 
     constexpr StringView kBagProbe = u8R"lua(
@@ -292,6 +318,14 @@ function BagProbe:nameLens()
     local ss = self.b:names()
     return #ss + #ss[1] + #ss[2]
 end
+function BagProbe:sumOf() return self.b:sum({1.5, 2.25, -0.75}) end
+function BagProbe:lettersOf() return self.b:letters({"ab", "cde"}) end
+function BagProbe:sumOfNone() return self.b:sum({}) end
+function BagProbe:doubledOf()
+    local xs = {1.5, 2.25, -0.75}
+    local twice = self.b:doubled(xs)
+    return #twice + twice[1] + twice[3] + xs[1]
+end
 )lua";
 }
 REFLECT_VALUE(LuauRoom, "rtti::luau::test")
@@ -305,6 +339,9 @@ REFLECT_MEMBERS(LuauBag, "rtti::luau::test")
     builder.Method<&LuauBag::rooms>("rooms");
     builder.Method<&LuauBag::empty>("empty");
     builder.Method<&LuauBag::names>("names");
+    builder.Method<&LuauBag::sum>("sum", {"values"});
+    builder.Method<&LuauBag::letters>("letters", {"words"});
+    builder.Method<&LuauBag::doubled>("doubled", {"values"});
 }
 
 TEST_CASE("script.luau: a facade Array<T> return crosses as a native table (numeric + value element)")
@@ -328,6 +365,30 @@ TEST_CASE("script.luau: a facade Array<T> return crosses as a native table (nume
     CHECK(probe->Invoke(u8"roomSizes", Span<Variant>{}).Value().Get<f64>() == doctest::Approx(9.0));
     CHECK(probe->Invoke(u8"emptyLen", Span<Variant>{}).Value().Get<f64>() == doctest::Approx(0.0));
     CHECK(probe->Invoke(u8"nameLens", Span<Variant>{}).Value().Get<f64>() == doctest::Approx(7.0));
+}
+
+TEST_CASE("script.luau: a table crosses into a facade Array<T> parameter")
+{
+    RttiRegisterValue_LuauRoom();
+    RegisterArrayType<i32>();
+    RegisterArrayType<LuauRoom>();
+    RegisterArrayType<String>();
+    RegisterArrayType<f32>();
+
+    RefPtr<IScriptManager> manager = CreateLuauScriptManager(DefaultAllocator());
+    manager->RegisterType(TypeOf<LuauRoom>());
+    manager->RegisterType(LuauBag::StaticType());
+    manager->FinalizeTypes();
+
+    RefPtr<IScriptContext> context = manager->CreateContext();
+    REQUIRE(context->Load(kBagProbe, u8"luau.bag").IsOk());
+    RefPtr<ScriptObject> probe = context->CreateInstance(u8"BagProbe", Span<Variant>{});
+    REQUIRE(probe.Get() != nullptr);
+
+    CHECK(probe->Invoke(u8"sumOf", Span<Variant>{}).Value().Get<f64>() == doctest::Approx(3.0));
+    CHECK(probe->Invoke(u8"lettersOf", Span<Variant>{}).Value().Get<f64>() == doctest::Approx(5.0));
+    CHECK(probe->Invoke(u8"sumOfNone", Span<Variant>{}).Value().Get<f64>() == doctest::Approx(0.0));
+    CHECK(probe->Invoke(u8"doubledOf", Span<Variant>{}).Value().Get<f64>() == doctest::Approx(6.0));
 }
 
 // Container MEMBERS bind as owner ops (`shelf:rooms_count()` / `:rooms_at(0)` / `:rooms_add()` /

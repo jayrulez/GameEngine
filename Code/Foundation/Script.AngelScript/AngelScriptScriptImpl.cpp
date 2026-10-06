@@ -1023,11 +1023,94 @@ namespace foundation::script::angelscript
             return nullptr;
         }
 
+        // A script array argument (`const array<Elem> &in`) -> an Array<Variant> of its elements,
+        // each narrowed to the container's element type (the reflection call converts the list
+        // into the parameter's Array<E>). Numbers, bools, strings and our reflected handles.
+        [[nodiscard]] core::Variant ListFromArg(asIScriptGeneric* gen, asUINT index,
+                                                const core::TypeInfo& containerType) const
+        {
+            const CScriptArray* arr = static_cast<const CScriptArray*>(gen->GetArgAddress(index));
+            core::Array<core::Variant> list;
+            if (arr == nullptr)
+            {
+                return core::Variant::From<core::Array<core::Variant>>(core::Move(list));
+            }
+            const core::TypeInfo* elementType = containerType.container->elementType;
+            const int subId = arr->GetElementTypeId();
+            list.Reserve(arr->GetSize());
+            for (asUINT i = 0; i < arr->GetSize(); ++i)
+            {
+                list.PushBack(ValueFromAddress(subId, arr->At(i), elementType));
+            }
+            return core::Variant::From<core::Array<core::Variant>>(core::Move(list));
+        }
+
+        // A value at `addr` of AngelScript type `typeId` (an array element) -> a Variant narrowed to
+        // `expected`.
+        [[nodiscard]] core::Variant ValueFromAddress(int typeId, const void* addr,
+                                                     const core::TypeInfo* expected) const
+        {
+            if (addr == nullptr)
+            {
+                return core::Variant{};
+            }
+            switch (typeId)
+            {
+            case asTYPEID_BOOL:
+            {
+                const bool b = *static_cast<const bool*>(addr);
+                return (expected == nullptr || expected == &core::TypeOf<bool>())
+                           ? core::Variant::From<bool>(b)
+                           : CoerceNumber(b ? 1.0 : 0.0, expected);
+            }
+            case asTYPEID_INT8:
+                return CoerceNumber(*static_cast<const core::i8*>(addr), expected);
+            case asTYPEID_UINT8:
+                return CoerceNumber(*static_cast<const core::u8*>(addr), expected);
+            case asTYPEID_INT16:
+                return CoerceNumber(*static_cast<const core::i16*>(addr), expected);
+            case asTYPEID_UINT16:
+                return CoerceNumber(*static_cast<const core::u16*>(addr), expected);
+            case asTYPEID_INT32:
+                return CoerceNumber(*static_cast<const core::i32*>(addr), expected);
+            case asTYPEID_UINT32:
+                return CoerceNumber(*static_cast<const core::u32*>(addr), expected);
+            case asTYPEID_INT64:
+                return CoerceInteger(core::Variant::From<core::i64>(*static_cast<const core::i64*>(addr)),
+                                     expected);
+            case asTYPEID_UINT64:
+                return CoerceInteger(core::Variant::From<core::u64>(*static_cast<const core::u64*>(addr)),
+                                     expected);
+            case asTYPEID_FLOAT:
+                return CoerceNumber(*static_cast<const float*>(addr), expected);
+            case asTYPEID_DOUBLE:
+                return CoerceNumber(*static_cast<const double*>(addr), expected);
+            default:
+                break;
+            }
+            if (typeId == m_stringTypeId)
+            {
+                return core::Variant::From<core::String>(StringFromStd(*static_cast<const std::string*>(addr)));
+            }
+            if ((typeId & asTYPEID_OBJHANDLE) != 0 && TypeInfoForTypeId(typeId) != nullptr)
+            {
+                const BoxedVariant* box = *static_cast<const BoxedVariant* const*>(addr);
+                return (box != nullptr) ? box->value : core::Variant{};
+            }
+            return core::Variant{};
+        }
+
         // Script argument -> engine Variant (generic calling convention).
         [[nodiscard]] core::Variant ValueFromArg(asIScriptGeneric* gen, asUINT index,
                                                  const core::TypeInfo* expected) const
         {
             const int typeId = gen->GetArgTypeId(index);
+
+            // A list for an Array<E> parameter (declared `const array<Elem> &in`).
+            if (expected != nullptr && core::IsContainer(*expected) && expected->container->elementType != nullptr)
+            {
+                return ListFromArg(gen, index, *expected);
+            }
 
             // A `?&in` variable-type arg (the emit/send Variant-payload sink, and any `&in`
             // primitive) arrives BY REFERENCE: the arg slot holds a POINTER to the caller's
@@ -1998,10 +2081,10 @@ namespace foundation::script::angelscript
                 AppendAscii(out, primitive);
                 return true;
             }
-            // A reflected container (Array<T>): the native `array<Elem>@`. The element reuses its own
-            // spelling (`Entity@`, `int`, `string`, ...). Only the RETURN position is wired (a
-            // facade returning a set); a container is never a facade parameter, but the element
-            // must be spellable either way.
+            // A reflected container (Array<T>): the native array. The element reuses its own spelling
+            // (`Entity@`, `int`, `string`, ...). A return is `array<Elem>@` (a facade returning a
+            // set); a parameter is `const array<Elem> &in` (a script handing a facade a list, read
+            // into an Array<Variant> by ValueFromArg).
             if (core::IsContainer(*type))
             {
                 const core::TypeInfo* elem = type->container->elementType;
@@ -2010,9 +2093,9 @@ namespace foundation::script::angelscript
                 {
                     return false;
                 }
-                AppendAscii(out, "array<");
+                AppendAscii(out, isParam ? "const array<" : "array<");
                 out.Append(elemDecl);
-                AppendAscii(out, isParam ? ">" : ">@");
+                AppendAscii(out, isParam ? "> &in" : ">@");
                 return true;
             }
             // A native AngelScript enum: an int-backed VALUE type, spelled by name with no handle.

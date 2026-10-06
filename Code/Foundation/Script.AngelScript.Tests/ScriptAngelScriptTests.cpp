@@ -374,6 +374,33 @@ namespace
             out.PushBack(String(u8"cde"));
             return out;
         }
+        // Lists handed IN by a script (array parameters).
+        f32 sum(Array<f32> values) const
+        {
+            f32 total = 0.0f;
+            for (f32 v : values)
+            {
+                total += v;
+            }
+            return total;
+        }
+        i32 letters(Array<String> words) const
+        {
+            i32 total = 0;
+            for (const String& w : words)
+            {
+                total += static_cast<i32>(w.Size());
+            }
+            return total;
+        }
+        Array<f32> doubled(Array<f32> values) const
+        {
+            for (f32& v : values)
+            {
+                v *= 2.0f;
+            }
+            return values;
+        }
     };
 }
 REFLECT_MEMBERS(Bag, "rtti::script::test")
@@ -382,6 +409,9 @@ REFLECT_MEMBERS(Bag, "rtti::script::test")
     builder.Method<&Bag::rooms>("rooms");
     builder.Method<&Bag::empty>("empty");
     builder.Method<&Bag::names>("names");
+    builder.Method<&Bag::sum>("sum", {"values"});
+    builder.Method<&Bag::letters>("letters", {"words"});
+    builder.Method<&Bag::doubled>("doubled", {"values"});
     builder.Constructor();
 }
 namespace
@@ -393,6 +423,7 @@ namespace
             RegisterArrayType<i32>();
             RegisterArrayType<Room>();
             RegisterArrayType<String>();
+            RegisterArrayType<f32>();
             return true;
         }();
         (void)once;
@@ -424,6 +455,32 @@ TEST_CASE("angelscript: a facade Array<T> return crosses as a native array<T> (n
     CHECK(ctx->GetGlobal(u8"R").Get<f64>() == 9.0);
     CHECK(ctx->GetGlobal(u8"E").Get<f64>() == 0.0);
     CHECK(ctx->GetGlobal(u8"L").Get<f64>() == 7.0);
+}
+
+TEST_CASE("angelscript: a script array crosses into a facade Array<T> parameter")
+{
+    RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
+    RegisterBag(*manager);
+    RefPtr<IScriptContext> ctx = manager->CreateContext();
+
+    const Status status = ctx->Load(u8"double S; double L; double E; double D;\n"
+                                    u8"void main() {\n"
+                                    u8"  Bag b;\n"
+                                    u8"  array<float> xs = {1.5f, 2.25f, -0.75f};\n"
+                                    u8"  S = b.sum(xs);\n"                                // 3.0
+                                    u8"  array<string> ws = {\"ab\", \"cde\"};\n"
+                                    u8"  L = b.letters(ws);\n"                            // 5
+                                    u8"  array<float> none;\n"
+                                    u8"  E = b.sum(none);\n"                              // 0
+                                    u8"  array<float>@ twice = b.doubled(xs);\n"
+                                    u8"  D = twice.length() + twice[0] + twice[2] + xs[0];\n" // 3 + 3 - 1.5 + 1.5 = 6
+                                    u8"}\n",
+                                    u8"main");
+    REQUIRE(status.IsOk());
+    CHECK(ctx->GetGlobal(u8"S").Get<f64>() == doctest::Approx(3.0));
+    CHECK(ctx->GetGlobal(u8"L").Get<f64>() == 5.0);
+    CHECK(ctx->GetGlobal(u8"E").Get<f64>() == 0.0);
+    CHECK(ctx->GetGlobal(u8"D").Get<f64>() == doctest::Approx(6.0)); // the script's own array unchanged
 }
 
 TEST_CASE("angelscript: a nested-value member is a borrow handle edited in place (unit 2b)")

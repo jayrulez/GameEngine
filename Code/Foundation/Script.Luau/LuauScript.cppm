@@ -1178,6 +1178,24 @@ namespace foundation::script
     Variant LuauScriptContext::ToVariantForParam(lua_State* state, int index,
                                                  const TypeInfo* expected)
     {
+        // A table for an Array<E> parameter: its sequence (1..n) as an Array<Variant>, each element
+        // narrowed to E as a parameter of that type would be; the reflection call converts the list
+        // into the parameter's Array<E>.
+        if (expected != nullptr && IsContainer(*expected) && expected->container->elementType != nullptr &&
+            lua_type(state, index) == LUA_TTABLE)
+        {
+            const int table = lua_absindex(state, index);
+            const int count = lua_objlen(state, table);
+            Array<Variant> list;
+            list.Reserve(static_cast<usize>(count));
+            for (int i = 1; i <= count; ++i)
+            {
+                lua_rawgeti(state, table, i);
+                list.PushBack(ToVariantForParam(state, -1, expected->container->elementType));
+                lua_pop(state, 1);
+            }
+            return Variant::From<Array<Variant>>(Move(list));
+        }
         // A Lua number narrows to the reflected param's EXACT numeric/enum type. Lua numbers are all
         // f64, but the neutral dispatch matches the declared param type, so an f32/i32/enum param
         // must receive that typed Variant - not a bare f64 (which it would reject). Mirrors

@@ -17,7 +17,8 @@
 //
 // Usage: Engine.Player <projectDir> [--scene <source-db-path>] [--exit-after <seconds>]
 //                      [--data-root <dir>]  (engine data; default = the Data/.dataroot walk)
-//                      [--screenshot <png> [--screenshot-frame N | --screenshot-after S] [--screenshot-exit]]
+//                      [--screenshot <png> [--screenshot-frame N | --screenshot-after S]
+//                       [--screenshot-count N] [--screenshot-exit]]
 //
 // Two modes, detected by layout:
 //   PROJECT dir (Project.xml): scenes load from the authored source DB (their cooked form IS

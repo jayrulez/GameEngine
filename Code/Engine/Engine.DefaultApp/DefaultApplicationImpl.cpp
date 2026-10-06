@@ -787,12 +787,16 @@ namespace engine::runtime
     void DefaultApplication::FinishFrame(IApplicationHost& host, FrameContext& frame)
     {
         ++m_renderedFrames;
-        if (m_screenshotOptions.Requested() && !m_screenshotOptionFired &&
-            m_screenshotOptions.Due(m_renderedFrames, m_runSeconds))
+        // The --screenshot run: from the due frame, one file a frame until --screenshot-count are
+        // taken (each recorded here and written by the next frame's OnUpdate, before this records
+        // the next), and --screenshot-exit only after the last.
+        if (m_screenshotOptions.Requested() && m_screenshotsTaken < m_screenshotOptions.count &&
+            (m_screenshotsTaken > 0 || m_screenshotOptions.Due(m_renderedFrames, m_runSeconds)))
         {
-            m_screenshotOptionFired = true;
-            m_screenshot.Request(m_screenshotOptions.path.AsView());
-            m_screenshotExitPending = m_screenshotOptions.exitAfter;
+            m_screenshot.Request(m_screenshotOptions.PathFor(m_screenshotsTaken).AsView());
+            ++m_screenshotsTaken;
+            m_screenshotExitPending =
+                m_screenshotOptions.exitAfter && m_screenshotsTaken == m_screenshotOptions.count;
         }
         if (!m_screenshot.Armed())
         {

@@ -71,6 +71,22 @@ TEST_CASE("screenshot: the flags parse, default to frame 30, and ignore what is 
     CHECK_FALSE(Parse({"--screenshot"}).Requested()); // a dangling flag asks for nothing
 }
 
+// Consecutive frames (frame-to-frame change in an exported build: TAA's jitter in PaperKid's player):
+// one file each, numbered before the extension; one frame keeps the path as given.
+TEST_CASE("screenshot: a count takes that many consecutive frames, one numbered file each")
+{
+    const ScreenshotOptions one = Parse({"--screenshot", "dir/shot.png"});
+    CHECK(one.count == 1u);
+    CHECK(one.PathFor(0) == StringView(u8"dir/shot.png"));
+
+    const ScreenshotOptions run = Parse({"--screenshot", "dir.v2/shot.png", "--screenshot-count", "8"});
+    CHECK(run.count == 8u);
+    CHECK(run.PathFor(0) == StringView(u8"dir.v2/shot-0.png"));
+    CHECK(run.PathFor(7) == StringView(u8"dir.v2/shot-7.png"));
+    CHECK(Parse({"--screenshot", "noext", "--screenshot-count", "2"}).PathFor(1) == StringView(u8"noext-1"));
+    CHECK(Parse({"--screenshot", "a.png", "--screenshot-count", "0"}).count == 1u); // never "no frames"
+}
+
 TEST_CASE("screenshot: rows unpack from the aligned pitch, and BGRA swizzles to RGBA")
 {
     // 3x2 pixels in a 256-byte pitch; each row's tail is garbage the unpack must skip.

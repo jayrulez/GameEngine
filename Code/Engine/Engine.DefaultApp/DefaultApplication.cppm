@@ -344,7 +344,7 @@ export namespace engine::runtime
         ScreenshotCapture m_screenshot;
         ScreenshotOptions m_screenshotOptions;
         core::u64 m_renderedFrames = 0; // frames FinishFrame saw (the --screenshot-frame count)
-        bool m_screenshotOptionFired = false; // the --screenshot request is one-shot
+        core::u32 m_screenshotsTaken = 0; // of the --screenshot run (--screenshot-count frames, then done)
         bool m_screenshotExitPending = false;
         core::f32 m_exitAfterSeconds = 0.0f;
         core::f32 m_runSeconds = 0.0f;

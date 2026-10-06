@@ -72,12 +72,14 @@ unpacks the rows into RGBA8 (BGRA surfaces swizzled), writes the file through
 with a log line, never a silent no-op. Three ways in:
 - **F11** in any DefaultApplication: `screenshot_<ticks>.png` in the working directory (the legacy
   sandbox binding, now on the base app so the player has it too).
-- **`--screenshot <png> [--screenshot-frame N | --screenshot-after S] [--screenshot-exit]`**
-  (`ScreenshotOptionsFromArguments`, read by `OnCommandLine` for every app): capture at rendered frame N
-  (default 30) or at the first frame past S seconds (frame-rate independent), and exit once the
-  file is written when asked - a screenshot with no hand on the keyboard and no desktop capture
-  tool (Wayland has none an unprivileged process may use). Exit code 1 when the capture could not
-  be produced.
+- **`--screenshot <png> [--screenshot-frame N | --screenshot-after S] [--screenshot-count N]
+  [--screenshot-exit]`** (`ScreenshotOptionsFromArguments`, read by `OnCommandLine` for every app):
+  capture at rendered frame N (default 30) or at the first frame past S seconds (frame-rate
+  independent), and exit once the file is written when asked - a screenshot with no hand on the
+  keyboard and no desktop capture tool (Wayland has none an unprivileged process may use). With a
+  count, that many consecutive frames from there, as `<png stem>-<i>.png` (frame-to-frame change:
+  TAA's jitter in an exported build), exiting after the last. Exit code 1 when the capture could
+  not be produced.
 - The base `OnRenderWindow` is `RenderFrame` (the scenes + window overlays) then `FinishFrame`. A
   subclass that draws its own overlay (ImGui, a HUD - every sample does) overrides it and calls
   the two around the overlay, so the overlay is in the shot; the Sandbox, which renders offscreen

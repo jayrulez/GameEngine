@@ -39,7 +39,32 @@ export namespace engine::runtime
         u32 frame = 30;           // give the scene a few frames to load and settle
         f32 afterSeconds = 0.0f;  // > 0 wins over `frame`
         bool exitAfter = false;   // --screenshot-exit: quit once the file is written
+        u32 count = 1;            // --screenshot-count: this many consecutive frames from the due one
         [[nodiscard]] bool Requested() const noexcept { return !path.IsEmpty(); }
+        /// The file for the `index`-th frame of a run: the path itself for one frame, else the path
+        /// with "-<index>" before its extension ("shot.png" -> "shot-0.png", "shot-1.png", ...).
+        [[nodiscard]] String PathFor(u32 index) const
+        {
+            if (count <= 1)
+            {
+                return path;
+            }
+            const StringView p = path.AsView();
+            usize dot = p.Size();
+            for (usize i = p.Size(); i > 0; --i)
+            {
+                if (p[i - 1] == u8'.')
+                {
+                    dot = i - 1;
+                    break;
+                }
+                if (p[i - 1] == u8'/' || p[i - 1] == u8'\\')
+                {
+                    break;
+                }
+            }
+            return Format(u8"{}-{}{}", p.SubStr(0, dot), index, p.SubStr(dot, p.Size() - dot));
+        }
         /// Whether this frame (the `frames`-th rendered, at `seconds` of run time) is the one.
         [[nodiscard]] bool Due(u64 frames, f32 seconds) const noexcept
         {
@@ -47,8 +72,9 @@ export namespace engine::runtime
         }
     };
 
-    /// Parses `--screenshot <path>`, `--screenshot-frame <n>`, `--screenshot-after <seconds>` and
-    /// `--screenshot-exit` out of a command line, ignoring everything else (the other flags have
+    /// Parses `--screenshot <path>`, `--screenshot-frame <n>`, `--screenshot-after <seconds>`,
+    /// `--screenshot-count <n>` (consecutive frames: measuring frame-to-frame change, TAA's jitter one)
+    /// and `--screenshot-exit` out of a command line, ignoring everything else (the other flags have
     /// their own readers).
     [[nodiscard]] inline ScreenshotOptions ScreenshotOptionsFromArguments(int argc, char** argv)
     {
@@ -97,6 +123,15 @@ export namespace engine::runtime
                     }
                 }
                 options.afterSeconds = seconds;
+            }
+            else if (arg == u8"--screenshot-count" && i + 1 < argc)
+            {
+                u32 count = 0;
+                for (const char* c = argv[++i]; *c >= '0' && *c <= '9'; ++c)
+                {
+                    count = count * 10u + static_cast<u32>(*c - '0');
+                }
+                options.count = (count > 0) ? count : 1u;
             }
             else if (arg == u8"--screenshot-exit")
             {

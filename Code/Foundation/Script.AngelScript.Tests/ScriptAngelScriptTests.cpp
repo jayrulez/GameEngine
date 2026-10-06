@@ -668,6 +668,49 @@ TEST_CASE("angelscript: Guids compare with == and !=")
     CHECK(ctx->GetGlobal(u8"NilSame").Get<bool>());
 }
 
+// A reflected-type field reads back whether it is a plain member (the object itself) or a handle,
+// and so does a plain global: a playtest's probe of a game script's Guid field read null.
+TEST_CASE("angelscript: plain reflected-type members and globals read back as their values")
+{
+    RegisterCoreTypes();
+    RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
+    RegisterReflectedTypes(*manager);
+    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    REQUIRE(static_cast<bool>(ctx));
+    REQUIRE(ctx->Load(u8"Guid kTrack = Guid(\"6b0a7709-5169-4a0e-8077-c78b87a132e6\");\n"
+                      u8"class Holder {\n"
+                      u8"  Guid track;\n"
+                      u8"  Float3 where;\n"
+                      u8"  Guid@ held;\n"
+                      u8"  Holder() { track = kTrack; where = Float3(1, 2, 3); @held = Guid(\"0758e8d2-c6cd-47a7-bce6-9728a9501018\"); }\n"
+                      u8"}\n",
+                      u8"main")
+                .IsOk());
+    Guid track;
+    Guid held;
+    REQUIRE(Guid::TryParse(u8"6b0a7709-5169-4a0e-8077-c78b87a132e6", track));
+    REQUIRE(Guid::TryParse(u8"0758e8d2-c6cd-47a7-bce6-9728a9501018", held));
+
+    RefPtr<ScriptObject> holder = ctx->CreateInstance(u8"Holder", Span<Variant>{});
+    REQUIRE(static_cast<bool>(holder));
+    Result<Variant> got = holder->GetProperty(u8"track");
+    REQUIRE(got.HasValue());
+    REQUIRE(got.Value().Is<Guid>());
+    CHECK(got.Value().Get<Guid>() == track);
+    Result<Variant> where = holder->GetProperty(u8"where");
+    REQUIRE(where.HasValue());
+    REQUIRE(where.Value().Is<Float3>());
+    CHECK(where.Value().Get<Float3>().y == doctest::Approx(2.0f));
+    Result<Variant> handle = holder->GetProperty(u8"held");
+    REQUIRE(handle.HasValue());
+    REQUIRE(handle.Value().Is<Guid>());
+    CHECK(handle.Value().Get<Guid>() == held);
+
+    const Variant global = ctx->GetGlobal(u8"kTrack");
+    REQUIRE(global.Is<Guid>());
+    CHECK(global.Get<Guid>() == track);
+}
+
 TEST_CASE("angelscript: 64-bit integer facade args/returns round-trip exactly (no double funnel)")
 {
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());

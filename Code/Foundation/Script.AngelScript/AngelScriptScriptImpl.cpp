@@ -1595,6 +1595,14 @@ namespace foundation::script::angelscript
                 const BoxedVariant* box = *static_cast<const BoxedVariant* const*>(address);
                 return (box != nullptr) ? box->value : core::Variant{};
             }
+            // A plain reflected-type member or global (`Guid m`, OBJHANDLE clear): AngelScript
+            // hands back the address of the object itself, the box (a reflected type is an
+            // asOBJ_REF box), not of a handle to it. It read as empty, so a playtest probe of a
+            // script's Guid field answered null.
+            if (TypeInfoForTypeId(typeId) != nullptr)
+            {
+                return static_cast<const BoxedVariant*>(address)->value;
+            }
             return core::Variant{};
         }
 

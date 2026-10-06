@@ -33,6 +33,15 @@
             </Flex>
           </ContentButton>
 
+          <ContentButton id="course-2" width="320" padding="8" style="background: state-list(normal=rounded-rect(#1C2740, radius=10, border=#5A6E96, border-width=2), hover=rounded-rect(#26345A, radius=10, border=#B8C8E8, border-width=3), pressed=rounded-rect(#304070, radius=10, border=#FFD966, border-width=4), focused=rounded-rect(#1C2740, radius=10, border=#FFD966, border-width=5), disabled=rounded-rect(#0E1424, radius=10, border=#3A4A6A, border-width=2));">
+            <Flex direction="vertical" align="start" spacing="4">
+              <ImageView source="{5885a767-b7c1-4bc9-8878-661ac3c5bcf3}" width="304" height="171" corner-radius="6"/>
+              <Spacer spacer-height="4"/>
+              <Label text="Ridge" font-size="22" style="text-color: #FFFFFF;"/>
+              <Label id="course-2-best" text="" font-size="14" style="text-color: #E0E8F8;"/>
+            </Flex>
+          </ContentButton>
+
         </Flex>
 
         <Spacer spacer-height="12"/>

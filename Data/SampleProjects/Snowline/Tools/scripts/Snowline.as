@@ -13,7 +13,8 @@
 // ("GemCollected"), each with how many it counts for. The board announces each trick as it lands
 // ("TrickAir", "TrickSpin", "TrickGrab", then "TrickLanded"): a clean one scores its air, its half
 // turns and its grab, times the combo, which a clean landing or a near miss past a tree
-// ("NearMiss") raises and a crash ("RiderCrashed") or a missed gate ends.
+// ("NearMiss") raises and a crash ("RiderCrashed") or a missed gate ends. Clearing a crevasse
+// ("GapCleared", from Gap.as) scores too and raises the combo.
 //
 // The results tally the run a row at a time (the ride, the gates, the gems, the tricks, the time
 // bonus), then
@@ -28,12 +29,13 @@ Guid kFinishDoc = Guid("409e4cea-20a2-4705-9a54-059fa662850f"); // UI/Finish
 Guid kTitleDoc = Guid("2a97818d-8b96-4bfc-a7ae-6200a870ea69");  // UI/Title
 
 // The courses, in order: each unlocked by a bronze on the one before it.
-const int kCourseCount = 2;
+const int kCourseCount = 3;
 Guid kMeadow = Guid("c3ba9d83-5633-451c-a028-6beca57428fa"); // Scenes/Meadow
 Guid kForest = Guid("a6e8728b-4a6d-400b-a765-cec67a8fa222"); // Scenes/Forest
+Guid kRidge = Guid("b41720b8-3476-4b34-9a26-3da287aba954"); // Scenes/Ridge
 
-Guid courseScene(int i) { return i == 1 ? kForest : kMeadow; }
-string courseName(int i) { return i == 1 ? "Forest" : "Meadow"; }
+Guid courseScene(int i) { return i == 2 ? kRidge : (i == 1 ? kForest : kMeadow); }
+string courseName(int i) { return i == 2 ? "Ridge" : (i == 1 ? "Forest" : "Meadow"); }
 
 // Audio/GemChime (sounds.py): the tally's tick, pitched up row by row, and lower as a medal lands.
 Guid kChime = Guid("c47f1131-6df4-49ea-b2c7-6e3b3316a3ce");
@@ -47,6 +49,7 @@ const int kSpinPoints = 250;      // a half turn
 const int kGrabPoints = 400;      // a second holding a grab
 const int kComboMost = 5;         // the highest combo multiplier
 const int kNearMissPoints = 100;  // a trunk passed close, fast
+const int kGapPoints = 500;       // a crevasse cleared
 const float kTrickShown = 1.6f;   // how long a landed trick shows (s)
 const float kTallyFirst = 0.5f;   // the first row's moment after the finish (s)
 const float kTallyGap = 0.45f;    // between the rows (s)
@@ -98,6 +101,7 @@ class Game
         Screen@ s = ui::push(kTitleDoc);
         s.findButton("course-0").onClick(Action(this.onMeadow));
         s.findButton("course-1").onClick(Action(this.onForest));
+        s.findButton("course-2").onClick(Action(this.onRidge));
         for (int i = 0; i < kCourseCount; ++i)
         {
             bool open = unlocked(i);
@@ -109,6 +113,7 @@ class Game
 
     private void onMeadow() { startCourse(0); }
     private void onForest() { startCourse(1); }
+    private void onRidge() { startCourse(2); }
 
     // A course opens with a bronze or better on the one before it; the first is always open.
     private bool unlocked(int i)
@@ -259,6 +264,19 @@ class Game
         int points = kNearMissPoints * m_combo;
         m_tricks += points;
         showTrick("Near miss", "+" + points);
+        raiseCombo();
+    }
+
+    // Over a crevasse and down past it: points, and the combo grows.
+    void onGapCleared(int centimetres)
+    {
+        if (!m_running)
+        {
+            return;
+        }
+        int points = kGapPoints * m_combo;
+        m_tricks += points;
+        showTrick("Gap " + (centimetres / 100) + " m", "+" + points);
         raiseCombo();
     }
 

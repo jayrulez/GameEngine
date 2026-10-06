@@ -22,6 +22,8 @@ Needs terrain.py <course> and importall.py <course> first: it places what they m
   course's best run, saved, ridden again beside the player; hidden until there is one;
 - the kickers (Kicker.as, which sets the launch off the lip, on Models/Props/KickerModel with its
   collision) on the course line between gates;
+- a gap, if the course has one (terrain.py's crevasse): a kicker whose lip stands at its edge, and
+  the Gap (Gap.as) judging the landing past it; no gate stands near it;
 - the chase camera (FollowCamera.as).
 """
 import json, math, os, sys
@@ -80,6 +82,7 @@ FINISH = asset("ScriptClassAsset", "Finish")
 GHOST = asset("ScriptClassAsset", "Ghost")
 PLAYER_GHOST = asset("ScriptClassAsset", "PlayerGhost")
 KICKER = asset("ScriptClassAsset", "Kicker")
+GAP = asset("ScriptClassAsset", "Gap") if "gap" in info else None
 GEM = asset("ScriptClassAsset", "Gem")
 GEM_MODEL = next(a["guid"] for a in ASSETS if a["type"] == "PrefabDocument"
                  and a.get("group", "") == "Models/Props/GemModel")
@@ -92,6 +95,7 @@ RIDER_GRAPH = asset("AnimationGraphAsset", "RiderGraph")
 GATE_FIRST = 40.0     # the first gate's distance from the top
 FINISH_BEFORE = 6.0   # the finish's distance before the line's end (m)
 SHORTCUT_CLEAR = 25.0 # no gate within this far (along z) of a shortcut's ends, nor between them (m)
+GAP_CLEAR = (30.0, 15.0) # no gate this far before a gap's lip, nor this far past its end (along z, m)
 # Each course's rules:
 # - gate_half, gate_swing, gate_spacing, gate_prefabs: half the gap between a gate's poles, how far
 #   each gate stands off the line side to side, the metres down the line between gates, and the
@@ -111,6 +115,10 @@ RULES = {
     # groomed snow, the trees close beyond them; and a row of gems down the shortcut.
     "Forest": dict(gate_half=3.0, gate_swing=2.5, gate_spacing=38.0, gate_prefabs=("GateRedNarrow", "GateBlueNarrow"),
                    gem_offset=5.8, kickers=(), medals=(40.0, 45.0, 52.0), pines=0.06),
+    # Air: wide gates, a run of three kickers in the first gaps, and the crevasse (terrain.py's
+    # gap) with its own kicker at the lip; few trees.
+    "Ridge": dict(gate_half=4.0, gate_swing=3.5, gate_spacing=45.0, gate_prefabs=("GateRed", "GateBlue"),
+                  gem_offset=10.0, kickers=(0, 1, 2), medals=(29.0, 33.0, 40.0), pines=0.02),
 }
 COURSE = RULES[name]
 # The kicker's shape (blender/props.py, which models it from the same numbers): its curve, buried
@@ -149,9 +157,11 @@ def gate_distances(points, length):
     out = []
     distance = GATE_FIRST
     z0, z1 = info.get("shortcut_range", (1.0e9, 1.0e9))
+    gap = info.get("gap")
+    g0, g1 = (gap["lip"][2] - GAP_CLEAR[0], gap["lip"][2] + gap["length"] + GAP_CLEAR[1]) if gap else (1.0e9, 1.0e9)
     while distance < length - FINISH_BEFORE - 20.0:
         p, _ = along_course(points, distance)
-        if not (z0 - SHORTCUT_CLEAR <= p[2] <= z1 + SHORTCUT_CLEAR):
+        if not (z0 - SHORTCUT_CLEAR <= p[2] <= z1 + SHORTCUT_CLEAR) and not (g0 <= p[2] <= g1):
             out.append(distance)
         distance += COURSE["gate_spacing"]
     return out
@@ -175,6 +185,7 @@ def gates(d, points, length):
         d.instance(prefabs[COURSE["gate_prefabs"][index % 2]], parent=e)
     gems(d, points, mountain, placed)
     kickers(d, points, mountain, placed)
+    gap(d, points, mountain)
     p, heading = along_course(points, length - FINISH_BEFORE)
     e = d.entity("Finish", (p[0], mountain.height(p[0], p[2]), p[2]), yaw(math.degrees(heading)))
     gold, silver, bronze = COURSE["medals"]
@@ -228,16 +239,53 @@ def kickers(d, points, mountain, placed):
     prefab = next(a["guid"] for a in ASSETS if a["type"] == "PrefabDocument"
                   and a.get("group", "") == "Models/Props/KickerModel")
     for i, gap in enumerate(COURSE["kickers"]):
-        middle = (placed[gap] + placed[gap + 1]) / 2.0
-        p, heading = along_course(points, middle)
-        q, _ = along_course(points, middle + KICKER_FOOT)
-        drop = mountain.height(p[0], p[2]) - mountain.height(q[0], q[2])
-        slope = math.degrees(math.atan2(drop, KICKER_FOOT))
-        e = d.entity("Kicker%d" % i, (p[0], mountain.height(p[0], p[2]) - KICKER_SINK, p[2]),
-                     qmul(yaw(math.degrees(heading)), pitch(slope)))
-        d.script(e, (KICKER, {"run": KICKER_RUN, "lipHeight": KICKER_HEIGHT, "lipAngle": KICKER_LIP_ANGLE,
-                              "width": KICKER_WIDTH}))
-        d.instance(prefab, parent=e)
+        kicker(d, points, mountain, prefab, "Kicker%d" % i, (placed[gap] + placed[gap + 1]) / 2.0)
+
+
+def kicker(d, points, mountain, prefab, label, distance):
+    """One kicker `distance` metres down the course line (where its ramp leaves the snow)."""
+    p, heading = along_course(points, distance)
+    q, _ = along_course(points, distance + KICKER_FOOT)
+    drop = mountain.height(p[0], p[2]) - mountain.height(q[0], q[2])
+    slope = math.degrees(math.atan2(drop, KICKER_FOOT))
+    e = d.entity(label, (p[0], mountain.height(p[0], p[2]) - KICKER_SINK, p[2]),
+                 qmul(yaw(math.degrees(heading)), pitch(slope)))
+    d.script(e, (KICKER, {"run": KICKER_RUN, "lipHeight": KICKER_HEIGHT, "lipAngle": KICKER_LIP_ANGLE,
+                          "width": KICKER_WIDTH}))
+    d.instance(prefab, parent=e)
+
+
+def distance_to(points, target):
+    """How far down the course line its closest point to `target` (x, z) is (m)."""
+    best, best_d, run = 1.0e18, 0.0, 0.0
+    for a, b in zip(points, points[1:]):
+        step = math.dist(a, b)
+        ax, az, bx, bz = a[0], a[2], b[0], b[2]
+        t = ((target[0] - ax) * (bx - ax) + (target[1] - az) * (bz - az)) / max(1e-9, (bx - ax) ** 2 + (bz - az) ** 2)
+        t = max(0.0, min(1.0, t))
+        e = math.hypot(target[0] - (ax + (bx - ax) * t), target[1] - (az + (bz - az) * t))
+        if e < best:
+            best, best_d = e, run + step * t
+        run += step
+    return best_d
+
+
+def gap(d, points, mountain):
+    """The crevasse (terrain.py's gap): a kicker whose lip stands at its edge, and the Gap (Gap.as)
+    that judges the landing past it: short of the ramp up is a crash, beyond it a cleared gap."""
+    info_gap = info.get("gap")
+    if not info_gap:
+        return
+    prefab = next(a["guid"] for a in ASSETS if a["type"] == "PrefabDocument"
+                  and a.get("group", "") == "Models/Props/KickerModel")
+    lip = info_gap["lip"]
+    at = distance_to(points, (lip[0], lip[2]))
+    # The kicker's lip KICKER_RUN up its ramp (its ramp follows the slope) stands at the edge.
+    kicker(d, points, mountain, prefab, "GapKicker", at - KICKER_RUN)
+    _, heading = along_course(points, at)
+    e = d.entity("Gap", tuple(lip), yaw(math.degrees(heading)))
+    d.script(e, (GAP, {"heading": heading, "short": info_gap["short"], "length": info_gap["length"],
+                       "reach": info_gap["reach"]}))
 
 
 def aim_bone(name, share):

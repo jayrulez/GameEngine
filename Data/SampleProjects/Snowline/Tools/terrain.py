@@ -27,6 +27,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # packed snow fades out between these distances from the line, in metres), where the forest may
 # start (forest_from), how many forest patches and how big. A shortcut, if any, is a narrow groomed
 # chord across the inside of one bend, from z0 to z1 (it leaves and rejoins the course there).
+# `valley` is how steeply the ground rises away from the course (Meadow's and Forest's 0.0011 when
+# unset). A gap, if any, is a crevasse across the valley at z: the snow drops `depth` over `wall`
+# metres there, then comes back up over `ramp` metres, never steeper than the fall line, so a rider
+# who falls in still rides out downhill; it spans the course to `reach` metres either side (fading
+# out between the two).
 COURSES = {
     "Meadow": dict(size=513, world=513.0, min_y=0.0, max_y=120.0, top_z=-200.0, bottom_z=200.0,
                    bend_amplitude=30.0, bend_length=160.0, seed=7,
@@ -37,6 +42,13 @@ COURSES = {
                    bend_amplitude=42.0, bend_length=110.0, seed=23,
                    course_groom=(4.5, 7.0), forest_from=(8.0, 12.0), forest_patches=170, patch_size=(20.0, 50.0),
                    shortcut=dict(z0=-75.0, z1=5.0, groom=(2.0, 3.5))),
+    # Air: a longer run on gentle bends, steep rocky sides, few trees, and a gap: a crevasse across
+    # the valley on the bend's apex low down, a kicker at its lip (course.py), the avalanche's
+    # stretch after it.
+    "Ridge": dict(size=513, world=513.0, min_y=0.0, max_y=120.0, top_z=-230.0, bottom_z=230.0,
+                  bend_amplitude=25.0, bend_length=200.0, seed=41, valley=0.0036,
+                  course_groom=(6.0, 9.0), forest_from=(28.0, 40.0), forest_patches=35, patch_size=(15.0, 35.0),
+                  gap=dict(z=70.0, depth=2.5, wall=1.5, ramp=20.0, reach=(30.0, 42.0))),
 }
 SPLAT_SIZE = 512
 TEXTURE_SIZE = 256
@@ -84,7 +96,7 @@ class Mountain:
         h = 5.0 + 90.0 * t ** 1.25  # leaves room under MAX_Y for the valley sides
         # Away from the course the ground rises into a broad valley.
         d = abs(x - self.course_x(z))
-        h += min(d, 140.0) ** 2 * 0.0011
+        h += min(d, 140.0) ** 2 * s.get("valley", 0.0011)
         # Swells on the open snow, none on the course itself.
         swell = sum(a * math.sin(fx * x + fz * z * 1.3 + p) for fx, fz, p, a in self.swells)
         h += swell * smoothstep(12.0, 35.0, d) * 2.0
@@ -93,7 +105,23 @@ class Mountain:
         cut = s.get("shortcut")
         if cut:
             h -= 0.6 * (1.0 - smoothstep(cut["groom"][0], cut["groom"][1] + 2.0, self.shortcut_distance(x, z)))
+        h -= self.gap_depth(x, z)
         return max(s["min_y"], min(s["max_y"], h))
+
+    def gap_depth(self, x, z):
+        """How far below the slope the crevasse puts (x, z) (0 off it, or with no gap)."""
+        gap = self.spec.get("gap")
+        if not gap:
+            return 0.0
+        dz = z - gap["z"]
+        if dz <= 0.0 or dz >= gap["wall"] + gap["ramp"]:
+            return 0.0
+        if dz < gap["wall"]:
+            depth = gap["depth"] * dz / gap["wall"]
+        else:
+            depth = gap["depth"] * (1.0 - (dz - gap["wall"]) / gap["ramp"])
+        d = abs(x - self.course_x(z))
+        return depth * (1.0 - smoothstep(gap["reach"][0], gap["reach"][1], d))
 
 
 def noise_texture(path, base, spread, seed, streaks=False):
@@ -192,6 +220,14 @@ def main():
             cut_points.append([round(x, 3), round(m.height(x, z) + 0.05, 3), round(z, 3)])
         info["shortcut"] = cut_points
         info["shortcut_range"] = [spec["shortcut"]["z0"], spec["shortcut"]["z1"]]
+    gap = spec.get("gap")
+    if gap:
+        # The crevasse: its lip on the course line (on the snow before the drop), and how far past
+        # the lip a landing is short (in it, the ramp up not yet reached) and where it ends.
+        x = m.course_x(gap["z"])
+        info["gap"] = dict(lip=[round(x, 3), round(m.height(x, gap["z"]), 3), gap["z"]],
+                           short=round(gap["wall"] + gap["ramp"] * 0.6, 3),
+                           length=gap["wall"] + gap["ramp"], reach=gap["reach"][0])
     json.dump(info, open(os.path.join(out, name + ".json"), "w"), indent=1)
     print(name, "written to", out, "- course", round(length, 1), "m, drop",
           round(points[0][1] - points[-1][1], 1), "m")

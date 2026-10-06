@@ -19,7 +19,8 @@
 // ("NearMiss", once per trunk): an overlap in the trees' collision group around the rider.
 //
 // A kicker launches the rider itself ("KickerAngle", then "KickerLaunch", from Kicker.as): the
-// board takes off along its heading at the speed and angle given.
+// board takes off along its heading at the speed and angle given. Landing short in a crevasse
+// ("GapShort", from Gap.as) is a crash.
 //
 // The rider's animation graph (graph.py) follows by parameters: Lean (the carve, heel -1 to toe
 // +1), Tuck, Airborne, Grab and Crashed. The rider stands left foot forward facing the board's
@@ -83,6 +84,7 @@ class Board
     private float m_launchAngle = 0.0f; // the next kicker launch's angle above level (degrees)
     private float m_launchSpeed = 0.0f; // its speed (m/s); 0 when none is due
     private Float3 m_lastTrunk = Float3(1.0e9f, 0.0f, 0.0f); // the last trunk passed close (its centre)
+    private bool m_crashDue = false; // a crash told to the board (a short gap), taken next update
 
     Board(Entity@ entity) { @self = entity; }
 
@@ -197,10 +199,11 @@ class Board
         {
             v = land(v);
         }
-        if (struck)
+        if (struck || (m_crashDue && m_crash <= 0.0f))
         {
             v = crash(v);
         }
+        m_crashDue = false;
         nearMiss(at, v);
         c.drive(v);
         m_driven = v;
@@ -261,6 +264,7 @@ class Board
         m_spin = 0.0f;
         m_grabbed = 0.0f;
         m_crash = 0.0f;
+        m_crashDue = false;
         m_driven = Float3(0.0f, 0.0f, 0.0f);
         m_nextGate = 0;
         m_lean = 0.0f;
@@ -277,6 +281,9 @@ class Board
     // A kicker's launch (Kicker.as): its angle comes first, then its speed, applied next update.
     void onKickerAngle(int tenths) { m_launchAngle = float(tenths) / 10.0f; }
     void onKickerLaunch(int centimetres) { m_launchSpeed = float(centimetres) / 100.0f; }
+
+    // Down in the crevasse, short of its far side (Gap.as).
+    void onGapShort(int unused) { m_crashDue = true; }
 
     // The gate the rider looks at next is the one after the last crossed (passed or missed).
     void onGatePassed(int index) { m_nextGate = index + 1; }

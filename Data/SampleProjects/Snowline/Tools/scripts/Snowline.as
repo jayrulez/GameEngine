@@ -82,7 +82,7 @@ class Game
     private bool m_onEnding = false; // the ending is up
     private bool m_endingDue = false; // this run won a better medal on the last course
     private bool m_paused = false;    // the pause menu is up over the run
-    private int m_music = 0;          // the track playing: 0 none, 1 the title's, 2 a run's
+    private Guid m_music;             // the track playing (nil for none)
     private bool m_running = true;
     private bool m_started = false; // the rider's first frame has come (the clock runs from it)
     private float m_time = 0.0f;    // seconds on the clock this run
@@ -124,7 +124,7 @@ class Game
     private void showTitle()
     {
         m_onTitle = true;
-        music(1);
+        music(kMusicTitle);
         run::setTimeScale(0.0f); // the scene behind the title holds still
         ui::clear();
         Screen@ s = ui::push(kTitleDoc);
@@ -210,7 +210,7 @@ class Game
             return;
         }
         Audio::playOneShot(kClick, AudioBus::Effects, 0.7f);
-        music(2);
+        music(kMusicRun);
         m_onTitle = false;
         m_started = false;
         m_gates = 0;
@@ -580,7 +580,7 @@ class Game
     {
         m_onEnding = true;
         Audio::playOneShot(kMedalSting, AudioBus::Music, 0.9f);
-        music(1);
+        music(kMusicTitle);
         run::setTimeScale(0.0f); // the course behind it holds still
         ui::clear();
         ui::push(kEndingDoc);
@@ -616,16 +616,15 @@ class Game
                                                                   : "Thanks for riding. There is gold still out there.");
     }
 
-    // The music, 1 the title's or 2 a run's: switched only when it changes, so the title's keeps
-    // playing across the menus. (By number: a script cannot compare two Guids.)
-    private void music(int track)
+    // The music: switched only when the track changes, so the title's keeps playing across menus.
+    private void music(Guid track)
     {
         if (m_music == track)
         {
             return;
         }
         m_music = track;
-        Audio::playMusic(track == 1 ? kMusicTitle : kMusicRun, 1.0f, kMusicVolume);
+        Audio::playMusic(track, 1.0f, kMusicVolume);
     }
 
     private string medalTitle(int rank)

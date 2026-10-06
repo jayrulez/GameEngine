@@ -153,6 +153,14 @@ export namespace foundation::render
         f32 iblSpecularIntensity = 1.0f;
     };
 
+    // The part of a record context every pass drawing from `view`'s camera shares: the view, the
+    // camera's matrix and position, and the wind clock (the view's scene clock, else the frame's).
+    // One function so no camera pass misses a field: the prepass once left the position at the
+    // origin, and faded vegetation dissolved by its distance from there in depth but from the
+    // camera in colour (far trees drew as flat grey silhouettes).
+    [[nodiscard]] RenderRecordContext CameraRecordContext(const RenderView& view, f32 frameTime,
+                                                          f32 prevFrameTime) noexcept;
+
     // A fully-resolved draw: all GPU state resolved (PSO built, bind groups + ring slots allocated,
     // buffers bound), ready to EMIT as pure commands with NO shared mutation - so emission can run
     // in parallel across threads/bundles. Produced by Renderer::Resolve (single-threaded, where the

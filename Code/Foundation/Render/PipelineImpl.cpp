@@ -323,6 +323,28 @@ namespace foundation::render
             });
     }
 
+    RenderRecordContext CameraRecordContext(const RenderView& view, f32 frameTime,
+                                            f32 prevFrameTime) noexcept
+    {
+        RenderRecordContext ctx{};
+        ctx.view = &view;
+        // The camera's matrix and position: per-view LOD selection reads the matrix (an identity
+        // one in the prepass picked the finest LODs while the forward picked by distance, and the
+        // two surfaces z-fought in row bands), and the vegetation fade measures from the position.
+        // Every camera pass must agree on both, or its depth and its colour draw different things.
+        ctx.viewMatrix = view.Camera().view;
+        ctx.cameraPos = view.Camera().position;
+        // The WIND clock: the view's SCENE clock (scaled, pausable), else the frame's fallback.
+        ctx.timeSeconds = frameTime;
+        ctx.prevTimeSeconds = prevFrameTime;
+        if (view.Scene() != nullptr && view.Scene()->HasTime())
+        {
+            ctx.timeSeconds = view.Scene()->TimeSeconds();
+            ctx.prevTimeSeconds = view.Scene()->PrevTimeSeconds();
+        }
+        return ctx;
+    }
+
     void ForwardPass::ResolveAndEmit(const RenderView& view, const RendererRegistry& registry,
                                      rhi::CommandEncoder& encoder, u32 frameIndex, u32 viewIndex,
                                      rhi::TextureFormat colorFormat, const Float4x4& drawViewProj,
@@ -333,23 +355,12 @@ namespace foundation::render
                                      rhi::TextureView* sceneDepthView, bool probesEnabled,
                                      u32 probeBase, u32 probeCount)
     {
-        RenderRecordContext ctx{};
-        // The WIND clock: the view's SCENE clock (scaled, pausable), else the frame's fallback.
-        ctx.timeSeconds = m_timeSeconds;
-        ctx.prevTimeSeconds = m_prevTimeSeconds;
-        if (view.Scene() != nullptr && view.Scene()->HasTime())
-        {
-            ctx.timeSeconds = view.Scene()->TimeSeconds();
-            ctx.prevTimeSeconds = view.Scene()->PrevTimeSeconds();
-        }
-        ctx.view = &view;
+        RenderRecordContext ctx = CameraRecordContext(view, m_timeSeconds, m_prevTimeSeconds);
         ctx.viewProj =
             drawViewProj; // opaque = jittered (TAA), transparent = unjittered (drawn post-TAA)
         ctx.prevViewProj = prevViewProj;
         ctx.jitter = jitter;
         ctx.prevJitter = prevJitter;
-        ctx.viewMatrix = view.Camera().view;
-        ctx.cameraPos = view.Camera().position;
         ctx.ambient =
             (view.Scene() != nullptr) ? view.Scene()->Ambient() : Float3{0.03f, 0.03f, 0.03f};
         if (view.Scene() != nullptr)
@@ -672,24 +683,9 @@ namespace foundation::render
     void RenderFrame::RecordDepthPrepass(rhi::RenderPassEncoder& rp, const RenderView& view,
                                          const RendererRegistry& registry, u32 viewIndex)
     {
-        RenderRecordContext ctx{};
-        ctx.timeSeconds = m_timeSeconds; // the WIND clock: the view's scene's, else the frame's
-        ctx.prevTimeSeconds = m_prevTimeSeconds;
-        if (view.Scene() != nullptr && view.Scene()->HasTime())
-        {
-            ctx.timeSeconds = view.Scene()->TimeSeconds();
-            ctx.prevTimeSeconds = view.Scene()->PrevTimeSeconds();
-        }
-        ctx.view =
-            &view; // instance-share cache is keyed by view pointer (prepass fills, forward reuses)
+        // The view: the instance-share cache is keyed by its pointer (prepass fills, forward reuses).
+        RenderRecordContext ctx = CameraRecordContext(view, m_timeSeconds, m_prevTimeSeconds);
         ctx.viewProj = view.Camera().ViewProjection();
-        // The camera view matrix: per-view LOD selection (terrain chunk coverage, mesh LOD
-        // chains) reads viewMatrix + the view's projection. WITHOUT it the prepass selects LODs
-        // from an identity view (camera at origin -> maximal coverage -> finest LOD) while the
-        // forward pass selects by real distance - two DIFFERENT surfaces whose depths z-fight,
-        // dropping far fragments in row bands (the zoomed-out terrain artifact). The cascade
-        // path already fills it for exactly this reason.
-        ctx.viewMatrix = view.Camera().view;
         ctx.depthFormat = m_pass.DepthFormat();
         ctx.depthPrepass = true;
         // Scene-pass MSAA: the depth prepass runs at the view's sample count so
@@ -767,18 +763,8 @@ namespace foundation::render
                                     const RendererRegistry& registry, u32 viewIndex,
                                     const Float4x4& viewProj)
     {
-        RenderRecordContext ctx{};
-        // The WIND clock: the view's SCENE clock (scaled, pausable), else the frame's fallback.
-        ctx.timeSeconds = m_timeSeconds;
-        ctx.prevTimeSeconds = m_prevTimeSeconds;
-        if (view.Scene() != nullptr && view.Scene()->HasTime())
-        {
-            ctx.timeSeconds = view.Scene()->TimeSeconds();
-            ctx.prevTimeSeconds = view.Scene()->PrevTimeSeconds();
-        }
-        ctx.view = &view;
+        RenderRecordContext ctx = CameraRecordContext(view, m_timeSeconds, m_prevTimeSeconds);
         ctx.viewProj = viewProj; // the CROPPED camera projection (PickSystem)
-        ctx.viewMatrix = view.Camera().view; // per-view LOD selection, like the prepass
         ctx.colorFormat = kPickIdFormat;
         ctx.depthFormat = m_pass.DepthFormat();
         ctx.sampleCount = 1;

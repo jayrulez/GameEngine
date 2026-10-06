@@ -1332,3 +1332,31 @@ TEST_CASE("render: a pipeline for the transparent pass never writes depth")
     CHECK(MeshRenderer::TransparentPassDepth(DepthMode::ReadOnly) == DepthMode::ReadOnly);
     CHECK(MeshRenderer::TransparentPassDepth(DepthMode::Disabled) == DepthMode::Disabled);
 }
+
+// Far faded vegetation drew as flat grey silhouettes: the depth prepass left the camera position at
+// the origin, so a set dissolved by its distance from there in depth but from the camera in colour.
+// Every camera pass builds its context through CameraRecordContext, which carries the camera whole.
+TEST_CASE("render: a camera pass's context carries the camera's position, matrix and scene clock")
+{
+    ExtractedScene scene{DefaultAllocator()};
+    ViewCamera camera;
+    camera.position = Float3{1200.0f, 80.0f, -640.0f};
+    camera.view = Float4x4::LookAtRH(camera.position, Float3{1200.0f, 0.0f, -400.0f}, Float3{0, 1, 0});
+    RenderView view;
+    view.Bind(scene, camera, ViewSettings{}, nullptr, foundation::rhi::TextureFormat::RGBA8Unorm, 64, 64);
+
+    RenderRecordContext ctx = CameraRecordContext(view, 3.0f, 2.5f);
+    CHECK(ctx.view == &view);
+    CHECK(ctx.cameraPos.x == 1200.0f);
+    CHECK(ctx.cameraPos.y == 80.0f);
+    CHECK(ctx.cameraPos.z == -640.0f);
+    CHECK(ctx.viewMatrix.m[3][0] == camera.view.m[3][0]);
+    CHECK(ctx.viewMatrix.m[3][2] == camera.view.m[3][2]);
+    CHECK(ctx.timeSeconds == 3.0f); // no scene clock: the frame's
+    CHECK(ctx.prevTimeSeconds == 2.5f);
+
+    scene.SetTime(10.0f, 9.5f); // a scene clock wins
+    ctx = CameraRecordContext(view, 3.0f, 2.5f);
+    CHECK(ctx.timeSeconds == 10.0f);
+    CHECK(ctx.prevTimeSeconds == 9.5f);
+}

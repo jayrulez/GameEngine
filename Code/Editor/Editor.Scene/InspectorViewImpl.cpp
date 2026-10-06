@@ -3095,10 +3095,11 @@ namespace editor
                   });
 
         // A struct element (a reflected value type with properties - a vegetation layer): every
-        // slot gets its own expander of leaf rows right after the list, "<List> N: <name>", each
-        // row addressed through the slot path so it reads, writes and undoes like a component
-        // field (the pickers included). A list inside the element (a layer's materials) is a list
-        // editor of its own in the slot's expander, reached through the same path; one level deep.
+        // slot gets its own expander of leaf rows inside the component's section, after the
+        // list, "<List> N: <name>", each row addressed through the slot path so it reads, writes
+        // and undoes like a component field (the pickers included). A list inside the element (a
+        // layer's materials) is a list editor of its own in the slot's expander, reached through
+        // the same path; one level deep.
         const TypeInfo* elementType = prop.type->container->elementType;
         const bool structElement = elementType != nullptr && elementType != &TypeOf<MatRef>() &&
                                    elementType != &TypeOf<foundation::scene::EntityRef>() &&
@@ -3111,6 +3112,7 @@ namespace editor
                     rawList->slotNames[i] == ContainerElementLabel(elementType)
                         ? Format(u8"{} {}", label, i + 1)
                         : Format(u8"{} {}: {}", label, i + 1, rawList->slotNames[i]);
+                m_grid->SetCategoryParent(slotCategory.AsView(), category);
                 for (const PropertyInfo& sub : Properties(*elementType))
                 {
                     if (sub.type != nullptr && IsContainer(*sub.type))

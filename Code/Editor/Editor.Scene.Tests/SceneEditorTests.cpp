@@ -793,6 +793,9 @@ TEST_CASE("inspector: a list of reflected structs gets a per-slot expander of le
     CHECK(slot2Rows == layerFields);
     CHECK(slot1Density);
     CHECK(slot1Mesh);
+    // Each slot's expander sits inside the component's section, where the list's row is.
+    CHECK(inspector.Grid()->CategoryParent(u8"Procedural Layers 1: Grass") == list->Category());
+    CHECK(inspector.Grid()->CategoryParent(u8"Procedural Layers 2") == list->Category());
 
     // A list inside a slot (the layer's materials, one per mesh slot) is a list editor of its own
     // in that slot's expander, and edits reach that layer's list alone.

@@ -49,6 +49,19 @@ export namespace foundation::rhi::webgpu
             wgpuDesc.dimension = ToWgpuTextureDimension(textureDesc.dimension);
             wgpuDesc.size.width = textureDesc.width;
             wgpuDesc.size.height = textureDesc.height;
+            // WebGPU takes a block-compressed texture only in whole blocks (a 480 x 270 BC1 picture
+            // was refused: "not a multiple of the block width (4) and height (4)"); Vulkan takes the
+            // size in texels. The data already fills its last blocks (the cook repeats the edge
+            // texels), so the texture is made at the size rounded up to whole blocks: sampled, the
+            // picture spreads over at most three more edge rows or columns. Each level's write is
+            // rounded the same way (WebGpuTransferBatch) and fits inside it.
+            if (IsCompressed(textureDesc.format))
+            {
+                const u32 bw = BlockWidth(textureDesc.format);
+                const u32 bh = BlockHeight(textureDesc.format);
+                wgpuDesc.size.width = (wgpuDesc.size.width + bw - 1) / bw * bw;
+                wgpuDesc.size.height = (wgpuDesc.size.height + bh - 1) / bh * bh;
+            }
             // WebGPU folds array layers into depthOrArrayLayers (3D textures have no layers).
             wgpuDesc.size.depthOrArrayLayers =
                 textureDesc.dimension == TextureDimension::Texture3D

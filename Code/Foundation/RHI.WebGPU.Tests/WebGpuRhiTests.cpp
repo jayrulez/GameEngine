@@ -661,6 +661,61 @@ namespace
 // Snowline's first web run: a block-compressed texture's mip tail (its 2x2 and 1x1 levels) was
 // written at its size in texels, which WebGPU refuses ("copySize.width (2) is not a multiple of
 // compressed texture format block width (4)"); every level must go up in whole blocks.
+// Snowline's course pictures, 480 x 270 in BC1: WebGPU refused to make the texture ("not a multiple
+// of the block width (4) and height (4)"). A compressed texture whose size is not whole blocks is
+// made, and its whole mip chain uploads, with no error.
+TEST_CASE("rhi.webgpu: a compressed texture whose size is not whole blocks is made and uploads")
+{
+    Backend* backend = TryCreateBackend();
+    if (backend == nullptr)
+    {
+        return;
+    }
+    u32 errors = 0;
+    SetLogSink(&CountWebGpuErrors, &errors);
+    Device* device = nullptr;
+    REQUIRE(backend->EnumerateAdapters()[0]->CreateDevice(DeviceDesc{}, device).IsOk());
+    Queue* queue = device->GetQueue(QueueType::Transfer);
+    TransferBatch* batch = nullptr;
+    REQUIRE(queue->CreateTransferBatch(batch).IsOk());
+
+    const TextureFormat format = TextureFormat::BC1RGBAUnormSrgb;
+    TextureDesc desc;
+    desc.format = format;
+    desc.width = 18;
+    desc.height = 10;
+    desc.mipLevelCount = 5; // 18x10, 9x5, 4x2, 2x1, 1x1
+    desc.usage = TextureUsage::CopyDst | TextureUsage::Sampled;
+    Texture* texture = nullptr;
+    REQUIRE(device->CreateTexture(desc, texture).IsOk());
+
+    u8 blocks[20 * 12];
+    for (u32 i = 0; i < sizeof(blocks); ++i)
+    {
+        blocks[i] = static_cast<u8>(i);
+    }
+    for (u32 level = 0; level < desc.mipLevelCount; ++level)
+    {
+        const u32 w = Max(desc.width >> level, 1u);
+        const u32 h = Max(desc.height >> level, 1u);
+        TextureDataLayout layout;
+        layout.bytesPerRow = CompressedRowPitch(format, w);
+        layout.rowsPerImage = (h + BlockHeight(format) - 1) / BlockHeight(format);
+        const usize bytes = CompressedLevelBytes(format, w, h);
+        batch->WriteTexture(texture, Span<const u8>(blocks, bytes), layout, Extent3D{w, h, 1}, level, 0);
+    }
+    REQUIRE(batch->Submit().IsOk());
+    device->WaitIdle(); // the error callbacks arrive through the event pump
+
+    CHECK(errors == 0);
+    CHECK(!device->IsLost());
+    SetLogSink(nullptr, nullptr);
+    queue->DestroyTransferBatch(batch);
+    device->DestroyTexture(texture);
+    device->Destroy();
+    backend->Destroy();
+}
+
 TEST_CASE("rhi.webgpu: a compressed texture's whole mip chain uploads, the tail in whole blocks")
 {
     Backend* backend = TryCreateBackend();

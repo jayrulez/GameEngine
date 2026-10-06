@@ -284,7 +284,7 @@ class Game
         raiseCombo();
     }
 
-    // The avalanche: its gap on the HUD, beating as it closes.
+    // The avalanche: its gap on the HUD, red and beating as it closes.
     void onAvalancheReleased(int metres)
     {
         if (m_running)
@@ -302,9 +302,17 @@ class Game
         }
         Label@ gap = ui::findLabel("hud-avalanche");
         gap.setText("" + metres + " m");
-        if (metres < 15 && metres % 2 == 0)
+        if (metres < 15)
         {
-            ui::find("hud-avalanche-panel").pulse(1.12f, 0.18f);
+            gap.setTextColor(Color(1.0f, 0.45f, 0.4f, 1.0f));
+            if (metres % 2 == 0)
+            {
+                ui::find("hud-avalanche-panel").pulse(1.12f, 0.18f);
+            }
+        }
+        else
+        {
+            gap.clearTextColor();
         }
     }
 

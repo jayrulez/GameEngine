@@ -1,8 +1,7 @@
 # Snowline
 
-A snowboard time trial with tricks, built through the engine's MCP tools: the third game after Sky
-Hopper and PaperKid, chosen for the engine features neither of them uses (terrain, vegetation,
-splines, an animation graph driven by parameters, decals, physics joints). As with them, every
+A snowboard time trial with tricks, built through the engine's MCP tools, using terrain,
+vegetation, splines, an animation graph driven by parameters, decals and physics joints. Every
 missing or wrong tool or engine behaviour met on the way was fixed in the engine as part of the
 work. It follows its spec (`Documentation/Specs/snowline.md`).
 

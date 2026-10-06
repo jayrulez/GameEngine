@@ -5,6 +5,9 @@ helpers kept): a soft round sprite (a texture made here) and the board's snow:
   stops it on the rider's Spray entity).
 - Powder: a burst of snow as the board lands (Board.as restarts it on the rider's Powder entity).
 - GemSparkle: a gem taken, a bright burst of glints (Prefabs/GemSparkle, gems.py, plays it once).
+- Avalanche: the front of an avalanche, a wall of billowing snow as wide as the valley floor,
+  rising and spreading as it is left behind (continuous; Avalanche.as plays and stops it as the
+  avalanche follows the course line).
 
 Each effect starts from the engine's own new effect (asset_create, then asset_data_read), so the
 fields this does not set keep the engine's defaults. Initializers and behaviors are stored by their
@@ -223,5 +226,21 @@ def gem_sparkle(t):
                    texture=DOT, blend=ADDITIVE, soft=False)]
 
 
-for n, b in (("Spray", spray), ("Powder", powder), ("GemSparkle", gem_sparkle)):
+# Avalanche: big slow billows off a front 30 m wide, swelling and rising as the front runs on
+# (simulated in the world, so they stay behind it), and a churn of smaller snow thrown up off it.
+def avalanche(t):
+    return [system(t, "Billows", 260,
+                   [position(kind=3, extents=(15.0, 1.0, 1.5)), lifetime(2.0, 3.5),
+                    velocity((0, 2.5, 0), (2.0, 1.5, 2.0)), size((3.0, 3.0), (6.0, 6.0)),
+                    color((0.90, 0.93, 0.98, 0.9), (1.0, 1.0, 1.0, 0.95)), rotation(0.4)],
+                   [drag(0.6), size_over_life((0, 0.7), (1, 2.6)), alpha_over_life((0, 0), (0.15, 0.95), (1, 0))],
+                   texture=DOT, rate=80.0),
+            system(t, "Churn", 160,
+                   [position(kind=3, extents=(14.0, 0.5, 1.0)), lifetime(0.8, 1.4),
+                    velocity((0, 6.0, 0), (4.0, 2.0, 4.0)), size((0.8, 0.8), (1.6, 1.6)), color(SNOW)],
+                   [gravity(0.8), drag(1.5), size_over_life((0, 0.8), (1, 1.6)), alpha_over_life((0, 1), (1, 0))],
+                   texture=DOT, rate=120.0)]
+
+
+for n, b in (("Spray", spray), ("Powder", powder), ("GemSparkle", gem_sparkle), ("Avalanche", avalanche)):
     effect(n, b)

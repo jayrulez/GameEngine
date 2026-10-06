@@ -24,6 +24,8 @@ Needs terrain.py <course> and importall.py <course> first: it places what they m
   collision) on the course line between gates;
 - a gap, if the course has one (terrain.py's crevasse): a kicker whose lip stands at its edge, and
   the Gap (Gap.as) judging the landing past it; no gate stands near it;
+- an avalanche, if the course has one (RULES): Avalanche.as on a path_follow on the course line,
+  with the Avalanche particle effect and the Rumble sound (particles.py, sounds.py) under it;
 - the chase camera (FollowCamera.as).
 """
 import json, math, os, sys
@@ -104,7 +106,9 @@ GAP_CLEAR = (30.0, 15.0) # no gate this far before a gap's lip, nor this far pas
 # - kickers: the gaps (after gate i) a kicker stands midway in, on the line;
 # - pines: the forest's density (instances a square metre where the forest floor is painted);
 # - medals: gold, silver, bronze (s, penalties included). Snowline.as judges a run by them and the
-#   medal ghosts ride at their pace.
+#   medal ghosts ride at their pace;
+# - avalanche (optional): where down the line the rider sets it off (release, m; Avalanche.as). Ridge's
+#   breaks loose 47 m before the crevasse's lip, so the chase runs over the gap to the finish.
 # Meadow's medals: the autopilot, riding the line untucked and missing two or three gates,
 # finishes in about 36 s (31 s riding): a bronze. Silver asks for the gates; gold for the gates
 # and a tucked line.
@@ -118,7 +122,8 @@ RULES = {
     # Air: wide gates, a run of three kickers in the first gaps, and the crevasse (terrain.py's
     # gap) with its own kicker at the lip; few trees.
     "Ridge": dict(gate_half=4.0, gate_swing=3.5, gate_spacing=45.0, gate_prefabs=("GateRed", "GateBlue"),
-                  gem_offset=10.0, kickers=(0, 1, 2), medals=(29.0, 33.0, 40.0), pines=0.02),
+                  gem_offset=10.0, kickers=(0, 1, 2), medals=(29.0, 33.0, 40.0), pines=0.02,
+                  avalanche=dict(release=270.0)),
 }
 COURSE = RULES[name]
 # The kicker's shape (blender/props.py, which models it from the same numbers): its curve, buried
@@ -341,6 +346,23 @@ def ghosts(d, course, length):
         d.script(e, (GHOST, {"medal": medal, "finishDistance": length - FINISH_BEFORE}))
         d.instance(RIDER_MODEL, rot=yaw(180), parent=e, ops=rider_ops(asset("MaterialAsset", label)))
 
+def avalanche(d, course):
+    """The avalanche, if the course has one: parked at the line's top, still (Avalanche.as sets it
+    off), its front of billowing snow and its rumble under it. The follower turns its -Z down the
+    line, so the front's width (the effect's X) lies across it."""
+    rule = COURSE.get("avalanche")
+    if not rule:
+        return
+    e = d.entity("Avalanche", tuple(info["course"][0]))
+    d.add(e, "path_follow", spline=course, speed=0.0, loop=False, playing=True, alignToTangent=True)
+    d.script(e, (asset("ScriptClassAsset", "Avalanche"), {"course": ("entity", course), "release": rule["release"]}))
+    front = d.entity("Front", (0, 1.0, 0), parent=e)
+    d.add(front, "particle_effect", effect=asset("ParticleEffectAsset", "Avalanche"))
+    rumble = d.entity("Rumble", parent=e)
+    d.add(rumble, "audio.Source", clip=asset("AudioClipAsset", "Rumble"), loop=True, spatial=False, autoPlay=False,
+          volume=0.0)
+
+
 # The sun: low and from the side, so the slope's relief reads.
 SUN_ROT = (-0.4229, 0.2418, 0.1162, 0.8653)
 
@@ -453,6 +475,7 @@ def build():
 
     print("gates", gates(d, info["course"], info["course_length"]))
     ghosts(d, course, info["course_length"])
+    avalanche(d, course)
     # The player's best run: it rides where the rider rode, so it sits as the rider does, the model
     # 0.9 m below the capsule's centre it was recorded at.
     player_ghost = d.entity("PlayerGhost", (top[0], top[1] + 0.9, top[2]), yaw(heading))

@@ -4,6 +4,8 @@
 - Audio/Wind: four seconds of wind, looping seamlessly (its last half second crossfaded into its
   first): noise through two low-pass filters (a low roar and a thinner hiss), swelling in slow
   gusts. Board.as plays it on the rider's Wind source, louder and higher as the rider goes faster.
+- Audio/Rumble: four seconds of an avalanche's roar, looping the same way: noise through a very low
+  filter, thudding unevenly. Avalanche.as plays it on its Rumble source, louder as it closes in.
 """
 import math, os, random, struct, sys, wave
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -38,6 +40,33 @@ def wind(path, seconds=4.0, fade=0.5):
         w.writeframes(b"".join(struct.pack("<h", int(v / peak * 0.8 * 32767)) for v in out))
 
 
+def rumble(path, seconds=4.0, fade=0.5):
+    rnd = random.Random(53)
+    total = int((seconds + fade) * RATE)
+    deep = low = 0.0
+    thud = 0.0
+    raw = []
+    for i in range(total):
+        white = rnd.uniform(-1.0, 1.0)
+        deep += (white - deep) * 0.004  # the ground's roar
+        low += (white - low) * 0.03     # snow churning over it
+        if rnd.random() < 6.0 / RATE:   # a few uneven thuds a second
+            thud = rnd.uniform(0.6, 1.0)
+        thud *= 0.9993
+        raw.append(deep * 9.0 * (0.7 + 0.6 * thud) + low * 0.6)
+    n, f = int(seconds * RATE), int(fade * RATE)
+    out = raw[:n]
+    for i in range(f):
+        k = i / f
+        out[i] = raw[n + i] * (1.0 - k) + raw[i] * k
+    peak = max(abs(v) for v in out) or 1.0
+    with wave.open(path, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(RATE)
+        w.writeframes(b"".join(struct.pack("<h", int(v / peak * 0.85 * 32767)) for v in out))
+
+
 def chime(path, notes=((1318.5, 0.0), (1975.5, 0.07)), seconds=0.7):
     total = int(seconds * RATE)
     out = [0.0] * total
@@ -63,6 +92,9 @@ def main():
     path = os.path.join(out, "GemChime.wav")
     chime(path)
     print("GemChime", mcp("asset_import", {"source": path, "group": "Audio", "importer": "Audio"})["guid"])
+    path = os.path.join(out, "Rumble.wav")
+    rumble(path)
+    print("Rumble", mcp("asset_import", {"source": path, "group": "Audio", "importer": "Audio"})["guid"])
 
 
 main()

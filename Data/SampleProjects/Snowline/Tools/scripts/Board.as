@@ -20,7 +20,8 @@
 //
 // A kicker launches the rider itself ("KickerAngle", then "KickerLaunch", from Kicker.as): the
 // board takes off along its heading at the speed and angle given. Landing short in a crevasse
-// ("GapShort", from Gap.as) is a crash.
+// ("GapShort", from Gap.as) is a crash, and so is the avalanche catching the rider
+// ("AvalancheCaught").
 //
 // The rider's animation graph (graph.py) follows by parameters: Lean (the carve, heel -1 to toe
 // +1), Tuck, Airborne, Grab and Crashed. The rider stands left foot forward facing the board's
@@ -282,8 +283,9 @@ class Board
     void onKickerAngle(int tenths) { m_launchAngle = float(tenths) / 10.0f; }
     void onKickerLaunch(int centimetres) { m_launchSpeed = float(centimetres) / 100.0f; }
 
-    // Down in the crevasse, short of its far side (Gap.as).
+    // Down in the crevasse, short of its far side (Gap.as), or caught by the avalanche (Avalanche.as).
     void onGapShort(int unused) { m_crashDue = true; }
+    void onAvalancheCaught(int unused) { m_crashDue = true; }
 
     // The gate the rider looks at next is the one after the last crossed (passed or missed).
     void onGatePassed(int index) { m_nextGate = index + 1; }

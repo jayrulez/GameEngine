@@ -14,7 +14,9 @@
 // ("TrickAir", "TrickSpin", "TrickGrab", then "TrickLanded"): a clean one scores its air, its half
 // turns and its grab, times the combo, which a clean landing or a near miss past a tree
 // ("NearMiss") raises and a crash ("RiderCrashed") or a missed gate ends. Clearing a crevasse
-// ("GapCleared", from Gap.as) scores too and raises the combo.
+// ("GapCleared", from Gap.as) scores too and raises the combo. On a course with an avalanche, the
+// HUD shows how far behind it is from the moment it breaks loose ("AvalancheReleased",
+// "AvalancheGap"); catching the rider ("AvalancheCaught") is a crash, and it is spent.
 //
 // The results tally the run a row at a time (the ride, the gates, the gems, the tricks, the time
 // bonus), then
@@ -75,6 +77,7 @@ class Game
     private int m_combo = 1;
     private int m_tricks = 0;        // trick points this run
     private float m_trickShow = 0.0f; // how long the landed trick shows yet
+    private bool m_caught = false;    // the avalanche has just caught the rider (its crash follows)
 
     // The course's medal times (s, penalties included), from the finish line.
     private float m_gold = 0.0f;
@@ -267,6 +270,41 @@ class Game
         raiseCombo();
     }
 
+    // The avalanche: its gap on the HUD, beating as it closes.
+    void onAvalancheReleased(int metres)
+    {
+        if (m_running)
+        {
+            ui::find("hud-avalanche-panel").setVisible(true);
+            onAvalancheGap(metres);
+        }
+    }
+
+    void onAvalancheGap(int metres)
+    {
+        if (!m_running)
+        {
+            return;
+        }
+        Label@ gap = ui::findLabel("hud-avalanche");
+        gap.setText("" + metres + " m");
+        if (metres < 15 && metres % 2 == 0)
+        {
+            ui::find("hud-avalanche-panel").pulse(1.12f, 0.18f);
+        }
+    }
+
+    // Caught: the board crashes (Board.as), and the avalanche, spent, rolls on past.
+    void onAvalancheCaught(int unused)
+    {
+        if (m_running)
+        {
+            showTrick("Caught by the avalanche", "");
+            ui::find("hud-avalanche-panel").setVisible(false);
+            m_caught = true;
+        }
+    }
+
     // Over a crevasse and down past it: points, and the combo grows.
     void onGapCleared(int centimetres)
     {
@@ -286,7 +324,11 @@ class Game
         if (m_running)
         {
             endCombo();
-            showTrick("Crash", "");
+            if (!m_caught)
+            {
+                showTrick("Crash", ""); // a catch's crash keeps its own message
+            }
+            m_caught = false;
         }
     }
 
@@ -340,6 +382,7 @@ class Game
     void onRunFinished(int unused)
     {
         m_running = false;
+        ui::find("hud-avalanche-panel").setVisible(false);
         m_tallyStep = 0;
         m_tallyTime = 0.0f;
         keepBest(m_time + m_penalty);
@@ -566,6 +609,7 @@ class Game
         endCombo();
         ui::find("hud-trick").setVisible(false);
         ui::find("hud-penalty").setVisible(false);
+        ui::find("hud-avalanche-panel").setVisible(false);
         showGates();
         showGems();
     }

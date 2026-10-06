@@ -49,6 +49,31 @@ export namespace foundation::scene
                                            Array<Float3>& outTriangles) = 0;
     };
 
+    // An upright capsule of static content, in world space: from `foot` up `height` (the whole
+    // capsule, foot to the top of its cap; the cylinder between the caps is height - 2 radius, at
+    // least 0), `radius` round, in physics collision group `group`. A tree's trunk.
+    struct StaticCapsule
+    {
+        Float3 foot{};
+        f32 radius = 0.0f;
+        f32 height = 0.0f;
+        u8 group = 0;
+    };
+
+    // A system whose static content should be solid without an entity per piece (vegetation: a
+    // forest's trunks): physics asks it for capsules when it builds its bodies, so neither domain
+    // links the other. Specs/vegetation-colliders.md.
+    class IStaticColliderSource
+    {
+    public:
+        virtual ~IStaticColliderSource() = default;
+
+        // Appends the capsules this system's static content stands on the world as. False when its
+        // content is not ready yet (a resource still resolving): nothing is appended, and physics
+        // asks again later.
+        virtual bool CollectStaticCapsules(Scene& scene, Array<StaticCapsule>& outCapsules) = 0;
+    };
+
     // What a ray found on a solid surface (world space).
     struct SceneRayHit
     {
@@ -106,6 +131,8 @@ export namespace foundation::scene
         [[nodiscard]] virtual ISceneRayQuery* AsRayQuery() noexcept { return nullptr; }
         // And for one that moves characters (ISceneCharacterMotion).
         [[nodiscard]] virtual ISceneCharacterMotion* AsCharacterMotion() noexcept { return nullptr; }
+        // And for one with static content to make solid (IStaticColliderSource).
+        [[nodiscard]] virtual IStaticColliderSource* AsStaticColliderSource() noexcept { return nullptr; }
 
         // --- lifecycle (Scene calls these) ---
         virtual void OnSceneCreate(Scene& /*scene*/) {} // added to a scene

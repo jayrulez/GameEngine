@@ -206,7 +206,8 @@ TEST_CASE("engine.vegetation: the component reflects (two lists of reflected lay
     for (const char* name : {"name", "mesh", "materials", "placement", "splatLayer",
                              "splatThreshold", "maskPlane", "density", "scaleRange",
                              "maxSlopeDegrees", "heightRange", "alignToNormal", "fadeStart",
-                             "fadeEnd", "castShadows", "maxInstancesPerChunk", "visible"})
+                             "fadeEnd", "castShadows", "maxInstancesPerChunk", "visible",
+                             "collisionRadius", "collisionHeight", "collisionGroup"})
     {
         INFO(name);
         CHECK(FindProperty(grownType, name) != nullptr);
@@ -214,7 +215,8 @@ TEST_CASE("engine.vegetation: the component reflects (two lists of reflected lay
     const TypeInfo& propType = TypeOf<PropVegetationLayer>();
     for (const char* name : {"name", "mesh", "materials", "scaleRange", "maxSlopeDegrees",
                              "heightRange", "alignToNormal", "fadeStart", "fadeEnd",
-                             "castShadows", "maxInstancesPerChunk", "visible"})
+                             "castShadows", "maxInstancesPerChunk", "visible", "collisionRadius",
+                             "collisionHeight", "collisionGroup"})
     {
         INFO(name);
         CHECK(FindProperty(propType, name) != nullptr);
@@ -225,7 +227,7 @@ TEST_CASE("engine.vegetation: the component reflects (two lists of reflected lay
     CHECK(FindProperty(type, "proceduralLayers") != nullptr);
     CHECK(FindProperty(type, "propLayers") != nullptr);
     CHECK(FindProperty(type, "layers") == nullptr); // the one list is gone (data version 2)
-    CHECK(type.dataVersion == 3u); // 3: a material per slot
+    CHECK(type.dataVersion == 4u); // 3: a material per slot; 4: a layer's collision
     CHECK(type.minReadDataVersion == 1u); // the legacy reader for the one-list layout
 
     TerrainVegetationComponent authored;
@@ -408,7 +410,7 @@ TEST_CASE("engine.vegetation: the legacy reader splits a data-version-1 one-list
     CHECK(loaded.propLayers[0].instances[1].m[3][0] == -5.0f);
     CHECK(loaded.mask.id == Guid{0x55u, 0x66u});
     CHECK(loaded.visible);
-    // The same body under the CURRENT version writes and reads the two lists (version 3).
+    // The same body under the CURRENT version writes and reads the two lists (version 4).
     MemoryStream again;
     {
         BinarySerializer ar(again, SerializeMode::Write);
@@ -422,7 +424,7 @@ TEST_CASE("engine.vegetation: the legacy reader splits a data-version-1 one-list
     {
         BinarySerializer ar(again, SerializeMode::Read);
         BeginVersionedPayload(ar, type);
-        CHECK(ar.Version() == 3u);
+        CHECK(ar.Version() == 4u);
         Serialize(ar, resaved);
         EndVersionedPayload(ar);
         REQUIRE(ar.IsOk());
@@ -1159,4 +1161,245 @@ TEST_CASE("engine.vegetation: a stamped prop over a cut cell does not draw and c
     (void)hf::FillHoles(*f.grid, -20.0f, -20.0f, 3.0f);
     sets = f.Extract(snapshot, nullptr);
     CHECK(TotalInstances(sets) == 3u);
+}
+
+// ---- vegetation colliders (Specs/vegetation-colliders.md) ----
+
+namespace
+{
+    // A procedural layer in the data-version-3 layout (a material list, no collision), as a scene
+    // saved before 2026-10-06 stored it.
+    void WriteLayerV3(ISerializer& ar)
+    {
+        String name(u8"Pines");
+        foundation::resource::Ref<geometry::StaticMesh> mesh;
+        mesh.SetId(Guid{0x11u, 0x22u});
+        Array<foundation::resource::Ref<foundation::materials::Material>> materials;
+        Float2 scaleRange{0.8f, 1.2f};
+        f32 maxSlopeDegrees = 35.0f;
+        Float2 heightRange{-1.0e6f, 1.0e6f};
+        bool alignToNormal = false;
+        f32 fadeStart = 40.0f;
+        f32 fadeEnd = 80.0f;
+        bool castShadows = true;
+        u32 maxInstancesPerChunk = 4096;
+        bool visible = true;
+        u8 placement = 1; // Splat
+        u32 splatLayer = 2;
+        f32 splatThreshold = 0.5f;
+        u32 maskPlane = 0;
+        f32 density = 0.025f;
+        foundation::core::Serialize(ar, "name", name);
+        foundation::core::Serialize(ar, "mesh", mesh);
+        foundation::core::Serialize(ar, "materials", materials);
+        foundation::core::Serialize(ar, "scaleRange", scaleRange);
+        foundation::core::Serialize(ar, "maxSlopeDegrees", maxSlopeDegrees);
+        foundation::core::Serialize(ar, "heightRange", heightRange);
+        foundation::core::Serialize(ar, "alignToNormal", alignToNormal);
+        foundation::core::Serialize(ar, "fadeStart", fadeStart);
+        foundation::core::Serialize(ar, "fadeEnd", fadeEnd);
+        foundation::core::Serialize(ar, "castShadows", castShadows);
+        foundation::core::Serialize(ar, "maxInstancesPerChunk", maxInstancesPerChunk);
+        foundation::core::Serialize(ar, "visible", visible);
+        foundation::core::Serialize(ar, "placement", placement);
+        foundation::core::Serialize(ar, "splatLayer", splatLayer);
+        foundation::core::Serialize(ar, "splatThreshold", splatThreshold);
+        foundation::core::Serialize(ar, "maskPlane", maskPlane);
+        foundation::core::Serialize(ar, "density", density);
+    }
+
+    Array<scene::StaticCapsule> Capsules(Fixture& f, bool expectReady = true)
+    {
+        Array<scene::StaticCapsule> out;
+        scene::IStaticColliderSource* source = f.mgr->AsStaticColliderSource();
+        REQUIRE(source != nullptr);
+        CHECK(source->CollectStaticCapsules(f.scene, out) == expectReady);
+        return out;
+    }
+}
+
+TEST_CASE("engine.vegetation: a data-version-3 layer reads as scenery only; version 4 round-trips its collision")
+{
+    engine::vegetation::RegisterVegetationComponentReflection();
+    const TypeInfo& type = TypeOf<TerrainVegetationComponent>();
+    MemoryStream stream;
+    {
+        BinarySerializer ar(stream, SerializeMode::Write);
+        const SerializedDataVersion chain[] = {{type.id, 3u}};
+        u32 n = 1;
+        ar.Key("dataVersions");
+        ar.BeginArray(n);
+        SerializedDataVersion entry = chain[0];
+        ar.Key("type");
+        ar.Scalar(&entry.typeId, ScalarKind::UInt64);
+        ar.Key("version");
+        ar.Scalar(&entry.version, ScalarKind::UInt32);
+        ar.EndArray();
+        ar.PushVersionScope(chain, 1);
+        u32 count = 1;
+        ar.Key("proceduralLayers");
+        ar.BeginArray(count);
+        WriteLayerV3(ar);
+        ar.EndArray();
+        Array<PropVegetationLayer> none;
+        foundation::core::Serialize(ar, "propLayers", none);
+        foundation::resource::Ref<veg::VegetationMask> mask;
+        foundation::core::Serialize(ar, "mask", mask);
+        bool visible = true;
+        foundation::core::Serialize(ar, "visible", visible);
+        ar.PopVersionScope();
+        REQUIRE(ar.IsOk());
+    }
+    REQUIRE(stream.Seek(0, SeekOrigin::Begin) == 0);
+    TerrainVegetationComponent loaded;
+    {
+        BinarySerializer ar(stream, SerializeMode::Read);
+        BeginVersionedPayload(ar, type);
+        CHECK(ar.Version() == 3u);
+        Serialize(ar, loaded);
+        EndVersionedPayload(ar);
+        REQUIRE(ar.IsOk());
+    }
+    REQUIRE(loaded.proceduralLayers.Size() == 1u);
+    CHECK(loaded.proceduralLayers[0].collisionRadius == 0.0f);
+    CHECK(loaded.proceduralLayers[0].collisionHeight == 0.0f);
+    CHECK(loaded.proceduralLayers[0].density == 0.025f); // the fields after the base still line up
+
+    // The current version writes and reads the collision.
+    TerrainVegetationComponent solid;
+    ProceduralVegetationLayer pines;
+    pines.collisionRadius = 0.3f;
+    pines.collisionHeight = 4.5f;
+    pines.collisionGroup = 2;
+    pines.density = 0.06f;
+    solid.proceduralLayers.PushBack(pines);
+    MemoryStream current;
+    {
+        BinarySerializer ar(current, SerializeMode::Write);
+        BeginVersionedPayload(ar, type);
+        Serialize(ar, solid);
+        EndVersionedPayload(ar);
+        REQUIRE(ar.IsOk());
+    }
+    REQUIRE(current.Seek(0, SeekOrigin::Begin) == 0);
+    TerrainVegetationComponent back;
+    {
+        BinarySerializer ar(current, SerializeMode::Read);
+        BeginVersionedPayload(ar, type);
+        CHECK(ar.Version() == 4u);
+        Serialize(ar, back);
+        EndVersionedPayload(ar);
+        REQUIRE(ar.IsOk());
+    }
+    REQUIRE(back.proceduralLayers.Size() == 1u);
+    CHECK(back.proceduralLayers[0].collisionRadius == 0.3f);
+    CHECK(back.proceduralLayers[0].collisionHeight == 4.5f);
+    CHECK(back.proceduralLayers[0].collisionGroup == 2u);
+    CHECK(back.proceduralLayers[0].density == 0.06f);
+}
+
+TEST_CASE("engine.vegetation: a solid prop layer is a capsule per instance, scaled, in its group; scenery is none")
+{
+    Fixture f(/*withSplat*/ false);
+    PropVegetationLayer& rocks = f.MakePropsOnly();
+    rocks.instances.PushBack(Float4x4::Translation(Float3{-40.0f, 2.0f, -40.0f}));
+    rocks.instances.PushBack(Float4x4::Scale(Float3{2.0f, 2.0f, 2.0f}) *
+                             Float4x4::Translation(Float3{20.0f, 2.0f, 20.0f}));
+    CHECK(Capsules(f).IsEmpty()); // radius 0: scenery only
+
+    f.Prop().collisionRadius = 0.25f;
+    f.Prop().collisionHeight = 3.0f;
+    f.Prop().collisionGroup = 5;
+    Array<scene::StaticCapsule> capsules = Capsules(f);
+    REQUIRE(capsules.Size() == 2u);
+    bool small = false, large = false;
+    for (const scene::StaticCapsule& c : capsules)
+    {
+        CHECK(c.group == 5u);
+        CHECK(c.foot.y == doctest::Approx(2.0f));
+        if (c.foot.x < 0.0f)
+        {
+            small = true;
+            CHECK(c.foot.x == doctest::Approx(-40.0f));
+            CHECK(c.radius == doctest::Approx(0.25f));
+            CHECK(c.height == doctest::Approx(3.0f));
+        }
+        else
+        {
+            large = true; // the 2x instance: a 2x trunk
+            CHECK(c.foot.x == doctest::Approx(20.0f));
+            CHECK(c.radius == doctest::Approx(0.5f));
+            CHECK(c.height == doctest::Approx(6.0f));
+        }
+    }
+    CHECK(small);
+    CHECK(large);
+
+    // The terrain entity moved: the trunks stand where the drawn instances do.
+    f.scene.SetLocalTransform(f.terrain, Transform{Float3{100.0f, 0.0f, 0.0f}, Quaternion::Identity,
+                                                   Float3{1.0f, 1.0f, 1.0f}});
+    f.scene.UpdateTransforms();
+    capsules = Capsules(f);
+    REQUIRE(capsules.Size() == 2u);
+    for (const scene::StaticCapsule& c : capsules)
+    {
+        CHECK(c.foot.x > 50.0f);
+    }
+}
+
+TEST_CASE("engine.vegetation: a solid procedural layer's capsules are the drawn instances over the whole terrain")
+{
+    Fixture f(/*withSplat*/ false); // Uniform: every chunk grows
+    f.Layer().collisionRadius = 0.2f;
+    f.Layer().collisionHeight = 2.0f;
+    f.Layer().scaleRange = Float2{1.0f, 1.0f};
+    Array<scene::StaticCapsule> capsules = Capsules(f);
+    CHECK(!capsules.IsEmpty());
+
+    // Headless, the drawing takes every chunk: the same instances, the same places.
+    f.mgr->SetBuildBudget(100);
+    render::ExtractedScene snapshot{DefaultAllocator()};
+    Array<const render::MultiMeshRenderData*> sets = f.Extract(snapshot, nullptr);
+    u32 drawn = 0;
+    for (const render::MultiMeshRenderData* s : sets)
+    {
+        drawn += s->uploadCount;
+    }
+    REQUIRE(drawn == capsules.Size());
+    usize matched = 0;
+    for (const render::MultiMeshRenderData* s : sets)
+    {
+        for (u32 i = 0; i < s->uploadCount; ++i)
+        {
+            const Float3 p{s->transforms[i].m[3][0], s->transforms[i].m[3][1], s->transforms[i].m[3][2]};
+            for (const scene::StaticCapsule& c : capsules)
+            {
+                if (Length(c.foot - p) < 1e-4f)
+                {
+                    ++matched;
+                    break;
+                }
+            }
+        }
+    }
+    CHECK(matched == capsules.Size());
+
+    // A hidden layer or component is still solid (a view toggle); an inactive terrain is not.
+    f.Layer().visible = false;
+    f.Component().visible = false;
+    CHECK(Capsules(f).Size() == capsules.Size());
+    f.scene.SetActive(f.terrain, false);
+    CHECK(Capsules(f).IsEmpty());
+}
+
+TEST_CASE("engine.vegetation: a solid layer whose mesh is still resolving is not ready, and adds nothing")
+{
+    Fixture f(/*withSplat*/ false);
+    f.Layer().collisionRadius = 0.2f;
+    f.Layer().collisionHeight = 2.0f;
+    f.Layer().mesh = nullptr;
+    f.Layer().mesh.SetId(Guid{0x51u, 0x52u}); // named, not bound yet
+    CHECK(Capsules(f, /*expectReady*/ false).IsEmpty());
+    f.Layer().mesh = f.mesh.Get(); // it resolved
+    CHECK(!Capsules(f).IsEmpty());
 }

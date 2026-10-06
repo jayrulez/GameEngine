@@ -117,7 +117,22 @@ namespace engine::vegetation
             .PropAttribute("description",
                            String(u8"Instances one 64 x 64 quad terrain chunk holds; a chunk that "
                                   u8"fills stops placing and logs once."))
-            .template Property<&Layer::visible>("visible");
+            .template Property<&Layer::visible>("visible")
+            .template Property<&Layer::collisionRadius>("collisionRadius")
+            .PropAttribute("displayName", String(u8"Collision Radius"))
+            .PropAttribute("description",
+                           String(u8"A solid trunk this radius round (metres, scaled with each "
+                                  u8"instance); 0 is scenery only."))
+            .template Property<&Layer::collisionHeight>("collisionHeight")
+            .PropAttribute("displayName", String(u8"Collision Height"))
+            .PropAttribute("description",
+                           String(u8"The trunk's height from its foot to its top (metres, scaled "
+                                  u8"with each instance)."))
+            .template Property<&Layer::collisionGroup>("collisionGroup")
+            .PropAttribute("displayName", String(u8"Collision Group"))
+            .PropAttribute("description",
+                           String(u8"The physics collision group of the trunks (0 to 31): the scene's "
+                                  u8"group matrix decides what they stop, and a query finds them by it."));
     }
 
     REFLECT_VALUE(ProceduralVegetationLayer, "rtti::engine::vegetation")
@@ -159,7 +174,8 @@ namespace engine::vegetation
     {
         builder.Attribute("displayName", String(u8"Terrain Vegetation"))
             .Attribute("category", String(u8"Terrain"))
-            .DataVersion(3)          // 2026-10-05: a material per slot (was one material);
+            .DataVersion(4)          // 2026-10-06: a layer's collision (trunk radius, height, group);
+                                     // 2026-10-05: a material per slot (was one material);
                                      // 2026-09-23: two layer lists (was one list + placement)
             .ReadsDataVersionsFrom(1) // the legacy reader splits a V1 list (remove after re-saves)
             .Property<&TerrainVegetationComponent::proceduralLayers>("proceduralLayers")
@@ -412,19 +428,13 @@ namespace engine::vegetation
         ++m_builds;
     }
 
-    void TerrainVegetationComponentManager::ExtractLayer(
-        render::ExtractedScene& snapshot, scene::EntityHandle owner, const Guid& ownerId,
-        u32 slot, const VegetationLayerBase& base, const veg::ScatterLayer& layer, bool props,
-        Span<const Float4x4> authored, const heightfield::Heightfield& hf,
-        const tmodel::SplatWeights* splat, const veg::VegetationMask* mask,
-        const Float4x4& entityWorld, u32& budget)
+    TerrainVegetationComponentManager::LayerCache* TerrainVegetationComponentManager::PrepareLayer(
+        scene::EntityHandle owner, const Guid& ownerId, u32 slot, const VegetationLayerBase& base,
+        const veg::ScatterLayer& layer, bool props, Span<const Float4x4> authored,
+        const heightfield::Heightfield& hf, const tmodel::SplatWeights* splat,
+        const veg::VegetationMask* mask, const Float4x4& entityWorld)
     {
         LayerCache& cache = CacheFor(owner, slot);
-        cache.seenThisFrame = true; // a hidden layer keeps its sets (unhide = no regrow)
-        if (!base.visible)
-        {
-            return;
-        }
         foundation::geometry::StaticMesh* mesh = base.mesh.Get();
         if (mesh == nullptr)
         {
@@ -436,7 +446,7 @@ namespace engine::vegetation
                             u8"uncooked or stale asset) - nothing will draw",
                             SlotName(slot), base.name);
             }
-            return;
+            return nullptr;
         }
         cache.warnedNoMesh = false;
         const u64 layerHash = veg::LayerScatterHash(layer);
@@ -518,6 +528,31 @@ namespace engine::vegetation
                 }
             }
         }
+
+        return &cache;
+    }
+
+    void TerrainVegetationComponentManager::ExtractLayer(
+        render::ExtractedScene& snapshot, scene::EntityHandle owner, const Guid& ownerId,
+        u32 slot, const VegetationLayerBase& base, const veg::ScatterLayer& layer, bool props,
+        Span<const Float4x4> authored, const heightfield::Heightfield& hf,
+        const tmodel::SplatWeights* splat, const veg::VegetationMask* mask,
+        const Float4x4& entityWorld, u32& budget)
+    {
+        LayerCache& seen = CacheFor(owner, slot);
+        seen.seenThisFrame = true; // a hidden layer keeps its sets (unhide = no regrow)
+        if (!base.visible)
+        {
+            return;
+        }
+        LayerCache* prepared = PrepareLayer(owner, ownerId, slot, base, layer, props, authored, hf, splat,
+                                            mask, entityWorld);
+        if (prepared == nullptr)
+        {
+            return;
+        }
+        LayerCache& cache = *prepared;
+        foundation::geometry::StaticMesh* mesh = base.mesh.Get();
 
         const bool hasOrigin = snapshot.HasViewOrigin();
         const Float3 origin = snapshot.ViewOrigin();
@@ -683,6 +718,116 @@ namespace engine::vegetation
             (void)m_caches.Remove(key);
         }
         m_pendingRegions.Clear();
+    }
+
+    namespace
+    {
+        // A resource that is named but not resolved yet: still loading (or never will: a
+        // deleted asset, which the drawing warns about on its own).
+        template <typename T>
+        [[nodiscard]] bool Pending(const foundation::resource::Ref<T>& ref) noexcept
+        {
+            return !ref.id.IsNil() && ref.Get() == nullptr;
+        }
+    }
+
+    bool TerrainVegetationComponentManager::CollectStaticCapsules(scene::Scene& scene,
+                                                                  Array<scene::StaticCapsule>& outCapsules)
+    {
+        if (m_scene == nullptr)
+        {
+            return true;
+        }
+        bool ready = true;
+        ForEach(
+            [&](TerrainVegetationComponent& c, scene::EntityHandle owner)
+            {
+                const auto solid = [](const VegetationLayerBase& layer) { return layer.collisionRadius > 0.0f; };
+                bool any = false;
+                for (const ProceduralVegetationLayer& layer : c.proceduralLayers)
+                {
+                    any = any || solid(layer);
+                }
+                for (const PropVegetationLayer& layer : c.propLayers)
+                {
+                    any = any || solid(layer);
+                }
+                // An inactive terrain has no trunks, as an inactive rigid body has no body. The view
+                // toggles (the component's and a layer's `visible`) do not matter.
+                if (!any || !scene.IsEffectivelyActive(owner))
+                {
+                    return;
+                }
+                scene::EntityHandle terrainEntity{};
+                engine::terrain::TerrainComponent* tc = FindTerrainFor(scene, owner, terrainEntity);
+                foundation::terrain::TerrainResource* res = tc != nullptr ? tc->terrain.Get() : nullptr;
+                heightfield::Heightfield* hf = res != nullptr ? res->heightfield.Get() : nullptr;
+                if (tc == nullptr)
+                {
+                    return; // no terrain to stand on: nothing grows, nothing is solid
+                }
+                if (hf == nullptr || hf->IsEmpty() || Pending(res->weights) || Pending(c.mask))
+                {
+                    ready = false;
+                    return;
+                }
+                const tmodel::SplatWeights* splat = res->weights.Get();
+                const veg::VegetationMask* mask = c.mask.Get();
+                const Guid ownerId = scene.GetEntityId(owner);
+                const Float4x4 entityWorld = scene.GetWorldMatrix(terrainEntity);
+                const auto collect = [&](u32 slot, const VegetationLayerBase& base, const veg::ScatterLayer& layer,
+                                         bool props, Span<const Float4x4> authored)
+                {
+                    if (!solid(base))
+                    {
+                        return;
+                    }
+                    if (Pending(base.mesh))
+                    {
+                        ready = false;
+                        return;
+                    }
+                    LayerCache* cache = PrepareLayer(owner, ownerId, slot, base, layer, props, authored, *hf,
+                                                     splat, mask, entityWorld);
+                    if (cache == nullptr)
+                    {
+                        return;
+                    }
+                    const AABB meshBounds = base.mesh.Get()->bounds;
+                    for (u32 i = 0; i < cache->sets.Size(); ++i)
+                    {
+                        if (cache->sets[i].dirty)
+                        {
+                            // Every chunk, whatever the camera sees: the same build the drawing does.
+                            BuildSet(*cache, i, *hf, splat, mask, layer, meshBounds, props, authored);
+                        }
+                        for (const Float4x4& m : cache->sets[i].world)
+                        {
+                            // The instance's scale from its matrix (its X axis's length: the scatter's
+                            // scale is uniform), its foot its translation.
+                            const f32 scale = Length(Float3{m.m[0][0], m.m[0][1], m.m[0][2]});
+                            scene::StaticCapsule capsule;
+                            capsule.foot = Float3{m.m[3][0], m.m[3][1], m.m[3][2]};
+                            capsule.radius = base.collisionRadius * scale;
+                            capsule.height = base.collisionHeight * scale;
+                            capsule.group = base.collisionGroup;
+                            outCapsules.PushBack(capsule);
+                        }
+                    }
+                };
+                for (u32 li = 0; li < c.proceduralLayers.Size(); ++li)
+                {
+                    const ProceduralVegetationLayer& grown = c.proceduralLayers[li];
+                    collect(ProceduralSlot(li), grown, grown.ToScatterLayer(), false, {});
+                }
+                for (u32 li = 0; li < c.propLayers.Size(); ++li)
+                {
+                    const PropVegetationLayer& placed = c.propLayers[li];
+                    collect(PropSlot(li), placed, placed.ToScatterLayer(), true,
+                            Span<const Float4x4>{placed.instances.Data(), placed.instances.Size()});
+                }
+            });
+        return ready;
     }
 }
 

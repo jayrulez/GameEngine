@@ -76,6 +76,13 @@ export namespace engine::vegetation
         bool castShadows = false;
         u32 maxInstancesPerChunk = 4096;
         bool visible = true;
+        // What of an instance is solid (Specs/vegetation-colliders.md): an upright trunk this
+        // radius round and this tall from its foot (both scaled with the instance), in this
+        // physics collision group. Radius 0 is scenery only (the default). The view toggles
+        // (`visible`, the component's) do not change it.
+        f32 collisionRadius = 0.0f;
+        f32 collisionHeight = 0.0f;
+        u8 collisionGroup = 0;
 
         void FillScatterLayer(veg::ScatterLayer& layer) const noexcept
         {
@@ -169,6 +176,14 @@ export namespace engine::vegetation
         foundation::core::Serialize(ar, "castShadows", l.castShadows);
         foundation::core::Serialize(ar, "maxInstancesPerChunk", l.maxInstancesPerChunk);
         foundation::core::Serialize(ar, "visible", l.visible);
+        // Data version 4 added the collision. Version 0 is no version scope (a bare round-trip),
+        // which this type never stores (its versions start at 1): the writer's own, current layout.
+        if (ar.Mode() == SerializeMode::Write || ar.Version() == 0 || ar.Version() >= 4)
+        {
+            foundation::core::Serialize(ar, "collisionRadius", l.collisionRadius);
+            foundation::core::Serialize(ar, "collisionHeight", l.collisionHeight);
+            foundation::core::Serialize(ar, "collisionGroup", l.collisionGroup);
+        }
     }
 
     inline void Serialize(ISerializer& ar, ProceduralVegetationLayer& l)
@@ -310,7 +325,8 @@ export namespace engine::vegetation
 
     class TerrainVegetationComponentManager final
         : public foundation::scene::SerializableComponentManager<TerrainVegetationComponent>,
-          public render::IRenderDataProvider
+          public render::IRenderDataProvider,
+          public foundation::scene::IStaticColliderSource
     {
     public:
         // Chunks scattered per extraction (a cold start spreads over frames).
@@ -348,6 +364,17 @@ export namespace engine::vegetation
         /// render::IRenderDataProvider: one MultiMeshRenderData per (layer, chunk) in range of
         /// the snapshot's view origin (every chunk when the snapshot has none - headless).
         void ExtractRenderData(render::ExtractedScene& snapshot) override;
+
+        /// IStaticColliderSource: a capsule per instance of every solid layer (collisionRadius >
+        /// 0) over the whole terrain, built through the same chunk path the drawing uses (the
+        /// scatter with its rules for a procedural layer, the bucketed authored instances for a
+        /// prop layer), so the trees physics has are the trees drawn. Not ready while a solid
+        /// layer's heightfield, splat, mask or mesh is still resolving.
+        [[nodiscard]] foundation::scene::IStaticColliderSource* AsStaticColliderSource() noexcept override
+        {
+            return this;
+        }
+        bool CollectStaticCapsules(scene::Scene& scene, Array<scene::StaticCapsule>& outCapsules) override;
 
         // ---- introspection (tests + the HUD) ----
         [[nodiscard]] usize BuiltSetCount() const noexcept; // sets holding instances
@@ -405,6 +432,15 @@ export namespace engine::vegetation
                       const veg::ScatterLayer& layer, const AABB& meshBounds, bool props,
                       Span<const Float4x4> authored);
         void Compose(LayerCache& cache, ChunkSet& set);
+        // Brings one layer's cache up to date with its sources (another heightfield, mesh or rule
+        // resets it; a sculpt, a paint or a new instance list dirties its chunks; a moved terrain
+        // recomposes them). Null when the layer's mesh does not resolve. The drawing and the
+        // colliders both go through it, then build the dirty chunks they need.
+        LayerCache* PrepareLayer(scene::EntityHandle owner, const Guid& ownerId, u32 slot,
+                                 const VegetationLayerBase& base, const veg::ScatterLayer& layer,
+                                 bool props, Span<const Float4x4> authored,
+                                 const heightfield::Heightfield& hf, const tmodel::SplatWeights* splat,
+                                 const veg::VegetationMask* mask, const Float4x4& entityWorld);
         // One layer of either list: `layer` carries the rules (and the source for a procedural
         // one), `authored` the placed instances of a prop layer (`props`), else empty.
         void ExtractLayer(render::ExtractedScene& snapshot, scene::EntityHandle owner,

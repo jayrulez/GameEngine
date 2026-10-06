@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The tracked sample project (Data/SampleProjects/PaperKid) must stay readable at the CURRENT data
-// versions. A wire-version bump or a key rename that forgets to upgrade its sources leaves it
-// refused by the strict readers - the cook logged 13 refusals (font, six meshes, six UI
-// documents) before the 2026-09-18 upgrade. This registers the whole pipeline the way
-// Tools.Cook does, opens a scratch copy (so opening never writes into the tracked tree), and
-// reads every instance back.
+// The tracked sample projects (Data/SampleProjects: PaperKid, Sky Hopper, Snowline) must stay
+// readable at the CURRENT data versions. A wire-version bump or a key rename that forgets to
+// upgrade their sources leaves them refused by the strict readers - the cook logged 13 refusals
+// (font, six meshes, six UI documents) on PaperKid before the 2026-09-18 upgrade. This registers
+// the whole pipeline the way Tools.Cook does, opens a scratch copy (so opening never writes into
+// the tracked tree), and reads every instance back.
 #include <doctest/doctest.h>
 #include <filesystem>
 #include <string>
@@ -252,4 +252,13 @@ TEST_CASE("sample project: Sky Hopper (PlatformerGame) reads, cooks and its over
     // 13 models with their parts, 12 clips of audio, 2 fonts, 5 effects + prefabs, 3 levels,
     // 8 scripts, 9 screens and a theme, the input map
     CheckSampleProject(u8"PlatformerGame", u8"scratch_platformer_versions", {150u, 100.0, 20u});
+}
+
+TEST_CASE("sample project: Snowline reads, cooks and its overrides match")
+{
+    // 3 courses, each a terrain (heightfield, splatmap, terrain asset) and a scene; the rider
+    // (rigged mesh, skeleton, 8 clips, its animation graph), 9 models, 33 materials, 16 prefabs,
+    // 13 scripts, 4 UI documents, 4 particle effects, 3 sounds, the input map and the render
+    // profiles; the overrides are the gates', gems', kickers', ghosts', gap's and avalanche's settings
+    CheckSampleProject(u8"Snowline", u8"scratch_snowline_versions", {127u, 108.0, 162u});
 }

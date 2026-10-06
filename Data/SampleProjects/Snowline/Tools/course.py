@@ -19,12 +19,13 @@ Needs terrain.py <course> and importall.py <course> first: it places what they m
   its medal's time;
 - the player's ghost (PlayerGhost.as, the rider model under it in ghosts.py's GhostPlayer): the
   course's best run, saved, ridden again beside the player; hidden until there is one;
+- the kickers (Models/Props/KickerModel, with its collision) on the course line between gates;
 - the chase camera (FollowCamera.as).
 """
 import json, math, os, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from scenegen import Doc, mcp, yaw, num, vec, component_removed, component_added, component_modified, settings
+from scenegen import Doc, mcp, yaw, num, vec, component_removed, component_added, component_modified, settings, pitch
 from look import look
 
 name = sys.argv[1] if len(sys.argv) > 1 else "Meadow"
@@ -90,6 +91,12 @@ FINISH_BEFORE = 6.0   # the finish's distance before the line's end (m)
 # the course line without tucking and misses two gates, finishes in 35.7 s (31.7 s riding): a
 # bronze. Silver asks for the gates; gold for the gates and a tucked line.
 MEDALS = {"Meadow": (30.0, 34.0, 40.0)}
+# The kickers: each midway between two gates (the gap after gate KICKER_GAPS[i]), on the course
+# line, tilted to the slope under it. Meadow has one: the course that teaches carving and flags
+# has one jump to learn the air on.
+KICKERS = {"Meadow": (3,)}
+KICKER_LENGTH = 7.8 # the kicker's base, foot to back (blender/props.py: run + table + back), m
+KICKER_SINK = 0.15  # how far its foot sits in the snow, so no edge stands proud of it (m)
 GEM_ROW = 3           # gems in a row
 GEM_GAP = 4.0         # metres down the course between a row's gems
 GEM_OFFSET = 11.0     # how far a row stands off the course line (m): the packed course is 9 m
@@ -127,6 +134,7 @@ def gates(d, points, length):
         index += 1
         distance += GATE_SPACING
     gems(d, points, mountain, index)
+    kickers(d, points, mountain)
     p, heading = along_course(points, length - FINISH_BEFORE)
     e = d.entity("Finish", (p[0], mountain.height(p[0], p[2]), p[2]), yaw(math.degrees(heading)))
     gold, silver, bronze = MEDALS[name]
@@ -150,6 +158,30 @@ def gems(d, points, mountain, gate_count):
             d.instance(GEM_MODEL, parent=e)
             count += 1
     print("gems", count)
+
+
+def qmul(a, b):
+    """Quaternions (xyzw): `a` after `b`."""
+    ax, ay, az, aw = a
+    bx, by, bz, bw = b
+    return (aw * bx + ax * bw + ay * bz - az * by, aw * by - ax * bz + ay * bw + az * bx,
+            aw * bz + ax * by - ay * bx + az * bw, aw * bw - ax * bx - ay * by - az * bz)
+
+
+def kickers(d, points, mountain):
+    """Each kicker on the course line midway between two gates, facing down it, its base tilted to
+    the slope it stands on (the drop over its base's length)."""
+    prefab = next(a["guid"] for a in ASSETS if a["type"] == "PrefabDocument"
+                  and a.get("group", "") == "Models/Props/KickerModel")
+    for i, gap in enumerate(KICKERS.get(name, ())):
+        middle = GATE_FIRST + GATE_SPACING * (gap + 0.5)
+        p, heading = along_course(points, middle)
+        q, _ = along_course(points, middle + KICKER_LENGTH)
+        drop = mountain.height(p[0], p[2]) - mountain.height(q[0], q[2])
+        slope = math.degrees(math.atan2(drop, KICKER_LENGTH))
+        e = d.entity("Kicker%d" % i, (p[0], mountain.height(p[0], p[2]) - KICKER_SINK, p[2]),
+                     qmul(yaw(math.degrees(heading)), pitch(slope)))
+        d.instance(prefab, parent=e)
 
 
 def aim_bone(name, share):

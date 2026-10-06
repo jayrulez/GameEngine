@@ -8,7 +8,7 @@ Tools/generated/Props). Imports, each once (a re-run re-imports over the same as
 - Terrain/Textures: the layers' textures.
 - Models/Rider/RiderModel: the rider on the board, rigged, with its clips (blender/rider.py, into
   Tools/generated/Rider).
-- Models/Props/<Name>Model: the props (a prefab and its mesh each).
+- Models/Props/<Name>Model: the props (a prefab and its mesh each; the kicker its collision too).
 Then cooks.
 """
 import json, os, sys
@@ -26,8 +26,11 @@ def existing():
     return mcp("asset_list", {})["assets"]
 
 
-def imported(path, group, importer):
-    r = mcp("asset_import", {"source": path, "group": group, "importer": importer})
+def imported(path, group, importer, options=None):
+    args = {"source": path, "group": group, "importer": importer}
+    if options:
+        args["options"] = options
+    r = mcp("asset_import", args)
     print("imported", os.path.basename(path), "->", r["type"], r["guid"])
     return r["guid"]
 
@@ -82,9 +85,11 @@ if os.path.exists(rider):
     imported(rider, "Models/Rider", "Model")
 
 props = os.path.join(HERE, "generated", "Props")
-for model in ("Pine", "Rock", "GatePole", "GateFlagRed", "GateFlagBlue", "Finish", "Gem"):
+# The kicker is ridden, so it carries its collision (a triangle mesh: the rider rides its curve).
+COLLIDES = {"Kicker"}
+for model in ("Pine", "Rock", "GatePole", "GateFlagRed", "GateFlagBlue", "Finish", "Gem", "Kicker"):
     path = os.path.join(props, model + "Model.glb")
     if os.path.exists(path):
-        imported(path, "Models/Props", "Model")
+        imported(path, "Models/Props", "Model", {"Generate collision": True} if model in COLLIDES else None)
 
 print(json.dumps(mcp("asset_cook", {}), indent=None))

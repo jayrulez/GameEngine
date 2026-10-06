@@ -10,6 +10,7 @@ tree is a trunk and a few cones, each with a cap of snow.
 import math, os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import bmesh
 import kit3d
 from kit3d import P, tube, ball
 
@@ -24,6 +25,7 @@ kit3d.PALETTE.update({
     "Pole": (0.92, 0.92, 0.90), "PoleBand": (0.06, 0.06, 0.07),
     "FlagRed": (0.80, 0.07, 0.05), "FlagBlue": (0.04, 0.18, 0.72), "Banner": (0.85, 0.15, 0.10),
     "Gem": (0.05, 0.55, 0.85), "GemCore": (0.15, 0.75, 1.0),
+    "KickerSnow": (0.80, 0.86, 0.94), "KickerLip": (0.10, 0.35, 0.80),
 })
 # The gem lights itself a little, so it reads against the snow in the shade and from far off.
 kit3d.GLOW.update({"Gem": 0.5, "GemCore": 0.9})
@@ -81,8 +83,39 @@ def gem():
     tube("Girdle", P(0, 0, -0.03), P(0, 0, 0.03), 0.318, "GemCore", "root", 8)
 
 
+KICKER_RUN = 4.5    # the ramp's length up to the lip (m)
+KICKER_HEIGHT = 1.4 # the lip's height (m); the ramp curves up to it, 32 degrees at the lip
+KICKER_TABLE = 0.8  # the flat top past the lip (m)
+KICKER_BACK = 2.5   # the slope down behind it (m)
+KICKER_WIDTH = 5.0
+
+
+def kicker():
+    """A kicker: a ramp of packed snow, its foot at the origin, rising forward (+Z in the engine)
+    along a curve (height H (f/L)^2, so 2H/L = 32 degrees at the lip), a short flat table, then a
+    slope down behind. A painted stripe marks the lip. Imported with collision (a triangle mesh,
+    so the rider rides the curve)."""
+    profile = [(KICKER_RUN * i / 8, KICKER_HEIGHT * (i / 8) ** 2) for i in range(9)]
+    profile.append((KICKER_RUN + KICKER_TABLE, KICKER_HEIGHT))
+    profile.append((KICKER_RUN + KICKER_TABLE + KICKER_BACK, 0.0))
+    half = KICKER_WIDTH / 2
+    bm = bmesh.new()
+    left = [bm.verts.new(P(-half, f, h)) for f, h in profile]
+    right = [bm.verts.new(P(half, f, h)) for f, h in profile]
+    for i in range(len(profile) - 1):
+        bm.faces.new((left[i], right[i], right[i + 1], left[i + 1]))  # the riding surface
+    bm.faces.new(list(reversed(left)))  # the sides
+    bm.faces.new(list(right))
+    bm.faces.new((left[0], left[-1], right[-1], right[0]))  # the base
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    kit3d.finish("Kicker", bm, "KickerSnow")
+    # The lip's stripe, a hair proud of the snow along the lip.
+    kit3d.box("Lip", (KICKER_WIDTH + 0.02, 0.18, 0.04), P(0, KICKER_RUN - 0.05, KICKER_HEIGHT - 0.01),
+              "KickerLip", tilt=-30.0)
+
+
 MODELS = {"Pine": pine, "Rock": rock, "GatePole": gate_pole, "GateFlagRed": gate_flag("FlagRed"),
-          "GateFlagBlue": gate_flag("FlagBlue"), "Finish": finish, "Gem": gem}
+          "GateFlagBlue": gate_flag("FlagBlue"), "Finish": finish, "Gem": gem, "Kicker": kicker}
 
 
 def main():
@@ -93,6 +126,7 @@ def main():
         if PREVIEW:
             cam = kit3d.studio()
             eye, target = {"Pine": (P(-6, 9, 4), P(0, 0, 3)), "Finish": (P(-8, 14, 5), P(0, 0, 2)),
+                           "Kicker": (P(-7, -3, 3), P(0, 3.5, 0.6)),
                            "GatePole": (P(-1.5, 2.5, 1.5), P(0, 0, 1.0))}.get(
                 name, (P(-1.2, 2.0, 0.8), P(0.25, 0, 0.0)) if name.startswith("GateFlag") else
                 (P(-2, 3, 1.5), P(0, 0, 0.3)))

@@ -394,7 +394,7 @@
 		</array>
 		<string name="skeletonGuid">6aa5e7c6-5952-4435-bd94-07311eebc479</string>
 		<i32 name="skeletonParentNode">16</i32>
-		<array name="animationGuids" count="8">
+		<array name="animationGuids" count="10">
 			<string>ef098e98-9eb0-4eec-8fc4-69f6bbd9bdf9</string>
 			<string>b75d7d08-816d-4a8d-985f-3c8fc9a6184c</string>
 			<string>58cab22c-9526-4595-ba58-7f6f87d9b2f6</string>
@@ -403,6 +403,8 @@
 			<string>9d098f70-f503-4445-9143-3ae2f13f6949</string>
 			<string>889f1178-25db-4e6f-b22a-1609f6517509</string>
 			<string>ee4ceb74-f4aa-4a5e-8dc2-f77c3350f71f</string>
+			<string>c519de9a-4a05-4624-9d4b-cf5e97ed15ed</string>
+			<string>dae95600-2a30-4a44-8fa6-bb0a077cfc78</string>
 		</array>
 		<object name="boundsMin">
 			<f32 name="x">-0.26939154</f32>

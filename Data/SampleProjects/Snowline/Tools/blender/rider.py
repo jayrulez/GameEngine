@@ -16,7 +16,9 @@ hips (the crouch, and the shift toward the toes or heels), the spine's bend and 
 - Ride: two seconds, looping: the neutral stance, a slight bob.
 - CarveToe, CarveHeel: one second, looping: on the toe edge (leaning over the toes) and the heel
   edge (sitting back over the heels). The animation graph blends them with Ride by the lean.
-- Tuck: one second, looping: low and compact, hands by the knees.
+- Tuck, TuckToe, TuckHeel: one second, looping: low and compact, hands by the knees; square over
+  the board, and leaning onto the toe edge or the heel edge (the graph blends them by the lean, as
+  it does the carves, so a tucked rider leans into the turn it makes).
 - Air: one second, looping: knees drawn up, arms out for balance.
 - Grab: one second, looping: crouched in the air, the front hand on the board's toe edge.
 - Land: half a second: the knees soak up the landing and rise back to Ride's stance.
@@ -170,7 +172,9 @@ def build_armature(pose):
         ik = pb["shin_" + s].constraints.new("IK")
         ik.target, ik.subtarget = rig, "ik_foot_" + s
         ik.pole_target, ik.pole_subtarget = rig, "pole_knee_" + s
-        ik.pole_angle = math.radians(-90)
+        # +90: the knee toward its pole, over the toes. At -90 the solve turned the chain half round
+        # and every knee bent back toward the heels.
+        ik.pole_angle = math.radians(90)
         ik.chain_count = 2
         cr = pb["foot_" + s].constraints.new("COPY_ROTATION")
         cr.target, cr.subtarget = rig, "foot_aim_" + s
@@ -198,9 +202,16 @@ FACING_AXIS = (-1, 0, 0)   # the way the rider faces (the toes)
 UP_AXIS = (0, 0, 1)
 
 # A pose: lean (degrees onto the toe edge, negative the heel edge), crouch (m the hips drop), shift
-# (m the hips move toward the toes, negative the heels), bend (degrees the spine bends toward the
+# (m the hips move toward the heels, negative the toes), bend (degrees the spine bends toward the
 # toes), each hand's target offset from its rest, and drop (m the whole rider sinks: Crash).
-STANCE_POSE = dict(lean=0.0, crouch=0.0, shift=0.0, bend=6.0, front=P(0, 0, 0), back=P(0, 0, 0), drop=0.0, roll=0.0)
+#
+# Taken from riding photos: the knees soft and over the toes, the hips centred between the feet,
+# the back upright (bending at the waist is the beginner's fault), the head down the board, the
+# front hand leading over the nose and the back hand low by the back hip. On the heel edge the rider
+# sits back with the arms reaching forward; on the toe edge the shins press toward the snow and the
+# back stays upright.
+STANCE_POSE = dict(lean=0.0, crouch=0.06, shift=0.0, bend=6.0, front=P(-0.06, 0.10, 0.0), back=P(-0.02, 0.18, -0.06),
+                   drop=0.0, roll=0.0)
 
 
 def pose_with(**changes):
@@ -211,15 +222,20 @@ def pose_with(**changes):
 
 POSES = {
     "Ride": pose_with(),
-    "CarveToe": pose_with(lean=24.0, crouch=0.10, shift=-0.08, bend=18.0, front=P(-0.20, 0.08, 0.10),
-                          back=P(-0.15, -0.10, 0.05)),
-    "CarveHeel": pose_with(lean=-22.0, crouch=0.16, shift=0.10, bend=-4.0, front=P(0.12, 0.10, 0.18),
-                           back=P(0.10, -0.12, 0.10)),
-    "Tuck": pose_with(crouch=0.30, shift=-0.03, bend=38.0, front=P(-0.10, -0.12, -0.30), back=P(-0.08, 0.14, -0.28)),
-    "Air": pose_with(crouch=0.22, bend=12.0, front=P(-0.05, 0.25, 0.45), back=P(0.05, -0.28, 0.40)),
-    # The front hand down to the toe edge by the front binding; the back arm up and out.
-    "Grab": pose_with(crouch=0.40, shift=-0.06, bend=55.0, front=P(-0.18, -0.19, -0.85), back=P(0.10, -0.30, 0.45)),
-    "Land": pose_with(crouch=0.32, bend=26.0, front=P(-0.08, 0.20, 0.10), back=P(0.05, -0.22, 0.10)),
+    "CarveToe": pose_with(lean=24.0, crouch=0.14, shift=-0.07, bend=8.0, front=P(-0.18, 0.10, -0.06),
+                          back=P(-0.12, 0.02, -0.08)),
+    "CarveHeel": pose_with(lean=-22.0, crouch=0.20, shift=0.08, bend=14.0, front=P(-0.22, 0.02, 0.06),
+                           back=P(-0.20, 0.16, 0.04)),
+    "Tuck": pose_with(crouch=0.30, shift=0.0, bend=22.0, front=P(-0.12, -0.14, -0.30), back=P(-0.10, 0.18, -0.30)),
+    "TuckToe": pose_with(lean=20.0, crouch=0.30, shift=-0.05, bend=20.0, front=P(-0.16, -0.12, -0.34),
+                         back=P(-0.14, 0.16, -0.34)),
+    "TuckHeel": pose_with(lean=-18.0, crouch=0.32, shift=0.07, bend=26.0, front=P(-0.18, -0.10, -0.24),
+                          back=P(-0.16, 0.20, -0.24)),
+    "Air": pose_with(crouch=0.24, bend=10.0, front=P(-0.05, 0.22, 0.30), back=P(0.02, -0.20, 0.24)),
+    # An indy: the knees drawn up, the back hand down to the toe edge between the bindings, the
+    # front arm out over the nose for balance.
+    "Grab": pose_with(crouch=0.34, shift=-0.02, bend=34.0, front=P(-0.12, 0.26, 0.14), back=P(-0.02, 0.41, -0.86)),
+    "Land": pose_with(crouch=0.30, bend=18.0, front=P(-0.10, 0.18, 0.06), back=P(-0.04, 0.10, 0.02)),
     "Crash": pose_with(lean=-70.0, crouch=0.25, shift=0.20, bend=-10.0, front=P(0.35, 0.15, 0.60),
                        back=P(0.30, -0.20, 0.55), drop=0.45),
 }
@@ -245,7 +261,7 @@ def clip_pose(name, t):
         p = dict(ride)
         p["crouch"] = 0.02 * (1 - math.cos(2 * math.pi * t)) / 2  # a slight bob
         return p
-    if name in ("CarveToe", "CarveHeel", "Tuck", "Air", "Grab"):
+    if name in ("CarveToe", "CarveHeel", "Tuck", "TuckToe", "TuckHeel", "Air", "Grab"):
         # Held: the pose itself, with a breath of movement so it does not freeze.
         p = dict(POSES[name])
         p["crouch"] += 0.015 * math.sin(2 * math.pi * t)
@@ -259,8 +275,8 @@ def clip_pose(name, t):
     raise KeyError(name)
 
 
-CLIPS = {"Ride": 2.0, "CarveToe": 1.0, "CarveHeel": 1.0, "Tuck": 1.0, "Air": 1.0, "Grab": 1.0, "Land": 0.5,
-         "Crash": 1.5}
+CLIPS = {"Ride": 2.0, "CarveToe": 1.0, "CarveHeel": 1.0, "Tuck": 1.0, "TuckToe": 1.0, "TuckHeel": 1.0, "Air": 1.0,
+         "Grab": 1.0, "Land": 0.5, "Crash": 1.5}
 
 
 def key_drive(rig, name, frames):

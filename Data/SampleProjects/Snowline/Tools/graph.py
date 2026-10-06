@@ -3,7 +3,7 @@
 
 Board.as drives it by parameters (SceneAnimation setFloat / setBool), never by naming clips:
 - Lean (float, -1..1): the carve, heel edge to toe edge; Ride's state blends CarveHeel, Ride and
-  CarveToe by it.
+  CarveToe by it, and Tuck's TuckHeel, Tuck and TuckToe (a tucked rider leans into its turn too).
 - Tuck, Airborne, Grab, Crashed (bools): the rider's situation, each its own state.
 
 States: Ride (the lean blend), Tuck, Air, Grab, Land (once, then back to Ride), Crash (held while
@@ -38,7 +38,7 @@ NIL = "00000000-0000-0000-0000-000000000000"
 # name, loop, clip or a blend: (param, [(threshold, clip)])
 STATES = [
     ("Ride", True, ("Lean", [(-1.0, "CarveHeel"), (0.0, "Ride"), (1.0, "CarveToe")])),
-    ("Tuck", True, "Tuck"),
+    ("Tuck", True, ("Lean", [(-1.0, "TuckHeel"), (0.0, "Tuck"), (1.0, "TuckToe")])),
     ("Air", True, "Air"),
     ("Grab", True, "Grab"),
     ("Land", False, "Land"),

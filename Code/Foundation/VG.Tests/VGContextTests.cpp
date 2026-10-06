@@ -764,3 +764,58 @@ TEST_CASE("vg.context: a zero-blur shadow is a plain rounded rect; an inset shad
         CHECK(ctx.GetBatch().vertices.IsEmpty()); // a hard inset shadow is nothing
     }
 }
+
+// A card's thumbnail with rounded corners: the picture is cut to the rounded rect (no opaque
+// vertex in a corner's cut-away), each vertex samples the texel of its place in the dest rect
+// (worked out before the transform), the fringe clamps to the source, and no radius is the
+// plain image quad.
+TEST_CASE("vg.context: DrawImageRounded maps the texture onto a rounded rect, cut at its corners")
+{
+    VGContext ctx;
+    image::ImageDataRef tex(200, 100);
+    const Rectangle dest{10.0f, 20.0f, 100.0f, 50.0f};
+    const Rectangle src{100.0f, 0.0f, 100.0f, 100.0f}; // the right half of the texture
+    ctx.PushState();
+    ctx.Translate(5.0f, 0.0f);
+    ctx.DrawImageRounded(&tex, dest, src, CornerRadii(10.0f));
+    ctx.PopState();
+
+    VGBatch& batch = ctx.GetBatch();
+    REQUIRE(batch.textures.Size() == 2u);
+    CHECK(batch.textures[1] == &tex);
+    REQUIRE(batch.CommandCount() == 1u);
+    CHECK(batch.GetCommand(0).textureIndex == 1);
+    REQUIRE(batch.VertexCount() > 4u);
+
+    bool sawLeftEdge = false;
+    for (const VGVertex& v : batch.vertices)
+    {
+        const f32 x = v.position.x - 5.0f; // back to the dest rect's space
+        const f32 y = v.position.y;
+        CHECK(v.texCoord.x >= 0.5f - 1e-4f); // inside the source half, the fringe clamped
+        CHECK(v.texCoord.x <= 1.0f + 1e-4f);
+        CHECK(v.texCoord.y >= -1e-4f);
+        CHECK(v.texCoord.y <= 1.0f + 1e-4f);
+        if (v.coverage >= 1.0f)
+        {
+            // An opaque vertex lies inside the rounded rect: in the top-left corner, within the
+            // radius of the corner's centre.
+            if (x < 20.0f && y < 30.0f)
+            {
+                const f32 dx = x - 20.0f, dy = y - 30.0f;
+                CHECK(dx * dx + dy * dy <= 10.0f * 10.0f + 0.5f);
+            }
+            if (x < 11.0f && y >= 29.0f && y <= 61.0f) // the left edge (inset half a fringe)
+            {
+                sawLeftEdge = true;
+                CHECK(v.texCoord.x == doctest::Approx(0.5f + (x - 10.0f) / 200.0f).epsilon(0.001));
+                CHECK(v.texCoord.y == doctest::Approx((y - 20.0f) / 50.0f).epsilon(0.001));
+            }
+        }
+    }
+    CHECK(sawLeftEdge);
+
+    VGContext square;
+    square.DrawImageRounded(&tex, dest, src, CornerRadii(0.0f));
+    CHECK(square.GetBatch().VertexCount() == 4u);
+}

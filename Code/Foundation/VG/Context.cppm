@@ -849,6 +849,24 @@ export namespace foundation::vg
             TransformVertices(startVertex);
         }
 
+        /// DrawImage clipped to a rounded rectangle: `srcRect` of the texture maps onto
+        /// `destRect`, and only the part inside `destRect` rounded by `radii` is drawn, with an
+        /// anti-aliased edge (a picture with rounded corners, such as a card's thumbnail).
+        void DrawImageRounded(const image::ImageData* texture, Rectangle destRect,
+                              Rectangle srcRect, CornerRadii radii, Color tint = Color::White)
+        {
+            if (texture == nullptr || destRect.width <= 0.0f || destRect.height <= 0.0f)
+                return;
+            if (radii.IsZero())
+            {
+                DrawImage(texture, destRect, srcRect, tint);
+                return;
+            }
+            PathBuilder pb;
+            ShapeBuilder::BuildRoundedRect(destRect, radii, pb);
+            FillConvexPathWithImage(pb.ToPath(), texture, destRect, srcRect, tint);
+        }
+
         /// DrawImage with the DEST rect snapped to the device pixel grid (axis-aligned
         /// transforms only; rotated draws fall through unsnapped). The crispness half of
         /// the icon-bake pipeline: a baked bitmap drawn at a fractional origin smears
@@ -1272,6 +1290,36 @@ export namespace foundation::vg
             m_batch.indices.PushBack(baseIndex + 0);
             m_batch.indices.PushBack(baseIndex + 2);
             m_batch.indices.PushBack(baseIndex + 3);
+        }
+
+        /// Fill a convex path with `srcRect` of a texture mapped onto `destRect` (the path is
+        /// tessellated as a solid fill, its AA fringe included; each vertex then takes the UV of
+        /// its place in `destRect`). UVs are clamped to `srcRect` so the fringe, which reaches
+        /// a little past the shape, samples its edge texels rather than the texture beyond.
+        void FillConvexPathWithImage(const Path& path, const image::ImageData* texture,
+                                     Rectangle destRect, Rectangle srcRect, Color tint)
+        {
+            const i32 textureIndex = GetOrAddTexture(texture);
+            SetupForTextureDraw(textureIndex);
+            const usize startVertex = m_batch.vertices.Size();
+            FillTessellator::Tessellate(path, FillRule::NonZero, ApplyOpacity(tint), true,
+                                        m_batch.vertices, m_batch.indices, GetScaledTolerance(),
+                                        GetScaledFringe());
+            const f32 texW = static_cast<f32>(texture->Width());
+            const f32 texH = static_cast<f32>(texture->Height());
+            const f32 u0 = srcRect.x / texW;
+            const f32 v0 = srcRect.y / texH;
+            const f32 u1 = (srcRect.x + srcRect.width) / texW;
+            const f32 v1 = (srcRect.y + srcRect.height) / texH;
+            for (usize i = startVertex; i < m_batch.vertices.Size(); ++i)
+            {
+                VGVertex& v = m_batch.vertices[i];
+                const f32 tx = (v.position.x - destRect.x) / destRect.width;
+                const f32 ty = (v.position.y - destRect.y) / destRect.height;
+                v.texCoord = Float2{Clamp(u0 + (u1 - u0) * tx, Min(u0, u1), Max(u0, u1)),
+                                    Clamp(v0 + (v1 - v0) * ty, Min(v0, v1), Max(v0, v1))};
+            }
+            TransformVertices(startVertex);
         }
 
         /// Emit a textured quad into the batch in untransformed coordinates (coverage 1.0).

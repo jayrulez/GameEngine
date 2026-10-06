@@ -10,6 +10,24 @@
 > Created 2026-09-12 from the open sections of week-2026-09-05.md (which had absorbed
 > week-2026-08-29, week-2026-08-22 and the archived roadmap/backlog folders).
 
+## Queued 2026-10-06 (user, the web demos on a phone)
+
+- **Touch drives the game UI**: the web shell takes touch (`Shell.Web/WebInput.cppm`, start / move /
+  end / cancel on the canvas) and consumes it so the page does not scroll or zoom, which also stops
+  the browser turning taps into mouse clicks; the game UI reads only mouse, keys and pads. So on a
+  phone no menu can be pressed (Snowline's title cannot pick a course). Route touch into the UI as
+  pointer input (a tap presses, a drag scrolls). Check what Sedulous does first.
+- **Touch controls in the sample games**: the input map already binds touch (`TouchButton`, a screen
+  region; `TouchStick`, a floating virtual stick), but no game uses it. Each game binds a stick and
+  buttons (Snowline: the left half carves, zones on the right for jump, tuck and grab) and draws a
+  light overlay showing them, shown only once a touch is seen.
+- **Orientation on mobile**: held upright, a phone gives the canvas a portrait shape, and the games
+  are landscape. Options: ask the browser for landscape (`screen.orientation.lock`, which needs
+  fullscreen and is refused on some browsers), letterbox a landscape render into the portrait canvas,
+  or rotate the presented image a quarter turn with the input transformed to match, and a prompt to
+  turn the phone where nothing else works. Likely the larger item of the three: the shell's canvas
+  sizing, the player's fit, and every pointer and touch coordinate are involved.
+
 ## Queued 2026-10-02 (user, PaperKid)
 
 - **Auto exposure settles visibly at the start of a scene** (user 2026-10-03): a scene loads with

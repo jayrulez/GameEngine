@@ -103,7 +103,7 @@ class Game
             bool open = unlocked(i);
             s.findButton("course-" + i).setEnabled(open);
             s.findLabel("course-" + i + "-best").setText(open ? bestLine(i)
-                                                           : "A bronze on " + courseName(i - 1) + " opens it");
+                                                           : "Locked: " + courseName(i - 1) + " bronze");
         }
     }
 

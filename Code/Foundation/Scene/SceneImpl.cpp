@@ -258,7 +258,16 @@ namespace foundation::scene
 
     Float4x4 Scene::GetWorldMatrix(EntityHandle entity) const
     {
-        return IsValid(entity) ? m_transforms[entity.index].worldMatrix : Float4x4::Identity();
+        if (!IsValid(entity))
+        {
+            return Float4x4::Identity();
+        }
+        // Moved since the last UpdateTransforms (it, or an ancestor: MarkDirty cascades down), the
+        // cache is a frame old: compose it fresh. Read mid-update (a script's onUpdate, after
+        // physics has written this frame's pose), the cached matrix answered where the entity was
+        // last frame, and a camera following it shook.
+        const TransformData& t = m_transforms[entity.index];
+        return t.dirty ? ComposeWorldMatrix(entity) : t.worldMatrix;
     }
 
     Float4x4 Scene::GetPrevWorldMatrix(EntityHandle entity) const

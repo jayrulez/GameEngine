@@ -228,7 +228,8 @@ export namespace foundation::scene
         [[nodiscard]] Transform GetLocalTransform(EntityHandle entity) const;
         void SetLocalPosition(EntityHandle entity, Float3 position);
 
-        // World matrix from the most recent UpdateTransforms (Identity until first update).
+        // World matrix: the one the most recent UpdateTransforms cached, or, for an entity moved
+        // since (it or an ancestor), composed fresh up the local chain, so it is current mid-update.
         [[nodiscard]] Float4x4 GetWorldMatrix(EntityHandle entity) const;
         [[nodiscard]] Float4x4 GetPrevWorldMatrix(EntityHandle entity) const;
         // Translation row of the world matrix (row-vector convention).

@@ -1820,6 +1820,37 @@ TEST_CASE("script.scene: entity handles compare with == and !=")
     CHECK(bed.scene.GetEntityName(target) == StringView(u8"compared"));
 }
 
+// worldPosition() inside onUpdate is this frame's: a behavior that moves a parent reads the child's
+// new world position at once (it read last frame's, from the cached world matrix).
+TEST_CASE("script.scene: worldPosition is current inside onUpdate after a move")
+{
+    ScriptedScene bed;
+    scene::EntityHandle parent = bed.scene.CreateEntity(u8"Parent");
+    scene::EntityHandle child = bed.scene.CreateEntity(u8"Child");
+    bed.scene.SetParent(child, parent);
+    bed.scene.SetLocalPosition(child, Float3{5.0f, 0.0f, 0.0f});
+
+    RefPtr<ScriptClass> mover =
+        MakeClass(u8"Mover",
+                  u8"class Mover {\n"
+                  u8"    private Entity@ self;\n"
+                  u8"    Mover(Entity@ entity) { @self = entity; }\n"
+                  u8"    void onUpdate(double dt) {\n"
+                  u8"        Entity@ p = self.scene.find(\"Parent\");\n"
+                  u8"        Entity@ c = self.scene.find(\"Child\");\n"
+                  u8"        p.setPosition(20.0f, 0.0f, 0.0f);\n"
+                  u8"        Float3 w = c.worldPosition();\n"
+                  u8"        if (w.x > 24.99f && w.x < 25.01f) { c.setName(\"fresh\"); }\n"
+                  u8"    }\n"
+                  u8"}\n",
+                  {u8"onUpdate"});
+    (void)bed.AddScripted(mover, u8"mover");
+    bed.Start();
+    bed.Frame();
+
+    CHECK(bed.scene.GetEntityName(child) == StringView(u8"fresh"));
+}
+
 // ---- second backend, uniformly: a .as behavior runs the SAME neutral
 // runtime path as any backend - the RunHost resolves the backend by the class's language, assembles
 // the module through the backend (AngelScript needs no prelude), instantiates, and dispatches

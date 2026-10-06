@@ -85,6 +85,32 @@ TEST_CASE("dirty cascade: moving a parent recomputes its descendants; nothing el
     CHECK(Near(scene.GetWorldPosition(child).y, 7.0f));
 }
 
+// Read mid-update (a script after physics moved the entity, before UpdateTransforms), the world
+// pose is this frame's: the cached matrix had answered last frame's.
+TEST_CASE("world matrix is current before UpdateTransforms: a moved parent's child, the previous kept")
+{
+    Scene scene{DefaultAllocator()};
+    EntityHandle parent = scene.CreateEntity();
+    EntityHandle child = scene.CreateEntity();
+    EntityHandle other = scene.CreateEntity();
+    scene.SetLocalPosition(parent, Float3{10, 0, 0});
+    scene.SetLocalPosition(child, Float3{5, 0, 0});
+    scene.SetLocalPosition(other, Float3{0, 0, 3});
+    scene.SetParent(child, parent);
+    scene.UpdateTransforms();
+    scene.UpdateTransforms(); // settled: the previous matrices caught up
+
+    scene.SetLocalPosition(parent, Float3{20, 0, 0});
+    CHECK(Near(scene.GetWorldPosition(parent).x, 20.0f));       // moved: fresh
+    CHECK(Near(scene.GetWorldPosition(child).x, 25.0f));        // under a moved parent: fresh
+    CHECK(Near(scene.GetWorldPosition(other).z, 3.0f));         // untouched: the cache
+    CHECK(Near(scene.GetPrevWorldMatrix(child).m[3][0], 15.0f)); // last frame's, kept
+
+    scene.UpdateTransforms();
+    CHECK(Near(scene.GetWorldPosition(child).x, 25.0f)); // the cache agrees
+    CHECK(Near(scene.GetPrevWorldMatrix(child).m[3][0], 15.0f));
+}
+
 TEST_CASE("motion vectors: previous world matrix snapshots the prior frame")
 {
     Scene scene{DefaultAllocator()};

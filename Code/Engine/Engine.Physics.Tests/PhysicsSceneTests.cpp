@@ -1425,6 +1425,14 @@ TEST_CASE("physics.scene: a source's static capsules are solid, in their group, 
     CHECK_FALSE(physics.nearestOverlap(6.0f, 1.0f, 0.0f, 1.0f, 1 << 3).hit); // another group
     CHECK_FALSE(physics.nearestOverlap(9.0f, 1.0f, 0.0f, 1.0f, 1 << 2).hit); // beside it
 
+    // Its body carries the invalid entity outright, not the default word 0 a query would have to
+    // know no live entity packs to.
+    RayHit trunkHit;
+    REQUIRE(play.physics->World()->RayCast(Float3{3.0f, 3.0f, 0.0f}, Float3{1.0f, 0.0f, 0.0f}, 10.0f,
+                                           trunkHit));
+    CHECK(trunkHit.position.x == doctest::Approx(5.6f).epsilon(0.01));
+    CHECK(trunkHit.userData == PackEntity(scene::EntityHandle::Invalid()));
+
     // Driven at it, the character stops at the trunk instead of passing through.
     for (int i = 0; i < 120; ++i)
     {

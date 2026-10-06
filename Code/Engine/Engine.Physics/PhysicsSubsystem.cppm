@@ -829,6 +829,10 @@ export namespace engine::physics
             shape.halfHeight = cylinder * 0.5f;
             desc.shapes.PushBack(shape);
             desc.position = capsule.foot + Float3{0.0f, capsule.radius + cylinder * 0.5f, 0.0f};
+            // Owned by no entity, said explicitly: the default word 0 unpacks as (index 0,
+            // generation 0), which a live entity never is (a slot's generation starts at 1), but a
+            // query reading it should not lean on that.
+            desc.userData = PackEntity(scene::EntityHandle::Invalid());
             (void)m_world->CreateBody(desc);
         }
 

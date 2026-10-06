@@ -1,9 +1,7 @@
 # Snowline
 
 A snowboard time trial with tricks, built through the engine's MCP tools, using terrain,
-vegetation, splines, an animation graph driven by parameters, decals and physics joints. Every
-missing or wrong tool or engine behaviour met on the way was fixed in the engine as part of the
-work. It follows its spec (`Documentation/Specs/snowline.md`).
+vegetation, splines, an animation graph driven by parameters, decals and physics joints.
 
 ![Snowline, the title and its courses](../../../Documentation/Images/Snowline-Title.png)
 

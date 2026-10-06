@@ -11,6 +11,7 @@
 import foundation.core;
 import foundation.ui;
 import foundation.image;
+import foundation.vg; // CornerRadii
 #include "TestHelpers.h"
 
 using namespace foundation::ui;
@@ -18,6 +19,7 @@ using namespace foundation::ui::tests;
 using namespace foundation::core;
 namespace core = foundation::core;
 namespace image = foundation::image;
+namespace vg = foundation::vg;
 
 // Register the drawable factories + the element types these parser tests reference.
 static void EnsureGlobals()
@@ -822,6 +824,26 @@ TEST_CASE("sss: Image_LoadsFromProvider")
     Drawable* bg = view->ResolveStyleDrawable(StyleProperty::Background);
     REQUIRE(bg != nullptr);
     CHECK(core::Cast<ImageDrawable>(bg) != nullptr);
+}
+
+TEST_CASE("sss: an image() takes radius= to round its corners, with a tint beside it")
+{
+    EnsureGlobals();
+    MockResourceProvider provider;
+    provider.AddImage(u8"textures/bg.png");
+    StyleSheetLoader loader(DefaultAllocator());
+    loader.ResourceProvider = &provider;
+    core::RefPtr<StyleSheet> sheet = loader.Load(u8R"(
+        @image bg "textures/bg.png";
+        View { background: image(bg, radius=8 8 0 0, tint=#FF000080); }
+    )");
+    Fixture f(Move(sheet));
+    core::RefPtr<TestView> view = f.AddView();
+    ImageDrawable* bg = core::Cast<ImageDrawable>(view->ResolveStyleDrawable(StyleProperty::Background));
+    REQUIRE(bg != nullptr);
+    CHECK(bg->Radii == vg::CornerRadii(8.0f, 8.0f, 0.0f, 0.0f));
+    CHECK(bg->Tint.r == doctest::Approx(1.0f));
+    CHECK(bg->Tint.a == doctest::Approx(128.0f / 255.0f).epsilon(0.01));
 }
 
 TEST_CASE("sss: NineSlice_LoadsFromProvider")

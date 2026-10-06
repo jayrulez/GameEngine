@@ -49,10 +49,14 @@ export namespace foundation::ui
         /// answers (an asset still loading), the view shows nothing and asks again. Empty: the
         /// image SetImage gave.
         Property<core::String> Source;
+        /// Rounds the picture's corners (the drawn picture's own rect: the fitted rect under
+        /// FitCenter, the view under CenterCrop and FillBounds). Zero: square corners.
+        Property<vg::CornerRadii> CornerRadius;
 
         ImageView()
         {
             ScaleType.SetOwner(this, InvalidationKind::Visual);
+            CornerRadius.SetOwner(this, InvalidationKind::Visual);
             Tint.SetOwner(this, InvalidationKind::Visual);
             Source.SetOwner(this, InvalidationKind::Layout);
         }
@@ -97,35 +101,36 @@ export namespace foundation::ui
             switch (ScaleType.Value())
             {
             case ::foundation::ui::ScaleType::None:
-                ctx.VG().DrawImage(m_image, Rectangle{0, 0, iw, ih}, srcRect, Tint.Value());
+                Blit(ctx, Rectangle{0, 0, iw, ih}, srcRect);
                 break;
             case ::foundation::ui::ScaleType::FillBounds:
-                ctx.VG().DrawImage(m_image, dstRect, srcRect, Tint.Value());
+                Blit(ctx, dstRect, srcRect);
                 break;
             case ::foundation::ui::ScaleType::FitCenter:
             {
                 const f32 scale = Min(Width() / iw, Height() / ih);
                 const f32 fitW = iw * scale, fitH = ih * scale;
-                ctx.VG().DrawImage(
-                    m_image,
-                    Rectangle{(Width() - fitW) * 0.5f, (Height() - fitH) * 0.5f, fitW, fitH},
-                    srcRect, Tint.Value());
+                Blit(ctx, Rectangle{(Width() - fitW) * 0.5f, (Height() - fitH) * 0.5f, fitW, fitH},
+                     srcRect);
                 break;
             }
             case ::foundation::ui::ScaleType::CenterCrop:
             {
                 const f32 scale = Max(Width() / iw, Height() / ih);
                 const f32 cropW = Width() / scale, cropH = Height() / scale;
-                ctx.VG().DrawImage(
-                    m_image, dstRect,
-                    Rectangle{(iw - cropW) * 0.5f, (ih - cropH) * 0.5f, cropW, cropH},
-                    Tint.Value());
+                Blit(ctx, dstRect,
+                     Rectangle{(iw - cropW) * 0.5f, (ih - cropH) * 0.5f, cropW, cropH});
                 break;
             }
             }
         }
 
     private:
+        void Blit(UIDrawContext& ctx, Rectangle dst, Rectangle src)
+        {
+            ctx.VG().DrawImageRounded(m_image, dst, src, CornerRadius.Value(), Tint.Value());
+        }
+
         void ResolveSource()
         {
             const StringView source = Source.Value().AsView();

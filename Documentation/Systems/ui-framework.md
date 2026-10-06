@@ -74,7 +74,7 @@ $text-dim, $error, $success, $warning`).
 (single compound - NO descendant selectors); 2-value `padding` is CSS order (vertical
 horizontal), the opposite of C++ `Thickness{h,v}`; drawable factories `color()
 rounded-rect(radius=a b c d) state-colors() state-rounded() svg(name[,tint=...])
-image() nine-slice() gradient() layer() inset()`; color functions `lighten darken alpha
+image(name[,tint=...][,radius=a b c d]) nine-slice() gradient() layer() inset()`; color functions `lighten darken alpha
 mix hover pressed disabled focused` (the state ones delegate to `Palette::Compute*`);
 `background:` ALWAYS builds a drawable while `background-color:` stores a raw Color for
 `ResolveStyleColor` consumers (ToastCard, the canvases, ModalBackdrop, DragAdorner);

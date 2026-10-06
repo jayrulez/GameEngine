@@ -9,12 +9,14 @@
 #include "Core/Prelude.h"
 import foundation.core;
 import foundation.ui;
+import foundation.vg; // CornerRadii
 #include "TestHelpers.h"
 
 using namespace foundation::ui;
 using namespace foundation::ui::tests;
 using namespace foundation::core;
 namespace core = foundation::core;
+namespace vg = foundation::vg;
 
 static void EnsureInit()
 {
@@ -650,4 +652,26 @@ TEST_CASE("markup: a second content element, or children on a view that takes no
     REQUIRE(label);
     REQUIRE(warnings.Size() == 1u);
     CHECK(warnings[0].AsView().ContainsIgnoreCase(u8"holds no children"));
+}
+
+// A card's picture rounded on its top corners only, flush with the card's rounded body.
+TEST_CASE("markup: an ImageView's corner-radius takes one value or four")
+{
+    EnsureInit();
+    Array<String> warnings;
+    auto view = MarkupLoader::LoadFromString(DefaultAllocator(),
+                                             u8"<Flex>\n"
+                                             u8"  <ImageView id=\"all\" corner-radius=\"8\"/>\n"
+                                             u8"  <ImageView id=\"top\" corner-radius=\"8 8 0 0\"/>\n"
+                                             u8"  <ImageView id=\"none\"/>\n"
+                                             u8"</Flex>",
+                                             nullptr, &warnings);
+    REQUIRE(view);
+    CHECK(warnings.IsEmpty());
+    ViewGroup* root = Cast<ViewGroup>(view.Get());
+    REQUIRE(root != nullptr);
+    CHECK(root->FindByName<ImageView>(u8"all")->CornerRadius.Value() == vg::CornerRadii(8.0f));
+    CHECK(root->FindByName<ImageView>(u8"top")->CornerRadius.Value() ==
+          vg::CornerRadii(8.0f, 8.0f, 0.0f, 0.0f));
+    CHECK(root->FindByName<ImageView>(u8"none")->CornerRadius.Value().IsZero());
 }

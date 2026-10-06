@@ -15,6 +15,7 @@ export module foundation.ui:image_drawable;
 
 import foundation.core;  // Color, Rectangle, Float2, Optional
 import foundation.image; // ImageData
+import foundation.vg;    // CornerRadii
 import :drawable;
 import :draw_context;
 
@@ -29,6 +30,8 @@ export namespace foundation::ui
     public:
         const image::ImageData* Image = nullptr;
         Color Tint = Color::White;
+        /// Rounds the image's corners within the bounds it is drawn to; zero: square.
+        vg::CornerRadii Radii{};
 
         ImageDrawable() = default;
         explicit ImageDrawable(const image::ImageData* image, Color tint = Color::White)
@@ -40,10 +43,10 @@ export namespace foundation::ui
         {
             if (Image != nullptr)
             {
-                ctx.VG().DrawImage(Image, bounds,
-                                   Rectangle{0.0f, 0.0f, static_cast<f32>(Image->Width()),
-                                             static_cast<f32>(Image->Height())},
-                                   Tint);
+                ctx.VG().DrawImageRounded(Image, bounds,
+                                          Rectangle{0.0f, 0.0f, static_cast<f32>(Image->Width()),
+                                                    static_cast<f32>(Image->Height())},
+                                          Radii, Tint);
             }
         }
 

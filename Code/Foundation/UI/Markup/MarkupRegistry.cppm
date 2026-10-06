@@ -18,6 +18,7 @@ module;
 export module foundation.ui:markup_registry;
 
 import foundation.core;
+import foundation.vg; // CornerRadii (an ImageView's corner-radius)
 import :view;
 import :layout_style;
 import :size_spec;
@@ -506,6 +507,26 @@ export namespace foundation::ui
         [[nodiscard]] static Thickness ParseThickness(StringView value)
         {
             f32 values[4] = {0, 0, 0, 0};
+            const i32 count = ParseNumbers(value, values);
+            return StyleValueParser::ParseThickness(values, count);
+        }
+
+        /// Parse corner radii: "8" (all), "8 8 0 0" (top-left, top-right, bottom-right,
+        /// bottom-left, as the style's radius=).
+        [[nodiscard]] static vg::CornerRadii ParseCornerRadii(StringView value)
+        {
+            f32 values[4] = {0, 0, 0, 0};
+            const i32 count = ParseNumbers(value, values);
+            if (count >= 4)
+            {
+                return vg::CornerRadii(values[0], values[1], values[2], values[3]);
+            }
+            return vg::CornerRadii(count > 0 ? values[0] : 0.0f);
+        }
+
+        /// Up to four space-separated numbers into `values`; answers how many were read.
+        static i32 ParseNumbers(StringView value, f32 (&values)[4])
+        {
             i32 count = 0;
             const char8_t* data = value.Data();
             const usize n = value.Size();
@@ -525,7 +546,7 @@ export namespace foundation::ui
                     start = i + 1;
                 }
             }
-            return StyleValueParser::ParseThickness(values, count);
+            return count;
         }
 
         /// Register all built-in view types with their markup-settable properties. Safe to call
@@ -1207,6 +1228,15 @@ export namespace foundation::ui
                              if (ImageView* c = Cast<ImageView>(v))
                              {
                                  c->Source.SetValue(String(val));
+                             }
+                         });
+        // Rounds the picture's corners: <ImageView corner-radius="8"/> or four values.
+        RegisterProperty(u8"ImageView", u8"corner-radius",
+                         [](View* v, StringView val)
+                         {
+                             if (ImageView* c = Cast<ImageView>(v))
+                             {
+                                 c->CornerRadius.SetValue(ParseCornerRadii(val));
                              }
                          });
         RegisterView(u8"DrawableView",

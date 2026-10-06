@@ -100,7 +100,11 @@ Play-in-editor works by construction (the same event stream through the viewport
   texture, registered on every VG renderer before it draws. A render texture a camera targets is a
   texture too, so a HUD shows a live minimap or monitor (Specs/render-textures.md). Script:
   `ui::findImage(id).setSource(textureId)`, and `SceneRender.of(scene).setCameraTarget(camera,
-  textureId)` on the render side.
+  textureId)` on the render side. `corner-radius="8"` (or four values, top-left first) rounds the
+  picture's corners.
+- **Picture buttons** - a `<ContentButton id="card">` holds one element as its face (a Flex with an
+  `ImageView` and labels, say): the button draws its style's background behind it, and
+  `ui::findButton("card").onClick(...)` and `findLabel` reach it and the labels inside.
 
 ## Locked decisions
 

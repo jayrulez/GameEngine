@@ -180,3 +180,36 @@ TEST_CASE("drawable: DrawableView KeepAspect fits and centres rather than stretc
     CHECK(icon->lastBounds.x == doctest::Approx(15.0f)); // centred
     CHECK(icon->lastBounds.y == doctest::Approx(0.0f));
 }
+
+// A rounded picture is cut to its rounded rect (more than the plain quad's four vertices, all on
+// the image's texture), the ImageView and the image() drawable alike; square corners stay the
+// plain quad.
+TEST_CASE("drawable: an ImageView and an ImageDrawable round the picture's corners")
+{
+    foundation::image::ImageDataRef picture{64, 32};
+    auto drawOnce = [&](auto&& draw) -> core::usize
+    {
+        foundation::vg::VGContext vgContext;
+        UIDrawContext ctx(vgContext, 1.0f, nullptr);
+        draw(ctx);
+        const foundation::vg::VGBatch& batch = vgContext.GetBatch();
+        REQUIRE(batch.textures.Size() == 2u);
+        CHECK(batch.textures[1] == &picture);
+        return batch.VertexCount();
+    };
+
+    auto view = core::MakeRef<ImageView>(core::DefaultAllocator(), &picture);
+    view->ScaleType.SetValue(ScaleType::FillBounds);
+    view->Measure(BoxConstraints::Tight(128, 64));
+    view->Layout(0, 0, 128, 64);
+    View* asView = view.Get(); // OnDraw is public on View
+    CHECK(drawOnce([&](UIDrawContext& ctx) { asView->OnDraw(ctx); }) == 4u);
+    view->CornerRadius.SetValue(foundation::vg::CornerRadii(8.0f, 8.0f, 0.0f, 0.0f));
+    CHECK(drawOnce([&](UIDrawContext& ctx) { asView->OnDraw(ctx); }) > 4u);
+
+    ImageDrawable image(&picture);
+    const core::Rectangle bounds{0, 0, 128, 64};
+    CHECK(drawOnce([&](UIDrawContext& ctx) { image.Draw(ctx, bounds); }) == 4u);
+    image.Radii = foundation::vg::CornerRadii(6.0f);
+    CHECK(drawOnce([&](UIDrawContext& ctx) { image.Draw(ctx, bounds); }) > 4u);
+}

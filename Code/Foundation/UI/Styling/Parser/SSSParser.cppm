@@ -1617,16 +1617,23 @@ export namespace foundation::ui
                      return d;
                  });
 
-        // image(name, tint=$color) -> ImageDrawable
+        // image(name, tint=$color, radius=6) -> ImageDrawable (radius: 1 or 4 values, rounding
+        // the image's corners)
         Register(u8"image",
                  [](SSSParser& parser, StyleSheet& sheet) -> RefPtr<Drawable>
                  {
                      const StringView name = parser.ConsumeIdent();
                      Color tint = Color::White;
-                     if (parser.MatchComma())
+                     vg::CornerRadii radii{};
+                     while (parser.MatchComma())
                      {
                          const StringView kw = parser.PeekKeywordArg();
-                         if (kw == StringView(u8"tint"))
+                         if (kw == StringView(u8"radius"))
+                         {
+                             parser.ConsumeKeywordArg();
+                             radii = parser.ParseCornerRadiiValue();
+                         }
+                         else if (kw == StringView(u8"tint"))
                          {
                              parser.ConsumeKeywordArg();
                              tint = parser.ParseColorArg();
@@ -1641,6 +1648,7 @@ export namespace foundation::ui
 
                      RefPtr<ImageDrawable> d =
                          MakeRef<ImageDrawable>(parser.Allocator(), imageData, tint);
+                     d->Radii = radii;
                      sheet.OwnDrawable(d);
                      return d;
                  });

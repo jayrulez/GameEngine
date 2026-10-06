@@ -9,7 +9,9 @@
 // ("GemCollected"), each with how many it counts for.
 //
 // The results tally the run a row at a time (the ride, the gates, the gems, the time bonus), then
-// land the final time with the medal it earned, the score and the best time this session. Jump
+// land the final time with the medal it earned, the score and the course's best. The best time and
+// the best medal are kept in the save ("best.<scene>", "medal.<scene>"), and a run that beats the
+// best is announced ("NewBest", in hundredths) so PlayerGhost.as keeps it as the course's ghost. Jump
 // skips to the end, then starts the next run ("RunRestart" puts the rider back at the top, the
 // gates back to waiting and the gems back in place).
 
@@ -44,10 +46,11 @@ class Game
     private float m_silver = 0.0f;
     private float m_bronze = 0.0f;
 
-    // The results: the tally's steps shown so far, the time since the finish, this session's best.
+    // The results: the tally's steps shown so far, the time since the finish, and the course's best
+    // before this run (-1 for none).
     private int m_tallyStep = 0;
     private float m_tallyTime = 0.0f;
-    private float m_best = -1.0f;
+    private float m_previousBest = -1.0f;
 
     void launch()
     {
@@ -127,7 +130,41 @@ class Game
         m_running = false;
         m_tallyStep = 0;
         m_tallyTime = 0.0f;
+        keepBest(m_time + m_penalty);
         ui::push(kFinishDoc);
+    }
+
+    // The course's best time and medal, kept in the save; a new best is announced at once, so the
+    // ghost keeps this run before the next one starts recording.
+    private void keepBest(float total)
+    {
+        string course = run::currentScene().name();
+        m_previousBest = Save::getFloat("best." + course, -1.0f);
+        if (m_previousBest < 0.0f || total < m_previousBest)
+        {
+            Save::setFloat("best." + course, total);
+            run::events().emit("NewBest", int(total * 100.0f + 0.5f));
+        }
+        int rank = medalRank(medalName(total));
+        if (rank > Save::getInt("medal." + course, 0))
+        {
+            Save::setInt("medal." + course, rank);
+        }
+        Save::flush();
+    }
+
+    // 3 gold, 2 silver, 1 bronze, 0 none.
+    private int medalRank(string medal)
+    {
+        if (medal == "gold")
+        {
+            return 3;
+        }
+        if (medal == "silver")
+        {
+            return 2;
+        }
+        return medal == "bronze" ? 1 : 0;
     }
 
     // ---- the results: one row at a time, then the final time and its medal, then the score ----
@@ -226,12 +263,18 @@ class Game
         }
         ui::find("row-score").setVisible(true);
         ui::findLabel("final-score").setText("" + (m_taken * kGemPoints + timeBonus(total)));
-        bool newBest = m_best < 0.0f || total < m_best;
-        string best = newBest ? (m_best < 0.0f ? "" : "New best!  (was " + clock(m_best) + ")")
-                              : "Best " + clock(m_best);
-        if (newBest)
+        string best;
+        if (m_previousBest < 0.0f)
         {
-            m_best = total;
+            best = "Your ghost will ride this run";
+        }
+        else if (total < m_previousBest)
+        {
+            best = "New best!  (was " + clock(m_previousBest) + ")";
+        }
+        else
+        {
+            best = "Best " + clock(m_previousBest);
         }
         ui::findLabel("final-best").setText(best);
         ui::findLabel("final-prompt").setText("Jump to ride again");

@@ -17,6 +17,8 @@ Needs terrain.py <course> and importall.py <course> first: it places what they m
 - the medal ghosts (Ghost.as, a path_follow on the course line, the rider model under it in a
   medal's see-through colour, ghosts.py's materials): one per medal, each riding to the finish at
   its medal's time;
+- the player's ghost (PlayerGhost.as, the rider model under it in ghosts.py's GhostPlayer): the
+  course's best run, saved, ridden again beside the player; hidden until there is one;
 - the chase camera (FollowCamera.as).
 """
 import json, math, os, sys
@@ -69,6 +71,7 @@ BOARD = asset("ScriptClassAsset", "Board")
 GATE = asset("ScriptClassAsset", "Gate")
 FINISH = asset("ScriptClassAsset", "Finish")
 GHOST = asset("ScriptClassAsset", "Ghost")
+PLAYER_GHOST = asset("ScriptClassAsset", "PlayerGhost")
 GEM = asset("ScriptClassAsset", "Gem")
 GEM_MODEL = next(a["guid"] for a in ASSETS if a["type"] == "PrefabDocument"
                  and a.get("group", "") == "Models/Props/GemModel")
@@ -298,6 +301,11 @@ def build():
 
     print("gates", gates(d, info["course"], info["course_length"]))
     ghosts(d, course, info["course_length"])
+    # The player's best run: it rides where the rider rode, so it sits as the rider does, the model
+    # 0.9 m below the capsule's centre it was recorded at.
+    player_ghost = d.entity("PlayerGhost", (top[0], top[1] + 0.9, top[2]), yaw(heading))
+    d.script(player_ghost, (PLAYER_GHOST, {}))
+    d.instance(RIDER_MODEL, (0, -0.9, 0), parent=player_ghost, ops=rider_ops(asset("MaterialAsset", "GhostPlayer")))
 
     cam = d.entity("Camera", (top[0], top[1] + 4.0, top[2] - 8.0))
     d.add(cam, "camera", farZ=1200.0, fovYRadians=1.05)

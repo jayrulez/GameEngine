@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""ghosts.py: the medal ghosts' materials, written through the editor's MCP.
+"""ghosts.py: the ghosts' materials, written through the editor's MCP.
 
 - Materials/GhostGold, GhostSilver, GhostBronze: one per medal, its colour, see-through (alpha
   blended) and glowing a little, so a ghost reads as a ghost against the snow and in the shade.
   course.py gives a ghost's rider model this material in every slot: a silhouette in the medal's
   colour.
+- Materials/GhostPlayer: the player's own best run (PlayerGhost.as), the same, in pale blue.
 
 A material starts from the engine's own new PBR material (asset_create, then asset_data_read), so
 the fields this does not set keep the engine's defaults; its uniforms are written by the offsets
@@ -19,7 +20,8 @@ ALPHA_BLEND = 2  # foundation::materials::BlendMode::AlphaBlend
 OPACITY = 0.6
 GLOW = 0.7       # the emissive colour's share of the base colour
 
-MEDALS = {"GhostGold": (1.0, 0.70, 0.12), "GhostSilver": (0.72, 0.78, 0.88), "GhostBronze": (0.72, 0.38, 0.16)}
+GHOSTS = {"GhostGold": (1.0, 0.70, 0.12), "GhostSilver": (0.72, 0.78, 0.88), "GhostBronze": (0.72, 0.38, 0.16),
+          "GhostPlayer": (0.35, 0.75, 1.0)}
 
 ASSETS = mcp("asset_list", {})["assets"]
 
@@ -50,5 +52,5 @@ def material(name, rgb):
     return guid
 
 
-for n, c in MEDALS.items():
+for n, c in GHOSTS.items():
     material(n, c)

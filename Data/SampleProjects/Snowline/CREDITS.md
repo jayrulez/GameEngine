@@ -29,7 +29,7 @@ Made with GameEngine. Third-party assets, with thanks:
 
 ## Fonts
 
-- **Roboto** by Google, the engine's own UI font, [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)
+- **Roboto** by Google, the UI font (cooked as a distance-field font, `Content/Fonts`), [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)
   (`Licenses/Roboto-NOTICE.txt`).
 
 Everything else (the scenes, the scripts, the screens, the effects and the animation graph) is the

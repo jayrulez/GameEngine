@@ -326,3 +326,55 @@ TEST_CASE("ttf.shaper: ShapeTextWrapped honors explicit newlines")
     DefaultAllocator().Delete(font);
     TrueTypeFonts::Shutdown();
 }
+
+// ============================ the service: sizes =========================
+
+// A coverage family is baked at each size asked for: drawn from one bake, every label in a game
+// without a UI font came out at the bake's size whatever its font-size.
+TEST_CASE("ttf.service: a coverage family answers each size with its own bake, cached")
+{
+    TrueTypeFonts::Initialize();
+    TrueTypeFontService service(DefaultAllocator());
+    REQUIRE(service.LoadFont(u8"Roboto", AssetPath("/roboto/Roboto-Regular.ttf")) == FontLoadResult::Success);
+
+    CachedFont* small = service.GetFont(u8"Roboto", 16.0f);
+    CachedFont* large = service.GetFont(u8"Roboto", 40.0f);
+    CachedFont* huge = service.GetFont(u8"Roboto", 72.0f); // past the first atlas: it grows
+    REQUIRE(small != nullptr);
+    REQUIRE(large != nullptr);
+    REQUIRE(huge != nullptr);
+    CHECK(small->font->PixelHeight() == doctest::Approx(16.0f));
+    CHECK(large->font->PixelHeight() == doctest::Approx(40.0f));
+    CHECK(huge->font->PixelHeight() == doctest::Approx(72.0f));
+    CHECK(huge->font->Metrics().ascent > large->font->Metrics().ascent);
+    CHECK(large->font->Metrics().ascent > small->font->Metrics().ascent);
+
+    // Cached: the same size again is the same font, and a fraction rounds to the whole pixel.
+    CHECK(service.GetFont(u8"Roboto", 40.0f) == large);
+    CHECK(service.GetFont(u8"Roboto", 40.3f) == large);
+    CHECK(service.GetAtlasTexture(u8"Roboto", 40.0f) == service.GetAtlasTexture(large));
+    // An unknown family falls back to the default family's first bake, as before.
+    CachedFont* fallback = service.GetFont(u8"Nope", 24.0f);
+    REQUIRE(fallback != nullptr);
+    CHECK(fallback->font->PixelHeight() == doctest::Approx(FontLoadOptions::ExtendedLatin().pixelHeight));
+}
+
+TEST_CASE("ttf.service: a family loaded from memory bakes its other sizes from the kept bytes")
+{
+    TrueTypeFonts::Initialize();
+    const String path = AssetPath("/roboto/Roboto-Regular.ttf");
+    Array<u8> bytes;
+    {
+        FileStream file(path.AsView(), FileMode::Read);
+        REQUIRE(file.IsValid());
+        bytes.Resize(static_cast<usize>(file.Size()));
+        REQUIRE(file.Read(bytes.Data(), bytes.Size()) == bytes.Size());
+    }
+    TrueTypeFontService service(DefaultAllocator());
+    REQUIRE(service.LoadFontFromMemory(u8"Roboto", Span<const u8>(bytes.Data(), bytes.Size())) ==
+            FontLoadResult::Success);
+    bytes.Clear(); // the service keeps its own copy
+    CachedFont* big = service.GetFont(u8"Roboto", 30.0f);
+    REQUIRE(big != nullptr);
+    CHECK(big->font->PixelHeight() == doctest::Approx(30.0f));
+}

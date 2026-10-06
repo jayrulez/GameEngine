@@ -6,7 +6,9 @@
 // IFontService that loads TrueType/OpenType fonts through the source-format
 // pipeline (parse -> bake -> expand-to-RGBA8). With a VFS file system set, the
 // locator is a path opened through it; otherwise it is a disk path (for
-// sandboxes/tools/tests). Ported from Sedulous.Fonts.TTF/TrueTypeFontService.bf;
+// sandboxes/tools/tests). A distance-field family serves every size from one bake (scaled views);
+// a coverage family is baked again at each size asked for (once, rounded to whole pixels, from its
+// kept source), so a label's font-size is the size it draws at. Ported from Sedulous.Fonts.TTF/TrueTypeFontService.bf;
 // Beef's "Family@Height" string keys become explicit family + size fields.
 
 module;
@@ -55,30 +57,12 @@ export namespace foundation::fonts
         LoadFont(StringView familyName, StringView locator,
                  FontLoadOptions options = FontLoadOptions::ExtendedLatin())
         {
-            IFont* font = nullptr;
-            if (m_fileSystem != nullptr)
+            const FontLoadResult result = LoadFontUnremembered(familyName, locator, options);
+            if (result == FontLoadResult::Success)
             {
-                UniquePtr<IStream> stream = m_fileSystem->Open(locator, FileMode::Read);
-                if (!stream || !stream->IsValid())
-                    return FontLoadResult::FileNotFound;
-
-                const StringView ext = PathExtension(locator);
-                Result<IFont*, FontLoadResult> parsed =
-                    FontParserFactory::ParseFromStream(*stream, ext, options, *m_allocator);
-                if (!parsed.HasValue())
-                    return parsed.Error();
-                font = parsed.Value();
+                Remember(familyName, String(locator), {}, options);
             }
-            else
-            {
-                Result<IFont*, FontLoadResult> parsed =
-                    FontParserFactory::ParseFromFile(locator, options, *m_allocator);
-                if (!parsed.HasValue())
-                    return parsed.Error();
-                font = parsed.Value();
-            }
-
-            return CacheFont(familyName, font, options);
+            return result;
         }
 
         // Load a font from in-memory TTF/OTF bytes (an EMBEDDED fallback: a relocated
@@ -87,18 +71,16 @@ export namespace foundation::fonts
         LoadFontFromMemory(StringView familyName, Span<const u8> bytes,
                            FontLoadOptions options = FontLoadOptions::ExtendedLatin())
         {
-            Array<u8> copy;
-            copy.Resize(bytes.Size());
-            if (bytes.Size() != 0)
-                MemCopy(copy.Data(), bytes.Data(), bytes.Size());
-            TrueTypeFont* font = m_allocator->New<TrueTypeFont>();
-            const FontLoadResult parsed = font->Initialize(Move(copy), options.pixelHeight);
-            if (parsed != FontLoadResult::Success)
+            const FontLoadResult result = BakeFromMemory(familyName, bytes, options);
+            if (result == FontLoadResult::Success)
             {
-                m_allocator->Delete(font);
-                return parsed;
+                Array<u8> kept;
+                kept.Resize(bytes.Size());
+                if (bytes.Size() != 0)
+                    MemCopy(kept.Data(), bytes.Data(), bytes.Size());
+                Remember(familyName, String(), Move(kept), options);
             }
-            return CacheFont(familyName, font, options);
+            return result;
         }
 
         // Change the default family used by GetFont(pixelHeight).
@@ -127,6 +109,13 @@ export namespace foundation::fonts
                 {
                     return SynthesizeScaled(*closest, familyName, pixelHeight);
                 }
+                // A coverage atlas holds glyphs at its one size: drawn at another, the text came
+                // out at the bake's size whatever was asked (every label in a game without a UI
+                // font drew alike). Bake the size asked for, once, from the family's source.
+                if (CachedFont* baked = BakeSize(familyName, pixelHeight))
+                {
+                    return baked;
+                }
                 return closest->cachedFont;
             }
             return m_defaultFont;
@@ -143,6 +132,7 @@ export namespace foundation::fonts
         [[nodiscard]] foundation::image::ImageData* GetAtlasTexture(StringView familyName,
                                                                   f32 pixelHeight) override
         {
+            (void)GetFont(familyName, pixelHeight); // the size's own bake, if it wants one
             if (const FontEntry* exact = FindExact(familyName, pixelHeight))
                 return exact->texture;
             if (const FontEntry* closest = FindClosest(familyName, pixelHeight))
@@ -157,6 +147,137 @@ export namespace foundation::fonts
         void ReleaseFont(CachedFont*) override {}
 
     private:
+        // Where a family came from, to bake it again at another size (a coverage family).
+        struct FamilySource
+        {
+            String family;
+            String locator;   // a LoadFont path (empty for in-memory bytes)
+            Array<u8> bytes;  // a LoadFontFromMemory face
+            FontLoadOptions options;
+        };
+
+        void Remember(StringView family, String locator, Array<u8> bytes, const FontLoadOptions& options)
+        {
+            for (FamilySource& source : m_sources)
+            {
+                if (FamilyEquals(source.family, family))
+                {
+                    return; // the first load names the family's source
+                }
+            }
+            FamilySource source;
+            source.family = String(family);
+            source.locator = Move(locator);
+            source.bytes = Move(bytes);
+            source.options = options;
+            m_sources.PushBack(Move(source));
+        }
+
+        // Parse `locator` and bake it at `options` (LoadFont, and a coverage family's next size).
+        [[nodiscard]] FontLoadResult LoadFontUnremembered(StringView familyName, StringView locator,
+                                                          const FontLoadOptions& options)
+        {
+            IFont* font = nullptr;
+            if (m_fileSystem != nullptr)
+            {
+                UniquePtr<IStream> stream = m_fileSystem->Open(locator, FileMode::Read);
+                if (!stream || !stream->IsValid())
+                    return FontLoadResult::FileNotFound;
+
+                const StringView ext = PathExtension(locator);
+                Result<IFont*, FontLoadResult> parsed =
+                    FontParserFactory::ParseFromStream(*stream, ext, options, *m_allocator);
+                if (!parsed.HasValue())
+                    return parsed.Error();
+                font = parsed.Value();
+            }
+            else
+            {
+                Result<IFont*, FontLoadResult> parsed =
+                    FontParserFactory::ParseFromFile(locator, options, *m_allocator);
+                if (!parsed.HasValue())
+                    return parsed.Error();
+                font = parsed.Value();
+            }
+
+            return CacheFont(familyName, font, options);
+        }
+
+        [[nodiscard]] FontLoadResult BakeFromMemory(StringView familyName, Span<const u8> bytes,
+                                                    const FontLoadOptions& options)
+        {
+            Array<u8> copy;
+            copy.Resize(bytes.Size());
+            if (bytes.Size() != 0)
+                MemCopy(copy.Data(), bytes.Data(), bytes.Size());
+            TrueTypeFont* font = m_allocator->New<TrueTypeFont>();
+            const FontLoadResult parsed = font->Initialize(Move(copy), options.pixelHeight);
+            if (parsed != FontLoadResult::Success)
+            {
+                m_allocator->Delete(font);
+                return parsed;
+            }
+            return CacheFont(familyName, font, options);
+        }
+
+        // A coverage family baked at `pixelHeight` (rounded to whole pixels, 4 to 256), its atlas
+        // grown until the glyphs fit (to 4096 a side). Null when the family has no kept source or
+        // the bake fails; the caller then draws with the closest bake.
+        [[nodiscard]] CachedFont* BakeSize(StringView familyName, f32 pixelHeight)
+        {
+            const FamilySource* source = nullptr;
+            for (const FamilySource& candidate : m_sources)
+            {
+                if (FamilyEquals(candidate.family, familyName))
+                {
+                    source = &candidate;
+                    break;
+                }
+            }
+            if (source == nullptr || source->options.atlasMode == AtlasMode::DistanceField)
+            {
+                return nullptr;
+            }
+            const f32 rounded = Clamp(Round(pixelHeight), 4.0f, 256.0f);
+            if (const FontEntry* exact = FindExact(familyName, rounded))
+            {
+                return exact->cachedFont;
+            }
+            FontLoadOptions options = source->options;
+            options.pixelHeight = rounded;
+            // The atlas the family loaded with, grown with the size (glyph area goes with its square).
+            const f32 grow = Max(1.0f, rounded / Max(source->options.pixelHeight, 1.0f));
+            u32 side = Max(source->options.atlasWidth, source->options.atlasHeight);
+            while (static_cast<f32>(side) < static_cast<f32>(source->options.atlasWidth) * grow && side < 4096u)
+            {
+                side *= 2u;
+            }
+            for (;; side *= 2u)
+            {
+                options.atlasWidth = side;
+                options.atlasHeight = side;
+                FontLoadResult result = FontLoadResult::Unknown;
+                if (!source->bytes.IsEmpty())
+                {
+                    result = BakeFromMemory(familyName, Span<const u8>(source->bytes.Data(), source->bytes.Size()),
+                                            options);
+                }
+                else if (!source->locator.IsEmpty())
+                {
+                    result = LoadFontUnremembered(familyName, source->locator.AsView(), options);
+                }
+                if (result == FontLoadResult::Success)
+                {
+                    const FontEntry* made = FindExact(familyName, rounded);
+                    return made != nullptr ? made->cachedFont : nullptr;
+                }
+                if (result != FontLoadResult::AtlasPackingFailed || side >= 4096u)
+                {
+                    return nullptr;
+                }
+            }
+        }
+
         struct FontEntry
         {
             String family;
@@ -296,6 +417,7 @@ export namespace foundation::fonts
         IAllocator* m_allocator;
         foundation::vfs::IFileSystem* m_fileSystem = nullptr; // non-owning
         Array<FontEntry*> m_fonts;
+        Array<FamilySource> m_sources; // each family's first load, to bake more sizes from
         String m_defaultFontFamily = String(u8"Default");
         CachedFont* m_defaultFont = nullptr;
         f32 m_defaultFontSize = 16;

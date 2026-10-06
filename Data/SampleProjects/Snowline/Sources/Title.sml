@@ -45,7 +45,7 @@
         </Flex>
 
         <Spacer spacer-height="12"/>
-        <Label text="Arrows or stick to choose, Enter or A to ride. In a run, Escape or Start for this." font-size="15" style="text-color: #8FA3C8;"/>
+        <Label text="Arrows or stick to choose, Enter or A to ride. In a run, Escape or Start to pause." font-size="15" style="text-color: #8FA3C8;"/>
       </Flex>
     </Panel>
 

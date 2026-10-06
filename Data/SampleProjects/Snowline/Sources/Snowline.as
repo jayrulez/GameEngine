@@ -2,8 +2,10 @@
 // a run the clock, the gates and their penalties, the gems, the tricks, the HUD, and the results.
 //
 // The title lists the courses with the best medal and time won on each (from the save); a course
-// opens with a bronze on the one before it. Picking one loads its scene afresh; Pause (Escape or
-// Start), in a run or on the results, goes back to the title.
+// opens with a bronze on the one before it. Picking one loads its scene afresh. Pause (Escape or
+// Start) in a run holds it still under the pause menu: Resume (or Pause, or Grab, B on a pad) rides
+// on, Restart run starts it over, Courses goes back to the title. On the results, Pause goes back
+// to the title.
 //
 // The gates announce themselves ("GateRegistered") and report each crossing ("GatePassed",
 // "GateMissed": round the outside costs kMissPenalty seconds); the finish line holds the course's
@@ -34,6 +36,7 @@ Guid kHudDoc = Guid("9ff3ed63-f33c-487a-a88f-2761d48af746");    // UI/Hud
 Guid kFinishDoc = Guid("409e4cea-20a2-4705-9a54-059fa662850f"); // UI/Finish
 Guid kTitleDoc = Guid("2a97818d-8b96-4bfc-a7ae-6200a870ea69");  // UI/Title
 Guid kEndingDoc = Guid("c9a6c0a0-f6af-407c-9dc1-919fcf16923a"); // UI/Ending
+Guid kPauseDoc = Guid("d5271221-42fb-4bae-9d00-d8f16d328daa");  // UI/Pause
 
 // The courses, in order: each unlocked by a bronze on the one before it.
 const int kCourseCount = 3;
@@ -66,6 +69,7 @@ class Game
     private bool m_onTitle = false; // the title is up: nothing runs behind it
     private bool m_onEnding = false; // the ending is up
     private bool m_endingDue = false; // this run won a better medal on the last course
+    private bool m_paused = false;    // the pause menu is up over the run
     private bool m_running = true;
     private bool m_started = false; // the rider's first frame has come (the clock runs from it)
     private float m_time = 0.0f;    // seconds on the clock this run
@@ -119,6 +123,40 @@ class Game
             s.findLabel("course-" + i + "-best").setText(open ? bestLine(i)
                                                            : "Locked: " + courseName(i - 1) + " bronze");
         }
+    }
+
+    // ---- the pause menu: the run holds still under it ----
+    private void pause()
+    {
+        m_paused = true;
+        run::setTimeScale(0.0f);
+        Screen@ s = ui::push(kPauseDoc);
+        s.findButton("resume-btn").onClick(Action(this.onResume));
+        s.findButton("restart-btn").onClick(Action(this.onRestartRun));
+        s.findButton("courses-btn").onClick(Action(this.onCourses));
+    }
+
+    private void onResume()
+    {
+        if (!m_paused)
+        {
+            return;
+        }
+        m_paused = false;
+        ui::pop(); // the pause menu
+        run::setTimeScale(1.0f);
+    }
+
+    private void onRestartRun()
+    {
+        onResume();
+        restart();
+    }
+
+    private void onCourses()
+    {
+        m_paused = false;
+        showTitle();
     }
 
     private void onMeadow() { startCourse(0); }
@@ -179,9 +217,25 @@ class Game
             }
             return;
         }
+        if (m_paused)
+        {
+            // Back out of the menu the way it came in, or with B (the Grab button) on a pad.
+            if (Input::wasPressed("Pause") || Input::wasPressed("Grab"))
+            {
+                onResume();
+            }
+            return;
+        }
         if (Input::wasPressed("Pause"))
         {
-            showTitle(); // in a run or on the results: back to the courses
+            if (m_running)
+            {
+                pause();
+            }
+            else
+            {
+                showTitle(); // on the results: back to the courses
+            }
             return;
         }
         if (m_running)

@@ -1482,6 +1482,67 @@ TEST_CASE("game-instance: a game keeps its values between runs through Save (Ang
     CHECK_FALSE(reread.Values().Has(u8"scratch"));
 }
 
+TEST_CASE("game-instance: a game keeps a list of numbers through Save (AngelScript and Luau)")
+{
+    RegisterCoreTypes();
+    foundation::script::RegisterScriptFacadeReflection();
+    engine::runtime::RegisterRunScriptFacade();
+    engine::runtime::RegisterSaveScriptFacade();
+    foundation::script::angelscript::RegisterAngelScriptBackend();
+    foundation::script::RegisterLuauScriptBackend();
+    const String path = FreshSavePath(u8"game_floats.xml");
+
+    // AngelScript records a run; it outlives the run, and reads back whole.
+    {
+        engine::runtime::GameInstance gi;
+        gi.SetSaveFile(path.AsView());
+        REQUIRE(gi.StartScript(u8"class Game {\n"
+                               u8"  Game() {}\n"
+                               u8"  void launch() {\n"
+                               u8"    array<float> samples = {0.5f, 1.25f, -3.0f};\n"
+                               u8"    Save::setFloats(\"ghost\", samples);\n"
+                               u8"    array<float>@ back = Save::getFloats(\"ghost\");\n"
+                               u8"    Save::setInt(\"length\", back.length());\n"
+                               u8"    Save::setInt(\"missing\", Save::getFloats(\"none\").length());\n"
+                               u8"  }\n"
+                               u8"  void update(double dt) {}\n"
+                               u8"  void exit() {}\n"
+                               u8"}\n",
+                               u8"game.as"));
+        CHECK(gi.Saves().Values().GetInt(u8"length", -1) == 3);
+        CHECK(gi.Saves().Values().GetInt(u8"missing", -1) == 0);
+        gi.StopScript();
+    }
+    engine::runtime::RunSave reread(DefaultAllocator());
+    reread.Open(path.AsView());
+    const Array<f32> ghost = reread.Values().GetFloats(u8"ghost");
+    REQUIRE(ghost.Size() == 3u);
+    CHECK(ghost[0] == 0.5f);
+    CHECK(ghost[1] == 1.25f);
+    CHECK(ghost[2] == -3.0f);
+
+    // Luau reads the same list as a table and writes its own.
+    {
+        engine::runtime::GameInstance gi;
+        gi.SetSaveFile(path.AsView());
+        REQUIRE(gi.StartScript(u8"Game = {}\n"
+                               u8"Game.__index = Game\n"
+                               u8"function Game.new() return setmetatable({}, Game) end\n"
+                               u8"function Game:launch()\n"
+                               u8"  local g = Save.getFloats('ghost')\n"
+                               u8"  Save.setFloat('sum', g[1] + g[2] + g[3])\n"
+                               u8"  Save.setFloats('ghost', {7, 8})\n"
+                               u8"end\n"
+                               u8"function Game:update(dt) end\n"
+                               u8"function Game:exit() end\n",
+                               u8"game.luau"));
+        CHECK(gi.Saves().Values().GetFloat(u8"sum", 0.0f) == doctest::Approx(-1.25f));
+        REQUIRE(gi.Saves().Values().GetFloats(u8"ghost").Size() == 2u);
+        CHECK(gi.Saves().Values().GetFloats(u8"ghost")[1] == 8.0f);
+        gi.StopScript();
+    }
+}
+
 TEST_CASE("game-instance: Save flushes on request and clears (Luau); a run with no file writes nowhere")
 {
     RegisterCoreTypes();

@@ -94,6 +94,10 @@ export namespace engine::runtime
         static void setBool(core::String key, bool value);
         [[nodiscard]] static core::String getString(core::String key, core::String fallback);
         static void setString(core::String key, core::String value);
+        // A list of numbers (a recorded run): set whole, read whole; empty when absent or another
+        // kind. AngelScript `array<float>`, Luau a table.
+        [[nodiscard]] static core::Array<f32> getFloats(core::String key);
+        static void setFloats(core::String key, core::Array<f32> values);
 
         // Writes now if anything changed; false if the write failed or the run has no save file.
         static bool flush();

@@ -146,6 +146,21 @@ namespace engine::runtime
         }
     }
 
+    core::Array<f32> Save::getFloats(core::String key)
+    {
+        RunSave* save = Resolve();
+        return save != nullptr ? save->Values().GetFloats(key.AsView()) : core::Array<f32>{};
+    }
+
+    void Save::setFloats(core::String key, core::Array<f32> values)
+    {
+        if (RunSave* save = Resolve(); save != nullptr &&
+                                       save->Values().SetFloats(key.AsView(), Span<const f32>(values.Data(), values.Size())))
+        {
+            save->MarkChanged();
+        }
+    }
+
     bool Save::flush()
     {
         RunSave* save = Resolve();
@@ -165,6 +180,8 @@ namespace engine::runtime
         builder.Method<&Save::setBool>("setBool", {"key", "value"});
         builder.Method<&Save::getString>("getString", {"key", "fallback"});
         builder.Method<&Save::setString>("setString", {"key", "value"});
+        builder.Method<&Save::getFloats>("getFloats", {"key"});
+        builder.Method<&Save::setFloats>("setFloats", {"key", "values"});
         builder.Method<&Save::flush>("flush");
         builder.Constructor();
     }
@@ -174,6 +191,7 @@ namespace engine::runtime
         static const bool once = []()
         {
             settings::RegisterSaveValuesType(); // reading a save file instantiates the section by name
+            RegisterArrayType<f32>();           // getFloats/setFloats: a list crosses as array<float>
             GlobalTypeRegistry().Register(Save::StaticType());
             foundation::script::RegisterExtraFacadeName(u8"Save");
             return true;

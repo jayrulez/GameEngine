@@ -758,38 +758,53 @@ namespace editor
 
     void RegisterPieRunTool(foundation::mcp::McpServer& server, EditorContext& context)
     {
-        JsonValue until = SchemaBuilder()
-                              .Str(u8"entity", u8"the entity, by guid, name or slash path")
-                              .Str(u8"field", u8"its field path, as in probes (default "
-                                              u8"worldPosition; worldPosition.y for the height)")
-                              .Str(u8"script", u8"or a game script property")
-                              .Str(u8"op", u8"<, <=, >, >=, == or !=")
-                              .Build();
-        until.Set(u8"description",
-                  JsonValue::MakeString(u8"end the run early when one value crosses: {entity, "
-                                        u8"field, op, value} or {script, op, value}; `value` is a "
-                                        u8"number, or with == and != a boolean or a string"));
+        SchemaBuilder until;
+        until.Str(u8"entity", u8"the entity, by guid, name or slash path")
+            .Str(u8"field", u8"its field path, as in probes (default worldPosition; worldPosition.y "
+                            u8"for the height)")
+            .Str(u8"script", u8"or a game script property")
+            .Str(u8"op", u8"<, <=, >, >=, == or !=")
+            .Any(u8"value", u8"what it is compared with: a number, or with == and != a boolean or a "
+                            u8"string");
+        SchemaBuilder entry;
+        entry.Number(u8"at", u8"run seconds since the run starts", true)
+            .Str(u8"key", u8"a KeyCode case name")
+            .Str(u8"mouseButton", u8"a MouseButton case name")
+            .Arr(u8"mouseMove", u8"number", u8"[x, y] in the game's render-resolution pixels")
+            .Arr(u8"wheel", u8"number", u8"[x, y]")
+            .Integer(u8"gamepad", u8"the pad (default 0)")
+            .Str(u8"button", u8"a GamepadButton case name")
+            .Str(u8"axis", u8"a GamepadAxis case name")
+            .Number(u8"value", u8"the axis value, -1 to 1")
+            .Boolean(u8"down", u8"pressed (default true) or let go");
+        SchemaBuilder probe;
+        probe.Str(u8"entity", u8"the entity, by guid, name or slash path")
+            .Arr(u8"fields", u8"string", u8"its field paths (default [\"worldPosition\"])")
+            .Str(u8"script", u8"or a game script property");
         JsonValue schema =
             SchemaBuilder()
                 .Str(u8"pie", u8"the PIE instance's id, as pie_list reports it (default: the "
                               u8"primary, `game-page`)")
                 .Number(u8"duration", u8"run seconds to run, up to 600", true)
-                .Arr(u8"input", u8"object",
-                     u8"the timeline: entries {at, key, down} | {at, mouseButton, down} | {at, "
-                     u8"mouseMove: [x, y]} | {at, wheel: [x, y]} | {at, gamepad, button, down} | "
-                     u8"{at, gamepad, axis, value}; `at` is run seconds since the run starts, "
-                     u8"`down` defaults to true, `gamepad` to 0; mouseMove is in the game's "
-                     u8"render-resolution pixels (a scaled screenshot's divided by its scale)")
-                .Arr(u8"probes", u8"object",
-                     u8"what to read: {entity, fields} (entity by guid, name or slash path; "
-                     u8"fields default [\"worldPosition\"]) or {script: \"<game script "
-                     u8"property>\"}")
+                .ObjectArr(u8"input", entry,
+                           u8"the timeline: entries {at, key, down} | {at, mouseButton, down} | {at, "
+                           u8"mouseMove: [x, y]} | {at, wheel: [x, y]} | {at, gamepad, button, down} | "
+                           u8"{at, gamepad, axis, value}; `at` is run seconds since the run starts, "
+                           u8"`down` defaults to true, `gamepad` to 0; mouseMove is in the game's "
+                           u8"render-resolution pixels (a scaled screenshot's divided by its scale)")
+                .ObjectArr(u8"probes", probe,
+                           u8"what to read: {entity, fields} (entity by guid, name or slash path; "
+                           u8"fields default [\"worldPosition\"]) or {script: \"<game script "
+                           u8"property>\"}")
                 .Number(u8"every", u8"sample the probes every N run seconds (default 0.5)")
                 .Arr(u8"sampleAt", u8"number", u8"or sample at these run times instead")
                 .Arr(u8"screenshots", u8"number", u8"run times at which to write a PNG of the tab")
                 .Str(u8"screenshotDir", u8"an existing directory for the screenshots (default: "
                                         u8"<user-data>/screenshots)")
-                .Property(u8"until", Move(until))
+                .Obj(u8"until", until,
+                     u8"end the run early when one value crosses: {entity, field, op, value} or "
+                     u8"{script, op, value}; `value` is a number, or with == and != a boolean or a "
+                     u8"string")
                 .Build();
 
         EditorContext* ctx = &context;

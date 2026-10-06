@@ -265,6 +265,50 @@ TEST_CASE("mcp: an argument the schema does not declare is refused, naming the t
     CHECK(r4.Get(u8"error").Get(u8"code").AsInt() == -32602);
 }
 
+TEST_CASE("mcp: the schema check reaches every depth, naming a nested field by its path")
+{
+    McpServer s;
+    SchemaBuilder probe;
+    probe.Str(u8"entity").Arr(u8"fields", u8"string");
+    SchemaBuilder until;
+    until.Str(u8"op", {}, true).Any(u8"value");
+    s.RegisterTool(u8"nested", u8"Nested shapes",
+                   SchemaBuilder()
+                       .ObjectArr(u8"probes", probe)
+                       .Obj(u8"until", until)
+                       .Arr(u8"times", u8"number")
+                       .Map(u8"options")
+                       .Build(),
+                   foundation::mcp::ToolAnnotations::ReadOnly(),
+                   [](const JsonValue&) -> ToolResult { return JsonValue::MakeObject(); });
+    auto call = [&s](const char8_t* arguments) -> JsonValue
+    {
+        String line = Format(u8"{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{{"
+                             u8"\"name\":\"nested\",\"arguments\":{}}}}}",
+                             StringView(arguments));
+        return Response(s.HandleLine(line.AsView()));
+    };
+    auto refusal = [](const JsonValue& r) -> String
+    {
+        REQUIRE(r.Has(u8"error"));
+        CHECK(r.Get(u8"error").Get(u8"code").AsInt() == -32602);
+        return r.Get(u8"error").Get(u8"message").AsString();
+    };
+
+    // A list item's misspelt key, named by its path.
+    CHECK(refusal(call(u8"{\"probes\":[{\"entity\":\"a\"},{\"entity\":\"b\",\"field\":\"x\"}]}")) ==
+          StringView(u8"nested: no field 'probes[1].field' (it takes: entity, fields)"));
+    // A nested object's missing required field and an element of the wrong type.
+    CHECK(refusal(call(u8"{\"until\":{\"value\":3}}")) == StringView(u8"nested: missing required field 'until.op'"));
+    CHECK(refusal(call(u8"{\"times\":[1,\"x\"]}")) == StringView(u8"nested: field 'times[1]' must be of type number"));
+    CHECK(refusal(call(u8"{\"probes\":[{\"fields\":[\"a\",2]}]}")) ==
+          StringView(u8"nested: field 'probes[0].fields[1]' must be of type string"));
+    // A map takes any key; a well-formed call passes at every depth.
+    JsonValue ok = call(u8"{\"probes\":[{\"entity\":\"a\",\"fields\":[\"rotation\"]}],\"until\":{\"op\":\"<\","
+                        u8"\"value\":true},\"times\":[1,2],\"options\":{\"anything\":1}}");
+    CHECK(ok.Has(u8"result"));
+}
+
 // --- Subset rejections -----------------------------------------------------
 
 TEST_CASE("mcp: unknown method is -32601")

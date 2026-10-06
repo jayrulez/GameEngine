@@ -82,6 +82,48 @@ export namespace foundation::mcp
             return Add(Move(name), Move(prop), required);
         }
 
+        // A nested object whose fields `fields` declares: checked as the arguments are (its required
+        // fields, the type of each, and a field it does not declare refused, named by its path).
+        SchemaBuilder& Obj(String name, const SchemaBuilder& fields, String description = {},
+                           bool required = false)
+        {
+            JsonValue prop = fields.Build();
+            if (!description.IsEmpty())
+            {
+                prop.Set(u8"description", JsonValue::MakeString(Move(description)));
+            }
+            return Add(Move(name), Move(prop), required);
+        }
+
+        // An array of objects, each checked against `fields` as Obj checks one.
+        SchemaBuilder& ObjectArr(String name, const SchemaBuilder& fields, String description = {},
+                                 bool required = false)
+        {
+            JsonValue prop = JsonValue::MakeObject();
+            prop.Set(u8"type", JsonValue::MakeString(u8"array"));
+            if (!description.IsEmpty())
+            {
+                prop.Set(u8"description", JsonValue::MakeString(Move(description)));
+            }
+            prop.Set(u8"items", fields.Build());
+            return Add(Move(name), Move(prop), required);
+        }
+
+        // A map of names the tool resolves itself (an importer's options, a behaviour's properties):
+        // an object that takes any key (additionalProperties:true). The tool refuses a key it does
+        // not know, with its own list.
+        SchemaBuilder& Map(String name, String description = {}, bool required = false)
+        {
+            JsonValue prop = JsonValue::MakeObject();
+            prop.Set(u8"type", JsonValue::MakeString(u8"object"));
+            if (!description.IsEmpty())
+            {
+                prop.Set(u8"description", JsonValue::MakeString(Move(description)));
+            }
+            prop.Set(u8"additionalProperties", JsonValue::MakeBool(true));
+            return Add(Move(name), Move(prop), required);
+        }
+
         // A field of any JSON shape (no type constraint): declared, so the call may pass it, and
         // described, so an agent knows what goes there.
         SchemaBuilder& Any(String name, String description = {}, bool required = false)
@@ -171,57 +213,43 @@ export namespace foundation::mcp
         return true; // unknown/absent type constraint: accept
     }
 
-    // Validate `args` against an object `schema`. Returns an empty Optional when valid, else a
-    // human-readable message naming the offending field (destined for a -32602 response). A field
-    // the schema does not declare is refused, naming the ones it does: a misspelt argument would
-    // otherwise be dropped without a word and the call run without it. A schema that sets
-    // additionalProperties:true takes any field.
-    [[nodiscard]] inline Optional<String> ValidateArgs(const JsonValue& args, const JsonValue& schema)
+    namespace schema_detail
     {
-        if (!args.IsObject())
+        [[nodiscard]] inline String Join(const String& path, StringView key)
         {
-            return String(u8"arguments must be a JSON object");
-        }
-        const JsonValue required = schema.Get(u8"required");
-        for (i64 i = 0; i < required.Count(); ++i)
-        {
-            const String key = required.At(i).AsString();
-            if (!args.Has(key))
+            if (path.IsEmpty())
             {
-                return Format(u8"missing required field '{}'", key.AsView());
+                return String(key);
             }
+            return Format(u8"{}.{}", path.AsView(), key);
         }
-        const JsonValue properties = schema.Get(u8"properties");
-        const JsonValue open = schema.Get(u8"additionalProperties");
-        const bool openEnded = open.IsBool() && open.AsBool();
-        for (i64 i = 0; i < args.Count(); ++i)
+
+        [[nodiscard]] inline String DeclaredNames(const JsonValue& properties)
         {
-            const String key = args.KeyAt(i);
-            const JsonValue prop = properties.Get(key);
-            if (prop.IsNull())
+            String declared;
+            for (i64 j = 0; j < properties.Count(); ++j)
             {
-                if (openEnded)
+                if (j > 0)
                 {
-                    continue; // any field goes: not validated
+                    declared.Append(StringView(u8", "));
                 }
-                String declared;
-                for (i64 j = 0; j < properties.Count(); ++j)
-                {
-                    if (j > 0)
-                    {
-                        declared.Append(StringView(u8", "));
-                    }
-                    declared.Append(properties.KeyAt(j).AsView());
-                }
-                return properties.Count() == 0
-                           ? Format(u8"no argument '{}' (it takes none)", key.AsView())
-                           : Format(u8"no argument '{}' (it takes: {})", key.AsView(), declared.AsView());
+                declared.Append(properties.KeyAt(j).AsView());
             }
-            const JsonValue value = args.Get(key);
+            return declared;
+        }
+
+        [[nodiscard]] inline Optional<String> ValidateObject(const JsonValue& value, const JsonValue& schema,
+                                                             const String& path);
+
+        // One value against its property schema, at `path`: its type, its enum, then what is inside
+        // it (an object that declares its properties, an array's elements).
+        [[nodiscard]] inline Optional<String> ValidateValue(const JsonValue& value, const JsonValue& prop,
+                                                            const String& path)
+        {
             const String type = prop.Get(u8"type").AsString();
             if (!JsonMatchesType(value, type.AsView()))
             {
-                return Format(u8"field '{}' must be of type {}", key.AsView(), type.AsView());
+                return Format(u8"field '{}' must be of type {}", path.AsView(), type.AsView());
             }
             const JsonValue choices = prop.Get(u8"enum");
             if (choices.IsArray())
@@ -237,10 +265,89 @@ export namespace foundation::mcp
                 }
                 if (!allowed)
                 {
-                    return Format(u8"field '{}' is not one of the allowed values", key.AsView());
+                    return Format(u8"field '{}' is not one of the allowed values", path.AsView());
                 }
             }
+            if (value.IsObject() && prop.Get(u8"properties").IsObject())
+            {
+                return ValidateObject(value, prop, path);
+            }
+            const JsonValue items = prop.Get(u8"items");
+            if (value.IsArray() && items.IsObject())
+            {
+                for (i64 i = 0; i < value.Count(); ++i)
+                {
+                    Optional<String> error =
+                        ValidateValue(value.At(i), items, Format(u8"{}[{}]", path.AsView(), i));
+                    if (error.HasValue())
+                    {
+                        return error;
+                    }
+                }
+            }
+            return {};
         }
-        return {};
+
+        // An object against an object schema: its required fields, then each field it has. A field
+        // the schema does not declare is refused, naming the ones it does, unless the schema sets
+        // additionalProperties:true. At the top (`path` empty) a field is an "argument".
+        [[nodiscard]] inline Optional<String> ValidateObject(const JsonValue& value, const JsonValue& schema,
+                                                             const String& path)
+        {
+            const JsonValue required = schema.Get(u8"required");
+            for (i64 i = 0; i < required.Count(); ++i)
+            {
+                const String key = required.At(i).AsString();
+                if (!value.Has(key))
+                {
+                    return Format(u8"missing required field '{}'", Join(path, key.AsView()).AsView());
+                }
+            }
+            const JsonValue properties = schema.Get(u8"properties");
+            const JsonValue open = schema.Get(u8"additionalProperties");
+            const bool openEnded = open.IsBool() && open.AsBool();
+            for (i64 i = 0; i < value.Count(); ++i)
+            {
+                const String key = value.KeyAt(i);
+                const JsonValue prop = properties.Get(key);
+                if (prop.IsNull())
+                {
+                    if (openEnded)
+                    {
+                        continue; // any field goes: not validated
+                    }
+                    const String declared = DeclaredNames(properties);
+                    const String where = Join(path, key.AsView());
+                    const char8_t* noun = path.IsEmpty() ? u8"argument" : u8"field";
+                    return properties.Count() == 0
+                               ? Format(u8"no {} '{}' (it takes none)", StringView(noun), where.AsView())
+                               : Format(u8"no {} '{}' (it takes: {})", StringView(noun), where.AsView(),
+                                        declared.AsView());
+                }
+                Optional<String> error = ValidateValue(value.Get(key), prop, Join(path, key.AsView()));
+                if (error.HasValue())
+                {
+                    return error;
+                }
+            }
+            return {};
+        }
+    }
+
+    // Validate `args` against an object `schema`. Returns an empty Optional when valid, else a
+    // human-readable message naming the offending field by its path (destined for a -32602
+    // response): "no argument 'X' (it takes: ...)", "no field 'probes[0].field' (it takes: ...)",
+    // "missing required field 'until.op'", "field 'sampleAt[1]' must be of type number". A field
+    // the schema does not declare is refused at any depth, naming the ones it does: a misspelt
+    // name would otherwise be dropped without a word and the call run without it. An object that
+    // sets additionalProperties:true (a map; see SchemaBuilder::Map, AnyFields) takes any field,
+    // and so does one that declares no properties at all (an object of unknown shape).
+    [[nodiscard]] inline Optional<String> ValidateArgs(const JsonValue& args, const JsonValue& schema)
+    {
+        if (!args.IsObject())
+        {
+            return String(u8"arguments must be a JSON object");
+        }
+        return schema_detail::ValidateObject(args, schema, String());
     }
 }

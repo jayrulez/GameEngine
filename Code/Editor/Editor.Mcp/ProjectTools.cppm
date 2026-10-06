@@ -276,6 +276,9 @@ export namespace editor::mcp
                              u8"spaces ignored (a model's \"Generate collision\", say); an unknown "
                              u8"one is refused with the importer's list, unnamed toggles keep their "
                              u8"defaults, and the result lists every toggle's value"));
+            // A map of names the tool resolves itself (it refuses one it does not know, with its
+            // own list): the server's schema check takes any key here.
+            property.Set(u8"additionalProperties", JsonValue::MakeBool(true));
             return property;
         }
 

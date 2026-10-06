@@ -331,6 +331,9 @@ namespace editor
                              u8"true/false, a string, [x, y, z] for a vector, [r, g, b, a] for a "
                              u8"colour, an entity (guid, name or path) or null for an entity "
                              u8"reference, an asset guid or null for an asset reference"));
+            // A map of names the tool resolves itself (it refuses one it does not know, with its
+            // own list): the server's schema check takes any key here.
+            property.Set(u8"additionalProperties", JsonValue::MakeBool(true));
             return property;
         }
 

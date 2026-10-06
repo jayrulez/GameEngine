@@ -120,7 +120,10 @@ entity outside a run, each running behaviour's properties under `live` beside wh
 - **Arguments are checked against the tool's schema.** One the schema does not declare is
   refused (`pie_run: no argument 'timeline' (it takes: pie, duration, input, ...)`), as are a
   missing required one and one of the wrong type, before the tool runs: a misspelt name never
-  quietly drops what it carried.
+  quietly drops what it carried. The same holds at every depth, the field named by its path
+  (`pie_run: no field 'probes[0].field' (it takes: entity, fields, script)`); only a map of
+  names the tool resolves itself (asset_import's `options`, a behaviour's `properties`) takes
+  any key, and the tool refuses one it does not know.
 - **Read before destructive changes.** `asset_uses` before deleting anything;
   `project_health` after - dangling references surface later, not at delete time.
 - **Check `known_issues` before re-diagnosing** an odd symptom; if it matches a recorded

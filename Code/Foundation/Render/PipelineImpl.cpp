@@ -133,7 +133,8 @@ namespace foundation::render
                                   rendergraph::RGHandle colorH, rendergraph::RGHandle depth,
                                   bool clearColor, rhi::TextureFormat colorFormat,
                                   rendergraph::RGHandle normalH, rendergraph::RGHandle velocityH,
-                                  rendergraph::RGHandle materialH, const Float4x4& prevViewProj,
+                                  rendergraph::RGHandle materialH, rendergraph::RGHandle albedoH,
+                                  const Float4x4& prevViewProj,
                                   Float2 jitter, Float2 prevJitter, const ClusterBinding& cluster,
                                   const ShadowBinding& shadow, const IblBinding& ibl,
                                   rhi::LoadOp depthLoad, rendergraph::RGSubresourceRange colorSub,
@@ -148,7 +149,7 @@ namespace foundation::render
         const rhi::LoadOp colorLoad = clearColor ? rhi::LoadOp::Clear : rhi::LoadOp::Load;
         graph.AddRenderPass(
             u8"forward",
-            [this, &view, &registry, depth, colorH, normalH, velocityH, materialH, colorLoad,
+            [this, &view, &registry, depth, colorH, normalH, velocityH, materialH, albedoH, colorLoad,
              colorFormat, frameIndex, viewIndex, prevViewProj, jitter, prevJitter, cluster, shadow,
              ibl, depthLoad, colorSub, probeHandle, probeValid, probeBase,
              probeCount](rendergraph::PassBuilder& b)
@@ -162,6 +163,9 @@ namespace foundation::render
                 b.SetColorTarget(2, velocityH, rhi::LoadOp::Clear, rhi::StoreOp::Store,
                                  rhi::ClearColor::Black());
                 b.SetColorTarget(3, materialH, rhi::LoadOp::Clear, rhi::StoreOp::Store,
+                                 rhi::ClearColor::Black());
+                // Diffuse albedo (SSGI tints its gathered bounce by it).
+                b.SetColorTarget(4, albedoH, rhi::LoadOp::Clear, rhi::StoreOp::Store,
                                  rhi::ClearColor::Black());
                 // Depth: loaded after the prepass for early-Z; capture (no prepass) passes Clear.
                 b.SetDepthTarget(depth, depthLoad, rhi::StoreOp::Store);
@@ -443,7 +447,8 @@ namespace foundation::render
             bd.colorFormats[1] = kGNormalFormat;   // MRT: view-space normal
             bd.colorFormats[2] = kGVelocityFormat; // MRT: motion vector
             bd.colorFormats[3] = kGMaterialFormat; // MRT: roughness/metallic (SSR)
-            bd.colorFormatCount = 4;
+            bd.colorFormats[4] = kGAlbedoFormat;   // MRT: diffuse albedo (SSGI)
+            bd.colorFormatCount = 5;
         }
         bd.depthStencilFormat = m_depthFormat;
         // A bundle's read-only flags MUST match the render pass that executes it - the browser's
@@ -1638,6 +1643,8 @@ namespace foundation::render
                         const rendergraph::RGHandle capMaterial = m_graph.CreateTransient(
                             u8"probe.material",
                             rendergraph::RGTextureDesc(kGMaterialFormat, res, res));
+                        const rendergraph::RGHandle capAlbedo = m_graph.CreateTransient(
+                            u8"probe.albedo", rendergraph::RGTextureDesc(kGAlbedoFormat, res, res));
 
                         rendergraph::RGSubresourceRange sub{};
                         sub.baseArrayLayer = layerBase + face;
@@ -1650,7 +1657,7 @@ namespace foundation::render
                             cv, *m_registry, m_graph, m_frameIndex,
                             /*viewIndex*/ kCaptureViewIndexBase + face, capturedH, capDepth,
                             /*clearColor*/ true, ReflectionProbeSystem::kCubeFormat, capNormal,
-                            capVel, capMaterial, faceVP, Float2{0, 0}, Float2{0, 0},
+                            capVel, capMaterial, capAlbedo, faceVP, Float2{0, 0}, Float2{0, 0},
                             ClusterBinding{}, capShadow, capIbl, rhi::LoadOp::Clear, sub);
                         // Sky into the same face, after the forward (loads the captured depth).
                         // Distinct sky uniform slot per capture face (2..7), so the capture never shares SkyPass's
@@ -1822,6 +1829,9 @@ namespace foundation::render
                 // Roughness/metallic G-buffer - consumed by the SSR pass (roughness gates/fades reflections).
                 const rendergraph::RGHandle materialT = m_graph.CreateTransient(
                     u8"forward.material", msaaDesc(kGMaterialFormat, v->Width(), v->Height()));
+                // Diffuse albedo G-buffer - consumed by SSGI (the bounce it gathers is tinted by it).
+                const rendergraph::RGHandle albedoT = m_graph.CreateTransient(
+                    u8"forward.albedo", msaaDesc(kGAlbedoFormat, v->Width(), v->Height()));
                 // Depth for 1x OVERLAY passes that render into the final LDR after post (debug draw): the
                 // scene `depth` when off, but the RESOLVED 1x depth under MSAA (a 1x overlay can't depth-
                 // test a 4x attachment). Set to postDepth inside the HDR MSAA block below.
@@ -1930,7 +1940,7 @@ namespace foundation::render
                         u8"forward.hdr", msaaDesc(m_tonemap->HdrFormat(), v->Width(), v->Height()));
                     m_pass.DeclarePass(*v, *m_registry, m_graph, m_frameIndex, viewIndex, hdr,
                                        depth, /*clear*/ true, m_tonemap->HdrFormat(), normalT,
-                                       velocityT, materialT, prevViewProj, jitter, prevJitter,
+                                       velocityT, materialT, albedoT, prevViewProj, jitter, prevJitter,
                                        cluster, shadow, ibl, rhi::LoadOp::Load,
                                        rendergraph::RGSubresourceRange{}, probePrefilteredH,
                                        probeActive, probeRange.base, probeRange.count);
@@ -1946,7 +1956,8 @@ namespace foundation::render
                     // last G-buffer writer and before the first 1x consumer (Fable pin 3). When
                     // msaaSamples == 1 the post* handles alias the originals - no resolve passes emitted.
                     rendergraph::RGHandle postHdr = hdr, postDepth = depth, postNormal = normalT,
-                                          postVelocity = velocityT, postMaterial = materialT;
+                                          postVelocity = velocityT, postMaterial = materialT,
+                                          postAlbedo = albedoT;
                 debugSemanticSrc = hdr; // updated to the 1x resolve below when MSAA is on
                     if (msaaSamples > 1)
                     {
@@ -1968,12 +1979,13 @@ namespace foundation::render
                                                   b.SetExecute([](rhi::RenderPassEncoder&) {});
                                               });
                         const MsaaResolveOutputs r = m_msaaResolve->DeclareResolve(
-                            m_graph, depth, normalT, velocityT, materialT, m_pass.DepthFormat(),
+                            m_graph, depth, normalT, velocityT, materialT, albedoT, m_pass.DepthFormat(),
                             v->Width(), v->Height());
                         postDepth = r.depth;
                         postNormal = r.normal;
                         postVelocity = r.velocity;
                         postMaterial = r.material;
+                        postAlbedo = r.albedo;
                         overlayDepth = postDepth; // 1x overlays (debug draw) test the resolved depth
                         debugSemanticSrc = postHdr;
                     }
@@ -1993,17 +2005,34 @@ namespace foundation::render
                                                    /*samples*/ 1u);
                     }
                     // Screen-space GI (tier 1): one diffuse bounce gathered from the lit HDR, BEFORE
-                    // SSR so reflections see the bounce. Additive composite (unit-albedo v1 ruling -
-                    // see :ssgi); produces a fresh HDR the rest of the chain consumes.
+                    // SSR so reflections see the bounce. Where a ray hits, the bounce (tinted by the
+                    // albedo G-buffer) replaces the ambient the forward lit with, so the composite is
+                    // given that ambient: the same SH sky, dimmer and flat fill (see :ssgi). Produces
+                    // a fresh HDR the rest of the chain consumes.
                     rendergraph::RGHandle sceneHdr = postHdr;
                     if (m_ssgi != nullptr && post.ssgiEnabled)
                     {
                         SsgiPass::Params ssgiParams;
                         ssgiParams.intensity = post.ssgiIntensity;
+                        SsgiPass::Sky sky;
+                        // The forward's own test for using the scene's IBL (MeshRenderer view set).
+                        if (ibl.valid && ibl.shBuffer != nullptr && ibl.prefilterView != nullptr &&
+                            ibl.brdfView != nullptr)
+                        {
+                            sky.shBuffer = ibl.shBuffer;
+                            sky.shHandle = ibl.shHandle;
+                            sky.generation = ibl.generation;
+                        }
+                        if (v->Scene() != nullptr)
+                        {
+                            sky.ambient = v->Scene()->Ambient();
+                            sky.iblDiffuse = v->Scene()->Sky().iblDiffuseIntensity;
+                        }
+                        sky.viewToWorld = Inverse(v->Camera().view);
                         sceneHdr = m_ssgi->DeclareSsgi(
-                            m_graph, sceneHdr, postDepth, postNormal, postVelocity, v->Width(),
-                            v->Height(), v->ViewportX(), v->ViewportY(), v->ViewportWidth(),
-                            v->ViewportHeight(), Inverse(v->Camera().projection),
+                            m_graph, sceneHdr, postDepth, postNormal, postVelocity, postAlbedo, sky,
+                            v->Width(), v->Height(), v->ViewportX(), v->ViewportY(),
+                            v->ViewportWidth(), v->ViewportHeight(), Inverse(v->Camera().projection),
                             v->Camera().projection, ssgiParams, viewIndex, m_noiseFrame);
                     }
                     // Screen-space reflections: reflect the lit HDR (sky + opaque + decals) into itself, AFTER
@@ -2150,7 +2179,8 @@ namespace foundation::render
                     // No tonemap: forward writes the LDR target directly.
                     m_pass.DeclarePass(*v, *m_registry, m_graph, m_frameIndex, viewIndex, colorH,
                                        depth, clearColor, v->TargetFormat(), normalT, velocityT,
-                                       materialT, prevViewProj, jitter, prevJitter, cluster, shadow,
+                                       materialT, albedoT, prevViewProj, jitter, prevJitter, cluster,
+                                       shadow,
                                        ibl, rhi::LoadOp::Load, rendergraph::RGSubresourceRange{},
                                        probePrefilteredH, probeActive, probeRange.base,
                                        probeRange.count);

@@ -2063,16 +2063,18 @@ namespace foundation::render
             config.shaderFlags |= shaders::ShaderFlags::Wind; // the material's Wind* lanes sway it
         }
         // Opaque + masked render the MRT G-buffer pass: target 0 = shaded color (format overridden
-        // per-view at build); targets 1/2 = view-space normal + motion vector (the GBUFFER permutation
-        // writes them). Transparent renders a separate color-only pass, so it stays single-target.
+        // per-view at build); targets 1/2 = view-space normal + motion vector, 3 = roughness/metallic,
+        // 4 = diffuse albedo (the GBUFFER permutation writes them). Transparent renders a separate
+        // color-only pass, so it stays single-target.
         const bool gbuffer = (config.blendMode == materials::BlendMode::Opaque ||
                               config.blendMode == materials::BlendMode::Masked);
         if (gbuffer)
         {
-            config.colorTargetCount = 4;
+            config.colorTargetCount = 5;
             config.colorFormats[1] = kGNormalFormat;
             config.colorFormats[2] = kGVelocityFormat;
             config.colorFormats[3] = kGMaterialFormat; // SSR: roughness/metallic
+            config.colorFormats[4] = kGAlbedoFormat;   // SSGI: diffuse albedo
             config.shaderFlags |= shaders::ShaderFlags::GBuffer;
             // Equal-depth fragments from the depth prepass must pass (early-Z shades each opaque pixel once).
             config.depthCompare = rhi::depth::NearerOrEqual();

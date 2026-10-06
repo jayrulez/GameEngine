@@ -6,11 +6,14 @@
 /// Screen-space global illumination - SsrPass's DIFFUSE twin. A trace pass marches a few
 /// cosine-weighted hemisphere rays per pixel against the depth buffer and gathers the lit HDR
 /// at each hit as one-bounce radiance; a resolve pass temporally accumulates the (necessarily
-/// noisy) trace against a per-view ping-pong history and composites ADDITIVELY into the HDR
-/// (out = hdr + gi * intensity; SSR lerp-replaces because it stands in for IBL specular - the
-/// bounce is light the scene does not otherwise carry). Unit-albedo approximation is the v1
-/// ruling; per-pixel albedo modulation arrives when the forward integrates indirect terms
-/// with the tier-2 probe volume.
+/// noisy) trace against a per-view ping-pong history and composites into the HDR. The forward
+/// already lit every surface with the sky's ambient as if nothing stood in the way; a ray that
+/// hits geometry finds what really is in that direction, so the composite swaps the sky light
+/// for the bounce there: out = hdr + albedo * (bounce - hitWeight * skyRadiance) * intensity,
+/// skyRadiance being the pixel's own ambient (the scene's SH sky over its normal, plus the flat
+/// fill). The bounce is tinted by the G-buffer's diffuse albedo, and occluded corners darken
+/// instead of lifting. (A unit-albedo, purely additive v1 washed colours out and erased contact
+/// shadows, counting the sky twice.)
 ///
 /// Declared AFTER decals and BEFORE SSR (reflections then see the bounce), same slot rules as
 /// :ssr: per-view history, generation-keyed bind-group caches with deferred frees, trace noise
@@ -18,6 +21,7 @@
 
 module;
 #include "Core/Prelude.h"
+#include <cstddef> // offsetof
 
 export module foundation.render:ssgi;
 
@@ -67,14 +71,27 @@ export namespace foundation::render
             i32 debug = 0;            // >0 = show the accumulated GI raw (no composite)
         };
 
+        // The ambient the forward lit the view's scene with, which a hit replaces: the scene's SH
+        // sky (when its IBL is active; else none) scaled by its diffuse dimmer, plus the flat fill,
+        // and the camera's world matrix to take the G-buffer's view-space normal to world space.
+        struct Sky
+        {
+            rhi::Buffer* shBuffer = nullptr;   // the scene's SH9 irradiance (null = none)
+            rendergraph::RGHandle shHandle{};  // read by the composite (orders the SH bake first)
+            u64 generation = 0;                // the IBL context's (bind group key)
+            f32 iblDiffuse = 1.0f;             // EnvironmentSettings' sky-lighting dimmer
+            Float3 ambient{0.0f, 0.0f, 0.0f};  // the flat fill (linear)
+            Float4x4 viewToWorld = Float4x4::Identity();
+        };
+
         // Declare trace + resolve for one view; returns the composited HDR handle
         // ("ssgi.scene"), or `hdr` unchanged when the pass cannot run.
         [[nodiscard]] rendergraph::RGHandle
         DeclareSsgi(rendergraph::RenderGraph& graph, rendergraph::RGHandle hdr,
                     rendergraph::RGHandle depth, rendergraph::RGHandle normal,
-                    rendergraph::RGHandle velocity, u32 w, u32 h, i32 vx, i32 vy, u32 vw, u32 vh,
-                    const Float4x4& invProj, const Float4x4& proj, const Params& p, u32 viewIndex,
-                    u32 frameIndex);
+                    rendergraph::RGHandle velocity, rendergraph::RGHandle albedo, const Sky& sky,
+                    u32 w, u32 h, i32 vx, i32 vy, u32 vw, u32 vh, const Float4x4& invProj,
+                    const Float4x4& proj, const Params& p, u32 viewIndex, u32 frameIndex);
 
     private:
         static constexpr rhi::TextureFormat kHdrFormat =
@@ -139,7 +156,15 @@ export namespace foundation::render
             i32 debug = 0;
             f32 ghostReject = 3.0f;
             f32 intensity = 1.0f;
+            // HLSL starts a float4 on a 16-byte boundary; Float4 here is only 4-byte aligned, so
+            // the pad keeps the C++ offsets the shader's (a shifted read scrambled the sky term).
+            f32 pad0 = 0.0f;
+            f32 pad1 = 0.0f;
+            Float4 viewToWorld[3]{};       // rows of the camera's world rotation (view -> world normal)
+            Float4 skyAmbient{};           // rgb = flat fill, w = SH sky dimmer (0 = no SH sky)
         };
+        static_assert(offsetof(SsgiResolvePushC, viewToWorld) == 64,
+                      "SSGI resolve push: the float4 block must start where HLSL puts it");
         static_assert(sizeof(SsgiResolvePushC) <= 128,
                       "SSGI resolve push exceeds the portable 128-byte limit");
 
@@ -179,10 +204,11 @@ export namespace foundation::render
         rhi::BindGroup* EnsureBlurBindGroup(rhi::TextureView* gi, rhi::TextureView* depth,
                                             u64 generation);
 
-        // Resolve bind group (gi, history, velocity, hdr + 2 samplers), one per history view, kept only while
-        // its three transient inputs (gi, velocity, hdr: views and generations) are the ones it was
+        // Resolve bind group (gi, history, velocity, hdr, albedo, normal, sky SH + 2 samplers), one
+        // per history view, kept only while its transient inputs (gi, velocity, hdr, albedo, normal:
+        // views and generations; the SH buffer and its context's generation) are the ones it was
         // built from (BindGroupCache).
-        using ResolveInputs = BindGroupInputs<3>;
+        using ResolveInputs = BindGroupInputs<5>;
         rhi::BindGroup* EnsureResolveBindGroup(rhi::TextureView* histPrev, const ResolveInputs& inputs);
 
         void Shutdown();
@@ -233,7 +259,8 @@ export namespace foundation::render
         HashMap<rhi::TextureView*, Entry> m_bindGroups;
         HashMap<rhi::TextureView*, DownEntry> m_downBindGroups;
         HashMap<rhi::TextureView*, BlurEntry> m_blurBindGroups;
-        BindGroupCache<3> m_resolveBindGroups;
+        BindGroupCache<5> m_resolveBindGroups;
+        rhi::Buffer* m_dummyShBuffer = nullptr; // bound when the scene has no SH sky (never read)
         Array<Retired> m_retired;
         u32 m_lastFrame = 0xFFFFFFFFu;
     };

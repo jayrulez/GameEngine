@@ -25,15 +25,17 @@ namespace foundation::render
 
     Status MsaaResolvePass::Initialize()
     {
-        // 4 MULTISAMPLED sampled textures (no sampler - the shader uses .Load(coord, 0)): normal (t0),
-        // velocity (t1), material (t2) are RG float aux; depth (t3) is read as unfilterable float.
+        // 5 MULTISAMPLED sampled textures (no sampler - the shader uses .Load(coord, 0)): normal (t0),
+        // velocity (t1), material (t2) are RG float aux; depth (t3) is read as unfilterable float;
+        // albedo (t4) is the RGBA8 diffuse albedo SSGI reads.
         rhi::BindGroupLayoutEntry e[] = {
             rhi::BindGroupLayoutEntry::SampledTexture(0, rhi::ShaderStage::Fragment),
             rhi::BindGroupLayoutEntry::SampledTexture(1, rhi::ShaderStage::Fragment),
             rhi::BindGroupLayoutEntry::SampledTexture(2, rhi::ShaderStage::Fragment),
             rhi::BindGroupLayoutEntry::SampledTexture(3, rhi::ShaderStage::Fragment),
+            rhi::BindGroupLayoutEntry::SampledTexture(4, rhi::ShaderStage::Fragment),
         };
-        for (u32 i = 0; i < 4; ++i)
+        for (u32 i = 0; i < 5; ++i)
         {
             e[i].textureMultisampled = true; // Texture2DMS<...> inputs
             // WebGPU forbids a filterable (Float) sample type on a multisampled texture binding; all
@@ -42,7 +44,7 @@ namespace foundation::render
             e[i].textureSampleType = rhi::TextureSampleType::UnfilterableFloat;
         }
         rhi::BindGroupLayoutDesc ld{};
-        ld.entries = Span<const rhi::BindGroupLayoutEntry>{e, 4};
+        ld.entries = Span<const rhi::BindGroupLayoutEntry>{e, 5};
         if (!m_device->CreateBindGroupLayout(ld, m_layout).IsOk())
         {
             return Status{ErrorCode::Unknown};
@@ -70,13 +72,14 @@ namespace foundation::render
         {
             return nullptr;
         }
-        rhi::ColorTargetState targets[3] = {};
+        rhi::ColorTargetState targets[4] = {};
         targets[0].format = kGNormalFormat;   // SV_Target0 = normal
         targets[1].format = kGVelocityFormat; // SV_Target1 = velocity
         targets[2].format = kGMaterialFormat; // SV_Target2 = material
+        targets[3].format = kGAlbedoFormat;   // SV_Target3 = albedo
         rhi::FragmentState frag{};
         frag.shader = rhi::ProgrammableStage{ps, u8"main", rhi::ShaderStage::Fragment};
-        frag.targets = Span<const rhi::ColorTargetState>{targets, 3};
+        frag.targets = Span<const rhi::ColorTargetState>{targets, 4};
 
         // Depth written via SV_Depth: depth test must be enabled to permit the write (Vulkan gates
         // depth writes on depthTestEnabled), so use Always (undefined initial depth is irrelevant).
@@ -124,10 +127,11 @@ namespace foundation::render
             rhi::BindGroupEntry::TextureEntry(inputs.views[1]),
             rhi::BindGroupEntry::TextureEntry(inputs.views[2]),
             rhi::BindGroupEntry::TextureEntry(depth),
+            rhi::BindGroupEntry::TextureEntry(inputs.views[4]),
         };
         rhi::BindGroupDesc bgd{};
         bgd.layout = m_layout;
-        bgd.entries = Span<const rhi::BindGroupEntry>{ent, 4};
+        bgd.entries = Span<const rhi::BindGroupEntry>{ent, 5};
         rhi::BindGroup* bg = nullptr;
         if (!m_device->CreateBindGroup(bgd, bg).IsOk())
         {
@@ -140,7 +144,8 @@ namespace foundation::render
     MsaaResolveOutputs MsaaResolvePass::DeclareResolve(
         rendergraph::RenderGraph& graph, rendergraph::RGHandle msaaDepth,
         rendergraph::RGHandle msaaNormal, rendergraph::RGHandle msaaVelocity,
-        rendergraph::RGHandle msaaMaterial, rhi::TextureFormat depthFormat, u32 w, u32 h)
+        rendergraph::RGHandle msaaMaterial, rendergraph::RGHandle msaaAlbedo, rhi::TextureFormat depthFormat,
+        u32 w, u32 h)
     {
         MsaaResolveOutputs out{};
         if (w == 0 || h == 0)
@@ -172,34 +177,39 @@ namespace foundation::render
                                              rendergraph::RGTextureDesc(kGVelocityFormat, w, h));
         out.material = graph.CreateTransient(u8"msaa.resolvedMaterial",
                                              rendergraph::RGTextureDesc(kGMaterialFormat, w, h));
+        out.albedo = graph.CreateTransient(u8"msaa.resolvedAlbedo",
+                                           rendergraph::RGTextureDesc(kGAlbedoFormat, w, h));
         out.depth =
             graph.CreateTransient(u8"msaa.resolvedDepth", rendergraph::RGTextureDesc(depthFormat, w, h));
 
         graph.AddRenderPass(
             u8"msaa.resolve",
-            [this, &graph, msaaDepth, msaaNormal, msaaVelocity, msaaMaterial, out,
+            [this, &graph, msaaDepth, msaaNormal, msaaVelocity, msaaMaterial, msaaAlbedo, out,
              w, h](rendergraph::PassBuilder& b)
             {
                 b.SetColorTarget(0, out.normal, rhi::LoadOp::DontCare, rhi::StoreOp::Store);
                 b.SetColorTarget(1, out.velocity, rhi::LoadOp::DontCare, rhi::StoreOp::Store);
                 b.SetColorTarget(2, out.material, rhi::LoadOp::DontCare, rhi::StoreOp::Store);
+                b.SetColorTarget(3, out.albedo, rhi::LoadOp::DontCare, rhi::StoreOp::Store);
                 // Depth is fully overwritten via SV_Depth (fullscreen), so it need not be loaded.
                 b.SetDepthTarget(out.depth, rhi::LoadOp::DontCare, rhi::StoreOp::Store);
                 b.ReadTexture(msaaNormal);
                 b.ReadTexture(msaaVelocity);
                 b.ReadTexture(msaaMaterial);
                 b.ReadTexture(msaaDepth);
+                b.ReadTexture(msaaAlbedo);
                 b.SetViewport(0, 0, w, h);
                 b.NeverCull();
                 b.SetExecute(
-                    [this, &graph, msaaDepth, msaaNormal, msaaVelocity,
-                     msaaMaterial](rhi::RenderPassEncoder& rp)
+                    [this, &graph, msaaDepth, msaaNormal, msaaVelocity, msaaMaterial,
+                     msaaAlbedo](rhi::RenderPassEncoder& rp)
                     {
                         BindInputs inputs;
                         inputs.Set(0, graph.GetTextureView(msaaNormal), graph.GetTextureGeneration(msaaNormal));
                         inputs.Set(1, graph.GetTextureView(msaaVelocity), graph.GetTextureGeneration(msaaVelocity));
                         inputs.Set(2, graph.GetTextureView(msaaMaterial), graph.GetTextureGeneration(msaaMaterial));
                         inputs.Set(3, graph.GetTextureView(msaaDepth), graph.GetTextureGeneration(msaaDepth));
+                        inputs.Set(4, graph.GetTextureView(msaaAlbedo), graph.GetTextureGeneration(msaaAlbedo));
                         rhi::BindGroup* bg = EnsureBindGroup(inputs);
                         if (bg == nullptr)
                         {

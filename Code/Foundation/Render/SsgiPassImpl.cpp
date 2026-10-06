@@ -5,7 +5,7 @@
 ///
 /// Structure mirrors :ssr exactly (trace + temporal resolve, per-view ping-pong history,
 /// generation-keyed bind-group caches with deferred frees). See SsgiPass.cppm for the design
-/// notes and the additive-composite ruling.
+/// notes and the composite (the bounce replaces the sky it hides, tinted by the albedo G-buffer).
 
 module;
 #include "Core/Prelude.h"
@@ -149,18 +149,22 @@ namespace foundation::render
             return Status{ErrorCode::Unknown};
         }
 
-        // Resolve: gi(t0) history(t1) velocity(t2) hdr(t3) + point(s0) linear(s1).
-        // MRT out = composited HDR + next-frame GI history.
+        // Resolve: gi(t0) history(t1) velocity(t2) hdr(t3) albedo(t4) normal(t5) sky SH(t6) +
+        // point(s0) linear(s1). MRT out = composited HDR + next-frame GI history.
         rhi::BindGroupLayoutEntry re[] = {
             rhi::BindGroupLayoutEntry::SampledTexture(0, rhi::ShaderStage::Fragment),
             rhi::BindGroupLayoutEntry::SampledTexture(1, rhi::ShaderStage::Fragment),
             rhi::BindGroupLayoutEntry::SampledTexture(2, rhi::ShaderStage::Fragment),
             rhi::BindGroupLayoutEntry::SampledTexture(3, rhi::ShaderStage::Fragment),
+            rhi::BindGroupLayoutEntry::SampledTexture(4, rhi::ShaderStage::Fragment),
+            rhi::BindGroupLayoutEntry::SampledTexture(5, rhi::ShaderStage::Fragment),
+            rhi::BindGroupLayoutEntry::StorageBuffer(6, rhi::ShaderStage::Fragment, /*readOnly*/ true,
+                                                     /*stride*/ 16), // StructuredBuffer<float4> IblSH
             rhi::BindGroupLayoutEntry::Sampler(0, rhi::ShaderStage::Fragment),
             rhi::BindGroupLayoutEntry::Sampler(1, rhi::ShaderStage::Fragment),
         };
         rhi::BindGroupLayoutDesc rld{};
-        rld.entries = Span<const rhi::BindGroupLayoutEntry>{re, 6};
+        rld.entries = Span<const rhi::BindGroupLayoutEntry>{re, 9};
         if (!m_device->CreateBindGroupLayout(rld, m_resolveLayout).IsOk())
         {
             return Status{ErrorCode::Unknown};
@@ -178,6 +182,17 @@ namespace foundation::render
             return Status{ErrorCode::Unknown};
         }
         if (!CreateResolvePipeline())
+        {
+            return Status{ErrorCode::Unknown};
+        }
+        // Bound in the SH slot when a scene has no SH sky: the composite then never reads it (its
+        // dimmer is 0), so its contents do not matter.
+        rhi::BufferDesc shd{};
+        shd.size = 9 * sizeof(Float4);
+        shd.usage = rhi::BufferUsage::Storage;
+        shd.memory = rhi::MemoryLocation::GpuOnly;
+        shd.label = u8"ssgi.dummySH";
+        if (!m_device->CreateBuffer(shd, m_dummyShBuffer).IsOk())
         {
             return Status{ErrorCode::Unknown};
         }
@@ -308,8 +323,9 @@ namespace foundation::render
     rendergraph::RGHandle
     SsgiPass::DeclareSsgi(rendergraph::RenderGraph& graph, rendergraph::RGHandle hdr,
                           rendergraph::RGHandle depth, rendergraph::RGHandle normal,
-                          rendergraph::RGHandle velocity, u32 w, u32 h, i32 vx, i32 vy, u32 vw,
-                          u32 vh, const Float4x4& invProj, const Float4x4& proj, const Params& p,
+                          rendergraph::RGHandle velocity, rendergraph::RGHandle albedo,
+                          const Sky& sky, u32 w, u32 h, i32 vx, i32 vy, u32 vw, u32 vh,
+                          const Float4x4& invProj, const Float4x4& proj, const Params& p,
                           u32 viewIndex, u32 frameIndex)
     {
         if (w == 0 || h == 0 || viewIndex >= kMaxViews)
@@ -519,12 +535,23 @@ namespace foundation::render
         rpc2.debug = p.debug;
         rpc2.ghostReject = p.ghostReject;
         rpc2.intensity = (p.intensity >= 0.0f) ? p.intensity : 0.0f;
+        // The ambient a hit replaces (see :ssgi): the camera's world rotation turns the G-buffer's
+        // view-space normal to world, where the SH sky is; no SH sky = flat fill alone (as the forward).
+        for (u32 r = 0; r < 3; ++r)
+        {
+            rpc2.viewToWorld[r] = Float4{sky.viewToWorld(r, 0), sky.viewToWorld(r, 1), sky.viewToWorld(r, 2), 0.0f};
+        }
+        const bool shSky = sky.shBuffer != nullptr;
+        rpc2.skyAmbient = Float4{sky.ambient.x, sky.ambient.y, sky.ambient.z, shSky ? sky.iblDiffuse : 0.0f};
+        rhi::Buffer* const shBuffer = shSky ? sky.shBuffer : m_dummyShBuffer;
+        const u64 shGeneration = shSky ? sky.generation : 0;
+        const rendergraph::RGHandle shHandle = shSky ? sky.shHandle : rendergraph::RGHandle{};
 
         rhi::TextureView* histPrevView = hist.view[prev];
         graph.AddRenderPass(
             u8"ssgi.resolve",
-            [this, &graph, filtered, histPrev, velocity, hdr, out, histCur, histPrevView,
-             rpc2](rendergraph::PassBuilder& b)
+            [this, &graph, filtered, histPrev, velocity, hdr, albedo, normal, out, histCur,
+             histPrevView, rpc2, shBuffer, shGeneration, shHandle](rendergraph::PassBuilder& b)
             {
                 b.SetColorTarget(0, out, rhi::LoadOp::Clear, rhi::StoreOp::Store,
                                  rhi::ClearColor::Black());
@@ -534,15 +561,24 @@ namespace foundation::render
                 b.ReadTexture(histPrev);
                 b.ReadTexture(velocity);
                 b.ReadTexture(hdr);
+                b.ReadTexture(albedo);
+                b.ReadTexture(normal);
+                if (shHandle.IsValid())
+                {
+                    b.ReadBuffer(shHandle);
+                }
                 b.NeverCull();
                 b.SetExecute(
-                    [this, &graph, filtered, velocity, hdr, histPrevView,
-                     rpc2](rhi::RenderPassEncoder& rp)
+                    [this, &graph, filtered, velocity, hdr, albedo, normal, histPrevView, rpc2,
+                     shBuffer, shGeneration](rhi::RenderPassEncoder& rp)
                     {
                         ResolveInputs inputs;
                         inputs.Set(0, graph.GetTextureView(filtered), graph.GetTextureGeneration(filtered));
                         inputs.Set(1, graph.GetTextureView(velocity), graph.GetTextureGeneration(velocity));
                         inputs.Set(2, graph.GetTextureView(hdr), graph.GetTextureGeneration(hdr));
+                        inputs.Set(3, graph.GetTextureView(albedo), graph.GetTextureGeneration(albedo));
+                        inputs.Set(4, graph.GetTextureView(normal), graph.GetTextureGeneration(normal));
+                        inputs.SetBuffer(shBuffer, shGeneration);
                         rhi::BindGroup* bg = EnsureResolveBindGroup(histPrevView, inputs);
                         if (bg == nullptr)
                         {
@@ -779,12 +815,15 @@ namespace foundation::render
             rhi::BindGroupEntry::TextureEntry(histPrev),
             rhi::BindGroupEntry::TextureEntry(inputs.views[1]),
             rhi::BindGroupEntry::TextureEntry(inputs.views[2]),
+            rhi::BindGroupEntry::TextureEntry(inputs.views[3]),
+            rhi::BindGroupEntry::TextureEntry(inputs.views[4]),
+            rhi::BindGroupEntry::BufferEntry(inputs.buffer, 0, 9 * sizeof(Float4)),
             rhi::BindGroupEntry::SamplerEntry(m_sampler),
             rhi::BindGroupEntry::SamplerEntry(m_linearSampler),
         };
         rhi::BindGroupDesc bgd{};
         bgd.layout = m_resolveLayout;
-        bgd.entries = Span<const rhi::BindGroupEntry>{ent, 6};
+        bgd.entries = Span<const rhi::BindGroupEntry>{ent, 9};
         rhi::BindGroup* bg = nullptr;
         if (!m_device->CreateBindGroup(bgd, bg).IsOk())
         {
@@ -821,6 +860,11 @@ namespace foundation::render
         }
         m_blurBindGroups.Clear();
         m_resolveBindGroups.Release([this](rhi::BindGroup* bg) { m_device->DestroyBindGroup(bg); });
+        if (m_dummyShBuffer != nullptr)
+        {
+            m_device->DestroyBuffer(m_dummyShBuffer);
+            m_dummyShBuffer = nullptr;
+        }
         for (auto& r : m_retired)
         {
             m_device->DestroyBindGroup(r.bg);

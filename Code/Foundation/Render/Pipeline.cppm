@@ -434,7 +434,7 @@ export namespace foundation::render
                          rendergraph::RGHandle colorH, rendergraph::RGHandle depth, bool clearColor,
                          rhi::TextureFormat colorFormat, rendergraph::RGHandle normalH,
                          rendergraph::RGHandle velocityH, rendergraph::RGHandle materialH,
-                         const Float4x4& prevViewProj, Float2 jitter, Float2 prevJitter,
+                         rendergraph::RGHandle albedoH, const Float4x4& prevViewProj, Float2 jitter, Float2 prevJitter,
                          const ClusterBinding& cluster = {}, const ShadowBinding& shadow = {},
                          const IblBinding& ibl = {}, rhi::LoadOp depthLoad = rhi::LoadOp::Load,
                          rendergraph::RGSubresourceRange colorSub = {},

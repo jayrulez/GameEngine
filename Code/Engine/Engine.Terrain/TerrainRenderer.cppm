@@ -1342,17 +1342,19 @@ export namespace engine::terrain
             vbl.attributes = Span<const rhi::VertexAttribute>{attrs, 1};
 
             // Opaque terrain writes the forward GBUFFER: target 0 = shaded colour, 1 = view-space
-            // normal, 2 = motion vector, 3 = material (roughness/metallic). The forward pass binds all
-            // four, so the PSO must declare them (WebGPU rejects a target-count mismatch). No blend.
-            rhi::ColorTargetState targets[4]{};
+            // normal, 2 = motion vector, 3 = material (roughness/metallic), 4 = diffuse albedo. The
+            // forward pass binds all five, so the PSO must declare them (WebGPU rejects a target-count
+            // mismatch). No blend.
+            rhi::ColorTargetState targets[5]{};
             targets[0].format = colorFormat;
             targets[1].format = render::kGNormalFormat;
             targets[2].format = render::kGVelocityFormat;
             targets[3].format = render::kGMaterialFormat;
+            targets[4].format = render::kGAlbedoFormat;
 
             rhi::FragmentState frag{};
             frag.shader = rhi::ProgrammableStage{ps, u8"main", rhi::ShaderStage::Fragment};
-            frag.targets = Span<const rhi::ColorTargetState>{targets, 4};
+            frag.targets = Span<const rhi::ColorTargetState>{targets, 5};
 
             rhi::DepthStencilState ds{};
             ds.format = m_depthFormat;

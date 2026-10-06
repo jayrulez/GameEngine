@@ -83,3 +83,31 @@ TEST_CASE("bind group cache: a group is rebuilt when any input changed, not only
     CHECK(released == 1u); // A's (B's was handed back as stale above)
     CHECK(cache.Size() == 0u);
 }
+
+// SSGI's composite also binds a scene's sky lighting buffer: two views of different scenes share
+// one history texture slot when they take turns, so the buffer (and its context's generation) is an
+// input like the views, and a group built with another scene's sky is not handed back.
+TEST_CASE("bind group cache: the bound buffer and its generation are inputs too")
+{
+    BindGroupCache<3> cache;
+    rhi::TextureView* history = View(6);
+    rhi::BindGroup* stale = nullptr;
+    rhi::Buffer* skyA = reinterpret_cast<rhi::Buffer*>(g_slots[4]);
+    rhi::Buffer* skyB = reinterpret_cast<rhi::Buffer*>(g_slots[5]);
+
+    BindGroupInputs<3> withA = Inputs(0, 1, 1, 1, 3, 1);
+    withA.SetBuffer(skyA, 7);
+    cache.Store(history, withA, Group(0));
+    CHECK(cache.Find(history, withA, stale) == Group(0));
+
+    BindGroupInputs<3> withB = withA;
+    withB.SetBuffer(skyB, 8);
+    CHECK(cache.Find(history, withB, stale) == nullptr); // another scene's sky
+    CHECK(stale == Group(0));
+
+    cache.Store(history, withB, Group(1));
+    BindGroupInputs<3> regenerated = withB;
+    regenerated.SetBuffer(skyB, 9); // the same buffer, rebuilt (a new context generation)
+    CHECK(cache.Find(history, regenerated, stale) == nullptr);
+    CHECK(stale == Group(1));
+}

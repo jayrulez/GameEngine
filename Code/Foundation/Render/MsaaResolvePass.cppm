@@ -38,6 +38,7 @@ export namespace foundation::render
         rendergraph::RGHandle normal{};
         rendergraph::RGHandle velocity{};
         rendergraph::RGHandle material{};
+        rendergraph::RGHandle albedo{};
     };
 
     // Owns the fullscreen sample-0 resolve pipeline. Produces 1x depth + aux transients from the MSAA
@@ -64,12 +65,13 @@ export namespace foundation::render
                                                         rendergraph::RGHandle msaaNormal,
                                                         rendergraph::RGHandle msaaVelocity,
                                                         rendergraph::RGHandle msaaMaterial,
+                                                        rendergraph::RGHandle msaaAlbedo,
                                                         rhi::TextureFormat depthFormat, u32 w, u32 h);
 
     private:
         rhi::RenderPipeline* MakePipeline(rhi::TextureFormat depthFormat);
-        // The multisampled inputs: normal, velocity, material, depth.
-        using BindInputs = BindGroupInputs<4>;
+        // The multisampled inputs: normal, velocity, material, depth, albedo.
+        using BindInputs = BindGroupInputs<5>;
         rhi::BindGroup* EnsureBindGroup(const BindInputs& inputs);
         void Shutdown();
 
@@ -84,6 +86,6 @@ export namespace foundation::render
         // Bind groups keyed by the depth view, each kept only while all four inputs (views and
         // their textures' generations) are the ones it was built from: transients are pooled per
         // frame, and checking depth alone kept other frames' normal, velocity or material bound.
-        BindGroupCache<4> m_bindGroups;
+        BindGroupCache<5> m_bindGroups;
     };
 }

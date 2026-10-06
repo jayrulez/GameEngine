@@ -24,17 +24,25 @@ namespace rhi = foundation::rhi;
 export namespace foundation::render
 {
     // What a bind group was built from: each view it binds that can change between frames, with
-    // its texture's generation. Two are equal only when every view and generation is.
+    // its texture's generation, and the one buffer it binds that can (a scene's sky lighting, with
+    // the context's generation; none by default). Two are equal only when every input is.
     template <usize N>
     struct BindGroupInputs
     {
         rhi::TextureView* views[N] = {};
         u64 generations[N] = {};
+        rhi::Buffer* buffer = nullptr;
+        u64 bufferGeneration = 0;
 
         void Set(usize slot, rhi::TextureView* view, u64 generation) noexcept
         {
             views[slot] = view;
             generations[slot] = generation;
+        }
+        void SetBuffer(rhi::Buffer* b, u64 generation) noexcept
+        {
+            buffer = b;
+            bufferGeneration = generation;
         }
         // No group can be built while an input is missing.
         [[nodiscard]] bool Complete() const noexcept

@@ -48,6 +48,10 @@ export namespace foundation::render
     // screen-space reflection pass (roughness gates/fades SSR; metallic tints it). Written only by the
     // opaque/masked GBUFFER permutation, same as normal/velocity.
     inline constexpr rhi::TextureFormat kGMaterialFormat = rhi::TextureFormat::RG8Unorm;
+    // G-buffer diffuse albedo (rgb; a unused): what screen-space GI tints the bounce light it
+    // gathers by, since what leaves a surface is the light arriving times its albedo. Written by
+    // the same GBUFFER permutation. (Five targets total 22 bytes a sample, under WebGPU's 32.)
+    inline constexpr rhi::TextureFormat kGAlbedoFormat = rhi::TextureFormat::RGBA8Unorm;
 
     // A renderable's category - the dispatch key that routes it to a `Renderer`. A plain u16
     // (not an enum class) so external subsystems (particles, world-space UI) can claim ids

@@ -291,6 +291,12 @@ export namespace foundation::ui
                     {
                         vg->Padding = MarkupRegistry::ParseThickness(value);
                     }
+                    else
+                    {
+                        // A control's padding is a style (its DefaultStylePadding when none is
+                        // set), so the attribute sets it inline rather than being dropped.
+                        view->SetStyle(StyleProperty::Padding, MarkupRegistry::ParseThickness(value));
+                    }
                     continue;
                 }
 

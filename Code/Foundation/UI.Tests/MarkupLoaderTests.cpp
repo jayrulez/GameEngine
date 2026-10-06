@@ -675,3 +675,27 @@ TEST_CASE("markup: an ImageView's corner-radius takes one value or four")
           vg::CornerRadii(8.0f, 8.0f, 0.0f, 0.0f));
     CHECK(root->FindByName<ImageView>(u8"none")->CornerRadius.Value().IsZero());
 }
+
+// padding on a control (not a ViewGroup) was dropped, so a card kept the button's own 12 by 8 and
+// its picture sat off-centre. The attribute now sets the control's padding style.
+TEST_CASE("markup: padding on a control sets its padding, the content inset evenly")
+{
+    EnsureInit();
+    Array<String> warnings;
+    auto view = MarkupLoader::LoadFromString(DefaultAllocator(),
+                                             u8"<ContentButton padding=\"8\">\n"
+                                             u8"  <Spacer spacer-width=\"304\" spacer-height=\"100\"/>\n"
+                                             u8"</ContentButton>",
+                                             nullptr, &warnings);
+    REQUIRE(view);
+    CHECK(warnings.IsEmpty());
+    ContentButton* card = Cast<ContentButton>(view.Get());
+    REQUIRE(card != nullptr);
+    REQUIRE(card->Content() != nullptr);
+    card->Measure(BoxConstraints::Loose(1000, 1000));
+    CHECK(card->MeasuredSize.x == doctest::Approx(320.0f));
+    CHECK(card->MeasuredSize.y == doctest::Approx(116.0f));
+    card->Layout(0, 0, 320, 116);
+    CHECK(card->Content()->Bounds.x == doctest::Approx(8.0f));
+    CHECK(card->Content()->Bounds.y == doctest::Approx(8.0f));
+}

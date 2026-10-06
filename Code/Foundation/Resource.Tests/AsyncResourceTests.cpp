@@ -462,6 +462,56 @@ TEST_CASE("resource.async: Pump reports a burst ONCE when the in-flight loads dr
     logger.SetMinLevel(previousLevel);
 }
 
+namespace
+{
+    struct MissingFactoryCapture : ILogSink
+    {
+        int lines = 0;
+
+        void Write(LogLevel, StringView category, StringView message) noexcept override
+        {
+            if (category == u8"Resource" && message.StartsWith(u8"bind failed: no resource factory registered"))
+            {
+                ++lines;
+            }
+        }
+    };
+}
+
+// Sedulous 066007c4. A bind of a type no factory builds is a host wiring error, logged; a manager
+// that only collects references (a scene's reference scan, factory-less by design) says nothing,
+// the bind landing unresolved all the same. One asset_uses call logged 200 of these.
+TEST_CASE("resource: a missing factory is logged unless the manager only collects references")
+{
+    RegisterAsyncTypes();
+    CleanDir(u8"scratch_missing_factory_db");
+    NativeFileSystem mount(u8"scratch_missing_factory_db", DefaultAllocator());
+    foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), mount,
+                                            foundation::core::BinarySerializerFactory(), u8".rasset");
+    AsyncFactory factory; // never added: it only names the instance's value
+    const Guid id = MakeInstance(db, factory, u8"steel", 8, 0);
+
+    MissingFactoryCapture capture;
+    Logger& logger = GlobalLogger();
+    logger.AddSink(&capture);
+
+    ResourceManager host(DefaultAllocator(), db);
+    CHECK(host.ReportsMissingFactories());
+    CHECK(host.Bind<AsyncProduct>(id).Get() == nullptr);
+    CHECK(capture.lines == 1); // a host with no factory for it: logged
+
+    ResourceManager collector(DefaultAllocator(), db);
+    collector.SetReportsMissingFactories(false);
+    CHECK(collector.Bind<AsyncProduct>(id).Get() == nullptr);
+    Array<Guid> unresolved;
+    collector.CollectUnresolved(unresolved);
+    REQUIRE(unresolved.Size() == 1u); // still unresolved: the answer the scan wants
+    CHECK(unresolved[0] == id);
+    CHECK(capture.lines == 1); // a collector: nothing more logged
+
+    logger.RemoveSink(&capture);
+}
+
 TEST_CASE("resource.async: finalize follows decode-completion order (FIFO)")
 {
     RegisterAsyncTypes();

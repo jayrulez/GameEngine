@@ -601,6 +601,13 @@ export namespace foundation::resource
         void SetAsyncBinds(bool enabled) noexcept { m_asyncBinds = enabled; }
         [[nodiscard]] bool AsyncBindsEnabled() const noexcept { return m_asyncBinds; }
 
+        // Whether a bind of a product type no factory builds is logged, as a host wiring error.
+        // Off for a manager that only collects references (a scene's reference scan): it has no
+        // factories by design, and every bind landing unresolved is the answer it wants, not a
+        // fault to report.
+        void SetReportsMissingFactories(bool enabled) noexcept { m_reportsMissingFactories = enabled; }
+        [[nodiscard]] bool ReportsMissingFactories() const noexcept { return m_reportsMissingFactories; }
+
         // Rebuilds the product for an already-bound id (e.g. after the source
         // changed on disk) AND, transitively, every resource that depends on it.
         // All proxies see the new products. False if `id` is unbound.
@@ -736,11 +743,14 @@ export namespace foundation::resource
             {
                 // A HOST WIRING error, not a data error: the product type has no registered
                 // IResourceFactory (RegisterStandardFactories or the host forgot AddFactory).
-                LOG_WARNING(u8"Resource",
-                                     u8"bind failed: no resource factory registered for the product "
-                                     u8"type of '{}' ('{}'::'{}') - host is missing an AddFactory",
-                                     instance->Name(), instance->TypeNamespace(),
-                                     instance->TypeName());
+                if (m_reportsMissingFactories)
+                {
+                    LOG_WARNING(u8"Resource",
+                                u8"bind failed: no resource factory registered for the product "
+                                u8"type of '{}' ('{}'::'{}') - host is missing an AddFactory",
+                                instance->Name(), instance->TypeNamespace(),
+                                instance->TypeName());
+                }
                 return;
             }
 
@@ -1074,6 +1084,7 @@ export namespace foundation::resource
         JobSystem* m_jobs = nullptr; // shared decode pool (null = sync-only)
         u64 m_mainThreadId = 0;      // thread that constructs/pumps; async finalize must run here
         bool m_asyncBinds = false;   // Ref<T>::Bind routes through BindAsync while set
+        bool m_reportsMissingFactories = true; // off: a collector, quiet on a missing factory
         HashMap<Guid, UniquePtr<PendingLoad>> m_pending; // main-thread only (heap-stable Counter)
         bool m_burstActive = false;  // ReportSettledBurst: a burst of async loads is in flight
         usize m_burstPeak = 0;

@@ -69,6 +69,8 @@ namespace engine
             return false;
         }
         foundation::resource::ResourceManager collector(allocator, db);
+        // Unresolved is the answer here: each bind would otherwise log a missing factory.
+        collector.SetReportsMissingFactories(false);
         scene::ResolveSceneResources(scratch, collector);
         collector.CollectUnresolved(outResources);
         scratch.ForEachPendingPrefabInstance([&outPrefabs](scene::Scene::PendingPrefabInstance& pending)

@@ -542,15 +542,23 @@ class Board
         {
             return false;
         }
+        Float3 lost = m_driven - v;
+        float lostLength = Math::Sqrt(lost.x * lost.x + lost.y * lost.y + lost.z * lost.z);
         if (c.grounded())
         {
             Float3 n = c.groundNormal;
-            Float3 lost = m_driven - v;
-            float lostLength = Math::Sqrt(lost.x * lost.x + lost.y * lost.y + lost.z * lost.z);
             if (Math::Abs(lost.x * n.x + lost.y * n.y + lost.z * n.z) >= 0.8f * lostLength)
             {
                 return false; // into the snow, not into something on it
             }
+        }
+        // Thrown upward by what it met: a slope under it, not an obstacle. A hop on a kicker's
+        // curve came back down onto the steeper ramp still counted as in the air, and the ramp
+        // turning it upward (20 m/s ahead to 14 ahead and 11 up) read as a crash into something.
+        // A tree or a rock takes the speed back along the travel and pushes nothing up.
+        if (v.y - m_driven.y > 0.5f * lostLength)
+        {
+            return false;
         }
         return true;
     }

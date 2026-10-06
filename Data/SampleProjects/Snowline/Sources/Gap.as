@@ -3,9 +3,10 @@
 //
 // Once the rider passes the lip within `reach` of it, its first touch of the snow is judged: short
 // of `short` metres past the lip (in the crevasse, before its ramp up) is "GapShort", which the
-// board takes as a crash; at or past it is "GapCleared" (the distance flown, in centimetres), which
-// the game scores. A rider who rolls in without leaving the snow is short as well, once it is past
-// the crevasse's wall. Past `length` without a touch it is cleared.
+// board takes as a crash; at or past it is "GapCleared" (the distance flown, in centimetres, at
+// the touch), which the game scores. A rider who rolls in without leaving the snow is short as
+// well, once it is past the crevasse's wall. A rider flying over is judged where it touches down,
+// so the distance is the one flown.
 
 class Gap
 {
@@ -13,7 +14,6 @@ class Gap
 
     [0.0, "The course's heading at the lip (radians; 0 runs toward +Z)"] float heading;
     [13.5, "Past the lip, how far a landing is still in the crevasse (m)"] float short;
-    [21.5, "The crevasse's length past the lip (m)"] float length;
     [30.0, "How far either side of the course the crevasse spans (m)"] float reach;
 
     private Entity@ m_rider;
@@ -52,14 +52,9 @@ class Gap
         {
             m_flew = true;
         }
-        if (along >= length)
-        {
-            judge(along); // flown clean over: cleared
-            return;
-        }
         if (grounded && (m_flew || along > 2.0f))
         {
-            judge(along);
+            judge(along); // past the crevasse by now if it flew over it
         }
     }
 

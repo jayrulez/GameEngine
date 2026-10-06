@@ -289,8 +289,7 @@ def gap(d, points, mountain):
     kicker(d, points, mountain, prefab, "GapKicker", at - KICKER_RUN)
     _, heading = along_course(points, at)
     e = d.entity("Gap", tuple(lip), yaw(math.degrees(heading)))
-    d.script(e, (GAP, {"heading": heading, "short": info_gap["short"], "length": info_gap["length"],
-                       "reach": info_gap["reach"]}))
+    d.script(e, (GAP, {"heading": heading, "short": info_gap["short"], "reach": info_gap["reach"]}))
 
 
 def aim_bone(name, share):

@@ -260,5 +260,5 @@ TEST_CASE("sample project: Snowline reads, cooks and its overrides match")
     // (rigged mesh, skeleton, 8 clips, its animation graph), 9 models, 33 materials, 16 prefabs,
     // 13 scripts, 4 UI documents, 4 particle effects, 3 sounds, the input map and the render
     // profiles; the overrides are the gates', gems', kickers', ghosts', gap's and avalanche's settings
-    CheckSampleProject(u8"Snowline", u8"scratch_snowline_versions", {127u, 108.0, 162u});
+    CheckSampleProject(u8"Snowline", u8"scratch_snowline_versions", {127u, 108.0, 161u});
 }

@@ -1,10 +1,6 @@
 # PaperKid
 
-A small arcade paper-route game, built entirely through the engine's MCP tools: the second test,
-after Sky Hopper, of how far an agent gets making a game with them, where every missing or wrong
-tool or engine behaviour was fixed in the engine as part of the work. It replaces an earlier
-PaperKid that stopped after one block, and follows its spec
-(`Documentation/Specs/paperkid.md`).
+A small arcade paper-route game, built entirely through the engine's MCP tools.
 
 ![PaperKid, riding a block](../../../Documentation/Images/PaperKid-Play.png)
 

@@ -158,8 +158,10 @@ def build_armature(pose):
         bone("ik_hand_" + s, REST_HAND(end), REST_HAND(end) + up, "root", False)
         bone("pole_knee_" + s, HIP(end) + P(-0.9, end * 0.3, -0.2), HIP(end) + P(-0.9, end * 0.3, -0.2) + up,
              "hips", False)
-        bone("pole_elbow_" + s, SHOULDER(end) + P(0.5, end * 0.5, -0.6),
-             SHOULDER(end) + P(0.5, end * 0.5, -0.6) + up, "spine", False)
+        # The elbows hang down and back, as relaxed arms do; reaching out along the board too, the
+        # pole had them wing out sideways.
+        bone("pole_elbow_" + s, SHOULDER(end) + P(0.5, end * 0.1, -0.8),
+             SHOULDER(end) + P(0.5, end * 0.1, -0.8) + up, "spine", False)
         bone("upperarm_" + s, pose["shoulder" + s], pose["elbow" + s], "spine")
         bone("forearm_" + s, pose["elbow" + s], pose["hand" + s], "upperarm_" + s).use_connect = True
         bone("thigh_" + s, pose["hip" + s], pose["knee" + s], "hips")
@@ -224,8 +226,8 @@ POSES = {
     "Ride": pose_with(),
     "CarveToe": pose_with(lean=24.0, crouch=0.14, shift=-0.07, bend=8.0, front=P(-0.18, 0.10, -0.06),
                           back=P(-0.12, 0.02, -0.08)),
-    "CarveHeel": pose_with(lean=-22.0, crouch=0.20, shift=0.08, bend=14.0, front=P(-0.22, 0.02, 0.06),
-                           back=P(-0.20, 0.16, 0.04)),
+    "CarveHeel": pose_with(lean=-22.0, crouch=0.20, shift=0.08, bend=14.0, front=P(-0.34, 0.06, 0.02),
+                           back=P(-0.32, 0.12, 0.0)),
     "Tuck": pose_with(crouch=0.30, shift=0.0, bend=22.0, front=P(-0.12, -0.14, -0.30), back=P(-0.10, 0.18, -0.30)),
     "TuckToe": pose_with(lean=20.0, crouch=0.30, shift=-0.05, bend=20.0, front=P(-0.16, -0.12, -0.34),
                          back=P(-0.14, 0.16, -0.34)),

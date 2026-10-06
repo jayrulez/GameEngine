@@ -104,8 +104,8 @@ Game projects under `Data/SampleProjects/`, opened from the editor's project man
 
 **Sky Hopper** (`PlatformerGame`) is a small 3D platformer built entirely through the engine's
 MCP tools by an AI agent, played through to the end over the same tools, and shipped to a Steam
-Deck: three levels, coins, enemies and hazards, menus with volume settings, music and effects,
-and gamepad support throughout.
+Deck: five levels, coins, enemies and hazards, three lives with stars and best scores saved,
+menus with volume settings, music and effects, and gamepad support throughout.
 
 | Title | Level 1 | Settings |
 |:---:|:---:|:---:|

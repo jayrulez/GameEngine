@@ -213,9 +213,18 @@ class Board
         // hang on the frame rate. One long step had given a first run a 0.4 m/s head start.
         int steps = int(Math::Ceil(d / kStep));
         float h = d / float(steps);
+        // A jump pops the rider off the snow in the first step; the rest of the frame is in the
+        // air. (Integrated as still on the snow, each later step laid the velocity back along the
+        // slope and took the jump away: no jump at all whenever a frame ran longer than kStep.)
+        bool onSnow = grounded;
         for (int i = 0; i < steps; ++i)
         {
-            v = integrate(c, v, grounded, steer, tuck, jump && i == 0, h);
+            bool popping = jump && i == 0 && onSnow && m_crash <= 0.0f;
+            v = integrate(c, v, onSnow, steer, tuck, popping, h);
+            if (popping)
+            {
+                onSnow = false;
+            }
         }
         if (grounded && m_inAir)
         {

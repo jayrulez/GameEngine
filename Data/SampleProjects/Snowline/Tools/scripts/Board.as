@@ -14,6 +14,10 @@
 // air), "TrickSpin" (degrees, in half turns), "TrickGrab" (centiseconds grabbed), then
 // "TrickLanded" (1 clean, 0 crashed); a crash is "RiderCrashed" too.
 //
+// Riding into something solid at speed (a tree, a rock: what took the speed did not go into the
+// snow) is a crash too. Riding past a trunk close and fast without touching it is a near miss
+// ("NearMiss", once per trunk): an overlap in the trees' collision group around the rider.
+//
 // A kicker launches the rider itself ("KickerAngle", then "KickerLaunch", from Kicker.as): the
 // board takes off along its heading at the speed and angle given.
 //
@@ -48,6 +52,10 @@ class Board
     [3.0, "A clean landing's burst of speed (m/s)"] float landBurst;
     [0.25, "Share of its speed a crash keeps"] float crashKeep;
     [1.2, "How long a crash takes the control away (s)"] float crashTime;
+    [5.0, "Speed lost to something solid in one frame that is a crash (m/s)"] float hitLoss;
+    [2, "The physics collision group of the trees and rocks"] int treesGroup;
+    [2.2, "How close a trunk passes for a near miss (m, from the rider's centre to its axis)"] float nearMissReach;
+    [9.0, "Slowest speed a near miss counts at (m/s)"] float nearMissSpeed;
     ["asset:Prefab", "The board's mark in the snow (Prefabs/TrackMark)"] Guid@ trackMark;
     [1.5, "Distance between the track's marks (m)"] float trackSpacing;
     [2.0, "Slowest speed that leaves a track (m/s)"] float trackSpeed;
@@ -74,6 +82,7 @@ class Board
     private Float3 m_driven = Float3(0.0f, 0.0f, 0.0f); // the velocity the board drove last frame
     private float m_launchAngle = 0.0f; // the next kicker launch's angle above level (degrees)
     private float m_launchSpeed = 0.0f; // its speed (m/s); 0 when none is due
+    private Float3 m_lastTrunk = Float3(1.0e9f, 0.0f, 0.0f); // the last trunk passed close (its centre)
 
     Board(Entity@ entity) { @self = entity; }
 
@@ -108,6 +117,7 @@ class Board
             return;
         }
         CharacterComponent@ c = CharacterComponent::of(self);
+        bool struck = hitSomething(c);
         Float3 v = alongTheSnow(c);
         if (m_fromRest)
         {
@@ -187,6 +197,11 @@ class Board
         {
             v = land(v);
         }
+        if (struck)
+        {
+            v = crash(v);
+        }
+        nearMiss(at, v);
         c.drive(v);
         m_driven = v;
         face(v, d, grounded);
@@ -492,9 +507,67 @@ class Board
             float k = (flat + landBurst) / flat;
             return Float3(v.x * k, v.y, v.z * k);
         }
+        return crash(v);
+    }
+
+    // Down: most of the speed gone, the control for crashTime.
+    private Float3 crash(Float3 v)
+    {
         m_crash = crashTime;
         self.scene.events.emit("RiderCrashed", 1);
         return Float3(v.x * crashKeep, v.y, v.z * crashKeep);
+    }
+
+    // Whether the character's step took a lot of speed into something that is not the snow: a
+    // tree, a rock. (Speed the snow takes goes along its normal, and alongTheSnow gives it back.)
+    private bool hitSomething(CharacterComponent@ c)
+    {
+        if (m_crash > 0.0f)
+        {
+            return false;
+        }
+        Float3 v = c.velocity;
+        float driven = Math::Sqrt(m_driven.x * m_driven.x + m_driven.z * m_driven.z);
+        float now = Math::Sqrt(v.x * v.x + v.z * v.z);
+        if (driven - now < hitLoss)
+        {
+            return false;
+        }
+        if (c.grounded())
+        {
+            Float3 n = c.groundNormal;
+            Float3 lost = m_driven - v;
+            float lostLength = Math::Sqrt(lost.x * lost.x + lost.y * lost.y + lost.z * lost.z);
+            if (Math::Abs(lost.x * n.x + lost.y * n.y + lost.z * n.z) >= 0.8f * lostLength)
+            {
+                return false; // into the snow, not into something on it
+            }
+        }
+        return true;
+    }
+
+    // A trunk passing within reach at speed, not touched: a near miss, once for each trunk.
+    private void nearMiss(Float3 at, Float3 v)
+    {
+        if (m_crash > 0.0f || v.x * v.x + v.z * v.z < nearMissSpeed * nearMissSpeed)
+        {
+            return;
+        }
+        RayCastHit@ trunk = ScenePhysics::of(self.scene).nearestOverlap(at.x, at.y, at.z, nearMissReach,
+                                                                        1 << treesGroup);
+        if (trunk is null || !trunk.hit)
+        {
+            return;
+        }
+        Float3 p = trunk.position;
+        float dx = p.x - m_lastTrunk.x;
+        float dz = p.z - m_lastTrunk.z;
+        if (dx * dx + dz * dz < 0.25f)
+        {
+            return; // this one again
+        }
+        m_lastTrunk = p;
+        self.scene.events.emit("NearMiss", 1);
     }
 
     private float wrap(float a)

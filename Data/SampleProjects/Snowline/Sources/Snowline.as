@@ -12,8 +12,8 @@
 // medal ghosts, not while the scene is still coming in. The gems announce themselves too ("GemRegistered") and report being taken
 // ("GemCollected"), each with how many it counts for. The board announces each trick as it lands
 // ("TrickAir", "TrickSpin", "TrickGrab", then "TrickLanded"): a clean one scores its air, its half
-// turns and its grab, times the combo, which a clean landing raises and a crash or a missed gate
-// ends.
+// turns and its grab, times the combo, which a clean landing or a near miss past a tree
+// ("NearMiss") raises and a crash ("RiderCrashed") or a missed gate ends.
 //
 // The results tally the run a row at a time (the ride, the gates, the gems, the tricks, the time
 // bonus), then
@@ -46,6 +46,7 @@ const int kAirPoints = 200;       // a second in the air
 const int kSpinPoints = 250;      // a half turn
 const int kGrabPoints = 400;      // a second holding a grab
 const int kComboMost = 5;         // the highest combo multiplier
+const int kNearMissPoints = 100;  // a trunk passed close, fast
 const float kTrickShown = 1.6f;   // how long a landed trick shows (s)
 const float kTallyFirst = 0.5f;   // the first row's moment after the finish (s)
 const float kTallyGap = 0.45f;    // between the rows (s)
@@ -238,15 +239,41 @@ class Game
         }
         if (clean == 0)
         {
-            endCombo();
-            showTrick("Crash", "");
-            return;
+            return; // the crash (RiderCrashed) ends the combo
         }
         int points = int(m_trickAir * float(kAirPoints)) + (m_trickSpin / 180) * kSpinPoints
                      + int(m_trickGrab * float(kGrabPoints));
         points *= m_combo;
         m_tricks += points;
         showTrick(trickName(), "+" + points);
+        raiseCombo();
+    }
+
+    // A trunk passed close and fast: points, and the combo grows, as a clean landing's does.
+    void onNearMiss(int unused)
+    {
+        if (!m_running)
+        {
+            return;
+        }
+        int points = kNearMissPoints * m_combo;
+        m_tricks += points;
+        showTrick("Near miss", "+" + points);
+        raiseCombo();
+    }
+
+    // Down in the snow off a landing or into a tree: the combo is gone.
+    void onRiderCrashed(int unused)
+    {
+        if (m_running)
+        {
+            endCombo();
+            showTrick("Crash", "");
+        }
+    }
+
+    private void raiseCombo()
+    {
         if (m_combo < kComboMost)
         {
             m_combo += 1;

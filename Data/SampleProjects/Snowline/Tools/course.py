@@ -315,9 +315,10 @@ def spline_points(points):
 
 
 def vegetation_layer(label, mesh, materials, placement, density, scale, slope, fade, splat_layer=0,
-                     threshold=0.25, shadows=False):
+                     threshold=0.25, shadows=False, solid=(0.0, 0.0)):
     """One procedural layer (the component's ProceduralVegetationLayer, field by field); its
-    materials one per mesh slot, as the model's prefab lists them."""
+    materials one per mesh slot, as the model's prefab lists them. `solid` is its trunk (radius,
+    height; scaled with each instance), in TREES_GROUP; (0, 0) is scenery only."""
     return ('<string name="name">%s</string><string name="mesh">%s</string>'
             '<array name="materials" count="%d">%s</array>'
             '<object name="scaleRange"><f32 name="x">%s</f32><f32 name="y">%s</f32></object>'
@@ -325,23 +326,34 @@ def vegetation_layer(label, mesh, materials, placement, density, scale, slope, f
             '<object name="heightRange"><f32 name="x">-1000000</f32><f32 name="y">1000000</f32></object>'
             '<bool name="alignToNormal">false</bool><f32 name="fadeStart">%s</f32><f32 name="fadeEnd">%s</f32>'
             '<bool name="castShadows">%s</bool><u32 name="maxInstancesPerChunk">4096</u32><bool name="visible">true</bool>'
+            '<f32 name="collisionRadius">%s</f32><f32 name="collisionHeight">%s</f32><u8 name="collisionGroup">%d</u8>'
             '<u8 name="placement">%d</u8><u32 name="splatLayer">%d</u32><f32 name="splatThreshold">%s</f32>'
             '<u32 name="maskPlane">0</u32><f32 name="density">%s</f32>' % (
                 label, mesh, len(materials), "".join("<string>%s</string>" % m for m in materials), num(scale[0]), num(scale[1]), num(slope), num(fade[0]), num(fade[1]),
-                num(shadows), placement, splat_layer, num(threshold), num(density)))
+                num(shadows), num(solid[0]), num(solid[1]), TREES_GROUP if solid[0] > 0 else 0, placement, splat_layer,
+                num(threshold), num(density)))
 
 
 UNIFORM, SPLAT = 0, 1
+# Collision groups: 0 everything, 1 the gates' flags (gates.py's FLAG_GROUP), 2 the trees and rocks
+# (the vegetation's trunks: Board.as finds a near miss by this group).
+FLAGS_GROUP, TREES_GROUP = 1, 2
+PINE_TRUNK = (0.35, 6.0)  # a pine's solid core (radius, height): the trunk and its lowest boughs
+ROCK_SOLID = (0.7, 1.0)   # a boulder, half sunk
 BASE_LAYER = 0xFFFFFFFF  # the splat's unpainted base (the vegetation's kSplatBaseLayer)
 
 
 def build():
     d = Doc(name)
     look(d)
-    # Collision groups: 0 everything, 1 the gates' flags (gates.py's FLAG_GROUP), which collide with
-    # nothing. A flag at its hinge's limit would stop the rider dead; Gate.as swings it instead.
-    d.settings.append(settings("physics", groupNames=["<string>Default</string>", "<string>Flags</string>"],
-                               groupCollides=["<u32>%d</u32>" % (0xFFFFFFFF & ~(1 << 1)), "<u32>0</u32>"]))
+    # The collision groups (FLAGS_GROUP, TREES_GROUP): the flags collide with nothing (a flag at its
+    # hinge's limit would stop the rider dead; Gate.as swings it instead); the trees and rocks stop
+    # the rider (group 0) like any solid, said explicitly.
+    everything_but_flags = 0xFFFFFFFF & ~(1 << FLAGS_GROUP)
+    d.settings.append(settings("physics",
+                               groupNames=["<string>Default</string>", "<string>Flags</string>", "<string>Trees</string>"],
+                               groupCollides=["<u32>%d</u32>" % everything_but_flags, "<u32>0</u32>",
+                                              "<u32>%d</u32>" % everything_but_flags]))
     sun = d.entity("Sun", rot=SUN_ROT)
     d.add(sun, "light", type=0, intensity=4.0, castsShadows=True)
 
@@ -352,9 +364,9 @@ def build():
         # Pines where terrain.py laid the forest floor (palette layer 2), sparse enough to ride
         # between; rocks thinly everywhere the slope allows, the course's own splat aside.
         vegetation_layer("Pines", PINE, PINE_MATERIALS, SPLAT, COURSE["pines"], (0.8, 1.3), 30.0, (250.0, 320.0), splat_layer=2,
-                         threshold=0.5, shadows=True),
+                         threshold=0.5, shadows=True, solid=PINE_TRUNK),
         vegetation_layer("Rocks", ROCK, ROCK_MATERIALS, SPLAT, 0.0015, (0.6, 1.5), 40.0, (120.0, 160.0), splat_layer=BASE_LAYER,
-                         threshold=0.9),
+                         threshold=0.9, solid=ROCK_SOLID),
     ])
 
     course = d.entity("Course")

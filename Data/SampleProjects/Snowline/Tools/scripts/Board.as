@@ -23,9 +23,12 @@
 // ("GapShort", from Gap.as) is a crash, and so is the avalanche catching the rider
 // ("AvalancheCaught").
 //
-// The rider's animation graph (graph.py) follows by parameters: Lean (the carve, heel -1 to toe
-// +1), Tuck, Airborne, Grab and Crashed. The rider stands left foot forward facing the board's
-// right side, so a right turn is a toe-side carve.
+// The rider's animation graph (graph.py) follows by parameters: Lean (heel -1 to toe +1), Tuck,
+// Airborne, Grab and Crashed. The lean is the turn the board makes, not the stick: as a rider leans
+// into a turn by its speed times how fast it turns (the lean that balances the turn's pull,
+// atan(v w / g)), full at `fullLean` degrees. Riding straight is upright whatever the stick says,
+// and a tuck, turning half as hard, leans less. The rider stands left foot forward facing the
+// board's right side, so a right turn is on the toe edge.
 //
 // With `autopilot`, the board steers itself down the course line (playtests, the measurements).
 const float kStep = 1.0f / 60.0f; // the longest step the board integrates at once (s)
@@ -72,10 +75,13 @@ class Board
     [6.0, "Slowest speed that throws spray (m/s)"] float spraySpeed;
     [25.0, "Speed at which the wind is at its loudest (m/s)"] float windSpeed;
     [0.7, "The wind's loudest volume"] float windVolume;
+    [40.0, "The lean into a turn that is the full carve pose (degrees)"] float fullLean;
 
     private Float3 m_start;
     private float m_yaw = 0.0f;   // radians; 0 faces +Z
-    private float m_lean = 0.0f;  // the eased carve, -1 heel .. +1 toe
+    private float m_lean = 0.0f;  // the eased lean into the turn, -1 heel .. +1 toe
+    private float m_lastHeading = 0.0f; // the travel's heading last frame (radians), for the turn rate
+    private bool m_headingKnown = false;
     private bool m_airborne = false;
     private Entity@ m_figure;     // the skinned mesh the graph drives
     private float m_sinceMark = 0.0f; // metres ridden since the last mark of the track
@@ -228,7 +234,7 @@ class Board
         track(at, v, grounded, d);
         snow(v, steer, grounded);
         wind(v);
-        animate(grounded ? steer : 0.0f, tuck, !grounded, grab && !grounded, d);
+        animate(grounded ? turnLean(v, d) : 0.0f, tuck, !grounded, grab && !grounded, d);
         look(down);
     }
 
@@ -285,6 +291,7 @@ class Board
         m_driven = Float3(0.0f, 0.0f, 0.0f);
         m_nextGate = 0;
         m_lean = 0.0f;
+        m_headingKnown = false;
     }
 
     // The facing the scene started the rider with (radians; 0 faces +Z): the board turns from it,
@@ -629,6 +636,27 @@ class Board
     }
 
     // The graph's parameters: the lean eases toward the carve (a right turn is the toe edge).
+    // How far the rider leans into the turn the board is making, -1 (heel) .. +1 (toe): the angle
+    // that balances the turn, atan(speed x turn rate / g), against fullLean. A right turn (the
+    // heading falling) is on the toe edge.
+    private float turnLean(Float3 v, float d)
+    {
+        float speed = Math::Sqrt(v.x * v.x + v.z * v.z);
+        if (speed < 1.0f)
+        {
+            m_headingKnown = false;
+            return 0.0f;
+        }
+        float heading = Math::Atan2(v.x, v.z);
+        float rate = m_headingKnown ? wrap(heading - m_lastHeading) / d : 0.0f;
+        m_lastHeading = heading;
+        m_headingKnown = true;
+        float angle = Math::RadiansToDegrees(Math::Atan2(speed * Math::Abs(rate), 9.81f));
+        float lean = angle / fullLean;
+        lean = (lean > 1.0f) ? 1.0f : lean;
+        return (rate < 0.0f) ? lean : -lean;
+    }
+
     private void animate(float steer, bool tuck, bool airborne, bool grab, float d)
     {
         Entity@ figureNow = figure();

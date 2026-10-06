@@ -4,7 +4,7 @@
 	<string name="typeName">ModelManifestAsset</string>
 	<array name="dataVersions" count="1">
 		<u64 name="type">2440385714661564817</u64>
-		<u32 name="version">2</u32>
+		<u32 name="version">3</u32>
 	</array>
 	<object name="payload">
 		<string name="fileName">RiderModel.glb</string>
@@ -393,6 +393,7 @@
 			<i32 name="mesh">-1</i32>
 		</array>
 		<string name="skeletonGuid">6aa5e7c6-5952-4435-bd94-07311eebc479</string>
+		<i32 name="skeletonParentNode">16</i32>
 		<array name="animationGuids" count="8">
 			<string>ef098e98-9eb0-4eec-8fc4-69f6bbd9bdf9</string>
 			<string>b75d7d08-816d-4a8d-985f-3c8fc9a6184c</string>

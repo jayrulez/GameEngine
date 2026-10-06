@@ -56,6 +56,13 @@ export namespace foundation::ui
             Invalidate();
         }
 
+        [[nodiscard]] View* ContentChild() const noexcept override { return m_content.Get(); }
+        bool SetContentChild(RefPtr<View> content) override
+        {
+            SetContent(Move(content));
+            return true;
+        }
+
         [[nodiscard]] ControlState GetControlState() const override
         {
             ControlState state = ControlState::Normal;

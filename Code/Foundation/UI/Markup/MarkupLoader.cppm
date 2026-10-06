@@ -82,6 +82,48 @@ export namespace foundation::ui
 
             ApplyAttributes(element, tagName, view.Get(), context, warnings);
 
+            // A view that draws one view as its content (a ContentButton) takes its one child
+            // element as that content.
+            if (!Cast<ViewGroup>(view.Get()))
+            {
+                bool taken = false;
+                for (xml::XmlNode* childNode : element->Children())
+                {
+                    if (childNode->NodeType() != xml::XmlNodeType::Element)
+                    {
+                        continue;
+                    }
+                    xml::XmlElement* childElem = static_cast<xml::XmlElement*>(childNode);
+                    if (taken)
+                    {
+                        if (warnings != nullptr)
+                        {
+                            String w(u8"<");
+                            w.Append(tagName);
+                            w.Append(u8"> holds one element as its content: <");
+                            w.Append(childElem->TagName());
+                            w.Append(u8"> dropped (wrap several in a Flex)");
+                            warnings->PushBack(Move(w));
+                        }
+                        continue;
+                    }
+                    RefPtr<View> childView = BuildView(allocator, childElem, context, warnings);
+                    if (childView && view->SetContentChild(childView))
+                    {
+                        taken = true;
+                    }
+                    else if (warnings != nullptr)
+                    {
+                        String w(childView ? u8"<" : u8"unknown element <");
+                        w.Append(childElem->TagName());
+                        w.Append(childView ? u8"> dropped: <" : u8"> dropped (inside <");
+                        w.Append(tagName);
+                        w.Append(childView ? u8"> holds no children" : u8">)");
+                        warnings->PushBack(Move(w));
+                    }
+                }
+            }
+
             // Recurse into children.
             if (ViewGroup* viewGroup = Cast<ViewGroup>(view.Get()))
             {

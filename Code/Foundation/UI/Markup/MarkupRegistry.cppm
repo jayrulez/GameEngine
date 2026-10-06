@@ -38,6 +38,7 @@ import :scroll_view;
 import :label;
 import :button;
 import :icon_button;
+import :content_button;
 import :checkbox;
 import :radio_button;
 import :radio_group;
@@ -875,6 +876,11 @@ export namespace foundation::ui
                                  c->FontFamily.SetValue(String(val));
                              }
                          });
+
+        // A button that draws any view as its content (a picture card: an image and labels): its
+        // one child element is that content (MarkupLoader, through View::SetContentView).
+        RegisterView(u8"ContentButton", [](IAllocator& allocator) -> RefPtr<View>
+                     { return MakeRef<ContentButton>(allocator); });
 
         // Icon button: the icon drawable is set in code (or a theme part); markup exposes its size.
         RegisterView(u8"IconButton", [](IAllocator& allocator) -> RefPtr<View>

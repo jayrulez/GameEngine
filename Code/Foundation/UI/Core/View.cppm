@@ -768,6 +768,18 @@ export namespace foundation::ui
             return defaultVal;
         }
 
+        // === Content ===
+        /// A view that draws one other view as its content without holding it as a child (a
+        /// ContentButton, a ToggleButton) answers it here, so a search by name and markup reach it
+        /// without naming the control types. None by default.
+        [[nodiscard]] virtual View* ContentChild() const noexcept { return nullptr; }
+        /// Takes `content` as that content; false for a view that has none to take.
+        virtual bool SetContentChild(RefPtr<View> content)
+        {
+            (void)content;
+            return false;
+        }
+
         // === Hit testing ===
         [[nodiscard]] virtual View* HitTest(Float2 localPoint)
         {
@@ -982,25 +994,39 @@ export namespace foundation::ui
                              Max(0.0f, Height() - Padding.Top - Padding.Bottom)};
         }
 
-        /// Find a descendant view by name (recursive).
+        /// Find a descendant view by name (recursive), into a child's content too (a
+        /// ContentButton's labels).
         [[nodiscard]] View* FindByName(StringView name) const
         {
             for (usize i = 0; i < ChildCount(); ++i)
             {
-                View* child = GetChildAt(i);
-                if (child->Name.Size() > 0 && child->Name.AsView() == name)
+                if (View* found = FindInSubtree(GetChildAt(i), name))
                 {
-                    return child;
-                }
-                if (ViewGroup* childGroup = Cast<ViewGroup>(child))
-                {
-                    if (View* found = childGroup->FindByName(name))
-                    {
-                        return found;
-                    }
+                    return found;
                 }
             }
             return nullptr;
+        }
+        /// `view` itself if it is named `name`, else the first such view under it (its children,
+        /// then its content).
+        [[nodiscard]] static View* FindInSubtree(View* view, StringView name)
+        {
+            if (view == nullptr)
+            {
+                return nullptr;
+            }
+            if (view->Name.Size() > 0 && view->Name.AsView() == name)
+            {
+                return view;
+            }
+            if (ViewGroup* group = Cast<ViewGroup>(view))
+            {
+                if (View* found = group->FindByName(name))
+                {
+                    return found;
+                }
+            }
+            return FindInSubtree(view->ContentChild(), name);
         }
         template <typename T>
         [[nodiscard]] T* FindByName(StringView name) const

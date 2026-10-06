@@ -42,6 +42,13 @@ export namespace foundation::ui
             Invalidate();
         }
 
+        [[nodiscard]] View* ContentChild() const noexcept override { return m_content.Get(); }
+        bool SetContentChild(RefPtr<View> content) override
+        {
+            SetContent(Move(content));
+            return true;
+        }
+
     protected:
         [[nodiscard]] Thickness DefaultStylePadding() const override { return Thickness{12, 8}; }
 

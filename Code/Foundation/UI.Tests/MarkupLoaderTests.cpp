@@ -591,3 +591,63 @@ TEST_CASE("markup: MarkupLoader::Initialize is safe to call from many threads at
     REQUIRE(view);
     CHECK(Cast<Label>(view.Get()) != nullptr);
 }
+
+// === A button with any content (a picture card) ===
+
+TEST_CASE("markup: a ContentButton takes its one child element as its content, found by name")
+{
+    EnsureInit();
+    Array<String> warnings;
+    auto view = MarkupLoader::LoadFromString(DefaultAllocator(),
+                                             u8"<Flex>\n"
+                                             u8"  <ContentButton id=\"card\">\n"
+                                             u8"    <Flex direction=\"vertical\">\n"
+                                             u8"      <ImageView id=\"card-picture\" source=\"{0a1b}\"/>\n"
+                                             u8"      <Label id=\"card-best\" text=\"Gold\"/>\n"
+                                             u8"    </Flex>\n"
+                                             u8"  </ContentButton>\n"
+                                             u8"</Flex>",
+                                             nullptr, &warnings);
+    REQUIRE(view);
+    CHECK(warnings.IsEmpty());
+    ViewGroup* root = Cast<ViewGroup>(view.Get());
+    REQUIRE(root != nullptr);
+    ContentButton* card = root->FindByName<ContentButton>(u8"card");
+    REQUIRE(card != nullptr);
+    REQUIRE(card->Content() != nullptr);
+    CHECK(card->ContentChild() == card->Content());
+    // The finders reach into the content: its label and its picture.
+    Label* best = root->FindByName<Label>(u8"card-best");
+    REQUIRE(best != nullptr);
+    CHECK(best->Text.Value() == u8"Gold");
+    CHECK(root->FindByName<ImageView>(u8"card-picture") != nullptr);
+    // A ContentButton is a button: a click reaches its handler.
+    i32 clicks = 0;
+    card->OnClick.Add([&clicks](ButtonBase*) { ++clicks; });
+    card->OnClick.Invoke(card);
+    CHECK(clicks == 1);
+}
+
+TEST_CASE("markup: a second content element, or children on a view that takes none, is dropped with a warning")
+{
+    EnsureInit();
+    Array<String> warnings;
+    auto view = MarkupLoader::LoadFromString(DefaultAllocator(),
+                                             u8"<ContentButton><Label text=\"a\"/><Label text=\"b\"/></ContentButton>",
+                                             nullptr, &warnings);
+    REQUIRE(view);
+    ContentButton* button = Cast<ContentButton>(view.Get());
+    REQUIRE(button != nullptr);
+    Label* content = Cast<Label>(button->Content());
+    REQUIRE(content != nullptr);
+    CHECK(content->Text.Value() == u8"a"); // the first is the content
+    REQUIRE(warnings.Size() == 1u);
+    CHECK(warnings[0].AsView().ContainsIgnoreCase(u8"holds one element"));
+
+    warnings.Clear();
+    auto label = MarkupLoader::LoadFromString(DefaultAllocator(), u8"<Label text=\"x\"><Label text=\"y\"/></Label>",
+                                              nullptr, &warnings);
+    REQUIRE(label);
+    REQUIRE(warnings.Size() == 1u);
+    CHECK(warnings[0].AsView().ContainsIgnoreCase(u8"holds no children"));
+}

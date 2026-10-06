@@ -32,6 +32,8 @@ import foundation.script.angelscript;
 import foundation.script.luau;
 #endif
 import editor.mcp;
+import editor.project;  // the seeded project, opened to check it
+import fonts.pipeline;  // FontAsset (the seeded default UI font)
 
 using namespace foundation::core;
 using namespace foundation::mcp;
@@ -127,6 +129,44 @@ TEST_CASE("integration.mcp: an agent creates, opens, and inspects a project via 
     JsonValue bad =
         CallResponse(server, u8"project_open", With(Obj(), u8"directory", u8"nope_not_a_project"));
     CHECK(bad.Get(u8"result").Get(u8"isError").AsBool() == true);
+}
+
+// project_create seeds the editor's starter content: Snowline, made over MCP, had no default UI
+// font, so its exported game showed no text (the engine's built-in font is not in a dist).
+TEST_CASE("integration.mcp: project_create seeds the default UI font, the sky and the primitives")
+{
+    pipeline::RegisterPipelineTypes();
+    std::error_code ec;
+    std::filesystem::remove_all("mcp_seeded_project", ec);
+    pipeline::AssetCreatorRegistry creators{DefaultAllocator()};
+    (void)pipeline::RegisterAllCreators(creators);
+    const String dataRoot = foundation::vfs::FindDataRoot();
+    REQUIRE_FALSE(dataRoot.IsEmpty());
+
+    McpServer server;
+    editor::mcp::ProjectSession session;
+    editor::mcp::ProjectOwner owner;
+    editor::mcp::RegisterProjectOpenTools(server, session, owner, &creators, dataRoot.AsView());
+    JsonValue created = CallOk(server, u8"project_create",
+                               With(With(Obj(), u8"directory", u8"mcp_seeded_project"), u8"name", u8"Seeded"));
+    CHECK(created.Get(u8"seeded").AsBool());
+
+    UniquePtr<editor::EditorProject> project =
+        editor::EditorProject::Open(DefaultAllocator(), u8"mcp_seeded_project");
+    REQUIRE(static_cast<bool>(project));
+    const Guid font = project->Settings().defaultUiFontId;
+    REQUIRE_FALSE(font.IsNil());
+    foundation::content::Instance* fontInstance = project->SourceDb().GetInstance(font);
+    REQUIRE(fontInstance != nullptr);
+    RefPtr<ISerializable> read = fontInstance->ReadObject();
+    const pipeline::FontAsset* asset = Cast<pipeline::FontAsset>(read.Get());
+    REQUIRE(asset != nullptr);
+    CHECK(asset->family == StringView(u8"Roboto"));
+    CHECK(asset->mode == pipeline::FontBakeMode::DistanceField); // one bake draws every size clean
+    foundation::content::Group* root = project->SourceDb().RootGroup();
+    REQUIRE(root->GetGroup(u8"Environment") != nullptr);
+    CHECK(root->GetGroup(u8"Environment")->GetInstance(u8"BlueSky") != nullptr);
+    CHECK(std::filesystem::exists("mcp_seeded_project/Sources/Roboto-Regular.ttf"));
 }
 
 TEST_CASE("integration.mcp: asset_list / asset_info read the open project's content DB")

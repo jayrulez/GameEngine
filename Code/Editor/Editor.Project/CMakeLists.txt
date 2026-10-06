@@ -8,6 +8,7 @@ target_link_libraries(Editor.Project
     PUBLIC Pipeline::Importer Foundation::Core Foundation::VFS Foundation::VFS.Pak Foundation::Content Foundation::Xml.Serialization Engine::Project
            Foundation::Settings Foundation::Scene.Resource
            Pipeline::Cook Foundation::Resource Foundation::Policy
+           Pipeline::Core Pipeline::Fonts Pipeline::Texture # the new project's starter font and sky
            Foundation::Shaders Foundation::Shaders.System) # export cooks the engine shader pack (Data/Shaders/shaders.dpak)
 
 # The player executable basename, from the build's single source of truth (root CMakeLists). The
@@ -28,6 +29,7 @@ target_sources(Editor.Project
         AllocatorImpl.cpp
         CookServiceImpl.cpp
         ProjectScaffoldImpl.cpp
+        ProjectSeedImpl.cpp
         ExportTemplateImpl.cpp
         ExportImpl.cpp
     PUBLIC

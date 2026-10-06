@@ -30,6 +30,7 @@ import foundation.vfs;
 import foundation.content;
 import foundation.xml.serialization;
 import engine.project;
+import pipeline.core; // AssetCreatorRegistry (the starter content's primitives)
 import :export_roots; // the project owns its "Always Export" set (export_roots.xml)
 
 using namespace foundation::core;
@@ -262,5 +263,15 @@ export namespace editor
     // when the project already declares a module or Native/ exists - never overwrites
     // user code. Defined in ProjectScaffoldImpl.cpp.
     [[nodiscard]] Status ScaffoldNativeModule(EditorProject& project);
+
+    // The starter content a new project is seeded with, whether made by the editor's New Project
+    // or the MCP project_create: Roboto as a distance-field font set as the manifest's default UI
+    // font (what a shipped game's text draws with), BlueSky.hdr as the default sky, and the cube,
+    // sphere and plane primitives (every primitive with `allPrimitives`) through `creators`.
+    // Payload files come from `dataRoot`'s Assets/. The caller saves the settings and the source
+    // database. Defined in ProjectSeedImpl.cpp.
+    void SeedStarterContent(IAllocator& allocator, EditorProject& project,
+                            const pipeline::AssetCreatorRegistry& creators, StringView dataRoot,
+                            bool allPrimitives = false);
 
 }

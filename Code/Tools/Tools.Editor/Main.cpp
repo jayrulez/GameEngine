@@ -163,98 +163,18 @@ namespace
     // primitive meshes at the current source version without opening the editor UI.
     bool g_seedAllPrimitives = false;
 
-    // Starter content for a manager-created project: the baseline FONT (and its manifest
-    // default - a fresh project must render game-UI text in an export from day one), the
-    // default SKY, and the primitive meshes. Payload files come from the data root's Assets/.
+    // Starter content for a manager-created project: editor::SeedStarterContent (the baseline
+    // font set as the manifest default, the sky, the primitives), from the data root's Assets/.
     // THE data root for this process: resolved once in main (an explicit --data-root, else the
     // Data/.dataroot walk from the executable) - the same mechanism every executable uses. The
     // editor refuses to start without one; there is no compile-time path fallback.
     String g_dataRoot;
     [[nodiscard]] StringView EditorDataRoot() { return g_dataRoot.AsView(); }
 
-    [[nodiscard]] String BaselineAssetPath(StringView relative)
-    {
-        return foundation::vfs::DataPath(EditorDataRoot(), PathJoin(u8"Assets", relative).AsView());
-    }
-
     void SeedNewProject(editor::EditorContext& ctx, editor::EditorProject& project)
     {
-        foundation::content::Group* root = project.SourceDb().RootGroup();
-
-        // 1) The baseline UI font: Roboto imported as a real FontAsset + set as the
-        //    manifest's default (the guid the player binds; source guid == product guid).
-        {
-            const String source = BaselineAssetPath(u8"fonts/roboto/Roboto-Regular.ttf");
-            Result<String> copied = pipeline::CopyIntoSources(pipeline::ImportContext{AppRoot(), project.SourcesRoot()}, source.AsView());
-            if (copied.HasValue())
-            {
-                foundation::content::Group* fonts = root->GetGroup(u8"Fonts");
-                if (fonts == nullptr)
-                {
-                    fonts = root->CreateGroup(u8"Fonts");
-                }
-                if (foundation::content::Instance* instance = fonts->CreateInstance(
-                        u8"Roboto", pipeline::FontAsset::StaticType()))
-                {
-                    pipeline::FontAsset asset;
-                    asset.fileName = foundation::vfs::SourcePath(copied.Value().AsView());
-                    asset.family = String(u8"Roboto");
-                    if (instance->WriteObject(asset).IsOk())
-                    {
-                        project.Settings().defaultUiFontId = instance->Id();
-                    }
-                }
-            }
-            else
-            {
-                LOG_WARNING(u8"Editor",
-                                     u8"starter font missing ({}) - new project has no "
-                                     u8"default UI font",
-                                     source);
-            }
-        }
-
-        // 2) The default sky: BlueSky.hdr as an equirectangular skybox texture.
-        {
-            const String source = BaselineAssetPath(u8"environment/BlueSky.hdr");
-            Result<String> copied = pipeline::CopyIntoSources(pipeline::ImportContext{AppRoot(), project.SourcesRoot()}, source.AsView());
-            if (copied.HasValue())
-            {
-                foundation::content::Group* env = root->GetGroup(u8"Environment");
-                if (env == nullptr)
-                {
-                    env = root->CreateGroup(u8"Environment");
-                }
-                if (foundation::content::Instance* instance = env->CreateInstance(
-                        u8"BlueSky", pipeline::TextureAsset::StaticType()))
-                {
-                    pipeline::TextureAsset asset;
-                    asset.fileName = foundation::vfs::SourcePath(copied.Value().AsView());
-                    asset.SetupForEquirectangularSkybox();
-                    (void)instance->WriteObject(asset);
-                }
-            }
-        }
-
-        // 3) Primitive meshes: the creators File > New > Primitives runs.
-        const String sourcesRoot(project.SourcesRoot().AsView());
-        for (const pipeline::AssetCreator& creator : ctx.Creators().All())
-        {
-            if (creator.category.AsView() != StringView(u8"Primitives"))
-            {
-                continue;
-            }
-            const StringView label = creator.label.AsView();
-            const bool starter = label == StringView(u8"Cube") || label == StringView(u8"Sphere") ||
-                                 label == StringView(u8"Plane");
-            if (starter || g_seedAllPrimitives)
-            {
-                (void)creator.Create(nullptr, root, sourcesRoot.AsView());
-            }
-        }
-
-        LOG_INFO(u8"Editor", u8"starter content seeded (font/sky/primitives{})",
-                 g_seedAllPrimitives ? u8", all primitives" : u8"");
+        // The one seeding function the MCP project_create runs too (editor.project).
+        editor::SeedStarterContent(AppRoot(), project, ctx.Creators(), EditorDataRoot(), g_seedAllPrimitives);
     }
 }
 namespace graphics = foundation::graphics;

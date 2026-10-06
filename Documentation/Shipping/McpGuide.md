@@ -131,7 +131,10 @@ entity outside a run, each running behaviour's properties under `live` beside wh
 
 ## Workflows
 
-**Project**: `project_create` -> `project_open` -> `project_info`, which also reports the
+**Project**: `project_create` makes the project with the editor's starter content, as New
+Project does: Roboto as a distance-field font set as the default UI font (what an exported game's
+text draws with: the engine's built-in font is not in a dist), the default sky, and a cube, sphere
+and plane. Then `project_open` -> `project_info`, which also reports the
 settings play reads (default scene, startup script, default input map, bus layout, UI theme,
 loading screen, UI font, MSAA, and `uiFontIds`, the other fonts the game UI loads beside the
 default, each a family a label picks with `font-family="<family>"`, a title face say, and the

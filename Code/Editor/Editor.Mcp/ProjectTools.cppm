@@ -97,24 +97,32 @@ export namespace editor::mcp
     // Registers project_create / project_open - the STDIO host's additions. What project_open
     // opens is stored in `owner` and the session is pointed at it; the editor host, whose project
     // is the editor's own, registers neither.
+    // `creators` and `dataRoot` let project_create seed the new project's starter content as the
+    // editor's New Project does (SeedStarterContent: the default UI font, the sky, the primitives);
+    // a host that passes none creates the bare project.
     inline void RegisterProjectOpenTools(foundation::mcp::McpServer& server,
-                                         ProjectSession& session, ProjectOwner& owner)
+                                         ProjectSession& session, ProjectOwner& owner,
+                                         const pipeline::AssetCreatorRegistry* creators = nullptr,
+                                         StringView dataRoot = {})
     {
         using foundation::mcp::SchemaBuilder;
         using foundation::mcp::ToolResult;
         ProjectSession* s = &session;
         ProjectOwner* o = &owner;
+        const String seedRoot(dataRoot);
 
         server.RegisterTool(
             u8"project_create",
             u8"Scaffold a new project (Project.xml manifest + the standard directory layout) at a "
-            u8"directory. Does not open it - call project_open next.",
+            u8"directory, seeded with the editor's starter content (Roboto as the default UI font, "
+            u8"the default sky, the cube, sphere and plane). Does not open it - call project_open "
+            u8"next.",
             SchemaBuilder()
                 .Str(u8"directory", u8"path to create the project at", true)
                 .Str(u8"name", u8"the project's display name", true)
                 .Build(),
                 foundation::mcp::ToolAnnotations::Creates(),
-            [](const JsonValue& args) -> ToolResult
+            [creators, seedRoot](const JsonValue& args) -> ToolResult
             {
                 const String directory = args.Get(u8"directory").AsString();
                 const String name = args.Get(u8"name").AsString();
@@ -124,9 +132,24 @@ export namespace editor::mcp
                     return Err(Format(u8"could not create project at '{}' (error {})",
                                       directory.AsView(), static_cast<i32>(st.Code())));
                 }
+                // The starter content, as the editor's New Project seeds it: without it a project
+                // made here had no default UI font, and its exported game showed no text.
+                bool seeded = false;
+                if (creators != nullptr && !seedRoot.IsEmpty())
+                {
+                    UniquePtr<editor::EditorProject> project =
+                        editor::EditorProject::Open(editor::EditorRootAllocator(), directory.AsView());
+                    if (project)
+                    {
+                        editor::SeedStarterContent(editor::EditorRootAllocator(), *project, *creators,
+                                                   seedRoot.AsView());
+                        seeded = project->SaveSettings().IsOk();
+                    }
+                }
                 JsonValue out = JsonValue::MakeObject();
                 out.Set(u8"created", JsonValue::MakeBool(true));
                 out.Set(u8"directory", JsonValue::MakeString(directory));
+                out.Set(u8"seeded", JsonValue::MakeBool(seeded));
                 return out;
             });
 

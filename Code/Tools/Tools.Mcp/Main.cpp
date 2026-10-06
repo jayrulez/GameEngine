@@ -124,7 +124,7 @@ int main(int argc, char** argv)
     editor::mcp::RegisterEngineTools(server, session, builders, importers, creators, logBuffer,
                                      paths, operations);
     // This host's additions: an agent opens (or scaffolds) the project it wants to work on.
-    editor::mcp::RegisterProjectOpenTools(server, session, owner);
+    editor::mcp::RegisterProjectOpenTools(server, session, owner, &creators, dataRoot.AsView());
     // host_info (ops hygiene): pid + build stamp + versions + the open-project state.
     RegisterHostInfoTool(
         server, String(reinterpret_cast<const char8_t*>(BuildStamp())),

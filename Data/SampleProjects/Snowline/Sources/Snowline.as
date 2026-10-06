@@ -1,5 +1,9 @@
-// Snowline - the run's orchestrator (the reserved class Game): the clock, the gates and their
-// penalties, the gems, the HUD, and the results.
+// Snowline - the game's orchestrator (the reserved class Game): the title and its courses, and in
+// a run the clock, the gates and their penalties, the gems, the tricks, the HUD, and the results.
+//
+// The title lists the courses with the best medal and time won on each (from the save); a course
+// opens with a bronze on the one before it. Picking one loads its scene afresh; Pause (Escape or
+// Start), in a run or on the results, goes back to the title.
 //
 // The gates announce themselves ("GateRegistered") and report each crossing ("GatePassed",
 // "GateMissed": round the outside costs kMissPenalty seconds); the finish line holds the course's
@@ -21,6 +25,15 @@
 
 Guid kHudDoc = Guid("9ff3ed63-f33c-487a-a88f-2761d48af746");    // UI/Hud
 Guid kFinishDoc = Guid("409e4cea-20a2-4705-9a54-059fa662850f"); // UI/Finish
+Guid kTitleDoc = Guid("2a97818d-8b96-4bfc-a7ae-6200a870ea69");  // UI/Title
+
+// The courses, in order: each unlocked by a bronze on the one before it.
+const int kCourseCount = 2;
+Guid kMeadow = Guid("c3ba9d83-5633-451c-a028-6beca57428fa"); // Scenes/Meadow
+Guid kForest = Guid("a6e8728b-4a6d-400b-a765-cec67a8fa222"); // Scenes/Forest
+
+Guid courseScene(int i) { return i == 1 ? kForest : kMeadow; }
+string courseName(int i) { return i == 1 ? "Forest" : "Meadow"; }
 
 // Audio/GemChime (sounds.py): the tally's tick, pitched up row by row, and lower as a medal lands.
 Guid kChime = Guid("c47f1131-6df4-49ea-b2c7-6e3b3316a3ce");
@@ -39,6 +52,7 @@ const float kTallyGap = 0.45f;    // between the rows (s)
 
 class Game
 {
+    private bool m_onTitle = false; // the title is up: nothing runs behind it
     private bool m_running = true;
     private bool m_started = false; // the rider's first frame has come (the clock runs from it)
     private float m_time = 0.0f;    // seconds on the clock this run
@@ -71,13 +85,82 @@ class Game
 
     void launch()
     {
+        showTitle();
+    }
+
+    // ---- the title: a course to ride, each with the best won on it, or what unlocks it ----
+    private void showTitle()
+    {
+        m_onTitle = true;
+        run::setTimeScale(0.0f); // the scene behind the title holds still
+        ui::clear();
+        Screen@ s = ui::push(kTitleDoc);
+        s.findButton("course-0").onClick(Action(this.onMeadow));
+        s.findButton("course-1").onClick(Action(this.onForest));
+        for (int i = 0; i < kCourseCount; ++i)
+        {
+            bool open = unlocked(i);
+            s.findButton("course-" + i).setEnabled(open);
+            s.findLabel("course-" + i + "-best").setText(open ? bestLine(i)
+                                                           : "A bronze on " + courseName(i - 1) + " opens it");
+        }
+    }
+
+    private void onMeadow() { startCourse(0); }
+    private void onForest() { startCourse(1); }
+
+    // A course opens with a bronze or better on the one before it; the first is always open.
+    private bool unlocked(int i)
+    {
+        return i == 0 || Save::getInt("medal." + courseName(i - 1), 0) >= 1;
+    }
+
+    // The best medal and time won on a course, from the save.
+    private string bestLine(int i)
+    {
+        float best = Save::getFloat("best." + courseName(i), -1.0f);
+        if (best < 0.0f)
+        {
+            return "Not ridden yet";
+        }
+        int rank = Save::getInt("medal." + courseName(i), 0);
+        string medal = rank == 3 ? "Gold" : (rank == 2 ? "Silver" : (rank == 1 ? "Bronze" : "No medal"));
+        return medal + "   best " + clock(best);
+    }
+
+    // A course from its top: everything the last run counted starts over, and the scene loads afresh
+    // (its gates, gems and finish announce themselves again).
+    private void startCourse(int i)
+    {
+        if (!unlocked(i))
+        {
+            return;
+        }
+        m_onTitle = false;
+        m_started = false;
+        m_gates = 0;
+        m_gems = 0;
+        m_gold = 0.0f;
+        m_silver = 0.0f;
+        m_bronze = 0.0f;
+        ui::clear();
         ui::push(kHudDoc);
-        showGates();
-        showGems();
+        resetRun();
+        run::setTimeScale(1.0f);
+        run::loadScene(courseScene(i));
     }
 
     void update(float dt)
     {
+        if (m_onTitle)
+        {
+            return;
+        }
+        if (Input::wasPressed("Pause"))
+        {
+            showTitle(); // in a run or on the results: back to the courses
+            return;
+        }
         if (m_running)
         {
             if (!m_started)
@@ -419,6 +502,13 @@ class Game
 
     private void restart()
     {
+        resetRun();
+        run::events().emit("RunRestart", 0); // in a run the scene bus is the run bus
+    }
+
+    // What a run counts, back to its start (the course's own counts stay: its gates and gems).
+    private void resetRun()
+    {
         m_running = true;
         m_time = 0.0f;
         m_penalty = 0.0f;
@@ -433,7 +523,6 @@ class Game
         ui::find("hud-penalty").setVisible(false);
         showGates();
         showGems();
-        run::events().emit("RunRestart", 0); // in a run the scene bus is the run bus
     }
 
     private void showGates()

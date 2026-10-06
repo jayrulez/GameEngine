@@ -19,7 +19,8 @@ Needs terrain.py <course> and importall.py <course> first: it places what they m
   its medal's time;
 - the player's ghost (PlayerGhost.as, the rider model under it in ghosts.py's GhostPlayer): the
   course's best run, saved, ridden again beside the player; hidden until there is one;
-- the kickers (Models/Props/KickerModel, with its collision) on the course line between gates;
+- the kickers (Kicker.as, which sets the launch off the lip, on Models/Props/KickerModel with its
+  collision) on the course line between gates;
 - the chase camera (FollowCamera.as).
 """
 import json, math, os, sys
@@ -31,6 +32,8 @@ from look import look
 name = sys.argv[1] if len(sys.argv) > 1 else "Meadow"
 # course.py <course> autopilot: the rider steers itself (playtests and measurements).
 AUTOPILOT = "autopilot" in sys.argv[2:]
+# course.py <course> autopilot spin=<stick>: the autopilot also spins in the air (a trick's playtest).
+AUTOPILOT_SPIN = next((float(a.split("=", 1)[1]) for a in sys.argv[2:] if a.startswith("spin=")), 0.0)
 info = json.load(open(os.path.join(HERE, "generated", name, name + ".json")))
 ASSETS = mcp("asset_list", {})["assets"]
 
@@ -73,6 +76,7 @@ GATE = asset("ScriptClassAsset", "Gate")
 FINISH = asset("ScriptClassAsset", "Finish")
 GHOST = asset("ScriptClassAsset", "Ghost")
 PLAYER_GHOST = asset("ScriptClassAsset", "PlayerGhost")
+KICKER = asset("ScriptClassAsset", "Kicker")
 GEM = asset("ScriptClassAsset", "Gem")
 GEM_MODEL = next(a["guid"] for a in ASSETS if a["type"] == "PrefabDocument"
                  and a.get("group", "") == "Models/Props/GemModel")
@@ -95,8 +99,16 @@ MEDALS = {"Meadow": (30.0, 34.0, 40.0)}
 # line, tilted to the slope under it. Meadow has one: the course that teaches carving and flags
 # has one jump to learn the air on.
 KICKERS = {"Meadow": (3,)}
-KICKER_LENGTH = 7.8 # the kicker's base, foot to back (blender/props.py: run + table + back), m
-KICKER_SINK = 0.15  # how far its foot sits in the snow, so no edge stands proud of it (m)
+# The kicker's shape (blender/props.py, which models it from the same numbers): its curve, buried
+# KICKER_BURY at its start, rises to the lip KICKER_HEIGHT over KICKER_CURVE. Kicker.as needs the
+# lip: how far up the ramp from where it leaves the snow, how high, at what angle.
+KICKER_CURVE, KICKER_HEIGHT, KICKER_BURY, KICKER_WIDTH = 5.4, 1.4, 0.12, 5.0
+KICKER_RUN = KICKER_CURVE - KICKER_CURVE * math.sqrt(KICKER_BURY / (KICKER_HEIGHT + KICKER_BURY))
+KICKER_LIP_ANGLE = math.degrees(math.atan(2.0 * (KICKER_HEIGHT + KICKER_BURY) / KICKER_CURVE))
+KICKER_FOOT = 3.0   # the run over which the kicker is tilted to the slope at its foot (m)
+KICKER_SINK = 0.003 # how far its foot sits in the snow: a hair, as its ramp starts level with it.
+                    # Sunk deeper, the ramp came out of the snow already steep: a kink that threw
+                    # the rider off before the lip
 GEM_ROW = 3           # gems in a row
 GEM_GAP = 4.0         # metres down the course between a row's gems
 GEM_OFFSET = 11.0     # how far a row stands off the course line (m): the packed course is 9 m
@@ -170,17 +182,19 @@ def qmul(a, b):
 
 def kickers(d, points, mountain):
     """Each kicker on the course line midway between two gates, facing down it, its base tilted to
-    the slope it stands on (the drop over its base's length)."""
+    the slope at its foot (the drop over KICKER_FOOT), so its ramp starts along the snow."""
     prefab = next(a["guid"] for a in ASSETS if a["type"] == "PrefabDocument"
                   and a.get("group", "") == "Models/Props/KickerModel")
     for i, gap in enumerate(KICKERS.get(name, ())):
         middle = GATE_FIRST + GATE_SPACING * (gap + 0.5)
         p, heading = along_course(points, middle)
-        q, _ = along_course(points, middle + KICKER_LENGTH)
+        q, _ = along_course(points, middle + KICKER_FOOT)
         drop = mountain.height(p[0], p[2]) - mountain.height(q[0], q[2])
-        slope = math.degrees(math.atan2(drop, KICKER_LENGTH))
+        slope = math.degrees(math.atan2(drop, KICKER_FOOT))
         e = d.entity("Kicker%d" % i, (p[0], mountain.height(p[0], p[2]) - KICKER_SINK, p[2]),
                      qmul(yaw(math.degrees(heading)), pitch(slope)))
+        d.script(e, (KICKER, {"run": KICKER_RUN, "lipHeight": KICKER_HEIGHT, "lipAngle": KICKER_LIP_ANGLE,
+                              "width": KICKER_WIDTH}))
         d.instance(prefab, parent=e)
 
 
@@ -311,8 +325,11 @@ def build():
     # rider placed higher drops onto the slope as the run starts, and the board turns the drop into
     # speed down it, which a restarted run (put back on the snow) never had.
     rider = d.entity("Rider", (top[0], top[1] + 0.9, top[2]), yaw(heading))
-    d.add(rider, "physics.Character", radius=0.35, halfHeight=0.55, maxSlopeDegrees=60.0)
-    d.script(rider, (BOARD, {"course": ("entity", course), "autopilot": AUTOPILOT,
+    # A short step down: the controller snaps the rider onto snow up to this far below, which keeps
+    # it on the terrain's small dips, but at the default 0.5 m it held the rider down over a kicker's
+    # lip and rode it down the back instead of into the air (as often as not, by the frame timing).
+    d.add(rider, "physics.Character", radius=0.35, halfHeight=0.55, maxSlopeDegrees=60.0, stepDown=0.1)
+    d.script(rider, (BOARD, {"course": ("entity", course), "autopilot": AUTOPILOT, "autopilotSpin": AUTOPILOT_SPIN,
                              "trackMark": ("asset", asset("PrefabDocument", "TrackMark", "Prefabs"))}))
     # The rider's head looks down the course line ahead (Board.as sets the point each frame; the
     # next gate once the course has gates): an aim on the rider, which drives the graph below it.

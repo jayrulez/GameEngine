@@ -61,14 +61,14 @@
 		<i32 name="skeletonParentNode">-2</i32>
 		<array name="animationGuids" count="0"/>
 		<object name="boundsMin">
-			<f32 name="x">-2.51</f32>
-			<f32 name="y">0</f32>
-			<f32 name="z">0</f32>
+			<f32 name="x">-2.5</f32>
+			<f32 name="y">-0.12</f32>
+			<f32 name="z">-1.517269</f32>
 		</object>
 		<object name="boundsMax">
-			<f32 name="x">2.51</f32>
-			<f32 name="y">1.4523205</f32>
-			<f32 name="z">7.8</f32>
+			<f32 name="x">2.5</f32>
+			<f32 name="y">1.403</f32>
+			<f32 name="z">7.182731</f32>
 		</object>
 		<array name="entries" count="0"/>
 	</object>

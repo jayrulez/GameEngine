@@ -5,11 +5,21 @@
 // to the velocity the rider has, kept along the ground; snow friction and air drag take some back.
 // The stick turns that velocity (a carve), at a rate, keeping its speed but for what a hard carve
 // scrubs off; a tuck cuts the drag and the turning; a jump pops the rider off the snow. In the air,
-// gravity alone, and the grab button holds a grab. At the finish, back to the top.
+// gravity alone: the stick spins the rider instead of carving, and the grab button holds a grab.
+//
+// A landing after real air (`minAir`) is judged against the path: the board within
+// `landTolerance` of the way the rider is travelling, forward or switch (backward), is clean and
+// gives a burst of speed; anything else is a crash, which takes most of the speed and the control
+// for `crashTime`. Each trick is announced for the game to score: "TrickAir" (centiseconds in the
+// air), "TrickSpin" (degrees, in half turns), "TrickGrab" (centiseconds grabbed), then
+// "TrickLanded" (1 clean, 0 crashed); a crash is "RiderCrashed" too.
+//
+// A kicker launches the rider itself ("KickerAngle", then "KickerLaunch", from Kicker.as): the
+// board takes off along its heading at the speed and angle given.
 //
 // The rider's animation graph (graph.py) follows by parameters: Lean (the carve, heel -1 to toe
-// +1), Tuck, Airborne and Grab. The rider stands left foot forward facing the board's right side,
-// so a right turn is a toe-side carve.
+// +1), Tuck, Airborne, Grab and Crashed. The rider stands left foot forward facing the board's
+// right side, so a right turn is a toe-side carve.
 //
 // With `autopilot`, the board steers itself down the course line (playtests, the measurements).
 const float kStep = 1.0f / 60.0f; // the longest step the board integrates at once (s)
@@ -21,6 +31,7 @@ class Board
     [null, "The course line (an entity with a spline)"] Entity@ course;
     [false, "Steer down the course line on its own (playtests)"] bool autopilot;
     [15.0, "How far down the course line the autopilot aims (m)"] float lookAhead;
+    [0.0, "The stick the autopilot holds in the air, a spin (playtests: -1 to 1)"] float autopilotSpin;
     [12.0, "How far down the course line the rider looks (m)"] float gazeAhead;
     [80.0, "Fastest turn of the velocity, a full carve (degrees a second)"] float carveRate;
     [0.35, "Speed a full carve scrubs off (share of gravity's pull into the slope)"] float carveScrub;
@@ -30,6 +41,12 @@ class Board
     [0.45, "Air drag in a tuck (share of the standing drag)"] float tuckDrag;
     [0.5, "Turning in a tuck (share of the full carve)"] float tuckTurn;
     [5.5, "Upward speed of a jump (m/s)"] float jumpSpeed;
+    [540.0, "Fastest spin in the air, the stick full over (degrees a second)"] float spinRate;
+    [0.35, "Shortest time in the air that is a trick, judged as it lands (s)"] float minAir;
+    [35.0, "How far the board may be off the path, forward or switch, for a clean landing (degrees)"] float landTolerance;
+    [3.0, "A clean landing's burst of speed (m/s)"] float landBurst;
+    [0.25, "Share of its speed a crash keeps"] float crashKeep;
+    [1.2, "How long a crash takes the control away (s)"] float crashTime;
     ["asset:Prefab", "The board's mark in the snow (Prefabs/TrackMark)"] Guid@ trackMark;
     [1.5, "Distance between the track's marks (m)"] float trackSpacing;
     [2.0, "Slowest speed that leaves a track (m/s)"] float trackSpeed;
@@ -48,6 +65,14 @@ class Board
     private int m_nextGate = 0;   // the gate the rider looks at next
     private Quaternion m_startRotation;
     private bool m_fromRest = true; // a run begins: the next update starts from rest
+    private bool m_inAir = false;   // off the snow since the last landing
+    private float m_air = 0.0f;     // how long this time in the air has lasted (s)
+    private float m_spin = 0.0f;    // how far the rider has spun in it (radians, signed)
+    private float m_grabbed = 0.0f; // how long it has held a grab in it (s)
+    private float m_crash = 0.0f;   // how long the crash still holds (s)
+    private Float3 m_driven = Float3(0.0f, 0.0f, 0.0f); // the velocity the board drove last frame
+    private float m_launchAngle = 0.0f; // the next kicker launch's angle above level (degrees)
+    private float m_launchSpeed = 0.0f; // its speed (m/s); 0 when none is due
 
     Board(Entity@ entity) { @self = entity; }
 
@@ -82,7 +107,7 @@ class Board
             return;
         }
         CharacterComponent@ c = CharacterComponent::of(self);
-        Float3 v = c.velocity;
+        Float3 v = alongTheSnow(c);
         if (m_fromRest)
         {
             // Every run starts from rest, and on the frame after it begins: the clock (Snowline.as)
@@ -91,6 +116,7 @@ class Board
             // the first run a head start the clock never saw, and a restarted one would carry the
             // last run's speed.
             c.drive(Float3(0.0f, 0.0f, 0.0f));
+            m_driven = Float3(0.0f, 0.0f, 0.0f);
             m_fromRest = false;
             return;
         }
@@ -112,8 +138,41 @@ class Board
             jump = Input::wasPressed("Jump");
         }
         bool grab = !autopilot && Input::isDown("Grab");
+        if (m_crash > 0.0f)
+        {
+            // Down in the snow: no control until the crash is over.
+            m_crash -= d;
+            steer = 0.0f;
+            tuck = false;
+            jump = false;
+            grab = false;
+        }
 
         bool grounded = c.grounded();
+        if (m_launchSpeed > 0.0f)
+        {
+            // Off a kicker's lip: along the heading, up at the lip's angle, and into the air.
+            float heading = (v.x * v.x + v.z * v.z > 0.04f) ? Math::Atan2(v.x, v.z) : m_yaw;
+            float up = Math::DegreesToRadians(m_launchAngle);
+            v = Float3(Math::Sin(heading) * Math::Cos(up) * m_launchSpeed, Math::Sin(up) * m_launchSpeed,
+                       Math::Cos(heading) * Math::Cos(up) * m_launchSpeed);
+            m_launchSpeed = 0.0f;
+            grounded = false;
+        }
+        if (!grounded)
+        {
+            // In the air the stick spins the rider (the autopilot holds autopilotSpin).
+            float stick = autopilot ? autopilotSpin : steer;
+            float spin = (m_crash > 0.0f ? 0.0f : stick) * Math::DegreesToRadians(spinRate) * d;
+            m_spin += spin;
+            m_yaw += spin;
+            m_air += d;
+            if (grab)
+            {
+                m_grabbed += d;
+            }
+            m_inAir = true;
+        }
         // The frame in steps of at most kStep: a long frame (the first after the scene loads, a
         // hitch) is integrated as the short ones it stands for, so the speed a run gathers does not
         // hang on the frame rate. One long step had given a first run a 0.4 m/s head start.
@@ -123,12 +182,17 @@ class Board
         {
             v = integrate(c, v, grounded, steer, tuck, jump && i == 0, h);
         }
+        if (grounded && m_inAir)
+        {
+            v = land(v);
+        }
         c.drive(v);
-        face(v, d);
+        m_driven = v;
+        face(v, d, grounded);
         track(at, v, grounded, d);
         snow(v, steer, grounded);
         wind(v);
-        animate(steer, tuck, !grounded, grab && !grounded, d);
+        animate(grounded ? steer : 0.0f, tuck, !grounded, grab && !grounded, d);
         look(down);
     }
 
@@ -176,6 +240,12 @@ class Board
         self.setRotation(m_startRotation);
         m_yaw = startYaw();
         m_fromRest = true;
+        m_inAir = false;
+        m_air = 0.0f;
+        m_spin = 0.0f;
+        m_grabbed = 0.0f;
+        m_crash = 0.0f;
+        m_driven = Float3(0.0f, 0.0f, 0.0f);
         m_nextGate = 0;
         m_lean = 0.0f;
     }
@@ -187,6 +257,10 @@ class Board
         Float3 forward = Quaternion::RotateVector(m_startRotation, Float3(0.0f, 0.0f, 1.0f));
         return Math::Atan2(forward.x, forward.z);
     }
+
+    // A kicker's launch (Kicker.as): its angle comes first, then its speed, applied next update.
+    void onKickerAngle(int tenths) { m_launchAngle = float(tenths) / 10.0f; }
+    void onKickerLaunch(int centimetres) { m_launchSpeed = float(centimetres) / 100.0f; }
 
     // The gate the rider looks at next is the one after the last crossed (passed or missed).
     void onGatePassed(int index) { m_nextGate = index + 1; }
@@ -346,10 +420,95 @@ class Board
     }
 
     // The rider faces where it goes, easing round.
-    private void face(Float3 v, float d)
+    // The velocity to carry on from. The character's own step takes away whatever went into a
+    // surface; the snow under the board only turns it, though (its push is square to the motion
+    // along it). So when what was lost since the last drive went into the ground:
+    // - riding (or after a hop too short to be a trick, as over a kicker's curve), the board turns
+    //   its own velocity along the snow and keeps its speed: the lost part had taken a rider from
+    //   17 to 7 m/s up a kicker;
+    // - landing from real air, it keeps what lies along the snow and loses what went into it.
+    // Speed lost to anything else (a rock, a tree) stays lost.
+    private Float3 alongTheSnow(CharacterComponent@ c)
     {
-        if (v.x * v.x + v.z * v.z < 0.04f)
+        Float3 v = c.velocity;
+        if (!c.grounded())
         {
+            return v;
+        }
+        Float3 n = c.groundNormal;
+        Float3 lost = m_driven - v;
+        float lostLength = Math::Sqrt(lost.x * lost.x + lost.y * lost.y + lost.z * lost.z);
+        if (lostLength < 0.05f || Math::Abs(lost.x * n.x + lost.y * n.y + lost.z * n.z) < 0.8f * lostLength)
+        {
+            return v;
+        }
+        float into = m_driven.x * n.x + m_driven.y * n.y + m_driven.z * n.z;
+        Float3 along = Float3(m_driven.x - n.x * into, m_driven.y - n.y * into, m_driven.z - n.z * into);
+        float alongLength = Math::Sqrt(along.x * along.x + along.y * along.y + along.z * along.z);
+        if (alongLength < 0.01f)
+        {
+            return v;
+        }
+        if (m_inAir && m_air >= minAir)
+        {
+            return along; // a landing
+        }
+        float speed = Math::Sqrt(m_driven.x * m_driven.x + m_driven.y * m_driven.y + m_driven.z * m_driven.z);
+        float k = speed / alongLength;
+        return Float3(along.x * k, along.y * k, along.z * k);
+    }
+
+    // Judges a landing: the board along the path (forward or switch) is clean, a burst of speed
+    // along it; across it is a crash. Short hops (under minAir) are neither. The trick's parts are
+    // announced for the game to score. Returns the velocity the rider rides on with.
+    private Float3 land(Float3 v)
+    {
+        m_inAir = false;
+        float air = m_air;
+        float spun = m_spin;
+        float grabbed = m_grabbed;
+        m_air = 0.0f;
+        m_spin = 0.0f;
+        m_grabbed = 0.0f;
+        float flat = Math::Sqrt(v.x * v.x + v.z * v.z);
+        if (air < minAir || flat < 1.0f)
+        {
+            return v;
+        }
+        float off = wrap(m_yaw - Math::Atan2(v.x, v.z));
+        if (Math::Abs(off) > 1.5708f)
+        {
+            off = wrap(off - 3.14159f); // landing switch: judged against riding backward
+        }
+        bool clean = Math::Abs(off) <= Math::DegreesToRadians(landTolerance);
+        int halfTurns = int(Math::Abs(spun) / 3.14159f + 0.5f);
+        self.scene.events.emit("TrickAir", int(air * 100.0f + 0.5f));
+        self.scene.events.emit("TrickSpin", halfTurns * 180);
+        self.scene.events.emit("TrickGrab", int(grabbed * 100.0f + 0.5f));
+        self.scene.events.emit("TrickLanded", clean ? 1 : 0);
+        if (clean)
+        {
+            float k = (flat + landBurst) / flat;
+            return Float3(v.x * k, v.y, v.z * k);
+        }
+        m_crash = crashTime;
+        self.scene.events.emit("RiderCrashed", 1);
+        return Float3(v.x * crashKeep, v.y, v.z * crashKeep);
+    }
+
+    private float wrap(float a)
+    {
+        while (a > 3.14159f) { a -= 6.28318f; }
+        while (a < -3.14159f) { a += 6.28318f; }
+        return a;
+    }
+
+    // On the snow the rider turns to its travel (easing); in the air it holds the facing it spun to.
+    private void face(Float3 v, float d, bool grounded)
+    {
+        if (!grounded || v.x * v.x + v.z * v.z < 0.04f)
+        {
+            self.setRotationEuler(0.0f, Math::RadiansToDegrees(m_yaw), 0.0f);
             return;
         }
         float turn = Math::Atan2(v.x, v.z) - m_yaw;
@@ -375,6 +534,7 @@ class Board
         anim.setBool(figureNow, "Tuck", tuck);
         anim.setBool(figureNow, "Airborne", airborne);
         anim.setBool(figureNow, "Grab", grab);
+        anim.setBool(figureNow, "Crashed", m_crash > 0.0f);
         m_airborne = airborne;
     }
 }

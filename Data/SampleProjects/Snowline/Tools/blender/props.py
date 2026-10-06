@@ -83,21 +83,29 @@ def gem():
     tube("Girdle", P(0, 0, -0.03), P(0, 0, 0.03), 0.318, "GemCore", "root", 8)
 
 
-KICKER_RUN = 4.5    # the ramp's length up to the lip (m)
-KICKER_HEIGHT = 1.4 # the lip's height (m); the ramp curves up to it, 32 degrees at the lip
-KICKER_TABLE = 0.8  # the flat top past the lip (m)
-KICKER_BACK = 2.5   # the slope down behind it (m)
+KICKER_CURVE = 5.4   # the ramp's curve, from its buried start to the lip (m)
+KICKER_HEIGHT = 1.4  # the lip's height above the snow (m)
+KICKER_BURY = 0.12   # how deep the curve starts under the snow (m)
+KICKER_TABLE = 0.8   # the flat top past the lip (m)
+KICKER_BACK = 2.5    # the slope down behind it (m)
 KICKER_WIDTH = 5.0
+# Where the curve comes out of the snow: the origin. From there to the lip is the run; the curve
+# leaves the snow at 9 degrees and reaches the lip at 29.
+KICKER_EMERGE = KICKER_CURVE * math.sqrt(KICKER_BURY / (KICKER_HEIGHT + KICKER_BURY))
+KICKER_RUN = KICKER_CURVE - KICKER_EMERGE
 
 
 def kicker():
-    """A kicker: a ramp of packed snow, its foot at the origin, rising forward (+Z in the engine)
-    along a curve (height H (f/L)^2, so 2H/L = 32 degrees at the lip), a short flat table, then a
-    slope down behind. A painted stripe marks the lip. Imported with collision (a triangle mesh,
-    so the rider rides the curve)."""
-    profile = [(KICKER_RUN * i / 8, KICKER_HEIGHT * (i / 8) ** 2) for i in range(9)]
+    """A kicker: a ramp of packed snow rising forward (+Z in the engine) along a curve (height
+    (H + b) (u / C)^2 - b over its length C), a short flat table, then a slope down behind. The
+    curve starts `b` under the snow, so no edge of it stands proud of the snow however the
+    terrain's surface lies; the origin is where it comes out, at 9 degrees, glancing, and it
+    reaches the lip at 29. A painted stripe marks the lip. Imported with collision (a triangle
+    mesh, so the rider rides the curve)."""
+    rise = KICKER_HEIGHT + KICKER_BURY
+    profile = [(KICKER_CURVE * i / 10 - KICKER_EMERGE, rise * (i / 10) ** 2 - KICKER_BURY) for i in range(11)]
     profile.append((KICKER_RUN + KICKER_TABLE, KICKER_HEIGHT))
-    profile.append((KICKER_RUN + KICKER_TABLE + KICKER_BACK, 0.0))
+    profile.append((KICKER_RUN + KICKER_TABLE + KICKER_BACK, -KICKER_BURY))
     half = KICKER_WIDTH / 2
     bm = bmesh.new()
     left = [bm.verts.new(P(-half, f, h)) for f, h in profile]
@@ -106,12 +114,16 @@ def kicker():
         bm.faces.new((left[i], right[i], right[i + 1], left[i + 1]))  # the riding surface
     bm.faces.new(list(reversed(left)))  # the sides
     bm.faces.new(list(right))
-    bm.faces.new((left[0], left[-1], right[-1], right[0]))  # the base
+    bm.faces.new((left[0], left[-1], right[-1], right[0]))  # the base, under the snow
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
     kit3d.finish("Kicker", bm, "KickerSnow")
-    # The lip's stripe, a hair proud of the snow along the lip.
-    kit3d.box("Lip", (KICKER_WIDTH + 0.02, 0.18, 0.04), P(0, KICKER_RUN - 0.05, KICKER_HEIGHT - 0.01),
-              "KickerLip", tilt=-30.0)
+    # The lip's stripe: paint on the table just past the lip, 3 mm up, flat. It is in the collision
+    # too, so it must stand proud of nothing: a raised strip at the lip deflected riders upward.
+    stripe = bmesh.new()
+    corners = [P(-half, KICKER_RUN, KICKER_HEIGHT + 0.003), P(half, KICKER_RUN, KICKER_HEIGHT + 0.003),
+               P(half, KICKER_RUN + 0.4, KICKER_HEIGHT + 0.003), P(-half, KICKER_RUN + 0.4, KICKER_HEIGHT + 0.003)]
+    stripe.faces.new([stripe.verts.new(c) for c in reversed(corners)])  # counter-clockwise from above: facing up
+    kit3d.finish("Lip", stripe, "KickerLip")
 
 
 MODELS = {"Pine": pine, "Rock": rock, "GatePole": gate_pole, "GateFlagRed": gate_flag("FlagRed"),

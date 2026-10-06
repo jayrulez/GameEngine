@@ -11,6 +11,7 @@
 
 import foundation.core;
 import foundation.ui;
+import foundation.script; // IScriptDelegate (a click handler)
 import engine.ui.script;
 
 using namespace foundation::core;
@@ -34,6 +35,18 @@ namespace
         l->Text.SetValue(String(text));
         return l;
     }
+
+    // A click handler that counts its calls, in place of a script function.
+    class CountingDelegate final : public foundation::script::IScriptDelegate
+    {
+    public:
+        int calls = 0;
+        Result<Variant> Invoke(Span<Variant>) override
+        {
+            ++calls;
+            return Variant{};
+        }
+    };
 }
 
 TEST_CASE("uiscript.handle: an owning handle keeps its view alive after the tree drops it")
@@ -91,6 +104,32 @@ TEST_CASE("uiscript.handle: findLabel searches the subtree deeply, first match")
     uis::Label deep = Group(root.Get()).findLabel(u8"deep");
     REQUIRE(deep.isValid());
     CHECK(deep.text() == StringView(u8"found"));
+}
+
+// A card is a ContentButton (a picture and labels as its content): the Button handle covers it, its
+// click runs the script's handler, and a label inside its content is found from the screen.
+TEST_CASE("uiscript.handle: a ContentButton is a Button, its labels found through its content")
+{
+    auto root = MakeRef<ui::FrameLayout>(DefaultAllocator());
+    auto content = MakeRef<ui::FrameLayout>(DefaultAllocator());
+    content->AddView(MakeLabel(u8"card-best", u8"Gold").Get());
+    auto card = MakeRef<ui::ContentButton>(DefaultAllocator(), RefPtr<ui::View>(content.Get()));
+    card->Name = String(u8"card");
+    root->AddView(card.Get());
+
+    uis::ViewGroup g = Group(root.Get());
+    uis::Button button = g.findButton(u8"card");
+    REQUIRE(button.isValid());
+    CHECK(button.text() == StringView(u8"")); // no text of its own: its content is its face
+
+    auto handler = MakeRef<CountingDelegate>(DefaultAllocator());
+    button.onClick(RefPtr<foundation::script::IScriptDelegate>(handler.Get()));
+    card->OnClick.Invoke(card.Get()); // headless (no context): the handler runs at once
+    CHECK(handler->calls == 1);
+
+    uis::Label best = g.findLabel(u8"card-best");
+    REQUIRE(best.isValid());
+    CHECK(best.text() == StringView(u8"Gold"));
 }
 
 // Sedulous 3bffde51: a view's opacity at once, or faded on the UI's frame clock (which runs while

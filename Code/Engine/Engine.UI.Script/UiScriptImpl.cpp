@@ -321,7 +321,7 @@ namespace engine::uiscript
     }
     void Button::onClick(RefPtr<foundation::script::IScriptDelegate> handler)
     {
-        auto* b = As<ui::Button>(view);
+        auto* b = As<ui::ButtonBase>(view); // any button: a text Button or a ContentButton
         if (b == nullptr || !handler)
         {
             return; // null-but-valid handle, or no handler: a safe no-op (loud-null idiom).
@@ -488,7 +488,7 @@ namespace engine::uiscript
     Label H::findLabel(String name) const { return FindAs<ui::Label, Label>(view, name.AsView()); }     \
     Button H::findButton(String name) const                                                             \
     {                                                                                                   \
-        return FindAs<ui::Button, Button>(view, name.AsView());                                         \
+        return FindAs<ui::ButtonBase, Button>(view, name.AsView());                                     \
     }                                                                                                   \
     ProgressBar H::findProgressBar(String name) const                                                   \
     {                                                                                                   \

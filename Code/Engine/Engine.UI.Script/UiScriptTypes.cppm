@@ -102,7 +102,9 @@ export namespace engine::uiscript
         void setText(String value);
     };
 
-    /// A button. `button.text` reads its caption; `button.onClick(ScriptDelegate(fn))` binds a script
+    /// A button: a text Button, or a ContentButton drawing any view as its content (a picture card,
+    /// whose labels the finders reach). `button.text` reads a text button's caption (empty for a
+    /// content button); `button.onClick(ScriptDelegate(fn))` binds a script
     /// function as its click handler. The handler stays alive as long as the button (released when the
     /// screen pops). It always runs through the mutation queue (drained next frame), never inline during
     /// click dispatch - so it may do ANY structural mutation (screens, entities, ...), not just screen

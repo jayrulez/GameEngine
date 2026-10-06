@@ -1790,6 +1790,36 @@ TEST_CASE("script.scene: Scene.find / Scene.findByPath resolve entities in the c
     CHECK(bed.scene.GetEntityName(e) == StringView(u8"miss-ok"));
 }
 
+// Two handles compare by the entity they name: the same entity found twice is equal, two entities
+// are not, and the behavior's own handle equals the entity found by its name.
+TEST_CASE("script.scene: entity handles compare with == and !=")
+{
+    ScriptedScene bed;
+    scene::EntityHandle target = bed.scene.CreateEntity(u8"Target");
+    scene::EntityHandle other = bed.scene.CreateEntity(u8"Other");
+    (void)other;
+
+    RefPtr<ScriptClass> comparer =
+        MakeClass(u8"Comparer",
+                  u8"class Comparer {\n"
+                  u8"    private Entity@ self;\n"
+                  u8"    Comparer(Entity@ entity) { @self = entity; }\n"
+                  u8"    void onStart() {\n"
+                  u8"        Entity@ a = self.scene.find(\"Target\");\n"
+                  u8"        Entity@ b = self.scene.find(\"Target\");\n"
+                  u8"        Entity@ c = self.scene.find(\"Other\");\n"
+                  u8"        Entity@ me = self.scene.find(\"comparer\");\n"
+                  u8"        if (a == b && a != c && me == self) { a.setName(\"compared\"); }\n"
+                  u8"    }\n"
+                  u8"}\n",
+                  {u8"onStart"});
+    (void)bed.AddScripted(comparer, u8"comparer");
+    bed.Start();
+    bed.Frame();
+
+    CHECK(bed.scene.GetEntityName(target) == StringView(u8"compared"));
+}
+
 // ---- second backend, uniformly: a .as behavior runs the SAME neutral
 // runtime path as any backend - the RunHost resolves the backend by the class's language, assembles
 // the module through the backend (AngelScript needs no prelude), instantiates, and dispatches

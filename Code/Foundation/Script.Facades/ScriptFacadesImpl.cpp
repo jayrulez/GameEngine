@@ -20,8 +20,20 @@ namespace core = foundation::core;
 
 namespace foundation::script
 {
+    namespace
+    {
+        // Two handles to the same entity: the same scene, slot and generation (a handle to an
+        // entity since destroyed differs from one to the slot's new occupant).
+        bool SameEntity(Entity a, Entity b)
+        {
+            return a.scene == b.scene && a.entityIndex == b.entityIndex && a.entityGeneration == b.entityGeneration;
+        }
+    }
+
     REFLECT_VALUE(Entity, "rtti::script")
     {
+        // a == b in a script: is the hit the rider, is this trunk the last one passed.
+        builder.Method<&SameEntity>("Equals", {"a", "b"}).Operator(core::MethodOperator::Equals);
         builder.Method<&Entity::isValid>("isValid");
         builder.Method<&Entity::active>("active");
         builder.Method<&Entity::setActive>("setActive");

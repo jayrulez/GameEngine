@@ -23,9 +23,20 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 # P0 (Documentation/Specs/snowline.md): a 513 x 513 heightfield at 1 m, heights 0 to 120 m, a
 # 400 m course from the top gate to the finish.
+# Each course: its size and drop, its bends, how wide the groomed course is (course_groom: the
+# packed snow fades out between these distances from the line, in metres), where the forest may
+# start (forest_from), how many forest patches and how big. A shortcut, if any, is a narrow groomed
+# chord across the inside of one bend, from z0 to z1 (it leaves and rejoins the course there).
 COURSES = {
     "Meadow": dict(size=513, world=513.0, min_y=0.0, max_y=120.0, top_z=-200.0, bottom_z=200.0,
-                   bend_amplitude=30.0, bend_length=160.0, seed=7),
+                   bend_amplitude=30.0, bend_length=160.0, seed=7,
+                   course_groom=(6.0, 9.0), forest_from=(20.0, 30.0), forest_patches=70, patch_size=(18.0, 45.0)),
+    # Lines and shortcuts: tighter bends, a narrower course, the forest close on both sides, and a
+    # shortcut through the trees across the bend half way down.
+    "Forest": dict(size=513, world=513.0, min_y=0.0, max_y=120.0, top_z=-200.0, bottom_z=200.0,
+                   bend_amplitude=42.0, bend_length=110.0, seed=23,
+                   course_groom=(4.5, 7.0), forest_from=(8.0, 12.0), forest_patches=170, patch_size=(20.0, 50.0),
+                   shortcut=dict(z0=-75.0, z1=5.0, groom=(2.0, 3.5))),
 }
 SPLAT_SIZE = 512
 TEXTURE_SIZE = 256
@@ -48,6 +59,23 @@ class Mountain:
         s = self.spec
         return s["bend_amplitude"] * math.sin(math.pi * (z - s["top_z"]) / s["bend_length"])
 
+    def shortcut_ends(self):
+        """The shortcut's two ends on the course line ((x, z), (x, z)), or None."""
+        cut = self.spec.get("shortcut")
+        if not cut:
+            return None
+        return (self.course_x(cut["z0"]), cut["z0"]), (self.course_x(cut["z1"]), cut["z1"])
+
+    def shortcut_distance(self, x, z):
+        """How far (x, z) is from the shortcut's chord (a large number with no shortcut)."""
+        ends = self.shortcut_ends()
+        if ends is None:
+            return 1.0e9
+        (ax, az), (bx, bz) = ends
+        dx, dz = bx - ax, bz - az
+        t = max(0.0, min(1.0, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz)))
+        return math.hypot(x - (ax + dx * t), z - (az + dz * t))
+
     def height(self, x, z):
         s = self.spec
         half = s["world"] / 2.0
@@ -60,8 +88,11 @@ class Mountain:
         # Swells on the open snow, none on the course itself.
         swell = sum(a * math.sin(fx * x + fz * z * 1.3 + p) for fx, fz, p, a in self.swells)
         h += swell * smoothstep(12.0, 35.0, d) * 2.0
-        # The course: a shallow groove, so a rider sits in it.
+        # The course: a shallow groove, so a rider sits in it; the shortcut a narrower one.
         h -= 0.8 * (1.0 - smoothstep(4.0, 10.0, d))
+        cut = s.get("shortcut")
+        if cut:
+            h -= 0.6 * (1.0 - smoothstep(cut["groom"][0], cut["groom"][1] + 2.0, self.shortcut_distance(x, z)))
         return max(s["min_y"], min(s["max_y"], h))
 
 
@@ -97,7 +128,11 @@ def main():
 
     # The splatmap, from the heights' slope and the distance to the course.
     rnd = random.Random(spec["seed"] + 1)
-    patches = [(rnd.uniform(-half, half), rnd.uniform(-half, half), rnd.uniform(18, 45)) for _ in range(70)]
+    patches = [(rnd.uniform(-half, half), rnd.uniform(-half, half), rnd.uniform(*spec["patch_size"]))
+               for _ in range(spec["forest_patches"])]
+    groom0, groom1 = spec["course_groom"]
+    forest0, forest1 = spec["forest_from"]
+    cut = spec.get("shortcut")
     splat = Image.new("RGBA", (SPLAT_SIZE, SPLAT_SIZE))
     px = splat.load()
     cell = world / (size - 1)
@@ -111,13 +146,19 @@ def main():
             dhdz = (heights[gz + 1][gx] - heights[gz][gx]) / cell
             slope = math.degrees(math.atan(math.hypot(dhdx, dhdz)))
             d = abs(x - m.course_x(z))
-            course = 1.0 - smoothstep(6.0, 9.0, d)
+            course = 1.0 - smoothstep(groom0, groom1, d)
+            ds = m.shortcut_distance(x, z)
+            if cut:
+                course = max(course, 1.0 - smoothstep(cut["groom"][0], cut["groom"][1], ds))
             rock = smoothstep(28.0, 36.0, slope) * (1.0 - course)
             forest = 0.0
-            if d > 20.0:
+            if d > forest0:
                 for px_, pz, r in patches:
                     forest = max(forest, 1.0 - smoothstep(r * 0.6, r, math.hypot(x - px_, z - pz)))
-            forest *= smoothstep(20.0, 30.0, d) * (1.0 - rock)
+            forest *= smoothstep(forest0, forest1, d) * (1.0 - rock)
+            if cut:
+                # The shortcut runs through the trees: they come right up to it.
+                forest *= smoothstep(cut["groom"][1], cut["groom"][1] + 1.5, ds)
             base = max(0.0, 1.0 - course - rock - forest)
             total = base + course + rock + forest
             px[sx, sy] = tuple(int(round(v / total * 255)) for v in (base, course, rock, forest))
@@ -140,6 +181,17 @@ def main():
     length = sum(math.dist(a, b) for a, b in zip(points, points[1:]))
     info = dict(name=name, size=size, world=world, min_y=spec["min_y"], max_y=spec["max_y"],
                 course=points, course_length=round(length, 1))
+    ends = m.shortcut_ends()
+    if ends:
+        # The shortcut's line: every 10 m along its chord, a little above its snow.
+        (ax, az), (bx, bz) = ends
+        steps = max(1, int(math.hypot(bx - ax, bz - az) / 10.0))
+        cut_points = []
+        for i in range(steps + 1):
+            x, z = ax + (bx - ax) * i / steps, az + (bz - az) * i / steps
+            cut_points.append([round(x, 3), round(m.height(x, z) + 0.05, 3), round(z, 3)])
+        info["shortcut"] = cut_points
+        info["shortcut_range"] = [spec["shortcut"]["z0"], spec["shortcut"]["z1"]]
     json.dump(info, open(os.path.join(out, name + ".json"), "w"), indent=1)
     print(name, "written to", out, "- course", round(length, 1), "m, drop",
           round(points[0][1] - points[-1][1], 1), "m")

@@ -8,12 +8,13 @@ Needs terrain.py <course> and importall.py <course> first: it places what they m
 - the course line: a spline down the middle of the course (terrain.py's points, with Catmull-Rom
   handles, stored as written);
 - the rider (Board.as on a character, the modelled rider and board under it) at the top gate;
-- the slalom gates (Gate.as on each, Prefabs/GateRed and GateBlue in turn under them) every
-  GATE_SPACING metres down the course, swinging side to side of the line, standing on the snow
-  (terrain.py's mountain), and the finish (Finish.as, Prefabs/FinishLine) at the line's end;
+- the slalom gates (Gate.as on each, the course's red and blue prefabs in turn under them) every
+  gate_spacing metres down the course (RULES), swinging side to side of the line, standing on the
+  snow (terrain.py's mountain), none on a shortcut's bend; and the finish (Finish.as,
+  Prefabs/FinishLine) at the line's end;
 - the gems (Gem.as on each, the Gem model under it): a row of GEM_ROW between each pair of gates,
-  GEM_OFFSET metres out on the side of the gate before them, past the packed course, so taking
-  them means holding a wider line than the gates ask for;
+  gem_offset metres out on the side of the gate before them, past the packed course, so taking
+  them means holding a wider line than the gates ask for; and a row down a shortcut;
 - the medal ghosts (Ghost.as, a path_follow on the course line, the rider model under it in a
   medal's see-through colour, ghosts.py's materials): one per medal, each riding to the finish at
   its medal's time;
@@ -88,19 +89,30 @@ RIDER_MODEL = next(a["guid"] for a in ASSETS if a["type"] == "PrefabDocument"
 RIDER_GRAPH = asset("AnimationGraphAsset", "RiderGraph")
 
 
-GATE_SPACING = 45.0   # metres down the course between gates
 GATE_FIRST = 40.0     # the first gate's distance from the top
-GATE_SWING = 3.5      # how far each gate stands off the course line, side to side (m)
 FINISH_BEFORE = 6.0   # the finish's distance before the line's end (m)
-# Each course's medal times (s, penalties included): gold, silver, bronze. Snowline.as judges a
-# run by them and the medal ghosts will ride at their pace. Meadow's: the autopilot, which rides
-# the course line without tucking and misses two gates, finishes in 35.7 s (31.7 s riding): a
-# bronze. Silver asks for the gates; gold for the gates and a tucked line.
-MEDALS = {"Meadow": (30.0, 34.0, 40.0)}
-# The kickers: each midway between two gates (the gap after gate KICKER_GAPS[i]), on the course
-# line, tilted to the slope under it. Meadow has one: the course that teaches carving and flags
-# has one jump to learn the air on.
-KICKERS = {"Meadow": (3,)}
+SHORTCUT_CLEAR = 25.0 # no gate within this far (along z) of a shortcut's ends, nor between them (m)
+# Each course's rules:
+# - gate_half, gate_swing, gate_spacing, gate_prefabs: half the gap between a gate's poles, how far
+#   each gate stands off the line side to side, the metres down the line between gates, and the
+#   red and blue prefabs at that width (gates.py);
+# - gem_offset: how far a row of gems stands off the line (past the groomed course, short of trees);
+# - kickers: the gaps (after gate i) a kicker stands midway in, on the line;
+# - pines: the forest's density (instances a square metre where the forest floor is painted);
+# - medals: gold, silver, bronze (s, penalties included). Snowline.as judges a run by them and the
+#   medal ghosts ride at their pace.
+# Meadow's medals: the autopilot, riding the line untucked and missing two or three gates,
+# finishes in about 36 s (31 s riding): a bronze. Silver asks for the gates; gold for the gates
+# and a tucked line.
+RULES = {
+    "Meadow": dict(gate_half=4.0, gate_swing=3.5, gate_spacing=45.0, gate_prefabs=("GateRed", "GateBlue"),
+                   gem_offset=11.0, kickers=(3,), medals=(30.0, 34.0, 40.0), pines=0.025),
+    # Lines and shortcuts: narrower gates closer together on the tighter bends; gems just past the
+    # groomed snow, the trees close beyond them; and a row of gems down the shortcut.
+    "Forest": dict(gate_half=3.0, gate_swing=2.5, gate_spacing=38.0, gate_prefabs=("GateRedNarrow", "GateBlueNarrow"),
+                   gem_offset=5.8, kickers=(), medals=(40.0, 45.0, 52.0), pines=0.06),
+}
+COURSE = RULES[name]
 # The kicker's shape (blender/props.py, which models it from the same numbers): its curve, buried
 # KICKER_BURY at its start, rises to the lip KICKER_HEIGHT over KICKER_CURVE. Kicker.as needs the
 # lip: how far up the ramp from where it leaves the snow, how high, at what angle.
@@ -113,7 +125,7 @@ KICKER_SINK = 0.003 # how far its foot sits in the snow: a hair, as its ramp sta
                     # the rider off before the lip
 GEM_ROW = 3           # gems in a row
 GEM_GAP = 4.0         # metres down the course between a row's gems
-GEM_OFFSET = 11.0     # how far a row stands off the course line (m): the packed course is 9 m
+SHORTCUT_GEMS = 5     # gems down a shortcut's middle
 GEM_HEIGHT = 1.0      # a gem's centre above the snow (m): about the rider's centre
 
 
@@ -130,47 +142,75 @@ def along_course(points, distance):
     return list(points[-1]), 0.0
 
 
+def gate_distances(points, length):
+    """Where the gates stand: every gate_spacing metres down the line from GATE_FIRST, short of the
+    finish, none on a shortcut's bend nor within SHORTCUT_CLEAR of its ends (a rider taking the
+    shortcut rides past those, so it would miss them)."""
+    out = []
+    distance = GATE_FIRST
+    z0, z1 = info.get("shortcut_range", (1.0e9, 1.0e9))
+    while distance < length - FINISH_BEFORE - 20.0:
+        p, _ = along_course(points, distance)
+        if not (z0 - SHORTCUT_CLEAR <= p[2] <= z1 + SHORTCUT_CLEAR):
+            out.append(distance)
+        distance += COURSE["gate_spacing"]
+    return out
+
+
 def gates(d, points, length):
-    """The gates and the finish, each an entity carrying its script with its prefab under it."""
+    """The gates and the finish, each an entity carrying its script with its prefab under it; then
+    the gems and kickers between the gates."""
     import terrain
     mountain = terrain.Mountain(terrain.COURSES[name])
     prefabs = {a["name"]: a["guid"] for a in ASSETS if a["type"] == "PrefabDocument" and a.get("group") == "Prefabs"}
-    index = 0
-    distance = GATE_FIRST
-    while distance < length - FINISH_BEFORE - 20.0:
+    placed = gate_distances(points, length)
+    swing = COURSE["gate_swing"]
+    for index, distance in enumerate(placed):
         p, heading = along_course(points, distance)
         side = 1 if index % 2 == 0 else -1
-        x = p[0] + math.cos(heading) * GATE_SWING * side  # +X across a heading of 0
-        z = p[2] - math.sin(heading) * GATE_SWING * side
+        x = p[0] + math.cos(heading) * swing * side  # +X across a heading of 0
+        z = p[2] - math.sin(heading) * swing * side
         e = d.entity("Gate%d" % index, (x, mountain.height(x, z), z), yaw(math.degrees(heading)))
-        d.script(e, (GATE, {"index": index, "heading": heading, "halfWidth": 4.0}))
-        d.instance(prefabs["GateRed" if index % 2 == 0 else "GateBlue"], parent=e)
-        index += 1
-        distance += GATE_SPACING
-    gems(d, points, mountain, index)
-    kickers(d, points, mountain)
+        d.script(e, (GATE, {"index": index, "heading": heading, "halfWidth": COURSE["gate_half"]}))
+        d.instance(prefabs[COURSE["gate_prefabs"][index % 2]], parent=e)
+    gems(d, points, mountain, placed)
+    kickers(d, points, mountain, placed)
     p, heading = along_course(points, length - FINISH_BEFORE)
     e = d.entity("Finish", (p[0], mountain.height(p[0], p[2]), p[2]), yaw(math.degrees(heading)))
-    gold, silver, bronze = MEDALS[name]
+    gold, silver, bronze = COURSE["medals"]
     d.script(e, (FINISH, {"heading": heading, "gold": gold, "silver": silver, "bronze": bronze}))
     d.instance(prefabs["FinishLine"], parent=e)
-    return index
+    return len(placed)
 
 
-def gems(d, points, mountain, gate_count):
-    """A row of gems in each gap between gates, out on the side of the gate before it."""
+def gems(d, points, mountain, placed):
+    """A row of gems in each gap between neighbouring gates (one spacing apart: not across a
+    shortcut's bend), out on the side of the gate before it; and a row down a shortcut's middle,
+    the reward for taking it."""
     count = 0
-    for gap in range(gate_count - 1):
+    offset = COURSE["gem_offset"]
+
+    def gem(x, z):
+        nonlocal count
+        e = d.entity("Gem%d" % count, (x, mountain.height(x, z) + GEM_HEIGHT, z))
+        d.script(e, (GEM, {}))
+        d.instance(GEM_MODEL, parent=e)
+        count += 1
+
+    for gap in range(len(placed) - 1):
+        if placed[gap + 1] - placed[gap] > COURSE["gate_spacing"] + 1.0:
+            continue
         side = 1 if gap % 2 == 0 else -1  # the side gate `gap` stands on (gates() swings the same way)
-        middle = GATE_FIRST + GATE_SPACING * (gap + 0.5)
+        middle = (placed[gap] + placed[gap + 1]) / 2.0
         for k in range(GEM_ROW):
             p, heading = along_course(points, middle + (k - (GEM_ROW - 1) / 2) * GEM_GAP)
-            x = p[0] + math.cos(heading) * GEM_OFFSET * side
-            z = p[2] - math.sin(heading) * GEM_OFFSET * side
-            e = d.entity("Gem%d" % count, (x, mountain.height(x, z) + GEM_HEIGHT, z))
-            d.script(e, (GEM, {}))
-            d.instance(GEM_MODEL, parent=e)
-            count += 1
+            gem(p[0] + math.cos(heading) * offset * side, p[2] - math.sin(heading) * offset * side)
+    cut = info.get("shortcut")
+    if cut:
+        a, b = cut[0], cut[-1]
+        for k in range(SHORTCUT_GEMS):
+            t = 0.3 + 0.4 * k / (SHORTCUT_GEMS - 1)
+            gem(a[0] + (b[0] - a[0]) * t, a[2] + (b[2] - a[2]) * t)
     print("gems", count)
 
 
@@ -182,13 +222,13 @@ def qmul(a, b):
             aw * bz + ax * by - ay * bx + az * bw, aw * bw - ax * bx - ay * by - az * bz)
 
 
-def kickers(d, points, mountain):
+def kickers(d, points, mountain, placed):
     """Each kicker on the course line midway between two gates, facing down it, its base tilted to
     the slope at its foot (the drop over KICKER_FOOT), so its ramp starts along the snow."""
     prefab = next(a["guid"] for a in ASSETS if a["type"] == "PrefabDocument"
                   and a.get("group", "") == "Models/Props/KickerModel")
-    for i, gap in enumerate(KICKERS.get(name, ())):
-        middle = GATE_FIRST + GATE_SPACING * (gap + 0.5)
+    for i, gap in enumerate(COURSE["kickers"]):
+        middle = (placed[gap] + placed[gap + 1]) / 2.0
         p, heading = along_course(points, middle)
         q, _ = along_course(points, middle + KICKER_FOOT)
         drop = mountain.height(p[0], p[2]) - mountain.height(q[0], q[2])
@@ -311,7 +351,7 @@ def build():
     d.add(mountain, "terrainVegetation", proceduralLayers=[
         # Pines where terrain.py laid the forest floor (palette layer 2), sparse enough to ride
         # between; rocks thinly everywhere the slope allows, the course's own splat aside.
-        vegetation_layer("Pines", PINE, PINE_MATERIALS, SPLAT, 0.025, (0.8, 1.3), 30.0, (250.0, 320.0), splat_layer=2,
+        vegetation_layer("Pines", PINE, PINE_MATERIALS, SPLAT, COURSE["pines"], (0.8, 1.3), 30.0, (250.0, 320.0), splat_layer=2,
                          threshold=0.5, shadows=True),
         vegetation_layer("Rocks", ROCK, ROCK_MATERIALS, SPLAT, 0.0015, (0.6, 1.5), 40.0, (120.0, 160.0), splat_layer=BASE_LAYER,
                          threshold=0.9),

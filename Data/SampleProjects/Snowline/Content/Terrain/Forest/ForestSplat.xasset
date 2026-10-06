@@ -1,0 +1,14 @@
+<root>
+	<string name="guid">257ba615-6338-43d6-af34-604a452cdac8</string>
+	<string name="typeNamespace">rtti::pipeline::splatmap</string>
+	<string name="typeName">SplatmapAsset</string>
+	<array name="dataVersions" count="1">
+		<u64 name="type">13776832803885014330</u64>
+		<u32 name="version">0</u32>
+	</array>
+	<object name="payload">
+		<string name="fileName">ForestSplat.png</string>
+		<i32 name="width">1024</i32>
+		<i32 name="height">1024</i32>
+	</object>
+</root>

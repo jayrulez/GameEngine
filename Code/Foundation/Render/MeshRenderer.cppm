@@ -171,6 +171,18 @@ export namespace foundation::render
         // a scene without wind materials renders byte-identical to before the flag existed.
         [[nodiscard]] static bool MaterialWantsWind(const materials::Material* material) noexcept;
 
+        // The depth a blended material's pipeline uses in the transparent pass, which reads the
+        // depth buffer but never writes it (its bundle is depth-read-only): a writing mode becomes
+        // ReadOnly. MaterialBuilder::Transparent pairs the two, but a material authored as data (a
+        // blend mode set, the depth left at its ReadWrite default) carried a pipeline WebGPU refused
+        // inside the pass; Vulkan did not check.
+        [[nodiscard]] static materials::DepthMode TransparentPassDepth(materials::DepthMode mode) noexcept
+        {
+            return (mode == materials::DepthMode::ReadWrite || mode == materials::DepthMode::WriteOnly)
+                       ? materials::DepthMode::ReadOnly
+                       : mode;
+        }
+
         // Instances a set's per-frame region holds for `count` live instances: rounded up to a
         // multiple of 16 so every region's byte offset (capacity x 144-byte InstanceData) is a
         // multiple of 2304 = 9 x 256, the strictest storage-buffer offset alignment any backend

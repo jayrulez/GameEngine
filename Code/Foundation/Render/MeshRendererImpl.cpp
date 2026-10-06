@@ -2085,6 +2085,7 @@ namespace foundation::render
         else
         {
             config.colorTargetCount = 1; // transparent: color-only
+            config.depthMode = TransparentPassDepth(config.depthMode);
         }
         return config;
     }

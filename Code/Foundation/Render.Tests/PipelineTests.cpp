@@ -1321,3 +1321,14 @@ TEST_CASE("mesh renderer: the per-frame rings hold the shadow casters, not only 
     // Nothing to draw needs nothing.
     CHECK(MeshRenderer::InstanceSlotsPerFrame(0, 0, cascades, 0) == 0u);
 }
+
+// A blended material authored as data (blend mode set, depth left at ReadWrite) drew in the
+// transparent pass with a depth-writing pipeline, which WebGPU refuses there; the pass reads depth only.
+TEST_CASE("render: a pipeline for the transparent pass never writes depth")
+{
+    using foundation::materials::DepthMode;
+    CHECK(MeshRenderer::TransparentPassDepth(DepthMode::ReadWrite) == DepthMode::ReadOnly);
+    CHECK(MeshRenderer::TransparentPassDepth(DepthMode::WriteOnly) == DepthMode::ReadOnly);
+    CHECK(MeshRenderer::TransparentPassDepth(DepthMode::ReadOnly) == DepthMode::ReadOnly);
+    CHECK(MeshRenderer::TransparentPassDepth(DepthMode::Disabled) == DepthMode::Disabled);
+}

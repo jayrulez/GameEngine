@@ -1121,7 +1121,7 @@ TEST_CASE("debug view: semantic modes blit the raw scene HDR on the tonemap path
     }
 }
 
-TEST_CASE("auto-exposure: per-(view,frame) bind-group slots survive consecutive frames")
+TEST_CASE("auto-exposure: per-(view,frame) bind-group slots survive consecutive frames, and a new scene snaps")
 {
     // The exposure state PING-PONGS its prev-frame view, so a per-view-only slot
     // mismatched every frame and freed a descriptor set the previous frame's in-flight
@@ -1186,6 +1186,8 @@ TEST_CASE("auto-exposure: per-(view,frame) bind-group slots survive consecutive 
 
     // Three frames = the ping-pong wraps and slot 0 gets REWRITTEN (frame 2 reuses
     // frame 0's slot); with the old per-view slot this rewrote every frame instead.
+    // The first frame snaps to the measured value; the rest ease from the last frame.
+    scene.SetSceneSerial(1);
     for (u32 f = 0; f < 3; ++f)
     {
         frame.SetDeltaSeconds(0.016f);
@@ -1194,6 +1196,20 @@ TEST_CASE("auto-exposure: per-(view,frame) bind-group slots survive consecutive 
                       128);
         frame.End();
         CHECK(hasPass(u8"exposure.measure"));
+        CHECK(exposure.Snapped(0) == (f == 0));
+    }
+
+    // Another scene in the same view (a level loaded) snaps again instead of easing from the
+    // last scene's exposure (the dim and brighten at every level start), then eases as before.
+    scene.SetSceneSerial(2);
+    for (u32 f = 3; f < 5; ++f)
+    {
+        frame.SetDeltaSeconds(0.016f);
+        frame.Begin(*h.encoder, f);
+        frame.AddView(scene, camera, settings, h.colorView, rhi::TextureFormat::BGRA8Unorm, 128,
+                      128);
+        frame.End();
+        CHECK(exposure.Snapped(0) == (f == 3));
     }
 }
 

@@ -851,6 +851,12 @@ export namespace foundation::render
         [[nodiscard]] f32 PrevTimeSeconds() const noexcept { return m_prevTimeSeconds; }
         [[nodiscard]] bool HasTime() const noexcept { return m_hasTime; }
 
+        // The scene this snapshot was extracted from (scene::Scene::Serial; 0 = none stamped, a
+        // probe). Snapshots are pooled and reused across scenes, so this, not the snapshot's
+        // address, tells a view's history passes that the scene changed under them.
+        void SetSceneSerial(u64 serial) noexcept { m_sceneSerial = serial; }
+        [[nodiscard]] u64 SceneSerial() const noexcept { return m_sceneSerial; }
+
         // Reset for a new frame: drop the item + light lists, rewind the (internal) arena.
         void Reset() noexcept;
 
@@ -875,6 +881,7 @@ export namespace foundation::render
         f32 m_timeSeconds = 0.0f;     // the scene clock (see SetTime)
         f32 m_prevTimeSeconds = 0.0f;
         bool m_hasTime = false;
+        u64 m_sceneSerial = 0; // see SetSceneSerial
     };
 
     // Extension seam (scene-agnostic, à la Sedulous's IRenderDataProvider): a downstream system - e.g.

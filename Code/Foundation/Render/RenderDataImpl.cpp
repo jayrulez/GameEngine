@@ -158,6 +158,7 @@ namespace foundation::render
         m_timeSeconds = 0.0f;
         m_prevTimeSeconds = 0.0f;
         m_hasTime = false;
+        m_sceneSerial = 0;
         m_arena.Reset();
     }
 

@@ -54,6 +54,11 @@ export namespace foundation::scene
         [[nodiscard]] StringView Name() const noexcept { return m_name.AsView(); }
         void SetName(StringView name) { m_name = String(name); }
 
+        // This scene instance, unique for the process (never reused, unlike its address): what
+        // tells the renderer a view now shows another scene, so a pass that eases from last
+        // frame (auto exposure) starts over instead of carrying the old scene's state in.
+        [[nodiscard]] u64 Serial() const noexcept { return m_serial; }
+
         [[nodiscard]] u32 EntityCount() const noexcept { return m_aliveCount; }
 
         // ---- entity lifecycle ----
@@ -586,8 +591,15 @@ export namespace foundation::scene
         // be re-entrant). Stale/duplicate entries are skipped by the IsValid guard.
         void ProcessPendingDestroys();
 
+        [[nodiscard]] static u64 NextSerial() noexcept
+        {
+            static Atomic<u64> counter{0};
+            return counter.fetch_add(1) + 1;
+        }
+
         IAllocator* m_allocator;
         String m_name;
+        u64 m_serial = NextSerial(); // see Serial()
         Array<EntitySlot> m_entities;        // entity pool (index = slot)
         Array<TransformData> m_transforms;   // parallel transform pool (same index)
         Array<u32> m_freeList;               // free slot indices for reuse

@@ -89,6 +89,8 @@ export namespace foundation::render
         /// Declare the measure+adapt pass for one view. Returns the view's ADAPTED 1x1 as an
         /// imported handle (left in ShaderRead) for the tonemap to ReadTexture, plus the raw
         /// view to bind - or an invalid handle when the pass cannot run (missing shader/GPU).
+        /// `sceneSerial` names the scene the view shows (ExtractedScene::SceneSerial): when it
+        /// changes the history is dropped and the new scene's exposure snaps.
         struct Result
         {
             rendergraph::RGHandle handle{};
@@ -98,7 +100,8 @@ export namespace foundation::render
         [[nodiscard]] Result DeclareExposure(rendergraph::RenderGraph& graph,
                                              rendergraph::RGHandle hdr, u32 viewIndex,
                                              u32 frameIndex, Float2 uvScale, Float2 uvOffset,
-                                             f32 deltaSeconds, f32 adaptSpeed)
+                                             f32 deltaSeconds, f32 adaptSpeed,
+                                             u64 sceneSerial = 0)
         {
             Result out;
             rhi::RenderPipeline* pipeline = EnsurePipeline();
@@ -111,6 +114,15 @@ export namespace foundation::render
             {
                 return out;
             }
+            // Another scene in this view (a level loaded, or the slot taken by another view's
+            // scene): its exposure starts at its own level rather than easing from the old
+            // scene's, which read as a dim and brighten at every level start.
+            if (state.sceneSerial != sceneSerial)
+            {
+                state.valid = false;
+                state.sceneSerial = sceneSerial;
+            }
+            state.snapped = !state.valid;
             const u32 cur = state.cur, prev = cur ^ 1u;
             const rendergraph::RGHandle prevH =
                 graph.ImportTarget(u8"exposure.prev", state.tex[prev], state.view[prev],
@@ -176,6 +188,13 @@ export namespace foundation::render
             return out;
         }
 
+        /// Whether `viewIndex`'s last declared pass took the measured value outright (its first
+        /// frame, or the first frame of another scene) instead of easing from the last frame.
+        [[nodiscard]] bool Snapped(u32 viewIndex) const noexcept
+        {
+            return m_views[viewIndex % kMaxViews].snapped;
+        }
+
     private:
         struct ViewState
         {
@@ -185,6 +204,8 @@ export namespace foundation::render
                                            rhi::ResourceState::Undefined};
             u32 cur = 0;
             bool valid = false;
+            bool snapped = false;  // the last declared pass took the measured value outright
+            u64 sceneSerial = 0;   // the scene the history belongs to (ExtractedScene::SceneSerial)
             u64 generation = 0;
         };
 

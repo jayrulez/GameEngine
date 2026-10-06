@@ -54,6 +54,13 @@ TEST_CASE("ExtractedScene: Add registers items; Reset empties without freeing ch
     scene.Reset();
     CHECK(scene.IsEmpty());
     CHECK(scene.Size() == 0);
+
+    // The scene a snapshot came from is stamped each frame; a reset drops it (a pooled snapshot
+    // may serve another scene next).
+    scene.SetSceneSerial(42);
+    CHECK(scene.SceneSerial() == 42u);
+    scene.Reset();
+    CHECK(scene.SceneSerial() == 0u);
 }
 
 TEST_CASE("sort keys: category dominates, then state, then depth")

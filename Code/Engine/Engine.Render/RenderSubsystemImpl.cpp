@@ -414,6 +414,7 @@ namespace engine::render
             ExtractSceneInto(scene, *snapshot,
                              m_renderCtx); // parallel when the job system is up (resets snapshot)
             snapshot->SetViewOrigin(camera.position); // after the reset, before the providers
+            snapshot->SetSceneSerial(scene.Serial()); // a new scene restarts the view's history
             ExtractInstancedMeshesInto(
                 scene, *snapshot); // instanced sets (MultiMesh): one item each, O(1)/frame
             if (m_spriteRenderer.Get() != nullptr)

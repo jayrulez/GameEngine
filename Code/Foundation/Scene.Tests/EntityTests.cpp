@@ -13,6 +13,25 @@ import foundation.scene;
 using namespace foundation::core;
 using namespace foundation::scene;
 
+// The renderer tells a view's scenes apart by this (a pooled snapshot or a reused address
+// cannot): every scene instance has its own, never zero, and a later scene never repeats one.
+TEST_CASE("scene serial: every scene instance has its own")
+{
+    Scene first(DefaultAllocator(), u8"first");
+    Scene second(DefaultAllocator(), u8"second");
+    CHECK(first.Serial() != 0u);
+    CHECK(second.Serial() != 0u);
+    CHECK(first.Serial() != second.Serial());
+    u64 earlier = 0;
+    {
+        Scene gone(DefaultAllocator());
+        earlier = gone.Serial();
+    }
+    Scene later(DefaultAllocator()); // may reuse the address; not the serial
+    CHECK(later.Serial() != earlier);
+    CHECK(later.Serial() > second.Serial());
+}
+
 TEST_CASE("entity create: unique valid handles + count")
 {
     Scene scene(DefaultAllocator(), u8"world");

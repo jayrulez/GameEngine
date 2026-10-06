@@ -2104,7 +2104,8 @@ namespace foundation::render
                     {
                         const ExposurePass::Result adapted = m_exposurePass->DeclareExposure(
                             m_graph, sceneColor, viewIndex, m_frameIndex, uvScale, uvOffset,
-                            m_deltaSeconds, post.autoExposureSpeed);
+                            m_deltaSeconds, post.autoExposureSpeed,
+                            v->Scene() != nullptr ? v->Scene()->SceneSerial() : 0);
                         autoExposure.enabled = adapted.view != nullptr;
                         autoExposure.handle = adapted.handle;
                         autoExposure.view = adapted.view;

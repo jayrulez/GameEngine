@@ -30,6 +30,14 @@ so a save file is an ordinary settings file (the same envelope, versioning and u
 passthrough) holding one `SaveValues` section. A value read as another kind than it was written
 answers the reader's fallback, except that an int reads as a float (a whole number is a number).
 
+A value can also be a list of numbers (kind `floats`, added 2026-10-05 for Snowline's ghost, a
+recorded run of a few thousand numbers): written as a plain array in `value`, read back whole,
+and an empty list when absent or another kind. Kinds are written by name, and a kind a build does
+not know (a newer build's) skips that one entry: the rest of the save reads, and the next write
+drops it. The skip is exact in a keyed format, which a save file is (XML); a positional payload
+cannot size a value it does not know. Builds from before the skip fail the whole section on an
+unknown kind, so they cannot read a save holding a list.
+
 ### 3. A run's save (Engine.GameInstance)
 
 A `GameInstance` owns its run's save: the values, the file they live in, and whether they have
@@ -50,6 +58,8 @@ Save::setInt("best.level2", 4210);      // setFloat / setBool / setString
 int best = Save::getInt("best.level2", 0); // getFloat / getBool / getString, with a fallback
 Save::has("best.level2");  Save::remove("best.level2");  Save::clear();
 Save::flush();             // write now if anything changed; false if the write failed
+Save::setFloats("ghost.meadow", samples); // a list of numbers (array<float>, a Luau table)
+array<float>@ run = Save::getFloats("ghost.meadow"); // empty when absent or another kind
 ```
 
 A context with no run save (an editor tool) reads every fallback and writes nowhere.

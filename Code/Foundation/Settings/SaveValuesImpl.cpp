@@ -21,7 +21,7 @@ namespace foundation::settings
     {
         // Kinds are written by name, so a save file reads in a text editor and a kind added later
         // does not renumber the others.
-        constexpr StringView kKindNames[] = {u8"bool", u8"int", u8"float", u8"text"};
+        constexpr StringView kKindNames[] = {u8"bool", u8"int", u8"float", u8"text", u8"floats"};
 
         bool KindFromName(StringView name, SaveValueKind& out) noexcept
         {
@@ -60,9 +60,12 @@ namespace foundation::settings
             foundation::core::Serialize(ar, "kind", kind);
             if (ar.Mode() == SerializeMode::Read && !KindFromName(kind.AsView(), entry.kind))
             {
-                ar.FailPayload(ErrorCode::InvalidArgument); // a kind this build does not know
+                // A kind this build does not know (a newer build wrote it): that value is skipped,
+                // the rest of the save still reads, and the next write drops it. Exact in a keyed
+                // format (a save file is XML), which reads the next entry by its own key; a
+                // positional payload cannot size a value it does not know.
                 ar.EndObject();
-                break;
+                continue;
             }
             switch (entry.kind)
             {
@@ -77,6 +80,9 @@ namespace foundation::settings
                 break;
             case SaveValueKind::Text:
                 foundation::core::Serialize(ar, "value", entry.textValue);
+                break;
+            case SaveValueKind::Floats:
+                foundation::core::Serialize(ar, "value", entry.floatsValue);
                 break;
             }
             ar.EndObject();

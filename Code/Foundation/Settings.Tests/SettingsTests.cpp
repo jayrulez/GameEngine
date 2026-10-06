@@ -302,6 +302,8 @@ namespace
             values.SetFloat(u8"best.time", 62.25f);
             values.SetBool(u8"won", true);
             values.SetText(u8"last.level", u8"Level 3");
+            const f32 ghost[] = {1.5f, -2.25f, 0.0f, 1e6f};
+            values.SetFloats(u8"ghost", Span<const f32>(ghost, 4));
             REQUIRE(store.Save(stream, make()).IsOk());
         }
         REQUIRE(stream.Seek(0, SeekOrigin::Begin) == 0);
@@ -309,12 +311,68 @@ namespace
         REQUIRE(store.Load(stream, make()).IsOk());
         const settings::SaveValues* values = store.Find<settings::SaveValues>();
         REQUIRE(values != nullptr);
-        CHECK(values->Count() == 4u);
+        CHECK(values->Count() == 5u);
         CHECK(values->GetInt(u8"coins", 0) == 37);
         CHECK(values->GetFloat(u8"best.time", 0.0f) == 62.25f);
         CHECK(values->GetBool(u8"won", false));
         CHECK(values->GetText(u8"last.level", u8"") == u8"Level 3");
+        const Array<f32> ghost = values->GetFloats(u8"ghost");
+        REQUIRE(ghost.Size() == 4u);
+        CHECK(ghost[0] == 1.5f);
+        CHECK(ghost[1] == -2.25f);
+        CHECK(ghost[2] == 0.0f);
+        CHECK(ghost[3] == 1e6f);
     }
+}
+
+TEST_CASE("settings: a list of numbers is a save value of its own kind")
+{
+    settings::SaveValues values;
+    const f32 run[] = {0.0f, 1.0f, 2.5f};
+    CHECK(values.SetFloats(u8"ghost", Span<const f32>(run, 3)));
+    CHECK_FALSE(values.SetFloats(u8"ghost", Span<const f32>(run, 3))); // the same list is no change
+    const f32 other[] = {0.0f, 1.0f, 2.75f};
+    CHECK(values.SetFloats(u8"ghost", Span<const f32>(other, 3)));     // one number differs
+    CHECK(values.SetFloats(u8"ghost", Span<const f32>(other, 2)));     // a shorter list
+    REQUIRE(values.GetFloats(u8"ghost").Size() == 2u);
+    CHECK(values.GetFloats(u8"ghost")[1] == 1.0f);
+
+    // Absent, or another kind: an empty list; and the list is not a number to the scalar getters.
+    CHECK(values.GetFloats(u8"missing").IsEmpty());
+    values.SetInt(u8"best", 3);
+    CHECK(values.GetFloats(u8"best").IsEmpty());
+    CHECK(values.GetFloat(u8"ghost", -1.0f) == -1.0f);
+    // An empty list is a value too.
+    CHECK(values.SetFloats(u8"empty", Span<const f32>()));
+    CHECK(values.Has(u8"empty"));
+}
+
+TEST_CASE("settings: a save value of a kind this build does not know is skipped, the rest read")
+{
+    settings::RegisterSaveValuesType();
+    settings::Settings store(foundation::core::DefaultAllocator());
+    store.Section<settings::SaveValues>().SetInt(u8"a.before", 1);
+    store.Section<settings::SaveValues>().SetText(u8"m.marker", u8"zzzz");
+    store.Section<settings::SaveValues>().SetInt(u8"z.after", 3);
+    MemoryStream written;
+    REQUIRE(store.Save(written, xml::XmlSerializerFactory()).IsOk());
+    std::string text(reinterpret_cast<const char*>(written.Bytes().Data()), written.Bytes().Size());
+    // A newer build's kind in place of the text one, with a value this build cannot read as text.
+    const usize kind = text.find(">text<");
+    REQUIRE(kind != std::string::npos);
+    text.replace(kind, 6, ">sound<");
+
+    MemoryStream edited;
+    (void)edited.Write(text.data(), text.size());
+    REQUIRE(edited.Seek(0, SeekOrigin::Begin) == 0);
+    settings::Settings read(foundation::core::DefaultAllocator());
+    REQUIRE(read.Load(edited, xml::XmlSerializerFactory()).IsOk());
+    const settings::SaveValues* values = read.Find<settings::SaveValues>();
+    REQUIRE(values != nullptr);
+    CHECK(values->Count() == 2u);
+    CHECK(values->GetInt(u8"a.before", 0) == 1);
+    CHECK(values->GetInt(u8"z.after", 0) == 3);
+    CHECK_FALSE(values->Has(u8"m.marker"));
 }
 
 TEST_CASE("settings: save values round-trip as a section (binary)")
@@ -333,5 +391,11 @@ TEST_CASE("settings: save values round-trip as a section (XML), kinds written by
     REQUIRE(store.Save(stream, xml::XmlSerializerFactory()).IsOk());
     const std::string text(reinterpret_cast<const char*>(stream.Bytes().Data()), stream.Bytes().Size());
     CHECK(text.find(">float<") != std::string::npos);
+    const f32 ghost[] = {2.0f};
+    store.Section<settings::SaveValues>().SetFloats(u8"ghost", Span<const f32>(ghost, 1));
+    MemoryStream again;
+    REQUIRE(store.Save(again, xml::XmlSerializerFactory()).IsOk());
+    const std::string listed(reinterpret_cast<const char*>(again.Bytes().Data()), again.Bytes().Size());
+    CHECK(listed.find(">floats<") != std::string::npos);
     CHECK(text.find("best.time") != std::string::npos);
 }

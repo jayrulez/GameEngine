@@ -27,6 +27,7 @@ export namespace foundation::settings
         Int,
         Float,
         Text,
+        Floats, // a list of numbers (a recorded run, a curve)
     };
 
     class SaveValues final : public ISerializable
@@ -41,6 +42,7 @@ export namespace foundation::settings
             i32 intValue = 0;
             f32 floatValue = 0.0f;
             String textValue;
+            Array<f32> floatsValue;
         };
 
         [[nodiscard]] usize Count() const noexcept { return m_entries.Size(); }
@@ -53,21 +55,21 @@ export namespace foundation::settings
         {
             Entry& entry = Slot(key);
             const bool changed = entry.kind != SaveValueKind::Bool || entry.boolValue != value || m_inserted;
-            entry = Entry{entry.key, SaveValueKind::Bool, value, 0, 0.0f, String{}};
+            entry = Entry{entry.key, SaveValueKind::Bool, value, 0, 0.0f, String{}, Array<f32>{}};
             return changed;
         }
         bool SetInt(StringView key, i32 value)
         {
             Entry& entry = Slot(key);
             const bool changed = entry.kind != SaveValueKind::Int || entry.intValue != value || m_inserted;
-            entry = Entry{entry.key, SaveValueKind::Int, false, value, 0.0f, String{}};
+            entry = Entry{entry.key, SaveValueKind::Int, false, value, 0.0f, String{}, Array<f32>{}};
             return changed;
         }
         bool SetFloat(StringView key, f32 value)
         {
             Entry& entry = Slot(key);
             const bool changed = entry.kind != SaveValueKind::Float || entry.floatValue != value || m_inserted;
-            entry = Entry{entry.key, SaveValueKind::Float, false, 0, value, String{}};
+            entry = Entry{entry.key, SaveValueKind::Float, false, 0, value, String{}, Array<f32>{}};
             return changed;
         }
         bool SetText(StringView key, StringView value)
@@ -75,7 +77,25 @@ export namespace foundation::settings
             Entry& entry = Slot(key);
             const bool changed =
                 entry.kind != SaveValueKind::Text || entry.textValue.AsView() != value || m_inserted;
-            entry = Entry{entry.key, SaveValueKind::Text, false, 0, 0.0f, String(value)};
+            entry = Entry{entry.key, SaveValueKind::Text, false, 0, 0.0f, String(value), Array<f32>{}};
+            return changed;
+        }
+
+        bool SetFloats(StringView key, Span<const f32> values)
+        {
+            Entry& entry = Slot(key);
+            bool changed = entry.kind != SaveValueKind::Floats || entry.floatsValue.Size() != values.Size() || m_inserted;
+            for (usize i = 0; !changed && i < values.Size(); ++i)
+            {
+                changed = entry.floatsValue[i] != values[i];
+            }
+            Array<f32> copy;
+            copy.Reserve(values.Size());
+            for (f32 v : values)
+            {
+                copy.PushBack(v);
+            }
+            entry = Entry{entry.key, SaveValueKind::Floats, false, 0, 0.0f, String{}, Move(copy)};
             return changed;
         }
 
@@ -109,6 +129,13 @@ export namespace foundation::settings
             const Entry* entry = Find(key);
             return (entry != nullptr && entry->kind == SaveValueKind::Text) ? entry->textValue
                                                                               : String(fallback);
+        }
+
+        // The list stored at `key`, or an empty one when there is none or the value is another kind.
+        [[nodiscard]] Array<f32> GetFloats(StringView key) const
+        {
+            const Entry* entry = Find(key);
+            return (entry != nullptr && entry->kind == SaveValueKind::Floats) ? entry->floatsValue : Array<f32>{};
         }
 
         // Answers whether there was a value to remove.

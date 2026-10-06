@@ -25,10 +25,15 @@
 // best is announced ("NewBest", in hundredths) so PlayerGhost.as keeps it as the course's ghost. Jump
 // skips to the end, then starts the next run ("RunRestart" puts the rider back at the top, the
 // gates back to waiting and the gems back in place).
+//
+// A run that wins a better medal on the last course (Ridge) than it had is followed by the ending:
+// the best medal and time on every course, their total and the medals won. Jump from it goes back
+// to the title.
 
 Guid kHudDoc = Guid("9ff3ed63-f33c-487a-a88f-2761d48af746");    // UI/Hud
 Guid kFinishDoc = Guid("409e4cea-20a2-4705-9a54-059fa662850f"); // UI/Finish
 Guid kTitleDoc = Guid("2a97818d-8b96-4bfc-a7ae-6200a870ea69");  // UI/Title
+Guid kEndingDoc = Guid("c9a6c0a0-f6af-407c-9dc1-919fcf16923a"); // UI/Ending
 
 // The courses, in order: each unlocked by a bronze on the one before it.
 const int kCourseCount = 3;
@@ -59,6 +64,8 @@ const float kTallyGap = 0.45f;    // between the rows (s)
 class Game
 {
     private bool m_onTitle = false; // the title is up: nothing runs behind it
+    private bool m_onEnding = false; // the ending is up
+    private bool m_endingDue = false; // this run won a better medal on the last course
     private bool m_running = true;
     private bool m_started = false; // the rider's first frame has come (the clock runs from it)
     private float m_time = 0.0f;    // seconds on the clock this run
@@ -132,9 +139,7 @@ class Game
         {
             return "Not ridden yet";
         }
-        int rank = Save::getInt("medal." + courseName(i), 0);
-        string medal = rank == 3 ? "Gold" : (rank == 2 ? "Silver" : (rank == 1 ? "Bronze" : "No medal"));
-        return medal + "   best " + clock(best);
+        return medalTitle(Save::getInt("medal." + courseName(i), 0)) + "   best " + clock(best);
     }
 
     // A course from its top: everything the last run counted starts over, and the scene loads afresh
@@ -163,6 +168,15 @@ class Game
     {
         if (m_onTitle)
         {
+            return;
+        }
+        if (m_onEnding)
+        {
+            if (Input::wasPressed("Jump") || Input::wasPressed("Pause"))
+            {
+                m_onEnding = false;
+                showTitle();
+            }
             return;
         }
         if (Input::wasPressed("Pause"))
@@ -404,6 +418,7 @@ class Game
         if (rank > Save::getInt("medal." + course, 0))
         {
             Save::setInt("medal." + course, rank);
+            m_endingDue = course == courseName(kCourseCount - 1);
         }
         Save::flush();
     }
@@ -448,8 +463,58 @@ class Game
         if (Input::wasPressed("Jump"))
         {
             ui::pop(); // the results
+            if (m_endingDue)
+            {
+                m_endingDue = false;
+                showEnding();
+                return;
+            }
             restart();
         }
+    }
+
+    // ---- the ending: every course's best, their total, the medals ----
+    private void showEnding()
+    {
+        m_onEnding = true;
+        run::setTimeScale(0.0f); // the course behind it holds still
+        ui::clear();
+        ui::push(kEndingDoc);
+        string last = courseName(kCourseCount - 1);
+        ui::findLabel("end-headline").setText(medalTitle(Save::getInt("medal." + last, 0)) + " on " + last);
+        float total = 0.0f;
+        bool allRidden = true;
+        int golds = 0;
+        int silvers = 0;
+        int bronzes = 0;
+        for (int i = 0; i < kCourseCount; ++i)
+        {
+            float best = Save::getFloat("best." + courseName(i), -1.0f);
+            int rank = Save::getInt("medal." + courseName(i), 0);
+            ui::find("end-" + i + "-" + (rank == 3 ? "gold" : (rank == 2 ? "silver" : (rank == 1 ? "bronze" : "none"))))
+                .setVisible(true);
+            ui::findLabel("end-" + i + "-best").setText(best < 0.0f ? "not ridden" : medalTitle(rank) + "   " + clock(best));
+            if (best < 0.0f)
+            {
+                allRidden = false;
+            }
+            else
+            {
+                total += best;
+            }
+            golds += rank == 3 ? 1 : 0;
+            silvers += rank == 2 ? 1 : 0;
+            bronzes += rank == 1 ? 1 : 0;
+        }
+        ui::findLabel("end-total").setText(allRidden ? clock(total) : "");
+        ui::findLabel("end-medals").setText("" + golds + " gold   " + silvers + " silver   " + bronzes + " bronze");
+        ui::findLabel("end-closing").setText(golds == kCourseCount ? "Gold on every course. Thanks for riding."
+                                                                  : "Thanks for riding. There is gold still out there.");
+    }
+
+    private string medalTitle(int rank)
+    {
+        return rank == 3 ? "Gold" : (rank == 2 ? "Silver" : (rank == 1 ? "Bronze" : "No medal"));
     }
 
     // Steps 0-4 are the rows, 5 the final time with its medal, 6 the score and the best.

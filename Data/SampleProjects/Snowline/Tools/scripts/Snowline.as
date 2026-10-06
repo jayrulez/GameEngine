@@ -74,6 +74,7 @@ const int kGapPoints = 500;       // a crevasse cleared
 const float kTrickShown = 1.6f;   // how long a landed trick shows (s)
 const float kTallyFirst = 0.5f;   // the first row's moment after the finish (s)
 const float kTallyGap = 0.45f;    // between the rows (s)
+const float kControlsShown = 6.0f; // how long the controls show as a course starts (s)
 
 class Game
 {
@@ -100,6 +101,7 @@ class Game
     private int m_combo = 1;
     private int m_tricks = 0;        // trick points this run
     private float m_trickShow = 0.0f; // how long the landed trick shows yet
+    private float m_controlsShow = 0.0f; // how long the controls panel shows yet
     private bool m_caught = false;    // the avalanche has just caught the rider (its crash follows)
 
     // The course's medal times (s, penalties included), from the finish line.
@@ -143,6 +145,8 @@ class Game
     {
         m_paused = true;
         Audio::playOneShot(kClick, AudioBus::Effects, 0.7f);
+        m_controlsShow = 0.0f;
+        ui::find("hud-controls").setVisible(false); // the menu shows them itself
         run::setTimeScale(0.0f);
         Screen@ s = ui::push(kPauseDoc);
         s.findButton("resume-btn").onClick(Action(this.onResume));
@@ -217,6 +221,13 @@ class Game
         ui::clear();
         ui::push(kHudDoc);
         resetRun();
+        // The controls, keyboard and pad, along the bottom for the first seconds of the course
+        // (and always in the pause menu).
+        View@ controls = ui::find("hud-controls");
+        controls.setVisible(true);
+        controls.setOpacity(0.0f);
+        controls.fadeTo(1.0f, 0.3f);
+        m_controlsShow = kControlsShown;
         run::setTimeScale(1.0f);
         run::loadScene(courseScene(i));
     }
@@ -271,6 +282,14 @@ class Game
                 if (m_flash <= 0.0f)
                 {
                     ui::find("hud-penalty").setVisible(false);
+                }
+            }
+            if (m_controlsShow > 0.0f)
+            {
+                m_controlsShow -= run::realDeltaTime();
+                if (m_controlsShow <= 0.0f)
+                {
+                    ui::find("hud-controls").fadeTo(0.0f, 0.6f);
                 }
             }
             if (m_trickShow > 0.0f)

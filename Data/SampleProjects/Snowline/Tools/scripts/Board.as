@@ -32,6 +32,7 @@ class Board
     [false, "Steer down the course line on its own (playtests)"] bool autopilot;
     [15.0, "How far down the course line the autopilot aims (m)"] float lookAhead;
     [0.0, "The stick the autopilot holds in the air, a spin (playtests: -1 to 1)"] float autopilotSpin;
+    [false, "The autopilot holds a grab in the air (playtests)"] bool autopilotGrab;
     [12.0, "How far down the course line the rider looks (m)"] float gazeAhead;
     [80.0, "Fastest turn of the velocity, a full carve (degrees a second)"] float carveRate;
     [0.35, "Speed a full carve scrubs off (share of gravity's pull into the slope)"] float carveScrub;
@@ -137,7 +138,7 @@ class Board
             tuck = Input::isDown("Tuck");
             jump = Input::wasPressed("Jump");
         }
-        bool grab = !autopilot && Input::isDown("Grab");
+        bool grab = autopilot ? autopilotGrab : Input::isDown("Grab");
         if (m_crash > 0.0f)
         {
             // Down in the snow: no control until the crash is over.

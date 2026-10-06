@@ -34,6 +34,8 @@ name = sys.argv[1] if len(sys.argv) > 1 else "Meadow"
 AUTOPILOT = "autopilot" in sys.argv[2:]
 # course.py <course> autopilot spin=<stick>: the autopilot also spins in the air (a trick's playtest).
 AUTOPILOT_SPIN = next((float(a.split("=", 1)[1]) for a in sys.argv[2:] if a.startswith("spin=")), 0.0)
+# ... grab: it holds a grab in the air as well.
+AUTOPILOT_GRAB = "grab" in sys.argv[2:]
 info = json.load(open(os.path.join(HERE, "generated", name, name + ".json")))
 ASSETS = mcp("asset_list", {})["assets"]
 
@@ -330,6 +332,7 @@ def build():
     # lip and rode it down the back instead of into the air (as often as not, by the frame timing).
     d.add(rider, "physics.Character", radius=0.35, halfHeight=0.55, maxSlopeDegrees=60.0, stepDown=0.1)
     d.script(rider, (BOARD, {"course": ("entity", course), "autopilot": AUTOPILOT, "autopilotSpin": AUTOPILOT_SPIN,
+                             "autopilotGrab": AUTOPILOT_GRAB,
                              "trackMark": ("asset", asset("PrefabDocument", "TrackMark", "Prefabs"))}))
     # The rider's head looks down the course line ahead (Board.as sets the point each frame; the
     # next gate once the course has gates): an aim on the rider, which drives the graph below it.

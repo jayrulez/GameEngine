@@ -6,9 +6,13 @@
 // medal times ("MedalGold", "MedalSilver", "MedalBronze", in hundredths) and ends the run
 // ("RunFinished"). The clock starts when the rider does ("RunStarted", from Board.as), with the
 // medal ghosts, not while the scene is still coming in. The gems announce themselves too ("GemRegistered") and report being taken
-// ("GemCollected"), each with how many it counts for.
+// ("GemCollected"), each with how many it counts for. The board announces each trick as it lands
+// ("TrickAir", "TrickSpin", "TrickGrab", then "TrickLanded"): a clean one scores its air, its half
+// turns and its grab, times the combo, which a clean landing raises and a crash or a missed gate
+// ends.
 //
-// The results tally the run a row at a time (the ride, the gates, the gems, the time bonus), then
+// The results tally the run a row at a time (the ride, the gates, the gems, the tricks, the time
+// bonus), then
 // land the final time with the medal it earned, the score and the course's best. The best time and
 // the best medal are kept in the save ("best.<scene>", "medal.<scene>"), and a run that beats the
 // best is announced ("NewBest", in hundredths) so PlayerGhost.as keeps it as the course's ghost. Jump
@@ -24,7 +28,12 @@ Guid kChime = Guid("c47f1131-6df4-49ea-b2c7-6e3b3316a3ce");
 const float kMissPenalty = 2.0f;
 const int kGemPoints = 100;       // a gem's worth
 const int kBonusPerSecond = 100;  // each second under the bronze time
-const int kTallySteps = 6;        // the four rows, then the final time and medal, then the score
+const int kTallySteps = 7;        // the five rows, then the final time and medal, then the score
+const int kAirPoints = 200;       // a second in the air
+const int kSpinPoints = 250;      // a half turn
+const int kGrabPoints = 400;      // a second holding a grab
+const int kComboMost = 5;         // the highest combo multiplier
+const float kTrickShown = 1.6f;   // how long a landed trick shows (s)
 const float kTallyFirst = 0.5f;   // the first row's moment after the finish (s)
 const float kTallyGap = 0.45f;    // between the rows (s)
 
@@ -40,6 +49,14 @@ class Game
     private float m_flash = 0.0f;   // how long the "+2 s" shows yet
     private int m_gems = 0;         // how many the course has
     private int m_taken = 0;
+
+    // Tricks: the one landing now (its parts as the board reports them), the combo, the points.
+    private float m_trickAir = 0.0f;
+    private int m_trickSpin = 0;
+    private float m_trickGrab = 0.0f;
+    private int m_combo = 1;
+    private int m_tricks = 0;        // trick points this run
+    private float m_trickShow = 0.0f; // how long the landed trick shows yet
 
     // The course's medal times (s, penalties included), from the finish line.
     private float m_gold = 0.0f;
@@ -77,6 +94,14 @@ class Game
                     ui::find("hud-penalty").setVisible(false);
                 }
             }
+            if (m_trickShow > 0.0f)
+            {
+                m_trickShow -= run::realDeltaTime();
+                if (m_trickShow <= 0.0f)
+                {
+                    ui::find("hud-trick").setVisible(false);
+                }
+            }
             return;
         }
         updateResults(dt);
@@ -96,6 +121,7 @@ class Game
 
     void onGateMissed(int index)
     {
+        endCombo();
         m_missed += 1;
         m_penalty += kMissPenalty;
         m_flash = 1.2f;
@@ -114,6 +140,64 @@ class Game
     {
         m_taken += value;
         showGems();
+    }
+
+    void onTrickAir(int centiseconds) { m_trickAir = float(centiseconds) / 100.0f; }
+    void onTrickSpin(int degrees) { m_trickSpin = degrees; }
+    void onTrickGrab(int centiseconds) { m_trickGrab = float(centiseconds) / 100.0f; }
+
+    // A trick landed: clean, it scores and the combo grows; crashed, the combo is gone.
+    void onTrickLanded(int clean)
+    {
+        if (!m_running)
+        {
+            return;
+        }
+        if (clean == 0)
+        {
+            endCombo();
+            showTrick("Crash", "");
+            return;
+        }
+        int points = int(m_trickAir * float(kAirPoints)) + (m_trickSpin / 180) * kSpinPoints
+                     + int(m_trickGrab * float(kGrabPoints));
+        points *= m_combo;
+        m_tricks += points;
+        showTrick(trickName(), "+" + points);
+        if (m_combo < kComboMost)
+        {
+            m_combo += 1;
+        }
+        View@ combo = ui::find("hud-combo");
+        ui::findLabel("hud-combo").setText("Combo x" + m_combo);
+        combo.setVisible(true);
+    }
+
+    // "360 Grab", "180", "Air": the spin if any, then the grab if held a while, else just air.
+    private string trickName()
+    {
+        string name = m_trickSpin > 0 ? "" + m_trickSpin : "";
+        if (m_trickGrab >= 0.2f)
+        {
+            name += (name == "" ? "" : " ") + "Grab";
+        }
+        return name == "" ? "Air" : name;
+    }
+
+    private void showTrick(string name, string points)
+    {
+        Label@ trick = ui::findLabel("hud-trick");
+        trick.setText(points == "" ? name : name + "   " + points);
+        trick.setVisible(true);
+        trick.setOpacity(0.0f);
+        trick.fadeTo(1.0f, 0.15f);
+        m_trickShow = kTrickShown;
+    }
+
+    private void endCombo()
+    {
+        m_combo = 1;
+        ui::find("hud-combo").setVisible(false);
     }
 
     void onMedalGold(int hundredths) { m_gold = float(hundredths) / 100.0f; }
@@ -197,11 +281,11 @@ class Game
         }
     }
 
-    // Steps 0-3 are the rows, 4 the final time with its medal, 5 the score and the best.
+    // Steps 0-4 are the rows, 5 the final time with its medal, 6 the score and the best.
     private void tallyStep(int step, bool quiet)
     {
         float total = m_time + m_penalty;
-        if (step <= 3)
+        if (step <= 4)
         {
             string key;
             string value;
@@ -221,6 +305,11 @@ class Game
                 key = "gems";
                 value = "" + m_taken + " / " + m_gems + "    +" + (m_taken * kGemPoints);
             }
+            else if (step == 3)
+            {
+                key = "tricks";
+                value = "+" + m_tricks;
+            }
             else
             {
                 key = "bonus";
@@ -239,7 +328,7 @@ class Game
             }
             return;
         }
-        if (step == 4)
+        if (step == 5)
         {
             ui::findLabel("final-time").setText(clock(total));
             string medal = medalName(total);
@@ -262,7 +351,7 @@ class Game
             return;
         }
         ui::find("row-score").setVisible(true);
-        ui::findLabel("final-score").setText("" + (m_taken * kGemPoints + timeBonus(total)));
+        ui::findLabel("final-score").setText("" + (m_taken * kGemPoints + m_tricks + timeBonus(total)));
         string best;
         if (m_previousBest < 0.0f)
         {
@@ -337,6 +426,10 @@ class Game
         m_missed = 0;
         m_flash = 0.0f;
         m_taken = 0;
+        m_tricks = 0;
+        m_trickShow = 0.0f;
+        endCombo();
+        ui::find("hud-trick").setVisible(false);
         ui::find("hud-penalty").setVisible(false);
         showGates();
         showGems();

@@ -10,6 +10,12 @@
       <Label id="hud-penalty" text="+2 s" font-size="24" style="text-color: #FF5A4A;" visibility="hidden"/>
     </Flex>
 
+    <!-- A landed trick, named with its points, for a moment; under it the combo, while there is one. -->
+    <Flex direction="vertical" align="center" spacing="2">
+      <Label id="hud-trick" text="" font-size="30" style="text-color: #FFE38A;" visibility="hidden"/>
+      <Label id="hud-combo" text="" font-size="22" style="text-color: #FFFFFF;" visibility="hidden"/>
+    </Flex>
+
     <!-- Gates passed of the course's, and gems taken of its gems. -->
     <Flex direction="vertical" align="end" spacing="8">
       <Panel padding="10" style="background: rounded-rect(#10182AB0, radius=10);">

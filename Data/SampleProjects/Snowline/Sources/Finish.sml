@@ -20,6 +20,10 @@
           <Label text="Gems" font-size="19" style="text-color: #7FDFFF;"/>
           <Label id="value-gems" text="" font-size="19" style="text-color: #FFFFFF;"/>
         </Flex>
+        <Flex id="row-tricks" direction="horizontal" justify="space-between" align="center" width="380" visibility="hidden">
+          <Label text="Tricks" font-size="19" style="text-color: #FFE38A;"/>
+          <Label id="value-tricks" text="" font-size="19" style="text-color: #FFFFFF;"/>
+        </Flex>
         <Flex id="row-bonus" direction="horizontal" justify="space-between" align="center" width="380" visibility="hidden">
           <Label text="Time bonus" font-size="19" style="text-color: #B8C8E8;"/>
           <Label id="value-bonus" text="" font-size="19" style="text-color: #FFFFFF;"/>

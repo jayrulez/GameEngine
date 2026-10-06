@@ -18,17 +18,31 @@ class FollowCamera
     // is drawn, dying away, so it never pulls the follow off course.
     private Float3 m_base = Float3(0.0f, 0.0f, 0.0f);
     private float m_shake = 0.0f;
+    private bool m_reseat = false; // a new run: seat behind the rider again on the next update
 
     FollowCamera(Entity@ entity) { @self = entity; }
 
     void onStart()
     {
+        seatBehind();
+    }
+
+    // A new run puts the rider back at the top: the camera goes straight behind it again. Its lag
+    // would otherwise seat it on the side it was last on (downhill, at the finish), facing the
+    // rider. On the next update, once the board has turned the rider back down the course.
+    void onRunRestart(int unused)
+    {
+        m_reseat = true;
+    }
+
+    // Straight behind the rider's facing, not wherever the scene or the last run left the camera.
+    private void seatBehind()
+    {
         if (target is null || !target.isValid())
         {
             return;
         }
-        // Start straight behind the rider's facing, not wherever the scene put the camera.
-        Float3 at = target.worldPosition();
+        Float3 at = target.position();
         Float3 back = Quaternion::RotateVector(target.rotation(), Float3(0.0f, 0.0f, -1.0f));
         Float3 seat = Float3(at.x + back.x * distance, at.y + height, at.z + back.z * distance);
         self.setPosition(seat);
@@ -46,6 +60,12 @@ class FollowCamera
         float d = float(dt);
         if (d <= 0.0f || target is null || !target.isValid())
         {
+            return;
+        }
+        if (m_reseat)
+        {
+            m_reseat = false;
+            seatBehind();
             return;
         }
         // The target's LOCAL position (the rider is a root): physics has already written this

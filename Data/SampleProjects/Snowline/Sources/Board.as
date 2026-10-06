@@ -53,6 +53,7 @@ class Board
     {
         m_start = self.position();
         m_startRotation = self.rotation();
+        m_yaw = startYaw();
         // The run starts with the rider's first frame: the clock (Snowline.as) and the medal ghosts
         // count from here, so a rider level with a ghost crosses the line on its medal's time.
         self.scene.events.emit("RunStarted", 0);
@@ -153,10 +154,18 @@ class Board
     {
         CharacterComponent::of(self).setPosition(m_start);
         self.setRotation(m_startRotation);
-        m_yaw = 0.0f;
+        m_yaw = startYaw();
         m_restarted = true;
         m_nextGate = 0;
         m_lean = 0.0f;
+    }
+
+    // The facing the scene started the rider with (radians; 0 faces +Z): the board turns from it,
+    // not from +Z, so the rider sets off without swinging round first.
+    private float startYaw()
+    {
+        Float3 forward = Quaternion::RotateVector(m_startRotation, Float3(0.0f, 0.0f, 1.0f));
+        return Math::Atan2(forward.x, forward.z);
     }
 
     // The gate the rider looks at next is the one after the last crossed (passed or missed).

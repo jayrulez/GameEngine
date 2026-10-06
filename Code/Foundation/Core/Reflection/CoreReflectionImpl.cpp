@@ -324,6 +324,9 @@ namespace foundation::core
             .Property<&Guid::low>("low")
             .Constant("Nil", Guid::Nil)
             .Method<&Guid::IsNil>("IsNil")
+            // a == b in a script: which asset is this, is that the track already playing.
+            .Method<&EqualValues<Guid>>("Equals", {"a", "b"})
+            .Operator(MethodOperator::Equals)
             .Constructor()
             .Constructor<u64, u64>()
             // Guid("ac96b003-5b7c-...") for scripts/editor text documents. Declared as String

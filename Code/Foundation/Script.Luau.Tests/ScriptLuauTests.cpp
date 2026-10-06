@@ -1252,6 +1252,29 @@ TEST_CASE("script.luau: an instance's own fields read as properties, its methods
     CHECK_FALSE(counter->GetProperty(u8"missing").HasValue());
 }
 
+// Two asset ids compare in a script, through the reflected Equals as __eq.
+TEST_CASE("script.luau: Guids compare with == and ~=")
+{
+    RegisterCoreTypes();
+    RefPtr<IScriptManager> manager = CreateLuauScriptManager(DefaultAllocator());
+    manager->RegisterType(TypeOf<Guid>());
+    manager->FinalizeTypes();
+    RefPtr<IScriptContext> context = manager->CreateContext();
+    REQUIRE(context->Load(u8R"lua(
+Ids = {}
+Ids.__index = Ids
+function Ids.new() return setmetatable({}, Ids) end
+function Ids:same() return Guid.new("6b0a7709-5169-4a0e-8077-c78b87a132e6") == Guid.new("6b0a7709-5169-4a0e-8077-c78b87a132e6") end
+function Ids:differ() return Guid.new("6b0a7709-5169-4a0e-8077-c78b87a132e6") ~= Guid.new("0758e8d2-c6cd-47a7-bce6-9728a9501018") end
+)lua",
+                          u8"luau.ids")
+                .IsOk());
+    RefPtr<ScriptObject> ids = context->CreateInstance(u8"Ids", Span<Variant>{});
+    REQUIRE(ids.Get() != nullptr);
+    CHECK(ids->Invoke(u8"same", Span<Variant>{}).Value().Get<bool>());
+    CHECK(ids->Invoke(u8"differ", Span<Variant>{}).Value().Get<bool>());
+}
+
 // Sedulous 22a73e31: the reflected operators bind as metamethods on the reflected value types
 // (Float3 is Luau's native vector, which has its own): a + b, v * 2, -v, a == b, q * r, and
 // Luau's a += b through __add.

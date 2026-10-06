@@ -643,6 +643,31 @@ TEST_CASE("angelscript: reflected operators - a + b, v * 2.0f, -v, a == b, p += 
     CHECK(ctx->GetGlobal(u8"Hue").Get<f64>() == doctest::Approx(0.75));
 }
 
+// Two asset ids compare in a script (Snowline's music: is this the track already playing).
+TEST_CASE("angelscript: Guids compare with == and !=")
+{
+    RegisterCoreTypes();
+    RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
+    RegisterReflectedTypes(*manager);
+    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    REQUIRE(static_cast<bool>(ctx));
+    const Status status =
+        ctx->Load(u8"bool Same; bool Differ; bool NilSame;\n"
+                  u8"Guid kTrack = Guid(\"6b0a7709-5169-4a0e-8077-c78b87a132e6\");\n"
+                  u8"void main() {\n"
+                  u8"  Guid playing = Guid(\"6b0a7709-5169-4a0e-8077-c78b87a132e6\");\n"
+                  u8"  Same = playing == kTrack;\n"
+                  u8"  Differ = playing != Guid(\"0758e8d2-c6cd-47a7-bce6-9728a9501018\");\n"
+                  u8"  Guid none;\n"
+                  u8"  NilSame = none == Guid() && none.IsNil();\n"
+                  u8"}\n",
+                  u8"main");
+    REQUIRE(status.IsOk());
+    CHECK(ctx->GetGlobal(u8"Same").Get<bool>());
+    CHECK(ctx->GetGlobal(u8"Differ").Get<bool>());
+    CHECK(ctx->GetGlobal(u8"NilSame").Get<bool>());
+}
+
 TEST_CASE("angelscript: 64-bit integer facade args/returns round-trip exactly (no double funnel)")
 {
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());

@@ -32,14 +32,6 @@
 
 ## Queued 2026-10-02 (user, PaperKid)
 
-- **Auto exposure settles visibly at the start of a scene** (user 2026-10-03): a scene loads with
-  the exposure where it was (or the default) and adapts toward its target over a second or two,
-  a noticeable dim and brighten every time a level starts. A new scene, or the first frame of a
-  view, should start at its target exposure and adapt only from then on. Look at `ExposurePass`
-  (its per-view history, `kMaxViews` slots indexed by view order, and what it starts from) and at
-  whether a scene load resets it. PaperKid turned auto exposure off meanwhile; measured, its
-  fixed EV 0 is 10 to 16% brighter than auto exposure settled at, so turning it back on will
-  change the look a little.
 - **TAA still looks jittery** (user 2026-10-03, "for later"): with the stale-history bug fixed the
   player matches the editor, but the resolve itself leaves visible jitter on edges. Look at the
   usual suspects in `TaaPass` and `taa` shader: the Halton sequence length (8) and jitter scale

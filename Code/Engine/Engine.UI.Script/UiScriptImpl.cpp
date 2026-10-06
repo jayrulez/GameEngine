@@ -306,6 +306,25 @@ namespace engine::uiscript
             l->Text.SetValue(Move(value));
         }
     }
+    Color Label::textColor() const
+    {
+        auto* l = As<ui::Label>(view);
+        return (l != nullptr) ? l->ResolvedTextColor() : Color::Transparent;
+    }
+    void Label::setTextColor(Color value)
+    {
+        if (auto* l = As<ui::Label>(view))
+        {
+            l->TextColor.SetValue(Optional<Color>(value));
+        }
+    }
+    void Label::clearTextColor()
+    {
+        if (auto* l = As<ui::Label>(view))
+        {
+            l->TextColor.SetValue(Optional<Color>{});
+        }
+    }
 
     String Button::text() const
     {
@@ -687,6 +706,9 @@ namespace engine::uiscript
         builder.Method<&Label::setRotation>("setRotation", {"degrees"});
         UI_SCRIPT_REFLECT_MOTION(Label);
         builder.Method<&Label::setText>("setText", {"value"});
+        builder.ComputedProperty<&Label::textColor>("textColor");
+        builder.Method<&Label::setTextColor>("setTextColor", {"value"});
+        builder.Method<&Label::clearTextColor>("clearTextColor");
         builder.Constructor();
     }
     REFLECT_VALUE(Button, "rtti::engine.ui.script")

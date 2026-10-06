@@ -280,3 +280,32 @@ TEST_CASE("uiscript.handle: views move, scale, turn and pulse on the frame clock
     missing.pulse(2.0f, 1.0f);
     CHECK(missing.scale() == doctest::Approx(1.0f));
 }
+
+// Sedulous dfeaf682: a label's text colour from script. It reads the style's until one is set; a
+// set colour is the label's own and reads back; clearing goes back to the style's; a handle whose
+// label is gone reads transparent and sets nothing.
+TEST_CASE("uiscript.handle: a label's text colour is set, read and cleared back to the style's")
+{
+    auto root = MakeRef<ui::FrameLayout>(DefaultAllocator());
+    auto label = MakeLabel(u8"warning", u8"12 m");
+    label->SetStyle(ui::StyleProperty::TextColor, Color{0.2f, 0.4f, 0.6f, 1.0f});
+    root->AddView(label.Get());
+
+    uis::Label warning = Group(root.Get()).findLabel(u8"warning");
+    REQUIRE(warning.isValid());
+    CHECK(warning.textColor().b == doctest::Approx(0.6f)); // the style's
+
+    warning.setTextColor(Color{1.0f, 0.3f, 0.3f, 0.5f});
+    CHECK(warning.textColor().r == doctest::Approx(1.0f));
+    CHECK(warning.textColor().a == doctest::Approx(0.5f));
+    REQUIRE(label->TextColor.Value().HasValue()); // the label's own
+    CHECK(label->TextColor.Value().Value().g == doctest::Approx(0.3f));
+
+    warning.clearTextColor();
+    CHECK_FALSE(label->TextColor.Value().HasValue());
+    CHECK(warning.textColor().b == doctest::Approx(0.6f)); // the style's again
+
+    uis::Label gone = Group(root.Get()).findLabel(u8"nope");
+    gone.setTextColor(Color::White); // nothing to set: no crash
+    CHECK(gone.textColor().a == doctest::Approx(0.0f));
+}

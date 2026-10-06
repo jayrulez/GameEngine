@@ -89,6 +89,17 @@ export namespace foundation::ui
             return overflow == StringView(u8"ellipsis");
         }
 
+        /// The colour the text draws in: the label's own TextColor when set, else the style's
+        /// text-color (the one place both drawing and a script's read take it from). A disabled
+        /// label dims it when it draws.
+        [[nodiscard]] Color ResolvedTextColor()
+        {
+            return TextColor.Value().HasValue()
+                       ? TextColor.Value().Value()
+                       : ResolveStyleColor(StyleProperty::TextColor,
+                                           Color{220.0f / 255.0f, 225.0f / 255.0f, 235.0f / 255.0f, 1.0f});
+        }
+
     protected:
         void OnMeasure(BoxConstraints constraints) override
         {
@@ -181,11 +192,7 @@ export namespace foundation::ui
                 return;
             }
 
-            Color textColor = TextColor.Value().HasValue()
-                                  ? TextColor.Value().Value()
-                                  : ResolveStyleColor(StyleProperty::TextColor,
-                                                      Color{220.0f / 255.0f, 225.0f / 255.0f,
-                                                            235.0f / 255.0f, 1.0f});
+            Color textColor = ResolvedTextColor();
             if (!IsEffectivelyEnabled())
             {
                 textColor = Palette::ComputeDisabled(textColor);

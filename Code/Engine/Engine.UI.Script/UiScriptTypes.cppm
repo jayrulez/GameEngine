@@ -100,6 +100,13 @@ export namespace engine::uiscript
         UI_SCRIPT_COMMON_HANDLE_MEMBERS
         [[nodiscard]] String text() const;
         void setText(String value);
+        /// The colour its text draws in: its own (setTextColor) when set, else its style's
+        /// text-color. Transparent for a handle whose label is gone.
+        [[nodiscard]] Color textColor() const;
+        /// Its own text colour, over the style's (`label.setTextColor(Color(1, 0.3f, 0.3f, 1))`).
+        void setTextColor(Color value);
+        /// Drops its own text colour: back to the style's.
+        void clearTextColor();
     };
 
     /// A button: a text Button, or a ContentButton drawing any view as its content (a picture card,

@@ -77,6 +77,8 @@ Play-in-editor works by construction (the same event stream through the viewport
   Every handle moves and turns its view with `setTranslation(x, y)` (pixels from where layout put
   it) and `setRotation(degrees)`, the view's post-layout transform, so a minimap marker or a
   compass needle moves each frame without a relayout; `translation` and `rotation` read it back.
+  A label's `setTextColor(Color)` gives it its own text colour over the style's (a warning turning
+  red), `clearTextColor()` drops it, and `textColor` reads the colour it draws in.
 - **Tweens** - every handle animates on the UI frame clock, which runs while the game is paused:
   `fadeTo(opacity, seconds)`, `moveTo(x, y, seconds)`, `scaleTo(scale, seconds)` (`setScale` and
   `scale` for the instant form), `rotateTo(degrees, seconds)`, each with an optional `Ease`

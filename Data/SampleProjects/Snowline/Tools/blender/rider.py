@@ -212,7 +212,10 @@ UP_AXIS = (0, 0, 1)
 # front hand leading over the nose and the back hand low by the back hip. On the heel edge the rider
 # sits back with the arms reaching forward; on the toe edge the shins press toward the snow and the
 # back stays upright.
-STANCE_POSE = dict(lean=0.0, crouch=0.06, shift=0.0, bend=6.0, front=P(-0.06, 0.10, 0.0), back=P(-0.02, 0.18, -0.06),
+#
+# The hands stay well out from the body (about four fifths of the arm's reach from the shoulder):
+# a hand drawn in by the hip or up by the shoulder folds the arm hard at the elbow.
+STANCE_POSE = dict(lean=0.0, crouch=0.06, shift=0.0, bend=6.0, front=P(-0.06, 0.10, 0.0), back=P(0.0, 0.06, -0.08),
                    drop=0.0, roll=0.0)
 
 
@@ -226,18 +229,18 @@ POSES = {
     "Ride": pose_with(),
     "CarveToe": pose_with(lean=24.0, crouch=0.14, shift=-0.07, bend=8.0, front=P(-0.18, 0.10, -0.06),
                           back=P(-0.12, 0.02, -0.08)),
-    "CarveHeel": pose_with(lean=-22.0, crouch=0.20, shift=0.08, bend=14.0, front=P(-0.34, 0.06, 0.02),
-                           back=P(-0.32, 0.12, 0.0)),
+    "CarveHeel": pose_with(lean=-22.0, crouch=0.20, shift=0.08, bend=14.0, front=P(-0.22, 0.06, -0.06),
+                           back=P(-0.20, 0.06, -0.08)),
     "Tuck": pose_with(crouch=0.30, shift=0.0, bend=22.0, front=P(-0.12, -0.14, -0.30), back=P(-0.10, 0.18, -0.30)),
     "TuckToe": pose_with(lean=20.0, crouch=0.30, shift=-0.05, bend=20.0, front=P(-0.16, -0.12, -0.34),
                          back=P(-0.14, 0.16, -0.34)),
     "TuckHeel": pose_with(lean=-18.0, crouch=0.32, shift=0.07, bend=26.0, front=P(-0.18, -0.10, -0.24),
                           back=P(-0.16, 0.20, -0.24)),
-    "Air": pose_with(crouch=0.24, bend=10.0, front=P(-0.05, 0.22, 0.30), back=P(0.02, -0.20, 0.24)),
+    "Air": pose_with(crouch=0.24, bend=10.0, front=P(-0.04, 0.16, 0.10), back=P(-0.04, -0.16, 0.08)),
     # An indy: the knees drawn up, the back hand down to the toe edge between the bindings, the
     # front arm out over the nose for balance.
     "Grab": pose_with(crouch=0.34, shift=-0.02, bend=34.0, front=P(-0.12, 0.26, 0.14), back=P(-0.02, 0.41, -0.86)),
-    "Land": pose_with(crouch=0.30, bend=18.0, front=P(-0.10, 0.18, 0.06), back=P(-0.04, 0.10, 0.02)),
+    "Land": pose_with(crouch=0.30, bend=18.0, front=P(-0.10, 0.12, -0.10), back=P(-0.06, -0.08, -0.14)),
     "Crash": pose_with(lean=-70.0, crouch=0.25, shift=0.20, bend=-10.0, front=P(0.35, 0.15, 0.60),
                        back=P(0.30, -0.20, 0.55), drop=0.45),
 }

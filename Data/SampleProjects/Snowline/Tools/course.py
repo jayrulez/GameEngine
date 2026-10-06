@@ -12,9 +12,10 @@ Needs terrain.py <course> and importall.py <course> first: it places what they m
   gate_spacing metres down the course (RULES), swinging side to side of the line, standing on the
   snow (terrain.py's mountain), none on a shortcut's bend; and the finish (Finish.as,
   Prefabs/FinishLine) at the line's end;
-- the gems (Gem.as on each, the Gem model under it): a row of GEM_ROW between each pair of gates,
-  gem_offset metres out on the side of the gate before them, past the packed course, so taking
-  them means holding a wider line than the gates ask for; and a row down a shortcut;
+- the gems (Gem.as on each, the Gem model under it): an arc over each kicker's flight and the
+  gap's, so the air is worth taking; between the gates without a kicker, a row of GEM_ROW on the
+  course line, or every third gap gem_offset metres out on the side of the gate before it (a
+  wider line than the gates ask for); and a row down a shortcut;
 - the medal ghosts (Ghost.as, a path_follow on the course line, the rider model under it in a
   medal's see-through colour, ghosts.py's materials): one per medal, each riding to the finish at
   its medal's time;
@@ -105,6 +106,9 @@ GAP_CLEAR = (30.0, 15.0) # no gate this far before a gap's lip, nor this far pas
 # - gem_offset: how far a row of gems stands off the line (past the groomed course, short of trees);
 # - kickers: the gaps (after gate i) a kicker stands midway in, on the line;
 # - pines: the forest's density (instances a square metre where the forest floor is painted);
+# - air_speed, gap_speed: the launch speed (m/s) the arcs of gems over the kickers and the gap
+#   follow: a rider riding the line untucked (the autopilot leaves Meadow's kicker at 16.8 m/s and
+#   Ridge's gap at 20), a little under, so a slower rider still meets them early in the flight;
 # - medals: gold, silver, bronze (s, penalties included). Snowline.as judges a run by them and the
 #   medal ghosts ride at their pace;
 # - avalanche (optional): where down the line the rider sets it off (release, m; Avalanche.as). Ridge's
@@ -114,7 +118,7 @@ GAP_CLEAR = (30.0, 15.0) # no gate this far before a gap's lip, nor this far pas
 # and a tucked line.
 RULES = {
     "Meadow": dict(gate_half=4.0, gate_swing=3.5, gate_spacing=45.0, gate_prefabs=("GateRed", "GateBlue"),
-                   gem_offset=11.0, kickers=(3,), medals=(30.0, 34.0, 40.0), pines=0.025),
+                   gem_offset=11.0, kickers=(3,), medals=(30.0, 34.0, 40.0), pines=0.025, air_speed=16.0),
     # Lines and shortcuts: narrower gates closer together on the tighter bends; gems just past the
     # groomed snow, the trees close beyond them; and a row of gems down the shortcut.
     "Forest": dict(gate_half=3.0, gate_swing=2.5, gate_spacing=38.0, gate_prefabs=("GateRedNarrow", "GateBlueNarrow"),
@@ -123,7 +127,7 @@ RULES = {
     # gap) with its own kicker at the lip; few trees.
     "Ridge": dict(gate_half=4.0, gate_swing=3.5, gate_spacing=45.0, gate_prefabs=("GateRed", "GateBlue"),
                   gem_offset=10.0, kickers=(0, 1, 2), medals=(29.0, 33.0, 40.0), pines=0.02,
-                  avalanche=dict(release=270.0)),
+                  avalanche=dict(release=270.0), air_speed=16.0, gap_speed=19.0),
 }
 COURSE = RULES[name]
 # The kicker's shape (blender/props.py, which models it from the same numbers): its curve, buried
@@ -140,6 +144,9 @@ GEM_ROW = 3           # gems in a row
 GEM_GAP = 4.0         # metres down the course between a row's gems
 SHORTCUT_GEMS = 5     # gems down a shortcut's middle
 GEM_HEIGHT = 1.0      # a gem's centre above the snow (m): about the rider's centre
+GEM_AIR = (3.0, 6.0, 9.0)            # the arc over a kicker: metres past its lip, level
+GEM_GAP_AIR = (4.0, 8.0, 12.0, 16.0) # the arc over a gap's crevasse
+RIDER_CENTRE = 0.9    # the rider's centre above its board (m): the flight the gems follow
 
 
 def along_course(points, distance):
@@ -213,14 +220,32 @@ def gems(d, points, mountain, placed):
         d.instance(GEM_MODEL, parent=e)
         count += 1
 
+    def gem_at(x, y, z):
+        nonlocal count
+        e = d.entity("Gem%d" % count, (x, y, z))
+        d.script(e, (GEM, {}))
+        d.instance(GEM_MODEL, parent=e)
+        count += 1
+
     for gap in range(len(placed) - 1):
         if placed[gap + 1] - placed[gap] > COURSE["gate_spacing"] + 1.0:
             continue
-        side = 1 if gap % 2 == 0 else -1  # the side gate `gap` stands on (gates() swings the same way)
         middle = (placed[gap] + placed[gap + 1]) / 2.0
+        if gap in COURSE["kickers"]:
+            # Over the kicker: the arc a rider flies off it.
+            for x, y, z in air_arc(points, mountain, middle, COURSE["air_speed"], GEM_AIR):
+                gem_at(x, y, z)
+            continue
+        # On the line, or every third gap out to the side of the gate before it.
+        side = (1 if gap % 2 == 0 else -1) if gap % 3 == 2 else 0
         for k in range(GEM_ROW):
             p, heading = along_course(points, middle + (k - (GEM_ROW - 1) / 2) * GEM_GAP)
             gem(p[0] + math.cos(heading) * offset * side, p[2] - math.sin(heading) * offset * side)
+    if info.get("gap"):
+        lip = info["gap"]["lip"]
+        at = distance_to(points, (lip[0], lip[2]))
+        for x, y, z in air_arc(points, mountain, at - KICKER_RUN, COURSE["gap_speed"], GEM_GAP_AIR):
+            gem_at(x, y, z)
     cut = info.get("shortcut")
     if cut:
         a, b = cut[0], cut[-1]
@@ -228,6 +253,29 @@ def gems(d, points, mountain, placed):
             t = 0.3 + 0.4 * k / (SHORTCUT_GEMS - 1)
             gem(a[0] + (b[0] - a[0]) * t, a[2] + (b[2] - a[2]) * t)
     print("gems", count)
+
+
+def kicker_tilt(points, mountain, distance):
+    """The slope (degrees, falling) a kicker `distance` metres down the line is tilted to."""
+    p, _ = along_course(points, distance)
+    q, _ = along_course(points, distance + KICKER_FOOT)
+    return math.degrees(math.atan2(mountain.height(p[0], p[2]) - mountain.height(q[0], q[2]), KICKER_FOOT))
+
+
+def air_arc(points, mountain, distance, speed, past):
+    """Points along the flight off a kicker whose ramp leaves the snow `distance` metres down the
+    line, launched at `speed` (Kicker.as: off the lip at its angle above level, the lip's angle
+    less the slope it stands on), `past` metres past the lip, level: the rider's centre there."""
+    tilt = kicker_tilt(points, mountain, distance)
+    lip_distance = distance + KICKER_RUN * math.cos(math.radians(tilt))
+    lip, heading = along_course(points, lip_distance)
+    lip_y = mountain.height(lip[0], lip[2]) + KICKER_HEIGHT + RIDER_CENTRE
+    angle = math.radians(KICKER_LIP_ANGLE - tilt)
+    out = []
+    for x in past:
+        y = lip_y + x * math.tan(angle) - 9.81 * x * x / (2.0 * speed * speed * math.cos(angle) ** 2)
+        out.append((lip[0] + math.sin(heading) * x, y, lip[2] + math.cos(heading) * x))
+    return out
 
 
 def qmul(a, b):
@@ -250,9 +298,7 @@ def kickers(d, points, mountain, placed):
 def kicker(d, points, mountain, prefab, label, distance):
     """One kicker `distance` metres down the course line (where its ramp leaves the snow)."""
     p, heading = along_course(points, distance)
-    q, _ = along_course(points, distance + KICKER_FOOT)
-    drop = mountain.height(p[0], p[2]) - mountain.height(q[0], q[2])
-    slope = math.degrees(math.atan2(drop, KICKER_FOOT))
+    slope = kicker_tilt(points, mountain, distance)
     e = d.entity(label, (p[0], mountain.height(p[0], p[2]) - KICKER_SINK, p[2]),
                  qmul(yaw(math.degrees(heading)), pitch(slope)))
     d.script(e, (KICKER, {"run": KICKER_RUN, "lipHeight": KICKER_HEIGHT, "lipAngle": KICKER_LIP_ANGLE,

@@ -51,7 +51,8 @@ class Avalanche
         }
         float d = float(dt);
         SceneSplines@ splines = SceneSplines::of(self.scene);
-        SplineHit@ here = splines.closestPoint(course, m_rider.worldPosition());
+        // The rider is top-level: position() is this frame's pose (worldPosition() was last frame's).
+        SplineHit@ here = splines.closestPoint(course, m_rider.position());
         if (here is null || !here.valid)
         {
             return;

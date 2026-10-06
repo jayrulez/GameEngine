@@ -61,7 +61,8 @@ class Gate
             return;
         }
         // The rider in the gate's frame: along the course, and across it (+ toward the right pole).
-        Float3 d = m_rider.worldPosition() - self.worldPosition();
+        // The rider is top-level: position() is this frame's pose (worldPosition() was last frame's).
+        Float3 d = m_rider.position() - self.worldPosition();
         float fx = Math::Sin(heading);
         float fz = Math::Cos(heading);
         float along = d.x * fx + d.z * fz;

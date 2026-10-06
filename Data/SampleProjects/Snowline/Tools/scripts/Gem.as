@@ -47,7 +47,8 @@ class Gem
         {
             return;
         }
-        if (Float3::Distance(m_rider.worldPosition(), self.worldPosition()) < radius)
+        // The rider is top-level: position() is this frame's pose (worldPosition() was last frame's).
+        if (Float3::Distance(m_rider.position(), self.worldPosition()) < radius)
         {
             m_taken = true;
             m_model.setActive(false);

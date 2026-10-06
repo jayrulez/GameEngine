@@ -34,7 +34,8 @@ class Gap
         {
             return;
         }
-        Float3 d = m_rider.worldPosition() - self.worldPosition();
+        // The rider is top-level: position() is this frame's pose (worldPosition() was last frame's).
+        Float3 d = m_rider.position() - self.worldPosition();
         float along = d.x * Math::Sin(heading) + d.z * Math::Cos(heading);
         float across = d.x * Math::Cos(heading) - d.z * Math::Sin(heading);
         if (!m_armed && m_lastAlong < 0.0f && along >= 0.0f && Math::Abs(across) <= reach)

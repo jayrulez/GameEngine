@@ -33,7 +33,8 @@ class Finish
         {
             return;
         }
-        Float3 d = m_rider.worldPosition() - self.worldPosition();
+        // The rider is top-level: position() is this frame's pose (worldPosition() was last frame's).
+        Float3 d = m_rider.position() - self.worldPosition();
         float along = d.x * Math::Sin(heading) + d.z * Math::Cos(heading);
         if (m_seen && m_lastAlong < 0.0f && along >= 0.0f)
         {

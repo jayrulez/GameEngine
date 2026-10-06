@@ -39,7 +39,8 @@ class Kicker
         float flat = Math::Sqrt(forward.x * forward.x + forward.z * forward.z);
         float fx = forward.x / flat;
         float fz = forward.z / flat;
-        Float3 d = m_rider.worldPosition() - self.worldPosition();
+        // The rider is top-level: position() is this frame's pose (worldPosition() was last frame's).
+        Float3 d = m_rider.position() - self.worldPosition();
         float along = d.x * fx + d.z * fz;
         float across = d.x * fz - d.z * fx;
         bool within = Math::Abs(across) <= width * 0.5f;

@@ -76,7 +76,8 @@ class Ghost
         {
             return;
         }
-        Float3 at = self.worldPosition();
+        // A top-level entity: this frame's pose (worldPosition() read last frame's).
+        Float3 at = self.position();
         RayCastHit@ hit = ScenePhysics::of(self.scene).rayCast(Float3(at.x, at.y + 4.0f, at.z),
                                                                 Float3(0.0f, -1.0f, 0.0f), 10.0f, 1);
         float y = (hit !is null && hit.hit) ? hit.position.y - at.y : 0.0f;

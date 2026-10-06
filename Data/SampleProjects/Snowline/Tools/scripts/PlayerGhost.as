@@ -81,7 +81,8 @@ class PlayerGhost
 
     private void record()
     {
-        Float3 at = m_rider.worldPosition();
+        // The rider is top-level: position() is this frame's pose (worldPosition() was last frame's).
+        Float3 at = m_rider.position();
         Float3 forward = Quaternion::RotateVector(m_rider.rotation(), Float3(0.0f, 0.0f, 1.0f));
         m_recording.insertLast(at.x);
         m_recording.insertLast(at.y);

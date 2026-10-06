@@ -1367,3 +1367,96 @@ TEST_CASE("physics.scene: the scene ray query finds solid ground and passes thro
     REQUIRE(play.physics->World()->RayCast(Float3{0, 3, 0}, Float3{0, -1, 0}, 10.0f, raw));
     CHECK(raw.position.y == doctest::Approx(1.0f).epsilon(1e-3));
 }
+
+// ---- static capsules from a source (Specs/vegetation-colliders.md) ----
+
+namespace
+{
+    // A stand-in for the vegetation: a system with trunks to make solid, ready when told.
+    class TrunkSource final : public scene::SceneSystem, public scene::IStaticColliderSource
+    {
+    public:
+        bool ready = true;
+        Array<scene::StaticCapsule> trunks;
+        u32 asked = 0;
+
+        [[nodiscard]] scene::IStaticColliderSource* AsStaticColliderSource() noexcept override { return this; }
+        bool CollectStaticCapsules(scene::Scene&, Array<scene::StaticCapsule>& out) override
+        {
+            ++asked;
+            if (!ready)
+            {
+                return false;
+            }
+            for (const scene::StaticCapsule& t : trunks)
+            {
+                out.PushBack(t);
+            }
+            return true;
+        }
+    };
+}
+
+TEST_CASE("physics.scene: a source's static capsules are solid, in their group, found with no entity")
+{
+    PlayScene play;
+    play.scene.AddSystem<CharacterComponentManager>();
+    play.AddFloor();
+    TrunkSource* source = play.scene.AddSystem<TrunkSource>();
+    scene::StaticCapsule trunk;
+    trunk.foot = Float3{6.0f, 0.0f, 0.0f};
+    trunk.radius = 0.4f;
+    trunk.height = 5.0f;
+    trunk.group = 2;
+    source->trunks.PushBack(trunk);
+    scene::EntityHandle rider = play.scene.CreateEntity(u8"rider");
+    play.scene.SetLocalPosition(rider, Float3{0.0f, 1.0f, 0.0f});
+    CharacterComponent& character = play.scene.GetSystem<CharacterComponentManager>()->Add(rider);
+    play.Start();
+    play.Step(30); // settles on the floor
+
+    // The overlap in the trunks' group finds it: no entity, its centre (foot + height / 2).
+    ScenePhysics physics{&play.scene};
+    const RayCastHit found = physics.nearestOverlap(6.0f, 1.0f, 0.0f, 1.0f, 1 << 2);
+    CHECK(found.hit);
+    CHECK_FALSE(found.entity().isValid());
+    CHECK(found.position.x == doctest::Approx(6.0f).epsilon(0.01));
+    CHECK(found.position.y == doctest::Approx(2.5f).epsilon(0.01));
+    CHECK_FALSE(physics.nearestOverlap(6.0f, 1.0f, 0.0f, 1.0f, 1 << 3).hit); // another group
+    CHECK_FALSE(physics.nearestOverlap(9.0f, 1.0f, 0.0f, 1.0f, 1 << 2).hit); // beside it
+
+    // Driven at it, the character stops at the trunk instead of passing through.
+    for (int i = 0; i < 120; ++i)
+    {
+        character.drive(Float3{5.0f, -1.0f, 0.0f});
+        play.Step();
+    }
+    CHECK(character.currPosition.x < 6.0f - 0.4f);
+    CHECK(character.currPosition.x > 4.5f);
+}
+
+TEST_CASE("physics.scene: a source not ready at the start is asked again, and its capsules are solid once ready")
+{
+    PlayScene play;
+    TrunkSource* source = play.scene.AddSystem<TrunkSource>();
+    scene::StaticCapsule trunk;
+    trunk.foot = Float3{0.0f, 0.0f, 0.0f};
+    trunk.radius = 0.5f;
+    trunk.height = 0.6f; // shorter than its width: a sphere sitting on its foot
+    source->trunks.PushBack(trunk);
+    source->ready = false;
+    play.Start();
+    play.Step(3);
+    ScenePhysics physics{&play.scene};
+    CHECK_FALSE(physics.nearestOverlap(0.0f, 0.5f, 0.0f, 0.3f, ~0).hit);
+    CHECK(source->asked >= 3u);
+
+    source->ready = true;
+    play.Step(1);
+    const RayCastHit found = physics.nearestOverlap(0.0f, 0.5f, 0.0f, 0.3f, ~0);
+    CHECK(found.hit);
+    CHECK(found.position.y == doctest::Approx(0.5f).epsilon(0.01)); // a sphere of 0.5 on the foot
+    const u32 asked = source->asked;
+    play.Step(5);
+    CHECK(source->asked == asked); // ready once, never asked again
+}

@@ -177,6 +177,7 @@ export namespace engine::physics
             }
             m_world = MakeUnique<PhysicsWorld>(DefaultAllocator(), DefaultAllocator(), settings);
             BuildBodies();
+            BuildStaticCapsules();
             BuildJoints();
             BuildCharacters();
         }
@@ -215,6 +216,9 @@ export namespace engine::physics
                     });
             }
             m_events.Clear();
+            m_pendingCapsuleSources.Clear(); // the capsule bodies drop with the world
+            m_capsuleWait = 0.0f;
+            m_warnedCapsules = false;
             m_world = nullptr;
         }
 
@@ -231,6 +235,8 @@ export namespace engine::physics
                 return;
             }
             PROFILE_SCOPE("Physics.Step");
+
+            RetryStaticCapsules(fixedDeltaTime); // a source still resolving at start, solid once ready
 
             ReconcileActiveState(); // active edges settle BEFORE this step simulates
 
@@ -752,6 +758,80 @@ export namespace engine::physics
             }
         }
 
+        // Static content without an entity per piece (a forest's trunks): every system that is an
+        // IStaticColliderSource gives its capsules, one static body each in its group, owned by no
+        // entity (Specs/vegetation-colliders.md). A source not ready yet is asked again each step.
+        void BuildStaticCapsules()
+        {
+            m_scene->ForEachSystem(
+                [&](scene::SceneSystem& system)
+                {
+                    if (scene::IStaticColliderSource* source = system.AsStaticColliderSource())
+                    {
+                        CollectCapsules(*source);
+                    }
+                });
+        }
+
+        void CollectCapsules(scene::IStaticColliderSource& source)
+        {
+            Array<scene::StaticCapsule> capsules;
+            if (!source.CollectStaticCapsules(*m_scene, capsules))
+            {
+                m_pendingCapsuleSources.PushBack(&source);
+                return;
+            }
+            for (const scene::StaticCapsule& capsule : capsules)
+            {
+                CreateCapsuleBody(capsule);
+            }
+        }
+
+        void RetryStaticCapsules(f32 dt)
+        {
+            if (m_pendingCapsuleSources.IsEmpty())
+            {
+                return;
+            }
+            Array<scene::IStaticColliderSource*> pending = Move(m_pendingCapsuleSources);
+            m_pendingCapsuleSources.Clear();
+            for (scene::IStaticColliderSource* source : pending)
+            {
+                CollectCapsules(*source);
+            }
+            m_capsuleWait += dt;
+            if (!m_pendingCapsuleSources.IsEmpty() && m_capsuleWait > 5.0f && !m_warnedCapsules)
+            {
+                m_warnedCapsules = true;
+                LOG_WARNING(u8"Physics",
+                            u8"{} static collider source(s) still not ready after 5 s: their content "
+                            u8"is not solid until it is",
+                            m_pendingCapsuleSources.Size());
+            }
+        }
+
+        // An upright capsule from `foot` up `height` (the whole capsule; the cylinder between the
+        // caps is height - 2 radius, at least 0: a short one is a sphere sitting on the foot).
+        void CreateCapsuleBody(const scene::StaticCapsule& capsule)
+        {
+            if (capsule.radius <= 0.0f)
+            {
+                return;
+            }
+            BodyDesc desc;
+            desc.motion = MotionKind::Static;
+            desc.layer = PhysicsLayer::Static;
+            desc.group = capsule.group;
+            ShapeDesc shape;
+            const f32 cylinder = Max(capsule.height - 2.0f * capsule.radius, 0.0f);
+            shape.kind = cylinder > 0.0f ? ShapeKind::Capsule : ShapeKind::Sphere;
+            shape.radius = capsule.radius;
+            shape.halfHeight = cylinder * 0.5f;
+            desc.shapes.PushBack(shape);
+            desc.position = capsule.foot + Float3{0.0f, capsule.radius + cylinder * 0.5f, 0.0f};
+            (void)m_world->CreateBody(desc);
+        }
+
         void BuildBodies()
         {
             scene::Scene& scene = *m_scene;
@@ -856,6 +936,9 @@ export namespace engine::physics
         PhysicsSceneSettings m_settings;
         UniquePtr<PhysicsWorld> m_world;
         Array<ContactEvent> m_events;
+        Array<scene::IStaticColliderSource*> m_pendingCapsuleSources; // not ready at the last ask
+        f32 m_capsuleWait = 0.0f;   // how long they have been waited for (s)
+        bool m_warnedCapsules = false;
         const Array<IContactListener*>* m_listeners = nullptr; // owned by the subsystem
     };
 

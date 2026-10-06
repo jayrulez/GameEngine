@@ -124,6 +124,19 @@ scripts.
 
 Watch it played on a Steam Deck: [PaperKid gameplay video](https://youtu.be/syJlmIirg_o).
 
+**Snowline** is a snowboard time trial with tricks, built the same way and chosen for the engine
+features the other two do not use: generated terrain with splat-painted snow, rock and forest,
+scattered vegetation whose trees are solid, splines for the course line and the medal ghosts, an
+animation graph the rider drives by parameters, decals for its tracks, and jointed slalom flags.
+Three courses opened by medals: Meadow, Forest with its shortcut through the trees, and Ridge with
+a run of kickers, a gap over a crevasse and an avalanche chasing down the last stretch. Spins and
+grabs score on a combo, your best run rides beside you as a ghost, and the rider is modelled,
+rigged and animated by Blender scripts.
+
+| Courses | Ridge, past the gap | A run's results |
+|:---:|:---:|:---:|
+| ![Courses](Documentation/Images/Snowline-Title.png) | ![Ridge](Documentation/Images/Snowline-Ridge.png) | ![Results](Documentation/Images/Snowline-Results.png) |
+
 **NativeSample** is the reference for a game with native C++ code beside its scripts.
 
 ## Repository layout

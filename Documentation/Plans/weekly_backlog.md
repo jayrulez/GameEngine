@@ -16,7 +16,9 @@
   end / cancel on the canvas) and consumes it so the page does not scroll or zoom, which also stops
   the browser turning taps into mouse clicks; the game UI reads only mouse, keys and pads. So on a
   phone no menu can be pressed (Snowline's title cannot pick a course). Route touch into the UI as
-  pointer input (a tap presses, a drag scrolls). Check what Sedulous does first.
+  pointer input (a tap presses, a drag scrolls). Sedulous (asked 2026-10-06): its UI input pump has
+  no touch either; its web shell does not prevent the browser's default, so a tap may arrive as a
+  synthesized mouse click there (unverified), a drag never does. New on both sides.
 - **Touch controls in the sample games**: the input map already binds touch (`TouchButton`, a screen
   region; `TouchStick`, a floating virtual stick), but no game uses it. Each game binds a stick and
   buttons (Snowline: the left half carves, zones on the right for jump, tuck and grab) and draws a

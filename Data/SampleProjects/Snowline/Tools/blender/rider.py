@@ -184,7 +184,10 @@ def build_armature(pose):
         ik = pb["forearm_" + s].constraints.new("IK")
         ik.target, ik.subtarget = rig, "ik_hand_" + s
         ik.pole_target, ik.pole_subtarget = rig, "pole_elbow_" + s
-        ik.pole_angle = math.radians(90)
+        # The arms reach opposite ways along the board, so the pole angle that lays the front
+        # elbow out toward the nose is the opposite one for the back elbow: one angle for both
+        # folded the back arm's elbow in against the ribs, its forearm sticking out to the tail.
+        ik.pole_angle = math.radians(90 if end == FRONT else -90)
         ik.chain_count = 2
     for b in pb:
         b.rotation_mode = "QUATERNION"

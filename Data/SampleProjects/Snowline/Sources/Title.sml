@@ -4,7 +4,7 @@
        (thumbnails.py) with its name and the best medal and time won on it, or what unlocks it.
        A card is one button holding its picture and labels: one rounded body with the picture
        inset in it, rounded to match; its frame lights when it is focused or hovered; a locked card
-       is disabled and dims. -->
+       is disabled and dims. Quit, under the cards, ends the game. -->
   <Flex direction="vertical" justify="center" align="center" padding="32">
 
     <Panel padding="24" style="background: rounded-rect(#10182AE6, radius=16);">
@@ -45,6 +45,8 @@
         </Flex>
 
         <Spacer spacer-height="12"/>
+        <Button id="quit-btn" text="Quit" width="200" height="40" font-size="20" style="background: state-list(normal=rounded-rect(#1C2740, radius=10, border=#5A6E96, border-width=2), hover=rounded-rect(#26345A, radius=10, border=#B8C8E8, border-width=3), pressed=rounded-rect(#304070, radius=10, border=#FFD966, border-width=4), focused=rounded-rect(#1C2740, radius=10, border=#FFD966, border-width=4)); text-color: #FFFFFF;"/>
+        <Spacer spacer-height="8"/>
         <Label text="Arrows or stick to choose, Enter or A to ride. In a run, Escape or Start to pause." font-size="15" style="text-color: #8FA3C8;"/>
       </Flex>
     </Panel>

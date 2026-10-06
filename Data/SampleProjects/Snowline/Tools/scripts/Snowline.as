@@ -131,6 +131,7 @@ class Game
         s.findButton("course-0").onClick(Action(this.onMeadow));
         s.findButton("course-1").onClick(Action(this.onForest));
         s.findButton("course-2").onClick(Action(this.onRidge));
+        s.findButton("quit-btn").onClick(Action(this.onQuit));
         for (int i = 0; i < kCourseCount; ++i)
         {
             bool open = unlocked(i);
@@ -183,6 +184,12 @@ class Game
     private void onMeadow() { startCourse(0); }
     private void onForest() { startCourse(1); }
     private void onRidge() { startCourse(2); }
+
+    private void onQuit()
+    {
+        Audio::playOneShot(kClick, AudioBus::Effects, 0.7f);
+        run::requestExit(0);
+    }
 
     // A course opens with a bronze or better on the one before it; the first is always open.
     private bool unlocked(int i)

@@ -47,8 +47,19 @@ Guid kRidge = Guid("b41720b8-3476-4b34-9a26-3da287aba954"); // Scenes/Ridge
 Guid courseScene(int i) { return i == 2 ? kRidge : (i == 1 ? kForest : kMeadow); }
 string courseName(int i) { return i == 2 ? "Ridge" : (i == 1 ? "Forest" : "Meadow"); }
 
-// Audio/GemChime (sounds.py): the tally's tick, pitched up row by row, and lower as a medal lands.
+// Audio/GemChime (sounds.py): the tally's tick, pitched up row by row.
 Guid kChime = Guid("c47f1131-6df4-49ea-b2c7-6e3b3316a3ce");
+// The rest of the game's sounds (sounds.py; CREDITS.md): the music on the title and in a run, a gate
+// passed and missed, the menus' click and back, and the stings for a medal won or not.
+Guid kMusicTitle = Guid("6b0a7709-5169-4a0e-8077-c78b87a132e6"); // Audio/MusicTitle
+Guid kMusicRun = Guid("0758e8d2-c6cd-47a7-bce6-9728a9501018");   // Audio/MusicRun
+Guid kGatePass = Guid("62695db5-901a-4848-b930-48c4de71333e");   // Audio/GatePass
+Guid kGateMiss = Guid("03bc6d2f-0775-4585-991a-dcd832a73588");   // Audio/GateMiss
+Guid kClick = Guid("266f8061-1743-413e-9fd3-670dc30b07d8");      // Audio/Click
+Guid kBack = Guid("46d6cfc0-8ee3-4b32-aac6-7d0f6e7d47a4");       // Audio/Back
+Guid kMedalSting = Guid("e5519cc0-8c46-42e9-ba6b-32b0c007e1cd"); // Audio/Medal
+Guid kNoMedalSting = Guid("c3718ef9-fc5d-4d57-be4f-20c8251a5c13"); // Audio/NoMedal
+const float kMusicVolume = 0.55f;
 
 const float kMissPenalty = 2.0f;
 const int kGemPoints = 100;       // a gem's worth
@@ -70,6 +81,7 @@ class Game
     private bool m_onEnding = false; // the ending is up
     private bool m_endingDue = false; // this run won a better medal on the last course
     private bool m_paused = false;    // the pause menu is up over the run
+    private int m_music = 0;          // the track playing: 0 none, 1 the title's, 2 a run's
     private bool m_running = true;
     private bool m_started = false; // the rider's first frame has come (the clock runs from it)
     private float m_time = 0.0f;    // seconds on the clock this run
@@ -110,6 +122,7 @@ class Game
     private void showTitle()
     {
         m_onTitle = true;
+        music(1);
         run::setTimeScale(0.0f); // the scene behind the title holds still
         ui::clear();
         Screen@ s = ui::push(kTitleDoc);
@@ -129,6 +142,7 @@ class Game
     private void pause()
     {
         m_paused = true;
+        Audio::playOneShot(kClick, AudioBus::Effects, 0.7f);
         run::setTimeScale(0.0f);
         Screen@ s = ui::push(kPauseDoc);
         s.findButton("resume-btn").onClick(Action(this.onResume));
@@ -142,6 +156,7 @@ class Game
         {
             return;
         }
+        Audio::playOneShot(kBack, AudioBus::Effects, 0.7f);
         m_paused = false;
         ui::pop(); // the pause menu
         run::setTimeScale(1.0f);
@@ -149,12 +164,14 @@ class Game
 
     private void onRestartRun()
     {
+        Audio::playOneShot(kClick, AudioBus::Effects, 0.7f);
         onResume();
         restart();
     }
 
     private void onCourses()
     {
+        Audio::playOneShot(kClick, AudioBus::Effects, 0.7f);
         m_paused = false;
         showTitle();
     }
@@ -188,6 +205,8 @@ class Game
         {
             return;
         }
+        Audio::playOneShot(kClick, AudioBus::Effects, 0.7f);
+        music(2);
         m_onTitle = false;
         m_started = false;
         m_gates = 0;
@@ -275,12 +294,14 @@ class Game
 
     void onGatePassed(int index)
     {
+        Audio::playOneShot(kGatePass, AudioBus::Effects, 0.5f);
         m_passed += 1;
         showGates();
     }
 
     void onGateMissed(int index)
     {
+        Audio::playOneShot(kGateMiss, AudioBus::Effects, 0.6f);
         endCombo();
         m_missed += 1;
         m_penalty += kMissPenalty;
@@ -539,6 +560,8 @@ class Game
     private void showEnding()
     {
         m_onEnding = true;
+        Audio::playOneShot(kMedalSting, AudioBus::Music, 0.9f);
+        music(1);
         run::setTimeScale(0.0f); // the course behind it holds still
         ui::clear();
         ui::push(kEndingDoc);
@@ -572,6 +595,18 @@ class Game
         ui::findLabel("end-medals").setText("" + golds + " gold   " + silvers + " silver   " + bronzes + " bronze");
         ui::findLabel("end-closing").setText(golds == kCourseCount ? "Gold on every course. Thanks for riding."
                                                                   : "Thanks for riding. There is gold still out there.");
+    }
+
+    // The music, 1 the title's or 2 a run's: switched only when it changes, so the title's keeps
+    // playing across the menus. (By number: a script cannot compare two Guids.)
+    private void music(int track)
+    {
+        if (m_music == track)
+        {
+            return;
+        }
+        m_music = track;
+        Audio::playMusic(track == 1 ? kMusicTitle : kMusicRun, 1.0f, kMusicVolume);
     }
 
     private string medalTitle(int rank)
@@ -634,6 +669,10 @@ class Game
             if (medal == "")
             {
                 ui::find("medal-none").setVisible(true);
+                if (!quiet)
+                {
+                    Audio::playOneShot(kNoMedalSting, AudioBus::Music, 0.8f);
+                }
             }
             else
             {
@@ -643,7 +682,7 @@ class Game
                 {
                     disc.setScale(1.6f);
                     disc.scaleTo(1.0f, 0.3f, Ease::Out);
-                    Audio::playOneShot(kChime, AudioBus::Effects, 0.6f, 0.6f);
+                    Audio::playOneShot(kMedalSting, AudioBus::Music, 0.9f);
                 }
             }
             return;

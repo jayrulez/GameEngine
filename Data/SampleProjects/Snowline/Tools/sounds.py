@@ -1,11 +1,21 @@
 #!/usr/bin/env python3
-"""sounds.py: Snowline's generated sounds (no third-party audio), imported through the editor's MCP.
+"""sounds.py [--kenney <dir>] [--music <dir>]: Snowline's sounds, imported through the editor's MCP.
+
+Generated here (no third-party content):
 
 - Audio/Wind: four seconds of wind, looping seamlessly (its last half second crossfaded into its
   first): noise through two low-pass filters (a low roar and a thinner hiss), swelling in slow
   gusts. Board.as plays it on the rider's Wind source, louder and higher as the rider goes faster.
 - Audio/Rumble: four seconds of an avalanche's roar, looping the same way: noise through a very low
   filter, thudding unevenly. Avalanche.as plays it on its Rumble source, louder as it closes in.
+
+Taken from Kenney's packs (CC0; `--kenney` is the folder holding the unzipped packs), each imported
+under the name the game knows it by (KENNEY): the board's pop, landing, crash and a hit on a tree;
+a gate passed and missed; the menus' click and back; the medal and no-medal stings.
+
+The music (`--music` holds the downloads; CREDITS.md says where each is from): Audio/MusicTitle,
+"Slippery Slope" by RaisinRiot (CC-BY 3.0), converted from its WAV to Ogg Vorbis; Audio/MusicRun,
+"Black Diamond" by Joth (CC0), as published.
 """
 import math, os, random, struct, sys, wave
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -83,9 +93,45 @@ def chime(path, notes=((1318.5, 0.0), (1975.5, 0.07)), seconds=0.7):
         w.writeframes(b"".join(struct.pack("<h", int(v / peak * 0.8 * 32767)) for v in out))
 
 
+# name: (pack, file) under the Kenney folder.
+KENNEY = {
+    "Pop": ("impact-sounds", "Audio/footstep_snow_000.ogg"),
+    "Land": ("impact-sounds", "Audio/footstep_snow_003.ogg"),
+    "Crash": ("impact-sounds", "Audio/impactSoft_heavy_002.ogg"),
+    "TreeHit": ("impact-sounds", "Audio/impactWood_heavy_001.ogg"),
+    "GatePass": ("interface-sounds", "Audio/select_002.ogg"),
+    "GateMiss": ("interface-sounds", "Audio/error_004.ogg"),
+    "Click": ("interface-sounds", "Audio/click_002.ogg"),
+    "Back": ("interface-sounds", "Audio/back_002.ogg"),
+    "Medal": ("music-jingles", "Audio/Pizzicato jingles/jingles_PIZZI02.ogg"),
+    "NoMedal": ("music-jingles", "Audio/Steel jingles/jingles_STEEL06.ogg"),
+}
+
+
+def third_party(out, kenney, music):
+    import shutil, subprocess
+    for name, (pack, rel) in KENNEY.items():
+        path = os.path.join(out, name + ".ogg")
+        shutil.copyfile(os.path.join(kenney, pack, rel), path)
+        print(name, mcp("asset_import", {"source": path, "group": "Audio", "importer": "Audio"})["guid"])
+    title = os.path.join(out, "MusicTitle.ogg")
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", os.path.join(music, "SlipperySlope.wav"), "-c:a", "libvorbis",
+                    "-q:a", "5", title], check=True)
+    print("MusicTitle", mcp("asset_import", {"source": title, "group": "Audio", "importer": "Audio"})["guid"])
+    run = os.path.join(out, "MusicRun.mp3")
+    shutil.copyfile(os.path.join(music, "BlackDiamond.mp3"), run)
+    print("MusicRun", mcp("asset_import", {"source": run, "group": "Audio", "importer": "Audio"})["guid"])
+
+
 def main():
     out = os.path.join(HERE, "generated", "Audio")
     os.makedirs(out, exist_ok=True)
+    args = sys.argv[1:]
+    kenney = args[args.index("--kenney") + 1] if "--kenney" in args else None
+    music = args[args.index("--music") + 1] if "--music" in args else None
+    if kenney and music:
+        third_party(out, kenney, music)
+        return
     path = os.path.join(out, "Wind.wav")
     wind(path)
     print("Wind", mcp("asset_import", {"source": path, "group": "Audio", "importer": "Audio"})["guid"])

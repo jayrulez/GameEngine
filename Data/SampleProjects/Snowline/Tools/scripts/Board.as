@@ -30,6 +30,13 @@
 // With `autopilot`, the board steers itself down the course line (playtests, the measurements).
 const float kStep = 1.0f / 60.0f; // the longest step the board integrates at once (s)
 
+// The board's sounds (sounds.py, Kenney's Impact Sounds): the pop of a jump or a kicker's lip, a
+// clean landing, a crash into the snow and a hit on a tree or rock.
+Guid kPopSound = Guid("5abbb76b-6d21-4ca0-8d9f-988b1c4c6369");     // Audio/Pop
+Guid kLandSound = Guid("73acb3f2-1241-47c2-9101-5680a9f40548");    // Audio/Land
+Guid kCrashSound = Guid("d03eb225-103d-4ba3-bd28-e0fde147e313");   // Audio/Crash
+Guid kTreeHitSound = Guid("a3179659-c479-447f-af6b-74ea09672ca8"); // Audio/TreeHit
+
 class Board
 {
     private Entity@ self;
@@ -172,6 +179,11 @@ class Board
                        Math::Cos(heading) * Math::Cos(up) * m_launchSpeed);
             m_launchSpeed = 0.0f;
             grounded = false;
+            Audio::playOneShot(kPopSound, AudioBus::Effects, 0.8f);
+        }
+        else if (jump && grounded && m_crash <= 0.0f)
+        {
+            Audio::playOneShot(kPopSound, AudioBus::Effects, 0.6f, 1.1f);
         }
         if (!grounded)
         {
@@ -199,6 +211,10 @@ class Board
         if (grounded && m_inAir)
         {
             v = land(v);
+        }
+        if (struck)
+        {
+            Audio::playOneShot(kTreeHitSound, AudioBus::Effects, 0.9f);
         }
         if (struck || (m_crashDue && m_crash <= 0.0f))
         {
@@ -513,6 +529,7 @@ class Board
         self.scene.events.emit("TrickLanded", clean ? 1 : 0);
         if (clean)
         {
+            Audio::playOneShot(kLandSound, AudioBus::Effects, 0.9f);
             float k = (flat + landBurst) / flat;
             return Float3(v.x * k, v.y, v.z * k);
         }
@@ -522,6 +539,7 @@ class Board
     // Down: most of the speed gone, the control for crashTime.
     private Float3 crash(Float3 v)
     {
+        Audio::playOneShot(kCrashSound, AudioBus::Effects, 1.0f);
         m_crash = crashTime;
         self.scene.events.emit("RiderCrashed", 1);
         return Float3(v.x * crashKeep, v.y, v.z * crashKeep);

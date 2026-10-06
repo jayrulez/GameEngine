@@ -19,7 +19,8 @@ copies live in the project's `Sources/`.
      from the course's table of rules (its bends, its groomed width, its forest, a shortcut, a gap).
    - `importall.py <course>`: imports those and the models, and makes the course's terrain asset.
 4. **Shared assets**: `effects.py` (the track marks), `particles.py` (spray, powder, the gem's
-   sparkle, the avalanche), `sounds.py` (wind, the chime, the avalanche's rumble), `ghosts.py`
+   sparkle, the avalanche), `sounds.py` (wind, the chime, the avalanche's rumble; with `--kenney
+   <dir> --music <dir>`, the Kenney sound effects and the two music tracks), `ghosts.py`
    (the ghosts' materials), `gates.py` (the gate and finish prefabs), `gems.py` (the sparkle
    prefab) and `graph.py` (the rider's animation graph).
 5. **Scripts and UI**: `importscripts.py` imports `scripts/*.as` and `ui/*.sml`.

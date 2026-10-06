@@ -283,7 +283,7 @@ namespace editor
                      [self](const Guid& g) { self->m_asset->baseHeightId = g; });
 
         // The paint layers are a section list: the header's add icon, and each layer a section
-        // with its maps, its tiling and its remove icon (removal remaps the weight raster). A
+        // inside Paint layers with its maps, its tiling and its remove icon (removal remaps the weight raster). A
         // layer's index is its weight channel, so the order is not the user's to change.
         auto layers = MakeRef<ui::toolkit::PropertyGrid>(Allocator());
         {
@@ -303,6 +303,7 @@ namespace editor
             const u32 idx = i;
             const String section = LayerSection(i);
             const StringView cat = section.AsView();
+            layers->SetCategoryParent(cat, u8"Paint layers");
             layers->SetCategoryHeaderActions(
                 cat, app::ContainerListEditor::ElementActions(
                          Allocator(), i, layerCount, core::Function<void(usize, bool)>{},

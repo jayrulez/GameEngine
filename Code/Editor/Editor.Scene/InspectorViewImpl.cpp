@@ -1922,7 +1922,7 @@ namespace editor
 
         // A section list: the component's section holds the list's header (the count and the add
         // icon, which also takes a dropped script class), and each behavior is a section of its
-        // own below it, its move and remove icons in that section's header.
+        // own nested inside it, its move and remove icons in that section's header.
         SceneInspectorView* self = this;
         auto list =
             MakeRef<ContainerListEditor>(MemoryAllocator(), StringView(u8"Behaviors"), category);
@@ -1982,7 +1982,7 @@ namespace editor
 
         for (usize i = 0; i < component->behaviors.Size(); ++i)
         {
-            BuildScriptBehaviorRows(id, i, component->behaviors.Size());
+            BuildScriptBehaviorRows(id, category, i, component->behaviors.Size());
         }
     }
 
@@ -1998,7 +1998,8 @@ namespace editor
         return (manager != nullptr && e.IsAssigned()) ? manager->Get(e) : nullptr;
     }
 
-    void SceneInspectorView::BuildScriptBehaviorRows(const Guid& id, usize index, usize count)
+    void SceneInspectorView::BuildScriptBehaviorRows(const Guid& id, StringView componentCategory,
+                                                     usize index, usize count)
     {
         const scene::EntityHandle e = m_edit->Resolve(id);
         auto* manager = m_edit->Scene().GetSystem<engine::script::ScriptComponentManager>();
@@ -2014,6 +2015,7 @@ namespace editor
         // The behavior's section, its move and remove icons in the section header.
         const String section = ScriptBehaviorSection(index, AssetNameFor(behavior.script.id));
         const StringView category = section.AsView();
+        m_grid->SetCategoryParent(category, componentCategory); // inside the component's section
         m_grid->SetCategoryHeaderActions(
             category,
             ContainerListEditor::ElementActions(

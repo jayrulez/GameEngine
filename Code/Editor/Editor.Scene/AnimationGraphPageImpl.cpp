@@ -1484,7 +1484,7 @@ namespace editor
             }
 
             // The entries are a section list: the header's add icon, and each entry a section
-            // with its remove icon (an entry's threshold or position places it, so its order
+            // inside the state's kind with its remove icon (an entry's threshold or position places it, so its order
             // means nothing).
             {
                 const i32 li = layerIndex, si = stateIndex;
@@ -1518,6 +1518,7 @@ namespace editor
             for (usize e = 0; e < entryCount; ++e)
             {
                 const String entryCat = Format(u8"Entry {}", e + 1);
+                g.SetCategoryParent(entryCat.AsView(), kindCat.AsView());
                 {
                     const i32 li = layerIndex, si = stateIndex;
                     g.SetCategoryHeaderActions(
@@ -1653,7 +1654,8 @@ namespace editor
         RowInt(g, u8"Priority", &transition.priority, cat, page, -100, 100);
 
         // The conditions are a section list, all of them required, so their order means
-        // nothing: the header's add icon, and each condition a section with its remove icon.
+        // nothing: the header's add icon, and each condition a section inside the transition's
+        // with its remove icon.
         const i32 li = layerIndex, ti = transitionIndex;
         auto conditions =
             MakeRef<app::ContainerListEditor>(Allocator(), StringView(u8"Conditions"), cat);
@@ -1686,6 +1688,7 @@ namespace editor
         {
             animation::GraphConditionData& condition = transition.conditions[c];
             const String condCat = Format(u8"Condition {}", c + 1);
+            g.SetCategoryParent(condCat.AsView(), cat);
             g.SetCategoryHeaderActions(
                 condCat.AsView(),
                 app::ContainerListEditor::ElementActions(

@@ -546,8 +546,8 @@ namespace editor
             source.eventTimes.PushBack(0.0f);
         }
         // The events are a section list: the header's add icon places one at the playhead, and
-        // each event is a section of its own with its remove icon (their order means nothing:
-        // an event's time places it).
+        // each event is a section of its own inside Events with its remove icon (their order means
+        // nothing: an event's time places it).
         auto events = MakeRef<app::ContainerListEditor>(Allocator(), StringView(u8"Events"),
                                                         StringView(u8"Events"));
         events->ElementsAsSections = true;
@@ -571,6 +571,7 @@ namespace editor
         for (usize e = 0; e < eventCount; ++e)
         {
             const String cat = EventSection(e);
+            g.SetCategoryParent(cat.AsView(), u8"Events");
             g.SetCategoryHeaderActions(
                 cat.AsView(),
                 app::ContainerListEditor::ElementActions(

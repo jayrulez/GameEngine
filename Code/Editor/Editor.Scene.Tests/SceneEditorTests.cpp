@@ -940,6 +940,10 @@ TEST_CASE("inspector: behaviours are sections whose rows follow a move")
     REQUIRE(list() != nullptr);
     CHECK(list()->ElementsAsSections);
     CHECK(list()->slotNames.Size() == 2u);
+    // Each behaviour's section sits inside the component's.
+    const String firstSection =
+        editor::SceneInspectorView::ScriptBehaviorSection(0, list()->slotNames[0].AsView());
+    CHECK(inspector.Grid()->CategoryParent(firstSection.AsView()) == list()->Category());
 
     // The add icon: one behaviour, one undo step.
     const usize before = commands.Size();

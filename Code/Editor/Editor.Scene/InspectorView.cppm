@@ -566,8 +566,10 @@ void ApplyPropertyPresentation(ui::toolkit::PropertyGrid& grid,
 
         void BuildScriptBehaviors(const Guid& id, StringView category);
 
-        // A behavior's section: its rows, with its move and remove icons in the header.
-        void BuildScriptBehaviorRows(const Guid& id, usize index, usize count);
+        // A behavior's section, nested in the component's: its rows, with its move and remove
+        // icons in the header.
+        void BuildScriptBehaviorRows(const Guid& id, StringView componentCategory, usize index,
+                                     usize count);
         // The live ScriptComponent of `id`, or null (re-resolved: component pools move).
         [[nodiscard]] engine::script::ScriptComponent* LiveScript(const Guid& id);
 

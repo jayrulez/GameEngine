@@ -63,6 +63,17 @@ export namespace foundation::render
                    u32 h, f32 blendFactor, f32 varianceGamma, f32 motionScale, f32 nearPlane,
                    f32 farPlane);
 
+        /// Forget history slot `slot`'s accumulated state (the frame handed the slot to another
+        /// view, RenderFrame::HistorySlotFor): its next frame starts fresh instead of blending in
+        /// what the slot's previous view saw.
+        void InvalidateHistory(u32 slot) noexcept
+        {
+            if (slot < kMaxViews)
+            {
+                m_views[slot].valid = false;
+            }
+        }
+
     private:
         struct TaaPush
         {
@@ -70,7 +81,7 @@ export namespace foundation::render
             f32 blendFactor = 0.97f;
             f32 historyValid = 0.0f;
             f32 varianceGamma = 1.25f;
-            f32 motionScale = 32.0f;
+            f32 motionScale = 1.0f / 32.0f; // per pixel a frame (taa.ps.hlsl)
             f32 nearPlane = 0.1f;
             f32 farPlane = 1000.0f;
         };

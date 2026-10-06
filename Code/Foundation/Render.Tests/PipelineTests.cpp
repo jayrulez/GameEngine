@@ -1376,3 +1376,58 @@ TEST_CASE("render: a camera pass's context carries the camera's position, matrix
     CHECK(ctx.timeSeconds == 10.0f);
     CHECK(ctx.prevTimeSeconds == 9.5f);
 }
+
+// A view's between-frame state follows its history key, not its place in the frame's list:
+// PaperKid's minimap, a render texture drawn on alternate frames before the main view, moved the
+// main view between places 0 and 1 every frame, so it read the minimap's camera and TAA history.
+TEST_CASE("render: a view keeps its history slot by its key, wherever it falls in the frame")
+{
+    RenderHarness h;
+    if (!h.Init(64, 64))
+    {
+        MESSAGE("DXC/Null unavailable; skipping");
+        return;
+    }
+    shaders::ShaderSystem shaderSystem(*h.compiler, h.device);
+    WireEngineShaders(shaderSystem);
+    RendererRegistry registry;
+    RenderFrame frame(DefaultAllocator(), h.device, registry, /*framesInFlight*/ 2);
+
+    bool fresh = false;
+    frame.Begin(*h.encoder, 0);
+    const u32 main = frame.HistorySlotFor(1001, 0, fresh); // the main view, alone
+    CHECK(fresh);
+    frame.End();
+
+    frame.Begin(*h.encoder, 1);
+    const u32 side = frame.HistorySlotFor(2002, 0, fresh); // a render texture, drawn first
+    CHECK(fresh);
+    CHECK(side != main);
+    CHECK(frame.HistorySlotFor(1001, 1, fresh) == main); // the main view, now second: same slot
+    CHECK_FALSE(fresh);
+    frame.End();
+
+    frame.Begin(*h.encoder, 0);
+    CHECK(frame.HistorySlotFor(1001, 0, fresh) == main); // first again, still the same slot
+    CHECK_FALSE(fresh);
+    frame.End();
+
+    // Every slot taken: a new key takes the one seen longest ago (the side view's), never one in
+    // use this frame, and is told it is fresh.
+    for (u32 f = 0; f < RenderFrame::kHistorySlots; ++f)
+    {
+        frame.Begin(*h.encoder, f % 2);
+        (void)frame.HistorySlotFor(1001, 0, fresh);
+        for (u64 k = 0; k < RenderFrame::kHistorySlots - 2; ++k)
+        {
+            (void)frame.HistorySlotFor(5000 + k, static_cast<u32>(k + 1), fresh);
+        }
+        frame.End();
+    }
+    frame.Begin(*h.encoder, 0);
+    (void)frame.HistorySlotFor(1001, 0, fresh);
+    const u32 newcomer = frame.HistorySlotFor(9009, 1, fresh);
+    CHECK(fresh);
+    CHECK(newcomer == side);
+    frame.End();
+}

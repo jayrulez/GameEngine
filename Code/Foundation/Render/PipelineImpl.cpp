@@ -581,6 +581,46 @@ namespace foundation::render
         return Span<const GpuLocalShadow>{m_localShadows.Data(), m_localShadows.Size()};
     }
 
+    u32 RenderFrame::HistorySlotFor(u64 historyKey, u32 viewIndex, bool& fresh) noexcept
+    {
+        fresh = false;
+        // An unkeyed view is known by its place in the list, as before keys (tests, samples): a key
+        // of its own that no real key (a hash) is expected to meet.
+        const u64 key = (historyKey != 0) ? historyKey : (0xFFFF'FFFF'0000'0000ull | viewIndex);
+        for (u32 s = 0; s < kHistorySlots; ++s)
+        {
+            if (m_historySlots[s].used && m_historySlots[s].key == key)
+            {
+                m_historySlots[s].lastFrame = m_noiseFrame;
+                return s;
+            }
+        }
+        // New to the slots: a free one, else the one seen longest ago (never one taken this frame).
+        u32 pick = kHistorySlots;
+        u32 oldestAge = 0;
+        for (u32 s = 0; s < kHistorySlots; ++s)
+        {
+            if (!m_historySlots[s].used)
+            {
+                pick = s;
+                break;
+            }
+            const u32 age = m_noiseFrame - m_historySlots[s].lastFrame;
+            if (age > 0 && age >= oldestAge)
+            {
+                oldestAge = age;
+                pick = s;
+            }
+        }
+        if (pick == kHistorySlots)
+        {
+            pick = viewIndex % kHistorySlots; // more views this frame than slots: share, as before
+        }
+        m_historySlots[pick] = HistorySlot{key, m_noiseFrame, true};
+        fresh = true;
+        return pick;
+    }
+
     void RenderFrame::Begin(rhi::CommandEncoder& encoder, u32 frameIndex)
     {
         m_encoder = &encoder;
@@ -1757,6 +1797,30 @@ namespace foundation::render
                 // Cluster build (compute) declared before the forward pass so the graph orders the
                 // light-binning write ahead of the shading read. viewIndex isolates per-view buffers.
                 const u32 viewIndex = static_cast<u32>(i);
+                // The view's between-frame state lives in its history slot, found by its key
+                // (not its place in the list, which a render texture drawn only on some frames
+                // shifts). A slot new to this view starts clean.
+                bool historyFresh = false;
+                const u32 historySlot = HistorySlotFor(v->Settings().historyKey, viewIndex, historyFresh);
+                if (historyFresh)
+                {
+                    if (m_taa != nullptr)
+                    {
+                        m_taa->InvalidateHistory(historySlot);
+                    }
+                    if (m_ssr != nullptr)
+                    {
+                        m_ssr->InvalidateHistory(historySlot);
+                    }
+                    if (m_ssgi != nullptr)
+                    {
+                        m_ssgi->InvalidateHistory(historySlot);
+                    }
+                    if (m_exposurePass != nullptr)
+                    {
+                        m_exposurePass->InvalidateHistory(historySlot);
+                    }
+                }
                 ClusterBinding cluster;
                 if (m_clusters != nullptr)
                 {
@@ -1871,21 +1935,22 @@ namespace foundation::render
                 // Motion vectors: this view's previous-frame (jittered) view-proj + jitter (no motion on first
                 // sight). Record this frame's for next frame.
                 const Float4x4 curViewProj = v->Camera().ViewProjection(); // jittered when TAA on
-                const Float4x4 prevViewProj =
-                    (viewIndex < m_prevViewProj.Size()) ? m_prevViewProj[viewIndex] : curViewProj;
-                if (m_curViewProj.Size() <= viewIndex)
+                const Float4x4 prevViewProj = (!historyFresh && historySlot < m_prevViewProj.Size())
+                                                  ? m_prevViewProj[historySlot]
+                                                  : curViewProj;
+                if (m_curViewProj.Size() <= historySlot)
                 {
-                    m_curViewProj.Resize(viewIndex + 1u, curViewProj);
+                    m_curViewProj.Resize(historySlot + 1u, curViewProj);
                 }
-                m_curViewProj[viewIndex] = curViewProj;
-                const Float2 prevJitter = (viewIndex < m_prevJitter.Size())
-                                              ? m_prevJitter[viewIndex]
-                                              : Float2{0.0f, 0.0f};
-                if (m_curJitter.Size() <= viewIndex)
+                m_curViewProj[historySlot] = curViewProj;
+                const Float2 prevJitter = (!historyFresh && historySlot < m_prevJitter.Size())
+                                              ? m_prevJitter[historySlot]
+                                              : jitter;
+                if (m_curJitter.Size() <= historySlot)
                 {
-                    m_curJitter.Resize(viewIndex + 1u, jitter);
+                    m_curJitter.Resize(historySlot + 1u, jitter);
                 }
-                m_curJitter[viewIndex] = jitter;
+                m_curJitter[historySlot] = jitter;
 
                 // Depth prepass: opaque-only, clears + writes the camera depth so the forward pass shades
                 // each opaque pixel once (early-Z via LessEqual). Declared before the forward, which Loads it.
@@ -2033,7 +2098,7 @@ namespace foundation::render
                             m_graph, sceneHdr, postDepth, postNormal, postVelocity, postAlbedo, sky,
                             v->Width(), v->Height(), v->ViewportX(), v->ViewportY(),
                             v->ViewportWidth(), v->ViewportHeight(), Inverse(v->Camera().projection),
-                            v->Camera().projection, ssgiParams, viewIndex, m_noiseFrame);
+                            v->Camera().projection, ssgiParams, historySlot, m_noiseFrame);
                     }
                     // Screen-space reflections: reflect the lit HDR (sky + opaque + decals) into itself, AFTER
                     // decals and BEFORE AO/TAA (pre-TAA so the resolve stabilizes the march). Reads the roughness
@@ -2047,7 +2112,7 @@ namespace foundation::render
                             m_graph, sceneHdr, postDepth, postNormal, postMaterial, postVelocity,
                             v->Width(), v->Height(), v->ViewportX(), v->ViewportY(), v->ViewportWidth(),
                             v->ViewportHeight(), Inverse(v->Camera().projection),
-                            v->Camera().projection, ssrParams, viewIndex, m_frameIndex);
+                            v->Camera().projection, ssrParams, historySlot, m_frameIndex);
                     }
                     // AO (GTAO or SSAO) from the opaque depth+normal G-buffer, computed BEFORE the TAA resolve
                     // and multiplied into the HDR pre-TAA, so TAA stabilizes it (applying AO post-TAA wobbles,
@@ -2082,7 +2147,7 @@ namespace foundation::render
                     {
                         const f32 taaFar = (v->Camera().farZ > 0.0f) ? v->Camera().farZ : 1000.0f;
                         sceneColor = m_taa->DeclareTaa(
-                            m_graph, litHdr, postVelocity, postDepth, viewIndex, v->Width(),
+                            m_graph, litHdr, postVelocity, postDepth, historySlot, v->Width(),
                             v->Height(), post.taaBlend, post.taaGamma, m_taaMotionScale, /*near*/ 0.1f,
                             taaFar);
                     }
@@ -2132,7 +2197,7 @@ namespace foundation::render
                     if (post.autoExposure && m_exposurePass != nullptr)
                     {
                         const ExposurePass::Result adapted = m_exposurePass->DeclareExposure(
-                            m_graph, sceneColor, viewIndex, m_frameIndex, uvScale, uvOffset,
+                            m_graph, sceneColor, historySlot, m_frameIndex, uvScale, uvOffset,
                             m_deltaSeconds, post.autoExposureSpeed,
                             v->Scene() != nullptr ? v->Scene()->SceneSerial() : 0);
                         autoExposure.enabled = adapted.view != nullptr;

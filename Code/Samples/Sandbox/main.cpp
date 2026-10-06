@@ -1050,7 +1050,7 @@ namespace
                         render->SetTaaGamma(g);
                     }
                     float m = render->TaaMotionScale();
-                    if (ImGui::SliderFloat("TAA Motion", &m, 0.0f, 128.0f))
+                    if (ImGui::SliderFloat("TAA Motion (per px)", &m, 0.0f, 0.25f))
                     {
                         render->SetTaaMotionScale(m);
                     }

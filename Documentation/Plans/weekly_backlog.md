@@ -30,16 +30,19 @@
   turn the phone where nothing else works. Likely the larger item of the three: the shell's canvas
   sizing, the player's fit, and every pointer and touch coordinate are involved.
 
+## Queued 2026-10-06 (user, PaperKid on TAA)
+
+- **A flash during play in PaperKid's player** (user 2026-10-06): with TAA on and its jitter fixed
+  (the per-view history keys, the pixel-based motion drop), the user saw flashing while riding a
+  block in the desktop player. Not reproduced yet: 60 consecutive player frames on block 1's title
+  and 3 s of play in the editor show only smooth drift (auto exposure adapting as cars pass, up to
+  3 to 4%), and a 13-level drop that was the Route failed panel. Ask what flashes (the whole screen,
+  the minimap, part of the scene) and when (the level start with its camera shake, a car, a throw),
+  then capture it with `--screenshot-count` in the player. First suspect: auto exposure (it now snaps
+  on a scene change, and the minimap no longer shares the main view's history).
+
 ## Queued 2026-10-02 (user, PaperKid)
 
-- **TAA still looks jittery** (user 2026-10-03, "for later"): with the stale-history bug fixed the
-  player matches the editor, but the resolve itself leaves visible jitter on edges. Look at the
-  usual suspects in `TaaPass` and `taa` shader: the Halton sequence length (8) and jitter scale
-  (computed from the target's size, not the viewport's: `PipelineImpl.cpp`, `HaltonJitter(...,
-  v->Width(), v->Height())`), the YCoCg variance clip's gamma (1.25 in PaperKid) and blend factor
-  (0.97), the depth-disocclusion reject, and whether history sampling (Catmull-Rom) or a
-  sharpening pass is wanted. Measure frame-to-frame edge change on a static scene before and
-  after each change (the method used for the stale-history bug).
 - **`run::loadScene` misses scenes in a project-folder player**: run on a project folder,
   the player keeps authored scenes in its source database and hands DefaultApplication only
   the cooked one (`PlayerApplication.h`, `m_sceneDb` vs `SetContentDatabase(m_contentDb)`),

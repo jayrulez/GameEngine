@@ -394,7 +394,7 @@ export namespace engine::render
         bool m_taaEnabled = false;     // TAA off by default (UI toggle)
         f32 m_taaBlend = 0.97f;        // history weight (stability)
         f32 m_taaGamma = 1.25f;        // variance-clip box half-width
-        f32 m_taaMotionScale = 32.0f;  // history drop-off with motion
+        f32 m_taaMotionScale = 1.0f / 32.0f; // history drop-off per pixel of motion a frame
         f32 m_bloomIntensity = 0.05f;  // 0 = bloom off
         f32 m_bloomThreshold = 1.0f;
         f32 m_bloomKnee = 0.6f;

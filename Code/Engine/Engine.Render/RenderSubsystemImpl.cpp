@@ -502,6 +502,20 @@ namespace engine::render
             LimitPostForOrthographic(settings.post);
         }
         settings.viewportKey = viewportKey; // pick requests bind to it
+        // Who this view is from frame to frame, for the state it carries between frames (motion
+        // vectors' previous camera, TAA/SSR/SSGI/exposure history): its viewport's key (an editor
+        // page, the Game tab), or a render texture's own view (target cameras), with the scene and
+        // the viewport's corner (split screen). Not the window's target: its view changes with
+        // the swapchain image.
+        {
+            u64 h = kFnv1a64OffsetBasis;
+            const auto mix = [&h](u64 v) { h = (h ^ v) * kFnv1a64Prime; };
+            mix(static_cast<u64>(reinterpret_cast<usize>(viewportKey)));
+            mix(m_renderingTargets ? static_cast<u64>(reinterpret_cast<usize>(target)) : 0u);
+            mix(scene.Serial());
+            mix(static_cast<u64>(static_cast<u32>(viewport.x)) << 32 | static_cast<u32>(viewport.y));
+            settings.historyKey = (h != 0) ? h : 1u;
+        }
         settings.sceneOverlays = !m_renderingTargets;
         // Finalize per-view motion-vector need AFTER any override: TAA OR an SSR temporal pass.
         // SSR's `temporal` stays frame-global, so the OR lands here, not in ResolveScenePost.

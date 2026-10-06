@@ -58,6 +58,12 @@ export namespace foundation::render
         // The opaque per-viewport key the RenderScene call carried (null = unkeyed). Pick
         // requests bind to it: only the view rendered with a matching key answers them.
         const void* viewportKey = nullptr;
+        // Which view this is from frame to frame (0 = by its place in the frame's list). The state a
+        // view carries between frames (its previous camera for motion vectors, the TAA, SSR, SSGI
+        // and exposure histories) follows this key, not the view's position: a render texture drawn
+        // on alternate frames before the main view shifted the main view's position every other
+        // frame, so it read the other view's history (PaperKid's minimap: TAA jitter in the player).
+        u64 historyKey = 0;
         // This view may frustum-cull its draw list (the frame's global switch still gates it).
         // A per-view override (ViewPostOverride::disableCulling) clears it for an A/B.
         bool frustumCull = true;

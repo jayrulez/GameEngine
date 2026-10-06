@@ -195,6 +195,17 @@ export namespace foundation::render
             return m_views[viewIndex % kMaxViews].snapped;
         }
 
+        /// Forget history slot `slot`'s accumulated state (the frame handed the slot to another
+        /// view, RenderFrame::HistorySlotFor): its next frame starts fresh instead of blending in
+        /// what the slot's previous view saw.
+        void InvalidateHistory(u32 slot) noexcept
+        {
+            if (slot < kMaxViews)
+            {
+                m_views[slot].valid = false;
+            }
+        }
+
     private:
         struct ViewState
         {

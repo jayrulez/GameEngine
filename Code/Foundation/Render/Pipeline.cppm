@@ -643,6 +643,14 @@ export namespace foundation::render
         // AO/TAA (so TAA stabilizes the march). Set once per frame before End.
         void SetSsr(SsrPass* pass) noexcept { m_ssr = pass; }
         void SetSsgi(SsgiPass* pass) noexcept { m_ssgi = pass; }
+
+        // The history slot a view keeps its between-frame state in (previous camera + jitter, the
+        // TAA / SSR / SSGI / exposure histories), from its ViewSettings::historyKey (0 = the
+        // view's place in this frame's list, `viewIndex`). The same key gets the same slot every
+        // frame, wherever the view falls in the list; a key new to the frame takes a free slot or
+        // the one seen longest ago, and `fresh` says so (its state is the last owner's: reset it).
+        static constexpr u32 kHistorySlots = 8; // the passes' per-view history arrays
+        [[nodiscard]] u32 HistorySlotFor(u64 historyKey, u32 viewIndex, bool& fresh) noexcept;
         // Scene-pass MSAA first-sample resolve (borrowed pass); null = no MSAA support. Used only when
         // a view's post.msaaSamples > 1, to resolve the MSAA depth+aux to 1x for the post consumers.
         void SetMsaaResolve(MsaaResolvePass* pass) noexcept { m_msaaResolve = pass; }
@@ -674,7 +682,7 @@ export namespace foundation::render
         void SetBloom(f32 intensity, f32 threshold, f32 knee) noexcept;
         // Temporal AA: jitters the projection + resolves against per-view history (off = no jitter, no resolve).
         // blend = max history weight (stability), gamma = variance-clip box half-width, motionScale = how fast
-        // history drops with motion.
+        // history drops with motion, per pixel a frame (it halves at 1 / motionScale pixels; 0 = never).
         void SetTaa(bool on, f32 blend, f32 gamma, f32 motionScale) noexcept;
         // Ambient occlusion: mode (Off/GTAO/SSAO) + knobs. AO is applied to the HDR before TAA (strength 0
         // or Off = no AO). debugMode != 0 forces the AO on and shows the debug channel straight to screen.
@@ -809,7 +817,7 @@ export namespace foundation::render
         bool m_taaEnabled = false;
         f32 m_taaBlend = 0.97f;
         f32 m_taaGamma = 1.25f;
-        f32 m_taaMotionScale = 32.0f;
+        f32 m_taaMotionScale = 1.0f / 32.0f;
         ExposurePass* m_exposurePass = nullptr;
         DebugBlitPass* m_debugBlit = nullptr; // borrowed; editor debug-view blit (after compose)
         f32 m_deltaSeconds = 1.0f / 60.0f;
@@ -823,10 +831,17 @@ export namespace foundation::render
             false; // set per frame when any view enables TAA (drives the jitter advance)
         // Motion vectors + TAA: last frame's view-proj + jitter per view index (this frame's collected into
         // m_curViewProj/m_curJitter, swapped in at End). Camera motion = prev vs current (jittered) view-proj.
-        Array<Float4x4> m_prevViewProj;
+        Array<Float4x4> m_prevViewProj; // indexed by history slot (HistorySlotFor)
         Array<Float4x4> m_curViewProj;
         Array<Float2> m_prevJitter;
         Array<Float2> m_curJitter;
+        struct HistorySlot
+        {
+            u64 key = 0;
+            u32 lastFrame = 0; // m_noiseFrame when a view last took it
+            bool used = false;
+        };
+        HistorySlot m_historySlots[kHistorySlots];
         Array<ResolvedDraw>
             m_prepassResolved; // reused depth-draw buffer for the camera depth prepass
         Array<ResolvedDraw> m_shadowResolved; // reused depth-draw buffer for the shadow pass

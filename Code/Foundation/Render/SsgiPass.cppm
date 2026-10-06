@@ -93,6 +93,17 @@ export namespace foundation::render
                     u32 w, u32 h, i32 vx, i32 vy, u32 vw, u32 vh, const Float4x4& invProj,
                     const Float4x4& proj, const Params& p, u32 viewIndex, u32 frameIndex);
 
+        /// Forget history slot `slot`'s accumulated state (the frame handed the slot to another
+        /// view, RenderFrame::HistorySlotFor): its next frame starts fresh instead of blending in
+        /// what the slot's previous view saw.
+        void InvalidateHistory(u32 slot) noexcept
+        {
+            if (slot < kMaxViews)
+            {
+                m_views[slot].valid = false;
+            }
+        }
+
     private:
         static constexpr rhi::TextureFormat kHdrFormat =
             rhi::TextureFormat::RGBA16Float; // matches the scene HDR

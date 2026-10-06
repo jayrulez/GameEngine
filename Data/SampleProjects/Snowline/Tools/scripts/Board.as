@@ -49,7 +49,8 @@ class Board
     [15.0, "How far down the course line the autopilot aims (m)"] float lookAhead;
     [0.0, "The stick the autopilot holds in the air, a spin (playtests: -1 to 1)"] float autopilotSpin;
     [false, "The autopilot holds a grab in the air (playtests)"] bool autopilotGrab;
-    [12.0, "How far down the course line the rider looks (m)"] float gazeAhead;
+    [12.0, "How far ahead the rider looks with nothing to look at (m)"] float gazeAhead;
+    [4.0, "How quickly the rider's gaze moves to a new target (per second)"] float lookEase;
     [80.0, "Fastest turn of the velocity, a full carve (degrees a second)"] float carveRate;
     [0.35, "Speed a full carve scrubs off (share of gravity's pull into the slope)"] float carveScrub;
     [12.0, "Speed at which a carve scrubs in full; slower, in proportion (m/s)"] float scrubSpeed;
@@ -82,6 +83,8 @@ class Board
     private float m_lean = 0.0f;  // the eased lean into the turn, -1 heel .. +1 toe
     private float m_lastHeading = 0.0f; // the travel's heading last frame (radians), for the turn rate
     private bool m_headingKnown = false;
+    private Float3 m_lookAt = Float3(0.0f, 0.0f, 0.0f); // where the head looks (eased)
+    private bool m_lookKnown = false;
     private bool m_airborne = false;
     private Entity@ m_figure;     // the skinned mesh the graph drives
     private float m_sinceMark = 0.0f; // metres ridden since the last mark of the track
@@ -235,7 +238,7 @@ class Board
         snow(v, steer, grounded);
         wind(v);
         animate(grounded ? turnLean(v, d) : 0.0f, tuck, !grounded, grab && !grounded, d);
-        look(down);
+        look(at, v, d);
     }
 
     // One step of the board's motion: on the snow, gravity along the slope, friction, a carve's
@@ -292,6 +295,7 @@ class Board
         m_nextGate = 0;
         m_lean = 0.0f;
         m_headingKnown = false;
+        m_lookKnown = false;
     }
 
     // The facing the scene started the rider with (radians; 0 faces +Z): the board turns from it,
@@ -350,14 +354,21 @@ class Board
     }
 
     // The rider's head looks at the next gate (an AimIkComponent on the board's entity), then the
-    // finish; with neither found, down the course line ahead. About eye height above the snow.
-    private void look(float down)
+    // finish, while it lies ahead; once it is behind (the finish crossed, a gate gone by), down the
+    // way the rider is travelling instead. The point eases from one target to the next, so the head
+    // turns rather than snaps. (Looking at the finish after crossing it, the head swung round to
+    // look back at it.) About eye height above the snow.
+    private void look(Float3 at, Float3 v, float d)
     {
         AimIkComponent@ aim = AimIkComponent::of(self);
         if (aim is null)
         {
             return;
         }
+        float flat = Math::Sqrt(v.x * v.x + v.z * v.z);
+        float dx = (flat > 0.5f) ? v.x / flat : Math::Sin(m_yaw);
+        float dz = (flat > 0.5f) ? v.z / flat : Math::Cos(m_yaw);
+        Float3 want = Float3(at.x + dx * gazeAhead, at.y + 0.3f, at.z + dz * gazeAhead);
         Entity@ next = self.scene.find("Gate" + m_nextGate);
         if (next is null || !next.isValid())
         {
@@ -365,21 +376,25 @@ class Board
         }
         if (next !is null && next.isValid())
         {
-            SceneAnimation::of(self.scene).setIkTarget(self, next.worldPosition() + Float3(0.0f, 1.2f, 0.0f));
-            return;
+            Float3 p = next.worldPosition();
+            float tx = p.x - at.x;
+            float tz = p.z - at.z;
+            float dist = Math::Sqrt(tx * tx + tz * tz);
+            // Ahead: within about 60 degrees of the travel.
+            if (dist > 1.0f && (tx * dx + tz * dz) > 0.5f * dist)
+            {
+                want = p + Float3(0.0f, 1.2f, 0.0f);
+            }
         }
-        if (course is null || !course.isValid())
+        if (!m_lookKnown)
         {
-            return;
+            m_lookAt = want;
+            m_lookKnown = true;
         }
-        SceneSplines@ splines = SceneSplines::of(self.scene);
-        float length = splines.length(course);
-        float ahead = down + gazeAhead;
-        SplineHit@ point = splines.sampleAtDistance(course, (ahead < length) ? ahead : length);
-        if (point !is null && point.valid)
-        {
-            SceneAnimation::of(self.scene).setIkTarget(self, point.position + Float3(0.0f, 1.2f, 0.0f));
-        }
+        float ease = lookEase * d;
+        ease = (ease < 1.0f) ? ease : 1.0f;
+        m_lookAt = m_lookAt + (want - m_lookAt) * ease;
+        SceneAnimation::of(self.scene).setIkTarget(self, m_lookAt);
     }
 
     // How far down the course line the rider is (m): the closest point's distance along it.

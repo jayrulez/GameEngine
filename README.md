@@ -137,6 +137,8 @@ rigged and animated by Blender scripts.
 |:---:|:---:|:---:|
 | ![Courses](Documentation/Images/Snowline-Title.png) | ![Ridge](Documentation/Images/Snowline-Ridge.png) | ![Results](Documentation/Images/Snowline-Results.png) |
 
+Watch it played on a Steam Deck: [Snowline gameplay video](https://youtu.be/vlxxLiMEzp0).
+
 **NativeSample** is the reference for a game with native C++ code beside its scripts.
 
 ## Repository layout

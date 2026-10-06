@@ -1,10 +1,8 @@
 # Sky Hopper
 
 A small 3D platformer, built entirely through the engine's MCP tools: the test of how far an
-agent gets making a game with them, where every missing or wrong tool was fixed in the engine
-as part of the work. It recreates Sedulous's Sky Hopper, and was played through to the end over
-the same tools before it shipped to a Steam Deck through the container build
-(`scripts/build-steamdeck.sh`).
+agent gets making a game with them. It was played through to the end over the same tools before
+it shipped to a Steam Deck through the container build (`scripts/build-steamdeck.sh`).
 
 ![Sky Hopper, Level 1](../../../Documentation/Images/SkyHopper-Play.png)
 

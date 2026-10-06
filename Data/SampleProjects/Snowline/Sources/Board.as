@@ -12,6 +12,8 @@
 // so a right turn is a toe-side carve.
 //
 // With `autopilot`, the board steers itself down the course line (playtests, the measurements).
+const float kStep = 1.0f / 60.0f; // the longest step the board integrates at once (s)
+
 class Board
 {
     private Entity@ self;
@@ -45,7 +47,7 @@ class Board
     private bool m_spraying = false;
     private int m_nextGate = 0;   // the gate the rider looks at next
     private Quaternion m_startRotation;
-    private bool m_restarted = false; // a new run began: the next update starts from rest
+    private bool m_fromRest = true; // a run begins: the next update starts from rest
 
     Board(Entity@ entity) { @self = entity; }
 
@@ -81,14 +83,18 @@ class Board
         }
         CharacterComponent@ c = CharacterComponent::of(self);
         Float3 v = c.velocity;
-        if (m_restarted)
+        if (m_fromRest)
         {
-            // The character still carries the last run's speed until it is driven otherwise.
-            v = Float3(0.0f, 0.0f, 0.0f);
-            m_restarted = false;
+            // Every run starts from rest, and on the frame after it begins: the clock (Snowline.as)
+            // hears "RunStarted" or restarts on this frame and counts from the next, so the board
+            // waits for it. Integrating this frame (the long first one after the scene loads) gave
+            // the first run a head start the clock never saw, and a restarted one would carry the
+            // last run's speed.
+            c.drive(Float3(0.0f, 0.0f, 0.0f));
+            m_fromRest = false;
+            return;
         }
         Float3 at = self.position();
-        const float g = 9.81f;
         float down = travelled(at);
 
         // What the rider asks for: the carve (-1 left .. +1 right), a tuck, a jump, a grab.
@@ -108,6 +114,30 @@ class Board
         bool grab = !autopilot && Input::isDown("Grab");
 
         bool grounded = c.grounded();
+        // The frame in steps of at most kStep: a long frame (the first after the scene loads, a
+        // hitch) is integrated as the short ones it stands for, so the speed a run gathers does not
+        // hang on the frame rate. One long step had given a first run a 0.4 m/s head start.
+        int steps = int(Math::Ceil(d / kStep));
+        float h = d / float(steps);
+        for (int i = 0; i < steps; ++i)
+        {
+            v = integrate(c, v, grounded, steer, tuck, jump && i == 0, h);
+        }
+        c.drive(v);
+        face(v, d);
+        track(at, v, grounded, d);
+        snow(v, steer, grounded);
+        wind(v);
+        animate(steer, tuck, !grounded, grab && !grounded, d);
+        look(down);
+    }
+
+    // One step of the board's motion: on the snow, gravity along the slope, friction, a carve's
+    // scrub, drag and the carve's turn (and a jump's pop); in the air, gravity.
+    private Float3 integrate(CharacterComponent@ c, Float3 v, bool grounded, float steer, bool tuck,
+                             bool jump, float d)
+    {
+        const float g = 9.81f;
         if (grounded)
         {
             Float3 n = c.groundNormal;
@@ -133,19 +163,9 @@ class Board
             {
                 v = Float3(v.x, v.y + jumpSpeed, v.z);
             }
+            return v;
         }
-        else
-        {
-            v = Float3(v.x, v.y - g * d, v.z);
-        }
-        c.drive(v);
-        face(v, d);
-        track(at, v, grounded, d);
-        snow(v, steer, grounded);
-        wind(v);
-        animate(steer, tuck, !grounded, grab && !grounded, d);
-        look(down);
-
+        return Float3(v.x, v.y - g * d, v.z);
     }
 
     // Snowline.as starts the next run (the finish card's Jump): back to the top, at rest, facing
@@ -155,7 +175,7 @@ class Board
         CharacterComponent::of(self).setPosition(m_start);
         self.setRotation(m_startRotation);
         m_yaw = startYaw();
-        m_restarted = true;
+        m_fromRest = true;
         m_nextGate = 0;
         m_lean = 0.0f;
     }

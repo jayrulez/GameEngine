@@ -272,7 +272,10 @@ def build():
     top = info["course"][0]
     nxt = info["course"][1]
     heading = math.degrees(math.atan2(nxt[0] - top[0], nxt[2] - top[2]))
-    rider = d.entity("Rider", (top[0], top[1] + 1.0, top[2]), yaw(heading))
+    # The capsule's centre 0.9 m up (half height 0.55 + radius 0.35): on the snow, not above it. A
+    # rider placed higher drops onto the slope as the run starts, and the board turns the drop into
+    # speed down it, which a restarted run (put back on the snow) never had.
+    rider = d.entity("Rider", (top[0], top[1] + 0.9, top[2]), yaw(heading))
     d.add(rider, "physics.Character", radius=0.35, halfHeight=0.55, maxSlopeDegrees=60.0)
     d.script(rider, (BOARD, {"course": ("entity", course), "autopilot": AUTOPILOT,
                              "trackMark": ("asset", asset("PrefabDocument", "TrackMark", "Prefabs"))}))

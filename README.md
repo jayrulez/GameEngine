@@ -66,7 +66,8 @@ Requirements:
       libxtst-dev libwayland-dev wayland-protocols libxkbcommon-dev libasound2-dev
   ```
 
-- Windows x64: Clang 17+ (LLVM; not MSVC) and the Windows SDK.
+- Windows x64: Clang 17+ (LLVM) or MSVC, and the Windows SDK. The MSVC presets run from a
+  Developer Command Prompt (vcvars64), so `cl.exe` and the SDK are on the path.
 - A Vulkan 1.3 (or, on Windows, D3D12) capable GPU to run anything that draws.
 - For web builds, emsdk 6.0.5 with the project's response file patch applied; see
   [Documentation/Guides/emscripten-windows.md](Documentation/Guides/emscripten-windows.md).
@@ -82,8 +83,8 @@ ctest --preset clang                  # the unit and integration tests
 
 | Preset | Meaning |
 |---|---|
-| `clang` / `gcc` | Debug, the development configuration |
-| `clang-shared` | Debug with shared libraries |
+| `clang` / `gcc` / `msvc` | Debug, the development configuration |
+| `clang-shared` / `msvc-shared` | Debug with shared libraries |
 | `clang-reldbg` | RelWithDebInfo, for performance work |
 | `clang-release` / `gcc-release` | Release |
 | `clang-shipping` / `gcc-shipping` | Shipping (no asserts, stripped) |
@@ -100,23 +101,24 @@ Add `--mcp` to serve the open project to an agent over MCP while you work in the
 
 ## Sample projects
 
-Game projects under `Data/SampleProjects/`, opened from the editor's project manager.
+Game projects under `Data/SampleProjects/`, opened from the editor's project manager. The three
+games are built through the engine's MCP tools and ship to the web and the Steam Deck;
+[GameEngineDemos](https://jayrulez.github.io/GameEngineDemos/) plays them in a browser.
 
-**Sky Hopper** (`PlatformerGame`) is a small 3D platformer built entirely through the engine's
-MCP tools by an AI agent, played through to the end over the same tools, and shipped to a Steam
-Deck: five levels, coins, enemies and hazards, three lives with stars and best scores saved,
-menus with volume settings, music and effects, and gamepad support throughout.
+**Sky Hopper** (`PlatformerGame`) is a small 3D platformer, played through to the end over the
+MCP tools by an AI agent while it was built: five levels, coins, enemies and hazards, three lives
+with stars and best scores saved, menus with volume settings, music and effects, and gamepad
+support throughout.
 
 | Title | Level 1 | Settings |
 |:---:|:---:|:---:|
 | ![Title](Documentation/Images/SkyHopper-Title.png) | ![Playing](Documentation/Images/SkyHopper-Play.png) | ![Settings](Documentation/Images/SkyHopper-Settings.png) |
 
-**PaperKid** is an arcade paper-route game, also built entirely through the MCP tools: five
-town blocks on a difficulty ramp, papers thrown with a soft auto-aim, traffic and pedestrians on
-the navmesh, lives, a live minimap drawn by a top-down camera into a render texture, particle
-effects, a newsprint UI theme, and music that speeds up when the clock runs low. The kid and
-his bike, the houses, cars, people and animals are modelled, rigged and animated by Blender
-scripts.
+**PaperKid** is an arcade paper-route game: five town blocks on a difficulty ramp, papers thrown
+with a soft auto-aim, traffic and pedestrians on the navmesh, lives, a live minimap drawn by a
+top-down camera into a render texture, particle effects, a newsprint UI theme, and music that
+speeds up when the clock runs low. Its kid, bike, town and people are modelled, rigged and
+animated by Blender scripts.
 
 | Title | Riding a block | Block cleared |
 |:---:|:---:|:---:|
@@ -124,14 +126,14 @@ scripts.
 
 Watch it played on a Steam Deck: [PaperKid gameplay video](https://youtu.be/syJlmIirg_o).
 
-**Snowline** is a snowboard time trial with tricks, built the same way and chosen for the engine
-features the other two do not use: generated terrain with splat-painted snow, rock and forest,
-scattered vegetation whose trees are solid, splines for the course line and the medal ghosts, an
-animation graph the rider drives by parameters, decals for its tracks, and jointed slalom flags.
-Three courses opened by medals: Meadow, Forest with its shortcut through the trees, and Ridge with
-a run of kickers, a gap over a crevasse and an avalanche chasing down the last stretch. Spins and
-grabs score on a combo, your best run rides beside you as a ghost, and the rider is modelled,
-rigged and animated by Blender scripts.
+**Snowline** is a snowboard time trial with tricks, chosen for the engine features the other two
+do not use: generated terrain with splat-painted snow, rock and forest, scattered vegetation whose
+trees are solid, splines for the course line and the medal ghosts, an animation graph the rider
+drives by parameters, decals for its tracks, and jointed slalom flags. Three courses opened by
+medals: Meadow, Forest with its shortcut through the trees, and Ridge with a run of kickers, a gap
+over a crevasse and an avalanche chasing down the last stretch. Spins and grabs score on a combo,
+and your best run rides beside you as a ghost. The rider is modelled, rigged and animated by
+Blender scripts.
 
 | Courses | Ridge, past the gap | A run's results |
 |:---:|:---:|:---:|
@@ -154,8 +156,11 @@ Code/
                   the MCP tools
   Tools/          Editor, Cook, Export, ShaderPack and Mcp executables
   Integration/    Flows that cross collections
-  Samples/        Engine samples and the RHI samples
+  Samples/        Low-level C++ samples, one per engine area, and the RHI samples
+                  (Code/Samples/README.md)
   Extensions/     Dear ImGui as a debug UI extension
+  Experimental/   A retained-mode UI framework in progress and its sandbox
+                  (OPTION_EXPERIMENTAL_GUI)
 Data/             Engine data (shaders, fonts, themes) and the sample projects
 ThirdParty/       Vendored dependencies
 scripts/          Distribution, export template and Steam Deck builds
@@ -164,17 +169,14 @@ Documentation/    Shipping documentation (served to agents through the MCP host)
 ```
 
 Each Foundation and Engine module has a sibling `.Tests` target; `Code/Integration/` holds the
-flows that cross collections. The RHI samples exercise one backend feature each and take
-`--vulkan` / `--webgpu` (`--dx12` on Windows).
+flows that cross collections.
 
 ## Platform support
 
 Linux and Windows are the development platforms. WebGPU runs on the desktop through wgpu-native
-and in the browser through a wasm build; `WebScene` renders the same scene on every backend for
-side by side comparison ([Documentation/Guides/webscene.md](Documentation/Guides/webscene.md)),
-and the export produces a web player. A Steam Deck player builds in a container
-(`scripts/build-steamdeck.sh`, glibc 2.35, below SteamOS) and installs as an export template, so
-the export packages a game for the Deck. macOS has no backend yet.
+and in the browser through a wasm build, and the export produces a web player. A Steam Deck player
+builds in a container (`scripts/build-steamdeck.sh`, glibc 2.35, below SteamOS) and installs as an
+export template, so the export packages a game for the Deck. macOS has no backend yet.
 
 ## Dependencies
 

@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Sandbox - the running dev harness. It extends DefaultApplication (which registers
-// the SceneSubsystem + RenderSubsystem and renders active scenes each frame), creates a
-// scene with two spinning cube grids (instanced + distinct), and lets the engine draw it.
-// As the renderer grows, this is where we exercise it.
+// AnimatedCrowd - a skinned crowd drawn as one instanced set: ONE InstancedMeshComponent (the
+// character at a grid of transforms) and ONE InstancedSkinningComponent (M shared pose palettes),
+// so the whole crowd is one draw per pass animated by M palette computes, not N. The HUD picks how
+// each character takes its pose from the palettes (random, wave, columns, clusters). [Space] adds a
+// batch, [Backspace] removes one, [P] the profiler.
 
 #include "Core/Prelude.h"
 #include "Profiler/Profiler.h" // PROFILE_SCOPE (isolate animation-drive cost)

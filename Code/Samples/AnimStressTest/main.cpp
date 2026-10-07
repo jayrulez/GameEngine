@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Sandbox - the running dev harness. It extends DefaultApplication (which registers
-// the SceneSubsystem + RenderSubsystem and renders active scenes each frame), creates a
-// scene with two spinning cube grids (instanced + distinct), and lets the engine draw it.
-// As the renderer grows, this is where we exercise it.
+// AnimStressTest - a skinned-animation benchmark. It cooks the Quaternius humanoid once and
+// replicates it across a grid, each copy an entity with its own AnimationPlayer (all sharing the
+// cooked mesh, skeleton, clips and materials), so the cost of driving N separate characters can be
+// measured as batches are added. [Space] adds a batch, [Backspace] removes one, [P] the profiler.
 
 #include "Core/Prelude.h"
 #include "Profiler/Profiler.h" // PROFILE_SCOPE (isolate animation-drive cost)

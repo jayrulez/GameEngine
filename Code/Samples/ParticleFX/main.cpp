@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// ParticleFX - the particle-system showcase. Builds a ParticleEffect in code (an additive fountain),
-// attaches it to an entity via ParticleEffectComponent, and lets engine.particles tick the
-// CPU sim + draw the billboards through the dedicated ParticleRenderer. Phase 2 of the particle track
-// CPU sim on the existing extract->resolve->draw pipeline. GPU-compute sim,
-// trails, mesh particles, and the cooked resource/editor are not implemented.
+// ParticleFX - the particle-system showcase: sixteen effects built in code, one per cell of a grid,
+// each a ParticleEffect on an entity's ParticleEffectComponent, ticked by engine.particles and drawn
+// by the ParticleRenderer. A fountain; mesh shards, opaque and glowing (the same sim, two
+// materials); embers that each carry a point light; soft-particle haze; trail ribbons; rain that
+// bounces off a sphere and the ground; a local-space puff orbiting its emitter; smoke, fire, a
+// campfire and fireworks; a tornado; a flipbook explosion; a magic circle; and fireflies.
 
 #include "Core/Prelude.h"
 #include "imgui.h"

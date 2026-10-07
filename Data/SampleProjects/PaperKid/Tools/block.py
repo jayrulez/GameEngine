@@ -15,16 +15,16 @@ SUN_ROT = (-0.4935577, 0.15065993, 0.08726525, 0.85210747)
 SUN_INTENSITY = 4.5
 
 
-# The look, as the user set it on Start (2026-10-02): GTAO, bloom, a fixed exposure. FXAA until
-# TAA's resolve is less jittery, and auto exposure off: it dimmed and brightened over the first
-# second or two of every scene (user, 2026-10-03; both in the engine backlog). The look lives in
-# two shared profiles (PaperKid Environment, PaperKid Post) that every scene's settings name, so
-# it is tuned once. Colours are sRGB, as entered anywhere (the sky's were tuned while colours were
-# read raw, and are written as the values they decode from).
+# The look, as the user set it on Start (2026-10-02): GTAO, bloom. FXAA (user, 2026-10-06: kept
+# after TAA's jitter was fixed; TAA is for the next game). Auto exposure on since it starts at a
+# scene's level (2026-10-06; it had dimmed and brightened over every scene's first seconds). The
+# look lives in two shared profiles (PaperKid Environment, PaperKid Post) that every scene's
+# settings name, so it is tuned once. Colours are sRGB, as entered anywhere (the sky's were tuned
+# while colours were read raw, and are written as the values they decode from).
 POST = dict(exposureEV=1.0, tonemapOperator=1, bloomEnabled=True, bloomThreshold=1.0, bloomKnee=0.6,
             bloomIntensity=0.05, aoMode=2, aoStrength=1.0, aoRadius=1.0, aoIntensity=1.0, ssrEnabled=False,
             ssrIntensity=1.0, aaMode=1, taaBlendFactor=0.97, taaVarianceGamma=1.25, fxaaSubpixel=0.75,
-            autoExposure=False, autoExposureKey=0.25, autoExposureSpeed=2.0, autoExposureMinEV=-4.0,
+            autoExposure=True, autoExposureKey=0.25, autoExposureSpeed=2.0, autoExposureMinEV=-4.0,
             autoExposureMaxEV=4.0, gradingIntensity=1.0, ssgiEnabled=False, ssgiIntensity=1.0)
 ENVIRONMENT = dict(ambientColor={"r": 0.349, "g": 0.381, "b": 0.437, "a": 1.0}, ambientIntensity=0.08, skyMode=0,
                    skyIntensity=1.0, skyBackgroundIntensity=1.0, skyRotation=0.0,

@@ -836,6 +836,11 @@ endif()
 
 if(OPTION_BUILD_SAMPLES)
     add_subdirectory(Code/Samples)
+    # The experimental GUI's sandbox lives beside the framework it shows; it draws through the
+    # samples' framework, so it joins after it.
+    if(OPTION_EXPERIMENTAL_GUI AND TARGET Samples::Framework)
+        add_subdirectory(Code/Experimental/GUI.Sandbox) # experimental.gui widgets + CSS on the VG renderer
+    endif()
 endif()
 
 # Game native code (game-native-code.md N3): the game's native directory joins the

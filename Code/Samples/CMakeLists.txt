@@ -45,8 +45,5 @@ if(TARGET Samples::Framework)
     add_subdirectory(RHI)  # backend-agnostic via the framework (Smoketest gates itself on Vulkan)
     add_subdirectory(WebScene) # full-renderer exercise scene (desktop build; also the web sample)
     add_subdirectory(VG)  # VG sandbox - end-to-end VG stack demo
-    if(OPTION_EXPERIMENTAL_GUI)
-        add_subdirectory(GUI) # GUI sandbox - experimental.gui widgets + CSS on the VG renderer
-    endif()
     add_subdirectory(UI)  # UI sandbox - foundation.ui (Sedulous.UI port) on the VG renderer
 endif()

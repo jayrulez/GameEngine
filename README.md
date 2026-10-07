@@ -3,53 +3,66 @@
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/WSvxW8mWH5)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A game engine in C++23, built on modules throughout: a layered runtime over an abstract RHI with
-Vulkan, WebGPU and Direct3D 12 backends, a scene editor with play in editor, an asset pipeline,
-AngelScript and Luau gameplay scripting, and a CSS styled UI framework. It runs on Linux,
-Windows and, through Emscripten, in the browser, and ships games to the Steam Deck.
+A game engine in C++23, built on modules throughout, with the editor, asset pipeline and tools to
+take a game from first scene to shipped build: a project made in the editor exports to a desktop
+player, to the browser (WebGPU through Emscripten) and to the Steam Deck. Underneath are a layered
+runtime over an abstract RHI with Vulkan, WebGPU and Direct3D 12 backends; a render graph driving
+forward PBR with shadows, image-based lighting and a full post stack; physics, navigation, audio,
+skeletal animation with graphs and IK, terrain and vegetation; gameplay scripting in AngelScript
+or Luau; and a CSS-styled UI framework.
+
+It is built to be worked by agents as well as people. An MCP host exposes the engine's
+reflection, its script API, project operations and play in editor, and the three sample games in
+this repository were each built and playtested through those tools, then shipped to the web and
+the Steam Deck.
 
 ![The editor](Documentation/Images/Editor.png)
 
 ## What is here
 
-**Rendering.** A render graph over the RHI: forward PBR with a depth prepass, cascaded and
-local shadows, IBL and reflection probes, decals, sprites, particles, skinned meshes, terrain
-and vegetation, and a post stack with ambient occlusion, SSR, SSGI (experimental), bloom, TAA,
-MSAA, auto exposure, grading and FXAA. Vulkan 1.3 is the primary desktop backend; WebGPU runs on
-the desktop through wgpu-native and in the browser as itself; Direct3D 12 runs on Windows.
-Shaders are HLSL, compiled through DXC and cross compiled to WGSL for the web, and cooked into
-packs.
+**Rendering.** A render graph over the RHI: forward PBR with a depth prepass and clustered
+lights; cascaded sun shadows and shadowed point and spot lights; image-based lighting and
+reflection probes; decals, sprites, particles, skinned and instanced meshes, terrain and
+vegetation; render textures for in-game cameras; and a post stack with ambient occlusion, SSR,
+screen-space GI, bloom, TAA, MSAA, FXAA, auto exposure and colour grading. A game's look is set
+once in shared environment and post profiles. Vulkan 1.3 is the primary desktop backend; WebGPU
+runs on the desktop through wgpu-native and in the browser as itself; Direct3D 12 runs on
+Windows. Shaders are HLSL, compiled through DXC, cross compiled to WGSL for the web, and cooked
+into packs.
 
 **Scene and engine.** Entities with hierarchical transforms, component managers per domain,
 prefabs with overrides, scene serialization, and the subsystems a game needs: physics (Jolt),
-navigation (Recast/Detour), audio (miniaudio, four fixed buses plus custom ones with effect
-chains), animation (skeletal, graphs, property animation), particles, splines, terrain, input
-maps, networking with state replication, and world space UI.
+navigation (Recast/Detour), audio (miniaudio, buses with effect chains), animation (skeletal
+clips, animation graphs, IK, root motion, property animation), particles, splines, terrain and
+vegetation, input maps, save data, networking with state replication, and world-space UI.
 
 **Scripting.** Gameplay code in AngelScript or Luau over the engine's reflected script facades:
-behaviours per entity, a level script per scene, a game script per run, coroutines and events.
-See [Documentation/Shipping/Scripting.md](Documentation/Shipping/Scripting.md).
+behaviours per entity, a level script per scene, a game script per run, coroutines and events,
+with a debugger in the editor. See [Documentation/Shipping/Scripting.md](Documentation/Shipping/Scripting.md).
 
-**Editor.** A project manager, scene hierarchy, a viewport with gizmos and per domain tools
+**Editor.** A project manager, scene hierarchy, a viewport with gizmos and per-domain tools
 (terrain sculpting and painting, vegetation, spline editing), inspectors from reflection, an
 asset browser over the import and cook pipeline, undo and redo, play in editor (several
 instances side by side), and a page per asset type: materials, meshes, textures, fonts, audio,
-animation clips and graphs, particles, input maps, UI documents and themes, scripts with a
-debugger.
+animation clips and graphs, particles, input maps, UI documents and themes, render profiles, and
+scripts.
 
-**Pipeline.** Importers (glTF, FBX and OBJ, images, audio, fonts), cooks per asset type, texture
-compression (BC7, ASTC), an export that packages a project for the desktop player, the web or a
-Steam Deck, and headless tools for all of it.
+**Pipeline and shipping.** Importers (glTF, FBX and OBJ, images, audio, fonts), cooks per asset
+type, texture compression (BC7, ASTC), and an export that packages a project for the desktop
+player, the web or the Steam Deck from per-target presets and player templates; headless tools
+do all of it from the command line.
 
 **UI.** A retained view tree with flex, dock, grid and flow layouts, `.sml` markup and `.sss`
-stylesheets with a cascade, transitions and themes, keyboard and gamepad navigation, a vector
-graphics layer with SVG, distance field and coverage fonts, and an editor toolkit (docking,
-property grids, colour pickers, curve and gradient editors, a node graph canvas).
+stylesheets with a cascade, transitions and themes, keyboard and gamepad navigation, a game UI
+kit (menus, bars, prompts, toasts), a vector graphics layer with SVG, distance field and coverage
+fonts, and an editor toolkit (docking, property grids, colour pickers, curve and gradient
+editors, a node graph canvas).
 
 **Agent tooling.** An MCP host (`Tools.Mcp`) exposes the engine's reflection, the script API and
 project operations (import, cook, scene validation, export, health checks); the editor serves
-the same tools over HTTP for its open project, plus pages and play in editor, so an agent can
-build and playtest a game. [AGENTS.md](AGENTS.md) is how an agent works on the engine itself.
+the same tools over HTTP for its open project, plus its pages and play in editor, where an agent
+plays the game with scripted input and reads back probes and screenshots.
+[AGENTS.md](AGENTS.md) is how an agent works on the engine itself.
 
 ## Building
 

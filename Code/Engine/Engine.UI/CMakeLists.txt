@@ -5,7 +5,7 @@ target_link_libraries(Engine.UI
            Foundation::Resource Foundation::Shell Foundation::RHI Foundation::Fonts Foundation::Fonts.TrueType Foundation::Fonts.Resource
            Foundation::Input Engine::Input Foundation::UI Foundation::UI.Shell Foundation::UI.Gamekit
            Foundation::UI.Resource
-           Foundation::Script Foundation::Script.Facades
+           Foundation::Script Foundation::Script.Facades Engine::UI.Script
            Foundation::VG Foundation::VG.Renderer Foundation::Shaders Foundation::Shaders.System
            Foundation::Render Engine::Render Foundation::Image Foundation::Texture.Resource Foundation::Profiler Foundation::VFS Engine::Domain Foundation::Policy)
 target_sources(Engine.UI

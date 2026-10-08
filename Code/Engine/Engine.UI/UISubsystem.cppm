@@ -42,6 +42,7 @@ import foundation.ui;
 import foundation.ui.shell; // UiInputBridge (key/text mapping + IME lifecycle)
 import foundation.ui.gamekit; // ScreenStack over the screen-tier RootView
 import foundation.ui.resource;
+import engine.ui.script; // ViewGroup: a component's instantiated tree as a script handle
 import foundation.image; // ImageData (the texture images an ImageView names)
 import foundation.script;         // Object / IScriptContext / IScriptDelegate / the run-context service
 import foundation.script.facades; // RegisterExtraFacadeName (the behavior-module prelude hook)
@@ -92,6 +93,9 @@ export namespace engine::ui
 
         // Runtime (transient):
         RefPtr<View> root;                     // instantiated tree (template = document)
+        // The instantiated tree as a script group handle (`root()` to scripts), whose finders reach
+        // the views inside, as `ui::root()` reaches the HUD's. Null-valid before the tree is built.
+        [[nodiscard]] engine::uiscript::ViewGroup rootGroup() const;
         RefPtr<ViewGroup> host;                // per-canvas host in the scene root (order + scaler)
         RefPtr<RootView> renderRoot;           // RenderTexture mode: standalone root (never a tier)
         const UIDocument* builtFrom = nullptr; // rebuild detector (hot reload)
@@ -167,6 +171,9 @@ export namespace engine::ui
         // Runtime (transient):
         RefPtr<View> root;
         const UIDocument* builtFrom = nullptr;
+
+        // The instantiated tree as a script group handle (`root()`), as UICanvasComponent's.
+        [[nodiscard]] engine::uiscript::ViewGroup rootGroup() const;
     };
 
     inline void Serialize(ISerializer& ar, UIBillboardComponent& c)
@@ -227,6 +234,10 @@ export namespace engine::ui
         const UITheme* themeFrom = nullptr;
         rhi::Texture* renderTexture = nullptr; // subsystem-owned (accessors)
         rhi::TextureView* renderTextureView = nullptr;
+
+        // The instantiated tree as a script group handle (`root()`), as UICanvasComponent's: a
+        // meter over a guard's head is filled through it.
+        [[nodiscard]] engine::uiscript::ViewGroup rootGroup() const;
     };
 
     inline void Serialize(ISerializer& ar, UIWorldPanelComponent& c)

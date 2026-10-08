@@ -46,6 +46,8 @@ import foundation.particles;          // ParticleEffectComponent + manager (part
 import engine.particles;   // *.of + SceneParticles (particle surface)
 import foundation.net.replication;    // NetworkComponent + manager + .of (net surface)
 import engine.ui;          // world-space UI components + managers + .of (UI surface)
+import engine.ui.script;   // the typed view handles a component's root() returns
+import foundation.ui;      // core views (a world panel's tree, built by hand)
 import foundation.spline;             // SplinePoint (the path follow surface)
 import engine.spline;      // PathFollowComponent.of (path follow surface)
 
@@ -4852,6 +4854,46 @@ TEST_CASE("script.scene: the world-space UI components reach script via .of")
     CHECK(billboards->Get(e)->minScale == doctest::Approx(0.8f));
     REQUIRE(panels->Get(e) != nullptr);
     CHECK_FALSE(panels->Get(e)->interactive);
+}
+
+// A world panel's views reach script: root() is its tree as a group handle, with the screen tier's
+// finders (a meter over a guard's head is filled through it). Built by hand here; the subsystem
+// builds it from the panel's document in a running game.
+TEST_CASE("script.scene: a world-space UI component's root() finds and drives the views inside it")
+{
+    engine::ui::RegisterUiComponentScriptFacades();
+    engine::uiscript::RegisterUiScriptSurface();
+    ScriptedScene bed;
+    auto* panels = bed.scene.AddSystem<engine::ui::UIWorldPanelComponentManager>();
+
+    RefPtr<ScriptClass> meter =
+        MakeClass(u8"Meter",
+                  u8"class Meter {\n"
+                  u8"    private Entity@ self;\n"
+                  u8"    Meter(Entity@ entity) { @self = entity; }\n"
+                  u8"    void onStart() {\n"
+                  u8"        ViewGroup@ panel = UIWorldPanelComponent::of(self).root();\n"
+                  u8"        panel.findProgressBar(\"meter\").setValue(0.75);\n"
+                  u8"        panel.findLabel(\"mark\").setText(\"!\");\n"
+                  u8"    }\n"
+                  u8"}\n",
+                  {u8"onStart"});
+    const scene::EntityHandle e = bed.AddScripted(meter, u8"guard");
+    engine::ui::UIWorldPanelComponent& panel = panels->Add(e);
+    RefPtr<foundation::ui::ViewGroup> tree = MakeRef<foundation::ui::ViewGroup>(DefaultAllocator());
+    RefPtr<foundation::ui::ProgressBar> bar = MakeRef<foundation::ui::ProgressBar>(DefaultAllocator());
+    bar->Name = String(u8"meter");
+    RefPtr<foundation::ui::Label> mark = MakeRef<foundation::ui::Label>(DefaultAllocator());
+    mark->Name = String(u8"mark");
+    tree->AddView(bar.Get());
+    tree->AddView(mark.Get());
+    panel.root = tree;
+
+    bed.Start();
+    bed.Frame();
+
+    CHECK(bar->Value.Value() == doctest::Approx(0.75f));
+    CHECK(mark->Text.Value() == u8"!");
 }
 
 // The entity's identity, its local transform by value and the hierarchy (Sedulous's Entity): a

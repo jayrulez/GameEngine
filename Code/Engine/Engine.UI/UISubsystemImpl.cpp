@@ -2603,6 +2603,7 @@ namespace engine::ui
         builder.Property<&UIBillboardComponent::minScale>("minScale");
         builder.Property<&UIBillboardComponent::maxScale>("maxScale");
         builder.Property<&UIBillboardComponent::visible>("visible");
+        builder.Method<&UIBillboardComponent::rootGroup>("root");
     }
 
     REFLECT_VALUE(UICanvasComponent, "rtti::engine::ui")
@@ -2620,6 +2621,7 @@ namespace engine::ui
         builder.Property<&UICanvasComponent::renderMode>("renderMode");
         builder.Property<&UICanvasComponent::renderTextureWidth>("renderTextureWidth");
         builder.Property<&UICanvasComponent::renderTextureHeight>("renderTextureHeight");
+        builder.Method<&UICanvasComponent::rootGroup>("root");
     }
 
     REFLECT_VALUE(UIWorldPanelComponent, "rtti::engine::ui")
@@ -2634,7 +2636,23 @@ namespace engine::ui
         builder.Property<&UIWorldPanelComponent::pixelsPerMeter>("pixelsPerMeter");
         builder.Property<&UIWorldPanelComponent::interactive>("interactive");
         builder.Property<&UIWorldPanelComponent::visible>("visible");
+        builder.Method<&UIWorldPanelComponent::rootGroup>("root");
     }
+
+    namespace
+    {
+        // A component's tree as a script group handle (null-valid when not built yet).
+        engine::uiscript::ViewGroup GroupOf(const RefPtr<View>& root)
+        {
+            engine::uiscript::ViewGroup group;
+            group.view = root;
+            return group;
+        }
+    }
+
+    engine::uiscript::ViewGroup UICanvasComponent::rootGroup() const { return GroupOf(root); }
+    engine::uiscript::ViewGroup UIBillboardComponent::rootGroup() const { return GroupOf(root); }
+    engine::uiscript::ViewGroup UIWorldPanelComponent::rootGroup() const { return GroupOf(root); }
 
     void RegisterUIComponentReflection()
     {

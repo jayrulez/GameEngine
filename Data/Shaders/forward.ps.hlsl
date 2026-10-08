@@ -516,8 +516,8 @@ float4 main(PSInput input) : SV_Target0 {
     // remains (else the TAA reprojection wobbles with the jitter). The jitter added to projection(2,0/1)
     // shifts NDC by -Jitter (RH: clip.w = -viewZ), so we ADD Jitter back to recover the geometric NDC.
     // NDC.y is flipped vs UV.y, hence the (0.5, -0.5) scale.
-    // Emitted radiance: factor x map, added unlit on top (HDR - feeds bloom). Black default
-    // (factor AND map) keeps pre-emissive materials exact.
+    // Emitted radiance: factor x map, added unlit on top (HDR - feeds bloom). The factor defaults
+    // to black (no glow) and an unbound map to white (glTF), so a colour alone glows.
     float3 emissive = EmissiveColor.rgb * EmissiveMap.Sample(MainSampler, input.uv).rgb;
     float2 curNDC  = input.curClip.xy  / input.curClip.w  + Jitter.xy;
     float2 prevNDC = input.prevClip.xy / input.prevClip.w + Jitter.zw;

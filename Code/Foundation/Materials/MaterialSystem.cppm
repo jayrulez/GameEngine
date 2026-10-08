@@ -463,11 +463,11 @@ export namespace foundation::materials
                     if (view == nullptr)
                     {
                         // Unbound-slot neutrals by intent: normal maps decode to (0,0,1) = geometric
-                        // normal; emissive maps must be BLACK (white would make everything glow);
-                        // everything else (albedo/MR/AO) multiplies, so white = identity.
-                        view = Contains(p.name, u8"ormal")     ? m_normalView
-                               : Contains(p.name, u8"missive") ? m_blackView
-                                                               : m_whiteView;
+                        // normal; everything else (albedo/MR/AO/emissive) multiplies its factor, so
+                        // white = identity. An emissive map too (glTF: emission = factor x texture, the
+                        // texture white when absent): a glow authored as a colour alone shows, and a
+                        // material that does not glow has a black EmissiveColor.
+                        view = Contains(p.name, u8"ormal") ? m_normalView : m_whiteView;
                     }
                     if (view != nullptr)
                     {

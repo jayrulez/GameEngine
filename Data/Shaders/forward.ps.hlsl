@@ -227,9 +227,10 @@ cbuffer Material : register(b0, space2) {    // data-driven PBR material (inferr
     // (pre-straggler materials upgrade at load: emissive black, strength/scale 1, cutoff 0.5)
 };
 // Standard PBR material maps (the fixed forward set-2 contract, Sedulous-aligned). Unset maps bind a
-// neutral default (white for albedo/MR/AO, flat normal for NormalMap, BLACK for EmissiveMap) so
-// untextured materials are unaffected. All five are sampled: albedo, normal (tangent-space),
-// metallic-roughness (glTF: G=roughness, B=metallic), occlusion, emissive.
+// neutral default (white for albedo/MR/AO/emissive, flat normal for NormalMap) so untextured
+// materials are unaffected (an emissive map multiplies EmissiveColor, black unless authored). All
+// five are sampled: albedo, normal (tangent-space), metallic-roughness (glTF: G=roughness,
+// B=metallic), occlusion, emissive.
 Texture2D    AlbedoMap            : register(t0, space2);
 Texture2D    NormalMap            : register(t1, space2);
 Texture2D    MetallicRoughnessMap : register(t2, space2);

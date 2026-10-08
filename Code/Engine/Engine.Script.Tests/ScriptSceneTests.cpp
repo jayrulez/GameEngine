@@ -1851,6 +1851,50 @@ TEST_CASE("script.scene: worldPosition is current inside onUpdate after a move")
     CHECK(bed.scene.GetEntityName(child) == StringView(u8"fresh"));
 }
 
+// worldRotation() / worldScale(): a child's turn in the world is its parent's after its own, scale
+// aside, and its scale theirs times its own. A guard's lantern (a child) aims where the guard's turn
+// and its own tip send it.
+TEST_CASE("script.scene: worldRotation composes the ancestors' turns, worldScale their scales")
+{
+    ScriptedScene bed;
+    scene::EntityHandle parent = bed.scene.CreateEntity(u8"Parent");
+    scene::EntityHandle child = bed.scene.CreateEntity(u8"Child");
+    bed.scene.SetParent(child, parent);
+    Transform p = bed.scene.GetLocalTransform(parent);
+    p.rotation = Quaternion::FromAxisAngle(Float3{0, 1, 0}, 1.2f);
+    p.scale = Float3{2.0f, 2.0f, 2.0f};
+    bed.scene.SetLocalTransform(parent, p);
+    Transform c = bed.scene.GetLocalTransform(child);
+    c.rotation = Quaternion::FromAxisAngle(Float3{1, 0, 0}, -0.4f);
+    c.scale = Float3{1.5f, 1.5f, 1.5f};
+    bed.scene.SetLocalTransform(child, c);
+
+    RefPtr<ScriptClass> reader =
+        MakeClass(u8"Reader",
+                  u8"class Reader {\n"
+                  u8"    private Entity@ self;\n"
+                  u8"    Reader(Entity@ entity) { @self = entity; }\n"
+                  u8"    void onUpdate(double dt) {\n"
+                  u8"        Entity@ p = self.scene.find(\"Parent\");\n"
+                  u8"        Entity@ c = self.scene.find(\"Child\");\n"
+                  u8"        Float3 f = Float3(0.0f, 0.0f, -1.0f);\n"
+                  u8"        Float3 world = Quaternion::RotateVector(c.worldRotation(), f);\n"
+                  u8"        Float3 composed = Quaternion::RotateVector(p.rotation(), Quaternion::RotateVector(c.rotation(), f));\n"
+                  u8"        Float3 d = Float3(world.x - composed.x, world.y - composed.y, world.z - composed.z);\n"
+                  u8"        bool turned = world.z > -0.99f;\n"
+                  u8"        Float3 s = c.worldScale();\n"
+                  u8"        bool scaled = s.x > 2.999f && s.x < 3.001f && s.y > 2.999f && s.z < 3.001f;\n"
+                  u8"        if (turned && scaled && d.x * d.x + d.y * d.y + d.z * d.z < 1e-8f) { c.setName(\"composed\"); }\n"
+                  u8"    }\n"
+                  u8"}\n",
+                  {u8"onUpdate"});
+    (void)bed.AddScripted(reader, u8"reader");
+    bed.Start();
+    bed.Frame();
+
+    CHECK(bed.scene.GetEntityName(child) == StringView(u8"composed"));
+}
+
 // ---- second backend, uniformly: a .as behavior runs the SAME neutral
 // runtime path as any backend - the RunHost resolves the backend by the class's language, assembles
 // the module through the backend (AngelScript needs no prelude), instantiates, and dispatches

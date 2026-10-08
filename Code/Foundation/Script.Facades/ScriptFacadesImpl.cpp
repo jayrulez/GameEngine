@@ -48,6 +48,8 @@ namespace foundation::script
         builder.Method<&Entity::worldPosition>("worldPosition");
         builder.Method<&Entity::setRotationEuler>("setRotationEuler");
         builder.Method<&Entity::rotation>("rotation");
+        builder.Method<&Entity::worldRotation>("worldRotation");
+        builder.Method<&Entity::worldScale>("worldScale");
         builder.Method<&Entity::setRotation>("setRotation", {"rotation"});
         builder.Method<&Entity::scale>("scale");
         builder.Method<static_cast<void (Entity::*)(f32, f32, f32)>(&Entity::setScale)>(

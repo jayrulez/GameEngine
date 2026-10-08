@@ -218,6 +218,33 @@ export namespace foundation::script
         {
             return Live() ? scene->GetLocalTransform(Handle()).rotation : Quaternion{};
         }
+        /// The rotation in the world: its own turn and every ancestor's (scale aside), as
+        /// worldPosition is its place. Identity for a dead entity or a degenerate (zero-scale) one.
+        [[nodiscard]] Quaternion worldRotation() const
+        {
+            Float3 translation;
+            Quaternion world = Quaternion::Identity;
+            Float3 scale;
+            if (Live())
+            {
+                (void)Decompose(scene->GetWorldMatrix(Handle()), translation, world, scale);
+            }
+            return world;
+        }
+        /// The scale in the world: its own and every ancestor's, per axis (a basis axis's length).
+        /// One for a dead entity or a degenerate (zero-scale) one. Under a rotated parent with an
+        /// uneven scale the world shears, and an axis's length is all a scale can say of it.
+        [[nodiscard]] Float3 worldScale() const
+        {
+            Float3 translation;
+            Quaternion rotation;
+            Float3 world = Float3::One;
+            if (Live())
+            {
+                (void)Decompose(scene->GetWorldMatrix(Handle()), translation, rotation, world);
+            }
+            return world;
+        }
         void setRotation(Quaternion rotation)
         {
             if (!Live())

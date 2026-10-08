@@ -566,6 +566,7 @@ namespace engine::physics
         builder.Property<&RayCastHit::normal>("normal");
         builder.Property<&RayCastHit::surface>("surface");
         builder.Method<&RayCastHit::entity>("entity");
+        builder.Method<&RayCastHit::material>("material");
         builder.Method<&RayCastHit::impulse>("impulse", {"x", "y", "z"});
     }
 

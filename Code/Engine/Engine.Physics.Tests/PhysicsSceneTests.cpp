@@ -513,6 +513,28 @@ TEST_CASE("physics.scene: ScenePhysics.rayCast returns an EXPLICIT RayCastHit (n
     CHECK_FALSE(ScenePhysics{nullptr}.rayCast(0, 5, 0, 0, -1, 0, 20).hit);
 }
 
+TEST_CASE("physics.scene: RayCastHit.material names the hit body's physical material (a game's surface)")
+{
+    // A floor of one material and a box with none: a ray down onto each reads what it stands on,
+    // the id of the material asset (a game maps it to its footsteps); a miss reads nil.
+    PlayScene play;
+    const scene::EntityHandle floor = play.AddFloor();
+    const Guid wood{0x77, 0x00d};
+    play.scene.GetSystem<RigidBodyComponentManager>()->Get(floor)->material.SetId(wood);
+    (void)play.AddBox(0.5f); // at x = 0, no material
+    play.Start();
+    play.Step(10);
+
+    ScenePhysics physics{&play.scene};
+    const RayCastHit onFloor = physics.rayCast(3, 5, 0, 0, -1, 0, 20);
+    REQUIRE(onFloor.hit);
+    CHECK(onFloor.material() == wood);
+    const RayCastHit onBox = physics.rayCast(0, 5, 0, 0, -1, 0, 20);
+    REQUIRE(onBox.hit);
+    CHECK(onBox.material() == Guid{});
+    CHECK(physics.rayCast(0, 100, 0, 0, 1, 0, 1).material() == Guid{});
+}
+
 TEST_CASE("physics.scene: ScenePhysics.sphereCast sweeps a sphere (hits earlier than a ray)")
 {
     PlayScene play;

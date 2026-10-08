@@ -5178,8 +5178,9 @@ TEST_CASE("script.scene: a behaviour makes, ends and finds entities by id; Rando
         u8"end\n");
 }
 
-// ScenePhysics in Sedulous's Float3 forms: a ray down onto a body, the overlap set by a center, an
-// impulse by a Float3, gravity by a Float3. Both backends act the same way.
+// ScenePhysics in Sedulous's Float3 forms: a ray down onto a body (and the material it is made of),
+// the overlap set by a center, an impulse by a Float3, gravity by a Float3. Both backends act the
+// same way.
 namespace
 {
     void CheckPhysicsFloat3Script(StringView language, StringView className, StringView source)
@@ -5190,6 +5191,8 @@ namespace
                                                     physics::MotionKind::Dynamic, Float3{0.5f, 0.5f, 0.5f});
         const scene::EntityHandle b = world.AddBody(u8"right", Float3{1.5f, 0, 0},
                                                     physics::MotionKind::Dynamic, Float3{0.5f, 0.5f, 0.5f});
+        // `left` is made of a material (the ray reads its id back: RayCastHit.material).
+        world.scene->GetSystem<engine::physics::RigidBodyComponentManager>()->Get(a)->material.SetId(Guid{7, 9});
         const scene::EntityHandle scanner = world.scene->CreateEntity(u8"scanner");
         world.Attach(scanner, MakeClassLang(language, className, source, {u8"onStart"}));
 
@@ -5217,7 +5220,8 @@ TEST_CASE("script.scene: ScenePhysics casts, overlaps, impulses and gravity by F
         u8"        RayCastHit@ down = p.rayCast(Float3(-1.5f, 10, 0), Float3(0, -1, 0), 20.0f);\n"
         u8"        RayCastHit@ masked = p.rayCast(Float3(-1.5f, 10, 0), Float3(0, -1, 0), 20.0f, 0);\n"
         u8"        RayCastHit@ near = p.nearestOverlap(Float3(1.4f, 0, 0), 1.0f);\n"
-        u8"        if (down.hit && down.entity().name() == \"left\" && !masked.hit && near.hit\n"
+        u8"        if (down.hit && down.entity().name() == \"left\" && down.material().high == 7 && !masked.hit\n"
+        u8"            && near.hit && near.material().IsNil()\n"
         u8"            && near.entity().name() == \"right\" && p.gravity().y == -20.0f) {\n"
         u8"            self.setName(\"hit\");\n"
         u8"        }\n"
@@ -5243,7 +5247,8 @@ TEST_CASE("script.scene: ScenePhysics casts, overlaps, impulses and gravity by F
         u8"    local down = p:rayCast(Float3.new(-1.5, 10, 0), Float3.new(0, -1, 0), 20.0)\n"
         u8"    local masked = p:rayCast(Float3.new(-1.5, 10, 0), Float3.new(0, -1, 0), 20.0, 0)\n"
         u8"    local near = p:nearestOverlap(Float3.new(1.4, 0, 0), 1.0)\n"
-        u8"    if down.hit and down:entity():name() == \"left\" and not masked.hit and near.hit\n"
+        u8"    if down.hit and down:entity():name() == \"left\" and down:material() == Guid.new(7, 9)\n"
+        u8"        and not masked.hit and near.hit and near:material() == Guid.new(0, 0)\n"
         u8"        and near:entity():name() == \"right\" and p:gravity().y == -20 then\n"
         u8"        me:setName(\"hit\")\n"
         u8"    end\n"

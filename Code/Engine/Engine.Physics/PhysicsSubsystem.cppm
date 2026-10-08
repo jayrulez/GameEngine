@@ -1098,6 +1098,23 @@ export namespace engine::physics
             return e;
         }
 
+        // The physical material of the body the ray hit (its rigid body's `material`): what it is
+        // made of, for a game deciding how a step on it sounds. Nil on a miss, for a body without
+        // a material, and for one that is not a rigid body (a terrain's surface). Resolved at call
+        // time, like entity().
+        [[nodiscard]] Guid material() const
+        {
+            const foundation::script::Entity e = entity();
+            if (!e.Live())
+            {
+                return Guid{};
+            }
+            auto* bodies = scene->GetSystem<RigidBodyComponentManager>();
+            const RigidBodyComponent* body =
+                bodies != nullptr ? bodies->Get(UnpackEntity(packedEntity)) : nullptr;
+            return body != nullptr ? body->material.id : Guid{};
+        }
+
         // Impulse on the hit body (no-op on a miss / dead world). Resolves the world at call
         // time through the carried scene - the hit stores no world pointer.
         void impulse(f32 x, f32 y, f32 z) const

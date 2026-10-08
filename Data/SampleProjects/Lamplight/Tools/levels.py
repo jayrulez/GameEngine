@@ -14,7 +14,9 @@ and the thief starts facing it with the camera south of him.
 - guards: a round per guard, its points (x, z) walked in turn.
 - loot: {"kind": Purse / Candlestick, "at": (x, z), "value"}; target: the one thing the level is
   for, carried to the exit (a trigger, (x0, z0, x1, z1)); checkpoints: trigger rectangles.
+- props: {"kind": HayBale / Trough, "at": (x, z), "yaw": degrees}: cover, each with its collider.
 - start: the thief's (x, z, yaw degrees); bounds: the navigation zone's (x0, z0, x1, z1).
+- moon: its intensity and direction; rain: true for rain round the thief and its sound.
 """
 
 ROOM = dict(
@@ -70,5 +72,40 @@ GARDENS = dict(
     moon=dict(intensity=0.35, yaw=-60.0, pitch=-45.0),
 )
 
-LEVELS = {"Gardens": GARDENS, "Room": ROOM}
+STABLE_YARD = dict(
+    name="StableYard",
+    # Level 2: the stable yard in the rain. Wet setts all round (the lamps shine in them), a
+    # gravel lane across to the east gate that is loud underfoot, quiet grass in the corners, hay
+    # bales and a trough for cover. The stable block on the north side: two stalls open to the
+    # yard and the tack room behind a locked door, where the ledger is kept and a lamp burns. One
+    # guard walks the yard, another the front of the stable. In over the south-west wall; out by
+    # the east gate, locked.
+    ground=[("Cobbles", (0, 0, 12, 10)), ("Gravel", (1, 7, 14, 8)), ("Gravel", (12, 6, 14, 9)),
+            ("Grass", (8, 1, 12, 5)), ("Grass", (0, 8, 3, 10)), ("Flags", (1, 1, 4, 4)), ("Floor", (4, 1, 7, 4))],
+    walls=[("GardenWall", (0, 0), (12, 0)), ("GardenWall", (0, 10), (12, 10)),
+           ("GardenWall", (0, 0), (0, 10)), ("GardenWall", (12, 0), (12, 10)),
+           # The stable block: the stalls (west) and the tack room (east) behind a wall between.
+           ("Wall", (1, 1), (7, 1)), ("Wall", (1, 4), (7, 4)), ("Wall", (1, 1), (1, 4)), ("Wall", (7, 1), (7, 4)),
+           ("Wall", (4, 1), (4, 4))],
+    corners=[("GardenWall", (12, 7)), ("GardenWall", (12, 8))],  # the east gate's piers
+    openings=[dict(at=(12, 7.5), kind="Gate", locked=True),
+              dict(at=(2.5, 4), kind="Doorway", locked=False), dict(at=(5.5, 4), kind="Doorway", locked=True)],
+    props=[dict(kind="HayBale", at=(16.0, 9.6)), dict(kind="HayBale", at=(17.4, 9.9), yaw=20.0),
+           dict(kind="HayBale", at=(10.0, 17.0), yaw=90.0), dict(kind="HayBale", at=(5.0, 12.5)),
+           dict(kind="Trough", at=(18.5, 18.6))],
+    lamps=[dict(kind="LanternPost", at=(9.2, 11.2)), dict(kind="LanternPost", at=(22.6, 12.6)),
+           dict(kind="OilLamp", at=(11.5, 4.0))],
+    guards=[[(6.0, 12.0), (21.0, 12.0), (21.0, 17.0), (6.0, 17.0)], [(4.0, 9.8), (13.0, 9.8)]],
+    loot=[dict(kind="Purse", at=(4.0, 4.5), value=10), dict(kind="Candlestick", at=(13.0, 3.0), value=25),
+          dict(kind="Purse", at=(22.0, 3.0), value=10), dict(kind="Purse", at=(8.0, 1.0), value=10)],
+    target=dict(kind="Ledger", at=(12.0, 6.5), value=150),
+    exit=(24.6, 14.0, 27.0, 16.0),
+    checkpoints=[(2.0, 13.0, 4.0, 16.0)],
+    start=(2.5, 18.5, 0.0),
+    bounds=(0.0, 0.0, 28.0, 20.0),
+    moon=dict(intensity=0.12, yaw=-40.0, pitch=-55.0),  # behind cloud
+    rain=True,
+)
+
+LEVELS = {"Gardens": GARDENS, "StableYard": STABLE_YARD, "Room": ROOM}
 FIRST = "Gardens"  # the level the game boots into

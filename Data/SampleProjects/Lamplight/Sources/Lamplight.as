@@ -40,7 +40,7 @@ class Game
     // ---- the levels: their scenes, names and what each is for ----
     private Guid levelScene(int i)
     {
-        return i == 0 ? Guid("75fcbc4e-0e3d-43c6-b143-a37ae6f887cf") : Guid("00000000-0000-0000-0000-000000000000");
+        return i == 0 ? Guid("75fcbc4e-0e3d-43c6-b143-a37ae6f887cf") : Guid("dfd95986-d233-4894-bee9-476f3c9ea9cf");
     }
     private string levelName(int i) { return i == 0 ? "Gardens" : "StableYard"; }
     private string levelTitle(int i) { return i == 0 ? "The Gardens" : "The Stable Yard"; }

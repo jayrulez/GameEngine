@@ -8,6 +8,7 @@ Each sits on the ground at its origin; the level places it, and Loot.as picks it
 - Purse: a leather coin purse spilling a few coins: loot.
 - Candlestick: a silver candlestick: loot.
 - Key: the gardener's great iron key with a brass bow: the Gardens' target, carried to the exit.
+- Ledger: the stable ledger, bound in red with a brass clasp: the Stable Yard's target.
 """
 import os, sys
 from mathutils import Vector
@@ -21,7 +22,7 @@ OUT = os.path.abspath(ARGS[0] if ARGS else "loot-out")
 PREVIEW = "preview" in ARGS
 WANTED = [a for a in ARGS[1:] if a != "preview"]
 
-kit3d.PALETTE.update({"PurseLeather": (0.22, 0.10, 0.04), "Gold": (0.95, 0.70, 0.25), "Silver": (0.80, 0.80, 0.82),
+kit3d.PALETTE.update({"Binding": (0.25, 0.06, 0.04), "Pages": (0.85, 0.80, 0.65), "PurseLeather": (0.22, 0.10, 0.04), "Gold": (0.95, 0.70, 0.25), "Silver": (0.80, 0.80, 0.82),
                       "KeyIron": (0.10, 0.10, 0.11), "Brass": (0.78, 0.56, 0.24)})
 kit3d.ROUGHNESS.update({"Gold": 0.25, "Silver": 0.2, "Brass": 0.3, "KeyIron": 0.45})
 kit3d.GLOW.update({"Gold": 0.6, "Silver": 0.12, "Brass": 0.5})  # a glint, so loot reads in the dark
@@ -47,7 +48,13 @@ def key():
     box("Bit", (0.02, 0.05, 0.06), P(0, 0.17, 0.0), "KeyIron")
 
 
-MODELS = {"Purse": purse, "Candlestick": candlestick, "Key": key}
+def ledger():
+    box("Cover", (0.26, 0.34, 0.05), P(0, 0, 0.025), "Binding", bevel=0.008)
+    box("Pages", (0.24, 0.33, 0.035), P(0.012, 0, 0.026), "Pages")
+    box("Clasp", (0.03, 0.06, 0.055), P(0.13, 0, 0.026), "Brass")
+
+
+MODELS = {"Purse": purse, "Candlestick": candlestick, "Key": key, "Ledger": ledger}
 
 
 def main():

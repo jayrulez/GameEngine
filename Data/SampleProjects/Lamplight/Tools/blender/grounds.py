@@ -15,7 +15,9 @@ its colliders from the same sizes:
   between two rails, a lock box near the far edge.
 - LanternPost: an iron post with a glowing lantern on top, 2.5 m; the level hangs the point light
   in the lantern.
-- Grass, Gravel, Flags: 2 m ground tiles, their tops at y = 0: lawn, a raked path, flagstones.
+- Grass, Gravel, Flags, Cobbles: 2 m ground tiles, their tops at y = 0: lawn, a raked path,
+  flagstones, rain-wet setts.
+- HayBale (1.2 x 0.8 x 0.6 m) and Trough (1.8 x 0.6 x 0.6 m): a stable yard's cover.
 """
 import math, os, random, sys
 from mathutils import Vector
@@ -33,11 +35,14 @@ kit3d.PALETTE.update({
     "Yew": (0.035, 0.09, 0.035), "YewLight": (0.05, 0.12, 0.045), "Stone": (0.32, 0.30, 0.27),
     "Coping": (0.40, 0.38, 0.34), "Iron": (0.05, 0.05, 0.055), "Glass": (1.0, 0.72, 0.38),
     "Lawn": (0.05, 0.11, 0.035), "Gravel": (0.36, 0.33, 0.28), "Pebble": (0.45, 0.42, 0.37),
-    "Flag": (0.30, 0.29, 0.27), "Joint": (0.12, 0.11, 0.10),
+    "Flag": (0.30, 0.29, 0.27), "Joint": (0.12, 0.11, 0.10), "Cobble": (0.20, 0.19, 0.18),
+    "Hay": (0.55, 0.42, 0.18), "HayDark": (0.40, 0.30, 0.12), "Twine": (0.30, 0.20, 0.10),
+    "Plank": (0.22, 0.14, 0.08), "Water": (0.02, 0.03, 0.04),
 })
 kit3d.GLOW.update({"Glass": 6.0})
 kit3d.ROUGHNESS.update({"Yew": 0.95, "YewLight": 0.95, "Stone": 0.9, "Lawn": 0.95, "Gravel": 0.95,
-                        "Iron": 0.5, "Flag": 0.55})
+                        "Iron": 0.5, "Flag": 0.55, "Cobble": 0.12, "Joint": 0.2, "Hay": 0.95,
+                        "HayDark": 0.95, "Water": 0.02})
 
 GRID = 2.0
 
@@ -117,9 +122,43 @@ def flags():
             x += w
 
 
+def cobbles():
+    """Rain-wet setts: dark, glossy (SSR shows the lamps in them), each a little proud of the
+    joints between."""
+    box("Bed", (GRID, GRID, 0.03), P(0, 0, -0.025), "Joint")
+    rnd = random.Random(9)
+    n = 10
+    for i in range(n):
+        for j in range(n):
+            x = -GRID / 2 + (i + 0.5) * GRID / n + (0.05 if j % 2 else 0.0)
+            if x > GRID / 2 - 0.08:
+                continue
+            z = -GRID / 2 + (j + 0.5) * GRID / n
+            box("Sett", (GRID / n - 0.025, GRID / n - 0.025, 0.03), P(x, z, -0.012 + rnd.uniform(-0.004, 0.004)),
+                "Cobble", bevel=0.008)
+
+
+def hay_bale():
+    box("Bale", (1.2, 0.8, 0.6), P(0, 0, 0.3), "Hay", bevel=0.06)
+    for x in (-0.3, 0.3):
+        box("Twine", (0.03, 0.82, 0.62), P(x, 0, 0.3), "Twine")
+    box("Straw", (1.1, 0.7, 0.04), P(0, 0, 0.61), "HayDark", bevel=0.02)
+
+
+def trough():
+    t = 0.06  # the planks' thickness: a hollow box, the water inside
+    box("Bottom", (1.8, 0.6, 0.1), P(0, 0, 0.05), "Plank", bevel=0.01)
+    for side in (-1, 1):
+        box("Side", (1.8, t, 0.6), P(0, side * (0.3 - t / 2), 0.3), "Plank", bevel=0.01)
+        box("End", (t, 0.6, 0.6), P(side * (0.9 - t / 2), 0, 0.3), "Plank", bevel=0.01)
+    box("Water", (1.8 - 2 * t, 0.6 - 2 * t, 0.02), P(0, 0, 0.5), "Water")
+
+
 MODELS = {"Hedge": hedge, "HedgeCorner": hedge_corner, "GardenWall": garden_wall, "Pier": pier, "Gate": gate, "LanternPost": lantern_post,
-          "Grass": grass, "Gravel": gravel, "Flags": flags}
-VIEWS = {"big": (Vector((3.5, -4.5, 3.0)), Vector((0, 0, 1.0))), "tile": (Vector((2.0, -2.5, 2.5)), Vector((0, 0, 0)))}
+          "Grass": grass, "Gravel": gravel, "Flags": flags, "Cobbles": cobbles, "HayBale": hay_bale,
+          "Trough": trough}
+VIEWS = {"big": (Vector((3.5, -4.5, 3.0)), Vector((0, 0, 1.0))), "tile": (Vector((2.0, -2.5, 2.5)), Vector((0, 0, 0))),
+         "prop": (Vector((2.2, -2.6, 1.8)), Vector((0, 0, 0.3)))}
 
 
 def main():
@@ -129,7 +168,8 @@ def main():
         MODELS[name]()
         if PREVIEW:
             cam = kit3d.studio()
-            eye, target = VIEWS["tile" if name in ("Grass", "Gravel", "Flags") else "big"]
+            eye, target = VIEWS["tile" if name in ("Grass", "Gravel", "Flags", "Cobbles") else
+                                ("prop" if name in ("HayBale", "Trough") else "big")]
             kit3d.shoot(cam, os.path.join(OUT, name + ".png"), eye, target)
         kit3d.export_static(os.path.join(OUT, name + ".glb"), name)
         print("written", name)

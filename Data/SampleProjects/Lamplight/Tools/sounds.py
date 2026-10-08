@@ -12,6 +12,10 @@ physical material under the foot):
 Taking things (Loot.as):
 - Audio/Coins: a purse's jingle, a few bright pings close together.
 - Audio/Taken: the target in hand, a low two-note chime.
+
+Weather:
+- Audio/Rain: four seconds of steady rain, looping seamlessly (its last half second crossfaded into
+  its first): a hiss of filtered noise with a patter of drops on it.
 """
 import math, os, random, struct, sys, wave
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -103,6 +107,24 @@ def taken(rnd):
     return out
 
 
+def rain(rnd, seconds=4.0, fade=0.5):
+    total = int((seconds + fade) * RATE)
+    hiss = lowpass([rnd.uniform(-1, 1) for _ in range(total)], 0.45)
+    out = [0.6 * h for h in hiss]
+    for _ in range(int(220 * (seconds + fade))):  # drops: tiny clicks scattered through it
+        at = rnd.randrange(total)
+        amp = rnd.uniform(0.2, 0.8)
+        for t in range(int(0.002 * RATE)):
+            if at + t < total:
+                out[at + t] += amp * rnd.uniform(-1, 1) * math.exp(-t / (0.0004 * RATE))
+    n, f = int(seconds * RATE), int(fade * RATE)
+    loop = out[:n]
+    for t in range(f):  # crossfade the tail into the head: the loop has no seam
+        k = t / f
+        loop[t] = out[t] * k + out[n + t] * (1 - k)
+    return loop
+
+
 SURFACES = {"Wood": (wood, 0.8), "Stone": (stone, 0.7), "Gravel": (gravel, 0.75), "Grass": (grass, 0.5)}
 
 
@@ -114,7 +136,7 @@ def main():
             write(path, make(random.Random(sum(map(ord, name)) * 10 + take)), level)  # the same takes each run
             guid = mcp("asset_import", {"source": path, "group": "Audio", "importer": "Audio"})["guid"]
             print("Step%s%d" % (name, take), guid)
-    for name, make in (("Coins", coins), ("Taken", taken)):
+    for name, make in (("Coins", coins), ("Taken", taken), ("Rain", rain)):
         path = os.path.join(OUT, name + ".wav")
         write(path, make(random.Random(sum(map(ord, name)))), 0.7)
         print(name, mcp("asset_import", {"source": path, "group": "Audio", "importer": "Audio"})["guid"])

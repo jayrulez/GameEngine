@@ -40,7 +40,10 @@ WALLS = {
 }
 # Ground tiles by kind: the piece and what it is made of.
 GROUND = {"Floor": (("Manor", "Floor"), "Wood"), "Grass": (("Grounds", "Grass"), "Grass"),
-          "Gravel": (("Grounds", "Gravel"), "Gravel"), "Flags": (("Grounds", "Flags"), "Stone")}
+          "Gravel": (("Grounds", "Gravel"), "Gravel"), "Flags": (("Grounds", "Flags"), "Stone"),
+          "Cobbles": (("Grounds", "Cobbles"), "Stone")}
+# Props by kind: the piece and its collider's size (x, height, z) before its yaw.
+PROPS = {"HayBale": (("Grounds", "HayBale"), (1.2, 0.6, 0.8)), "Trough": (("Grounds", "Trough"), (1.8, 0.6, 0.6))}
 
 ASSETS = mcp("asset_list", {})["assets"]
 
@@ -228,6 +231,28 @@ class Builder:
         self.solid(name, (width / 2, height / 2, 0), (width, height, 0.05), parent=hinge, motion=1)
         self.doors.append((hinge, shut, lock_along, lock_height, opening.get("locked", True)))
 
+    # ---- props: cover to hide behind, each with its collider ----
+    def props(self):
+        for n, prop in enumerate(self.t.get("props", [])):
+            (kit, name), size = PROPS[prop["kind"]]
+            x, z = prop["at"]
+            rot = yaw(prop.get("yaw", 0.0))
+            self.place("%s%d" % (prop["kind"], n), kit, name, (x, 0.0, z), rot)
+            self.solid("%s%d" % (prop["kind"], n), (x, size[1] / 2, z), size, "Wood", rot)
+
+    # ---- weather: rain falling round the thief (and its sound), on a level that has it ----
+    def weather(self):
+        if not self.t.get("rain"):
+            return
+        e = self.d.stable_id("entity")
+        # 5 m over the thief: under the camera (about 7 m up), so no streak passes close to it.
+        self.d.entity("Rain", (0, 5.0, 0), parent=self.thief, eid=e)
+        self.d.add(e, "particle_effect", effect=asset("ParticleEffectAsset", "Rain"))
+        e = self.d.stable_id("entity")
+        self.d.entity("RainSound", parent=self.thief, eid=e)
+        self.d.add(e, "audio.Source", clip=asset("AudioClipAsset", "Rain"), loop=True, spatial=False, autoPlay=True,
+                   volume=0.45)
+
     # ---- lights: the moon, lantern posts, oil lamps on tables ----
     def lights(self):
         moon = self.t.get("moon", dict(intensity=0.25, yaw=-60.0, pitch=-50.0))
@@ -363,8 +388,10 @@ class Builder:
     def build(self):
         self.ground()
         self.walls()
+        self.props()
         self.lights()
         self.people()
+        self.weather()
         self.wiring()
         self.navigation()
         name = self.t["name"]

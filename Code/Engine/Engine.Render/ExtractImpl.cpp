@@ -89,6 +89,12 @@ namespace engine::render
         rd.material = primary;
         rd.entityId = PackEntity(e);
         rd.category = CategoryForMaterial(primary);
+        rd.fade = Clamp(mc.fade, 0.0f, 1.0f);
+        if (rd.fade > 0.0f && rd.category == RenderCategories::Opaque)
+        {
+            // Out of the depth prepass: its depth would hide what the dither lets through.
+            rd.category = RenderCategories::Masked;
+        }
         // Batch-cluster key for the sort (opaque draws stay contiguous by mesh+material). rendererId keeps
         // its default 0 - the MeshRenderer is the first-registered renderer, so mesh data routes to it.
         rd.sortBatchKey = BatchKey(mc.mesh.Get(), primary);

@@ -711,7 +711,7 @@
 			<object name="data">
 				<array name="dataVersions" count="1">
 					<u64 name="type">17486421469838262082</u64>
-					<u32 name="version">4</u32>
+					<u32 name="version">5</u32>
 				</array>
 				<string name="mesh">3e78d2f0-41ef-4c24-893f-9fc8fad47b04</string>
 				<array name="materials" count="2">
@@ -725,6 +725,7 @@
 					<f32 name="a">1</f32>
 				</object>
 				<bool name="visible">true</bool>
+				<f32 name="fade">0</f32>
 				<f32 name="lodBias">0</f32>
 				<i32 name="forceLod">-1</i32>
 			</object>
@@ -735,7 +736,7 @@
 			<object name="data">
 				<array name="dataVersions" count="1">
 					<u64 name="type">17486421469838262082</u64>
-					<u32 name="version">4</u32>
+					<u32 name="version">5</u32>
 				</array>
 				<string name="mesh">04a71db2-3343-4564-81f4-470cb29066e7</string>
 				<array name="materials" count="3">
@@ -750,6 +751,7 @@
 					<f32 name="a">1</f32>
 				</object>
 				<bool name="visible">true</bool>
+				<f32 name="fade">0</f32>
 				<f32 name="lodBias">0</f32>
 				<i32 name="forceLod">-1</i32>
 			</object>
@@ -760,7 +762,7 @@
 			<object name="data">
 				<array name="dataVersions" count="1">
 					<u64 name="type">17486421469838262082</u64>
-					<u32 name="version">4</u32>
+					<u32 name="version">5</u32>
 				</array>
 				<string name="mesh">515fb03d-61fe-4ddf-a1b7-186cdf2ddb8f</string>
 				<array name="materials" count="1">
@@ -773,6 +775,7 @@
 					<f32 name="a">1</f32>
 				</object>
 				<bool name="visible">true</bool>
+				<f32 name="fade">0</f32>
 				<f32 name="lodBias">0</f32>
 				<i32 name="forceLod">-1</i32>
 			</object>
@@ -783,7 +786,7 @@
 			<object name="data">
 				<array name="dataVersions" count="1">
 					<u64 name="type">17486421469838262082</u64>
-					<u32 name="version">4</u32>
+					<u32 name="version">5</u32>
 				</array>
 				<string name="mesh">72daa11a-4190-40b1-9dc2-e9a68aea5099</string>
 				<array name="materials" count="5">
@@ -800,6 +803,7 @@
 					<f32 name="a">1</f32>
 				</object>
 				<bool name="visible">true</bool>
+				<f32 name="fade">0</f32>
 				<f32 name="lodBias">0</f32>
 				<i32 name="forceLod">-1</i32>
 			</object>

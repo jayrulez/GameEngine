@@ -249,6 +249,60 @@ TEST_CASE("ExtractSceneInto maps a transparent material to the Transparent categ
     CHECK(md->category == RenderCategories::Transparent);
 }
 
+TEST_CASE("ExtractSceneInto carries a mesh's fade, clamped, and draws a faded opaque mesh Masked")
+{
+    scene::Scene scene{DefaultAllocator()};
+    auto* meshes = scene.AddSystem<MeshComponentManager>();
+
+    RefPtr<geometry::StaticMesh> mesh = geometry::Primitives::Quad(DefaultAllocator());
+    RefPtr<materials::Material> plaster =
+        materials::MaterialBuilder(u8"plaster").Shader(u8"forward").Build();
+    RefPtr<materials::Material> glass =
+        materials::MaterialBuilder(u8"glass").Shader(u8"forward").Transparent().Build();
+
+    // Solid, half faded, over-faded (clamps to 1), and a faded transparent one (stays Transparent).
+    const f32 fades[] = {0.0f, 0.5f, 3.0f, 0.5f};
+    for (u32 i = 0; i < 4; ++i)
+    {
+        MeshComponent& m = meshes->Add(scene.CreateEntity());
+        m.mesh = mesh;
+        m.SetMaterial(i == 3 ? glass : plaster);
+        m.fade = fades[i];
+    }
+    scene.UpdateTransforms();
+
+    ExtractedScene snapshot{DefaultAllocator()};
+    ExtractSceneInto(scene, snapshot);
+    REQUIRE(snapshot.Size() == 4);
+    u32 solid = 0, half = 0, gone = 0, glassy = 0;
+    for (usize i = 0; i < snapshot.Size(); ++i)
+    {
+        const auto* md = static_cast<const MeshRenderData*>(snapshot.Items()[i]);
+        if (md->category == RenderCategories::Transparent)
+        {
+            glassy += Near(md->fade, 0.5f) ? 1u : 0u;
+        }
+        else if (md->fade == 0.0f)
+        {
+            // Solid: the depth prepass draws it, as before.
+            solid += md->category == RenderCategories::Opaque ? 1u : 0u;
+        }
+        else if (Near(md->fade, 0.5f))
+        {
+            // Faded: out of the prepass, whose depth would hide what shows through it.
+            half += md->category == RenderCategories::Masked ? 1u : 0u;
+        }
+        else if (Near(md->fade, 1.0f))
+        {
+            gone += md->category == RenderCategories::Masked ? 1u : 0u;
+        }
+    }
+    CHECK(solid == 1u);
+    CHECK(half == 1u);
+    CHECK(gone == 1u);
+    CHECK(glassy == 1u);
+}
+
 TEST_CASE("instanced-mesh: seeded identity instance + entity-relative composition")
 {
     scene::Scene scene(DefaultAllocator(), u8"world");

@@ -4,6 +4,7 @@
 // Render - foundation.render:mesh_renderer implementation unit (sec 3.2 / sec 10.6).
 module;
 #include "Core/Prelude.h"
+#include <bit>
 
 module foundation.render;
 
@@ -1058,14 +1059,18 @@ namespace foundation::render
             // meshes - identical (mesh, material) skinned instances collapse into one instanced draw.
             const bool headSkinned =
                 head->mesh != nullptr && head->mesh->IsSkinned() && head->boneMatrices != nullptr;
-            // Extend the run while mesh + material match (a batchable group).
+            // A faded mesh's fade rides its instance's DataOffsets.w, so it draws instanced too.
+            const bool headFaded = head->fade > 0.0f;
+            // Extend the run while mesh + material match (a batchable group), and the run's faded
+            // or solid as a whole: the two draw with different pipelines (DITHER).
             usize j = i + 1;
             if (allowInstancing)
             {
                 while (j < items.Size())
                 {
                     const auto* nd = static_cast<const MeshRenderData*>(items[j].data);
-                    if (nd->multiMesh || nd->mesh != head->mesh || nd->material != head->material)
+                    if (nd->multiMesh || nd->mesh != head->mesh || nd->material != head->material ||
+                        (nd->fade > 0.0f) != headFaded)
                     {
                         break;
                     }
@@ -1077,8 +1082,9 @@ namespace foundation::render
             const GpuMesh* mesh = m_meshes.GetOrUpload(head->mesh);
             if (mesh != nullptr)
             {
-                // Skinned always uses the instanced path (even count 1) - the single path has no bone base.
-                if (runLen >= 2 || headSkinned)
+                // Skinned always uses the instanced path (even count 1) - the single path has no bone
+                // base - and so does a faded mesh, whose fade only the instanced path carries.
+                if (runLen >= 2 || headSkinned || headFaded)
                 {
                     ResolveInstanced(ctx, viewOffset, clusterBG, items, i, runLen, *head, *mesh,
                                      out);
@@ -1348,10 +1354,12 @@ namespace foundation::render
         }
         // The camera depth prepass already filled this group's InstanceData + DataOffsets (identical objects,
         // same order) and cached the range - REUSE it instead of allocating + re-filling (build once). Falls
-        // back to a fresh fill on a miss (no prepass, count mismatch, or ring exhausted).
+        // back to a fresh fill on a miss (no prepass, count mismatch, or ring exhausted). A faded run is
+        // never prepassed, and a solid group of the same mesh and material must not lend it its range.
+        const bool faded = head.fade > 0.0f;
         u64 offsByteOffset;
         const InstShare* shared =
-            m_instShareCache.Find(InstShareKey(ctx.view, head.mesh, head.material));
+            faded ? nullptr : m_instShareCache.Find(InstShareKey(ctx.view, head.mesh, head.material));
         if (shared != nullptr && shared->count == count)
         {
             offsByteOffset = shared->offsByteOffset;
@@ -1382,8 +1390,8 @@ namespace foundation::render
                         prevBase = s->prevBase;
                     }
                 }
-                od[k] = DataOffsets{inst.slotIndex + k, boneBase, prevBase,
-                                    0}; // .x=Instances[] idx, .y/.z=bone bases
+                // .x = Instances[] index, .y/.z = bone bases, .w = the fade's bits (0 = solid).
+                od[k] = DataOffsets{inst.slotIndex + k, boneBase, prevBase, std::bit_cast<u32>(md->fade)};
             }
             offsByteOffset = offs.byteOffset;
         }
@@ -2061,6 +2069,10 @@ namespace foundation::render
         if (MaterialWantsWind(md.material))
         {
             config.shaderFlags |= shaders::ShaderFlags::Wind; // the material's Wind* lanes sway it
+        }
+        if (md.fade > 0.0f)
+        {
+            config.shaderFlags |= shaders::ShaderFlags::Dither; // the screen-door fade (a cutaway)
         }
         // Opaque + masked render the MRT G-buffer pass: target 0 = shaded color (format overridden
         // per-view at build); targets 1/2 = view-space normal + motion vector, 3 = roughness/metallic,

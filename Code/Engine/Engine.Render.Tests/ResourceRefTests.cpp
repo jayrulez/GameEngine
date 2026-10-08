@@ -85,6 +85,7 @@ TEST_CASE("resource-ref: scene round-trip resolves mesh refs through proxy handl
         MeshComponent& mc = scene.GetSystem<MeshComponentManager>()->Add(e);
         mc.mesh.SetId(meshId);
         mc.color = Color{0.5f, 0.25f, 0.125f, 1.0f};
+        mc.fade = 0.75f; // authored fade persists (data v5)
 
         BinarySerializer ar(blob, SerializeMode::Write);
         scene::SerializeScene(ar, scene);
@@ -112,6 +113,7 @@ TEST_CASE("resource-ref: scene round-trip resolves mesh refs through proxy handl
     CHECK(mc->mesh.id == meshId);
     CHECK(mc->mesh.Get() == nullptr);
     CHECK(mc->color.r == doctest::Approx(0.5f));
+    CHECK(mc->fade == doctest::Approx(0.75f));
 
     scene::ResolveSceneResources(loaded, resources);
     geometry::StaticMesh* live = mc->mesh.Get();

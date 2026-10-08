@@ -221,6 +221,10 @@ export namespace foundation::render
         Float4x4 world = Float4x4::Identity();
         // worldCenter + worldRadius live on the RenderData base now (generic depth sort + cull); see them there.
         Color color = Color{1.0f, 1.0f, 1.0f, 1.0f}; // per-instance tint
+        // Screen-door fade, 0 (solid) to 1 (gone). A faded mesh draws in the Masked category (out of
+        // the depth prepass, whose depth would hide what shows through it) with the DITHER variant,
+        // and always through the instanced path, its fade riding DataOffsets.w. Shadows ignore it.
+        f32 fade = 0.0f;
         geometry::StaticMesh* mesh = nullptr;
         materials::Material* material = nullptr;
         // Optional per-submesh materials (borrowed array, indexed by SubMesh::materialIndex). When present,

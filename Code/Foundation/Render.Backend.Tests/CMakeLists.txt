@@ -11,6 +11,7 @@ add_executable(Render.Backend.Tests
     PickProbeTests.cpp
     WindProbeTests.cpp
     InstanceFadeProbeTests.cpp
+    DitherFadeProbeTests.cpp
     ScaledViewProbeTests.cpp ColorProbeTests.cpp ShadowControlProbeTests.cpp
     ScreenSpaceProbeTests.cpp TaaProbeTests.cpp)
 

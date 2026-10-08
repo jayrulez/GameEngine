@@ -59,6 +59,10 @@ export namespace engine::render
         Array<RefPtr<materials::Material>> materialCache; // runtime-only; refreshed at extract
         Color color = Color{1.0f, 1.0f, 1.0f, 1.0f};
         bool visible = true;
+        // How far the mesh is faded out, 0 (solid) to 1 (gone), drawn as a screen-door dither: a
+        // cutaway wall between the camera and the player. Only its camera pixels thin out; it still
+        // casts its whole shadow, so the room behind a cut-away wall stays as dark as it was.
+        f32 fade = 0.0f;
         // Slot-0 conveniences for runtime code (samples/spawners) - refs and raw objects both fit
         // (resource::Ref adopts direct pointers).
         void SetMaterial(const RefPtr<materials::Material>& m)
@@ -348,6 +352,7 @@ export namespace engine::render
         foundation::core::Serialize(ar, "materials", c.materials);
         foundation::core::Serialize(ar, "color", c.color);
         foundation::core::Serialize(ar, "visible", c.visible);
+        foundation::core::Serialize(ar, "fade", c.fade);
         foundation::core::Serialize(ar, "lodBias", c.lodBias);
         foundation::core::Serialize(ar, "forceLod", c.forceLod);
     }

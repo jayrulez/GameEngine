@@ -67,7 +67,7 @@ namespace engine::render
     {
         builder.Attribute("displayName", String(u8"Mesh"))
             .Attribute("category", String(u8"Rendering"))
-            .DataVersion(4) // v4: LOD knobs (v3: unified materials array, slot 0 = whole-mesh)
+            .DataVersion(5) // v5: fade (v4: LOD knobs, v3: unified materials array)
             // Script (Track A): MeshComponent.of(entity) -> a re-resolving handle; `color`/`visible`
             // set live from a behavior. `mesh`/`materials` are resource refs - swapped via the
             // resource-resolve primitive (Phase 1b), not this raw property.
@@ -75,6 +75,11 @@ namespace engine::render
             .Property<&MeshComponent::mesh>("mesh")
             .Property<&MeshComponent::color>("color")
             .Property<&MeshComponent::visible>("visible")
+            .Property<&MeshComponent::fade>("fade")
+            .PropAttribute("range", Float4{0.0f, 1.0f, 0.01f, 0.0f})
+            .PropAttribute("description",
+                           String(u8"Fades the mesh out with a dither, 0 = solid, 1 = gone (a "
+                                  u8"cutaway). Its shadow stays whole."))
             .Property<&MeshComponent::lodBias>("lodBias")
             .PropAttribute("displayName", String(u8"LOD Bias"))
             .PropAttribute("description",

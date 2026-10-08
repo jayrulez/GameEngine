@@ -310,7 +310,7 @@ export namespace foundation::render
         struct DataOffsets
         {
             u32 x, y, z, w;
-        }; // 16  (instance-stepped vertex attr)
+        }; // 16  (instance-stepped vertex attr; forward: .w = the fade's bits)
         struct ShadowViewData
         {
             Float4x4 lightViewProj;

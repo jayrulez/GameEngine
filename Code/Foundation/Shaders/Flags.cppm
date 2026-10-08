@@ -32,6 +32,7 @@ export namespace foundation::shaders
         GBuffer = 1u << 7, // -> #define GBUFFER (forward MRT: also output view-normal + motion)
         Wind = 1u << 8,    // -> #define WIND (vertex sway from the material's Wind* properties)
         Holes = 1u << 9,   // -> #define HOLES (terrain: discard by the bilinear hole mask - a holed chunk's rim)
+        Dither = 1u << 10, // -> #define DITHER (a faded mesh: discard by a screen-door pattern; a cutaway)
     };
 
     [[nodiscard]] constexpr ShaderFlags operator|(ShaderFlags a, ShaderFlags b) noexcept
@@ -71,6 +72,7 @@ export namespace foundation::shaders
         {ShaderFlags::ReceiveShadows, u8"RECEIVE_SHADOWS"},
         {ShaderFlags::Wind, u8"WIND"},
         {ShaderFlags::Holes, u8"HOLES"},
+        {ShaderFlags::Dither, u8"DITHER"},
     };
 
     // Append a `#define NAME 1` for each set flag (static-literal names - safe to

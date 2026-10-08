@@ -2,7 +2,7 @@
 // are children, so they swing with it). Locked, it is picked by holding Interact at it: the thief's
 // hand goes to the lock (two-bone IK on the thief, TwoBoneIkComponent), a bar fills on the HUD,
 // and letting go starts the pick over. Unlocked, Interact opens it away from the thief and closes
-// it again.
+// it again. A guard who comes to it (Knock) opens it, locked or not: guards have the keys.
 
 const float kDoorPi = 3.14159265f;
 
@@ -85,6 +85,21 @@ class Door
         m_angle = Math::Abs(delta) <= step ? m_target : m_angle + (delta > 0.0f ? step : -step);
         self.setRotationEuler(0.0f, shutYaw + m_angle, 0.0f);
         prompt(near || (!locked && m_target != 0.0f && dx * dx + dz * dz <= 4.0f * reach * reach));
+    }
+
+    // A guard at the door (Guard.as knocks): he has the keys, so a shut door opens away from him,
+    // locked or not, and stays open behind him.
+    void onKnock(Float3 at)
+    {
+        if (m_target != 0.0f || m_angle != 0.0f)
+        {
+            return;
+        }
+        float yaw = shutYaw * kDoorPi / 180.0f;
+        Float3 hinge = self.worldPosition();
+        float side = (at.x - hinge.x) * Math::Sin(yaw) + (at.z - hinge.z) * Math::Cos(yaw) >= 0.0f ? 1.0f : -1.0f;
+        locked = false;
+        m_target = side * openAngle;
     }
 
     // The HUD's prompt and the pick's progress while in reach; cleared on leaving, only by the door

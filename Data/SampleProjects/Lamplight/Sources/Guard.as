@@ -7,6 +7,7 @@
 //   chest (a ray that ignores the guards' own group), fills `awareness` by how lit the thief is
 //   (SceneRender.lightAt, his own lantern included) and faster the nearer; unseen, it drains.
 // - Within `touch` he notices the thief whatever the light (bumped into).
+// - A shut door in his way he opens (Knock; he has the keys).
 // - Suspicious at half: he stops and turns to look. Chase when full: he runs at the thief and
 //   catches him within `catchDistance` (a Caught event: the thief to his checkpoint, the guards to
 //   their rounds). Lose him, or hear a Noise within its reach: Search, go there and look round,
@@ -49,6 +50,7 @@ class Guard
     private Entity@ m_figure;
     private float m_calm = 0.0f; // after a catch: not looking for the thief yet
     private Float3 m_heard = Float3(0.0f, 0.0f, 0.0f); // the last noise he went to look at
+    private float m_knockIn = 0.0f; // until the next look for a door in his way
 
     Guard(Entity@ entity) { @self = entity; }
 
@@ -126,6 +128,34 @@ class Guard
         }
         animate(d);
         show();
+        knock(d);
+    }
+
+    // A shut door in his way (a guard has the keys): what is just ahead of him at the waist, told
+    // to open (Door.as answers on its hinge, the collider's parent). The navigation runs through
+    // doorways whether their doors are open or not, so without this he would walk into one and stop.
+    private void knock(float d)
+    {
+        m_knockIn -= d;
+        if (m_knockIn > 0.0f)
+        {
+            return;
+        }
+        m_knockIn = 0.25f;
+        Float3 p = self.worldPosition();
+        Float3 ahead = Float3(Math::Sin(m_yaw), 0.0f, Math::Cos(m_yaw)); // the model faces +Z
+        uint mask = 0xFFFFFFFF & ~(uint(1) << uint(group));
+        RayCastHit@ hit = ScenePhysics::of(self.scene).rayCast(Float3(p.x, p.y + 1.0f, p.z), ahead, 1.2f, mask);
+        if (hit is null || !hit.hit)
+        {
+            return;
+        }
+        Entity@ thing = hit.entity();
+        Entity@ hinge = (thing !is null && thing.isValid()) ? thing.parent() : null;
+        if (hinge !is null && hinge.isValid())
+        {
+            hinge.send("Knock", p);
+        }
     }
 
     // The meter over his head: hidden while he has seen nothing, then the bar fills with his

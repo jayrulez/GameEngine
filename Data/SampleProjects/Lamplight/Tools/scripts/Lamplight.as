@@ -14,7 +14,7 @@
 // the most loot and whether it was ghosted ("done.<level>", "best.<level>", "loot.<level>",
 // "ghost.<level>").
 
-const int kLevelCount = 2;
+const int kLevelCount = 3;
 Guid kTitleDoc = Guid("{{UI:Title}}");
 Guid kHudDoc = Guid("{{UI:Hud}}");
 Guid kPauseDoc = Guid("{{UI:Pause}}");
@@ -40,11 +40,16 @@ class Game
     // ---- the levels: their scenes, names and what each is for ----
     private Guid levelScene(int i)
     {
-        return i == 0 ? Guid("{{Scene:Gardens}}") : Guid("{{Scene:StableYard}}");
+        if (i == 0) return Guid("{{Scene:Gardens}}");
+        if (i == 1) return Guid("{{Scene:StableYard}}");
+        return Guid("{{Scene:GroundFloor}}");
     }
-    private string levelName(int i) { return i == 0 ? "Gardens" : "StableYard"; }
-    private string levelTitle(int i) { return i == 0 ? "The Gardens" : "The Stable Yard"; }
-    private string targetName(int i) { return i == 0 ? "the gardener's key" : "the stable ledger"; }
+    private string levelName(int i) { return i == 0 ? "Gardens" : (i == 1 ? "StableYard" : "GroundFloor"); }
+    private string levelTitle(int i) { return i == 0 ? "The Gardens" : (i == 1 ? "The Stable Yard" : "The Ground Floor"); }
+    private string targetName(int i)
+    {
+        return i == 0 ? "the gardener's key" : (i == 1 ? "the stable ledger" : "the butler's keys");
+    }
 
     // A level opens once the one before it is done; the first is always open, one not built yet never.
     private bool unlocked(int i)
@@ -85,6 +90,7 @@ class Game
         Screen@ s = ui::push(kTitleDoc);
         s.findButton("level-0").onClick(Action(this.onLevel0));
         s.findButton("level-1").onClick(Action(this.onLevel1));
+        s.findButton("level-2").onClick(Action(this.onLevel2));
         s.findButton("quit-btn").onClick(Action(this.onQuit));
         for (int i = 0; i < kLevelCount; ++i)
         {
@@ -95,6 +101,7 @@ class Game
 
     private void onLevel0() { startLevel(0); }
     private void onLevel1() { startLevel(1); }
+    private void onLevel2() { startLevel(2); }
     private void onQuit() { run::requestExit(0); }
 
     // ---- a level ----

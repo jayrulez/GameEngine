@@ -14,7 +14,7 @@
 // the most loot and whether it was ghosted ("done.<level>", "best.<level>", "loot.<level>",
 // "ghost.<level>").
 
-const int kLevelCount = 2;
+const int kLevelCount = 3;
 Guid kTitleDoc = Guid("8d1f7418-513a-4730-b043-96d9a9150585");
 Guid kHudDoc = Guid("b7c6bea8-3a7d-454b-9aeb-a2a178e5693e");
 Guid kPauseDoc = Guid("f40800e3-4aed-4158-94d8-fb49fa0e68d0");
@@ -40,11 +40,16 @@ class Game
     // ---- the levels: their scenes, names and what each is for ----
     private Guid levelScene(int i)
     {
-        return i == 0 ? Guid("75fcbc4e-0e3d-43c6-b143-a37ae6f887cf") : Guid("dfd95986-d233-4894-bee9-476f3c9ea9cf");
+        if (i == 0) return Guid("75fcbc4e-0e3d-43c6-b143-a37ae6f887cf");
+        if (i == 1) return Guid("dfd95986-d233-4894-bee9-476f3c9ea9cf");
+        return Guid("04933472-8d3a-4a3c-943d-ad9f45fe86e7");
     }
-    private string levelName(int i) { return i == 0 ? "Gardens" : "StableYard"; }
-    private string levelTitle(int i) { return i == 0 ? "The Gardens" : "The Stable Yard"; }
-    private string targetName(int i) { return i == 0 ? "the gardener's key" : "the stable ledger"; }
+    private string levelName(int i) { return i == 0 ? "Gardens" : (i == 1 ? "StableYard" : "GroundFloor"); }
+    private string levelTitle(int i) { return i == 0 ? "The Gardens" : (i == 1 ? "The Stable Yard" : "The Ground Floor"); }
+    private string targetName(int i)
+    {
+        return i == 0 ? "the gardener's key" : (i == 1 ? "the stable ledger" : "the butler's keys");
+    }
 
     // A level opens once the one before it is done; the first is always open, one not built yet never.
     private bool unlocked(int i)
@@ -85,6 +90,7 @@ class Game
         Screen@ s = ui::push(kTitleDoc);
         s.findButton("level-0").onClick(Action(this.onLevel0));
         s.findButton("level-1").onClick(Action(this.onLevel1));
+        s.findButton("level-2").onClick(Action(this.onLevel2));
         s.findButton("quit-btn").onClick(Action(this.onQuit));
         for (int i = 0; i < kLevelCount; ++i)
         {
@@ -95,6 +101,7 @@ class Game
 
     private void onLevel0() { startLevel(0); }
     private void onLevel1() { startLevel(1); }
+    private void onLevel2() { startLevel(2); }
     private void onQuit() { run::requestExit(0); }
 
     // ---- a level ----

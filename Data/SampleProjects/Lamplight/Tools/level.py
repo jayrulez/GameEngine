@@ -42,6 +42,15 @@ WALLS = {
 GROUND = {"Floor": (("Manor", "Floor"), "Wood"), "Grass": (("Grounds", "Grass"), "Grass"),
           "Gravel": (("Grounds", "Gravel"), "Gravel"), "Flags": (("Grounds", "Flags"), "Stone"),
           "Cobbles": (("Grounds", "Cobbles"), "Stone")}
+# Lamps on tables by kind: the piece, where its light hangs over the tabletop and how bright, and
+# its glowing material slots (Lamp.as swaps them out while it is out). The oil lamp casts shadows
+# (six shadow tiles, a point light); a candelabra does not, so a room can have several.
+TABLE_LAMPS = {
+    "OilLamp": dict(piece=("Manor", "OilLamp"), lightY=0.75, intensity=6.0, range=7.0, shadows=True,
+                    flameSlot=1, chimneySlot=2),
+    "Candelabra": dict(piece=("Manor", "Candelabra"), lightY=0.7, intensity=3.0, range=5.5, shadows=False,
+                       flameSlot=2, chimneySlot=-1),
+}
 # Props by kind: the piece and its collider's size (x, height, z) before its yaw.
 PROPS = {"HayBale": (("Grounds", "HayBale"), (1.2, 0.6, 0.8)), "Trough": (("Grounds", "Trough"), (1.8, 0.6, 0.6))}
 
@@ -240,6 +249,28 @@ class Builder:
             self.place("%s%d" % (prop["kind"], n), kit, name, (x, 0.0, z), rot)
             self.solid("%s%d" % (prop["kind"], n), (x, size[1] / 2, z), size, "Wood", rot)
 
+    # ---- rooms: each a reflection probe over its floor (polished boards show the room in them) and
+    #      a reverb zone round it (the wettest zone the listener is in wins, so each room echoes as
+    #      it is sized) ----
+    def rooms(self):
+        for room in self.t.get("rooms", []):
+            i0, j0, i1, j1 = room["rect"]
+            cx, cz = GRID * (i0 + i1) / 2, GRID * (j0 + j1) / 2
+            hx, hz = GRID * (i1 - i0) / 2, GRID * (j1 - j0) / 2
+            e = self.d.stable_id("entity")
+            self.d.entity(room["name"], (cx, 1.5, cz), eid=e)
+            self.d.add(e, "reflection_probe", halfExtents={"x": hx, "y": 1.5, "z": hz}, blendDistance=0.5,
+                       resolution=128)
+            self.d.add(e, "audio.ReverbZone", radius=max(hx, hz), edgeFade=0.2,
+                       roomSize=room.get("roomSize", min(0.9, 0.3 + (hx * hz) / 60.0)),
+                       damping=room.get("damping", 0.4), wetLevel=room.get("wet", 0.35))
+
+    # ---- the way on: a hatch to stand on (the exit's trigger is over it) ----
+    def hatch(self):
+        if "hatch" in self.t:
+            x, z = self.t["hatch"]
+            self.place("Hatch", "Manor", "Hatch", (x, 0.0, z))
+
     # ---- weather: rain falling round the thief (and its sound), on a level that has it ----
     def weather(self):
         if not self.t.get("rain"):
@@ -274,19 +305,24 @@ class Builder:
                            castsShadows=True)
                 slots = piece("Grounds", "LanternPost")[1]  # Iron, Glass (grounds.py's order)
                 self.lamps.append((post, light, dict(flameSlot=1, chimneySlot=-1, flameLit=slots[1])))
-            elif kind == "OilLamp":
-                # A table with an oil lamp; its light 0.75 m over the tabletop (any nearer and the
-                # top is tens of times brighter than the walls and clips white).
+            elif kind in TABLE_LAMPS:
+                # A table with a lamp on it; its light hangs well over the tabletop (any nearer and
+                # the top is tens of times brighter than the walls and clips white).
+                spec = TABLE_LAMPS[kind]
                 self.place("Table%d" % n, "Manor", "Table", (x, 0.0, z))
                 self.solid("Table%d" % n, (x, 0.4, z), (1.6, 0.8, 0.9), "Wood")
-                oil = self.place("OilLamp%d" % n, "Manor", "OilLamp", (x, 0.8, z))
+                lamp_entity = self.place("%s%d" % (kind, n), *spec["piece"], (x, 0.8, z))
                 light = self.d.stable_id("entity")
-                self.d.entity("LampLight%d" % n, (0, 0.75, 0), parent=oil, eid=light)
-                self.d.add(light, "light", type=1, color={"r": 1.0, "g": 0.72, "b": 0.42, "a": 1.0}, intensity=6.0,
-                           range=7.0, castsShadows=True)
-                slots = piece("Manor", "OilLamp")[1]  # Brass, Flame, Chimney (manor.py's order)
-                self.lamps.append((oil, light, dict(flameSlot=1, chimneySlot=2, flameLit=slots[1],
-                                                    chimneyLit=slots[2])))
+                self.d.entity("LampLight%d" % n, (0, spec["lightY"], 0), parent=lamp_entity, eid=light)
+                self.d.add(light, "light", type=1, color={"r": 1.0, "g": 0.72, "b": 0.42, "a": 1.0},
+                           intensity=lamp.get("intensity", spec["intensity"]), range=spec["range"],
+                           castsShadows=spec["shadows"])
+                slots = piece(*spec["piece"])[1]
+                glow = dict(flameSlot=spec["flameSlot"], chimneySlot=spec["chimneySlot"],
+                            flameLit=slots[spec["flameSlot"]])
+                if spec["chimneySlot"] >= 0:
+                    glow["chimneyLit"] = slots[spec["chimneySlot"]]
+                self.lamps.append((lamp_entity, light, glow))
 
     # ---- the thief, his camera, the guards, loot, the target, the exit, checkpoints ----
     def people(self):
@@ -382,13 +418,17 @@ class Builder:
         x0, z0, x1, z1 = self.t["bounds"]
         e = self.d.stable_id("entity")
         self.d.entity("NavZone", ((x0 + x1) / 2, 1.5, (z0 + z1) / 2), eid=e)
+        # Baked for the guards' own radius (0.35 m) on a fine grid: at the default 0.6 m a 1.2 m
+        # doorway or gate erodes shut and no round goes through one.
         self.d.add(e, "navigation.Zone", extents={"x": (x1 - x0) / 2, "y": 3.0, "z": (z1 - z0) / 2},
-                   zone=nav_zone(self.t["name"]))
+                   zone=nav_zone(self.t["name"]), agentRadius=0.35, cellSize=0.15, cellHeight=0.1)
 
     def build(self):
         self.ground()
         self.walls()
         self.props()
+        self.rooms()
+        self.hatch()
         self.lights()
         self.people()
         self.weather()

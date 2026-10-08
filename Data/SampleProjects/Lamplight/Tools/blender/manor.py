@@ -16,7 +16,9 @@ generator from the same sizes (room.py):
   hinge edge (x 0..1.04), with a brass lock plate and knob on both faces near the far edge.
 - Table: a 1.6 m by 0.9 m table, 0.8 m high.
 - OilLamp: a brass font and base with a glass chimney and its flame, 0.45 m tall; the level hangs
-  its point light over it (room.py says how high, and why).
+  its point light over it (level.py says how high, and why).
+- Candelabra: three silver branches and lit candles, 0.5 m tall; its light hangs over it too.
+- Hatch: a cellar's trapdoor flush with the floor, 1.2 m square: a level's way down.
 """
 import math, os, sys
 from mathutils import Vector
@@ -34,9 +36,10 @@ kit3d.PALETTE.update({
     "Plaster": (0.62, 0.57, 0.49), "Skirting": (0.16, 0.10, 0.06), "Boards": (0.20, 0.11, 0.06),
     "TableWood": (0.30, 0.18, 0.10), "Brass": (0.78, 0.56, 0.24), "Chimney": (0.85, 0.80, 0.70),
     "Flame": (1.0, 0.70, 0.35), "DoorWood": (0.22, 0.12, 0.06), "DoorPanel": (0.18, 0.10, 0.05),
+    "Silver": (0.72, 0.72, 0.74), "Wax": (0.92, 0.88, 0.78), "HatchWood": (0.20, 0.13, 0.08),
 })
 kit3d.GLOW.update({"Flame": 6.0, "Chimney": 1.5})
-kit3d.ROUGHNESS.update({"Boards": 0.12, "Brass": 0.35, "Plaster": 0.85})
+kit3d.ROUGHNESS.update({"Boards": 0.12, "Brass": 0.35, "Plaster": 0.85, "Silver": 0.25, "Wax": 0.6})
 
 GRID, HEIGHT, THICK = 2.0, 3.0, 0.2
 SKIRT_H, SKIRT_T = 0.16, 0.02   # skirting height, and how far it stands proud of the plaster
@@ -124,8 +127,30 @@ def oil_lamp():
     tube("ChimneyTop", Vector((0, 0, 0.36)), Vector((0, 0, 0.45)), 0.03, "Chimney", segments=12, radius2=0.025)
 
 
+def candelabra():
+    """A three-branch silver candelabra with its candles lit (their flames glow; the level hangs
+    the light over them)."""
+    tube("Base", Vector((0, 0, 0)), Vector((0, 0, 0.03)), 0.09, "Silver", segments=16)
+    tube("Stem", Vector((0, 0, 0.03)), Vector((0, 0, 0.3)), 0.018, "Silver", segments=10)
+    for x in (-0.14, 0.0, 0.14):
+        if x != 0.0:
+            tube("Arm", P(0, 0, 0.26), P(x, 0, 0.32), 0.012, "Silver", segments=8)
+        tube("Cup", P(x, 0, 0.32), P(x, 0, 0.35), 0.025, "Silver", segments=10)
+        tube("Candle", P(x, 0, 0.35), P(x, 0, 0.47), 0.015, "Wax", segments=10)
+        ball("Flame", P(x, 0, 0.49), 0.012, "Flame", scale=(1, 1, 2.0), segments=(10, 6))
+
+
+def hatch():
+    """A cellar's trapdoor in the floor (1.2 m square, flush), with its iron ring: the way down."""
+    for i in range(6):
+        box("Plank", (1.2, 0.19, 0.04), P(0, -0.5 + i * 0.2, -0.015), "HatchWood", bevel=0.006)
+    for x in (-0.45, 0.45):
+        box("Brace", (0.08, 1.2, 0.01), P(x, 0, 0.006), "Brass")
+    tube("Ring", P(0, 0.3, 0.008), P(0, 0.3, 0.016), 0.06, "Brass", segments=16)
+
+
 MODELS = {"Wall": wall, "Doorway": doorway, "Door": door, "Post": post, "Floor": floor, "Table": table,
-          "OilLamp": oil_lamp}
+          "OilLamp": oil_lamp, "Candelabra": candelabra, "Hatch": hatch}
 VIEWS = {"big": (Vector((3.5, -4.5, 3.0)), Vector((0, 0, 1.2))),
          "small": (Vector((0.9, -1.2, 0.8)), Vector((0, 0, 0.25)))}
 
@@ -137,7 +162,7 @@ def main():
         MODELS[name]()
         if PREVIEW:
             cam = kit3d.studio()
-            eye, target = VIEWS["small" if name == "OilLamp" else "big"]
+            eye, target = VIEWS["small" if name in ("OilLamp", "Candelabra", "Hatch") else "big"]
             kit3d.shoot(cam, os.path.join(OUT, name + ".png"), eye, target)
         kit3d.export_static(os.path.join(OUT, name + ".glb"), name)
         print("written", name)

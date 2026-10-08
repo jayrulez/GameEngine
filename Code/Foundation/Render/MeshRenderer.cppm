@@ -300,7 +300,9 @@ export namespace foundation::render
             Color tint;
             u32 boneBase = 0, prevBoneBase = 0;
             u32 pickIndex = 0, pickGeneration = 0; // pick pass only (EntityTag index + 1, generation)
-        }; // 160 (cbuffer Object)
+            f32 fade = 0.0f; // the screen-door fade, 0 = solid (forward pass, the DITHER variant)
+            u32 _fadePad[3] = {};
+        }; // 176 (cbuffer Object)
         struct InstanceData
         {
             Float4x4 world;
@@ -320,7 +322,7 @@ export namespace foundation::render
         // GPU-layout contract: these mirror HLSL cbuffer/StructuredBuffer elements and use the PACKED
         // Float4x4 (64B, tight). A stray SIMD Matrix4 (also 64B but 16-byte aligned) would still trip the
         // size math via padding shifts - the guards pin the exact byte layout the shaders expect.
-        static_assert(sizeof(ObjectData) == 160, "cbuffer Object layout drift");
+        static_assert(sizeof(ObjectData) == 176, "cbuffer Object layout drift");
         static_assert(sizeof(InstanceData) == 144,
                       "StructuredBuffer<InstanceData> element layout drift");
         // The pick pass's set-0 view (cbuffer PickView in pick_ids.vs): the cropped VP plus a

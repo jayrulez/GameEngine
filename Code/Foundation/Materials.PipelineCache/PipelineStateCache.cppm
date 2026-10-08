@@ -149,8 +149,8 @@ export namespace foundation::materials
             // --- vertex ---
             // Up to three buffers, in slot order matching the renderer's draw bindings: mesh stream
             // (slot 0); the skinning stream (slot 1, joints loc 6 + weights loc 7) when skinned; the
-            // instance-stepped DataOffsets stream (loc 5) when instanced. Skinned draws are always
-            // instanced -> [mesh, skin, offsets]; non-skinned instanced -> [mesh, offsets].
+            // instance-stepped DataOffsets stream (loc 5) when instanced: [mesh], [mesh, skin],
+            // [mesh, offsets] or [mesh, skin, offsets]. The shaders pin their input locations.
             rhi::VertexBufferLayout buffers[3] = {
                 VertexLayoutHelper::BufferLayout(config.vertexLayout), {}, {}};
             u32 bufferCount = (config.vertexLayout != VertexLayoutType::None) ? 1u : 0u;

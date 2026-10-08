@@ -5,7 +5,8 @@
 // out, with a solid card behind the faded-out one. The solid card is untouched, the half-faded one
 // keeps about half its pixels, and the faded-out one draws none and hides none of the card behind
 // it, so it stayed out of the depth prepass too. The two faded cards share one instanced draw,
-// each with its own fade. Vulkan + WebGPU.
+// each with its own fade; drawn apart (each its own material), each is a lone draw by the single
+// path, which thins them the same. Vulkan + WebGPU.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -62,8 +63,9 @@ namespace
     };
 
     // The cards, at 3 m: solid on the left, `middleFade` in the middle, `rightFade` on the right
-    // (none when negative), and a wider solid card 6 m away behind the right one.
-    Lit RenderCards(rhi::Device& device, f32 middleFade, f32 rightFade)
+    // (none when negative), and a wider solid card 6 m away behind the right one. `apart`: the
+    // middle and right cards each have a material of their own, so neither batches.
+    Lit RenderCards(rhi::Device& device, f32 middleFade, f32 rightFade, bool apart = false)
     {
         Lit lit;
         shaders::ShaderSystemHost host{DefaultAllocator()};
@@ -85,10 +87,14 @@ namespace
             RefPtr<geometry::StaticMesh> card = Card();
             RefPtr<materials::Material> material =
                 materials::CreatePBR(u8"dither.card", Float4{0.9f, 0.9f, 0.9f, 1}, 0, 0.9f);
+            RefPtr<materials::Material> middleMaterial =
+                materials::CreatePBR(u8"dither.middle", Float4{0.9f, 0.9f, 0.9f, 1}, 0, 0.9f);
+            RefPtr<materials::Material> rightMaterial =
+                materials::CreatePBR(u8"dither.right", Float4{0.9f, 0.9f, 0.9f, 1}, 0, 0.9f);
             ExtractedScene scene{DefaultAllocator()};
             scene.SetAmbient(Float3{1.0f, 1.0f, 1.0f});
             u32 nextEntity = 1;
-            const auto add = [&](const Float3& at, f32 scale, f32 fade)
+            const auto add = [&](const Float3& at, f32 scale, f32 fade, materials::Material* mat)
             {
                 MeshRenderData* md = scene.Add<MeshRenderData>();
                 REQUIRE(md != nullptr);
@@ -97,23 +103,23 @@ namespace
                 md->world.m[3][1] = at.y;
                 md->world.m[3][2] = at.z;
                 md->mesh = card.Get();
-                md->material = material.Get();
+                md->material = mat;
                 md->fade = fade;
                 md->rendererId = meshRenderer.RendererId();
                 // As extraction routes it: a faded opaque mesh draws Masked (no prepass).
                 md->category = fade > 0.0f ? RenderCategories::Masked : RenderCategories::Opaque;
-                md->sortBatchKey = BatchKey(card.Get(), material.Get());
+                md->sortBatchKey = BatchKey(card.Get(), mat);
                 md->worldCenter = at;
                 md->worldRadius = scale;
                 md->entityId = nextEntity++;
             };
-            add(Float3{-1.15f, 0.0f, -3.0f}, 1.0f, 0.0f);
-            add(Float3{0.0f, 0.0f, -3.0f}, 1.0f, middleFade);
+            add(Float3{-1.15f, 0.0f, -3.0f}, 1.0f, 0.0f, material.Get());
+            add(Float3{0.0f, 0.0f, -3.0f}, 1.0f, middleFade, apart ? middleMaterial.Get() : material.Get());
             if (rightFade >= 0.0f)
             {
-                add(Float3{1.15f, 0.0f, -3.0f}, 1.0f, rightFade);
+                add(Float3{1.15f, 0.0f, -3.0f}, 1.0f, rightFade, apart ? rightMaterial.Get() : material.Get());
             }
-            add(Float3{2.3f, 0.0f, -6.0f}, 1.6f, 0.0f);
+            add(Float3{2.3f, 0.0f, -6.0f}, 1.6f, 0.0f, material.Get());
 
             ViewCamera camera;
             camera.view = Float4x4::LookAtRH(Float3{0, 0, 0}, Float3{0, 0, -1}, Float3{0, 1, 0});
@@ -204,6 +210,12 @@ namespace
         CHECK(faded.columns[1] * 10u <= solid.columns[1] * 6u);
         // Faded out: none of its pixels, and the card behind shows whole (no prepass depth).
         CHECK(faded.columns[2] == solid.columns[2]);
+        // Each a lone draw (the single path): thinned exactly as in the shared instanced draw.
+        const Lit apart = RenderCards(device, 0.5f, 1.0f, /*apart*/ true);
+        REQUIRE(apart.valid);
+        CHECK(apart.columns[0] == faded.columns[0]);
+        CHECK(apart.columns[1] == faded.columns[1]);
+        CHECK(apart.columns[2] == faded.columns[2]);
     }
 }
 

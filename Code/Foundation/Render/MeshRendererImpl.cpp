@@ -1055,11 +1055,9 @@ namespace foundation::render
                 ++i;
                 continue;
             }
-            // Skinned meshes carry per-instance bones via DataOffsets.y now, so they batch like static
-            // meshes - identical (mesh, material) skinned instances collapse into one instanced draw.
-            const bool headSkinned =
-                head->mesh != nullptr && head->mesh->IsSkinned() && head->boneMatrices != nullptr;
-            // A faded mesh's fade rides its instance's DataOffsets.w, so it draws instanced too.
+            // Skinned and faded meshes batch like any other: identical (mesh, material) instances
+            // collapse into one instanced draw, and a lone one draws by the single path, which carries
+            // the same bones and fade per object.
             const bool headFaded = head->fade > 0.0f;
             // Extend the run while mesh + material match (a batchable group), and the run's faded
             // or solid as a whole: the two draw with different pipelines (DITHER).
@@ -1082,9 +1080,7 @@ namespace foundation::render
             const GpuMesh* mesh = m_meshes.GetOrUpload(head->mesh);
             if (mesh != nullptr)
             {
-                // Skinned always uses the instanced path (even count 1) - the single path has no bone
-                // base - and so does a faded mesh, whose fade only the instanced path carries.
-                if (runLen >= 2 || headSkinned || headFaded)
+                if (runLen >= 2)
                 {
                     ResolveInstanced(ctx, viewOffset, clusterBG, items, i, runLen, *head, *mesh,
                                      out);
@@ -1168,9 +1164,8 @@ namespace foundation::render
                 ++i;
                 continue;
             }
-            // Skinned casters batch like static ones now (per-instance bone base via DataOffsets.y).
-            const bool headSkinned =
-                head->mesh != nullptr && head->mesh->IsSkinned() && head->boneMatrices != nullptr;
+            // Skinned casters batch like static ones; a lone one draws by the single path (its bone
+            // base rides the object block there).
             usize j = i + 1;
             while (j < items.Size())
             {
@@ -1185,7 +1180,7 @@ namespace foundation::render
             const GpuMesh* mesh = m_meshes.GetOrUpload(head->mesh);
             if (mesh != nullptr)
             {
-                if (runLen >= 2 || headSkinned)
+                if (runLen >= 2)
                 {
                     ResolveDepthInstanced(ctx, shadowViewOffset, items, i, runLen, *mesh, out,
                                           pick);
@@ -1227,7 +1222,7 @@ namespace foundation::render
         // GPU skinning: a skinned mesh draws the SKINNED + SkinnedMesh-layout permutation, binds the
         // skin stream (buffer 1), and reads its bones from the shared device pool at boneBase (matrix
         // units, computed once this frame by UploadSkinning). No per-pass upload here.
-        u32 boneBase = 0;
+        u32 boneBase = 0, prevBoneBase = 0;
         bool skinned = md.boneMatrices != nullptr && md.boneCount > 0 && md.mesh != nullptr &&
                        md.mesh->IsSkinned() && mesh.skinBuffer != nullptr;
         if (skinned)
@@ -1236,6 +1231,7 @@ namespace foundation::render
             if (s != nullptr)
             {
                 boneBase = s->base;
+                prevBoneBase = s->prevBase; // last frame's pose: the skinned motion vectors
                 config.vertexLayout = materials::VertexLayoutType::SkinnedMesh;
                 config.shaderFlags |= shaders::ShaderFlags::Skinned;
             }
@@ -1256,7 +1252,8 @@ namespace foundation::render
         od.prevWorld = ctx.needsMotion ? PrevWorldFor(md.entityId, md.world) : md.world;
         od.tint = md.color;
         od.boneBase = boneBase;
-        od.prevBoneBase = boneBase;
+        od.prevBoneBase = prevBoneBase;
+        od.fade = md.fade;
         *static_cast<ObjectData*>(obj.ptr) = od;
 
         // Shared per-submesh draw state (view/object/cluster sets + vertex/index buffers + skinning).

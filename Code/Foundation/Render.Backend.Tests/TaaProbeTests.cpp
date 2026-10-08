@@ -8,7 +8,9 @@
 // ones the history lands in the wrong place, the clip throws it away, and the jittered frame shows
 // through (PaperKid's chase camera: steady titles, jittery levels). And with a second view drawn
 // before it on alternate frames (PaperKid's minimap, a render texture every other frame), the main
-// view keeps its own history by its key, not by its place in the frame's list.
+// view keeps its own history by its key, not by its place in the frame's list. And with the camera
+// still and the bars one skinned mesh slid a pixel a frame by its bone, its motion vectors come from
+// last frame's pose, so it resolves as steadily, drawn alone (the single path) or batched.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -73,9 +75,40 @@ namespace
         bool keyed = false;
     };
 
+    // The bars as ONE skinned mesh, every vertex on bone 0: moving the bone moves them all.
+    RefPtr<geometry::SkinnedMesh> SkinnedBars()
+    {
+        RefPtr<geometry::SkinnedMesh> bars = MakeRef<geometry::SkinnedMesh>(DefaultAllocator());
+        RefPtr<geometry::StaticMesh> cube = geometry::Primitives::Cube(DefaultAllocator(), 1.0f);
+        const u32 barIndices = cube->indices.Count();
+        bars->indices.Resize(41u * barIndices);
+        geometry::VertexSkinning one{};
+        one.weights = Float4{1, 0, 0, 0};
+        for (i32 b = -20; b <= 20; ++b)
+        {
+            const u32 base = static_cast<u32>(bars->vertices.Size());
+            const Float3 at{0.3f * static_cast<f32>(b), 0.0f, -kWallDistance + 0.01f};
+            for (geometry::StaticMeshVertex v : cube->vertices)
+            {
+                v.position = Float3{v.position.x * 0.1f, v.position.y * 20.0f, v.position.z * 0.02f} + at;
+                bars->vertices.PushBack(v);
+                bars->skinning.PushBack(one);
+            }
+            for (u32 k = 0; k < barIndices; ++k)
+            {
+                bars->indices.Add(base + cube->indices.Get(k));
+            }
+        }
+        bars->bounds = AABB::FromCenterExtents(Float3{0, 0, -kWallDistance}, Float3{7.0f, 10.0f, 0.1f});
+        bars->subMeshes.PushBack(geometry::SubMesh{0, static_cast<i32>(bars->indices.Count()), 0, geometry::PrimitiveType::Triangles});
+        return bars;
+    }
+
     // Render kFrames with the camera stepping `step` along +X a frame (TAA on or off) and read back
-    // the last kKept.
-    Array<testsupport::CapturedImage> RenderSlide(rhi::Device& device, f32 step, bool taaOn, SideView side = {})
+    // the last kKept. `skinnedStep`: the camera stays and the bars, one skinned mesh, slide that far
+    // along -X a frame by their bone.
+    Array<testsupport::CapturedImage> RenderSlide(rhi::Device& device, f32 step, bool taaOn, SideView side = {},
+                                                  f32 skinnedStep = 0.0f, bool twin = false)
     {
         Array<testsupport::CapturedImage> kept;
         shaders::ShaderSystemHost host{DefaultAllocator()};
@@ -106,7 +139,7 @@ namespace
             RefPtr<materials::Material> dark = materials::CreatePBR(u8"taa.wall", Float4{0.05f, 0.05f, 0.05f, 1.0f}, 0.0f, 0.9f);
             RefPtr<materials::Material> bright = materials::CreatePBR(u8"taa.bar", Float4{0.9f, 0.9f, 0.9f, 1.0f}, 0.0f, 0.9f);
             items.PushBack(Slab(Float3{40.0f, 20.0f, 0.1f}, Float3{0.0f, 0.0f, -kWallDistance - 0.05f}, dark));
-            for (i32 b = -20; b <= 20; ++b)
+            for (i32 b = -20; b <= 20 && skinnedStep == 0.0f; ++b)
             {
                 items.PushBack(Slab(Float3{0.1f, 20.0f, 0.02f}, Float3{0.3f * static_cast<f32>(b), 0.0f, -kWallDistance + 0.01f},
                                     bright));
@@ -126,6 +159,33 @@ namespace
                 data->mesh = item.mesh.Get();
                 data->material = item.material.Get();
                 data->category = RenderCategories::Opaque;
+            }
+            RefPtr<geometry::SkinnedMesh> bars;
+            Array<Float4x4> palette, previous; // this frame's pose and last frame's (motion vectors)
+            palette.Resize(1, Float4x4::Identity());
+            previous.Resize(1, Float4x4::Identity());
+            if (skinnedStep != 0.0f)
+            {
+                bars = SkinnedBars();
+                MeshRenderData* data = scene.Add<MeshRenderData>();
+                data->entityId = nextEntity++;
+                data->world = Float4x4::Identity();
+                data->worldCenter = Float3{0.0f, 0.0f, -kWallDistance};
+                data->worldRadius = 20.0f;
+                data->mesh = bars.Get();
+                data->material = bright.Get();
+                data->category = RenderCategories::Opaque;
+                data->boneMatrices = palette.Data(); // the same palettes every frame, their poses moving
+                data->prevBoneMatrices = previous.Data();
+                data->boneCount = 1;
+                if (twin) // a second copy hidden behind the wall: the two batch, so the instanced path
+                {
+                    MeshRenderData* copy = scene.Add<MeshRenderData>();
+                    *copy = *data;
+                    copy->entityId = nextEntity++;
+                    copy->world = Float4x4::Translation(Float3{0.0f, 0.0f, -6.0f});
+                    copy->worldCenter = Float3{0.0f, 0.0f, -6.0f - kWallDistance};
+                }
             }
 
             rhi::TextureDesc td{};
@@ -176,6 +236,8 @@ namespace
 
             for (u32 i = 0; i < kFrames; ++i)
             {
+                previous[0] = palette[0];
+                palette[0] = Float4x4::Translation(Float3{-skinnedStep * static_cast<f32>(i), 0.0f, 0.0f});
                 const Float3 eye{step * static_cast<f32>(i), 0.0f, 0.0f};
                 ViewCamera camera;
                 camera.position = eye;
@@ -266,6 +328,21 @@ namespace
         CHECK(moving < still * 2.5f);
     }
 
+    void ProbeTaaSkinned(rhi::Device& device, const char* backend)
+    {
+        CAPTURE(backend);
+        const f32 still = MeanStray(RenderSlide(device, 0.0f, true, {}, 1e-6f), 0);
+        const f32 alone = MeanStray(RenderSlide(device, 0.0f, true, {}, PixelStep()), 1);
+        const f32 batched = MeanStray(RenderSlide(device, 0.0f, true, {}, PixelStep(), /*twin*/ true), 1);
+        MESSAGE(doctest::String(backend) << ": skinned bars' stray, still " << still << ", sliding a pixel a frame alone "
+                                         << alone << ", batched with a twin " << batched);
+        // As steady as the camera slide by either path: the motion vectors carry last frame's pose.
+        // With this frame's pose for last frame's (the single path's old bone base) the bars' motion
+        // read as none and the history smeared (105 against 2.9).
+        CHECK(alone < still * 2.5f);
+        CHECK(batched < still * 2.5f);
+    }
+
     void ProbeTaaSideView(rhi::Device& device, const char* backend)
     {
         CAPTURE(backend);
@@ -331,4 +408,9 @@ TEST_CASE("taa: under a camera moving a pixel a frame, the resolved image moves 
 TEST_CASE("taa: a view drawn before the main one on alternate frames leaves the main view's history alone")
 {
     ForEachBackend(&ProbeTaaSideView);
+}
+
+TEST_CASE("taa: a lone skinned mesh slid by its bone resolves as steadily as a camera slide")
+{
+    ForEachBackend(ProbeTaaSkinned);
 }

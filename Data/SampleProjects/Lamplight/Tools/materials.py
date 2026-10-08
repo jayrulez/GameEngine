@@ -6,6 +6,8 @@ material lists. Colours are sRGB, as entered anywhere.
 
 - Materials/FlameOut, Materials/ChimneyOut: an oil lamp put out (Lamp.as), its wick and glass no
   longer glowing.
+- Materials/Pebble: the thrown stone's grey.
+
 The room's pieces, the thief and the guard bring their own (blender/manor.py, thief.py, guard.py).
 """
 import os, struct, sys
@@ -19,6 +21,7 @@ MATERIALS = {
     # wick, and the chimney's glass dark and glossy.
     "FlameOut": ((0.10, 0.08, 0.07), 0.8, 0.0, None),
     "ChimneyOut": ((0.42, 0.40, 0.37), 0.15, 0.0, None),
+    "Pebble": ((0.45, 0.43, 0.40), 0.75, 0.0, None),  # a grey stone (prefabs.py's Pebble)
 }
 
 _assets = None

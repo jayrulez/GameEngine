@@ -6,6 +6,7 @@ project's default.
 - Sneak: C, or the east button (B): slow and silent. Run: Left Shift, or pressing the left stick:
   fast and loud.
 - Interact: F, or the south button (A): pick a lock, open a door, put out a lamp.
+- Throw: G, or the west button (X): a pebble ahead, whose landing draws a guard to look.
 - Turn the camera a quarter left or right: Q / E, or the left and right shoulders.
 - Pause: Escape, or Start.
 Codes are the engine's enums' values (shell::KeyCode, shell::GamepadButton, input::StickCode).
@@ -17,9 +18,9 @@ from mcp import call as mcp
 
 KEY, GAMEPAD_BUTTON, GAMEPAD_STICK, COMPOSITE = 0, 4, 6, 7
 BUTTON, AXIS2D = 0, 2
-A, C, D, E, F, Q, S, W = 1, 3, 4, 5, 6, 17, 19, 23
+A, C, D, E, F, G, Q, S, W = 1, 3, 4, 5, 6, 7, 17, 19, 23
 ESCAPE, LEFT_SHIFT = 62, 109
-SOUTH, EAST, LEFT_SHOULDER, RIGHT_SHOULDER, LEFT_STICK_PRESS, START = 0, 1, 4, 5, 6, 14
+SOUTH, EAST, WEST, LEFT_SHOULDER, RIGHT_SHOULDER, LEFT_STICK_PRESS, START = 0, 1, 2, 4, 5, 6, 14
 LEFT_STICK = 0
 
 ACTIONS = [
@@ -28,6 +29,7 @@ ACTIONS = [
     ("Sneak", BUTTON, [dict(source=KEY, code=C), dict(source=GAMEPAD_BUTTON, code=EAST)]),
     ("Run", BUTTON, [dict(source=KEY, code=LEFT_SHIFT), dict(source=GAMEPAD_BUTTON, code=LEFT_STICK_PRESS)]),
     ("Interact", BUTTON, [dict(source=KEY, code=F), dict(source=GAMEPAD_BUTTON, code=SOUTH)]),
+    ("Throw", BUTTON, [dict(source=KEY, code=G), dict(source=GAMEPAD_BUTTON, code=WEST)]),
     ("TurnLeft", BUTTON, [dict(source=KEY, code=Q), dict(source=GAMEPAD_BUTTON, code=LEFT_SHOULDER)]),
     ("TurnRight", BUTTON, [dict(source=KEY, code=E), dict(source=GAMEPAD_BUTTON, code=RIGHT_SHOULDER)]),
     ("Pause", BUTTON, [dict(source=KEY, code=ESCAPE), dict(source=GAMEPAD_BUTTON, code=START)]),

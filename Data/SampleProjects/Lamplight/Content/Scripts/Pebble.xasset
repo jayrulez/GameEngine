@@ -1,0 +1,13 @@
+<root>
+	<string name="guid">7ecfe7aa-7865-4b43-80f9-c121d92f573d</string>
+	<string name="typeNamespace">rtti::pipeline::script</string>
+	<string name="typeName">ScriptClassAsset</string>
+	<array name="dataVersions" count="1">
+		<u64 name="type">1265517353284495090</u64>
+		<u32 name="version">0</u32>
+	</array>
+	<object name="payload">
+		<string name="fileName">Pebble.as</string>
+		<string name="language">angelscript</string>
+	</object>
+</root>

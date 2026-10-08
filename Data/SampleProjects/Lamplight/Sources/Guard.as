@@ -48,6 +48,7 @@ class Guard
     private float m_yaw = 0.0f;
     private Entity@ m_figure;
     private float m_calm = 0.0f; // after a catch: not looking for the thief yet
+    private Float3 m_heard = Float3(0.0f, 0.0f, 0.0f); // the last noise he went to look at
 
     Guard(Entity@ entity) { @self = entity; }
 
@@ -155,7 +156,8 @@ class Guard
         }
         if (flatDistance(self.worldPosition(), Float3(n.x, n.y, n.z)) <= hearing * n.w)
         {
-            search(Float3(n.x, n.y, n.z));
+            m_heard = Float3(n.x, n.y, n.z);
+            search(m_heard);
         }
     }
 

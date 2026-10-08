@@ -25,7 +25,7 @@ GRID, ROOM_W, ROOM_D, WALL_H, WALL_T = 2.0, 10.0, 8.0, 3.0, 0.2  # the kit's gri
 DOOR_W, DOOR_H = 1.2, 2.2
 LEAF_W, LEAF_H = 1.04, 2.12  # the door's leaf inside the frame (manor.py's Door)
 TABLE = (-2.6, 0.0, -1.6)
-GUARD_ROUTE = [(-3.0, 0.0, 2.5), (3.0, 0.0, 2.5), (3.0, 0.0, -2.5), (-3.0, 0.0, -2.5)]
+GUARD_ROUTE = [(-3.0, 0.0, 1.0), (3.0, 0.0, 1.0), (3.0, 0.0, -2.5), (-3.0, 0.0, -2.5)]  # clear of the doorway
 GUARD_GROUP = 2  # the guards' collision group (Guard.as looks past it)
 
 ASSETS = mcp("asset_list", {})["assets"]
@@ -204,7 +204,8 @@ def build():
     cam = d.stable_id("entity")
     d.entity("Camera", (1.2, 7.9, 9.5), pitch(-42.0), eid=cam)
     d.add(cam, "camera", fovYRadians=0.9)
-    d.script(thief, (asset("ScriptClassAsset", "Thief"), {"camera": ("entity", cam)}),
+    d.script(thief, (asset("ScriptClassAsset", "Thief"), {"camera": ("entity", cam),
+                                                          "pebble": ("asset", asset("PrefabDocument", "Pebble"))}),
              (asset("ScriptClassAsset", "LightMeter"), {"hud": ("asset", asset("UIDocumentAsset", "Hud"))}),
              (asset("ScriptClassAsset", "Footsteps"), {s.lower(): ("asset", surf[s]) for s in surf}))
     d.script(cam, (asset("ScriptClassAsset", "CameraRig"), {"target": ("entity", thief)}))
@@ -245,6 +246,14 @@ def build():
     d.script(guard, (asset("ScriptClassAsset", "Guard"), {
         "thief": ("entity", thief), "route": ("entity", round_), "lantern": ("entity", lantern),
         "meter": ("entity", meter), "group": GUARD_GROUP}))
+
+    # A checkpoint in the yard outside the door (Checkpoint.as): out of the room, a catch sends the
+    # thief back there rather than to the start.
+    check = d.stable_id("entity")
+    d.entity("Checkpoint", (0, 0.9, ROOM_D / 2 + 1.5), eid=check)
+    d.add(check, "physics.RigidBody", motion=0, layer=3, shape=0, isTrigger=True,
+          halfExtents={"x": 1.5, "y": 1.0, "z": 1.0})
+    d.script(check, (asset("ScriptClassAsset", "Checkpoint"), {"thief": ("entity", thief)}))
 
     # The navigation zone over the room and the yard, baked from the static colliders after the
     # scene is written (bake_navigation below).

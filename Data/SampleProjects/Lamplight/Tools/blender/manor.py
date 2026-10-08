@@ -19,6 +19,11 @@ generator from the same sizes (room.py):
   its point light over it (level.py says how high, and why).
 - Candelabra: three silver branches and lit candles, 0.5 m tall; its light hangs over it too.
 - Hatch: a cellar's trapdoor flush with the floor, 1.2 m square: a level's way down.
+- CellarWall, CellarPillar: the cellars' rough stone, a 2 m edge 3 m high and 0.4 m thick, and the
+  0.5 m pillar where runs meet.
+- Barrel (0.6 m across, 0.9 m tall), WineRack (2 m by 2 m, 0.5 m deep): the cellars' cover.
+- TorchStand: an iron stand with a burning torch at 1.5 m; the level hangs its flickering light.
+- Stairs: stone stairs up out of the cellars, 2 m wide, rising 3 m over 2 m north from the origin.
 """
 import math, os, sys
 from mathutils import Vector
@@ -37,8 +42,11 @@ kit3d.PALETTE.update({
     "TableWood": (0.30, 0.18, 0.10), "Brass": (0.78, 0.56, 0.24), "Chimney": (0.85, 0.80, 0.70),
     "Flame": (1.0, 0.70, 0.35), "DoorWood": (0.22, 0.12, 0.06), "DoorPanel": (0.18, 0.10, 0.05),
     "Silver": (0.72, 0.72, 0.74), "Wax": (0.92, 0.88, 0.78), "HatchWood": (0.20, 0.13, 0.08),
+    "CellarStone": (0.22, 0.20, 0.18), "CellarStoneDark": (0.15, 0.14, 0.13), "Cask": (0.26, 0.15, 0.08),
+    "Hoop": (0.08, 0.08, 0.09), "Rack": (0.18, 0.11, 0.06), "Bottle": (0.06, 0.12, 0.06),
+    "TorchWood": (0.16, 0.10, 0.06), "Fire": (1.0, 0.55, 0.18), "StairStone": (0.30, 0.28, 0.25),
 })
-kit3d.GLOW.update({"Flame": 6.0, "Chimney": 1.5})
+kit3d.GLOW.update({"Flame": 6.0, "Chimney": 1.5, "Fire": 8.0})
 kit3d.ROUGHNESS.update({"Boards": 0.12, "Brass": 0.35, "Plaster": 0.85, "Silver": 0.25, "Wax": 0.6})
 
 GRID, HEIGHT, THICK = 2.0, 3.0, 0.2
@@ -149,8 +157,61 @@ def hatch():
     tube("Ring", P(0, 0.3, 0.008), P(0, 0.3, 0.016), 0.06, "Brass", segments=16)
 
 
+def cellar_wall():
+    """One 2 m edge of the cellars' rough stone, 3 m high and 0.4 m thick, in courses."""
+    for i in range(6):
+        up = 0.25 + i * 0.5
+        shift = 0.12 if i % 2 else -0.12
+        box("Course", (GRID, 0.4, 0.48), P(shift * 0.0, 0, up), "CellarStone" if i % 2 else "CellarStoneDark",
+            bevel=0.03)
+
+
+def cellar_pillar():
+    box("Pillar", (0.5, 0.5, 3.0), P(0, 0, 1.5), "CellarStoneDark", bevel=0.04)
+
+
+def barrel():
+    """A cask on its end, 0.6 m across and 0.9 m tall, hooped."""
+    tube("Cask", Vector((0, 0, 0)), Vector((0, 0, 0.9)), 0.3, "Cask", segments=16, radius2=0.3)
+    for up in (0.12, 0.78):
+        tube("Hoop", Vector((0, 0, up)), Vector((0, 0, up + 0.04)), 0.305, "Hoop", segments=16)
+
+
+def wine_rack():
+    """A rack of bottles against a wall: 2 m wide, 2 m high, 0.5 m deep."""
+    for sx in (-1, 0, 1):
+        box("Upright", (0.06, 0.5, 2.0), P(sx * 0.97, 0, 1.0), "Rack")
+    for k in range(5):
+        up = 0.2 + k * 0.42
+        box("Shelf", (2.0, 0.5, 0.04), P(0, 0, up), "Rack")
+        for i in range(8):
+            tube("Bottle", P(-0.85 + i * 0.24, -0.22, up + 0.06), P(-0.85 + i * 0.24, 0.2, up + 0.06), 0.04,
+                 "Bottle", segments=8)
+
+
+def torch_stand():
+    """An iron stand with a burning torch at 1.5 m (the level hangs its flickering light there)."""
+    tube("Stand", Vector((0, 0, 0)), Vector((0, 0, 1.35)), 0.03, "Hoop", segments=8)
+    for a in range(3):
+        import math as _m
+        x, y = 0.18 * _m.cos(a * 2.094), 0.18 * _m.sin(a * 2.094)
+        tube("Leg", Vector((0, 0, 0.25)), Vector((x, y, 0.0)), 0.02, "Hoop", segments=6)
+    tube("Cup", Vector((0, 0, 1.3)), Vector((0, 0, 1.38)), 0.06, "Hoop", segments=10, radius2=0.08)
+    tube("Torch", Vector((0, 0, 1.3)), Vector((0, 0, 1.5)), 0.035, "TorchWood", segments=8)
+    ball("Fire", Vector((0, 0, 1.58)), 0.07, "Fire", scale=(1, 1, 1.8), segments=(10, 8))
+
+
+def stairs():
+    """Stone stairs going up out of the cellars against the north wall: 2 m wide, rising to 3 m
+    over 2 m (the way on; the exit's trigger is at their foot)."""
+    for k in range(10):
+        box("Step", (2.0, 0.2, 0.3 * (k + 1)), P(0, -k * 0.2, 0.15 * (k + 1)), "StairStone", bevel=0.01)
+
+
 MODELS = {"Wall": wall, "Doorway": doorway, "Door": door, "Post": post, "Floor": floor, "Table": table,
-          "OilLamp": oil_lamp, "Candelabra": candelabra, "Hatch": hatch}
+          "OilLamp": oil_lamp, "Candelabra": candelabra, "Hatch": hatch, "CellarWall": cellar_wall,
+          "CellarPillar": cellar_pillar, "Barrel": barrel, "WineRack": wine_rack, "TorchStand": torch_stand,
+          "Stairs": stairs}
 VIEWS = {"big": (Vector((3.5, -4.5, 3.0)), Vector((0, 0, 1.2))),
          "small": (Vector((0.9, -1.2, 0.8)), Vector((0, 0, 0.25)))}
 

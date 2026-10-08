@@ -2,7 +2,7 @@
 names in its settings, so the look is tuned in one place (Snowline's arrangement, its look.py).
 
 Night: a deep blue sky and a faint blue ambient, so the lamps light the scene and the dark between
-them is real cover. TAA (SSGI's few rays need it), SSR for polished floors and wet stone, SSGI for
+them is real cover. Cellars (its own environment profile): darker still, for the levels below. TAA (SSGI's few rays need it), SSR for polished floors and wet stone, SSGI for
 lamplight bouncing off walls, GTAO, bloom on the flames, and auto exposure for walking from a lit
 hall into a dark cellar. Colours are sRGB, as entered anywhere.
 """
@@ -21,6 +21,12 @@ ENVIRONMENT = dict(ambientColor={"r": 0.20, "g": 0.26, "b": 0.42, "a": 1.0}, amb
                    skyGround={"r": 0.04, "g": 0.04, "b": 0.06, "a": 1.0}, sunIntensity=1.0, sunAngularSize=0.5,
                    turbidity=2.0, iblDiffuseIntensity=0.2, iblSpecularIntensity=0.4,
                    shadowDistance=40.0, shadowCascadeSplit=0.75, shadowFadeDistance=8.0)
+
+# The cellars: no sky to speak of and almost no ambient, so a passage between torches is truly dark
+# and walking from a torch-lit vault into it drives the auto exposure.
+CELLARS = dict(ENVIRONMENT, ambientColor={"r": 0.18, "g": 0.16, "b": 0.14, "a": 1.0}, ambientIntensity=0.008,
+               skyIntensity=0.02, skyBackgroundIntensity=0.02, iblDiffuseIntensity=0.03, iblSpecularIntensity=0.1)
+ENVIRONMENTS = {"Night": ("Lamplight Environment", ENVIRONMENT), "Cellars": ("Lamplight Cellars Environment", CELLARS)}
 
 _profiles = {}
 
@@ -46,12 +52,13 @@ def profile(creator, asset_type, name, values):
     return guid
 
 
-def look(doc):
-    """Name the shared profiles in a scene's settings."""
-    if not _profiles:
-        _profiles["environment"] = profile("Environment Profile", "EnvironmentProfileAsset",
-                                           "Lamplight Environment", ENVIRONMENT)
-        _profiles["postprocess"] = profile("Post Process Profile", "PostProcessProfileAsset",
-                                           "Lamplight Post", POST)
-    doc.settings.append(settings("environment", source=1, profile=_profiles["environment"]))
+def look(doc, environment="Night"):
+    """Name the shared profiles in a scene's settings: the post profile every level shares, and the
+    environment the level asks for (ENVIRONMENTS)."""
+    name, values = ENVIRONMENTS[environment]
+    if name not in _profiles:
+        _profiles[name] = profile("Environment Profile", "EnvironmentProfileAsset", name, values)
+    if "postprocess" not in _profiles:
+        _profiles["postprocess"] = profile("Post Process Profile", "PostProcessProfileAsset", "Lamplight Post", POST)
+    doc.settings.append(settings("environment", source=1, profile=_profiles[name]))
     doc.settings.append(settings("postprocess", source=1, profile=_profiles["postprocess"]))

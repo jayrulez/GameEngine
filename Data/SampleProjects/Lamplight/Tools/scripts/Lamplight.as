@@ -14,7 +14,7 @@
 // the most loot and whether it was ghosted ("done.<level>", "best.<level>", "loot.<level>",
 // "ghost.<level>").
 
-const int kLevelCount = 3;
+const int kLevelCount = 4;
 Guid kTitleDoc = Guid("{{UI:Title}}");
 Guid kHudDoc = Guid("{{UI:Hud}}");
 Guid kPauseDoc = Guid("{{UI:Pause}}");
@@ -42,13 +42,21 @@ class Game
     {
         if (i == 0) return Guid("{{Scene:Gardens}}");
         if (i == 1) return Guid("{{Scene:StableYard}}");
-        return Guid("{{Scene:GroundFloor}}");
+        if (i == 2) return Guid("{{Scene:GroundFloor}}");
+        return Guid("{{Scene:Cellars}}");
     }
-    private string levelName(int i) { return i == 0 ? "Gardens" : (i == 1 ? "StableYard" : "GroundFloor"); }
-    private string levelTitle(int i) { return i == 0 ? "The Gardens" : (i == 1 ? "The Stable Yard" : "The Ground Floor"); }
+    private string levelName(int i)
+    {
+        return i == 0 ? "Gardens" : (i == 1 ? "StableYard" : (i == 2 ? "GroundFloor" : "Cellars"));
+    }
+    private string levelTitle(int i)
+    {
+        return i == 0 ? "The Gardens" : (i == 1 ? "The Stable Yard" : (i == 2 ? "The Ground Floor" : "The Cellars"));
+    }
     private string targetName(int i)
     {
-        return i == 0 ? "the gardener's key" : (i == 1 ? "the stable ledger" : "the butler's keys");
+        return i == 0 ? "the gardener's key"
+                      : (i == 1 ? "the stable ledger" : (i == 2 ? "the butler's keys" : "the steward's letter"));
     }
 
     // A level opens once the one before it is done; the first is always open, one not built yet never.
@@ -91,6 +99,7 @@ class Game
         s.findButton("level-0").onClick(Action(this.onLevel0));
         s.findButton("level-1").onClick(Action(this.onLevel1));
         s.findButton("level-2").onClick(Action(this.onLevel2));
+        s.findButton("level-3").onClick(Action(this.onLevel3));
         s.findButton("quit-btn").onClick(Action(this.onQuit));
         for (int i = 0; i < kLevelCount; ++i)
         {
@@ -102,6 +111,7 @@ class Game
     private void onLevel0() { startLevel(0); }
     private void onLevel1() { startLevel(1); }
     private void onLevel2() { startLevel(2); }
+    private void onLevel3() { startLevel(3); }
     private void onQuit() { run::requestExit(0); }
 
     // ---- a level ----

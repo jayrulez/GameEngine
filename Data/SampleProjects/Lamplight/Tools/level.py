@@ -37,6 +37,7 @@ WALLS = {
     "Wall": dict(piece=("Manor", "Wall"), h=3.0, t=0.2, corner=("Manor", "Post"), c=0.2),
     "Hedge": dict(piece=("Grounds", "Hedge"), h=1.6, t=0.8, corner=("Grounds", "HedgeCorner"), c=0.8),
     "GardenWall": dict(piece=("Grounds", "GardenWall"), h=2.4, t=0.4, corner=("Grounds", "Pier"), c=0.6),
+    "CellarWall": dict(piece=("Manor", "CellarWall"), h=3.0, t=0.4, corner=("Manor", "CellarPillar"), c=0.5),
 }
 # Ground tiles by kind: the piece and what it is made of.
 GROUND = {"Floor": (("Manor", "Floor"), "Wood"), "Grass": (("Grounds", "Grass"), "Grass"),
@@ -52,7 +53,14 @@ TABLE_LAMPS = {
                        flameSlot=2, chimneySlot=-1),
 }
 # Props by kind: the piece and its collider's size (x, height, z) before its yaw.
-PROPS = {"HayBale": (("Grounds", "HayBale"), (1.2, 0.6, 0.8)), "Trough": (("Grounds", "Trough"), (1.8, 0.6, 0.6))}
+PROPS = {"HayBale": (("Grounds", "HayBale"), (1.2, 0.6, 0.8)), "Trough": (("Grounds", "Trough"), (1.8, 0.6, 0.6)),
+         "Barrel": (("Manor", "Barrel"), (0.6, 0.9, 0.6)), "WineRack": (("Manor", "WineRack"), (2.0, 2.0, 0.5))}
+# A torch on its stand: its light where the flame burns, flickering (Flicker.as), and the flame's
+# slot for Lamp.as (manor.py's order: Hoop, TorchWood, Fire). Its shadow is cached (Static: the
+# stand never moves; the renderer redraws it where a guard or the thief walks through) and comes
+# from the static layer's own tiles, which go to the lights nearest the camera; a torch that gets
+# none lights through walls, so each still stands well inside its room.
+TORCH = dict(lightY=1.58, intensity=5.0, range=6.0, flameSlot=2)
 
 ASSETS = mcp("asset_list", {})["assets"]
 
@@ -129,7 +137,7 @@ class Builder:
         self.lamps = []   # (lamp entity, its light, lit flame slot guid or None, lit glass slot, slots)
         self.doors = []   # (hinge entity, leaf length, lock height)
         self.corners = set()
-        look(self.d)
+        look(self.d, table.get("environment", "Night"))
 
     def place(self, name, kit, kind, pos, rot=(0, 0, 0, 1), parent=None):
         """A kit piece, its materials as imported."""
@@ -270,6 +278,12 @@ class Builder:
         if "hatch" in self.t:
             x, z = self.t["hatch"]
             self.place("Hatch", "Manor", "Hatch", (x, 0.0, z))
+        if "stairs" in self.t:
+            # Up against a north wall, rising north from their foot at (x, z); solid (the way on is
+            # the exit's trigger at the foot, not the climb).
+            x, z = self.t["stairs"]
+            self.place("Stairs", "Manor", "Stairs", (x, 0.0, z))
+            self.solid("Stairs", (x, 1.5, z - 0.9), (2.0, 3.0, 2.0))
 
     # ---- weather: rain falling round the thief (and its sound), on a level that has it ----
     def weather(self):
@@ -287,10 +301,11 @@ class Builder:
     # ---- lights: the moon, lantern posts, oil lamps on tables ----
     def lights(self):
         moon = self.t.get("moon", dict(intensity=0.25, yaw=-60.0, pitch=-50.0))
-        e = self.d.stable_id("entity")
-        self.d.entity("Moon", rot=quat_mul(yaw(moon["yaw"]), pitch(moon["pitch"])), eid=e)
-        self.d.add(e, "light", type=0, color={"r": 0.55, "g": 0.65, "b": 1.0, "a": 1.0}, intensity=moon["intensity"],
-                   castsShadows=True)
+        if moon["intensity"] > 0.0:  # none below ground
+            e = self.d.stable_id("entity")
+            self.d.entity("Moon", rot=quat_mul(yaw(moon["yaw"]), pitch(moon["pitch"])), eid=e)
+            self.d.add(e, "light", type=0, color={"r": 0.55, "g": 0.65, "b": 1.0, "a": 1.0},
+                       intensity=moon["intensity"], castsShadows=True)
         for n, lamp in enumerate(self.t.get("lamps", [])):
             kind, (x, z) = lamp["kind"], lamp["at"]
             if kind == "LanternPost":
@@ -305,6 +320,18 @@ class Builder:
                            castsShadows=True)
                 slots = piece("Grounds", "LanternPost")[1]  # Iron, Glass (grounds.py's order)
                 self.lamps.append((post, light, dict(flameSlot=1, chimneySlot=-1, flameLit=slots[1])))
+            elif kind == "Torch":
+                stand = self.place("Torch%d" % n, "Manor", "TorchStand", (x, 0.0, z))
+                self.solid("Torch%d" % n, (x, 0.75, z), (0.3, 1.5, 0.3))
+                light = self.d.stable_id("entity")
+                self.d.entity("TorchLight%d" % n, (0, TORCH["lightY"], 0), parent=stand, eid=light)
+                self.d.add(light, "light", type=1, color={"r": 1.0, "g": 0.62, "b": 0.32, "a": 1.0},
+                           intensity=lamp.get("intensity", TORCH["intensity"]), range=TORCH["range"],
+                           castsShadows=True, shadowUpdate=1)
+                self.d.script(light, (asset("ScriptClassAsset", "Flicker"), {}))
+                slots = piece("Manor", "TorchStand")[1]
+                self.lamps.append((stand, light, dict(flameSlot=TORCH["flameSlot"], chimneySlot=-1,
+                                                      flameLit=slots[TORCH["flameSlot"]])))
             elif kind in TABLE_LAMPS:
                 # A table with a lamp on it; its light hangs well over the tabletop (any nearer and
                 # the top is tens of times brighter than the walls and clips white).

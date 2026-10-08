@@ -9,6 +9,7 @@ Each sits on the ground at its origin; the level places it, and Loot.as picks it
 - Candlestick: a silver candlestick: loot.
 - Key: the gardener's great iron key with a brass bow: the Gardens' target, carried to the exit.
 - Ledger: the stable ledger, bound in red with a brass clasp: the Stable Yard's target.
+- Letter: a letter under a red seal, the vault's combination: the Cellars' target.
 """
 import os, sys
 from mathutils import Vector
@@ -54,7 +55,12 @@ def ledger():
     box("Clasp", (0.03, 0.06, 0.055), P(0.13, 0, 0.026), "Brass")
 
 
-MODELS = {"Purse": purse, "Candlestick": candlestick, "Key": key, "Ledger": ledger}
+def letter():
+    box("Paper", (0.24, 0.16, 0.01), P(0, 0, 0.005), "Pages", bevel=0.003)
+    tube("Seal", P(0, 0, 0.01), P(0, 0, 0.018), 0.025, "Binding", segments=14)
+
+
+MODELS = {"Purse": purse, "Candlestick": candlestick, "Key": key, "Ledger": ledger, "Letter": letter}
 
 
 def main():

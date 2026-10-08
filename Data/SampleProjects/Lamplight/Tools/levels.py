@@ -6,7 +6,7 @@ and the thief starts facing it with the camera south of him.
 
 - ground: (kind, (i0, j0, i1, j1)) rectangles of tiles (Floor, Grass, Gravel, Flags), later ones
   over earlier ones.
-- walls: (kind, (i0, j0), (i1, j1)) runs (Wall, Hedge, GardenWall), with a corner piece at each end;
+- walls: (kind, (i0, j0), (i1, j1)) runs (Wall, Hedge, GardenWall, CellarWall), with a corner piece at each end;
   corners: (kind, (i, j)) more corner pieces (either side of a gate, where a run meets another
   mid-way).
 - openings: {"at": (i, j) the segment's middle, "kind": Doorway / Gate / Gap, "locked": bool}.
@@ -14,12 +14,15 @@ and the thief starts facing it with the camera south of him.
 - guards: a round per guard, its points (x, z) walked in turn.
 - loot: {"kind": Purse / Candlestick, "at": (x, z), "value"}; target: the one thing the level is
   for, carried to the exit (a trigger, (x0, z0, x1, z1)); checkpoints: trigger rectangles.
-- props: {"kind": HayBale / Trough, "at": (x, z), "yaw": degrees}: cover, each with its collider.
+- props: {"kind": HayBale / Trough / Barrel / WineRack, "at": (x, z), "yaw": degrees}: cover, each with its collider.
 - rooms: {"name", "rect": (i0, j0, i1, j1) cells, "roomSize", "damping", "wet"}: a reflection probe
   over the room and a reverb zone round it. hatch: (x, z) of a cellar hatch (put the exit over it).
-- lamps also: {"kind": OilLamp / Candelabra, "at", "intensity"}: a table with that lamp on it.
+- lamps also: {"kind": OilLamp / Candelabra, "at", "intensity"}: a table with that lamp on it;
+  {"kind": Torch, "at"}: a torch on its stand, flickering.
+- stairs: (x, z) of the foot of stairs rising north out of the level (put the exit there).
 - start: the thief's (x, z, yaw degrees); bounds: the navigation zone's (x0, z0, x1, z1).
-- moon: its intensity and direction; rain: true for rain round the thief and its sound.
+- moon: its intensity and direction (0: none); rain: true for rain round the thief and its sound;
+  environment: Night (the default) or Cellars (look.py).
 """
 
 ROOM = dict(
@@ -149,5 +152,66 @@ GROUND_FLOOR = dict(
     moon=dict(intensity=0.18, yaw=-60.0, pitch=-50.0),
 )
 
-LEVELS = {"Gardens": GARDENS, "StableYard": STABLE_YARD, "GroundFloor": GROUND_FLOOR, "Room": ROOM}
+CELLARS = dict(
+    name="Cellars",
+    # Level 4: down the kitchen hatch to the landing (south-west). The cellars are dark but for their
+    # torches, so walking from the bright barrel vault into a black passage swings the exposure. The
+    # wine cellar (north-west) has no light at all; the vault (middle) is torch-lit, pillared and
+    # watched; the store (south) and the steward's room (south-east, through a locked gate) share
+    # the second guard. The steward's letter, with the vault's combination, is on his floor; the way
+    # on is the stairs (north-east), reached through the vault's locked gate and the passage, or
+    # round by the steward's room. Every room echoes like stone.
+    ground=[("Flags", (0, 0, 12, 10))],
+    walls=[("CellarWall", (0, 0), (12, 0)), ("CellarWall", (0, 10), (12, 10)), ("CellarWall", (0, 0), (0, 10)),
+           ("CellarWall", (12, 0), (12, 10)),
+           ("CellarWall", (4, 0), (4, 10)), ("CellarWall", (0, 5), (4, 5)), ("CellarWall", (4, 6), (12, 6)),
+           ("CellarWall", (9, 0), (9, 6)), ("CellarWall", (9, 4), (12, 4)), ("CellarWall", (8, 6), (8, 10))],
+    openings=[dict(at=(4, 2.5), kind="Gap"),                  # wine cellar and vault
+              dict(at=(4, 8.5), kind="Gap"),                  # landing and store
+              dict(at=(1.5, 5), kind="Gap"),                  # landing and wine cellar
+              dict(at=(6.5, 6), kind="Gap"),                  # vault and store
+              dict(at=(9, 4.5), kind="Gate", locked=True),    # vault and passage
+              dict(at=(8, 8.5), kind="Gate", locked=True),    # store and steward's room
+              dict(at=(10.5, 6), kind="Gap"),                 # passage and steward's room
+              dict(at=(10.5, 4), kind="Gap")],                # passage and stairs
+    # Pillars: either side of every arch and gate, and four holding up the vault.
+    corners=[("CellarWall", p) for p in ((4, 2), (4, 3), (4, 8), (4, 9), (1, 5), (2, 5), (6, 6), (7, 6), (9, 5),
+                                         (8, 8), (8, 9), (10, 6), (11, 6), (10, 4), (11, 4),
+                                         (6, 2), (7, 2), (6, 4), (7, 4))],
+    rooms=[dict(name="Vault", rect=(4, 0, 9, 6), roomSize=0.9, damping=0.3, wet=0.75),
+           dict(name="WineCellar", rect=(0, 0, 4, 5), roomSize=0.6, wet=0.6),
+           dict(name="Landing", rect=(0, 5, 4, 10), roomSize=0.6, wet=0.6),
+           dict(name="Store", rect=(4, 6, 8, 10), roomSize=0.7, wet=0.65),
+           dict(name="Steward", rect=(8, 6, 12, 10), damping=0.6, wet=0.5),
+           dict(name="StairFoot", rect=(9, 0, 12, 4), wet=0.6), dict(name="Passage", rect=(9, 4, 12, 6), wet=0.7)],
+    # Torches stand well inside their rooms: only the two nearest the camera get shadows (a point
+    # light takes six of the static layer's sixteen tiles), and a torch without one lights through
+    # a wall between rooms.
+    lamps=[dict(kind="Torch", at=(13.0, 0.8), intensity=7.0), dict(kind="Torch", at=(16.5, 11.2), intensity=7.0),
+           dict(kind="Torch", at=(1.0, 15.0)), dict(kind="Torch", at=(12.0, 16.5)), dict(kind="Torch", at=(23.0, 6.0)),
+           dict(kind="OilLamp", at=(22.0, 18.6))],
+    props=[dict(kind="WineRack", at=(2.5, 0.45)), dict(kind="WineRack", at=(5.5, 0.45)),
+           dict(kind="WineRack", at=(0.45, 4.5), yaw=90.0),
+           dict(kind="Barrel", at=(10.5, 6.5)), dict(kind="Barrel", at=(11.1, 6.9)), dict(kind="Barrel", at=(15.5, 2.5)),
+           dict(kind="Barrel", at=(16.8, 6.0)), dict(kind="Barrel", at=(16.6, 6.65)),
+           dict(kind="Barrel", at=(10.0, 17.5)), dict(kind="Barrel", at=(10.6, 17.9)), dict(kind="Barrel", at=(10.2, 18.5)),
+           dict(kind="Barrel", at=(13.5, 13.5)), dict(kind="Barrel", at=(14.1, 13.2)),
+           dict(kind="WineRack", at=(13.0, 19.55)), dict(kind="Barrel", at=(6.5, 19.0))],
+    guards=[[(10.0, 2.0), (16.0, 2.0), (16.0, 10.0), (10.0, 10.0)],
+            [(10.0, 14.0), (14.0, 17.0), (20.0, 17.0), (22.5, 14.0), (20.0, 17.0), (14.0, 17.0)]],
+    loot=[dict(kind="Candlestick", at=(7.0, 1.5), value=25), dict(kind="Purse", at=(1.2, 8.8), value=10),
+          dict(kind="Purse", at=(17.0, 4.0), value=10), dict(kind="Candlestick", at=(23.0, 10.0), value=25),
+          dict(kind="Purse", at=(9.0, 19.2), value=10)],
+    target=dict(kind="Letter", at=(23.2, 19.0), value=150),
+    stairs=(21.0, 2.0),
+    exit=(20.0, 2.2, 22.0, 3.6),
+    checkpoints=[(18.6, 8.4, 23.6, 11.6)],
+    start=(3.0, 17.0, 0.0),
+    bounds=(0.0, 0.0, 24.0, 20.0),
+    moon=dict(intensity=0.0, yaw=-60.0, pitch=-50.0),
+    environment="Cellars",
+)
+
+LEVELS = {"Gardens": GARDENS, "StableYard": STABLE_YARD, "GroundFloor": GROUND_FLOOR, "Cellars": CELLARS,
+          "Room": ROOM}
 FIRST = "Gardens"  # the level the game boots into

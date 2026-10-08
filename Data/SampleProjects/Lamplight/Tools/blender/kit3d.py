@@ -19,7 +19,8 @@ def P(x, fwd, up):
 
 # ---------------------------------------------------------------- materials
 PALETTE = {}  # material name -> linear RGB; each model script fills in its own
-GLOW = {}     # material name -> emission strength: a material that lights itself (its own colour)
+GLOW = {}     # material name -> emission strength: a material that lights itself (its own colour), or
+              # (r, g, b, strength) for a glow of another colour
 ROUGHNESS = {}  # material name -> roughness, where the 0.7 default will not do (a waxed floor)
 _materials = {}
 
@@ -34,8 +35,9 @@ def material(name):
         bsdf.inputs["Roughness"].default_value = ROUGHNESS.get(name, 0.7 if name != "Metal" else 0.35)
         bsdf.inputs["Metallic"].default_value = 0.6 if name == "Metal" else 0.0
         if name in GLOW:
-            bsdf.inputs["Emission Color"].default_value = (r, g, b, 1.0)
-            bsdf.inputs["Emission Strength"].default_value = GLOW[name]
+            glow = GLOW[name] if isinstance(GLOW[name], tuple) else (r, g, b, GLOW[name])
+            bsdf.inputs["Emission Color"].default_value = (glow[0], glow[1], glow[2], 1.0)
+            bsdf.inputs["Emission Strength"].default_value = glow[3]
         _materials[name] = m
     return _materials[name]
 

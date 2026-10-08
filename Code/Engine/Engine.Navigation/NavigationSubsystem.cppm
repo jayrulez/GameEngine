@@ -129,6 +129,10 @@ export namespace engine::navigation
             }
             PROFILE_SCOPE("Navigation.Update");
 
+            // 0. A zone whose navmesh was re-baked and reloaded since its crowd was built gets a
+            //    crowd over the new one (the old product stays alive until then: we hold it).
+            RebuildReloadedZones(*agents);
+
             // 1. Apply pending navigate()/stop() requests (crowd works in zone-local space).
             agents->ForEach(
                 [this](NavAgentComponent& a, scene::EntityHandle)
@@ -228,6 +232,11 @@ export namespace engine::navigation
 
         struct RuntimeZone
         {
+            // The navmesh product the crowd and query were built over, held so a reload (a re-bake
+            // cooked while the scene runs) cannot free it under them; compared with what the
+            // zone's ref resolves to now, to notice the reload and rebuild over the new one.
+            RefPtr<nav::NavigationZoneResource> product;
+            scene::EntityHandle entity{};
             UniquePtr<nav::NavigationCrowd> crowd;
             UniquePtr<nav::NavigationMeshQuery> query;
             Float4x4 world = Float4x4::Identity();
@@ -264,17 +273,71 @@ export namespace engine::navigation
                     rz.invWorld = Inverse(rz.world);
                     rz.center = m_scene->GetWorldPosition(entity);
                     rz.extents = z.extents;
-                    const f32 radius =
-                        product->mesh.BakedAgentRadius() > 0.0f ? product->mesh.BakedAgentRadius()
-                                                               : 0.6f;
-                    rz.crowd = MakeUnique<nav::NavigationCrowd>(*m_allocator, *m_allocator,
-                                                                product->mesh, kMaxAgentsPerZone,
-                                                                radius);
-                    rz.query = MakeUnique<nav::NavigationMeshQuery>(*m_allocator, *m_allocator,
-                                                                    product->mesh);
+                    rz.entity = entity;
+                    BuildCrowd(rz, *product);
                     z.runtimeIndex = static_cast<i32>(m_zones.Size());
                     m_zones.PushBack(Move(rz));
                 });
+        }
+
+        // The crowd and the query over `product`'s navmesh, which the zone then holds.
+        void BuildCrowd(RuntimeZone& rz, nav::NavigationZoneResource& product)
+        {
+            rz.product = RefPtr<nav::NavigationZoneResource>(&product);
+            const f32 radius =
+                product.mesh.BakedAgentRadius() > 0.0f ? product.mesh.BakedAgentRadius() : 0.6f;
+            rz.crowd = MakeUnique<nav::NavigationCrowd>(*m_allocator, *m_allocator, product.mesh,
+                                                        kMaxAgentsPerZone, radius);
+            rz.query = MakeUnique<nav::NavigationMeshQuery>(*m_allocator, *m_allocator, product.mesh);
+        }
+
+        // Each zone whose ref now resolves to a different, usable navmesh than its crowd was built
+        // over (a re-bake reloaded while the scene runs): a new crowd and query over the new one,
+        // its agents added back where they stand, their destinations sent again. A reload still
+        // decoding (no product yet) keeps the old crowd running until it lands.
+        void RebuildReloadedZones(NavAgentComponentManager& agents)
+        {
+            auto* zones = m_scene->GetSystem<NavMeshZoneComponentManager>();
+            if (zones == nullptr)
+            {
+                return;
+            }
+            for (usize i = 0; i < m_zones.Size(); ++i)
+            {
+                RuntimeZone& rz = m_zones[i];
+                const NavMeshZoneComponent* z = zones->Get(rz.entity);
+                nav::NavigationZoneResource* now = z != nullptr ? z->zone.Get() : nullptr;
+                if (now == nullptr || now == rz.product.Get() || !now->IsValid())
+                {
+                    continue;
+                }
+                rz.query = nullptr; // the old crowd and query go before the product they read
+                rz.crowd = nullptr;
+                BuildCrowd(rz, *now);
+                agents.ForEach(
+                    [&](NavAgentComponent& a, scene::EntityHandle entity)
+                    {
+                        if (a.zoneIndex != static_cast<i32>(i))
+                        {
+                            return;
+                        }
+                        a.agentId = AddToCrowd(rz, a, m_scene->GetWorldPosition(entity));
+                        a.targetDirty = a.hasTarget && !a.finished; // on its way again
+                    });
+            }
+        }
+
+        // An agent into a zone's crowd at `worldPos` with its own steering profile; its slot, or -1.
+        i32 AddToCrowd(RuntimeZone& rz, NavAgentComponent& a, Float3 worldPos)
+        {
+            nav::NavigationAgentParams ap;
+            ap.radius = a.radius;
+            ap.height = a.height;
+            ap.maxSpeed = a.maxSpeed;
+            ap.maxAcceleration = a.maxAcceleration;
+            a.appliedSpeed = a.maxSpeed; // the live-change compare starts in sync
+            a.appliedAcceleration = a.maxAcceleration;
+            return rz.crowd->AddAgent(TransformPoint(worldPos, rz.invWorld), ap);
         }
 
         void RegisterAgents()
@@ -299,13 +362,7 @@ export namespace engine::navigation
                         return;
                     }
                     RuntimeZone& rz = m_zones[static_cast<usize>(a.zoneIndex)];
-                    const Float3 local = TransformPoint(worldPos, rz.invWorld);
-                    nav::NavigationAgentParams ap;
-                    ap.radius = a.radius;
-                    ap.height = a.height;
-                    ap.maxSpeed = a.maxSpeed;
-                    ap.maxAcceleration = a.maxAcceleration;
-                    a.agentId = rz.crowd->AddAgent(local, ap);
+                    a.agentId = AddToCrowd(rz, a, worldPos);
                     if (a.agentId < 0)
                     {
                         LOG_WARNING(u8"Navigation",
@@ -321,8 +378,6 @@ export namespace engine::navigation
                                     u8"will not move (is it on baked ground, and was the zone baked?)",
                                     m_scene->GetEntityName(entity), worldPos.x, worldPos.y, worldPos.z);
                     }
-                    a.appliedSpeed = a.maxSpeed; // the live-change compare starts in sync
-                    a.appliedAcceleration = a.maxAcceleration;
                 });
         }
 

@@ -45,14 +45,14 @@ namespace
         (void)RemoveDirectory(root);
     }
 
-    void BakeGroundZone(Array<byte>& blob)
+    void BakeGroundZone(Array<byte>& blob, f32 half = 10.0f)
     {
         Array<Float3> verts;
         Array<u32> indices;
-        verts.PushBack(Float3{-10, 0, -10});
-        verts.PushBack(Float3{10, 0, -10});
-        verts.PushBack(Float3{10, 0, 10});
-        verts.PushBack(Float3{-10, 0, 10});
+        verts.PushBack(Float3{-half, 0, -half});
+        verts.PushBack(Float3{half, 0, -half});
+        verts.PushBack(Float3{half, 0, half});
+        verts.PushBack(Float3{-half, 0, half});
         const u32 t[] = {0, 3, 2, 0, 2, 1};
         for (u32 i : t)
         {
@@ -144,6 +144,83 @@ TEST_CASE("navigation.scene: a MoveEntity agent navigates across a zone to its t
     scene.SetSimulationEnabled(false);
     scene.Stop();
     RemoveTree(u8"scratch_navscene_db");
+}
+
+// A zone re-baked while the scene runs (the editor cooks the new navmesh and reloads it under a
+// playing scene): the crowd was built over the old navmesh, which the reload parks and later
+// frees. The zone rebuilds its crowd over the new one and its agents carry on to where they were
+// going. It used to keep stepping the old crowd over the freed navmesh (an editor crash).
+TEST_CASE("navigation.scene: a zone's navmesh reloaded mid-run: the agent carries on over the new one")
+{
+    RegisterNavigationResource();
+    RegisterNavigationComponentReflection();
+    RemoveTree(u8"scratch_navreload_db");
+    foundation::vfs::NativeFileSystem mount(u8"scratch_navreload_db", foundation::core::DefaultAllocator());
+    content::ContentDatabase db(DefaultAllocator(), mount, BinarySerializerFactory(), u8".rasset");
+    const auto write = [](content::Instance& instance, f32 half)
+    {
+        Array<byte> blob;
+        BakeGroundZone(blob, half);
+        NavigationZoneSource src;
+        src.navMeshBlob.Resize(blob.Size());
+        MemCopy(src.navMeshBlob.Data(), blob.Data(), blob.Size());
+        REQUIRE(instance.WriteObject(src).IsOk());
+    };
+    auto* zoneInstance = db.RootGroup()->CreateInstance(u8"zone", NavigationZoneSource::StaticType());
+    REQUIRE(zoneInstance != nullptr);
+    write(*zoneInstance, 10.0f);
+    NavigationZoneFactory factory(DefaultAllocator());
+    ResourceManager manager(DefaultAllocator(), db);
+    manager.AddFactory(&factory);
+
+    scene::Scene scene(DefaultAllocator(), u8"nav");
+    AddNavigationSceneManagers(scene);
+    scene::EntityHandle zoneEntity = scene.CreateEntity(u8"zone");
+    NavMeshZoneComponent& zoneComp = scene.GetSystem<NavMeshZoneComponentManager>()->Add(zoneEntity);
+    zoneComp.extents = Float3{15, 10, 15};
+    zoneComp.zone.SetId(zoneInstance->Id());
+    zoneComp.zone.Bind(manager);
+    REQUIRE(zoneComp.zone.Get() != nullptr);
+    scene::EntityHandle agentEntity = scene.CreateEntity(u8"agent");
+    scene.SetLocalPosition(agentEntity, Float3{-5, 0, 0});
+    NavAgentComponent* agent = &scene.GetSystem<NavAgentComponentManager>()->Add(agentEntity);
+    scene.UpdateTransforms();
+    scene.Start();
+    scene.SetSimulationEnabled(true);
+    REQUIRE(agent->agentId >= 0);
+
+    agent->navigate(5.0f, 0.0f, 0.0f);
+    for (int step = 0; step < 45; ++step) // part of the way
+    {
+        scene.Update(1.0f / 30.0f);
+    }
+    const f32 midway = scene.GetWorldPosition(agentEntity).x;
+    CHECK(midway > -4.0f);
+    CHECK_FALSE(agent->finished);
+
+    // Re-baked bigger and reloaded; the old navmesh parked, then released for good.
+    const NavigationZoneResource* before = zoneComp.zone.Get();
+    write(*zoneInstance, 12.0f);
+    REQUIRE(manager.Reload(zoneInstance->Id()));
+    REQUIRE(zoneComp.zone.Get() != nullptr);
+    CHECK(zoneComp.zone.Get() != before);
+    for (int frame = 0; frame < 16; ++frame)
+    {
+        manager.CollectGarbage();
+    }
+
+    for (int step = 0; step < 360 && !agent->finished; ++step)
+    {
+        scene.Update(1.0f / 30.0f);
+    }
+    const Float3 end = scene.GetWorldPosition(agentEntity);
+    CHECK(agent->finished);
+    CHECK(std::abs(end.x - 5.0f) < 1.5f); // where it was going, from where it had got to
+    CHECK(end.x > midway);
+
+    scene.SetSimulationEnabled(false);
+    scene.Stop();
+    RemoveTree(u8"scratch_navreload_db");
 }
 
 TEST_CASE("navigation.scene: a SCALED zone entity places the navmesh rigidly (no double-scale)")

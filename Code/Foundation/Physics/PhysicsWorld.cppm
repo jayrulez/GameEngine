@@ -376,8 +376,10 @@ export namespace foundation::physics
         /// Max push force (N) the character exerts on dynamic bodies. Set live from the component
         /// each step so authored/inspector/runtime changes take effect (create seeds it too).
         void SetCharacterStrength(CharacterId id, f32 strength);
-        /// Sweeps the character (slide + stairs + stick-to-floor) against the world.
-        /// Call once per fixed step, after Step().
+        /// Sweeps the character (slide + stairs + stick-to-floor) against the world, then raises
+        /// TriggerEnter / TriggerExit for the triggers it walked into or out of (a character is
+        /// not a body in the solver, so no contact reports them otherwise). Call once per fixed
+        /// step, after Step(); its trigger events are drained with the next step's contacts.
         void UpdateCharacter(CharacterId id, f32 deltaTime);
         [[nodiscard]] Float3 CharacterPosition(CharacterId id) const;
         void SetCharacterPosition(CharacterId id, Float3 position); // teleport
@@ -393,6 +395,11 @@ export namespace foundation::physics
         void DrainContacts(Array<ContactEvent>& out);
 
     private:
+        // After a character's sweep: the triggers it now stands inside against those of the last
+        // sweep, as TriggerEnter/TriggerExit events in the contact stream (the trigger on side A,
+        // the character's user word on side B).
+        void SenseTriggers(CharacterId id);
+
         struct Impl;
         UniquePtr<Impl> m_impl;
     };

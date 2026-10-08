@@ -1103,12 +1103,12 @@ TEST_CASE("physics.scene: a strong character shoves a dynamic crate (maxStrength
     CHECK(play.scene.GetWorldPosition(crate).x > crateStartX + 0.3f);
 }
 
-// KNOWN GAP: a CharacterComponent walking into a
-// sensor does NOT yet raise a TriggerEnter event. The trigger stream comes from the world's
-// RIGID-BODY contact listener, and a CharacterVirtual is a swept capsule, not a body in that solver,
-// so its sensor overlaps never reach it. This guard asserts the CURRENT behavior (no event); when
-// character->sensor contacts are implemented it FLIPS - update it to assert the event fires.
-TEST_CASE("physics.scene: a CharacterComponent walking into a trigger raises NO TriggerEnter (known gap)")
+// A CharacterComponent walking into a trigger raises TriggerEnter, and walking out TriggerExit.
+// A CharacterVirtual is a swept capsule, not a body in the solver, so the world's contact listener
+// never saw it; the world now tests the capsule against triggers after each sweep and raises the
+// events itself (Lamplight's checkpoints are triggers the thief walks into). This test pinned the
+// gap until then.
+TEST_CASE("physics.scene: a CharacterComponent walking into a trigger raises TriggerEnter, and out of it TriggerExit")
 {
     PlayScene play;
     play.scene.AddSystem<CharacterComponentManager>();
@@ -1130,23 +1130,32 @@ TEST_CASE("physics.scene: a CharacterComponent walking into a trigger raises NO 
     listeners.PushBack(&recorder);
     play.physics->SetContactListeners(&listeners);
 
-    // Walk the character straight through where the sensor is; it reaches and passes x=3.
+    // Walk the character straight through where the sensor is (x 2.3..3.7) and out past it.
     character.moveVelocity = Float3{3.0f, 0.0f, 0.0f};
-    bool entered = false;
+    i32 entered = 0, exited = 0;
+    f32 enteredAt = 0.0f;
     for (int i = 0; i < 240; ++i)
     {
         play.Step(1);
         for (const EntityContact& c : recorder.contacts)
         {
-            if (c.kind == ContactKind::TriggerEnter &&
-                ((c.a == volume && c.b == hero) || (c.a == hero && c.b == volume)))
+            if ((c.a == volume && c.b == hero) || (c.a == hero && c.b == volume))
             {
-                entered = true;
+                if (c.kind == ContactKind::TriggerEnter && entered++ == 0)
+                {
+                    enteredAt = character.currPosition.x;
+                }
+                exited += c.kind == ContactKind::TriggerExit ? 1 : 0;
             }
         }
+        recorder.contacts.Clear();
     }
-    CHECK(character.currPosition.x > 3.0f);       // it really did walk through the volume
-    CHECK_FALSE(entered);                         // ...yet no trigger event fired (the gap)
+    CHECK(character.currPosition.x > 4.5f); // it really did walk through the volume and out
+    CHECK(entered == 1);                    // once in...
+    CHECK(exited == 1);                     // ...and once out
+    // In when the capsule (radius 0.35) reaches the box's near side, give or take a step.
+    CHECK(enteredAt > 1.6f);
+    CHECK(enteredAt < 2.3f);
 }
 
 // ---- the editor Simulate cycle (regression: stop hung + OOMed the editor) ----

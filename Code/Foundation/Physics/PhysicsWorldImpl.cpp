@@ -182,6 +182,28 @@ namespace foundation::physics
             }
         };
 
+        [[nodiscard]] bool Holds(const Array<JPH::BodyID>& ids, JPH::BodyID id)
+        {
+            for (const JPH::BodyID& each : ids)
+            {
+                if (each == id)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Passes triggers only: what a character stands inside.
+        class SensorBodyFilter final : public JPH::BodyFilter
+        {
+        public:
+            [[nodiscard]] bool ShouldCollideLocked(const JPH::Body& body) const override
+            {
+                return body.IsSensor();
+            }
+        };
+
         [[nodiscard]] JPH::Vec3 ToJph(Float3 v) { return JPH::Vec3(v.x, v.y, v.z); }
         [[nodiscard]] JPH::Quat ToJph(Quaternion q) { return JPH::Quat(q.x, q.y, q.z, q.w); }
         [[nodiscard]] Float3 FromJph(JPH::Vec3 v) { return Float3{v.GetX(), v.GetY(), v.GetZ()}; }
@@ -680,6 +702,10 @@ namespace foundation::physics
         Array<JointSlot> joints;
         Array<JPH::Ref<JPH::CharacterVirtual>> characters; // CharacterId = slot; null = freed
         Array<Float2> characterSteps;                      // (stepUp, stepDown) per slot
+        // The triggers each character stood inside after its last sweep (per slot): a character
+        // is a swept capsule, not a body in the solver, so the contact listener never sees it
+        // enter one; UpdateCharacter compares these and raises TriggerEnter/TriggerExit itself.
+        Array<Array<JPH::BodyID>> characterSensors;
     };
 
     PhysicsWorld::PhysicsWorld(core::IAllocator& allocator, const PhysicsWorldSettings& settings)
@@ -1053,11 +1079,13 @@ namespace foundation::physics
             {
                 m_impl->characters[i] = character;
                 m_impl->characterSteps[i] = Float2{desc.stepUp, desc.stepDown};
+                m_impl->characterSensors[i].Clear();
                 return CharacterId{static_cast<u32>(i)};
             }
         }
         m_impl->characters.PushBack(character);
         m_impl->characterSteps.PushBack(Float2{desc.stepUp, desc.stepDown});
+        m_impl->characterSensors.PushBack(Array<JPH::BodyID>{});
         return CharacterId{static_cast<u32>(m_impl->characters.Size() - 1)};
     }
 
@@ -1068,6 +1096,7 @@ namespace foundation::physics
             return;
         }
         m_impl->characters[id.value] = nullptr;
+        m_impl->characterSensors[id.value].Clear();
     }
 
     void PhysicsWorld::SetCharacterVelocity(CharacterId id, Float3 velocity)
@@ -1117,6 +1146,57 @@ namespace foundation::physics
             m_impl->system->GetDefaultBroadPhaseLayerFilter(layers::From(PhysicsLayer::Dynamic, 0)),
             m_impl->system->GetDefaultLayerFilter(layers::From(PhysicsLayer::Dynamic, 0)), {}, {},
             *m_impl->tempAllocator);
+        SenseTriggers(id);
+    }
+
+    void PhysicsWorld::SenseTriggers(CharacterId id)
+    {
+        JPH::CharacterVirtual& character = *m_impl->characters[id.value];
+        // The triggers the capsule overlaps where the sweep left it (each body once).
+        const JPH::CollideShapeSettings settings;
+        JPH::AllHitCollisionCollector<JPH::CollideShapeCollector> collector;
+        const SensorBodyFilter sensorsOnly;
+        m_impl->system->GetNarrowPhaseQuery().CollideShape(
+            character.GetShape(), JPH::Vec3::sReplicate(1.0f), character.GetCenterOfMassTransform(), settings,
+            JPH::RVec3::sZero(), collector, {}, {}, sensorsOnly);
+        Array<JPH::BodyID> inside;
+        for (const JPH::CollideShapeResult& r : collector.mHits)
+        {
+            if (!Holds(inside, r.mBodyID2))
+            {
+                inside.PushBack(r.mBodyID2);
+            }
+        }
+        // Entered and left since the last sweep, as the listener reports a body's: the trigger on
+        // side A, the character (its user word; it has no body) on side B, at the character.
+        Array<JPH::BodyID>& before = m_impl->characterSensors[id.value];
+        const Float3 at = FromJph(JPH::Vec3(character.GetPosition()));
+        const auto raise = [&](ContactKind kind, JPH::BodyID sensor)
+        {
+            ContactEvent e;
+            e.kind = kind;
+            e.bodyA = BodyId{sensor.GetIndexAndSequenceNumber()};
+            e.userA = m_impl->system->GetBodyInterface().GetUserData(sensor);
+            e.userB = character.GetUserData();
+            e.point = at;
+            ScopedLock lock(m_impl->contacts.mutex);
+            m_impl->contacts.events.PushBack(e);
+        };
+        for (JPH::BodyID sensor : inside)
+        {
+            if (!Holds(before, sensor))
+            {
+                raise(ContactKind::TriggerEnter, sensor);
+            }
+        }
+        for (JPH::BodyID sensor : before)
+        {
+            if (!Holds(inside, sensor))
+            {
+                raise(ContactKind::TriggerExit, sensor);
+            }
+        }
+        before = Move(inside);
     }
 
     Float3 PhysicsWorld::CharacterPosition(CharacterId id) const

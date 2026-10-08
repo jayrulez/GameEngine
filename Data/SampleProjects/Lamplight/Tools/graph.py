@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""graph.py: the thief's animation graph (Models/Thief/ThiefGraph), written through the editor's MCP.
+"""graph.py: the characters' animation graphs (Models/<Name>/<Name>Graph), written through the
+editor's MCP. The scripts drive them by parameters (SceneAnimation setFloat / setBool), never by
+naming clips:
 
-Thief.as drives it by parameters (SceneAnimation setFloat / setBool), never by naming clips:
-- Speed (float, m/s): how fast the thief goes along the floor.
-- Crouched (bool): sneaking (the Sneak control held).
+- ThiefGraph (Thief.as): Speed (float, m/s) and Crouched (bool, the Sneak control held). Stand
+  blends Idle, Walk and Run at the speeds their strides match (0, 1.6 and 4.5 m/s,
+  blender/thief.py); Crouched blends Crouch and Sneak (0 and 1.0 m/s); the two cross-fade on
+  Crouched.
+- GuardGraph (Guard.as): Speed and Searching (bool, standing and looking round). Move blends Idle,
+  Walk and Run (0, 1.2 and 4.0 m/s, blender/guard.py); Look plays while Searching.
 
-States: Stand blends Idle, Walk and Run by Speed at the speeds their strides match (0, 1.6 and 4.5
-m/s, blender/thief.py), Crouched blends Crouch and Sneak (0 and 1.0 m/s). The two cross-fade on
-Crouched. Snowline's graph.py is the same writer for the rider's graph.
+Snowline's graph.py is the same writer for the rider's graph.
 """
 import os, sys
 import xml.etree.ElementTree as ET
@@ -16,41 +19,28 @@ from scenegen import mcp
 
 FLOAT, BOOL = 0, 2
 EQUAL = 0
-PARAMS = [("Speed", FLOAT), ("Crouched", BOOL)]
-P = {name: i for i, (name, _) in enumerate(PARAMS)}
+NIL = "00000000-0000-0000-0000-000000000000"
+
+# Each graph: its model, parameters, states (name, loop, a clip or a blend: (param, [(threshold,
+# clip)])), its first state, and transitions (src, dst, fade s, exit time or None, [(param, value)]).
+GRAPHS = {
+    "Thief": dict(
+        params=[("Speed", FLOAT), ("Crouched", BOOL)],
+        states=[("Stand", True, ("Speed", [(0.0, "Idle"), (1.6, "Walk"), (4.5, "Run")])),
+                ("Crouched", True, ("Speed", [(0.0, "Crouch"), (1.0, "Sneak")]))],
+        start="Stand",
+        transitions=[("Stand", "Crouched", 0.25, None, [("Crouched", True)]),
+                     ("Crouched", "Stand", 0.25, None, [("Crouched", False)])]),
+    "Guard": dict(
+        params=[("Speed", FLOAT), ("Searching", BOOL)],
+        states=[("Move", True, ("Speed", [(0.0, "Idle"), (1.2, "Walk"), (4.0, "Run")])),
+                ("Look", True, "Look")],
+        start="Move",
+        transitions=[("Move", "Look", 0.3, None, [("Searching", True)]),
+                     ("Look", "Move", 0.3, None, [("Searching", False)])]),
+}
 
 assets = mcp("asset_list", {})["assets"]
-
-
-def clip(name):
-    return next(a["guid"] for a in assets if a["type"] == "AnimationClipAsset"
-                and a.get("group") == "Models/Thief" and a["name"] == name)
-
-
-def graph_guid():
-    found = [a["guid"] for a in assets if a["type"] == "AnimationGraphAsset" and a["name"] == "ThiefGraph"]
-    return found[0] if found else mcp("asset_create", {"creator": "Animation Graph", "name": "ThiefGraph",
-                                                       "group": "Models/Thief"})["guid"]
-
-
-NIL = "00000000-0000-0000-0000-000000000000"
-# name, loop, clip or a blend: (param, [(threshold, clip)])
-STATES = [
-    ("Stand", True, ("Speed", [(0.0, "Idle"), (1.6, "Walk"), (4.5, "Run")])),
-    ("Crouched", True, ("Speed", [(0.0, "Crouch"), (1.0, "Sneak")])),
-]
-S = {name: i for i, (name, _, _) in enumerate(STATES)}
-
-
-def when(param, value):
-    return (P[param], EQUAL, 1.0 if value else 0.0)
-
-
-# src, dst, fade (s), exit time (None = none), conditions
-TRANSITIONS = [
-    (S["Stand"], S["Crouched"], 0.25, None, [when("Crouched", True)]),
-    (S["Crouched"], S["Stand"], 0.25, None, [when("Crouched", False)]),
-]
 
 
 def el(parent, tag, name=None, text=None, **attrs):
@@ -67,8 +57,20 @@ def arr(parent, name, items, tag):
     return a
 
 
-def write():
-    guid = graph_guid()
+def write(model, g):
+    group = "Models/" + model
+    graph_name = model + "Graph"
+    found = [a["guid"] for a in assets if a["type"] == "AnimationGraphAsset" and a["name"] == graph_name]
+    guid = found[0] if found else mcp("asset_create", {"creator": "Animation Graph", "name": graph_name,
+                                                       "group": group})["guid"]
+    clip = lambda c: next(a["guid"] for a in assets if a["type"] == "AnimationClipAsset"
+                          and a.get("group") == group and a["name"] == c)
+    PARAMS = g["params"]
+    P = {n: i for i, (n, _) in enumerate(PARAMS)}
+    STATES = g["states"]
+    S = {n: i for i, (n, _, _) in enumerate(STATES)}
+    TRANSITIONS = [(S[src], S[dst], fade, exit_time, [(P[p], EQUAL, 1.0 if v else 0.0) for p, v in conds])
+                   for src, dst, fade, exit_time, conds in g["transitions"]]
     root = ET.fromstring(mcp("asset_data_read", {"guid": guid})["xml"])
     payload = root.find("object[@name='payload']")
     for child in list(payload):
@@ -82,7 +84,7 @@ def write():
     layers = el(payload, "array", "layers", count="1")
     # A layer and each state and transition are written flat in their arrays (the serializer's form).
     el(layers, "string", "name", "Base")
-    el(layers, "i32", "defaultState", str(S["Stand"]))
+    el(layers, "i32", "defaultState", str(S[g["start"]]))
     el(layers, "u8", "blendMode", "0")
     el(layers, "f32", "weight", "1")
     el(layers, "array", "maskWeights", count="0")
@@ -126,8 +128,11 @@ def write():
     el(xy, "f32", "x", "60")
     el(xy, "f32", "y", "40")
     mcp("asset_data_write", {"guid": guid, "xml": ET.tostring(root, encoding="unicode")})
-    print("ThiefGraph", guid)
+    print(graph_name, guid)
     return guid
 
 
-write()
+
+
+for model, g in GRAPHS.items():
+    write(model, g)

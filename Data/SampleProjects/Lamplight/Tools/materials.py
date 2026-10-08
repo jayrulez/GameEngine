@@ -6,8 +6,7 @@ material lists. Colours are sRGB, as entered anywhere.
 
 - Materials/FlameOut, Materials/ChimneyOut: an oil lamp put out (Lamp.as), its wick and glass no
   longer glowing.
-- Materials/Guard: the guard stand-in's colour until his model. The room's pieces and the thief
-  bring their own (blender/manor.py, blender/thief.py).
+The room's pieces, the thief and the guard bring their own (blender/manor.py, thief.py, guard.py).
 """
 import os, struct, sys
 import xml.etree.ElementTree as ET
@@ -16,7 +15,6 @@ from scenegen import mcp
 
 MATERIALS = {
     # name: (base colour, roughness, metallic, emissive colour or None)
-    "Guard": ((0.45, 0.12, 0.10), 0.6, 0.0, None),
     # A lamp put out (Lamp.as swaps them in for the kit's glowing Flame and Chimney): a charred
     # wick, and the chimney's glass dark and glossy.
     "FlameOut": ((0.10, 0.08, 0.07), 0.8, 0.0, None),

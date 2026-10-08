@@ -1,0 +1,113 @@
+<root>
+	<string name="guid">fb9a3a20-db7e-4acb-bfb5-db7913bd3c8b</string>
+	<string name="typeNamespace">rtti::pipeline::animation</string>
+	<string name="typeName">AnimationGraphAsset</string>
+	<array name="dataVersions" count="1">
+		<u64 name="type">11629658473614327302</u64>
+		<u32 name="version">0</u32>
+	</array>
+	<object name="payload">
+		<string name="fileName"/>
+		<array name="paramNames" count="2">
+			<string>Speed</string>
+			<string>Searching</string>
+		</array>
+		<array name="paramTypes" count="2">
+			<u8>0</u8>
+			<u8>2</u8>
+		</array>
+		<array name="paramFloats" count="2">
+			<f32>0</f32>
+			<f32>0</f32>
+		</array>
+		<array name="paramInts" count="2">
+			<i32>0</i32>
+			<i32>0</i32>
+		</array>
+		<array name="paramBools" count="2">
+			<u8>0</u8>
+			<u8>0</u8>
+		</array>
+		<array name="layers" count="1">
+			<string name="name">Base</string>
+			<i32 name="defaultState">0</i32>
+			<u8 name="blendMode">0</u8>
+			<f32 name="weight">1</f32>
+			<array name="maskWeights" count="0"/>
+			<array name="states" count="2">
+				<string name="name">Move</string>
+				<f32 name="speed">1</f32>
+				<bool name="loop">true</bool>
+				<u8 name="kind">1</u8>
+				<string name="clipRef">00000000-0000-0000-0000-000000000000</string>
+				<i32 name="paramIndex">0</i32>
+				<i32 name="paramIndexX">-1</i32>
+				<i32 name="paramIndexY">-1</i32>
+				<array name="entryThresholds" count="3">
+					<f32>0</f32>
+					<f32>1.2</f32>
+					<f32>4</f32>
+				</array>
+				<array name="entryPositions" count="0"/>
+				<array name="entryClips" count="3">
+					<string>dd7d3c2b-0915-4dd1-91d4-5822c98451ab</string>
+					<string>6fed6ef0-afca-4606-bf01-e3e13ae8d45e</string>
+					<string>f88afe07-2f09-4295-8191-9da5b024db0b</string>
+				</array>
+				<string name="name">Look</string>
+				<f32 name="speed">1</f32>
+				<bool name="loop">true</bool>
+				<u8 name="kind">0</u8>
+				<string name="clipRef">9e188c17-c310-4570-8298-1bb71de1eed0</string>
+				<i32 name="paramIndex">-1</i32>
+				<i32 name="paramIndexX">-1</i32>
+				<i32 name="paramIndexY">-1</i32>
+				<array name="entryThresholds" count="0"/>
+				<array name="entryPositions" count="0"/>
+				<array name="entryClips" count="0"/>
+			</array>
+			<array name="transitions" count="2">
+				<i32 name="src">0</i32>
+				<i32 name="dst">1</i32>
+				<f32 name="duration">0.3</f32>
+				<bool name="hasExitTime">false</bool>
+				<f32 name="exitTime">1</f32>
+				<i32 name="priority">0</i32>
+				<array name="conditions" count="1">
+					<i32 name="paramIndex">1</i32>
+					<u8 name="op">0</u8>
+					<f32 name="threshold">1</f32>
+				</array>
+				<i32 name="src">1</i32>
+				<i32 name="dst">0</i32>
+				<f32 name="duration">0.3</f32>
+				<bool name="hasExitTime">false</bool>
+				<f32 name="exitTime">1</f32>
+				<i32 name="priority">0</i32>
+				<array name="conditions" count="1">
+					<i32 name="paramIndex">1</i32>
+					<u8 name="op">0</u8>
+					<f32 name="threshold">0</f32>
+				</array>
+			</array>
+		</array>
+		<array name="layerStatePositions" count="1">
+			<array count="2">
+				<object>
+					<f32 name="x">280</f32>
+					<f32 name="y">120</f32>
+				</object>
+				<object>
+					<f32 name="x">500</f32>
+					<f32 name="y">120</f32>
+				</object>
+			</array>
+		</array>
+		<array name="layerAnyStatePositions" count="1">
+			<object>
+				<f32 name="x">60</f32>
+				<f32 name="y">40</f32>
+			</object>
+		</array>
+	</object>
+</root>

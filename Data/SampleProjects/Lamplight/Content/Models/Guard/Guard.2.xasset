@@ -1,9 +1,9 @@
 <root>
-	<string name="guid">0f258be0-03cd-4c8e-bc65-4462875775d7</string>
+	<string name="guid">f66c727b-3287-42d9-ada7-73cb2c71f0f8</string>
 	<string name="typeNamespace">rtti::pipeline::geometry</string>
-	<string name="typeName">StaticMeshAsset</string>
+	<string name="typeName">SkinnedMeshAsset</string>
 	<array name="dataVersions" count="1">
-		<u64 name="type">2902198860942581667</u64>
+		<u64 name="type">17551791087153124077</u64>
 		<u32 name="version">5</u32>
 	</array>
 	<object name="payload">

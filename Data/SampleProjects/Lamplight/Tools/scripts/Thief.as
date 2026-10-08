@@ -1,7 +1,8 @@
 // Thief - the player: moves on the floor relative to where the camera looks (up on the stick is
 // away from the camera, whichever quarter it has turned to), at a sneak (crouched), a walk or a
 // run, and turns to face where it goes. The character controller keeps it on the floor and out of
-// the walls; the model's graph (graph.py) follows by Speed and Crouched.
+// the walls; the model's graph (graph.py) follows by Speed and Crouched. Caught (Guard.as), it goes
+// back to the last checkpoint.
 
 const float kPi = 3.14159265f;
 
@@ -22,6 +23,8 @@ class Thief
 
     private float m_yaw = 0.0f;
     private Entity@ m_figure;
+    private Float3 m_checkpoint = Float3(0.0f, 0.0f, 0.0f); // where a catch sends the thief back
+
 
     Thief(Entity@ entity) { @self = entity; }
 
@@ -75,6 +78,23 @@ class Thief
         while (delta < -kPi) delta += 2.0f * kPi;
         m_yaw += delta * Saturate(turnRate * float(dt));
         self.setRotationEuler(0.0f, Math::RadiansToDegrees(m_yaw), 0.0f);
+    }
+
+    void onStart()
+    {
+        m_checkpoint = self.worldPosition();
+    }
+
+    // Caught by a guard (Guard.as): back to the last checkpoint.
+    void onCaught(Float3 at)
+    {
+        CharacterComponent::of(self).setPosition(m_checkpoint);
+    }
+
+    // A checkpoint reached: a catch now sends the thief back here.
+    void onCheckpoint(Float3 at)
+    {
+        m_checkpoint = at;
     }
 
     // A door's lock being picked (Door.as): face it and stand still, the hand on it.

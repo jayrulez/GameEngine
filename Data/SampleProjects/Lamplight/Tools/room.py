@@ -5,12 +5,12 @@ wall pieces round it, a doorway in the middle of the south side, a post at each 
 floor in waxed boards, so SSR shows the lamp and the lantern in it. No ceiling: the camera looks
 down from above and behind, and the wall pieces between it and the thief fade (CutawayWall).
 A table with an oil lamp on it (its point light 0.75 m over the tabletop, so the top is lit, not
-clipped), a guard walking a loop round the room with his lantern (a spot light
-with shadows, carried along a closed spline by path_follow), the thief by the door, and the camera
+clipped), a locked door, a guard on his round with his lantern (a spot light with shadows; he
+walks the navigation baked from the colliders, Guard.as), the thief by the door, and the camera
 rig. Each piece's collider is its own unscaled entity, placed from the same sizes.
 
-The guard is still a cylinder until his model. Run with the editor open on the
-project and its MCP server on, after manor.py's pieces are imported and importscripts.py has run:
+Run with the editor open on the project and its MCP server on, after the models are imported,
+graph.py has written the graphs and importscripts.py has run:
     python3 room.py
 """
 import math, os, sys
@@ -26,11 +26,12 @@ DOOR_W, DOOR_H = 1.2, 2.2
 LEAF_W, LEAF_H = 1.04, 2.12  # the door's leaf inside the frame (manor.py's Door)
 TABLE = (-2.6, 0.0, -1.6)
 GUARD_ROUTE = [(-3.0, 0.0, 2.5), (3.0, 0.0, 2.5), (3.0, 0.0, -2.5), (-3.0, 0.0, -2.5)]
-GUARD_SPEED = 1.2  # m/s, a slow round
+GUARD_GROUP = 2  # the guards' collision group (Guard.as looks past it)
 
 ASSETS = mcp("asset_list", {})["assets"]
-THIEF_MODEL = next((a["guid"] for a in ASSETS if a["type"] == "PrefabDocument" and a.get("group") == "Models/Thief"),
-                   None)
+MODEL = lambda name: next((a["guid"] for a in ASSETS if a["type"] == "PrefabDocument"
+                           and a.get("group") == "Models/" + name), None)
+THIEF_MODEL, GUARD_MODEL = MODEL("Thief"), MODEL("Guard")
 
 
 def mesh(name):
@@ -71,15 +72,22 @@ def model_parts(prefab):
     return parts
 
 
-def thief_ops():
-    """The thief model's import plays one clip; Thief.as drives the graph instead (Snowline's rider
-    does the same): the prefab's root loses the clip animator, and the skinned mesh gains the graph."""
-    parts = model_parts(THIEF_MODEL)
-    graph = [a["guid"] for a in ASSETS if a["type"] == "AnimationGraphAsset" and a["name"] == "ThiefGraph"]
+def model_ops(prefab, graph_name):
+    """A model's import plays one clip; its script drives a graph instead (Snowline's rider does the
+    same): the prefab's root loses the clip animator, and the skinned mesh gains the graph."""
+    parts = model_parts(prefab)
+    graph = [a["guid"] for a in ASSETS if a["type"] == "AnimationGraphAsset" and a["name"] == graph_name]
     if not graph:
-        raise SystemExit("no ThiefGraph (run graph.py first)")
+        raise SystemExit("no %s (run graph.py first)" % graph_name)
     return [component_removed(parts["animator"], "skeletal_animation"),
             component_added(parts["meshOwner"], "animation_graph", skeleton=parts["skeleton"], graph=graph[0])]
+
+
+def nav_zone():
+    """The room's Navigation Zone asset (Navigation/RoomNav), made the first time."""
+    found = [a["guid"] for a in ASSETS if a["type"] == "NavigationZoneAsset" and a["name"] == "RoomNav"]
+    return found[0] if found else mcp("asset_create", {"creator": "Navigation Zone", "name": "RoomNav",
+                                                       "group": "Navigation"})["guid"]
 
 
 def asset(asset_type, name):
@@ -96,33 +104,12 @@ def quat_mul(a, b):
             aw * bz + ax * by - ay * bx + az * bw, aw * bw - ax * bx - ay * by - az * bz)
 
 
-def spline_points(points):
-    """A closed loop's points with Catmull-Rom handles (each a sixth of the chord between its
-    neighbours, wrapping round), written flat as the engine's serializer writes an array of structs."""
-    items = []
-    n = len(points)
-    for i, p in enumerate(points):
-        a, b = points[(i - 1) % n], points[(i + 1) % n]
-        h = [(b[k] - a[k]) / 6.0 for k in range(3)]
-        f = lambda v: "".join('<f32 name="%s">%s</f32>' % (k, num(float(x))) for k, x in zip("xyz", v))
-        items.append('<object name="position">%s</object><object name="in">%s</object>'
-                     '<object name="out">%s</object><u8 name="mode">0</u8>' % (f(p), f([-x for x in h]), f(h)))
-    return items
-
-
 def build():
     mats = all_materials()
     surf = surfaces()
-    cylinder = mesh("Cylinder")
     kit = {n: piece(n) for n in ("Wall", "Doorway", "Door", "Post", "Floor", "Table", "OilLamp")}
     d = Doc("Room")
     look(d)
-
-    def thing(name, m, mat, pos, scale, rot=(0, 0, 0, 1), parent=None):
-        e = d.stable_id("entity")
-        d.entity(name, pos, rot, scale, parent=parent, eid=e)
-        d.add(e, "mesh", mesh=m, materials=["<string>%s</string>" % mats[mat]])
-        return e
 
     def place(name, kind, pos, rot=(0, 0, 0, 1), parent=None):
         """A kit piece, its materials as imported."""
@@ -205,25 +192,12 @@ def build():
     lamp_slots = kit["OilLamp"][1]  # Brass, Flame, Chimney (blender/manor.py's order)
     lamps.append((lamp, lamp_light, lamp_slots))
 
-    # The guard: round the room on a closed spline, his lantern a spot light ahead of him and down.
-    route = d.stable_id("entity")
-    d.entity("GuardRoute", eid=route)
-    d.add(route, "spline", points=spline_points(GUARD_ROUTE), closed=True)
-    guard = d.stable_id("entity")
-    d.entity("Guard", GUARD_ROUTE[0], eid=guard)
-    d.add(guard, "path_follow", spline=route, speed=GUARD_SPEED, loop=True, playing=True, alignToTangent=True)
-    thing("GuardBody", cylinder, "Guard", (0, 0.9, 0), (0.55, 1.8, 0.55), parent=guard)
-    lantern = d.stable_id("entity")
-    d.entity("Lantern", (0.3, 1.1, -0.35), pitch(-25.0), parent=guard, eid=lantern)
-    d.add(lantern, "light", type=2, color={"r": 1.0, "g": 0.8, "b": 0.55, "a": 1.0}, intensity=12.0,
-          range=9.0, castsShadows=True)
-
     # The thief by the door: a character controller (Player), the model under it (blender/thief.py,
     # its origin at the feet, the capsule's centre 0.9 m up) driven by its graph (graph.py).
     thief = d.stable_id("entity")
     d.entity("Player", (1.2, 0.9, 3.0), eid=thief)
     d.add(thief, "physics.Character", radius=0.3, halfHeight=0.6, maxSlopeDegrees=45.0, stepUp=0.3)
-    d.instance(THIEF_MODEL, (0, -0.9, 0), parent=thief, ops=thief_ops())
+    d.instance(THIEF_MODEL, (0, -0.9, 0), parent=thief, ops=model_ops(THIEF_MODEL, "ThiefGraph"))
     # The right hand reaches for a lock (Door.as sets the target and the weight while picking).
     d.add(thief, "two_bone_ik", startBone="upperarm_R", midBone="forearm_R", endBone="hand_R", weight=0.0,
           fadeSeconds=0.25)
@@ -242,6 +216,43 @@ def build():
             "flameLit": ("asset", slots[1]), "chimneyLit": ("asset", slots[2]),
             "flameOut": ("asset", mats["FlameOut"]), "chimneyOut": ("asset", mats["ChimneyOut"])}))
     d.script(door, (asset("ScriptClassAsset", "Door"), {"thief": ("entity", thief), "locked": True}))
+    # The guard (blender/guard.py) on his round: a navigation agent walking the round's points
+    # (Guard.as), his model under him driven by its graph, a kinematic capsule in the guards' own
+    # collision group (the thief cannot walk through him; his own sight looks past it), and the
+    # lantern's spot light where the model holds the lantern (0.26 m left, 1.02 up, 0.41 ahead,
+    # measured on the held pose), tipped down a little: what it lights is what he sees.
+    round_ = d.stable_id("entity")
+    d.entity("Round", eid=round_)
+    for i, p in enumerate(GUARD_ROUTE):
+        d.entity("Point%d" % i, p, parent=round_)
+    guard = d.stable_id("entity")
+    d.entity("Guard1", GUARD_ROUTE[0], eid=guard)
+    d.add(guard, "navigation.Agent", radius=0.35, height=1.8, maxSpeed=4.0, maxAcceleration=8.0)
+    d.instance(GUARD_MODEL, (0, 0, 0), parent=guard, ops=model_ops(GUARD_MODEL, "GuardGraph"))
+    body = d.stable_id("entity")
+    d.entity("GuardCollider", (0, 0.9, 0), parent=guard, eid=body)
+    d.add(body, "physics.RigidBody", motion=1, layer=0, shape=2, radius=0.35, halfHeight=0.55,
+          collisionGroup=GUARD_GROUP)
+    lantern = d.stable_id("entity")
+    # A spot light shines along its -Z; the guard faces +Z, so it is turned half round, then tipped.
+    d.entity("Lantern", (0.26, 1.02, 0.41), quat_mul(yaw(180.0), pitch(-20.0)), parent=guard, eid=lantern)
+    d.add(lantern, "light", type=2, color={"r": 1.0, "g": 0.8, "b": 0.55, "a": 1.0}, intensity=12.0,
+          range=9.0, outerAngle=0.6, innerAngle=0.45, castsShadows=True)
+    # What he makes of the thief, over his head (Guard.as fills it): hidden until he sees something.
+    meter = d.stable_id("entity")
+    d.entity("Meter", (0, 2.25, 0), parent=guard, eid=meter)
+    d.add(meter, "ui.Billboard", document=asset("UIDocumentAsset", "GuardMeter"), visible=False)
+    d.script(guard, (asset("ScriptClassAsset", "Guard"), {
+        "thief": ("entity", thief), "route": ("entity", round_), "lantern": ("entity", lantern),
+        "meter": ("entity", meter), "group": GUARD_GROUP}))
+
+    # The navigation zone over the room and the yard, baked from the static colliders after the
+    # scene is written (bake_navigation below).
+    zone = d.stable_id("entity")
+    d.entity("NavZone", (0, 1.5, 0), eid=zone)
+    d.add(zone, "navigation.Zone", extents={"x": ROOM_W / 2 + 3, "y": 3.0, "z": ROOM_D / 2 + 3},
+          zone=nav_zone())
+
     cutaway = asset("ScriptClassAsset", "CutawayWall")
     for e, (nx, nz) in walls:
         d.script(e, (cutaway, {"camera": ("entity", cam), "thief": ("entity", thief),
@@ -253,5 +264,9 @@ def build():
 
 if __name__ == "__main__":
     guid = build()
-    mcp("project_settings_set", {"defaultSceneId": guid})  # P0 has the one scene; the game boots into it
+    mcp("project_settings_set", {"defaultSceneId": guid})  # the one scene so far; the game boots into it
+    # The navigation for the guard: baked from the scene's static colliders into RoomNav, cooked.
+    mcp("page_open", {"guid": guid})
+    print(mcp("navigation_bake", {"page": guid, "entity": "NavZone"}))
+    mcp("asset_cook", {})
     print("Room", guid)

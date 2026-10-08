@@ -1,5 +1,5 @@
 <root>
-	<string name="guid">fc9fe8b0-d230-423c-be4d-bf212785a521</string>
+	<string name="guid">63389041-b211-4bc2-a4df-8276814fab59</string>
 	<string name="typeNamespace">rtti::pipeline::materials</string>
 	<string name="typeName">MaterialAsset</string>
 	<array name="dataVersions" count="1">
@@ -8,13 +8,13 @@
 	</array>
 	<object name="payload">
 		<string name="fileName"/>
-		<string name="name">Guard</string>
+		<string name="name">Eye</string>
 		<string name="shaderId">00000000-0000-0000-0000-000000000000</string>
 		<string name="shaderName">forward</string>
 		<u32 name="shaderFlags">0</u32>
 		<u8 name="blendMode">0</u8>
 		<u8 name="depthMode">1</u8>
-		<u8 name="cullMode">1</u8>
+		<u8 name="cullMode">0</u8>
 		<u8 name="vertexLayout">4</u8>
 		<array name="propertyNames" count="16">
 			<string>BaseColor</string>
@@ -107,18 +107,18 @@
 			<u32>0</u32>
 		</array>
 		<array name="uniformDefaults" count="64">
-			<u8>102</u8>
-			<u8>102</u8>
-			<u8>230</u8>
+			<u8>59</u8>
+			<u8>28</u8>
+			<u8>139</u8>
 			<u8>62</u8>
-			<u8>143</u8>
-			<u8>194</u8>
-			<u8>245</u8>
-			<u8>61</u8>
-			<u8>205</u8>
-			<u8>204</u8>
-			<u8>204</u8>
-			<u8>61</u8>
+			<u8>106</u8>
+			<u8>191</u8>
+			<u8>125</u8>
+			<u8>62</u8>
+			<u8>106</u8>
+			<u8>191</u8>
+			<u8>125</u8>
+			<u8>62</u8>
 			<u8>0</u8>
 			<u8>0</u8>
 			<u8>128</u8>
@@ -127,9 +127,9 @@
 			<u8>0</u8>
 			<u8>0</u8>
 			<u8>0</u8>
-			<u8>154</u8>
-			<u8>153</u8>
-			<u8>25</u8>
+			<u8>51</u8>
+			<u8>51</u8>
+			<u8>51</u8>
 			<u8>63</u8>
 			<u8>0</u8>
 			<u8>0</u8>

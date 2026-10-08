@@ -976,6 +976,17 @@ namespace foundation::render
     {
         ctx.casters.Clear();
         ctx.animatedSpheres.Clear();
+        ctx.movingCasters = 0;
+        // Moved casters matter only to the cached (Static) atlas tiles; without any, nothing is kept.
+        bool cached = false;
+        for (const LocalShadowCaster& c : scene.LocalShadowCasters())
+        {
+            cached = cached || c.isStatic;
+        }
+        ctx.boundsFrame ^= 1u;
+        HashMap<u64, Float4>& bounds = ctx.casterBoundsById[ctx.boundsFrame];
+        const HashMap<u64, Float4>& lastBounds = ctx.casterBoundsById[ctx.boundsFrame ^ 1u];
+        bounds.Clear();
         for (RenderData* data : scene.Items())
         {
             if (data == nullptr)
@@ -1009,9 +1020,42 @@ namespace foundation::render
                 {
                     ctx.animatedSpheres.PushBack(
                         Float4{md->worldCenter.x, md->worldCenter.y, md->worldCenter.z, md->worldRadius});
+                    ++ctx.movingCasters;
+                    ctx.casters.PushBack(DrawItem{MakeSortKey(data->category, stateBits, 0u), data});
+                    continue;
+                }
+            }
+            if (cached && data->entityId != 0)
+            {
+                // Any other caster is still unless its bounds changed since the last frame (or it is
+                // new): then where it is and where it was both redraw (its old shadow leaves the cache).
+                const Float4 sphere{data->worldCenter.x, data->worldCenter.y, data->worldCenter.z,
+                                    data->worldRadius};
+                bounds.InsertOrAssign(data->entityId, sphere);
+                const Float4* was = lastBounds.Find(data->entityId);
+                if (was == nullptr || was->x != sphere.x || was->y != sphere.y || was->z != sphere.z ||
+                    was->w != sphere.w)
+                {
+                    ctx.animatedSpheres.PushBack(sphere);
+                    if (was != nullptr)
+                    {
+                        ctx.animatedSpheres.PushBack(*was);
+                    }
+                    ++ctx.movingCasters;
                 }
             }
             ctx.casters.PushBack(DrawItem{MakeSortKey(data->category, stateBits, 0u), data});
+        }
+        if (cached)
+        {
+            for (const auto& entry : lastBounds)
+            {
+                if (!bounds.Contains(entry.key))
+                {
+                    ctx.animatedSpheres.PushBack(entry.value); // gone: its shadow leaves the cache
+                    ++ctx.movingCasters;
+                }
+            }
         }
         RadixSortDrawItems(ctx.casters, m_sortScratch);
         // Compact bounds SoA (xyz = worldCenter, w = worldRadius) aligned to the SORTED caster order, so the
@@ -1039,13 +1083,13 @@ namespace foundation::render
         return 0;
     }
 
-    usize RenderFrame::AnimatedShadowCasterCount(const ExtractedScene* scene) const noexcept
+    usize RenderFrame::MovingShadowCasterCount(const ExtractedScene* scene) const noexcept
     {
         for (const UniquePtr<SceneShadowCtx>& ctx : m_sceneShadowPool)
         {
             if (ctx->scene == scene && scene != nullptr)
             {
-                return ctx->animatedSpheres.Size();
+                return ctx->movingCasters;
             }
         }
         return 0;

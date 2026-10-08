@@ -576,8 +576,14 @@ export namespace foundation::render
             const ExtractedScene* scene = nullptr;
             Array<DrawItem> casters;            // camera-independent caster list (this scene)
             Array<Float4> casterBounds;         // aligned to casters: xyz=worldCenter, w=radius
-            Array<Float4> animatedSpheres;      // skinned-caster spheres, xyz centre w radius (static-tile routing)
+            Array<Float4> animatedSpheres;      // moving casters' spheres, xyz centre w radius (static-tile routing)
             Array<Float4> prevAnimatedSpheres;  // last frame's (a caster leaving a tile redraws it too)
+            usize movingCasters = 0;            // how many casters moved this frame (diagnostics)
+            // Each caster's bounds by entity, this frame's and last frame's alternating, so a caster that
+            // moved (a door swinging), appeared or went redraws the cached tiles it touches. Kept only
+            // while the scene has cached (Static) local shadows.
+            HashMap<u64, Float4> casterBoundsById[2];
+            u32 boundsFrame = 0;
             Array<LocalShadowTile> staticTiles; // this scene's static-layer tiles (this frame)
             Array<LocalShadowTile> staticRenderTiles; // subset dirty THIS frame (rendered)
             Array<u32> staticTileDirty;               // per-static-tile refresh countdown
@@ -751,10 +757,11 @@ export namespace foundation::render
         [[nodiscard]] const rendergraph::RenderGraph& Graph() const noexcept { return m_graph; }
 
         [[nodiscard]] usize ViewCount() const noexcept { return m_views.ActiveCount(); }
-        /// Diagnostics/tests: this scene's shadow caster count and how many of them are skinned
-        /// (animated) casters, from the last frame that built the scene's shadow context.
+        /// Diagnostics/tests: this scene's shadow caster count and how many of them moved (skinned, or
+        /// moved, appeared or gone since the last frame while the scene has cached shadows), from the
+        /// last frame that built the scene's shadow context.
         [[nodiscard]] usize ShadowCasterCount(const ExtractedScene* scene) const noexcept;
-        [[nodiscard]] usize AnimatedShadowCasterCount(const ExtractedScene* scene) const noexcept;
+        [[nodiscard]] usize MovingShadowCasterCount(const ExtractedScene* scene) const noexcept;
 
     private:
         RendererRegistry* m_registry;

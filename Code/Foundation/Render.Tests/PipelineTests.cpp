@@ -379,7 +379,65 @@ TEST_CASE("RenderData::kind says what an item is; the caster list never downcast
     // All three are casters (base fields only); exactly the skinned MESH is an animated caster.
     // The id gate read 2 animated casters here (the junk bytes) and missed the real one.
     CHECK(frame.ShadowCasterCount(&scene) == 3u);
-    CHECK(frame.AnimatedShadowCasterCount(&scene) == 1u);
+    CHECK(frame.MovingShadowCasterCount(&scene) == 1u);
+}
+
+TEST_CASE("RenderFrame: a caster that moves, appears or goes counts as moving for cached shadows")
+{
+    RenderHarness h;
+    if (!h.Init(128, 128))
+    {
+        MESSAGE("DXC/Null unavailable; skipping");
+        return;
+    }
+    InertOpaqueRenderer external;
+    RendererRegistry registry;
+    registry.Register(&external);
+    ShadowSystem shadows(h.device, 2);
+    REQUIRE(shadows.Initialize().IsOk());
+    RenderFrame frame(DefaultAllocator(), h.device, registry, 2, nullptr, nullptr, &shadows);
+
+    // A door and a wall (plain casters, no bones) by a torch whose shadow is cached.
+    ExtractedScene scene{DefaultAllocator()};
+    JunkRenderData* door = scene.Add<JunkRenderData>();
+    JunkRenderData* wall = scene.Add<JunkRenderData>();
+    u64 id = 7;
+    JunkRenderData* both[] = {door, wall};
+    for (JunkRenderData* d : both)
+    {
+        d->category = RenderCategories::Opaque;
+        d->rendererId = external.RendererId();
+        d->worldRadius = 1.0f;
+        d->entityId = id++;
+    }
+    wall->worldCenter = Float3{3.0f, 1.5f, 0.0f};
+    LocalShadowCaster torch;
+    torch.type = 1;
+    torch.positionWS = Float3{1.0f, 1.5f, 1.0f};
+    torch.range = 6.0f;
+    torch.isStatic = true;
+    scene.AddLocalShadowCaster(torch);
+
+    ViewCamera camera;
+    camera.view = Float4x4::LookAtRH(Float3{0, 0, 5}, Float3{0, 0, 0}, Float3{0, 1, 0});
+    camera.projection = Float4x4::PerspectiveFovRH(1.0472f, 1.0f, 0.1f, 100.0f);
+    const auto render = [&]()
+    {
+        ViewSettings settings;
+        frame.Begin(*h.encoder, 0);
+        frame.AddView(scene, camera, settings, h.colorView, rhi::TextureFormat::BGRA8Unorm, 128, 128);
+        frame.End();
+        return frame.MovingShadowCasterCount(&scene);
+    };
+
+    CHECK(render() == 2u); // both new to the cache
+    CHECK(render() == 0u); // still
+    door->worldCenter = Float3{0.5f, 1.0f, 0.5f}; // the door swings
+    CHECK(render() == 1u);
+    CHECK(render() == 0u); // and stops
+    door->castShadows = false; // gone from the casters
+    CHECK(render() == 1u);
+    CHECK(render() == 0u);
 }
 
 TEST_CASE("RenderFrame batches same-mesh-same-material draws into an instanced draw")

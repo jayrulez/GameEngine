@@ -252,8 +252,9 @@ export namespace engine::render
     };
 
     // How a spot/point light's shadow updates. Realtime = re-render every
-    // frame (default). Static = render once into the cached atlas layer; the caster geometry is assumed
-    // not to move (the cache only refreshes if the LIGHT itself moves / changes). Cheap for static scenes.
+    // frame (default). Static = render into the cached atlas layer, redrawn when the LIGHT moves or
+    // changes, and where a caster moves, appears or goes (a figure walking, a door swinging) within its
+    // reach. Cheap for scenes that mostly stand still.
     enum class ShadowUpdateMode : u32
     {
         Realtime = 0,

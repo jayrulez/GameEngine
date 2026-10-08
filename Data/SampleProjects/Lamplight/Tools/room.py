@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from scenegen import Doc, mcp, yaw, pitch, num, component_added, component_removed
 from look import look
 from materials import all_materials
+from surfaces import surfaces
 
 GRID, ROOM_W, ROOM_D, WALL_H, WALL_T = 2.0, 10.0, 8.0, 3.0, 0.2  # the kit's grid and wall (manor.py)
 DOOR_W, DOOR_H = 1.2, 2.2
@@ -111,6 +112,7 @@ def spline_points(points):
 
 def build():
     mats = all_materials()
+    surf = surfaces()
     cylinder = mesh("Cylinder")
     kit = {n: piece(n) for n in ("Wall", "Doorway", "Door", "Post", "Floor", "Table", "OilLamp")}
     d = Doc("Room")
@@ -130,12 +132,13 @@ def build():
         d.add(e, "mesh", mesh=m, materials=["<string>%s</string>" % g for g in slots])
         return e
 
-    def solid(name, pos, size):
-        """A static box collider of its own, unscaled, so the shape is the size it says."""
+    def solid(name, pos, size, surface="Wood"):
+        """A static box collider of its own, unscaled, so the shape is the size it says, made of
+        `surface` (surfaces.py): what a step on it sounds like."""
         e = d.stable_id("entity")
         d.entity(name + "Collider", pos, eid=e)
         d.add(e, "physics.RigidBody", motion=0, layer=0, shape=0,
-              halfExtents={"x": size[0] / 2, "y": size[1] / 2, "z": size[2] / 2})
+              halfExtents={"x": size[0] / 2, "y": size[1] / 2, "z": size[2] / 2}, material=surf[surface])
 
     # The moon: a faint blue key from high in the west, so the room is not black between the lamps.
     moon = d.stable_id("entity")
@@ -148,7 +151,10 @@ def build():
     for i in range(int(ROOM_W / GRID)):
         for j in range(int(ROOM_D / GRID)):
             place("Floor%d_%d" % (i, j), "Floor", (-hw + GRID * (i + 0.5), 0, -hd + GRID * (j + 0.5)))
-    solid("Floor", (0, -0.25, 0), (ROOM_W + 6, 0.5, ROOM_D + 6))
+    solid("Floor", (0, -0.25, 0), (ROOM_W, 0.5, ROOM_D))
+    # The yard outside the door, flagstones, a centimetre below the boards so a ray down inside the
+    # room finds the boards first.
+    solid("Yard", (0, -0.26, 0), (ROOM_W + 6, 0.5, ROOM_D + 6), "Stone")
 
     # The walls: a piece per grid edge (the doorway mid-south), a post at each corner; each piece
     # fades by its outward normal when it stands between the camera and the thief.
@@ -225,7 +231,8 @@ def build():
     d.entity("Camera", (1.2, 7.9, 9.5), pitch(-42.0), eid=cam)
     d.add(cam, "camera", fovYRadians=0.9)
     d.script(thief, (asset("ScriptClassAsset", "Thief"), {"camera": ("entity", cam)}),
-             (asset("ScriptClassAsset", "LightMeter"), {"hud": ("asset", asset("UIDocumentAsset", "Hud"))}))
+             (asset("ScriptClassAsset", "LightMeter"), {"hud": ("asset", asset("UIDocumentAsset", "Hud"))}),
+             (asset("ScriptClassAsset", "Footsteps"), {s.lower(): ("asset", surf[s]) for s in surf}))
     d.script(cam, (asset("ScriptClassAsset", "CameraRig"), {"target": ("entity", thief)}))
     # Each lamp the thief can put out and light again (Lamp.as), its flame and chimney swapped for
     # the dark materials while it is out.

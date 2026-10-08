@@ -1,0 +1,21 @@
+<root>
+	<string name="guid">8581c747-68e5-41b5-856d-f580e8af3219</string>
+	<string name="typeNamespace">rtti::pipeline::audio</string>
+	<string name="typeName">AudioClipAsset</string>
+	<array name="dataVersions" count="1">
+		<u64 name="type">16043286944878179724</u64>
+		<u32 name="version">0</u32>
+	</array>
+	<object name="payload">
+		<string name="fileName">StepGrass1.wav</string>
+		<bool name="stream">false</bool>
+		<bool name="keepCompressed">false</bool>
+		<bool name="forceMono">false</bool>
+		<bool name="loop">false</bool>
+		<u64 name="loopStartFrame">0</u64>
+		<u64 name="loopEndFrame">0</u64>
+		<bool name="trimTrailingSilence">false</bool>
+		<bool name="normalize">false</bool>
+		<f32 name="gain">1</f32>
+	</object>
+</root>

@@ -1,0 +1,12 @@
+<root>
+	<string name="guid">2facd323-f360-4e63-a4e0-115f437db17e</string>
+	<string name="typeNamespace">rtti::pipeline::geometry</string>
+	<string name="typeName">SkinnedMeshAsset</string>
+	<array name="dataVersions" count="1">
+		<u64 name="type">17551791087153124077</u64>
+		<u32 name="version">5</u32>
+	</array>
+	<object name="payload">
+		<string name="fileName"/>
+	</object>
+</root>

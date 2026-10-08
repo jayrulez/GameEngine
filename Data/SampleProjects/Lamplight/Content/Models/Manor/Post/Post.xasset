@@ -1,0 +1,73 @@
+<root>
+	<string name="guid">1c10bd83-ee97-4b10-b991-c6eab3c1f5ff</string>
+	<string name="typeNamespace">rtti::pipeline::modelimporter</string>
+	<string name="typeName">ModelManifestAsset</string>
+	<array name="dataVersions" count="1">
+		<u64 name="type">2440385714661564817</u64>
+		<u32 name="version">3</u32>
+	</array>
+	<object name="payload">
+		<string name="fileName">Post.glb</string>
+		<array name="meshGuids" count="1">
+			<string>e29664e5-57ef-488b-ba10-0d51c25f7a42</string>
+		</array>
+		<array name="meshSkinned" count="1">
+			<u8>0</u8>
+		</array>
+		<array name="meshMaterial" count="1">
+			<i32>0</i32>
+		</array>
+		<array name="meshMaterialSlots" count="1">
+			<object>
+				<array name="slots" count="2">
+					<i32>0</i32>
+					<i32>1</i32>
+				</array>
+			</object>
+		</array>
+		<array name="collisionGuids" count="0"/>
+		<array name="materialGuids" count="2">
+			<string>10cd34ac-933c-4696-b24a-c0ef7709e159</string>
+			<string>ff3f3069-3a3e-42aa-bf10-00ea8cc2ad08</string>
+		</array>
+		<array name="materialAlbedo" count="2">
+			<string>00000000-0000-0000-0000-000000000000</string>
+			<string>00000000-0000-0000-0000-000000000000</string>
+		</array>
+		<array name="nodes" count="1">
+			<string name="name">Post</string>
+			<i32 name="parent">-1</i32>
+			<object name="t">
+				<f32 name="x">0</f32>
+				<f32 name="y">0</f32>
+				<f32 name="z">0</f32>
+			</object>
+			<object name="r">
+				<f32 name="x">0</f32>
+				<f32 name="y">0</f32>
+				<f32 name="z">0</f32>
+				<f32 name="w">1</f32>
+			</object>
+			<object name="s">
+				<f32 name="x">1</f32>
+				<f32 name="y">1</f32>
+				<f32 name="z">1</f32>
+			</object>
+			<i32 name="mesh">0</i32>
+		</array>
+		<string name="skeletonGuid">00000000-0000-0000-0000-000000000000</string>
+		<i32 name="skeletonParentNode">-2</i32>
+		<array name="animationGuids" count="0"/>
+		<object name="boundsMin">
+			<f32 name="x">-0.12</f32>
+			<f32 name="y">0</f32>
+			<f32 name="z">-0.12</f32>
+		</object>
+		<object name="boundsMax">
+			<f32 name="x">0.12</f32>
+			<f32 name="y">3</f32>
+			<f32 name="z">0.12</f32>
+		</object>
+		<array name="entries" count="0"/>
+	</object>
+</root>

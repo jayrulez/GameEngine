@@ -1,0 +1,13 @@
+<root>
+	<string name="guid">0fd58e25-43b6-4fb6-ac5f-ecbeedd4112b</string>
+	<string name="typeNamespace">rtti::pipeline::script</string>
+	<string name="typeName">ScriptClassAsset</string>
+	<array name="dataVersions" count="1">
+		<u64 name="type">1265517353284495090</u64>
+		<u32 name="version">0</u32>
+	</array>
+	<object name="payload">
+		<string name="fileName">LightMeter.as</string>
+		<string name="language">angelscript</string>
+	</object>
+</root>

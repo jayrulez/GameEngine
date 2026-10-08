@@ -95,17 +95,22 @@ it; the plan is checked against the code, not guessed.
 1. **How lit is a point.** The light meter and a guard's eye both need "how much light reaches
    this position", and the script API has none (no light list, no shadow query). A script could
    find every lamp by name and raycast to each, but the game would carry a copy of the
-   renderer's falloff. Shaped as an engine query, `SceneRender::of(scene).lightAt(position)`
-   (P1): the scene's lights summed with the renderer's own range and cone falloff, each occluded
-   by a physics raycast (a CPU estimate of the shading, not a GPU readback), plus the ambient.
-   Tested against the falloff the forward shader uses.
+   renderer's falloff. Fixed in P1 as `SceneRender::of(scene).lightAt(position)` (and with a
+   collision-group mask): every enabled light by the renderer's own range falloff and spot cone
+   (`LightFalloff`, the CPU twin of the forward shader's), a light that casts shadows stopped by
+   what stands between (a ray through the scene's solid surfaces, `ISceneRayQuery`, so render
+   does not depend on physics), by its shadow strength, plus the ambient. A light without
+   shadows shines through walls, as it does on screen. A CPU estimate of the shading, not a GPU
+   readback; the sky's image-based light is not in it.
 2. **Seeing the thief indoors from a higher camera.** Walls and upper floors between the camera
    and the thief must get out of the way, and the engine has no fade or cutaway: a script can
    hide a mesh (`MeshComponent.visible`, a hard pop) or swap its material, nothing smoother.
-   Shaped at P0 as a per-mesh fade the renderer draws as a screen-door dither (the opaque path,
-   the depth prepass and shadows stay consistent, and TAA smooths the dither), with the game
-   choosing what to fade by raycast or by room. Decided against hiding by `visible` after
-   trying both at P0.
+   Decided at P0, after trying both: a per-mesh fade (`MeshComponent.fade`, 0 solid to 1 gone)
+   the renderer draws as a screen-door dither, eased in and out by the game's `CutawayWall`
+   behaviour (a wall fades while the camera is outside it and the thief inside). A faded mesh
+   leaves the depth prepass, so nothing behind it is hidden by depth it no longer covers, and it
+   keeps casting its whole shadow, so the room behind a cut-away wall stays as dark as it was;
+   the hard hide by `visible` dropped the shadow with the wall.
 3. **A meter over a guard's head.** Showing or hiding "?" and "!" works through a world panel's
    `visible`; filling a meter inside it does not, since the screen `ui` facade cannot reach a
    world panel's widgets ("there is no scene.ui script root", `UiScriptFacade.cppm`). Decided
@@ -121,11 +126,10 @@ it; the plan is checked against the code, not guessed.
 
 ## Phases
 
-- **P0 A lit room, measured.** One room from the modular kit with a lamp (point light, shadows),
+- **P0 A lit room.** One room from the modular kit with a lamp (point light, shadows),
   a guard's lantern (spot light, shadows) walking a route, the thief on a stand-in character, the
-  quarter-turn camera with its cutaway, SSR on a polished floor, SSGI and TAA on. Exported to the
-  web and the Deck, with frame times and pack sizes in a table, as Snowline's P0: the first game
-  lit by local lights, so its cost is measured before levels are built on it.
+  quarter-turn camera with its cutaway, SSR on a polished floor, SSGI and TAA on. The exports to
+  the web and the Deck, with frame times and pack sizes, wait for the finished game.
 - **P1 Sneaking.** The thief (Blender model, rigged, sneak / walk / run / crouch clips on a graph),
   the light meter, noise from footsteps by surface, doors, lockpicking with the hand on the lock
   (two-bone IK), putting out and relighting lamps.

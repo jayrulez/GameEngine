@@ -36,11 +36,8 @@ kit3d.PALETTE.update({
     "Eye": (0.08, 0.06, 0.06),
 })
 kit3d.ROUGHNESS.update({"Cloth": 0.9, "ClothDark": 0.9, "Mask": 0.95, "Leather": 0.55, "Buckle": 0.35})
-# A faint cold glow of his own, so the player can find him in a room with no light at all. It lights
-# nothing else, so the light meter (and the guards) still read the room as dark.
-SHADE = (0.30, 0.36, 0.50)
-kit3d.GLOW.update({name: SHADE + (0.04,) for name in ("Cloth", "ClothDark", "Mask", "Leather", "Eye")})
-kit3d.GLOW.update({"Skin": 0.03, "Buckle": 0.03})
+# No glow of his own here: in the dark, LightMeter.as gives his figure one (its EmissiveColor, set
+# for his mesh alone), so in the light he is as he is.
 
 BODY = figure.Body()
 

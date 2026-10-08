@@ -1002,6 +1002,103 @@ TEST_CASE("extract: a light's shadow controls reach the shadow it casts")
     CHECK(Abs(entry.normalBiasPerDistance - 0.5f * 2.0f * Tan(fov * 0.5f) / 512.0f) < 1e-6f);
 }
 
+TEST_CASE("extract: the local shadow tiles go to the lights nearest the view")
+{
+    // Five shadowed point lights in a row, 10 m apart; a point takes six of a layer's sixteen tiles,
+    // so two fit in the realtime layer.
+    scene::Scene scene(DefaultAllocator(), u8"tiles");
+    auto* lights = scene.AddSystem<LightComponentManager>();
+    for (u32 i = 0; i < 5; ++i)
+    {
+        scene::EntityHandle e = scene.CreateEntity(u8"torch");
+        scene.SetLocalPosition(e, Float3{10.0f * static_cast<f32>(i), 0.0f, 0.0f});
+        LightComponent& lc = lights->Add(e);
+        lc.type = LightType::Point;
+        lc.range = 4.0f;
+        lc.castsShadows = true;
+    }
+    scene.UpdateTransforms();
+    const auto shadowed = [](const ExtractedScene& out)
+    {
+        Array<u32> which(DefaultAllocator());
+        for (u32 i = 0; i < out.Lights().Size(); ++i)
+        {
+            if (out.Lights()[i].shadowIndex >= 0.0f)
+            {
+                which.PushBack(i);
+            }
+        }
+        return which;
+    };
+
+    SUBCASE("without a view, the first that fit")
+    {
+        ExtractedScene out{DefaultAllocator()};
+        ExtractLightsInto(scene, out);
+        const Array<u32> which = shadowed(out);
+        REQUIRE(which.Size() == 2u);
+        CHECK(which[0] == 0u);
+        CHECK(which[1] == 1u);
+    }
+    SUBCASE("with a view, the nearest; their tiles in the order the lights came")
+    {
+        ExtractedScene out{DefaultAllocator()};
+        out.SetViewOrigin(Float3{39.0f, 3.0f, 0.0f}); // inside the last one's reach, near the fourth
+        ExtractLightsInto(scene, out);
+        const Array<u32> which = shadowed(out);
+        REQUIRE(which.Size() == 2u);
+        CHECK(which[0] == 3u);
+        CHECK(which[1] == 4u);
+        CHECK(out.Lights()[3].shadowIndex == 0.0f); // the earlier light takes the first entries
+        CHECK(out.Lights()[4].shadowIndex == 6.0f);
+        REQUIRE(out.LocalShadowCasters().Size() == 2u);
+        CHECK(Near(out.LocalShadowCasters()[0].positionWS.x, 30.0f));
+        CHECK(Near(out.LocalShadowCasters()[1].positionWS.x, 40.0f));
+
+        // Walking past them to the far side changes which is nearer, not where their tiles are.
+        ExtractedScene later{DefaultAllocator()};
+        later.SetViewOrigin(Float3{50.0f, 3.0f, 0.0f});
+        ExtractLightsInto(scene, later);
+        CHECK(later.Lights()[3].shadowIndex == 0.0f);
+        CHECK(later.Lights()[4].shadowIndex == 6.0f);
+    }
+    SUBCASE("a spot still fits where a point no longer does")
+    {
+        scene::EntityHandle e = scene.CreateEntity(u8"lantern");
+        scene.SetLocalPosition(e, Float3{100.0f, 0.0f, 0.0f});
+        LightComponent& spot = lights->Add(e);
+        spot.type = LightType::Spot;
+        spot.castsShadows = true;
+        scene.UpdateTransforms();
+        ExtractedScene out{DefaultAllocator()};
+        out.SetViewOrigin(Float3{0.0f, 3.0f, 0.0f});
+        ExtractLightsInto(scene, out);
+        const Array<u32> which = shadowed(out);
+        REQUIRE(which.Size() == 3u);
+        CHECK(which[2] == 5u);
+        CHECK(out.Lights()[5].shadowIndex == 12.0f);
+    }
+    SUBCASE("the static layer has a budget of its own")
+    {
+        u32 n = 0;
+        lights->ForEach(
+            [&](LightComponent& lc, scene::EntityHandle)
+            {
+                if (n++ >= 2)
+                {
+                    lc.shadowUpdate = ShadowUpdateMode::Static;
+                }
+            });
+        ExtractedScene out{DefaultAllocator()};
+        ExtractLightsInto(scene, out);
+        const Array<u32> which = shadowed(out);
+        REQUIRE(which.Size() == 4u); // two realtime, two of the three static
+        CHECK(which[2] == 2u);
+        CHECK(which[3] == 3u);
+        CHECK(out.LocalShadowCasters()[2].isStatic);
+    }
+}
+
 TEST_CASE("light: the shadow controls round-trip with the scene (v1)")
 {
     scene::Scene a{DefaultAllocator()};

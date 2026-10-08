@@ -552,6 +552,20 @@ namespace engine::render
         return total;
     }
 
+    namespace
+    {
+        // A spot or point light asking for a shadow while the atlas tiles are shared out.
+        struct ShadowCandidate
+        {
+            u32 light = 0; // its index among the scene's extracted lights
+            LocalShadowCaster caster;
+            u32 tiles = 1;     // a spot takes one tile, a point six (its cube faces)
+            f32 nearness = 0;  // the view's distance to the light's reach (0 inside it)
+            f32 distance = 0;  // the view's distance to the light itself (breaks ties)
+            bool chosen = false;
+        };
+    }
+
     void ExtractLightsInto(scene::Scene& scene, ExtractedScene& out)
     {
         auto* lights = scene.GetSystem<LightComponentManager>();
@@ -559,10 +573,9 @@ namespace engine::render
         {
             return;
         }
+        Array<GpuLight> found(scene.Allocator());
+        Array<ShadowCandidate> candidates(scene.Allocator());
         bool haveShadow = false;
-        u32 rtTiles = 0,
-            stTiles = 0;     // tiles used per atlas layer (realtime / static); capped separately
-        u32 flatEntries = 0; // running GpuLocalShadow entry index = the next caster's shadowIndex
         lights->ForEach(
             [&](LightComponent& lc, scene::EntityHandle e)
             {
@@ -583,34 +596,76 @@ namespace engine::render
                     ds.strength = lc.shadowStrength;
                     out.SetDirectionalShadow(ds);
                 }
-                // Local (spot/point) shadow casters (5.3): assign shadowIndex = the caster's BASE atlas tile
-                // here, then register it; the ShadowSystem builds the perspective matrix/matrices at frame
-                // time. A spot uses 1 tile, a point 6 (cube faces). Capped at the atlas tile budget.
-                const bool localCaster =
-                    lc.castsShadows && (lc.type == LightType::Spot || lc.type == LightType::Point);
-                const u32 tilesNeeded = (lc.type == LightType::Point) ? 6u : 1u;
-                const bool isStatic = (lc.shadowUpdate == ShadowUpdateMode::Static);
-                u32& layerTiles =
-                    isStatic ? stTiles : rtTiles; // each atlas layer has its own budget
-                if (localCaster && layerTiles + tilesNeeded <= kMaxLocalShadowTiles)
+                if (lc.castsShadows && (lc.type == LightType::Spot || lc.type == LightType::Point))
                 {
-                    g.shadowIndex =
-                        static_cast<f32>(flatEntries); // base entry into the GpuLocalShadow buffer
-                    LocalShadowCaster c;
-                    c.type = static_cast<u32>(lc.type);
-                    c.positionWS = g.positionWS;
-                    c.directionWS = g.directionWS;
-                    c.range = lc.range;
-                    c.outerAngle = lc.outerAngle;
-                    c.isStatic = isStatic;
-                    c.normalBias = lc.shadowNormalBias;
-                    c.depthBias = ShadowBiasDefaults::kLocalDepthBias * lc.shadowDepthBiasScale;
-                    out.AddLocalShadowCaster(c);
-                    layerTiles += tilesNeeded;
-                    flatEntries += tilesNeeded;
+                    ShadowCandidate c;
+                    c.light = static_cast<u32>(found.Size());
+                    c.tiles = (lc.type == LightType::Point) ? 6u : 1u;
+                    c.caster.type = static_cast<u32>(lc.type);
+                    c.caster.positionWS = g.positionWS;
+                    c.caster.directionWS = g.directionWS;
+                    c.caster.range = lc.range;
+                    c.caster.outerAngle = lc.outerAngle;
+                    c.caster.isStatic = (lc.shadowUpdate == ShadowUpdateMode::Static);
+                    c.caster.normalBias = lc.shadowNormalBias;
+                    c.caster.depthBias = ShadowBiasDefaults::kLocalDepthBias * lc.shadowDepthBiasScale;
+                    if (out.HasViewOrigin())
+                    {
+                        c.distance = Length(g.positionWS - out.ViewOrigin());
+                        c.nearness = Max(0.0f, c.distance - lc.range);
+                    }
+                    candidates.PushBack(c);
                 }
-                out.AddLight(g);
+                found.PushBack(g);
             });
+
+        // Local (spot/point) shadows (5.3) share an atlas of kMaxLocalShadowTiles per layer (realtime
+        // and static each have their own). More lights may ask than fit, so they are chosen by how
+        // near the view is to each one's reach, nearest first (the order they come in breaks ties, and
+        // is all there is without a view): a light far off gives its tiles to one beside the camera.
+        // A light that does not fit is unshadowed, and a smaller one later in the ranking may still.
+        Array<u32> ranked(scene.Allocator());
+        for (u32 i = 0; i < candidates.Size(); ++i)
+        {
+            ranked.PushBack(i);
+        }
+        ranked.Sort(
+            [&](u32 a, u32 b)
+            {
+                const ShadowCandidate& x = candidates[a];
+                const ShadowCandidate& y = candidates[b];
+                return x.nearness != y.nearness ? x.nearness < y.nearness : x.distance < y.distance;
+            });
+        u32 rtTiles = 0,
+            stTiles = 0; // tiles used per atlas layer (realtime / static)
+        for (u32 i : ranked)
+        {
+            ShadowCandidate& c = candidates[i];
+            u32& layerTiles = c.caster.isStatic ? stTiles : rtTiles;
+            if (layerTiles + c.tiles <= kMaxLocalShadowTiles)
+            {
+                c.chosen = true;
+                layerTiles += c.tiles;
+            }
+        }
+        // The chosen register in the order they came in, not the ranking's: tiles follow that order,
+        // so moving the camera reshuffles nothing (the static layer's cached tiles stay valid) until
+        // the chosen set itself changes. Each one's shadowIndex is its BASE entry into the
+        // GpuLocalShadow buffer; the ShadowSystem builds the matrices at frame time.
+        u32 flatEntries = 0;
+        for (const ShadowCandidate& c : candidates)
+        {
+            if (c.chosen)
+            {
+                found[c.light].shadowIndex = static_cast<f32>(flatEntries);
+                out.AddLocalShadowCaster(c.caster);
+                flatEntries += c.tiles;
+            }
+        }
+        for (const GpuLight& g : found)
+        {
+            out.AddLight(g);
+        }
     }
 
     void ExtractEnvironmentInto(scene::Scene& scene, ExtractedScene& out)

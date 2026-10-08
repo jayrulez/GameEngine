@@ -1830,3 +1830,65 @@ TEST_CASE("rhi.webgpu: destroying a fence with a pending work-done callback is s
     device->Destroy();
     backend->Destroy();
 }
+
+// Lamplight in the browser went black now and then: the world-space UI over a guard half off
+// screen set a scissor past the target's right edge ("Scissor rect (x: 1933, ...) is not contained
+// in the render area"), WebGPU refused the whole command encoder, and the frame never drew. A
+// scissor reaching past the target, before it, or wholly outside it is clipped to the render area:
+// no error.
+TEST_CASE("rhi.webgpu: a scissor reaching outside the render area is clipped to it, without an error")
+{
+    Backend* backend = TryCreateBackend();
+    if (backend == nullptr)
+    {
+        return;
+    }
+    u32 errors = 0;
+    SetLogSink(&CountWebGpuErrors, &errors);
+    Device* device = nullptr;
+    REQUIRE(backend->EnumerateAdapters()[0]->CreateDevice(DeviceDesc{}, device).IsOk());
+    TextureDesc targetDesc = TextureDesc::RenderTarget(TextureFormat::RGBA8Unorm, 64, 48);
+    Texture* target = nullptr;
+    REQUIRE(device->CreateTexture(targetDesc, target).IsOk());
+    TextureViewDesc viewDesc;
+    viewDesc.format = TextureFormat::RGBA8Unorm;
+    TextureView* view = nullptr;
+    REQUIRE(device->CreateTextureView(target, viewDesc, view).IsOk());
+    CommandPool* pool = nullptr;
+    REQUIRE(device->CreateCommandPool(QueueType::Graphics, pool).IsOk());
+    CommandEncoder* encoder = nullptr;
+    REQUIRE(pool->CreateEncoder(encoder).IsOk());
+
+    RenderPassDesc pass;
+    ColorAttachment color;
+    color.view = view;
+    color.loadOp = LoadOp::Clear;
+    color.storeOp = StoreOp::Store;
+    pass.colorAttachments.Add(color);
+    RenderPassEncoder* renderPass = encoder->BeginRenderPass(pass);
+    REQUIRE(renderPass != nullptr);
+    renderPass->SetScissor(70, 10, 0, 10);   // past the right edge (the browser's case)
+    renderPass->SetScissor(50, 40, 30, 20);  // reaching over the bottom right corner
+    renderPass->SetScissor(-8, -4, 16, 16);  // starting before the top left
+    renderPass->SetScissor(100, 100, 5, 5);  // wholly outside
+    renderPass->End();
+    CommandBuffer* commandBuffer = encoder->Finish();
+    REQUIRE(commandBuffer != nullptr);
+    Fence* fence = nullptr;
+    REQUIRE(device->CreateFence(0, fence).IsOk());
+    CommandBuffer* commandBuffers[] = {commandBuffer};
+    device->GetQueue(QueueType::Graphics)->Submit(Span<CommandBuffer* const>(commandBuffers, 1), fence, 1);
+    REQUIRE(fence->Wait(1, ~0ull));
+    device->WaitIdle(); // the error callbacks arrive through the event pump
+
+    CHECK(errors == 0);
+    CHECK(!device->IsLost());
+    SetLogSink(nullptr, nullptr);
+    device->DestroyFence(fence);
+    pool->DestroyEncoder(encoder);
+    device->DestroyCommandPool(pool);
+    device->DestroyTextureView(view);
+    device->DestroyTexture(target);
+    device->Destroy();
+    backend->Destroy();
+}

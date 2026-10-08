@@ -73,7 +73,8 @@ export namespace foundation::rhi
         /// Set the viewport rectangle and depth range.
         virtual void SetViewport(f32 x, f32 y, f32 w, f32 h, f32 minDepth = 0.0f,
                                  f32 maxDepth = 1.0f) = 0;
-        /// Set the scissor rectangle.
+        /// Set the scissor rectangle. It is clipped to the pass's render area: a rect reaching past
+        /// the target (a world-space UI panel half off screen) draws what is on it.
         virtual void SetScissor(i32 x, i32 y, u32 w, u32 h) = 0;
         /// Set the blend constant color.
         virtual void SetBlendConstant(f32 r, f32 g, f32 b, f32 a) = 0;

@@ -143,7 +143,18 @@ export namespace foundation::rhi::webgpu
 
             const WGPURenderPassEncoder pass =
                 m_api->wgpuCommandEncoderBeginRenderPass(m_encoder, &wgpuDesc);
-            m_renderPass.Begin(*m_api, m_device, pass);
+            // The render area: the attachments' size at the viewed mip (scissors are clipped to it).
+            u32 width = 0, height = 0;
+            const TextureView* sized = !passDesc.colorAttachments.IsEmpty() ? passDesc.colorAttachments[0].view
+                                       : passDesc.depthStencilAttachment.HasValue()
+                                           ? passDesc.depthStencilAttachment->view
+                                           : nullptr;
+            if (sized != nullptr && sized->texture != nullptr)
+            {
+                width = Max(sized->texture->desc.width >> sized->desc.baseMipLevel, 1u);
+                height = Max(sized->texture->desc.height >> sized->desc.baseMipLevel, 1u);
+            }
+            m_renderPass.Begin(*m_api, m_device, pass, width, height);
             return &m_renderPass;
         }
 

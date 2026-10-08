@@ -31,10 +31,15 @@ export namespace foundation::rhi::webgpu
     class WebGpuRenderPassEncoder final : public RenderPassEncoder
     {
     public:
-        void Begin(const WebGpuApi& api, WGPUDevice device, WGPURenderPassEncoder encoder)
+        // `width` x `height`: the pass's render area (its attachments' size), which scissors are
+        // clipped to.
+        void Begin(const WebGpuApi& api, WGPUDevice device, WGPURenderPassEncoder encoder, u32 width,
+                   u32 height)
         {
             m_api = &api;
             m_encoder = encoder;
+            m_width = width;
+            m_height = height;
             m_pushConstants.Begin(api, device);
         }
 
@@ -84,10 +89,24 @@ export namespace foundation::rhi::webgpu
                                                     maxDepth);
         }
 
+        // Clipped to the render area: WebGPU refuses a rect reaching outside it (and the whole
+        // command encoder with it, so the frame goes black), where Vulkan and D3D12 clip. A rect
+        // wholly outside becomes an empty one, which draws nothing.
         void SetScissor(i32 x, i32 y, u32 width, u32 height) override
         {
-            m_api->wgpuRenderPassEncoderSetScissorRect(m_encoder, static_cast<u32>(x),
-                                                       static_cast<u32>(y), width, height);
+            if (m_width == 0 || m_height == 0) // the render area not known: as asked
+            {
+                m_api->wgpuRenderPassEncoderSetScissorRect(m_encoder, static_cast<u32>(x), static_cast<u32>(y),
+                                                           width, height);
+                return;
+            }
+            const i64 x0 = Max<i64>(x, 0), y0 = Max<i64>(y, 0);
+            const i64 x1 = Min<i64>(static_cast<i64>(x) + width, m_width);
+            const i64 y1 = Min<i64>(static_cast<i64>(y) + height, m_height);
+            const bool empty = x1 <= x0 || y1 <= y0;
+            m_api->wgpuRenderPassEncoderSetScissorRect(
+                m_encoder, empty ? 0u : static_cast<u32>(x0), empty ? 0u : static_cast<u32>(y0),
+                empty ? 0u : static_cast<u32>(x1 - x0), empty ? 0u : static_cast<u32>(y1 - y0));
         }
 
         void SetBlendConstant(f32 r, f32 g, f32 b, f32 a) override
@@ -200,6 +219,8 @@ export namespace foundation::rhi::webgpu
 
         const WebGpuApi* m_api = nullptr;
         WGPURenderPassEncoder m_encoder = nullptr;
+        u32 m_width = 0;  // the render area (scissors are clipped to it)
+        u32 m_height = 0;
         PushConstantEmulator m_pushConstants;
     };
 }

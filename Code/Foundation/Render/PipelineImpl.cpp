@@ -1007,7 +1007,8 @@ namespace foundation::render
                 // the static atlas tiles whose light volume it overlaps get re-rendered (per-tile routing).
                 if (md->boneMatrices != nullptr && md->boneCount > 0)
                 {
-                    ctx.animatedSpheres.PushBack(Sphere{md->worldCenter, md->worldRadius});
+                    ctx.animatedSpheres.PushBack(
+                        Float4{md->worldCenter.x, md->worldCenter.y, md->worldCenter.z, md->worldRadius});
                 }
             }
             ctx.casters.PushBack(DrawItem{MakeSortKey(data->category, stateBits, 0u), data});
@@ -1134,6 +1135,11 @@ namespace foundation::render
                 ctx.scene = scene;
                 ctx.casters.Clear();
                 ctx.casterBounds.Clear();
+                ctx.prevAnimatedSpheres.Clear(); // last frame's moving casters, kept to redraw what they left
+                for (const Float4& s : ctx.animatedSpheres)
+                {
+                    ctx.prevAnimatedSpheres.PushBack(s);
+                }
                 ctx.animatedSpheres.Clear();
                 ctx.staticTiles.Clear();
                 ctx.staticRenderTiles.Clear();
@@ -1273,13 +1279,10 @@ namespace foundation::render
                 for (usize ti = 0; ti < ctx.staticTiles.Size(); ++ti)
                 {
                     const LocalShadowTile& t = ctx.staticTiles[ti];
-                    for (const Sphere& sp : ctx.animatedSpheres)
+                    if (MovingCasterTouchesTile(t.cullCenter, t.cullRadius, ctx.animatedSpheres.AsSpan(),
+                                                ctx.prevAnimatedSpheres.AsSpan()))
                     {
-                        if (Length(sp.center - t.cullCenter) <= t.cullRadius + sp.radius)
-                        {
-                            ctx.staticTileDirty[ti] = fif;
-                            break;
-                        }
+                        ctx.staticTileDirty[ti] = fif;
                     }
                 }
                 ctx.staticRenderTiles.Clear();

@@ -141,6 +141,26 @@ export namespace foundation::render
         u32 x = 0, y = 0, w = 0, h = 0;
     };
 
+    // Whether a cached (Static) atlas tile must be redrawn for a moving caster (a skinned figure)
+    // touching its light's volume: one there now, or one there last frame, which has just left and
+    // whose shadow the cache still holds. Spheres are xyz = world centre, w = radius.
+    [[nodiscard]] inline bool MovingCasterTouchesTile(Float3 tileCenter, f32 tileRadius, Span<const Float4> now,
+                                                      Span<const Float4> before)
+    {
+        const auto touches = [&](Span<const Float4> spheres)
+        {
+            for (const Float4& s : spheres)
+            {
+                if (Length(Float3{s.x, s.y, s.z} - tileCenter) <= tileRadius + s.w)
+                {
+                    return true;
+                }
+            }
+            return false;
+        };
+        return touches(now) || touches(before);
+    }
+
     [[nodiscard]] inline AtlasTile AtlasTileRect(u32 tileIndex, u32 atlasRes, u32 tileRes)
     {
         const u32 perRow = (tileRes > 0) ? (atlasRes / tileRes) : 1;

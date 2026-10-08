@@ -567,12 +567,6 @@ export namespace foundation::render
             Float3 cullCenter;
             f32 cullRadius = 0.0f;
         };
-        struct Sphere
-        {
-            Float3 center;
-            f32 radius = 0.0f;
-        }; // a caster's world bounding sphere
-
         // All shadow inputs sourced from ONE scene. A frame can render several DISTINCT scenes
         // (editor pages side-by-side); each view reads its scene's context - never another's.
         // Pooled behind UniquePtrs: graph-execute lambdas capture the pointers, so addresses must
@@ -582,7 +576,8 @@ export namespace foundation::render
             const ExtractedScene* scene = nullptr;
             Array<DrawItem> casters;            // camera-independent caster list (this scene)
             Array<Float4> casterBounds;         // aligned to casters: xyz=worldCenter, w=radius
-            Array<Sphere> animatedSpheres;      // skinned-caster spheres (static-tile routing)
+            Array<Float4> animatedSpheres;      // skinned-caster spheres, xyz centre w radius (static-tile routing)
+            Array<Float4> prevAnimatedSpheres;  // last frame's (a caster leaving a tile redraws it too)
             Array<LocalShadowTile> staticTiles; // this scene's static-layer tiles (this frame)
             Array<LocalShadowTile> staticRenderTiles; // subset dirty THIS frame (rendered)
             Array<u32> staticTileDirty;               // per-static-tile refresh countdown

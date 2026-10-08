@@ -1099,6 +1099,20 @@ TEST_CASE("extract: the local shadow tiles go to the lights nearest the view")
     }
 }
 
+TEST_CASE("shadows: a cached tile redraws while a moving caster is in it and once after it leaves")
+{
+    const Float3 torch{0.0f, 1.5f, 0.0f};
+    const Float4 inside[] = {Float4{2.0f, 0.9f, 0.0f, 1.0f}};
+    const Float4 away[] = {Float4{20.0f, 0.9f, 0.0f, 1.0f}};
+    const Float4 grazing[] = {Float4{6.5f, 0.9f, 0.0f, 1.0f}}; // its sphere reaches the 6 m volume
+    CHECK(MovingCasterTouchesTile(torch, 6.0f, Span<const Float4>{inside}, {}));
+    CHECK(MovingCasterTouchesTile(torch, 6.0f, Span<const Float4>{grazing}, {}));
+    CHECK_FALSE(MovingCasterTouchesTile(torch, 6.0f, Span<const Float4>{away}, {}));
+    // Walked out this frame: last frame's sphere still redraws the tile, so his shadow leaves too.
+    CHECK(MovingCasterTouchesTile(torch, 6.0f, Span<const Float4>{away}, Span<const Float4>{inside}));
+    CHECK_FALSE(MovingCasterTouchesTile(torch, 6.0f, Span<const Float4>{away}, Span<const Float4>{away}));
+}
+
 TEST_CASE("light: the shadow controls round-trip with the scene (v1)")
 {
     scene::Scene a{DefaultAllocator()};

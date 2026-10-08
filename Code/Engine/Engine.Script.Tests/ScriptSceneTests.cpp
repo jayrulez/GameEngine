@@ -3808,6 +3808,47 @@ TEST_CASE("script.scene: scene.events.emit carries a reflected component handle 
     CHECK(gadgets->Get(consumerEntity)->power == doctest::Approx(7.0f));
 }
 
+TEST_CASE("script.scene: an event's reflected value reaches a handler that takes it by value as well "
+          "as one that takes a handle")
+{
+    ScriptedScene bed;
+    RefPtr<ScriptClass> producer =
+        MakeClass(u8"Producer",
+                  u8"class Producer {\n"
+                  u8"    private Entity@ self;\n"
+                  u8"    Producer(Entity@ entity) { @self = entity; }\n"
+                  u8"    void onStart() { self.scene.events.emit(\"Spotted\", Float3(1.0f, 2.0f, 3.0f)); }\n"
+                  u8"}\n",
+                  {u8"onStart"});
+    // By value (`Float3 at`) once arrived null and faulted the behaviour; by handle always worked.
+    RefPtr<ScriptClass> byValue =
+        MakeClass(u8"ByValue",
+                  u8"class ByValue {\n"
+                  u8"    private Entity@ self;\n"
+                  u8"    ByValue(Entity@ entity) { @self = entity; }\n"
+                  u8"    void onSpotted(Float3 at) { if (at.y == 2.0f && at.z == 3.0f) self.setName(\"seen\"); }\n"
+                  u8"}\n",
+                  {u8"onSpotted"});
+    RefPtr<ScriptClass> byHandle =
+        MakeClass(u8"ByHandle",
+                  u8"class ByHandle {\n"
+                  u8"    private Entity@ self;\n"
+                  u8"    ByHandle(Entity@ entity) { @self = entity; }\n"
+                  u8"    void onSpotted(Float3@ at) { if (at !is null && at.x == 1.0f) self.setName(\"seen\"); }\n"
+                  u8"}\n",
+                  {u8"onSpotted"});
+
+    (void)bed.AddScripted(producer, u8"producer");
+    const scene::EntityHandle a = bed.AddScripted(byValue, u8"a");
+    const scene::EntityHandle b = bed.AddScripted(byHandle, u8"b");
+    bed.Start();
+    bed.Frame(); // the producer emits; the bus drains to both handlers
+    bed.Frame();
+
+    CHECK(bed.scene.GetEntityName(a) == StringView(u8"seen"));
+    CHECK(bed.scene.GetEntityName(b) == StringView(u8"seen"));
+}
+
 // ---- render surface: MeshComponent.of / LightComponent.of - a behavior reaches the real
 //      render components by type and mutates them live, exactly like the physics components. Pure-data
 //      props (visible/intensity/range/enabled); resource-ref swaps (mesh/material) are Phase 1b. ----

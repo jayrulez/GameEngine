@@ -1849,7 +1849,11 @@ namespace foundation::script::angelscript
                     (void)executor->SetArgObject(arg, &stringTemps[i]);
                     continue;
                 }
-                if ((typeId & asTYPEID_OBJHANDLE) != 0 && TypeInfoForTypeId(typeId) != nullptr &&
+                // A reflected value, to a handle parameter (`Float3@ at`) or a by-value one
+                // (`Float3 at`: AngelScript copies the box in). A by-value parameter once got
+                // nothing and faulted the handler on its first use of it.
+                if (const core::TypeInfo* reflected = TypeInfoForTypeId(typeId);
+                    reflected != nullptr && reflected->enumeratorCount == 0 && !IsFuncdefTypeId(typeId) &&
                     !value.IsEmpty())
                 {
                     boxTemps[i] = NewBox(value);
@@ -3437,8 +3441,10 @@ namespace foundation::script::angelscript
                     (void)executor->SetArgObject(arg, &stringTemps[i]);
                     continue;
                 }
-                if ((typeId & asTYPEID_OBJHANDLE) != 0 &&
-                    m_manager->TypeInfoForTypeId(typeId) != nullptr && !value.IsEmpty())
+                // A reflected value, to a handle parameter or a by-value one (BindArgsInto's rule).
+                if (const core::TypeInfo* reflected = m_manager->TypeInfoForTypeId(typeId);
+                    reflected != nullptr && reflected->enumeratorCount == 0 &&
+                    !m_manager->IsFuncdefTypeId(typeId) && !value.IsEmpty())
                 {
                     boxTemps[i] =
                         NewBox(value); // SetArgObject AddRefs; ours released after Execute

@@ -585,6 +585,17 @@ MultiMesh path - no renderer of their own. Spec: `Documentation/Specs/terrain-ve
 - **Forward shader** - port Sedulous's `forward.frag.hlsl` (the assessed-correct PBR loop) as
  the standard surface→lighting path; adapt bindings to our set convention + TEXCOORDn vertex
  inputs (slice learned this) + `row_major` matrices (slice learned this).
+- **A mesh's own material properties (2026-10-08).** A material's properties are shared by every
+ mesh that uses it (the mesh renderer keeps one `MaterialInstance` per material). A mesh can set
+ some for itself alone: `MeshComponent::SetMaterialProperty(slot, name, value, size)` (scripts:
+ `SceneRender.setMaterialFloat` / `setMaterialFloat4` / `clearMaterialProperty`), runtime state
+ that is not saved. Extraction lends them to the draw (`MeshRenderData::overrides`, with a version
+ that changes with them). Such a mesh never batches; drawn alone, each slot it overrides gets an
+ instance of its own, kept per (entity, slot), its values reset to the material's and the overrides
+ applied again whenever the version changes, and released a few frames after no draw uses it.
+ Values are as the material authors them (a colour sRGB, an HDR colour's intensity in w), so the
+ one encode to the GPU stays where it is. Depth and shadow passes draw with the shared material.
+ `MaterialInstance` refuses a value wider than its property.
 
 ---
 

@@ -215,6 +215,18 @@ export namespace foundation::render
     // frame (the producer keeps the resources alive). `worldCenter` is the world-space bounds
     // center, used for view-depth sorting (and, later, culling). `entityId` is an opaque tag
     // the producer may set (e.g. a packed entity handle) for picking - meaningless to the core.
+    // One material property set for one mesh alone (its owner's override, borrowed into the draw):
+    // the draw's material in `slot` gets an instance of its own carrying `value`, as the material
+    // authors it (a colour sRGB rgba, an HDR colour sRGB rgb with its intensity in w). `size` is the
+    // bytes written: 4 for a float, 16 for a Float4.
+    struct MaterialPropertyOverride
+    {
+        u32 slot = 0;
+        u32 size = sizeof(f32);
+        Float4 value = Float4{0, 0, 0, 0};
+        String name;
+    };
+
     struct MeshRenderData : RenderData
     {
         MeshRenderData() noexcept { kind = RenderDataKind::Mesh; } // subclasses inherit the stamp
@@ -223,7 +235,7 @@ export namespace foundation::render
         Color color = Color{1.0f, 1.0f, 1.0f, 1.0f}; // per-instance tint
         // Screen-door fade, 0 (solid) to 1 (gone). A faded mesh draws in the Masked category (out of
         // the depth prepass, whose depth would hide what shows through it) with the DITHER variant,
-        // and always through the instanced path, its fade riding DataOffsets.w. Shadows ignore it.
+        // its fade riding the instance data or, drawn alone, the object block. Shadows ignore it.
         f32 fade = 0.0f;
         geometry::StaticMesh* mesh = nullptr;
         materials::Material* material = nullptr;
@@ -231,6 +243,13 @@ export namespace foundation::render
         // the renderer draws each submesh with submeshMaterials[matIdx]; else `material` covers the mesh.
         const RefPtr<materials::Material>* submeshMaterials = nullptr;
         u32 submeshMaterialCount = 0;
+        // Material properties set for this mesh alone (borrowed from its owner for the frame), and
+        // their version, bumped whenever they change. A mesh with any draws alone (it never batches)
+        // with an instance of its own for each overridden slot; depth and shadow passes use the
+        // shared material.
+        const MaterialPropertyOverride* overrides = nullptr;
+        u32 overrideCount = 0;
+        u32 overrideVersion = 0;
         // entityId lives on the RenderData base (generic pick tag); see it there.
         // GPU skinning: per-bone skinning matrices for a skinned mesh (borrowed for the frame, from an
         // AnimationPlayer). When non-null + the mesh IsSkinned(), the renderer uploads them to its bone

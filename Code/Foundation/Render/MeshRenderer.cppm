@@ -458,6 +458,17 @@ export namespace foundation::render
         // The MaterialInstance the renderer owns for `material` (one per material, created lazily). The
         // instance carries per-draw overrides (textures/uniforms) + caches its bind group in the system.
         [[nodiscard]] materials::MaterialInstance* InstanceFor(materials::Material* material);
+        [[nodiscard]] UniquePtr<materials::MaterialInstance> NewInstance(materials::Material* material);
+
+        // The instance a mesh with material overrides draws `slot` with: one of its own per (entity,
+        // slot), its overrides re-applied over the material's values when their version changes; the
+        // shared instance when none of its overrides is for `slot`.
+        [[nodiscard]] materials::MaterialInstance* InstanceFor(const MeshRenderData& md, u32 slot,
+                                                               materials::Material* material);
+        // Retire an instance's bind group and uniform buffer (in-flight frames may still bind them).
+        void ReleaseInstance(materials::MaterialInstance& instance);
+        // Drop the override instances no draw has used for a while (overrides cleared, entity gone).
+        void PruneOverrideInstances();
 
         // The set-2 (material) bind group for `material`, built data-driven from its property list by the
         // material system (UBO + textures/samplers in declared order, with white/flat-normal/default-sampler
@@ -546,6 +557,18 @@ export namespace foundation::render
         RefPtr<materials::Material> m_defaultMaterial;
         HashMap<u64, materials::MaterialInstance*> m_instances;          // lookup by Material::uid
         Array<UniquePtr<materials::MaterialInstance>> m_instanceStorage; // ownership
+        struct OverrideInstance
+        {
+            u64 entityId = 0;
+            u32 slot = 0;
+            u64 materialUid = 0;
+            u32 version = 0;
+            bool applied = false;
+            u64 lastUsed = 0; // m_frameSerial when a draw last used it
+            UniquePtr<materials::MaterialInstance> instance;
+        };
+        HashMap<u64, OverrideInstance> m_overrideInstances; // by (entity, slot)
+        u64 m_frameSerial = 0;
 
         DynamicUniformRing m_viewRing;
         DynamicUniformRing m_shadowViewRing;

@@ -63,6 +63,45 @@ export namespace engine::render
         // cutaway wall between the camera and the player. Only its camera pixels thin out; it still
         // casts its whole shadow, so the room behind a cut-away wall stays as dark as it was.
         f32 fade = 0.0f;
+        // Material properties set for this mesh alone (runtime, not saved): its material in a slot
+        // drawn with one of its own carrying them (a glow, a tint, a flash), the shared material
+        // untouched. `materialOverrideVersion` changes with them, so the renderer re-applies.
+        Array<foundation::render::MaterialPropertyOverride> materialOverrides;
+        u32 materialOverrideVersion = 0;
+        // Set (or replace) a property's value in `slot`; `size` is 4 for a float, 16 for a Float4.
+        void SetMaterialProperty(u32 slot, StringView name, Float4 value, u32 size)
+        {
+            ++materialOverrideVersion;
+            for (foundation::render::MaterialPropertyOverride& o : materialOverrides)
+            {
+                if (o.slot == slot && o.name == name)
+                {
+                    o.value = value;
+                    o.size = size;
+                    return;
+                }
+            }
+            foundation::render::MaterialPropertyOverride o;
+            o.slot = slot;
+            o.size = size;
+            o.value = value;
+            o.name = String(name);
+            materialOverrides.PushBack(Move(o));
+        }
+        // Back to the material's own value; false if it was not set.
+        bool ClearMaterialProperty(u32 slot, StringView name)
+        {
+            for (usize i = 0; i < materialOverrides.Size(); ++i)
+            {
+                if (materialOverrides[i].slot == slot && materialOverrides[i].name == name)
+                {
+                    materialOverrides.RemoveAt(i);
+                    ++materialOverrideVersion;
+                    return true;
+                }
+            }
+            return false;
+        }
         // Slot-0 conveniences for runtime code (samples/spawners) - refs and raw objects both fit
         // (resource::Ref adopts direct pointers).
         void SetMaterial(const RefPtr<materials::Material>& m)
@@ -1176,6 +1215,40 @@ export namespace engine::render
                 mesh->materials[static_cast<usize>(slot)].Bind(*resources);
             }
             return true;
+        }
+
+        // Set one of the entity's material properties for it alone: the material in `slot` draws with
+        // `value` for the property `name` (as the material editor shows it: Roughness, EmissiveColor),
+        // every other mesh using that material unchanged. A Float4 for a colour or a vector: a colour
+        // as authored, sRGB rgba, and an HDR colour (EmissiveColor) sRGB rgb with its intensity in w.
+        // A name the material does not have, or a value wider than the property, changes nothing.
+        // Runtime only: not saved with the scene. False for an entity without a mesh or a negative slot.
+        bool setMaterialFloat(foundation::script::Entity entity, i32 slot, String name, f32 value) const
+        {
+            MeshComponent* mesh = MeshOf(entity);
+            if (mesh == nullptr || slot < 0)
+            {
+                return false;
+            }
+            mesh->SetMaterialProperty(static_cast<u32>(slot), name, Float4{value, 0, 0, 0}, sizeof(f32));
+            return true;
+        }
+        bool setMaterialFloat4(foundation::script::Entity entity, i32 slot, String name, Float4 value) const
+        {
+            MeshComponent* mesh = MeshOf(entity);
+            if (mesh == nullptr || slot < 0)
+            {
+                return false;
+            }
+            mesh->SetMaterialProperty(static_cast<u32>(slot), name, value, sizeof(Float4));
+            return true;
+        }
+        // Put a property set by setMaterialFloat/Float4 back to the material's own value; false if it
+        // was not set.
+        bool clearMaterialProperty(foundation::script::Entity entity, i32 slot, String name) const
+        {
+            MeshComponent* mesh = MeshOf(entity);
+            return mesh != nullptr && slot >= 0 && mesh->ClearMaterialProperty(static_cast<u32>(slot), name);
         }
 
         // Point the entity's camera at the texture `id` (a render texture asset): it then draws

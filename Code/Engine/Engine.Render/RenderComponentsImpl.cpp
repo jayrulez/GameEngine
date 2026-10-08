@@ -197,6 +197,9 @@ namespace engine::render
             &SceneRender::setMaterial)>("setMaterial", {"entity", "resourceId"});
         builder.Method<static_cast<bool (SceneRender::*)(foundation::script::Entity, Guid, i32) const>(
             &SceneRender::setMaterial)>("setMaterial", {"entity", "resourceId", "slot"});
+        builder.Method<&SceneRender::setMaterialFloat>("setMaterialFloat", {"entity", "slot", "name", "value"});
+        builder.Method<&SceneRender::setMaterialFloat4>("setMaterialFloat4", {"entity", "slot", "name", "value"});
+        builder.Method<&SceneRender::clearMaterialProperty>("clearMaterialProperty", {"entity", "slot", "name"});
         builder.Method<&SceneRender::setCameraTarget>("setCameraTarget", {"entity", "textureId"});
         builder.Method<static_cast<Float3 (SceneRender::*)(Float3) const>(&SceneRender::lightAt)>(
             "lightAt", {"position"});

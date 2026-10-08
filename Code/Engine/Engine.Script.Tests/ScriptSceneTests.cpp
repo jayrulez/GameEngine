@@ -4042,6 +4042,85 @@ TEST_CASE("script.scene: SceneRender.setMesh / setMaterial swap a component's re
     CHECK(bed.scene.GetEntityName(e) == StringView(u8"swapped"));
 }
 
+// ---- per-mesh material properties: SceneRender.setMaterialFloat / setMaterialFloat4 set a property
+//      of one slot for this mesh alone (the renderer draws it with an instance of its own), and
+//      clearMaterialProperty puts it back; the component keeps them, each change bumping its
+//      version so the renderer re-applies. ----
+
+namespace
+{
+    void CheckMaterialPropertyScript(StringView language, StringView className, StringView source)
+    {
+        engine::render::RegisterRenderScriptFacade();
+        ScriptedScene bed;
+        auto* meshes = bed.scene.AddSystem<engine::render::MeshComponentManager>();
+        RefPtr<ScriptClass> tinter = MakeClassLang(language, className, source, {u8"onStart"});
+        const scene::EntityHandle e = bed.AddScripted(tinter, u8"e");
+        meshes->Add(e);
+        bed.Start();
+        bed.Frame();
+
+        const engine::render::MeshComponent* mesh = meshes->Get(e);
+        REQUIRE(mesh != nullptr);
+        CHECK(bed.scene.GetEntityName(e) == StringView(u8"set"));
+        // Roughness set then set again (one entry, the later value), the glow set, the tint set and
+        // cleared: two left, the version bumped by each of the five changes (a second clear of the
+        // tint and a negative slot change nothing).
+        REQUIRE(mesh->materialOverrides.Size() == 2u);
+        CHECK(mesh->materialOverrides[0].name == StringView(u8"Roughness"));
+        CHECK(mesh->materialOverrides[0].slot == 0u);
+        CHECK(mesh->materialOverrides[0].size == sizeof(f32));
+        CHECK(mesh->materialOverrides[0].value.x == doctest::Approx(0.25f));
+        CHECK(mesh->materialOverrides[1].name == StringView(u8"EmissiveColor"));
+        CHECK(mesh->materialOverrides[1].slot == 1u);
+        CHECK(mesh->materialOverrides[1].size == sizeof(Float4));
+        CHECK(mesh->materialOverrides[1].value.w == doctest::Approx(2.0f));
+        CHECK(mesh->materialOverrideVersion == 5u);
+    }
+}
+
+TEST_CASE("script.scene: SceneRender sets and clears a mesh's own material properties")
+{
+    CheckMaterialPropertyScript(
+        u8"angelscript", u8"Tinter",
+        u8"class Tinter {\n"
+        u8"    private Entity@ self;\n"
+        u8"    Tinter(Entity@ entity) { @self = entity; }\n"
+        u8"    void onStart() {\n"
+        u8"        SceneRender@ r = SceneRender::of(self.scene);\n"
+        u8"        bool a = r.setMaterialFloat(self, 0, \"Roughness\", 0.5f);\n"
+        u8"        bool b = r.setMaterialFloat(self, 0, \"Roughness\", 0.25f);\n"
+        u8"        bool c = r.setMaterialFloat4(self, 1, \"EmissiveColor\", Float4(0.3f, 0.4f, 0.5f, 2.0f));\n"
+        u8"        r.setMaterialFloat4(self, 0, \"BaseColor\", Float4(1.0f, 0.0f, 0.0f, 1.0f));\n"
+        u8"        bool d = r.clearMaterialProperty(self, 0, \"BaseColor\");\n"
+        u8"        bool e = r.clearMaterialProperty(self, 0, \"BaseColor\");\n"
+        u8"        bool f = r.setMaterialFloat(self, -1, \"Roughness\", 1.0f);\n"
+        u8"        if (a && b && c && d && !e && !f) { self.setName(\"set\"); }\n"
+        u8"    }\n"
+        u8"}\n");
+}
+
+TEST_CASE("script.scene: SceneRender sets and clears a mesh's own material properties (Luau)")
+{
+    CheckMaterialPropertyScript(
+        u8"luau", u8"Tinter",
+        u8"Tinter = {}\n"
+        u8"Tinter.__index = Tinter\n"
+        u8"function Tinter.new(entity) return setmetatable({ entity = entity }, Tinter) end\n"
+        u8"function Tinter:onStart()\n"
+        u8"    local me = self.entity\n"
+        u8"    local r = SceneRender.of(me.scene)\n"
+        u8"    local a = r:setMaterialFloat(me, 0, \"Roughness\", 0.5)\n"
+        u8"    local b = r:setMaterialFloat(me, 0, \"Roughness\", 0.25)\n"
+        u8"    local c = r:setMaterialFloat4(me, 1, \"EmissiveColor\", Float4.new(0.3, 0.4, 0.5, 2.0))\n"
+        u8"    r:setMaterialFloat4(me, 0, \"BaseColor\", Float4.new(1, 0, 0, 1))\n"
+        u8"    local d = r:clearMaterialProperty(me, 0, \"BaseColor\")\n"
+        u8"    local e = r:clearMaterialProperty(me, 0, \"BaseColor\")\n"
+        u8"    local f = r:setMaterialFloat(me, -1, \"Roughness\", 1.0)\n"
+        u8"    if a and b and c and d and not e and not f then me:setName(\"set\") end\n"
+        u8"end\n");
+}
+
 TEST_CASE("script.scene: SceneRender.lightAt reads how lit a place is, with and without a group mask")
 {
     engine::render::RegisterRenderScriptFacade();

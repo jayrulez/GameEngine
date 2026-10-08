@@ -964,6 +964,56 @@ TEST_CASE("extract: effectively-inactive entities render NOTHING; toggling resto
     (void)sprites;
 }
 
+TEST_CASE("extract: a mesh's own material properties reach its draw, with their version")
+{
+    scene::Scene scene(DefaultAllocator(), u8"overrides");
+    auto* meshes = scene.AddSystem<MeshComponentManager>();
+    RefPtr<geometry::StaticMesh> cube = geometry::Primitives::Cube(DefaultAllocator(), 1.0f);
+    const scene::EntityHandle plain = scene.CreateEntity(u8"plain");
+    meshes->Add(plain).mesh = cube;
+    const scene::EntityHandle glowing = scene.CreateEntity(u8"glowing");
+    MeshComponent& mc = meshes->Add(glowing);
+    mc.mesh = cube;
+    mc.SetMaterialProperty(0, u8"EmissiveColor", Float4{0.3f, 0.4f, 0.5f, 2.0f}, sizeof(Float4));
+    mc.SetMaterialProperty(0, u8"Roughness", Float4{0.2f, 0, 0, 0}, sizeof(f32));
+    scene.UpdateTransforms();
+
+    const auto drawOf = [&](ExtractedScene& out, scene::EntityHandle e) -> const MeshRenderData*
+    {
+        for (RenderData* d : out.Items())
+        {
+            if (d != nullptr && d->entityId == PackEntity(e))
+            {
+                return static_cast<const MeshRenderData*>(d);
+            }
+        }
+        return nullptr;
+    };
+    ExtractedScene out{DefaultAllocator()};
+    ExtractSceneInto(scene, out);
+    const MeshRenderData* a = drawOf(out, plain);
+    const MeshRenderData* b = drawOf(out, glowing);
+    REQUIRE(a != nullptr);
+    REQUIRE(b != nullptr);
+    CHECK(a->overrideCount == 0u);
+    CHECK(a->overrides == nullptr);
+    REQUIRE(b->overrideCount == 2u);
+    CHECK(b->overrides[0].name == StringView(u8"EmissiveColor"));
+    CHECK(b->overrides[0].value.w == doctest::Approx(2.0f));
+    CHECK(b->overrides[1].size == sizeof(f32));
+    const u32 version = b->overrideVersion;
+
+    // A change (here a clear) bumps the version the renderer compares.
+    CHECK(mc.ClearMaterialProperty(0, u8"Roughness"));
+    CHECK_FALSE(mc.ClearMaterialProperty(0, u8"Roughness"));
+    ExtractedScene later{DefaultAllocator()};
+    ExtractSceneInto(scene, later);
+    const MeshRenderData* c = drawOf(later, glowing);
+    REQUIRE(c != nullptr);
+    CHECK(c->overrideCount == 1u);
+    CHECK(c->overrideVersion != version);
+}
+
 TEST_CASE("extract: a light's shadow controls reach the shadow it casts")
 {
     scene::Scene scene(DefaultAllocator(), u8"shadows");

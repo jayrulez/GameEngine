@@ -223,7 +223,8 @@ export namespace foundation::materials
             }
             const usize i = static_cast<usize>(idx);
             const MaterialPropertyDef& d = m_material->GetProperty(i);
-            if (!d.IsUniform() || m_uniformData.Size() < d.offset + bytes)
+            // Never wider than the property: a Float4 written to a float would spill into the next.
+            if (!d.IsUniform() || bytes > d.size || m_uniformData.Size() < d.offset + bytes)
             {
                 return;
             }

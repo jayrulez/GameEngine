@@ -246,7 +246,9 @@ namespace foundation::render
     void MeshRenderer::PrepareFrame(u32 maxDraws, u32 frameIndex)
     {
         m_ready = false;
+        ++m_frameSerial;
         PruneStaleMaterialInstances();
+        PruneOverrideInstances();
         TickRetiredBindGroups();    // free per-frame bind groups retired long enough ago to be idle
         m_materials->TickRetired(); // same, for material set-2 groups replaced by rebuilds
         if (maxDraws == 0)
@@ -1060,15 +1062,16 @@ namespace foundation::render
             // the same bones and fade per object.
             const bool headFaded = head->fade > 0.0f;
             // Extend the run while mesh + material match (a batchable group), and the run's faded
-            // or solid as a whole: the two draw with different pipelines (DITHER).
+            // or solid as a whole: the two draw with different pipelines (DITHER). A mesh with
+            // material overrides draws alone, with instances of its own.
             usize j = i + 1;
-            if (allowInstancing)
+            if (allowInstancing && head->overrideCount == 0)
             {
                 while (j < items.Size())
                 {
                     const auto* nd = static_cast<const MeshRenderData*>(items[j].data);
                     if (nd->multiMesh || nd->mesh != head->mesh || nd->material != head->material ||
-                        (nd->fade > 0.0f) != headFaded)
+                        (nd->fade > 0.0f) != headFaded || nd->overrideCount > 0)
                     {
                         break;
                     }
@@ -1276,8 +1279,9 @@ namespace foundation::render
         base.indexFormat = mesh.indexFormat;
         base.instanceCount = 1;
 
-        // Emit one draw for an index sub-range with `m`'s material (set 2 = its data-driven bind group).
-        const auto emit = [&](materials::Material* m, u64 indexOffset, u32 indexCount)
+        // Emit one draw for an index sub-range with `m`'s material (set 2 = its data-driven bind group),
+        // the mesh's own instance of it when the mesh overrides properties in that `slot`.
+        const auto emit = [&](materials::Material* m, u32 slot, u64 indexOffset, u32 indexCount)
         {
             materials::Material* use = (m != nullptr) ? m : mat;
             rhi::BindGroupLayout* set2 = m_materials->GetOrCreateLayout(*use);
@@ -1293,7 +1297,7 @@ namespace foundation::render
             }
             ResolvedDraw d = base;
             d.pso = pso;
-            d.materialSet = m_materials->PrepareInstance(*InstanceFor(use), set2);
+            d.materialSet = m_materials->PrepareInstance(*InstanceFor(md, slot, use), set2);
             d.indexOffset = indexOffset;
             d.indexCount = indexCount;
             out.PushBack(d);
@@ -1313,22 +1317,22 @@ namespace foundation::render
             const u64 stride = (mesh.indexFormat == rhi::IndexFormat::UInt16) ? 2u : 4u;
             for (const geometry::SubMesh& sub : subs)
             {
-                materials::Material* m =
-                    (sub.materialIndex >= 0 &&
-                     static_cast<u32>(sub.materialIndex) < md.submeshMaterialCount)
-                        ? md.submeshMaterials[sub.materialIndex].Get()
-                        : nullptr;
+                const bool inRange = sub.materialIndex >= 0 &&
+                                     static_cast<u32>(sub.materialIndex) < md.submeshMaterialCount;
+                materials::Material* m = inRange ? md.submeshMaterials[sub.materialIndex].Get() : nullptr;
+                u32 slot = inRange ? static_cast<u32>(sub.materialIndex) : 0u;
                 if (m == nullptr)
                 {
                     m = md.material;
+                    slot = 0;
                 } // OOB/unresolved slot -> slot 0
-                emit(m, mesh.indexOffset + static_cast<u64>(sub.startIndex) * stride,
+                emit(m, slot, mesh.indexOffset + static_cast<u64>(sub.startIndex) * stride,
                      static_cast<u32>(sub.indexCount));
             }
         }
         else
         {
-            emit(mat, mesh.indexOffset, mesh.indexCount);
+            emit(mat, 0u, mesh.indexOffset, mesh.indexCount);
         }
     }
 
@@ -2170,12 +2174,108 @@ namespace foundation::render
         {
             return *found;
         }
-        UniquePtr<materials::MaterialInstance> created =
-            MakeUnique<materials::MaterialInstance>(DefaultAllocator(), material);
+        UniquePtr<materials::MaterialInstance> created = NewInstance(material);
         materials::MaterialInstance* inst = created.Get();
         m_instanceStorage.PushBack(Move(created));       // owns the instance
         m_instances.InsertOrAssign(material->uid, inst); // lookup (storage owns the instance)
         return inst;
+    }
+
+    UniquePtr<materials::MaterialInstance> MeshRenderer::NewInstance(materials::Material* material)
+    {
+        return MakeUnique<materials::MaterialInstance>(DefaultAllocator(), material);
+    }
+
+    materials::MaterialInstance* MeshRenderer::InstanceFor(const MeshRenderData& md, u32 slot,
+                                                           materials::Material* material)
+    {
+        bool overridden = false;
+        for (u32 i = 0; i < md.overrideCount && !overridden; ++i)
+        {
+            overridden = md.overrides[i].slot == slot;
+        }
+        if (!overridden)
+        {
+            return InstanceFor(material);
+        }
+        const u64 key = md.entityId * 0x9E3779B97F4A7C15ull + slot;
+        OverrideInstance* entry = m_overrideInstances.Find(key);
+        if (entry != nullptr &&
+            (entry->entityId != md.entityId || entry->slot != slot || entry->materialUid != material->uid))
+        {
+            // Another mesh hashed here, or the slot's material changed: start over with the new one.
+            ReleaseInstance(*entry->instance);
+            m_overrideInstances.Remove(key);
+            entry = nullptr;
+        }
+        if (entry == nullptr)
+        {
+            OverrideInstance created;
+            created.entityId = md.entityId;
+            created.slot = slot;
+            created.materialUid = material->uid;
+            created.instance = NewInstance(material);
+            entry = &m_overrideInstances.InsertOrAssign(key, Move(created));
+        }
+        entry->lastUsed = m_frameSerial;
+        if (!entry->applied || entry->version != md.overrideVersion)
+        {
+            // Back to the material's own values, then this slot's overrides over them.
+            materials::MaterialInstance& inst = *entry->instance;
+            for (const materials::MaterialPropertyDef& d : material->Properties())
+            {
+                if (d.IsUniform())
+                {
+                    inst.ResetProperty(d.name);
+                }
+            }
+            for (u32 i = 0; i < md.overrideCount; ++i)
+            {
+                const MaterialPropertyOverride& o = md.overrides[i];
+                if (o.slot != slot)
+                {
+                    continue;
+                }
+                if (o.size == sizeof(f32))
+                {
+                    inst.SetFloat(o.name, o.value.x);
+                }
+                else
+                {
+                    inst.SetFloat4(o.name, o.value);
+                }
+            }
+            entry->version = md.overrideVersion;
+            entry->applied = true;
+        }
+        return entry->instance.Get();
+    }
+
+    void MeshRenderer::ReleaseInstance(materials::MaterialInstance& instance)
+    {
+        RetireBindGroup(m_materials->DetachBindGroup(&instance));
+        RetireBuffer(m_materials->DetachUniformBuffer(&instance));
+    }
+
+    void MeshRenderer::PruneOverrideInstances()
+    {
+        // Unused for longer than the frames in flight: no draw wants it any more.
+        Array<u64> stale;
+        for (auto& entry : m_overrideInstances)
+        {
+            if (entry.value.lastUsed + m_framesInFlight + 1 < m_frameSerial)
+            {
+                stale.PushBack(entry.key);
+            }
+        }
+        for (u64 key : stale)
+        {
+            if (OverrideInstance* entry = m_overrideInstances.Find(key))
+            {
+                ReleaseInstance(*entry->instance);
+            }
+            m_overrideInstances.Remove(key);
+        }
     }
 
     bool MeshRenderer::MaterialWantsWind(const materials::Material* material) noexcept
@@ -2712,6 +2812,7 @@ namespace foundation::render
     {
         // Release material instances first (their dtors notify the still-live MaterialSystem, which
         // owns + destroys their data-driven bind groups). The default material's RefPtr then drops.
+        m_overrideInstances.Clear();
         m_instances.Clear();
         m_instanceStorage.Clear();
         m_defaultMaterial.Reset();

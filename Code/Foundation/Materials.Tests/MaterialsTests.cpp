@@ -141,6 +141,31 @@ TEST_CASE("material system: infers bind-group layout from properties + builds in
     CHECK(system.GetBindGroup(inst) == bg);
 }
 
+TEST_CASE("material instance: a value wider than its property is refused, a narrower one fits")
+{
+    RefPtr<Material> mat = MaterialBuilder(u8"lit")
+                               .Shader(u8"forward")
+                               .Float(u8"roughness", 0.5f)
+                               .Float(u8"metallic", 0.25f)
+                               .Float4(u8"tint", Float4{1, 1, 1, 1})
+                               .Build();
+    REQUIRE(mat);
+    MaterialInstance inst(mat.Get());
+    const auto at = [&](StringView name)
+    {
+        f32 v = 0.0f;
+        MemCopy(&v, inst.UniformData().Data() + mat->FindProperty(name)->offset, sizeof(v));
+        return v;
+    };
+    // A Float4 into a float would write past it, over the next property: refused.
+    inst.SetFloat4(u8"roughness", Float4{0.9f, 0.9f, 0.9f, 0.9f});
+    CHECK(at(u8"roughness") == doctest::Approx(0.5f));
+    CHECK(at(u8"metallic") == doctest::Approx(0.25f));
+    // A float into a Float4 sets its first component.
+    inst.SetFloat(u8"tint", 0.5f);
+    CHECK(at(u8"tint") == doctest::Approx(0.5f));
+}
+
 TEST_CASE("material instance: overrides notify the system + re-prep is driven by the dirty list")
 {
     rhi::null::NullDevice device{DefaultAllocator()};

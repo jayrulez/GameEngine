@@ -108,6 +108,9 @@ namespace engine::render
         rd.submeshMaterials = mc.materialCache.Size() > 1 ? mc.materialCache.Data() : nullptr;
         rd.submeshMaterialCount =
             mc.materialCache.Size() > 1 ? static_cast<u32>(mc.materialCache.Size()) : 0u;
+        rd.overrides = mc.materialOverrides.IsEmpty() ? nullptr : mc.materialOverrides.Data(); // borrowed
+        rd.overrideCount = static_cast<u32>(mc.materialOverrides.Size());
+        rd.overrideVersion = mc.materialOverrideVersion;
     }
 
     void ExtractSceneInto(scene::Scene& scene, ExtractedScene& out)

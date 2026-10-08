@@ -67,7 +67,6 @@ Code/Foundation/Profiler/Profiler.cppm
 Code/Foundation/PropertyAnimation.Resource/PropertyAnimationResource.cppm
 Code/Foundation/RenderGraph/BarrierSolver.cppm
 Code/Foundation/Render/IBLSystemImpl.cpp
-Code/Foundation/Render/MeshRendererImpl.cpp
 Code/Foundation/Render/PipelineImpl.cpp
 Code/Foundation/RHI.DX12/DxBackend.cppm
 Code/Foundation/RHI.Null/NullModule.cppm

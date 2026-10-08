@@ -60,10 +60,11 @@ export namespace foundation::render
     class MeshRenderer final : public Renderer
     {
     public:
-        MeshRenderer(rhi::Device& device, shaders::ShaderSystem& shaderSystem,
+        // `allocator`: the owner's, for what the renderer keeps (its material instances and lists).
+        MeshRenderer(IAllocator& allocator, rhi::Device& device, shaders::ShaderSystem& shaderSystem,
                      materials::PipelineStateCache& psoCache,
                      materials::MaterialSystem& materialSystem, u32 framesInFlight) noexcept
-            : m_device(&device), m_shaders(&shaderSystem), m_psoCache(&psoCache),
+            : m_allocator(&allocator), m_device(&device), m_shaders(&shaderSystem), m_psoCache(&psoCache),
               m_materials(&materialSystem), m_meshes(device),
               m_framesInFlight(framesInFlight < 1 ? 1 : framesInFlight),
               m_viewRing(device, framesInFlight, kViewDataSlot,
@@ -530,6 +531,7 @@ export namespace foundation::render
 
         void Shutdown();
 
+        IAllocator* m_allocator; // first: the containers below are made with it
         rhi::Device* m_device;
         shaders::ShaderSystem* m_shaders;
         materials::PipelineStateCache* m_psoCache;
@@ -548,15 +550,15 @@ export namespace foundation::render
         rhi::PipelineLayout* m_shadowPipelineLayoutInstanced = nullptr;
         // Forward pipeline layouts, keyed by (material set-2 layout, instanced); built on demand so each
         // material's own set-2 layout drives the PSO (material-driven; supports custom shaders).
-        HashMap<u64, rhi::PipelineLayout*> m_pipelineLayouts;
+        HashMap<u64, rhi::PipelineLayout*> m_pipelineLayouts{*m_allocator};
         HashMap<u64, rhi::PipelineLayout*>
-            m_shadowMaskedLayouts; // masked-shadow 3-set layouts (by set-2, instanced)
+            m_shadowMaskedLayouts{*m_allocator}; // masked-shadow 3-set layouts (by set-2, instanced)
 
         // Material set-2 resources. The default material (standard PBR) backs draws with no material;
         // instances carry per-material overrides and flow through the material system's data-driven BG path.
         RefPtr<materials::Material> m_defaultMaterial;
-        HashMap<u64, materials::MaterialInstance*> m_instances;          // lookup by Material::uid
-        Array<UniquePtr<materials::MaterialInstance>> m_instanceStorage; // ownership
+        HashMap<u64, materials::MaterialInstance*> m_instances{*m_allocator};          // lookup by Material::uid
+        Array<UniquePtr<materials::MaterialInstance>> m_instanceStorage{*m_allocator}; // ownership
         struct OverrideInstance
         {
             u64 entityId = 0;
@@ -567,7 +569,7 @@ export namespace foundation::render
             u64 lastUsed = 0; // m_frameSerial when a draw last used it
             UniquePtr<materials::MaterialInstance> instance;
         };
-        HashMap<u64, OverrideInstance> m_overrideInstances; // by (entity, slot)
+        HashMap<u64, OverrideInstance> m_overrideInstances{*m_allocator}; // by (entity, slot)
         u64 m_frameSerial = 0;
 
         DynamicUniformRing m_viewRing;
@@ -598,8 +600,8 @@ export namespace foundation::render
             u32 count;
             bool hasPrev = true;
         };
-        HashMap<const Float4x4*, BoneSlot> m_boneStart;
-        Array<SkinnedRef> m_skinnedScratch;
+        HashMap<const Float4x4*, BoneSlot> m_boneStart{*m_allocator};
+        Array<SkinnedRef> m_skinnedScratch{*m_allocator};
 
         // Per-entity previous-frame world matrix, for rigid-object motion vectors. FLAT double-buffer indexed
         // by entity INDEX (entityId low 32 bits) - not a hashmap: direct O(1) index, no hashing/probing/rehash
@@ -607,8 +609,8 @@ export namespace foundation::render
         // (read by every view this frame); resolves write THIS frame's into m_curWorld; the two swap at
         // FinishFrame. Out-of-range / never-written -> prev == cur (no motion), so newly-visible objects don't
         // smear on their first frame.
-        Array<Float4x4> m_prevWorld;
-        Array<Float4x4> m_curWorld;
+        Array<Float4x4> m_prevWorld{*m_allocator};
+        Array<Float4x4> m_curWorld{*m_allocator};
 
         // Record `cur` as this frame's world (idempotent across a frame's views - same value each time) and
         // return the entity's previous-frame world (or `cur` if unknown). Indexed by entity index so multiple
@@ -624,7 +626,7 @@ export namespace foundation::render
             u64 offsByteOffset = 0;
             u32 count = 0;
         };
-        HashMap<u64, InstShare> m_instShareCache;
+        HashMap<u64, InstShare> m_instShareCache{*m_allocator};
         // Keyed by the VIEW pointer (not viewIndex): the main view's prepass + forward share one RenderView, but
         // probe-capture forwards reuse viewIndex 0 with a different draw list - a distinct pointer avoids collision.
         static u64 InstShareKey(const void* view, const void* mesh, const void* mat) noexcept;
@@ -632,7 +634,7 @@ export namespace foundation::render
         // LOD hysteresis memory: last selected level per (view pointer, item), persisted
         // ACROSS frames (that is the point). Bounded by a size cap - when it overflows the
         // map clears wholesale (worst case: one frame of unhysteresed selection).
-        HashMap<u64, u32> m_lodLast;
+        HashMap<u64, u32> m_lodLast{*m_allocator};
 
         // Bind groups retired this/prior frames but possibly still referenced by in-flight command
         // buffers; freed by TickRetiredBindGroups once the frame ring has cycled (framesLeft hits 0).
@@ -641,13 +643,13 @@ export namespace foundation::render
             rhi::BindGroup* bg;
             u32 framesLeft;
         };
-        Array<RetiredBG> m_retiredBGs;
+        Array<RetiredBG> m_retiredBGs{*m_allocator};
         struct RetiredBuffer
         {
             rhi::Buffer* buffer;
             u32 framesLeft;
         };
-        Array<RetiredBuffer> m_retiredBuffers; // material uniform buffers of pruned instances
+        Array<RetiredBuffer> m_retiredBuffers{*m_allocator}; // material uniform buffers of pruned instances
 
         // Per-view set-0 slots (views of different scenes bind different IBL products) + the
         // CURRENT view's group (set by EnsureViewBindGroup; read by the Resolve* bodies).
@@ -664,7 +666,7 @@ export namespace foundation::render
             rhi::TextureView* probeCube = nullptr;
             rhi::Buffer* probeBuf = nullptr;
         };
-        Array<ViewBGSlot> m_viewBGs;
+        Array<ViewBGSlot> m_viewBGs{*m_allocator};
         rhi::BindGroup* m_viewBG = nullptr; // current view's (borrowed from its slot)
         rhi::BindGroup* m_shadowViewBG = nullptr;
         u32 m_shadowViewBGGen = 0;
@@ -740,7 +742,7 @@ export namespace foundation::render
                 0; // this frame's region byte offset (rewritten every frame -> FiF-slotted)
             bool skinned = false; // drew skinned this frame (posePool present)
         };
-        HashMap<u64, MultiMeshSet> m_multiMeshSets;
+        HashMap<u64, MultiMeshSet> m_multiMeshSets{*m_allocator};
         rhi::Buffer* m_rampBuffer = nullptr; // shared DataOffsets ramp (Vertex, CpuToGpu)
         u32 m_rampCapacity = 0;
         u32 m_multiMeshFrame = 0; // bumped each UploadMultiMeshes (eviction clock)

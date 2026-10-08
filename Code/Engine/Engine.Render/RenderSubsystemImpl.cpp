@@ -772,7 +772,7 @@ namespace engine::render
             return;
         }
 
-        m_meshRenderer = MakeUnique<MeshRenderer>(m_allocator, *m_device, *m_shaders,
+        m_meshRenderer = MakeUnique<MeshRenderer>(m_allocator, m_allocator, *m_device, *m_shaders,
                                                   *m_psoCache, *m_materialSystem, m_framesInFlight);
         if (!m_meshRenderer->Initialize().IsOk())
         {

@@ -63,7 +63,7 @@ TEST_CASE("scaled-view: a view drawn at its own size fills its rectangle upright
         materials::PipelineStateCache psoCache(shaderSystem, *device);
         materials::MaterialSystem materialSystem;
         REQUIRE(materialSystem.Initialize(*device).IsOk());
-        MeshRenderer meshRenderer(*device, shaderSystem, psoCache, materialSystem, /*framesInFlight*/ 2);
+        MeshRenderer meshRenderer(DefaultAllocator(), *device, shaderSystem, psoCache, materialSystem, /*framesInFlight*/ 2);
         REQUIRE(meshRenderer.Initialize().IsOk());
         RendererRegistry registry;
         registry.Register(&meshRenderer);

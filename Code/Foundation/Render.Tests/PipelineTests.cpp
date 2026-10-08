@@ -133,7 +133,7 @@ TEST_CASE("RenderFrame draws a one-cube view (extract -> sort -> mesh upload -> 
 
     materials::MaterialSystem materialSystem;
     REQUIRE(materialSystem.Initialize(h.device).IsOk());
-    MeshRenderer meshRenderer(h.device, shaderSystem, psoCache, materialSystem,
+    MeshRenderer meshRenderer(DefaultAllocator(), h.device, shaderSystem, psoCache, materialSystem,
                               /*framesInFlight*/ 2);
     REQUIRE(meshRenderer.Initialize().IsOk());
     RendererRegistry registry;
@@ -182,7 +182,7 @@ TEST_CASE("RenderFrame: the bone pool starts small and grows the frame that need
     materials::PipelineStateCache psoCache(shaderSystem, h.device);
     materials::MaterialSystem materialSystem;
     REQUIRE(materialSystem.Initialize(h.device).IsOk());
-    MeshRenderer meshRenderer(h.device, shaderSystem, psoCache, materialSystem,
+    MeshRenderer meshRenderer(DefaultAllocator(), h.device, shaderSystem, psoCache, materialSystem,
                               /*framesInFlight*/ 2);
     REQUIRE(meshRenderer.Initialize().IsOk());
     RendererRegistry registry;
@@ -243,7 +243,7 @@ TEST_CASE("RenderFrame: the bone pool starts small and grows the frame that need
     CHECK(meshRenderer.BonePoolSlotsPerFrame() == 8192u);
 
     // A scene that fits never grows it.
-    MeshRenderer small(h.device, shaderSystem, psoCache, materialSystem, 2);
+    MeshRenderer small(DefaultAllocator(), h.device, shaderSystem, psoCache, materialSystem, 2);
     REQUIRE(small.Initialize().IsOk());
     RendererRegistry smallRegistry;
     smallRegistry.Register(&small);
@@ -311,7 +311,7 @@ TEST_CASE("RenderData::kind says what an item is; the caster list never downcast
     materials::PipelineStateCache psoCache(shaderSystem, h.device);
     materials::MaterialSystem materialSystem;
     REQUIRE(materialSystem.Initialize(h.device).IsOk());
-    MeshRenderer meshRenderer(h.device, shaderSystem, psoCache, materialSystem, 2);
+    MeshRenderer meshRenderer(DefaultAllocator(), h.device, shaderSystem, psoCache, materialSystem, 2);
     REQUIRE(meshRenderer.Initialize().IsOk());
     // The external renderer registers FIRST, so it - not the mesh renderer - holds id 0. That is
     // the terrain probe's shape (it registers terrain alone) and any embedding that adds its own
@@ -453,7 +453,7 @@ TEST_CASE("RenderFrame batches same-mesh-same-material draws into an instanced d
     materials::PipelineStateCache psoCache(shaderSystem, h.device);
     materials::MaterialSystem materialSystem;
     REQUIRE(materialSystem.Initialize(h.device).IsOk());
-    MeshRenderer meshRenderer(h.device, shaderSystem, psoCache, materialSystem,
+    MeshRenderer meshRenderer(DefaultAllocator(), h.device, shaderSystem, psoCache, materialSystem,
                               /*framesInFlight*/ 2);
     REQUIRE(meshRenderer.Initialize().IsOk());
     RendererRegistry registry;
@@ -504,7 +504,7 @@ TEST_CASE("RenderFrame parallel emit: many distinct draws fan out across the job
         materials::PipelineStateCache psoCache(shaderSystem, h.device);
         materials::MaterialSystem materialSystem;
         REQUIRE(materialSystem.Initialize(h.device).IsOk());
-        MeshRenderer meshRenderer(h.device, shaderSystem, psoCache, materialSystem,
+        MeshRenderer meshRenderer(DefaultAllocator(), h.device, shaderSystem, psoCache, materialSystem,
                                   /*framesInFlight*/ 2);
         REQUIRE(meshRenderer.Initialize().IsOk());
         RendererRegistry registry;
@@ -560,7 +560,7 @@ TEST_CASE("RenderFrame with an empty view still clears (no crash, no PSOs)")
     materials::PipelineStateCache psoCache(shaderSystem, h.device);
     materials::MaterialSystem materialSystem;
     REQUIRE(materialSystem.Initialize(h.device).IsOk());
-    MeshRenderer meshRenderer(h.device, shaderSystem, psoCache, materialSystem,
+    MeshRenderer meshRenderer(DefaultAllocator(), h.device, shaderSystem, psoCache, materialSystem,
                               /*framesInFlight*/ 2);
     REQUIRE(meshRenderer.Initialize().IsOk());
     RendererRegistry registry;
@@ -594,7 +594,7 @@ TEST_CASE("RenderFrame multi-scene shadows: each view sources its OWN scene (no 
     materials::PipelineStateCache psoCache(shaderSystem, h.device);
     materials::MaterialSystem materialSystem;
     REQUIRE(materialSystem.Initialize(h.device).IsOk());
-    MeshRenderer meshRenderer(h.device, shaderSystem, psoCache, materialSystem,
+    MeshRenderer meshRenderer(DefaultAllocator(), h.device, shaderSystem, psoCache, materialSystem,
                               /*framesInFlight*/ 2);
     REQUIRE(meshRenderer.Initialize().IsOk());
     RendererRegistry registry;
@@ -856,7 +856,7 @@ TEST_CASE("RenderFrame draws an UNLIT material (unlit shader compiles + PSO buil
     materials::PipelineStateCache psoCache(shaderSystem, h.device);
     materials::MaterialSystem materialSystem;
     REQUIRE(materialSystem.Initialize(h.device).IsOk());
-    MeshRenderer meshRenderer(h.device, shaderSystem, psoCache, materialSystem,
+    MeshRenderer meshRenderer(DefaultAllocator(), h.device, shaderSystem, psoCache, materialSystem,
                               /*framesInFlight*/ 2);
     REQUIRE(meshRenderer.Initialize().IsOk());
     RendererRegistry registry;
@@ -989,7 +989,7 @@ TEST_CASE("debug view: a named graph texture appends the blit pass; the inventor
     materials::PipelineStateCache psoCache(shaderSystem, h.device);
     materials::MaterialSystem materialSystem;
     REQUIRE(materialSystem.Initialize(h.device).IsOk());
-    MeshRenderer meshRenderer(h.device, shaderSystem, psoCache, materialSystem,
+    MeshRenderer meshRenderer(DefaultAllocator(), h.device, shaderSystem, psoCache, materialSystem,
                               /*framesInFlight*/ 2);
     REQUIRE(meshRenderer.Initialize().IsOk());
     RendererRegistry registry;
@@ -1109,7 +1109,7 @@ TEST_CASE("debug view: semantic modes blit the raw scene HDR on the tonemap path
     materials::PipelineStateCache psoCache(shaderSystem, h.device);
     materials::MaterialSystem materialSystem;
     REQUIRE(materialSystem.Initialize(h.device).IsOk());
-    MeshRenderer meshRenderer(h.device, shaderSystem, psoCache, materialSystem,
+    MeshRenderer meshRenderer(DefaultAllocator(), h.device, shaderSystem, psoCache, materialSystem,
                               /*framesInFlight*/ 2);
     REQUIRE(meshRenderer.Initialize().IsOk());
     RendererRegistry registry;
@@ -1199,7 +1199,7 @@ TEST_CASE("auto-exposure: per-(view,frame) bind-group slots survive consecutive 
     materials::PipelineStateCache psoCache(shaderSystem, h.device);
     materials::MaterialSystem materialSystem;
     REQUIRE(materialSystem.Initialize(h.device).IsOk());
-    MeshRenderer meshRenderer(h.device, shaderSystem, psoCache, materialSystem,
+    MeshRenderer meshRenderer(DefaultAllocator(), h.device, shaderSystem, psoCache, materialSystem,
                               /*framesInFlight*/ 2);
     REQUIRE(meshRenderer.Initialize().IsOk());
     RendererRegistry registry;
@@ -1285,7 +1285,7 @@ TEST_CASE("ssgi: enabling the per-view flag declares trace + resolve; the chain 
     materials::PipelineStateCache psoCache(shaderSystem, h.device);
     materials::MaterialSystem materialSystem;
     REQUIRE(materialSystem.Initialize(h.device).IsOk());
-    MeshRenderer meshRenderer(h.device, shaderSystem, psoCache, materialSystem,
+    MeshRenderer meshRenderer(DefaultAllocator(), h.device, shaderSystem, psoCache, materialSystem,
                               /*framesInFlight*/ 2);
     REQUIRE(meshRenderer.Initialize().IsOk());
     RendererRegistry registry;

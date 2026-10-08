@@ -541,7 +541,7 @@ namespace foundation::render
 
     void MeshRenderer::EvictStaleMultiMeshSets()
     {
-        Array<u64> stale;
+        Array<u64> stale(*m_allocator);
         for (auto& kv : m_multiMeshSets)
         {
             if (m_multiMeshFrame - kv.value.lastFrame > kMultiMeshEvictFrames)
@@ -2183,7 +2183,7 @@ namespace foundation::render
 
     UniquePtr<materials::MaterialInstance> MeshRenderer::NewInstance(materials::Material* material)
     {
-        return MakeUnique<materials::MaterialInstance>(DefaultAllocator(), material);
+        return MakeUnique<materials::MaterialInstance>(*m_allocator, material);
     }
 
     materials::MaterialInstance* MeshRenderer::InstanceFor(const MeshRenderData& md, u32 slot,
@@ -2260,7 +2260,7 @@ namespace foundation::render
     void MeshRenderer::PruneOverrideInstances()
     {
         // Unused for longer than the frames in flight: no draw wants it any more.
-        Array<u64> stale;
+        Array<u64> stale(*m_allocator);
         for (auto& entry : m_overrideInstances)
         {
             if (entry.value.lastUsed + m_framesInFlight + 1 < m_frameSerial)

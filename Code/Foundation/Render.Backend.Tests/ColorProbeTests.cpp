@@ -216,7 +216,7 @@ TEST_CASE("colour probe: a material colour renders like a texture of the same va
         materials::PipelineStateCache psoCache(shaderSystem, device);
         materials::MaterialSystem materialSystem;
         REQUIRE(materialSystem.Initialize(device).IsOk());
-        MeshRenderer meshRenderer(device, shaderSystem, psoCache, materialSystem, /*framesInFlight*/ 2);
+        MeshRenderer meshRenderer(DefaultAllocator(), device, shaderSystem, psoCache, materialSystem, /*framesInFlight*/ 2);
         REQUIRE(meshRenderer.Initialize().IsOk());
         RendererRegistry registry;
         registry.Register(&meshRenderer);

@@ -73,7 +73,7 @@ namespace
             materials::PipelineStateCache psoCache(shaderSystem, device);
             materials::MaterialSystem materialSystem;
             REQUIRE(materialSystem.Initialize(device).IsOk());
-            MeshRenderer meshRenderer(device, shaderSystem, psoCache, materialSystem, 2);
+            MeshRenderer meshRenderer(DefaultAllocator(), device, shaderSystem, psoCache, materialSystem, 2);
             REQUIRE(meshRenderer.Initialize().IsOk());
             RendererRegistry registry;
             registry.Register(&meshRenderer);

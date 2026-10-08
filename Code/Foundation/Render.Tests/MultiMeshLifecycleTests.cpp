@@ -79,7 +79,7 @@ TEST_CASE("multimesh: a set unseen for kMultiMeshEvictFrames leaves the pool, re
     materials::PipelineStateCache psoCache(shaderSystem, s.device);
     materials::MaterialSystem materialSystem;
     REQUIRE(materialSystem.Initialize(s.device).IsOk());
-    MeshRenderer renderer(s.device, shaderSystem, psoCache, materialSystem, /*framesInFlight*/ 2);
+    MeshRenderer renderer(DefaultAllocator(), s.device, shaderSystem, psoCache, materialSystem, /*framesInFlight*/ 2);
     REQUIRE(renderer.Initialize().IsOk());
     GpuRetireQueue retire;
     retire.Initialize(&s.device, 2);
@@ -146,7 +146,7 @@ TEST_CASE("shadows: castShadows = false keeps an Opaque item out of the caster l
     materials::PipelineStateCache psoCache(shaderSystem, s.device);
     materials::MaterialSystem materialSystem;
     REQUIRE(materialSystem.Initialize(s.device).IsOk());
-    MeshRenderer renderer(s.device, shaderSystem, psoCache, materialSystem, 2);
+    MeshRenderer renderer(DefaultAllocator(), s.device, shaderSystem, psoCache, materialSystem, 2);
     REQUIRE(renderer.Initialize().IsOk());
     RendererRegistry registry;
     registry.Register(&renderer);
@@ -235,7 +235,7 @@ TEST_CASE("multimesh: a draw count that grows within the capacity rewrites the r
     materials::PipelineStateCache psoCache(shaderSystem, s.device);
     materials::MaterialSystem materialSystem;
     REQUIRE(materialSystem.Initialize(s.device).IsOk());
-    MeshRenderer renderer(s.device, shaderSystem, psoCache, materialSystem, /*framesInFlight*/ 2);
+    MeshRenderer renderer(DefaultAllocator(), s.device, shaderSystem, psoCache, materialSystem, /*framesInFlight*/ 2);
     REQUIRE(renderer.Initialize().IsOk());
 
     RefPtr<geometry::StaticMesh> cube = geometry::Primitives::Cube(DefaultAllocator(), 1.0f);
@@ -302,7 +302,7 @@ TEST_CASE("multimesh: a set with an uploadCount holds its whole list from the fi
     materials::PipelineStateCache psoCache(shaderSystem, s.device);
     materials::MaterialSystem materialSystem;
     REQUIRE(materialSystem.Initialize(s.device).IsOk());
-    MeshRenderer renderer(s.device, shaderSystem, psoCache, materialSystem, /*framesInFlight*/ 2);
+    MeshRenderer renderer(DefaultAllocator(), s.device, shaderSystem, psoCache, materialSystem, /*framesInFlight*/ 2);
     REQUIRE(renderer.Initialize().IsOk());
 
     RefPtr<geometry::StaticMesh> cube = geometry::Primitives::Cube(DefaultAllocator(), 1.0f);
@@ -352,7 +352,7 @@ TEST_CASE("multimesh: a faded set uploads each instance's rank in its tint alpha
     materials::PipelineStateCache psoCache(shaderSystem, s.device);
     materials::MaterialSystem materialSystem;
     REQUIRE(materialSystem.Initialize(s.device).IsOk());
-    MeshRenderer renderer(s.device, shaderSystem, psoCache, materialSystem, /*framesInFlight*/ 2);
+    MeshRenderer renderer(DefaultAllocator(), s.device, shaderSystem, psoCache, materialSystem, /*framesInFlight*/ 2);
     REQUIRE(renderer.Initialize().IsOk());
     RefPtr<geometry::StaticMesh> cube = geometry::Primitives::Cube(DefaultAllocator(), 1.0f);
     RefPtr<materials::Material> material =

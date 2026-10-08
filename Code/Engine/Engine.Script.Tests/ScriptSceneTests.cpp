@@ -3955,6 +3955,39 @@ TEST_CASE("script.scene: SceneRender.setMesh / setMaterial swap a component's re
     CHECK(bed.scene.GetEntityName(e) == StringView(u8"swapped"));
 }
 
+TEST_CASE("script.scene: SceneRender.lightAt reads how lit a place is, with and without a group mask")
+{
+    engine::render::RegisterRenderScriptFacade();
+    ScriptedScene bed;
+    auto* lights = bed.scene.AddSystem<engine::render::LightComponentManager>();
+    const scene::EntityHandle lampEntity = bed.scene.CreateEntity(u8"lamp");
+    bed.scene.SetLocalPosition(lampEntity, Float3{0.0f, 2.0f, 0.0f});
+    engine::render::LightComponent& lamp = lights->Add(lampEntity);
+    lamp.type = engine::render::LightType::Point;
+    lamp.intensity = 4.0f;
+    lamp.range = 0.0f; // no falloff: the full 4 arrives anywhere
+
+    RefPtr<ScriptClass> meter =
+        MakeClass(u8"Meter",
+                  u8"class Meter {\n"
+                  u8"    private Entity@ self;\n"
+                  u8"    Meter(Entity@ entity) { @self = entity; }\n"
+                  u8"    void onStart() {\n"
+                  u8"        SceneRender@ r = SceneRender::of(self.scene);\n"
+                  u8"        Float3 lit = r.lightAt(Float3(0.0f, 0.0f, 0.0f));\n"
+                  u8"        Float3 masked = r.lightAt(Float3(0.0f, 0.0f, 0.0f), 1);\n"
+                  u8"        if (lit.x > 3.99f && lit.x < 4.01f && masked.y > 3.99f) {\n"
+                  u8"            self.setName(\"lit\");\n"
+                  u8"        }\n"
+                  u8"    }\n"
+                  u8"}\n",
+                  {u8"onStart"});
+    const scene::EntityHandle e = bed.AddScripted(meter, u8"e");
+    bed.Start();
+    bed.Frame();
+    CHECK(bed.scene.GetEntityName(e) == StringView(u8"lit"));
+}
+
 TEST_CASE("script.scene: SceneRender.setCameraTarget points a camera at a render texture; nil "
           "clears it")
 {

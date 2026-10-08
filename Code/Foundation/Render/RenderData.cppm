@@ -402,6 +402,35 @@ export namespace foundation::render
     };
     static_assert(sizeof(GpuLight) == 64);
 
+    // The share of a light's intensity that reaches `point`, before any shadow: the forward
+    // shader's range falloff and spot cone (forward.ps.hlsl Attenuation and SpotAttenuation, kept
+    // the same), on the CPU, for a game asking how lit a place is. 1 for a directional light.
+    [[nodiscard]] inline f32 LightFalloff(const GpuLight& light, Float3 point) noexcept
+    {
+        if (light.type < 0.5f)
+        {
+            return 1.0f;
+        }
+        const Float3 toLight = light.positionWS - point;
+        const f32 dist = Length(toLight);
+        f32 falloff = 1.0f;
+        if (light.range > 0.0f)
+        {
+            const f32 d = dist / light.range;
+            const f32 d2 = d * d;
+            const f32 window = Clamp(1.0f - d2 * d2, 0.0f, 1.0f);
+            falloff = (window * window) / (dist * dist + 1e-4f);
+        }
+        if (light.type > 1.5f)
+        {
+            const Float3 l = toLight / Max(dist, 1e-4f);
+            const f32 cosAngle = -Dot(l, light.directionWS);
+            falloff *= Clamp((cosAngle - light.outerCos) / (light.innerCos - light.outerCos + 1e-4f),
+                             0.0f, 1.0f);
+        }
+        return falloff;
+    }
+
     // The active directional shadow caster for a scene (the extraction OUTPUT): just the light direction
     // + whether one exists. The cascade matrices are derived later (in RenderFrame, where the camera
     // frustum is available) since CSM fitting needs the camera. valid == false => no shadow this frame.

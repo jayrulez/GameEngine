@@ -460,3 +460,27 @@ TEST_CASE("overlay registry: sorted by order, stable ties, idempotent, removable
     CHECK_FALSE(registry.Contains(&backgroundB));
     CHECK(registry.Contains(&middle));
 }
+
+TEST_CASE("LightFalloff matches the forward shader's range window and spot cone")
+{
+    GpuLight point;
+    point.type = 1.0f;
+    point.positionWS = Float3{0.0f, 2.0f, 0.0f};
+    point.range = 10.0f;
+    // d = 0.2 of the range: window (1 - d^4)^2 = 0.99680256, over dist^2 (+1e-4 as in the shader).
+    CHECK(LightFalloff(point, Float3{0, 0, 0}) == doctest::Approx(0.99680256f / 4.0001f));
+    CHECK(LightFalloff(point, Float3{0, 12.0f, 0}) == doctest::Approx(0.0f)); // at the range: none
+    point.range = 0.0f; // no range: the shader returns one, no inverse square either
+    CHECK(LightFalloff(point, Float3{0, 0, 0}) == doctest::Approx(1.0f));
+
+    GpuLight spot;
+    spot.type = 2.0f;
+    spot.directionWS = Float3{0.0f, -1.0f, 0.0f};
+    spot.innerCos = Cos(0.3f);
+    spot.outerCos = Cos(0.5f);
+    CHECK(LightFalloff(spot, Float3{0, -2.0f, 0}) == doctest::Approx(1.0f));              // the axis
+    CHECK(LightFalloff(spot, Float3{2.0f * Tan(0.7f), -2.0f, 0}) == doctest::Approx(0.0f)); // outside
+
+    GpuLight sun; // directional: everywhere alike
+    CHECK(LightFalloff(sun, Float3{5, 5, 5}) == doctest::Approx(1.0f));
+}

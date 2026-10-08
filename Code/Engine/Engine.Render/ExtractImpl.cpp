@@ -455,6 +455,103 @@ namespace engine::render
             });
     }
 
+    GpuLight MakeGpuLight(const LightComponent& lc, const Float4x4& world) noexcept
+    {
+        GpuLight g;
+        g.positionWS = TransformPoint(Float3{0, 0, 0}, world);
+        // Forward is -Z (row 2 negated) in world space (row-major, row-vector convention).
+        g.directionWS = Normalized(Float3{-world.m[2][0], -world.m[2][1], -world.m[2][2]});
+        g.range = lc.range;
+        const Color lightColor = ToLinear(lc.color);
+        g.color = Float3{lightColor.r, lightColor.g, lightColor.b};
+        g.intensity = lc.intensity;
+        g.type = static_cast<f32>(static_cast<u32>(lc.type));
+        g.shadowStrength = lc.shadowStrength;
+        g.innerCos = Cos(lc.innerAngle);
+        g.outerCos = Cos(lc.outerAngle);
+        return g;
+    }
+
+    namespace
+    {
+        // How far a ray looks for what stands between a point and a directional light (the sun or
+        // the moon): past any level, so only what is really overhead shades it.
+        constexpr f32 kDirectionalOcclusionReach = 1000.0f;
+        // A ray toward a local light stops this short of it, so the lamp's own glass or holder
+        // (when it has a collider) does not count as standing in its way.
+        constexpr f32 kLightClearance = 0.05f;
+    }
+
+    Float3 SceneRender::lightAt(Float3 position) const
+    {
+        return lightAt(position, 0xFFFFFFFFu);
+    }
+
+    Float3 SceneRender::lightAt(Float3 position, u32 groupMask) const
+    {
+        Float3 total{0.0f, 0.0f, 0.0f};
+        if (scene == nullptr)
+        {
+            return total;
+        }
+        if (auto* env = scene->GetSystem<EnvironmentSystem>())
+        {
+            const EnvironmentSettings& e = env->Effective(); // as ExtractEnvironmentInto reads it
+            const Color ambient = ToLinear(e.ambientColor);
+            total = Float3{ambient.r, ambient.g, ambient.b} * e.ambientIntensity;
+        }
+        auto* lights = scene->GetSystem<LightComponentManager>();
+        if (lights == nullptr)
+        {
+            return total;
+        }
+        scene::ISceneRayQuery* rays = nullptr; // the scene's solid surfaces (physics), if any
+        scene->ForEachSystem(
+            [&](scene::SceneSystem& system)
+            {
+                if (rays == nullptr)
+                {
+                    rays = system.AsRayQuery();
+                }
+            });
+        lights->ForEach(
+            [&](LightComponent& lc, scene::EntityHandle e)
+            {
+                if (!scene->IsEffectivelyActive(e) || !lc.enabled)
+                {
+                    return;
+                }
+                const GpuLight g = MakeGpuLight(lc, scene->GetWorldMatrix(e));
+                const f32 falloff = LightFalloff(g, position);
+                if (falloff <= 0.0f)
+                {
+                    return;
+                }
+                f32 lit = 1.0f;
+                // Only a light that casts shadows is stopped by a wall: one that does not lights
+                // through it on screen too, and the answer follows what the player sees.
+                if (lc.castsShadows && rays != nullptr)
+                {
+                    Float3 direction = -g.directionWS;
+                    f32 reach = kDirectionalOcclusionReach;
+                    if (lc.type != LightType::Directional)
+                    {
+                        const Float3 toLight = g.positionWS - position;
+                        const f32 dist = Length(toLight);
+                        direction = toLight / Max(dist, 1e-4f);
+                        reach = dist - kLightClearance;
+                    }
+                    scene::SceneRayHit hit;
+                    if (reach > 0.0f && rays->CastRay(position, direction, reach, groupMask, hit))
+                    {
+                        lit = 1.0f - lc.shadowStrength; // the shader lerps toward lit by it
+                    }
+                }
+                total += g.color * (g.intensity * falloff * lit);
+            });
+        return total;
+    }
+
     void ExtractLightsInto(scene::Scene& scene, ExtractedScene& out)
     {
         auto* lights = scene.GetSystem<LightComponentManager>();
@@ -473,19 +570,7 @@ namespace engine::render
                 {
                     return;
                 }
-                const Float4x4 world = scene.GetWorldMatrix(e);
-                GpuLight g;
-                g.positionWS = TransformPoint(Float3{0, 0, 0}, world);
-                // Forward is -Z (row 2 negated) in world space (row-major, row-vector convention).
-                g.directionWS = Normalized(Float3{-world.m[2][0], -world.m[2][1], -world.m[2][2]});
-                g.range = lc.range;
-                const Color lightColor = ToLinear(lc.color);
-                g.color = Float3{lightColor.r, lightColor.g, lightColor.b};
-                g.intensity = lc.intensity;
-                g.type = static_cast<f32>(static_cast<u32>(lc.type));
-                g.shadowStrength = lc.shadowStrength;
-                g.innerCos = Cos(lc.innerAngle);
-                g.outerCos = Cos(lc.outerAngle);
+                GpuLight g = MakeGpuLight(lc, scene.GetWorldMatrix(e));
                 if (!haveShadow && lc.castsShadows && lc.type == LightType::Directional)
                 {
                     haveShadow = true;

@@ -35,6 +35,11 @@ export namespace engine::render
     namespace scene = foundation::scene;
 
 
+    // A light component at `world` as the renderer lights with it (position, forward, linear
+    // colour, cone cosines); the shadow fields stay unset, extraction assigns those. SceneRender's
+    // lightAt builds its lights the same way, so the two cannot drift.
+    [[nodiscard]] GpuLight MakeGpuLight(const LightComponent& light, const Float4x4& world) noexcept;
+
     // Packs an entity handle into the opaque MeshRenderData::entityId (for pick; opaque to core).
     [[nodiscard]] u64 PackEntity(scene::EntityHandle e) noexcept;
 

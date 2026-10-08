@@ -1123,6 +1123,16 @@ export namespace engine::render
     {
         scene::Scene* scene = nullptr;
 
+        // How much light reaches `position` (linear RGB, the units lights are authored in): every
+        // enabled light with the renderer's own range falloff and spot cone, a light that casts
+        // shadows stopped by what stands between (a ray through the scene's solid surfaces, among
+        // the collision groups in `groupMask`), plus the ambient. The light a surface facing each
+        // light would get, before its colour and angle: a CPU estimate of the shading for a light
+        // meter or a guard's eye, not a read of the frame (the sky's image-based light is not in
+        // it). Ask from a point off any surface: a ray that starts inside a wall is stopped by it.
+        [[nodiscard]] Float3 lightAt(Float3 position) const;
+        [[nodiscard]] Float3 lightAt(Float3 position, u32 groupMask) const;
+
         // Swap the entity's MeshComponent mesh to resource `id`, binding it through the run's
         // resource manager so the swap takes effect live (a bare VM with no manager sets the id
         // only, unbound). False (a no-op) if the scene is null or the entity has no MeshComponent.

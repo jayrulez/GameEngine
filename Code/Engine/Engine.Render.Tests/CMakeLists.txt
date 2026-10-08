@@ -4,6 +4,7 @@ add_executable(Engine.Render.Tests
     ResourceRefTests.cpp
     TestsMain.cpp
     ExtractTests.cpp
+    LightAtTests.cpp
     RenderProfileTests.cpp)
 
 target_link_libraries(Engine.Render.Tests PRIVATE

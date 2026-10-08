@@ -198,6 +198,10 @@ namespace engine::render
         builder.Method<static_cast<bool (SceneRender::*)(foundation::script::Entity, Guid, i32) const>(
             &SceneRender::setMaterial)>("setMaterial", {"entity", "resourceId", "slot"});
         builder.Method<&SceneRender::setCameraTarget>("setCameraTarget", {"entity", "textureId"});
+        builder.Method<static_cast<Float3 (SceneRender::*)(Float3) const>(&SceneRender::lightAt)>(
+            "lightAt", {"position"});
+        builder.Method<static_cast<Float3 (SceneRender::*)(Float3, u32) const>(&SceneRender::lightAt)>(
+            "lightAt", {"position", "groupMask"});
         builder.Method<&SceneRender::of>("of", {"scene"});
         builder.Constructor(); // some backends only materialize constructible foreign classes
     }

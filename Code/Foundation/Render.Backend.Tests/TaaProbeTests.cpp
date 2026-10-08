@@ -175,6 +175,9 @@ namespace
                 data->mesh = bars.Get();
                 data->material = bright.Get();
                 data->category = RenderCategories::Opaque;
+                // As extraction keys it: the draw list groups by this, so the twin below sorts beside
+                // it and the two batch (by depth alone, the wall lands between them).
+                data->sortBatchKey = BatchKey(bars.Get(), bright.Get());
                 data->boneMatrices = palette.Data(); // the same palettes every frame, their poses moving
                 data->prevBoneMatrices = previous.Data();
                 data->boneCount = 1;

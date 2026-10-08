@@ -86,6 +86,7 @@ class Guard
             if (awareness >= 1.0f)
             {
                 m_state = kChase;
+                self.scene.events.emit("Spotted", 0); // the game counts it (Lamplight.as)
             }
             else if (awareness < 0.25f)
             {

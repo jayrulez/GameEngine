@@ -5,7 +5,6 @@ class LightMeter
 {
     private Entity@ self;
 
-    ["asset:UIDocument", "The HUD with the meter (UI/Hud)"] Guid@ hud;
     [0.4, "Where the light is read, above the thief's centre (m): the chest"] float chestHeight;
     [0.15, "The light (luminance) that fills half the meter"] float halfLight;
     [6.0, "How quickly the meter follows the light"] float follow;
@@ -28,10 +27,7 @@ class LightMeter
 
     void onStart()
     {
-        if (hud !is null)
-        {
-            ui::push(hud);
-        }
+        // The HUD is the game's (Lamplight.as pushes it before the level loads).
         @m_bar = ui::findProgressBar("hud-light");
         @m_label = ui::findLabel("hud-light-label");
         m_shown = level();

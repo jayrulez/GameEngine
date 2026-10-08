@@ -8,6 +8,10 @@ physical material under the foot):
 - Audio/StepStone1..3: a hard tap on flags, a sharp click with a little ring.
 - Audio/StepGravel1..3: a crunch, a scatter of tiny clicks under noise.
 - Audio/StepGrass1..3: a soft brush of noise.
+
+Taking things (Loot.as):
+- Audio/Coins: a purse's jingle, a few bright pings close together.
+- Audio/Taken: the target in hand, a low two-note chime.
 """
 import math, os, random, struct, sys, wave
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -74,6 +78,31 @@ def grass(rnd):
     return [brush[t] * math.sin(math.pi * t / n) ** 1.5 for t in range(n)]
 
 
+def ping(n, f, at, decay, amp, out):
+    for t in range(n - at):
+        out[at + t] += amp * math.sin(2 * math.pi * f * t / RATE) * math.exp(-t / (decay * RATE))
+
+
+def coins(rnd):
+    n = int(0.45 * RATE)
+    out = [0.0] * n
+    for k in range(6):
+        at = int((0.02 + k * 0.05 + rnd.uniform(0, 0.02)) * RATE)
+        f = rnd.uniform(2600, 4200)
+        ping(n, f, at, 0.04, 1.0, out)
+        ping(n, f * 2.7, at, 0.02, 0.4, out)
+    return out
+
+
+def taken(rnd):
+    n = int(1.1 * RATE)
+    out = [0.0] * n
+    for at, f in ((0.0, 392.0), (0.16, 587.3)):  # G4 then D5
+        for h, a in ((1, 1.0), (2, 0.35), (3, 0.15)):
+            ping(n, f * h, int(at * RATE), 0.45, a, out)
+    return out
+
+
 SURFACES = {"Wood": (wood, 0.8), "Stone": (stone, 0.7), "Gravel": (gravel, 0.75), "Grass": (grass, 0.5)}
 
 
@@ -85,6 +114,10 @@ def main():
             write(path, make(random.Random(sum(map(ord, name)) * 10 + take)), level)  # the same takes each run
             guid = mcp("asset_import", {"source": path, "group": "Audio", "importer": "Audio"})["guid"]
             print("Step%s%d" % (name, take), guid)
+    for name, make in (("Coins", coins), ("Taken", taken)):
+        path = os.path.join(OUT, name + ".wav")
+        write(path, make(random.Random(sum(map(ord, name)))), 0.7)
+        print(name, mcp("asset_import", {"source": path, "group": "Audio", "importer": "Audio"})["guid"])
     print(mcp("asset_cook", {}))
 
 

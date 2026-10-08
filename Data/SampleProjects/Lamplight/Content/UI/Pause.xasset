@@ -1,0 +1,12 @@
+<root>
+	<string name="guid">f40800e3-4aed-4158-94d8-fb49fa0e68d0</string>
+	<string name="typeNamespace">rtti::pipeline::ui</string>
+	<string name="typeName">UIDocumentAsset</string>
+	<array name="dataVersions" count="1">
+		<u64 name="type">6477862957065698361</u64>
+		<u32 name="version">2</u32>
+	</array>
+	<object name="payload">
+		<string name="fileName">Pause.sml</string>
+	</object>
+</root>

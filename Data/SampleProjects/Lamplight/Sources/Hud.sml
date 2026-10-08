@@ -2,9 +2,19 @@
 
   <Flex direction="vertical" justify="space-between" align="stretch" padding="18" spacing="10">
 
-    <!-- A word at the top for a moment: a checkpoint reached. -->
-    <Flex direction="horizontal" justify="center">
+    <!-- The top: the level's target and what has been taken (Lamplight.as), and a word for a
+         moment in the middle (a checkpoint reached, the exit with nothing to show). -->
+    <Flex direction="horizontal" justify="space-between" align="start">
+      <Panel padding="10" style="background: rounded-rect(#0A0E18C0, radius=10);">
+        <Flex direction="vertical" align="start" spacing="2">
+          <Label id="hud-target" text="" font-size="20" style="text-color: #F0E0C0;"/>
+          <Label id="hud-loot" text="" font-size="18" style="text-color: #D8C8A8;"/>
+        </Flex>
+      </Panel>
       <Label id="hud-note" text="Checkpoint" font-size="28" visibility="hidden" style="text-color: #F0E0C0;"/>
+      <Panel padding="10" style="background: rounded-rect(#0A0E18C0, radius=10);">
+        <Label id="hud-time" text="0:00" font-size="22" style="text-color: #F0E0C0;"/>
+      </Panel>
     </Flex>
 
     <Flex direction="vertical" justify="end" align="stretch" spacing="10">

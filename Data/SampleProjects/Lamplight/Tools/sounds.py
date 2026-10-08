@@ -125,6 +125,17 @@ def rain(rnd, seconds=4.0, fade=0.5):
     return loop
 
 
+def bell(rnd):
+    """The alarm: a hand bell rung four times, its inharmonic partials (a bell's, not a string's)."""
+    n = int(2.4 * RATE)
+    out = [0.0] * n
+    for k in range(4):
+        at = int(k * 0.45 * RATE)
+        for ratio, a, decay in ((1.0, 1.0, 0.9), (2.0, 0.6, 0.6), (2.76, 0.45, 0.4), (5.4, 0.25, 0.2)):
+            ping(n, 880.0 * ratio, at, decay, a, out)
+    return out
+
+
 SURFACES = {"Wood": (wood, 0.8), "Stone": (stone, 0.7), "Gravel": (gravel, 0.75), "Grass": (grass, 0.5)}
 
 
@@ -136,7 +147,7 @@ def main():
             write(path, make(random.Random(sum(map(ord, name)) * 10 + take)), level)  # the same takes each run
             guid = mcp("asset_import", {"source": path, "group": "Audio", "importer": "Audio"})["guid"]
             print("Step%s%d" % (name, take), guid)
-    for name, make in (("Coins", coins), ("Taken", taken), ("Rain", rain)):
+    for name, make in (("Coins", coins), ("Taken", taken), ("Rain", rain), ("Bell", bell)):
         path = os.path.join(OUT, name + ".wav")
         write(path, make(random.Random(sum(map(ord, name)))), 0.7)
         print(name, mcp("asset_import", {"source": path, "group": "Audio", "importer": "Audio"})["guid"])

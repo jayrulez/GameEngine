@@ -14,7 +14,8 @@
 // the most loot and whether it was ghosted ("done.<level>", "best.<level>", "loot.<level>",
 // "ghost.<level>").
 
-const int kLevelCount = 4;
+const int kLevelCount = 5;
+const float kControlsShown = 6.0f; // how long the controls show as a level starts (s)
 Guid kTitleDoc = Guid("{{UI:Title}}");
 Guid kHudDoc = Guid("{{UI:Hud}}");
 Guid kPauseDoc = Guid("{{UI:Pause}}");
@@ -31,6 +32,7 @@ class Game
     private int m_seen = 0;
     private int m_caught = 0;
     private float m_note = 0.0f; // how long the HUD's word shows yet
+    private float m_controlsShow = 0.0f; // how long the controls panel shows yet
 
     void launch()
     {
@@ -43,20 +45,23 @@ class Game
         if (i == 0) return Guid("{{Scene:Gardens}}");
         if (i == 1) return Guid("{{Scene:StableYard}}");
         if (i == 2) return Guid("{{Scene:GroundFloor}}");
-        return Guid("{{Scene:Cellars}}");
+        if (i == 3) return Guid("{{Scene:Cellars}}");
+        return Guid("{{Scene:UpperFloor}}");
     }
     private string levelName(int i)
     {
-        return i == 0 ? "Gardens" : (i == 1 ? "StableYard" : (i == 2 ? "GroundFloor" : "Cellars"));
+        return i == 0 ? "Gardens" : (i == 1 ? "StableYard" : (i == 2 ? "GroundFloor" : (i == 3 ? "Cellars" : "UpperFloor")));
     }
     private string levelTitle(int i)
     {
-        return i == 0 ? "The Gardens" : (i == 1 ? "The Stable Yard" : (i == 2 ? "The Ground Floor" : "The Cellars"));
+        return i == 0 ? "The Gardens"
+                      : (i == 1 ? "The Stable Yard" : (i == 2 ? "The Ground Floor" : (i == 3 ? "The Cellars" : "The Upper Floor")));
     }
     private string targetName(int i)
     {
         return i == 0 ? "the gardener's key"
-                      : (i == 1 ? "the stable ledger" : (i == 2 ? "the butler's keys" : "the steward's letter"));
+                      : (i == 1 ? "the stable ledger"
+                                : (i == 2 ? "the butler's keys" : (i == 3 ? "the steward's letter" : "the family jewels")));
     }
 
     // A level opens once the one before it is done; the first is always open, one not built yet never.
@@ -100,6 +105,7 @@ class Game
         s.findButton("level-1").onClick(Action(this.onLevel1));
         s.findButton("level-2").onClick(Action(this.onLevel2));
         s.findButton("level-3").onClick(Action(this.onLevel3));
+        s.findButton("level-4").onClick(Action(this.onLevel4));
         s.findButton("quit-btn").onClick(Action(this.onQuit));
         for (int i = 0; i < kLevelCount; ++i)
         {
@@ -112,6 +118,7 @@ class Game
     private void onLevel1() { startLevel(1); }
     private void onLevel2() { startLevel(2); }
     private void onLevel3() { startLevel(3); }
+    private void onLevel4() { startLevel(4); }
     private void onQuit() { run::requestExit(0); }
 
     // ---- a level ----
@@ -129,6 +136,12 @@ class Game
         ui::clear();
         ui::push(kHudDoc);
         showHud();
+        // The controls, keyboard and pad, for the first seconds of the level (the pause menu has them too).
+        View@ controls = ui::find("hud-controls");
+        controls.setVisible(true);
+        controls.setOpacity(0.0f);
+        controls.fadeTo(1.0f, 0.3f);
+        m_controlsShow = kControlsShown;
         run::setTimeScale(1.0f);
         run::loadScene(levelScene(i));
     }
@@ -156,6 +169,14 @@ class Game
             return;
         }
         m_time += dt;
+        if (m_controlsShow > 0.0f)
+        {
+            m_controlsShow -= dt;
+            if (m_controlsShow <= 0.0f)
+            {
+                ui::find("hud-controls").fadeTo(0.0f, 0.6f);
+            }
+        }
         ui::findLabel("hud-time").setText(clock(m_time));
         if (m_note > 0.0f)
         {
@@ -203,6 +224,11 @@ class Game
         m_seen++;
     }
 
+    void onAlarm(Float3 at)
+    {
+        note("The alarm! Every guard is coming");
+    }
+
     void onCaught(Float3 at)
     {
         m_caught++;
@@ -228,6 +254,8 @@ class Game
     {
         m_paused = true;
         run::setTimeScale(0.0f);
+        m_controlsShow = 0.0f;
+        ui::find("hud-controls").setVisible(false); // the menu shows them itself
         Screen@ s = ui::push(kPauseDoc);
         s.findButton("resume-btn").onClick(Action(this.onResume));
         s.findButton("restart-btn").onClick(Action(this.onRestart));
@@ -272,11 +300,14 @@ class Game
         Save::flush();
 
         Screen@ s = ui::push(kResultsDoc);
-        s.findLabel("res-title").setText(ghost ? "Away like a ghost" : (m_caught == 0 ? "Away clean" : "Away"));
+        bool last = m_level + 1 >= kLevelCount;
+        string title = ghost ? "Away like a ghost" : (m_caught == 0 ? "Away clean" : "Away");
+        s.findLabel("res-title").setText(last ? "The jewels are yours. " + title : title);
         s.findLabel("res-time").setText("Time   " + clock(m_time));
         s.findLabel("res-loot").setText("Loot   " + m_loot);
         s.findLabel("res-seen").setText("Seen " + m_seen + (m_seen == 1 ? " time" : " times") + ", caught " + m_caught);
-        s.findLabel("res-medal").setText(ghost ? "Ghost: never seen" : "");
+        s.findLabel("res-medal").setText(last ? "The Lamplight heist is done" + (ghost ? ". Ghost: never seen" : "")
+                                              : (ghost ? "Ghost: never seen" : ""));
         s.findLabel("res-best").setText("Best on " + levelTitle(m_level) + ": " + clock(Save::getFloat("best." + level, m_time))
                                         + ", loot " + Save::getInt("loot." + level, m_loot));
         bool next = m_level + 1 < kLevelCount && unlocked(m_level + 1);

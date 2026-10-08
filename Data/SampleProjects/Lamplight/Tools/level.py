@@ -54,7 +54,8 @@ TABLE_LAMPS = {
 }
 # Props by kind: the piece and its collider's size (x, height, z) before its yaw.
 PROPS = {"HayBale": (("Grounds", "HayBale"), (1.2, 0.6, 0.8)), "Trough": (("Grounds", "Trough"), (1.8, 0.6, 0.6)),
-         "Barrel": (("Manor", "Barrel"), (0.6, 0.9, 0.6)), "WineRack": (("Manor", "WineRack"), (2.0, 2.0, 0.5))}
+         "Barrel": (("Manor", "Barrel"), (0.6, 0.9, 0.6)), "WineRack": (("Manor", "WineRack"), (2.0, 2.0, 0.5)),
+         "Table": (("Manor", "Table"), (1.6, 0.8, 0.9))}
 # A torch on its stand: its light where the flame burns, flickering (Flicker.as), and the flame's
 # slot for Lamp.as (manor.py's order: Hoop, TorchWood, Fire). Its shadow is cached (Static: the
 # stand never moves; the renderer redraws it where a guard or the thief walks through) and comes
@@ -246,7 +247,8 @@ class Builder:
         self.fading.append((self.place(name + "Leaf", *model, (0, 0, 0), parent=hinge),
                             (0, 1) if along_x else (1, 0), width / 2))
         self.solid(name, (width / 2, height / 2, 0), (width, height, 0.05), parent=hinge, motion=1)
-        self.doors.append((hinge, shut, lock_along, lock_height, opening.get("locked", True)))
+        self.doors.append((hinge, shut, lock_along, lock_height, opening.get("locked", True),
+                           opening.get("pickSeconds", 3.0)))
 
     # ---- props: cover to hide behind, each with its collider ----
     def props(self):
@@ -432,10 +434,15 @@ class Builder:
             if "chimneyLit" in slots:
                 props["chimneyLit"] = ("asset", slots["chimneyLit"])
             d.script(lamp, (asset("ScriptClassAsset", "Lamp"), props))
-        for hinge, shut, lock_along, lock_height, locked in self.doors:
+        for hinge, shut, lock_along, lock_height, locked, pick in self.doors:
             d.script(hinge, (asset("ScriptClassAsset", "Door"), {
                 "thief": ("entity", thief), "locked": locked, "shutYaw": shut, "lockAlong": lock_along,
-                "lockHeight": lock_height}))
+                "lockHeight": lock_height, "pickSeconds": float(pick)}))
+        if self.t.get("alarm"):
+            # The floor's bell: a guard giving chase rings it and brings every guard (Alarm.as).
+            e = d.stable_id("entity")
+            d.entity("Alarm", eid=e)
+            d.script(e, (asset("ScriptClassAsset", "Alarm"), {"thief": ("entity", thief)}))
         cutaway = asset("ScriptClassAsset", "CutawayWall")
         for e, (nx, nz), half in self.fading:
             d.script(e, (cutaway, {"camera": ("entity", cam), "thief": ("entity", thief),

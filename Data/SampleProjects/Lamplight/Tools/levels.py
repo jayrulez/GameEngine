@@ -9,12 +9,13 @@ and the thief starts facing it with the camera south of him.
 - walls: (kind, (i0, j0), (i1, j1)) runs (Wall, Hedge, GardenWall, CellarWall), with a corner piece at each end;
   corners: (kind, (i, j)) more corner pieces (either side of a gate, where a run meets another
   mid-way).
-- openings: {"at": (i, j) the segment's middle, "kind": Doorway / Gate / Gap, "locked": bool}.
+- openings: {"at": (i, j) the segment's middle, "kind": Doorway / Gate / Gap, "locked": bool,
+  "pickSeconds": how long its lock takes to pick (3 by default)}.
 - lamps: {"kind": LanternPost / OilLamp, "at": (x, z)}.
 - guards: a round per guard, its points (x, z) walked in turn.
 - loot: {"kind": Purse / Candlestick, "at": (x, z), "value"}; target: the one thing the level is
   for, carried to the exit (a trigger, (x0, z0, x1, z1)); checkpoints: trigger rectangles.
-- props: {"kind": HayBale / Trough / Barrel / WineRack, "at": (x, z), "yaw": degrees}: cover, each with its collider.
+- props: {"kind": HayBale / Trough / Barrel / WineRack / Table, "at": (x, z), "yaw": degrees}: cover, each with its collider.
 - rooms: {"name", "rect": (i0, j0, i1, j1) cells, "roomSize", "damping", "wet"}: a reflection probe
   over the room and a reverb zone round it. hatch: (x, z) of a cellar hatch (put the exit over it).
 - lamps also: {"kind": OilLamp / Candelabra, "at", "intensity"}: a table with that lamp on it;
@@ -22,6 +23,7 @@ and the thief starts facing it with the camera south of him.
 - stairs: (x, z) of the foot of stairs rising north out of the level (put the exit there).
 - start: the thief's (x, z, yaw degrees); bounds: the navigation zone's (x0, z0, x1, z1).
 - moon: its intensity and direction (0: none); rain: true for rain round the thief and its sound;
+  alarm: true for a bell a guard's chase rings, bringing every guard (Alarm.as);
   environment: Night (the default) or Cellars (look.py).
 """
 
@@ -221,6 +223,54 @@ CELLARS = dict(
     environment="Cellars",
 )
 
-LEVELS = {"Gardens": GARDENS, "StableYard": STABLE_YARD, "GroundFloor": GROUND_FLOOR, "Cellars": CELLARS,
+UPPER_FLOOR = dict(
+    name="UpperFloor",
+    # Level 5, the last: up from the cellars by a hatch at the west end of the long gallery. North of
+    # it a bedroom, the master's study (locked, its oil lamp) and the master bedroom, one guard going
+    # between study and bedroom; south a guest room and the antechamber, one guard going between them
+    # (the antechamber's west half and the guest room), and off the antechamber the vault, behind a
+    # strong door that takes twice as long to pick: do it while he is in the guest room. The gallery's guard walks its whole length. A guard giving chase
+    # rings the alarm and every guard on the floor comes. The family jewels are in the vault; the way
+    # out is back down the hatch.
+    ground=[("Floor", (0, 0, 14, 10))],
+    walls=[("Wall", (0, 0), (14, 0)), ("Wall", (0, 10), (14, 10)), ("Wall", (0, 0), (0, 10)), ("Wall", (14, 0), (14, 10)),
+           ("Wall", (0, 4), (14, 4)), ("Wall", (0, 6), (14, 6)), ("Wall", (5, 0), (5, 4)), ("Wall", (10, 0), (10, 4)),
+           ("Wall", (6, 6), (6, 10)), ("Wall", (10, 6), (10, 10))],
+    openings=[dict(at=(2.5, 4), kind="Doorway", locked=False),    # gallery and bedroom
+              dict(at=(7.5, 4), kind="Doorway", locked=True),     # gallery and study
+              dict(at=(12.5, 4), kind="Doorway", locked=False),   # gallery and master bedroom
+              dict(at=(5, 2.5), kind="Doorway", locked=False),    # bedroom and study
+              dict(at=(10, 1.5), kind="Doorway", locked=False),   # study and master bedroom
+              dict(at=(2.5, 6), kind="Doorway", locked=False),    # gallery and guest room
+              dict(at=(8.5, 6), kind="Doorway", locked=False),    # gallery and antechamber
+              dict(at=(6, 8.5), kind="Doorway", locked=False),    # guest room and antechamber
+              dict(at=(10, 8.5), kind="Doorway", locked=True, pickSeconds=6.0)],  # the vault's strong door
+    rooms=[dict(name="Gallery", rect=(0, 4, 14, 6), roomSize=0.8, wet=0.45), dict(name="Bedroom", rect=(0, 0, 5, 4)),
+           dict(name="Study", rect=(5, 0, 10, 4), damping=0.75), dict(name="MasterBedroom", rect=(10, 0, 14, 4)),
+           dict(name="GuestRoom", rect=(0, 6, 6, 10)), dict(name="Antechamber", rect=(6, 6, 10, 10)),
+           dict(name="Vault", rect=(10, 6, 14, 10), roomSize=0.5, wet=0.55)],
+    lamps=[dict(kind="OilLamp", at=(9.0, 8.9)), dict(kind="Candelabra", at=(19.0, 11.1)),
+           dict(kind="OilLamp", at=(15.0, 3.0)), dict(kind="Candelabra", at=(4.0, 1.6)),
+           dict(kind="Candelabra", at=(24.0, 1.6)), dict(kind="Candelabra", at=(4.0, 18.5)),
+           dict(kind="Candelabra", at=(13.5, 13.2)), dict(kind="Candelabra", at=(26.0, 13.5))],
+    props=[dict(kind="Table", at=(7.0, 5.5)), dict(kind="Table", at=(8.0, 13.2)), dict(kind="Table", at=(22.0, 6.5)),
+           dict(kind="Table", at=(13.0, 18.8))],
+    guards=[[(12.0, 10.0), (26.0, 10.0)],
+            [(12.0, 5.0), (18.0, 2.0), (24.0, 3.0), (25.5, 6.0), (18.0, 6.0)],
+            [(14.0, 16.0), (8.0, 17.0), (3.0, 14.5), (8.0, 17.0)]],
+    loot=[dict(kind="Purse", at=(1.5, 1.5), value=10), dict(kind="Candlestick", at=(12.0, 1.2), value=25),
+          dict(kind="Candlestick", at=(26.5, 1.5), value=25), dict(kind="Purse", at=(1.5, 19.0), value=10),
+          dict(kind="Purse", at=(26.5, 18.5), value=10)],
+    target=dict(kind="Jewels", at=(26.0, 16.0), value=250),
+    hatch=(1.4, 10.0),
+    exit=(0.8, 9.4, 2.0, 10.6),
+    checkpoints=[(24.0, 8.4, 27.6, 11.6)],
+    start=(3.6, 10.0, 0.0),
+    bounds=(0.0, 0.0, 28.0, 20.0),
+    moon=dict(intensity=0.1, yaw=-60.0, pitch=-50.0),
+    alarm=True,
+)
+
+LEVELS = {"Gardens": GARDENS, "StableYard": STABLE_YARD, "GroundFloor": GROUND_FLOOR, "Cellars": CELLARS, "UpperFloor": UPPER_FLOOR,
           "Room": ROOM}
 FIRST = "Gardens"  # the level the game boots into

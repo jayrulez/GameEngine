@@ -12,7 +12,7 @@ class LightMeter
     [0.15, "The light (luminance) that fills half the meter"] float halfLight;
     [6.0, "How quickly the meter follows the light"] float follow;
     [0.3, "Below this much light (the meter's 0..1) the glow comes up"] float glowBelow;
-    [0.05, "The glow's strength in full dark (its EmissiveColor intensity)"] float glowStrength;
+    [0.03, "The glow's strength in full dark (its EmissiveColor intensity)"] float glowStrength;
     [7, "How many material slots the figure has"] int slots;
 
     private float m_shown = 0.0f;

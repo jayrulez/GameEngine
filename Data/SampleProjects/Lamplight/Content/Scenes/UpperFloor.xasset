@@ -1,0 +1,12 @@
+<root>
+	<string name="guid">78b56fe9-5031-40c9-be8f-72ce637aca3a</string>
+	<string name="typeNamespace">rtti::scene</string>
+	<string name="typeName">SceneDocument</string>
+	<array name="dataVersions" count="1">
+		<u64 name="type">10281239718989168749</u64>
+		<u32 name="version">0</u32>
+	</array>
+	<object name="payload">
+		<string name="name">UpperFloor</string>
+	</object>
+</root>

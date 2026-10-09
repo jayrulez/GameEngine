@@ -338,7 +338,17 @@ namespace
                 engine::render::MeshComponent& mc = meshes->Add(entities[i]);
                 mc.mesh = core::RefPtr<geometry::StaticMesh>(mesh);
                 mc.color = core::Color{1.0f, 1.0f, 1.0f, 1.0f};
-                mc.SetMaterials(m_modelMats); // unified list; slot 0 covers out-of-range
+                // The mesh's own material list (its slots); slot 0 covers out-of-range.
+                core::Array<core::i32> slots;
+                m_model->MeshMaterialIndices(static_cast<core::usize>(node.meshIndex), slots);
+                core::Array<core::RefPtr<materials::Material>> meshMats;
+                for (const core::i32 slot : slots)
+                {
+                    meshMats.PushBack(static_cast<core::usize>(slot) < m_modelMats.Size()
+                                          ? m_modelMats[static_cast<core::usize>(slot)]
+                                          : core::RefPtr<materials::Material>{});
+                }
+                mc.SetMaterials(meshMats);
                 if (mesh->IsSkinned())
                 {
                     skinnedEntities.PushBack(entities[i]);

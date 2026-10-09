@@ -138,12 +138,36 @@ export namespace foundation::model
             meshes; // base ptr (a SkinnedMesh upcasts here); skinned via meshSkinned
         Array<u8> meshSkinned;
         Array<i32> meshMaterial; // material index per mesh (-1 = none)
+        // Per mesh, the model-wide materials its submeshes index (a cooked SubMesh::materialIndex
+        // is a position in its mesh's list, not in `materials`). Empty for a mesh of a v1 manifest,
+        // whose submeshes index `materials` directly.
+        Array<ModelMeshMaterialSlots> meshMaterialSlots;
         Array<Proxy<materials::Material>>
             materials;                       // resolved materials (albedo wired as default texture)
         Proxy<animation::Skeleton> skeleton; // resolved skeleton (null if not skinned)
         Array<Proxy<animation::AnimationClip>> animations; // resolved animation clips
         Float3 boundsMin{};
         Float3 boundsMax{};
+
+        // The model-wide material indices (into `materials`) a mesh's submeshes index, in slot
+        // order: what an entity drawing the mesh binds as its material list. A v1 manifest's mesh
+        // (no slots) indexes every material, in order.
+        void MeshMaterialIndices(usize meshIndex, Array<i32>& out) const
+        {
+            out.Clear();
+            if (meshIndex < meshMaterialSlots.Size() && !meshMaterialSlots[meshIndex].slots.IsEmpty())
+            {
+                for (const i32 slot : meshMaterialSlots[meshIndex].slots)
+                {
+                    out.PushBack(slot);
+                }
+                return;
+            }
+            for (usize i = 0; i < materials.Size(); ++i)
+            {
+                out.PushBack(static_cast<i32>(i));
+            }
+        }
     };
 
     // Builds a ModelResource from a ModelManifestSource: copies the hierarchy + resolves each
@@ -182,6 +206,10 @@ export namespace foundation::model
             for (const i32 m : src->meshMaterial)
             {
                 model->meshMaterial.PushBack(m);
+            }
+            for (const ModelMeshMaterialSlots& slots : src->meshMaterialSlots)
+            {
+                model->meshMaterialSlots.PushBack(slots);
             }
 
             // Resolve meshes (skinned ones bind as SkinnedMesh, stored as the StaticMesh base; the renderer

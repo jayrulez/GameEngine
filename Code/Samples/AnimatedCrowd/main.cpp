@@ -310,8 +310,9 @@ namespace
                         ? m_modelMats[static_cast<core::usize>(matIdx)]
                         : (m_modelMats.IsEmpty() ? core::RefPtr<materials::Material>{}
                                                  : m_modelMats[0]);
-                m_skinnedParts.PushBack(
-                    Part{core::RefPtr<geometry::StaticMesh>(mesh), mat, matIdx});
+                Part part{core::RefPtr<geometry::StaticMesh>(mesh), mat, matIdx, {}};
+                m_model->MeshMaterialIndices(i, part.slots); // what its submeshes index
+                m_skinnedParts.PushBack(core::Move(part));
             }
             if (m_skinnedParts.IsEmpty())
             {
@@ -382,6 +383,12 @@ namespace
                     for (const geometry::SubMesh& os : sm->subMeshes)
                     {
                         geometry::SubMesh s = os;
+                        // The part's submeshes index its own slots; the merged mesh indexes the
+                        // model's whole list.
+                        s.materialIndex =
+                            (os.materialIndex >= 0 && static_cast<core::usize>(os.materialIndex) < p.slots.Size())
+                                ? p.slots[static_cast<core::usize>(os.materialIndex)]
+                                : ((p.matIdx >= 0) ? p.matIdx : 0);
                         s.startIndex = static_cast<core::i32>(iwrite);
                         for (core::i32 k = 0; k < os.indexCount; ++k)
                         {
@@ -478,6 +485,7 @@ namespace
             // The meshes to instance per clip group: the merged single mesh, or the N skinned parts.
             core::Array<core::RefPtr<geometry::StaticMesh>> drawMeshes;
             core::Array<core::RefPtr<materials::Material>> drawMats;
+            core::Array<core::Array<core::RefPtr<materials::Material>>> drawSubMats; // per draw-mesh
             if (m_mergeMeshes)
             {
                 if (!m_mergedMesh)
@@ -487,6 +495,7 @@ namespace
                 drawMeshes.PushBack(m_mergedMesh);
                 drawMats.PushBack(m_skinnedParts.IsEmpty() ? core::RefPtr<materials::Material>{}
                                                            : m_skinnedParts[0].mat);
+                drawSubMats.PushBack(m_modelMats); // the merged mesh indexes the model's list
             }
             else
             {
@@ -494,6 +503,14 @@ namespace
                 {
                     drawMeshes.PushBack(part.mesh);
                     drawMats.PushBack(part.mat);
+                    core::Array<core::RefPtr<materials::Material>> own; // the part's slots
+                    for (const core::i32 slot : part.slots)
+                    {
+                        own.PushBack(static_cast<core::usize>(slot) < m_modelMats.Size()
+                                         ? m_modelMats[static_cast<core::usize>(slot)]
+                                         : core::RefPtr<materials::Material>{});
+                    }
+                    drawSubMats.PushBack(core::Move(own));
                 }
             }
 
@@ -512,7 +529,7 @@ namespace
                     engine::render::InstancedMeshComponent& c = imm->Add(e);
                     c.mesh = drawMeshes[p];
                     c.material = drawMats[p];
-                    c.submeshMaterials = m_modelMats;
+                    c.submeshMaterials = drawSubMats[p];
                     c.tints =
                         clipTint[g]; // set BEFORE SetInstances (the version bump uploads them)
                     c.poseAssignment =
@@ -961,6 +978,7 @@ namespace
             core::RefPtr<geometry::StaticMesh> mesh;
             core::RefPtr<materials::Material> mat;
             core::i32 matIdx = -1;
+            core::Array<core::i32> slots; // the model-wide materials its submeshes index
         };
         scene::EntityHandle m_keyLight{}; // directional CSM light (K toggles its shadows)
         core::Array<Part>

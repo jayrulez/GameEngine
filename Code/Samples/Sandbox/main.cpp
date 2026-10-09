@@ -710,8 +710,8 @@ namespace
             rootT.scale = core::Float3{fit, fit, fit};
             m_scene->SetLocalTransform(modelRoot, rootT);
 
-            // All the model's materials, indexed by SubMesh::materialIndex (= model material index) for
-            // per-submesh (multi-material) rendering. The resource manager keeps them alive via m_models.
+            // All the model's materials; a mesh binds the ones its submeshes index (its slots, from
+            // MeshMaterialIndices). The resource manager keeps them alive via m_models.
             core::Array<core::RefPtr<materials::Material>> modelMats;
             modelMats.Reserve(model->materials.Size());
             for (auto& mp : model->materials)
@@ -758,9 +758,18 @@ namespace
                     mesh); // hold a ref (manager owns the handle)
                 mc.color = core::Color{1.0f, 1.0f, 1.0f, 1.0f};
 
-                // The unified material list: submeshes index it by SubMesh::materialIndex,
-                // slot 0 covers anything out of range.
-                mc.SetMaterials(modelMats);
+                // The mesh's own material list: its submeshes index it by SubMesh::materialIndex,
+                // slot 0 covering anything out of range.
+                core::Array<core::i32> slots;
+                model->MeshMaterialIndices(static_cast<core::usize>(node.meshIndex), slots);
+                core::Array<core::RefPtr<materials::Material>> meshMats;
+                for (const core::i32 slot : slots)
+                {
+                    meshMats.PushBack(static_cast<core::usize>(slot) < modelMats.Size()
+                                          ? modelMats[static_cast<core::usize>(slot)]
+                                          : core::RefPtr<materials::Material>{});
+                }
+                mc.SetMaterials(meshMats);
                 if (mesh->IsSkinned())
                 {
                     skinnedEntities.PushBack(entities[i]);

@@ -1141,6 +1141,62 @@ TEST_CASE("mesh lod: _LODn suffix parsing (case-insensitive; _LOD0 and non-suffi
     CHECK(pipeline::ParseLodSuffix(u8"Foo_MOD1", base) == 0);  // wrong tag
 }
 
+// Sandbox's character drew its face and eyes in the wrong materials: since submeshes index their
+// mesh's own slots, a runtime user of the model needs each mesh's slot list, and the bound model
+// dropped it. It keeps it now, and MeshMaterialIndices gives the model-wide material each of a
+// mesh's slots is, the list an entity drawing the mesh binds.
+TEST_CASE("model resource: each mesh keeps its material slots, the materials its submeshes index")
+{
+    const String characterStorage = MiPath(u8"Assets/models/QuaterniusCharacter/glTF/Character.gltf");
+    const StringView character = characterStorage.AsView();
+    if (character.IsEmpty())
+    {
+        return;
+    }
+    model::RegisterModelResourceTypes();
+    vfs::NativeFileSystem mount(u8"scratch_modelimporter_slots_db", DefaultAllocator());
+    content::ContentDatabase db(foundation::core::DefaultAllocator(), mount, foundation::core::BinarySerializerFactory(), u8".rasset");
+    Guid modelGuid;
+    REQUIRE(pipeline::LoadAndCook(character, db, u8"Character", modelGuid) == model::ModelLoadResult::Ok);
+
+    resource::ResourceManager manager(DefaultAllocator(), db);
+    geometry::StaticMeshFactory meshFactory(DefaultAllocator());
+    geometry::SkinnedMeshFactory skinnedFactory(DefaultAllocator());
+    model::ModelFactory modelFactory;
+    foundation::animation::SkeletonFactory skeletonFactory(DefaultAllocator());
+    foundation::animation::AnimationClipFactory clipFactory(DefaultAllocator());
+    manager.AddFactory(&meshFactory);
+    manager.AddFactory(&skinnedFactory);
+    manager.AddFactory(&modelFactory);
+    manager.AddFactory(&skeletonFactory);
+    manager.AddFactory(&clipFactory);
+    resource::Proxy<model::ModelResource> model = manager.Bind<model::ModelResource>(modelGuid);
+    REQUIRE(model);
+    REQUIRE(model->meshMaterialSlots.Size() == model->meshes.Size());
+
+    // Every mesh's submeshes index within its own list, and its list names model-wide materials.
+    bool sawSeveral = false;
+    Array<i32> indices;
+    for (usize m = 0; m < model->meshes.Size(); ++m)
+    {
+        const geometry::StaticMesh* mesh = model->meshes[m].Get();
+        REQUIRE(mesh != nullptr);
+        model->MeshMaterialIndices(m, indices);
+        REQUIRE_FALSE(indices.IsEmpty());
+        sawSeveral = sawSeveral || indices.Size() > 1;
+        for (const i32 index : indices)
+        {
+            CHECK(index >= 0);
+            CHECK(static_cast<usize>(index) < model->materials.Size());
+        }
+        for (const geometry::SubMesh& sub : mesh->subMeshes)
+        {
+            CHECK(sub.materialIndex < static_cast<i32>(indices.Size()));
+        }
+    }
+    CHECK(sawSeveral); // the character's body draws several of its six materials
+}
+
 TEST_CASE("mesh convert: submesh materials become per-mesh slots (first-appearance order), "
           "and the slot list names the model-wide materials")
 {

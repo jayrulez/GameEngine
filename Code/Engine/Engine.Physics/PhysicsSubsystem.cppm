@@ -1110,9 +1110,9 @@ export namespace engine::physics
                 return Guid{};
             }
             auto* bodies = scene->GetSystem<RigidBodyComponentManager>();
-            const RigidBodyComponent* body =
+            const RigidBodyComponent* rigid =
                 bodies != nullptr ? bodies->Get(UnpackEntity(packedEntity)) : nullptr;
-            return body != nullptr ? body->material.id : Guid{};
+            return rigid != nullptr ? rigid->material.id : Guid{};
         }
 
         // Impulse on the hit body (no-op on a miss / dead world). Resolves the world at call

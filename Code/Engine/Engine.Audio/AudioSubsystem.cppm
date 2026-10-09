@@ -281,8 +281,10 @@ export namespace engine::audio
             }
             PROFILE_SCOPE("Audio.Sources");
 
-            // Scene simulation pause/resume maps onto the per-scene group (fade both ways).
-            const bool simulating = m_scene->SimulationEnabled();
+            // The scene's sounds hold while it is paused (fade both ways): its simulation off, or no
+            // time passing in it (a game's pause, run.setTimeScale(0): behaviours and physics stand
+            // still, so its rain and its footsteps do too).
+            const bool simulating = m_scene->SimulationEnabled() && deltaTime > 0.0f;
             if (simulating != m_wasSimulating && m_sceneGroup != 0)
             {
                 m_engine->SetSceneGroupPaused(m_sceneGroup, !simulating);

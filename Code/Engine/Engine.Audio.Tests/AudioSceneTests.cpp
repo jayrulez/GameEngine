@@ -179,6 +179,26 @@ TEST_CASE("audio.scene: pausing scene simulation pauses the scene's voice group;
     CHECK_FALSE(play.engine.IsSceneGroupPaused(play.audio->SceneGroup()));
 }
 
+TEST_CASE("audio.scene: no time passing in the scene (a game's pause) holds its voices; time again "
+          "resumes them")
+{
+    PlayScene play;
+    RefPtr<AudioClip> clip = MakeToneClip(1.0f);
+    (void)play.AddSource(clip, Float3{0, 0, 0});
+    play.Start();
+    play.Frame();
+    CHECK_FALSE(play.engine.IsSceneGroupPaused(play.audio->SceneGroup()));
+
+    // run.setTimeScale(0): the scene still updates, with no time in it (the rain held in Lamplight).
+    play.Frame(0.0f);
+    CHECK(play.engine.IsSceneGroupPaused(play.audio->SceneGroup()));
+    play.Frame(0.0f);
+    CHECK(play.engine.IsSceneGroupPaused(play.audio->SceneGroup()));
+
+    play.Frame();
+    CHECK_FALSE(play.engine.IsSceneGroupPaused(play.audio->SceneGroup()));
+}
+
 TEST_CASE("audio.scene: a finished one-shot reaps and the component handle clears")
 {
     PlayScene play;

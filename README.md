@@ -12,7 +12,7 @@ skeletal animation with graphs and IK, terrain and vegetation; gameplay scriptin
 or Luau; and a CSS-styled UI framework.
 
 It is built to be worked by agents as well as people. An MCP host exposes the engine's
-reflection, its script API, project operations and play in editor, and the three sample games in
+reflection, its script API, project operations and play in editor, and the four sample games in
 this repository were each built and playtested through those tools, then shipped to the web and
 the Steam Deck.
 
@@ -114,7 +114,7 @@ Add `--mcp` to serve the open project to an agent over MCP while you work in the
 
 ## Sample projects
 
-Game projects under `Data/SampleProjects/`, opened from the editor's project manager. The three
+Game projects under `Data/SampleProjects/`, opened from the editor's project manager. The four
 games are built through the engine's MCP tools and ship to the web and the Steam Deck;
 [GameEngineDemos](https://jayrulez.github.io/GameEngineDemos/) plays them in a browser.
 
@@ -153,6 +153,20 @@ Blender scripts.
 | ![Courses](Documentation/Images/Snowline-Title.png) | ![Ridge](Documentation/Images/Snowline-Ridge.png) | ![Results](Documentation/Images/Snowline-Results.png) |
 
 Watch it played on a Steam Deck: [Snowline gameplay video](https://youtu.be/vlxxLiMEzp0).
+
+**Lamplight** is a night-time manor heist in pure stealth, chosen for what the others leave out:
+lamplight and lantern shadows, a light meter that reads the renderer's own lights (a guard's eye
+reads the same), guards on navigation rounds who see by their lantern's cone, hear footsteps on
+each surface and come to a thrown pebble, doors and gates to pick, walls that dither away between
+the camera and the thief, rain, reverb per room, and auto exposure from moonlit grounds into
+torch-lit cellars. Five levels, from the gardens to the vault on the upper floor, with
+checkpoints, loot, an alarm, and a ghost medal for never being seen. Everything in it, the thief
+and the guards included, is built by scripts: Blender for the models, a level generator for the
+scenes, generated sounds.
+
+| The Gardens | The Ground Floor | Away like a ghost |
+|:---:|:---:|:---:|
+| ![Gardens](Documentation/Images/Lamplight-Gardens.png) | ![Ground Floor](Documentation/Images/Lamplight-GroundFloor.png) | ![Results](Documentation/Images/Lamplight-Results.png) |
 
 **NativeSample** is the reference for a game with native C++ code beside its scripts.
 

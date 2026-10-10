@@ -18,56 +18,57 @@ namespace editor::app
     ViewModeToggles::ViewModeToggles()
     {
         Direction = ui::Orientation::Horizontal;
-        Spacing = 2;
-        EditorIcons& icons = EditorIcons::Get(); // null drawables before Initialize (tests)
-        m_list = MakeToggle(icons.viewList.Get(), u8"List", false);
-        m_gridToggle = MakeToggle(icons.viewGrid.Get(), u8"Grid", true);
-        m_list->IsChecked.SetValue(true);
-        ui::LayoutStyle center;
-        center.AlignSelf = ui::Align::Center;
-        AddView(m_list.Get(), center);
-        AddView(m_gridToggle.Get(), center);
-    }
-
-    void ViewModeToggles::SetGridMode(bool grid)
-    {
-        m_grid = grid;
-        m_list->IsChecked.SetValue(!grid);
-        m_gridToggle->IsChecked.SetValue(grid);
-    }
-
-    RefPtr<ui::ToggleButton> ViewModeToggles::MakeToggle(ui::SVGDrawable* icon, StringView tooltip,
-                                                         bool grid)
-    {
-        auto glyph = MakeRef<ui::DrawableView>(MemoryAllocator(), ui::DrawablePtr(icon), 16.0f, 16.0f);
-        glyph->KeepAspect = true;
-        auto toggle = MakeRef<ui::ToggleButton>(MemoryAllocator());
-        toggle->SetContent(RefPtr<ui::View>(glyph.Get()));
-        toggle->SetStyle(ui::StyleProperty::Padding, ui::Thickness{4.0f, 3.0f});
-        toggle->TooltipText = String(tooltip);
-        // A radio pair, by the checked state rather than the click: a toggle flips on a click
-        // and on Space alike, and a click on the checked one must not leave neither checked.
+        m_segments = MakeRef<SegmentedToggle>(MemoryAllocator());
+        m_segments->Spacing = 2.0f;
         ViewModeToggles* self = this;
-        ui::ToggleButton* raw = toggle.Get();
-        toggle->IsChecked.Changed.Add(ui::Event<void(bool)>::Handler{
-            [self, raw, grid](bool checked)
+        m_segments->Build(
+            2,
+            [self](i32 index)
             {
-                if (checked && grid != self->m_grid)
+                // Null drawables before EditorIcons::Initialize (tests).
+                EditorIcons& icons = EditorIcons::Get();
+                ui::SVGDrawable* icon = index == 0 ? icons.viewList.Get() : icons.viewGrid.Get();
+                auto glyph = MakeRef<ui::DrawableView>(self->MemoryAllocator(), ui::DrawablePtr(icon),
+                                                       16.0f, 16.0f);
+                glyph->KeepAspect = true;
+                return RefPtr<ui::View>(glyph.Get());
+            },
+            [self](i32 index)
+            {
+                const bool grid = index == 1;
+                if (grid != self->m_grid)
                 {
-                    self->SetGridMode(grid);
+                    self->m_grid = grid;
                     if (self->OnModeChanged)
                     {
                         self->OnModeChanged(grid);
                     }
                 }
-                else if (!checked && grid == self->m_grid)
-                {
-                    // Back to checked. Silently: a property ignores a SetValue made from its own
-                    // Changed handler, and the owner is invalidated right after this returns.
-                    raw->IsChecked.SetSilent(true);
-                }
-            }});
-        return toggle;
+            },
+            [self]() { return self->m_grid ? 1 : 0; },
+            [](i32 index) { return index == 0 ? StringView(u8"List") : StringView(u8"Grid"); });
+        for (usize k = 0; k < m_segments->ChildCount(); ++k)
+        {
+            if (ui::ToggleButton* toggle = Segment(k))
+            {
+                toggle->SetStyle(ui::StyleProperty::Padding, ui::Thickness{4.0f, 3.0f});
+            }
+        }
+        ui::LayoutStyle center;
+        center.AlignSelf = ui::Align::Center;
+        AddView(m_segments.Get(), center);
+    }
+
+    void ViewModeToggles::SetGridMode(bool grid)
+    {
+        m_grid = grid;
+        m_segments->Refresh();
+    }
+
+    ui::ToggleButton* ViewModeToggles::Segment(usize index) const noexcept
+    {
+        return index < m_segments->ChildCount() ? Cast<ui::ToggleButton>(m_segments->GetChildAt(index))
+                                                : nullptr;
     }
 
     RTTI_DEFINE_OBJECT(ViewModeToggles, "rtti::editor::app")

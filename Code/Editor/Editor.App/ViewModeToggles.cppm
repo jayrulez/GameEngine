@@ -3,8 +3,9 @@
 // Editor App - :view_mode_toggles partition
 //
 // ViewModeToggles: the List / Grid pair over a view of assets (the asset browser, the asset
-// picker) - two icon toggles, one checked, with the words as their tooltips. The owner shows the
-// list or the grid; the pair only says which and reports a click.
+// picker) - two icon toggles, one checked, with the words as their tooltips: a SegmentedToggle of
+// two, the panels' exclusive row. The owner shows the list or the grid; the pair only says which
+// and reports a choice.
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -13,6 +14,7 @@ export module editor.app:view_mode_toggles;
 
 import foundation.core;
 import foundation.ui;
+import :tool_panel_widgets; // SegmentedToggle
 
 using namespace foundation::core;
 namespace ui = foundation::ui;
@@ -32,15 +34,13 @@ export namespace editor::app
         void SetGridMode(bool grid);
         [[nodiscard]] bool GridMode() const noexcept { return m_grid; }
 
-        [[nodiscard]] ui::ToggleButton* ListToggle() const noexcept { return m_list.Get(); }
-        [[nodiscard]] ui::ToggleButton* GridToggle() const noexcept { return m_gridToggle.Get(); }
+        [[nodiscard]] ui::ToggleButton* ListToggle() const noexcept { return Segment(0); }
+        [[nodiscard]] ui::ToggleButton* GridToggle() const noexcept { return Segment(1); }
 
     private:
-        [[nodiscard]] RefPtr<ui::ToggleButton> MakeToggle(ui::SVGDrawable* icon, StringView tooltip,
-                                                          bool grid);
+        [[nodiscard]] ui::ToggleButton* Segment(usize index) const noexcept;
 
-        RefPtr<ui::ToggleButton> m_list;
-        RefPtr<ui::ToggleButton> m_gridToggle;
+        RefPtr<SegmentedToggle> m_segments;
         bool m_grid = false;
     };
 }

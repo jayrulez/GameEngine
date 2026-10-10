@@ -44,6 +44,36 @@ export namespace editor::mcp::detail
                           Span<const PropertyInfo* const>(fields.Data(), fields.Size()), &project);
     }
 
+    /// How the settings group, as the Project Settings dialog's tabs show them: each category (in
+    /// the order the settings first name it) and the names of its settings, from their reflected
+    /// `category` ("General" when none).
+    inline JsonValue ProjectSettingCategoriesJson()
+    {
+        Array<String> categories;
+        Array<JsonValue> names;
+        for (const PropertyInfo* field : ProjectSettingProperties())
+        {
+            const StringView category = engine::project::SettingCategory(*field);
+            usize index = 0;
+            while (index < categories.Size() && categories[index].AsView() != category)
+            {
+                ++index;
+            }
+            if (index == categories.Size())
+            {
+                categories.PushBack(String(category));
+                names.PushBack(JsonValue::MakeArray());
+            }
+            names[index].Add(JsonValue::MakeString(String(PropertyName(*field))));
+        }
+        JsonValue out = JsonValue::MakeObject();
+        for (usize i = 0; i < categories.Size(); ++i)
+        {
+            out.Set(categories[i], Move(names[i]));
+        }
+        return out;
+    }
+
     /// project_settings_set's schema: one argument per setting, as reflection describes it.
     inline JsonValue ProjectSettingsSchema()
     {
@@ -71,8 +101,8 @@ export namespace editor::mcp
             u8"choice one of its values by name (renderFit, windowMode), a flag true or false; MSAA "
             u8"takes the render levels. Checked "
             u8"in full before anything changes, then saved to the manifest; the editor re-applies "
-            u8"what depends on them (the game UI's font and theme). Returns the settings as "
-            u8"project_info does.",
+            u8"what depends on them (the game UI's font and theme). Returns the settings and their "
+            u8"categories as project_info does.",
             detail::ProjectSettingsSchema(), foundation::mcp::ToolAnnotations::Adjusts(),
             [s](const JsonValue& args) -> ToolResult
             {
@@ -135,6 +165,7 @@ export namespace editor::mcp
                 }
                 JsonValue out = JsonValue::MakeObject();
                 out.Set(u8"settings", detail::ProjectSettingsJson(project));
+                out.Set(u8"settingCategories", detail::ProjectSettingCategoriesJson());
                 return out;
             });
     }

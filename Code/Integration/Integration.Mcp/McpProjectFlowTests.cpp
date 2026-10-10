@@ -122,6 +122,27 @@ TEST_CASE("integration.mcp: an agent creates, opens, and inspects a project via 
     CHECK(info.Get(u8"directory").AsString().Size() > 0u);
     CHECK(info.Get(u8"sourcesRoot").AsString().Size() > 0u);
 
+    // The settings group as the Project Settings dialog's tabs: every setting in one category,
+    // General first.
+    const JsonValue categories = info.Get(u8"settingCategories");
+    REQUIRE(categories.Count() > 1);
+    CHECK(categories.KeyAt(0) == StringView(u8"General"));
+    i64 grouped = 0;
+    bool msaaOnDisplay = false;
+    for (i64 i = 0; i < categories.Count(); ++i)
+    {
+        const JsonValue names = categories.Get(categories.KeyAt(i));
+        grouped += names.Count();
+        for (i64 n = 0; n < names.Count(); ++n)
+        {
+            msaaOnDisplay = msaaOnDisplay ||
+                            (categories.KeyAt(i) == StringView(u8"Display") &&
+                             names.At(n).AsString() == StringView(u8"renderMsaaSamples"));
+        }
+    }
+    CHECK(grouped == info.Get(u8"settings").Count());
+    CHECK(msaaOnDisplay);
+
     // The manifest is written to disk.
     CHECK(std::filesystem::exists("mcp_fixture_project/Project.xml"));
 

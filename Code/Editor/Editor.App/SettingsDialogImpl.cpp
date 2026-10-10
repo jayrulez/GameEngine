@@ -5,7 +5,8 @@
 //
 // ProjectSettingsDialog: a modal editor for the project manifest (Project.xml) - the settings
 // ProjectSettings' reflection describes (its name, native module and asset settings, each asset
-// slot filtered to the type the setting names) and the MSAA level. The engine version stamp is shown read-only (every save re-stamps it to the
+// slot filtered to the type the setting names) and the MSAA level, a tab per category the settings
+// name. The engine version stamp is shown read-only under General (every save re-stamps it to the
 // running engine; the launcher/project-manager owns migration).
 //
 // [Save] writes the fields back into EditorProject::Settings() and persists the manifest;
@@ -69,8 +70,7 @@ namespace editor::app
         return raw;
     }
 
-    void ProjectSettingsDialog::BuildSettingRows(ui::FlexLayout& column,
-                                                 editor::EditorProject* project)
+    void ProjectSettingsDialog::BuildSettingRows(editor::EditorProject* project)
     {
         namespace proj = engine::project;
         const TypeInfo& type = proj::ProjectSettings::StaticType();
@@ -109,6 +109,7 @@ namespace editor::app
             {
                 continue;
             }
+            ui::FlexLayout& column = m_tabs->Column(proj::SettingCategory(property));
             if (proj::IsAssetListSetting(property))
             {
                 AddAssetListRow(column, label->AsView(), list++);

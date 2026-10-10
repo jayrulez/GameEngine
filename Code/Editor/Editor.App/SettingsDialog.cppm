@@ -5,8 +5,10 @@
 //
 // ProjectSettingsDialog: a modal editor for the project manifest (Project.xml) - the settings
 // ProjectSettings' reflection describes (its name, native module and asset settings, each asset
-// slot filtered to the type the setting names) and the MSAA level. The engine version stamp is shown read-only (every save re-stamps it to the
-// running engine; the launcher/project-manager owns migration).
+// slot filtered to the type the setting names) and the MSAA level, a tab per category the settings
+// name (their `category`; Preferences reads the same way). The engine version stamp is shown
+// read-only under General (every save re-stamps it to the running engine; the
+// launcher/project-manager owns migration).
 //
 // [Save] writes the fields back into EditorProject::Settings() and persists the manifest;
 // [Cancel]/Escape discards. Every asset setting is a ResourceRefEditor row: pick, drop and clear
@@ -29,6 +31,7 @@ import editor.core;
 import :resource_ref_editor;
 import :container_list_editor;
 import :asset_picker_dialog;
+import :category_tabs;
 
 using namespace foundation::core;
 
@@ -44,29 +47,34 @@ export namespace editor::app
         explicit ProjectSettingsDialog(editor::EditorContext& context)
             : ui::Dialog(u8"Project Settings"), m_context(&context)
         {
-            MinWidth.SetValue(460.0f);
-            MinHeight.SetValue(240.0f);
-            MaxWidth.SetValue(560.0f);
-            MaxHeight.SetValue(560.0f); // taller so the ~8 rows fit; the ScrollView handles overflow
+            // A fixed size, as Preferences: a tab view measures only the page it shows, so a
+            // free height would jump as the tabs change. Each page scrolls inside it.
+            MinWidth.SetValue(560.0f);
+            MaxWidth.SetValue(680.0f);
+            MinHeight.SetValue(420.0f);
+            MaxHeight.SetValue(420.0f);
 
             editor::EditorProject* project = context.Project();
-
-            auto column = MakeRef<ui::FlexLayout>(MemoryAllocator());
-            column->Direction = ui::Orientation::Vertical;
-            column->Spacing = 8;
+            m_tabs = MakeUnique<CategoryTabs>(MemoryAllocator(), MemoryAllocator());
 
             // The settings as the type describes them (ProjectSettings' reflection): a text row
             // per string setting, per asset setting a slot that picks, takes a dropped asset of
             // its type and clears (editor-lists-and-asset-slots.md P1), a list of slots per asset
             // list, and a field, check box or combo per number, flag or choice, seeded from the
-            // manifest. MSAA, a choice from the render subsystem's levels, follows.
-            BuildSettingRows(*column, project);
+            // manifest, each in its category's tab. MSAA, a choice from the render subsystem's
+            // levels, follows in its own.
+            BuildSettingRows(project);
 
             // Scene-pass MSAA: Off / 2x / 4x maps to renderMsaaSamples 1 / 2 / 4. The
             // player and play-in-editor apply it; the render subsystem capability-clamps at runtime
             // (2x degrades to 1x on WebGPU).
             {
-                ui::FlexLayout* row = AddRow(*column, u8"MSAA");
+                const PropertyInfo* msaa =
+                    FindProperty(engine::project::ProjectSettings::StaticType(), "renderMsaaSamples");
+                ui::FlexLayout* row = AddRow(
+                    m_tabs->Column(msaa != nullptr ? engine::project::SettingCategory(*msaa)
+                                                   : engine::project::kSettingDefaultCategory),
+                    u8"MSAA");
                 m_msaaCombo = MakeRef<ui::ComboBox>(MemoryAllocator());
                 for (u32 i = 0; i < engine::render::MsaaLevelCount(); ++i)
                 {
@@ -81,7 +89,8 @@ export namespace editor::app
 
             // Engine stamp - informational; re-stamped by every save.
             {
-                ui::FlexLayout* row = AddRow(*column, u8"Engine version");
+                ui::FlexLayout* row =
+                    AddRow(m_tabs->Column(engine::project::kSettingDefaultCategory), u8"Engine version");
                 auto value =
                     MakeRef<ui::Label>(MemoryAllocator(), editor::kEngineVersionString);
                 ui::LayoutStyle lp;
@@ -89,18 +98,7 @@ export namespace editor::app
                 row->AddView(value.Get(), lp);
             }
 
-            // Scroll the settings column so a tall list can't spill over the modal button row
-            // (the Dialog gives its content a fixed, Grow-shared area above the buttons; without
-            // scrolling, a column taller than that area overflows onto them). User feedback.
-            auto scroll = MakeRef<ui::ScrollView>(MemoryAllocator());
-            scroll->VScrollBarPolicy.SetValue(ui::ScrollBarPolicy::Auto);
-            scroll->HScrollBarPolicy.SetValue(ui::ScrollBarPolicy::Never);
-            {
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Match();
-                scroll->AddView(column.Get(), lp);
-            }
-            SetContent(scroll.Get());
+            SetContent(&m_tabs->View());
 
             {
                 ProjectSettingsDialog* self = this;
@@ -110,14 +108,20 @@ export namespace editor::app
             AddButton(u8"Cancel", ui::DialogResult::Cancel);
         }
 
+        /// The category tabs, in the order the settings first name them.
+        [[nodiscard]] ui::TabView& Tabs() const noexcept { return m_tabs->View(); }
+        /// The tab for a category, or -1.
+        [[nodiscard]] i32 TabIndexOf(StringView category) const { return m_tabs->IndexOf(category); }
+
     private:
         // A labeled horizontal row (fixed-width label, callers append the field views).
         ui::FlexLayout* AddRow(ui::FlexLayout& column, StringView label);
 
         ui::EditText* AddTextRow(ui::FlexLayout& column, StringView label, StringView value);
 
-        /// One row per reflected setting a row edits: strings as text, asset settings as slots.
-        void BuildSettingRows(ui::FlexLayout& column, editor::EditorProject* project);
+        /// One row per reflected setting a row edits, in its category's tab: strings as text,
+        /// asset settings as slots.
+        void BuildSettingRows(editor::EditorProject* project);
 
         /// An asset setting's row: a slot bound to `id` (the value Save applies). Edit and
         /// reveal are left off: this is a modal dialog.
@@ -173,6 +177,7 @@ export namespace editor::app
         };
 
         editor::EditorContext* m_context;
+        UniquePtr<CategoryTabs> m_tabs;
         Array<TextSetting> m_texts;
         Array<AssetSetting> m_assets; // sized before the rows bind to it: never reallocates after
         Array<RefPtr<ResourceRefEditor>> m_assetRows; // the rows' editors; their views sit in rows

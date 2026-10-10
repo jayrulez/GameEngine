@@ -563,3 +563,85 @@ TEST_CASE("preferences: a tab per category, contributions sharing their category
     boxes[0]->IsChecked.SetValue(true);
     CHECK(navigationFlag);
 }
+
+// Project Settings shows a tab per category its settings name (as Preferences does), in the order
+// they first name them; every labelled setting is on its category's tab, and MSAA, its own row,
+// on the display settings' tab.
+TEST_CASE("project-settings: a tab per category the settings name")
+{
+    const StringView dir = u8"scratch_settings_dialog_tabs";
+    (void)RemoveDirectoryRecursive(dir);
+    REQUIRE(EditorProject::Create(DefaultAllocator(), dir, u8"P").IsOk());
+    UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
+    REQUIRE(static_cast<bool>(project));
+    EditorContext context{DefaultAllocator()};
+    context.SetProject(project.Get());
+    {
+        auto dialog = MakeRef<app::ProjectSettingsDialog>(DefaultAllocator(), context);
+        ui::TabView& tabs = dialog->Tabs();
+        CHECK(tabs.SelectedIndex() == 0);
+        CHECK(dialog->TabIndexOf(engine::project::kSettingDefaultCategory) == 0);
+
+        // The categories, as the settings name them, in first-named order: one tab each.
+        Array<String> categories;
+        for (const PropertyInfo& property : Properties(engine::project::ProjectSettings::StaticType()))
+        {
+            if (engine::project::SettingAttribute(property, engine::project::kSettingLabelAttribute) ==
+                nullptr)
+            {
+                continue;
+            }
+            const StringView category = engine::project::SettingCategory(property);
+            bool seen = false;
+            for (const String& known : categories)
+            {
+                seen = seen || known.AsView() == category;
+            }
+            if (!seen)
+            {
+                categories.PushBack(String(category));
+            }
+        }
+        REQUIRE(categories.Size() > 1u);
+        CHECK(tabs.TabCount() == categories.Size());
+        for (usize i = 0; i < categories.Size(); ++i)
+        {
+            CHECK(dialog->TabIndexOf(categories[i].AsView()) == static_cast<i32>(i));
+        }
+
+        // Each labelled setting's label is on its category's tab.
+        const auto labelsOn = [&tabs](i32 tab)
+        {
+            Array<ui::Label*> labels;
+            CollectViews(*tabs.GetChildAt(static_cast<usize>(tab)), labels);
+            return labels;
+        };
+        const auto hasLabel = [&labelsOn](i32 tab, StringView text)
+        {
+            for (ui::Label* label : labelsOn(tab))
+            {
+                if (label->Text.Value() == text)
+                {
+                    return true;
+                }
+            }
+            return false;
+        };
+        for (const PropertyInfo& property : Properties(engine::project::ProjectSettings::StaticType()))
+        {
+            const String* label =
+                engine::project::SettingAttribute(property, engine::project::kSettingLabelAttribute);
+            if (label != nullptr)
+            {
+                CHECK(hasLabel(dialog->TabIndexOf(engine::project::SettingCategory(property)),
+                               label->AsView()));
+            }
+        }
+        CHECK(hasLabel(0, u8"Engine version"));
+        CHECK(hasLabel(dialog->TabIndexOf(u8"Display"), u8"MSAA"));
+        CHECK_FALSE(hasLabel(0, u8"MSAA"));
+    }
+    context.SetProject(nullptr);
+    project.Reset();
+    (void)RemoveDirectoryRecursive(dir);
+}

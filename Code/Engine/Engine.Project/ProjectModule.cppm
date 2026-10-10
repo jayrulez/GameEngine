@@ -65,8 +65,11 @@ export namespace engine::project
     // ProjectSettings reflects the settings the Project Settings dialog edits (and the MCP
     // project_settings_set sets), each with a `label`; an asset setting is a Guid property whose
     // `assetType` attribute names the asset type it takes (the picker's filter) and whose
-    // `emptyText` says what unset means. The engine stamp and the path mirrors are not settings.
+    // `emptyText` says what unset means. A setting's `category` names the group it shows in (the
+    // dialog's tab; none is "General"). The engine stamp and the path mirrors are not settings.
     inline constexpr const char* kSettingLabelAttribute = "label";
+    inline constexpr const char* kSettingCategoryAttribute = "category";
+    inline constexpr StringView kSettingDefaultCategory = u8"General";
     inline constexpr const char* kSettingAssetTypeAttribute = "assetType";
     inline constexpr const char* kSettingEmptyTextAttribute = "emptyText";
 
@@ -179,6 +182,13 @@ export namespace engine::project
         const Attribute* found =
             FindAttribute(property, StringView(reinterpret_cast<const utf8char*>(key)));
         return found != nullptr ? found->value.TryGet<String>() : nullptr;
+    }
+
+    /// The group a setting shows in: its `category`, or "General" when it names none.
+    [[nodiscard]] inline StringView SettingCategory(const PropertyInfo& property) noexcept
+    {
+        const String* category = SettingAttribute(property, kSettingCategoryAttribute);
+        return category != nullptr ? category->AsView() : kSettingDefaultCategory;
     }
 
     /// An asset setting: a Guid property naming one asset of its `assetType`.

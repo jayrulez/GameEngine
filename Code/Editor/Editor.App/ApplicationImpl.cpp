@@ -759,19 +759,6 @@ namespace editor::app
         {
             m_mcpHost->Pump(); // answers a waiting agent call HERE: tools touch main-thread state
         }
-        // I4 instrumentation: periodic resident-product report while a project is open -
-        // the 5-GB-with-no-pages repro accumulates over ~30s of background work AFTER open,
-        // so a single post-open snapshot misses it. 15s cadence, INFO; remove or demote
-        // once the eviction work lands.
-        if (m_project)
-        {
-            m_resourceReportTimer += dt;
-            if (m_resourceReportTimer >= 15.0f)
-            {
-                m_resourceReportTimer = 0.0f;
-                ReportResourceMemory();
-            }
-        }
         // DPI drift: the window moved to a monitor with a different content scale (or the
         // OS scale changed) - re-bake the icon set at the new device sizes so icons stay
         // 1:1-texel crisp instead of bilinear-scaled from the old bake.

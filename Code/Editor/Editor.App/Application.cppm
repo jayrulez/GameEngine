@@ -387,7 +387,6 @@ export namespace editor::app
         // I4 instrumentation: log the ResourceManager's live-product report (counts by type;
         // unreferenced = cache-only purge candidates). Project > Report Resource Memory.
         void ReportResourceMemory();
-        f32 m_resourceReportTimer = 0.0f; // periodic I4 report cadence
 
         // The editor's root: everything the editor allocates (UI tree, pages, panels,
         // services) rolls up under the Editor memory tag. Declared FIRST in this block

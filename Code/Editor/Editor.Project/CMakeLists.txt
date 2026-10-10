@@ -43,6 +43,7 @@ target_sources(Editor.Project
             JobService.cppm
             ExportPreset.cppm
             ExportRoots.cppm
+            TemplateIcons.cppm
             ExportTemplate.cppm
             ExportController.cppm
             CookService.cppm

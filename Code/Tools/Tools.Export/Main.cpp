@@ -12,7 +12,7 @@
 //   Tools.Export --template list
 //   Tools.Export --template import <templateDir>
 //   Tools.Export --template create <configDir> [--install | --out <folder>] [--id <id>] [--name <name>]
-//                                  [--notes <text>]
+//                                  [--notes <text>] [--icon <built-in name | file.svg>]
 //
 // No export_presets.xml in the project => a host preset for the current platform is synthesized, so a
 // quick dev export works out of the box (the host template = the player next to this tool).
@@ -137,7 +137,8 @@ namespace
             "  Tools.Export --template list\n"
             "  Tools.Export --template import <templateDir>\n"
             "  Tools.Export --template create <configDir> [--install | --out <folder>]\n"
-            "                                 [--id <id>] [--name <name>] [--notes <text>]\n");
+            "                                 [--id <id>] [--name <name>] [--notes <text>]\n"
+            "                                 [--icon <desktop|windows|linux|handheld|web|phone | file.svg>]\n");
         return 1;
     }
 
@@ -178,7 +179,8 @@ namespace
     // --template create <configDir> [--install | --out <folder>] [--id] [--name] [--notes]. Default:
     // install into the templates root (usable immediately). --out <folder> writes a self-contained
     // bundle to that folder to zip. --id/--name/--notes replace the canonical identity, so a second
-    // bundle for one platform (the Steam Deck build) sits beside the first.
+    // bundle for one platform (the Steam Deck build) sits beside the first; --icon names the icon the
+    // template carries (a built-in one, `handheld` for the Deck, or an .svg), else its platform's.
     int TemplateCreate(int argc, char** argv)
     {
         // argv[3] = configDir; optional argv[4..] = --install | --out <folder>.
@@ -212,6 +214,17 @@ namespace
             else if (std::strcmp(argv[i], "--notes") == 0 && i + 1 < argc)
             {
                 identity.notes = Sv(argv[++i]);
+            }
+            else if (std::strcmp(argv[i], "--icon") == 0 && i + 1 < argc)
+            {
+                identity.icon = Sv(argv[++i]);
+                if (!identity.icon.EndsWith(u8".svg") && editor::BuiltInTemplateIconSvg(identity.icon).IsEmpty())
+                {
+                    std::fprintf(stderr, "unknown icon: %s (desktop, windows, linux, handheld, web, phone, "
+                                         "or an .svg file)\n",
+                                 argv[i]);
+                    return Usage();
+                }
             }
             else
             {

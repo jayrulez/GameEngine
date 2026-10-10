@@ -92,5 +92,6 @@ if [[ "${TEMPLATE:-1}" != "0" ]]; then
     "$BIN/Tools.Export" --template create "$BIN" --install \
         --id "$PREFIX-steamdeck-release-$VERSION" \
         --name "Steam Deck Release $VERSION" \
+        --icon handheld \
         --notes "Linux64 Release built for glibc 2.35 (Ubuntu 22.04), libstdc++ and SDL3 linked in."
 fi

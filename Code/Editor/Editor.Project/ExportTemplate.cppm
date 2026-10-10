@@ -28,6 +28,7 @@ import foundation.vfs;
 import foundation.xml.serialization;
 import engine.project;
 import :export_preset; // ExportPreset, ExportPresetSet
+import :template_icons; // the icon a created template carries
 
 using namespace foundation::core;
 
@@ -56,6 +57,10 @@ export namespace editor
         Array<String>
             symbols; // optional symbol files (PDB/DWARF); staged only when the preset opts in
         String notes;
+        // The template's icon, an SVG file in its bundle (kTemplateIconFile when made by
+        // CreateTemplate), which the editor shows it by. Empty in a manifest from before it: the
+        // editor shows its platform's built-in icon.
+        String icon;
 
         String directory;    // NOT serialized: absolute dir the bundle lives in (host: the Bin dir)
         bool isHost = false; // NOT serialized: synthesized host template vs imported from disk
@@ -349,6 +354,9 @@ export namespace editor
         StringView id;
         StringView name;
         StringView notes;
+        // A built-in icon's name (kBuiltInTemplateIcons: `handheld` for the Steam Deck build) or the
+        // path of an .svg to carry; empty gives the platform's built-in icon.
+        StringView icon;
     };
 
     // Synthesize + materialize a template from a "Bin/<Config>/<Platform>-<Compiler>" build dir.
@@ -475,6 +483,35 @@ export namespace editor
 
         tmpl.directory = bundleDir;
         vfs::NativeFileSystem bundleFs(bundleDir.AsView(), foundation::core::DefaultAllocator());
+
+        // The icon the template carries: an .svg given by path is copied in; otherwise the built-in
+        // one named, or the platform's. An unknown name or a missing file refuses the template
+        // rather than shipping it without the icon its maker asked for.
+        if (identity.icon.EndsWith(u8".svg"))
+        {
+            if (!FileCopyPreserving(identity.icon,
+                                    PathJoin(bundleDir.AsView(), kTemplateIconFile).AsView()))
+            {
+                return Status{ErrorCode::NotFound};
+            }
+        }
+        else
+        {
+            const StringView svg = BuiltInTemplateIconSvg(
+                identity.icon.IsEmpty() ? DefaultTemplateIconName(tmpl.platform.AsView()) : identity.icon);
+            if (svg.IsEmpty())
+            {
+                return Status{ErrorCode::InvalidArgument};
+            }
+            if (Status s = bundleFs.AsWritable()->Save(
+                    kTemplateIconFile, Span<const byte>(reinterpret_cast<const byte*>(svg.Data()), svg.Size()));
+                !s.IsOk())
+            {
+                return s;
+            }
+        }
+        tmpl.icon = String(kTemplateIconFile);
+
         if (Status s = SaveTemplateManifest(*bundleFs.AsWritable(), tmpl); !s.IsOk())
         {
             return s;
@@ -489,6 +526,21 @@ export namespace editor
             *outDir = bundleDir;
         }
         return Status{};
+    }
+
+    // The SVG a template is shown by: the icon file in its bundle, or (the host template, a bundle
+    // from before icons, an unreadable file) the built-in icon of its platform.
+    [[nodiscard]] inline String TemplateIconSvg(const ExportTemplate& tmpl, IAllocator& allocator)
+    {
+        if (!tmpl.icon.IsEmpty())
+        {
+            String svg = ReadTemplateFile(tmpl.directory.AsView(), tmpl.icon.AsView(), allocator);
+            if (!svg.IsEmpty())
+            {
+                return svg;
+            }
+        }
+        return String(BuiltInTemplateIconSvg(DefaultTemplateIconName(tmpl.platform.AsView())), allocator);
     }
 
     // The installed export templates (imported bundles under a templates root) plus the synthesized

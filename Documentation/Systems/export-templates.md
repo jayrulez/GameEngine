@@ -48,7 +48,9 @@ Release) so old presets resolve. `EffectiveConfig()` treats an unstamped (v1) te
 `template.xml` (shipped): `id`, `name`, `platform`, `config`, `compiler`, `engineVersion`,
 `playerBinary`, categorized runtime files - `sidecars` (REQUIRED, always staged, read from the build's
 `runtime-libs` manifest) + `symbols` (optional PDB/DWARF, staged only when the preset opts in) - and
-`notes` (plus runtime-resolved, non-serialized `directory` / `isHost`). Symbols do not justify a
+`notes`, and `icon`, the SVG in the bundle the editor shows the template by (`icon.svg`; a manifest
+from before it shows its platform's built-in icon), plus runtime-resolved, non-serialized `directory` /
+`isHost`. Symbols do not justify a
 separate template; they are an optional group on Debug/RelWithDebInfo templates, and export defaults to
 NOT staging them into the shipped dist (ship stripped, retain symbols beside the template for
 symbolication). If the player runtime-compiles shaders, its compiler (e.g. `dxcompiler`) is just another
@@ -58,7 +60,9 @@ required runtime-lib.
 
 - **Create** - `CreateTemplate(configDir, destRoot, mode)` synthesizes the descriptor from a build dir
   (`SynthesizeHostTemplate` reads platform + `runtime-libs`), stamps config/compiler/engineVersion,
-  copies the player + sidecars (`FileCopyPreserving`, keeps +x), writes `template.xml`. Two modes:
+  copies the player + sidecars (`FileCopyPreserving`, keeps +x), writes the icon (`icon.svg`: a
+  built-in one by name, `--icon handheld` for the Steam Deck build, or a given `.svg`; else the
+  platform's built-in desktop, windows, linux or web icon) and `template.xml`. Two modes:
   install into the templates root (usable immediately) or export to a folder (for zip + distribution).
   A Web build synthesizes a "Web" template (the player is the `.html`, sidecars from the manifest, and
   export stages page + sidecars + `Content.pak` + `player.xml` + the WGSL `Data/Shaders/shaders.dpak`

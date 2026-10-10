@@ -16,6 +16,7 @@ export import :log_buffer;
 export import :job_service;
 export import :export_preset;
 export import :export_roots;
+export import :template_icons;
 export import :export_template;
 export import :export_controller;
 export import :export_pipeline;

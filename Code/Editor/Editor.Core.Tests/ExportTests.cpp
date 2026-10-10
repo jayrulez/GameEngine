@@ -1015,7 +1015,7 @@ TEST_CASE("export: CreateTemplate packages a Bin/<Config> dir and the registry t
     REQUIRE(editor::CreateTemplate(binDir.AsView(), root.AsView(), editor::TemplateOutput::Install, &deckId,
                                    &deckDir,
                                    editor::TemplateIdentity{u8"steamdeck-release", u8"Steam Deck",
-                                                            u8"glibc 2.35"})
+                                                            u8"glibc 2.35", u8"handheld"})
                 .IsOk());
     CHECK(deckId == StringView(u8"steamdeck-release"));
     reg.Refresh(root.AsView(), &rootFs, base.AsView(), &toolFs);
@@ -2321,3 +2321,83 @@ TEST_CASE("export: Add Native Code scaffolds the reference shape and wires the m
     NukeTree(dir);
 }
 
+
+// A template carries its own icon (icon.svg, named by its manifest), which the editor shows it by:
+// its platform's built-in one unless its maker names another (the Deck build's `handheld`) or gives
+// an .svg; an unknown name refuses the template. The host template, and a manifest from before
+// icons, show the platform's built-in icon.
+TEST_CASE("export: a created template carries its icon, the platform's unless one is named")
+{
+    const String base = TempDir(u8"scratch_createtmpl_icon");
+    const String outFolder = TempDir(u8"scratch_createtmpl_icon_bundle");
+    NukeTree(base.AsView());
+    NukeTree(outFolder.AsView());
+
+    String leaf(GetHostPlatformName());
+    leaf += u8"-GCC";
+    const String binDir = PathJoin(
+        PathJoin(PathJoin(base.AsView(), u8"Bin").AsView(), u8"Release").AsView(), leaf.AsView());
+    REQUIRE(CreateDirectories(binDir.AsView()));
+    foundation::vfs::NativeFileSystem binFs(binDir.AsView(), foundation::core::DefaultAllocator());
+    SaveText(binFs, GetExecutableName(u8"Engine.Player").AsView(), u8"#!player\n");
+
+    const auto create = [&](editor::TemplateIdentity identity)
+    {
+        return editor::CreateTemplate(binDir.AsView(), outFolder.AsView(),
+                                      editor::TemplateOutput::ExportFolder, nullptr, nullptr, identity);
+    };
+    // The icon the bundle's manifest names, as the editor reads it.
+    const auto bundledIcon = [&outFolder]()
+    {
+        foundation::vfs::NativeFileSystem bundleFs(outFolder.AsView(), foundation::core::DefaultAllocator());
+        editor::ExportTemplate manifest;
+        REQUIRE(editor::LoadTemplateManifest(bundleFs, manifest).IsOk());
+        CHECK(manifest.icon == editor::kTemplateIconFile);
+        manifest.directory = outFolder;
+        return editor::TemplateIconSvg(manifest, foundation::core::DefaultAllocator());
+    };
+
+    // No icon named: the platform's built-in one, in the bundle and named by the manifest.
+    REQUIRE(create({}).IsOk());
+    const StringView platformIcon =
+        editor::BuiltInTemplateIconSvg(editor::DefaultTemplateIconName(GetHostPlatformName()));
+    REQUIRE_FALSE(platformIcon.IsEmpty());
+    CHECK(bundledIcon() == platformIcon);
+
+    // A built-in one by name: the Deck build's handheld.
+    editor::TemplateIdentity handheld;
+    handheld.icon = u8"handheld";
+    REQUIRE(create(handheld).IsOk());
+    CHECK(bundledIcon() == editor::BuiltInTemplateIconSvg(u8"handheld"));
+
+    // An .svg of the maker's own, copied in.
+    const StringView own = u8"<svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"9\"/></svg>";
+    SaveText(binFs, u8"own.svg", own);
+    editor::TemplateIdentity custom;
+    const String ownPath = PathJoin(binDir.AsView(), u8"own.svg");
+    custom.icon = ownPath.AsView();
+    REQUIRE(create(custom).IsOk());
+    CHECK(bundledIcon() == own);
+
+    // An unknown name, or an .svg that is not there, refuses the template.
+    editor::TemplateIdentity unknown;
+    unknown.icon = u8"toaster";
+    CHECK_FALSE(create(unknown).IsOk());
+    editor::TemplateIdentity missing;
+    missing.icon = u8"/nowhere/at/all.svg";
+    CHECK_FALSE(create(missing).IsOk());
+
+    // The host template (no bundle icon) and an unreadable icon show the platform's built-in one.
+    editor::ExportTemplate host;
+    host.platform = String(u8"Web");
+    host.isHost = true;
+    CHECK(editor::TemplateIconSvg(host, foundation::core::DefaultAllocator()) ==
+          editor::BuiltInTemplateIconSvg(u8"web"));
+    host.icon = String(u8"gone.svg");
+    host.directory = outFolder;
+    CHECK(editor::TemplateIconSvg(host, foundation::core::DefaultAllocator()) ==
+          editor::BuiltInTemplateIconSvg(u8"web"));
+
+    NukeTree(base.AsView());
+    NukeTree(outFolder.AsView());
+}

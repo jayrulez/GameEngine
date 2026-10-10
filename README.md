@@ -98,9 +98,9 @@ ctest --preset clang                  # the unit and integration tests
 |---|---|
 | `clang` / `gcc` / `msvc` | Debug, the development configuration |
 | `clang-shared` / `msvc-shared` | Debug with shared libraries |
-| `clang-reldbg` | RelWithDebInfo, for performance work |
-| `clang-release` / `gcc-release` | Release |
-| `clang-shipping` / `gcc-shipping` | Shipping (no asserts, stripped) |
+| `clang-reldbg` / `msvc-reldbg` | RelWithDebInfo, for performance work and the editor download |
+| `clang-release` / `gcc-release` / `msvc-release` | Release |
+| `clang-shipping` / `gcc-shipping` / `msvc-shipping` | Shipping (no asserts, stripped) |
 | `wasm` / `wasm-shipping` | Emscripten wasm32 |
 
 Running the editor:

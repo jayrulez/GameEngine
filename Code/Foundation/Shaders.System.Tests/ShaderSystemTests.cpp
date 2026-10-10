@@ -321,6 +321,18 @@ TEST_CASE("shader system host: dev-first policy - a pack in the data root does n
         CHECK(host.GetVariant(u8"hosted", ShaderStage::Vertex, ShaderFlags::None) != nullptr);
     }
     {
+        // A distribution marks itself (Shaders/.pack-first): Automatic then starts from the pack
+        // although the sources and DXC are there; the sources stay for whoever cooks from them.
+        {
+            std::ofstream marker(root / "Shaders" / ".pack-first", std::ios::binary);
+        }
+        ShaderSystemHost host{DefaultAllocator()};
+        REQUIRE(host.Initialize(device, dataFs));
+        CHECK(host.UsingPack());
+        CHECK(host.PackVariantCount() == 1u);
+        std::filesystem::remove(root / "Shaders" / ".pack-first");
+    }
+    {
         // Explicit opt-in: ForcePack loads Shaders/shaders.dpak from the data root - and ONLY
         // from there (no executable-dir or cwd probing), so it is exactly our one-variant pack.
         ShaderSystemHost host{DefaultAllocator()};

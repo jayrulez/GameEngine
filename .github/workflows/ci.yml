@@ -311,7 +311,7 @@ jobs:
   
   # Debug builds are intentionally kept for build/test coverage, but their build
   # directories are not uploaded because they are very large (1.4-2.2 GB).
-  # Instead, CI produces the packaged Release editor + deployment templates using
+  # Instead, CI produces the packaged editor + deployment templates (RelWithDebInfo, symbols split off) using
   # the same distribution scripts as release.yml, so PRs have small downloadable builds for testing.
   linux-release:
     name: Linux / Release distribution
@@ -375,6 +375,10 @@ jobs:
             "dist/DeploymentTemplate-${VERSION}-Linux64.tar.gz" \
             -C dist/templates \
             linux64-release
+          tar -czf \
+            "dist/DeploymentTemplate-${VERSION}-Linux64-symbols.tar.gz" \
+            -C dist/templates \
+            linux64-release-symbols
 
       - name: Upload Linux release build
         uses: actions/upload-artifact@v7
@@ -382,7 +386,9 @@ jobs:
           name: linux-release
           path: |
             dist/Editor-*-Linux64.tar.gz
+            dist/Editor-*-Linux64-symbols.tar.gz
             dist/DeploymentTemplate-*-Linux64.tar.gz
+            dist/DeploymentTemplate-*-Linux64-symbols.tar.gz
           if-no-files-found: error
           retention-days: 1
     
@@ -422,12 +428,18 @@ jobs:
             -Path dist/templates/win64-release `
             -DestinationPath "dist/DeploymentTemplate-$Version-Win64.zip"
 
+          Compress-Archive `
+            -Path dist/templates/win64-release-symbols `
+            -DestinationPath "dist/DeploymentTemplate-$Version-Win64-symbols.zip"
+
       - name: Upload Windows release build
         uses: actions/upload-artifact@v7
         with:
           name: windows-release
           path: |
             dist/Editor-*-Win64.zip
+            dist/Editor-*-Win64-symbols.zip
             dist/DeploymentTemplate-*-Win64.zip
+            dist/DeploymentTemplate-*-Win64-symbols.zip
           if-no-files-found: error
           retention-days: 1

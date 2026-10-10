@@ -15,8 +15,11 @@
 ///     accident).
 ///   - PACK mode: the cooked `Shaders/shaders.dpak` => no compiler, prebuilt blobs in the
 ///     device's backend format (WGSL in a browser). The dist / web path, entered when dev mode
-///     is unavailable - or explicitly, via ShaderPackPolicy::ForcePack or the
-///     OPTION_USE_SHADER_PACK environment variable (pack-on-desktop testing).
+///     is unavailable - or explicitly, via ShaderPackPolicy::ForcePack, the
+///     OPTION_USE_SHADER_PACK environment variable (pack-on-desktop testing), or a
+///     `Shaders/.pack-first` marker in the data root: an editor distribution ships the sources (to
+///     cook an export's pack, and later to fork them) beside its cooked pack, and starts from the
+///     pack; the dev tree never has the marker, so its hot reload stays.
 ///
 /// This is the single implementation of "how do I get a ShaderSystem for this device".
 
@@ -53,6 +56,8 @@ export namespace foundation::shaders
     inline constexpr StringView kShaderFolder = u8"Shaders";
     inline constexpr StringView kShaderPackFile = u8"shaders.dpak";
     inline constexpr StringView kShaderPackPath = u8"Shaders/shaders.dpak";
+    // A data root that ships sources AND a pack and wants the pack (an editor distribution).
+    inline constexpr StringView kShaderPackFirstMarker = u8"Shaders/.pack-first";
 
     class ShaderSystemHost
     {
@@ -99,9 +104,10 @@ export namespace foundation::shaders
             {
                 wantPack = false;
             }
-            else if (devPossible && GetEnvironmentVariable(u8"OPTION_USE_SHADER_PACK").HasValue())
+            else if (devPossible && (GetEnvironmentVariable(u8"OPTION_USE_SHADER_PACK").HasValue() ||
+                                     dataFileSystem.Exists(kShaderPackFirstMarker)))
             {
-                wantPack = true;
+                wantPack = true; // asked for: testing, or a distribution that marks itself
             }
 
             const bool havePack = wantPack && LoadPack();

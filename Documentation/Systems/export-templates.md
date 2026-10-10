@@ -23,6 +23,14 @@ three configs is wasted disk when most projects ship Release only). Product stan
 first-class so "release template" and "debug template" are both expressible, but the product defaults to
 and optimizes for RELEASE - Debug/RelWithDebInfo are opt-in dev/power-user variants.
 
+The PUBLISHED desktop templates (the release downloads for Linux and Windows) are the exception since
+2026-10-10: they are RelWithDebInfo, built from the same tree as the editor download, so a release
+builds the engine once and a crash in a game shipped on them can be resolved. The player is optimised
+all the same; its debug info is split off before packaging (the Linux template's player is stripped,
+the Windows PDB never enters the template) into a `-symbols` archive published beside the template.
+Their ids say so (`gameengine-linux64-relwithdebinfo-<version>`), and a preset asking for Release
+finds them by the platform fallback below.
+
 The host implicit template inherits the running tool's config (develop the editor in Debug -> the
 zero-setup host template is a Debug player), so shipping requires an explicit Release template; the
 config axis makes this a non-special-case (the host template carries whatever config built it).

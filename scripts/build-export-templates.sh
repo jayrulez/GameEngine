@@ -14,6 +14,13 @@
 #   Tools.Export --template create <Bin/<Config>/<Platform>-<Compiler>>
 # which reads the build's runtime-libs manifest, copies the player + sidecars, writes template.xml.
 #
+# The Linux template is built RelWithDebInfo (the clang-reldbg preset, the tree the editor
+# distribution builds too, so a release builds the engine once): the player is optimised, and its
+# debug info is split off before packaging - the template's player is stripped (an export copies it
+# as it is, so every game would carry it otherwise) and Engine.Player.debug goes to
+# <OUT>/linux64-release-symbols, to keep with the build. The template's config, and so its id, is
+# RelWithDebInfo (gameengine-linux64-relwithdebinfo-<version>).
+#
 # Windows is NOT built here (no toolchain on Linux) - use scripts/build-export-templates.ps1 on a
 # Windows agent for the Win64 template.
 #
@@ -31,9 +38,9 @@ JOBS="${JOBS:-4}"
 OUT="${OUT:-}"
 WHICH="${1:-all}"
 
-# Release is the product default for templates (ships stripped Release).
-LINUX_BUILD="build/clang-release"
-LINUX_BIN="Bin/Release/Linux64-Clang"
+LINUX_PRESET="clang-reldbg"            # RelWithDebInfo, shared with build-editor-dist.sh
+LINUX_BUILD="build/$LINUX_PRESET"
+LINUX_BIN="Bin/RelWithDebInfo/Linux64-Clang"
 WEB_BUILD="build/wasm-shipping"        # the wasm-shipping preset: emscripten, Release, shipping
 WEB_BIN="Bin/Release/Emscripten-Clang-Shipping" # the preset's output suffix (-Shipping)
 
@@ -64,16 +71,36 @@ create_template() { # <config-dir> <out-subdir-tag>
 build_linux() {
     log "Linux (Release) template"
     if [[ ! -f "$LINUX_BUILD/CMakeCache.txt" ]]; then
-        echo ">> configuring $LINUX_BUILD (Release)"
-        # Pin clang explicitly - see build-editor-dist.sh (the Bin/ dir is compiler-derived).
+        echo ">> configuring $LINUX_BUILD (the $LINUX_PRESET preset)"
+        # The preset pins clang (the Bin/ dir is compiler-derived); CXX_COMPILER overrides it
+        # for a versioned clang - see build-editor-dist.sh.
         CXX_BIN="${CXX_COMPILER:-clang++}"
         C_BIN="${C_COMPILER:-clang}"
-        cmake -S . -B "$LINUX_BUILD" -G Ninja -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER="$C_BIN" -DCMAKE_CXX_COMPILER="$CXX_BIN" \
+        cmake --preset "$LINUX_PRESET" -DCMAKE_C_COMPILER="$C_BIN" -DCMAKE_CXX_COMPILER="$CXX_BIN" \
             -DCMAKE_ASM_COMPILER="$CXX_BIN"
     fi
     cmake --build "$LINUX_BUILD" --target Engine.Player Tools.Export -j"$JOBS"
-    create_template "$LINUX_BIN" "linux64-release"
+
+    # Package a stripped copy: the player and its sidecars in a staging folder shaped like the Bin
+    # one (the template reads its config and compiler from the path), the debug info split off.
+    local stage="build/tmp/template-stage/$LINUX_BIN"
+    local symbols="${OUT:-build/tmp/template-stage}/linux64-release-symbols"
+    rm -rf "build/tmp/template-stage" "$symbols"
+    mkdir -p "$stage" "$symbols"
+    cp "$LINUX_BIN/Engine.Player" "$stage/"
+    if [[ -f "$LINUX_BIN/Engine.Player.runtime-libs" ]]; then
+        cp "$LINUX_BIN/Engine.Player.runtime-libs" "$stage/"
+        while IFS= read -r lib; do
+            if [[ -n "$lib" && -f "$LINUX_BIN/$lib" ]]; then
+                cp "$LINUX_BIN/$lib" "$stage/"
+            fi
+        done < "$LINUX_BIN/Engine.Player.runtime-libs"
+    fi
+    objcopy --only-keep-debug "$stage/Engine.Player" "$symbols/Engine.Player.debug"
+    strip --strip-debug "$stage/Engine.Player"
+    objcopy --add-gnu-debuglink="$symbols/Engine.Player.debug" "$stage/Engine.Player"
+    create_template "$stage" "linux64-release"
+    echo "player symbols: $symbols/Engine.Player.debug (keep it with the build)"
 }
 
 build_web() {

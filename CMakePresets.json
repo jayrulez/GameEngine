@@ -115,6 +115,41 @@
       }
     },
     {
+      "name": "msvc-release",
+      "displayName": "MSVC (Ninja, Release)",
+      "description": "Requires a Developer Command Prompt (vcvars64) so cl.exe and the Windows SDK are on PATH; Ninja is used for C++20 module support.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/msvc-release",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "cl",
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "msvc-reldbg",
+      "displayName": "MSVC (Ninja, RelWithDebInfo)",
+      "description": "Requires a Developer Command Prompt (vcvars64) so cl.exe and the Windows SDK are on PATH; Ninja is used for C++20 module support.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/msvc-reldbg",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "cl",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "msvc-shipping",
+      "displayName": "MSVC (Ninja, Shipping: no asserts, stripped)",
+      "description": "Requires a Developer Command Prompt (vcvars64) so cl.exe and the Windows SDK are on PATH; Ninja is used for C++20 module support.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/msvc-shipping",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "cl",
+        "CMAKE_BUILD_TYPE": "Release",
+        "OPTION_SHIPPING_BUILD": "ON",
+        "BUILDSYSTEM_OUTPUT_SUFFIX": "-Shipping"
+      }
+    },
+    {
       "name": "wasm",
       "displayName": "Emscripten wasm32 (Ninja, Debug)",
       "generator": "Ninja",
@@ -181,6 +216,18 @@
       "configurePreset": "msvc-shared"
     },
     {
+      "name": "msvc-release",
+      "configurePreset": "msvc-release"
+    },
+    {
+      "name": "msvc-reldbg",
+      "configurePreset": "msvc-reldbg"
+    },
+    {
+      "name": "msvc-shipping",
+      "configurePreset": "msvc-shipping"
+    },
+    {
       "name": "wasm",
       "configurePreset": "wasm"
     },
@@ -228,6 +275,13 @@
     {
       "name": "msvc-shared",
       "configurePreset": "msvc-shared",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "msvc-reldbg",
+      "configurePreset": "msvc-reldbg",
       "output": {
         "outputOnFailure": true
       }

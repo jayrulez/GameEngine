@@ -93,22 +93,27 @@ jobs:
       - name: Build editor distribution
         run: CXX_COMPILER=clang++-21 C_COMPILER=clang-21 OUT=dist/Editor-Linux64 scripts/build-editor-dist.sh
       # The DEPLOYMENT TEMPLATE (game runtime: Engine.Player + sidecars + template.xml) - a SEPARATE
-      # downloadable package a developer exports their game against. Reuses build/clang-release from
-      # the editor build above (adds Engine.Player + Tools.Export). The Web template is a separate
-      # job below (needs emsdk).
+      # downloadable package a developer exports their game against. Reuses build/clang-reldbg from
+      # the editor build above (adds Engine.Player + Tools.Export): both are RelWithDebInfo, so the
+      # engine builds once. The Web template is a separate job below (needs emsdk).
       - name: Build deployment template (Linux runtime)
         run: |
           VERSION="$(grep -oP '^\s*VERSION\s+\K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | head -1)"
           CXX_COMPILER=clang++-21 C_COMPILER=clang-21 OUT=dist/templates scripts/build-export-templates.sh linux
           tar -czf "dist/DeploymentTemplate-${VERSION}-Linux64.tar.gz" -C dist/templates linux64-release
+          tar -czf "dist/DeploymentTemplate-${VERSION}-Linux64-symbols.tar.gz" -C dist/templates linux64-release-symbols
       - name: Publish to the GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           # Version-stamped names from build-editor-dist.sh + the template step (e.g.
           # Editor-0.1.0-Linux64.tar.gz); glob so the workflow tracks the version automatically.
+          # The -symbols archives are the split debug info of the two downloads: a crash report
+          # from either resolves against them.
           files: |
             dist/Editor-*-Linux64.tar.gz
+            dist/Editor-*-Linux64-symbols.tar.gz
             dist/DeploymentTemplate-*-Linux64.tar.gz
+            dist/DeploymentTemplate-*-Linux64-symbols.tar.gz
           fail_on_unmatched_files: true
 
   # The MSVC modules build is exercised by ci.yml on every push; the dist/template .ps1 packaging
@@ -135,8 +140,8 @@ jobs:
         run: pwsh scripts/build-editor-dist.ps1 -Out dist/Editor-Win64
       # The DEPLOYMENT TEMPLATE (Windows game runtime: Engine.Player.exe + sidecars + template.xml) -
       # a SEPARATE downloadable package a developer exports a Windows game against, mirroring the
-      # Linux/Web template jobs. Reuses build/msvc-release from the editor build above (it adds
-      # Engine.Player + Tools.Export).
+      # Linux/Web template jobs. Reuses build/msvc-reldbg from the editor build above (it adds
+      # Engine.Player + Tools.Export): both are RelWithDebInfo, so the engine builds once.
       - name: Build deployment template (Windows runtime)
         shell: pwsh
         run: |
@@ -144,12 +149,15 @@ jobs:
           $Version = if ($cmake -match 'project\(\s*GameEngine\s+VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)') { $Matches[1] } else { "0.0.0" }
           pwsh scripts/build-export-templates.ps1 -Out dist/templates
           Compress-Archive -Path dist/templates/win64-release -DestinationPath "dist/DeploymentTemplate-$Version-Win64.zip"
+          Compress-Archive -Path dist/templates/win64-release-symbols -DestinationPath "dist/DeploymentTemplate-$Version-Win64-symbols.zip"
       - name: Publish to the GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/Editor-*-Win64.zip
+            dist/Editor-*-Win64-symbols.zip
             dist/DeploymentTemplate-*-Win64.zip
+            dist/DeploymentTemplate-*-Win64-symbols.zip
           fail_on_unmatched_files: true
 
   # Web deployment template (Emscripten/WebGPU game runtime: Engine.Player .js/.wasm + serve.py).

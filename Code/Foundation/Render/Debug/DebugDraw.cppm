@@ -127,6 +127,25 @@ export namespace foundation::render::debug
         return Float3{x * iw, y * iw, z * iw};
     }
 
+    /// A grid drawn on a plane by a shader (the editor's ground grid): a square `extent` metres
+    /// across each way from `origin`, on the plane spanned by the unit axes `axisU` and `axisV`.
+    /// Lines fall at whole multiples of `spacing` along each axis in WORLD coordinates (so the
+    /// square can follow the camera without the lines swimming), every tenth one heavier;
+    /// `blend` (0..1) fades the finest lines out and the next decade's in as the camera climbs.
+    /// It fades out toward `fadeDistance` from `cameraPosition`, and is depth-tested against the
+    /// scene. The two lines through the world origin take their axis's colour.
+    struct GridPlaneDesc
+    {
+        Float3 origin{};
+        f32 extent = 100.0f;
+        Float3 axisU{1.0f, 0.0f, 0.0f};
+        f32 spacing = 1.0f;
+        Float3 axisV{0.0f, 0.0f, 1.0f};
+        f32 blend = 0.0f;
+        Float3 cameraPosition{};
+        f32 fadeDistance = 100.0f;
+    };
+
     class DebugDraw
     {
     public:
@@ -138,6 +157,11 @@ export namespace foundation::render::debug
         [[nodiscard]] const Array<Debug2DCommand>& Commands2D() const noexcept { return m_2d; }
         [[nodiscard]] const Array<Debug3DTextCommand>& TextCommands3D() const noexcept;
         [[nodiscard]] const Array<u8>& TextChars() const noexcept { return m_textChars; }
+        /// The shader grid this list asked for this frame, if any (one per list; the last wins).
+        [[nodiscard]] const GridPlaneDesc* GridPlane() const noexcept
+        {
+            return m_hasGrid ? &m_grid : nullptr;
+        }
 
         [[nodiscard]] bool HasAnyDraws() const noexcept;
 
@@ -184,6 +208,9 @@ export namespace foundation::render::debug
         void DrawArrow(Float3 start, Float3 end, Color color, f32 headSize = 0.1f,
                        bool overlay = false);
         void DrawGrid(Float3 center, f32 size, i32 divisions, Color color, bool overlay = false);
+        // A grid on a plane drawn by a shader: anti-aliased, fading, stepping with the camera
+        // (GridPlaneDesc). One per list per frame.
+        void DrawGridPlane(const GridPlaneDesc& grid);
         void DrawCylinder(Float3 center, f32 radius, f32 height, Color color, i32 segments = 16,
                           bool overlay = false);
         void DrawCone(Float3 apex, Float3 direction, f32 length, f32 angle, Color color,
@@ -212,6 +239,8 @@ export namespace foundation::render::debug
         Array<Debug2DCommand> m_2d;
         Array<Debug3DTextCommand> m_3dText;
         Array<u8> m_textChars;
+        GridPlaneDesc m_grid;
+        bool m_hasGrid = false;
     };
 
 } // namespace foundation::render::debug

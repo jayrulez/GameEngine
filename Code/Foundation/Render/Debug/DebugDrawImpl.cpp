@@ -36,7 +36,7 @@ namespace foundation::render::debug
     bool DebugDraw::HasAnyDraws() const noexcept
     {
         return !m_lines.IsEmpty() || !m_overlayLines.IsEmpty() || !m_tris.IsEmpty() ||
-               !m_overlayTris.IsEmpty() || !m_2d.IsEmpty() || !m_3dText.IsEmpty();
+               !m_overlayTris.IsEmpty() || !m_2d.IsEmpty() || !m_3dText.IsEmpty() || m_hasGrid;
     }
 
     void DebugDraw::Clear() noexcept
@@ -48,6 +48,13 @@ namespace foundation::render::debug
         m_2d.Clear();
         m_3dText.Clear();
         m_textChars.Clear();
+        m_hasGrid = false;
+    }
+
+    void DebugDraw::DrawGridPlane(const GridPlaneDesc& grid)
+    {
+        m_grid = grid;
+        m_hasGrid = true;
     }
 
     void DebugDraw::DrawLine(Float3 from, Float3 to, Color color, bool overlay)

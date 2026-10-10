@@ -49,6 +49,20 @@ namespace foundation::render
             return Status{ErrorCode::Unknown};
         }
 
+        // The shader grid: ViewProj + its parameters (debug_grid.*.hlsl, GridPush), read by both
+        // stages, at space0 like the geometry pass's.
+        rhi::PushConstantRange grc{};
+        grc.stages = rhi::ShaderStage::Vertex | rhi::ShaderStage::Fragment;
+        grc.offset = 0;
+        grc.size = sizeof(Float4x4) + 4 * sizeof(Float4);
+        grc.bindGroupIndex = 0;
+        rhi::PipelineLayoutDesc grld{};
+        grld.pushConstantRanges = Span<const rhi::PushConstantRange>{&grc, 1};
+        if (!m_device->CreatePipelineLayout(grld, m_gridLayout).IsOk())
+        {
+            return Status{ErrorCode::Unknown};
+        }
+
         // Screen pipeline: font atlas (t0) + sampler (s0) + InvSize push.
         rhi::BindGroupLayoutEntry se[] = {
             rhi::BindGroupLayoutEntry::SampledTexture(0, rhi::ShaderStage::Fragment),
@@ -115,15 +129,25 @@ namespace foundation::render
                     scene ? &scene->OverlayTriVertices() : nullptr,
                     view ? &view->OverlayTriVertices() : nullptr);
         const u32 total = static_cast<u32>(verts.Size());
-        if (total == 0)
+        // The shader grid: the view's own list wins (editor chrome), then the scene's, then global.
+        const debug::GridPlaneDesc* gridDesc = nullptr;
+        const debug::DebugDraw* lists[3] = {view, scene, global};
+        for (const debug::DebugDraw* list : lists)
+        {
+            if (gridDesc == nullptr && list != nullptr)
+            {
+                gridDesc = list->GridPlane();
+            }
+        }
+        if (total == 0 && gridDesc == nullptr)
         {
             return;
         }
 
         const u32 slot =
             (viewIndex % kMaxViews) * m_framesInFlight + (frameIndex % m_framesInFlight);
-        rhi::Buffer* vb = UploadGeom(slot, verts);
-        if (vb == nullptr)
+        rhi::Buffer* vb = total > 0 ? UploadGeom(slot, verts) : nullptr;
+        if (total > 0 && vb == nullptr)
         {
             return;
         }
@@ -132,13 +156,35 @@ namespace foundation::render
         {
             return;
         }
+        // The grid's push block (debug_grid.vs.hlsl GridPush): ViewProj, then four float4s.
+        struct GridPush
+        {
+            Float4x4 viewProj;
+            Float4 originExtent;
+            Float4 axisUSpacing;
+            Float4 axisVBlend;
+            Float4 cameraFade;
+        };
+        static_assert(sizeof(GridPush) == sizeof(Float4x4) + 4 * sizeof(Float4), "GridPush layout drift");
+        const bool drawGrid = gridDesc != nullptr && p->grid != nullptr;
+        GridPush gridPush{};
+        if (drawGrid)
+        {
+            const debug::GridPlaneDesc& g = *gridDesc;
+            gridPush = GridPush{viewProj,
+                                Float4{g.origin.x, g.origin.y, g.origin.z, g.extent},
+                                Float4{g.axisU.x, g.axisU.y, g.axisU.z, g.spacing},
+                                Float4{g.axisV.x, g.axisV.y, g.axisV.z, g.blend},
+                                Float4{g.cameraPosition.x, g.cameraPosition.y, g.cameraPosition.z,
+                                       g.fadeDistance}};
+        }
 
         const u32 dlN = ol0 - dl0, olN = dt0 - ol0, dtN = ot0 - dt0, otN = total - ot0;
         const Float4x4 vpMat = viewProj;
         graph.AddRenderPass(
             u8"debug.geom",
-            [color, depth, vb, p, vpX, vpY, vpW, vpH, vpMat, dlN, ol0, olN, dt0, dtN, ot0,
-             otN](rendergraph::PassBuilder& b)
+            [color, depth, vb, p, vpX, vpY, vpW, vpH, vpMat, dlN, ol0, olN, dt0, dtN, ot0, otN,
+             drawGrid, gridPush](rendergraph::PassBuilder& b)
             {
                 b.SetColorTarget(0, color, rhi::LoadOp::Load, rhi::StoreOp::Store,
                                  rhi::ClearColor::Black());
@@ -147,8 +193,22 @@ namespace foundation::render
                 b.SetViewport(vpX, vpY, vpW, vpH);
                 b.NeverCull();
                 b.SetExecute(
-                    [vb, p, vpMat, dlN, ol0, olN, dt0, dtN, ot0, otN](rhi::RenderPassEncoder& rp)
+                    [vb, p, vpMat, dlN, ol0, olN, dt0, dtN, ot0, otN, drawGrid,
+                     gridPush](rhi::RenderPassEncoder& rp)
                     {
+                        // The grid first, so lines and gizmos draw over it: six vertices, the
+                        // quad made in the vertex shader from the push block (no vertex buffer).
+                        if (drawGrid)
+                        {
+                            rp.SetPipeline(p->grid);
+                            rp.SetPushConstants(rhi::ShaderStage::Vertex | rhi::ShaderStage::Fragment, 0,
+                                                sizeof(gridPush), &gridPush);
+                            rp.Draw(6, 1, 0, 0);
+                        }
+                        if (vb == nullptr)
+                        {
+                            return;
+                        }
                         // SetPipeline before SetPushConstants (push needs a bound layout); all 4 pipelines
                         // share the geom layout so re-pushing the ViewProj per stream is fine.
                         rp.SetVertexBuffer(0, vb, 0);
@@ -423,7 +483,8 @@ namespace foundation::render
     DebugDrawPass::Pipelines* DebugDrawPass::EnsurePipelines(rhi::TextureFormat colorFmt,
                                                              rhi::TextureFormat depthFmt)
     {
-        const u64 shaderVersion = m_shaders->Version(u8"debug_geom"); // hot reload rebuilds
+        // Hot reload rebuilds: either shader's change does.
+        const u64 shaderVersion = m_shaders->Version(u8"debug_geom") + m_shaders->Version(u8"debug_grid");
         Pipelines* entry = nullptr;
         for (Pipelines& candidate : m_geom)
         {
@@ -469,10 +530,50 @@ namespace foundation::render
             DestroyGeomPipelines(*entry);
             return nullptr;
         }
+        // The grid is optional: when it does not build (its shader missing from a pack), the
+        // lines still draw and the grid is skipped.
+        entry->grid = MakeGridPipeline(colorFmt, depthFmt);
         entry->color = colorFmt;
         entry->depth = depthFmt;
         entry->shaderVersion = shaderVersion;
         return entry;
+    }
+
+    rhi::RenderPipeline* DebugDrawPass::MakeGridPipeline(rhi::TextureFormat colorFmt,
+                                                         rhi::TextureFormat depthFmt)
+    {
+        rhi::ShaderModule* vs = m_shaders->GetVariant(u8"debug_grid", shaders::ShaderStage::Vertex,
+                                                      shaders::ShaderFlags::None);
+        rhi::ShaderModule* ps = m_shaders->GetVariant(
+            u8"debug_grid", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
+        if (vs == nullptr || ps == nullptr || m_gridLayout == nullptr)
+        {
+            return nullptr;
+        }
+        rhi::ColorTargetState color{};
+        color.format = colorFmt;
+        color.blend = rhi::BlendState::AlphaBlend();
+        rhi::FragmentState frag{};
+        frag.shader = rhi::ProgrammableStage{ps, u8"main", rhi::ShaderStage::Fragment};
+        frag.targets = Span<const rhi::ColorTargetState>{&color, 1};
+        rhi::DepthStencilState ds{};
+        ds.format = depthFmt;
+        ds.depthWriteEnabled = false;
+        ds.depthCompare = rhi::depth::NearerOrEqual(); // the scene hides it, as the lines
+        rhi::RenderPipelineDesc pd{};
+        pd.layout = m_gridLayout;
+        pd.vertex.shader = rhi::ProgrammableStage{vs, u8"main", rhi::ShaderStage::Vertex};
+        pd.fragment = frag;
+        pd.primitive.topology = rhi::PrimitiveTopology::TriangleList;
+        pd.primitive.cullMode = rhi::CullMode::None; // seen from above or below
+        pd.depthStencil = ds;
+        pd.label = u8"debug.grid";
+        rhi::RenderPipeline* pipeline = nullptr;
+        if (!m_device->CreateRenderPipeline(pd, pipeline).IsOk())
+        {
+            return nullptr;
+        }
+        return pipeline;
     }
 
     rhi::RenderPipeline* DebugDrawPass::MakeGeomPipeline(rhi::TextureFormat colorFmt,
@@ -630,7 +731,7 @@ namespace foundation::render
     void DebugDrawPass::DestroyGeomPipelines(Pipelines& entry)
     {
         rhi::RenderPipeline** slots[] = {&entry.lineDepth, &entry.lineOverlay, &entry.triDepth,
-                                         &entry.triOverlay};
+                                         &entry.triOverlay, &entry.grid};
         for (rhi::RenderPipeline** slot : slots)
         {
             if (*slot != nullptr)
@@ -696,6 +797,11 @@ namespace foundation::render
         {
             m_device->DestroyPipelineLayout(m_geomLayout);
             m_geomLayout = nullptr;
+        }
+        if (m_gridLayout != nullptr)
+        {
+            m_device->DestroyPipelineLayout(m_gridLayout);
+            m_gridLayout = nullptr;
         }
         if (m_screenLayout != nullptr)
         {

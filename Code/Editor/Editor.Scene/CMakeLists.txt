@@ -54,6 +54,7 @@ target_sources(Editor.Scene
             SceneViewSettings.cppm
             ZoomReadout.cppm
             ViewGizmo.cppm
+            SceneGrid.cppm
             CameraPreview.cppm
             EditContext.cppm
             SettingsProfiles.cppm

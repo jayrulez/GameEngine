@@ -160,9 +160,7 @@ namespace editor
             render::debug::DebugDraw& dd = m_render->DebugView(m_viewport.Get());
             if (m_showGrid)
             {
-                // sRGB, like every colour: a light grey that stays clear of the backdrop.
-                dd.DrawGrid(Float3{0, 0, 0}, kGridSize, kGridDivisions,
-                            Color{0.63f, 0.63f, 0.65f, 1.0f});
+                DrawSceneGrid(dd);
                 dd.DrawLine(Float3{0, 0, 0}, Float3{1, 0, 0}, Color{0.9f, 0.2f, 0.2f, 1.0f});
                 dd.DrawLine(Float3{0, 0, 0}, Float3{0, 1, 0}, Color{0.2f, 0.9f, 0.2f, 1.0f});
                 dd.DrawLine(Float3{0, 0, 0}, Float3{0, 0, 1}, Color{0.2f, 0.4f, 0.95f, 1.0f});
@@ -1066,6 +1064,55 @@ namespace editor
         }
     }
 
+    GridSpacing SceneEditorPage::CurrentGridSpacing() const
+    {
+        const GridPlaneAxes axes = AxesOf(m_gridPlane);
+        return GridSpacingFor(Abs(Dot(m_camera.position, axes.normal)));
+    }
+
+    void SceneEditorPage::DrawSceneGrid(render::debug::DebugDraw& dd) const
+    {
+        const GridPlaneAxes axes = AxesOf(m_gridPlane);
+        const f32 height = Abs(Dot(m_camera.position, axes.normal));
+        const GridSpacing step = GridSpacingFor(height);
+        // The camera's foot on the plane: the grid is centred under it, wherever it flies.
+        const Float3 foot = m_camera.position - axes.normal * Dot(m_camera.position, axes.normal);
+        if (!m_gridLines)
+        {
+            render::debug::GridPlaneDesc grid;
+            grid.origin = foot;
+            grid.fadeDistance = GridFadeDistance(height);
+            grid.extent = grid.fadeDistance;
+            grid.axisU = axes.u;
+            grid.axisV = axes.v;
+            grid.spacing = step.spacing;
+            grid.blend = step.blend;
+            grid.cameraPosition = m_camera.position;
+            dd.DrawGridPlane(grid);
+            return;
+        }
+        // The line grid, to compare: the same spacing, every tenth line brighter, a square 100
+        // cells each way snapped to the coarse spacing under the camera (so it does not swim), no
+        // fade and no blend between decades.
+        constexpr i32 kHalfCells = 100;
+        const f32 coarse = step.spacing * 10.0f;
+        const f32 cu = Floor(Dot(foot, axes.u) / coarse) * coarse;
+        const f32 cv = Floor(Dot(foot, axes.v) / coarse) * coarse;
+        const f32 half = step.spacing * static_cast<f32>(kHalfCells);
+        // sRGB, like every colour: a light grey that stays clear of the backdrop.
+        const Color minor{0.63f, 0.63f, 0.65f, 0.35f};
+        const Color major{0.63f, 0.63f, 0.65f, 1.0f};
+        for (i32 i = -kHalfCells; i <= kHalfCells; ++i)
+        {
+            const f32 t = static_cast<f32>(i) * step.spacing;
+            const Color color = (i % 10 == 0) ? major : minor;
+            const Float3 alongV = axes.u * (cu + t);
+            const Float3 alongU = axes.v * (cv + t);
+            dd.DrawLine(alongV + axes.v * (cv - half), alongV + axes.v * (cv + half), color);
+            dd.DrawLine(alongU + axes.u * (cu - half), alongU + axes.u * (cu + half), color);
+        }
+    }
+
     void SceneEditorPage::DrawZoomReadout(render::debug::DebugDraw& dd, f32 opacity) const
     {
         if (!m_viewport || !m_viewport->IsReady() || m_viewport->RenderHeight() == 0)
@@ -1076,8 +1123,7 @@ namespace editor
         const ScaleBar bar = ScaleBarAt(m_camera.focusDistance, kFovY, height);
         const String focusText = Format(u8"{} to focus", FormatMetres(m_camera.focusDistance));
         // The cell of the grid as drawn; whether the grid shows is the page's toggle.
-        const String cellText =
-            Format(u8"grid cell {}", FormatMetres(kGridSize / static_cast<f32>(kGridDivisions)));
+        const String cellText = Format(u8"grid cell {}", FormatMetres(CurrentGridSpacing().spacing));
         const String barText = FormatMetres(bar.metres);
 
         // Bottom-left, clear of the tool status (top-left) and the FPS readout (top-right):
@@ -1226,6 +1272,22 @@ namespace editor
         // gizmos (from component shapes, no world - distinct from the RUNTIME
         // PhysicsSceneSettings.debugDraw).
         add(u8"Grid", &SceneEditorPage::m_showGrid);
+        // The grid's plane, one checked; and the old debug-line grid, to compare the two.
+        const auto plane = [&](StringView label, GridPlane value)
+        {
+            String text(mark(m_gridPlane == value));
+            text += label;
+            menu->AddItem(text.AsView(),
+                          [self, value]()
+                          {
+                              self->m_gridPlane = value;
+                              self->SaveViewPrefs();
+                          });
+        };
+        plane(u8"Grid on XZ (ground)", GridPlane::XZ);
+        plane(u8"Grid on XY", GridPlane::XY);
+        plane(u8"Grid on YZ", GridPlane::YZ);
+        add(u8"Grid as lines (to compare)", &SceneEditorPage::m_gridLines);
         add(u8"Entity markers", &SceneEditorPage::m_showMarkers);
         menu->AddSeparator();
         add(u8"LOD overlay", &SceneEditorPage::m_showLodOverlay);
@@ -1681,6 +1743,10 @@ namespace editor
         m_showColliders = p.showColliders;
         m_showMarkers = p.showMarkers;
         m_showFps = p.showFps;
+        m_gridPlane = p.gridPlane <= static_cast<u8>(GridPlane::YZ)
+                          ? static_cast<GridPlane>(p.gridPlane)
+                          : GridPlane::XZ;
+        m_gridLines = p.gridLines;
     }
 
     void SceneEditorPage::SaveViewPrefs()
@@ -1689,6 +1755,8 @@ namespace editor
         // resurrects another's default. Runs on every toggle and when the page closes.
         SceneViewPref pref{InstanceId(), m_showGrid, m_showLodOverlay, m_showColliders,
                            m_showMarkers, m_showFps};
+        pref.gridPlane = static_cast<u8>(m_gridPlane);
+        pref.gridLines = m_gridLines;
         pref.hasCamera = true;
         pref.cameraPosition = m_camera.position;
         pref.cameraYaw = m_camera.yaw;

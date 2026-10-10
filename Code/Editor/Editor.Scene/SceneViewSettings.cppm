@@ -63,6 +63,10 @@ export namespace editor
         f32 hierarchySplit = 0.2f;
         f32 inspectorSplit = 0.72f;
         f32 bottomDockSplit = 0.72f;
+        // The grid (added 2026-10-10): the plane it lies on (GridPlane: 0 XZ, 1 XY, 2 YZ), and
+        // whether it is drawn as debug lines instead of the shader grid (kept to compare them).
+        u8 gridPlane = 0;
+        bool gridLines = false;
 
         // The section's data version gates the keys added after v3 (a keyed reader FAILS the
         // whole section on a missing key, so a v3 file must not be asked for them).
@@ -90,6 +94,8 @@ export namespace editor
                 foundation::core::SerializeAppended(ar, "hierarchySplit", hierarchySplit);
                 foundation::core::SerializeAppended(ar, "inspectorSplit", inspectorSplit);
                 foundation::core::SerializeAppended(ar, "bottomDockSplit", bottomDockSplit);
+                foundation::core::SerializeAppended(ar, "gridPlane", gridPlane);
+                foundation::core::SerializeAppended(ar, "gridLines", gridLines);
             }
         }
     };

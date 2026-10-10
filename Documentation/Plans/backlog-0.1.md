@@ -8,15 +8,6 @@
 
 ## Editor
 
-- **A scene grid that fits our scenes, perhaps infinite** (user 2026-10-09): the scene view's
-  ground grid is debug-draw lines, a fixed 20 m square in 20 cells (`ScenePageImpl.cpp`,
-  `dd.DrawGrid(..., 20.0f, 20, ...)`), too small for most of our scenes now (Snowline's
-  courses, Lamplight's levels). Look into the options, likely done in a shader: a ground plane
-  drawn as one quad (or full-screen pass) whose fragment shader draws the lines from world
-  position, anti-aliased by screen-space derivatives, fading with distance, with the spacing
-  stepping by powers of ten as the camera climbs and a coarser line every N, depth-tested
-  against the scene so geometry hides it. Compare with resizing the debug-draw grid to the
-  scene's bounds or the camera. Keep the per-scene grid toggle (`SceneViewSettings`).
 - **An orthographic editor camera** (user 2026-10-09): the scene view's camera can switch
   between perspective and orthographic with a toggle (in the view's toolbar, and a key). Pairs
   with the orientation gizmo: snapping to a face is where an orthographic top, front or side

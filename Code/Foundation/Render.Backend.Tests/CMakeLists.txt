@@ -14,7 +14,7 @@ add_executable(Render.Backend.Tests
     DitherFadeProbeTests.cpp
     MaterialOverrideProbeTests.cpp
     EmissiveProbeTests.cpp
-    ScaledViewProbeTests.cpp ColorProbeTests.cpp ShadowControlProbeTests.cpp
+    ScaledViewProbeTests.cpp ColorProbeTests.cpp DebugGridProbeTests.cpp ShadowControlProbeTests.cpp
     ScreenSpaceProbeTests.cpp TaaProbeTests.cpp)
 
 target_link_libraries(Render.Backend.Tests PRIVATE

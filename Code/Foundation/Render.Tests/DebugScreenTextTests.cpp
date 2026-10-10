@@ -66,3 +66,21 @@ TEST_CASE("debug-draw: DrawScreenLine records a line, drawn as a quad its thickn
     debug::ScreenLineQuad(Float2{5.0f, 5.0f}, Float2{5.0f, 5.0f}, 2.0f, q);
     CHECK(Abs(q[0].y - q[3].y) + Abs(q[0].x - q[3].x) > 0.0f);
 }
+
+TEST_CASE("debug-draw: a list carries one shader grid a frame, the last asked for, until cleared")
+{
+    debug::DebugDraw dd;
+    CHECK(dd.GridPlane() == nullptr);
+    CHECK_FALSE(dd.HasAnyDraws());
+    debug::GridPlaneDesc grid;
+    grid.spacing = 1.0f;
+    dd.DrawGridPlane(grid);
+    grid.spacing = 10.0f;
+    dd.DrawGridPlane(grid);
+    REQUIRE(dd.GridPlane() != nullptr);
+    CHECK(dd.GridPlane()->spacing == 10.0f);
+    CHECK(dd.HasAnyDraws());
+    dd.Clear();
+    CHECK(dd.GridPlane() == nullptr);
+    CHECK_FALSE(dd.HasAnyDraws());
+}

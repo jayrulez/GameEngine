@@ -56,6 +56,7 @@ import foundation.mcp; // McpServer (the MCP tool contribution)
 import :view_settings; // RegisterSceneViewSettingsType (per-scene grid pref)
 import :zoom_readout;  // the measurement overlay while zooming
 import :view_gizmo;    // the orientation gizmo in the viewport's top-right
+import :scene_grid;    // the grid's plane, spacing and reach
 import :edit;
 import :settings_profiles; // QueueSettingsProfileEdit (a profile-mode settings edit)
 import :scene_page_interface; // ISceneEditorPage (published on the page)
@@ -550,10 +551,11 @@ export namespace editor
 
     private:
         static constexpr f32 kFovY = 1.0472f; // must match OnRenderWindow's projection
-        // The ground grid: a square this many metres wide in this many cells (one cell is what
-        // the zoom readout reports).
-        static constexpr f32 kGridSize = 20.0f;
-        static constexpr i32 kGridDivisions = 20;
+        // The grid's spacing where the camera is now (GridSpacingFor its distance from the grid's
+        // plane): what the grid draws and the zoom readout reports.
+        [[nodiscard]] GridSpacing CurrentGridSpacing() const;
+        // The grid on m_gridPlane: the shader grid, or the debug-line grid when m_gridLines.
+        void DrawSceneGrid(render::debug::DebugDraw& dd) const;
 
         // The measurement overlay while zooming, bottom-left: the focus distance, the grid cell
         // and a scale bar, at `opacity`.
@@ -683,6 +685,8 @@ export namespace editor
         // physics collider gizmos, the origin cross on every entity.
         ui::toolkit::ToolbarMenuButton* m_overlaysButton = nullptr; // borrowed (toolbar-owned)
         bool m_showGrid = true;
+        GridPlane m_gridPlane = GridPlane::XZ; // the plane the grid lies on (Overlays menu)
+        bool m_gridLines = false; // debug lines instead of the shader grid, to compare the two
         bool m_showLodOverlay = false;
         bool m_showColliders = false;
         bool m_showMarkers = true;

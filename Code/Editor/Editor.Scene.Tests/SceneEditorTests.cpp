@@ -664,6 +664,8 @@ TEST_CASE("scene-editor: the per-scene view state (grid + LOD) round-trips throu
         view.hierarchySplit = 0.31f;
         view.inspectorSplit = 0.64f;
         view.bottomDockSplit = 0.55f;
+        view.gridPlane = 2; // YZ
+        view.gridLines = true;
         CHECK(SaveSceneViewPref(&twice, view));
     }
     MemoryStream buf7;
@@ -679,6 +681,9 @@ TEST_CASE("scene-editor: the per-scene view state (grid + LOD) round-trips throu
     CHECK(splits.inspectorSplit == doctest::Approx(0.64f));
     CHECK(splits.bottomDockSplit == doctest::Approx(0.55f));
     CHECK(splits.cameraYaw == doctest::Approx(0.75f)); // siblings intact
+    CHECK(splits.gridPlane == 2u);                     // the grid's plane and style, per scene
+    CHECK(splits.gridLines);
+    CHECK(LoadSceneViewPref(&thrice, sceneB, fb).gridPlane == 0u);
     CHECK_FALSE(LoadSceneViewPref(&thrice, sceneB, fb).hasSplits);
 
     // A file saved before the split keys existed still loads: its prefs keep every other field,
@@ -692,7 +697,8 @@ TEST_CASE("scene-editor: the per-scene view state (grid + LOD) round-trips throu
             ++end;
         }
         const StringView line = saved.AsView().SubStr(start, end - start);
-        if (!line.ContainsIgnoreCase(u8"split"))
+        if (!line.ContainsIgnoreCase(u8"split") && !line.ContainsIgnoreCase(u8"gridPlane") &&
+            !line.ContainsIgnoreCase(u8"gridLines"))
         {
             older.Append(line);
             older.Append(u8"\n");
@@ -707,6 +713,8 @@ TEST_CASE("scene-editor: the per-scene view state (grid + LOD) round-trips throu
     REQUIRE(fromOld.Load(oldFile, foundation::xml::XmlSerializerFactory()).IsOk());
     const SceneViewPref oldPref = LoadSceneViewPref(&fromOld, sceneA, fb);
     CHECK_FALSE(oldPref.hasSplits);
+    CHECK(oldPref.gridPlane == 0u); // the ground, the shader grid
+    CHECK_FALSE(oldPref.gridLines);
     CHECK(oldPref.hasCamera);
     CHECK(oldPref.cameraYaw == doctest::Approx(0.75f));
 }

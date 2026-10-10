@@ -77,6 +77,7 @@ export namespace foundation::render
             rhi::RenderPipeline* lineOverlay = nullptr;
             rhi::RenderPipeline* triDepth = nullptr;
             rhi::RenderPipeline* triOverlay = nullptr;
+            rhi::RenderPipeline* grid = nullptr; // the shader grid; null when it did not build
             u64 shaderVersion = 0; // ShaderSystem::Version at build (hot reload)
         };
 
@@ -103,6 +104,7 @@ export namespace foundation::render
                                               rhi::CompareFunction cmp);
 
         rhi::RenderPipeline* EnsureScreenPipeline(rhi::TextureFormat colorFmt);
+        rhi::RenderPipeline* MakeGridPipeline(rhi::TextureFormat colorFmt, rhi::TextureFormat depthFmt);
 
         Status CreateFontAtlas();
 
@@ -114,6 +116,7 @@ export namespace foundation::render
         shaders::ShaderSystem* m_shaders;
         u32 m_framesInFlight = 2;
         rhi::PipelineLayout* m_geomLayout = nullptr;
+        rhi::PipelineLayout* m_gridLayout = nullptr; // the grid's push block (both stages)
         rhi::PipelineLayout* m_screenLayout = nullptr;
         rhi::BindGroupLayout* m_screenBgLayout = nullptr;
         rhi::Sampler* m_sampler = nullptr;

@@ -135,6 +135,26 @@
   and `scripts/build-export-templates.*` are the starting point), and the sample projects
   packaged so users have something to open and play with. Perhaps the project launcher lists
   remote samples too, to download and open from there (pairs with the launcher polish above).
+- **Windows build scripts and presets, made consistent** (user 2026-10-10): the Windows scripts
+  build with one compiler and package from another's output. `build-editor-dist.ps1` configures
+  `build\msvc-release` with no compiler pinned (whatever the environment hands CMake; on the
+  user's machine, clang) but copies from a fixed `Bin\Release\Win64-MSVC`.
+  `build-export-templates.ps1 -Compiler Clang` passes clang-cl, yet uses the same
+  `build/msvc-release` tree, and an existing tree keeps the compiler it was first configured
+  with. `CMakePresets.json` has only Debug MSVC presets (`msvc`, `msvc-shared`): no MSVC
+  release or shipping preset, and no clang-cl ones. Add the missing presets (release and
+  shipping for MSVC and clang-cl, matching the Linux set), have both scripts configure through
+  a preset chosen by `-Compiler`, and derive the `Bin\...\Win64-<Compiler>` folder from that
+  same choice, so the build and the copy cannot disagree. Check the `.sh` scripts the same way.
+- **The editor dist cannot export: it ships no shader sources** (user 2026-10-10):
+  `build-editor-dist.sh` and `.ps1` stage only the cooked `Data/Shaders/shaders.dpak` and skip
+  the `Data/Shaders` sources on purpose ("unneeded in pack mode"). But an export cooks the
+  player's pack from those sources (`StageShaderPack` in `Editor.Project/ExportImpl.cpp` reads
+  `<dataRoot>/Shaders` and fails with "cannot cook shaders: no 'Shaders' under the data root"),
+  so the distributed editor cannot export a game. Stage the shader sources (the `.hlsl` and
+  `.hlsli` the cook reads) beside the pack in both scripts, fix their comments, and check that
+  the editor still runs from the pack. Then export a project from a staged dist as the test.
+  Custom shaders in the editor (above) will need the sources there too.
 - **Luau variants of the sample games, and whether we keep two languages** (user 2026-10-09):
   perhaps write a Luau version of each sample game's scripts (all four are AngelScript), as an
   exercise of the Luau side end to end either way. First decide whether we really want to

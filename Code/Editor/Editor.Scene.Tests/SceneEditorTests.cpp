@@ -655,6 +655,60 @@ TEST_CASE("scene-editor: the per-scene view state (grid + LOD) round-trips throu
     CHECK(back.selection[0] == Guid{7, 7});
     CHECK(back.selection[1] == Guid{8, 8});
     CHECK_FALSE(LoadSceneViewPref(&twice, sceneB, fb).hasCamera); // the other scene: never saved
+    CHECK_FALSE(back.hasSplits); // that page saved no splits: the page's defaults stand
+
+    // The page's split positions: saved by a closing page, restored on reopen, per scene.
+    {
+        SceneViewPref view = back;
+        view.hasSplits = true;
+        view.hierarchySplit = 0.31f;
+        view.inspectorSplit = 0.64f;
+        view.bottomDockSplit = 0.55f;
+        CHECK(SaveSceneViewPref(&twice, view));
+    }
+    MemoryStream buf7;
+    REQUIRE(twice.Save(buf7, foundation::xml::XmlSerializerFactory()).IsOk());
+    (void)buf7.Seek(0, SeekOrigin::Begin);
+    const String saved(StringView(reinterpret_cast<const utf8char*>(buf7.Bytes().Data()),
+                                  buf7.Bytes().Size()));
+    foundation::settings::Settings thrice(foundation::core::DefaultAllocator());
+    REQUIRE(thrice.Load(buf7, foundation::xml::XmlSerializerFactory()).IsOk());
+    const SceneViewPref splits = LoadSceneViewPref(&thrice, sceneA, fb);
+    CHECK(splits.hasSplits);
+    CHECK(splits.hierarchySplit == doctest::Approx(0.31f));
+    CHECK(splits.inspectorSplit == doctest::Approx(0.64f));
+    CHECK(splits.bottomDockSplit == doctest::Approx(0.55f));
+    CHECK(splits.cameraYaw == doctest::Approx(0.75f)); // siblings intact
+    CHECK_FALSE(LoadSceneViewPref(&thrice, sceneB, fb).hasSplits);
+
+    // A file saved before the split keys existed still loads: its prefs keep every other field,
+    // and read no splits (the page keeps its defaults).
+    String older;
+    for (usize start = 0; start < saved.Size();)
+    {
+        usize end = start;
+        while (end < saved.Size() && saved.AsView()[end] != u8'\n')
+        {
+            ++end;
+        }
+        const StringView line = saved.AsView().SubStr(start, end - start);
+        if (!line.ContainsIgnoreCase(u8"split"))
+        {
+            older.Append(line);
+            older.Append(u8"\n");
+        }
+        start = end + 1;
+    }
+    REQUIRE(older.Size() < saved.Size()); // the split keys were there, and are gone
+    MemoryStream oldFile;
+    (void)oldFile.Write(reinterpret_cast<const byte*>(older.Data()), older.Size());
+    (void)oldFile.Seek(0, SeekOrigin::Begin);
+    foundation::settings::Settings fromOld(foundation::core::DefaultAllocator());
+    REQUIRE(fromOld.Load(oldFile, foundation::xml::XmlSerializerFactory()).IsOk());
+    const SceneViewPref oldPref = LoadSceneViewPref(&fromOld, sceneA, fb);
+    CHECK_FALSE(oldPref.hasSplits);
+    CHECK(oldPref.hasCamera);
+    CHECK(oldPref.cameraYaw == doctest::Approx(0.75f));
 }
 
 TEST_CASE("scene-editor: a v3 view pref (before markers / FPS / camera) reads through the "

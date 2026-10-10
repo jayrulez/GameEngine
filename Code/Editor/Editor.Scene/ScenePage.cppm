@@ -431,19 +431,20 @@ export namespace editor
             }
 
             // Page layout: [ hierarchy | (viewport-column | inspector) ].
-            auto inner = MakeRef<foundation::ui::toolkit::SplitView>(Allocator());
-            inner->SetSplitRatio(0.72f);
-            inner->SetPanes(m_viewportColumn.Get(), m_inspector.Get());
-            auto topContent = MakeRef<foundation::ui::toolkit::SplitView>(Allocator());
-            topContent->SetSplitRatio(0.2f);
-            topContent->SetPanes(m_hierarchy.Get(), inner.Get());
-            m_content = topContent;
+            m_inspectorSplit = MakeRef<foundation::ui::toolkit::SplitView>(Allocator());
+            m_inspectorSplit->SetSplitRatio(0.72f);
+            m_inspectorSplit->SetPanes(m_viewportColumn.Get(), m_inspector.Get());
+            m_hierarchySplit = MakeRef<foundation::ui::toolkit::SplitView>(Allocator());
+            m_hierarchySplit->SetSplitRatio(0.2f);
+            m_hierarchySplit->SetPanes(m_hierarchy.Get(), m_inspectorSplit.Get());
+            m_content = m_hierarchySplit;
 
             m_router =
                 MakeUnique<foundation::shell::InputRouter>(Allocator(), host.Shell()->Input());
 
             // Start framed on the origin (grid center), orbit pivot there, horizon level -
-            // then where this scene was last left, if a page saved that (camera + selection).
+            // then where this scene was last left, if a page saved that (camera + selection +
+            // the split positions).
             m_camera.LookAt(Float3{0.0f, 0.0f, 0.0f});
             RestoreViewState();
         }
@@ -626,7 +627,7 @@ export namespace editor
         void ScenePage_OverlaysInit();
         void LoadViewPrefs(); // read this scene's saved overlay toggles (per-project, by guid)
         void SaveViewPrefs(); // persist the whole pref: toggles + camera + selection (toggle / close)
-        void RestoreViewState(); // camera + selection from the saved pref (after the scene loads)
+        void RestoreViewState(); // camera, selection, splits from the saved pref (after the scene loads)
 
         // Reflect externally-driven state (the W/E/R keys, X space toggle) back into the
         // toolbar. SetIsChecked no-ops when unchanged, and the mode handlers only act on
@@ -749,6 +750,8 @@ export namespace editor
         UniquePtr<ViewportToolPanelHost> m_toolPanelHost;
         RefPtr<foundation::ui::toolkit::BottomDock> m_bottomDock;   // the collapsible bottom strip
         RefPtr<foundation::ui::toolkit::SplitView> m_viewportColumn; // [viewport / bottom dock] vsplit
+        RefPtr<foundation::ui::toolkit::SplitView> m_hierarchySplit; // [hierarchy | the rest]
+        RefPtr<foundation::ui::toolkit::SplitView> m_inspectorSplit; // [viewport column | inspector]
         u64 m_openAssetInterceptorId = 0; // the clip-open claim (removed in the destructor)
         RefPtr<ui::viewport::ViewportView> m_viewport;
 

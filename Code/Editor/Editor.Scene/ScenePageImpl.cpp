@@ -1620,8 +1620,8 @@ namespace editor
 
     void SceneEditorPage::SaveViewPrefs()
     {
-        // Save the WHOLE pref (toggles + camera + selection) so saving one never resurrects
-        // another's default. Runs on every toggle and when the page closes.
+        // Save the WHOLE pref (toggles + camera + selection + splits) so saving one never
+        // resurrects another's default. Runs on every toggle and when the page closes.
         SceneViewPref pref{InstanceId(), m_showGrid, m_showLodOverlay, m_showColliders,
                            m_showMarkers, m_showFps};
         pref.hasCamera = true;
@@ -1629,6 +1629,13 @@ namespace editor
         pref.cameraYaw = m_camera.yaw;
         pref.cameraPitch = m_camera.pitch;
         pref.cameraFocusDistance = m_camera.focusDistance;
+        if (m_hierarchySplit && m_inspectorSplit && m_viewportColumn)
+        {
+            pref.hasSplits = true;
+            pref.hierarchySplit = m_hierarchySplit->SplitRatio();
+            pref.inspectorSplit = m_inspectorSplit->SplitRatio();
+            pref.bottomDockSplit = m_viewportColumn->SplitRatio();
+        }
         if (m_editContext)
         {
             for (const Guid& id : m_editContext->EntitySelection().Items())
@@ -1646,6 +1653,13 @@ namespace editor
     {
         const SceneViewPref none{InstanceId()};
         const SceneViewPref p = LoadSceneViewPref(m_context->ProjectEditorSettings(), InstanceId(), none);
+        if (p.hasSplits && m_hierarchySplit && m_inspectorSplit && m_viewportColumn)
+        {
+            // The bottom dock's ratio applies when it opens (its pane starts collapsed).
+            m_hierarchySplit->SetSplitRatio(p.hierarchySplit);
+            m_inspectorSplit->SetSplitRatio(p.inspectorSplit);
+            m_viewportColumn->SetSplitRatio(p.bottomDockSplit);
+        }
         if (!p.hasCamera)
         {
             return; // never saved by a page: the origin framing stands

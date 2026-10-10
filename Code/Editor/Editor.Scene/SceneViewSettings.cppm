@@ -56,6 +56,13 @@ export namespace editor
         f32 cameraFocusDistance = 12.0f;
         // The entity selection at close (persistent ids; ids no longer in the scene are dropped).
         Array<Guid> selection;
+        // The page's split positions as it last had them (added 2026-10-10): hierarchy | rest,
+        // viewport column | inspector, viewport / bottom dock. hasSplits = false until a page has
+        // saved them, and the page's own defaults stand.
+        bool hasSplits = false;
+        f32 hierarchySplit = 0.2f;
+        f32 inspectorSplit = 0.72f;
+        f32 bottomDockSplit = 0.72f;
 
         // The section's data version gates the keys added after v3 (a keyed reader FAILS the
         // whole section on a missing key, so a v3 file must not be asked for them).
@@ -78,6 +85,11 @@ export namespace editor
                 foundation::core::Serialize(ar, "cameraPitch", cameraPitch);
                 foundation::core::Serialize(ar, "cameraFocusDistance", cameraFocusDistance);
                 foundation::core::Serialize(ar, "selection", selection);
+                // Appended keys: a settings file saved before them still loads, with the defaults.
+                foundation::core::SerializeAppended(ar, "hasSplits", hasSplits);
+                foundation::core::SerializeAppended(ar, "hierarchySplit", hierarchySplit);
+                foundation::core::SerializeAppended(ar, "inspectorSplit", inspectorSplit);
+                foundation::core::SerializeAppended(ar, "bottomDockSplit", bottomDockSplit);
             }
         }
     };

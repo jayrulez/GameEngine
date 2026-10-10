@@ -27,11 +27,6 @@
   with the orientation gizmo: snapping to a face is where an orthographic top, front or side
   view is most used. The engine's cameras already have an orthographic projection
   (`MakeCameraProjection`); the editor camera's zoom becomes the ortho size there.
-- **A scene page keeps its split sizes** (user 2026-10-09): the hierarchy / viewport /
-  inspector splits of a scene page go back to their defaults each time a scene opens, so they
-  are dragged again every time. Save them per page (per scene) and restore them on open,
-  as more fields on the per-scene record the grid toggle already lives in (`SceneViewPref`,
-  `Editor.Scene/SceneViewSettings.cppm`, kept in the project's editor settings).
 - **The Welcome page needs a purpose** (user 2026-10-09, to think about): it has been a stub
   from the start. Its real job is to hold the top split: with every editor page closed, the
   top section stays for a newly opened page to dock into (without it the Console and Assets

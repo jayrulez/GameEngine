@@ -37,6 +37,7 @@ export import :editor_icons;
     export import :resource_ref_editor;
     export import :compact_asset_slot;
     export import :list_header;
+    export import :view_mode_toggles;
 export import :asset_drag_data;
 export import :project_manager_view;
 export import :shell;

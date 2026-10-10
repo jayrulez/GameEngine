@@ -29,6 +29,7 @@ import foundation.ui;
 import foundation.ui.toolkit;
 import editor.core;
 import :editor_icons;
+import :layout; // EditorAssetBrowserSettings (the picker's list/grid view mode)
 
 using namespace foundation::core;
 namespace content = foundation::content;
@@ -122,7 +123,56 @@ namespace editor::app
             }
         }
         m_list->Selection.ClearSelection();
+        m_grid->Selection.ClearSelection();
         m_list->NotifyDataChanged();
+        m_gridAdapter->NotifyDataSetChanged();
+    }
+
+    ui::DrawablePtr AssetPickerDialog::IconFor(content::Instance& instance)
+    {
+        RefPtr<ui::Drawable> thumbnail;
+        if (m_context->Thumbnails() != nullptr)
+        {
+            thumbnail = m_context->Thumbnails()->Get(instance.Id());
+        }
+        return thumbnail ? ui::DrawablePtr(thumbnail.Get())
+                         : ui::DrawablePtr(EditorIcons::Get().ForAssetType(instance.TypeName()));
+    }
+
+    i32 AssetPickerDialog::SelectedPosition() const
+    {
+        return m_gridMode ? m_grid->Selection.FirstSelected() : m_list->Selection.FirstSelected();
+    }
+
+    void AssetPickerDialog::SetGridMode(bool grid, bool persist)
+    {
+        m_gridMode = grid;
+        m_viewToggles->SetGridMode(grid);
+        m_list->Visibility = grid ? ui::VisibilityValue::Gone : ui::VisibilityValue::Visible;
+        m_grid->Visibility = grid ? ui::VisibilityValue::Visible : ui::VisibilityValue::Gone;
+        Invalidate();
+        if (persist)
+        {
+            // Remembered per project, apart from the browser's: a picker is often a narrower
+            // choice (one asset type), where tiles of thumbnails read better or worse than there.
+            if (foundation::settings::Settings* store = m_context->ProjectEditorSettings())
+            {
+                store->Section<EditorAssetBrowserSettings>().pickerGridMode = grid;
+                store->MarkChanged<EditorAssetBrowserSettings>();
+                m_context->RequestProjectEditorSettingsSave();
+            }
+        }
+    }
+
+    void AssetPickerDialog::ApplySavedViewMode()
+    {
+        if (foundation::settings::Settings* store = m_context->ProjectEditorSettings())
+        {
+            if (const EditorAssetBrowserSettings* section = store->Find<EditorAssetBrowserSettings>())
+            {
+                SetGridMode(section->pickerGridMode, /*persist*/ false);
+            }
+        }
     }
 
     void AssetPickerDialog::CollectGroup(content::Group& group, bool recurse)
@@ -218,7 +268,7 @@ namespace editor::app
         Close(ui::DialogResult::OK);
     }
 
-    void AssetPickerDialog::ShowRowMenu(i32 position, f32 x, f32 y)
+    void AssetPickerDialog::ShowRowMenu(ui::View* source, i32 position, f32 x, f32 y)
     {
         if (position < 0 || position >= static_cast<i32>(m_rows.Size()) || Context == nullptr)
         {
@@ -234,7 +284,7 @@ namespace editor::app
                           self->m_context->ToggleFavorite(id);
                           self->RebuildList();
                       });
-        const Float2 screenPos = m_list->LocalToScreen(Float2{x, y});
+        const Float2 screenPos = source->LocalToScreen(Float2{x, y});
         menu->Show(Context, screenPos.x, screenPos.y);
     }
 }

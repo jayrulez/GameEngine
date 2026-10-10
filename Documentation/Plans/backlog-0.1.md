@@ -51,9 +51,6 @@
   project. A list / grid toggle, the grid showing each project's thumbnail (a picture of the
   project to recognise it by); and some of the per-project options moved into a menu (a
   hamburger or similar) so the page reads cleanly.
-- **The asset browser's List / Grid buttons as icon buttons** (user 2026-10-09): they are text
-  buttons now; make them icon buttons (a list icon and a grid icon, with the words as their
-  tooltips).
 - **A more polished Console header** (user 2026-10-09): revamp the look of the Console panel's
   header row, its log-level filters and its search field, so it reads as finished UI.
 - **Editor preferences by category, in tabs** (user 2026-10-09): the preferences show every
@@ -127,6 +124,20 @@
   `.hlsli` the cook reads) beside the pack in both scripts, fix their comments, and check that
   the editor still runs from the pack. Then export a project from a staged dist as the test.
   Custom shaders in the editor (above) will need the sources there too.
+- **A component picker dialog** (user 2026-10-10): the inspector's Add Component button opens a
+  context menu of category submenus (`SceneInspectorView::ShowAddComponentMenu`,
+  `InspectorViewImpl.cpp`, categories and display names from each component's metadata). Make it
+  a picker dialog like the asset picker: a search field at the top, and below it the categories
+  with their components, filtered as you type. This likely answers "organize the new-component
+  menu" from PaperKid's editor feedback (`weekly_backlog.md`, the carried list).
+- **Screenshots of the whole editor, over MCP and from a hotkey** (user 2026-10-10): today the
+  whole window can be captured only at launch (`Tools.Editor --screenshot <png> --screenshot-after
+  <s>`, one shot of the main window's finished backbuffer, UI included, through the runtime's
+  `ScreenshotCapture`), and over MCP only a scene viewport (`viewport_screenshot`) or a Game tab
+  (`pie_screenshot`). Add an MCP tool that captures the whole editor window while it runs (the
+  same backbuffer capture, armed on demand, its path answered when the next frame completes it;
+  floating windows too, or say which window), and an editor action with a hotkey that writes one
+  to the screenshots folder. Update the MCP guide and `kEngineToolCount` with the tool.
 
 ### Seeded: gizmo vertex snapping (user 2026-08-26)
 

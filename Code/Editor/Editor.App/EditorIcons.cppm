@@ -55,6 +55,10 @@ export namespace editor::app
         RefPtr<ui::BakedSVGDrawable> folder;
         RefPtr<ui::BakedSVGDrawable> unknown;
 
+        // === Asset views (the browser's and the picker's List / Grid toggles) ===
+        RefPtr<ui::BakedSVGDrawable> viewList; // rows, each a bullet and a line
+        RefPtr<ui::BakedSVGDrawable> viewGrid; // four tiles
+
         // === Chrome ===
         RefPtr<ui::BakedSVGDrawable> close; // tab/panel close X (theme tints it)
 
@@ -84,7 +88,7 @@ export namespace editor::app
         [[nodiscard]] Array<ui::BakedSVGDrawable*> Bakeable() const;
 
         /// Every icon slot, the one table Shutdown and Bakeable walk (kSlotCount entries).
-        static constexpr ENGINE_EXPORT_DATA usize kSlotCount = 29;
+        static constexpr ENGINE_EXPORT_DATA usize kSlotCount = 31;
         [[nodiscard]] Array<RefPtr<ui::BakedSVGDrawable>*> Slots();
 
     private:
@@ -170,6 +174,24 @@ export namespace editor::app
   <line x1="15" y1="3" x2="15" y2="21" stroke="#E0E0E0" stroke-width="1"/>
   <line x1="3" y1="9"  x2="21" y2="9"  stroke="#E0E0E0" stroke-width="1"/>
   <line x1="3" y1="15" x2="21" y2="15" stroke="#E0E0E0" stroke-width="1"/>
+</svg>)svg";
+
+        // List view - three rows, each a bullet and a line.
+        static constexpr StringView kViewList = u8R"svg(<svg viewBox="0 0 24 24">
+  <rect x="3" y="5" width="3" height="3" rx="0.5" fill="#E0E0E0"/>
+  <rect x="3" y="10.5" width="3" height="3" rx="0.5" fill="#E0E0E0"/>
+  <rect x="3" y="16" width="3" height="3" rx="0.5" fill="#E0E0E0"/>
+  <line x1="9" y1="6.5" x2="21" y2="6.5" stroke="#E0E0E0" stroke-width="1.8" stroke-linecap="round"/>
+  <line x1="9" y1="12" x2="21" y2="12" stroke="#E0E0E0" stroke-width="1.8" stroke-linecap="round"/>
+  <line x1="9" y1="17.5" x2="21" y2="17.5" stroke="#E0E0E0" stroke-width="1.8" stroke-linecap="round"/>
+</svg>)svg";
+
+        // Grid view - four tiles.
+        static constexpr StringView kViewGrid = u8R"svg(<svg viewBox="0 0 24 24">
+  <rect x="4" y="4" width="7" height="7" rx="1" fill="#E0E0E0"/>
+  <rect x="13" y="4" width="7" height="7" rx="1" fill="#E0E0E0"/>
+  <rect x="4" y="13" width="7" height="7" rx="1" fill="#E0E0E0"/>
+  <rect x="13" y="13" width="7" height="7" rx="1" fill="#E0E0E0"/>
 </svg>)svg";
 
         // Scene - linked nodes (a scene graph).

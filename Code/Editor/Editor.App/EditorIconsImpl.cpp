@@ -59,6 +59,8 @@ namespace editor::app
         skeleton = ui::BakedSVGDrawable::FromString(editor::EditorRootAllocator(), kSkeleton);
         folder = ui::BakedSVGDrawable::FromString(editor::EditorRootAllocator(), kFolder);
         unknown = ui::BakedSVGDrawable::FromString(editor::EditorRootAllocator(), kUnknown);
+        viewList = ui::BakedSVGDrawable::FromString(editor::EditorRootAllocator(), kViewList);
+        viewGrid = ui::BakedSVGDrawable::FromString(editor::EditorRootAllocator(), kViewGrid);
         close = ui::BakedSVGDrawable::FromString(editor::EditorRootAllocator(), kClose);
         add = ui::BakedSVGDrawable::FromString(editor::EditorRootAllocator(), kAdd);
         remove = ui::BakedSVGDrawable::FromString(editor::EditorRootAllocator(), kRemove);
@@ -83,6 +85,7 @@ namespace editor::app
              {&translate, &rotate,      &scale,       &worldSpace, &localSpace,  &grid,
               &scene,     &prefab,      &mesh,        &skinnedMesh, &material,   &texture,
               &particleFx, &animation,  &animGraph,   &skeleton,   &folder,      &unknown,
+              &viewList,  &viewGrid,
               &close,     &add,         &remove,      &moveUp,     &moveDown,    &copy,
               &edit,      &brushRaise,  &brushLower,  &brushSmooth, &brushFlatten})
         {

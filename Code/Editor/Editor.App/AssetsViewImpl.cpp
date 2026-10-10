@@ -971,8 +971,7 @@ namespace editor::app
     void AssetsView::SetGridMode(bool grid, bool persist)
     {
         m_gridMode = grid;
-        m_listToggle->IsChecked.SetValue(!grid);
-        m_gridToggle->IsChecked.SetValue(grid);
+        m_viewToggles->SetGridMode(grid);
         m_list->Visibility = grid ? ui::VisibilityValue::Gone : ui::VisibilityValue::Visible;
         m_grid->Visibility = grid ? ui::VisibilityValue::Visible : ui::VisibilityValue::Gone;
         Invalidate();

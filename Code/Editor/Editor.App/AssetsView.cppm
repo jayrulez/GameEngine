@@ -39,6 +39,7 @@ import foundation.ui.toolkit;
 import editor.core;
 import pipeline.core; // AssetCreator (the New menus)
 import :editor_icons;
+import :view_mode_toggles;
 import :asset_drag_data;
 import :import_dialog;
 
@@ -148,13 +149,13 @@ export namespace editor::app
                     grow.Height = ui::SizeSpec::Match();
                     header->AddView(m_breadcrumb.Get(), grow);
                 }
-                m_listToggle = MakeRef<ui::ToggleButton>(MemoryAllocator(), StringView(u8"List"));
-                m_gridToggle = MakeRef<ui::ToggleButton>(MemoryAllocator(), StringView(u8"Grid"));
-                m_listToggle->IsChecked.SetValue(true);
-                m_listToggle->OnClick.Add([self](ui::ButtonBase*) { self->SetGridMode(false); });
-                m_gridToggle->OnClick.Add([self](ui::ButtonBase*) { self->SetGridMode(true); });
-                header->AddView(m_listToggle.Get());
-                header->AddView(m_gridToggle.Get());
+                m_viewToggles = MakeRef<ViewModeToggles>(MemoryAllocator());
+                m_viewToggles->OnModeChanged = [self](bool grid) { self->SetGridMode(grid); };
+                {
+                    ui::LayoutStyle center;
+                    center.AlignSelf = ui::Align::Center;
+                    header->AddView(m_viewToggles.Get(), center);
+                }
                 {
                     ui::LayoutStyle lp;
                     lp.Width = ui::SizeSpec::Match();
@@ -295,6 +296,9 @@ export namespace editor::app
         void Reveal(const Guid& id);
         /// The group tree (the left pane).
         [[nodiscard]] ui::TreeView* GroupTree() const noexcept { return m_tree.Get(); }
+        /// The List / Grid toggles over the content area.
+        [[nodiscard]] ViewModeToggles* ViewToggles() const noexcept { return m_viewToggles.Get(); }
+        [[nodiscard]] bool IsGridMode() const noexcept { return m_gridMode; }
 
         // Fill the available space.
         void OnMeasure(ui::BoxConstraints constraints) override;
@@ -787,8 +791,7 @@ export namespace editor::app
         RefPtr<ui::GridView> m_grid;
         RefPtr<ui::EditText> m_filterEdit;
         RefPtr<ui::toolkit::BreadcrumbBar> m_breadcrumb;
-        RefPtr<ui::ToggleButton> m_listToggle;
-        RefPtr<ui::ToggleButton> m_gridToggle;
+        RefPtr<ViewModeToggles> m_viewToggles;
         UniquePtr<TreeAdapter> m_treeAdapter;
         UniquePtr<ListAdapter> m_listAdapter;
         UniquePtr<GridAdapter> m_gridAdapter;

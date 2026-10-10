@@ -40,6 +40,7 @@ import editor.core;
 import pipeline.core; // AssetCreator (the New menus)
 import :editor_icons;
 import :view_mode_toggles;
+import :asset_filter;
 import :asset_drag_data;
 import :import_dialog;
 
@@ -299,6 +300,12 @@ export namespace editor::app
         /// The List / Grid toggles over the content area.
         [[nodiscard]] ViewModeToggles* ViewToggles() const noexcept { return m_viewToggles.Get(); }
         [[nodiscard]] bool IsGridMode() const noexcept { return m_gridMode; }
+        /// Filter as if `text` were typed into the filter field (names, or a guid or its start).
+        void SetFilter(StringView text);
+        /// The assets the content area lists now, in order (subgroup rows left out).
+        [[nodiscard]] Array<Guid> ListedAssets() const;
+        /// The selected row in whichever view shows, or -1.
+        [[nodiscard]] i32 SelectedPosition() const;
 
         // Fill the available space.
         void OnMeasure(ui::BoxConstraints constraints) override;
@@ -666,8 +673,6 @@ export namespace editor::app
         void RebuildList();
 
         void CollectFiltered(content::Group* group);
-
-        [[nodiscard]] static bool MatchesFilter(StringView name, StringView filter);
 
         [[nodiscard]] const Row* RowAt(i32 position) const;
 

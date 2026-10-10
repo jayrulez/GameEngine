@@ -60,6 +60,7 @@ target_sources(Editor.App
             CompactAssetSlot.cppm
             ListHeader.cppm
             ViewModeToggles.cppm
+            AssetFilter.cppm
             WindowCapture.cppm
             EditorWindowTools.cppm
             EditorMcpHost.cppm

@@ -31,6 +31,7 @@ import foundation.fonts; // TextAlignment (a tile name centred)
 import editor.core;
 import :editor_icons;
 import :view_mode_toggles;
+import :asset_filter;
 
 using namespace foundation::core;
 
@@ -87,6 +88,15 @@ export namespace editor::app
                 ui::LayoutStyle lp;
                 lp.Width = ui::SizeSpec::Match();
                 column->AddView(header.Get(), lp);
+            }
+            {
+                m_hint = MakeRef<ui::Label>(MemoryAllocator());
+                m_hint->FontSize.SetValue(12.0f);
+                m_hint->TextColor.SetValue(Optional<Color>(Color{1.0f, 0.75f, 0.4f, 1.0f}));
+                m_hint->Visibility = ui::VisibilityValue::Gone;
+                ui::LayoutStyle lp;
+                lp.Width = ui::SizeSpec::Match();
+                column->AddView(m_hint.Get(), lp);
             }
 
             auto split = MakeRef<ui::toolkit::SplitView>(MemoryAllocator());
@@ -205,6 +215,13 @@ export namespace editor::app
         }
         [[nodiscard]] ui::ListView* RowList() const noexcept { return m_list.Get(); }
         [[nodiscard]] ui::GridView* RowGrid() const noexcept { return m_grid.Get(); }
+        /// Filter as if `text` were typed into the filter field (names, or a guid or its start).
+        void SetFilter(StringView text);
+        /// The line under the filter: why a guid typed there lists nothing (empty when it does).
+        [[nodiscard]] StringView FilterHint() const noexcept
+        {
+            return m_hint->Text.Value().AsView();
+        }
 
     private:
         struct GroupNode
@@ -463,8 +480,6 @@ export namespace editor::app
 
         void CollectFiltered(content::Group* group);
 
-        [[nodiscard]] static bool MatchesFilter(StringView name, StringView filter);
-
         [[nodiscard]] content::Instance* Resolve(const Guid& id);
 
         // === actions ===
@@ -480,6 +495,7 @@ export namespace editor::app
         RefPtr<ui::GridView> m_grid;
         RefPtr<ViewModeToggles> m_viewToggles;
         RefPtr<ui::EditText> m_filterEdit;
+        RefPtr<ui::Label> m_hint; // a guid's asset this slot does not take, said under the filter
         UniquePtr<TreeAdapter> m_treeAdapter;
         UniquePtr<ListAdapter> m_listAdapter;
         UniquePtr<GridAdapter> m_gridAdapter;

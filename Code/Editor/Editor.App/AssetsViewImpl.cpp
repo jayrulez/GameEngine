@@ -730,7 +730,47 @@ namespace editor::app
         m_grid->Selection.ClearSelection();
         m_list->NotifyDataChanged();
         m_gridAdapter->NotifyDataSetChanged();
+        // A whole guid typed or pasted names one asset: select it, so Enter or a double-click
+        // opens it at once.
+        Guid typed;
+        if (FilterAsGuid(m_filter.AsView(), typed))
+        {
+            for (usize i = 0; i < m_rows.Size(); ++i)
+            {
+                if (m_rows[i].group == nullptr && m_rows[i].id == typed)
+                {
+                    m_list->Selection.Select(static_cast<i32>(i));
+                    m_grid->Selection.Select(static_cast<i32>(i));
+                    break;
+                }
+            }
+        }
         UpdateBreadcrumb();
+    }
+
+    void AssetsView::SetFilter(StringView text)
+    {
+        m_filterEdit->SetText(text);
+        m_filter = String(text);
+        RebuildList();
+    }
+
+    Array<Guid> AssetsView::ListedAssets() const
+    {
+        Array<Guid> out;
+        for (const Row& row : m_rows)
+        {
+            if (row.group == nullptr)
+            {
+                out.PushBack(row.id);
+            }
+        }
+        return out;
+    }
+
+    i32 AssetsView::SelectedPosition() const
+    {
+        return m_gridMode ? m_grid->Selection.FirstSelected() : m_list->Selection.FirstSelected();
     }
 
     void AssetsView::CollectFiltered(content::Group* group)
@@ -741,7 +781,7 @@ namespace editor::app
         }
         for (content::Instance* instance : group->Instances())
         {
-            if (MatchesFilter(instance->Name(), m_filter.AsView()))
+            if (AssetMatchesFilter(*instance, m_filter.AsView()))
             {
                 Row row;
                 row.id = instance->Id();
@@ -752,37 +792,6 @@ namespace editor::app
         {
             CollectFiltered(child);
         }
-    }
-
-    bool AssetsView::MatchesFilter(StringView name, StringView filter)
-    {
-        if (filter.IsEmpty())
-        {
-            return true;
-        }
-        if (name.Size() < filter.Size())
-        {
-            return false;
-        }
-        auto lower = [](utf8char c)
-        { return (c >= utf8char('A') && c <= utf8char('Z')) ? static_cast<utf8char>(c + 32) : c; };
-        for (usize i = 0; i + filter.Size() <= name.Size(); ++i)
-        {
-            bool match = true;
-            for (usize j = 0; j < filter.Size(); ++j)
-            {
-                if (lower(name[i + j]) != lower(filter[j]))
-                {
-                    match = false;
-                    break;
-                }
-            }
-            if (match)
-            {
-                return true;
-            }
-        }
-        return false;
     }
 
     const AssetsView::Row* AssetsView::RowAt(i32 position) const

@@ -201,3 +201,117 @@ TEST_CASE("AssetPickerDialog: a grid of the same rows, picked from, its mode kep
     CHECK(again->IsGridMode());
     CHECK(again->ViewToggles()->GridToggle()->IsChecked.Value());
 }
+
+TEST_CASE("asset filter: a name by any part of it, or a guid whole or by its first digits")
+{
+    PickerBench bench(u8"asset-filter-pure");
+    content::Instance* crate = bench.project->SourceDb().GetInstance(bench.asset);
+    REQUIRE(crate != nullptr);
+    utf8char text[37];
+    crate->Id().ToChars(text);
+    const String guid(StringView(text, 36));
+
+    CHECK(app::AssetMatchesFilter(*crate, u8""));
+    CHECK(app::AssetMatchesFilter(*crate, u8"rat"));  // a part of "Crate", any case
+    CHECK(app::AssetMatchesFilter(*crate, u8"CRATE"));
+    CHECK_FALSE(app::AssetMatchesFilter(*crate, u8"barrel"));
+
+    // The guid whole, upper case, braced, without dashes, or its first digits.
+    CHECK(app::AssetMatchesFilter(*crate, guid.AsView()));
+    String upper;
+    for (const utf8char c : guid.AsView())
+    {
+        upper.Append((c >= utf8char('a') && c <= utf8char('f')) ? static_cast<utf8char>(c - 32) : c);
+    }
+    CHECK(app::AssetMatchesFilter(*crate, upper.AsView()));
+    CHECK(app::AssetMatchesFilter(*crate, Format(u8"{{{}}}", guid.AsView()).AsView()));
+    String bare;
+    for (const utf8char c : guid.AsView())
+    {
+        if (c != utf8char('-'))
+        {
+            bare.Append(c);
+        }
+    }
+    CHECK(app::AssetMatchesFilter(*crate, bare.AsView()));
+    CHECK(app::AssetMatchesFilter(*crate, guid.AsView().SubStr(0, 6)));
+    // Too short to read as a guid, or a different one.
+    CHECK_FALSE(app::AssetMatchesFilter(*crate, u8"zz"));
+    String other(guid);
+    other = Format(u8"{}{}", guid.AsView().SubStr(0, 35), guid.AsView()[35] == u8'0' ? u8"1" : u8"0");
+    CHECK_FALSE(app::AssetMatchesFilter(*crate, other.AsView()));
+
+    // FilterAsGuid reads a whole guid only.
+    Guid parsed;
+    REQUIRE(app::FilterAsGuid(bare.AsView(), parsed));
+    CHECK(parsed == crate->Id());
+    CHECK_FALSE(app::FilterAsGuid(guid.AsView().SubStr(0, 6), parsed));
+    CHECK_FALSE(app::FilterAsGuid(u8"Crate", parsed));
+}
+
+TEST_CASE("AssetsView: a guid in the filter finds its asset in any group and selects it")
+{
+    PickerBench bench(u8"assets-view-guid");
+    // A second asset deep in a subgroup, the one to find.
+    content::Group* props = bench.project->SourceDb().RootGroup()->CreateGroup(u8"Props");
+    REQUIRE(props != nullptr);
+    content::Instance* lamp =
+        props->CreateInstance(u8"Lamp", pipeline::ImportOptions::StaticType());
+    REQUIRE(lamp != nullptr);
+    utf8char text[37];
+    lamp->Id().ToChars(text);
+
+    EditorCookService cook;
+    RefPtr<app::AssetsView> view = MakeRef<app::AssetsView>(DefaultAllocator(), bench.context, cook);
+    view->SetFilter(StringView(text, 36));
+    Array<Guid> listed = view->ListedAssets();
+    REQUIRE(listed.Size() == 1);
+    CHECK(listed[0] == lamp->Id());
+    CHECK(view->SelectedPosition() == 0); // a whole guid selects its asset
+
+    // Its first digits find it too, without choosing it for the user.
+    view->SetFilter(StringView(text, 8));
+    listed = view->ListedAssets();
+    bool found = false;
+    for (const Guid& id : listed)
+    {
+        found = found || id == lamp->Id();
+    }
+    CHECK(found);
+}
+
+TEST_CASE("AssetPickerDialog: a guid lists its asset when the slot takes it, says why not otherwise")
+{
+    PickerBench bench(u8"asset-picker-guid");
+    content::Instance* crate = bench.project->SourceDb().GetInstance(bench.asset);
+    REQUIRE(crate != nullptr);
+    utf8char text[37];
+    crate->Id().ToChars(text);
+
+    // A slot that takes the crate's type: listed and selected.
+    {
+        Array<String> types;
+        types.PushBack(String(crate->TypeName()));
+        RefPtr<app::AssetPickerDialog> picker =
+            MakeRef<app::AssetPickerDialog>(DefaultAllocator(), bench.context, Move(types));
+        picker->SetFilter(StringView(text, 36));
+        REQUIRE(picker->Rows().Size() == 1);
+        CHECK(picker->Rows()[0] == crate->Id());
+        CHECK(picker->RowList()->Selection.FirstSelected() == 0);
+        CHECK(picker->FilterHint().IsEmpty());
+    }
+    // A slot that takes something else: nothing listed, and the line under the filter says why.
+    {
+        Array<String> types;
+        types.PushBack(String(u8"MaterialAsset"));
+        RefPtr<app::AssetPickerDialog> picker =
+            MakeRef<app::AssetPickerDialog>(DefaultAllocator(), bench.context, Move(types));
+        picker->SetFilter(StringView(text, 36));
+        CHECK(picker->Rows().IsEmpty());
+        CHECK(picker->FilterHint().ContainsIgnoreCase(u8"Crate"));
+        CHECK(picker->FilterHint().ContainsIgnoreCase(u8"does not take"));
+        picker->SetFilter(u8"");
+        CHECK(picker->FilterHint().IsEmpty());
+    }
+}
+

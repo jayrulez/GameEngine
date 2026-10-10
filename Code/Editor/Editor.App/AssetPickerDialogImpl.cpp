@@ -105,7 +105,7 @@ namespace editor::app
             {
                 content::Instance* instance = m_context->Project()->SourceDb().GetInstance(id);
                 if (instance != nullptr && TypeMatches(*instance) &&
-                    MatchesFilter(instance->Name(), m_filter.AsView()))
+                    AssetMatchesFilter(*instance, m_filter.AsView()))
                 {
                     m_rows.PushBack(id);
                 }
@@ -126,6 +126,38 @@ namespace editor::app
         m_grid->Selection.ClearSelection();
         m_list->NotifyDataChanged();
         m_gridAdapter->NotifyDataSetChanged();
+
+        // A whole guid that names an asset this slot does not take lists nothing: say why, rather
+        // than leave an empty list that reads as "no such asset". A listed one is selected.
+        String hint;
+        Guid typed;
+        if (FilterAsGuid(m_filter.AsView(), typed))
+        {
+            content::Instance* named = Resolve(typed);
+            if (named != nullptr && !TypeMatches(*named))
+            {
+                hint = Format(u8"'{}' is a {}, which this slot does not take", named->Name(),
+                              named->TypeName());
+            }
+            for (usize i = 0; i < m_rows.Size(); ++i)
+            {
+                if (m_rows[i] == typed)
+                {
+                    m_list->Selection.Select(static_cast<i32>(i));
+                    m_grid->Selection.Select(static_cast<i32>(i));
+                    break;
+                }
+            }
+        }
+        m_hint->SetText(hint.AsView());
+        m_hint->Visibility = hint.IsEmpty() ? ui::VisibilityValue::Gone : ui::VisibilityValue::Visible;
+    }
+
+    void AssetPickerDialog::SetFilter(StringView text)
+    {
+        m_filterEdit->SetText(text);
+        m_filter = String(text);
+        RebuildList();
     }
 
     ui::DrawablePtr AssetPickerDialog::IconFor(content::Instance& instance)
@@ -206,7 +238,7 @@ namespace editor::app
             {
                 continue;
             }
-            if (MatchesFilter(instance->Name(), m_filter.AsView()))
+            if (AssetMatchesFilter(*instance, m_filter.AsView()))
             {
                 m_rows.PushBack(instance->Id());
             }
@@ -215,37 +247,6 @@ namespace editor::app
         {
             CollectFiltered(child);
         }
-    }
-
-    bool AssetPickerDialog::MatchesFilter(StringView name, StringView filter)
-    {
-        if (filter.IsEmpty())
-        {
-            return true;
-        }
-        if (name.Size() < filter.Size())
-        {
-            return false;
-        }
-        auto lower = [](utf8char c)
-        { return (c >= utf8char('A') && c <= utf8char('Z')) ? static_cast<utf8char>(c + 32) : c; };
-        for (usize i = 0; i + filter.Size() <= name.Size(); ++i)
-        {
-            bool match = true;
-            for (usize j = 0; j < filter.Size(); ++j)
-            {
-                if (lower(name[i + j]) != lower(filter[j]))
-                {
-                    match = false;
-                    break;
-                }
-            }
-            if (match)
-            {
-                return true;
-            }
-        }
-        return false;
     }
 
     content::Instance* AssetPickerDialog::Resolve(const Guid& id)

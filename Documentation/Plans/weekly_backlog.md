@@ -10,27 +10,8 @@
 > Created 2026-09-12 from the open sections of week-2026-09-05.md (which had absorbed
 > week-2026-08-29, week-2026-08-22 and the archived roadmap/backlog folders).
 >
-> The work queued for the 0.1 release lives in `backlog-0.1.md` (moved there 2026-10-10).
-
-## Queued 2026-10-06 (user, the web demos on a phone)
-
-- **Touch drives the game UI**: the web shell takes touch (`Shell.Web/WebInput.cppm`, start / move /
-  end / cancel on the canvas) and consumes it so the page does not scroll or zoom, which also stops
-  the browser turning taps into mouse clicks; the game UI reads only mouse, keys and pads. So on a
-  phone no menu can be pressed (Snowline's title cannot pick a course). Route touch into the UI as
-  pointer input (a tap presses, a drag scrolls). Sedulous (asked 2026-10-06): its UI input pump has
-  no touch either; its web shell does not prevent the browser's default, so a tap may arrive as a
-  synthesized mouse click there (unverified), a drag never does. New on both sides.
-- **Touch controls in the sample games**: the input map already binds touch (`TouchButton`, a screen
-  region; `TouchStick`, a floating virtual stick), but no game uses it. Each game binds a stick and
-  buttons (Snowline: the left half carves, zones on the right for jump, tuck and grab) and draws a
-  light overlay showing them, shown only once a touch is seen.
-- **Orientation on mobile**: held upright, a phone gives the canvas a portrait shape, and the games
-  are landscape. Options: ask the browser for landscape (`screen.orientation.lock`, which needs
-  fullscreen and is refused on some browsers), letterbox a landscape render into the portrait canvas,
-  or rotate the presented image a quarter turn with the input transformed to match, and a prompt to
-  turn the phone where nothing else works. Likely the larger item of the three: the shell's canvas
-  sizing, the player's fit, and every pointer and touch coordinate are involved.
+> The work queued for the 0.1 release lives in `backlog-0.1.md`, and what waits for 0.2 in
+> `backlog-0.2.md` (both started 2026-10-10).
 
 ## Queued 2026-10-06 (user, PaperKid on TAA)
 
@@ -228,38 +209,6 @@ Deliverable: a decision doc (Documentation/Specs/ or a Parity follow-up) with a
 recommendation - stay forward, add an OPTIONAL deferred path, or go hybrid - and
 if "add", a phased sketch. No renderer code this week.
 
-## Seeded: GPU profiler + profiler visualization (user 2026-08-26)
-
-Origin: same parity doc - "GPU PROFILER: Lumix-ahead - unified CPU/GPU profiler
-timeline + pipeline statistics + NVML telemetry + PIX/RenderDoc; Draconic:
-per-pass graph timestamps + CPU record-time report, SEPARATE from its CPU
-profiler." We have both halves but they are text-dump only and disjoint.
-
-What exists ([[profiler-system]]): `draconic.profiler` CPU scopes
-(compile-gated) + a GPU `GraphProfiler` (per-pass Vulkan timestamps); the P key
-DUMPS TEXT. Two gaps, and the user asked for both:
-
-1. **GPU profiler** - broaden past the current per-pass Vulkan-only timestamps:
-   finer scopes and coverage on the OTHER backends (WebGPU timestamp-query where
-   available, DX12) so the GPU timeline is not Vulkan-only. Pipeline statistics
-   (draw/primitive counts) alongside the timings if cheap.
-2. **Profiler visualization** - replace the text dump with a VISUAL profiler
-   panel (timeline / flamegraph) that UNIFIES the CPU scopes and the GPU
-   timestamps on ONE per-frame timeline (the "separate" problem the parity note
-   calls out). ImGui is already integrated ([[imgui-integration]]) - a candidate
-   host for the overlay - but decide editor-panel vs in-app-overlay at design.
-
-Open questions for week start:
-- The shared data model: merge CPU scope trees + GPU pass timings into one frame
-  record with a common clock/axis (GPU timestamps resolve a frame or two late -
-  the view must align them to the right CPU frame).
-- Where it lives: an editor profiler panel, an ImGui overlay in the samples, or
-  both reading the same capture. Keep the capture layer UI-free.
-- Portability: WebGPU timestamp-query is optional/limited and DX12 differs from
-  Vulkan - the GPU side degrades gracefully where timestamps are unavailable.
-- Compile-gating stays (the CPU profiler is already gated); the visualization is
-  a debug tool, not shipped in dist.
-
 ## Seeded: contact shadows (user 2026-08-26)
 
 Origin: same parity doc - "Lumix-only: contact shadows (SSS)" (also in Lumix's
@@ -441,93 +390,27 @@ Tests: deterministic scatter (seed -> instance transforms, headless); per-chunk
 set build/free; a Vk/WebGPU probe that grass renders + density fades with
 distance; scatter-off byte-identical.
 
-## Seeded: root motion for animation (user 2026-08-26)
+## Left over from root motion and IK (built 2026-10-05; checked 2026-10-10)
 
-Origin: same parity doc, animation section - "ROOT MOTION: Lumix decisive - full
-pipeline ... Draconic: ZERO hits for RootMotion/rootMotion across Code/. HARD
-BLOCKER for locomotion-driven characters." We have the surrounding stack
-(skeletal runtime, a Mecanim-style AnimationGraph FSM + BlendTree2D, clip/graph/
-skeleton editor pages, CharacterVirtual) but nothing extracts or applies the
-root bone's motion, so animation cannot DRIVE character movement. Directly
-relevant to PaperKid ([[first-game-paperboy]]) if the bike/character is
-animation-driven. Cross-cutting (import + clip resource + graph + scene +
-physics) - DESIGN FIRST, then phase.
+The seeds of 2026-08-26 for root motion and inverse kinematics were built to their specs
+(`Specs/root-motion.md` P0-P3, `Specs/inverse-kinematics.md` P0-P4: the clip bake and strip, the
+graph's blended deltas, the Entity / Character / Script modes, the editor's travel views; the
+two-bone and aim solvers, foot IK, the components, bone pickers and gizmos, the proofs in
+PaperKid, Sky Hopper and Snowline). What the seeds or the specs left open:
 
-The four pieces (mirror Lumix's shape on our stack):
-1. **Author/flag** - a per-clip root-motion flag + which bone is the root;
-   import-time identification of the root track.
-2. **Bake-time strip** - extract the root bone's per-frame DELTA (typically
-   planar XZ translation + yaw) OUT of the pose so the skeleton animates
-   IN PLACE, storing the delta separately on the clip resource
-   (AnimationResource). New sidecar/field + a version bump (serializer-strict).
-3. **Graph accumulation** - the AnimationGraph blends the per-clip root deltas
-   by the SAME weights it blends poses (per-node accumulation), producing one
-   root delta per frame. This is the subtle correctness piece.
-4. **Scene application** - a component applies the accumulated delta to the
-   entity Transform each frame; for a physics character, feed it to
-   CharacterVirtual ([[physics-p1]]) instead of teleporting the transform.
-
-Scope for the week: likely the spec + P0 (flag + bake strip + single-clip apply
-to the entity transform) so a walk clip MOVES the entity in place; graph
-blending of deltas + the CharacterVirtual path as P1.
-
-Open questions for week start:
-- Root DOF: planar XZ + yaw only (the common locomotion case) vs full 6-DOF -
-  start planar, keep the data general.
-- Loop wrap: the delta across a clip's loop boundary must be continuous (no
-  teleport at wrap).
-- Blend correctness: blending DELTAS by pose weights (and across FSM
-  transitions / exit-time) must not drift vs the visual pose blend.
-- Physics: apply to CharacterVirtual (collide + slide) vs a kinematic transform
-  for non-physics actors - support both.
-- Editor: the clip/graph preview shows in-place vs moving; the clip page marks
-  root motion.
-
-Tests: bake extraction (moving-root clip -> in-place pose + expected per-frame
-delta, headless); two-clip delta blend by weight; application accumulates to the
-right end transform over N frames; loop-wrap continuity; root-motion-off is
-byte-identical (clip plays as authored).
-
-## Seeded: inverse kinematics (user 2026-08-26)
-
-Origin: same parity doc, animation section - "IK: Lumix decisive - FABRIK N-bone
-graph node, editor-authorable. Draconic: none (only camera LookAt matrices).
-Neither has foot-IK / look-at / two-bone." A total gap; sibling to root motion
-(both are POST-graph pose modifications, and foot-IK plants feet DURING
-locomotion so it pairs with the root-motion work above).
-
-Goal: solve bone chains to reach targets - a pose-modification pass that runs
-AFTER the AnimationGraph produces the pose and BEFORE skinning, adjusting named
-chains toward world targets (hand-to-object, foot-to-ground, head look-at).
-
-Solver set (build cheapest-first):
-- **Two-bone (analytic)** - arms/legs; exact, cheap; the workhorse for foot +
-  hand IK.
-- **Look-at / aim** - single-bone (head/eyes/weapon) toward a target.
-- **FABRIK (N-bone iterative)** - general chains (spines, tails); Lumix's choice.
-- **Foot-IK** - two-bone legs + a ground RAYCAST (physics is available,
-  [[physics-p1]]) + pelvis drop, so feet plant on uneven ground.
-
-Where it runs (design decision at week start): AnimationGraph IK NODES (Lumix's
-shape - authored in the graph) vs a post-graph list of IK CONSTRAINTS on the
-animator component. Either way it mutates the local/model pose on the Skeleton
-before the palette is computed, with a per-constraint blend alpha (IK weight).
-
-Scope for the week: likely spec + P0 = the two-bone solver + look-at, applied
-through one chosen seam with a blend weight; FABRIK + foot-IK (ground ray +
-pelvis) as P1; editor chain authoring as it matures.
-
-Open questions for week start:
-- Target source: a world transform, another entity, or a raycast hit (foot).
-- Pole/hint vectors for the two-bone knee/elbow direction.
-- Blend: per-constraint alpha (IK off <-> full) so IK eases in/out, not a hard
-  snap; ordering when multiple constraints touch overlapping bones.
-- Interaction with root motion: foot planting vs the locomotion delta.
-- Editor: how chains are authored (graph node vs component) + previewed.
-
-Tests: two-bone reaches a REACHABLE target exactly + clamps an unreachable one
-to max extension (headless); look-at aims within tolerance; FABRIK converges;
-blend alpha 0 is byte-identical to the un-modified pose.
+- **An N-bone solver (FABRIK or CCD)** for longer chains (spines, tails, tentacles): named in the
+  IK seed, left out of the spec ("seed it when a game needs it"). Only two-bone and aim exist.
+  IK runs as components after the graph, not as graph nodes (the spec's choice over Lumix's).
+- **The graph page's preview running IK**: deferred in IK P4, since the graph page previews an
+  asset with no entity to take IK from; give the page its own IK preview controls when a game
+  needs one.
+- **A cull distance for foot IK**: deferred in IK P3 (no main camera at that layer); a viewer
+  point a script sets, past which foot IK stops probing.
+- **Vertical root motion for a character**: Character mode walks, it does not climb (the
+  delta's vertical is ignored), so a jump, climb or vault clip cannot carry a physics
+  character up. Entity mode keeps vertical when the clip extracts it.
+- Bone attachments, the natural next piece after IK, are already seeded under the planned list
+  below ("Bone attachments", item 6).
 
 ## Seeded: ragdoll (user 2026-08-26)
 
@@ -741,48 +624,6 @@ correct cell for a given view direction (the impostor from angle X matches the
 real mesh's silhouette within tolerance, headless/probe); coverage LOD selects
 the impostor beyond the last mesh LOD; impostor-off = the mesh chain unchanged.
 
-## Seeded: PLAN - in-editor shader editing + material/shader node-graph editor (user 2026-08-26)
-
-Origin: parity doc - "MATERIALS: par - both shader-ref + property-set with editor
-pages, NO node graph either side" and "SHADERS: Draconic-ahead ... Lumix-ahead on
-one nicety: in-editor shader editor WITH LIVE DISASSEMBLY." User asks for this as
-a PLANNING item - the deliverable this week is a DESIGN DOC, not a build.
-
-We are well-positioned (the plan should exploit what already exists):
-- Offline shader cook to a versioned SPIR-V/DXIL/WGSL pack with a variant lint
-  ([[shaders-track]]) - so "live disassembly" is our COOK OUTPUT, already produced.
-- `CodeEditView` + per-language lexer registry ([[code-editor-track]]) - a shader
-  code page reuses it (an HLSL lexer + save -> re-cook / hot-reload).
-- `MaterialEditorPage` (shader-ref + property set + preview) - the material page a
-  graph would feed.
-- A `NodeGraph` UI foundation (post-port, [[nodegraph-evolution]]) + the working
-  `AnimationGraphPage` node editor (3-pane, persisted node positions) as the
-  precedent for a graph editor.
-- Custom materials without renderer changes ([[renderer-direction]]) - what a
-  shader graph would author.
-
-Two candidate tiers for the plan to weigh + sequence:
-1. **In-editor shader source editing (the cheaper win)** - open a `.hlsl` in a
-   CodeEditView page, edit with the HLSL lexer, save -> the offline cook re-runs
-   + hot-reloads, and show the cooked SPIR-V/WGSL DISASSEMBLY (Lumix's nicety, but
-   from our compiler-free cooked pack, not a runtime FXC). Modest - reuses the
-   code editor + the shader cook.
-2. **Material / shader NODE GRAPH (the big feature; neither engine has it)** -
-   visual nodes (texture sample, math, blend, ... -> surface output) that GENERATE
-   HLSL fed through the EXISTING cook (SPIR-V/DXIL/WGSL, variant lint, compiler-
-   free dist all still apply). Authors custom materials without hand-writing
-   shaders. Rides the NodeGraph UI + the AnimationGraphPage editor pattern.
-
-The plan must decide: ship tier 1 first (fast, high-value, low-risk) with tier 2
-as the larger follow-on, or commit to the node graph directly; the node-graph
-DATA MODEL (nodes -> generated HLSL, variant/feature interaction, the material
-property surface it exposes); how generated shaders ride the variant/lint cook;
-and the graph's serialization + editor shape (reuse AnimationGraphPage's spine).
-
-Deliverable: the design doc (Documentation/Specs/) with the tiering
-recommendation + a phased sketch for the chosen path. No shader-graph code this
-week (tier 1's code page could be a stretch build if the plan lands early).
-
 ## Seeded: investigate large world support (user 2026-08-26)
 
 Origin: parity doc - "Lumix-ahead on WORLD SCALE - DVec3 double-precision
@@ -822,45 +663,6 @@ need - a big level, or planet-scale?); how camera-relative threads through the
 render graph + the froxel/clustered-forward view UBOs + shadows (all consume view
 matrices); physics far-from-origin behaviour (Jolt float limits); whether
 multi-terrain tiling already covers the near-term need.
-
-## Seeded: gizmo vertex snapping (user 2026-08-26)
-
-Origin: parity doc, editor - Lumix has VERTEX SNAPPING; "Draconic snaps drag
-DELTAS only." Our transform gizmo quantizes the drag delta to grid increments
-(translateSnap/rotateSnap/scaleSnap, Ctrl-held, PlayCanvas-style - Gizmo.cppm:
-89-92), but cannot snap an object's point ONTO a vertex of other geometry -
-precise assembly (align this corner to that wall's corner) is manual.
-
-Goal: a vertex-snap mode for the translate gizmo - while dragging (a modifier /
-toggle), snap the moved object so its snap SOURCE point lands exactly on the
-nearest VERTEX of the geometry under the cursor.
-
-The pieces (builds on the existing gizmo + scene pick):
-- **Target pick** - ray-pick a mesh under the cursor (QueryRay, already used for
-  selection/terrain), then find its NEAREST VERTEX to the hit (needs the mesh's
-  vertices in world space at edit time - from the bound mesh resource).
-- **Source point** - v1 = the moved object's PIVOT snaps to the target vertex;
-  v2 = pick a source vertex ON the moved object (Blender-style) so any corner can
-  be the anchor.
-- **Apply** - offset the object so source -> target; this is an ABSOLUTE snap
-  (unlike today's relative delta quantization), a distinct gizmo mode.
-
-Scope for the week: P0 = pivot-to-nearest-vertex snap on the translate gizmo
-under a modifier, with a highlight of the target vertex. Source-vertex pick +
-edge/face (surface) snapping as P1.
-
-Open questions for week start:
-- UX: the modifier/toggle (a held key like Blender's V, vs a toolbar snap-mode
-  toggle vs Ctrl-variant) - and coexistence with the existing delta snap.
-- Vertex data access at edit time: nearest vertex to the ray hit - do we walk the
-  bound mesh's CPU vertices, or sample the picked triangle's corners (cheaper, and
-  enough for pivot->vertex)?
-- Snap targets: vertex only (v1) vs also edges / faces / the grid; visual feedback
-  for the candidate target.
-
-Tests: with vertex snap on, dragging an object onto a mesh places its pivot at the
-EXACT nearest vertex position (headless gizmo test, known mesh + known drag);
-snap-off leaves the existing delta-snap behaviour byte-identical.
 
 ## Seeded: memory profiling (user 2026-08-26)
 
@@ -1002,35 +804,6 @@ Tests: the report WRITER formats + writes a given synthetic stack/context + log
 tail correctly (headless); install/uninstall of the handler is clean; a
 dev-only "force crash" command verifies end-to-end manually (a real crash is not
 unit-testable).
-
-## Seeded: mountable content directories (user 2026-08-29)
-
-Origin: reviewing Sedulous's VFS while building the editor's `data://` discovery+mount. Sedulous lets
-a project MOUNT MULTIPLE content directories. The ask: allow an editor project to mount additional
-content dirs beyond its own Sources/ - so authored content can be packaged (zip a data dir), shipped
-to someone else, and they DOWNLOAD + MOUNT it into their editor project (asset packs, shared prefabs,
-sample content). Builds on foundation.vfs (schemes/mounts) + the content DB.
-
-Sketch: a project references N mounted content roots (its own + external packs); the content DB and
-asset browser union them; GUID stability across packs (a pack's assets keep their guids so references
-resolve after mounting). Decide: mount persistence (in project settings), conflict handling (same
-guid in two packs), whether external mounts are read-only, and product/cook handling for mounted
-sources. Relates to the `data://` discovery work + [[vfs-and-resource-stack]].
-
-## Carried: page-toolbar roll-out - remaining pages (from week-2026-08-29)
-
-The PageToolbar (Save / Undo / Redo / Discard, self-gating on dirty + stack
-state) landed 2026-08-31 on: sound cue (already had it), bus layout, collision
-shape, texture, image. The audit corrected the old seed: NO other page carried
-it. Remaining editing pages to wire (same recipe - wrap the content root in a
-column with the toolbar on top, Refresh() in OnUpdate):
-material, animation clip, animation graph, particle effect, font, heightfield,
-terrain, input map, and the generic asset form. Gotcha from the first batch: a
-page that mutates its asset DIRECTLY (no commands) must override DiscardChanges
-to reload from the source DB - the base "undo the stack" default clears dirty
-without reverting (collision shape needed this); pages whose edits are blob
-commands (texture, image, bus layout) keep the base. Interface units that add
-the OnUpdate override need `import foundation.runtime.client`.
 
 ## Seeded: real-time global illumination (user 2026-09-03)
 

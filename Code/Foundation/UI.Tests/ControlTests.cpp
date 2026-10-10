@@ -785,6 +785,29 @@ TEST_CASE("control: Expander_HeaderActionsRightAlignedAndCentered")
     CHECK(actions->Bounds.y == doctest::Approx((band - 18.0f) * 0.5f));
 }
 
+TEST_CASE("control: Expander_HeaderTitleViewSitsBetweenTheChevronAndTheActions")
+{
+    // A view in place of the drawn title (an editable name): after the chevron, up to the
+    // actions block, centred in the band; clearing it goes back to the drawn HeaderText.
+    auto expander = core::MakeRef<Expander>(core::DefaultAllocator(), StringView(u8"Header"));
+    auto actions = core::MakeRef<TestView>(core::DefaultAllocator(), 44.0f, 18.0f);
+    auto title = core::MakeRef<TestView>(core::DefaultAllocator(), 60.0f, 20.0f);
+    expander->SetHeaderActions(actions.Get());
+    expander->SetHeaderTitle(title.Get());
+    CHECK(expander->HeaderTitle() == title.Get());
+
+    expander->Measure(BoxConstraints::Tight(400, 200));
+    expander->Layout(0, 0, 400, 200);
+    const f32 band = expander->HeaderBandHeight();
+    CHECK(title->Bounds.x == doctest::Approx(24.0f)); // chevron x 8 + size 8 + gap 8
+    CHECK(title->Bounds.x + title->Bounds.width <= actions->Bounds.x);
+    CHECK(title->Bounds.width > 60.0f); // it takes the room up to the actions
+    CHECK(title->Bounds.y == doctest::Approx((band - 20.0f) * 0.5f));
+
+    expander->SetHeaderTitle(nullptr);
+    CHECK(expander->HeaderTitle() == nullptr);
+}
+
 // === WantsArrowKeys (from DirectionalFocusTests: arrow keys go to the focused control, not focus-nav) ===
 
 TEST_CASE("control: WantsArrowKeys_ButtonFalse")

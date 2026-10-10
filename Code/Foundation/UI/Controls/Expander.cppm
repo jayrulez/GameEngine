@@ -72,6 +72,23 @@ export namespace foundation::ui
             }
         }
 
+        /// Replace the drawn title with a view (null goes back to the owner's HeaderText): an
+        /// editable label renames what the section is about in place. It sits after the chevron
+        /// and ends where the actions begin; a press it handles never toggles the section.
+        void SetTitle(View* title)
+        {
+            if (m_title != nullptr)
+            {
+                RemoveView(m_title, true);
+            }
+            m_title = title;
+            if (title != nullptr)
+            {
+                AddView(title);
+            }
+        }
+        [[nodiscard]] View* Title() const noexcept { return m_title; }
+
         void OnMouseDown(MouseEventArgs& e) override;
         void OnDraw(UIDrawContext& ctx) override;
 
@@ -88,6 +105,14 @@ export namespace foundation::ui
                 m_actions->Layout(Max(0.0f, width - aw - kActionsPad),
                                   Max(0.0f, (height - ah) * 0.5f), aw, ah);
             }
+            if (m_title != nullptr && m_title->Visibility != Visibility::Gone)
+            {
+                const f32 x = TitleX();
+                const f32 w = Max(0.0f, width - x - ReservedActionsWidth() - 4.0f);
+                const f32 h = Min(m_title->MeasuredSize.y, height);
+                m_title->Measure(BoxConstraints::Tight(w, h));
+                m_title->Layout(x, Max(0.0f, (height - h) * 0.5f), w, h);
+            }
         }
 
     private:
@@ -97,6 +122,9 @@ export namespace foundation::ui
         static constexpr f32 kTextGap = 8.0f;
         static constexpr f32 kActionsPad = 4.0f; // right inset for the actions block
         static constexpr f32 kActionsVPad = 2.0f; // band padding when actions set its height
+
+        /// Where the title begins: after the chevron.
+        [[nodiscard]] static constexpr f32 TitleX() { return kChevronX + kChevronSize + kTextGap; }
 
         /// Width the title must not paint into (actions block + its insets), 0 when none.
         [[nodiscard]] f32 ReservedActionsWidth() const
@@ -110,6 +138,7 @@ export namespace foundation::ui
 
         Expander* m_owner = nullptr; // the styled control the band draws for (never null)
         View* m_actions = nullptr;   // right-aligned header widgets; owned by m_children
+        View* m_title = nullptr;     // a view in place of the drawn title; owned by m_children
     };
 
     class Expander : public ViewGroup
@@ -180,6 +209,11 @@ export namespace foundation::ui
             m_header->SetActions(actions, layout);
         }
         void SetHeaderActions(View* actions) { m_header->SetActions(actions); }
+
+        /// A view in place of the drawn title (an editable name, say); null draws HeaderText
+        /// again. See ExpanderHeader::SetTitle.
+        void SetHeaderTitle(View* title) { m_header->SetTitle(title); }
+        [[nodiscard]] View* HeaderTitle() const noexcept { return m_header->Title(); }
 
         void Toggle() { SetIsExpanded(!m_isExpanded); }
         void Expand() { SetIsExpanded(true); }
@@ -329,6 +363,11 @@ export namespace foundation::ui
             m_actions->Measure(constraints.Loosen());
             bandH = Max(bandH, m_actions->MeasuredSize.y + kActionsVPad * 2.0f);
         }
+        if (m_title != nullptr && m_title->Visibility != Visibility::Gone)
+        {
+            m_title->Measure(constraints.Loosen());
+            bandH = Max(bandH, m_title->MeasuredSize.y + kActionsVPad * 2.0f);
+        }
         MeasuredSize = Float2{constraints.ConstrainWidth(constraints.BoundedMaxWidth(200.0f)),
                               constraints.ConstrainHeight(bandH)};
     }
@@ -393,7 +432,7 @@ export namespace foundation::ui
         }
 
         const StringView title = m_owner->HeaderText();
-        if (title.Size() > 0 && ctx.FontService() != nullptr)
+        if (m_title == nullptr && title.Size() > 0 && ctx.FontService() != nullptr)
         {
             const f32 fontSize = m_owner->ResolveStyleFloat(StyleProperty::FontSize, 16.0f);
             if (fonts::CachedFont* font =
@@ -404,7 +443,7 @@ export namespace foundation::ui
                     Color{220.0f / 255.0f, 225.0f / 255.0f, 235.0f / 255.0f, 1.0f});
                 // The title's rect ends where the actions block begins - it can no longer run
                 // underneath the buttons.
-                const f32 textX = kChevronX + kChevronSize + kTextGap;
+                const f32 textX = TitleX();
                 const f32 textW = Max(0.0f, Width() - textX - ReservedActionsWidth() - 4.0f);
                 ctx.VG().DrawText(title, font, Rectangle{textX, 0, textW, Height()},
                                   fonts::TextAlignment::Left, fonts::VerticalAlignment::Middle,

@@ -49,6 +49,7 @@ target_sources(Editor.Scene
         SkeletonPageImpl.cpp
         SettingsProfilesImpl.cpp
         SettingsProfilePageImpl.cpp
+        SceneLoadingImpl.cpp
     PUBLIC
         FILE_SET editorscene_modules TYPE CXX_MODULES FILES
             SceneViewSettings.cppm
@@ -60,6 +61,7 @@ target_sources(Editor.Scene
             SettingsProfiles.cppm
             SceneEditorPageInterface.cppm
             ViewportCaptureRecorder.cppm
+            SceneLoading.cppm
             PieInstancePage.cppm
             PieMcpTools.cppm
             SceneActions.cppm

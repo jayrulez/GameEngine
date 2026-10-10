@@ -61,6 +61,7 @@ import :edit;
 import :settings_profiles; // QueueSettingsProfileEdit (a profile-mode settings edit)
 import :scene_page_interface; // ISceneEditorPage (published on the page)
 import :viewport_capture;     // ViewportCaptureRecorder (viewport_screenshot)
+import :scene_loading;        // LoadEditorScene (the document, its binds, its prefabs)
 import :pie_tools;            // RegisterPieTools (the contribution)
 import :actions; // the scene editor's action declarations
 import :mcp_tools;            // RegisterSceneLiveTools (the contribution)
@@ -119,56 +120,17 @@ export namespace editor
                 m_sceneManager.SetSceneEventBus(&m_pageEvents);
                 m_scene = m_sceneManager.CreateScene(instance.Name());
                 m_scene->SetSimulationEnabled(false); // edit mode is frozen; Simulate un-freezes
-                const Stopwatch loadClock = Stopwatch::StartNew();
-                const Status loaded = scene::LoadScene(instance, *m_scene);
-                const i64 parseMs = static_cast<i64>(loadClock.Elapsed().AsMilliseconds());
-                i64 bindMs = 0;
-                i64 prefabMs = 0;
+                SceneLoadTimes times;
+                const Status loaded = LoadEditorScene(context, instance, *m_scene, &times);
                 if (loaded.IsOk())
                 {
-                    // Bind the scene's resource refs to cooked products (no-op refs stay null;
-                    // a later cook + reopen picks them up - live hot reload is the 6d pass).
-                    if (context.Resources() != nullptr)
-                    {
-                        // Async binds: decodes go to workers, proxies settle over the next
-                        // frames (the app pumps) and content POPS IN - a Sponza-sized page
-                        // must never stall the UI thread (the player's LoadSceneAsync model,
-                        // adopted editor-side).
-                        foundation::resource::AsyncBindScope asyncScope(*context.Resources());
-                        scene::ResolveSceneResources(*m_scene, *context.Resources());
-                    }
-                    bindMs = static_cast<i64>(loadClock.Elapsed().AsMilliseconds()) - parseMs;
-                    // Prefab instances load as ref+deltas - respawn them from the SOURCE DB
-                    // (payloads are edited assets, not cooked products), then bind the
-                    // spawned components' refs too.
-                    if (m_scene->PendingPrefabInstanceCount() > 0 && context.Project() != nullptr)
-                    {
-                        EditorContext* editorContext = &context;
-                        scene::ResolveScenePrefabs(
-                            *m_scene,
-                            Function<UniquePtr<IStream>(const Guid&)>{
-                                [editorContext](const Guid& prefabId) -> UniquePtr<IStream>
-                                {
-                                    foundation::content::Instance* prefab =
-                                        editorContext->Project()->SourceDb().GetInstance(prefabId);
-                                    return (prefab != nullptr) ? prefab->ReadData(u8"scene")
-                                                               : UniquePtr<IStream>{};
-                                }});
-                        if (context.Resources() != nullptr)
-                        {
-                            foundation::resource::AsyncBindScope asyncScope(*context.Resources());
-                            scene::ResolveSceneResources(*m_scene, *context.Resources());
-                        }
-                        prefabMs = static_cast<i64>(loadClock.Elapsed().AsMilliseconds()) -
-                                   parseMs - bindMs;
-                    }
                     // The UI-thread cost of opening this scene: the document parse, the bind
                     // pass (async: it queues decodes, the products pop in over later frames),
                     // the prefab respawn. The async decodes and GPU finalizes are not in here.
                     LOG_INFO(u8"Editor",
                              u8"opened scene '{}': parse {} ms, bind {} ms, prefabs {} ms "
                              u8"(UI thread)",
-                             m_title, parseMs, bindMs, prefabMs);
+                             m_title, times.parseMs, times.bindMs, times.prefabMs);
                 }
                 else if (loaded.Code() == ErrorCode::NotFound)
                 {

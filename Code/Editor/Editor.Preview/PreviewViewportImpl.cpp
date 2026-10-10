@@ -93,6 +93,22 @@ namespace editor
         return m_impl->scene;
     }
 
+    scene::Scene* PreviewViewport::ResetScene()
+    {
+        if (m_impl->scenes == nullptr)
+        {
+            return nullptr;
+        }
+        String name(m_impl->scene != nullptr ? m_impl->scene->Name() : StringView(u8"preview"));
+        if (m_impl->scene != nullptr)
+        {
+            m_impl->sceneManager.DestroyScene(m_impl->scene);
+        }
+        m_impl->scene = m_impl->sceneManager.CreateScene(name.AsView());
+        m_impl->scene->SetSimulationEnabled(false);
+        return m_impl->scene;
+    }
+
     ui::View* PreviewViewport::View() const
     {
         return m_impl->viewport.Get();

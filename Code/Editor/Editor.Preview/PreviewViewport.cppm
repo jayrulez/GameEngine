@@ -60,6 +60,9 @@ export namespace editor
 
         [[nodiscard]] bool IsValid() const;
         [[nodiscard]] scene::Scene* Scene() const;
+        /// Start over with an empty scene (the old one and everything in it destroyed): a page
+        /// that previews on different content (a profile on one of the project's scenes) swaps it.
+        scene::Scene* ResetScene();
         // The viewport view, as a base View for layout (SplitView panes etc.).
         [[nodiscard]] ui::View* View() const;
         [[nodiscard]] EditorCamera& Camera();

@@ -42,10 +42,6 @@
   defaults, set in the project settings, so the lookup goes scene, then project, then the
   hard-coded default. Survey which domains have scene settings, and how a project default
   relates to the profiles (a project default could simply name a profile).
-- **A preview scene for the environment and post-process profile pages** (user 2026-10-09): let
-  the page for an Environment or Post Process profile pick one of the project's scenes to preview
-  the profile on, so you see exactly how it looks there (Lamplight's shared profiles were tuned by
-  playing the levels). Remember the choice per profile.
 - **Custom shaders through the editor, before the 0.1 release** (user 2026-10-09, ready and
   showcased for 0.1; merged 2026-10-10 with the planning seed of 2026-08-26, "in-editor shader
   editing + material/shader node-graph editor"): custom shaders already work at the engine level,

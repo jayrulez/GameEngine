@@ -27,6 +27,8 @@ import editor.core;
 import editor.app;
 import editor.preview;
 import :inspector; // SettingsRows (the rows a scene's settings section shows)
+import :scene_loading; // LoadEditorScene, SceneWorldBounds (a project scene to preview on)
+import :view_settings; // LoadSceneViewPref (where that scene's page left its camera)
 
 using namespace foundation::core;
 namespace scene = foundation::scene;
@@ -71,6 +73,27 @@ namespace editor
         return true;
     }
 
+    bool PreviewSettingsProfileInScene(ISerializable& profileAsset, scene::Scene& target,
+                                       foundation::resource::ResourceManager* resources)
+    {
+        auto* asset = Cast<pipeline::SettingsProfileAsset>(&profileAsset);
+        if (asset == nullptr)
+        {
+            return false;
+        }
+        // A scene that takes its values from a profile renders that profile's COOKED values; the
+        // preview shows the ones being edited, so the block goes back to its own first.
+        target.ForEachSystem(
+            [&](scene::SceneSystem& system)
+            {
+                if (system.SettingsType() == asset->ValuesType())
+                {
+                    system.UseSettingsProfile(Guid{});
+                }
+            });
+        return ApplySettingsProfileToScene(profileAsset, target, resources);
+    }
+
     SettingsProfilePage::SettingsProfilePage(EditorContext& context,
                                              foundation::runtime::IApplicationHost& host,
                                              ui::runtime::UIHost& uiHost,
@@ -86,10 +109,8 @@ namespace editor
         SetInstanceId(instance.Id());
 
         m_preview = MakeUnique<PreviewViewport>(Allocator(), host, uiHost, u8"profile.preview");
-        m_preview->Camera().position = Float3{0.0f, 1.7f, 5.0f};
-        m_preview->Camera().LookAt(Float3{0.0f, 0.5f, 0.0f});
-        BuildPreviewScene();
-        ApplyPreview();
+        LoadPreviewPref();
+        LoadPreviewContent();
 
         m_grid = MakeRef<ui::toolkit::PropertyGrid>(Allocator());
         RebuildGrid();
@@ -293,8 +314,120 @@ namespace editor
         scene::Scene* preview = m_preview ? m_preview->Scene() : nullptr;
         if (preview != nullptr && m_asset.Get() != nullptr)
         {
-            (void)ApplySettingsProfileToScene(*m_asset, *preview, m_context->Resources());
+            (void)PreviewSettingsProfileInScene(*m_asset, *preview, m_context->Resources());
         }
+    }
+
+    void SettingsProfilePage::SetPreviewScene(const Guid& sceneId)
+    {
+        if (sceneId == m_previewSceneId)
+        {
+            return;
+        }
+        m_previewSceneId = sceneId;
+        LoadPreviewContent();
+        SavePreviewPref();
+    }
+
+    void SettingsProfilePage::LoadPreviewContent()
+    {
+        if (!m_preview)
+        {
+            return;
+        }
+        m_previewContent.Clear();
+        scene::Scene* preview = m_preview->ResetScene();
+        if (preview == nullptr)
+        {
+            return;
+        }
+        foundation::content::Instance* sceneDocument =
+            (!m_previewSceneId.IsNil() && m_context->Project() != nullptr)
+                ? m_context->Project()->SourceDb().GetInstance(m_previewSceneId)
+                : nullptr;
+        bool loaded = false;
+        if (sceneDocument != nullptr)
+        {
+            loaded = LoadEditorScene(*m_context, *sceneDocument, *preview).IsOk();
+            if (!loaded)
+            {
+                LOG_WARNING(u8"Editor", u8"profile '{}': preview scene '{}' did not load - showing the built-in one",
+                            m_title, sceneDocument->Name());
+                preview = m_preview->ResetScene();
+            }
+        }
+        EditorCamera& camera = m_preview->Camera();
+        if (loaded)
+        {
+            // From where that scene's page left its camera, else the whole scene in view.
+            const SceneViewPref view =
+                LoadSceneViewPref(m_context->ProjectEditorSettings(), m_previewSceneId, SceneViewPref{});
+            AABB bounds;
+            if (view.hasCamera)
+            {
+                camera.position = view.cameraPosition;
+                camera.yaw = view.cameraYaw;
+                camera.pitch = view.cameraPitch;
+                camera.focusDistance = view.cameraFocusDistance;
+            }
+            else if (SceneWorldBounds(*preview, bounds))
+            {
+                camera.FrameSphere(bounds.Center(), Length(bounds.Extents()), 1.0472f, /*ease*/ false);
+            }
+        }
+        else
+        {
+            camera.position = Float3{0.0f, 1.7f, 5.0f};
+            camera.LookAt(Float3{0.0f, 0.5f, 0.0f});
+            BuildPreviewScene();
+        }
+        ApplyPreview();
+    }
+
+    void SettingsProfilePage::LoadPreviewPref()
+    {
+        foundation::settings::Settings* store = m_context->ProjectEditorSettings();
+        if (store == nullptr)
+        {
+            return;
+        }
+        if (const ProfilePreviewSettings* section = store->Find<ProfilePreviewSettings>())
+        {
+            for (const ProfilePreviewPref& pref : section->prefs)
+            {
+                if (pref.profile == InstanceId())
+                {
+                    m_previewSceneId = pref.scene;
+                    return;
+                }
+            }
+        }
+    }
+
+    void SettingsProfilePage::SavePreviewPref()
+    {
+        foundation::settings::Settings* store = m_context->ProjectEditorSettings();
+        if (store == nullptr)
+        {
+            return;
+        }
+        ProfilePreviewSettings& section = store->Section<ProfilePreviewSettings>();
+        bool found = false;
+        for (ProfilePreviewPref& pref : section.prefs)
+        {
+            if (pref.profile == InstanceId())
+            {
+                pref.scene = m_previewSceneId;
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+        {
+            section.prefs.PushBack(ProfilePreviewPref{InstanceId(), m_previewSceneId});
+        }
+        store->MarkChanged<ProfilePreviewSettings>();
+        m_context->RequestProjectEditorSettingsSave();
     }
 
     void SettingsProfilePage::RebuildGrid()
@@ -352,6 +485,18 @@ namespace editor
                             });
         };
 
+        // The scene the profile is previewed on (page-local: not the profile's data, remembered
+        // per profile in the project's editor store).
+        {
+            const StringView sceneTypes[] = {u8"SceneDocument"};
+            auto sceneRow = MakeRef<ResourceRefEditor>(Allocator(), StringView(u8"Scene"), StringView(u8"(built-in)"),
+                                                       StringView(u8"Preview"), Span<const StringView>{sceneTypes, 1});
+            sceneRow->SetEmptyText(u8"(built-in)");
+            sceneRow->BindAsset(*m_context, [page]() { return page->m_previewSceneId; },
+                                [page](const Guid& picked) { page->SetPreviewScene(picked); });
+            m_grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(sceneRow.Get()));
+        }
+
         SettingsRows rows(*m_context, *m_grid, m_refreshers);
         const StringView category = SettingsCategoryName(*type);
         for (const PropertyInfo& prop : Properties(*type))
@@ -382,6 +527,9 @@ namespace editor
                                        foundation::runtime::IApplicationHost& host,
                                        ui::runtime::UIHost& uiHost)
     {
+        // The preview-choice section (registered before the app loads the per-project store).
+        GlobalTypeRegistry().Register(ProfilePreviewSettings::StaticType(), TypeDomain(u8"Editor"));
+        RegisterSerializable<ProfilePreviewSettings>();
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
             editor::EditorRootAllocator().New<SettingsProfilePageFactory>(host, uiHost),
             editor::EditorRootAllocator()));

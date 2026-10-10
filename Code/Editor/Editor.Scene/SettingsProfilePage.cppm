@@ -4,10 +4,14 @@
 // Editor::Scene - :settings_profile_page partition.
 //
 // SettingsProfilePage: edits a profile asset (an Environment Profile, a Post Process Profile;
-// any pipeline::SettingsProfileAsset) - a preview scene on the left (a ground, spheres of a few
-// materials, a cube and a sun) rendered with the profile applied, the profile's values on the
-// right in the same rows a scene's settings section shows (SettingsRows). Save writes the asset
-// and cooks it, so every scene using the profile picks the change up.
+// any pipeline::SettingsProfileAsset) - a preview on the left rendered with the profile applied,
+// the profile's values on the right in the same rows a scene's settings section shows
+// (SettingsRows). The preview is a built-in scene (a ground, spheres of a few materials, a cube
+// and a sun) or one of the project's scenes, picked in the Preview row (user 2026-10-09: shared
+// profiles are tuned by how they look in the levels): it loads as the scene page opens it, seen
+// from where that page's camera was left, the profile's values over the scene's own. The choice
+// is remembered per profile (ProfilePreviewSettings). Save writes the asset and cooks it, so every
+// scene using the profile picks the change up.
 //
 // Edits are blob-snapshot commands like the material page's: the whole asset serialized before
 // and after (it is small), consecutive scrubs of one field merged, each apply re-applying the
@@ -19,6 +23,7 @@
 
 module;
 #include "Core/Prelude.h"
+#include "Core/Reflection/Reflect.h"
 
 export module editor.scene:settings_profile_page;
 
@@ -46,6 +51,46 @@ export namespace editor
     bool ApplySettingsProfileToScene(ISerializable& profileAsset, foundation::scene::Scene& scene,
                                      foundation::resource::ResourceManager* resources);
 
+    /// As ApplySettingsProfileToScene, on a scene loaded to preview the profile on: the block is
+    /// first turned to its own values, so a scene that takes this profile (or another) by
+    /// reference shows the values being edited rather than the cooked ones.
+    bool PreviewSettingsProfileInScene(ISerializable& profileAsset, foundation::scene::Scene& scene,
+                                       foundation::resource::ResourceManager* resources);
+
+    /// The scene a profile is previewed on, per profile (nil: the built-in scene).
+    struct ProfilePreviewPref
+    {
+        Guid profile;
+        Guid scene;
+
+        void Serialize(ISerializer& ar)
+        {
+            ar.Key("profile");
+            ar.GuidValue(profile);
+            ar.Key("scene");
+            ar.GuidValue(scene);
+        }
+    };
+
+    inline void Serialize(ISerializer& ar, ProfilePreviewPref& p)
+    {
+        ar.BeginObject();
+        p.Serialize(ar);
+        ar.EndObject();
+    }
+
+    /// The profile pages' preview choices, in the per-project editor store.
+    class ProfilePreviewSettings final : public ISerializable
+    {
+        RTTI_OBJECT(ProfilePreviewSettings, ISerializable)
+    public:
+        Array<ProfilePreviewPref> prefs;
+
+        void Serialize(ISerializer& ar) override { foundation::core::Serialize(ar, "prefs", prefs); }
+    };
+
+    RTTI_DEFINE_OBJECT_VERSIONED(ProfilePreviewSettings, "rtti::editor::editor.scene", 1)
+
     class SettingsProfilePage final : public app::UIEditorPage
     {
     public:
@@ -67,6 +112,11 @@ export namespace editor
         // `blob`, the preview given its values.
         void ApplyAssetBlob(const Array<byte>& blob);
         [[nodiscard]] Array<byte> SnapshotAsset() const;
+
+        /// The scene the profile is previewed on (nil: the built-in one), and picking another:
+        /// the preview reloads and the choice is remembered for this profile.
+        [[nodiscard]] const Guid& PreviewSceneId() const noexcept { return m_previewSceneId; }
+        void SetPreviewScene(const Guid& scene);
 
     private:
         class EditProfileCommand final : public IEditorCommand
@@ -105,6 +155,11 @@ export namespace editor
         // One undoable edit of the profile's values: snapshot, mutate, snapshot, push.
         void ApplyEdit(StringView mergeKey, Function<void(void* values)> mutate);
         void BuildPreviewScene();
+        /// The preview's content: the picked scene, loaded and seen from where its page's camera
+        /// was left (else framed whole), or the built-in scene when none is picked or it is gone.
+        void LoadPreviewContent();
+        void LoadPreviewPref();
+        void SavePreviewPref();
         void ApplyPreview();
         void RebuildGrid();
 
@@ -113,6 +168,7 @@ export namespace editor
         RefPtr<ISerializable> m_asset; // a pipeline::SettingsProfileAsset (null: failed to read)
 
         UniquePtr<PreviewViewport> m_preview;
+        Guid m_previewSceneId; // the project scene previewed on; nil = the built-in one
         Array<RefPtr<RefCounted>> m_previewContent; // the preview's runtime meshes and materials
 
         RefPtr<foundation::ui::toolkit::PropertyGrid> m_grid;

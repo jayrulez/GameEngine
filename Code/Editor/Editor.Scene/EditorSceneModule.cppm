@@ -23,6 +23,7 @@ export import :actions;
 export import :entity_json;
 export import :mcp_tools;
 export import :viewport_capture;
+export import :scene_loading;
 export import :pie_page_interface;
 export import :pie_tools;
 export import :gizmo;

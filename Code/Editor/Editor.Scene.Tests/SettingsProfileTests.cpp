@@ -295,3 +295,91 @@ TEST_CASE("settings profiles: the profile page's preview takes the profile's val
     scene::Scene empty(DefaultAllocator(), u8"empty");
     CHECK_FALSE(editor::ApplySettingsProfileToScene(*look, empty, nullptr)); // no block to take them
 }
+
+// A profile previewed on one of the project's scenes (user 2026-10-09): a scene whose block takes a
+// profile by reference renders that profile's cooked values, so the preview turns the block to its
+// own values before giving it the ones being edited.
+TEST_CASE("settings profiles: previewed on a scene that takes a profile, the edited values show")
+{
+    RegisterRenderComponentReflection();
+    pipeline::RegisterRenderProfileAssets();
+    scene::Scene scene(DefaultAllocator(), u8"level");
+    auto* env = scene.AddSystem<EnvironmentSystem>();
+    env->UseSettingsProfile(Guid{0x1u, 0x2u});
+    REQUIRE(env->Environment().source == SettingsSource::Profile);
+
+    RefPtr<pipeline::EnvironmentProfileAsset> environment =
+        MakeRef<pipeline::EnvironmentProfileAsset>(DefaultAllocator());
+    environment->values.turbidity = 6.5f;
+    CHECK(editor::PreviewSettingsProfileInScene(*environment, scene, nullptr));
+    CHECK(env->Environment().source == SettingsSource::Scene);
+    CHECK(env->Effective().turbidity == doctest::Approx(6.5f)); // what the renderer reads
+}
+
+// The scene a profile is previewed on is remembered per profile, in the project's editor store.
+TEST_CASE("settings profiles: the preview scene choice round-trips per profile")
+{
+    editor::ProfilePreviewSettings settings;
+    settings.prefs.PushBack(editor::ProfilePreviewPref{Guid{0x1u, 0x1u}, Guid{0x2u, 0x2u}});
+    settings.prefs.PushBack(editor::ProfilePreviewPref{Guid{0x3u, 0x3u}, Guid{}});
+    MemoryStream stream;
+    {
+        BinarySerializer ar(stream, SerializeMode::Write);
+        settings.Serialize(ar);
+        REQUIRE(ar.IsOk());
+    }
+    (void)stream.Seek(0, SeekOrigin::Begin);
+    editor::ProfilePreviewSettings read;
+    {
+        BinarySerializer ar(stream, SerializeMode::Read);
+        read.Serialize(ar);
+        REQUIRE(ar.IsOk());
+    }
+    REQUIRE(read.prefs.Size() == 2u);
+    CHECK(read.prefs[0].profile == Guid{0x1u, 0x1u});
+    CHECK(read.prefs[0].scene == Guid{0x2u, 0x2u});
+    CHECK(read.prefs[1].scene.IsNil()); // the built-in scene
+}
+
+namespace
+{
+    // Measures two entities as fixed boxes, as a render or physics domain answers.
+    class TwoBoxes final : public scene::SceneSystem, public scene::ISceneEntityBounds
+    {
+    public:
+        scene::EntityHandle a = scene::EntityHandle::Invalid();
+        scene::EntityHandle b = scene::EntityHandle::Invalid();
+        [[nodiscard]] scene::ISceneEntityBounds* AsEntityBounds() noexcept override { return this; }
+        [[nodiscard]] bool EntityBounds(scene::Scene&, scene::EntityHandle e, AABB& out) override
+        {
+            if (e == a)
+            {
+                out = AABB{Float3{0.0f, 0.0f, 0.0f}, Float3{1.0f, 1.0f, 1.0f}};
+                return true;
+            }
+            if (e == b)
+            {
+                out = AABB{Float3{4.0f, -2.0f, 0.0f}, Float3{5.0f, 0.0f, 3.0f}};
+                return true;
+            }
+            return false;
+        }
+    };
+}
+
+// A previewed scene with no saved camera is framed whole: the bounds of everything measured.
+TEST_CASE("settings profiles: a scene's world bounds merge every measured entity")
+{
+    scene::Scene scene(DefaultAllocator(), u8"level");
+    AABB bounds;
+    CHECK_FALSE(editor::SceneWorldBounds(scene, bounds)); // nothing has a size
+    auto* boxes = scene.AddSystem<TwoBoxes>();
+    boxes->a = scene.CreateEntity(u8"A");
+    boxes->b = scene.CreateEntity(u8"B");
+    (void)scene.CreateEntity(u8"Marker"); // measured by nothing
+    REQUIRE(editor::SceneWorldBounds(scene, bounds));
+    CHECK(bounds.min.x == doctest::Approx(0.0f));
+    CHECK(bounds.min.y == doctest::Approx(-2.0f));
+    CHECK(bounds.max.x == doctest::Approx(5.0f));
+    CHECK(bounds.max.z == doctest::Approx(3.0f));
+}

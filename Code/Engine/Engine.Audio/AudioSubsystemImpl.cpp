@@ -167,7 +167,11 @@ namespace engine::audio
     {
         // v4: sourceType discriminant (Clip/Cue) drives the inspector + runtime.
         builder.Attribute("displayName", String(u8"Audio Source"))
-            .Attribute("category", String(u8"Audio")).DataVersion(4);
+            .Attribute("category", String(u8"Audio"))
+            .Attribute("description",
+                       String(u8"Plays a sound clip or cue from the entity, positioned in 3D or "
+                              u8"flat."))
+            .DataVersion(4);
         // Script (Track A): AudioSourceComponent.of(entity) -> live volume/pitch/loop/spatial/etc.
         // play/stop/pause + clip swap are engine ops -> SceneAudio.of(scene) (world ops keyed by entity).
         builder.Method<&foundation::script::ComponentOf<AudioSourceComponent>, AudioSourceComponent>(
@@ -211,7 +215,11 @@ namespace engine::audio
     REFLECT_VALUE(AudioListenerComponent, "rtti::engine::audio")
     {
         builder.Attribute("displayName", String(u8"Audio Listener"))
-            .Attribute("category", String(u8"Audio")).DataVersion(1);
+            .Attribute("category", String(u8"Audio"))
+            .Attribute("description",
+                       String(u8"Hears the scene from the entity; the first active listener is "
+                              u8"the one used."))
+            .DataVersion(1);
         builder.Property<&AudioListenerComponent::isActive>("isActive");
     }
 
@@ -313,7 +321,11 @@ namespace engine::audio
     REFLECT_VALUE(AudioReverbZoneComponent, "rtti::engine::audio")
     {
         builder.Attribute("displayName", String(u8"Reverb Zone"))
-            .Attribute("category", String(u8"Audio")).DataVersion(1);
+            .Attribute("category", String(u8"Audio"))
+            .Attribute("description",
+                       String(u8"Adds reverb to the scene's sound while the listener is inside "
+                              u8"its sphere."))
+            .DataVersion(1);
         builder.Property<&AudioReverbZoneComponent::radius>("radius");
         builder.Property<&AudioReverbZoneComponent::edgeFade>("edgeFade");
         builder.Property<&AudioReverbZoneComponent::roomSize>("roomSize");

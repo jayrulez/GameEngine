@@ -494,6 +494,9 @@ namespace engine::physics
     {
         builder.Attribute("displayName", String(u8"Rigid Body"))
             .Attribute("category", String(u8"Physics"))
+            .Attribute("description",
+                       String(u8"Makes the entity a physics body, static, kinematic or dynamic, "
+                              u8"with a collision shape."))
             .DataVersion(3); // v3: continuous collision + explicit mass
         builder.Property<&RigidBodyComponent::motion>("motion");
         builder.Property<&RigidBodyComponent::layer>("layer");
@@ -528,7 +531,11 @@ namespace engine::physics
     REFLECT_VALUE(ColliderComponent, "rtti::engine::physics")
     {
         builder.Attribute("displayName", String(u8"Collider"))
-            .Attribute("category", String(u8"Physics")).DataVersion(2); // v2: heightfield ref
+            .Attribute("category", String(u8"Physics"))
+            .Attribute("description",
+                       String(u8"Adds an extra collision shape to the nearest ancestor's rigid "
+                              u8"body."))
+            .DataVersion(2); // v2: heightfield ref
         builder.Property<&ColliderComponent::shape>("shape");
         builder.Property<&ColliderComponent::halfExtents>("halfExtents")
             .PropAttribute("visibleWhen", String(u8"shape=0"));
@@ -547,7 +554,11 @@ namespace engine::physics
     REFLECT_VALUE(CharacterComponent, "rtti::engine::physics")
     {
         builder.Attribute("displayName", String(u8"Character"))
-            .Attribute("category", String(u8"Physics")).DataVersion(1);
+            .Attribute("category", String(u8"Physics"))
+            .Attribute("description",
+                       String(u8"Moves the entity as a capsule character that walks slopes and "
+                              u8"steps, jumps and pushes bodies."))
+            .DataVersion(1);
         builder.Property<&CharacterComponent::radius>("radius");
         builder.Property<&CharacterComponent::halfHeight>("halfHeight");
         builder.Property<&CharacterComponent::maxSlopeDegrees>("maxSlopeDegrees");
@@ -587,6 +598,9 @@ namespace engine::physics
         // motor checkbox. kind/targetEntity/localAnchor apply to every kind, so stay unconditional.
         builder.Attribute("displayName", String(u8"Joint"))
             .Attribute("category", String(u8"Physics"))
+            .Attribute("description",
+                       String(u8"Connects the entity's rigid body to another body or the world: "
+                              u8"fixed, point, hinge, slider or distance."))
             .DataVersion(1)
             .Property<&JointComponent::kind>("kind")
             .Property<&JointComponent::targetEntity>("targetEntity")

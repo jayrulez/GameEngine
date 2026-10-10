@@ -51,6 +51,9 @@ namespace engine::script
     {
         builder.Attribute("displayName", String(u8"Script"))
             .Attribute("category", String(u8"Scripting"))
+            .Attribute("description",
+                       String(u8"Runs scripts on the entity, in order, each with its own "
+                              u8"property values."))
             .DataVersion(1);
     }
 

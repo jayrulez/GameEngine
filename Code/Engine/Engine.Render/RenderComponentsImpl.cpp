@@ -67,6 +67,8 @@ namespace engine::render
     {
         builder.Attribute("displayName", String(u8"Mesh"))
             .Attribute("category", String(u8"Rendering"))
+            .Attribute("description",
+                       String(u8"Draws a mesh with its materials at the entity's transform."))
             .DataVersion(5) // v5: fade (v4: LOD knobs, v3: unified materials array)
             // Script (Track A): MeshComponent.of(entity) -> a re-resolving handle; `color`/`visible`
             // set live from a behavior. `mesh`/`materials` are resource refs - swapped via the
@@ -102,6 +104,9 @@ namespace engine::render
     {
         builder.Attribute("displayName", String(u8"Instanced Mesh"))
             .Attribute("category", String(u8"Rendering"))
+            .Attribute("description",
+                       String(u8"Draws one mesh and material at many instance transforms in a "
+                              u8"single draw, for scatter and crowds."))
             .Method<&foundation::script::ComponentOf<InstancedMeshComponent>, InstancedMeshComponent>(
                 "of")
             .Property<&InstancedMeshComponent::mesh>("mesh")
@@ -114,6 +119,9 @@ namespace engine::render
     {
         builder.Attribute("displayName", String(u8"Camera"))
             .Attribute("category", String(u8"Rendering"))
+            .Attribute("description",
+                       String(u8"Views the scene from the entity, in perspective or "
+                              u8"orthographic, onto the screen or a render texture."))
             .DataVersion(2) // v1: projection + orthoHeight; v2: target + targetInterval
             .Method<&foundation::script::ComponentOf<CameraComponent>, CameraComponent>("of")
             // The mode first: the inspector shows only the fields of the chosen projection.
@@ -145,6 +153,9 @@ namespace engine::render
     {
         builder.Attribute("displayName", String(u8"Light"))
             .Attribute("category", String(u8"Rendering"))
+            .Attribute("description",
+                       String(u8"Lights the scene from the entity: directional, point or spot, "
+                              u8"optionally casting shadows."))
             // Script (Track A): LightComponent.of(entity) -> live color/intensity/range/enabled/etc.
             .Method<&foundation::script::ComponentOf<LightComponent>, LightComponent>("of")
             .DataVersion(1) // v1: shadowDepthBiasScale, shadowNormalBias, shadowStrength
@@ -399,6 +410,9 @@ namespace engine::render
     {
         builder.Attribute("displayName", String(u8"Sprite"))
             .Attribute("category", String(u8"Rendering"))
+            .Attribute("description",
+                       String(u8"Draws a textured billboard at the entity, facing the camera or "
+                              u8"fixed in the world."))
             .Method<&foundation::script::ComponentOf<SpriteComponent>, SpriteComponent>("of")
             .Property<&SpriteComponent::textureAsset>("texture")
             .Property<&SpriteComponent::size>("size")
@@ -413,6 +427,9 @@ namespace engine::render
     {
         builder.Attribute("displayName", String(u8"Decal"))
             .Attribute("category", String(u8"Rendering"))
+            .Attribute("description",
+                       String(u8"Projects a texture onto the surfaces inside the entity's box, "
+                              u8"along its local Z axis."))
             .Method<&foundation::script::ComponentOf<DecalComponent>, DecalComponent>("of")
             .Property<&DecalComponent::textureAsset>("texture")
             .Property<&DecalComponent::size>("size")
@@ -534,6 +551,9 @@ namespace engine::render
     {
         builder.Attribute("displayName", String(u8"Reflection Probe"))
             .Attribute("category", String(u8"Rendering"))
+            .Attribute("description",
+                       String(u8"Captures the scene around the entity into a cubemap that gives "
+                              u8"reflections to surfaces in its box."))
             .Method<&foundation::script::ComponentOf<ReflectionProbeComponent>, ReflectionProbeComponent>(
                 "of")
             .Property<&ReflectionProbeComponent::halfExtents>("halfExtents")

@@ -24,6 +24,9 @@ namespace engine::spline
     {
         builder.Attribute("displayName", String(u8"Spline"))
             .Attribute("category", String(u8"Utility"))
+            .Attribute("description",
+                       String(u8"Holds a curve of points, open or closed, for paths and "
+                              u8"followers; shape it with the spline tool."))
             .DataVersion(1);
         // Points are authored by the viewport spline tool, not the inspector: the rows are the
         // loop flag (through the curve, so its caches follow) and the point count, read-only.
@@ -114,6 +117,9 @@ namespace engine::spline
     {
         builder.Attribute("displayName", String(u8"Path Follow"))
             .Attribute("category", String(u8"Utility"))
+            .Attribute("description",
+                       String(u8"Moves the entity along another entity's spline at a set speed, "
+                              u8"optionally facing its direction."))
             .DataVersion(1)
             .Property<&PathFollowComponent::spline>("spline")
             .Property<&PathFollowComponent::speed>("speed")

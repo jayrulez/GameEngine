@@ -2590,7 +2590,11 @@ namespace engine::ui
     REFLECT_VALUE(UIBillboardComponent, "rtti::engine::ui")
     {
         builder.Attribute("displayName", String(u8"UI Billboard"))
-            .Attribute("category", String(u8"UI")).DataVersion(1);
+            .Attribute("category", String(u8"UI"))
+            .Attribute("description",
+                       String(u8"Shows a UI document on screen at the entity's position, such "
+                              u8"as a nameplate or health bar."))
+            .DataVersion(1);
         // Script (Track A): world-space UI component .of(entity) -> live data (offset/orientation/
         // scale/visible). The SCREEN tier (IScreenOverlay, loading screen) is deliberately NOT exposed.
         builder.Method<&foundation::script::ComponentOf<UIBillboardComponent>, UIBillboardComponent>(
@@ -2609,7 +2613,11 @@ namespace engine::ui
     REFLECT_VALUE(UICanvasComponent, "rtti::engine::ui")
     {
         builder.Attribute("displayName", String(u8"UI Canvas"))
-            .Attribute("category", String(u8"UI")).DataVersion(2); // v2 added the RenderTexture canvas mode
+            .Attribute("category", String(u8"UI"))
+            .Attribute("description",
+                       String(u8"Shows a UI document as a screen menu or HUD, or draws it into "
+                              u8"a render texture."))
+            .DataVersion(2); // v2 added the RenderTexture canvas mode
         builder.Method<&foundation::script::ComponentOf<UICanvasComponent>, UICanvasComponent>("of");
         builder.Property<&UICanvasComponent::document>("document");
         builder.Property<&UICanvasComponent::theme>("theme");
@@ -2627,7 +2635,11 @@ namespace engine::ui
     REFLECT_VALUE(UIWorldPanelComponent, "rtti::engine::ui")
     {
         builder.Attribute("displayName", String(u8"UI World Panel"))
-            .Attribute("category", String(u8"UI")).DataVersion(1);
+            .Attribute("category", String(u8"UI"))
+            .Attribute("description",
+                       String(u8"Shows a UI document on a panel in the world, in the entity's "
+                              u8"plane, optionally taking pointer input."))
+            .DataVersion(1);
         builder.Method<&foundation::script::ComponentOf<UIWorldPanelComponent>, UIWorldPanelComponent>(
             "of");
         builder.Property<&UIWorldPanelComponent::document>("document");

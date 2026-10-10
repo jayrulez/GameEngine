@@ -420,6 +420,9 @@ namespace foundation::net
     {
         builder.Attribute("displayName", String(u8"Network Identity"))
             .Attribute("category", String(u8"Networking"))
+            .Attribute("description",
+                       String(u8"Marks the entity as networked, giving it a network id and an "
+                              u8"owner, server or client."))
             .DataVersion(1);
         // Script (Track A): NetworkComponent.of(entity) -> read `authority` (is this entity server- or
         // client-owned) for authority-gated gameplay, and `id` for logging. READ-ONLY: replication
@@ -437,6 +440,9 @@ namespace foundation::net
     {
         builder.Attribute("displayName", String(u8"Networked Transform"))
             .Attribute("category", String(u8"Networking"))
+            .Attribute("description",
+                       String(u8"Sends the entity's position, rotation and scale over the "
+                              u8"network, smoothed on clients."))
             .DataVersion(1);
         builder.Property<&NetworkedTransform::position>("position")
             .PropAttribute(kReplicatedAttribute, true);

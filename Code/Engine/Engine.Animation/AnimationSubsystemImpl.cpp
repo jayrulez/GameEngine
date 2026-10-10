@@ -34,6 +34,9 @@ namespace engine::animation
     {
         builder.Attribute("displayName", String(u8"Skeletal Animation"))
             .Attribute("category", String(u8"Animation"))
+            .Attribute("description",
+                       String(u8"Plays one animation clip on a skeleton and poses the entity's "
+                              u8"skinned meshes with it."))
             .DataVersion(2) // v1: meshEntities persist; v2: rootMotion
             .ReadsDataVersionsFrom(1) // a v1 record reads with root motion off
             // Script (Track A): SkeletalAnimationComponent.of(entity) -> live speed/startTime/autoPlay.
@@ -61,6 +64,9 @@ namespace engine::animation
     {
         builder.Attribute("displayName", String(u8"Animation Graph"))
             .Attribute("category", String(u8"Animation"))
+            .Attribute("description",
+                       String(u8"Animates a skeleton through an animation graph's states and "
+                              u8"blends, posing its skinned meshes."))
             .DataVersion(2) // v1: meshEntities persist; v2: rootMotion
             .ReadsDataVersionsFrom(1) // a v1 record reads with root motion off
             // Script (Track A): AnimationGraphComponent.of(entity) -> live `active`; graph params
@@ -114,6 +120,9 @@ namespace engine::animation
     {
         builder.Attribute("displayName", String(u8"Two Bone IK"))
             .Attribute("category", String(u8"Animation"))
+            .Attribute("description",
+                       String(u8"Bends a two-bone chain so its end reaches a target, such as a "
+                              u8"foot on a step or a hand on a handle."))
             .Method<&foundation::script::ComponentOf<TwoBoneIkComponent>, TwoBoneIkComponent>("of")
             .Property<&TwoBoneIkComponent::startBone>("startBone")
             .PropAttribute("boneName", true)
@@ -159,6 +168,9 @@ namespace engine::animation
     {
         builder.Attribute("displayName", String(u8"Aim IK"))
             .Attribute("category", String(u8"Animation"))
+            .Attribute("description",
+                       String(u8"Turns a chain of bones so the last one points at a target, "
+                              u8"such as a head that follows."))
             .Method<&foundation::script::ComponentOf<AimIkComponent>, AimIkComponent>("of")
             .Property<&AimIkComponent::bones>("bones")
             .PropAttribute("description", String(u8"Root first; the last bone aims (a spine: 0.3, 0.5, 1)."))
@@ -203,6 +215,9 @@ namespace engine::animation
     {
         builder.Attribute("displayName", String(u8"Foot IK"))
             .Attribute("category", String(u8"Animation"))
+            .Attribute("description",
+                       String(u8"Plants the character's feet on the ground under them, angled "
+                              u8"to its slope, and lowers the pelvis so they reach."))
             .Method<&foundation::script::ComponentOf<FootIkComponent>, FootIkComponent>("of")
             .Property<&FootIkComponent::legs>("legs")
             .PropAttribute("description", String(u8"Up to four legs, each thigh, shin, foot."))
@@ -242,6 +257,9 @@ namespace engine::animation
         builder
             .Attribute("displayName", String(u8"Instanced Skinning"))
             .Attribute("category", String(u8"Animation"))
+            .Attribute("description",
+                       String(u8"Animates an instanced mesh crowd from a small shared pool of "
+                              u8"poses of one clip."))
             .Method<&foundation::script::ComponentOf<InstancedSkinningComponent>,
                     InstancedSkinningComponent>("of")
             .Property<&InstancedSkinningComponent::poseCount>("poseCount")
@@ -270,6 +288,9 @@ namespace engine::animation
         // (Phase G) play/stop methods.
         builder.Attribute("displayName", String(u8"Property Animator"))
             .Attribute("category", String(u8"Animation"))
+            .Attribute("description",
+                       String(u8"Plays a property animation clip on the entity, animating its "
+                              u8"transform and component values."))
             .Method<&foundation::script::ComponentOf<PropertyAnimatorComponent>,
                     PropertyAnimatorComponent>("of")
             // Playback ops for scripts: animator.of(entity).play()/stop()/pause()/... (no facade lib).

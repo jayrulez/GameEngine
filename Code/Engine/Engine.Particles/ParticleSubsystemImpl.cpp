@@ -27,6 +27,9 @@ namespace engine::particles
     {
         builder.Attribute("displayName", String(u8"Particle Effect"))
             .Attribute("category", String(u8"Effects"))
+            .Attribute("description",
+                       String(u8"Plays a particle effect at the entity: billboards, trails, meshes "
+                              u8"or lights."))
             // Script (Track A): ParticleEffectComponent.of(entity) -> live visible/meshScale/light*.
             // play/stop/setEffect are instance ops -> SceneParticles.of(scene) (world ops keyed by entity).
             .Method<&foundation::script::ComponentOf<ParticleEffectComponent>, ParticleEffectComponent>(

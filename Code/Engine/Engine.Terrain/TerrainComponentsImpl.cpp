@@ -112,6 +112,9 @@ namespace engine::terrain
     {
         builder.Attribute("displayName", String(u8"Terrain"))
             .Attribute("category", String(u8"Terrain"))
+            .Attribute("description",
+                       String(u8"Draws a terrain asset, its heights and painted layers, as "
+                              u8"ground that navigation can walk."))
             .DataVersion(2)
             .Property<&TerrainComponent::terrain>("terrain")
             .Property<&TerrainComponent::castShadows>("castShadows")

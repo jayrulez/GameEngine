@@ -174,6 +174,9 @@ namespace engine::vegetation
     {
         builder.Attribute("displayName", String(u8"Terrain Vegetation"))
             .Attribute("category", String(u8"Terrain"))
+            .Attribute("description",
+                       String(u8"Scatters grass, plants and props over the terrain on the same "
+                              u8"entity, by layer and painted mask."))
             .DataVersion(4)          // 2026-10-06: a layer's collision (trunk radius, height, group);
                                      // 2026-10-05: a material per slot (was one material);
                                      // 2026-09-23: two layer lists (was one list + placement)

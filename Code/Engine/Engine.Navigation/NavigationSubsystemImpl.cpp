@@ -183,6 +183,9 @@ namespace engine::navigation
     {
         builder.Attribute("displayName", String(u8"Nav Mesh Zone"))
             .Attribute("category", String(u8"Navigation"))
+            .Attribute("description",
+                       String(u8"Marks a box where a navigation mesh is baked, and loads that "
+                              u8"baked mesh for agents at run time."))
             .DataVersion(1)
             .Property<&NavMeshZoneComponent::extents>("extents")
             .Property<&NavMeshZoneComponent::cellSize>("cellSize")
@@ -198,6 +201,9 @@ namespace engine::navigation
     {
         builder.Attribute("displayName", String(u8"Nav Agent"))
             .Attribute("category", String(u8"Navigation"))
+            .Attribute("description",
+                       String(u8"Steers the entity to targets over the navigation mesh, "
+                              u8"avoiding other agents."))
             .DataVersion(2) // v2: stopDistance
             .Property<&NavAgentComponent::radius>("radius")
             .Property<&NavAgentComponent::height>("height")

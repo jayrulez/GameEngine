@@ -45,5 +45,7 @@ export import :font_atlas_cache;
 export import :mcp_host;
 export import :mcp_operations;
 export import :mcp_page_tools;
+export import :window_capture;
+export import :mcp_window_tools;
 export import :mcp_action_tools;
 export import :application;

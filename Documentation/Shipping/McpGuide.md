@@ -32,7 +32,11 @@ defaults, foot IK's legs for one; a list or structure inside an element still go
 `viewport_camera_set` read and move the viewport's editor camera in degrees, position, yaw,
 pitch or a `lookAt` point, editor state only; `viewport_screenshot` writes what the viewport
 shows to a PNG and returns its path and size, bringing the page to front first since a hidden
-viewport never renders - move the camera, shoot, read the file; `navigation_bake` bakes a
+viewport never renders - move the camera, shoot, read the file; `editor_screenshot` writes
+the whole editor window as the user sees it (panels, pages, menus, dialogs, toasts) the same
+way, `window: "all"` adding each floating window beside it, for checking the editor's own UI
+rather than a scene (the user's View > Screenshot Editor, F12, writes the same under
+`<user-data>/screenshots`); `navigation_bake` bakes a
 zone, as the inspector's Bake Navigation button does: the static geometry inside the zone's
 box (static, non-trigger rigid bodies and terrain; render meshes are not read, so a floor or
 an obstacle agents should respect needs a static body, and what moves never bakes) into the

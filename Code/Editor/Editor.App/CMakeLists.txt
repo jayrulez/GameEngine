@@ -27,6 +27,7 @@ target_sources(Editor.App
         CompactAssetSlotImpl.cpp
         ListHeaderImpl.cpp
         ViewModeTogglesImpl.cpp
+        EditorWindowToolsImpl.cpp
         EditorMcpHostImpl.cpp
         EditorProjectOperationsImpl.cpp
         EditorPageToolsImpl.cpp EditorActionToolsImpl.cpp
@@ -59,6 +60,8 @@ target_sources(Editor.App
             CompactAssetSlot.cppm
             ListHeader.cppm
             ViewModeToggles.cppm
+            WindowCapture.cppm
+            EditorWindowTools.cppm
             EditorMcpHost.cppm
             EditorProjectOperations.cppm
             EditorPageTools.cppm

@@ -126,14 +126,6 @@
   a picker dialog like the asset picker: a search field at the top, and below it the categories
   with their components, filtered as you type. This likely answers "organize the new-component
   menu" from PaperKid's editor feedback (`weekly_backlog.md`, the carried list).
-- **Screenshots of the whole editor, over MCP and from a hotkey** (user 2026-10-10): today the
-  whole window can be captured only at launch (`Tools.Editor --screenshot <png> --screenshot-after
-  <s>`, one shot of the main window's finished backbuffer, UI included, through the runtime's
-  `ScreenshotCapture`), and over MCP only a scene viewport (`viewport_screenshot`) or a Game tab
-  (`pie_screenshot`). Add an MCP tool that captures the whole editor window while it runs (the
-  same backbuffer capture, armed on demand, its path answered when the next frame completes it;
-  floating windows too, or say which window), and an editor action with a hotkey that writes one
-  to the screenshots folder. Update the MCP guide and `kEngineToolCount` with the tool.
 - **F frames the selection in the scene view** (user 2026-10-10): there is no frame action in
   the scene editor. The preview pages frame their content through `EditorCamera::FrameBounds`
   (mesh, material, collision shape), and `EditorCamera::LookAt` notes itself as the

@@ -805,15 +805,40 @@ namespace editor::app
             m_embeddedApp->OnUpdate(*m_embeddedHost, dt);
         }
 
-        // A screenshot recorded last frame: the GPU has to finish the copy; a one-off, so wait
-        // for everything, then map and write.
-        if (m_screenshot.Recorded())
+        // Window screenshots recorded last frame: written once the GPU has run the copies; a
+        // window closed before it drew fails its capture rather than leaving it waiting.
+        if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
         {
-            if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
+            m_windowCapture.Complete(*gfx->Raw(), host.Ctx().Allocator());
+        }
+        if (m_windowCapture.Busy())
+        {
+            Array<u32> open(m_editorAllocator);
+            if (host.Shell() != nullptr && host.Shell()->WindowManager() != nullptr)
             {
-                gfx->Raw()->WaitIdle();
-                foundation::image::Image written;
-                (void)m_screenshot.Complete(*gfx->Raw(), host.Ctx().Allocator(), written);
+                for (foundation::shell::IWindow* window : host.Shell()->WindowManager()->Windows())
+                {
+                    if (window != nullptr && window->IsOpen())
+                    {
+                        open.PushBack(window->Id());
+                    }
+                }
+            }
+            m_windowCapture.FailMissing(Span<const u32>(open.Data(), open.Size()));
+        }
+        if (m_announceScreenshot && !m_windowCapture.Busy())
+        {
+            m_announceScreenshot = false;
+            const Array<WindowShot> shots = m_windowCapture.Shots();
+            if (!shots.IsEmpty() && shots[0].state == WindowCaptureState::Written)
+            {
+                m_context.Notify(editor::NoticeKind::Success,
+                                 Format(u8"Screenshot saved: {}", shots[0].path.AsView()).AsView());
+            }
+            else
+            {
+                m_context.Notify(editor::NoticeKind::Error,
+                                 u8"The screenshot failed (the Console, category Screenshot, says why)");
             }
         }
         const bool screenshotRequested = !m_config.screenshotPath.IsEmpty();
@@ -835,7 +860,14 @@ namespace editor::app
                 m_elapsed >= m_config.screenshotAfterSeconds)
             {
                 m_screenshotFired = true; // one shot: the next main-window frame records it
-                m_screenshot.Request(m_config.screenshotPath.AsView());
+                if (graphics::RenderWindow* main = host.MainRenderWindow(); main != nullptr)
+                {
+                    WindowShotRequest request;
+                    request.window = main->Window().Id();
+                    request.main = true;
+                    request.path = m_config.screenshotPath;
+                    m_windowCapture.Request(Span<const WindowShotRequest>(&request, 1));
+                }
             }
         }
         // Headless-debug hook: ENV_TEST_OPEN=<guid> opens that instance's page ~2s in
@@ -1039,15 +1071,62 @@ namespace editor::app
         {
             m_uiHost->RenderWindow(frame);
         }
-        // The --screenshot capture: the main window's finished backbuffer, UI included. The
-        // copy sits in this frame's command stream; OnUpdate completes it next frame.
-        if (m_screenshot.Armed() && frame.valid && frame.window == host.MainRenderWindow() &&
-            frame.encoder != nullptr && host.Graphics() != nullptr &&
-            host.Graphics()->Raw() != nullptr)
+        // A window screenshot: this window's finished backbuffer, UI included, when one of it is
+        // armed. The copy sits in this frame's command stream; OnUpdate writes it next frame.
+        if (frame.valid && frame.window != nullptr && frame.encoder != nullptr &&
+            host.Graphics() != nullptr && host.Graphics()->Raw() != nullptr)
         {
-            (void)m_screenshot.Record(*host.Graphics()->Raw(), *frame.encoder, frame.backbuffer,
-                                      frame.window->Swap()->Format(), frame.width, frame.height);
+            m_windowCapture.Record(*host.Graphics()->Raw(), *frame.encoder, frame.window->Window().Id(),
+                                   frame.backbuffer, frame.window->Swap()->Format(), frame.width,
+                                   frame.height);
         }
+    }
+
+    Array<u32> EditorApplication::CapturableWindows()
+    {
+        Array<u32> windows(m_editorAllocator);
+        if (m_host == nullptr)
+        {
+            return windows;
+        }
+        graphics::RenderWindow* main = m_host->MainRenderWindow();
+        if (main == nullptr || !main->Window().IsOpen() || main->Window().IsMinimized())
+        {
+            return windows; // a minimised editor draws no frame
+        }
+        windows.PushBack(main->Window().Id());
+        if (m_host->Shell() != nullptr && m_host->Shell()->WindowManager() != nullptr)
+        {
+            for (foundation::shell::IWindow* window : m_host->Shell()->WindowManager()->Windows())
+            {
+                if (window != nullptr && window->Id() != main->Window().Id() && window->IsOpen() &&
+                    !window->IsMinimized())
+                {
+                    windows.PushBack(window->Id());
+                }
+            }
+        }
+        return windows;
+    }
+
+    void EditorApplication::TakeEditorScreenshot()
+    {
+        const Array<u32> windows = CapturableWindows();
+        if (windows.IsEmpty())
+        {
+            return;
+        }
+        WindowShotRequest request;
+        request.window = windows[0];
+        request.main = true;
+        request.path = NewScreenshotPath(u8"editor");
+        if (request.path.IsEmpty())
+        {
+            m_context.Notify(editor::NoticeKind::Error, u8"Could not create the screenshots folder");
+            return;
+        }
+        m_windowCapture.Request(Span<const WindowShotRequest>(&request, 1));
+        m_announceScreenshot = true;
     }
 
     void EditorApplication::OnShutdown(runtime::IApplicationHost& host)
@@ -1055,7 +1134,7 @@ namespace editor::app
         fonts::FontAtlasBakerFactory::SetAtlasCache(nullptr); // ours dies with this app
         if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
         {
-            m_screenshot.Release(*gfx->Raw()); // the readback buffer, while the device lives
+            m_windowCapture.Release(*gfx->Raw()); // the readback buffers, while the device lives
         }
         StopMcpHost();
         m_cookService.Shutdown(); // joins any in-flight cook before the DBs go away
@@ -2992,6 +3071,13 @@ namespace editor::app
             }
         };
         RegisterPageTools(m_mcpHost->Server(), Move(pageSeams));
+        // editor_screenshot, over the same capture as View > Screenshot.
+        WindowToolSeams windowSeams;
+        windowSeams.windows = [this]() { return CapturableWindows(); };
+        windowSeams.request = [this](Span<const WindowShotRequest> requests)
+        { m_windowCapture.Request(requests); };
+        windowSeams.shots = [this]() { return m_windowCapture.Shots(); };
+        RegisterWindowTools(m_mcpHost->Server(), Move(windowSeams));
         // The action bridge: everything a user can do by command, unattended (the dialogs an
         // action opens are suppressed and reported).
         ActionToolSeams actionSeams;
@@ -3700,6 +3786,17 @@ namespace editor::app
                 m_shell.ResetLayout();
                 m_context.SetStatus(u8"Layout reset to default.");
             };
+            (void)actions.Register(Move(d));
+        }
+        {
+            EditorActionDeclaration d =
+                Declare(u8"view.screenshot", u8"Screenshot Editor",
+                        u8"Write the editor's main window, as it looks now, to a PNG under "
+                        u8"<user-data>/screenshots",
+                        u8"View/Screenshot Editor", 300);
+            d.shortcut = EditorShortcut{ui::KeyCode::F12, ui::KeyModifiers::None};
+            d.readOnly = true; // a file outside the project; nothing in it changes
+            d.execute = [this](editor::EditorPage*) { TakeEditorScreenshot(); };
             (void)actions.Register(Move(d));
         }
         {

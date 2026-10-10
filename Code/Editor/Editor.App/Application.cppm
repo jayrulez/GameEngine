@@ -31,6 +31,8 @@ import editor.mcp;        // ProjectSession + the operations the MCP host serves
 import :mcp_host;         // EditorMcpHost (per project, pumped per frame)
 import :mcp_operations;   // EditorProjectOperations (the host's cook / import / export)
 import :mcp_page_tools;   // the page tools the host adds over this application's pages
+import :mcp_window_tools; // editor_screenshot, over this application's windows
+import :window_capture;   // EditorWindowCapture (the tool, View > Screenshot, --screenshot)
 import :mcp_action_tools; // the action bridge, unattended
 import foundation.ui.resource;        // UITheme (the manifest's default game-UI theme)
 import engine.ui;       // UISubsystem (SetDefaultTheme)
@@ -460,8 +462,16 @@ export namespace editor::app
         UIEditorPage* m_gamePage = nullptr; // the PRIMARY game tab (focus target); extras untracked
         u32 m_gamePageCounter = 0;          // unique persistence id for "Play New Instance" tabs
         f32 m_elapsed = 0.0f;               // autoExit/autoRebuild/screenshot accumulator
-        engine::runtime::ScreenshotCapture m_screenshot; // the --screenshot capture (one shot)
-        bool m_screenshotFired = false;
+        // Screenshots of the editor's windows: --screenshot, editor_screenshot, View > Screenshot.
+        EditorWindowCapture m_windowCapture{m_editorAllocator};
+        bool m_screenshotFired = false;    // the --screenshot one shot is armed
+        bool m_announceScreenshot = false; // View > Screenshot: tell the user when it is written
+
+        // The ids of the windows that can draw a frame now, the main window first; empty while
+        // the main window is minimised (nothing to capture).
+        [[nodiscard]] Array<u32> CapturableWindows();
+        // View > Screenshot (F12): the main window to a new PNG under <user-data>/screenshots.
+        void TakeEditorScreenshot();
         f32 m_testOpenElapsed = 0.0f;       // ENV_TEST_OPEN hook
         u32 m_testOpenStage = 0;
         bool m_autoRebuilt = false;

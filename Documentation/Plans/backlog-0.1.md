@@ -1,11 +1,12 @@
 # 0.1 backlog - open items for the 0.1 release
 
-> The work queued for the engine's 0.1 release (the editor's polish, the release builds, the
-> website, the flagship game, custom shaders, the docs, the fifth sample). Moved here from
-> `weekly_backlog.md` on 2026-10-10; that file keeps everything else open. Pull an item out of
-> here into the current weekly when it is started; delete it here when done.
+> The work queued for the engine's 0.1 release, in three parts: the editor, the engine, and the
+> rest of the release (builds, samples, docs, the website and the flagship game). Moved here from
+> `weekly_backlog.md` on 2026-10-10; that file keeps everything else open, and `backlog-0.2.md`
+> what waits for 0.2. Pull an item out of here into the current weekly when it is started; delete
+> it here when done.
 
-## Queued 2026-10-09 and after (user)
+## Editor
 
 - **A scene grid that fits our scenes, perhaps infinite** (user 2026-10-09): the scene view's
   ground grid is debug-draw lines, a fixed 20 m square in 20 cells (`ScenePageImpl.cpp`,
@@ -122,51 +123,6 @@
     exposes); how generated shaders ride the variant cook and lint; the graph's serialization and
     editor shape (reusing AnimationGraphPage's spine). For 0.1, tier 1 and the showcase are the
     likely scope; whether the graph is in 0.1 is part of the decision.
-- **Documentation cleaned up and made proper, for the 0.1 release** (user 2026-10-09): the
-  documentation as a user of the engine meets it, current and organised (getting started, the
-  editor, each system, scripting, exporting, the MCP guide), with the plans, specs and history
-  that grew in `Documentation/` kept apart from it or archived.
-- **The 0.1 release** (user 2026-10-09): the release itself, with
-  - **a website** for the engine (beyond the demos site, GameEngineDemos);
-  - **a showcase game**: the engine's flagship, released on Steam. Separate from the sample
-    games in this repository and not part of it (its own project and repository); the samples
-    stay the engine's examples.
-  The items marked for 0.1 above (custom shaders through the editor, the documentation, the
-  fifth sample below) belong to it.
-- **A fifth sample game, on networking and crowds, before 0.1** (user 2026-10-09): no sample
-  project uses the network stack or crowds yet, so neither has been showcased or stressed in a
-  game. The fifth sample in `Data/SampleProjects/` built around both: players over the network
-  (the engine's reliable UDP and replication) and a crowd (instanced skinning, navigation
-  crowds), built and playtested through the MCP tools as the others were. (Lamplight's crowd
-  was set aside "for later" when it was planned.)
-- **Scene facades as scene properties, as Sedulous has them? Decide before 0.1** (user
-  2026-10-09): Sedulous binds a scene facade as a property of the scene (`scene.Physics.RayCast`,
-  its SceneFacade role); ours are reached through the facade type (`ScenePhysics::of(scene)`,
-  `SceneRender::of`, `SceneAudio::of`, ...), kept so by the ruling of 2026-10-01 until the role
-  was revisited. Look at it before 0.1, while the script surface can still change freely: which
-  reads more naturally in AngelScript and Luau, what moving means for every facade, the sample
-  games' scripts and the docs. The earlier write-up is `Plans/beef-script-facades-note.md`.
-- **Sort the backlog and plans into 0.1 and 0.2** (user 2026-10-09): go through `weekly_backlog.md`,
-  the plans and everything else open (`Documentation/Plans`, `Ideas`, `Specs` with open parts,
-  `terrain-backlog.md`), keep what 0.1 needs, and move everything that will not be looked at for
-  0.1 to 0.2, so what is left in front of 0.1 is only the release's work.
-- **The 0.1 release builds and samples** (user 2026-10-09): build and package what users
-  download for 0.1: the export templates (each platform), the editor and the command-line tools
-  (Tools.Mcp, Tools.Export, Tools.Cook and the rest a user needs; `scripts/build-editor-dist.*`
-  and `scripts/build-export-templates.*` are the starting point), and the sample projects
-  packaged so users have something to open and play with. Perhaps the project launcher lists
-  remote samples too, to download and open from there (pairs with the launcher polish above).
-- **Windows build scripts and presets, made consistent** (user 2026-10-10): the Windows scripts
-  build with one compiler and package from another's output. `build-editor-dist.ps1` configures
-  `build\msvc-release` with no compiler pinned (whatever the environment hands CMake; on the
-  user's machine, clang) but copies from a fixed `Bin\Release\Win64-MSVC`.
-  `build-export-templates.ps1 -Compiler Clang` passes clang-cl, yet uses the same
-  `build/msvc-release` tree, and an existing tree keeps the compiler it was first configured
-  with. `CMakePresets.json` has only Debug MSVC presets (`msvc`, `msvc-shared`): no MSVC
-  release or shipping preset, and no clang-cl ones. Add the missing presets (release and
-  shipping for MSVC and clang-cl, matching the Linux set), have both scripts configure through
-  a preset chosen by `-Compiler`, and derive the `Bin\...\Win64-<Compiler>` folder from that
-  same choice, so the build and the copy cannot disagree. Check the `.sh` scripts the same way.
 - **The editor dist cannot export: it ships no shader sources** (user 2026-10-10):
   `build-editor-dist.sh` and `.ps1` stage only the cooked `Data/Shaders/shaders.dpak` and skip
   the `Data/Shaders` sources on purpose ("unneeded in pack mode"). But an export cooks the
@@ -176,65 +132,8 @@
   `.hlsli` the cook reads) beside the pack in both scripts, fix their comments, and check that
   the editor still runs from the pack. Then export a project from a staged dist as the test.
   Custom shaders in the editor (above) will need the sources there too.
-- **Luau variants of the sample games, and whether we keep two languages** (user 2026-10-09):
-  perhaps write a Luau version of each sample game's scripts (all four are AngelScript), as an
-  exercise of the Luau side end to end either way. First decide whether we really want to
-  support two scripting languages (the cost of every script facade, test and doc twice, against
-  what each brings). The heist plan already had a Luau-only game coming after Lamplight.
 
-## Queued 2026-10-06 (user, the web demos on a phone)
-
-- **Touch drives the game UI**: the web shell takes touch (`Shell.Web/WebInput.cppm`, start / move /
-  end / cancel on the canvas) and consumes it so the page does not scroll or zoom, which also stops
-  the browser turning taps into mouse clicks; the game UI reads only mouse, keys and pads. So on a
-  phone no menu can be pressed (Snowline's title cannot pick a course). Route touch into the UI as
-  pointer input (a tap presses, a drag scrolls). Sedulous (asked 2026-10-06): its UI input pump has
-  no touch either; its web shell does not prevent the browser's default, so a tap may arrive as a
-  synthesized mouse click there (unverified), a drag never does. New on both sides.
-- **Touch controls in the sample games**: the input map already binds touch (`TouchButton`, a screen
-  region; `TouchStick`, a floating virtual stick), but no game uses it. Each game binds a stick and
-  buttons (Snowline: the left half carves, zones on the right for jump, tuck and grab) and draws a
-  light overlay showing them, shown only once a touch is seen.
-- **Orientation on mobile**: held upright, a phone gives the canvas a portrait shape, and the games
-  are landscape. Options: ask the browser for landscape (`screen.orientation.lock`, which needs
-  fullscreen and is refused on some browsers), letterbox a landscape render into the portrait canvas,
-  or rotate the presented image a quarter turn with the input transformed to match, and a prompt to
-  turn the phone where nothing else works. Likely the larger item of the three: the shell's canvas
-  sizing, the player's fit, and every pointer and touch coordinate are involved.
-
-## Seeded: GPU profiler + profiler visualization (user 2026-08-26)
-
-Origin: same parity doc - "GPU PROFILER: Lumix-ahead - unified CPU/GPU profiler
-timeline + pipeline statistics + NVML telemetry + PIX/RenderDoc; Draconic:
-per-pass graph timestamps + CPU record-time report, SEPARATE from its CPU
-profiler." We have both halves but they are text-dump only and disjoint.
-
-What exists ([[profiler-system]]): `draconic.profiler` CPU scopes
-(compile-gated) + a GPU `GraphProfiler` (per-pass Vulkan timestamps); the P key
-DUMPS TEXT. Two gaps, and the user asked for both:
-
-1. **GPU profiler** - broaden past the current per-pass Vulkan-only timestamps:
-   finer scopes and coverage on the OTHER backends (WebGPU timestamp-query where
-   available, DX12) so the GPU timeline is not Vulkan-only. Pipeline statistics
-   (draw/primitive counts) alongside the timings if cheap.
-2. **Profiler visualization** - replace the text dump with a VISUAL profiler
-   panel (timeline / flamegraph) that UNIFIES the CPU scopes and the GPU
-   timestamps on ONE per-frame timeline (the "separate" problem the parity note
-   calls out). ImGui is already integrated ([[imgui-integration]]) - a candidate
-   host for the overlay - but decide editor-panel vs in-app-overlay at design.
-
-Open questions for week start:
-- The shared data model: merge CPU scope trees + GPU pass timings into one frame
-  record with a common clock/axis (GPU timestamps resolve a frame or two late -
-  the view must align them to the right CPU frame).
-- Where it lives: an editor profiler panel, an ImGui overlay in the samples, or
-  both reading the same capture. Keep the capture layer UI-free.
-- Portability: WebGPU timestamp-query is optional/limited and DX12 differs from
-  Vulkan - the GPU side degrades gracefully where timestamps are unavailable.
-- Compile-gating stays (the CPU profiler is already gated); the visualization is
-  a debug tool, not shipped in dist.
-
-## Seeded: gizmo vertex snapping (user 2026-08-26)
+### Seeded: gizmo vertex snapping (user 2026-08-26)
 
 > Checked 2026-10-10: not built, not even in part. The gizmo still has only the delta snap
 > (`translateSnap` / `rotateSnapDegrees` / `scaleSnap` under Ctrl, now `Gizmo.cppm:92-95`), and
@@ -276,3 +175,115 @@ Open questions for week start:
 Tests: with vertex snap on, dragging an object onto a mesh places its pivot at the
 EXACT nearest vertex position (headless gizmo test, known mesh + known drag);
 snap-off leaves the existing delta-snap behaviour byte-identical.
+
+## Engine
+
+- **Scene facades as scene properties, as Sedulous has them? Decide before 0.1** (user
+  2026-10-09): Sedulous binds a scene facade as a property of the scene (`scene.Physics.RayCast`,
+  its SceneFacade role); ours are reached through the facade type (`ScenePhysics::of(scene)`,
+  `SceneRender::of`, `SceneAudio::of`, ...), kept so by the ruling of 2026-10-01 until the role
+  was revisited. Look at it before 0.1, while the script surface can still change freely: which
+  reads more naturally in AngelScript and Luau, what moving means for every facade, the sample
+  games' scripts and the docs. The earlier write-up is `Plans/beef-script-facades-note.md`.
+- **Luau variants of the sample games, and whether we keep two languages** (user 2026-10-09):
+  perhaps write a Luau version of each sample game's scripts (all four are AngelScript), as an
+  exercise of the Luau side end to end either way. First decide whether we really want to
+  support two scripting languages (the cost of every script facade, test and doc twice, against
+  what each brings). The heist plan already had a Luau-only game coming after Lamplight.
+
+### The web demos on a phone (user 2026-10-06)
+
+
+- **Touch drives the game UI**: the web shell takes touch (`Shell.Web/WebInput.cppm`, start / move /
+  end / cancel on the canvas) and consumes it so the page does not scroll or zoom, which also stops
+  the browser turning taps into mouse clicks; the game UI reads only mouse, keys and pads. So on a
+  phone no menu can be pressed (Snowline's title cannot pick a course). Route touch into the UI as
+  pointer input (a tap presses, a drag scrolls). Sedulous (asked 2026-10-06): its UI input pump has
+  no touch either; its web shell does not prevent the browser's default, so a tap may arrive as a
+  synthesized mouse click there (unverified), a drag never does. New on both sides.
+- **Touch controls in the sample games**: the input map already binds touch (`TouchButton`, a screen
+  region; `TouchStick`, a floating virtual stick), but no game uses it. Each game binds a stick and
+  buttons (Snowline: the left half carves, zones on the right for jump, tuck and grab) and draws a
+  light overlay showing them, shown only once a touch is seen.
+- **Orientation on mobile**: held upright, a phone gives the canvas a portrait shape, and the games
+  are landscape. Options: ask the browser for landscape (`screen.orientation.lock`, which needs
+  fullscreen and is refused on some browsers), letterbox a landscape render into the portrait canvas,
+  or rotate the presented image a quarter turn with the input transformed to match, and a prompt to
+  turn the phone where nothing else works. Likely the larger item of the three: the shell's canvas
+  sizing, the player's fit, and every pointer and touch coordinate are involved.
+
+### Seeded: GPU profiler + profiler visualization (user 2026-08-26)
+
+Origin: same parity doc - "GPU PROFILER: Lumix-ahead - unified CPU/GPU profiler
+timeline + pipeline statistics + NVML telemetry + PIX/RenderDoc; Draconic:
+per-pass graph timestamps + CPU record-time report, SEPARATE from its CPU
+profiler." We have both halves but they are text-dump only and disjoint.
+
+What exists ([[profiler-system]]): `draconic.profiler` CPU scopes
+(compile-gated) + a GPU `GraphProfiler` (per-pass Vulkan timestamps); the P key
+DUMPS TEXT. Two gaps, and the user asked for both:
+
+1. **GPU profiler** - broaden past the current per-pass Vulkan-only timestamps:
+   finer scopes and coverage on the OTHER backends (WebGPU timestamp-query where
+   available, DX12) so the GPU timeline is not Vulkan-only. Pipeline statistics
+   (draw/primitive counts) alongside the timings if cheap.
+2. **Profiler visualization** - replace the text dump with a VISUAL profiler
+   panel (timeline / flamegraph) that UNIFIES the CPU scopes and the GPU
+   timestamps on ONE per-frame timeline (the "separate" problem the parity note
+   calls out). ImGui is already integrated ([[imgui-integration]]) - a candidate
+   host for the overlay - but decide editor-panel vs in-app-overlay at design.
+
+Open questions for week start:
+- The shared data model: merge CPU scope trees + GPU pass timings into one frame
+  record with a common clock/axis (GPU timestamps resolve a frame or two late -
+  the view must align them to the right CPU frame).
+- Where it lives: an editor profiler panel, an ImGui overlay in the samples, or
+  both reading the same capture. Keep the capture layer UI-free.
+- Portability: WebGPU timestamp-query is optional/limited and DX12 differs from
+  Vulkan - the GPU side degrades gracefully where timestamps are unavailable.
+- Compile-gating stays (the CPU profiler is already gated); the visualization is
+  a debug tool, not shipped in dist.
+
+## Other
+
+The release itself and the work around it: builds and packaging, the samples, the docs, the
+website and the flagship game.
+
+- **Documentation cleaned up and made proper, for the 0.1 release** (user 2026-10-09): the
+  documentation as a user of the engine meets it, current and organised (getting started, the
+  editor, each system, scripting, exporting, the MCP guide), with the plans, specs and history
+  that grew in `Documentation/` kept apart from it or archived.
+- **The 0.1 release** (user 2026-10-09): the release itself, with
+  - **a website** for the engine (beyond the demos site, GameEngineDemos);
+  - **a showcase game**: the engine's flagship, released on Steam. Separate from the sample
+    games in this repository and not part of it (its own project and repository); the samples
+    stay the engine's examples.
+  The items marked for 0.1 above (custom shaders through the editor, the documentation, the
+  fifth sample below) belong to it.
+- **A fifth sample game, on networking and crowds, before 0.1** (user 2026-10-09): no sample
+  project uses the network stack or crowds yet, so neither has been showcased or stressed in a
+  game. The fifth sample in `Data/SampleProjects/` built around both: players over the network
+  (the engine's reliable UDP and replication) and a crowd (instanced skinning, navigation
+  crowds), built and playtested through the MCP tools as the others were. (Lamplight's crowd
+  was set aside "for later" when it was planned.)
+- **Sort the backlog and plans into 0.1 and 0.2** (user 2026-10-09): go through `weekly_backlog.md`,
+  the plans and everything else open (`Documentation/Plans`, `Ideas`, `Specs` with open parts,
+  `terrain-backlog.md`), keep what 0.1 needs, and move everything that will not be looked at for
+  0.1 to 0.2, so what is left in front of 0.1 is only the release's work.
+- **The 0.1 release builds and samples** (user 2026-10-09): build and package what users
+  download for 0.1: the export templates (each platform), the editor and the command-line tools
+  (Tools.Mcp, Tools.Export, Tools.Cook and the rest a user needs; `scripts/build-editor-dist.*`
+  and `scripts/build-export-templates.*` are the starting point), and the sample projects
+  packaged so users have something to open and play with. Perhaps the project launcher lists
+  remote samples too, to download and open from there (pairs with the launcher polish above).
+- **Windows build scripts and presets, made consistent** (user 2026-10-10): the Windows scripts
+  build with one compiler and package from another's output. `build-editor-dist.ps1` configures
+  `build\msvc-release` with no compiler pinned (whatever the environment hands CMake; on the
+  user's machine, clang) but copies from a fixed `Bin\Release\Win64-MSVC`.
+  `build-export-templates.ps1 -Compiler Clang` passes clang-cl, yet uses the same
+  `build/msvc-release` tree, and an existing tree keeps the compiler it was first configured
+  with. `CMakePresets.json` has only Debug MSVC presets (`msvc`, `msvc-shared`): no MSVC
+  release or shipping preset, and no clang-cl ones. Add the missing presets (release and
+  shipping for MSVC and clang-cl, matching the Linux set), have both scripts configure through
+  a preset chosen by `-Compiler`, and derive the `Bin\...\Win64-<Compiler>` folder from that
+  same choice, so the build and the copy cannot disagree. Check the `.sh` scripts the same way.

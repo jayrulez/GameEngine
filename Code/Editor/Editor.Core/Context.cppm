@@ -300,7 +300,7 @@ export namespace editor
         };
         struct EditorSettingsContribution
         {
-            String category; // dialog group header ("Navigation")
+            String category; // its Preferences tab ("Navigation"); one tab per category
             Array<EditorSettingsBoolField> bools;
         };
         void RegisterEditorSettingsContribution(EditorSettingsContribution contribution)

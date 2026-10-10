@@ -518,3 +518,48 @@ TEST_CASE("preferences: the preview resolutions are rows that add and remove")
     button(u8"Remove")->FireClick();
     CHECK(dialog->PreviewRowCount() == 2u);
 }
+
+// Preferences shows a tab per category, not one long column: the editor's own, then one per
+// domain-contributed category, contributions that name the same category sharing its tab.
+TEST_CASE("preferences: a tab per category, contributions sharing their category's")
+{
+    RegisterEditorSettingsTypes();
+    EditorContext context{DefaultAllocator()};
+    bool navigationFlag = false;
+    const auto contribute = [&context, &navigationFlag](StringView category, StringView label)
+    {
+        EditorContext::EditorSettingsContribution contribution;
+        contribution.category = String(category);
+        EditorContext::EditorSettingsBoolField field;
+        field.label = String(label);
+        field.get = [&navigationFlag]() { return navigationFlag; };
+        field.set = [&navigationFlag](bool value) { navigationFlag = value; };
+        contribution.bools.PushBack(Move(field));
+        context.RegisterEditorSettingsContribution(Move(contribution));
+    };
+    contribute(u8"Navigation", u8"Show the navmesh");
+    contribute(u8"Audio", u8"Mute in the background");
+    contribute(u8"Navigation", u8"Show the bake bounds");
+    foundation::settings::Settings store(DefaultAllocator());
+
+    auto dialog = MakeRef<app::EditorPreferencesDialog>(DefaultAllocator(), context, store);
+    ui::TabView& tabs = dialog->Tabs();
+    REQUIRE(tabs.TabCount() == 7u);
+    CHECK(dialog->TabIndexOf(u8"Appearance") == 0);
+    CHECK(dialog->TabIndexOf(u8"Export") == 1);
+    CHECK(dialog->TabIndexOf(u8"Agent access") == 2);
+    CHECK(dialog->TabIndexOf(u8"Game preview") == 3);
+    CHECK(dialog->TabIndexOf(u8"Shortcuts") == 4);
+    CHECK(dialog->TabIndexOf(u8"Navigation") == 5);
+    CHECK(dialog->TabIndexOf(u8"Audio") == 6);
+    CHECK(tabs.SelectedIndex() == 0);
+
+    // Both Navigation fields are on its tab, and they still write through their closures.
+    Array<ui::CheckBox*> boxes;
+    CollectViews(*tabs.GetChildAt(5), boxes);
+    REQUIRE(boxes.Size() == 2u);
+    CHECK(boxes[0]->Text.Value() == StringView(u8"Show the navmesh"));
+    CHECK(boxes[1]->Text.Value() == StringView(u8"Show the bake bounds"));
+    boxes[0]->IsChecked.SetValue(true);
+    CHECK(navigationFlag);
+}

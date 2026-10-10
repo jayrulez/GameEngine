@@ -5,10 +5,11 @@
 //
 // EditorPreferencesDialog: a modal editor for PER-USER editor preferences (the foundation.settings
 // store persisted at <user-data>/editor.settings.xml) - distinct from ProjectSettingsDialog, which
-// edits the project manifest. Fields: the export templates root (blank = "$ENV_TEMPLATES_DIR,
-// else <user-data>/templates", shown as the placeholder) and the editor FONT paths (blank = the
-// built-in chain: dev-tree face, then the exe-embedded fallback). [Save] writes the sections back
-// into the store and persists it; font changes apply on the next editor start. [Cancel] discards.
+// edits the project manifest. A tab per category: Appearance (the editor FONT paths, blank = the
+// built-in chain, and the UI scale), Export (the templates root, blank = "$ENV_TEMPLATES_DIR, else
+// <user-data>/templates"), Agent access (the MCP host), Game preview (the Game tab's resolutions),
+// Shortcuts, then one per domain-contributed category. [Save] writes every tab's sections back into
+// the store and persists it; font changes apply on the next editor start. [Cancel] discards.
 
 module;
 #include "Core/Prelude.h"
@@ -36,44 +37,38 @@ export namespace editor::app
         EditorPreferencesDialog(editor::EditorContext& context, settings::Settings& store)
             : ui::Dialog(u8"Preferences"), m_context(&context), m_settings(&store)
         {
-            MinWidth.SetValue(560.0f);
-            MinHeight.SetValue(220.0f);
+            // A fixed size: a tab view measures only the page it shows, so a free height would
+            // jump as the tabs change. Each page scrolls inside it.
+            MinWidth.SetValue(620.0f);
             MaxWidth.SetValue(760.0f);
-            MaxHeight.SetValue(560.0f);
+            MinHeight.SetValue(480.0f);
+            MaxHeight.SetValue(480.0f);
 
-            auto column = MakeRef<ui::FlexLayout>(MemoryAllocator());
-            column->Direction = ui::Orientation::Vertical;
-            column->Spacing = 8;
+            m_tabs = MakeRef<ui::TabView>(MemoryAllocator());
+            m_tabs->TabsClosable.SetValue(false);
 
-            StringView current;
-            if (const editor::EditorExportSettings* s =
-                    store.Find<editor::EditorExportSettings>())
+            // --- Appearance: the editor's fonts and scale ---
             {
-                current = s->templatesRoot.AsView();
-            }
-            m_rootEdit = AddTextRow(*column, u8"Templates root", current);
-            m_rootEdit->SetPlaceholder(editor::DefaultTemplatesRoot().AsView());
-
-            StringView fontPath;
-            StringView monoPath;
-            if (const editor::EditorFontSettings* f =
-                    store.Find<editor::EditorFontSettings>())
-            {
-                fontPath = f->fontPath.AsView();
-                monoPath = f->monoFontPath.AsView();
-            }
-            m_fontEdit = AddTextRow(*column, u8"UI font (.ttf)", fontPath);
-            m_fontEdit->SetPlaceholder(u8"built-in (embedded fallback)");
-            m_monoFontEdit = AddTextRow(*column, u8"Mono font (.ttf)", monoPath);
-            m_monoFontEdit->SetPlaceholder(u8"built-in");
-            f32 uiScale = 1.0f;
-            if (const editor::EditorUiSettings* u =
-                    store.Find<editor::EditorUiSettings>())
-            {
-                uiScale = Clamp(u->uiScale, editor::kUiScaleMin, editor::kUiScaleMax);
-            }
-            {
-                ui::FlexLayout* row = AddRow(*column, u8"UI scale");
+                ui::FlexLayout& column = AddPage(u8"Appearance");
+                StringView fontPath;
+                StringView monoPath;
+                if (const editor::EditorFontSettings* f =
+                        store.Find<editor::EditorFontSettings>())
+                {
+                    fontPath = f->fontPath.AsView();
+                    monoPath = f->monoFontPath.AsView();
+                }
+                m_fontEdit = AddTextRow(column, u8"UI font (.ttf)", fontPath);
+                m_fontEdit->SetPlaceholder(u8"built-in (embedded fallback)");
+                m_monoFontEdit = AddTextRow(column, u8"Mono font (.ttf)", monoPath);
+                m_monoFontEdit->SetPlaceholder(u8"built-in");
+                f32 uiScale = 1.0f;
+                if (const editor::EditorUiSettings* u =
+                        store.Find<editor::EditorUiSettings>())
+                {
+                    uiScale = Clamp(u->uiScale, editor::kUiScaleMin, editor::kUiScaleMax);
+                }
+                ui::FlexLayout* row = AddRow(column, u8"UI scale");
                 auto slider = MakeRef<ui::Slider>(MemoryAllocator());
                 slider->Min.SetValue(editor::kUiScaleMin);
                 slider->Max.SetValue(editor::kUiScaleMax);
@@ -100,24 +95,30 @@ export namespace editor::app
                 slider->OnValueChanged.Add(
                     ui::Event<void(ui::Slider*, f32)>::Handler{
                         [self](ui::Slider*, f32 v) { self->UpdateScaleLabel(v); }});
-            }
-            {
-                auto note = MakeRef<ui::Label>(MemoryAllocator(),
-                                               StringView(u8"Font changes apply on restart."));
-                note->FontSize.SetValue(11.0f);
-                note->TextColor.SetValue(Optional<Color>(Color{0.55f, 0.55f, 0.55f, 1.0f}));
-                column->AddView(note.Get());
+                AddNote(column, u8"Font changes apply on restart.");
             }
 
-            // Agent access: the MCP host over the open project (EditorMcpSettings).
+            // --- Export: where the export templates live ---
             {
-                auto header = MakeRef<ui::Label>(MemoryAllocator(),
-                                                 StringView(u8"Agent access (MCP)"));
-                header->FontSize.SetValue(13.0f);
-                column->AddView(header.Get());
+                ui::FlexLayout& column = AddPage(u8"Export");
+                StringView current;
+                if (const editor::EditorExportSettings* s =
+                        store.Find<editor::EditorExportSettings>())
+                {
+                    current = s->templatesRoot.AsView();
+                }
+                m_rootEdit = AddTextRow(column, u8"Templates root", current);
+                m_rootEdit->SetPlaceholder(editor::DefaultTemplatesRoot().AsView());
+                AddNote(column, u8"Blank uses $ENV_TEMPLATES_DIR, else the templates folder "
+                                u8"under the editor's user data.");
+            }
+
+            // --- Agent access: the MCP host over the open project (EditorMcpSettings) ---
+            {
+                ui::FlexLayout& column = AddPage(u8"Agent access");
                 const editor::EditorMcpSettings* mcp = store.Find<editor::EditorMcpSettings>();
                 auto check = MakeRef<ui::CheckBox>(
-                    MemoryAllocator(), StringView(u8"Serve the open project to agents"),
+                    MemoryAllocator(), StringView(u8"Serve the open project to agents (MCP)"),
                     mcp != nullptr && mcp->enabled);
                 check->FontSize.SetValue(12.0f);
                 check->TooltipText =
@@ -128,34 +129,30 @@ export namespace editor::app
                     ui::LayoutStyle lp;
                     lp.Width = ui::SizeSpec::Match();
                     lp.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(22.0f));
-                    column->AddView(check.Get(), lp);
+                    column.AddView(check.Get(), lp);
                 }
                 const u32 port = mcp != nullptr ? mcp->port : editor::kEditorMcpDefaultPort;
-                m_mcpPortEdit = AddTextRow(*column, u8"MCP port", Format(u8"{}", port).AsView());
-                m_mcpTokenEdit = AddTextRow(*column, u8"MCP token",
+                m_mcpPortEdit = AddTextRow(column, u8"MCP port", Format(u8"{}", port).AsView());
+                m_mcpTokenEdit = AddTextRow(column, u8"MCP token",
                                             mcp != nullptr ? mcp->token.AsView() : StringView());
                 m_mcpTokenEdit->SetPlaceholder(u8"minted on first enable");
-                auto note = MakeRef<ui::Label>(
-                    MemoryAllocator(),
-                    StringView(u8"Applies to the open project on Save; the token is also written "
-                               u8"to <user-data>/mcp-token for a local agent."));
-                note->FontSize.SetValue(11.0f);
-                note->TextColor.SetValue(Optional<Color>(Color{0.55f, 0.55f, 0.55f, 1.0f}));
-                column->AddView(note.Get());
+                AddNote(column, u8"Applies to the open project on Save; the token is also "
+                                u8"written to <user-data>/mcp-token for a local agent.");
             }
 
-            // The Game tab's preview resolutions (GamePreviewSettings): sizes to test at on this
-            // machine, after the project's own and its export presets'. Staged, applied on Save.
+            // --- Game preview: the Game tab's resolutions (GamePreviewSettings), sizes to test
+            // at on this machine after the project's own and its export presets'. Staged,
+            // applied on Save. ---
             {
-                auto header = MakeRef<ui::Label>(MemoryAllocator(), StringView(u8"Game preview resolutions"));
-                header->FontSize.SetValue(13.0f);
-                column->AddView(header.Get());
+                ui::FlexLayout& column = AddPage(u8"Game preview");
+                AddNote(column, u8"Sizes the Game tab offers on this machine, after the "
+                                u8"project's own and its export presets'.");
                 auto previews = MakeRef<ui::FlexLayout>(MemoryAllocator());
                 previews->Direction = ui::Orientation::Vertical;
                 previews->Spacing = 4;
                 ui::LayoutStyle match;
                 match.Width = ui::SizeSpec::Match();
-                column->AddView(previews.Get(), match);
+                column.AddView(previews.Get(), match);
                 m_previewColumn = previews.Get();
                 if (const editor::GamePreviewSettings* seeded = editor::GamePreviewSettings::From(&store))
                 {
@@ -169,44 +166,34 @@ export namespace editor::app
                 add->OnClick.Add([self](ui::ButtonBase*) { self->AddPreviewRow(u8"Custom", 1920, 1080); });
                 ui::LayoutStyle left;
                 left.AlignSelf = ui::Align::Start;
-                column->AddView(add.Get(), left);
+                column.AddView(add.Get(), left);
             }
 
-            // Shortcuts: every action with its effective chord; a click on the chord captures the
-            // next key, Reset forgets the override. Staged in m_shortcutEdits, applied on Save.
+            // --- Shortcuts: every action with its effective chord; a click on the chord captures
+            // the next key, Reset forgets the override. Staged in m_shortcutEdits, applied on
+            // Save. ---
             {
-                auto header = MakeRef<ui::Label>(MemoryAllocator(), StringView(u8"Shortcuts"));
-                header->FontSize.SetValue(13.0f);
-                column->AddView(header.Get());
-                auto note = MakeRef<ui::Label>(
-                    MemoryAllocator(),
-                    StringView(u8"Click a chord and press the new keys (Esc cancels, Del clears). A "
-                               u8"chord another action holds is refused on Save, naming it."));
-                note->FontSize.SetValue(11.0f);
-                note->TextColor.SetValue(Optional<Color>(Color{0.55f, 0.55f, 0.55f, 1.0f}));
-                column->AddView(note.Get());
+                ui::FlexLayout& column = AddPage(u8"Shortcuts");
+                AddNote(column, u8"Click a chord and press the new keys (Esc cancels, Del clears). "
+                                u8"A chord another action holds is refused on Save, naming it.");
                 EditorActionRegistry& actions = context.Actions();
                 for (const editor::EditorActionDeclaration& action : actions.Actions())
                 {
-                    AddShortcutRow(*column, actions, action);
+                    AddShortcutRow(column, actions, action);
                 }
             }
 
-            // Domain-contributed categories (EditorContext::RegisterEditorSettingsContribution):
-            // the app hardcodes nothing - each domain's fields render generically here and
-            // write through their own closures (usually into the domain's user-store section).
+            // Domain-contributed categories (EditorContext::RegisterEditorSettingsContribution),
+            // a tab each (contributions naming one category share it): the app hardcodes
+            // nothing - each domain's fields render generically here and write through their
+            // own closures (usually into the domain's user-store section).
             for (const editor::EditorContext::EditorSettingsContribution& contribution :
                  context.EditorSettingsContributions())
             {
-                auto header = MakeRef<ui::Label>(MemoryAllocator(),
-                                                 contribution.category.AsView());
-                header->FontSize.SetValue(13.0f);
-                column->AddView(header.Get());
+                ui::FlexLayout& column = AddPage(contribution.category.AsView());
                 for (const editor::EditorContext::EditorSettingsBoolField& field :
                      contribution.bools)
                 {
-                    // `checked`, not `current`: the StringView `current` above (the templates
-                    // root) is still in scope, and reusing the name is MSVC C4456, fatal under /WX.
                     const bool checked = field.get ? field.get() : false;
                     auto check =
                         MakeRef<ui::CheckBox>(MemoryAllocator(), field.label.AsView(), checked);
@@ -229,21 +216,11 @@ export namespace editor::app
                     ui::LayoutStyle lp;
                     lp.Width = ui::SizeSpec::Match();
                     lp.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(22.0f));
-                    column->AddView(check.Get(), lp);
+                    column.AddView(check.Get(), lp);
                 }
             }
 
-            // Scroll the preferences column so it can grow without spilling over the modal button
-            // row (the Dialog gives content a fixed Grow-shared area above the buttons). User feedback.
-            auto scroll = MakeRef<ui::ScrollView>(MemoryAllocator());
-            scroll->VScrollBarPolicy.SetValue(ui::ScrollBarPolicy::Auto);
-            scroll->HScrollBarPolicy.SetValue(ui::ScrollBarPolicy::Never);
-            {
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Match();
-                scroll->AddView(column.Get(), lp);
-            }
-            SetContent(scroll.Get());
+            SetContent(m_tabs.Get());
 
             {
                 EditorPreferencesDialog* self = this;
@@ -261,6 +238,22 @@ export namespace editor::app
         /// host for the open project without a reopen.
         Function<void()> OnMcpSettingsApplied;
 
+        /// The category tabs: Appearance, Export, Agent access, Game preview, Shortcuts, then one
+        /// per domain-contributed category.
+        [[nodiscard]] ui::TabView& Tabs() const noexcept { return *m_tabs; }
+        /// The tab for a category, or -1.
+        [[nodiscard]] i32 TabIndexOf(StringView category) const
+        {
+            for (usize i = 0; i < m_pages.Size(); ++i)
+            {
+                if (m_pages[i].category.AsView() == category)
+                {
+                    return static_cast<i32>(i);
+                }
+            }
+            return -1;
+        }
+
         /// The preview resolutions staged in the dialog (rows not removed), in order.
         [[nodiscard]] usize PreviewRowCount() const noexcept
         {
@@ -273,6 +266,13 @@ export namespace editor::app
         }
 
     private:
+        /// A category's tab and the column its fields go in (the tab view owns the views).
+        struct Page
+        {
+            String category;
+            ui::FlexLayout* column = nullptr;
+        };
+
         /// One staged preview resolution; its views are the rows container's.
         struct PreviewRow
         {
@@ -329,6 +329,45 @@ export namespace editor::app
             match.Width = ui::SizeSpec::Match();
             m_previewColumn->AddView(row.Get(), match);
             m_previewRows.PushBack(PreviewRow{row.Get(), nameEdit.Get(), widthField, heightField, false});
+        }
+
+        /// The column of a category's tab, made the first time the category is named: a padded
+        /// column in a vertical scroll, so a long page (the shortcuts) scrolls inside the fixed
+        /// dialog without spilling over its buttons.
+        ui::FlexLayout& AddPage(StringView category)
+        {
+            for (const Page& page : m_pages)
+            {
+                if (page.category.AsView() == category)
+                {
+                    return *page.column;
+                }
+            }
+            auto column = MakeRef<ui::FlexLayout>(MemoryAllocator());
+            column->Direction = ui::Orientation::Vertical;
+            column->Spacing = 8;
+            column->Padding = ui::Thickness{12, 10};
+            auto scroll = MakeRef<ui::ScrollView>(MemoryAllocator());
+            scroll->VScrollBarPolicy.SetValue(ui::ScrollBarPolicy::Auto);
+            scroll->HScrollBarPolicy.SetValue(ui::ScrollBarPolicy::Never);
+            ui::LayoutStyle match;
+            match.Width = ui::SizeSpec::Match();
+            scroll->AddView(column.Get(), match);
+            m_tabs->AddTab(category, scroll.Get());
+            m_pages.PushBack(Page{String(category), column.Get()});
+            return *column;
+        }
+
+        /// A quiet line of explanation under a page's fields.
+        void AddNote(ui::FlexLayout& column, StringView text)
+        {
+            auto note = MakeRef<ui::Label>(MemoryAllocator(), text);
+            note->FontSize.SetValue(11.0f);
+            note->WordWrap.SetValue(true);
+            note->TextColor.SetValue(Optional<Color>(Color{0.55f, 0.55f, 0.55f, 1.0f}));
+            ui::LayoutStyle match;
+            match.Width = ui::SizeSpec::Match();
+            column.AddView(note.Get(), match);
         }
 
         void UpdateScaleLabel(f32 value)
@@ -511,6 +550,8 @@ export namespace editor::app
 
         editor::EditorContext* m_context;
         settings::Settings* m_settings;
+        RefPtr<ui::TabView> m_tabs;
+        Array<Page> m_pages;
         ui::EditText* m_rootEdit = nullptr;
         ui::EditText* m_fontEdit = nullptr;
         ui::EditText* m_monoFontEdit = nullptr;

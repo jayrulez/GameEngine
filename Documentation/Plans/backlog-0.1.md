@@ -42,10 +42,6 @@
   defaults, set in the project settings, so the lookup goes scene, then project, then the
   hard-coded default. Survey which domains have scene settings, and how a project default
   relates to the profiles (a project default could simply name a profile).
-- **The scene hierarchy's scrollbar takes its own space** (user 2026-10-09): it overlays the
-  rows now, and grabbing it easily drags an entity instead. Reserve its width beside the rows;
-  and first check whether a bug lets a press on the scrollbar reach the row under it (it
-  should never start a row drag), which would be the real fix either way.
 - **Polish the input map page** (user 2026-10-09: "needs a lot of polish"): the editor page for
   an input map asset (its actions and their key, pad and touch bindings). Its layout, how
   bindings are shown, added and changed, and its look, to the finish of the other pages.

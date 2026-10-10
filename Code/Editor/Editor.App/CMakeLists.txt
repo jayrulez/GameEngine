@@ -61,6 +61,7 @@ target_sources(Editor.App
             ListHeader.cppm
             ViewModeToggles.cppm
             AssetFilter.cppm
+            CategoryTabs.cppm
             WindowCapture.cppm
             EditorWindowTools.cppm
             EditorMcpHost.cppm

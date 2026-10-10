@@ -450,6 +450,19 @@ export namespace editor
             return Status{ErrorCode::NotFound};
         }
 
+        // The icon the template will carry, settled before anything is written: an unknown name
+        // or a missing .svg refuses the template while an installed bundle of this id still
+        // stands (Install replaces it whole below).
+        const bool iconFromFile = identity.icon.EndsWith(u8".svg");
+        const StringView builtInIcon =
+            iconFromFile ? StringView{}
+                         : BuiltInTemplateIconSvg(identity.icon.IsEmpty() ? DefaultTemplateIconName(tmpl.platform.AsView())
+                                                                          : identity.icon);
+        if (iconFromFile ? !FileExists(identity.icon) : builtInIcon.IsEmpty())
+        {
+            return Status{iconFromFile ? ErrorCode::NotFound : ErrorCode::InvalidArgument};
+        }
+
         const String bundleDir = (mode == TemplateOutput::Install)
                                      ? PathJoin(destRoot, tmpl.id.AsView())
                                      : String(destRoot);
@@ -484,31 +497,21 @@ export namespace editor
         tmpl.directory = bundleDir;
         vfs::NativeFileSystem bundleFs(bundleDir.AsView(), foundation::core::DefaultAllocator());
 
-        // The icon the template carries: an .svg given by path is copied in; otherwise the built-in
-        // one named, or the platform's. An unknown name or a missing file refuses the template
-        // rather than shipping it without the icon its maker asked for.
-        if (identity.icon.EndsWith(u8".svg"))
+        // The icon the template carries (settled above): an .svg given by path copied in,
+        // otherwise the built-in one named, or the platform's.
+        if (iconFromFile)
         {
-            if (!FileCopyPreserving(identity.icon,
-                                    PathJoin(bundleDir.AsView(), kTemplateIconFile).AsView()))
+            if (!FileCopyPreserving(identity.icon, PathJoin(bundleDir.AsView(), kTemplateIconFile).AsView()))
             {
                 return Status{ErrorCode::NotFound};
             }
         }
-        else
+        else if (Status s = bundleFs.AsWritable()->Save(
+                     kTemplateIconFile,
+                     Span<const byte>(reinterpret_cast<const byte*>(builtInIcon.Data()), builtInIcon.Size()));
+                 !s.IsOk())
         {
-            const StringView svg = BuiltInTemplateIconSvg(
-                identity.icon.IsEmpty() ? DefaultTemplateIconName(tmpl.platform.AsView()) : identity.icon);
-            if (svg.IsEmpty())
-            {
-                return Status{ErrorCode::InvalidArgument};
-            }
-            if (Status s = bundleFs.AsWritable()->Save(
-                    kTemplateIconFile, Span<const byte>(reinterpret_cast<const byte*>(svg.Data()), svg.Size()));
-                !s.IsOk())
-            {
-                return s;
-            }
+            return s;
         }
         tmpl.icon = String(kTemplateIconFile);
 

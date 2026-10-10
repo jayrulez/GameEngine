@@ -2387,6 +2387,22 @@ TEST_CASE("export: a created template carries its icon, the platform's unless on
     missing.icon = u8"/nowhere/at/all.svg";
     CHECK_FALSE(create(missing).IsOk());
 
+    // Refused before anything is written: an installed bundle of that id still stands (Sedulous
+    // found Install deleting it first).
+    const String root = TempDir(u8"scratch_createtmpl_icon_root");
+    NukeTree(root.AsView());
+    String installedId, installedDir;
+    REQUIRE(editor::CreateTemplate(binDir.AsView(), root.AsView(), editor::TemplateOutput::Install, &installedId,
+                                   &installedDir)
+                .IsOk());
+    CHECK_FALSE(editor::CreateTemplate(binDir.AsView(), root.AsView(), editor::TemplateOutput::Install, nullptr,
+                                       nullptr, unknown)
+                    .IsOk());
+    foundation::vfs::NativeFileSystem installedFs(installedDir.AsView(), foundation::core::DefaultAllocator());
+    CHECK(installedFs.Exists(u8"template.xml"));
+    CHECK(installedFs.Exists(editor::kTemplateIconFile));
+    NukeTree(root.AsView());
+
     // The host template (no bundle icon) and an unreadable icon show the platform's built-in one.
     editor::ExportTemplate host;
     host.platform = String(u8"Web");

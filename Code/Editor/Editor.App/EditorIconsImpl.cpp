@@ -62,6 +62,7 @@ namespace editor::app
         viewList = ui::BakedSVGDrawable::FromString(editor::EditorRootAllocator(), kViewList);
         viewGrid = ui::BakedSVGDrawable::FromString(editor::EditorRootAllocator(), kViewGrid);
         close = ui::BakedSVGDrawable::FromString(editor::EditorRootAllocator(), kClose);
+        search = ui::BakedSVGDrawable::FromString(editor::EditorRootAllocator(), kSearch);
         add = ui::BakedSVGDrawable::FromString(editor::EditorRootAllocator(), kAdd);
         remove = ui::BakedSVGDrawable::FromString(editor::EditorRootAllocator(), kRemove);
         moveUp = ui::BakedSVGDrawable::FromString(editor::EditorRootAllocator(), kMoveUp);
@@ -86,7 +87,7 @@ namespace editor::app
               &scene,     &prefab,      &mesh,        &skinnedMesh, &material,   &texture,
               &particleFx, &animation,  &animGraph,   &skeleton,   &folder,      &unknown,
               &viewList,  &viewGrid,
-              &close,     &add,         &remove,      &moveUp,     &moveDown,    &copy,
+              &close,     &search,     &add,         &remove,      &moveUp,     &moveDown,    &copy,
               &edit,      &brushRaise,  &brushLower,  &brushSmooth, &brushFlatten})
         {
             slots.PushBack(slot);

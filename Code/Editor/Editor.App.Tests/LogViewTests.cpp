@@ -190,3 +190,60 @@ TEST_CASE("editor-logview: the search narrows to matching lines")
     view->SetSearch(u8"");
     CHECK(view->VisibleEntryCount() == 5u);
 }
+
+TEST_CASE("editor-logview: each level's chip counts its lines and shows or hides them")
+{
+    auto view = MakeRef<LogView>(DefaultAllocator());
+    view->MaxEntries = 4;
+    CHECK(view->LevelCountText(LogView::Bucket::Error) == StringView(u8"0"));
+    view->AddEntry(LogLevel::Error, u8"A", u8"e1");
+    view->AddEntry(LogLevel::Fatal, u8"A", u8"e2"); // Fatal counts as an error
+    view->AddEntry(LogLevel::Warning, u8"A", u8"w1");
+    view->AddEntry(LogLevel::Trace, u8"A", u8"t1"); // Trace counts as debug
+    CHECK(view->LevelCount(LogView::Bucket::Error) == 2u);
+    CHECK(view->LevelCount(LogView::Bucket::Warning) == 1u);
+    CHECK(view->LevelCount(LogView::Bucket::Debug) == 1u);
+    CHECK(view->LevelCountText(LogView::Bucket::Error) == StringView(u8"2"));
+
+    // A line rolling off the cap leaves its level's count.
+    view->AddEntry(LogLevel::Info, u8"A", u8"i1");
+    CHECK(view->LevelCount(LogView::Bucket::Error) == 1u);
+    CHECK(view->LevelCountText(LogView::Bucket::Error) == StringView(u8"1"));
+    CHECK(view->LevelCount(LogView::Bucket::Info) == 1u);
+
+    // A chip off hides its level's lines; on again shows them. The chip follows a call too.
+    ui::ToggleButton* warnings = view->LevelChip(LogView::Bucket::Warning);
+    REQUIRE(warnings != nullptr);
+    CHECK(warnings->IsChecked.Value());
+    warnings->IsChecked.SetValue(false);
+    CHECK_FALSE(view->IsBucketVisible(LogView::Bucket::Warning));
+    CHECK(view->VisibleEntryCount() == 3u);
+    view->SetBucketVisible(LogView::Bucket::Warning, true);
+    CHECK(warnings->IsChecked.Value());
+    CHECK(view->VisibleEntryCount() == 4u);
+
+    // Clear empties every count.
+    view->Clear();
+    for (usize i = 0; i < LogView::kBucketCount; ++i)
+    {
+        CHECK(view->LevelCount(static_cast<LogView::Bucket>(i)) == 0u);
+    }
+    CHECK(view->LevelCountText(LogView::Bucket::Info) == StringView(u8"0"));
+}
+
+TEST_CASE("editor-logview: the search field's x shows with text and clears it")
+{
+    auto view = MakeRef<LogView>(DefaultAllocator());
+    view->AddEntry(LogLevel::Info, u8"A", u8"loaded");
+    view->AddEntry(LogLevel::Info, u8"A", u8"failed");
+    ui::IconButton* clear = view->ClearSearchButton();
+    REQUIRE(clear != nullptr);
+    CHECK(clear->Visibility == ui::VisibilityValue::Hidden);
+    view->SetSearch(u8"fail");
+    CHECK(view->VisibleEntryCount() == 1u);
+    CHECK(clear->Visibility == ui::VisibilityValue::Visible);
+    clear->FireClick();
+    CHECK(view->Search().IsEmpty());
+    CHECK(view->VisibleEntryCount() == 2u);
+    CHECK(clear->Visibility == ui::VisibilityValue::Hidden);
+}

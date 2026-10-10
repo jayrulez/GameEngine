@@ -28,8 +28,6 @@
   project. A list / grid toggle, the grid showing each project's thumbnail (a picture of the
   project to recognise it by); and some of the per-project options moved into a menu (a
   hamburger or similar) so the page reads cleanly.
-- **A more polished Console header** (user 2026-10-09): revamp the look of the Console panel's
-  header row, its log-level filters and its search field, so it reads as finished UI.
 - **Editor preferences by category, in tabs** (user 2026-10-09): the preferences show every
   setting in one long view; split them into categories, a tab each.
 - **Project settings by category, in tabs** (user 2026-10-09): the same clean-up for the

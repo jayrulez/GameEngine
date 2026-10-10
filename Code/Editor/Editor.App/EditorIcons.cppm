@@ -61,6 +61,7 @@ export namespace editor::app
 
         // === Chrome ===
         RefPtr<ui::BakedSVGDrawable> close; // tab/panel close X (theme tints it)
+        RefPtr<ui::BakedSVGDrawable> search; // magnifier (a search or filter field)
 
         // === List / row controls (container list editor: add row, remove row, reorder) ===
         RefPtr<ui::BakedSVGDrawable> add;      // plus
@@ -88,7 +89,7 @@ export namespace editor::app
         [[nodiscard]] Array<ui::BakedSVGDrawable*> Bakeable() const;
 
         /// Every icon slot, the one table Shutdown and Bakeable walk (kSlotCount entries).
-        static constexpr ENGINE_EXPORT_DATA usize kSlotCount = 31;
+        static constexpr ENGINE_EXPORT_DATA usize kSlotCount = 32;
         [[nodiscard]] Array<RefPtr<ui::BakedSVGDrawable>*> Slots();
 
     private:
@@ -174,6 +175,12 @@ export namespace editor::app
   <line x1="15" y1="3" x2="15" y2="21" stroke="#E0E0E0" stroke-width="1"/>
   <line x1="3" y1="9"  x2="21" y2="9"  stroke="#E0E0E0" stroke-width="1"/>
   <line x1="3" y1="15" x2="21" y2="15" stroke="#E0E0E0" stroke-width="1"/>
+</svg>)svg";
+
+        // Search - a magnifier.
+        static constexpr StringView kSearch = u8R"svg(<svg viewBox="0 0 24 24">
+  <circle cx="10" cy="10" r="6" fill="none" stroke="#E0E0E0" stroke-width="2"/>
+  <line x1="14.5" y1="14.5" x2="20" y2="20" stroke="#E0E0E0" stroke-width="2.4" stroke-linecap="round"/>
 </svg>)svg";
 
         // List view - three rows, each a bullet and a line.

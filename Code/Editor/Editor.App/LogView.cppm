@@ -5,8 +5,10 @@
 //
 // LogView: the Console panel content - a log view on foundation.ui, with category display
 // (core logs carry categories). A
-// filter/action toolbar (per-level CheckBoxes, a search box matching anywhere in a line ignoring
-// case, + Clear) over a recycled ListView of level-colored rows; bounded entry count; auto-scroll to the newest entry. Fed once per frame by
+// header row - a chip per level (its colour, its name, how many lines it holds; on shows them), a
+// search field matching anywhere in a line ignoring case (an x clears it), and a Clear icon - over
+// a recycled ListView of level-colored rows; bounded entry count; auto-scroll to the newest entry.
+// Fed once per frame by
 // EditorApplication draining the EditorLogBuffer. Rows select like any list (click, Ctrl click,
 // Shift click, Ctrl+A), and Ctrl+C or the context menu's Copy puts the selected rows on the
 // clipboard, oldest first, one per line.
@@ -19,6 +21,7 @@ export module editor.app:log_view;
 
 import foundation.core;
 import foundation.ui;
+import :editor_icons; // the search, clear-field and clear-console glyphs
 
 using namespace foundation::core;
 
@@ -61,40 +64,76 @@ export namespace editor::app
             auto column = MakeRef<ui::FlexLayout>(MemoryAllocator());
             column->Direction = ui::Orientation::Vertical;
 
-            // Toolbar: level filters + Clear.
+            // The header row: [level chips] ........ [search: icon, field, x] [clear].
             auto toolbar = MakeRef<ui::FlexLayout>(MemoryAllocator());
             toolbar->Direction = ui::Orientation::Horizontal;
-            toolbar->Spacing = 8.0f;
-            toolbar->Padding = ui::Thickness{4, 4};
-            static constexpr const char8_t* kNames[kBucketCount] = {u8"Debug", u8"Info",
-                                                                    u8"Warning", u8"Error"};
+            toolbar->Spacing = 4.0f;
+            toolbar->Padding = ui::Thickness{6, 3};
+            toolbar->AlignItems = ui::Align::Center;
+            ui::LayoutStyle center;
+            center.AlignSelf = ui::Align::Center;
+            EditorIcons& icons = EditorIcons::Get(); // null drawables before Initialize (tests)
             for (usize i = 0; i < kBucketCount; ++i)
             {
-                auto box = MakeRef<ui::CheckBox>(MemoryAllocator(), StringView(kNames[i]), true);
-                const usize bucket = i;
-                box->OnCheckedChanged.Add(
-                    [this, bucket](ui::CheckBox*, bool checked)
-                    { SetBucketVisible(static_cast<Bucket>(bucket), checked); });
-                m_filterBoxes[i] = box.Get();
-                toolbar->AddView(box.Get());
+                toolbar->AddView(MakeLevelChip(static_cast<Bucket>(i)).Get(), center);
             }
-            m_searchEdit = MakeRef<ui::EditText>(MemoryAllocator());
-            m_searchEdit->SetPlaceholder(u8"Search...");
-            m_searchEdit->OnTextChanged.Add([this](ui::EditText* edit) { SetSearch(edit->Text()); });
             {
                 ui::LayoutStyle grow;
                 grow.FlexGrow = 1.0f;
-                toolbar->AddView(m_searchEdit.Get(), grow);
+                toolbar->AddView(MakeRef<ui::View>(MemoryAllocator()).Get(), grow); // the gap
             }
-            auto clear = MakeRef<ui::Button>(MemoryAllocator(), StringView(u8"Clear"));
+            auto magnifier = MakeRef<ui::DrawableView>(
+                MemoryAllocator(), ui::DrawablePtr(icons.search.Get()), 14.0f, 14.0f);
+            magnifier->KeepAspect = true;
+            toolbar->AddView(magnifier.Get(), center);
+            m_searchEdit = MakeRef<ui::EditText>(MemoryAllocator());
+            m_searchEdit->SetPlaceholder(u8"Filter lines");
+            m_searchEdit->TooltipText = String(u8"Show only the lines containing this (any case)");
+            m_searchEdit->OnTextChanged.Add([this](ui::EditText* edit) { SetSearch(edit->Text()); });
+            {
+                // It grows with the panel up to a comfortable width and gives way in a narrow
+                // one, so the header never runs past the panel's edge.
+                ui::LayoutStyle field;
+                field.FlexGrow = 1.0f;
+                field.MinWidth = ui::Unit::Dp(80.0f);
+                field.MaxWidth = ui::Unit::Dp(260.0f);
+                field.AlignSelf = ui::Align::Center;
+                toolbar->AddView(m_searchEdit.Get(), field);
+            }
+            m_clearSearch = MakeRef<ui::IconButton>(MemoryAllocator(), icons.close.Get(), 10.0f);
+            m_clearSearch->TooltipText = String(u8"Clear the filter");
+            m_clearSearch->Visibility = ui::VisibilityValue::Hidden; // keeps its place: no jump
+            m_clearSearch->OnClick.Add(
+                [this](ui::ButtonBase*)
+                {
+                    m_searchEdit->SetText(u8"");
+                    SetSearch(u8"");
+                });
+            toolbar->AddView(m_clearSearch.Get(), center);
+            auto clear = MakeRef<ui::IconButton>(MemoryAllocator(), icons.remove.Get(), 16.0f);
+            clear->TooltipText = String(u8"Clear the console");
             clear->OnClick.Add([this](ui::ButtonBase*) { Clear(); });
-            toolbar->AddView(clear.Get());
-            column->AddView(toolbar.Get());
+            toolbar->AddView(clear.Get(), center);
+            {
+                ui::LayoutStyle row;
+                row.Width = ui::SizeSpec::Match();
+                row.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(28.0f));
+                column->AddView(toolbar.Get(), row);
+            }
+            {
+                // A hairline under the header (the theme's separator), so it reads as chrome.
+                auto rule = MakeRef<ui::Separator>(MemoryAllocator());
+                ui::LayoutStyle line;
+                line.Width = ui::SizeSpec::Match();
+                column->AddView(rule.Get(), line);
+            }
+            UpdateCounts();
 
             // The entry list (recycled rows), selecting many.
             m_adapter = MakeUnique<Adapter>(MemoryAllocator(), *this);
             m_list = MakeRef<EntryList>(MemoryAllocator(), *this);
             m_list->ItemHeight.SetValue(20.0f);
+            m_list->Padding = ui::Thickness{8, 4}; // the lines off the panel's edges and the header
             m_list->Selection.Mode = ui::SelectionMode::Multiple;
             m_list->SetAdapter(m_adapter.Get());
             m_list->OnItemRightClicked.Add([this](i32, f32 x, f32 y) { ShowContextMenu(x, y); });
@@ -127,6 +166,7 @@ export namespace editor::app
             entry.text += category;
             entry.text += u8"] ";
             entry.text += message;
+            ++m_counts[static_cast<usize>(entry.bucket)];
             m_entries.PushBack(Move(entry));
 
             // Trim to cap: indices into m_entries shift, so the filter is rebuilt below, and the
@@ -139,6 +179,7 @@ export namespace editor::app
                 {
                     ++trimmedVisible;
                 }
+                --m_counts[static_cast<usize>(m_entries[0].bucket)];
                 m_entries.RemoveAt(0);
                 trimmed = true;
             }
@@ -153,6 +194,7 @@ export namespace editor::app
                 m_filtered.PushBack(m_entries.Size() - 1);
                 m_adapter->NotifyDataSetChanged();
             }
+            UpdateCounts();
             ScrollToNewest();
         }
 
@@ -162,6 +204,31 @@ export namespace editor::app
             m_filtered.Clear();
             m_list->Selection.ClearSelection();
             m_adapter->NotifyDataSetChanged();
+            for (usize& count : m_counts)
+            {
+                count = 0;
+            }
+            UpdateCounts();
+        }
+
+        /// A level's chip in the header (on shows its lines), and the count it shows.
+        [[nodiscard]] ui::ToggleButton* LevelChip(Bucket bucket) const noexcept
+        {
+            return m_chips[static_cast<usize>(bucket)];
+        }
+        [[nodiscard]] usize LevelCount(Bucket bucket) const noexcept
+        {
+            return m_counts[static_cast<usize>(bucket)];
+        }
+        [[nodiscard]] StringView LevelCountText(Bucket bucket) const noexcept
+        {
+            const ui::Label* label = m_countLabels[static_cast<usize>(bucket)];
+            return label != nullptr ? label->Text.Value().AsView() : StringView{};
+        }
+        /// The search field's clear button (shown only while the field holds text).
+        [[nodiscard]] ui::IconButton* ClearSearchButton() const noexcept
+        {
+            return m_clearSearch.Get();
         }
 
         /// Selects every visible row.
@@ -224,10 +291,12 @@ export namespace editor::app
             m_visible[static_cast<usize>(bucket)] = visible;
             // A filter change re-numbers the rows, so the selection goes.
             m_list->Selection.ClearSelection();
-            if (ui::CheckBox* box = m_filterBoxes[static_cast<usize>(bucket)])
+            if (ui::ToggleButton* chip = m_chips[static_cast<usize>(bucket)])
             {
-                box->IsChecked.SetSilent(visible); // keep the toolbar in sync on programmatic calls
+                chip->IsChecked.SetSilent(visible); // keep the header in sync on programmatic calls
+                chip->Invalidate();
             }
+            UpdateCounts(); // an off level's chip dims
             RebuildFilter();
             ScrollToNewest();
         }
@@ -246,6 +315,11 @@ export namespace editor::app
                 return;
             }
             m_search = String(text);
+            if (m_clearSearch)
+            {
+                m_clearSearch->Visibility =
+                    m_search.IsEmpty() ? ui::VisibilityValue::Hidden : ui::VisibilityValue::Visible;
+            }
             // The rows re-number, so the selection goes.
             m_list->Selection.ClearSelection();
             RebuildFilter();
@@ -395,6 +469,92 @@ export namespace editor::app
                    (m_search.IsEmpty() || entry.text.AsView().ContainsIgnoreCase(m_search.AsView()));
         }
 
+        // A level's chip: a dot in the level's row colour, its name, and its line count; a toggle,
+        // on while its lines show, dimmed off.
+        RefPtr<ui::ToggleButton> MakeLevelChip(Bucket bucket)
+        {
+            static constexpr const char8_t* kNames[kBucketCount] = {u8"Debug", u8"Info",
+                                                                    u8"Warning", u8"Error"};
+            static constexpr const char8_t* kTips[kBucketCount] = {
+                u8"Show debug and trace lines", u8"Show info lines", u8"Show warnings",
+                u8"Show errors"};
+            const usize i = static_cast<usize>(bucket);
+            auto content = MakeRef<ui::FlexLayout>(MemoryAllocator());
+            content->Direction = ui::Orientation::Horizontal;
+            content->Spacing = 5.0f;
+            content->AlignItems = ui::Align::Center;
+            auto dotShape =
+                MakeRef<ui::RoundedRectDrawable>(MemoryAllocator(), BucketColor(bucket), 4.0f);
+            auto dot = MakeRef<ui::DrawableView>(MemoryAllocator(), ui::DrawablePtr(dotShape.Get()),
+                                                 8.0f, 8.0f);
+            content->AddView(dot.Get());
+            auto name = MakeRef<ui::Label>(MemoryAllocator(), StringView(kNames[i]));
+            name->FontSize.SetValue(12.0f);
+            content->AddView(name.Get());
+            m_nameLabels[i] = name.Get();
+            auto count = MakeRef<ui::Label>(MemoryAllocator(), StringView(u8"0"));
+            count->FontSize.SetValue(11.0f);
+            count->TextColor.SetValue(Optional<Color>(Color{0.6f, 0.6f, 0.62f, 1.0f}));
+            content->AddView(count.Get());
+            m_countLabels[i] = count.Get();
+
+            auto chip = MakeRef<ui::ToggleButton>(MemoryAllocator());
+            chip->SetContent(RefPtr<ui::View>(content.Get()));
+            chip->SetStyle(ui::StyleProperty::Padding, ui::Thickness{7.0f, 2.0f});
+            // A quiet pill rather than the theme's accent toggle: outlined when off, a soft fill
+            // when on, a touch lighter under the pointer.
+            const auto pill = [this](f32 fill, f32 border)
+            {
+                return RefPtr<ui::Drawable>(MakeRef<ui::RoundedRectDrawable>(
+                                                MemoryAllocator(), Color{1.0f, 1.0f, 1.0f, fill}, 9.0f,
+                                                Color{1.0f, 1.0f, 1.0f, border}, 1.0f)
+                                                .Get());
+            };
+            auto look = MakeRef<ui::StateListDrawable>(MemoryAllocator());
+            look->Set(ui::ControlState::Normal, pill(0.0f, 0.10f));
+            look->Set(ui::ControlState::Hover, pill(0.05f, 0.14f));
+            look->Set(ui::ControlState::Checked, pill(0.10f, 0.16f));
+            look->Set(ui::ControlState::Checked | ui::ControlState::Hover, pill(0.14f, 0.20f));
+            chip->SetStyle(ui::StyleProperty::Background, RefPtr<ui::Drawable>(look.Get()));
+            // A checked toggle draws its CheckedBackground first (the theme's accent): this pill too.
+            chip->SetStyle(ui::StyleProperty::CheckedBackground, RefPtr<ui::Drawable>(look.Get()));
+            chip->TooltipText = String(kTips[i]);
+            chip->IsChecked.SetSilent(m_visible[i]);
+            chip->OnCheckedChanged.Add([this, bucket](ui::ToggleButton*, bool checked)
+                                       { SetBucketVisible(bucket, checked); });
+            m_chips[i] = chip.Get();
+            return chip;
+        }
+
+        // Each chip's count: the lines its level holds now (capped in the text, not the count).
+        void UpdateCounts()
+        {
+            for (usize i = 0; i < kBucketCount; ++i)
+            {
+                if (ui::Label* label = m_countLabels[i])
+                {
+                    const String text = m_counts[i] > 9999
+                                            ? String(u8"9999+")
+                                            : Format(u8"{}", static_cast<u64>(m_counts[i]));
+                    if (label->Text.Value().AsView() != text.AsView())
+                    {
+                        label->SetText(text.AsView());
+                    }
+                    // An empty level's chip reads quieter.
+                    const Color quiet{0.45f, 0.45f, 0.47f, 1.0f};
+                    const Color shown{0.72f, 0.72f, 0.74f, 1.0f};
+                    label->TextColor.SetValue(
+                        Optional<Color>(m_counts[i] == 0 || !m_visible[i] ? quiet : shown));
+                }
+                // The name dims with its level hidden.
+                if (ui::Label* name = m_nameLabels[i])
+                {
+                    name->TextColor.SetValue(Optional<Color>(
+                        m_visible[i] ? Color{0.9f, 0.9f, 0.92f, 1.0f} : Color{0.5f, 0.5f, 0.52f, 1.0f}));
+                }
+            }
+        }
+
         void RebuildFilter()
         {
             m_filtered.Clear();
@@ -424,7 +584,11 @@ export namespace editor::app
 
         UniquePtr<Adapter> m_adapter;
         RefPtr<EntryList> m_list;
-        ui::CheckBox* m_filterBoxes[kBucketCount] = {}; // borrowed (toolbar owns them)
+        ui::ToggleButton* m_chips[kBucketCount] = {};    // borrowed (the header owns them)
+        ui::Label* m_countLabels[kBucketCount] = {};     // borrowed (each chip owns its own)
+        ui::Label* m_nameLabels[kBucketCount] = {};      // borrowed (each chip owns its own)
+        usize m_counts[kBucketCount] = {};               // the lines each level holds now
+        RefPtr<ui::IconButton> m_clearSearch;
     };
 
     RTTI_DEFINE_OBJECT(LogView, "rtti::editor::editor::app")

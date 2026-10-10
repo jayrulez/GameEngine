@@ -117,6 +117,8 @@ export namespace editor
         Function<void(const Guid&)> OnFrameEntity;
 
         [[nodiscard]] ui::toolkit::DraggableTreeView* Tree() const noexcept { return m_tree.Get(); }
+        /// The filter field (name, or guid), for tests.
+        [[nodiscard]] ui::EditText& FilterField() const noexcept { return *m_filterEdit; }
 
         /// Names the entity a drag of flat row `data.SourcePosition` carries.
         void DecorateDrag(ui::toolkit::TreeDragData& data);
@@ -322,8 +324,6 @@ export namespace editor
 
         void WireEvents();
 
-        // ASCII-case-insensitive substring match (v1 filter; UTF-8 folding later if needed).
-        [[nodiscard]] static bool MatchesFilter(StringView name, StringView filter);
 
         // True if the entity or ANY descendant matches (so ancestors of matches stay visible).
         [[nodiscard]] bool SubtreeMatches(scene::Scene& scene, scene::EntityHandle e) const;
@@ -344,6 +344,10 @@ export namespace editor
         [[nodiscard]] i32 FlatCount() const;
 
         void SyncSelectionToTree();
+        /// Open every ancestor of `entity` in the tree as built (and forget their collapse).
+        void ExpandAncestorsOf(const Guid& entity);
+        /// Scroll the tree to `entity`'s row, when it shows.
+        void RevealEntity(const Guid& entity);
 
         SceneEditContext* m_edit;
 

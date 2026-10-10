@@ -293,7 +293,18 @@ namespace editor
             [self](ui::EditText* edit)
             {
                 self->m_filter = String(edit->Text());
+                // A whole guid asks for that entity: shown with its ancestors open, selected (the
+                // inspector and the gizmo follow) and scrolled to.
+                Guid wanted;
+                const bool whole = FilterAsGuid(self->m_filter.AsView(), wanted) &&
+                                   self->m_edit->Scene().IsValid(self->m_edit->Scene().FindEntity(wanted));
                 self->RebuildSnapshot(); // filter changes rebuild regardless of revision
+                if (whole)
+                {
+                    self->ExpandAncestorsOf(wanted);
+                    self->m_edit->EntitySelection().Set(wanted);
+                    self->RevealEntity(wanted);
+                }
             });
 
         // Tree selection -> context selection is on click above; context -> tree here.
@@ -307,40 +318,9 @@ namespace editor
         };
     }
 
-    bool SceneHierarchyView::MatchesFilter(StringView name, StringView filter)
-    {
-        if (filter.IsEmpty())
-        {
-            return true;
-        }
-        if (name.Size() < filter.Size())
-        {
-            return false;
-        }
-        auto lower = [](utf8char c)
-        { return (c >= utf8char('A') && c <= utf8char('Z')) ? static_cast<utf8char>(c + 32) : c; };
-        for (usize i = 0; i + filter.Size() <= name.Size(); ++i)
-        {
-            bool match = true;
-            for (usize j = 0; j < filter.Size(); ++j)
-            {
-                if (lower(name[i + j]) != lower(filter[j]))
-                {
-                    match = false;
-                    break;
-                }
-            }
-            if (match)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
     bool SceneHierarchyView::SubtreeMatches(scene::Scene& scene, scene::EntityHandle e) const
     {
-        if (MatchesFilter(scene.GetEntityName(e), m_filter.AsView()))
+        if (NameOrGuidMatches(scene.GetEntityName(e), scene.GetEntityId(e), m_filter.AsView()))
         {
             return true;
         }
@@ -461,6 +441,50 @@ namespace editor
     {
         ui::FlattenedTreeAdapter* flat = m_tree->InternalTreeView()->FlatAdapter();
         return (flat != nullptr) ? flat->ItemCount() : 0;
+    }
+
+    void SceneHierarchyView::ExpandAncestorsOf(const Guid& entity)
+    {
+        // In the tree as built (its collapse state is re-read from it on every rebuild, so the
+        // remembered set alone would not hold), and so remembered.
+        ui::FlattenedTreeAdapter* flat = m_tree->InternalTreeView()->FlatAdapter();
+        scene::Scene& scene = m_edit->Scene();
+        bool opened = false;
+        for (scene::EntityHandle e = scene.GetParent(scene.FindEntity(entity)); scene.IsValid(e);
+             e = scene.GetParent(e))
+        {
+            const Guid ancestor = scene.GetEntityId(e);
+            m_collapsed.Remove(ancestor);
+            for (usize i = 0; flat != nullptr && i < m_nodes.Size(); ++i)
+            {
+                if (m_nodes[i].id == ancestor && !flat->IsExpanded(static_cast<i32>(i)))
+                {
+                    flat->Expand(static_cast<i32>(i));
+                    opened = true;
+                }
+            }
+        }
+        if (opened)
+        {
+            m_tree->InternalTreeView()->InternalListView()->NotifyDataChanged();
+        }
+    }
+
+    void SceneHierarchyView::RevealEntity(const Guid& entity)
+    {
+        ui::FlattenedTreeAdapter* flat = m_tree->InternalTreeView()->FlatAdapter();
+        if (flat == nullptr)
+        {
+            return;
+        }
+        for (i32 pos = 0; pos < flat->ItemCount(); ++pos)
+        {
+            if (GuidOfNode(flat->GetNodeId(pos)) == entity)
+            {
+                m_tree->InternalTreeView()->InternalListView()->ScrollToPosition(pos);
+                return;
+            }
+        }
     }
 
     void SceneHierarchyView::SyncSelectionToTree()

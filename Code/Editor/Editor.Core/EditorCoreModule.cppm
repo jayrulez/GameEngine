@@ -8,6 +8,7 @@ export module editor.core;
 export import editor.project;
 export import :command;
 export import :selection;
+export import :search_filter;
 export import :editor_settings;
 export import :page;
 export import :actions;

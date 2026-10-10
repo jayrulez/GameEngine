@@ -20,6 +20,7 @@ target_sources(Editor.Core
             Page.cppm
             Actions.cppm
             Context.cppm
+            SearchFilter.cppm
             ThumbnailService.cppm
             EditorSettings.cppm
             EditorCoreModule.cppm)

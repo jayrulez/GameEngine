@@ -648,3 +648,24 @@ TEST_CASE("context: an asset changed outside its page tells every open page edit
     context.ClosePage(first);
 }
 
+
+// Every editor filter field finds a thing by its name or its guid (editor.core :search_filter).
+TEST_CASE("search filter: a name part, or a guid whole or by its first digits")
+{
+    Guid id;
+    REQUIRE(Guid::TryParse(u8"3f2a9c1e-7b44-4d0e-9a51-0c6e2b8d7f13", id));
+    CHECK(editor::NameOrGuidMatches(u8"Crate", id, u8""));
+    CHECK(editor::NameOrGuidMatches(u8"Crate", id, u8"RAT"));
+    CHECK_FALSE(editor::NameOrGuidMatches(u8"Crate", id, u8"barrel"));
+    CHECK(editor::NameOrGuidMatches(u8"Crate", id, u8"3f2a"));
+    CHECK(editor::NameOrGuidMatches(u8"Crate", id, u8"3F2A9C1E-7B44"));
+    CHECK(editor::NameOrGuidMatches(u8"Crate", id, u8"{3f2a9c1e7b444d0e9a510c6e2b8d7f13}"));
+    CHECK_FALSE(editor::NameOrGuidMatches(u8"Crate", id, u8"3f2"));  // under four digits: a name only
+    CHECK_FALSE(editor::NameOrGuidMatches(u8"Crate", id, u8"4d0e")); // not the guid's beginning
+
+    Guid whole;
+    CHECK(editor::FilterAsGuid(u8" {3F2A9C1E-7B44-4D0E-9A51-0C6E2B8D7F13} ", whole));
+    CHECK(whole == id);
+    CHECK_FALSE(editor::FilterAsGuid(u8"3f2a9c1e", whole));
+    CHECK_FALSE(editor::FilterAsGuid(u8"Crate", whole));
+}

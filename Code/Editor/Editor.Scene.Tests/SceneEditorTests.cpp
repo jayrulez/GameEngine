@@ -1241,3 +1241,94 @@ TEST_CASE("inspector: a bone name field picks from the animator's skeleton")
     inspector.Refresh();
     CHECK(foundation::core::Cast<foundation::ui::toolkit::StringEditor>(inspector.Grid()->GetProperty(u8"startBone")) != nullptr);
 }
+
+// A guid copied from a log line, an MCP answer or a scene file finds its entity in the hierarchy, as
+// one finds an asset in the browser: whole or by its first digits, braces, dashes and case aside;
+// a whole one selects the entity, its collapsed ancestors opened (user 2026-10-10).
+TEST_CASE("hierarchy: the filter finds an entity by its guid; a whole one selects it")
+{
+    scene::Scene scene{DefaultAllocator()};
+    EditorCommandStack commands;
+    SceneEditContext edit(scene, commands);
+    auto hierarchyRef = foundation::core::MakeRef<SceneHierarchyView>(DefaultAllocator(), edit);
+    SceneHierarchyView& hierarchy = *hierarchyRef;
+
+    const Guid parent = edit.CreateEntity(u8"Parent");
+    const Guid child = edit.CreateEntity(u8"Child", parent);
+    (void)edit.CreateEntity(u8"Sibling");
+    hierarchy.Refresh();
+    auto* flat = hierarchy.Tree()->InternalTreeView()->FlatAdapter();
+    flat->Collapse(0); // Parent folded: Child hidden
+    REQUIRE(flat->ItemCount() == 2);
+
+    const auto type = [&hierarchy](StringView text)
+    {
+        hierarchy.FilterField().SetText(text);
+        hierarchy.FilterField().OnTextChanged.Invoke(&hierarchy.FilterField());
+    };
+    utf8char text[37];
+    child.ToChars(text);
+    const String whole(StringView(text, 36));
+
+    // Its first digits: the child and the ancestor that holds it, nothing else.
+    edit.EntitySelection().Clear(); // creating selects the new entity
+    type(whole.AsView().SubStr(0, 8));
+    flat = hierarchy.Tree()->InternalTreeView()->FlatAdapter();
+    CHECK(edit.EntitySelection().Primary() == nullptr); // first digits find, they do not select
+
+    // The whole guid, braced and in capitals: selected, its folded parent opened to show it.
+    String braced(u8"{");
+    for (const utf8char c : whole.AsView())
+    {
+        braced.Append((c >= utf8char('a') && c <= utf8char('f')) ? static_cast<utf8char>(c - 32) : c);
+    }
+    braced.Append(u8"}");
+    type(braced.AsView());
+    REQUIRE(edit.EntitySelection().Primary() != nullptr);
+    CHECK(*edit.EntitySelection().Primary() == child);
+    flat = hierarchy.Tree()->InternalTreeView()->FlatAdapter();
+    CHECK(flat->ItemCount() == 2); // Parent, now open, and Child
+    CHECK(flat->IsExpanded(0));
+
+    // A name still filters by name.
+    type(u8"sib");
+    flat = hierarchy.Tree()->InternalTreeView()->FlatAdapter();
+    CHECK(flat->ItemCount() == 1);
+}
+
+TEST_CASE("entity picker: the filter finds an entity by its guid; a whole one is the choice")
+{
+    scene::Scene scene{DefaultAllocator()};
+    EditorCommandStack commands;
+    SceneEditContext edit(scene, commands);
+    const Guid crate = edit.CreateEntity(u8"Crate");
+    const Guid lamp = edit.CreateEntity(u8"Lamp", crate);
+    (void)edit.CreateEntity(u8"Barrel");
+
+    auto picker = foundation::core::MakeRef<EntityPickerDialog>(DefaultAllocator(), scene, crate);
+    CHECK(picker->ShownCount() == 3u);
+    CHECK(picker->SelectedEntity() == crate); // the current target, pre-selected
+
+    const auto type = [&picker](StringView text)
+    {
+        picker->FilterField().SetText(text);
+        picker->FilterField().OnTextChanged.Invoke(&picker->FilterField());
+    };
+    utf8char text[37];
+    lamp.ToChars(text);
+    const String whole(StringView(text, 36));
+    String bare; // without dashes
+    for (const utf8char c : whole.AsView())
+    {
+        if (c != utf8char('-'))
+        {
+            bare.Append(c);
+        }
+    }
+    type(bare.AsView().SubStr(0, 6));
+    CHECK(picker->ShownCount() == 2u); // Lamp and the Crate holding it
+    type(bare.AsView());
+    CHECK(picker->SelectedEntity() == lamp); // a whole guid is the choice
+    type(u8"barr");
+    CHECK(picker->ShownCount() == 1u);
+}

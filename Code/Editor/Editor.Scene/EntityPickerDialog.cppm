@@ -23,6 +23,7 @@ import foundation.core;
 import foundation.ui;
 import foundation.ui.toolkit;
 import foundation.scene;
+import editor.core; // NameOrGuidMatches, FilterAsGuid (the editor's filter fields)
 
 using namespace foundation::core;
 
@@ -210,43 +211,10 @@ export namespace editor
             Close(ui::DialogResult::OK);
         }
 
-        // ASCII case-insensitive substring match (mirrors the hierarchy view's v1 filter).
-        [[nodiscard]] static bool MatchesFilter(StringView name, StringView filter)
-        {
-            if (filter.IsEmpty())
-            {
-                return true;
-            }
-            auto lower = [](utf8char c) -> utf8char
-            { return (c >= u8'A' && c <= u8'Z') ? static_cast<utf8char>(c - u8'A' + u8'a') : c; };
-            const usize n = name.Size();
-            const usize m = filter.Size();
-            if (m > n)
-            {
-                return false;
-            }
-            for (usize i = 0; i + m <= n; ++i)
-            {
-                usize j = 0;
-                for (; j < m; ++j)
-                {
-                    if (lower(name[i + j]) != lower(filter[j]))
-                    {
-                        break;
-                    }
-                }
-                if (j == m)
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-
         // True if the entity or ANY descendant matches (so ancestors of a match stay visible).
         [[nodiscard]] bool SubtreeMatches(scene::EntityHandle e) const
         {
-            if (MatchesFilter(m_scene->GetEntityName(e), m_filter.AsView()))
+            if (NameOrGuidMatches(m_scene->GetEntityName(e), m_scene->GetEntityId(e), m_filter.AsView()))
             {
                 return true;
             }
@@ -295,10 +263,17 @@ export namespace editor
                     m_roots.PushBack(AddNode(r, 0));
                 }
             }
-            // Pre-select the current target if it survived the filter.
+            // Pre-select the entity a whole guid names, else the current target, if it survived the
+            // filter.
+            Guid wanted = m_current;
+            Guid typed;
+            if (FilterAsGuid(m_filter.AsView(), typed))
+            {
+                wanted = typed;
+            }
             for (usize i = 0; i < m_nodes.Size(); ++i)
             {
-                if (m_nodes[i].id == m_current)
+                if (m_nodes[i].id == wanted)
                 {
                     m_selected = static_cast<i32>(i);
                     break;
@@ -316,8 +291,31 @@ export namespace editor
                     flat->Expand(static_cast<i32>(i)); // parents only
                 }
                 flat->RebuildVisibleList(); // repopulate from the source + notify the list
+                // Show the pre-selection as selected, scrolled to (Select confirms it).
+                for (i32 pos = 0; pos < flat->ItemCount() && m_selected >= 0; ++pos)
+                {
+                    if (flat->GetNodeId(pos) == m_selected)
+                    {
+                        m_tree->Selection().Select(pos);
+                        m_tree->InternalListView()->ScrollToPosition(pos);
+                        break;
+                    }
+                }
             }
         }
+
+    public:
+        /// For tests: the filter field, and the entity Select would confirm (nil: none).
+        [[nodiscard]] ui::EditText& FilterField() const noexcept { return *m_filterEdit; }
+        [[nodiscard]] Guid SelectedEntity() const
+        {
+            return (m_selected >= 0 && m_selected < static_cast<i32>(m_nodes.Size()))
+                       ? m_nodes[static_cast<usize>(m_selected)].id
+                       : Guid{};
+        }
+        [[nodiscard]] usize ShownCount() const noexcept { return m_nodes.Size(); }
+
+    private:
 
         scene::Scene* m_scene; // borrowed
         Guid m_current;

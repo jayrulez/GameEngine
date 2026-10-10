@@ -243,10 +243,10 @@ TEST_CASE("asset filter: a name by any part of it, or a guid whole or by its fir
 
     // FilterAsGuid reads a whole guid only.
     Guid parsed;
-    REQUIRE(app::FilterAsGuid(bare.AsView(), parsed));
+    REQUIRE(editor::FilterAsGuid(bare.AsView(), parsed));
     CHECK(parsed == crate->Id());
-    CHECK_FALSE(app::FilterAsGuid(guid.AsView().SubStr(0, 6), parsed));
-    CHECK_FALSE(app::FilterAsGuid(u8"Crate", parsed));
+    CHECK_FALSE(editor::FilterAsGuid(guid.AsView().SubStr(0, 6), parsed));
+    CHECK_FALSE(editor::FilterAsGuid(u8"Crate", parsed));
 }
 
 TEST_CASE("AssetsView: a guid in the filter finds its asset in any group and selects it")

@@ -8,3 +8,8 @@
 # and goto (build-msvc.cmd uses both).
 *.cmd text eol=crlf
 *.bat text eol=crlf
+
+# Shell scripts must be LF, whatever a contributor's core.autocrlf says: a CRLF shebang
+# makes Linux reject the script outright ("bad interpreter: /usr/bin/env bash^M"), and these
+# are committed from Windows (build-clang.sh, build-gcc.sh).
+*.sh text eol=lf

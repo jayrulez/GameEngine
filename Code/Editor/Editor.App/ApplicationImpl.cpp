@@ -1496,51 +1496,6 @@ namespace editor::app
         out.Refresh(templatesRoot.AsView(), &rootFs, toolDir.AsView(), &toolFs);
     }
 
-    ui::FlexLayout* EditorApplication::AddFormRow(ui::FlexLayout& column, StringView label,
-                                                  ui::View* field)
-    {
-        auto row = MakeRef<ui::FlexLayout>(m_editorAllocator);
-        row->Direction = ui::Orientation::Horizontal;
-        row->Spacing = 8;
-        {
-            auto text = MakeRef<ui::Label>(m_editorAllocator, label);
-            ui::LayoutStyle lp;
-            lp.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(120));
-            lp.AlignSelf = ui::Align::Center;
-            row->AddView(text.Get(), lp);
-        }
-        if (field != nullptr)
-        {
-            ui::LayoutStyle lp;
-            lp.FlexGrow = 1.0f;
-            lp.AlignSelf = ui::Align::Center;
-            row->AddView(field, lp);
-        }
-        ui::FlexLayout* raw = row.Get();
-        ui::LayoutStyle lp;
-        lp.Width = ui::SizeSpec::Match();
-        column.AddView(row.Get(), lp);
-        return raw;
-    }
-
-    void EditorApplication::QueueReplaceDialog(ui::Dialog* current, Function<void()> open)
-    {
-        m_uiHost->Context().MutationQueueRef().QueueAction(
-            Function<void()>{[current, open = Move(open)]()
-                             {
-                                 if (current != nullptr)
-                                 {
-                                     current->Close();
-                                 }
-                                 open();
-                             }});
-    }
-
-    void EditorApplication::ReopenExportPresetsPanel(ui::Dialog* current)
-    {
-        QueueReplaceDialog(current, Function<void()>{[this]() { OpenExportPresetsPanel(); }});
-    }
-
     void EditorApplication::SavePresetsController()
     {
         if (!m_project)
@@ -1553,77 +1508,6 @@ namespace editor::app
             m_context.Notify(editor::NoticeKind::Error,
                              u8"Saving export presets FAILED (see console).");
         }
-    }
-
-    String EditorApplication::JoinSemicolons(const Array<String>& items)
-    {
-        String out;
-        for (usize i = 0; i < items.Size(); ++i)
-        {
-            if (i > 0)
-            {
-                out += u8";";
-            }
-            out += items[i].AsView();
-        }
-        return out;
-    }
-
-    void EditorApplication::SplitSemicolons(StringView text, Array<String>& out)
-    {
-        const auto isSpace = [](utf8char c) { return c == utf8char(' ') || c == utf8char('\t'); };
-        usize start = 0;
-        for (usize i = 0; i <= text.Size(); ++i)
-        {
-            if (i != text.Size() && text[i] != utf8char(';'))
-            {
-                continue;
-            }
-            usize s = start, e = i;
-            while (s < e && isSpace(text[s]))
-            {
-                ++s;
-            }
-            while (e > s && isSpace(text[e - 1]))
-            {
-                --e;
-            }
-            if (e > s)
-            {
-                out.PushBack(String(text.SubStr(s, e - s)));
-            }
-            start = i + 1;
-        }
-    }
-
-    void EditorApplication::PickAdditionalFiles(RefPtr<ui::EditText> target)
-    {
-        if (m_host == nullptr || m_host->Shell() == nullptr ||
-            m_host->Shell()->Dialogs() == nullptr)
-        {
-            m_context.Notify(editor::NoticeKind::Error, u8"File dialogs are unavailable.");
-            return;
-        }
-        m_host->Shell()->Dialogs()->ShowOpenFile(
-            foundation::shell::DialogResultCallback{
-                [target](Span<const String> paths)
-                {
-                    if (paths.Size() == 0)
-                    {
-                        return;
-                    } // cancelled
-                    String text(target->Text());
-                    for (usize i = 0; i < paths.Size(); ++i)
-                    {
-                        if (!text.IsEmpty() && text[text.Size() - 1] != utf8char(';'))
-                        {
-                            text += u8";";
-                        }
-                        text += paths[i].AsView();
-                    }
-                    target->SetText(text.AsView());
-                }},
-            {}, {}, /*allowMultiple*/ true);
     }
 
     ui::Dialog* EditorApplication::OpenTemplatesManager()
@@ -1674,381 +1558,42 @@ namespace editor::app
         {
             return;
         }
-
         {
             foundation::vfs::NativeFileSystem projectFs(m_project->Directory(), m_editorAllocator);
-            m_presetsController.Load(projectFs); // reflects edits persisted by the editor form
+            m_presetsController.Load(projectFs);
         }
-
-        auto dialog = MakeRef<ui::Dialog>(m_editorAllocator, StringView(u8"Export"));
-        dialog->MinWidth.SetValue(600.0f);
-        dialog->MaxWidth.SetValue(820.0f);
-        dialog->MinHeight.SetValue(220.0f);
-        dialog->MaxHeight.SetValue(560.0f);
-        ui::Dialog* raw = dialog.Get();
-
-        auto column = MakeRef<ui::FlexLayout>(m_editorAllocator);
-        column->Direction = ui::Orientation::Vertical;
-        column->Spacing = 6;
-
-        auto info = MakeRef<ui::Label>(
-            m_editorAllocator, StringView(u8"Export presets (output directory: <project>/Dist):"));
-        column->AddView(info.Get());
-
-        for (usize i = 0; i < m_presetsController.Count(); ++i)
+        ExportDialogSeams seams;
+        seams.refresh = [this](editor::TemplateRegistry& registry) { BuildTemplateRegistryMainThread(registry); };
+        seams.save = [this]() { SavePresetsController(); };
+        seams.runExport = [this](StringView preset, bool all) { RunExport(preset, all); };
+        seams.openTemplates = [this]() { return OpenTemplatesManager(); };
+        seams.pickFiles = [this](Function<void(Array<String>)> chosen)
         {
-            const editor::ExportPreset& p = m_presetsController.At(i);
-            String text(p.name.AsView());
-            text += u8"  [";
-            text += p.platform.IsEmpty() ? StringView(u8"?") : p.platform.AsView();
-            text += u8"/";
-            text += p.config.IsEmpty() ? StringView(u8"Release") : p.config.AsView();
-            text += u8"]";
-
-            auto row = MakeRef<ui::FlexLayout>(m_editorAllocator);
-            row->Direction = ui::Orientation::Horizontal;
-            row->Spacing = 6;
+            if (m_host == nullptr || m_host->Shell() == nullptr || m_host->Shell()->Dialogs() == nullptr)
             {
-                auto label = MakeRef<ui::Label>(m_editorAllocator, text.AsView());
-                ui::LayoutStyle lp;
-                lp.FlexGrow = 1.0f;
-                lp.AlignSelf = ui::Align::Center;
-                row->AddView(label.Get(), lp);
+                m_context.Notify(editor::NoticeKind::Error, u8"File dialogs are unavailable.");
+                return;
             }
-            const String name(p.name.AsView());
-            const usize index = i;
-            {
-                auto b = MakeRef<ui::Button>(m_editorAllocator, StringView(u8"Export"));
-                b->OnClick.Add(
-                    [this, raw, name](ui::ButtonBase*)
+            m_host->Shell()->Dialogs()->ShowOpenFile(
+                foundation::shell::DialogResultCallback{
+                    [chosen = Move(chosen)](Span<const String> paths)
                     {
-                        RunExport(name.AsView(), false);
-                        raw->Close(ui::DialogResult::OK);
-                    });
-                row->AddView(b.Get());
-            }
-            {
-                auto b = MakeRef<ui::Button>(m_editorAllocator, StringView(u8"Edit"));
-                b->OnClick.Add(
-                    [this, raw, index](ui::ButtonBase*)
-                    {
-                        editor::ExportPreset current = m_presetsController.At(index);
-                        QueueReplaceDialog(
-                            raw,
-                            Function<void()>{
-                                [this, current, index]()
-                                { OpenPresetEditor(current, static_cast<isize>(index)); }});
-                    });
-                row->AddView(b.Get());
-            }
-            {
-                auto b = MakeRef<ui::Button>(m_editorAllocator, StringView(u8"Duplicate"));
-                b->OnClick.Add(
-                    [this, raw, index](ui::ButtonBase*)
-                    {
-                        m_presetsController.Duplicate(index);
-                        SavePresetsController();
-                        ReopenExportPresetsPanel(raw);
-                    });
-                row->AddView(b.Get());
-            }
-            {
-                auto b = MakeRef<ui::Button>(m_editorAllocator, StringView(u8"Delete"));
-                b->OnClick.Add(
-                    [this, raw, index](ui::ButtonBase*)
-                    {
-                        m_presetsController.Remove(index);
-                        SavePresetsController();
-                        ReopenExportPresetsPanel(raw);
-                    });
-                row->AddView(b.Get());
-            }
-            column->AddView(row.Get());
-        }
-
-        dialog->SetContent(column.Get());
-
-        ui::Button* add = dialog->AddButton(u8"Add...", ui::DialogResult::None);
-        add->OnClick.Add(
-            [this, raw](ui::ButtonBase*)
-            {
-                editor::ExportPreset fresh;
-                fresh.name = String(u8"New Preset");
-                fresh.platform = String(GetHostPlatformName());
-                QueueReplaceDialog(
-                    raw, Function<void()>{[this, fresh]() { OpenPresetEditor(fresh, -1); }});
-            });
-        ui::Button* exportAll = dialog->AddButton(u8"Export All", ui::DialogResult::None);
-        exportAll->OnClick.Add(
-            [this, raw](ui::ButtonBase*)
-            {
-                RunExport(StringView{}, true);
-                raw->Close(ui::DialogResult::OK);
-            });
-        ui::Button* templates = dialog->AddButton(u8"Manage Templates...", ui::DialogResult::None);
-        templates->OnClick.Add(
-            [this](ui::ButtonBase*)
-            { (void)OpenTemplatesManager(); }); // over the export dialog
-        dialog->AddButton(u8"Close", ui::DialogResult::Cancel);
-        dialog->Show(&m_uiHost->Context());
-    }
-
-    void EditorApplication::OpenPresetEditor(editor::ExportPreset initial, isize editIndex)
-    {
-        if (!m_uiHost)
-        {
-            return;
-        }
-
-        editor::TemplateRegistry registry;
-        BuildTemplateRegistryMainThread(registry);
-
-        auto dialog = MakeRef<ui::Dialog>(
-            m_editorAllocator,
-            StringView(editIndex < 0 ? u8"Add Export Preset" : u8"Edit Export Preset"));
-        dialog->MinWidth.SetValue(600.0f);
-        dialog->MaxWidth.SetValue(820.0f);
-        dialog->MinHeight.SetValue(340.0f);
-        dialog->MaxHeight.SetValue(640.0f);
-        ui::Dialog* raw = dialog.Get();
-
-        auto column = MakeRef<ui::FlexLayout>(m_editorAllocator);
-        column->Direction = ui::Orientation::Vertical;
-        column->Spacing = 6;
-
-        auto nameEdit = MakeRef<ui::EditText>(m_editorAllocator);
-        nameEdit->SetText(initial.name.AsView());
-        AddFormRow(*column, u8"Name", nameEdit.Get());
-
-        // Template dropdown: index 0 = resolve by platform/config; each later item maps to a
-        // concrete templateId (+ its platform/config), captured into the parallel arrays below.
-        auto templateCombo = MakeRef<ui::ComboBox>(m_editorAllocator);
-        templateCombo->AddItem(u8"(resolve by platform + config below)");
-        Array<String> comboIds, comboPlatforms, comboConfigs;
-        comboIds.PushBack(String{});
-        comboPlatforms.PushBack(String{});
-        comboConfigs.PushBack(String{});
-        i32 selectedCombo = 0;
-        for (usize i = 0; i < registry.Count(); ++i)
-        {
-            const editor::ExportTemplate* t = registry.At(i);
-            if (t == nullptr)
-            {
-                continue;
-            }
-            String item(t->name.AsView());
-            item += u8" [";
-            item += t->platform.AsView();
-            item += u8"/";
-            item += t->EffectiveConfig();
-            item += u8"]";
-            if (t->isHost)
-            {
-                item += u8" (host)";
-            }
-            const i32 idx = templateCombo->AddItem(item.AsView());
-            comboIds.PushBack(String(t->id.AsView()));
-            comboPlatforms.PushBack(String(t->platform.AsView()));
-            comboConfigs.PushBack(String(t->EffectiveConfig()));
-            if (!initial.templateId.IsEmpty() && initial.templateId.AsView() == t->id.AsView())
-            {
-                selectedCombo = idx;
-            }
-        }
-        templateCombo->SetSelectedIndex(selectedCombo);
-        AddFormRow(*column, u8"Template", templateCombo.Get());
-
-        auto platformEdit = MakeRef<ui::EditText>(m_editorAllocator);
-        platformEdit->SetText(initial.platform.AsView());
-        platformEdit->SetPlaceholder(GetHostPlatformName());
-        AddFormRow(*column, u8"Platform", platformEdit.Get());
-
-        auto configEdit = MakeRef<ui::EditText>(m_editorAllocator);
-        configEdit->SetText(initial.config.AsView());
-        configEdit->SetPlaceholder(u8"Release");
-        AddFormRow(*column, u8"Config", configEdit.Get());
-
-        auto playerEdit = MakeRef<ui::EditText>(m_editorAllocator);
-        playerEdit->SetText(initial.playerName.AsView());
-        playerEdit->SetPlaceholder(u8"(template default)");
-        AddFormRow(*column, u8"Player name", playerEdit.Get());
-
-        auto subdirEdit = MakeRef<ui::EditText>(m_editorAllocator);
-        subdirEdit->SetText(initial.outputSubdir.AsView());
-        subdirEdit->SetPlaceholder(u8"(sanitized name)");
-        AddFormRow(*column, u8"Output subdir", subdirEdit.Get());
-
-        auto filesEdit = MakeRef<ui::EditText>(m_editorAllocator);
-        filesEdit->SetText(JoinSemicolons(initial.additionalFiles).AsView());
-        filesEdit->SetPlaceholder(u8"icon.ico;config.xml");
-        ui::FlexLayout* filesRow = AddFormRow(*column, u8"Extra files", filesEdit.Get());
-        {
-            RefPtr<ui::EditText> filesRef = filesEdit;
-            auto browse = MakeRef<ui::Button>(m_editorAllocator, StringView(u8"Add Files..."));
-            browse->OnClick.Add([this, filesRef](ui::ButtonBase*)
-                                { PickAdditionalFiles(filesRef); });
-            filesRow->AddView(browse.Get());
-        }
-
-        auto symbolsCheck = MakeRef<ui::CheckBox>(m_editorAllocator,
-                                                  StringView(u8"Stage debug symbols into the dist"),
-                                                  initial.stageSymbols);
-        column->AddView(symbolsCheck.Get());
-        auto pruneCheck = MakeRef<ui::CheckBox>(m_editorAllocator,
-                                                StringView(u8"Prune to reachable content only"),
-                                                initial.pruneToReachable);
-        column->AddView(pruneCheck.Get());
-
-        // The display, per platform: this preset's own render size or window over the project's
-        // (a handheld's native panel, fullscreen on a console-like device). The choices are the
-        // enums' reflected values.
-        struct DisplayControls
-        {
-            ui::CheckBox* overridesRender = nullptr;
-            ui::NumericField* renderWidth = nullptr;
-            ui::NumericField* renderHeight = nullptr;
-            ui::ComboBox* renderFit = nullptr;
-            ui::CheckBox* overridesWindow = nullptr;
-            ui::NumericField* windowWidth = nullptr;
-            ui::NumericField* windowHeight = nullptr;
-            ui::ComboBox* windowMode = nullptr;
-            ui::CheckBox* windowResizable = nullptr;
+                        if (paths.Size() == 0)
+                        {
+                            return; // cancelled
+                        }
+                        Array<String> files;
+                        for (const String& path : paths)
+                        {
+                            files.PushBack(path);
+                        }
+                        chosen(Move(files));
+                    }},
+                {}, {}, /*allowMultiple*/ true);
         };
-        DisplayControls display;
-        {
-            const auto sizeField = [this](u32 value, f64 least)
-            {
-                auto field = MakeRef<ui::NumericField>(m_editorAllocator);
-                field->SetDecimalPlaces(0);
-                field->SetStep(1.0);
-                field->SetMin(least);
-                field->SetMax(16384.0);
-                field->SetValue(static_cast<f64>(value));
-                return field;
-            };
-            const auto enumCombo = [this](const TypeInfo& type, i64 current)
-            {
-                auto combo = MakeRef<ui::ComboBox>(m_editorAllocator);
-                i32 selected = 0;
-                for (usize i = 0; i < EnumeratorCount(type); ++i)
-                {
-                    (void)combo->AddItem(StringView(reinterpret_cast<const utf8char*>(EnumeratorAt(type, i).name)));
-                    selected = EnumeratorAt(type, i).value == current ? static_cast<i32>(i) : selected;
-                }
-                combo->SetSelectedIndex(selected);
-                return combo;
-            };
-            const auto pair = [this](ui::View* a, ui::View* b)
-            {
-                auto row = MakeRef<ui::FlexLayout>(m_editorAllocator);
-                row->Direction = ui::Orientation::Horizontal;
-                row->Spacing = 6;
-                ui::LayoutStyle fixed;
-                fixed.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(90));
-                row->AddView(a, fixed);
-                row->AddView(b, fixed);
-                return row;
-            };
-            const TypeInfo& settingsType = engine::project::ProjectSettings::StaticType(); // the enums
-            const TypeInfo& fitType = *FindProperty(settingsType, "renderFit")->type;
-            const TypeInfo& modeType = *FindProperty(settingsType, "windowMode")->type;
-
-            auto overridesRender = MakeRef<ui::CheckBox>(
-                m_editorAllocator, StringView(u8"Draw at its own render size"), initial.overridesRender);
-            column->AddView(overridesRender.Get());
-            auto renderWidth = sizeField(initial.renderWidth, 0.0);
-            auto renderHeight = sizeField(initial.renderHeight, 0.0);
-            AddFormRow(*column, u8"Render size", pair(renderWidth.Get(), renderHeight.Get()).Get());
-            auto renderFit = enumCombo(fitType, static_cast<i64>(initial.renderFit));
-            AddFormRow(*column, u8"Render fit", renderFit.Get());
-
-            auto overridesWindow = MakeRef<ui::CheckBox>(
-                m_editorAllocator, StringView(u8"Open its own window"), initial.overridesWindow);
-            column->AddView(overridesWindow.Get());
-            auto windowWidth = sizeField(initial.windowWidth, 1.0);
-            auto windowHeight = sizeField(initial.windowHeight, 1.0);
-            AddFormRow(*column, u8"Window size", pair(windowWidth.Get(), windowHeight.Get()).Get());
-            auto windowMode = enumCombo(modeType, static_cast<i64>(initial.windowMode));
-            AddFormRow(*column, u8"Window mode", windowMode.Get());
-            auto windowResizable =
-                MakeRef<ui::CheckBox>(m_editorAllocator, StringView(u8"Resizable"), initial.windowResizable);
-            column->AddView(windowResizable.Get());
-
-            display = DisplayControls{overridesRender.Get(), renderWidth.Get(), renderHeight.Get(),
-                                      renderFit.Get(), overridesWindow.Get(), windowWidth.Get(),
-                                      windowHeight.Get(), windowMode.Get(), windowResizable.Get()};
-        }
-
-        dialog->SetContent(column.Get());
-
-        ui::EditText* nameRaw = nameEdit.Get();
-        ui::ComboBox* comboRaw = templateCombo.Get();
-        ui::EditText* platformRaw = platformEdit.Get();
-        ui::EditText* configRaw = configEdit.Get();
-        ui::EditText* playerRaw = playerEdit.Get();
-        ui::EditText* subdirRaw = subdirEdit.Get();
-        ui::EditText* filesRaw = filesEdit.Get();
-        ui::CheckBox* symbolsRaw = symbolsCheck.Get();
-        ui::CheckBox* pruneRaw = pruneCheck.Get();
-
-        ui::Button* save = dialog->AddButton(u8"Save", ui::DialogResult::None);
-        save->OnClick.Add(
-            [this, raw, editIndex, nameRaw, comboRaw, platformRaw, configRaw, playerRaw, subdirRaw,
-             filesRaw, symbolsRaw, pruneRaw, comboIds, comboPlatforms, comboConfigs,
-             display](ui::ButtonBase*)
-            {
-                editor::ExportPreset result;
-                result.name = String(nameRaw->Text());
-                const i32 sel = comboRaw->SelectedIndex();
-                if (sel > 0 && static_cast<usize>(sel) < comboIds.Size())
-                {
-                    result.templateId = comboIds[static_cast<usize>(sel)];
-                    result.platform = comboPlatforms[static_cast<usize>(sel)];
-                    result.config = comboConfigs[static_cast<usize>(sel)];
-                }
-                else
-                {
-                    result.platform = String(platformRaw->Text());
-                    result.config = String(configRaw->Text());
-                }
-                result.playerName = String(playerRaw->Text());
-                result.outputSubdir = String(subdirRaw->Text());
-                result.stageSymbols = symbolsRaw->IsChecked.Value();
-                result.pruneToReachable = pruneRaw->IsChecked.Value();
-                SplitSemicolons(filesRaw->Text(), result.additionalFiles);
-                const TypeInfo& settingsType = engine::project::ProjectSettings::StaticType();
-                const auto chosen = [&settingsType](ui::ComboBox* combo, const char* property)
-                {
-                    const TypeInfo& type = *FindProperty(settingsType, property)->type;
-                    const i32 index = combo->SelectedIndex();
-                    return (index >= 0 && static_cast<usize>(index) < EnumeratorCount(type))
-                               ? EnumeratorAt(type, static_cast<usize>(index)).value
-                               : 0;
-                };
-                result.overridesRender = display.overridesRender->IsChecked.Value();
-                result.renderWidth = static_cast<u32>(display.renderWidth->Value());
-                result.renderHeight = static_cast<u32>(display.renderHeight->Value());
-                result.renderFit = static_cast<FitMode>(chosen(display.renderFit, "renderFit"));
-                result.overridesWindow = display.overridesWindow->IsChecked.Value();
-                result.windowWidth = static_cast<u32>(display.windowWidth->Value());
-                result.windowHeight = static_cast<u32>(display.windowHeight->Value());
-                result.windowMode =
-                    static_cast<engine::project::WindowMode>(chosen(display.windowMode, "windowMode"));
-                result.windowResizable = display.windowResizable->IsChecked.Value();
-
-                if (editIndex < 0)
-                {
-                    m_presetsController.Add(result);
-                }
-                else
-                {
-                    m_presetsController.Update(static_cast<usize>(editIndex), result);
-                }
-                SavePresetsController();
-                ReopenExportPresetsPanel(raw);
-            });
-        ui::Button* cancel = dialog->AddButton(u8"Cancel", ui::DialogResult::None);
-        cancel->OnClick.Add([this, raw](ui::ButtonBase*) { ReopenExportPresetsPanel(raw); });
+        seams.hostPlatform = String(GetHostPlatformName());
+        seams.outputRoot = PathJoin(m_project->Directory(), u8"Dist");
+        auto dialog = MakeRef<ExportDialog>(m_editorAllocator, m_context, m_presetsController, Move(seams));
         dialog->Show(&m_uiHost->Context());
     }
 

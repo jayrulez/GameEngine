@@ -225,11 +225,16 @@ audible/interactive items were never auto-checked - those remain for user sessio
       (platform, config) template — same staged output as the editor path.
 
 ## Export: editor UI (15c695a) — presets panel + templates manager
-- [ ] **File > Manage Templates…** lists every template (imported + synthesized host) with
-      name/platform/config/engineVersion and a "(!) engine mismatch" note on a stamped version
-      that differs from this build. Import… (folder picker → ImportTemplate), Create… (folder
-      picker on a `Bin/<Config>` dir → CreateTemplate), Remove (non-host only — the synthesized
-      host template offers no Remove). Each action refreshes the list.
+- [ ] **Edit > Export Templates…** lists every template (installed + this editor's own build) by
+      its icon, name, platform, config and engine version, a warning icon on a stamped version
+      that differs from this build; the selected one's details on the right. Install from
+      Folder… (folder picker → ImportTemplate), Create from Build… (folder picker on a
+      `Bin/<Config>` dir → CreateTemplate), Reveal Folder, Remove… (asks first; never the host
+      build). Each action refreshes the list in place.
+- [ ] **Project > Export…** lists the presets, each by its resolved template's icon (a warning
+      when none is installed); the selected one's settings in General / Content / Display tabs
+      under the card naming its template. Edits stick when switching presets and after reopening.
+      Export Templates… opens over it, and the cards follow an install or removal.
 
 ## Export: "Always Export" roots + badges (f22bc1a + 412c789 + 5ee987f)
 - [ ] Right-click a GROUP (row or left tree) > **Always export contents** — the group gets the

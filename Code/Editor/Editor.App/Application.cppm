@@ -283,45 +283,18 @@ export namespace editor::app
         // Refresh (copies manifests + dir paths), so it outlives the temporary filesystems here.
         void BuildTemplateRegistryMainThread(editor::TemplateRegistry& out);
 
-        // A labeled form row: fixed-width label + `field` (grows to fill). Returns the row so a caller
-        // can append trailing controls (e.g. a "Browse..." button beside a text field).
-        ui::FlexLayout* AddFormRow(ui::FlexLayout& column, StringView label, ui::View* field);
-
-        // Swap the currently-open management dialog for a freshly-built one: close `current` and run
-        // `open`, all on the UI mutation queue (never destroy/rebuild views mid-event-dispatch).
-        void QueueReplaceDialog(ui::Dialog* current, Function<void()> open);
-
-        void ReopenExportPresetsPanel(ui::Dialog* current);
-
         // Persist the in-memory preset set to the project's export_presets.xml.
         void SavePresetsController();
-
-        // Join / split the additionalFiles list <-> the ";"-separated text of the editor's Extra Files
-        // field (an EditText holds no array, so the form marshals through a single string).
-        [[nodiscard]] static String JoinSemicolons(const Array<String>& items);
-        static void SplitSemicolons(StringView text, Array<String>& out);
-
-        // Native multi-select "open file" -> append the chosen absolute paths to the Extra Files field.
-        // `target` is held by RefPtr so the field survives even if the form closes before the async
-        // dialog resolves (SetText on a detached view is harmless); no view hierarchy is rebuilt.
-        void PickAdditionalFiles(RefPtr<ui::EditText> target);
 
         // The export templates dialog (TemplatesDialog), over whatever is open: its seams are the
         // registry this host sees, the templates root, the OS folder picker and file manager.
         // Returns it, so a caller (Export) can follow its closing; null without a UI.
         ui::Dialog* OpenTemplatesManager();
 
-        // Export presets panel: (re)load the project's export_presets.xml into the controller, list each
-        // preset with per-row Export / Edit / Duplicate / Delete, plus Add / Export All / Manage
-        // Templates in the footer. Edit/Add open the preset-editor form (swapping this dialog).
+        // The export dialog (ExportDialog) over the project's presets, reloaded from its
+        // export_presets.xml: its seams save them, run an export, open the templates dialog over it
+        // and pick extra files.
         void OpenExportPresetsPanel();
-
-        // Preset-editor form: name, a template dropdown (registry.All(): sets templateId + derives
-        // platform/config) OR explicit platform/config when "(resolve by ...)" is chosen, player name,
-        // output subdir, additionalFiles (native multi-select picker) and the stageSymbols /
-        // pruneToReachable toggles. Save writes through the controller (Add when `editIndex` < 0, else
-        // Update), persists, and returns to the presets panel; Cancel just returns.
-        void OpenPresetEditor(editor::ExportPreset initial, isize editIndex);
 
         // Save As: write the page's CURRENT content to a NEW asset beside the original and
         // rebind the page to it. The original keeps its on-disk state - the escape hatch when

@@ -28,9 +28,6 @@
   project. A list / grid toggle, the grid showing each project's thumbnail (a picture of the
   project to recognise it by); and some of the per-project options moved into a menu (a
   hamburger or similar) so the page reads cleanly.
-- **Clean up and polish the export UI** (user 2026-10-09): the editor's export flow (choosing
-  a preset, its settings, the templates it resolves to, running the export and its result),
-  its look and how it is used, to the same finish as the rest.
 - **Project-wide defaults for scene settings, per domain** (user 2026-10-09, to think about): a
   scene's render settings come from the scene itself (its own values, or a profile asset it
   names, as Lamplight's levels share theirs), else from hard-coded defaults; other domains are

@@ -58,13 +58,16 @@ dist renders with no external dependency (engine shaders are cooked `.hlsl`, not
 
 - **CLI** (`Tools.Export`): `<project> [--out --preset | --all --rebuild]`, `--template list|import|
   create`; host-preset fallback when no `export_presets.xml`.
-- **Editor**: `File > Export...` runs NON-BLOCKING (cook via `EditorCookService`, then pack/stage on
-  `EditorJobService`), with status-bar progress and a sticky success toast + Open Folder (native reveal).
-  `File > Manage Templates...` lists registry templates (imported + host) with import; a preset-editor
-  form (`OpenPresetEditor`, Add/Edit) authors presets; both defer view-destroying actions through the UI
-  mutation queue. The editor mutation lock covers background jobs (closes the export-vs-UI DB race).
+- **Editor**: `Project > Export...` (`ExportDialog`) lists the project's presets beside the selected
+  one's settings in tabs (General, Content, Display) under a card naming the template it resolves to
+  here; edits save as they go. An export runs NON-BLOCKING (cook via `EditorCookService`, then
+  pack/stage on `EditorJobService`), with status-bar progress and a sticky success toast + Open Folder
+  (native reveal). `Edit > Export Templates...` (`TemplatesDialog`; the templates are the editor's,
+  shared by every project) lists the registry's templates by the icon each carries, with their details,
+  Install from Folder, Create from Build, Reveal and Remove. The editor mutation lock covers background
+  jobs (closes the export-vs-UI DB race).
 
-Templates root resolution: `ResolveTemplatesRoot(override -> $DRACONIC_TEMPLATES_DIR ->
+Templates root resolution: `ResolveTemplatesRoot(override -> $ENV_TEMPLATES_DIR ->
 <user-data>/templates)`, the override being `EditorExportSettings.templatesRoot` (edited in
 `File > Preferences...`).
 

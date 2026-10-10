@@ -21,6 +21,7 @@ target_sources(Editor.App
         AssetPickerDialogImpl.cpp
         SettingsDialogImpl.cpp
         TemplatesDialogImpl.cpp
+        ExportDialogImpl.cpp
         EditorIconsImpl.cpp
         ToolPanelImpl.cpp
         ContainerListEditorImpl.cpp
@@ -64,6 +65,7 @@ target_sources(Editor.App
             AssetFilter.cppm
             CategoryTabs.cppm
             TemplatesDialog.cppm
+            ExportDialog.cppm
             WindowCapture.cppm
             EditorWindowTools.cppm
             EditorMcpHost.cppm

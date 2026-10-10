@@ -54,6 +54,7 @@ import editor.propertyanimation; // the persistent in-scene property-animation e
 import editor.camera;
 import foundation.mcp; // McpServer (the MCP tool contribution)
 import :view_settings; // RegisterSceneViewSettingsType (per-scene grid pref)
+import :zoom_readout;  // the measurement overlay while zooming
 import :edit;
 import :settings_profiles; // QueueSettingsProfileEdit (a profile-mode settings edit)
 import :scene_page_interface; // ISceneEditorPage (published on the page)
@@ -544,6 +545,14 @@ export namespace editor
 
     private:
         static constexpr f32 kFovY = 1.0472f; // must match OnRenderWindow's projection
+        // The ground grid: a square this many metres wide in this many cells (one cell is what
+        // the zoom readout reports).
+        static constexpr f32 kGridSize = 20.0f;
+        static constexpr i32 kGridDivisions = 20;
+
+        // The measurement overlay while zooming, bottom-left: the focus distance, the grid cell
+        // and a scale bar, at `opacity`.
+        void DrawZoomReadout(render::debug::DebugDraw& dd, f32 opacity) const;
 
         // Camera ray through the mouse position, built from the camera basis (no matrix inverse).
         [[nodiscard]] bool MakeMouseRay(GizmoRay& out) const;
@@ -677,6 +686,7 @@ export namespace editor
         f64 m_fpsWindowSeconds = 0.0;
         u32 m_fpsWindowFrames = 0;
         String m_fpsText;
+        ZoomReadout m_zoomReadout; // shown for a moment after each wheel zoom
 
         // Viewport tool palette: a toggle per lone non-default tool, a dropdown per category
         // with two or more (GroupViewportTools). Checking one activates it - the affordance

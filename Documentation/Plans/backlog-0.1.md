@@ -17,10 +17,6 @@
   stepping by powers of ten as the camera climbs and a coarser line every N, depth-tested
   against the scene so geometry hides it. Compare with resizing the debug-draw grid to the
   scene's bounds or the camera. Keep the per-scene grid toggle (`SceneViewSettings`).
-- **A measurement overlay while zooming** (user 2026-10-09): when the mouse wheel zooms the scene
-  view, show the scale for a moment (what a grid cell or a screen length measures in metres at
-  the focus, and the camera's distance to it), fading out shortly after the zoom stops. Pairs
-  with the grid above: the grid's spacing steps as you zoom, and the overlay says what a cell is.
 - **An orientation gizmo in the scene view's top right** (user 2026-10-09): a small overlay
   showing which way the camera faces, with the world axes and the faces / directions labelled
   (X, Y, Z and their negatives, or Top, Front, Right), turning with the view. A view cube or
@@ -138,6 +134,15 @@
   same backbuffer capture, armed on demand, its path answered when the next frame completes it;
   floating windows too, or say which window), and an editor action with a hotkey that writes one
   to the screenshots folder. Update the MCP guide and `kEngineToolCount` with the tool.
+- **F frames the selection in the scene view** (user 2026-10-10): there is no frame action in
+  the scene editor. The preview pages frame their content through `EditorCamera::FrameBounds`
+  (mesh, material, collision shape), and `EditorCamera::LookAt` notes itself as the
+  frame-selection seam. Add a scene action (with F as its shortcut, on the action registry so it
+  shows in menus and the palette and can be rebound) that frames the selected entities: the union
+  of their world bounds (meshes, colliders, or the entity's position with a small radius for one
+  with nothing to measure), the camera moved so it fits and its orbit pivot set on its centre, so
+  Alt+drag orbits the selection afterwards. Perhaps an eased move rather than a jump; and a
+  double-click on a hierarchy row framing it too.
 
 ### Seeded: gizmo vertex snapping (user 2026-08-26)
 

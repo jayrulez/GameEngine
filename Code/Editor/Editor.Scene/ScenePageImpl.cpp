@@ -117,6 +117,10 @@ namespace editor
                                    (keyboard->IsKeyDown(foundation::shell::KeyCode::LeftShift) ||
                                     keyboard->IsKeyDown(foundation::shell::KeyCode::RightShift));
             m_camera.Update(keyboard, m_viewport->Mouse(), dt, !(modalToolActive && shiftDown));
+            if (m_camera.zoomedThisUpdate)
+            {
+                m_zoomReadout.Zoomed();
+            }
         }
         else
         {
@@ -154,7 +158,8 @@ namespace editor
             if (m_showGrid)
             {
                 // sRGB, like every colour: a light grey that stays clear of the backdrop.
-                dd.DrawGrid(Float3{0, 0, 0}, 20.0f, 20, Color{0.63f, 0.63f, 0.65f, 1.0f});
+                dd.DrawGrid(Float3{0, 0, 0}, kGridSize, kGridDivisions,
+                            Color{0.63f, 0.63f, 0.65f, 1.0f});
                 dd.DrawLine(Float3{0, 0, 0}, Float3{1, 0, 0}, Color{0.9f, 0.2f, 0.2f, 1.0f});
                 dd.DrawLine(Float3{0, 0, 0}, Float3{0, 1, 0}, Color{0.2f, 0.9f, 0.2f, 1.0f});
                 dd.DrawLine(Float3{0, 0, 0}, Float3{0, 0, 1}, Color{0.2f, 0.4f, 0.95f, 1.0f});
@@ -185,6 +190,11 @@ namespace editor
                 m_fpsWindowSeconds = 0.0;
                 m_fpsWindowFrames = 0;
                 m_fpsText.Clear();
+            }
+            m_zoomReadout.Advance(dt);
+            if (const f32 opacity = m_zoomReadout.Opacity(); opacity > 0.0f)
+            {
+                DrawZoomReadout(dd, opacity);
             }
         }
         UpdateCameraPreview(); // task #118: selection/pin -> preview visibility + target
@@ -986,6 +996,47 @@ namespace editor
         // Tool hotkeys (the select tool's W/E/R/X) belong to the camera while it owns input.
         in.keyboard = cameraOwnsMouse ? nullptr : kb;
         return m_viewportTools.Update(in);
+    }
+
+    void SceneEditorPage::DrawZoomReadout(render::debug::DebugDraw& dd, f32 opacity) const
+    {
+        if (!m_viewport || !m_viewport->IsReady() || m_viewport->RenderHeight() == 0)
+        {
+            return;
+        }
+        const f32 height = static_cast<f32>(m_viewport->RenderHeight());
+        const ScaleBar bar = ScaleBarAt(m_camera.focusDistance, kFovY, height);
+        const String focusText = Format(u8"{} to focus", FormatMetres(m_camera.focusDistance));
+        // The cell of the grid as drawn; whether the grid shows is the page's toggle.
+        const String cellText =
+            Format(u8"grid cell {}", FormatMetres(kGridSize / static_cast<f32>(kGridDivisions)));
+        const String barText = FormatMetres(bar.metres);
+
+        // Bottom-left, clear of the tool status (top-left) and the FPS readout (top-right):
+        // two lines of text over the bar, on a translucent backing.
+        constexpr f32 kMargin = 12.0f;
+        constexpr f32 kPad = 6.0f;
+        constexpr f32 kLine = static_cast<f32>(render::debug::kCharHeight) + 6.0f;
+        constexpr f32 kGlyph = static_cast<f32>(render::debug::kCharWidth);
+        const f32 textWidth =
+            kGlyph * static_cast<f32>(Max(focusText.Size(), cellText.Size()));
+        const f32 barWidth = bar.pixels + 6.0f + kGlyph * static_cast<f32>(barText.Size());
+        const f32 width = Max(textWidth, barWidth) + 2.0f * kPad;
+        const f32 boxHeight = 2.0f * kLine + 10.0f + 2.0f * kPad;
+        const f32 left = kMargin;
+        const f32 top = height - kMargin - boxHeight;
+        dd.DrawScreenRect(left, top, width, boxHeight, Color{0.0f, 0.0f, 0.0f, 0.45f * opacity});
+
+        const Color ink{0.85f, 0.85f, 0.85f, opacity};
+        const f32 x = left + kPad;
+        dd.DrawScreenText(x, top + kPad, focusText.AsView(), ink);
+        dd.DrawScreenText(x, top + kPad + kLine, cellText.AsView(), ink);
+        // The bar: a line the length of its round measure, with end ticks, its length beside it.
+        const f32 barY = top + kPad + 2.0f * kLine + 4.0f;
+        dd.DrawScreenRect(x, barY, bar.pixels, 2.0f, ink);
+        dd.DrawScreenRect(x, barY - 3.0f, 1.0f, 8.0f, ink);
+        dd.DrawScreenRect(x + bar.pixels - 1.0f, barY - 3.0f, 1.0f, 8.0f, ink);
+        dd.DrawScreenText(x + bar.pixels + 6.0f, barY - 3.0f, barText.AsView(), ink);
     }
 
     void SceneEditorPage::DrawGizmos(render::debug::DebugDraw& dd)

@@ -171,3 +171,32 @@ TEST_CASE("EditorCamera does not fly when RMB is up (W belongs to the gizmo shor
     CHECK(Near(cam.position.y, 2.0f));
     CHECK(Near(cam.position.z, 3.0f));
 }
+
+TEST_CASE("EditorCamera says when an Update zoomed on the wheel, and only then")
+{
+    editor::EditorCamera cam;
+    StubKeyboard kb;
+    StubMouse mouse;
+    const f32 before = cam.focusDistance;
+    mouse.scroll = 1.0f;
+    cam.Update(&kb, &mouse, 0.016f);
+    CHECK(cam.zoomedThisUpdate);
+    CHECK(cam.focusDistance < before);
+
+    // The next frame without a notch clears it.
+    mouse.scroll = 0.0f;
+    cam.Update(&kb, &mouse, 0.016f);
+    CHECK_FALSE(cam.zoomedThisUpdate);
+
+    // A wheel a modal tool owns (allowZoom false) is no zoom.
+    mouse.scroll = 1.0f;
+    cam.Update(&kb, &mouse, 0.016f, /*allowZoom*/ false);
+    CHECK_FALSE(cam.zoomedThisUpdate);
+
+    // Turning the camera is no zoom either.
+    mouse.scroll = 0.0f;
+    mouse.rmb = true;
+    mouse.dx = 40.0f;
+    cam.Update(&kb, &mouse, 0.016f);
+    CHECK_FALSE(cam.zoomedThisUpdate);
+}

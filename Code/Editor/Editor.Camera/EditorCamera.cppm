@@ -35,6 +35,7 @@ export namespace editor
         f32 zoomFraction = 0.12f;  // fraction of the pivot distance per wheel notch
         f32 focusDistance = 12.0f; // pivot distance ahead (Alt+LMB turntable orbit)
         f32 panSensitivity = 0.0015f;
+        bool zoomedThisUpdate = false; // the last Update dollied on the wheel (the zoom readout)
 
         [[nodiscard]] Quaternion Rotation() const
         {
@@ -110,6 +111,7 @@ export namespace editor
                     bool allowZoom = true)
         {
             namespace shell = foundation::shell;
+            zoomedThisUpdate = false;
             if (kb == nullptr)
             {
                 return;
@@ -166,6 +168,7 @@ export namespace editor
                     const f32 factor = Clamp(1.0f - zoomFraction * scroll, 0.2f, 5.0f);
                     focusDistance = Max(0.05f, focusDistance * factor);
                     position = focus - Forward() * focusDistance;
+                    zoomedThisUpdate = true;
                 }
             }
 

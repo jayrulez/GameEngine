@@ -39,8 +39,10 @@ pwsh scripts/build-export-templates.ps1 [-Out <dir>] [-Jobs <n>] [-Compiler MSVC
 
 `-Compiler` picks the preset, `msvc-reldbg` (the default) or `clang-reldbg` (clang++ on the MSVC
 ABI), and the `Bin/RelWithDebInfo/Win64-<Compiler>` folder it packages follows from the same choice, so
-the build and the package cannot disagree. Run it from a Developer PowerShell / VS dev environment
-so `cl` or `clang++` and `ninja` are on PATH, and confirm the Windows runtime sidecars (the DXC
+the build and the package cannot disagree. It builds through the repo's toolchain wrapper,
+`build-msvc.cmd` (finds Visual Studio and sets up its environment) or `build-clang.cmd` (pins one
+clang++ rather than whichever is first on PATH), so only `ninja` needs to be on PATH. Confirm the
+Windows runtime sidecars (the DXC
 runtime `dxcompiler.dll`, wgpu-native) stage into the output; the script's header lists the
 specific things to confirm on Windows.
 
@@ -94,6 +96,7 @@ pwsh scripts/build-editor-dist.ps1 [-Out <dir>] [-Jobs <n>] [-Compiler MSVC|Clan
 
 `-Compiler` picks `msvc-reldbg` (the default) or `clang-reldbg`, and the
 `Bin/RelWithDebInfo/Win64-<Compiler>` folder copied from follows from it. The pack is cooked for
-both Windows backends by default (DXIL for DX12, SPIR-V for Vulkan). Run from a Developer
-PowerShell so `cl` or `clang++` and `ninja` are on PATH; confirm `dxcompiler.dll`/`SDL3.dll` stage
-and that `Tools.Editor.pdb` lands in the symbols archive.
+both Windows backends by default (DXIL for DX12, SPIR-V for Vulkan). It builds through
+`build-msvc.cmd` or `build-clang.cmd`, as the templates script does, so only `ninja` needs to be on
+PATH; confirm `dxcompiler.dll`/`SDL3.dll` stage and that `Tools.Editor.pdb` lands in the symbols
+archive.

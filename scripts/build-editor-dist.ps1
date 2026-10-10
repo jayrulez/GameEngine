@@ -22,14 +22,18 @@
 
   NOT bundled: the Vulkan/DX12 system runtime (the target machine's GPU drivers).
 
-  Run from a Developer PowerShell / VS dev environment so cl or clang++ and ninja are on PATH.
+  The build goes through the repo's toolchain wrapper for -Compiler (build-msvc.cmd, which finds
+  Visual Studio and sets up its environment; build-clang.cmd, which pins one clang++ rather than
+  whichever is first on PATH), so the dist is built by the same toolchain a developer's build is.
+  ninja must be on PATH.
 
 .PARAMETER Out
   The dist folder label (default: dist\Editor-Win64; the version goes before the platform).
 .PARAMETER Jobs
   Build parallelism (default 4; higher can OOM the modules build).
 .PARAMETER Compiler
-  MSVC (the msvc-reldbg preset) or Clang (clang-reldbg: clang++ on the MSVC ABI). Default MSVC.
+  MSVC (the msvc-reldbg preset, through build-msvc.cmd) or Clang (clang-reldbg, clang++ on the MSVC
+  ABI, through build-clang.cmd). Default MSVC.
 .PARAMETER Formats
   Shader-pack formats (default "dxil spirv": the editor on Windows runs DX12 or Vulkan).
 #>
@@ -57,17 +61,13 @@ $Out     = Join-Path $rawDir "$prefix-$Version-$suffix"   # e.g. dist\Editor-0.1
 
 # One choice names the preset, its build tree and the Bin folder it writes (CMakeLists.txt:
 # Bin/<Config>/<Platform>-<CMAKE_CXX_COMPILER_ID>).
-$Preset = if ($Compiler -eq "MSVC") { "msvc-reldbg" } else { "clang-reldbg" }
-$Build  = "build\$Preset"
-$Bin    = "Bin\RelWithDebInfo\Win64-$Compiler"
+$Preset  = if ($Compiler -eq "MSVC") { "msvc-reldbg" } else { "clang-reldbg" }
+$Wrapper = if ($Compiler -eq "MSVC") { "build-msvc.cmd" } else { "build-clang.cmd" }
+$Bin     = "Bin\RelWithDebInfo\Win64-$Compiler"
 
-Write-Host "== Building Tools.Editor + Tools.ShaderPack ($Preset) =="
-if (-not (Test-Path (Join-Path $Build "CMakeCache.txt"))) {
-    cmake --preset $Preset
-    if ($LASTEXITCODE -ne 0) { throw "configuring the $Preset preset failed" }
-}
-cmake --build $Build --target Tools.Editor Tools.ShaderPack -j $Jobs
-if ($LASTEXITCODE -ne 0) { throw "building $Build failed" }
+Write-Host "== Building Tools.Editor + Tools.ShaderPack ($Preset, $Wrapper) =="
+& (Join-Path $Root $Wrapper) --preset $Preset --target Tools.Editor Tools.ShaderPack -j $Jobs
+if ($LASTEXITCODE -ne 0) { throw "$Wrapper --preset $Preset failed" }
 if (-not (Test-Path (Join-Path $Bin "Tools.Editor.exe"))) {
     throw "$Bin\Tools.Editor.exe not found - the $Preset build writes somewhere else?"
 }

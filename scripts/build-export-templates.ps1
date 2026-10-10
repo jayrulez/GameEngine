@@ -25,8 +25,10 @@ keep with the build. The template's config, and so its id, is RelWithDebInfo
            -Compiler    MSVC (default) or Clang: picks the preset, and so the Bin\RelWithDebInfo\Win64-<Compiler>
                         folder packaged - the build and the package cannot disagree
 
-  Run from a Developer PowerShell / VS dev environment so cl or clang++ and ninja are on PATH.
-  On Windows, confirm:
+  The build goes through the repo's toolchain wrapper for -Compiler (build-msvc.cmd, which finds
+  Visual Studio and sets up its environment; build-clang.cmd, which pins one clang++ rather than
+  whichever is first on PATH), so the template is built by the same toolchain a developer's build
+  is. ninja must be on PATH. On Windows, confirm:
     * The Win64 runtime sidecars stage: the DXC runtime (dxcompiler.dll) and wgpu-native are
       dlopen/runtime deps (see export-templates.md and the dxc-runtime-sidecar note). Confirm they
       land in Engine.Player.runtime-libs and beside the exe (rpath is POSIX-only; on Windows it is
@@ -48,25 +50,18 @@ Set-Location $Root
 # One choice names the preset, its build tree and the Bin folder it writes (CMakeLists.txt:
 # Bin/<Config>/<Platform>-<CMAKE_CXX_COMPILER_ID>).
 $Preset   = if ($Compiler -eq "MSVC") { "msvc-reldbg" } else { "clang-reldbg" }
-$BuildDir = "build/$Preset"
+$Wrapper  = if ($Compiler -eq "MSVC") { "build-msvc.cmd" } else { "build-clang.cmd" }
 $Plat     = "Win64"
 $BinDir   = "Bin/RelWithDebInfo/$Plat-$Compiler"
 $Exporter = Join-Path $BinDir "Tools.Export.exe"
 
 Write-Host "== Windows ($Compiler, RelWithDebInfo: $Preset) template ==" -ForegroundColor Cyan
 
-# 1) Configure the preset if its build dir does not exist yet (Ninja + a dev environment).
-if (-not (Test-Path (Join-Path $BuildDir "CMakeCache.txt"))) {
-    Write-Host ">> configuring the $Preset preset"
-    & cmake --preset $Preset
-    if ($LASTEXITCODE -ne 0) { throw "configuring the $Preset preset failed" }
-}
+# 1) Configure and build the player + the native exporter through the toolchain wrapper.
+& (Join-Path $Root $Wrapper) --preset $Preset --target Engine.Player Tools.Export -j $Jobs
+if ($LASTEXITCODE -ne 0) { throw "$Wrapper --preset $Preset failed" }
 
-# 2) Build the player + the native exporter.
-& cmake --build $BuildDir --target Engine.Player Tools.Export -j $Jobs
-if ($LASTEXITCODE -ne 0) { throw "building $BuildDir failed" }
-
-# 3) Package the build dir into a template.
+# 2) Package the build dir into a template.
 if (-not (Test-Path $Exporter)) {
     throw "$Exporter not found - did the $Preset build produce it? (expected under $BinDir)"
 }

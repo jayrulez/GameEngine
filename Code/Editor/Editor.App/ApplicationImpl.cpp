@@ -2630,14 +2630,16 @@ namespace editor::app
         m_context.SetJobs(&m_jobService); // pages submit light work (preview bakes) here
         // Thumbnails: the app owns the SERVICE + lifecycle only
         // (SetThumbnails happens in the CONSTRUCTOR - the composition root registers
-        // generators before this UI-boot phase runs); ready thumbnails rebind the browser,
-        // inspector slots re-query per refresh.
+        // generators before this UI-boot phase runs); ready thumbnails rebind the browser and
+        // whatever else listens on the context (an open asset picker); inspector slots re-query
+        // per refresh.
         m_thumbnailService.OnThumbnailReady = [this](const Guid& id)
         {
             if (m_assetsView)
             {
                 m_assetsView->RefreshThumbnail(id);
             }
+            m_context.NotifyThumbnailReady(id);
         };
         m_assetsView =
             MakeRef<AssetsView>(m_editorAllocator, m_context, m_cookService, &m_jobService);

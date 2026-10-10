@@ -153,6 +153,19 @@ namespace editor::app
         m_hint->Visibility = hint.IsEmpty() ? ui::VisibilityValue::Gone : ui::VisibilityValue::Visible;
     }
 
+    void AssetPickerDialog::RefreshThumbnail(const Guid& id)
+    {
+        for (usize i = 0; i < m_rows.Size(); ++i)
+        {
+            if (m_rows[i] == id)
+            {
+                m_listAdapter->NotifyRangeChanged(static_cast<i32>(i), 1);
+                m_gridAdapter->NotifyRangeChanged(static_cast<i32>(i), 1);
+                return;
+            }
+        }
+    }
+
     void AssetPickerDialog::SetFilter(StringView text)
     {
         m_filterEdit->SetText(text);

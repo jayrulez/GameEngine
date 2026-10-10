@@ -194,14 +194,23 @@ export namespace editor::app
 
             RebuildModel();
             ApplySavedViewMode();
+            // A thumbnail finishing while the dialog is open swaps into its row at once (Get
+            // only queues a missing one; this is how its arrival is heard).
+            m_thumbnailListener = m_context->AddThumbnailListener(
+                [self = this](const Guid& id) { self->RefreshThumbnail(id); });
         }
 
         ~AssetPickerDialog() override
         {
+            m_context->RemoveThumbnailListener(m_thumbnailListener);
             m_tree->SetAdapter(nullptr);
             m_list->SetAdapter(nullptr);
             m_grid->SetAdapter(nullptr);
         }
+
+        /// A thumbnail finished for `id`: rebind its row, list and grid alike (no-op when the
+        /// dialog does not list it).
+        void RefreshThumbnail(const Guid& id);
 
         /// Show the rows as a list or as a grid of tiles; `persist` remembers it for the project.
         void SetGridMode(bool grid, bool persist = true);
@@ -500,6 +509,7 @@ export namespace editor::app
         UniquePtr<ListAdapter> m_listAdapter;
         UniquePtr<GridAdapter> m_gridAdapter;
         bool m_gridMode = false;
+        u64 m_thumbnailListener = 0;
         Array<GroupNode> m_groups;
         Array<Guid> m_rows;
         content::Group* m_selectedGroup = nullptr;

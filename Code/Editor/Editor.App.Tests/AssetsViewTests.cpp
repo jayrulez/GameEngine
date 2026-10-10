@@ -315,3 +315,32 @@ TEST_CASE("AssetPickerDialog: a guid lists its asset when the slot takes it, say
     }
 }
 
+TEST_CASE("AssetPickerDialog: hears a thumbnail finish while it is open, and stops when it closes")
+{
+    PickerBench bench(u8"asset-picker-thumbnails");
+
+    // The context's listeners: each hears every ready thumbnail until removed.
+    Array<Guid> heard{DefaultAllocator()};
+    const u64 listener =
+        bench.context.AddThumbnailListener([&heard](const Guid& id) { heard.PushBack(id); });
+    bench.context.NotifyThumbnailReady(bench.asset);
+    REQUIRE(heard.Size() == 1);
+    CHECK(heard[0] == bench.asset);
+    bench.context.RemoveThumbnailListener(listener);
+    bench.context.NotifyThumbnailReady(bench.asset);
+    CHECK(heard.Size() == 1);
+    CHECK(bench.context.ThumbnailListenerCount() == 0u);
+
+    // A picker listens while it lives (in the grid as in the list), and stops when it goes.
+    {
+        RefPtr<app::AssetPickerDialog> picker =
+            MakeRef<app::AssetPickerDialog>(DefaultAllocator(), bench.context, Array<String>{});
+        CHECK(bench.context.ThumbnailListenerCount() == 1u);
+        picker->SetGridMode(true, false);
+        REQUIRE(picker->Rows().Size() == 1);
+        bench.context.NotifyThumbnailReady(bench.asset); // rebinds its row; no thumbnail here
+        bench.context.NotifyThumbnailReady(Guid{9, 9});   // not one of its rows: nothing
+    }
+    CHECK(bench.context.ThumbnailListenerCount() == 0u);
+    bench.context.NotifyThumbnailReady(bench.asset); // nothing left to call into
+}

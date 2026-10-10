@@ -162,6 +162,42 @@ export namespace editor
             }
             return false;
         }
+        /// THUMBNAIL READY: a view showing asset thumbnails beside the browser (the asset picker)
+        /// hears when one finishes, so its row swaps the type icon for it at once rather than on
+        /// its next rebind. The app forwards the thumbnail service's ready signal here. Remove
+        /// with the returned id when the view dies.
+        using ThumbnailListener = Function<void(const Guid&)>;
+        u64 AddThumbnailListener(ThumbnailListener listener)
+        {
+            const u64 id = ++m_nextInterceptorId;
+            m_thumbnailListeners.PushBack(ThumbnailEntry{id, Move(listener)});
+            return id;
+        }
+        void RemoveThumbnailListener(u64 id)
+        {
+            for (usize i = 0; i < m_thumbnailListeners.Size(); ++i)
+            {
+                if (m_thumbnailListeners[i].id == id)
+                {
+                    m_thumbnailListeners.RemoveAt(i);
+                    return;
+                }
+            }
+        }
+        [[nodiscard]] usize ThumbnailListenerCount() const noexcept
+        {
+            return m_thumbnailListeners.Size();
+        }
+        void NotifyThumbnailReady(const Guid& id)
+        {
+            for (const ThumbnailEntry& entry : m_thumbnailListeners)
+            {
+                if (entry.fn)
+                {
+                    entry.fn(id);
+                }
+            }
+        }
         /// Reveal the asset with this Guid in the asset browser (select + scroll into view).
         Function<void(const Guid&)> RevealAsset;
         void Notify(NoticeKind kind, StringView message);
@@ -178,7 +214,13 @@ export namespace editor
             OpenAssetInterceptor fn;
         };
         Array<InterceptorEntry> m_openInterceptors;
-        u64 m_nextInterceptorId = 0;
+        u64 m_nextInterceptorId = 0; // also numbers the thumbnail listeners
+        struct ThumbnailEntry
+        {
+            u64 id = 0;
+            ThumbnailListener fn;
+        };
+        Array<ThumbnailEntry> m_thumbnailListeners;
 
         struct PendingAssetEdit
         {

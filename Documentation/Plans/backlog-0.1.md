@@ -24,6 +24,13 @@
   shows nothing while it starts and opens a project. Design a logo (our own, with its licence
   beside it; GameEngine, never Raptor, in public text), then a splash window with it and the
   loading progress, shown from launch until the main window is ready.
+- **Find an entity by its guid in the hierarchy and the entity picker** (user 2026-10-10): the
+  hierarchy's filter and the entity picker dialog (`EntityPickerDialog`) match names only. A guid
+  copied from a log line, an MCP answer or a scene file should find its entity there too, whole or
+  by its first digits, with or without braces and dashes, in any case, as the asset browser and the
+  asset picker already do (`AssetMatchesFilter` / `FilterAsGuid`, Editor.App `:asset_filter`): a
+  whole guid selects the entity (the hierarchy reveals it). Share that matcher rather than copy
+  it: it moves down to where Editor.Scene reaches it too (Editor.Core).
 - **Polish the project launcher** (user 2026-10-09): the page the editor opens on to pick a
   project. A list / grid toggle, the grid showing each project's thumbnail (a picture of the
   project to recognise it by); and some of the per-project options moved into a menu (a

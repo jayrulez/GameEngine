@@ -38,10 +38,10 @@ export namespace editor::app
         EditorPreferencesDialog(editor::EditorContext& context, settings::Settings& store)
             : ui::Dialog(u8"Preferences"), m_context(&context), m_settings(&store)
         {
-            // A fixed size: a tab view measures only the page it shows, so a free height would
-            // jump as the tabs change. Each page scrolls inside it.
-            MinWidth.SetValue(620.0f);
-            MaxWidth.SetValue(760.0f);
+            // A fixed size: a tab view measures only the page it shows, so a free width or height
+            // would change as the tabs do. Each page scrolls inside it.
+            MinWidth.SetValue(680.0f);
+            MaxWidth.SetValue(680.0f);
             MinHeight.SetValue(480.0f);
             MaxHeight.SetValue(480.0f);
 

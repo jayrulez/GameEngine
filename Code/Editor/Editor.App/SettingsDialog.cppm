@@ -48,9 +48,9 @@ export namespace editor::app
             : ui::Dialog(u8"Project Settings"), m_context(&context)
         {
             // A fixed size, as Preferences: a tab view measures only the page it shows, so a
-            // free height would jump as the tabs change. Each page scrolls inside it.
-            MinWidth.SetValue(560.0f);
-            MaxWidth.SetValue(680.0f);
+            // free width or height would change as the tabs do. Each page scrolls inside it.
+            MinWidth.SetValue(620.0f);
+            MaxWidth.SetValue(620.0f);
             MinHeight.SetValue(420.0f);
             MaxHeight.SetValue(420.0f);
 

@@ -645,3 +645,53 @@ TEST_CASE("project-settings: a tab per category the settings name")
     project.Reset();
     (void)RemoveDirectoryRecursive(dir);
 }
+
+// A tab view measures only the page it shows, so a settings dialog whose width or height may vary
+// changed size as the tabs did (user 2026-10-10): Preferences and Project Settings keep one size.
+TEST_CASE("settings dialogs: one size whichever tab shows")
+{
+    RegisterEditorSettingsTypes();
+    const StringView dir = u8"scratch_settings_dialog_size";
+    (void)RemoveDirectoryRecursive(dir);
+    REQUIRE(EditorProject::Create(DefaultAllocator(), dir, u8"P").IsOk());
+    UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
+    REQUIRE(static_cast<bool>(project));
+    EditorContext context{DefaultAllocator()};
+    context.SetProject(project.Get());
+    foundation::settings::Settings store(DefaultAllocator());
+    const auto sizes = [](ui::Dialog& dialog, ui::TabView& tabs)
+    {
+        Array<Float2> out;
+        for (usize i = 0; i < tabs.TabCount(); ++i)
+        {
+            tabs.SetSelectedIndex(static_cast<i32>(i));
+            dialog.Measure(ui::BoxConstraints(dialog.MinWidth.Value(), dialog.MaxWidth.Value(),
+                                              dialog.MinHeight.Value(), dialog.MaxHeight.Value()));
+            out.PushBack(dialog.MeasuredSize);
+        }
+        return out;
+    };
+    {
+        auto preferences = MakeRef<app::EditorPreferencesDialog>(DefaultAllocator(), context, store);
+        const Array<Float2> measured = sizes(*preferences, preferences->Tabs());
+        REQUIRE(measured.Size() > 1u);
+        for (const Float2& size : measured)
+        {
+            CHECK(size.x == doctest::Approx(measured[0].x));
+            CHECK(size.y == doctest::Approx(measured[0].y));
+        }
+    }
+    {
+        auto settings = MakeRef<app::ProjectSettingsDialog>(DefaultAllocator(), context);
+        const Array<Float2> measured = sizes(*settings, settings->Tabs());
+        REQUIRE(measured.Size() > 1u);
+        for (const Float2& size : measured)
+        {
+            CHECK(size.x == doctest::Approx(measured[0].x));
+            CHECK(size.y == doctest::Approx(measured[0].y));
+        }
+    }
+    context.SetProject(nullptr);
+    project.Reset();
+    (void)RemoveDirectoryRecursive(dir);
+}

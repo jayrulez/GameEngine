@@ -2,7 +2,7 @@
 # description's cooked form is a registered serializable some builder produces (the link the
 # scene format reference joins). Cross-collection (Engine x Pipeline), so it lives here and the
 # engine suites stay pipeline-free.
-add_executable(Integration.Composition TestsMain.cpp CompositionPipelineTests.cpp)
+add_executable(Integration.Composition TestsMain.cpp CompositionPipelineTests.cpp UpdateOrderTests.cpp)
 target_link_libraries(Integration.Composition PRIVATE
     Engine::Composition Foundation::Resource Pipeline::Registration Pipeline::Core
     Foundation::Core doctest::doctest)

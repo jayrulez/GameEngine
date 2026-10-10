@@ -681,9 +681,17 @@ export namespace engine::script
 
     // ---- per-scene dispatch ----
 
+    /// Where the entity behaviors run in Update: before the systems that act on what a script
+    /// writes (the navigation crowd at -100, audio at -100, animation at -2 and -1), so a
+    /// destination, a sound or a graph parameter set in onUpdate takes effect that frame; a script
+    /// reads the positions those systems left the frame before. As Sedulous orders it (user
+    /// 2026-10-10). The scene's Level script runs just before the behaviors.
+    inline constexpr i32 kScriptUpdateOrder = -110;
+
     class ScriptSceneSystem final : public scene::SceneSystem
     {
     public:
+        [[nodiscard]] i32 UpdateOrder() const noexcept override { return kScriptUpdateOrder; }
         void OnSceneCreate(scene::Scene& scene) override
         {
             m_scene = &scene;
@@ -1475,8 +1483,9 @@ export namespace engine::script
 
         // ---- SceneSystem ----
         [[nodiscard]] bool IsSimulationOnly() const noexcept override { return true; }
-        // Before the entity behaviors of this scene (the level orchestrates, entities react).
-        [[nodiscard]] i32 UpdateOrder() const noexcept override { return -10; }
+        // Before the entity behaviors of this scene (the level orchestrates, entities react), and
+        // so before the systems that act on what scripts write (see kScriptUpdateOrder).
+        [[nodiscard]] i32 UpdateOrder() const noexcept override { return kScriptUpdateOrder - 10; }
 
         [[nodiscard]] const TypeInfo* SettingsType() const noexcept override
         {

@@ -26,7 +26,11 @@ dot calls for static facades).
 Handlers dispatch **by presence** - implement only what you need:
 
 - `onStart()` - after the entity/scene is live.
-- `onUpdate(dt)` - per frame, `dt` in seconds. (Levels also get `onFixedUpdate`.)
+- `onUpdate(dt)` - per frame, `dt` in seconds. (Levels also get `onFixedUpdate`.) Scripts update
+  before the systems that act on what they write (the navigation crowd, audio, animation), so a
+  destination, a sound or a graph parameter set here takes effect this frame; positions read here
+  are where those systems left things last frame. A scene's Level script updates before its
+  entities' behaviors.
 - `onDestroy()` - before teardown.
 - `on<Event>(...)` - named events: physics contacts, and any custom event another script
   sends. `entity.send("eventName", payload)` delivers to the target entity's behaviors.

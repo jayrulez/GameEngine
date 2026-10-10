@@ -55,6 +55,9 @@ export namespace foundation::ui
             Value.SetSilent(core::Max(minV, core::Min(value, maxV)));
         }
 
+        /// A press drags the thumb: never a drag of a source above it (a slider in a draggable row).
+        [[nodiscard]] bool OwnsPressDrag() const override { return true; }
+
         void OnMouseDown(MouseEventArgs& e) override
         {
             if (!IsEffectivelyEnabled())

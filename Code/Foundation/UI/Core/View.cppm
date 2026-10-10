@@ -426,6 +426,10 @@ export namespace foundation::ui
         [[nodiscard]] virtual IDragSource* AsDragSource() { return nullptr; }
         /// IDropTarget this view implements (accepts drops), or null. Override to return `this`.
         [[nodiscard]] virtual IDropTarget* AsDropTarget() { return nullptr; }
+        /// Whether a left press on this view starts a drag of its own (a scrollbar's thumb, a
+        /// slider's), so no drag source above it may take the gesture: a scrollbar laid over a
+        /// draggable tree's rows scrolls the tree, never drags a row.
+        [[nodiscard]] virtual bool OwnsPressDrag() const { return false; }
 
         /// Whether this view wants platform text input (IME) while it holds focus. Text-editing controls
         /// override to return true. The ui.shell bridge reads UIContext::WantsTextInput() (this view, if

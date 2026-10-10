@@ -640,11 +640,16 @@ namespace foundation::ui
         m_pressedId = hitView != nullptr ? hitView->Id : ViewId::Invalid;
         m_pressedButton = button;
 
-        // Initiate a potential drag on single left-click if the view or an ancestor is an IDragSource.
+        // Initiate a potential drag on single left-click if the view or an ancestor is an IDragSource,
+        // unless a view on the way up drags on its own (a scrollbar over a draggable list's rows).
         if (hitView != nullptr && button == MouseButton::Left && m_clickCount == 1)
         {
             for (View* dragView = hitView; dragView != nullptr; dragView = dragView->Parent)
             {
+                if (dragView->OwnsPressDrag())
+                {
+                    break;
+                }
                 if (IDragSource* source = dragView->AsDragSource())
                 {
                     m_context->DragDrop()->BeginPotentialDrag(dragView, source, m_mouseX, m_mouseY,

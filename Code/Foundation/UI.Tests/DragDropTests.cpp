@@ -221,3 +221,59 @@ TEST_CASE("drag-drop: a target leaving mid-drag is told so and the drag carries 
     CHECK(f.source->LastCancelled);
     CHECK(f.Popups() == 0);
 }
+
+TEST_CASE("drag-drop: a press on a scrollbar inside a source scrolls, and starts no drag")
+{
+    // A source holding a scrollbar, as a draggable tree holds its list's overlay bar.
+    class Panel final : public AbsoluteLayout, public IDragSource
+    {
+    public:
+        [[nodiscard]] IDragSource* AsDragSource() override { return this; }
+        [[nodiscard]] core::RefPtr<DragData> CreateDragData() override
+        {
+            return core::MakeRef<DragData>(core::DefaultAllocator(), StringView(u8"row"));
+        }
+        [[nodiscard]] core::RefPtr<View> CreateDragVisual(DragData*) override
+        {
+            return core::MakeRef<TestView>(core::DefaultAllocator(), 10.0f, 10.0f);
+        }
+        void OnDragStarted(DragData*) override {}
+        void OnDragCompleted(DragData*, DragDropEffects, bool) override {}
+    };
+
+    UIContext ctx{DefaultAllocator()};
+    core::RefPtr<RootView> root = core::MakeRef<RootView>(core::DefaultAllocator());
+    core::RefPtr<Panel> panel = core::MakeRef<Panel>(core::DefaultAllocator());
+    core::RefPtr<TestView> row = core::MakeRef<TestView>(core::DefaultAllocator(), 100.0f, 200.0f);
+    core::RefPtr<ScrollBar> bar = core::MakeRef<ScrollBar>(core::DefaultAllocator(), false);
+    bar->SetMaxValue(400.0f);
+    bar->SetViewportSize(200.0f);
+    Init(ctx, root.Get(), 400, 300);
+    LayoutStyle at;
+    at.Left = 0;
+    at.Top = 0;
+    panel->AddView(row.Get(), at);
+    at.Left = 90; // over the row's right edge, as an overlay bar sits
+    at.Width = SizeSpec::Fixed(Unit::Dp(10.0f));
+    at.Height = SizeSpec::Fixed(Unit::Dp(200.0f));
+    panel->AddView(bar.Get(), at);
+    root->AddView(panel.Get());
+    LayoutPass(ctx, root.Get());
+    InputManager* input = ctx.GetInputManager();
+    DragDropManager* drag = ctx.DragDrop();
+
+    // On the bar's thumb (its top): the bar takes the gesture and scrolls; nothing drags.
+    input->ProcessMouseDown(MouseButton::Left, 95, 20, 0);
+    CHECK_FALSE(drag->IsPotentialDrag());
+    input->ProcessMouseMove(95, 80);
+    CHECK_FALSE(drag->IsDragging());
+    CHECK(bar->Value() > 0.0f);
+    input->ProcessMouseUp(MouseButton::Left, 95, 80);
+
+    // On the row beside it: the source's drag, as before.
+    input->ProcessMouseDown(MouseButton::Left, 40, 20, 0);
+    CHECK(drag->IsPotentialDrag());
+    input->ProcessMouseMove(40, 60);
+    CHECK(drag->IsDragging());
+    input->ProcessMouseUp(MouseButton::Left, 40, 60);
+}

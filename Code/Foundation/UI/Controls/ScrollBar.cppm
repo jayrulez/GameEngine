@@ -48,6 +48,9 @@ export namespace foundation::ui
             Cursor = CursorType::Arrow;
         }
 
+        /// A press on the bar drags its thumb or pages: never a drag of a source above it.
+        [[nodiscard]] bool OwnsPressDrag() const override { return true; }
+
         // === Properties (Beef get/set -> methods) ===
         [[nodiscard]] f32 Value() const noexcept { return m_value; }
         void SetValue(f32 value)

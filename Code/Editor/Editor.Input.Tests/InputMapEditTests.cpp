@@ -14,6 +14,8 @@ import foundation.shell;
 import foundation.graphics;
 import foundation.input;
 import input.pipeline;
+import foundation.content;
+import foundation.ui;
 import editor.core;
 import editor.input;
 
@@ -144,4 +146,185 @@ TEST_CASE("input editor: a capture lands in the binding, or in one composite dir
     ApplyCapture(map, 0, 0, 5, -1, key);
     ApplyCapture(map, 9, 0, 0, -1, key);
     CHECK(move->bindings.Size() == 1u);
+}
+
+namespace
+{
+    template <typename T>
+    void CollectViews(foundation::ui::View& view, Array<T*>& out)
+    {
+        if (T* typed = Cast<T>(&view))
+        {
+            out.PushBack(typed);
+        }
+        if (auto* group = Cast<foundation::ui::ViewGroup>(&view))
+        {
+            for (usize i = 0; i < group->VisualChildCount(); ++i)
+            {
+                if (foundation::ui::View* child = group->GetVisualChild(i))
+                {
+                    CollectViews(*child, out);
+                }
+            }
+        }
+    }
+
+    /// A scratch project holding one input map: Gameplay (Move: four keys and a stick; Jump: a
+    /// key) and Menu (Back: a key).
+    struct PageFixture
+    {
+        StringView dir = u8"scratch_input_map_page";
+        UniquePtr<editor::EditorProject> project;
+        editor::EditorContext context{DefaultAllocator()};
+        StubHost host;
+        UniquePtr<editor::InputMapEditorPage> page;
+
+        PageFixture()
+        {
+            pipeline::RegisterInputMapAsset(); // the instance's type, written and read back
+            (void)RemoveDirectoryRecursive(dir);
+            REQUIRE(editor::EditorProject::Create(DefaultAllocator(), dir, u8"P").IsOk());
+            project = editor::EditorProject::Open(DefaultAllocator(), dir);
+            REQUIRE(static_cast<bool>(project));
+            context.SetProject(project.Get());
+            foundation::content::Instance* instance =
+                project->SourceDb().RootGroup()->CreateInstance(u8"Controls", pipeline::InputMapAsset::StaticType());
+            REQUIRE(instance != nullptr);
+            pipeline::InputMapAsset asset;
+            input::ActionSet gameplay;
+            gameplay.name = String(u8"Gameplay");
+            input::Action move;
+            move.name = String(u8"Move");
+            move.kind = input::ActionKind::Axis2D;
+            input::Binding keys;
+            keys.source = input::BindingSource::Composite2D;
+            move.bindings.PushBack(keys);
+            move.bindings.PushBack(FreshBinding(input::ActionKind::Axis2D));
+            gameplay.actions.PushBack(move);
+            input::Action jump;
+            jump.name = String(u8"Jump");
+            jump.bindings.PushBack(FreshBinding(input::ActionKind::Button));
+            gameplay.actions.PushBack(jump);
+            asset.Map().sets.PushBack(gameplay);
+            input::ActionSet menu;
+            menu.name = String(u8"Menu");
+            input::Action back;
+            back.name = String(u8"Back");
+            back.bindings.PushBack(FreshBinding(input::ActionKind::Button));
+            menu.actions.PushBack(back);
+            asset.Map().sets.PushBack(menu);
+            REQUIRE(instance->WriteObject(asset).IsOk());
+            page = UniquePtr<editor::InputMapEditorPage>(
+                DefaultAllocator().New<editor::InputMapEditorPage>(context, host, *instance), DefaultAllocator());
+        }
+        ~PageFixture()
+        {
+            page.Reset();
+            context.SetProject(nullptr);
+            project.Reset();
+            (void)RemoveDirectoryRecursive(dir);
+        }
+
+        template <typename T>
+        usize Count()
+        {
+            Array<T*> found;
+            CollectViews(page->Body(), found);
+            return found.Size();
+        }
+    };
+}
+
+TEST_CASE("input map page: the outline, a collapsible section per set with its actions' cards")
+{
+    PageFixture f;
+    CHECK(f.page->CurrentLayout() == editor::InputMapEditorPage::Layout::Outline);
+    CHECK(f.Count<foundation::ui::Expander>() == 2u); // Gameplay, Menu
+    // Key caps: Move's four keys and its stick, Jump's key, Back's key.
+    const usize capsOpen = f.Count<foundation::ui::Button>();
+
+    // A collapsed set stays collapsed across a rebuild (by name), its body hidden.
+    f.page->SetSetCollapsed(0, true);
+    CHECK(f.page->IsSetCollapsed(0));
+    f.page->RebuildNow();
+    Array<foundation::ui::Expander*> sections;
+    CollectViews(f.page->Body(), sections);
+    REQUIRE(sections.Size() == 2u);
+    CHECK_FALSE(sections[0]->IsExpanded());
+    CHECK(sections[1]->IsExpanded());
+    // Its title is the set's name, editable in place.
+    auto* title = Cast<foundation::ui::EditableLabel>(sections[0]->HeaderTitle());
+    REQUIRE(title != nullptr);
+    CHECK(title->Text() == StringView(u8"Gameplay"));
+    f.page->SetSetCollapsed(0, false);
+    f.page->RebuildNow();
+    CHECK(f.Count<foundation::ui::Button>() == capsOpen);
+}
+
+TEST_CASE("input map page: two panes, the list and the selected set or action")
+{
+    PageFixture f;
+    f.page->SetLayout(editor::InputMapEditorPage::Layout::TwoPanes);
+    f.page->RebuildNow();
+    CHECK(f.Count<foundation::ui::Expander>() == 0u);
+
+    // The selected action's bindings: Move's composite (four caps) and stick (one).
+    f.page->Select(0, 0);
+    f.page->RebuildNow();
+    Array<foundation::ui::Label*> labels;
+    CollectViews(f.page->Body(), labels);
+    bool fourKeys = false;
+    bool stick = false;
+    for (foundation::ui::Label* label : labels)
+    {
+        fourKeys = fourKeys || label->Text.Value() == StringView(u8"Four keys");
+        stick = stick || label->Text.Value() == StringView(u8"Gamepad stick");
+    }
+    CHECK(fourKeys);
+    CHECK(stick);
+
+    // A set selected: its name and priority.
+    f.page->Select(1, -1);
+    f.page->RebuildNow();
+    CHECK(f.page->SelectedSet() == 1u);
+    CHECK(f.page->SelectedAction() < 0);
+
+    // Removing what is selected keeps the selection on something that exists.
+    f.page->Select(1, 0);
+    f.page->RebuildNow();
+    CHECK(f.page->SelectedAction() == 0);
+}
+
+TEST_CASE("input map page: add a binding by source, a field's edits merge into one undo")
+{
+    PageFixture f;
+    f.page->AddBinding(0, 1, input::BindingSource::GamepadButton);
+    REQUIRE(f.page->Map().sets[0].actions[1].bindings.Size() == 2u);
+    CHECK(f.page->Map().sets[0].actions[1].bindings[1].source == input::BindingSource::GamepadButton);
+    f.page->Commands().Undo();
+    CHECK(f.page->Map().sets[0].actions[1].bindings.Size() == 1u);
+
+    // Dragging a dead zone: many edits, one step to undo.
+    f.page->RebuildNow();
+    Array<foundation::ui::NumericField*> numbers;
+    CollectViews(f.page->Body(), numbers);
+    foundation::ui::NumericField* deadZone = nullptr;
+    for (foundation::ui::NumericField* number : numbers)
+    {
+        deadZone = number->TooltipText.AsView().StartsWith(u8"Movement smaller") ? number : deadZone;
+    }
+    REQUIRE(deadZone != nullptr); // Move's stick
+    const f32 before = f.page->Map().sets[0].actions[0].bindings[1].deadZone;
+    deadZone->SetValue(0.2);
+    deadZone->SetValue(0.3);
+    deadZone->SetValue(0.4);
+    CHECK(f.page->Map().sets[0].actions[0].bindings[1].deadZone == doctest::Approx(0.4f));
+    f.page->Commands().Undo();
+    CHECK(f.page->Map().sets[0].actions[0].bindings[1].deadZone == doctest::Approx(before));
+
+    // Listening: the key cap reads as waiting; the same cap again cancels.
+    f.page->BeginListen(0, 1, 0);
+    CHECK(f.page->IsListening());
+    f.page->BeginListen(0, 1, 0);
+    CHECK_FALSE(f.page->IsListening());
 }

@@ -42,9 +42,6 @@
   defaults, set in the project settings, so the lookup goes scene, then project, then the
   hard-coded default. Survey which domains have scene settings, and how a project default
   relates to the profiles (a project default could simply name a profile).
-- **Polish the input map page** (user 2026-10-09: "needs a lot of polish"): the editor page for
-  an input map asset (its actions and their key, pad and touch bindings). Its layout, how
-  bindings are shown, added and changed, and its look, to the finish of the other pages.
 - **A preview scene for the environment and post-process profile pages** (user 2026-10-09): let
   the page for an Environment or Post Process profile pick one of the project's scenes to preview
   the profile on, so you see exactly how it looks there (Lamplight's shared profiles were tuned by

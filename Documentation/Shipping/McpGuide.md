@@ -30,7 +30,9 @@ of structures takes an array of objects, each naming the fields it sets, the res
 defaults, foot IK's legs for one; a list or structure inside an element still goes through
 `scene_write`); `viewport_camera_get` /
 `viewport_camera_set` read and move the viewport's editor camera in degrees, position, yaw,
-pitch or a `lookAt` point, editor state only; `viewport_screenshot` writes what the viewport
+pitch or a `lookAt` point, editor state only; `viewport_frame` frames entities (by name,
+path or guid; default the selection), each with everything under it, as the user's F does, the
+camera standing back until they fit and orbiting about them, at once so a screenshot after shows it; `viewport_screenshot` writes what the viewport
 shows to a PNG and returns its path and size, bringing the page to front first since a hidden
 viewport never renders - move the camera, shoot, read the file; `editor_screenshot` writes
 the whole editor window as the user sees it (panels, pages, menus, dialogs, toasts) the same

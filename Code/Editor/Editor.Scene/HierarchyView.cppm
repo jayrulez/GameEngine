@@ -9,7 +9,8 @@
 // wired to the page's SceneEditContext:
 //   - click selects (per-page Guid selection, synced both ways with the tree's SelectionModel);
 //   - right-click context menu: Create Child / Rename / Delete on rows, Create Entity on empty;
-//   - rows are EditableLabels: double-click / slow-click renames in place (single clicks pass
+//   - rows are EditableLabels: a slow second click renames in place, a double-click frames the
+//     entity in the viewport (OnFrameEntity) (single clicks pass
 //     through to selection by design), F2 / context-menu Rename triggers the same edit,
 //     Delete deletes;
 //   - drag a row INTO another = reparent; drag to a row EDGE = sibling reorder (insert-before
@@ -106,9 +107,12 @@ export namespace editor
         /// Per-frame: rebuild the snapshot when the scene changed, keep selection in sync.
         void Refresh();
 
-        /// Begin the in-place rename of an entity (F2 / context menu; double-click and
-        /// slow-click on the row do the same via the EditableLabel itself).
+        /// Begin the in-place rename of an entity (F2 / context menu; a slow second click on the
+        /// row does the same via the EditableLabel itself).
         void BeginRename(const Guid& entity);
+
+        /// A double-click on a row: the page frames its entity in the viewport.
+        Function<void(const Guid&)> OnFrameEntity;
 
         [[nodiscard]] ui::toolkit::DraggableTreeView* Tree() const noexcept { return m_tree.Get(); }
 
@@ -132,8 +136,8 @@ export namespace editor
             Array<i32> children;
         };
 
-        // A row IS an EditableLabel (depth-indented via TextOffsetX): double-click / slow-click
-        // edits in place, single clicks deliberately pass through to the list's selection, and
+        // A row IS an EditableLabel (depth-indented via TextOffsetX): a slow second click edits
+        // in place (a double-click frames the entity instead), single clicks deliberately pass through to the list's selection, and
         // Enter/Escape commit/cancel. The adapter created it, so static_cast recovery is safe.
         class Row final : public ui::EditableLabel
         {
@@ -219,6 +223,7 @@ export namespace editor
                 auto row = MakeRef<Row>(editor::EditorRootAllocator());
                 row->FontSize.SetValue(
                     Optional<f32>{12.0f}); // match the inspector's dense 12px text
+                row->DoubleClickToEdit.SetValue(false); // a double-click frames the entity
                 SceneEditContext* edit = m_owner->m_edit;
                 Row* raw = row.Get();
                 row->OnRenameCommitted.Add([edit, raw](ui::EditableLabel*, StringView newName)

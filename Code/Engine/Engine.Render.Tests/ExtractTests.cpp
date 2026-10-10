@@ -1678,3 +1678,45 @@ TEST_CASE("EnvironmentSettings: the default colours are sRGB and render as they 
     CHECK(decodesTo(e.skyZenith, 0.20f, 0.36f, 0.58f));
     CHECK(decodesTo(e.skyGround, 0.26f, 0.26f, 0.26f));
 }
+
+TEST_CASE("entity bounds: a mesh measures through its world matrix, an instanced set by its sphere")
+{
+    scene::Scene scene(DefaultAllocator(), u8"world");
+    auto* meshes = scene.AddSystem<MeshComponentManager>();
+    auto* sets = scene.AddSystem<InstancedMeshComponentManager>();
+    RefPtr<geometry::StaticMesh> cube = geometry::Primitives::Cube(DefaultAllocator(), 1.0f);
+    const AABB local = cube->bounds;
+    REQUIRE(local.IsValid());
+
+    // A mesh scaled 2 and moved: its bounds through that matrix.
+    const scene::EntityHandle crate = scene.CreateEntity(u8"crate");
+    Transform t;
+    t.position = Float3{3.0f, 0.0f, 0.0f};
+    t.scale = Float3{2.0f, 2.0f, 2.0f};
+    scene.SetLocalTransform(crate, t);
+    MeshComponent& m = meshes->Add(crate);
+    scene.UpdateTransforms();
+    AABB out;
+    CHECK_FALSE(scene::EntityWorldBounds(scene, crate, out)); // no mesh assigned yet
+    m.mesh = cube;
+    REQUIRE(scene::EntityWorldBounds(scene, crate, out));
+    CHECK(Near(out.min.x, 3.0f + 2.0f * local.min.x));
+    CHECK(Near(out.max.x, 3.0f + 2.0f * local.max.x));
+    CHECK(Near(out.max.y, 2.0f * local.max.y));
+
+    // An instanced set: nothing until extraction has measured it, then its merged sphere.
+    const scene::EntityHandle scatter = scene.CreateEntity(u8"scatter");
+    scene.SetLocalPosition(scatter, Float3{-5.0f, 0.0f, 0.0f});
+    InstancedMeshComponent& c = sets->Add(scatter);
+    c.mesh = cube;
+    scene.UpdateTransforms();
+    CHECK_FALSE(scene::EntityWorldBounds(scene, scatter, out));
+    ExtractedScene extracted{DefaultAllocator()};
+    ExtractInstancedMeshesInto(scene, extracted);
+    REQUIRE(scene::EntityWorldBounds(scene, scatter, out));
+    CHECK(Near(out.Center().x, -5.0f));
+    CHECK(out.Extents().x > 0.0f);
+
+    // An entity with neither.
+    CHECK_FALSE(scene::EntityWorldBounds(scene, scene.CreateEntity(u8"empty"), out));
+}

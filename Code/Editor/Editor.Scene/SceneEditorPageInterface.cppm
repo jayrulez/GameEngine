@@ -87,6 +87,12 @@ export namespace editor
         /// The viewport's free-fly camera - the pose the scene is looked at from, which an agent
         /// moves to look from somewhere specific; null on a page without a viewport.
         [[nodiscard]] virtual EditorCamera* ViewportCamera() noexcept = 0;
+        /// Frame entities in the viewport: the camera stands back along its view so the box
+        /// holding them all, each with everything under it, fits, and pivots its orbit on its centre. The box is what the
+        /// scene's systems measure (ISceneEntityBounds: meshes, colliders), or a small one at an
+        /// entity's position when none does. Eases there when `ease`. False when no entity
+        /// resolves or the page has no viewport.
+        virtual bool FrameEntities(Span<const Guid> entities, bool ease) = 0;
 
         /// Ask for the viewport's next rendered frame as a PNG at `path` (the directory must
         /// exist). Replaces a pending request. NotSupported on a page without a viewport.

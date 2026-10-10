@@ -367,6 +367,71 @@ namespace engine::physics
         }
     }
 
+    namespace
+    {
+        // The box a shape fills in its entity's own space, before the entity's world matrix: a
+        // box by its half extents, a sphere by its radius, a capsule along y, a cooked shape by
+        // its outline's points. A plane is endless and a heightfield is the terrain's to measure,
+        // so neither answers.
+        bool LocalShapeBounds(ShapeKind kind, Float3 halfExtents, f32 radius, f32 halfHeight,
+                              CollisionShape* cooked, AABB& out)
+        {
+            switch (kind)
+            {
+            case ShapeKind::Box:
+                out = AABB::FromCenterExtents(Float3{}, halfExtents);
+                return true;
+            case ShapeKind::Sphere:
+                out = AABB::FromCenterExtents(Float3{}, Float3{radius, radius, radius});
+                return true;
+            case ShapeKind::Capsule:
+                out = AABB::FromCenterExtents(Float3{}, Float3{radius, halfHeight + radius, radius});
+                return true;
+            case ShapeKind::Cooked:
+            {
+                if (cooked == nullptr || cooked->outline.IsEmpty())
+                {
+                    return false;
+                }
+                out = AABB::Empty();
+                for (const Float3& p : cooked->outline)
+                {
+                    out.Expand(p);
+                }
+                return true;
+            }
+            default:
+                return false;
+            }
+        }
+    }
+
+    bool RigidBodyComponentManager::EntityBounds(scene::Scene& scene, scene::EntityHandle entity, AABB& out)
+    {
+        RigidBodyComponent* c = Get(entity);
+        AABB local;
+        if (c == nullptr ||
+            !LocalShapeBounds(c->shape, c->halfExtents, c->radius, c->halfHeight, c->collisionShape.Get(), local))
+        {
+            return false;
+        }
+        out = TransformAABB(local, scene.GetWorldMatrix(entity));
+        return true;
+    }
+
+    bool ColliderComponentManager::EntityBounds(scene::Scene& scene, scene::EntityHandle entity, AABB& out)
+    {
+        ColliderComponent* c = Get(entity);
+        AABB local;
+        if (c == nullptr ||
+            !LocalShapeBounds(c->shape, c->halfExtents, c->radius, c->halfHeight, c->collisionShape.Get(), local))
+        {
+            return false;
+        }
+        out = TransformAABB(local, scene.GetWorldMatrix(entity));
+        return true;
+    }
+
     void PhysicsSubsystem::Update(f32)
     {
         foundation::runtime::Context* context = GetContext();

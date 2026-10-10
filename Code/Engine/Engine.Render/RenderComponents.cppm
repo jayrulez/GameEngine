@@ -408,10 +408,15 @@ export namespace engine::render
         // only attaches the bindings.
     }
 
-    class MeshComponentManager final : public scene::SerializableComponentManager<MeshComponent>
+    // Measures its entities for the scene (ISceneEntityBounds): a mesh's bounds through the
+    // entity's world matrix, once the mesh is loaded.
+    class MeshComponentManager final : public scene::SerializableComponentManager<MeshComponent>,
+                                       public scene::ISceneEntityBounds
     {
     public:
         MeshComponentManager() : scene::SerializableComponentManager<MeshComponent>(u8"mesh") {}
+        [[nodiscard]] scene::ISceneEntityBounds* AsEntityBounds() noexcept override { return this; }
+        [[nodiscard]] bool EntityBounds(scene::Scene& scene, scene::EntityHandle entity, AABB& out) override;
     };
     // Data-only components PERSIST (scene round-trip + full destroy-undo restore - a destroyed
     // entity's components are snapshotted through serializable managers only). Sprite/Decal/
@@ -489,14 +494,19 @@ export namespace engine::render
         c.material.Bind(manager);
     }
 
+    // Measures its entities for the scene (ISceneEntityBounds): the set's merged world sphere,
+    // which extraction keeps current, as a box.
     class InstancedMeshComponentManager final
-        : public scene::SerializableComponentManager<InstancedMeshComponent>
+        : public scene::SerializableComponentManager<InstancedMeshComponent>,
+          public scene::ISceneEntityBounds
     {
     public:
         InstancedMeshComponentManager()
             : scene::SerializableComponentManager<InstancedMeshComponent>(u8"instanced_mesh")
         {
         }
+        [[nodiscard]] scene::ISceneEntityBounds* AsEntityBounds() noexcept override { return this; }
+        [[nodiscard]] bool EntityBounds(scene::Scene& scene, scene::EntityHandle entity, AABB& out) override;
     };
     // Persist the texture ref + plain fields; the raw view override is runtime-only.
     inline void Serialize(ISerializer& ar, SpriteComponent& c)

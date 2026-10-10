@@ -74,6 +74,19 @@ export namespace foundation::scene
         virtual bool CollectStaticCapsules(Scene& scene, Array<StaticCapsule>& outCapsules) = 0;
     };
 
+    // A system that knows how much of the world an entity takes up (render: its meshes; physics:
+    // its colliders), for one that only wants the space: the editor framing a selection. Neither
+    // side names the other's components; EntityWorldBounds (in :scene) merges every answer.
+    class ISceneEntityBounds
+    {
+    public:
+        virtual ~ISceneEntityBounds() = default;
+
+        // The world-space box this system's components on `entity` fill. False when it has
+        // nothing on the entity to measure (or what it has is not loaded yet).
+        [[nodiscard]] virtual bool EntityBounds(Scene& scene, EntityHandle entity, AABB& out) = 0;
+    };
+
     // What a ray found on a solid surface (world space).
     struct SceneRayHit
     {
@@ -133,6 +146,8 @@ export namespace foundation::scene
         [[nodiscard]] virtual ISceneCharacterMotion* AsCharacterMotion() noexcept { return nullptr; }
         // And for one with static content to make solid (IStaticColliderSource).
         [[nodiscard]] virtual IStaticColliderSource* AsStaticColliderSource() noexcept { return nullptr; }
+        // And for one that measures entities (ISceneEntityBounds).
+        [[nodiscard]] virtual ISceneEntityBounds* AsEntityBounds() noexcept { return nullptr; }
 
         // --- lifecycle (Scene calls these) ---
         virtual void OnSceneCreate(Scene& /*scene*/) {} // added to a scene

@@ -129,6 +129,9 @@ namespace editor
             // moment the viewport stops being the input owner.
             m_camera.ReleaseCapture(m_viewport->Mouse());
         }
+        // A frame glides on whether or not the viewport has the input (a hierarchy double-click
+        // frames while the mouse is over the hierarchy).
+        m_camera.Advance(dt);
         (void)UpdateViewportTools(viewportActive, dt); // picking lives inside the select tool now
         // Mount/clear the active tool's settings panel in the bottom dock (safe here - a frame
         // boundary, never mid-event; the mount tears down the previous panel view).
@@ -1754,6 +1757,62 @@ namespace editor
         }
     }
 
+    bool SceneEditorPage::FrameEntities(Span<const Guid> entities, bool ease)
+    {
+        if (m_scene == nullptr || !m_viewport)
+        {
+            return false;
+        }
+        scene::Scene& scene = *m_scene;
+        AABB merged = AABB::Empty();
+        bool any = false;
+        for (const Guid& id : entities)
+        {
+            const scene::EntityHandle e = scene.FindEntity(id);
+            if (!scene.IsValid(e))
+            {
+                continue;
+            }
+            // The entity and everything under it, as the hierarchy shows it: a gameplay root's
+            // model hangs below it.
+            AABB box = AABB::Empty();
+            bool measured = false;
+            Array<scene::EntityHandle> pending(Allocator());
+            pending.PushBack(e);
+            while (!pending.IsEmpty())
+            {
+                const scene::EntityHandle current = pending[pending.Size() - 1];
+                pending.PopBack();
+                AABB part;
+                if (scene::EntityWorldBounds(scene, current, part))
+                {
+                    box = measured ? Merge(box, part) : part;
+                    measured = true;
+                }
+                for (scene::EntityHandle child = scene.GetFirstChild(current); scene.IsValid(child);
+                     child = scene.GetNextSibling(child))
+                {
+                    pending.PushBack(child);
+                }
+            }
+            if (!measured)
+            {
+                // Nothing in it measures (an empty, a light): its place, the marker's size.
+                const Float4x4 world = scene.GetWorldMatrix(e);
+                box = AABB::FromCenterExtents(Float3{world.m[3][0], world.m[3][1], world.m[3][2]},
+                                              Float3{0.35f, 0.35f, 0.35f});
+            }
+            merged = any ? Merge(merged, box) : box;
+            any = true;
+        }
+        if (!any)
+        {
+            return false;
+        }
+        m_camera.FrameSphere(merged.Center(), Length(merged.Extents()), kFovY, ease);
+        return true;
+    }
+
     void SceneEditorPage::DrawEntityMarkers(render::debug::DebugDraw& dd)
     {
         if (!m_editContext)
@@ -1762,8 +1821,6 @@ namespace editor
         }
         Selection<Guid>& selection = m_editContext->EntitySelection();
         scene::Scene& scene = *m_scene;
-        auto* meshes = scene.GetSystem<engine::render::MeshComponentManager>();
-        auto* instanced = scene.GetSystem<engine::render::InstancedMeshComponentManager>();
         scene.ForEachEntity(
             [&](scene::EntityHandle e)
             {
@@ -1785,30 +1842,13 @@ namespace editor
                     return;
                 }
 
-                if (meshes != nullptr)
+                // What the scene's systems measure the entity as (meshes, colliders, ...), so the
+                // box drawn is the one F frames; a small box at the origin when none does.
+                AABB bounds;
+                if (scene::EntityWorldBounds(scene, e, bounds))
                 {
-                    if (engine::render::MeshComponent* mc = meshes->Get(e))
-                    {
-                        if (foundation::geometry::StaticMesh* mesh = mc->mesh.Get())
-                        {
-                            dd.DrawTransformedBox(mesh->bounds.min, mesh->bounds.max, world, color);
-                            return;
-                        }
-                    }
-                }
-                if (instanced != nullptr)
-                {
-                    if (engine::render::InstancedMeshComponent* imc = instanced->Get(e))
-                    {
-                        if (imc->mesh.Get() != nullptr && imc->Count() > 0 &&
-                            imc->cachedRadius > 0.0f)
-                        {
-                            // Merged world bounds (kept current by extraction's compose pass).
-                            const f32 r = imc->cachedRadius;
-                            dd.DrawWireBoxCenter(imc->cachedCenter, Float3{r, r, r}, color);
-                            return;
-                        }
-                    }
+                    dd.DrawWireBoxCenter(bounds.Center(), bounds.Extents(), color);
+                    return;
                 }
                 dd.DrawWireBoxCenter(p, Float3{0.35f, 0.35f, 0.35f}, color);
             });

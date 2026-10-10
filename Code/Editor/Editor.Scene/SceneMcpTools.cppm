@@ -30,12 +30,12 @@ export namespace editor
 {
     /// The number of tools RegisterSceneLiveTools registers (selection_get / selection_set /
     /// simulate_start / simulate_stop / navigation_bake / entity_inspect / component_set /
-    /// viewport_camera_get / viewport_camera_set / viewport_screenshot); a tripwire like
-    /// kEngineToolCount.
+    /// viewport_camera_get / viewport_camera_set / viewport_frame / viewport_screenshot); a
+    /// tripwire like kEngineToolCount.
     /// The live editing tools (SceneMcpEditToolsImpl.cpp): entity_create, entity_update,
     /// entity_delete, component_add, component_remove, prefab_spawn, behavior_add, behavior_set.
     inline constexpr usize kSceneEditToolCount = 8;
-    inline constexpr usize kSceneLiveToolCount = 10 + kSceneEditToolCount;
+    inline constexpr usize kSceneLiveToolCount = 11 + kSceneEditToolCount;
 
     void RegisterSceneLiveTools(foundation::mcp::McpServer& server, EditorContext& context);
 }

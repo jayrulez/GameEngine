@@ -260,3 +260,56 @@ TEST_CASE("a system with static geometry answers the capability, others answer n
     CHECK(sources == 1);
     CHECK(triangles.Size() == 6);
 }
+
+namespace
+{
+    // A system that measures one entity as a fixed box: what a render or physics domain answers.
+    template <int Tag>
+    class BoxMeasure final : public SceneSystem, public ISceneEntityBounds
+    {
+    public:
+        EntityHandle entity = EntityHandle::Invalid();
+        AABB box{};
+        [[nodiscard]] ISceneEntityBounds* AsEntityBounds() noexcept override { return this; }
+        [[nodiscard]] bool EntityBounds(Scene&, EntityHandle e, AABB& out) override
+        {
+            if (e != entity)
+            {
+                return false;
+            }
+            out = box;
+            return true;
+        }
+    };
+}
+
+TEST_CASE("EntityWorldBounds merges what every measuring system answers, and says when none does")
+{
+    Scene scene{DefaultAllocator()};
+    const EntityHandle crate = scene.CreateEntity(u8"Crate");
+    const EntityHandle marker = scene.CreateEntity(u8"Marker");
+    AABB out{Float3{7.0f, 7.0f, 7.0f}, Float3{7.0f, 7.0f, 7.0f}};
+
+    // No system measures anything yet.
+    CHECK_FALSE(EntityWorldBounds(scene, crate, out));
+    CHECK(out.min.x == 7.0f); // untouched
+
+    // One system: its box.
+    auto* mesh = scene.AddSystem<BoxMeasure<0>>();
+    mesh->entity = crate;
+    mesh->box = AABB{Float3{0.0f, 0.0f, 0.0f}, Float3{1.0f, 2.0f, 1.0f}};
+    REQUIRE(EntityWorldBounds(scene, crate, out));
+    CHECK(out.max.y == 2.0f);
+
+    // A second one (a collider reaching further): the box holding both.
+    auto* collider = scene.AddSystem<BoxMeasure<1>>();
+    collider->entity = crate;
+    collider->box = AABB{Float3{-1.0f, 0.0f, 0.0f}, Float3{0.5f, 1.0f, 3.0f}};
+    REQUIRE(EntityWorldBounds(scene, crate, out));
+    CHECK(out.min.x == -1.0f);
+    CHECK(out.max.y == 2.0f);
+    CHECK(out.max.z == 3.0f);
+
+    // An entity neither measures.
+    CHECK_FALSE(EntityWorldBounds(scene, marker, out));
+}

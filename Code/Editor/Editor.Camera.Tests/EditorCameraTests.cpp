@@ -200,3 +200,45 @@ TEST_CASE("EditorCamera says when an Update zoomed on the wheel, and only then")
     cam.Update(&kb, &mouse, 0.016f);
     CHECK_FALSE(cam.zoomedThisUpdate);
 }
+
+TEST_CASE("EditorCamera::FrameSphere stands back along its view until the sphere fits, pivoting on it")
+{
+    editor::EditorCamera cam;
+    cam.position = Float3{0.0f, 0.0f, 0.0f};
+    cam.LookAt(Float3{0.0f, 0.0f, -1.0f}); // looking down -Z
+    const Float3 forward = cam.Forward();
+    const f32 fovY = 1.0472f;
+    const Float3 center{10.0f, 2.0f, -30.0f};
+
+    // At once: the direction kept, the pivot on the centre, the sphere inside the view.
+    cam.FrameSphere(center, 2.0f, fovY, /*ease*/ false);
+    CHECK_FALSE(cam.IsGliding());
+    CHECK(Near(Dot(cam.Forward(), forward), 1.0f));
+    const Float3 pivot = cam.position + cam.Forward() * cam.focusDistance;
+    CHECK(Near(pivot.x, center.x));
+    CHECK(Near(pivot.y, center.y));
+    CHECK(Near(pivot.z, center.z));
+    CHECK(2.0f / cam.focusDistance <= Sin(0.5f * fovY)); // the sphere's angle fits the half view
+
+    // Eased: there over glideSeconds, not before, wherever it started.
+    cam.position = Float3{0.0f, 0.0f, 0.0f};
+    cam.FrameSphere(center, 2.0f, fovY);
+    CHECK(cam.IsGliding());
+    cam.Advance(cam.glideSeconds * 0.5f);
+    CHECK(cam.IsGliding());
+    const Float3 halfway = cam.position;
+    cam.Advance(cam.glideSeconds);
+    CHECK_FALSE(cam.IsGliding());
+    CHECK(Length(cam.position - halfway) > 0.01f); // half way was not there yet
+    const Float3 settled = cam.position + cam.Forward() * cam.focusDistance;
+    CHECK(Near(settled.x, center.x));
+    CHECK(Near(settled.z, center.z));
+
+    // The user taking the camera (a wheel notch) stops a glide where it is.
+    cam.FrameSphere(Float3{-50.0f, 0.0f, 0.0f}, 1.0f, fovY);
+    StubKeyboard kb;
+    StubMouse mouse;
+    mouse.scroll = 1.0f;
+    cam.Update(&kb, &mouse, 0.016f);
+    CHECK_FALSE(cam.IsGliding());
+}

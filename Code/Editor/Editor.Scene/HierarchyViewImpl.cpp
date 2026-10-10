@@ -9,7 +9,8 @@
 // wired to the page's SceneEditContext:
 //   - click selects (per-page Guid selection, synced both ways with the tree's SelectionModel);
 //   - right-click context menu: Create Child / Rename / Delete on rows, Create Entity on empty;
-//   - rows are EditableLabels: double-click / slow-click renames in place (single clicks pass
+//   - rows are EditableLabels: a slow second click renames in place, a double-click frames the
+//     entity in the viewport (OnFrameEntity) (single clicks pass
 //     through to selection by design), F2 / context-menu Rename triggers the same edit,
 //     Delete deletes;
 //   - drag a row INTO another = reparent; drag to a row EDGE = sibling reorder (insert-before
@@ -163,6 +164,10 @@ namespace editor
                     self->m_syncing = true;
                     self->m_edit->EntitySelection().Set(id);
                     self->m_syncing = false;
+                    if (info.ClickCount >= 2 && self->OnFrameEntity)
+                    {
+                        self->OnFrameEntity(id);
+                    }
                 }
             });
 

@@ -126,15 +126,6 @@
   a picker dialog like the asset picker: a search field at the top, and below it the categories
   with their components, filtered as you type. This likely answers "organize the new-component
   menu" from PaperKid's editor feedback (`weekly_backlog.md`, the carried list).
-- **F frames the selection in the scene view** (user 2026-10-10): there is no frame action in
-  the scene editor. The preview pages frame their content through `EditorCamera::FrameBounds`
-  (mesh, material, collision shape), and `EditorCamera::LookAt` notes itself as the
-  frame-selection seam. Add a scene action (with F as its shortcut, on the action registry so it
-  shows in menus and the palette and can be rebound) that frames the selected entities: the union
-  of their world bounds (meshes, colliders, or the entity's position with a small radius for one
-  with nothing to measure), the camera moved so it fits and its orbit pivot set on its centre, so
-  Alt+drag orbits the selection afterwards. Perhaps an eased move rather than a jump; and a
-  double-click on a hierarchy row framing it too.
 
 ### Seeded: gizmo vertex snapping (user 2026-08-26)
 

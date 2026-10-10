@@ -36,6 +36,7 @@ export namespace editor
         f32 focusDistance = 12.0f; // pivot distance ahead (Alt+LMB turntable orbit)
         f32 panSensitivity = 0.0015f;
         bool zoomedThisUpdate = false; // the last Update dollied on the wheel (the zoom readout)
+        f32 glideSeconds = 0.3f;       // a frame eases over this long (0 jumps)
 
         [[nodiscard]] Quaternion Rotation() const
         {
@@ -84,6 +85,51 @@ export namespace editor
             position = center + Float3{0.0f, 0.4f, 1.0f} * (radius * 2.6f);
             LookAt(center);
         }
+
+        /// Frame a sphere in a view of vertical field of view `fovY` (radians): keep the view
+        /// direction, stand back far enough that the sphere fits with a margin, and put the orbit
+        /// pivot on its centre, so Alt+drag orbits it afterwards. Eases there over glideSeconds
+        /// when `ease` (Advance moves the glide on); any input that moves the camera stops the
+        /// glide where it is. The scene view's frame-the-selection.
+        void FrameSphere(Float3 center, f32 radius, f32 fovY, bool ease = true)
+        {
+            radius = Max(0.25f, radius);
+            const f32 distance = 1.1f * radius / Max(0.05f, Sin(0.5f * fovY));
+            const Float3 target = center - Forward() * distance;
+            if (!ease || glideSeconds <= 0.0f)
+            {
+                position = target;
+                focusDistance = distance;
+                m_gliding = false;
+                return;
+            }
+            m_glideFrom = position;
+            m_glideFromFocus = focusDistance;
+            m_glideTo = target;
+            m_glideToFocus = distance;
+            m_glideElapsed = 0.0f;
+            m_gliding = true;
+        }
+
+        /// Moves a FrameSphere glide on by `dt`, eased in and out; a no-op when none runs. Called
+        /// every frame whether or not the viewport has the input (a frame from the hierarchy
+        /// glides while the mouse is over the hierarchy).
+        void Advance(f32 dt)
+        {
+            if (!m_gliding)
+            {
+                return;
+            }
+            m_glideElapsed += dt;
+            f32 t = Clamp(m_glideElapsed / glideSeconds, 0.0f, 1.0f);
+            const bool done = t >= 1.0f;
+            t = t * t * (3.0f - 2.0f * t);
+            position = m_glideFrom + (m_glideTo - m_glideFrom) * t;
+            focusDistance = m_glideFromFocus + (m_glideToFocus - m_glideFromFocus) * t;
+            m_gliding = !done;
+        }
+
+        [[nodiscard]] bool IsGliding() const noexcept { return m_gliding; }
 
         /// Force-exit Tab-capture, restoring the OS cursor. The I2 stuck-mouse bug: Update()
         /// (the only place Tab toggles capture OFF) runs only while the viewport is
@@ -134,6 +180,7 @@ export namespace editor
 
                 if (alt && mouse->IsButtonDown(shell::MouseButton::Left))
                 {
+                    m_gliding = false; // the user takes the camera
                     // Turntable orbit: rotate about the focus point ahead, keeping it fixed.
                     const Float3 focus = position + Forward() * focusDistance;
                     yaw -= mouse->DeltaX() * lookSensitivity;
@@ -143,6 +190,7 @@ export namespace editor
                 }
                 else if (mouseCaptured || mouse->IsButtonDown(shell::MouseButton::Right))
                 {
+                    m_gliding = false;
                     yaw -= mouse->DeltaX() * lookSensitivity;
                     pitch -= mouse->DeltaY() * lookSensitivity;
                     pitch = Clamp(pitch, -1.55f, 1.55f);
@@ -150,6 +198,7 @@ export namespace editor
 
                 if (mouse->IsButtonDown(shell::MouseButton::Middle))
                 {
+                    m_gliding = false;
                     const f32 s = panSensitivity * focusDistance;
                     position =
                         position - Right() * (mouse->DeltaX() * s) + Up() * (mouse->DeltaY() * s);
@@ -158,6 +207,7 @@ export namespace editor
                 const f32 scroll = allowZoom ? mouse->ScrollY() : 0.0f;
                 if (scroll != 0.0f)
                 {
+                    m_gliding = false;
                     // Exponential dolly toward the orbit pivot: the step scales with the
                     // pivot distance, so zoom feels the same on a 100-unit scene and a
                     // 0.5-unit mesh, and the camera approaches but never crosses the
@@ -215,5 +265,13 @@ export namespace editor
                 position = position + Normalized(move) * speed;
             }
         }
+
+    private:
+        bool m_gliding = false;
+        f32 m_glideElapsed = 0.0f;
+        Float3 m_glideFrom{};
+        Float3 m_glideTo{};
+        f32 m_glideFromFocus = 0.0f;
+        f32 m_glideToFocus = 0.0f;
     };
 }

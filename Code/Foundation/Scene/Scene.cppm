@@ -630,4 +630,29 @@ export namespace foundation::scene
         f32 m_fixedAlpha = 0.0f;
     };
 
+    // The world-space box `entity` fills, as every system that measures entities
+    // (ISceneEntityBounds) answers it, merged: a mesh and its collider give the box holding both.
+    // False when no system has anything on the entity to measure.
+    [[nodiscard]] inline bool EntityWorldBounds(Scene& scene, EntityHandle entity, core::AABB& out)
+    {
+        core::AABB merged = core::AABB::Empty();
+        bool any = false;
+        scene.ForEachSystem(
+            [&](SceneSystem& system)
+            {
+                ISceneEntityBounds* measures = system.AsEntityBounds();
+                core::AABB box;
+                if (measures != nullptr && measures->EntityBounds(scene, entity, box) && box.IsValid())
+                {
+                    merged = any ? core::Merge(merged, box) : box;
+                    any = true;
+                }
+            });
+        if (any)
+        {
+            out = merged;
+        }
+        return any;
+    }
+
 } // namespace foundation::scene

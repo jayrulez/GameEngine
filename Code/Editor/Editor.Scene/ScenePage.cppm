@@ -223,6 +223,8 @@ export namespace editor
                 m_hierarchy->SetEditorContext(&context);
                 // Its context menus are the scene editor's actions over THIS page.
                 m_hierarchy->SetActions(&context.Actions(), this);
+                m_hierarchy->OnFrameEntity = [this](const Guid& entity)
+                { (void)FrameEntities(Span<const Guid>(&entity, 1), true); };
                 m_inspector =
                     MakeRef<SceneInspectorView>(Allocator(), context, *m_editContext);
                 {
@@ -529,6 +531,7 @@ export namespace editor
         }
         void SetAnimationPanelShown(bool shown) override;
         [[nodiscard]] EditorCamera* ViewportCamera() noexcept override { return &m_camera; }
+        bool FrameEntities(Span<const Guid> entities, bool ease) override;
         [[nodiscard]] Status RequestViewportCapture(StringView path) override
         {
             if (m_viewport.Get() == nullptr)

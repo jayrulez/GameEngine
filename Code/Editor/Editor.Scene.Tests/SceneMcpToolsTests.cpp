@@ -64,6 +64,19 @@ namespace
         // A viewport is pretended when `hasViewport`: the camera is real, the capture advances
         // when the test says the frame rendered (CompleteCapture / FailCapture).
         [[nodiscard]] EditorCamera* ViewportCamera() noexcept override { return hasViewport ? &camera : nullptr; }
+        // Records what was framed; the real page measures and moves the camera.
+        bool FrameEntities(Span<const Guid> entities, bool ease) override
+        {
+            framed.Clear();
+            for (const Guid& id : entities)
+            {
+                framed.PushBack(id);
+            }
+            framedEased = ease;
+            return hasViewport && !entities.IsEmpty();
+        }
+        Array<Guid> framed{DefaultAllocator()};
+        bool framedEased = true;
         [[nodiscard]] Status RequestViewportCapture(StringView path) override
         {
             if (!hasViewport)
@@ -203,7 +216,7 @@ TEST_CASE("scene-mcp-tools: page addressing, the selection round-trip, its refus
     McpServer server;
     RegisterSceneLiveTools(server, context);
     CHECK(server.ToolCount() == kSceneLiveToolCount);
-    CHECK(kSceneLiveToolCount == 18u); // a tripwire: bump deliberately when a live tool comes or goes
+    CHECK(kSceneLiveToolCount == 19u); // a tripwire: bump deliberately when a live tool comes or goes
     const String aGuid = GuidText(sceneA);
     const String lampGuid = GuidText(lamp);
     const String tableGuid = GuidText(table);
@@ -1000,6 +1013,54 @@ TEST_CASE("scene-mcp-tools: the viewport camera reads and moves in degrees (posi
 
     context.ClosePage(page);
     context.ClosePage(headless);
+}
+
+TEST_CASE("scene-mcp-tools: viewport_frame frames named entities or the selection, at once")
+{
+    Random rng(41);
+    const Guid sceneId = Guid::Generate(rng);
+    EditorContext context{DefaultAllocator()};
+    auto* page = static_cast<HeadlessScenePage*>(context.AdoptPage(UniquePtr<EditorPage>(
+        DefaultAllocator().New<HeadlessScenePage>(u8"Bistro", sceneId), DefaultAllocator())));
+    McpServer server;
+    RegisterSceneLiveTools(server, context);
+    CHECK(server.ToolCount() == kSceneLiveToolCount);
+    context.SetActivePage(page);
+
+    scene::Scene& scene = page->EditContext().Scene();
+    const Guid table = scene.GetEntityId(scene.CreateEntity(u8"Table"));
+    const Guid lamp = scene.GetEntityId(scene.CreateEntity(u8"Lamp"));
+
+    // No viewport: refused by name.
+    Answer got = Call(server, u8"viewport_frame", u8"{\"entities\":[\"Table\"]}");
+    CHECK_FALSE(got.ok);
+    CHECK(got.error.AsView().StartsWith(u8"page 'Bistro' has no viewport"));
+    page->hasViewport = true;
+
+    // Named entities: framed at once (no glide, so a screenshot after shows it); the camera back.
+    got = Call(server, u8"viewport_frame", u8"{\"entities\":[\"Table\",\"Lamp\"]}");
+    REQUIRE(got.ok);
+    REQUIRE(page->framed.Size() == 2);
+    CHECK(page->framed[0] == table);
+    CHECK(page->framed[1] == lamp);
+    CHECK_FALSE(page->framedEased);
+    CHECK(got.payload.Get(u8"focusDistance").IsNumber());
+
+    // No names: the selection; nothing selected: a refusal saying what to do.
+    got = Call(server, u8"viewport_frame", u8"{}");
+    CHECK_FALSE(got.ok);
+    CHECK(got.error.AsView().StartsWith(u8"nothing to frame"));
+    page->EditContext().EntitySelection().Set(lamp);
+    got = Call(server, u8"viewport_frame", u8"{}");
+    REQUIRE(got.ok);
+    REQUIRE(page->framed.Size() == 1);
+    CHECK(page->framed[0] == lamp);
+
+    // A name the scene does not have.
+    got = Call(server, u8"viewport_frame", u8"{\"entities\":[\"Sofa\"]}");
+    CHECK_FALSE(got.ok);
+    CHECK(got.error.AsView().StartsWith(u8"no entity 'Sofa'"));
+    context.ClosePage(page);
 }
 
 TEST_CASE("scene-mcp-tools: navigation_bake bakes a page's zone into its asset, and says why not")

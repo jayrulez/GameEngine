@@ -361,6 +361,39 @@ TEST_CASE("hierarchy: collapse state survives snapshot rebuilds")
     CHECK(flat->IsExpanded(0));
 }
 
+TEST_CASE("hierarchy: a double-click frames the row's entity; it no longer starts a rename")
+{
+    scene::Scene scene{DefaultAllocator()};
+    EditorCommandStack commands;
+    SceneEditContext edit(scene, commands);
+    auto hierarchyRef = foundation::core::MakeRef<SceneHierarchyView>(DefaultAllocator(), edit);
+    SceneHierarchyView& hierarchy = *hierarchyRef;
+    const Guid table = edit.CreateEntity(u8"Table");
+    hierarchy.Refresh();
+
+    Array<Guid> framed{DefaultAllocator()};
+    hierarchy.OnFrameEntity = [&framed](const Guid& id) { framed.PushBack(id); };
+    foundation::ui::TreeView* tree = hierarchy.Tree()->InternalTreeView();
+
+    // One click selects, and frames nothing.
+    tree->OnItemClick.Invoke(foundation::ui::TreeView::ItemClickInfo{0, 1});
+    CHECK(framed.IsEmpty());
+    REQUIRE(edit.EntitySelection().Primary() != nullptr);
+    CHECK(*edit.EntitySelection().Primary() == table);
+
+    // A double-click selects and frames.
+    tree->OnItemClick.Invoke(foundation::ui::TreeView::ItemClickInfo{0, 2});
+    REQUIRE(framed.Size() == 1);
+    CHECK(framed[0] == table);
+
+    // The row leaves the double-click to the tree: renames are a slow click, F2 or the menu.
+    RefPtr<foundation::ui::View> row = tree->TreeAdapter->CreateView(0);
+    auto* label = Cast<foundation::ui::EditableLabel>(row.Get());
+    REQUIRE(label != nullptr);
+    CHECK_FALSE(label->DoubleClickToEdit.Value());
+    CHECK(label->SlowClickToEdit.Value());
+}
+
 // Repro: switching the selected entity must rebuild the inspector for the NEW entity.
 TEST_CASE("inspector: rebuilds when the selection switches entities")
 {

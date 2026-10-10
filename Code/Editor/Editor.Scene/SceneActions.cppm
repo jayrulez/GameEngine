@@ -40,6 +40,7 @@ export namespace editor
         inline constexpr StringView kGizmoScale = u8"scene.gizmo.scale";
         inline constexpr StringView kGizmoWorldSpace = u8"scene.gizmo.worldSpace";
         inline constexpr StringView kMarkers = u8"scene.view.markers";
+        inline constexpr StringView kFrameSelection = u8"scene.view.frameSelection";
         inline constexpr StringView kAnimationPanel = u8"scene.view.animationPanel";
         inline constexpr StringView kEntityCreate = u8"scene.entity.create";
         inline constexpr StringView kEntityCreateChild = u8"scene.entity.createChild";
@@ -218,6 +219,26 @@ export namespace editor
         }
 
         // --- View ---
+        {
+            EditorActionDeclaration d = Declare(kFrameSelection, u8"Frame Selection",
+                                                u8"Move the viewport camera so the selected "
+                                                u8"entities fill the view, orbiting about them",
+                                                u8"Scene/Frame Selection", 290);
+            d.shortcut = EditorShortcut{foundation::ui::KeyCode::F, foundation::ui::KeyModifiers::None};
+            d.readOnly = true; // the camera is the page's view, not the scene
+            d.enabled = [scenePage](EditorPage* page)
+            {
+                ISceneEditorPage* scene = scenePage(page);
+                return scene != nullptr && scene->ViewportCamera() != nullptr &&
+                       !scene->EditContext().EntitySelection().IsEmpty() && !scene->CameraOwnsInput();
+            };
+            d.execute = [scenePage](EditorPage* page)
+            {
+                ISceneEditorPage* scene = scenePage(page);
+                (void)scene->FrameEntities(scene->EditContext().EntitySelection().Items(), true);
+            };
+            (void)actions.Register(Move(d));
+        }
         {
             EditorActionDeclaration d = Declare(kMarkers, u8"Entity Markers",
                                                 u8"Show every entity's marker in the viewport, "

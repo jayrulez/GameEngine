@@ -1246,6 +1246,69 @@ namespace editor
                 return CameraJson(addressed.Value(), *camera);
             });
 
+        server.RegisterTool(
+            u8"viewport_frame",
+            u8"Frame entities in a scene page's viewport, as the user's F (Scene > Frame Selection) "
+            u8"does: the editor camera stands back along its view until they all fit, and orbits "
+            u8"about their centre. `entities` names them (guids, names or slash paths; default: the "
+            u8"selection). What is framed is the box the scene measures each entity and everything "
+            u8"under it as (meshes, colliders), or a small box at an entity with nothing to measure. "
+            u8"Moves at once, "
+            u8"so a viewport_screenshot after it shows the framed view; returns the camera as "
+            u8"viewport_camera_get does.",
+            SchemaBuilder()
+                .Str(u8"page", kPageArgument)
+                .Arr(u8"entities", u8"string", u8"the entities to frame (default: the selection)")
+                .Build(),
+            ToolAnnotations::Adjusts(),
+            [ctx](const JsonValue& args) -> ToolResult
+            {
+                Result<AddressedPage, String> addressed = ResolveScenePage(*ctx, args);
+                if (!addressed.HasValue())
+                {
+                    return Err(Move(addressed.Error()));
+                }
+                ISceneEditorPage* scene = addressed.Value().scene;
+                EditorCamera* camera = scene->ViewportCamera();
+                if (camera == nullptr)
+                {
+                    return Err(Format(u8"page '{}' has no viewport", addressed.Value().page->Title()));
+                }
+                Array<Guid> ids(ctx->Allocator());
+                const JsonValue named = args.Get(u8"entities");
+                if (named.IsArray())
+                {
+                    for (i64 i = 0; i < named.Count(); ++i)
+                    {
+                        const String text = named.At(i).AsString();
+                        Result<Guid, String> id = ResolveSceneEntity(addressed.Value(), text.AsView());
+                        if (!id.HasValue())
+                        {
+                            return Err(Move(id.Error()));
+                        }
+                        ids.PushBack(id.Value());
+                    }
+                }
+                else
+                {
+                    for (const Guid& id : scene->EditContext().EntitySelection().Items())
+                    {
+                        ids.PushBack(id);
+                    }
+                }
+                if (ids.IsEmpty())
+                {
+                    return Err(String(u8"nothing to frame: pass `entities`, or select some first "
+                                      u8"(selection_set)"));
+                }
+                if (!scene->FrameEntities(Span<const Guid>(ids.Data(), ids.Size()), /*ease*/ false))
+                {
+                    return Err(Format(u8"page '{}' could not frame those entities",
+                                      addressed.Value().page->Title()));
+                }
+                return CameraJson(addressed.Value(), *camera);
+            });
+
         auto pending = MakeUnique<PendingCapture>(context.Allocator());
         PendingCapture* pendingPtr = pending.Get();
         server.RegisterTool(

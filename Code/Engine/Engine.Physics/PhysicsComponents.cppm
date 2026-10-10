@@ -146,10 +146,12 @@ export namespace engine::physics
     }
 
     // The rigid bodies, and the static level geometry they make: the static, non-trigger bodies'
-    // collision shapes, which the navigation bake reads.
+    // collision shapes, which the navigation bake reads. It measures its entities for the scene
+    // too (ISceneEntityBounds): a body's own shape, as authored, through the entity's world matrix.
     class RigidBodyComponentManager final
         : public foundation::scene::SerializableComponentManager<RigidBodyComponent>,
-          public foundation::scene::IStaticGeometrySource
+          public foundation::scene::IStaticGeometrySource,
+          public foundation::scene::ISceneEntityBounds
     {
     public:
         RigidBodyComponentManager()
@@ -163,16 +165,26 @@ export namespace engine::physics
         }
         void CollectStaticGeometry(foundation::scene::Scene& scene, const AABB& bounds, f32 detail,
                                    Array<Float3>& outTriangles) override;
+
+        [[nodiscard]] foundation::scene::ISceneEntityBounds* AsEntityBounds() noexcept override { return this; }
+        [[nodiscard]] bool EntityBounds(foundation::scene::Scene& scene, foundation::scene::EntityHandle entity,
+                                        AABB& out) override;
     };
 
+    // An extra shape a body folds in; it measures its entities as the body manager does.
     class ColliderComponentManager final
-        : public foundation::scene::SerializableComponentManager<ColliderComponent>
+        : public foundation::scene::SerializableComponentManager<ColliderComponent>,
+          public foundation::scene::ISceneEntityBounds
     {
     public:
         ColliderComponentManager()
             : SerializableComponentManager<ColliderComponent>(u8"physics.Collider")
         {
         }
+
+        [[nodiscard]] foundation::scene::ISceneEntityBounds* AsEntityBounds() noexcept override { return this; }
+        [[nodiscard]] bool EntityBounds(foundation::scene::Scene& scene, foundation::scene::EntityHandle entity,
+                                        AABB& out) override;
     };
 
     // Jolt CharacterVirtual on this entity: a kinematic capsule with slope/step/stair

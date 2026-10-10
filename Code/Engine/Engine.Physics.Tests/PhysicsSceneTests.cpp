@@ -1499,3 +1499,46 @@ TEST_CASE("physics.scene: a source not ready at the start is asked again, and it
     play.Step(5);
     CHECK(source->asked == asked); // ready once, never asked again
 }
+
+TEST_CASE("physics: bodies and colliders measure their entities by their authored shapes")
+{
+    scene::Scene scene(DefaultAllocator(), u8"bounds");
+    auto* bodies = scene.AddSystem<RigidBodyComponentManager>();
+    auto* colliders = scene.AddSystem<ColliderComponentManager>();
+
+    // A box body, moved and scaled: its half extents through the world matrix.
+    const scene::EntityHandle crate = scene.CreateEntity(u8"crate");
+    Transform t;
+    t.position = Float3{0.0f, 2.0f, 0.0f};
+    t.scale = Float3{2.0f, 1.0f, 1.0f};
+    scene.SetLocalTransform(crate, t);
+    RigidBodyComponent& body = bodies->Add(crate);
+    body.shape = ShapeKind::Box;
+    body.halfExtents = Float3{1.0f, 0.5f, 0.25f};
+
+    // A capsule collider: radius across, half height plus radius along y.
+    const scene::EntityHandle post = scene.CreateEntity(u8"post");
+    scene.SetLocalPosition(post, Float3{5.0f, 0.0f, 0.0f});
+    ColliderComponent& capsule = colliders->Add(post);
+    capsule.shape = ShapeKind::Capsule;
+    capsule.radius = 0.3f;
+    capsule.halfHeight = 1.0f;
+
+    // A plane is endless: it measures nothing.
+    const scene::EntityHandle ground = scene.CreateEntity(u8"ground");
+    bodies->Add(ground).shape = ShapeKind::Plane;
+    scene.UpdateTransforms();
+
+    AABB out;
+    REQUIRE(scene::EntityWorldBounds(scene, crate, out));
+    CHECK(out.min.x == doctest::Approx(-2.0f));
+    CHECK(out.max.x == doctest::Approx(2.0f));
+    CHECK(out.min.y == doctest::Approx(1.5f));
+    CHECK(out.max.z == doctest::Approx(0.25f));
+
+    REQUIRE(scene::EntityWorldBounds(scene, post, out));
+    CHECK(out.min.x == doctest::Approx(4.7f));
+    CHECK(out.max.y == doctest::Approx(1.3f));
+
+    CHECK_FALSE(scene::EntityWorldBounds(scene, ground, out));
+}

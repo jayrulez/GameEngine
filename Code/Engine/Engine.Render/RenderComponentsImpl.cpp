@@ -668,6 +668,29 @@ namespace engine::render
 
 namespace engine::render
 {
+    bool MeshComponentManager::EntityBounds(scene::Scene& scene, scene::EntityHandle entity, AABB& out)
+    {
+        const MeshComponent* mesh = Get(entity);
+        if (mesh == nullptr || mesh->mesh.Get() == nullptr || !mesh->mesh.Get()->bounds.IsValid())
+        {
+            return false;
+        }
+        out = TransformAABB(mesh->mesh.Get()->bounds, scene.GetWorldMatrix(entity));
+        return true;
+    }
+
+    bool InstancedMeshComponentManager::EntityBounds(scene::Scene&, scene::EntityHandle entity, AABB& out)
+    {
+        const InstancedMeshComponent* set = Get(entity);
+        if (set == nullptr || set->Count() == 0 || set->cachedRadius <= 0.0f)
+        {
+            return false; // empty, or not measured by extraction yet
+        }
+        const f32 r = set->cachedRadius;
+        out = AABB::FromCenterExtents(set->cachedCenter, Float3{r, r, r});
+        return true;
+    }
+
     void RegisterRenderComponentReflection()
     {
         static const bool once = []()

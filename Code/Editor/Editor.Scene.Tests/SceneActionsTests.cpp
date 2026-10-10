@@ -53,7 +53,17 @@ namespace
         [[nodiscard]] bool IsPaused() const noexcept override { return paused; }
         [[nodiscard]] GizmoController* Gizmos() noexcept override { return gizmos; }
         [[nodiscard]] bool CameraOwnsInput() const noexcept override { return cameraOwnsInput; }
-        [[nodiscard]] EditorCamera* ViewportCamera() noexcept override { return nullptr; }
+        [[nodiscard]] EditorCamera* ViewportCamera() noexcept override { return hasViewport ? &camera : nullptr; }
+        bool FrameEntities(Span<const Guid> entities, bool ease) override
+        {
+            framed.Clear();
+            for (const Guid& id : entities)
+            {
+                framed.PushBack(id);
+            }
+            framedEased = ease;
+            return !entities.IsEmpty();
+        }
         [[nodiscard]] Status RequestViewportCapture(StringView) override { return Status{ErrorCode::NotSupported}; }
         [[nodiscard]] const ViewportCapture& LastViewportCapture() const noexcept override { return capture; }
         [[nodiscard]] bool MarkersShown() const noexcept override { return markers; }
@@ -74,6 +84,10 @@ namespace
         bool markers = true;
         bool animation = false;
         bool cameraOwnsInput = false;
+        bool hasViewport = false;
+        EditorCamera camera;
+        Array<Guid> framed{DefaultAllocator()};
+        bool framedEased = false;
         ViewportCapture capture;
         GizmoController* gizmos = nullptr;
         Guid prefabFrom;
@@ -273,5 +287,43 @@ TEST_CASE("scene-actions: the entity actions act on the selection's primary, loc
     menu->ItemAt(0)->Action();
     CHECK(edit.Scene().EntityCount() == before + 1);
 
+    context.ClosePage(page);
+}
+
+TEST_CASE("scene-actions: F frames the selection, eased, on a page with a viewport")
+{
+    EditorContext context{DefaultAllocator()};
+    RegisterSceneEditorActions(context);
+    EditorActionRegistry& actions = context.Actions();
+    REQUIRE(actions.Find(kFrameSelection) != nullptr);
+    CHECK(actions.Find(kFrameSelection)->menuPath == u8"Scene/Frame Selection");
+    CHECK(actions.Shortcut(kFrameSelection).key == ui::KeyCode::F);
+    CHECK(actions.Shortcut(kFrameSelection).modifiers == ui::KeyModifiers::None);
+
+    auto* page = static_cast<HeadlessScenePage*>(context.AdoptPage(UniquePtr<EditorPage>(
+        DefaultAllocator().New<HeadlessScenePage>(u8"Bistro"), DefaultAllocator())));
+
+    // No viewport, or nothing selected: nothing to frame.
+    CHECK_FALSE(actions.IsEnabled(kFrameSelection, page));
+    page->hasViewport = true;
+    CHECK_FALSE(actions.IsEnabled(kFrameSelection, page));
+
+    Random rng(11);
+    const Guid a = Guid::Generate(rng);
+    const Guid b = Guid::Generate(rng);
+    page->EditContext().EntitySelection().Set(a);
+    page->EditContext().EntitySelection().Add(b);
+    CHECK(actions.IsEnabled(kFrameSelection, page));
+
+    // While the camera flies, its keys are its own.
+    page->cameraOwnsInput = true;
+    CHECK_FALSE(actions.IsEnabled(kFrameSelection, page));
+    page->cameraOwnsInput = false;
+
+    REQUIRE(actions.Execute(kFrameSelection, page).IsOk());
+    REQUIRE(page->framed.Size() == 2);
+    CHECK(page->framed[0] == a);
+    CHECK(page->framed[1] == b);
+    CHECK(page->framedEased);
     context.ClosePage(page);
 }

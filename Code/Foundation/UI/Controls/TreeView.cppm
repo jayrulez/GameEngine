@@ -263,7 +263,8 @@ export namespace foundation::ui
                 return false;
             }
             const i32 depth = m_flatAdapter->GetDepth(position);
-            const f32 arrowLeft = depth * IndentWidth.Value();
+            // The chevron scrolls sideways with its row (ListView::ScrollsHorizontally).
+            const f32 arrowLeft = depth * IndentWidth.Value() - m_listView->ScrollX();
             const f32 arrowRight = arrowLeft + IndentWidth.Value();
             return localX >= arrowLeft && localX < arrowRight;
         }
@@ -275,12 +276,15 @@ export namespace foundation::ui
                 return;
             }
             const f32 scrollY = m_listView->ScrollY();
+            const f32 scrollX = m_listView->ScrollX();
             const f32 itemH = m_listView->ItemHeight.Value();
             if (itemH <= 0)
             {
                 return;
             }
             const f32 viewportH = Height();
+            // A chevron scrolled off the left stays inside the tree.
+            ctx.VG().PushClipRect(Rectangle{0, 0, Width(), Height()});
 
             const i32 firstVisible = static_cast<i32>(scrollY / itemH);
             const i32 lastVisible = Min(firstVisible + static_cast<i32>(viewportH / itemH) + 1,
@@ -296,8 +300,8 @@ export namespace foundation::ui
 
                 const i32 depth = m_flatAdapter->GetDepth(i);
                 const f32 itemY = i * itemH - scrollY;
-                const f32 arrowX =
-                    depth * IndentWidth.Value() + (IndentWidth.Value() - ArrowSize.Value()) * 0.5f;
+                const f32 arrowX = depth * IndentWidth.Value() +
+                                   (IndentWidth.Value() - ArrowSize.Value()) * 0.5f - scrollX;
                 const f32 arrowCY = itemY + itemH * 0.5f;
                 const f32 halfSize = ArrowSize.Value() * 0.5f;
                 const bool isExpanded = m_flatAdapter->IsExpanded(nodeId);
@@ -335,6 +339,7 @@ export namespace foundation::ui
                     ctx.VG().Fill(arrowColor);
                 }
             }
+            ctx.VG().PopClip();
         }
 
         RefPtr<ListView> m_listView;

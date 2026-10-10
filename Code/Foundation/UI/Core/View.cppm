@@ -339,6 +339,16 @@ export namespace foundation::ui
         /// size out); plain OnMeasure overrides receive the post-margin post-spec box.
         void Measure(BoxConstraints c); // impl unit (needs RootView complete for the dpi query)
 
+        /// How wide this view's content is when nothing narrows it, at `height`: what a container
+        /// that scrolls sideways to show all of it (a list's rows) lays it out at. Default: its
+        /// measure with an unbounded width. A control that measures to fill (an editable label)
+        /// overrides it with what it draws.
+        [[nodiscard]] virtual f32 NaturalWidth(f32 height)
+        {
+            Measure(BoxConstraints{0.0f, kFloatMax, height, height});
+            return MeasuredSize.x;
+        }
+
         /// MeasuredSize plus this view's margins - what parents aggregate and place (parents
         /// hand Layout the MARGIN box; the base insets to the border box).
         [[nodiscard]] Float2 MarginBoxSize() const

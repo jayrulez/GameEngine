@@ -50,6 +50,10 @@ export namespace foundation::ui
     public:
         SelectionModel Selection;
         Property<f32> ItemHeight{30.0f};
+        /// Rows wider than the list scroll sideways instead of being cut at its edge: they lay out
+        /// at the widest visible row's natural width (View::NaturalWidth), and a horizontal bar
+        /// lies over the bottom. Shift+wheel, or a sideways wheel, scrolls it. Off by default.
+        Property<bool> ScrollsHorizontally{false};
 
         /// (position, clickCount, localX, localY)
         Event<void(i32, i32, f32, f32)> OnItemClicked;
@@ -71,6 +75,7 @@ export namespace foundation::ui
             IsTabStop = true;
             WantsArrowKeys = true;
             ItemHeight.SetOwner(this);
+            ScrollsHorizontally.SetOwner(this);
             ListView* self = this;
             m_scrollBar = MakeRef<ScrollBar>(MemoryAllocator(), false);
             m_scrollBar->Parent = this;
@@ -80,9 +85,31 @@ export namespace foundation::ui
                                                           self->m_scrollY = val;
                                                           self->Invalidate();
                                                       }});
+            m_hScrollBar = MakeRef<ScrollBar>(MemoryAllocator(), true);
+            m_hScrollBar->Parent = this;
+            m_hScrollBar->Visibility = VisibilityValue::Gone;
+            m_hScrollBar->OnValueChanged.Add(
+                Event<void(ScrollBar*, f32)>::Handler{[self](ScrollBar*, f32 val)
+                                                      {
+                                                          self->m_scrollX = val;
+                                                          self->Invalidate();
+                                                      }});
         }
 
         [[nodiscard]] f32 ScrollY() const noexcept { return m_scrollY; }
+        /// How far the rows are scrolled sideways (ScrollsHorizontally).
+        [[nodiscard]] f32 ScrollX() const noexcept { return m_scrollX; }
+        /// How wide the rows are laid out: the list's own width, or the widest visible row's.
+        [[nodiscard]] f32 ContentWidth() const noexcept { return m_contentWidth; }
+        [[nodiscard]] f32 MaxScrollX() const noexcept
+        {
+            return core::Max(0.0f, m_contentWidth - m_viewportWidth);
+        }
+        void ScrollByX(f32 dx)
+        {
+            m_scrollX = core::Clamp(m_scrollX + dx, 0.0f, MaxScrollX());
+            Invalidate();
+        }
         [[nodiscard]] ViewRecycler& Recycler() noexcept { return m_recycler; }
 
         [[nodiscard]] IListAdapter* GetAdapter() const noexcept { return m_adapter; }
@@ -108,7 +135,8 @@ export namespace foundation::ui
                 m_variableHeight
                     ? m_totalContentHeight
                     : ((m_adapter != nullptr) ? m_adapter->ItemCount() * ItemHeight.Value() : 0.0f);
-            const f32 viewportH = Height() - Padding.TotalVertical();
+            const f32 viewportH = Height() - Padding.TotalVertical() -
+                                  (m_hScrollBarVisible ? m_hScrollBar->BarThickness : 0.0f);
             return core::Max(0.0f, contentH - viewportH);
         }
 
@@ -153,7 +181,10 @@ export namespace foundation::ui
         }
 
         // === Visual children: active item views + scrollbar ===
-        [[nodiscard]] usize VisualChildCount() const override { return m_activeViews.Size() + 1; }
+        [[nodiscard]] usize VisualChildCount() const override
+        {
+            return m_activeViews.Size() + (ScrollsHorizontally.Value() ? 2 : 1);
+        }
         [[nodiscard]] View* GetVisualChild(usize index) const override
         {
             if (index < m_activeViews.Size())
@@ -172,12 +203,26 @@ export namespace foundation::ui
             {
                 return m_scrollBar.Get();
             }
+            if (index == m_activeViews.Size() + 1 && ScrollsHorizontally.Value())
+            {
+                return m_hScrollBar.Get();
+            }
             return nullptr;
         }
 
         // === Input ===
         void OnMouseWheel(MouseWheelEventArgs& e) override
         {
+            // Sideways (as ScrollView): a horizontal wheel, or Shift with the vertical one.
+            const f32 hDelta = e.DeltaX != 0
+                                   ? e.DeltaX
+                                   : (HasFlag(e.Modifiers, KeyModifiers::Shift) ? e.DeltaY : 0.0f);
+            if (ScrollsHorizontally.Value() && MaxScrollX() > 0 && hDelta != 0)
+            {
+                ScrollByX(-hDelta * ItemHeight.Value() * 2);
+                e.Handled = true;
+                return;
+            }
             if (MaxScrollY() > 0)
             {
                 ScrollBy(-e.DeltaY * ItemHeight.Value() * 2);
@@ -469,6 +514,12 @@ export namespace foundation::ui
             m_scrollBarVisible = MaxScrollY() > 0;
             m_scrollBar->Visibility =
                 m_scrollBarVisible ? VisibilityValue::Visible : VisibilityValue::Gone;
+            if (!ScrollsHorizontally.Value())
+            {
+                m_hScrollBarVisible = false;
+            }
+            m_hScrollBar->Visibility =
+                m_hScrollBarVisible ? VisibilityValue::Visible : VisibilityValue::Gone;
         }
 
         void OnLayout(f32 left, f32 top, f32 width, f32 height) override
@@ -486,10 +537,15 @@ export namespace foundation::ui
 
             m_scrollY = core::Clamp(m_scrollY, 0.0f, MaxScrollY());
 
+            m_viewportWidth = viewportW;
             if (m_adapter->ItemCount() == 0)
             {
                 m_scrollBarVisible = false;
                 m_scrollBar->Visibility = VisibilityValue::Gone;
+                m_hScrollBarVisible = false;
+                m_hScrollBar->Visibility = VisibilityValue::Gone;
+                m_contentWidth = viewportW;
+                m_scrollX = 0.0f;
                 return;
             }
 
@@ -531,11 +587,41 @@ export namespace foundation::ui
                 // recycles all actives). Rebinding per layout pass meant every visible row was
                 // rebound every frame.
 
+            }
+
+            // Sideways: the rows are as wide as the widest visible one wants (never narrower than
+            // the list), scrolled by m_scrollX. Only the visible rows are asked - a virtualised
+            // list knows no others - so the reach follows what is on screen.
+            f32 rowW = viewportW;
+            if (ScrollsHorizontally.Value())
+            {
+                for (i32 pos = firstVis; pos <= lastVis; ++pos)
+                {
+                    rowW = core::Max(rowW, m_activeViews.Find(pos)->Get()->NaturalWidth(
+                                               GetItemHeightAt(pos)));
+                }
+            }
+            m_contentWidth = rowW;
+            m_scrollX = core::Clamp(m_scrollX, 0.0f, MaxScrollX());
+            const bool hBar = ScrollsHorizontally.Value() && MaxScrollX() > 0;
+            if (hBar != m_hScrollBarVisible)
+            {
+                m_hScrollBarVisible = hBar;
+                m_hScrollBar->Visibility = hBar ? VisibilityValue::Visible : VisibilityValue::Gone;
+                m_scrollY = core::Clamp(m_scrollY, 0.0f, MaxScrollY());
+            }
+            if (hBar && Context != nullptr && m_hScrollBar->Context == nullptr)
+            {
+                Context->AttachView(m_hScrollBar.Get());
+            }
+
+            for (i32 pos = firstVis; pos <= lastVis; ++pos)
+            {
                 View* v = m_activeViews.Find(pos)->Get();
                 const f32 itemY = Padding.Top + GetItemOffset(pos) - m_scrollY;
                 const f32 itemH = GetItemHeightAt(pos);
-                v->Measure(BoxConstraints::Tight(viewportW, itemH));
-                v->Layout(Padding.Left, itemY, viewportW, itemH);
+                v->Measure(BoxConstraints::Tight(rowW, itemH));
+                v->Layout(Padding.Left - m_scrollX, itemY, rowW, itemH);
             }
 
             m_firstVisible = firstVis;
@@ -549,6 +635,15 @@ export namespace foundation::ui
                 m_scrollBar->Measure(BoxConstraints::Tight(m_scrollBar->BarThickness, viewportH));
                 m_scrollBar->Layout(width - m_scrollBar->BarThickness, Padding.Top,
                                     m_scrollBar->BarThickness, viewportH);
+            }
+            if (m_hScrollBarVisible)
+            {
+                const f32 thickness = m_hScrollBar->BarThickness;
+                m_hScrollBar->SetValue(m_scrollX);
+                m_hScrollBar->SetMaxValue(MaxScrollX());
+                m_hScrollBar->SetViewportSize(viewportW);
+                m_hScrollBar->Measure(BoxConstraints::Tight(viewportW, thickness));
+                m_hScrollBar->Layout(Padding.Left, height - thickness, viewportW, thickness);
             }
         }
 
@@ -744,6 +839,11 @@ export namespace foundation::ui
 
         RefPtr<ScrollBar> m_scrollBar;
         bool m_scrollBarVisible = false;
+        RefPtr<ScrollBar> m_hScrollBar; // a child only while ScrollsHorizontally
+        bool m_hScrollBarVisible = false;
+        f32 m_scrollX = 0.0f;
+        f32 m_contentWidth = 0.0f;
+        f32 m_viewportWidth = 0.0f;
 
         bool m_dragging = false;
         f32 m_dragLastY = 0.0f;

@@ -79,6 +79,27 @@ export namespace foundation::ui
 
         [[nodiscard]] bool IsEditing() const noexcept { return m_isEditing; }
 
+        /// Its text where it draws it (past TextOffsetX), and a little room after: an editable label
+        /// measures to fill, so its width says nothing of how long its text is.
+        [[nodiscard]] f32 NaturalWidth(f32 height) override
+        {
+            (void)height;
+            constexpr f32 kTrailing = 8.0f;
+            f32 textW = 0.0f;
+            if (Context != nullptr && Context->FontService() != nullptr)
+            {
+                const f32 fontSize = FontSize.Value().HasValue()
+                                         ? FontSize.Value().Value()
+                                         : ResolveStyleFloat(StyleProperty::FontSize, 14.0f);
+                if (fonts::CachedFont* font = Context->FontService()->GetFont(
+                        ResolveStyleFontFamily(FontFamily.Value()), fontSize))
+                {
+                    textW = font->font->MeasureString(Text());
+                }
+            }
+            return TextOffsetX.Value() + textW + kTrailing;
+        }
+
         /// Set the display text (ignored while editing). Hides EditText::SetText.
         void SetText(StringView text)
         {

@@ -265,3 +265,66 @@ TEST_CASE("list-view: Shift+Down and Shift+Up extend one range from the anchor")
     CHECK(lv->Selection.SelectedCount() == 1u);
     CHECK(lv->Selection.IsSelected(6));
 }
+
+namespace
+{
+    /// Rows 500 wide: wider than the list, as a deep hierarchy's rows are.
+    class WideListAdapter final : public ListAdapterBase
+    {
+    public:
+        i32 Count = 0;
+        f32 RowWidth = 500.0f;
+        explicit WideListAdapter(i32 count) : Count(count) {}
+        [[nodiscard]] i32 ItemCount() const override { return Count; }
+        [[nodiscard]] core::RefPtr<View> CreateView(i32) override
+        {
+            return core::MakeRef<TestView>(core::DefaultAllocator(), RowWidth, 30.0f);
+        }
+        // Rows are recycled: the width is the bound data, as a real row's text is.
+        void BindView(View* view, i32) override { static_cast<TestView*>(view)->DesiredWidth = RowWidth; }
+    };
+}
+
+TEST_CASE("list-view: wide rows scroll sideways only when asked, Shift+wheel moves them")
+{
+    UIContext ctx{DefaultAllocator()};
+    auto root = MakeRoot();
+    Init(ctx, root.Get(), 200, 300);
+    WideListAdapter adapter(100);
+    auto lv = MakeList();
+    lv->ItemHeight.SetValue(30);
+    lv->SetAdapter(&adapter);
+    root->AddView(lv.Get());
+    LayoutPass(ctx, root.Get());
+
+    // Off by default: rows are cut at the list's width, and there is no sideways bar.
+    const usize visibleRows = lv->VisualChildCount() - 1;
+    CHECK(lv->MaxScrollX() == 0.0f);
+    CHECK(lv->GetActiveView(0)->Width() < 200.0f);
+    const f32 maxScrollYWithout = lv->MaxScrollY();
+
+    // On: the rows lay out at their natural width, and the bar lies over the bottom.
+    lv->ScrollsHorizontally.SetValue(true);
+    LayoutPass(ctx, root.Get());
+    CHECK(lv->VisualChildCount() == visibleRows + 2);
+    CHECK(lv->ContentWidth() == doctest::Approx(500.0f));
+    CHECK(lv->GetActiveView(0)->Width() == doctest::Approx(500.0f));
+    CHECK(lv->MaxScrollX() > 300.0f);
+    CHECK(lv->MaxScrollY() > maxScrollYWithout); // the last row scrolls clear of the bar
+
+    // Shift+wheel scrolls sideways (not down); the rows follow.
+    ctx.GetInputManager()->ProcessMouseWheel(50, 50, 0, -1, KeyModifiers::Shift);
+    LayoutPass(ctx, root.Get());
+    CHECK(lv->ScrollX() > 0.0f);
+    CHECK(lv->ScrollY() == 0.0f);
+    CHECK(lv->GetActiveView(0)->Bounds.x == doctest::Approx(-lv->ScrollX()));
+    lv->ScrollByX(100000.0f);
+    CHECK(lv->ScrollX() == lv->MaxScrollX());
+
+    // Rows that fit: nothing to scroll, and the offset drops back.
+    adapter.RowWidth = 50.0f;
+    lv->NotifyDataChanged();
+    LayoutPass(ctx, root.Get());
+    CHECK(lv->MaxScrollX() == 0.0f);
+    CHECK(lv->ScrollX() == 0.0f);
+}

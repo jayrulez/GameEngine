@@ -92,6 +92,8 @@ export namespace editor
             m_adapter = MakeUnique<Adapter>(MemoryAllocator(), *this);
             m_tree = MakeRef<ui::toolkit::DraggableTreeView>(MemoryAllocator());
             m_tree->SetItemHeight(22.0f);
+            // A deep hierarchy scrolls sideways rather than asking for a wider panel.
+            m_tree->InternalTreeView()->InternalListView()->ScrollsHorizontally.SetValue(true);
             m_tree->SetAdapter(m_adapter.Get());
             {
                 ui::LayoutStyle grow;

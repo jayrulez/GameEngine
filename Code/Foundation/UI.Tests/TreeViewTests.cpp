@@ -217,3 +217,42 @@ TEST_CASE("tree-view: FocusedInternalList_KeyBubbles_To_OnItemKeyDown")
     CHECK(ctx.GetInputManager()->ProcessKeyDown(KeyCode::F2, KeyModifiers::None, false));
     CHECK(firedNode == 0);
 }
+
+TEST_CASE("tree-view: a chevron's click zone scrolls sideways with its row")
+{
+    // Rows wider than the tree, so it scrolls sideways.
+    class WideTreeAdapter final : public SimpleTreeAdapter
+    {
+    public:
+        [[nodiscard]] core::RefPtr<View> CreateView(i32) override
+        {
+            return core::MakeRef<TestView>(core::DefaultAllocator(), 600.0f, 30.0f);
+        }
+    };
+    UIContext ctx{DefaultAllocator()};
+    auto root = MakeRoot();
+    Init(ctx, root.Get(), 200, 300);
+    WideTreeAdapter adapter;
+    auto tv = MakeTree();
+    tv->SetAdapter(&adapter);
+    tv->InternalListView()->ScrollsHorizontally.SetValue(true);
+    root->AddView(tv.Get());
+    LayoutPass(ctx, root.Get());
+    REQUIRE(tv->InternalListView()->MaxScrollX() > 0.0f);
+
+    // Scrolled 8: root 0's chevron zone is [-8, 12) in the list, so 16 misses it and 2 hits it.
+    tv->InternalListView()->ScrollByX(8.0f);
+    LayoutPass(ctx, root.Get());
+    tv->InternalListView()->OnItemClicked.Invoke(0, 1, 16.0f, 5.0f);
+    CHECK(tv->FlatAdapter()->ItemCount() == 3);
+    tv->InternalListView()->OnItemClicked.Invoke(0, 1, 2.0f, 5.0f);
+    CHECK(tv->FlatAdapter()->ItemCount() == 5); // root 0 expanded
+}
+
+TEST_CASE("editable-label: its natural width is its text past the offset, not the box it fills")
+{
+    auto label = core::MakeRef<EditableLabel>(core::DefaultAllocator());
+    label->TextOffsetX.SetValue(40.0f);
+    // No font service here: the offset and the trailing room alone.
+    CHECK(label->NaturalWidth(20.0f) == doctest::Approx(48.0f));
+}

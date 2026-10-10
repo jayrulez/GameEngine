@@ -269,7 +269,7 @@ export namespace editor::app
 
         void SubmitExportJob(String presetName, bool all);
 
-        // === Templates + presets UI (File > Export... / File > Manage Templates...) ===
+        // === Templates + presets UI (Project > Export... / Edit > Export Templates...) ===
         //
         // Two management surfaces over the shared export driver: a templates manager (list + import /
         // create / remove installed bundles, with an engine-version match note) and an export-presets
@@ -292,7 +292,6 @@ export namespace editor::app
         void QueueReplaceDialog(ui::Dialog* current, Function<void()> open);
 
         void ReopenExportPresetsPanel(ui::Dialog* current);
-        void ReopenTemplatesManager(ui::Dialog* current);
 
         // Persist the in-memory preset set to the project's export_presets.xml.
         void SavePresetsController();
@@ -307,18 +306,10 @@ export namespace editor::app
         // dialog resolves (SetText on a detached view is harmless); no view hierarchy is rebuilt.
         void PickAdditionalFiles(RefPtr<ui::EditText> target);
 
-        // Import a template bundle (folder with a template.xml) into the templates root, then rebuild
-        // the manager. Async: the picked path is copied into ImportTemplate before any UI mutation.
-        void ImportTemplateThenRefresh(ui::Dialog* current);
-
-        // Create a template bundle from a "Bin/<Config>/<Platform>-<Compiler>" build dir (packaging the
-        // player + its runtime-libs), installing it into the templates root, then rebuild the manager.
-        void CreateTemplateThenRefresh(ui::Dialog* current);
-
-        // Templates manager: list every registry template (imported + the synthesized host), each with
-        // its platform/config/engine-version and a soft "(!) engine mismatch" note; Import / Create /
-        // Remove (non-host only) mutate the templates root and rebuild this dialog.
-        void OpenTemplatesManager();
+        // The export templates dialog (TemplatesDialog), over whatever is open: its seams are the
+        // registry this host sees, the templates root, the OS folder picker and file manager.
+        // Returns it, so a caller (Export) can follow its closing; null without a UI.
+        ui::Dialog* OpenTemplatesManager();
 
         // Export presets panel: (re)load the project's export_presets.xml into the controller, list each
         // preset with per-row Export / Edit / Duplicate / Delete, plus Add / Export All / Manage

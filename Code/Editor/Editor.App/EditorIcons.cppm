@@ -71,6 +71,9 @@ export namespace editor::app
         RefPtr<ui::BakedSVGDrawable> copy;     // duplicate (two documents)
         RefPtr<ui::BakedSVGDrawable> edit;     // pen (open-for-editing affordance)
 
+        // === Status ===
+        RefPtr<ui::BakedSVGDrawable> warning; // a triangle with "!"
+
         // === Terrain brush modes (sculpt tool panel) ===
         RefPtr<ui::BakedSVGDrawable> brushRaise;   // up arrow off a baseline
         RefPtr<ui::BakedSVGDrawable> brushLower;   // down arrow toward a baseline
@@ -89,7 +92,7 @@ export namespace editor::app
         [[nodiscard]] Array<ui::BakedSVGDrawable*> Bakeable() const;
 
         /// Every icon slot, the one table Shutdown and Bakeable walk (kSlotCount entries).
-        static constexpr ENGINE_EXPORT_DATA usize kSlotCount = 32;
+        static constexpr ENGINE_EXPORT_DATA usize kSlotCount = 33;
         [[nodiscard]] Array<RefPtr<ui::BakedSVGDrawable>*> Slots();
 
     private:
@@ -181,6 +184,13 @@ export namespace editor::app
         static constexpr StringView kSearch = u8R"svg(<svg viewBox="0 0 24 24">
   <circle cx="10" cy="10" r="6" fill="none" stroke="#E0E0E0" stroke-width="2"/>
   <line x1="14.5" y1="14.5" x2="20" y2="20" stroke="#E0E0E0" stroke-width="2.4" stroke-linecap="round"/>
+</svg>)svg";
+
+        // Warning - a triangle with an exclamation mark.
+        static constexpr StringView kWarning = u8R"svg(<svg viewBox="0 0 24 24">
+  <path d="M12 3.5l9.5 16.5h-19z" fill="none" stroke="#E8B04A" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="M12 9.5v5" fill="none" stroke="#E8B04A" stroke-width="1.8" stroke-linecap="round"/>
+  <circle cx="12" cy="17.3" r="1" fill="#E8B04A"/>
 </svg>)svg";
 
         // List view - three rows, each a bullet and a line.

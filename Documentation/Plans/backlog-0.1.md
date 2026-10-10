@@ -31,10 +31,6 @@
 - **Clean up and polish the export UI** (user 2026-10-09): the editor's export flow (choosing
   a preset, its settings, the templates it resolves to, running the export and its result),
   its look and how it is used, to the same finish as the rest.
-- **Clean up and polish export template management** (user 2026-10-09): how the editor lists,
-  installs, inspects and removes export templates (the prebuilt players a preset exports
-  against, `~/.local/share/gameengine/templates`), and how a preset shows the template it
-  resolves to.
 - **Project-wide defaults for scene settings, per domain** (user 2026-10-09, to think about): a
   scene's render settings come from the scene itself (its own values, or a profile asset it
   names, as Lamplight's levels share theirs), else from hard-coded defaults; other domains are

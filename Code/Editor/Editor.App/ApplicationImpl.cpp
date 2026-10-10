@@ -1541,11 +1541,6 @@ namespace editor::app
         QueueReplaceDialog(current, Function<void()>{[this]() { OpenExportPresetsPanel(); }});
     }
 
-    void EditorApplication::ReopenTemplatesManager(ui::Dialog* current)
-    {
-        QueueReplaceDialog(current, Function<void()>{[this]() { OpenTemplatesManager(); }});
-    }
-
     void EditorApplication::SavePresetsController()
     {
         if (!m_project)
@@ -1631,174 +1626,41 @@ namespace editor::app
             {}, {}, /*allowMultiple*/ true);
     }
 
-    void EditorApplication::ImportTemplateThenRefresh(ui::Dialog* current)
-    {
-        if (m_host == nullptr || m_host->Shell() == nullptr ||
-            m_host->Shell()->Dialogs() == nullptr)
-        {
-            m_context.Notify(editor::NoticeKind::Error, u8"File dialogs are unavailable.");
-            return;
-        }
-        m_host->Shell()->Dialogs()->ShowOpenFolder(foundation::shell::DialogResultCallback{
-            [this, current](Span<const String> paths)
-            {
-                if (paths.Size() == 0)
-                {
-                    return;
-                } // cancelled - leave the manager open
-                const String root = TemplatesRoot();
-                String id;
-                if (editor::ImportTemplate(paths[0].AsView(), root.AsView(), &id).IsOk())
-                {
-                    String msg(u8"Imported template '");
-                    msg += id;
-                    msg += u8"'.";
-                    m_context.Notify(editor::NoticeKind::Success, msg.AsView());
-                }
-                else
-                {
-                    m_context.Notify(editor::NoticeKind::Error,
-                                     u8"Import failed - the folder has no valid template.xml.");
-                }
-                ReopenTemplatesManager(current);
-            }});
-    }
-
-    void EditorApplication::CreateTemplateThenRefresh(ui::Dialog* current)
-    {
-        if (m_host == nullptr || m_host->Shell() == nullptr ||
-            m_host->Shell()->Dialogs() == nullptr)
-        {
-            m_context.Notify(editor::NoticeKind::Error, u8"File dialogs are unavailable.");
-            return;
-        }
-        m_host->Shell()->Dialogs()->ShowOpenFolder(foundation::shell::DialogResultCallback{
-            [this, current](Span<const String> paths)
-            {
-                if (paths.Size() == 0)
-                {
-                    return;
-                } // cancelled
-                const String root = TemplatesRoot();
-                String id, dir;
-                if (editor::CreateTemplate(paths[0].AsView(), root.AsView(),
-                                           editor::TemplateOutput::Install, &id, &dir)
-                        .IsOk())
-                {
-                    String msg(u8"Created template '");
-                    msg += id;
-                    msg += u8"'.";
-                    m_context.Notify(editor::NoticeKind::Success, msg.AsView());
-                }
-                else
-                {
-                    m_context.Notify(editor::NoticeKind::Error,
-                                     u8"Create failed - pick a Bin/<Config> build dir "
-                                     u8"containing Engine.Player.");
-                }
-                ReopenTemplatesManager(current);
-            }});
-    }
-
-    void EditorApplication::OpenTemplatesManager()
+    ui::Dialog* EditorApplication::OpenTemplatesManager()
     {
         if (!m_uiHost)
         {
-            return;
+            return nullptr;
         }
-
-        editor::TemplateRegistry registry;
-        BuildTemplateRegistryMainThread(registry);
-
-        auto dialog =
-            MakeRef<ui::Dialog>(m_editorAllocator, StringView(u8"Manage Export Templates"));
-        dialog->MinWidth.SetValue(560.0f);
-        dialog->MaxWidth.SetValue(780.0f);
-        dialog->MinHeight.SetValue(240.0f);
-        dialog->MaxHeight.SetValue(560.0f);
-        ui::Dialog* raw = dialog.Get();
-
-        auto column = MakeRef<ui::FlexLayout>(m_editorAllocator);
-        column->Direction = ui::Orientation::Vertical;
-        column->Spacing = 6;
-
-        auto header = MakeRef<ui::Label>(
-            m_editorAllocator,
-            StringView(u8"Installed export templates (the host build is always available):"));
-        column->AddView(header.Get());
-
-        for (usize i = 0; i < registry.Count(); ++i)
+        TemplatesDialogSeams seams;
+        seams.templatesRoot = [this]() { return TemplatesRoot(); };
+        seams.refresh = [this](editor::TemplateRegistry& registry) { BuildTemplateRegistryMainThread(registry); };
+        seams.pickFolder = [this](Function<void(String)> chosen)
         {
-            const editor::ExportTemplate* t = registry.At(i);
-            if (t == nullptr)
+            if (m_host == nullptr || m_host->Shell() == nullptr || m_host->Shell()->Dialogs() == nullptr)
             {
-                continue;
+                m_context.Notify(editor::NoticeKind::Error, u8"File dialogs are unavailable.");
+                return;
             }
-            String text(t->name.AsView());
-            text += u8"  [";
-            text += t->platform.AsView();
-            text += u8"/";
-            text += t->EffectiveConfig();
-            text += u8"]";
-            if (!t->engineVersion.IsEmpty())
-            {
-                text += u8"  v";
-                text += t->engineVersion.AsView();
-            }
-            if (t->isHost)
-            {
-                text += u8"  (host)";
-            }
-            if (!editor::TemplateEngineMatches(*t))
-            {
-                text += u8"  (!) engine mismatch";
-            }
-
-            auto row = MakeRef<ui::FlexLayout>(m_editorAllocator);
-            row->Direction = ui::Orientation::Horizontal;
-            row->Spacing = 8;
-            {
-                auto label = MakeRef<ui::Label>(m_editorAllocator, text.AsView());
-                ui::LayoutStyle lp;
-                lp.FlexGrow = 1.0f;
-                lp.AlignSelf = ui::Align::Center;
-                row->AddView(label.Get(), lp);
-            }
-            if (!t->isHost) // the host template is synthesized, never on disk => not removable
-            {
-                const String id(t->id.AsView());
-                auto remove = MakeRef<ui::Button>(m_editorAllocator, StringView(u8"Remove"));
-                remove->OnClick.Add(
-                    [this, raw, id](ui::ButtonBase*)
+            m_host->Shell()->Dialogs()->ShowOpenFolder(foundation::shell::DialogResultCallback{
+                [chosen = Move(chosen)](Span<const String> paths)
+                {
+                    if (paths.Size() > 0) // none: cancelled
                     {
-                        const String root = TemplatesRoot();
-                        if (editor::RemoveTemplate(root.AsView(), id.AsView()).IsOk())
-                        {
-                            String msg(u8"Removed template '");
-                            msg += id;
-                            msg += u8"'.";
-                            m_context.Notify(editor::NoticeKind::Success, msg.AsView());
-                        }
-                        else
-                        {
-                            m_context.Notify(editor::NoticeKind::Error,
-                                             u8"Remove failed (see console).");
-                        }
-                        ReopenTemplatesManager(raw);
-                    });
-                row->AddView(remove.Get());
+                        chosen(paths[0]);
+                    }
+                }});
+        };
+        seams.revealFolder = [this](StringView folder)
+        {
+            if (m_host != nullptr && m_host->Shell() != nullptr && m_host->Shell()->Dialogs() != nullptr)
+            {
+                m_host->Shell()->Dialogs()->OpenPath(folder);
             }
-            column->AddView(row.Get());
-        }
-
-        dialog->SetContent(column.Get());
-
-        ui::Button* import = dialog->AddButton(u8"Import...", ui::DialogResult::None);
-        import->OnClick.Add([this, raw](ui::ButtonBase*) { ImportTemplateThenRefresh(raw); });
-        ui::Button* create = dialog->AddButton(u8"Create...", ui::DialogResult::None);
-        create->OnClick.Add([this, raw](ui::ButtonBase*) { CreateTemplateThenRefresh(raw); });
-        dialog->AddButton(u8"Close", ui::DialogResult::Cancel);
+        };
+        auto dialog = MakeRef<TemplatesDialog>(m_editorAllocator, m_context, Move(seams));
         dialog->Show(&m_uiHost->Context());
+        return dialog.Get();
     }
 
     void EditorApplication::OpenExportPresetsPanel()
@@ -1925,8 +1787,8 @@ namespace editor::app
             });
         ui::Button* templates = dialog->AddButton(u8"Manage Templates...", ui::DialogResult::None);
         templates->OnClick.Add(
-            [this, raw](ui::ButtonBase*)
-            { QueueReplaceDialog(raw, Function<void()>{[this]() { OpenTemplatesManager(); }}); });
+            [this](ui::ButtonBase*)
+            { (void)OpenTemplatesManager(); }); // over the export dialog
         dialog->AddButton(u8"Close", ui::DialogResult::Cancel);
         dialog->Show(&m_uiHost->Context());
     }
@@ -3719,9 +3581,10 @@ namespace editor::app
         }
         {
             EditorActionDeclaration d =
-                Declare(u8"project.manageTemplates", u8"Manage Templates...",
-                        u8"Manage the export templates", u8"Project/Manage Templates...", 301);
-            d.execute = [this](editor::EditorPage*) { OpenTemplatesManager(); };
+                Declare(u8"edit.exportTemplates", u8"Export Templates...",
+                        u8"Install, inspect and remove the export templates this editor exports with",
+                        u8"Edit/Export Templates...", 201); // the editor's, beside Preferences: every project shares them
+            d.execute = [this](editor::EditorPage*) { (void)OpenTemplatesManager(); };
             (void)actions.Register(Move(d));
         }
         {

@@ -114,6 +114,23 @@ snap-off leaves the existing delta-snap behaviour byte-identical.
 
 ## Engine
 
+- **A script sets a scene's sky texture and environment profile** (user 2026-10-10): no script
+  can point a scene at another sky texture or Environment Profile. `EnvironmentSettings.of(scene)`
+  leaves its asset references out of AngelScript (the property loop skips a type it cannot declare)
+  and in Luau takes only another bound `Ref` of the same type, a plain copy that nothing
+  re-resolves (`EnvironmentSystem::ResolveResources` runs only from ResolveSceneResources and the
+  editor); `UseSettingsProfile` is not on the script surface. Give scripts what
+  `SceneRender.setMesh`/`setMaterial` already do for components: set by asset (guid or a typed
+  asset handle) and bind at once, the sky's environment rebaked; switching the profile turns the
+  block's source and binds the profile. Mind that the handle resolves to `Effective()`, so in
+  Profile mode a write lands in the shared profile. Then tell Sedulous (it copies the value fields
+  and leaves its references untouched today).
+- **Luau's write error for a mistyped property says "read-only"** (user 2026-10-10): assigning a
+  value of the wrong type to a reflected property (a guid or a string to a `Ref` field, say)
+  fails in `SetProperty` as InvalidArgument, and Luau's `__newindex` reports every failure as
+  "property is read-only" (`LuauScript.cppm`, NewIndexThunk). Say what failed: the property takes
+  a value of type X, not Y; keep "read-only" for a property that has no setter.
+
 - **Scene facades as scene properties, as Sedulous has them? Decide before 0.1** (user
   2026-10-09): Sedulous binds a scene facade as a property of the scene (`scene.Physics.RayCast`,
   its SceneFacade role); ours are reached through the facade type (`ScenePhysics::of(scene)`,

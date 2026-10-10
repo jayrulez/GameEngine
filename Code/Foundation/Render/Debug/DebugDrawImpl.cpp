@@ -385,6 +385,12 @@ namespace foundation::render::debug
                                      color, 0, 0, 1.0f});
     }
 
+    void DebugDraw::DrawScreenLine(f32 x0, f32 y0, f32 x1, f32 y1, Color color, f32 thickness)
+    {
+        m_2d.PushBack(Debug2DCommand{Debug2DKind::Line, Float2{x0, y0}, Float2{x1, y1}, color, 0, 0,
+                                     thickness});
+    }
+
     void DebugDraw::AppendChars(StringView text)
     {
         const utf8char* d = text.Data();

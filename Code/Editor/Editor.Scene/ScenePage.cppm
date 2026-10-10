@@ -55,6 +55,7 @@ import editor.camera;
 import foundation.mcp; // McpServer (the MCP tool contribution)
 import :view_settings; // RegisterSceneViewSettingsType (per-scene grid pref)
 import :zoom_readout;  // the measurement overlay while zooming
+import :view_gizmo;    // the orientation gizmo in the viewport's top-right
 import :edit;
 import :settings_profiles; // QueueSettingsProfileEdit (a profile-mode settings edit)
 import :scene_page_interface; // ISceneEditorPage (published on the page)
@@ -691,6 +692,9 @@ export namespace editor
         u32 m_fpsWindowFrames = 0;
         String m_fpsText;
         ZoomReadout m_zoomReadout; // shown for a moment after each wheel zoom
+        bool m_viewGizmoPressed = false; // a press that began on the orientation gizmo, until release
+        // The orientation gizmo: the axis tripod turning with the camera, the knob under the pointer lit.
+        void DrawViewGizmo(render::debug::DebugDraw& dd) const;
 
         // Viewport tool palette: a toggle per lone non-default tool, a dropdown per category
         // with two or more (GroupViewportTools). Checking one activates it - the affordance

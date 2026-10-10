@@ -269,6 +269,21 @@ namespace foundation::render
                 EmitQuad(out, cmd.position.x, cmd.position.y, cmd.size.x, cmd.size.y, u0, v0, u1,
                          v1, col);
             }
+            else if (cmd.kind == debug::Debug2DKind::Line)
+            {
+                f32 u0, v0, u1, v1;
+                debug::GetSolidBlockUV(u0, v0, u1, v1);
+                Float2 corners[4];
+                debug::ScreenLineQuad(cmd.position, cmd.size, cmd.scale, corners);
+                const Float2 uv{0.5f * (u0 + u1), 0.5f * (v0 + v1)}; // inside the solid block
+                const auto vertex = [&](i32 i)
+                { return debug::DebugTextVertex{Float3{corners[i].x, corners[i].y, 0}, uv, col}; };
+                const i32 order[6] = {0, 1, 2, 0, 2, 3}; // two triangles
+                for (const i32 i : order)
+                {
+                    out.PushBack(vertex(i));
+                }
+            }
             else
             {
                 const f32 cw = static_cast<f32>(debug::kCharWidth) * cmd.scale,

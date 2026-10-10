@@ -199,6 +199,7 @@ namespace editor
             {
                 DrawZoomReadout(dd, opacity);
             }
+            DrawViewGizmo(dd);
         }
         UpdateCameraPreview(); // task #118: selection/pin -> preview visibility + target
         SyncToolbar();
@@ -996,9 +997,73 @@ namespace editor
                        kb->IsKeyDown(foundation::shell::KeyCode::RightShift);
         }
         in.wheelDelta = mouse->ScrollY();
+        // The orientation gizmo takes a click on one of its knobs before any tool sees it, and the
+        // rest of that press, so the select tool neither picks nor box-selects under it. (A press
+        // reaches here only when the camera does not own the mouse: Alt+drag still orbits.)
+        if (in.leftPressed && m_viewport->IsHovered())
+        {
+            const ViewGizmoLayout gizmo = ViewGizmo::LayoutFor(
+                m_camera.Right(), m_camera.Up(), m_camera.Forward(), static_cast<f32>(in.viewportWidth));
+            const i32 hit =
+                ViewGizmo::Hit(gizmo, static_cast<f32>(in.pointerX), static_cast<f32>(in.pointerY));
+            if (hit >= 0)
+            {
+                f32 yaw = m_camera.yaw;
+                f32 pitch = m_camera.pitch;
+                ViewGizmo::SnapAngles(gizmo.poles[hit].axis, m_camera.yaw, yaw, pitch);
+                m_camera.TurnAboutPivot(yaw, pitch);
+                m_viewGizmoPressed = true;
+            }
+        }
+        if (m_viewGizmoPressed)
+        {
+            const bool released = in.leftReleased;
+            in.leftPressed = false;
+            in.leftDown = false;
+            in.leftReleased = false;
+            m_viewGizmoPressed = !released;
+        }
         // Tool hotkeys (the select tool's W/E/R/X) belong to the camera while it owns input.
         in.keyboard = cameraOwnsMouse ? nullptr : kb;
         return m_viewportTools.Update(in);
+    }
+
+    void SceneEditorPage::DrawViewGizmo(render::debug::DebugDraw& dd) const
+    {
+        if (!m_viewport || !m_viewport->IsReady() || m_viewport->RenderWidth() == 0)
+        {
+            return;
+        }
+        const ViewGizmoLayout gizmo =
+            ViewGizmo::LayoutFor(m_camera.Right(), m_camera.Up(), m_camera.Forward(),
+                                 static_cast<f32>(m_viewport->RenderWidth()));
+        i32 hovered = -1;
+        if (m_viewport->IsHovered() && m_viewport->Mouse() != nullptr)
+        {
+            hovered = ViewGizmo::Hit(gizmo, m_viewport->Mouse()->X(), m_viewport->Mouse()->Y());
+        }
+        // Back to front, so a knob pointing at the viewer covers the arms and knobs behind it; the
+        // positive axes have an arm from the centre, the negative ones a dimmer knob alone.
+        constexpr f32 kGlyph = static_cast<f32>(render::debug::kCharWidth);
+        constexpr f32 kGlyphHeight = static_cast<f32>(render::debug::kCharHeight);
+        const f32 half = 0.5f * ViewGizmo::kKnob;
+        for (i32 i = 0; i < 6; ++i)
+        {
+            const ViewGizmoPole& pole = gizmo.poles[i];
+            const Color color = ViewGizmo::ColorOf(pole, i == hovered);
+            if (pole.positive)
+            {
+                dd.DrawScreenLine(gizmo.center.x, gizmo.center.y, pole.screen.x, pole.screen.y, color,
+                                  2.0f);
+            }
+            dd.DrawScreenRect(pole.screen.x - half, pole.screen.y - half, ViewGizmo::kKnob,
+                              ViewGizmo::kKnob, color);
+            const StringView label = ViewGizmo::Label(pole);
+            const Color ink =
+                pole.positive ? Color{0.08f, 0.08f, 0.08f, 1.0f} : Color{0.9f, 0.9f, 0.9f, 1.0f};
+            dd.DrawScreenText(pole.screen.x - 0.5f * kGlyph * static_cast<f32>(label.Size()),
+                              pole.screen.y - 0.5f * kGlyphHeight, label, ink);
+        }
     }
 
     void SceneEditorPage::DrawZoomReadout(render::debug::DebugDraw& dd, f32 opacity) const

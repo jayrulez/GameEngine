@@ -53,6 +53,7 @@ target_sources(Editor.Scene
         FILE_SET editorscene_modules TYPE CXX_MODULES FILES
             SceneViewSettings.cppm
             ZoomReadout.cppm
+            ViewGizmo.cppm
             CameraPreview.cppm
             EditContext.cppm
             SettingsProfiles.cppm

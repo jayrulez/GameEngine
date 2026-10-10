@@ -86,6 +86,17 @@ export namespace editor
             LookAt(center);
         }
 
+        /// Turn to `newYaw` / `newPitch` about the orbit pivot: what the camera looks at stays put
+        /// and the camera swings round it (the orientation gizmo's snap to an axis). Stops a glide.
+        void TurnAboutPivot(f32 newYaw, f32 newPitch)
+        {
+            const Float3 pivot = position + Forward() * focusDistance;
+            yaw = newYaw;
+            pitch = Clamp(newPitch, -1.55f, 1.55f);
+            position = pivot - Forward() * focusDistance;
+            m_gliding = false;
+        }
+
         /// Frame a sphere in a view of vertical field of view `fovY` (radians): keep the view
         /// direction, stand back far enough that the sphere fits with a margin, and put the orbit
         /// pivot on its centre, so Alt+drag orbits it afterwards. Eases there over glideSeconds

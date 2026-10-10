@@ -36,6 +36,33 @@ export namespace foundation::render::debug
                static_cast<f32>(textLength) * glyphWidth;
     }
 
+    /// The four corners of a 2D line drawn `thickness` pixels wide from `a` to `b`: the segment
+    /// widened half the thickness to each side, in order a-left, b-left, b-right, a-right (two
+    /// triangles: 0 1 2 and 0 2 3). A zero-length line widens along x.
+    inline void ScreenLineQuad(Float2 a, Float2 b, f32 thickness, Float2 (&out)[4]) noexcept
+    {
+        f32 dx = b.x - a.x;
+        f32 dy = b.y - a.y;
+        const f32 lengthSq = dx * dx + dy * dy;
+        if (lengthSq <= 1.0e-12f)
+        {
+            dx = 1.0f;
+            dy = 0.0f;
+        }
+        else
+        {
+            const f32 inv = 1.0f / Sqrt(lengthSq);
+            dx *= inv;
+            dy *= inv;
+        }
+        const f32 half = 0.5f * thickness;
+        const Float2 side{-dy * half, dx * half}; // the perpendicular, half a thickness long
+        out[0] = Float2{a.x + side.x, a.y + side.y};
+        out[1] = Float2{b.x + side.x, b.y + side.y};
+        out[2] = Float2{b.x - side.x, b.y - side.y};
+        out[3] = Float2{a.x - side.x, a.y - side.y};
+    }
+
 
     // World-space geometry vertex (16B): position + packed RGBA8 color (byte0=R -> matches Unorm8x4).
     struct DebugVertex
@@ -55,7 +82,8 @@ export namespace foundation::render::debug
     enum class Debug2DKind : u8
     {
         Text,
-        Rectangle
+        Rectangle,
+        Line // position = start, size = end, scale = thickness (pixels)
     };
 
     // One 2D overlay command (pixel-space text or filled rect). Text glyphs live in the list's char store.
@@ -171,6 +199,8 @@ export namespace foundation::render::debug
         void DrawScreenTextRight(f32 rightMargin, f32 y, StringView text, Color color,
                                  f32 scale = 1.0f);
         void DrawScreenRect(f32 x, f32 y, f32 width, f32 height, Color color);
+        // A line in pixels, `thickness` wide, at any angle (the orientation gizmo's axes).
+        void DrawScreenLine(f32 x0, f32 y0, f32 x1, f32 y1, Color color, f32 thickness = 1.5f);
 
     private:
         void AppendChars(StringView text);

@@ -35,3 +35,34 @@ TEST_CASE("debug-draw: DrawScreenTextRight stores the margin as a negative x and
     const f32 x2 = debug::ResolveScreenTextX(right.position.x, right.textLength, glyph * 2.0f, 800);
     CHECK(x2 == doctest::Approx(800.0f - 12.0f - 15.0f * glyph * 2.0f));
 }
+
+TEST_CASE("debug-draw: DrawScreenLine records a line, drawn as a quad its thickness wide")
+{
+    debug::DebugDraw dd;
+    dd.DrawScreenLine(10.0f, 20.0f, 50.0f, 20.0f, Color{1, 0, 0, 1}, 4.0f);
+    REQUIRE(dd.Commands2D().Size() == 1u);
+    const debug::Debug2DCommand& line = dd.Commands2D()[0];
+    CHECK(line.kind == debug::Debug2DKind::Line);
+    CHECK(line.position.x == 10.0f);
+    CHECK(line.size.x == 50.0f);
+    CHECK(line.scale == 4.0f);
+
+    // A horizontal line widens 2 px up and down along its whole length.
+    Float2 q[4];
+    debug::ScreenLineQuad(Float2{10.0f, 20.0f}, Float2{50.0f, 20.0f}, 4.0f, q);
+    CHECK(q[0].x == doctest::Approx(10.0f));
+    CHECK(q[1].x == doctest::Approx(50.0f));
+    CHECK(Abs(q[0].y - q[3].y) == doctest::Approx(4.0f));
+    CHECK(Abs(q[1].y - q[2].y) == doctest::Approx(4.0f));
+
+    // A diagonal one widens across itself: each side's offset is perpendicular to the line.
+    debug::ScreenLineQuad(Float2{0.0f, 0.0f}, Float2{30.0f, 40.0f}, 2.0f, q);
+    const Float2 along{30.0f, 40.0f};
+    const Float2 side{q[0].x - q[3].x, q[0].y - q[3].y};
+    CHECK(side.x * along.x + side.y * along.y == doctest::Approx(0.0f).epsilon(1e-4));
+    CHECK(Sqrt(side.x * side.x + side.y * side.y) == doctest::Approx(2.0f));
+
+    // A zero-length line still has a width.
+    debug::ScreenLineQuad(Float2{5.0f, 5.0f}, Float2{5.0f, 5.0f}, 2.0f, q);
+    CHECK(Abs(q[0].y - q[3].y) + Abs(q[0].x - q[3].x) > 0.0f);
+}

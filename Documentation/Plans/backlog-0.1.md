@@ -17,11 +17,6 @@
   stepping by powers of ten as the camera climbs and a coarser line every N, depth-tested
   against the scene so geometry hides it. Compare with resizing the debug-draw grid to the
   scene's bounds or the camera. Keep the per-scene grid toggle (`SceneViewSettings`).
-- **An orientation gizmo in the scene view's top right** (user 2026-10-09): a small overlay
-  showing which way the camera faces, with the world axes and the faces / directions labelled
-  (X, Y, Z and their negatives, or Top, Front, Right), turning with the view. A view cube or
-  axis tripod as other editors have. Clicking a face or an axis pole snaps the view to look
-  along it (user 2026-10-09: "clicking on the faces/poles should work").
 - **An orthographic editor camera** (user 2026-10-09): the scene view's camera can switch
   between perspective and orthographic with a toggle (in the view's toolbar, and a key). Pairs
   with the orientation gizmo: snapping to a face is where an orthographic top, front or side

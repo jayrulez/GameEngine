@@ -1117,8 +1117,8 @@ this is the list, with the section to read for each.
    after the animation tick) + the drop-pure-joint-nodes import option, which
    RIDES the import-UX planning pass (merge-meshes). Read: "bone attachments
    + joint-node import noise".
-7. **PaperKid editor-use feedback** (still open): organize the new-component
-   menu; drag an instance into a group; seed input map / bus layout / UI theme
+7. **PaperKid editor-use feedback** (still open; the new-component menu is now a searchable
+   picker, 2026-10-10): drag an instance into a group; seed input map / bus layout / UI theme
    for new projects (font, sky, primitives already seeded); WASD default input
    map (the Shift multi-select bug was fixed, 92392d57); detached window does not render
    its viewport unless the main window is visible.

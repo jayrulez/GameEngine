@@ -71,6 +71,13 @@ export namespace editor
         }
     }
 
+    /// Whether `text` contains `part`, in any case: a filter field's match for things with no guid
+    /// (a component type). Empty `part` is in everything.
+    [[nodiscard]] inline bool TextContains(StringView text, StringView part)
+    {
+        return part.IsEmpty() || search_filter_detail::NameContains(text, part);
+    }
+
     /// Whether the filter field's text finds the thing called `name` with id `id`: empty finds
     /// everything; otherwise its name contains the text (any case), or its guid begins with the
     /// text's hex digits.

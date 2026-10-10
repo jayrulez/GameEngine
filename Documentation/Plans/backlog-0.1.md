@@ -68,12 +68,6 @@
     exposes); how generated shaders ride the variant cook and lint; the graph's serialization and
     editor shape (reusing AnimationGraphPage's spine). For 0.1, tier 1 and the showcase are the
     likely scope; whether the graph is in 0.1 is part of the decision.
-- **A component picker dialog** (user 2026-10-10): the inspector's Add Component button opens a
-  context menu of category submenus (`SceneInspectorView::ShowAddComponentMenu`,
-  `InspectorViewImpl.cpp`, categories and display names from each component's metadata). Make it
-  a picker dialog like the asset picker: a search field at the top, and below it the categories
-  with their components, filtered as you type. This likely answers "organize the new-component
-  menu" from PaperKid's editor feedback (`weekly_backlog.md`, the carried list).
 
 ### Seeded: gizmo vertex snapping (user 2026-08-26)
 

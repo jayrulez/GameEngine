@@ -33,6 +33,7 @@ export import :asset_thumbnails;
 export import :hierarchy;
 export import :inspector;
 export import :entity_picker_dialog;
+export import :component_picker_dialog;
 export import :page;
 export import :game_page;
 export import :game_resolution;

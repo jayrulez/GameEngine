@@ -1332,3 +1332,45 @@ TEST_CASE("entity picker: the filter finds an entity by its guid; a whole one is
     type(u8"barr");
     CHECK(picker->ShownCount() == 1u);
 }
+
+// Add Component is a picker with a search field (user 2026-10-10): the categories with their
+// components, narrowed as you type by a component's name or its category's; the first match is
+// selected, so typing and Enter adds it.
+TEST_CASE("component picker: search by name or category; the first match is the pick")
+{
+    Array<ComponentChoice> choices;
+    const TypeInfo* light = &TypeOf<i32>(); // stand-ins: the picker hands back what it was given
+    const TypeInfo* mesh = &TypeOf<f32>();
+    const TypeInfo* body = &TypeOf<bool>();
+    choices.PushBack(ComponentChoice{String(u8"Light"), String(u8"Rendering"), light, String(u8"Lights the scene.")});
+    choices.PushBack(ComponentChoice{String(u8"Mesh"), String(u8"Rendering"), mesh, String(u8"Draws a mesh.")});
+    choices.PushBack(ComponentChoice{String(u8"Rigid Body"), String(u8"Physics"), body, String()});
+    auto picker = foundation::core::MakeRef<ComponentPickerDialog>(DefaultAllocator(), Move(choices));
+    const TypeInfo* picked = nullptr;
+    picker->OnPicked = [&picked](const TypeInfo* type) { picked = type; };
+    CHECK(picker->ShownComponentCount() == 3u);
+    CHECK(picker->SelectedType() == light); // the first, selected
+    CHECK(picker->DescriptionText() == StringView(u8"Lights the scene.")); // said under the list
+
+    const auto type = [&picker](StringView text)
+    {
+        picker->FilterField().SetText(text);
+        picker->FilterField().OnTextChanged.Invoke(&picker->FilterField());
+    };
+    type(u8"MES");
+    CHECK(picker->ShownComponentCount() == 1u);
+    CHECK(picker->SelectedType() == mesh);
+    CHECK(picker->DescriptionText() == StringView(u8"Draws a mesh."));
+    type(u8"physics"); // a category finds all of it
+    CHECK(picker->ShownComponentCount() == 1u);
+    CHECK(picker->SelectedType() == body);
+    type(u8"nothing like it");
+    CHECK(picker->ShownComponentCount() == 0u);
+    CHECK(picker->SelectedType() == nullptr);
+    picker->Pick(); // nothing to add
+    CHECK(picked == nullptr);
+
+    type(u8"light");
+    picker->FilterField().OnSubmit.Invoke(&picker->FilterField()); // Enter adds the match
+    CHECK(picked == light);
+}

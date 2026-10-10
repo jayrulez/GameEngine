@@ -74,6 +74,7 @@ target_sources(Editor.Scene
             HierarchyView.cppm
             InspectorView.cppm
             EntityPickerDialog.cppm
+            ComponentPickerDialog.cppm
             ScenePage.cppm
             GamePage.cppm
             GameResolution.cppm

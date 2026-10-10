@@ -3149,11 +3149,9 @@ namespace editor
         }
 
         SceneEditContext* edit = m_edit;
-        auto menu = MakeRef<ui::ContextMenu>(MemoryAllocator());
 
-        // Category submenus with authored display names - not a
-        // flat raw-type-name dump. Categories and items sort
-        // alphabetically so placement is stable as subsystems register.
+        // The components the entity lacks, by their authored names, sorted by category then
+        // name so placement is stable as subsystems register.
         struct Entry
         {
             String label;
@@ -3198,26 +3196,17 @@ namespace editor
                 Swap(entries[j], entries[j - 1]);
             }
         }
-        ui::ContextMenu* section = nullptr;
-        StringView sectionName;
+        // A picker with a search field rather than a menu of submenus (user 2026-10-10): the
+        // choices go in by category, then name; the pick adds the component as one command.
+        Array<ComponentChoice> choices;
         for (const Entry& entry : entries)
         {
-            if (section == nullptr || entry.category != sectionName)
-            {
-                ui::MenuItem* item = menu->AddSubmenu(entry.category);
-                section = Cast<ui::ContextMenu>(item->Submenu.Get());
-                sectionName = entry.category;
-            }
-            if (section != nullptr)
-            {
-                const TypeInfo* type = entry.type;
-                section->AddItem(entry.label.AsView(),
-                                 [edit, id, type]() { edit->AddComponent(id, type); });
-            }
+            choices.PushBack(ComponentChoice{entry.label, String(entry.category), entry.type,
+                                             String(TypeAttrString(*entry.type, "description", StringView{}))});
         }
-        // (Paste lives on the dedicated Paste Component button now - it confirms before overwriting.)
-        const Float2 screenPos = m_addButton->LocalToScreen(Float2{0.0f, 0.0f});
-        menu->Show(Context, screenPos.x, screenPos.y);
+        auto picker = MakeRef<ComponentPickerDialog>(MemoryAllocator(), Move(choices));
+        picker->OnPicked = [edit, id](const TypeInfo* type) { edit->AddComponent(id, type); };
+        picker->Show(Context);
     }
 
     void SceneInspectorView::UpdatePasteButton()

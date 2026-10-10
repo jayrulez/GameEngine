@@ -98,6 +98,13 @@
   a picker dialog like the asset picker: a search field at the top, and below it the categories
   with their components, filtered as you type. This likely answers "organize the new-component
   menu" from PaperKid's editor feedback (`weekly_backlog.md`, the carried list).
+- **Find an asset by its guid in the asset browser and the asset picker** (user 2026-10-10): both
+  filter fields match the asset's name only (`AssetsView::MatchesFilter` and
+  `AssetPickerDialog::MatchesFilter`, over `instance->Name()`), so a guid from a log line, an MCP
+  answer or a scene file finds nothing. Typed text that parses as a guid (whole, perhaps also a
+  prefix of one) should find that asset wherever it is, in both views: the browser selecting and
+  revealing it (`AssetsView::Reveal` already navigates to an instance's group), the picker
+  listing it if its type is accepted (and saying so when it is not).
 
 ### Seeded: gizmo vertex snapping (user 2026-08-26)
 

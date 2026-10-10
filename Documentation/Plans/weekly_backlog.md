@@ -13,6 +13,20 @@
 > The work queued for the 0.1 release lives in `backlog-0.1.md`, and what waits for 0.2 in
 > `backlog-0.2.md` (both started 2026-10-10).
 
+## Queued 2026-10-10 (the backlog audit, the instance fade)
+
+The per-instance distance fade (built 2026-09-23, d9ea0086; `instance_fade.hlsli`) has two gaps
+the original sketch covered and the build left out, untracked until the audit:
+
+- **No fallback rank**: an instance's fade order is the rank written into `Tint.a`, which only a
+  set that carries a fade window writes (vegetation's scatter). The sketch's fallback, a hash of
+  the instance's world position for a producer that writes no rank, was not built, so such a set
+  cannot fade per instance.
+- **Past 256 faded sets, no fade**: each faded set takes a private view slot for its window, and a
+  frame budgets `kMaxFadedSetSlots = 256` (`MeshRenderer.cppm`); a set past the budget draws
+  through the pass's own slot, visible but unfaded, with no warning. Size the budget from the
+  frame's faded sets, or log when it runs out.
+
 ## Queued 2026-10-06 (user, PaperKid on TAA)
 
 - **A flash during play in PaperKid's player** (user 2026-10-06): with TAA on and its jitter fixed
@@ -34,22 +48,17 @@
   PaperKid's New game did nothing. A dist has one database, so exports are unaffected. Fix:
   give DefaultApplication the scene database separately, the player passing `m_sceneDb`, and
   log a failed load. Check what Sedulous's player does first.
-- **The loading screen setting shows nothing** (found 2026-10-04): the project's `loadingDocumentId`
-  ("the cooked UIDocument shown as the boot splash while the default scene loads",
-  `Engine.Project/ProjectModule.cppm`) is saved, exported and listed by `project_info`, but no code
-  in the engine or the player ever shows it. Build it, or drop the setting. When built: a loading
-  screen belongs to the RUN that is loading, not the shared screen tier, or every editor Game tab
-  shows it (Documentation/Specs/run-screens.md: each run has its own tier with run screens on;
-  the overlay API, `PushScreenOverlay` / `RemoveScreenOverlay`, has no run yet and only the
-  shared tier's overlay layer; give it a run as `ScreensFor` has, keeping truly global overlays,
-  a debug badge, shared). Check what Sedulous does first.
-- **pie_run cannot probe a behaviour's vector field** (found 2026-10-04, PaperKid's throws): a probe of
-  `Bike.m_target` (a private `Float3` member of the Bike behaviour) reads null, and `Bike.m_target.x`
-  answers "nothing at 'x'", while the behaviour's float fields probe fine. Probes should read a script
-  value type (Float3, Quaternion, Color) and its components, as they do an entity's `worldPosition`.
-- **Save data follow-ups** (2026-10-04, Documentation/Specs/save-data.md "Not now"): a web backend
-  (the web build's user data directory is in memory, so a save lasts one page load: browser storage,
-  IndexedDB); an MCP tool to read or clear the play-in-editor save, so an agent testing a "best
+- **The loading screen shows only at the player's boot** (found 2026-10-04; corrected 2026-10-10):
+  the player does show the project's `loadingDocumentId` (or a built-in splash) while its default
+  scene loads (`PlayerApplication::PushSplash`, since 3aff5736, 2026-08-02), but a script's
+  `loadScene` / `loadSceneAsync` and the editor's Play show nothing. When built: a loading screen
+  belongs to the RUN that is loading, not the shared screen tier, or every editor Game tab shows it
+  (Documentation/Specs/run-screens.md: each run has its own tier with run screens on; the overlay
+  API, `PushScreenOverlay` / `RemoveScreenOverlay`, has no run yet and only the shared tier's
+  overlay layer; give it a run as `ScreensFor` has, keeping truly global overlays, a debug badge,
+  shared). Check what Sedulous does first.
+- **Save data follow-ups** (2026-10-04, Documentation/Specs/save-data.md "Not now"; the web backend
+  was built 2026-10-04, d7237f84): an MCP tool to read or clear the play-in-editor save, so an agent testing a "best
   score" can start from nothing without editing `Editor/` by hand; the player's audio volumes still
   written at shutdown only, not through the atomic write at the moment they change.
 - **The editor crashes when the Console panel is squeezed very short** (found 2026-10-03, taking
@@ -127,12 +136,8 @@ week-2026-09-05.md under the section named.
   `align-content: space-evenly`, ellipsis on wrapped text. Each waits for a consumer.
 - **Beef UI review remainder** ("Beef UI line reviewed", week-2026-09-12): mirror the
   ContentButton (4) and DrawableView/Separator/ProgressBar unbounded-measure cases their
-  port added; decide whether UndoStack's `i32&` outputs should be spelled as outputs and
-  whether RemoveView's advisory `deleteChild` flag earns its place; the sandbox tree rows'
-  hard-coded 20px indent (cosmetic).
-- **Beef Engine-layer review**: the agent has started the Engine layer under the new
-  copy-and-strike ledger; review its commits the same way (read the bodies for "For the
-  Raptor agent" / "FOR RAPTOR REVIEW" / "worth mirroring").
+  port added. (The judgement calls, UndoStack's `i32&` outputs, RemoveView's `deleteChild`
+  and the tree's 20px indent, were left as they are: week-2026-09-12.)
 - **Net, deferred with the unification ruling** ("Net: unification ruling"): IPv6 (the u64
   DatagramEndpoint packs an IPv4 quad) and TLS; the Win32 host-resolution path is written
   but the MSVC lane is the user's to run.
@@ -178,6 +183,10 @@ Open questions for week start:
   bounds-vs-software-depth); on-screen = a boxes-behind-a-wall probe.
 
 ## Seeded: investigate deferred rendering (user 2026-08-26)
+
+> Checked 2026-10-10: not investigated; no decision doc. `Systems/renderer.md` lists
+> deferred / visibility-buffer rendering as a v1 non-goal. Since the seed, the forward pass writes
+> a fifth target, diffuse albedo, for SSGI (02ed2d57), which brings a G-buffer closer.
 
 Origin: same parity doc - Draconic is clustered FORWARD (GPU-built froxels,
 16px tiles, MSAA-compatible) while Lumix is DEFERRED (CPU-built 64px clusters,
@@ -286,6 +295,12 @@ Open questions for week start:
 
 ## Seeded: erosion + hole cutting for terrain (user 2026-08-26)
 
+> Checked 2026-10-10: hole cutting is BUILT (`Specs/terrain-holes.md` P0-P2, 2026-09-23: a
+> per-sample cut plane, the Cut Holes brush, the alpha-tested rim; 0da5fcb7, c0a2ed66, efa2266a),
+> differing from the sketch below (a per-sample plane, not a 1-bit sidecar; holed chunks get their
+> own index buffers). Its small leftovers: a hole overlay on the heightfield page, and the spec's
+> "fill all" and `_holes.png` items. Erosion is still open.
+
 Origin: same parity doc, terrain section - "Both lack erosion + hole cutting"
 and (holes/caves) "Both absent". Both are documented Draconic deferrals
 ([[terrain-track]] deferral list: holes, erosion/derived bakes). We already have
@@ -336,59 +351,17 @@ carve/deposit); hole mask round-trips through cook (present/absent + delete);
 a Vk/WebGPU probe that a holed cell renders nothing and a Jolt test that a ray
 passes through a holed cell but hits an unholed one.
 
-## Seeded: grass / vegetation / foliage for terrain (user 2026-08-26)
+## Left over from terrain vegetation (built through P2; checked 2026-10-10)
 
-Origin: same parity doc - "GRASS/VEGETATION: LUMIX AHEAD - TOTAL GAP, the LARGEST
-in this domain. Draconic: zero vegetation of any kind ... planned as terrain
-phase 3." Also the in-session user question (2026-08-26): how to paint grass on
-terrain - answered as a SEPARATE scatter system, procedural density-grass first,
-prop scatter second. This is a big track: DESIGN FIRST (write the spec), then
-phase the build.
+The seed of 2026-08-26 (grass / vegetation / foliage for terrain) was built to
+`Specs/terrain-vegetation.md` P0-P2: splat-driven grass as per-chunk instanced sets (95db51e0),
+the painted density mask and wind (a477bd3f, b834ae39), the prop scatter brush (12998377), and
+since then solid layers with trunk capsules (8f0f6ead). What the spec left as P3, each its own
+seed:
 
-What Lumix ships (the target to reach, not copy verbatim): density-mask-driven
-procedural grass (a type mask in the splatmap, ~1024 candidates/quad), per-quad
-instance buffers + AABB cull + distance density fade, an authoring brush, prefab
-scattering, and baked octahedral impostors as the far LOD.
-
-Our hooks (why this is buildable on what exists):
-- **Render path**: `InstancedMeshComponent` is SHIPPED (persistent buffer, shared
-  ramp, O(1)/frame - [[instanced-mesh]]); grass renders as instanced draws, no
-  new render primitive.
-- **Partitioning**: the terrain quadtree already gives per-chunk sets - the
-  [[terrain-track]] note is that grass instanced sets partition PER CHUNK so the
-  shipped per-set coverage LOD selection + hysteresis works FOR FREE (build/free
-  a chunk's grass set as it LODs / comes into range).
-- **Placement mask**: a density/type mask (a dedicated grass raster, or derived
-  from the top-K splat) drives where + which grass scatters.
-
-Phasing (pick how far at week start; likely spec + P0 only):
-- **Spec first** - the queued foliage design (procedural grass, then prop
-  scatter). Land the mask + scatter + LOD/cull model on paper before code.
-- **P0 procedural grass** - per-chunk deterministic (seeded) scatter of grass
-  instances from the density mask into instanced-mesh sets, distance density
-  fade + per-chunk AABB cull, optional VS wind sway. CPU scatter -> instanced
-  draw is the portable v1; GPU-driven scatter (the compute cull/LOD/indirect
-  chain) is the follow-on and shares the occlusion / DrawIndirect work seeded
-  this same week.
-- **P1 prop / prefab SCATTER brush** - paint mesh instances (rocks, bushes) with
-  density + jitter + slope/height rules + collision rejection.
-- **P2 DEFER** - baked impostors as the far LOD (also a standalone parity gap),
-  GPU-driven scatter culling.
-
-Open questions for week start:
-- Density/type mask: a dedicated grass raster (paint brush + cooked sidecar, the
-  splat-weights pattern) vs deriving from the splat top-K - a dedicated mask is
-  more controllable but is another channel.
-- Determinism: seed scatter PER CHUNK so it is stable frame-to-frame AND
-  headless-testable (seed -> expected instance transforms).
-- Set lifecycle: build/free per-chunk instanced sets as chunks stream + change
-  LOD; interaction with the CDLOD morph seeded this week (grass rides the morphed
-  surface height).
-- Wind: VS sway now vs later; culling reuses the terrain quadtree AABBs.
-
-Tests: deterministic scatter (seed -> instance transforms, headless); per-chunk
-set build/free; a Vk/WebGPU probe that grass renders + density fades with
-distance; scatter-off byte-identical.
+- **Baked octahedral impostors** as the far LOD: the impostors seed below.
+- **GPU-driven scatter and culling** over `DrawIndirect`, which the engine does not use yet.
+- **Grass riding the CDLOD-morphed surface**, waiting on the CDLOD morph seed above.
 
 ## Left over from root motion and IK (built 2026-10-05; checked 2026-10-10)
 
@@ -666,6 +639,11 @@ multi-terrain tiling already covers the near-term need.
 
 ## Seeded: memory profiling (user 2026-08-26)
 
+> Checked 2026-10-10: the data source is built (memory tags and byte tracking, ea498f3c;
+> `MemoryTagReport()` in `Core/Memory/MemoryTag.cppm`, tagged per subsystem since week 2026-08-29),
+> but nothing outside Core calls it: the live and peak readout, the graph over time and the panel
+> remain, as below.
+
 Origin: parity doc - Lumix has "a hierarchical MEMORY profiler with tag
 allocators ... memory profiler UI grouping live allocations by stack tree";
 "Draconic: no memory profiling" (called out as part of "Draconic's WIDEST editor
@@ -713,57 +691,12 @@ Context: the data source shipped with I5 this week (per-tag live/peak/total +
 `MemoryTagReport()` rollup rows - record in week-2026-08-29.md); the
 panel/graph work here remains.
 
-## Seeded: editor key rebinding (user 2026-08-26) - BUILT 2026-09-27
-
-Landed as layer 6 of Documentation/Specs/editor-actions.md (branch editor-actions-palette):
-the named-action registry was layers 1 to 5, the per-user EditorShortcutSettings section,
-the Preferences > Shortcuts page with key capture and collision detection (a collision keeps
-the holder's chord and is reported by name; the policy chosen: warn and keep), and the
-command palette beside it. The seed below is kept as the record of the ask.
-
-Origin: parity doc, editor platform - "Lumix-ahead DECISIVELY on keybindings - a
-full rebinding UI with COLLISION DETECTION vs Draconic's four HARDCODED
-accelerators (Ctrl+Z/Y/S/...)". Our editor shortcuts are hand-registered on the
-UI `ShortcutManager` (ApplicationImpl.cpp:2989+, `AddGlobal(KeyCode, Modifiers,
-...)`) - fixed, not user-remappable, not persisted. NOTE: distinct from the GAME
-input subsystem's rebinding ([[input-subsystem]], runtime rebind capture) - that
-maps GAME actions; this is the EDITOR's own hotkeys.
-
-Goal: user-rebindable editor shortcuts - a UI to view/change bindings with
-collision detection, persisted per-user.
-
-The pieces (build on the ShortcutManager + editor settings):
-- **Named action registry** - each editor shortcut becomes a NAMED command
-  ({id, default binding, handler}) instead of a hardcoded `AddGlobal` - so a
-  binding can be remapped by action id. Migrate the existing Undo/Redo/Save
-  accelerators into it first.
-- **Rebinding UI** - a Preferences panel (the EditorPreferencesDialog exists)
-  listing actions + their current binding, capturing a new key, and DETECTING
-  COLLISIONS (two actions on one chord). The game input subsystem already has a
-  key-CAPTURE widget/flow to reuse.
-- **Persistence** - store overrides in the PER-USER editor settings
-  (editor.settings.xml, the [[reorg-role-grouping]]-era EditorUiSettings home) as
-  a new `EditorShortcutSettings` section; on startup the ShortcutManager registers
-  each action's binding (default, unless overridden).
-
-Scope for the week: P0 = the named-action registry (wrapping today's hardcoded
-shortcuts) + persisted overrides + a rebind UI with collision detection. Per-user
-(a shortcut is a user preference, not per-project - the asset-browser/scene-grid
-scope precedent: match the scope of the thing).
-
-Open questions for week start:
-- Registry shape + how existing hardcoded `AddGlobal` sites migrate onto it.
-- Collision policy: warn, block, or reassign-and-clear-the-other.
-- Reuse the input subsystem's key-capture widget vs a small editor-local one.
-- The per-user settings section + defaults (a missing/older file = built-in
-  bindings; serializer-strict-gated).
-
-Tests: the action registry round-trips a rebinding through the settings store
-(default vs override); collision detection flags a duplicate chord; applying a
-stored override registers the new chord on the ShortcutManager; no override =
-the built-in accelerators unchanged.
-
 ## Seeded: crash reporting + dumps (user 2026-08-26)
+
+> Checked 2026-10-10: Linux has a fatal-signal backtrace to stderr (9efd2a9d, 39cfdce1, 03d7b742;
+> `LinuxSystem.cpp`, installed by `ApplicationHost`). Remaining: Windows (`InstallCrashBacktrace`
+> is a no-op there, `WriteBacktrace` prints raw addresses), the crash report file with a log tail
+> and build id, minidumps, offline symbolication and a "force crash" command.
 
 Origin: parity doc, editor platform - Lumix has "crash reporting (WINDOWS)";
 Draconic has none. A chance to be AHEAD via portability: Lumix's is Windows-only,
@@ -885,6 +818,9 @@ Recommended shape (not yet signed off):
   source-side like the baked navmesh), not a cook product - cook stays
   deterministic, bake uses whatever hardware is present.
 
+Checked 2026-10-10: tier 1, SSGI, is built (4e49a87e, 73e5078c, 02ed2d57); tiers 2 and 3, the
+surfel cache and the open rulings remain. Steps 1 and 2 of the order below are done.
+
 DECIDED ORDER (user 2026-09-03) across all four renderer seeds:
 1. debug views -> 2. GI tier 1 (SSGI) -> 3. GI tier 2 (probe volumes) ->
 4. lightmap baking LAST. Runtime probe updates / RT acceleration remain a
@@ -895,7 +831,9 @@ twice.
 
 The engine roadmap synced to reality and moved to Documentation/Archive/
 roadmap-history.md; everything still open there lives HERE now (the weekly docs
-are the one planning surface). Grouped by track, each with its trigger/state:
+are the one planning surface). Grouped by track, each with its trigger/state. Checked
+2026-10-10: finished items removed (save-game, export hardening, BC6H and the normal-map fix,
+the WebSocket client and web export integration, the importer chooser):
 
 **Core hardening (build when a consumer appears)**
 - Local convenience test-runner (one command -> all ctest presets).
@@ -907,34 +845,35 @@ are the one planning surface). Grouped by track, each with its trigger/state:
 - Pak compression (zstd/lz4; kCompressionNone today) + runtime write/watch.
 
 **Rendering**
-- Texture cook tail: BC6H for HDR + the normal-map format fix (SPEC READY:
-  texture-compression-hdr-and-normals.md, ships after texture-page-ux.md) and
-  KTX2/basis import (the WASM/Android transcode path).
+- Texture cook tail: KTX2/basis import (the WASM/Android transcode path). BC6H and the
+  normal-map fix shipped (0be5a25f, 78655c02).
 - GPU memory sub-allocation: Vulkan -> VMA, DX12 -> D3D12MA (one allocation per
   resource today; the vkAllocateMemory-FAILED warnings stay as the tripwire).
 - Spatial acceleration STRUCTURE (BVH/octree) - brute-force sphere culling
   shipped; dense/shadowed scenes are the trigger.
-- Post-processing phases 4/5 - phases 1-3 built and PAUSED pending the user's
-  on-screen verify; 4/5 resume after.
-- DX12 blit pipeline TODO (needs D3DCompile, DxDevice.cppm) - Windows-side.
+- Post-processing phases 4/5 - auto exposure and the grading LUT shipped
+  (`Systems/post-processing-config.md`); depth of field, vignette, motion blur and phase 5
+  (per-camera overrides, post volumes) remain.
+- The DX12 blit pipeline is built (D3DCompile in `DxDevice.cppm`), but a stale "TODO" comment
+  above it says otherwise; delete the comment, and run it on Windows once.
 - GPU-compute particle sim (CPU sim + full authoring triad shipped).
 - Scene streaming / partitioning.
 
 **Subsystems**
 - Behavior trees (navmesh/pathfinding/crowd complete; this is the AI half).
-- Networking tail: per-field bitmask delta, receive-RPC-into-script,
-  project-settings -> NetworkStartup, Win32 socket backend validation; the
+- Networking tail: per-field bitmask delta (replication diffs per component),
+  receive-RPC-into-script (the Net facade sends only), project-settings -> NetworkStartup
+  (`SetNetworkStartup` has no caller), Win32 socket backend validation; the
   net-extraction spec (P1-P4) is written and unbuilt.
-- Save-game (settings/config + i18n foundation shipped; save-game is the gap).
 
 **Portability**
-- Web tail: web networking (WebSocket client), Firefox validation, export
-  integration ([[web-platform-track]] carries the state).
+- Web tail: Firefox validation (the WebSocket client and export integration shipped:
+  c8bef210, 79e6b412).
 - Android: shell backend + touch/input + build (Vulkan covers the GPU side).
 
 **Editor + MVP closer**
-- Asset browser: drag-from-assets + importer chooser (thumbnails shipped).
-- Export-depth hardening + ONE real end-to-end export smoke - the last MVP gap.
+- Asset browser: dropping an asset into the viewport or the hierarchy to spawn it (the
+  importer chooser, 510251ff, and drags onto slots and lists, 2affb112, shipped).
 - Integrated showcase sample: PaperKid covers input/physics/audio/scripts/
   prefabs/game-UI; a networking showcase remains (net demo scripts are the seed).
 
@@ -946,8 +885,6 @@ Still open, each with its trigger:
 
 - **Editor on-screen verify (user sign-off owed)**: the P4b Bake button + zone
   gizmo + inspector flow, exercised in a real editor session.
-- **Player-path nav demo**: a cooked scene with agents loaded by DraconicPlayer
-  (demo B) - rides the authored-editor-sample item, not nav work itself.
 - **Async bake**: BakeNavigationZone stays SYNCHRONOUS by ruling; go async
   (job system + progress) only when a MEASURED bake stutters (>~100ms on a real
   zone). The call site is one function, so the move is mechanical.
@@ -960,7 +897,7 @@ Still open, each with its trigger:
 - **P2 features**: cross-zone stitching/portals, dynamic obstacles
   (DetourTileCache - or possibly just RebakeNavigationZoneRegion triggers,
   which shipped 2026-09-02 with the full partial-rebake chain), NavBlocker
-  volumes, MCP `nav_bake` tool (rides the MCP resume list).
+  volumes. (The MCP `navigation_bake` tool shipped, c08cec05.)
   Terrain-as-bake-source is DONE (0c05ad89), the bake is TILED + PARALLEL
   (toggleable) and partial rebake is wired end to end - do not re-plan
   any of those.
@@ -968,8 +905,6 @@ Still open, each with its trigger:
   week-2026-08-29.md (per-agent speed/stopDistance, agent introspection,
   tiled bake + per-tile regen, bake stage viz). USER VISUAL VERIFY owed
   (agent labels, stage overlay, tiled zone in a real session).
-- **Sequencing rule already recorded in terrain-backlog.md**: terrain HOLES
-  must subtract their cells from the bake when hole cutting lands.
 
 ## Backlog absorbed from docking-v2.md (archived 2026-09-01)
 
@@ -999,7 +934,8 @@ list shipped). Genuinely still open:
 - **Win32 runtime validation depth**: the Win32 System/Threading backends and
   MSVC build are CI-green as COMPILATION; runtime validation on real Windows
   (incl. CaptureStackBackTrace on the assert path) has never had a proper
-  pass. Rides any real Windows session.
+  pass. Rides any real Windows session. (A Windows session ran the tests, 148 of 148, the dev
+  loop and hot reload in week 2026-09-05; the assert path is still unexercised.)
 - **Async IO**: no async file API exists; no consumer has needed one (the job
   system + sync streams cover the cook and streaming paths so far). Build when
   a measured stall names it.
@@ -1016,7 +952,9 @@ The renderer optimization backlog moved to Documentation/Archive/
 renderer-improvements-history.md (the full measured analysis lives there; this
 is the work list). Priority order preserved:
 
-1. **Parallel command recording + draw-list sort (1a)** - THE priority. The
+1. **Parallel command recording + draw-list sort (1a)** - THE priority. (Checked 2026-10-10:
+   the forward pass already records through per-worker bundles; the draw-list sort and the
+   depth-prepass and shadow recording are still single-threaded.) The
    Godot 4.7 A/B (same RTX 2060, shadows on) put Draconic ~40% behind per
    sphere at 144k, and the entire gap is single-threaded CPU: BuildDrawList
    sort 6.47ms, pass record single-threaded while extraction is already
@@ -1058,14 +996,13 @@ items live HERE, corrected against the tree. The archives keep the full detail
 
 **Subsystem follow-ups (all consumer/demand-gated; details in each archive):**
 - *Input*: per-player device pairing (awaits a split-screen consumer),
-  action-triggered haptics, per-scene input.
+  action-triggered haptics (a script can rumble since eef9d560), per-scene input.
 - *Audio*: the grain-bank GROWTH PATH a-d (in-loop-out cues -> parameter
   system -> blend cues -> composite cues; grown, never big-bang ported -
-  user ruling 2026-07-19). Plus issue I7: clip-page pause + volume, runtime
-  volume API (small).
+  user ruling 2026-07-19). (Issue I7 is done: 63e79bae, 4b830b03, 43c95317.)
 - *Physics*: convex decomposition (V-HACD vendoring decision), gravity
-  volumes, JPH_DEBUG_RENDERER wiring, per-world Jolt job-pool consolidation,
-  contact events into per-entity script handlers.
+  volumes, JPH_DEBUG_RENDERER wiring, per-world Jolt job-pool consolidation.
+  (Contacts into per-entity script handlers shipped, 960b0352.)
 - *Scripting*: live-state-preserving hot reload (blocked on a getter
   convention), script-defined editor tooling hooks, debugger P2 profiler /
   P3 remote transport / P4 extras, luau-analyze CLI (P5b), delegate
@@ -1075,9 +1012,9 @@ items live HERE, corrected against the tree. The archives keep the full detail
   "deferred by the user" note is stale.
 - *Game UI*: world-tier option-A direct draw (VG-consult-gated), dirty-gated
   world-panel redraws, atlas packing + panel MIP chains, declarative markup
-  bindings, theme variants, UIDocumentPage per-line gutter diagnostics,
-  two-interactive-scenes pointer routing hardening, the toolkit test tail
-  (~212 upstream tests + UISandbox tabs).
+  bindings, two-interactive-scenes pointer routing hardening, the toolkit test tail
+  (~212 upstream tests + UISandbox tabs). (The gutter diagnostics shipped; theme variants are
+  moot now that games author their own `.sss` themes.)
 - *Networking*: the full refinement list (per-field bitmask delta,
   render-rate interpolation, priority/bandwidth budget, relevancy helpers,
   quantization; congestion/encryption/authority/lockstep/IPv6/web transports/
@@ -1087,7 +1024,7 @@ items live HERE, corrected against the tree. The archives keep the full detail
 - *VG*: overlay-tier MSAA (resolve-attachment plumbing is the real work),
   EvenOdd clip paths, nested clips - all deferred by choice post-#121.
 - *Web (task #112)*: (A) WebSocketTransport + native WS accept path BUILT
-  2026-09-01 - full record in week-2026-08-29.md. OWED: the user browser
+  2026-09-01. OWED: the user browser
   smoke (native host, the net demo recipe; browser WebScene joins,
   replicated state moves) - node cannot proxy WS so the browser proof is
   manual by design. Then (B) Firefox compat, (C) audio autoplay
@@ -1106,19 +1043,15 @@ interface hygiene on the fat modules, module splits, mold/split-dwarf, and
 ThirdParty rebuild confirmation.
 
 **UI core (audit follow-through):** P0-P2 + the damage gate SHIPPED; remaining
-= P3 styling dogfood (themes to .sss + UA default sheet + state ladder -
-scoping investigated, in the archive) and any P4 leftovers noted there.
+= the UA default sheet and the state ladder (the themes moved to `.sss` 2026-08-16, 1b09da29;
+`Palette::Compute` is still in controls' draw code) and any P4 leftovers noted there.
 
-**Issues triage (user-filed, 2026-08-08) - still open:** I2 mouse-capture
-never released (WATCH, hard repro), I4 memory ballooning (one half fixed;
-re-verify the rest), I5 allocator plumbing DONE (TRACK
-COMPLETE 2026-09-02, P0-P7 incl. the tripwire lockdown - full record in
-week-2026-08-29.md),
-I7 audio clip page small items, I8 Linux exported-player colors (root cause
-unconfirmed - harden the swapchain fallback regardless), I10 Windows
-path-separator normalization (trivial, exact fix known), I11 scene-pass MSAA
-(same item as the renderer backlog). I1 collider gizmos + I6 compression are
-FIXED/SHIPPED.
+**Issues triage (user-filed, 2026-08-08) - still open (checked 2026-10-10; I1, I2, I5, I6, I7
+and I10 are done):** I4 memory ballooning (the root cause fixed and instrumented; cache eviction
+and the partial header parse remain), I8 Linux exported-player colors (hardened: the swapchain
+format is logged and the tonemap encodes for a non-sRGB target, 1b552069; the user's retest is
+owed), I11 scene-pass MSAA (shipped; `Specs/msaa.md` leaves re-running the GTAO / SSR / TAA / FXAA
+probes with MSAA on).
 
 **Deferred-by-design (do NOT build without a user go-ahead):** GPU particle
 sim, post 4/5 (1-3 VERIFIED 2026-09-03 - unblocked, still needs the
@@ -1149,8 +1082,6 @@ tripwire 5, scene tripwire 8). Still open:
 - **On-device pixel probe for the GPU stage**: needs an editor-host harness
   (RenderSubsystem + SceneSubsystem + resources + a cooked product) no test
   target stands up today - the one honest test gap in the track.
-- **User visual verify PASSED 2026-09-03**: thumbnails confirmed working
-  in-editor (record in week-2026-08-29.md).
 - **Terrain thumbnail** stays icon-by-ruling (recorded in terrain-backlog.md).
 
 ## Carried from week-2026-08-29 (incomplete; moved 2026-09-07)
@@ -1188,8 +1119,8 @@ this is the list, with the section to read for each.
    + joint-node import noise".
 7. **PaperKid editor-use feedback** (still open): organize the new-component
    menu; drag an instance into a group; seed input map / bus layout / UI theme
-   for new projects (font, sky, primitives already seeded); Shift+up/down
-   multi-select bug; WASD default input map; detached window does not render
+   for new projects (font, sky, primitives already seeded); WASD default input
+   map (the Shift multi-select bug was fixed, 92392d57); detached window does not render
    its viewport unless the main window is visible.
 8. **Asset-variants sign-off (a)**: the web pak selection is MANIFEST-FREE
    (pak-name convention) - needs the user ruling, or a manifest gets built.
@@ -1329,31 +1260,3 @@ command recording only).
 - The per-phase lists are a separate, smaller commit; do it first, it changes no semantics.
 - Scope decision for the user: transform update only, or also the AsyncUpdate promise (a
   parallel per-depth-level pass is the natural first use of it).
-
-## DONE 2026-09-22: vegetation distance fade is per CHUNK - visible quads thin and vanish (user 2026-09-22)
-
-Built the same day once the Beef port had caught up: the sketch below, as written (rank in the
-tint alpha, the window on a private view slot per faded set, the CPU prefix kept as the bound).
-
-Observed: zooming out, vegetation thins and disappears one sharp chunk-shaped quad at a time.
-Cause (read, not fixed - the Beef port references the current code; HOLD): the fade is
-evaluated once per (layer, chunk) set in `TerrainVegetationComponentManager::ExtractLayer`
-(`VegetationComponentsImpl.cpp:496`): `distance = max(0, |origin - chunkCenter| - radius)`,
-`DensityAtDistance(distance, fadeStart 40, fadeEnd 80)` -> `FadePrefix` draw count, and the
-whole set is dropped past fadeEnd. Every instance in a chunk shares that one density, and
-neighbouring chunks differ, so the seam between a 30% chunk and a 100% chunk is a straight
-line; with a 64-sample chunk of 1 m cells (RaptorUAT: 257 samples over 256 m) the chunk is 64 m
-wide against a 40 m fade window, so a single chunk spans the entire fade. The prefix design is
-right (no re-upload, stable ranks); the granularity of the DISTANCE is the bug. Terrain's own
-chunk LOD went through the same lesson and moved to a per-chunk coverage metric with
-hysteresis and skirts; vegetation needs per-instance, not per-chunk.
-
-Fix sketch: keep the CPU prefix as the coarse upper bound (it uses the chunk's NEAREST
-distance, so it never removes an instance a finer test would keep - the prefix is exactly the
-ranks below `f(nearest)`), and move the real fade into the instanced vertex shader: each
-instance's own distance to the camera, the instance's own rank (store the scatter rank in
-`InstanceData.Tint.a`, or hash the world position when a producer has no rank), collapse the
-instance to zero scale when `rank > DensityAtDistance(d_i)`. fadeStart/fadeEnd ride a per-draw
-constant (the wind lanes are the precedent for per-material data; a per-layer pair is the
-cleaner home). Chunk-level drop past fadeEnd stays. Cost: a few ALU per vertex, no CPU or
-upload change; result: a smooth per-instance dissolve with no chunk seams at any window.

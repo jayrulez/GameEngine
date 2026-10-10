@@ -51,11 +51,6 @@
   project. A list / grid toggle, the grid showing each project's thumbnail (a picture of the
   project to recognise it by); and some of the per-project options moved into a menu (a
   hamburger or similar) so the page reads cleanly.
-- **The asset browser's tree: the chevron gap shrinks with each level** (user 2026-10-09): in the
-  Assets panel's folder hierarchy the space before each level's chevron gets smaller the deeper
-  the level, where the scene page's entity hierarchy keeps it even. Compare how the two build
-  their trees (`Editor.App/AssetsView.cppm` and `Editor.Scene/HierarchyView*`) and make the
-  assets tree indent as the entity one does.
 - **The asset browser's List / Grid buttons as icon buttons** (user 2026-10-09): they are text
   buttons now; make them icon buttons (a list icon and a grid icon, with the words as their
   tooltips).

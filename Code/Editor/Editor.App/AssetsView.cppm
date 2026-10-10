@@ -293,6 +293,8 @@ export namespace editor::app
         /// Reveal an instance in the browser: navigate to its owning
         /// group, select its row, and scroll it into view. Unknown Guids no-op.
         void Reveal(const Guid& id);
+        /// The group tree (the left pane).
+        [[nodiscard]] ui::TreeView* GroupTree() const noexcept { return m_tree.Get(); }
 
         // Fill the available space.
         void OnMeasure(ui::BoxConstraints constraints) override;
@@ -466,7 +468,9 @@ export namespace editor::app
                 row->BindTarget(Guid{}, node.group);
                 row->SetText(isRoot ? StringView(u8"Content") : node.group->Name());
                 row->SlowClickToEdit.SetValue(!isRoot); // the root is not renamable
-                row->TextOffsetX.SetValue(static_cast<f32>(depth + 1) * 18.0f);
+                // Past the chevron column, from the tree's own IndentWidth: a literal that differs
+                // from it steps each level by a different amount than the chevrons do.
+                row->TextOffsetX.SetValue(m_owner->m_tree->ContentInset(depth));
             }
 
         private:

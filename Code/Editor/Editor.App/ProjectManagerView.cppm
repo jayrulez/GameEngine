@@ -224,8 +224,8 @@ export namespace editor::app
             const bool grid = m_controller->GridView();
             m_listColumn->Direction = grid ? ui::Orientation::Horizontal : ui::Orientation::Vertical;
             m_listColumn->Wrap = grid;
-            m_listColumn->Spacing = grid ? 14 : 6;
-            m_listColumn->LineSpacing = grid ? 14 : 0; // between the grid's rows
+            m_listColumn->Spacing = grid ? 14.0f : 6.0f;
+            m_listColumn->LineSpacing = grid ? 14.0f : 0.0f; // between the grid's rows
             m_shownCards.Clear();
 
             const RecentProjectsSettings& reg = m_controller->Entries();

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- AssiduousEngine mark for 24 px and below: the A alone (the crop marks blur at that size). -->
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="#1F2227"/>
+  <g transform="translate(128 128) scale(0.92) translate(-128 -126)">
+    <path d="M128 46 L210 206 H164 L150 176 H106 L92 206 H46 Z" fill="#F58F42" stroke="#F58F42" stroke-width="10" stroke-linejoin="round"/>
+    <path d="M116 112 L116 150 L148 131 Z" fill="#1F2227" stroke="#1F2227" stroke-width="6" stroke-linejoin="round"/>
+  </g>
+</svg>

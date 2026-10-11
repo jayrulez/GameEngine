@@ -145,6 +145,7 @@ export namespace foundation::runtime
             }
 
             // Render every window uniformly (main == windows[0]).
+            m_presented = false;
             if (m_graphics != nullptr)
             {
                 PROFILE_SCOPE("Render");
@@ -168,6 +169,7 @@ export namespace foundation::runtime
                         PROFILE_SCOPE("Render.Present"); // record submit + queue present
                         rw->EndFrame(frame);
                     }
+                    m_presented = true;
                 }
                 {
                     PROFILE_SCOPE(
@@ -179,6 +181,14 @@ export namespace foundation::runtime
             m_context.EndFrame();
             FlushPendingCloses();
             PROFILE_FRAME_END();
+        }
+
+        /// Whether the last Tick had windows to show and presented none (every one minimized or
+        /// zero-sized). Nothing then waited on the display, so a runner that loops would spin; it
+        /// rests instead (RunApplication).
+        [[nodiscard]] bool IdleLastTick() const noexcept
+        {
+            return m_graphics != nullptr && !m_windows.IsEmpty() && !m_presented;
         }
 
         // Tear the application down: leave play, stop the Context, destroy windows.
@@ -320,6 +330,7 @@ export namespace foundation::runtime
         core::Array<RenderWindow*> m_pendingClose;            // deferred destroy
         bool m_started = false;
         bool m_running = false;
+        bool m_presented = false; // the last Tick presented a window (IdleLastTick)
         int m_exitCode = 0;
         FixedStepper m_stepper;
     };

@@ -622,7 +622,18 @@ namespace engine::render
             m_frame->CollectDebugResources(m_debugResourceSnapshot);
         }
         // Immediate-mode: clear all debug lists AFTER rendering, so next frame's draws start empty
-        // (the app accumulates during its update, before the next BeginRendering).
+        // (the app accumulates during its update, before the next BeginRendering). EndFrame clears
+        // them as well, for the iterations that render nothing.
+        ClearDebugLists();
+    }
+
+    void RenderSubsystem::EndFrame()
+    {
+        ClearDebugLists();
+    }
+
+    void RenderSubsystem::ClearDebugLists()
+    {
         m_debugGlobal.Clear();
         m_debugScreen.Clear();
         for (auto& kv : m_debugScenes)

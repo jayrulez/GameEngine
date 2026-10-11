@@ -146,6 +146,11 @@ export namespace engine::render
 
         // Frame dt reaches the render pipeline (auto-exposure adaptation eases against it).
         void Update(foundation::core::f32 deltaTime) override;
+        // The end of every host iteration, a frame rendered or not: the debug lists empty here
+        // too. EndRendering alone left them growing while no frame rendered (a minimized window:
+        // the host skips the render bracket while the app keeps drawing its grid and gizmos), to
+        // a multi-gigabyte debug vertex buffer and a long stall on restore.
+        void EndFrame() override;
 
         // Drop any render-data providers registered for a scene that's going away (borrowed pointers).
         void OnDestroying(scene::Scene& scene) override;
@@ -317,6 +322,8 @@ export namespace engine::render
         void OnShutdown() override;
 
     private:
+        // Empty every debug list (EndRendering, and EndFrame for an iteration that rendered none).
+        void ClearDebugLists();
         // A per-frame snapshot pool: one ExtractedScene per RenderScene call, kept alive (and its
         // arena chunks reused) until the next BeginRendering. (One snapshot is taken per RenderScene
         // call.)

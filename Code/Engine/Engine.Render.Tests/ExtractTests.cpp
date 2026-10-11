@@ -1720,3 +1720,27 @@ TEST_CASE("entity bounds: a mesh measures through its world matrix, an instanced
     // An entity with neither.
     CHECK_FALSE(scene::EntityWorldBounds(scene, scene.CreateEntity(u8"empty"), out));
 }
+
+TEST_CASE("render: the debug lists empty at every iteration's end, a frame rendered or not")
+{
+    // A minimized window renders no frame (the host skips BeginRendering/EndRendering) while the
+    // app keeps drawing: the lists must not grow across those iterations.
+    rhi::null::NullDevice device{DefaultAllocator()};
+    foundation::vfs::NativeFileSystem dataFs(foundation::vfs::FindDataRoot(), DefaultAllocator());
+    RenderSubsystem sub{DefaultAllocator(), device, 2, dataFs};
+    scene::Scene world(DefaultAllocator(), u8"world");
+    int viewKey = 0;
+    for (int iteration = 0; iteration < 100; ++iteration)
+    {
+        sub.DebugGlobal().DrawLine(Float3{0, 0, 0}, Float3{1, 0, 0}, Color{1, 1, 1, 1});
+        sub.DebugScene(world).DrawLine(Float3{0, 0, 0}, Float3{0, 1, 0}, Color{1, 1, 1, 1});
+        sub.DebugView(&viewKey).DrawLine(Float3{0, 0, 0}, Float3{0, 0, 1}, Color{1, 1, 1, 1});
+        sub.DebugScreen().DrawScreenRect(0, 0, 10, 10, Color{1, 1, 1, 1});
+        CHECK(sub.DebugGlobal().LineVertices().Size() == 2u); // this iteration's line alone
+        sub.EndFrame(); // no frame rendered: the end of the iteration still drains them
+    }
+    CHECK_FALSE(sub.DebugGlobal().HasAnyDraws());
+    CHECK_FALSE(sub.DebugScene(world).HasAnyDraws());
+    CHECK_FALSE(sub.DebugView(&viewKey).HasAnyDraws());
+    CHECK_FALSE(sub.DebugScreen().HasAnyDraws());
+}

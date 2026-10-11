@@ -303,6 +303,19 @@ TEST_CASE("client: with a graphics device, every window renders each Tick")
 
     host.Tick(0.016f); // only the survivor renders now
     CHECK(app.renders == 5);
+    CHECK_FALSE(host.IdleLastTick()); // it presented
+
+    // Minimized: nothing renders or presents, so the Tick was idle (the desktop runner rests
+    // rather than spinning); restored, it presents again.
+    auto& window = static_cast<NullWindow&>(host.Windows()[0]->Window());
+    window.SetMinimized(true);
+    host.Tick(0.016f);
+    CHECK(app.renders == 5);
+    CHECK(host.IdleLastTick());
+    window.SetMinimized(false);
+    host.Tick(0.016f);
+    CHECK(app.renders == 6);
+    CHECK_FALSE(host.IdleLastTick());
 
     host.Stop();
     CHECK(host.Windows().Size() == 0u);

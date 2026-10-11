@@ -28,7 +28,11 @@ using namespace foundation::graphics; // GraphicsDevice (moved from foundation::
 export namespace foundation::runtime
 {
     // Desktop runner: block-loop the app against the shell until either stops, clamped to
-    // maxFrameTime. APP_MAIN calls it on desktop; returns the app's exit code.
+    // maxFrameTime. APP_MAIN calls it on desktop; returns the app's exit code. The loop is paced
+    // by presenting (vsync); an iteration that presented nothing (every window minimized) rests
+    // a moment instead of spinning a core.
+    inline constexpr core::u32 kIdleRestMilliseconds = 10;
+
     inline int RunApplication(IApplication& app, shell::IShell& shell,
                               GraphicsDevice* graphics = nullptr)
     {
@@ -46,6 +50,10 @@ export namespace foundation::runtime
                 dt = host.Settings().maxFrameTime;
             }
             host.Tick(dt);
+            if (host.IdleLastTick())
+            {
+                core::SleepMilliseconds(kIdleRestMilliseconds);
+            }
         }
         host.Stop();
         return host.ExitCode();

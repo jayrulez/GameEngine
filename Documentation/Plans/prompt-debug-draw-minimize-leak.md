@@ -1,8 +1,10 @@
 # Debug-draw accumulation leaks while the window is minimized
 
-STATUS: root-caused on Windows 2026-10-10, NOT fixed. Instrumentation that found it is in the
-tree but UNCOMMITTED (see "What is already in the tree"). Platform-independent bug - the
-mechanism is in Foundation/Engine code, not in any Windows path.
+STATUS: root-caused on Windows 2026-10-10; FIXED 2026-10-11 (both defects; see the week-2026-10-10
+entry "The debug-draw leak behind the minimize hang"). Defect 1: `RenderSubsystem::EndFrame` drains
+the debug lists at the end of every host iteration, a frame rendered or not. Defect 2: the
+desktop runner rests 10 ms after an iteration that presented nothing (`ApplicationHost::IdleLastTick`).
+The instrumentation described below was never pushed; it stays on the Windows machine.
 
 ## Symptom, as a user sees it
 

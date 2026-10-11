@@ -19,6 +19,7 @@ import engine.navigation;
 import engine.physics;      // RigidBodyComponent + manager
 import engine.animation;    // the IK components and their animator
 import foundation.animation; // Skeleton (the IK gizmo's bind chain)
+import foundation.geometry;  // Primitives (the vertex snap test's cubes)
 import editor.core;
 import editor.scene;
 
@@ -737,4 +738,73 @@ TEST_CASE("component-gizmo: a two-bone IK chain draws in its bind pose, with its
         orange = orange || ((v.color & 0xFFu) > ((v.color >> 8) & 0xFFu) + 40u);
     }
     CHECK(orange);
+}
+
+TEST_CASE("gizmo-controller: vertex snap puts the pivot on the vertex under the cursor")
+{
+    foundation::scene::Scene scene{DefaultAllocator()};
+    auto* meshes = scene.AddSystem<engine::render::MeshComponentManager>();
+    EditorCommandStack commands;
+    SceneEditContext edit(scene, commands);
+    GizmoController ctl(edit);
+    RefPtr<foundation::geometry::StaticMesh> cube = foundation::geometry::Primitives::Cube(DefaultAllocator(), 2.0f);
+
+    // A cube to snap onto at (3, 0, 0): its face toward the camera at z = 1, corners (2..4, -1..1).
+    const Guid targetId = edit.CreateEntity(u8"Wall");
+    const foundation::scene::EntityHandle target = edit.Resolve(targetId);
+    scene.SetLocalPosition(target, Float3{3, 0, 0});
+    meshes->Add(target).mesh = cube;
+    // The dragged box has a mesh of its own: once moved in front of the wall it must not snap
+    // onto itself.
+    const Guid id = edit.CreateEntity(u8"Box");
+    meshes->Add(edit.Resolve(id)).mesh = cube;
+    edit.EntitySelection().Set(id);
+
+    const f32 size = TransformGizmo::ScreenScale(kCamPos, kCamFwd, 1.0472f, Float3{});
+    const Float3 grab{size * 0.6f, 0.0f, 0.0f}; // the X shaft
+    const auto snapping = [](GizmoFrameInput in)
+    {
+        in.vertexSnap = true;
+        return in;
+    };
+
+    REQUIRE(ctl.Update(Frame(grab, true, true, false)));
+    // Over the wall's face near its (4, 1, 1) corner: the pivot exactly there, though the drag
+    // holds the X shaft.
+    CHECK(ctl.Update(snapping(Frame(Float3{3.8f, 0.8f, 1.0f}, false, true, false))));
+    REQUIRE(ctl.SnapTarget().HasValue());
+    Float3 at = scene.GetLocalTransform(edit.Resolve(id)).position;
+    CHECK(at.x == doctest::Approx(4.0f));
+    CHECK(at.y == doctest::Approx(1.0f));
+    CHECK(at.z == doctest::Approx(1.0f));
+    // Again with the box now in front of the wall: it never snaps onto itself.
+    CHECK(ctl.Update(snapping(Frame(Float3{3.8f, 0.8f, 1.0f}, false, true, false))));
+    at = scene.GetLocalTransform(edit.Resolve(id)).position;
+    CHECK(at.x == doctest::Approx(4.0f));
+    CHECK(at.y == doctest::Approx(1.0f));
+
+    // Over no surface: the drag as it is (along X, y back to 0), and nothing marked.
+    CHECK(ctl.Update(snapping(Frame(grab + Float3{0, 40.0f, 0}, false, true, false))));
+    CHECK_FALSE(ctl.SnapTarget().HasValue());
+    CHECK(scene.GetLocalTransform(edit.Resolve(id)).position.y == doctest::Approx(0.0f));
+
+    // Without vertex snap, over the wall: the plain axis drag.
+    CHECK(ctl.Update(Frame(grab + Float3{1.0f, 0.5f, 0}, false, true, false)));
+    CHECK_FALSE(ctl.SnapTarget().HasValue());
+    at = scene.GetLocalTransform(edit.Resolve(id)).position;
+    CHECK(at.x == doctest::Approx(1.0f).epsilon(0.05f));
+    CHECK(at.y == doctest::Approx(0.0f));
+
+    // One drag, one undo entry, back to the start.
+    CHECK(ctl.Update(Frame(grab + Float3{1.0f, 0.5f, 0}, false, false, true)));
+    CHECK_FALSE(ctl.SnapTarget().HasValue());
+    commands.Undo();
+    CHECK(scene.GetLocalTransform(edit.Resolve(id)).position.x == doctest::Approx(0.0f));
+
+    // The toolbar's mode snaps every drag, V or not.
+    ctl.SetVertexSnapMode(true);
+    REQUIRE(ctl.Update(Frame(grab, true, true, false)));
+    CHECK(ctl.Update(Frame(Float3{3.8f, 0.8f, 1.0f}, false, true, false)));
+    CHECK(scene.GetLocalTransform(edit.Resolve(id)).position.y == doctest::Approx(1.0f));
+    CHECK(ctl.Update(Frame(Float3{3.8f, 0.8f, 1.0f}, false, false, true)));
 }

@@ -53,49 +53,11 @@
     exposes); how generated shaders ride the variant cook and lint; the graph's serialization and
     editor shape (reusing AnimationGraphPage's spine). For 0.1, tier 1 and the showcase are the
     likely scope; whether the graph is in 0.1 is part of the decision.
-
-### Seeded: gizmo vertex snapping (user 2026-08-26)
-
-> Checked 2026-10-10: not built, not even in part. The gizmo still has only the delta snap
-> (`translateSnap` / `rotateSnapDegrees` / `scaleSnap` under Ctrl, now `Gizmo.cppm:92-95`), and
-> nothing in the editor snaps to a vertex or a surface.
-
-Origin: parity doc, editor - Lumix has VERTEX SNAPPING; "Draconic snaps drag
-DELTAS only." Our transform gizmo quantizes the drag delta to grid increments
-(translateSnap/rotateSnap/scaleSnap, Ctrl-held, PlayCanvas-style - Gizmo.cppm:
-92-95), but cannot snap an object's point ONTO a vertex of other geometry -
-precise assembly (align this corner to that wall's corner) is manual.
-
-Goal: a vertex-snap mode for the translate gizmo - while dragging (a modifier /
-toggle), snap the moved object so its snap SOURCE point lands exactly on the
-nearest VERTEX of the geometry under the cursor.
-
-The pieces (builds on the existing gizmo + scene pick):
-- **Target pick** - ray-pick a mesh under the cursor (QueryRay, already used for
-  selection/terrain), then find its NEAREST VERTEX to the hit (needs the mesh's
-  vertices in world space at edit time - from the bound mesh resource).
-- **Source point** - v1 = the moved object's PIVOT snaps to the target vertex;
-  v2 = pick a source vertex ON the moved object (Blender-style) so any corner can
-  be the anchor.
-- **Apply** - offset the object so source -> target; this is an ABSOLUTE snap
-  (unlike today's relative delta quantization), a distinct gizmo mode.
-
-Scope for the week: P0 = pivot-to-nearest-vertex snap on the translate gizmo
-under a modifier, with a highlight of the target vertex. Source-vertex pick +
-edge/face (surface) snapping as P1.
-
-Open questions for week start:
-- UX: the modifier/toggle (a held key like Blender's V, vs a toolbar snap-mode
-  toggle vs Ctrl-variant) - and coexistence with the existing delta snap.
-- Vertex data access at edit time: nearest vertex to the ray hit - do we walk the
-  bound mesh's CPU vertices, or sample the picked triangle's corners (cheaper, and
-  enough for pivot->vertex)?
-- Snap targets: vertex only (v1) vs also edges / faces / the grid; visual feedback
-  for the candidate target.
-
-Tests: with vertex snap on, dragging an object onto a mesh places its pivot at the
-EXACT nearest vertex position (headless gizmo test, known mesh + known drag);
-snap-off leaves the existing delta-snap behaviour byte-identical.
+- **Vertex snap, the next steps** (from the seeded item, 2026-08-26; the pivot-onto-vertex snap
+  is built, week 2026-10-10): pick a SOURCE vertex on the moved object (Blender-style, any corner
+  as the anchor, not only the pivot); snap to edges, faces and the grid as well as vertices; a
+  skinned mesh in its current pose (today its bind pose, the pose its CPU vertices hold); the
+  instanced meshes and other drawn surfaces answering `ISceneSurfaceQuery` too.
 
 ## Engine
 

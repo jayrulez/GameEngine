@@ -194,6 +194,36 @@ namespace editor
             return;
         }
         m_gizmo.Draw(dd, m_mode);
+        if (m_snapTarget.HasValue())
+        {
+            // The vertex the pivot sits on, seen through whatever is in front of it.
+            const Color mark{1.0f, 0.85f, 0.2f, 1.0f};
+            dd.DrawWireSphereOverlay(m_snapTarget.Value(), m_gizmo.size * 0.05f, mark, 16);
+            dd.DrawCross(m_snapTarget.Value(), m_gizmo.size * 0.08f, mark, true);
+        }
+    }
+
+    Optional<Float3> GizmoController::FindSnapVertex(const GizmoRay& ray, scene::EntityHandle dragged)
+    {
+        scene::Scene& scene = m_edit->Scene();
+        // Never onto itself: the dragged entity and everything under it move with the drag.
+        const auto accept = [&scene, dragged](scene::EntityHandle candidate)
+        {
+            for (scene::EntityHandle e = candidate; e.IsAssigned(); e = scene.GetParent(e))
+            {
+                if (e == dragged)
+                {
+                    return false;
+                }
+            }
+            return true;
+        };
+        scene::SceneSurfaceHit hit;
+        if (!scene::RaycastSurface(scene, ray.origin, Normalized(ray.direction), kSnapReach, accept, hit))
+        {
+            return {};
+        }
+        return Optional<Float3>(hit.vertex);
     }
 
     StringView GizmoController::StatusText() const
@@ -202,8 +232,8 @@ namespace editor
         {
         case GizmoMode::Translate:
             return (m_space == GizmoSpace::World)
-                       ? StringView(u8"Move [World]  (W/E/R mode, X space, Ctrl snap)")
-                       : StringView(u8"Move [Local]  (W/E/R mode, X space, Ctrl snap)");
+                       ? StringView(u8"Move [World]  (W/E/R mode, X space, Ctrl snap, V vertex snap)")
+                       : StringView(u8"Move [Local]  (W/E/R mode, X space, Ctrl snap, V vertex snap)");
         case GizmoMode::Rotate:
             return (m_space == GizmoSpace::World)
                        ? StringView(u8"Rotate [World]  (W/E/R mode, X space, Ctrl snap)")
@@ -230,6 +260,13 @@ namespace editor
             const Float3 worldDelta = m_gizmo.UpdateTranslateDrag(in.ray, in.snap);
             t.position =
                 m_dragStartLocal.position + TransformDirection(worldDelta, m_parentInverseWorld);
+            // Vertex snap: the pivot ON the vertex under the cursor, whichever handle is held;
+            // over no surface, the drag as it is.
+            m_snapTarget = (in.vertexSnap || m_vertexSnapMode) ? FindSnapVertex(in.ray, entity) : Optional<Float3>{};
+            if (m_snapTarget.HasValue())
+            {
+                t.position = TransformPoint(m_snapTarget.Value(), m_parentInverseWorld);
+            }
             break;
         }
         case GizmoMode::Rotate:
@@ -256,6 +293,7 @@ namespace editor
     void GizmoController::FinishDrag()
     {
         m_gizmo.EndDrag();
+        m_snapTarget.Reset();
         if (m_inGroup)
         {
             m_edit->Commands().EndGroup();

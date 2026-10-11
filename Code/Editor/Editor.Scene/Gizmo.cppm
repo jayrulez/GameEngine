@@ -246,6 +246,10 @@ export namespace editor
         bool leftDown = false;
         bool leftReleased = false;
         bool snap = false;           // held Ctrl
+        /// Vertex snap (V held; the controller's VertexSnapMode does the same while on): a translate drag puts the pivot on
+        /// the vertex nearest where the cursor meets the scene's drawn surfaces, whichever handle
+        /// it holds (an absolute place, where Ctrl's snap steps the drag's distance).
+        bool vertexSnap = false;
         bool keyTranslate = false;   // W (edge)
         bool keyRotate = false;      // E (edge)
         bool keyScale = false;       // R (edge)
@@ -269,6 +273,10 @@ export namespace editor
         void SetMode(GizmoMode mode) noexcept;
         [[nodiscard]] GizmoSpace Space() const noexcept { return m_space; }
         void SetSpace(GizmoSpace space) noexcept;
+        /// Vertex snap for every translate drag while on (the toolbar's toggle), as holding V
+        /// does for one.
+        [[nodiscard]] bool VertexSnapMode() const noexcept { return m_vertexSnapMode; }
+        void SetVertexSnapMode(bool on) noexcept { m_vertexSnapMode = on; }
         [[nodiscard]] TransformGizmo& Gizmo() noexcept { return m_gizmo; }
         [[nodiscard]] bool IsActive() const noexcept { return m_active; }
 
@@ -279,8 +287,15 @@ export namespace editor
 
         [[nodiscard]] StringView StatusText() const;
 
+        /// The vertex a vertex-snapping drag holds the pivot on this frame (world); none when
+        /// not snapping, or when the cursor is over no surface.
+        [[nodiscard]] const Optional<Float3>& SnapTarget() const noexcept { return m_snapTarget; }
+
     private:
         void UpdateDrag(const GizmoFrameInput& in);
+        /// The vertex under `ray` to snap the dragged entity onto: on any drawn surface but the
+        /// dragged entity's own and its descendants'.
+        [[nodiscard]] Optional<Float3> FindSnapVertex(const GizmoRay& ray, scene::EntityHandle dragged);
 
         void FinishDrag();
 
@@ -298,5 +313,8 @@ export namespace editor
         core::Transform m_dragStartLocal;
         Float4x4 m_parentInverseWorld = Float4x4::Identity();
         Quaternion m_parentRotation = Quaternion::Identity;
+        bool m_vertexSnapMode = false;
+        Optional<Float3> m_snapTarget; // the vertex the pivot is snapped to (vertex snap)
+        static constexpr f32 kSnapReach = 10000.0f; // how far along the ray a snap target may be
     };
 }

@@ -216,7 +216,12 @@ service, status sink, and the registries:
 - **Gizmos**: `TransformGizmo` (translate/rotate/scale, world/local, screen-constant sizing, grid
  snap) drawn through the scene's debug-draw; drag = command group bracketing merged
  `SetTransformCommand`s; topmost-only selection filter so parents don't double-move children
- (Lumix lesson). Per-component gizmos via the `IGizmoRenderer` registry.
+ (Lumix lesson). Per-component gizmos via the `IGizmoRenderer` registry. **Vertex snap** (hold V,
+ or the toolbar's Vertex Snap / Scene > Gizmo > Vertex Snap for every drag): a move drag puts the
+ pivot exactly on the vertex nearest where the cursor meets the scene's drawn surfaces, whichever
+ handle it holds, marked in the viewport; over no surface the drag is as it was. The surfaces
+ answer through `ISceneSurfaceQuery` (`RaycastSurface`; the meshes' triangles on the CPU, a
+ skinned mesh in its bind pose), never the dragged entity or its descendants.
 - **Spline authoring (the flow, fixed 2026-09-20)**: Add Component > Spline puts a two-point
  segment along the entity's local X on the entity at its first Initialize phase (a bare component
  is seeded; a loaded one keeps its points), so the gizmo shows a curve at once; the inspector rows

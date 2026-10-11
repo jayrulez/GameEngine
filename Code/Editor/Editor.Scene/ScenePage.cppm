@@ -644,6 +644,7 @@ export namespace editor
         ui::toolkit::ToolbarToggle* m_rotateToggle = nullptr;
         ui::toolkit::ToolbarToggle* m_scaleToggle = nullptr;
         ui::toolkit::ToolbarToggle* m_spaceToggle = nullptr;
+        ui::toolkit::ToolbarToggle* m_vertexSnapToggle = nullptr; // the gizmo's vertex snap mode
         ui::toolkit::ToolbarToggle* m_animationToggle = nullptr; // the bottom dock's Animation tab
         // The Overlays dropdown's state (per-scene persisted): grid, LOD overlay, edit-time
         // physics collider gizmos, the origin cross on every entity.

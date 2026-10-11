@@ -192,6 +192,14 @@ TEST_CASE("scene-actions: registered once, disabled off a scene page; simulate, 
     CHECK(actions.IsChecked(kGizmoWorldSpace, page) == worldBefore);
     CHECK(actions.Execute(kGizmoWorldSpace, page).IsOk());
     CHECK(actions.IsChecked(kGizmoWorldSpace, page) != worldBefore);
+    // Vertex snap: a toggle over the gizmo's mode, off to start.
+    CHECK(actions.Find(kGizmoVertexSnap)->menuPath == u8"Scene/Gizmo/Vertex Snap");
+    CHECK_FALSE(actions.IsChecked(kGizmoVertexSnap, page));
+    CHECK(actions.Execute(kGizmoVertexSnap, page).IsOk());
+    CHECK(gizmos.VertexSnapMode());
+    CHECK(actions.IsChecked(kGizmoVertexSnap, page));
+    CHECK(actions.Execute(kGizmoVertexSnap, page).IsOk());
+    CHECK_FALSE(gizmos.VertexSnapMode());
     // While the camera owns the input (a fly in progress) W/E/R are its keys: the mode
     // actions refuse and leave the mode alone; the space toggle is unaffected.
     page->cameraOwnsInput = true;

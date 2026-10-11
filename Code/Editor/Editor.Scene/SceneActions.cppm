@@ -39,6 +39,7 @@ export namespace editor
         inline constexpr StringView kGizmoRotate = u8"scene.gizmo.rotate";
         inline constexpr StringView kGizmoScale = u8"scene.gizmo.scale";
         inline constexpr StringView kGizmoWorldSpace = u8"scene.gizmo.worldSpace";
+        inline constexpr StringView kGizmoVertexSnap = u8"scene.gizmo.vertexSnap";
         inline constexpr StringView kMarkers = u8"scene.view.markers";
         inline constexpr StringView kFrameSelection = u8"scene.view.frameSelection";
         inline constexpr StringView kAnimationPanel = u8"scene.view.animationPanel";
@@ -215,6 +216,32 @@ export namespace editor
                 GizmoController* gizmos = scenePage(page)->Gizmos();
                 gizmos->SetSpace(gizmos->Space() == GizmoSpace::World ? GizmoSpace::Local
                                                                        : GizmoSpace::World);
+            };
+            (void)actions.Register(Move(d));
+        }
+        {
+            // Every move drag snaps the pivot onto the vertex under the cursor while on; holding
+            // V does it for one drag.
+            EditorActionDeclaration d = Declare(kGizmoVertexSnap, u8"Vertex Snap",
+                                                u8"Moving with the gizmo puts the selection's pivot "
+                                                u8"on the vertex under the cursor (hold V for one "
+                                                u8"drag)",
+                                                u8"Scene/Gizmo/Vertex Snap", 201);
+            d.kind = EditorActionKind::Toggle;
+            d.enabled = [scenePage](EditorPage* page)
+            {
+                ISceneEditorPage* scene = scenePage(page);
+                return scene != nullptr && scene->Gizmos() != nullptr;
+            };
+            d.checked = [scenePage](EditorPage* page)
+            {
+                ISceneEditorPage* scene = scenePage(page);
+                return scene != nullptr && scene->Gizmos() != nullptr && scene->Gizmos()->VertexSnapMode();
+            };
+            d.execute = [scenePage](EditorPage* page)
+            {
+                GizmoController* gizmos = scenePage(page)->Gizmos();
+                gizmos->SetVertexSnapMode(!gizmos->VertexSnapMode());
             };
             (void)actions.Register(Move(d));
         }

@@ -42,6 +42,7 @@ namespace editor
             gizmoInput.keyRotate = keyboard->IsKeyPressed(foundation::shell::KeyCode::E);
             gizmoInput.keyScale = keyboard->IsKeyPressed(foundation::shell::KeyCode::R);
             gizmoInput.keyToggleSpace = keyboard->IsKeyPressed(foundation::shell::KeyCode::X);
+            gizmoInput.vertexSnap = keyboard->IsKeyDown(foundation::shell::KeyCode::V); // held
         }
         const bool consumed = m_gizmos.Update(gizmoInput);
 

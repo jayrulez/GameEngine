@@ -1539,6 +1539,19 @@ namespace editor
                 }
                 page->SyncToolbar();
             });
+        // Vertex snap for every move while checked (holding V does it for one drag).
+        m_vertexSnapToggle = m_toolbar->AddToggle(u8"Vertex Snap");
+        m_vertexSnapToggle->TooltipText = String(u8"Move the selection's pivot onto the vertex under the cursor "
+                                                 u8"(hold V for one drag)");
+        m_vertexSnapToggle->OnCheckedChanged.Add(
+            [page, actions](ui::toolkit::ToolbarToggle*, bool value)
+            {
+                if (actions->IsChecked(SceneActionIds::kGizmoVertexSnap, page) != value)
+                {
+                    (void)actions->Execute(SceneActionIds::kGizmoVertexSnap, page);
+                }
+                page->SyncToolbar();
+            });
 
         m_toolbar->AddSeparator();
 
@@ -1901,6 +1914,7 @@ namespace editor
         const bool world = actions.IsChecked(SceneActionIds::kGizmoWorldSpace, this);
         m_spaceToggle->SetIsChecked(world);
         m_spaceToggle->SetText(world ? StringView(u8"World") : StringView(u8"Local"));
+        m_vertexSnapToggle->SetIsChecked(actions.IsChecked(SceneActionIds::kGizmoVertexSnap, this));
         if (m_animationToggle != nullptr)
         {
             m_animationToggle->SetIsChecked(actions.IsChecked(SceneActionIds::kAnimationPanel, this));

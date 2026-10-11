@@ -19,11 +19,6 @@
   panels grow to the top and a new scene docks as a tab beside them). Give it a use while it
   does that: perhaps the project's page, with the project's information and quick ways to its
   settings and the other project-level things. Keep the docking job whatever it becomes.
-- **An editor logo, and a splash screen while the editor loads** (user 2026-10-09): the editor
-  has no logo (for its window and taskbar icon, the project manager and the Welcome page), and
-  shows nothing while it starts and opens a project. Design a logo (our own, with its licence
-  beside it; GameEngine, never Raptor, in public text), then a splash window with it and the
-  loading progress, shown from launch until the main window is ready.
 - **Polish the project launcher** (user 2026-10-09): the page the editor opens on to pick a
   project. A list / grid toggle, the grid showing each project's thumbnail (a picture of the
   project to recognise it by); and some of the per-project options moved into a menu (a

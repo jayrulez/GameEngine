@@ -42,6 +42,7 @@ export import :editor_icons;
     export import :category_tabs;
     export import :templates_dialog;
     export import :export_dialog;
+    export import :splash;
 export import :asset_drag_data;
 export import :project_manager_view;
 export import :shell;

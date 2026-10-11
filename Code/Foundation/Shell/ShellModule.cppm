@@ -84,6 +84,20 @@ export namespace foundation::shell
         bool borderless = false;
         // Windowed, exclusive or desktop fullscreen. A backend without fullscreen ignores it.
         WindowFullscreen fullscreen = WindowFullscreen::None;
+        // Created hidden, shown by IWindow::Show: an application that is not ready to draw (the
+        // editor while it starts, a splash on screen) keeps its window out of sight until it is.
+        bool hidden = false;
+        // A window drawn on the CPU (IWindow::PresentPixels) rather than by the GPU: a splash shown
+        // before there is a graphics device. Not for a window a swapchain will present to.
+        bool softwareSurface = false;
+    };
+
+    // One image of a window's icon: tightly packed 8-bit RGBA rows, `width` x `height`.
+    struct WindowIconImage
+    {
+        const core::u8* rgba = nullptr;
+        core::u32 width = 0;
+        core::u32 height = 0;
     };
 
     class IWindow
@@ -125,6 +139,25 @@ export namespace foundation::shell
         virtual void StartTextInput() = 0;
         virtual void StopTextInput() = 0;
         [[nodiscard]] virtual bool IsTextInputActive() const noexcept = 0;
+
+        // The window's icon (its title bar, the taskbar, the window switcher): the first image at
+        // the normal scale, any others as the same icon for larger display scales. The images are
+        // copied. A backend with no window icon ignores it (the default).
+        virtual void SetIcon(core::Span<const WindowIconImage> images) { (void)images; }
+
+        // Show a window created hidden (WindowSettings::hidden). A no-op when shown already.
+        virtual void Show() {}
+
+        // Put an image on a software window (WindowSettings::softwareSurface): tightly packed
+        // 8-bit RGBA rows, `width` x `height`, scaled to the window when the sizes differ. False
+        // when the backend has no software windows or the window is not one.
+        virtual bool PresentPixels(core::Span<const core::u8> rgba, core::u32 width, core::u32 height)
+        {
+            (void)rgba;
+            (void)width;
+            (void)height;
+            return false;
+        }
     };
 
     // What happened to a window during the last ProcessEvents() pump. Delivered

@@ -366,9 +366,11 @@ int main(int argc, char** argv)
     LOG_INFO(u8"Editor", u8"starting (project: {})", config.projectDirectory);
 
     shell::WindowSettings ws;
-    ws.title = u8"Editor";
+    ws.title = u8"AssiduousEngine";
     ws.width = 1600;
     ws.height = 900;
+    // Hidden until the editor is ready: the splash shows until then (startupFinished).
+    ws.hidden = true;
 
     auto shellPtr = shell::CreateShell(AppRoot(), ws);
     if (shellPtr.Get() == nullptr || shellPtr->MainWindow() == nullptr)
@@ -376,6 +378,38 @@ int main(int argc, char** argv)
         std::fprintf(stderr, "Tools.Editor: failed to create the OS shell/window\n");
         return 1;
     }
+    shell::IWindow* mainWindow = shellPtr->MainWindow();
+    (void)editor::app::ApplyEditorWindowIcon(*mainWindow, EditorDataRoot());
+
+    // The splash, from now until the editor is ready: startup holds the main thread with
+    // nothing drawn (the device, the shader compiles, the fonts, the project and its pages).
+    UniquePtr<editor::app::EditorSplash> splash = editor::app::OpenEditorSplash(
+        *shellPtr, EditorDataRoot(), config.fontPath.AsView(),
+        Span<const u8>(config.embeddedFont, config.embeddedFontSize),
+        Format(u8"Version {}", engine::project::kEngineVersionString).AsView(), editor::EditorRootAllocator());
+    if (splash)
+    {
+        splash->Step(u8"Starting the graphics device", 0.05f);
+    }
+    else
+    {
+        mainWindow->Show(); // no splash: show the window now, as before
+    }
+    config.startupProgress = [&splash](StringView status, f32 progress)
+    {
+        if (splash)
+        {
+            splash->Step(status, progress);
+        }
+    };
+    config.startupFinished = [&splash, mainWindow]()
+    {
+        mainWindow->Show();
+        if (splash)
+        {
+            splash->Close();
+        }
+    };
 
     // Validation follows the build config (Debug ON, optimized OFF) unless the command line
     // says otherwise - a RelWithDebInfo editor is for measuring, not for the layer's overhead.

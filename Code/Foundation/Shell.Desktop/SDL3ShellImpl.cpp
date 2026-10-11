@@ -80,6 +80,14 @@ namespace foundation::shell
         {
             flags |= SDL_WINDOW_BORDERLESS;
         }
+        if (settings.hidden)
+        {
+            flags |= SDL_WINDOW_HIDDEN;
+        }
+        if (settings.softwareSurface)
+        {
+            return flags; // drawn through SDL's window surface: no Vulkan surface on it
+        }
 #if defined(__linux__)
         const char* driver = SDL_GetCurrentVideoDriver();
         if (driver != nullptr && SDL_strcmp(driver, "dummy") != 0)
@@ -237,6 +245,74 @@ namespace foundation::shell
             SDL_StopTextInput(m_window);
             m_textInputActive = false;
         }
+    }
+
+    void SDL3Window::Show()
+    {
+        if (m_window != nullptr)
+        {
+            (void)SDL_ShowWindow(m_window);
+        }
+    }
+
+    bool SDL3Window::PresentPixels(core::Span<const core::u8> rgba, core::u32 width, core::u32 height)
+    {
+        if (m_window == nullptr || rgba.Size() < static_cast<core::usize>(width) * height * 4)
+        {
+            return false;
+        }
+        SDL_Surface* target = SDL_GetWindowSurface(m_window);
+        if (target == nullptr)
+        {
+            return false;
+        }
+        SDL_Surface* image = SDL_CreateSurfaceFrom(static_cast<int>(width), static_cast<int>(height),
+                                                   SDL_PIXELFORMAT_RGBA32, const_cast<core::u8*>(rgba.Data()),
+                                                   static_cast<int>(width * 4));
+        if (image == nullptr)
+        {
+            return false;
+        }
+        // The window's surface may be larger than the image on a scaled display: scale to fit.
+        const bool drawn = (target->w == static_cast<int>(width) && target->h == static_cast<int>(height))
+                               ? SDL_BlitSurface(image, nullptr, target, nullptr)
+                               : SDL_BlitSurfaceScaled(image, nullptr, target, nullptr, SDL_SCALEMODE_LINEAR);
+        SDL_DestroySurface(image);
+        return drawn && SDL_UpdateWindowSurface(m_window);
+    }
+
+    void SDL3Window::SetIcon(core::Span<const WindowIconImage> images)
+    {
+        if (m_window == nullptr || images.Size() == 0 || images[0].rgba == nullptr)
+        {
+            return;
+        }
+        // The surfaces borrow the pixels; SDL copies them when it sets the icon.
+        const auto surfaceOf = [](const WindowIconImage& image)
+        {
+            return SDL_CreateSurfaceFrom(static_cast<int>(image.width), static_cast<int>(image.height),
+                                         SDL_PIXELFORMAT_RGBA32, const_cast<core::u8*>(image.rgba),
+                                         static_cast<int>(image.width * 4));
+        };
+        SDL_Surface* icon = surfaceOf(images[0]);
+        if (icon == nullptr)
+        {
+            return;
+        }
+        for (core::usize i = 1; i < images.Size(); ++i)
+        {
+            if (images[i].rgba == nullptr)
+            {
+                continue;
+            }
+            if (SDL_Surface* larger = surfaceOf(images[i]))
+            {
+                (void)SDL_AddSurfaceAlternateImage(icon, larger); // the icon holds its own reference
+                SDL_DestroySurface(larger);
+            }
+        }
+        (void)SDL_SetWindowIcon(m_window, icon);
+        SDL_DestroySurface(icon);
     }
 
     void SDL3Window::OnResized(core::u32 w, core::u32 h) noexcept

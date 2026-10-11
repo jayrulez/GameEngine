@@ -143,11 +143,14 @@ namespace editor::app
             return;
         }
 
+        m_starting = true; // the splash hears startup's steps until the editor is ready
+        ReportStartup(u8"Loading settings", 0.12f);
         LoadEditorSettings(); // per-user prefs FIRST: the font paths below honor them
         // Domains reach their OWN sections through the context (the contributed-settings
         // seam); the app stays ignorant of their shapes.
         m_context.SetUserEditorSettings(&m_editorSettings);
 
+        ReportStartup(u8"Loading fonts", 0.18f);
         // Fonts (CPU rasterization/baking; no device needed). Path resolution chain per
         // family: the Preferences override -> the dev-tree compile define -> the
         // exe-EMBEDDED Roboto (a relocated editor must never come up textless). Every
@@ -246,6 +249,7 @@ namespace editor::app
         // The editor's mount over the data root: the UI host reads its VG shaders through it.
         m_dataFileSystem = MakeUnique<foundation::vfs::NativeFileSystem>(
             m_editorAllocator, m_config.dataRoot.AsView(), m_editorAllocator);
+        ReportStartup(u8"Preparing the interface", 0.30f);
         m_uiHost = MakeUnique<ui::runtime::UIHost>(m_editorAllocator, m_editorAllocator,
                                                    *host.Graphics(), *host.Shell(), *m_fontService,
                                                    *m_dataFileSystem);
@@ -310,8 +314,10 @@ namespace editor::app
         // main window's close button / OS quit; File>Exit routes through the same helper.
         host.Shell()->OnMainWindowCloseRequested = [this]() { return ConfirmExitAllowed(); };
 
+        // The logo heads the Welcome page and the project manager.
+        m_logo = LoadEditorLogo(m_config.dataRoot.AsView(), m_editorAllocator);
         m_shell.Build(m_context, m_dockHost.Get(), mainRw->Window().Width(),
-                      mainRw->Window().Height());
+                      mainRw->Window().Height(), m_logo);
         // The ACTIVE page follows dock-tab activation, not just OpenPage/ClosePage - with
         // side-by-side tab groups, Save was hitting whichever page opened last, not the tab
         // the user selected. Non-page panels (Console, Assets) leave the active page alone.
@@ -373,6 +379,7 @@ namespace editor::app
                 LOG_INFO(u8"Editor", u8"embedded app requested exit({}) with no Game tab playing it",
                          code);
             }});
+        ReportStartup(u8"Starting the renderer", 0.45f);
         m_embeddedApp = MakeUnique<engine::runtime::DefaultApplication>(m_editorAllocator);
         m_embeddedApp->SetDataRoot(m_config.dataRoot.AsView()); // the editor's root, not a re-walk
         m_embeddedApp->Configure(*m_embeddedHost);
@@ -402,6 +409,7 @@ namespace editor::app
         // receive the EMBEDDED host: every page's Ctx() resolves to the runtime context.
         // ONCE per app run - the registered factories capture the embedded host/app, which
         // stay alive across project close/open.
+        ReportStartup(u8"Loading the editors", 0.62f);
         RegisterActions(); // the editor-wide set first: the menu bar follows registration order
         if (m_config.registerEditors)
         {
@@ -422,11 +430,29 @@ namespace editor::app
         // lifecycle - no Close Project round-trip).
         if (m_config.startInProjectManager)
         {
+            ReportStartup(u8"Opening the project manager", 0.80f);
             EnterManagerMode();
         }
         else
         {
+            ReportStartup(Format(u8"Opening {}", PathFilename(m_config.projectDirectory.AsView())).AsView(), 0.70f);
             OpenProjectAt(m_config.projectDirectory.AsView());
+        }
+
+        // Ready: the splash goes and the main window (created hidden) comes up.
+        ReportStartup(u8"Ready", 1.0f);
+        m_starting = false;
+        if (m_config.startupFinished)
+        {
+            m_config.startupFinished();
+        }
+    }
+
+    void EditorApplication::ReportStartup(StringView status, f32 progress)
+    {
+        if (m_starting && m_config.startupProgress)
+        {
+            m_config.startupProgress(status, progress);
         }
     }
 
@@ -2159,11 +2185,15 @@ namespace editor::app
             if (ApplyOpenPages(*m_projectEditorSettings, pages, activePage).IsOk())
             {
                 UIEditorPage* toActivate = nullptr;
-                for (const Guid& id : pages)
+                for (usize index = 0; index < pages.Size(); ++index)
                 {
+                    const Guid& id = pages[index];
                     if (foundation::content::Instance* instance =
                             m_project->SourceDb().GetInstance(id))
                     {
+                        // On the splash while the editor starts: the pages are the long part.
+                        ReportStartup(Format(u8"Opening {}", instance->Name()).AsView(),
+                                      0.72f + 0.26f * static_cast<f32>(index) / static_cast<f32>(pages.Size()));
                         UIEditorPage* page = OpenInstancePage(*instance);
                         if (page != nullptr && id == activePage)
                         {

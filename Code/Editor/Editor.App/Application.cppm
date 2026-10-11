@@ -135,6 +135,13 @@ export namespace editor::app
         /// exe links every asset type. Null = new projects start empty.
         Function<void(editor::EditorContext&, editor::EditorProject&)>
             seedNewProject;
+
+        /// Startup's progress, for the splash main() shows until the editor is ready: what it is
+        /// doing now and how far along (0..1). Null = no splash.
+        Function<void(StringView, f32)> startupProgress;
+        /// Called once at the end of OnStartup, the editor ready: main() closes the splash and
+        /// shows the main window (created hidden while the splash is up). Null = nothing to do.
+        Function<void()> startupFinished;
     };
 
     class EditorApplication : public runtime::IApplication
@@ -173,6 +180,9 @@ export namespace editor::app
         void SetSceneRenderer(foundation::render::ISceneRenderer* renderer) noexcept;
 
         void OnStartup(runtime::IApplicationHost& host) override;
+        /// Tell the splash what startup is doing (EditorAppConfig::startupProgress), while it is
+        /// starting; a project opened later reports nothing.
+        void ReportStartup(StringView status, f32 progress);
 
         /// Opening a page over uncooked content queues a scoped cook: every resource id
         /// that was requested during the page's resolve but has no product (the
@@ -428,6 +438,8 @@ export namespace editor::app
         // Screenshots of the editor's windows: --screenshot, editor_screenshot, View > Screenshot.
         EditorWindowCapture m_windowCapture{m_editorAllocator};
         bool m_screenshotFired = false;    // the --screenshot one shot is armed
+        bool m_starting = false; // OnStartup is running: its steps go to the splash
+        ui::DrawablePtr m_logo;  // the AssiduousEngine logo (LoadEditorLogo), for the Welcome page and the manager
         bool m_announceScreenshot = false; // View > Screenshot: tell the user when it is written
 
         // The ids of the windows that can draw a frame now, the main window first; empty while

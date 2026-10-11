@@ -44,9 +44,12 @@ export namespace editor::app
         EditorShell& operator=(const EditorShell&) = delete;
 
         // Build the chrome. `dockHost` (nullable) lets panels float into real OS windows.
+        /// `logo` (LoadEditorLogo) heads the Welcome page; null shows the name as text.
         void Build(editor::EditorContext& context,
-                   ui::toolkit::IDockableWindowHost* dockHost, u32 width, u32 height)
+                   ui::toolkit::IDockableWindowHost* dockHost, u32 width, u32 height,
+                   ui::DrawablePtr logo = {})
         {
+            m_logo = Move(logo);
             m_root = MakeRef<ui::RootView>(editor::EditorRootAllocator());
             m_root->ViewportSize = Float2{static_cast<f32>(width), static_cast<f32>(height)};
             m_root->DpiScale = 1.0f;
@@ -137,13 +140,38 @@ export namespace editor::app
         void ResetLayout() { DockDefaults(); }
 
     private:
+        // The Welcome page: the logo (else the name) over a quiet line, centred in the panel.
+        RefPtr<ui::FlexLayout> BuildWelcome()
+        {
+            IAllocator& allocator = editor::EditorRootAllocator();
+            auto page = MakeRef<ui::FlexLayout>(allocator);
+            page->Direction = ui::Orientation::Vertical;
+            page->JustifyContent = ui::Justify::Center;
+            page->AlignItems = ui::Align::Center;
+            page->Spacing = 14;
+            if (m_logo.Get() != nullptr)
+            {
+                constexpr f32 kLogoHeight = 72.0f;
+                auto logo = MakeRef<ui::DrawableView>(allocator, m_logo, kLogoHeight * 931.0f / 200.0f, kLogoHeight);
+                logo->Opacity = 0.9f;
+                page->AddView(logo.Get());
+            }
+            else
+            {
+                auto name = MakeRef<ui::Label>(allocator, StringView(u8"AssiduousEngine"));
+                name->FontSize.SetValue(28.0f);
+                page->AddView(name.Get());
+            }
+            auto hint = MakeRef<ui::Label>(allocator, StringView(u8"Open an asset to begin"));
+            hint->FontSize.SetValue(13.0f);
+            hint->TextColor.SetValue(Optional<Color>(Color{0.55f, 0.55f, 0.57f, 1.0f}));
+            page->AddView(hint.Get());
+            return page;
+        }
+
         void BuildPanels()
         {
-            m_welcome = m_dock->AddPanel(
-                u8"Welcome",
-                MakeRef<ui::Label>(editor::EditorRootAllocator(),
-                                   StringView(u8"Editor - open an asset to begin"))
-                    .Get());
+            m_welcome = m_dock->AddPanel(u8"Welcome", BuildWelcome().Get());
             m_welcome->SetPersistenceId(kPanelWelcome);
             m_welcome->SetClosable(false);
 
@@ -195,6 +223,7 @@ export namespace editor::app
 
         // Borrowed - the DockManager owns registered panels.
         ui::toolkit::DockablePanel* m_welcome = nullptr;
+        ui::DrawablePtr m_logo; // the Welcome page's heading (null: the name as text)
         ui::toolkit::DockablePanel* m_console = nullptr;
         ui::toolkit::DockablePanel* m_assets = nullptr;
     };

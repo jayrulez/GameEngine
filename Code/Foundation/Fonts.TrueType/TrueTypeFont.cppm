@@ -73,6 +73,29 @@ export namespace foundation::fonts
         [[nodiscard]] FontMetrics Metrics() const override { return m_metrics; }
         [[nodiscard]] f32 PixelHeight() const override { return m_pixelHeight; }
 
+        /// One glyph's coverage at the font's pixel height, for drawing text on the CPU (a splash
+        /// shown before there is a GPU): `coverage` gets width x height bytes (0..255), and
+        /// (x0, y0) is its top-left relative to the pen on the baseline. False for a glyph with
+        /// nothing to draw (a space).
+        [[nodiscard]] bool RasterizeGlyph(i32 codepoint, Array<u8>& coverage, i32& width, i32& height, i32& x0,
+                                          i32& y0) const
+        {
+            const int glyph = stbtt_FindGlyphIndex(&m_fontInfo, codepoint);
+            int ix0 = 0, iy0 = 0, ix1 = 0, iy1 = 0;
+            stbtt_GetGlyphBitmapBox(&m_fontInfo, glyph, m_scale, m_scale, &ix0, &iy0, &ix1, &iy1);
+            width = ix1 - ix0;
+            height = iy1 - iy0;
+            x0 = ix0;
+            y0 = iy0;
+            if (glyph <= 0 || width <= 0 || height <= 0)
+            {
+                return false;
+            }
+            coverage.Resize(static_cast<usize>(width) * static_cast<usize>(height));
+            stbtt_MakeGlyphBitmap(&m_fontInfo, coverage.Data(), width, height, width, m_scale, m_scale, glyph);
+            return true;
+        }
+
         [[nodiscard]] GlyphInfo GetGlyphInfo(i32 codepoint) const override
         {
             if (const GlyphInfo* cached = m_glyphCache.Find(codepoint))

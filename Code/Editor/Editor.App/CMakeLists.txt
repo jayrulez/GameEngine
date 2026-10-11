@@ -22,6 +22,7 @@ target_sources(Editor.App
         SettingsDialogImpl.cpp
         TemplatesDialogImpl.cpp
         ExportDialogImpl.cpp
+        EditorSplashImpl.cpp
         EditorIconsImpl.cpp
         ToolPanelImpl.cpp
         ContainerListEditorImpl.cpp
@@ -66,6 +67,7 @@ target_sources(Editor.App
             CategoryTabs.cppm
             TemplatesDialog.cppm
             ExportDialog.cppm
+            EditorSplash.cppm
             WindowCapture.cppm
             EditorWindowTools.cppm
             EditorMcpHost.cppm

@@ -2727,3 +2727,53 @@ namespace engine::ui
         return kModule;
     }
 }
+
+namespace engine::ui
+{
+    RefPtr<foundation::ui::View> BuildDefaultLoadingScreen(IAllocator& allocator, StringView logoSvg)
+    {
+        namespace fui = foundation::ui;
+        fui::LayoutStyle fill;
+        fill.Width = fui::SizeSpec::Match();
+        fill.Height = fui::SizeSpec::Match();
+        auto screen = MakeRef<fui::Panel>(allocator);
+        screen->SetLayout(fill);
+        screen->SetStyle(fui::StyleProperty::Background,
+                         fui::DrawablePtr(MakeRef<fui::RoundedRectDrawable>(
+                                              allocator, Color{0x0A / 255.0f, 0x0A / 255.0f, 0x0C / 255.0f, 1.0f}, 0.0f)
+                                              .Get()));
+        auto column = MakeRef<fui::FlexLayout>(allocator);
+        column->Direction = fui::Orientation::Vertical;
+        column->JustifyContent = fui::Justify::Center;
+        column->AlignItems = fui::Align::Center;
+        column->Spacing = 14;
+        column->SetLayout(fill);
+        if (!logoSvg.IsEmpty())
+        {
+            if (RefPtr<fui::SVGDrawable> logo = fui::SVGDrawable::FromString(allocator, logoSvg); logo.Get() != nullptr)
+            {
+                constexpr f32 kLogoHeight = 72.0f;
+                auto view = MakeRef<fui::DrawableView>(allocator, fui::DrawablePtr(logo.Get()),
+                                                       kLogoHeight * kEngineLogoAspect, kLogoHeight);
+                view->KeepAspect = true;
+                view->Name = String(u8"logo");
+                fui::LayoutStyle gap; // the logo stands clear of the bar
+                gap.Margin = fui::Thickness{0, 0, 0, 22};
+                column->AddView(view.Get(), gap);
+            }
+        }
+        auto bar = MakeRef<fui::ProgressBar>(allocator);
+        bar->Name = String(u8"progress");
+        fui::LayoutStyle barSize;
+        barSize.Width = fui::SizeSpec::Fixed(fui::Unit::Dp(320.0f));
+        barSize.Height = fui::SizeSpec::Fixed(fui::Unit::Dp(6.0f));
+        column->AddView(bar.Get(), barSize);
+        auto status = MakeRef<fui::Label>(allocator, StringView(u8"Loading"));
+        status->Name = String(u8"status");
+        status->FontSize.SetValue(13.0f);
+        status->TextColor.SetValue(Optional<Color>(Color{0x9A / 255.0f, 0xA3 / 255.0f, 0xB2 / 255.0f, 1.0f}));
+        column->AddView(status.Get());
+        screen->AddView(column.Get());
+        return RefPtr<fui::View>(screen.Get());
+    }
+}

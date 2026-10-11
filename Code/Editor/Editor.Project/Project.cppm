@@ -47,6 +47,14 @@ export namespace editor
     using engine::project::kProjectContentDir;
     using engine::project::kProjectCookedDir;
     using engine::project::kProjectEditorDir;
+
+    /// The picture the launcher shows a project by: its scene view, captured by the editor (when
+    /// the default scene opens without one, when it is saved, on Set as Project Thumbnail) or an
+    /// image the user chose, in the project's per-machine editor folder (not under git).
+    [[nodiscard]] inline String ProjectThumbnailPath(StringView projectDirectory)
+    {
+        return PathJoin(PathJoin(projectDirectory, kProjectEditorDir).AsView(), u8"launcher-thumbnail.png");
+    }
     using engine::project::kProjectManifestFile;
     using engine::project::kProjectSourcesDir;
     using engine::project::kSourceAssetExtension;

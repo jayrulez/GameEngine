@@ -97,6 +97,10 @@ export namespace editor
         /// Ask for the viewport's next rendered frame as a PNG at `path` (the directory must
         /// exist). Replaces a pending request. NotSupported on a page without a viewport.
         [[nodiscard]] virtual Status RequestViewportCapture(StringView path) = 0;
+        /// Capture the viewport as the project's launcher thumbnail (ProjectThumbnailPath): the
+        /// scene alone, without the editor's overlays (grid, markers, gizmos, readouts, debug
+        /// view) in the captured frame. NotSupported without a viewport or a project.
+        [[nodiscard]] virtual Status RequestProjectThumbnail() = 0;
         /// The latest request's state, as it advances frame by frame.
         [[nodiscard]] virtual const ViewportCapture& LastViewportCapture() const noexcept = 0;
 

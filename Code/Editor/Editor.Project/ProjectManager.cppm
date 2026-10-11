@@ -121,6 +121,15 @@ export namespace editor
         }
         [[nodiscard]] settings::Settings& Store() noexcept { return *m_store; }
 
+        /// Whether the launcher shows a grid of the projects' pictures (else a list); kept in the
+        /// store with the recent projects (the caller saves it, as after Remove).
+        [[nodiscard]] bool GridView() { return m_store->Section<RecentProjectsSettings>().gridView; }
+        void SetGridView(bool grid)
+        {
+            m_store->Section<RecentProjectsSettings>().gridView = grid;
+            m_store->MarkChanged<RecentProjectsSettings>();
+        }
+
     private:
         settings::Settings* m_store;
     };

@@ -504,8 +504,10 @@ export namespace editor
                 return Status{ErrorCode::NotSupported};
             }
             m_capture.Request(path);
+            m_cleanCapture = false; // what the viewport shows, overlays and all
             return Status{};
         }
+        [[nodiscard]] Status RequestProjectThumbnail() override;
         [[nodiscard]] const ViewportCapture& LastViewportCapture() const noexcept override
         {
             return m_capture.State();
@@ -748,6 +750,15 @@ export namespace editor
         // The viewport capture (viewport_screenshot): armed by RequestViewportCapture, recorded
         // in OnAfterSceneRender off the composed colour target, completed in the next OnUpdate.
         ViewportCaptureRecorder m_capture;
+        // The launcher's picture of the project (ProjectThumbnailPath): the default scene's view,
+        // taken once it has settled when there is none yet, and on every save of it.
+        // Its capture is the scene alone: m_cleanCapture holds the overlays back from the frame
+        // the armed capture records.
+        [[nodiscard]] bool IsProjectDefaultScene() const;
+        [[nodiscard]] bool CleanCaptureFrame() const noexcept { return m_cleanCapture && m_capture.Armed(); }
+        bool m_cleanCapture = false;
+        bool m_thumbnailChecked = false;
+        f32 m_thumbnailWait = 0.0f;
         bool m_renderedThisFrame = false; // OnRenderWindow added the view this frame, at:
         u32 m_captureWidth = 0;
         u32 m_captureHeight = 0;

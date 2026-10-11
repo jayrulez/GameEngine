@@ -64,6 +64,7 @@ namespace editor::app
         close = ui::BakedSVGDrawable::FromString(editor::EditorRootAllocator(), kClose);
         search = ui::BakedSVGDrawable::FromString(editor::EditorRootAllocator(), kSearch);
         warning = ui::BakedSVGDrawable::FromString(editor::EditorRootAllocator(), kWarning);
+        more = ui::BakedSVGDrawable::FromString(editor::EditorRootAllocator(), kMore);
         add = ui::BakedSVGDrawable::FromString(editor::EditorRootAllocator(), kAdd);
         remove = ui::BakedSVGDrawable::FromString(editor::EditorRootAllocator(), kRemove);
         moveUp = ui::BakedSVGDrawable::FromString(editor::EditorRootAllocator(), kMoveUp);
@@ -89,7 +90,7 @@ namespace editor::app
               &particleFx, &animation,  &animGraph,   &skeleton,   &folder,      &unknown,
               &viewList,  &viewGrid,
               &close,     &search,     &add,         &remove,      &moveUp,     &moveDown,    &copy,
-              &edit,      &warning,
+              &edit,      &warning,     &more,
               &brushRaise,  &brushLower,  &brushSmooth, &brushFlatten})
         {
             slots.PushBack(slot);

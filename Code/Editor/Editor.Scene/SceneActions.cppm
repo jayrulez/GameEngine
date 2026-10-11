@@ -42,6 +42,7 @@ export namespace editor
         inline constexpr StringView kMarkers = u8"scene.view.markers";
         inline constexpr StringView kFrameSelection = u8"scene.view.frameSelection";
         inline constexpr StringView kAnimationPanel = u8"scene.view.animationPanel";
+        inline constexpr StringView kSetProjectThumbnail = u8"scene.view.setProjectThumbnail";
         inline constexpr StringView kEntityCreate = u8"scene.entity.create";
         inline constexpr StringView kEntityCreateChild = u8"scene.entity.createChild";
         inline constexpr StringView kEntityDuplicate = u8"scene.entity.duplicate";
@@ -236,6 +237,26 @@ export namespace editor
             {
                 ISceneEditorPage* scene = scenePage(page);
                 (void)scene->FrameEntities(scene->EditContext().EntitySelection().Items(), true);
+            };
+            (void)actions.Register(Move(d));
+        }
+        {
+            // The launcher's picture of the project: this view, now (it is otherwise taken when
+            // the default scene opens without one and when it is saved).
+            EditorActionDeclaration d = Declare(kSetProjectThumbnail, u8"Set as Project Thumbnail",
+                                                u8"Use this view as the picture the project launcher "
+                                                u8"shows the project by",
+                                                u8"Scene/Set as Project Thumbnail", 295);
+            d.readOnly = true; // a picture of the scene, not an edit of it
+            EditorContext* editor = &context;
+            d.enabled = [scenePage, editor](EditorPage* page)
+            { return scenePage(page) != nullptr && editor->Project() != nullptr; };
+            d.execute = [scenePage, editor](EditorPage* page)
+            {
+                if (scenePage(page)->RequestProjectThumbnail().IsOk())
+                {
+                    editor->SetStatus(u8"The launcher will show this view for the project.");
+                }
             };
             (void)actions.Register(Move(d));
         }

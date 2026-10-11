@@ -67,10 +67,13 @@ export namespace editor
         static constexpr ENGINE_EXPORT_DATA usize kMaxEntries = 20;
 
         Array<RecentProjectEntry> entries;
+        // The launcher shows the projects as a grid of their pictures, else as a list.
+        bool gridView = false;
 
         void Serialize(ISerializer& ar) override
         {
             foundation::core::Serialize(ar, "entries", entries);
+            SerializeAppended(ar, "gridView", gridView); // after the rest: older stores lack it
         }
 
         [[nodiscard]] const RecentProjectEntry* Find(StringView path) const

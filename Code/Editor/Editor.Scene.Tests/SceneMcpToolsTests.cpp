@@ -77,6 +77,7 @@ namespace
         }
         Array<Guid> framed{DefaultAllocator()};
         bool framedEased = true;
+        [[nodiscard]] Status RequestProjectThumbnail() override { return Status{ErrorCode::NotSupported}; }
         [[nodiscard]] Status RequestViewportCapture(StringView path) override
         {
             if (!hasViewport)

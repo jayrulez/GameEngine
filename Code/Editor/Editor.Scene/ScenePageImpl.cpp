@@ -88,6 +88,21 @@ namespace editor
         {
             return;
         }
+        // A project with no launcher picture yet gets one from its default scene, once the view
+        // has been up a moment with nothing left loading (content pops in asynchronously).
+        if (!m_thumbnailChecked && IsProjectDefaultScene())
+        {
+            m_thumbnailWait += dt;
+            const bool settled = m_context->Resources() == nullptr || m_context->Resources()->PendingCount() == 0;
+            if (m_thumbnailWait > 1.5f && settled)
+            {
+                m_thumbnailChecked = true;
+                if (!FileExists(ProjectThumbnailPath(m_context->Project()->Directory()).AsView()))
+                {
+                    (void)RequestProjectThumbnail();
+                }
+            }
+        }
 
         if (m_hierarchy)
         {
@@ -151,7 +166,8 @@ namespace editor
         // Per-scene debug draw (shows only where THIS scene renders; lists clear in
         // EndRendering, so re-accumulate every frame): ground grid + origin axes + entity
         // markers (selected = boxed and brighter) + gizmos.
-        if (m_render != nullptr && m_scene != nullptr)
+        // (None on the frame a project thumbnail is captured: the launcher shows the scene.)
+        if (m_render != nullptr && m_scene != nullptr && !CleanCaptureFrame())
         {
             // Draw the editor overlay (grid + markers + gizmos) into THIS viewport's own keyed
             // debug list, not the per-scene one - so it renders only in the main viewport, never in
@@ -268,7 +284,8 @@ namespace editor
 
         m_render->RenderScene(*m_scene, m_viewport->ColorTargetView(), m_viewport->ColorFormat(), w,
                               h, render::ViewportRect{0, 0, w, h}, &cameraOverride, targetState,
-                              &m_postOverride, /*viewportKey*/ m_viewport.Get(), &m_debugView);
+                              &m_postOverride, /*viewportKey*/ m_viewport.Get(),
+                              CleanCaptureFrame() ? nullptr : &m_debugView);
         m_viewport->SetColorState(rhi::ResourceState::ShaderRead);
         m_renderedThisFrame = true; // OnAfterSceneRender captures this frame's image
         m_captureWidth = w;
@@ -294,6 +311,7 @@ namespace editor
         m_capture.Record(host.Graphics()->Raw(), frame.encoder, m_viewport->ColorTexture(),
                          m_viewport->ColorFormat(), m_captureWidth, m_captureHeight,
                          rhi::ResourceState::ShaderRead);
+        m_cleanCapture = false;
     }
 
     void SceneEditorPage::CreatePrefabFromEntity(const Guid& entityId)
@@ -715,6 +733,11 @@ namespace editor
             ClearDirty();
             LOG_INFO(u8"Editor", u8"saved {} '{}'",
                               isPrefab ? StringView(u8"prefab") : StringView(u8"scene"), m_title);
+            // The launcher's picture of the project follows its default scene as it is saved.
+            if (!isPrefab && IsProjectDefaultScene())
+            {
+                (void)RequestProjectThumbnail();
+            }
             // Template changed: rebuild this prefab's instances in every OTHER open
             // scene, preserving their deltas (capture -> respawn -> reapply).
             if (isPrefab && m_scenes != nullptr)
@@ -747,6 +770,25 @@ namespace editor
             }
         }
         return saved;
+    }
+
+    bool SceneEditorPage::IsProjectDefaultScene() const
+    {
+        const EditorProject* project = m_context->Project();
+        return project != nullptr && !InstanceId().IsNil() && project->Settings().defaultSceneId == InstanceId();
+    }
+
+    Status SceneEditorPage::RequestProjectThumbnail()
+    {
+        if (m_context->Project() == nullptr)
+        {
+            return Status{ErrorCode::NotSupported};
+        }
+        const String path = ProjectThumbnailPath(m_context->Project()->Directory());
+        (void)CreateDirectories(PathParent(path.AsView()));
+        const Status requested = RequestViewportCapture(path.AsView());
+        m_cleanCapture = requested.IsOk();
+        return requested;
     }
 
     bool SceneEditorPage::CameraOwnsInput() const noexcept

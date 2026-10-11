@@ -75,6 +75,7 @@ namespace
         [[nodiscard]] bool MarkersShown() const noexcept override { return true; }
         [[nodiscard]] EditorCamera* ViewportCamera() noexcept override { return nullptr; }
         bool FrameEntities(Span<const Guid>, bool) override { return false; }
+        [[nodiscard]] Status RequestProjectThumbnail() override { return Status{ErrorCode::NotSupported}; }
         [[nodiscard]] Status RequestViewportCapture(StringView) override
         {
             return Status{ErrorCode::NotSupported};

@@ -2599,7 +2599,7 @@ namespace editor::app
         }
         if (!m_managerView)
         {
-            m_managerView = MakeUnique<ProjectManagerView>(m_editorAllocator, m_editorAllocator);
+            m_managerView = MakeUnique<ProjectManagerView>(m_editorAllocator, m_editorAllocator, m_logo);
             // Open/Create swap the window's root (detaching the manager view whose button is
             // mid-dispatch) - defer through the UI mutation queue, like Close Project.
             m_managerView->OnOpenProject = [this](StringView dir)

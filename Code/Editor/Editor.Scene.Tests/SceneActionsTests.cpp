@@ -64,6 +64,16 @@ namespace
             framedEased = ease;
             return !entities.IsEmpty();
         }
+        [[nodiscard]] Status RequestProjectThumbnail() override
+        {
+            if (!hasViewport)
+            {
+                return Status{ErrorCode::NotSupported};
+            }
+            ++thumbnailRequests;
+            return Status{};
+        }
+        i32 thumbnailRequests = 0;
         [[nodiscard]] Status RequestViewportCapture(StringView) override { return Status{ErrorCode::NotSupported}; }
         [[nodiscard]] const ViewportCapture& LastViewportCapture() const noexcept override { return capture; }
         [[nodiscard]] bool MarkersShown() const noexcept override { return markers; }
@@ -326,4 +336,36 @@ TEST_CASE("scene-actions: F frames the selection, eased, on a page with a viewpo
     CHECK(page->framed[1] == b);
     CHECK(page->framedEased);
     context.ClosePage(page);
+}
+
+TEST_CASE("scene-actions: Set as Project Thumbnail asks the page for its clean thumbnail capture")
+{
+    const StringView dir = u8"scratch_scene_actions_thumbnail_project";
+    (void)RemoveDirectoryRecursive(dir);
+    REQUIRE(EditorProject::Create(DefaultAllocator(), dir, u8"P").IsOk());
+    UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
+    REQUIRE(static_cast<bool>(project));
+
+    EditorContext context{DefaultAllocator()};
+    RegisterSceneEditorActions(context);
+    EditorActionRegistry& actions = context.Actions();
+    REQUIRE(actions.Find(kSetProjectThumbnail) != nullptr);
+    CHECK(actions.Find(kSetProjectThumbnail)->readOnly);
+    auto* page = static_cast<HeadlessScenePage*>(context.AdoptPage(UniquePtr<EditorPage>(
+        DefaultAllocator().New<HeadlessScenePage>(u8"Level1"), DefaultAllocator())));
+    page->hasViewport = true;
+
+    // No project: no launcher to show the picture.
+    CHECK_FALSE(actions.IsEnabled(kSetProjectThumbnail, page));
+
+    // With one, the page takes the capture (the scene without the editor's overlays), not a
+    // plain viewport capture of what the viewport shows.
+    context.SetProject(project.Get());
+    CHECK(actions.IsEnabled(kSetProjectThumbnail, page));
+    REQUIRE(actions.Execute(kSetProjectThumbnail, page).IsOk());
+    CHECK(page->thumbnailRequests == 1);
+
+    context.SetProject(nullptr);
+    context.ClosePage(page);
+    (void)RemoveDirectoryRecursive(dir);
 }

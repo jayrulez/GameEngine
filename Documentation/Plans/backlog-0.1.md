@@ -19,10 +19,6 @@
   panels grow to the top and a new scene docks as a tab beside them). Give it a use while it
   does that: perhaps the project's page, with the project's information and quick ways to its
   settings and the other project-level things. Keep the docking job whatever it becomes.
-- **Polish the project launcher** (user 2026-10-09): the page the editor opens on to pick a
-  project. A list / grid toggle, the grid showing each project's thumbnail (a picture of the
-  project to recognise it by); and some of the per-project options moved into a menu (a
-  hamburger or similar) so the page reads cleanly.
 - **Project-wide defaults for scene settings, per domain** (user 2026-10-09, to think about): a
   scene's render settings come from the scene itself (its own values, or a profile asset it
   names, as Lamplight's levels share theirs), else from hard-coded defaults; other domains are

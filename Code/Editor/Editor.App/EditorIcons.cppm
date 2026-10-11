@@ -73,6 +73,7 @@ export namespace editor::app
 
         // === Status ===
         RefPtr<ui::BakedSVGDrawable> warning; // a triangle with "!"
+        RefPtr<ui::BakedSVGDrawable> more;    // three dots: a menu of more choices
 
         // === Terrain brush modes (sculpt tool panel) ===
         RefPtr<ui::BakedSVGDrawable> brushRaise;   // up arrow off a baseline
@@ -92,7 +93,7 @@ export namespace editor::app
         [[nodiscard]] Array<ui::BakedSVGDrawable*> Bakeable() const;
 
         /// Every icon slot, the one table Shutdown and Bakeable walk (kSlotCount entries).
-        static constexpr ENGINE_EXPORT_DATA usize kSlotCount = 33;
+        static constexpr ENGINE_EXPORT_DATA usize kSlotCount = 34;
         [[nodiscard]] Array<RefPtr<ui::BakedSVGDrawable>*> Slots();
 
     private:
@@ -184,6 +185,13 @@ export namespace editor::app
         static constexpr StringView kSearch = u8R"svg(<svg viewBox="0 0 24 24">
   <circle cx="10" cy="10" r="6" fill="none" stroke="#E0E0E0" stroke-width="2"/>
   <line x1="14.5" y1="14.5" x2="20" y2="20" stroke="#E0E0E0" stroke-width="2.4" stroke-linecap="round"/>
+</svg>)svg";
+
+        // More - three dots in a row (a menu of further choices).
+        static constexpr StringView kMore = u8R"svg(<svg viewBox="0 0 24 24">
+  <circle cx="5.5" cy="12" r="2" fill="#E0E0E0"/>
+  <circle cx="12" cy="12" r="2" fill="#E0E0E0"/>
+  <circle cx="18.5" cy="12" r="2" fill="#E0E0E0"/>
 </svg>)svg";
 
         // Warning - a triangle with an exclamation mark.

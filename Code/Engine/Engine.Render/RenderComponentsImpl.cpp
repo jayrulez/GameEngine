@@ -699,6 +699,100 @@ namespace engine::render
         return true;
     }
 
+    namespace
+    {
+        // Whether the ray (any direction length) meets `box` before `reach`, in its units.
+        [[nodiscard]] bool RayMeetsBox(Float3 origin, Float3 direction, const AABB& box, f32 reach) noexcept
+        {
+            f32 enter = 0.0f;
+            f32 leave = reach;
+            const f32 o[3] = {origin.x, origin.y, origin.z};
+            const f32 d[3] = {direction.x, direction.y, direction.z};
+            const f32 lo[3] = {box.min.x, box.min.y, box.min.z};
+            const f32 hi[3] = {box.max.x, box.max.y, box.max.z};
+            for (i32 axis = 0; axis < 3; ++axis)
+            {
+                if (Abs(d[axis]) < 1e-12f)
+                {
+                    if (o[axis] < lo[axis] || o[axis] > hi[axis])
+                    {
+                        return false; // parallel to the slab and outside it
+                    }
+                    continue;
+                }
+                f32 t0 = (lo[axis] - o[axis]) / d[axis];
+                f32 t1 = (hi[axis] - o[axis]) / d[axis];
+                if (t0 > t1)
+                {
+                    const f32 swap = t0;
+                    t0 = t1;
+                    t1 = swap;
+                }
+                enter = Max(enter, t0);
+                leave = Min(leave, t1);
+                if (enter > leave)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+
+    bool MeshComponentManager::RaycastSurface(scene::Scene& scene, Float3 origin, Float3 direction, f32 maxDistance,
+                                              const Function<bool(scene::EntityHandle)>& accept,
+                                              scene::SceneSurfaceHit& out)
+    {
+        bool any = false;
+        f32 reach = maxDistance;
+        ForEach(
+            [&](const MeshComponent& component, scene::EntityHandle entity)
+            {
+                const geometry::StaticMesh* mesh = component.mesh.Get();
+                if (mesh == nullptr || mesh->vertices.IsEmpty() || !scene.IsActive(entity) ||
+                    (accept && !accept(entity)))
+                {
+                    return;
+                }
+                // The ray in the mesh's space, its direction NOT normalized: distances along it
+                // stay world distances along the world ray.
+                const Float4x4 world = scene.ComposeWorldMatrix(entity);
+                const Float4x4 toLocal = Inverse(world);
+                const Float3 localOrigin = TransformPoint(origin, toLocal);
+                const Float3 localDirection = TransformDirection(direction, toLocal);
+                if (mesh->bounds.IsValid() && !RayMeetsBox(localOrigin, localDirection, mesh->bounds, reach))
+                {
+                    return;
+                }
+                geometry::MeshRayHit hit;
+                if (!geometry::RaycastMesh(*mesh, localOrigin, localDirection, reach, hit))
+                {
+                    return;
+                }
+                reach = hit.distance;
+                any = true;
+                out.entity = entity;
+                out.distance = hit.distance;
+                out.position = TransformPoint(hit.position, world);
+                const Float3 normal = TransformDirection(hit.normal, Transpose(toLocal));
+                out.normal = LengthSquared(normal) > 0.0f ? Normalized(normal) : Float3::UnitY;
+                // The corner nearest the hit, measured in the world (a scaled mesh's nearest
+                // corner in its own space need not be the nearest on screen).
+                f32 best = -1.0f;
+                for (const Float3& corner : hit.corners)
+                {
+                    const Float3 at = TransformPoint(corner, world);
+                    const f32 d = LengthSquared(at - out.position);
+                    if (best < 0.0f || d < best)
+                    {
+                        best = d;
+                        out.vertex = at;
+                    }
+                }
+            });
+        return any;
+    }
+
     bool InstancedMeshComponentManager::EntityBounds(scene::Scene&, scene::EntityHandle entity, AABB& out)
     {
         const InstancedMeshComponent* set = Get(entity);

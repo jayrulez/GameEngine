@@ -655,4 +655,30 @@ export namespace foundation::scene
         return any;
     }
 
+    // The closest hit of a ray on the scene's drawn surfaces, as every system that answers rays
+    // against what it draws (ISceneSurfaceQuery) finds it: along unit `direction` from `origin`
+    // within `maxDistance`, on the entities `accept` takes (an empty function takes all). False
+    // on a miss.
+    [[nodiscard]] inline bool RaycastSurface(Scene& scene, core::Float3 origin, core::Float3 direction,
+                                             core::f32 maxDistance,
+                                             const core::Function<bool(EntityHandle)>& accept, SceneSurfaceHit& out)
+    {
+        bool any = false;
+        core::f32 reach = maxDistance;
+        scene.ForEachSystem(
+            [&](SceneSystem& system)
+            {
+                ISceneSurfaceQuery* query = system.AsSurfaceQuery();
+                SceneSurfaceHit hit;
+                if (query != nullptr && query->RaycastSurface(scene, origin, direction, reach, accept, hit) &&
+                    hit.distance <= reach)
+                {
+                    reach = hit.distance;
+                    out = hit;
+                    any = true;
+                }
+            });
+        return any;
+    }
+
 } // namespace foundation::scene

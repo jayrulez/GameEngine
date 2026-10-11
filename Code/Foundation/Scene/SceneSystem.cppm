@@ -109,6 +109,33 @@ export namespace foundation::scene
                                            SceneRayHit& out) = 0;
     };
 
+    // What a ray found on an entity's drawn surface (world space): the entity, where, and the
+    // corner of the triangle it met nearest the hit (a vertex to snap to).
+    struct SceneSurfaceHit
+    {
+        EntityHandle entity{};
+        f32 distance = 0.0f;
+        Float3 position{};
+        Float3 normal{0.0f, 1.0f, 0.0f};
+        Float3 vertex{};
+    };
+
+    // A system that can answer a ray against what it draws (render: its meshes' triangles), for
+    // one that wants the visible surface rather than the solid one: the editor snapping a dragged
+    // entity onto a vertex. Neither names the other's components; RaycastSurface (in :scene) asks
+    // every system that answers.
+    class ISceneSurfaceQuery
+    {
+    public:
+        virtual ~ISceneSurfaceQuery() = default;
+
+        // The closest hit along unit `direction` from `origin` within `maxDistance`, on the
+        // entities `accept` takes (an empty function takes all). False on a miss.
+        [[nodiscard]] virtual bool RaycastSurface(Scene& scene, Float3 origin, Float3 direction, f32 maxDistance,
+                                                  const Function<bool(EntityHandle)>& accept,
+                                                  SceneSurfaceHit& out) = 0;
+    };
+
     // A system that moves characters (physics: its character controllers), for a system that does
     // not depend on it: an animator walking its character by the clip's root motion.
     class ISceneCharacterMotion
@@ -148,6 +175,8 @@ export namespace foundation::scene
         [[nodiscard]] virtual IStaticColliderSource* AsStaticColliderSource() noexcept { return nullptr; }
         // And for one that measures entities (ISceneEntityBounds).
         [[nodiscard]] virtual ISceneEntityBounds* AsEntityBounds() noexcept { return nullptr; }
+        // And for one that answers rays against what it draws (ISceneSurfaceQuery).
+        [[nodiscard]] virtual ISceneSurfaceQuery* AsSurfaceQuery() noexcept { return nullptr; }
 
         // --- lifecycle (Scene calls these) ---
         virtual void OnSceneCreate(Scene& /*scene*/) {} // added to a scene

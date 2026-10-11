@@ -409,14 +409,20 @@ export namespace engine::render
     }
 
     // Measures its entities for the scene (ISceneEntityBounds): a mesh's bounds through the
-    // entity's world matrix, once the mesh is loaded.
+    // entity's world matrix, once the mesh is loaded. Answers rays against its meshes' triangles
+    // (ISceneSurfaceQuery; a skinned mesh in its bind pose, the pose its CPU vertices hold).
     class MeshComponentManager final : public scene::SerializableComponentManager<MeshComponent>,
-                                       public scene::ISceneEntityBounds
+                                       public scene::ISceneEntityBounds,
+                                       public scene::ISceneSurfaceQuery
     {
     public:
         MeshComponentManager() : scene::SerializableComponentManager<MeshComponent>(u8"mesh") {}
         [[nodiscard]] scene::ISceneEntityBounds* AsEntityBounds() noexcept override { return this; }
         [[nodiscard]] bool EntityBounds(scene::Scene& scene, scene::EntityHandle entity, AABB& out) override;
+        [[nodiscard]] scene::ISceneSurfaceQuery* AsSurfaceQuery() noexcept override { return this; }
+        [[nodiscard]] bool RaycastSurface(scene::Scene& scene, Float3 origin, Float3 direction, f32 maxDistance,
+                                          const Function<bool(scene::EntityHandle)>& accept,
+                                          scene::SceneSurfaceHit& out) override;
     };
     // Data-only components PERSIST (scene round-trip + full destroy-undo restore - a destroyed
     // entity's components are snapshotted through serializable managers only). Sprite/Decal/

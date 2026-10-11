@@ -5,7 +5,8 @@ add_executable(Engine.Render.Tests
     TestsMain.cpp
     ExtractTests.cpp
     LightAtTests.cpp
-    RenderProfileTests.cpp)
+    RenderProfileTests.cpp
+    SurfaceQueryTests.cpp)
 
 target_link_libraries(Engine.Render.Tests PRIVATE
     Engine::Render Foundation::Geometry.Resource Foundation::Materials.Resource Foundation::Scene.Resource

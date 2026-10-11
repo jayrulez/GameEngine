@@ -12,5 +12,6 @@ target_sources(Geometry
             IndexBuffer.cppm
             Mesh.cppm
             Primitives.cppm
+            MeshRaycast.cppm
             GeometryModule.cppm)
 

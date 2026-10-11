@@ -16,3 +16,4 @@ export import :types;
 export import :index_buffer;
 export import :mesh;
 export import :primitives;
+export import :mesh_raycast;

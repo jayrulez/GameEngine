@@ -220,3 +220,37 @@ TEST_CASE("tangent generation: mirrored UVs produce handedness w = -1")
     CHECK(mesh->vertices[0].tangent.x == doctest::Approx(1.0f));
     CHECK(mesh->vertices[3].tangent.x == doctest::Approx(-1.0f));
 }
+
+TEST_CASE("mesh raycast: the nearest triangle hit, from either side, and its nearest corner")
+{
+    // A 2-unit cube centred on the origin: its faces at +-1.
+    RefPtr<StaticMesh> cube = Primitives::Cube(DefaultAllocator(), 2.0f);
+    MeshRayHit hit;
+
+    // Straight down onto the top face: the hit at y = 1, the normal facing the ray.
+    REQUIRE(RaycastMesh(*cube, Float3{0.6f, 5.0f, 0.7f}, Float3{0, -1, 0}, 100.0f, hit));
+    CHECK(hit.distance == doctest::Approx(4.0f));
+    CHECK(hit.position.y == doctest::Approx(1.0f));
+    CHECK(hit.normal.y == doctest::Approx(1.0f));
+    // The corner nearest (0.6, 1, 0.7) is the top face's (1, 1, 1).
+    const Float3 corner = NearestCorner(hit);
+    CHECK(corner.x == doctest::Approx(1.0f));
+    CHECK(corner.y == doctest::Approx(1.0f));
+    CHECK(corner.z == doctest::Approx(1.0f));
+
+    // From inside, the far face counts too (both faces).
+    REQUIRE(RaycastMesh(*cube, Float3{0, 0, 0}, Float3{1, 0, 0}, 100.0f, hit));
+    CHECK(hit.distance == doctest::Approx(1.0f));
+
+    // A distance in units of an unnormalized direction (a world ray in the mesh's space).
+    REQUIRE(RaycastMesh(*cube, Float3{0.2f, 5.0f, 0.2f}, Float3{0, -2, 0}, 100.0f, hit));
+    CHECK(hit.distance == doctest::Approx(2.0f));
+
+    // Out of reach, or past it: no hit.
+    CHECK_FALSE(RaycastMesh(*cube, Float3{5, 5, 5}, Float3{0, 1, 0}, 100.0f, hit));
+    CHECK_FALSE(RaycastMesh(*cube, Float3{0.2f, 5.0f, 0.2f}, Float3{0, -1, 0}, 3.5f, hit));
+
+    // A mesh without triangles on the CPU never hits.
+    StaticMesh empty;
+    CHECK_FALSE(RaycastMesh(empty, Float3{0, 5, 0}, Float3{0, -1, 0}, 100.0f, hit));
+}

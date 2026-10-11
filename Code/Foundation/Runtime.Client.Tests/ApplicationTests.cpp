@@ -261,6 +261,25 @@ TEST_CASE("client: the host borrows the shell and exposes it to the app")
     host.Stop();
 }
 
+TEST_CASE("client: a window closed through the window manager goes at the end of the frame")
+{
+    // A window the host does not render (the editor's splash): closed through the manager, it
+    // is freed at the frame's end like any other, not left on screen.
+    NullShell shell;
+    PlatformApp app;
+    ApplicationHost host(DefaultAllocator());
+    host.Start(app, &shell);
+    IWindowManager* windows = shell.WindowManager();
+    REQUIRE(windows != nullptr);
+    auto opened = windows->CreateWindow(WindowSettings{});
+    REQUIRE(opened.HasValue());
+    const usize before = windows->Windows().Size();
+    windows->DestroyWindow(opened.Value());
+    host.Tick(0.016f);
+    CHECK(windows->Windows().Size() == before - 1);
+    host.Stop();
+}
+
 namespace
 {
     // Opens a second window at startup and counts per-window render calls.

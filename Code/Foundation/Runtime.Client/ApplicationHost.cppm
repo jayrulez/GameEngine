@@ -289,13 +289,12 @@ export namespace foundation::runtime
 
     private:
         // Destroy windows queued by CloseWindow: free the RenderWindow (GPU) then
-        // the OS window. Runs at frame end, after the GPU finished the frame.
+        // the OS window. Runs at frame end, after the GPU finished the frame. The window
+        // manager's queue is flushed every frame, not only when the host closed one of its
+        // own: a window closed through the manager directly (the editor's splash, which has
+        // no RenderWindow) otherwise stayed on screen, waiting for a flush that never came.
         void FlushPendingCloses()
         {
-            if (m_pendingClose.IsEmpty())
-            {
-                return;
-            }
             IWindowManager* wm = (m_shell != nullptr) ? m_shell->WindowManager() : nullptr;
 
             for (RenderWindow* dead : m_pendingClose)

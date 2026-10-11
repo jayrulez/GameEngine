@@ -33,14 +33,14 @@ import foundation.settings;
 import foundation.shell;
 import foundation.ui;
 import foundation.ui.toolkit;
-import foundation.vg;    // CornerRadii (a thumbnail's rounding)
-import foundation.fonts; // TextAlignment (the placeholder's initial)
+import foundation.fonts; // TextAlignment (the version column)
 import engine.project;
 import editor.core;
 import foundation.image;
 import foundation.image.io;
 import :editor_icons;
 import :view_mode_toggles;
+import :project_picture;
 
 using namespace foundation::core;
 using namespace foundation;
@@ -49,7 +49,6 @@ namespace shell = foundation::shell;
 export namespace editor::app
 {
     namespace ui = foundation::ui;
-    namespace vg = foundation::vg;
     namespace fonts = foundation::fonts;
     namespace project = engine::project;
 
@@ -467,42 +466,8 @@ export namespace editor::app
         // The project's picture (its thumbnail, else a tile with its initial), `w` x `h`.
         RefPtr<ui::View> Picture(const Card& card, f32 w, f32 h, f32 radius)
         {
-            auto image = MakeUnique<foundation::image::Image>(Allocator());
-            if (!card.missing &&
-                foundation::image::io::LoadImage(ProjectThumbnailPath(card.path.AsView()).AsView(), *image).IsOk())
-            {
-                auto view = MakeRef<ui::ImageView>(Allocator(), image.Get());
-                view->ScaleType.SetValue(ui::ScaleType::CenterCrop);
-                view->CornerRadius.SetValue(vg::CornerRadii(radius));
-                m_thumbnails.PushBack(Move(image)); // the view borrows it
-                auto frame = MakeRef<ui::FlexLayout>(Allocator());
-                ui::LayoutStyle size;
-                size.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(w));
-                size.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(h));
-                frame->AddView(view.Get(), size);
-                return RefPtr<ui::View>(frame.Get());
-            }
-            // No picture yet: the project's initial on a quiet tile.
-            auto tile = MakeRef<ui::Panel>(Allocator());
-            tile->SetStyle(ui::StyleProperty::Background,
-                           ui::DrawablePtr(MakeRef<ui::RoundedRectDrawable>(Allocator(), Color{1, 1, 1, 0.05f}, radius,
-                                                                            Color{1, 1, 1, 0.08f}, 1.0f)
-                                               .Get()));
-            String initial;
-            const StringView name = card.name.AsView();
-            initial.Append(name.IsEmpty() ? utf8char('?') : name[0]);
-            auto letter = MakeRef<ui::Label>(Allocator(), initial.AsView());
-            letter->FontSize.SetValue(h * 0.42f);
-            letter->TextColor.SetValue(Optional<Color>(Color{1, 1, 1, 0.35f}));
-            letter->HAlign.SetValue(fonts::TextAlignment::Center);
-            letter->VAlign.SetValue(fonts::VerticalAlignment::Middle);
-            tile->AddView(letter.Get());
-            auto frame = MakeRef<ui::FlexLayout>(Allocator());
-            ui::LayoutStyle size;
-            size.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(w));
-            size.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(h));
-            frame->AddView(tile.Get(), size);
-            return RefPtr<ui::View>(frame.Get());
+            return MakeProjectPicture(Allocator(), card.missing ? StringView() : card.path.AsView(),
+                                      card.name.AsView(), w, h, radius, m_thumbnails);
         }
 
         // The "more" button: the project's menu.

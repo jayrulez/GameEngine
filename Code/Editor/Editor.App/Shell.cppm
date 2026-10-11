@@ -8,9 +8,10 @@
 // everything scene-scoped (viewport, hierarchy, inspector, selection,
 // camera) lives INSIDE each editor page, because multi-scene editing means several scene
 // pages can be open at once - per-page views, never global panels. The dock CENTER is
-// the document area: each open page docks there as a closable tab via AddPagePanel; a
-// non-closable Welcome panel holds the center until the first page opens (and keeps the
-// center tab group alive when all pages close).
+// the document area: each open page docks there as a closable tab via AddPagePanel; the
+// non-closable Project panel holds the center (it keeps the center tab group alive when all
+// pages close, so a newly opened page docks there and not among the tool panels). With a project
+// open it shows the project's page (SetProjectContent, ProjectHomeView); without one, the logo.
 
 module;
 #include "Core/Prelude.h"
@@ -31,8 +32,9 @@ export namespace editor::app
 {
     namespace ui = foundation::ui;
 
-    // Stable persistence ids for the GLOBAL panels (LoadDockLayout match keys - do not rename).
-    inline constexpr StringView kPanelWelcome = u8"welcome";
+    // Stable persistence ids for the GLOBAL panels (LoadDockLayout match keys - do not rename:
+    // the Project panel keeps the id it had as the Welcome panel, so saved layouts still place it).
+    inline constexpr StringView kPanelProject = u8"welcome";
     inline constexpr StringView kPanelConsole = u8"console";
     inline constexpr StringView kPanelAssets = u8"assets";
 
@@ -44,7 +46,7 @@ export namespace editor::app
         EditorShell& operator=(const EditorShell&) = delete;
 
         // Build the chrome. `dockHost` (nullable) lets panels float into real OS windows.
-        /// `logo` (LoadEditorLogo) heads the Welcome page; null shows the name as text.
+        /// `logo` (LoadEditorLogo) heads the Project panel without a project; null shows the name.
         void Build(editor::EditorContext& context,
                    ui::toolkit::IDockableWindowHost* dockHost, u32 width, u32 height,
                    ui::DrawablePtr logo = {})
@@ -88,9 +90,9 @@ export namespace editor::app
         }
         [[nodiscard]] ui::toolkit::DockManager* Docks() const noexcept { return m_dock.Get(); }
 
-        [[nodiscard]] ui::toolkit::DockablePanel* WelcomePanel() const noexcept
+        [[nodiscard]] ui::toolkit::DockablePanel* ProjectPanel() const noexcept
         {
-            return m_welcome;
+            return m_project;
         }
         [[nodiscard]] ui::toolkit::DockablePanel* ConsolePanel() const noexcept
         {
@@ -108,6 +110,24 @@ export namespace editor::app
             }
         }
 
+        /// Show the open project's page in the Project panel; null (the project closed) shows the
+        /// logo again.
+        void SetProjectContent(foundation::ui::View* content)
+        {
+            if (m_project == nullptr)
+            {
+                return;
+            }
+            if (content != nullptr)
+            {
+                m_project->SetContent(content);
+            }
+            else
+            {
+                m_project->SetContent(BuildWelcome().Get());
+            }
+        }
+
         /// The Console panel's log view (fed by the app's EditorLogBuffer drain).
         [[nodiscard]] LogView* Console() const noexcept { return m_logView.Get(); }
 
@@ -121,7 +141,7 @@ export namespace editor::app
             ui::toolkit::DockablePanel* panel = m_dock->AddPanel(title, content);
             panel->SetClosable(true);
             m_dock->DockPanelRelativeTo(panel, ui::toolkit::DockPosition::Center,
-                                        m_welcome->Parent);
+                                        m_project->Parent);
             return panel;
         }
 
@@ -140,7 +160,7 @@ export namespace editor::app
         void ResetLayout() { DockDefaults(); }
 
     private:
-        // The Welcome page: the logo (else the name) over a quiet line, centred in the panel.
+        // The Project panel without a project: the logo (else the name) over a quiet line, centred.
         RefPtr<ui::FlexLayout> BuildWelcome()
         {
             IAllocator& allocator = editor::EditorRootAllocator();
@@ -171,9 +191,9 @@ export namespace editor::app
 
         void BuildPanels()
         {
-            m_welcome = m_dock->AddPanel(u8"Welcome", BuildWelcome().Get());
-            m_welcome->SetPersistenceId(kPanelWelcome);
-            m_welcome->SetClosable(false);
+            m_project = m_dock->AddPanel(u8"Project", BuildWelcome().Get());
+            m_project->SetPersistenceId(kPanelProject);
+            m_project->SetClosable(false);
 
             m_logView = MakeRef<LogView>(editor::EditorRootAllocator());
             m_console = m_dock->AddPanel(u8"Console", m_logView.Get());
@@ -195,7 +215,7 @@ export namespace editor::app
             // right, side by side so both show at once, 65/35; the pane takes 30% of the
             // height, the document 70%. (A dock inserts its split at 0.5; the ratio is the
             // first child's share, so the root's is the document's and the pane's is Assets'.)
-            m_dock->DockPanel(m_welcome, ui::toolkit::DockPosition::Center);
+            m_dock->DockPanel(m_project, ui::toolkit::DockPosition::Center);
             m_dock->DockPanel(m_assets, ui::toolkit::DockPosition::Bottom);
             m_dock->DockPanelRelativeTo(m_console, ui::toolkit::DockPosition::Right,
                                         m_assets->Parent);
@@ -222,8 +242,8 @@ export namespace editor::app
         RefPtr<LogView> m_logView;
 
         // Borrowed - the DockManager owns registered panels.
-        ui::toolkit::DockablePanel* m_welcome = nullptr;
-        ui::DrawablePtr m_logo; // the Welcome page's heading (null: the name as text)
+        ui::toolkit::DockablePanel* m_project = nullptr;
+        ui::DrawablePtr m_logo; // the Project panel's heading without a project (null: the name)
         ui::toolkit::DockablePanel* m_console = nullptr;
         ui::toolkit::DockablePanel* m_assets = nullptr;
     };

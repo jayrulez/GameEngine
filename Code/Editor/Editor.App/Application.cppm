@@ -55,6 +55,7 @@ import :settings_dialog;
 import :preferences_dialog;
 import :command_palette;
 import :project_manager_view;
+import :project_home;
 import :shell;
 import :font_atlas_cache;
 import :ui_page;
@@ -439,7 +440,7 @@ export namespace editor::app
         EditorWindowCapture m_windowCapture{m_editorAllocator};
         bool m_screenshotFired = false;    // the --screenshot one shot is armed
         bool m_starting = false; // OnStartup is running: its steps go to the splash
-        ui::DrawablePtr m_logo;  // the AssiduousEngine logo (LoadEditorLogo), for the Welcome page and the manager
+        ui::DrawablePtr m_logo;  // the AssiduousEngine logo (LoadEditorLogo), for the Project panel and the manager
         bool m_announceScreenshot = false; // View > Screenshot: tell the user when it is written
 
         // The ids of the windows that can draw a frame now, the main window first; empty while
@@ -496,6 +497,7 @@ export namespace editor::app
         UniquePtr<ActionMenuBar> m_actionMenus;       // the menu bar, from the registry
         UniquePtr<ActionShortcuts> m_actionShortcuts; // the global shortcuts, from it
         RefPtr<AssetsView> m_assetsView;
+        UniquePtr<ProjectHomeView> m_projectHome; // the Project panel's page while a project is open
         RefPtr<ui::toolkit::ToastHost> m_toastHost;
         Array<PagePanel> m_pagePanels;
     };

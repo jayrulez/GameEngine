@@ -13,12 +13,6 @@
   with the orientation gizmo: snapping to a face is where an orthographic top, front or side
   view is most used. The engine's cameras already have an orthographic projection
   (`MakeCameraProjection`); the editor camera's zoom becomes the ortho size there.
-- **The Welcome page needs a purpose** (user 2026-10-09, to think about): it has been a stub
-  from the start. Its real job is to hold the top split: with every editor page closed, the
-  top section stays for a newly opened page to dock into (without it the Console and Assets
-  panels grow to the top and a new scene docks as a tab beside them). Give it a use while it
-  does that: perhaps the project's page, with the project's information and quick ways to its
-  settings and the other project-level things. Keep the docking job whatever it becomes.
 - **Project-wide defaults for scene settings, per domain** (user 2026-10-09, to think about): a
   scene's render settings come from the scene itself (its own values, or a profile asset it
   names, as Lamplight's levels share theirs), else from hard-coded defaults; other domains are

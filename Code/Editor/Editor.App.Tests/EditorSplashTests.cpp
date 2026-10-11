@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 // Editor::App tests - the splash the editor shows while it starts (drawn on the CPU: its logo, its
-// status line and its progress bar), the logo the Welcome page and the project manager show, and
+// status line and its progress bar), the logo the Project panel and the project manager show, and
 // the window icon, all from the repository's branding files.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"

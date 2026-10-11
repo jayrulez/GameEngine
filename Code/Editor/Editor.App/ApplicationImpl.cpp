@@ -314,7 +314,7 @@ namespace editor::app
         // main window's close button / OS quit; File>Exit routes through the same helper.
         host.Shell()->OnMainWindowCloseRequested = [this]() { return ConfirmExitAllowed(); };
 
-        // The logo heads the Welcome page and the project manager.
+        // The logo heads the Project panel (without a project) and the project manager.
         m_logo = LoadEditorLogo(m_config.dataRoot.AsView(), m_editorAllocator);
         m_shell.Build(m_context, m_dockHost.Get(), mainRw->Window().Width(),
                       mainRw->Window().Height(), m_logo);
@@ -999,6 +999,10 @@ namespace editor::app
         if (m_assetsView)
         {
             m_assetsView->Refresh();
+        }
+        if (m_projectHome)
+        {
+            m_projectHome->Refresh();
         }
         if (m_resources)
         {
@@ -2026,7 +2030,14 @@ namespace editor::app
 
         // Settings-derived session state re-applies on save (default font/theme -
         // without this a changed default kept the OLD bind until reopen).
-        m_context.OnProjectSettingsChanged = [this]() { ApplyProjectUiDefaults(); };
+        m_context.OnProjectSettingsChanged = [this]()
+        {
+            ApplyProjectUiDefaults();
+            if (m_projectHome)
+            {
+                m_projectHome->MarkChanged(); // the Project page shows the settings
+            }
+        };
         // The active page's panel carries the dock's ActiveMark (the accent strip and ring): the
         // page a command goes to, visible when two pages sit side by side. A tool panel never
         // takes it - the mark follows the context's active page, not the dock's clicked panel.
@@ -2175,6 +2186,16 @@ namespace editor::app
             ApplyProjectUiDefaults();
         };
         m_shell.SetAssetsContent(m_assetsView.Get());
+        // The Project panel shows the project's page; its links open assets as the browser does.
+        m_projectHome = MakeUnique<ProjectHomeView>(m_editorAllocator, m_editorAllocator, m_context, &m_cookService);
+        m_projectHome->OnOpenAsset = [this](const Guid& id)
+        {
+            if (foundation::content::Instance* instance = m_project ? m_project->SourceDb().GetInstance(id) : nullptr)
+            {
+                (void)OpenInstancePage(*instance);
+            }
+        };
+        m_shell.SetProjectContent(&m_projectHome->View());
 
         // Reopen the pages from the last session (falling back to the default document),
         // THEN restore the dock layout so page panels land back in their arrangement
@@ -2556,6 +2577,8 @@ namespace editor::app
         m_gamePage = nullptr;
         m_shell.SetAssetsContent(nullptr);
         m_assetsView = nullptr;
+        m_shell.SetProjectContent(nullptr);
+        m_projectHome.Reset();
         m_context.OnCookRequested = {};
         m_context.CookBusy = {};
         m_context.OnFavoritesChanged = {};

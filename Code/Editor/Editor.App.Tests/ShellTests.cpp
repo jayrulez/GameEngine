@@ -44,10 +44,12 @@ TEST_CASE("editor-shell: builds the chrome with the global panels only")
     REQUIRE(shell.StatusBar() != nullptr);
     REQUIRE(shell.Docks() != nullptr);
 
-    // Global panels are Assets + Console (+ the Welcome center placeholder) - scene-scoped
+    // Global panels are Assets + Console (+ the Project panel holding the center) - scene-scoped
     // views (viewport/hierarchy/inspector) live INSIDE pages, never in the shell (multi-scene).
-    REQUIRE(shell.WelcomePanel() != nullptr);
-    CHECK(shell.WelcomePanel()->PersistenceId() == u8"welcome");
+    // The Project panel keeps the Welcome panel's id, so saved layouts still place it.
+    REQUIRE(shell.ProjectPanel() != nullptr);
+    CHECK(shell.ProjectPanel()->Title() == StringView(u8"Project"));
+    CHECK(shell.ProjectPanel()->PersistenceId() == u8"welcome");
     CHECK(shell.ConsolePanel()->PersistenceId() == u8"console");
     CHECK(shell.AssetsPanel()->PersistenceId() == u8"assets");
     CHECK(shell.Docks()->FindPanelById(u8"assets") == shell.AssetsPanel());
@@ -97,8 +99,8 @@ TEST_CASE("editor-shell: page panels dock into the center document area as closa
     ui::toolkit::DockablePanel* page = shell.AddPagePanel(u8"Scene 1", content.Get());
     REQUIRE(page != nullptr);
 
-    // The page tabs with the Welcome panel in the center group (same parent tab group).
-    CHECK(page->Parent == shell.WelcomePanel()->Parent);
+    // The page tabs with the Project panel in the center group (same parent tab group).
+    CHECK(page->Parent == shell.ProjectPanel()->Parent);
 }
 
 TEST_CASE("editor-shell: dock layout survives a save/restore round-trip")

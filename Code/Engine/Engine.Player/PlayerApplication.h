@@ -360,8 +360,8 @@ namespace engine::player
             LoadAndStartGameScript();
 
             // Then, if a startup scene resolved, load it ASYNC behind a boot splash (task #123
-            // step 4): push the splash overlay first (sync - a small resident document / the built-
-            // in default), kick the async load, and let OnUpdate drive the splash + activate the
+            // step 4): push the splash overlay first (sync - a small resident document / the engine's
+            // default), kick the async load, and let OnUpdate drive the splash + activate the
             // scene on completion. A NAMED-but-broken scene is still fatal.
             if (instance != nullptr)
             {
@@ -534,8 +534,9 @@ namespace engine::player
         }
 
         // ---- boot splash (task #123 step 4): a SCREEN overlay shown while the default scene streams
-        // async. loadingDocumentId names a cooked UIDocument; nil = the built-in default. Conventional
-        // control ids driven each frame: `progress` (ProgressBar). ----
+        // async. loadingDocumentId names a cooked UIDocument; nil = the engine's default loading
+        // screen (engine::ui::BuildDefaultLoadingScreen: its logo, a bar). Conventional control ids
+        // driven each frame: `progress` (ProgressBar). ----
 
         void DriveBoot(runtime::IApplicationHost& host)
         {
@@ -577,11 +578,16 @@ namespace engine::player
                     doc = RefPtr<foundation::ui::UIDocument>(proxy.Get());
                 }
             }
-            if (!doc)
+            if (doc)
             {
-                doc = DefaultSplashDocument();
+                return UI()->PushScreenOverlay(*doc);
             }
-            return UI()->PushScreenOverlay(*doc);
+            // None authored: the engine's own, with its logo.
+            RefPtr<foundation::ui::View> view = engine::ui::BuildDefaultLoadingScreen(
+                AppRoot(), StringView(reinterpret_cast<const utf8char*>(g_embeddedEngineLogo),
+                                      static_cast<usize>(g_embeddedEngineLogoSize)));
+            UI()->PushScreenOverlay(view);
+            return view;
         }
 
         void PopSplash()
@@ -604,20 +610,6 @@ namespace engine::player
             {
                 bar->Value.SetValue(progress);
             }
-        }
-
-        // The built-in default splash (bare-bones - a status label + progress bar). A distributed game
-        // authors its own UIDocument and sets loadingDocumentId; this just proves the flow works with
-        // zero authoring. The `status`/`progress` ids are the app<->document contract.
-        [[nodiscard]] static RefPtr<foundation::ui::UIDocument> DefaultSplashDocument()
-        {
-            RefPtr<foundation::ui::UIDocument> doc =
-                MakeRef<foundation::ui::UIDocument>(AppRoot());
-            doc->markup = String(u8"<FlexLayout>"
-                                 u8"<Label id=\"status\" text=\"Loading...\"/>"
-                                 u8"<ProgressBar id=\"progress\"/>"
-                                 u8"</FlexLayout>");
-            return doc;
         }
 
         PlayerOptions m_options;

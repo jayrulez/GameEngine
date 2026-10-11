@@ -5,6 +5,20 @@
 # the blocking runner + CLI args) and WebMain.cpp in the browser (web shell + WebGPU + the rAF
 # runner, dist PRELOADED into the virtual FS). The engine/resource/script libraries are shared.
 
+# The AssiduousEngine logo baked into every player as its SVG text (EmbeddedEngineLogo.h): the
+# default loading screen shows it when a game names no loading document.
+set(_engine_logo_svg "${CMAKE_SOURCE_DIR}/Data/Assets/branding/assiduous-logo.svg")
+set(_engine_logo_src "${CMAKE_CURRENT_BINARY_DIR}/EmbeddedEngineLogo.cpp")
+add_custom_command(
+    OUTPUT "${_engine_logo_src}"
+    COMMAND ${CMAKE_COMMAND}
+        -DIN=${_engine_logo_svg}
+        -DOUT=${_engine_logo_src}
+        -DSYMBOL=g_embeddedEngineLogo
+        -P ${CMAKE_SOURCE_DIR}/cmake/EmbedBinary.cmake
+    DEPENDS "${_engine_logo_svg}" "${CMAKE_SOURCE_DIR}/cmake/EmbedBinary.cmake"
+    COMMENT "Embedding the engine logo")
+
 if(EMSCRIPTEN)
 
     # --- Browser player: WebMain.cpp + the web platform trio + preloaded content ---
@@ -28,7 +42,7 @@ if(EMSCRIPTEN)
         Foundation::Physics Foundation::Physics.Resource Engine::Physics
         Engine::Project Foundation::VFS.Pak Foundation::Content Foundation::VFS Foundation::Xml.Serialization)
 
-    add_executable(Engine.Player WebMain.cpp)
+    add_executable(Engine.Player WebMain.cpp "${_engine_logo_src}")
     target_link_libraries(Engine.Player PRIVATE ${_web_player_libs})
 
     # NOTHING is baked into this binary: the player FETCHES player.xml + Content.pak (the export
@@ -53,7 +67,7 @@ if(EMSCRIPTEN)
 
     # The web SHIP player: the game's native module statically compiled in.
     if(ENGINE_GAME_NATIVE_TARGET)
-        add_executable(Engine.GamePlayer WebMain.cpp)
+        add_executable(Engine.GamePlayer WebMain.cpp "${_engine_logo_src}")
         target_link_libraries(Engine.GamePlayer PRIVATE
             ${_web_player_libs} ${ENGINE_GAME_NATIVE_TARGET})
         target_compile_definitions(Engine.GamePlayer PRIVATE ENGINE_SHIP_NATIVE_GAME)
@@ -74,13 +88,16 @@ if(EMSCRIPTEN)
     # the runtime-libs manifest the export template machinery reads: `--template create <this build
     # dir> --install` packages the player page + these sidecars as an importable "Web" template.
     set(_web_out_dir "$<TARGET_FILE_DIR:Engine.Player>")
+    # The loading card's logo (shell.html) rides beside the page as well.
     add_custom_command(TARGET Engine.Player POST_BUILD
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                 "${CMAKE_CURRENT_SOURCE_DIR}/serve.py" "${_web_out_dir}/serve.py"
-        COMMENT "Engine.Player(web): staging serve.py"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "${_engine_logo_svg}" "${_web_out_dir}/assiduous-logo.svg"
+        COMMENT "Engine.Player(web): staging serve.py and the logo"
         VERBATIM)
     file(GENERATE OUTPUT "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Engine.Player.runtime-libs"
-         CONTENT "Engine.Player.js\nEngine.Player.wasm\nserve.py\n")
+         CONTENT "Engine.Player.js\nEngine.Player.wasm\nserve.py\nassiduous-logo.svg\n")
 
 else()
 
@@ -92,7 +109,7 @@ else()
     add_library(Engine.Player.Main STATIC)
     target_sources(Engine.Player.Main
         PUBLIC FILE_SET player_main_modules TYPE CXX_MODULES FILES PlayerMain.cppm
-        PRIVATE PlayerMain.cpp)
+        PRIVATE PlayerMain.cpp "${_engine_logo_src}")
     target_link_libraries(Engine.Player.Main PRIVATE
         Foundation::Core
         Foundation::Runtime Foundation::Runtime.Client Foundation::Runtime.Desktop Engine::DefaultApp

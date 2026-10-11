@@ -38,6 +38,7 @@ module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
 #include "Core/Reflection/Reflect.h"
+#include "EmbeddedEngineLogo.h" // the default loading screen's logo
 
 module engine.player.main;
 

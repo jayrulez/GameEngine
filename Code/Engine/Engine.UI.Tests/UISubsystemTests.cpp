@@ -2227,3 +2227,26 @@ TEST_CASE("ui.subsystem: with run screens on, each run has its own screens and k
     input->SetSourceProvider(nullptr);
     ctx.Shutdown();
 }
+
+TEST_CASE("default loading screen: the engine's logo over the bar the player drives")
+{
+    // A stand-in logo: the player passes the AssiduousEngine logo's SVG text.
+    const StringView svg = u8"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 931 200\">"
+                           u8"<rect width=\"931\" height=\"200\" fill=\"#F58F42\"/></svg>";
+    RefPtr<foundation::ui::View> screen = engine::ui::BuildDefaultLoadingScreen(DefaultAllocator(), svg);
+    auto* root = Cast<foundation::ui::ViewGroup>(screen.Get());
+    REQUIRE(root != nullptr);
+    // The controls an authored loading document names, so the player drives either alike.
+    CHECK(root->FindByName<foundation::ui::ProgressBar>(u8"progress") != nullptr);
+    CHECK(root->FindByName<foundation::ui::Label>(u8"status") != nullptr);
+    auto* logo = root->FindByName<foundation::ui::DrawableView>(u8"logo");
+    REQUIRE(logo != nullptr);
+    CHECK(logo->Drawable.Get() != nullptr);
+
+    // No logo to draw: the bar alone.
+    RefPtr<foundation::ui::View> bare = engine::ui::BuildDefaultLoadingScreen(DefaultAllocator(), StringView());
+    auto* bareRoot = Cast<foundation::ui::ViewGroup>(bare.Get());
+    REQUIRE(bareRoot != nullptr);
+    CHECK(bareRoot->FindByName(u8"logo") == nullptr);
+    CHECK(bareRoot->FindByName<foundation::ui::ProgressBar>(u8"progress") != nullptr);
+}

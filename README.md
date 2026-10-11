@@ -1,4 +1,9 @@
-# Game Engine
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="Data/Assets/branding/assiduous-logo.svg">
+    <img alt="AssiduousEngine" src="Data/Assets/branding/assiduous-logo-light.svg" height="72">
+  </picture>
+</h1>
 
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/WSvxW8mWH5)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -223,4 +228,5 @@ The engine draws inspiration from [ezEngine](https://github.com/ezEngine/ezEngin
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE). The AssiduousEngine name and logo are not: they stay the project's
+own, under the terms in [Data/Assets/branding/LICENSE.txt](Data/Assets/branding/LICENSE.txt).

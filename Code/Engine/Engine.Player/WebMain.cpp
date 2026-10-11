@@ -17,6 +17,7 @@
 #include "Core/Log/Log.h"
 #include "Core/Reflection/Reflect.h"
 #include <emscripten/emscripten.h>
+#include "EmbeddedEngineLogo.h" // the default loading screen's logo
 
 import foundation.core;
 import foundation.vfs;

@@ -514,6 +514,11 @@ export namespace foundation::vg
                 FillRect(rect, color);
                 return;
             }
+            if (m_analyticBoxes)
+            {
+                DrawBox(rect, radii, color); // exact corners, no fringe
+                return;
+            }
             PathBuilder pb;
             ShapeBuilder::BuildRoundedRect(rect, radii, pb);
             FillPath(pb.ToPath(), color);
@@ -737,6 +742,18 @@ export namespace foundation::vg
 
         void StrokeRoundedRect(Rectangle rect, CornerRadii radii, Color color, f32 width = 1.0f)
         {
+            if (m_analyticBoxes && width > 0.0f)
+            {
+                // A stroke centred on the rect is a border of `width` inside the rect grown by
+                // half of it, each rounded corner grown with it.
+                const f32 h = width * 0.5f;
+                const auto grow = [h](f32 r) { return r > 0.0f ? r + h : 0.0f; };
+                DrawBox(Rectangle{rect.x - h, rect.y - h, rect.width + width, rect.height + width},
+                        CornerRadii(grow(radii.topLeft), grow(radii.topRight), grow(radii.bottomRight),
+                                    grow(radii.bottomLeft)),
+                        Color{0.0f, 0.0f, 0.0f, 0.0f}, BorderWidths(width), color);
+                return;
+            }
             // Crisp path: under an axis-aligned transform, snap the rect
             // so each edge's stroke centerline lands where StrokeRect's pixel-snapped bars
             // would - a 1px themed rounded border renders as a crisp 1-device-pixel line

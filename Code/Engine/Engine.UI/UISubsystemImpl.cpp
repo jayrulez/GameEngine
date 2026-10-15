@@ -178,6 +178,8 @@ namespace engine::ui
         rhi::ShaderModule* distanceFieldShader = nullptr;           // MSDF text fragment (borrowed)
         rhi::ShaderModule* gradConicShader = nullptr;    // per-pixel conic gradient (borrowed)
         rhi::ShaderModule* boxShadowShader = nullptr;    // blurred rounded rect (borrowed)
+        rhi::ShaderModule* boxVertexShader = nullptr;    // analytic box (borrowed)
+        rhi::ShaderModule* boxFragmentShader = nullptr;
         vg::VGContext vgContext;
         struct FormatRenderer
         {
@@ -459,7 +461,7 @@ namespace engine::ui
                 if (!renderer
                          ->Initialize(*device, *vertexShader, *fragmentShader, format, frameCount,
                                       distanceFieldShader, gradRadialShader, gradConicShader, targetConfig,
-                                      boxShadowShader)
+                                      boxShadowShader, boxVertexShader, boxFragmentShader)
                          .IsOk())
                 {
                     return nullptr;
@@ -2774,6 +2776,13 @@ namespace engine::ui
         // predate them); otherwise every renderer + the context fall back to the affine LUT.
         m_render->vgContext.SetPerPixelGradients(m_render->gradRadialShader != nullptr &&
                                                  m_render->gradConicShader != nullptr);
+        // Analytic boxes (VGContext::DrawBox) when both box shaders resolved; else they tessellate.
+        m_render->boxVertexShader = m_render->shaderHost.GetVariant(
+            u8"vg_box", foundation::shaders::ShaderStage::Vertex, foundation::shaders::ShaderFlags::None);
+        m_render->boxFragmentShader = m_render->shaderHost.GetVariant(
+            u8"vg_box", foundation::shaders::ShaderStage::Fragment, foundation::shaders::ShaderFlags::None);
+        m_render->vgContext.SetAnalyticBoxes(m_render->boxVertexShader != nullptr &&
+                                             m_render->boxFragmentShader != nullptr);
         // Stencil support for CANVAS render-to-texture passes (the only passes this
         // subsystem OWNS - the scene/screen overlay passes belong to the renderer/host
         // and stay color-only until they provide a DS attachment themselves). Canvas UI

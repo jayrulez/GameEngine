@@ -56,6 +56,18 @@ export namespace foundation::ui
             // border lies INSIDE bounds - border-box painting. VG strokes are
             // centered on the path, so an un-inset stroke would hang half outside the view,
             // where ClipsContent would amputate it and adjacent siblings' borders would overlap.
+            if (ctx.VG().AnalyticBoxes())
+            {
+                // Fill and border as ONE box: one signed distance gives both, so they cannot
+                // disagree at the corners, and the border lies inside bounds (border-box).
+                const bool bordered = BorderColor.a > 0.0f && BorderWidth > 0.0f;
+                if (FillColor.a > 0.0f || bordered)
+                {
+                    ctx.VG().DrawBox(bounds, Radii, FillColor, vg::BorderWidths(bordered ? BorderWidth : 0.0f),
+                                     BorderColor);
+                }
+                return;
+            }
             const f32 inset = BorderWidth * 0.5f;
             const Rectangle borderRect{bounds.x + inset, bounds.y + inset,
                                        Max(0.0f, bounds.width - BorderWidth),

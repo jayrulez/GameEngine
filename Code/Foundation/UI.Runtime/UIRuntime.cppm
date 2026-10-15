@@ -321,8 +321,10 @@ export namespace foundation::ui::runtime
             targetConfig.blendSpace = data->encoded ? vg::VGBlendSpace::Encoded : vg::VGBlendSpace::Linear;
             data->renderer.Initialize(*m_device->Raw(), *m_vs, *m_fs, data->drawFormat,
                                       static_cast<i32>(m_device->FramesInFlight()), m_distanceFieldFragmentShader,
-                                      m_gradRadialFs, m_gradConicFs, targetConfig, m_boxShadowFs);
+                                      m_gradRadialFs, m_gradConicFs, targetConfig, m_boxShadowFs, m_boxVs,
+                                      m_boxFs);
             data->vg->SetPerPixelGradients(perPixelGrad);
+            data->vg->SetAnalyticBoxes(m_boxVs != nullptr && m_boxFs != nullptr);
             data->vg->SetStencilFills(data->renderer.StencilFillsSupported());
 
             const f32 w = static_cast<f32>(window->Window().Width());
@@ -1079,6 +1081,9 @@ export namespace foundation::ui::runtime
             // means shadows are skipped, never mis-drawn.
             m_boxShadowFs = m_shaderHost.GetVariant(u8"vg_shadow", shaders::ShaderStage::Fragment,
                                                     shaders::ShaderFlags::None);
+            // Analytic boxes (VGContext::DrawBox); a pack that predates them means boxes tessellate.
+            m_boxVs = m_shaderHost.GetVariant(u8"vg_box", shaders::ShaderStage::Vertex, shaders::ShaderFlags::None);
+            m_boxFs = m_shaderHost.GetVariant(u8"vg_box", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
         }
         core::IAllocator* m_allocator;
 
@@ -1092,6 +1097,8 @@ export namespace foundation::ui::runtime
         rhi::ShaderModule* m_gradRadialFs = nullptr; // per-pixel radial gradient (borrowed)
         rhi::ShaderModule* m_gradConicFs = nullptr;  // per-pixel conic gradient (borrowed)
         rhi::ShaderModule* m_boxShadowFs = nullptr;  // blurred rounded rect (borrowed)
+        rhi::ShaderModule* m_boxVs = nullptr;        // analytic box (borrowed)
+        rhi::ShaderModule* m_boxFs = nullptr;
 
         UIContext m_ctx; // shared context; owns N RootViews (allocator from the ctor)
         core::UniquePtr<shell::InputRouter> m_router;

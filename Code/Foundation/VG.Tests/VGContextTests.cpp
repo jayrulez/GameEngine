@@ -741,6 +741,22 @@ TEST_CASE("vg.context: without layers, a layer is an opacity push")
     CHECK(batch.vertices.Back().color.a == doctest::Approx(0.5f)); // the layer's opacity popped
 }
 
+TEST_CASE("vg.context: past MaxLayers in a batch, a layer is an opacity push")
+{
+    VGContext ctx;
+    ctx.SetLayers(true);
+    for (i32 i = 0; i < VGContext::MaxLayers + 2; ++i)
+    {
+        ctx.PushLayer(0.5f);
+        ctx.FillPath(Square(0, 0, 10, 10), Color::Red, FillRule::NonZero, false);
+        ctx.PopLayer();
+    }
+    const VGBatch& batch = ctx.GetBatch();
+    CHECK(batch.layers.Size() == static_cast<usize>(VGContext::MaxLayers));
+    CHECK(batch.commands.Back().layer == -1);
+    CHECK(batch.vertices.Back().color.a == doctest::Approx(0.5f)); // faded on its own
+}
+
 TEST_CASE("vg.context: over-budget LUT cache eviction is announced through the batch")
 {
     VGContext ctx;

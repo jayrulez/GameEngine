@@ -78,6 +78,9 @@ export namespace foundation::vg
         };
 
     public:
+        /// Layers a batch holds before PushLayer falls back to an opacity push: each costs the
+        /// renderer a pass and a uniform slot (VGRenderer has 256 a frame, one per slice besides).
+        static constexpr i32 MaxLayers = 128;
         /// Distinct gradient ramps kept in the persistent LUT cache before a whole-cache
         /// eviction (announced via VGBatch::evictedTextures). Generous: a UI with a few
         /// static gradients never gets near it; only continuously ANIMATED ramp colors do.
@@ -382,10 +385,11 @@ export namespace foundation::vg
         /// PopLayer, with `opacity` and `blendMode`: a group fades as one, its overlapping parts
         /// never showing through each other (V3 of Specs/vg-and-gui-lab.md). Inside, opacity
         /// starts again at 1 and no clip applies (the clips around the layer apply to its
-        /// composite); the transform carries on. Without SetLayers, an opacity push instead.
+        /// composite); the transform carries on. Without SetLayers, or past MaxLayers in a batch, an
+        /// opacity push instead.
         void PushLayer(f32 opacity, VGBlendMode blendMode = VGBlendMode::Normal)
         {
-            if (!m_layersEnabled)
+            if (!m_layersEnabled || m_batch.layers.Size() >= static_cast<usize>(MaxLayers))
             {
                 PushOpacity(opacity);
                 m_layerStack.PushBack(LayerSave{}); // layer -1: PopLayer pops the opacity

@@ -51,9 +51,10 @@ with a 0.75 px fringe (`VG/Tessellation.cppm`).
   wgpu-native says no and falls back); VG's `VGBlendSpace::Encoded` keeps colours as authored and
   encodes what it samples back; the editor's windows draw Encoded. Found on the way: gradient ramps
   are baked from the authored stops, so gradients already ran as authored in both spaces; the
-  difference is in translucency. Left: the game's UI, which draws inside the renderer's passes
-  (its HUD over the scene, render-texture canvases, the Game tab), needs a pass of its own to draw
-  Encoded.
+  difference is in translucency. The game's screen UI followed (fda100af8): the overlay pass draws
+  through the target's UNORM view when the host gives one (the player's back buffer, the Game tab's
+  viewport, now 8-bit sRGB like the player's window); world panels and render-texture canvases stay
+  Linear, lit as part of the scene.
 - **V2 Nested clips.** Clip paths nest (an intersection, not a replacement), so a rounded card can
   hold a scrolled list of rounded items. Tests: two nested rounded clips probed at their corners.
   As built on `vg` (519edf76d): a nested clip writes its winding inside the mask and applies over

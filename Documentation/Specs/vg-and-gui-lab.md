@@ -78,6 +78,11 @@ with a 0.75 px fringe (`VG/Tessellation.cppm`).
   fringe on a side of zero width, and the analytic rounded-box shadow (an erf blur), inset shadows
   too; adapted under its licence. GPUI draws fill, border and shadow as separate primitives over
   the same snapped bounds; ours keeps them one coverage function where it can.
+  As built on `vg` (3f260b613, 66f136e37): `VGContext::DrawBox` (per-corner radii, per-side borders)
+  drawn by `vg_box` (GPUI's coverage and border, credited in ThirdParty/gpui/), box vertices after
+  the slice's ordinary ones in the same buffer; both UI hosts turn it on, rounded fills and strokes
+  route through it, and the theme's rounded drawable is one box. Shadows stay their own analytic
+  primitive (vg_shadow, the same erf idea); multiple shadows and dashed borders are later.
 - **V5 Device pixels under scaling.** A scaled canvas (a game UI at a reference resolution) lays out
   at its real scale, as DPI does, so edges land on device pixels; strokes of odd device width snap
   their centres. (This touches `foundation.ui`'s canvas scaler as well as VG.) Tests: a 2 px border

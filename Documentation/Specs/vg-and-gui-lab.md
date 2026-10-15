@@ -69,7 +69,7 @@ with a 0.75 px fringe (`VG/Tessellation.cppm`).
   group opacity, `filter: blur` and `backdrop-filter: blur` as a half-size downsample and a separable
   Gaussian); its offscreen target is the whole viewport, so ours sizes a layer to its bounds, for
   the web build's budget.
-  As built on `vg` (layers, filters not yet): `PushLayer`/`PopLayer` record a layer's draws apart
+  As built on `vg`: `PushLayer`/`PopLayer` record a layer's draws apart
   and one composite quad (a9f623693); `VGRenderer::RenderLayers` draws each layer, innermost first,
   into a target of its own (the renderer's format, sample count and stencil, so clips work inside;
   64-pixel size buckets from a pool per frame slot) before the host's pass, and the composite
@@ -82,6 +82,14 @@ with a 0.75 px fringe (`VG/Tessellation.cppm`).
   pipeline variant tables were one kind short since V4 (204a59959). Probes: two overlapping opaque
   reds in a half layer read 188 linear and 128 encoded, overlap and not; a half layer in a half
   layer is a quarter; clips inside a layer land in place; the same multisampled.
+  Filters (95acfd514, 960fdaa48): a layer may be blurred (a Gaussian sigma, separable, in the
+  canvas's blend space, up to 32), and `DrawBackdropBlur` blurs what the canvas drew behind a
+  rounded shape: everything drawn so far in the current target moves into a layer (layers are
+  then ordered by depth, not index) whose blurred copy the shape samples. The backdrop is the
+  canvas's own drawing, not the scene under a game's UI, which would need the host's target; and
+  none is drawn inside a clip path. Sheets reach both as `filter: blur()` and
+  `backdrop-filter: blur()`, and the sheet's `opacity` now applies (b7ad83366). The UI sandbox has
+  a Layers tab to look at (d1fab9534). Desaturate and colour matrices are left for a need.
 - **V4 An analytic box.** A rounded box with border and shadow drawn as one signed-distance
   primitive (fill, border and shadow from one coverage function), so the three cannot disagree, a
   thin border has no halo, and small radii are exact; multiple shadows and per-side borders follow

@@ -113,7 +113,8 @@ gaps in it, ranked by how much polish they cost, and two bugs.
   background with `radius=24`/`20` but set no `corner-radius`, so they cast square shadows. The
   shadow should follow the shape it sits under.
 - **Bug: the sheet's `opacity` does nothing**: `StyleProperty::Opacity` is parsed and classified
-  (`SSSParser.cppm:1089`, `StyleProperty.cppm`) and nothing applies it to a view.
+  (`SSSParser.cppm:1089`, `StyleProperty.cppm`) and nothing applies it to a view. Fixed on branch
+  `vg` (b7ad83366).
 - **UI blends in linear light, with no sRGB mode**: vertex colours are decoded to linear and the
   target is `BGRA8UnormSrgb` (`vg.vs.hlsl`; `Renderer.cppm`), so translucent panels, scrims and
   shadows read fainter than the values a designer writes (half-black over white comes out about
@@ -132,7 +133,9 @@ gaps in it, ranked by how much polish they cost, and two bugs.
   radius (`SSSParser.cppm:1433`). Stops, angles, radial, and the box's rounding.
 - **No offscreen layers in VG**: opacity is per vertex (`VG/Context.cppm`), so a fading card shows
   its children through each other and state cross-fades double-blend translucent backgrounds; and
-  there is no backdrop blur or filter (desaturate, glow). One layer seam serves all three.
+  there is no backdrop blur or filter (desaturate, glow). One layer seam serves all three. Built on
+  branch `vg` (V3): group opacity, `filter: blur()`, `backdrop-filter: blur()`; desaturate and glow
+  remain.
 - **Motion in sheets**: no `transform` property (rotate, skew, scale), no keyframes, and only
   quadratic easings (no `cubic-bezier`), so hover lifts, press squashes and focus pulses need
   script.

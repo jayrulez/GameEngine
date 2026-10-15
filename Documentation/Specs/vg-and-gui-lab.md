@@ -45,6 +45,15 @@ with a 0.75 px fringe (`VG/Tessellation.cppm`).
   default for UI). Half-black over white is then 50% grey, not 73%, and gradients and cross-fades
   interpolate as authored. Tests: pixel probes of a translucent fill, a gradient midpoint and a
   shadow edge in each space.
+  As built on branch `vg` (2026-10-15, the user's choice: a UNORM view of the target, not an
+  offscreen layer): the RHI's textures and swapchains may be viewed in their sRGB or UNORM twin
+  (Vulkan with VK_KHR_swapchain_mutable_format, the web canvas, DX12 flip buffers; desktop
+  wgpu-native says no and falls back); VG's `VGBlendSpace::Encoded` keeps colours as authored and
+  encodes what it samples back; the editor's windows draw Encoded. Found on the way: gradient ramps
+  are baked from the authored stops, so gradients already ran as authored in both spaces; the
+  difference is in translucency. Left: the game's UI, which draws inside the renderer's passes
+  (its HUD over the scene, render-texture canvases, the Game tab), needs a pass of its own to draw
+  Encoded.
 - **V2 Nested clips.** Clip paths nest (an intersection, not a replacement), so a rounded card can
   hold a scrolled list of rounded items. Tests: two nested rounded clips probed at their corners.
 - **V3 Layers.** `PushLayer(opacity, blend)` draws a subtree into an offscreen target and
@@ -196,8 +205,6 @@ then; likely the CSS front end and the motion first, the reflected object model 
 
 ## Open questions
 
-- V1: an Encoded canvas renders into a UNORM target and composites, or writes encoded values into a
-  UNORM view of the sRGB target; to decide by measuring both on Vulkan and WebGPU.
 - V3: the offscreen pool's budget on the web build.
 - G1: whether the lab's widgets become `Object`s with reflected properties directly, or are
   described to the binding by a reflected facade; to decide in G1's first layer.

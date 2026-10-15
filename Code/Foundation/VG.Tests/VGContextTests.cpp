@@ -742,6 +742,71 @@ TEST_CASE("vg.context: a blurred layer carries its sigma and three sigmas of mar
     CHECK(batch.layers[1].blur == doctest::Approx(VGContext::MaxLayerBlur));
 }
 
+TEST_CASE("vg.context: a backdrop blur moves what was drawn into a layer and shows its blurred copy")
+{
+    using foundation::vg::VGDrawMode;
+    VGContext ctx;
+    ctx.SetLayers(true);
+    ctx.FillPath(Square(0, 0, 40, 40), Color::Red, FillRule::NonZero, false);
+    ctx.PushLayer(0.5f); // drawn before the backdrop: becomes a child of the moved layer
+    ctx.FillPath(Square(50, 0, 60, 10), Color::Green, FillRule::NonZero, false);
+    ctx.PopLayer();
+    ctx.DrawBackdropBlur(Rectangle{10, 10, 20, 20}, CornerRadii(4.0f), 3.0f);
+    ctx.FillPath(Square(0, 50, 10, 60), Color::Blue, FillRule::NonZero, false); // after: the target
+
+    const VGBatch& batch = ctx.GetBatch();
+    REQUIRE(batch.layers.Size() == 2u);
+    const foundation::vg::VGLayer& behind = batch.layers[1];
+    CHECK(behind.parent == -1);
+    CHECK(behind.backdropBlur == doctest::Approx(3.0f));
+    CHECK(behind.opacity == doctest::Approx(1.0f));
+    CHECK(batch.layers[0].parent == 1); // the earlier layer now composites into the moved one
+    CHECK(batch.commands[0].layer == 1); // the red fill moved
+    int composites = 0;
+    int backdrops = 0;
+    for (const VGCommand& cmd : batch.commands)
+    {
+        if (cmd.compositeLayer == 1 && !cmd.backdrop)
+        {
+            CHECK(cmd.layer == -1);
+            CHECK(cmd.clipMode == foundation::vg::VGClipMode::None);
+            ++composites;
+        }
+        if (cmd.backdrop)
+        {
+            CHECK(cmd.drawMode == VGDrawMode::Layer);
+            CHECK(cmd.compositeLayer == 1);
+            CHECK(cmd.layer == -1);
+            ++backdrops;
+        }
+    }
+    CHECK(composites == 1);
+    CHECK(backdrops >= 1);
+    CHECK(batch.commands.Back().layer == -1); // the blue fill after it stays in the target
+    CHECK(batch.commands.Back().drawMode != VGDrawMode::Layer);
+}
+
+TEST_CASE("vg.context: no backdrop blur without layers or inside a clip path")
+{
+    {
+        VGContext ctx;
+        ctx.FillPath(Square(0, 0, 40, 40), Color::Red, FillRule::NonZero, false);
+        ctx.DrawBackdropBlur(Rectangle{10, 10, 20, 20}, CornerRadii(4.0f), 3.0f);
+        CHECK(ctx.GetBatch().layers.IsEmpty());
+        CHECK(ctx.GetBatch().commands.Size() == 1u);
+    }
+    {
+        VGContext ctx;
+        ctx.SetLayers(true);
+        ctx.SetStencilFills(true);
+        ctx.FillPath(Square(0, 0, 40, 40), Color::Red, FillRule::NonZero, false);
+        ctx.PushClipPath(Square(0, 0, 30, 30));
+        ctx.DrawBackdropBlur(Rectangle{10, 10, 20, 20}, CornerRadii(4.0f), 3.0f);
+        ctx.PopClipPath();
+        CHECK(ctx.GetBatch().layers.IsEmpty());
+    }
+}
+
 TEST_CASE("vg.context: without layers, a layer is an opacity push")
 {
     VGContext ctx; // the host never said its renderer draws layers

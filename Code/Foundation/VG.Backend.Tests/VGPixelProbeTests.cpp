@@ -1104,9 +1104,43 @@ namespace
         CHECK(Abs(static_cast<i32>(px.At(50, 39)[0]) - outside) <= 2); // down as across
         CHECK(Abs(static_cast<i32>(px.At(60, 50)[0]) - outside) <= 2); // and symmetric
     }
+
+    // A red half and a blue half meet at x = 64; a backdrop blur over the middle of the seam mixes
+    // them there and leaves the seam sharp above it, and a half-faded green layer drawn before it
+    // (moved under the backdrop's layer) still reads half. Encoded, so a half is byte 128.
+    void ProbeBackdropBlur(rhi::Device& device, const char* name, u32 sampleCount)
+    {
+        INFO(doctest::String(name), " x", sampleCount);
+        const Pixels px = RenderScene(
+            device,
+            [](vg::VGContext& ctx)
+            {
+                ctx.FillRect(Rectangle{0, 0, 64, 128}, ByteColor(255, 0, 0));
+                ctx.FillRect(Rectangle{64, 0, 64, 128}, ByteColor(0, 0, 255));
+                ctx.PushLayer(0.5f);
+                ctx.FillRect(Rectangle{8, 100, 20, 20}, ByteColor(0, 255, 0));
+                ctx.PopLayer();
+                ctx.DrawBackdropBlur(Rectangle{40, 40, 48, 40}, vg::CornerRadii(6.0f), 4.0f);
+            },
+            sampleCount, vg::VGBlendSpace::Encoded);
+        REQUIRE(px.valid);
+        const u8* seamLeft = px.At(63, 60);
+        const u8* seamRight = px.At(64, 60);
+        INFO("seam in the backdrop ", static_cast<i32>(seamLeft[0]), ",", static_cast<i32>(seamLeft[2]), " | ",
+             static_cast<i32>(seamRight[0]), ",", static_cast<i32>(seamRight[2]));
+        CHECK(Abs(static_cast<i32>(seamLeft[0]) + static_cast<i32>(seamRight[0]) - 255) <= 12); // mixed
+        CHECK(Abs(static_cast<i32>(seamLeft[2]) + static_cast<i32>(seamRight[2]) - 255) <= 12);
+        CHECK(seamLeft[0] > 100);
+        CHECK(seamRight[2] > 100);
+        CHECK(px.At(63, 20)[0] >= 253); // above the backdrop the seam is sharp
+        CHECK(px.At(63, 20)[2] <= 2);
+        CHECK(px.At(64, 20)[2] >= 253);
+        CHECK(px.At(44, 60)[0] >= 245); // well inside the red, blurred red is red
+        CHECK(Abs(static_cast<i32>(px.At(18, 110)[1]) - 128) <= 3); // the earlier layer, half green
+    }
 }
 
-TEST_CASE("vg.pixels: a layer fades a group as one, nests, clips inside, and blurs")
+TEST_CASE("vg.pixels: a layer fades a group as one, nests, clips inside, blurs, and blurs a backdrop")
 {
     rhi::Backend* vulkan = nullptr;
     (void)rhi::vk::CreateBackend(rhi::vk::VkBackendDesc{}, vulkan);
@@ -1119,6 +1153,8 @@ TEST_CASE("vg.pixels: a layer fades a group as one, nests, clips inside, and blu
         ProbeLayers(device, name, vg::VGBlendSpace::Linear, 4);
         ProbeLayerBlur(device, name, 1);
         ProbeLayerBlur(device, name, 4);
+        ProbeBackdropBlur(device, name, 1);
+        ProbeBackdropBlur(device, name, 4);
     };
     if (rhi::Device* device = MakeDevice(vulkan))
     {

@@ -367,14 +367,31 @@ export namespace foundation::vg::renderer
                 renderVerts.PushBack(VGRenderVertex(batch.vertices[i]));
 
             // The slice's layers: each kept to its parent (the canvas for the outermost), given a
-            // uniform slot of its own (its projection over its bounds) and a target size; their
-            // composites' quads are fitted to that (a layer may be clamped, its target larger).
+            // uniform slot of its own (its projection over its bounds) and a target size. Parents go
+            // first, by nesting depth: a backdrop blur makes a layer the parent of earlier ones.
             const i32 layerBase = static_cast<i32>(m_layers.Size());
             u32 nextUniformSlot = sliceUniformSlot + 1;
+            m_layers.Resize(m_layers.Size() + batch.layers.Size());
+            Array<i32> order;
+            order.Reserve(batch.layers.Size());
             for (usize l = 0; l < batch.layers.Size(); ++l)
             {
-                const vg::VGLayer& source = batch.layers[l];
-                PreparedLayer layer;
+                i32 depth = 0;
+                for (i32 p = batch.layers[l].parent; p >= 0 && depth <= static_cast<i32>(batch.layers.Size());
+                     p = batch.layers[static_cast<usize>(p)].parent)
+                    ++depth;
+                m_layers[static_cast<usize>(layerBase) + l].depth = depth;
+                order.PushBack(static_cast<i32>(l));
+            }
+            for (usize i = 1; i < order.Size(); ++i) // stable insertion sort by depth (layers are few)
+                for (usize j = i; j > 0 && m_layers[static_cast<usize>(layerBase + order[j - 1])].depth >
+                                               m_layers[static_cast<usize>(layerBase + order[j])].depth;
+                     --j)
+                    Swap(order[j - 1], order[j]);
+            for (const i32 l : order)
+            {
+                const vg::VGLayer& source = batch.layers[static_cast<usize>(l)];
+                PreparedLayer& layer = m_layers[static_cast<usize>(layerBase + l)];
                 layer.parent = source.parent >= 0 ? source.parent + layerBase : -1;
                 Rectangle outer{0.0f, 0.0f, static_cast<f32>(width), static_cast<f32>(height)};
                 bool parentValid = true;
@@ -392,45 +409,43 @@ export namespace foundation::vg::renderer
                 layer.height = static_cast<u32>(layer.bounds.height);
                 layer.targetWidth = RoundUpToBucket(layer.width);
                 layer.targetHeight = RoundUpToBucket(layer.height);
-                // A blur takes two more slots (across, then down); without its pipeline, none.
+                // A blur (in place, or a backdrop's copy) takes two more slots, across then down;
+                // without its pipeline, none.
                 layer.blur = m_blurPipeline != nullptr ? source.blur : 0.0f;
-                const u32 slots = layer.blur > 0.0f ? 3u : 1u;
+                layer.backdropBlur = m_blurPipeline != nullptr ? source.backdropBlur : 0.0f;
+                const bool blurs = layer.blur > 0.0f || layer.backdropBlur > 0.0f;
+                const u32 slots = blurs ? 3u : 1u;
                 layer.valid = parentValid && layer.width > 0 && layer.height > 0 &&
                               nextUniformSlot + slots <= static_cast<u32>(MaxUniformSlots);
                 if (layer.valid)
                 {
                     layer.uniformOffset = nextUniformSlot * static_cast<u32>(UniformSlotSize);
                     ++nextUniformSlot;
-                    if (layer.blur > 0.0f)
+                    if (blurs)
                     {
                         layer.blurUniformOffset = nextUniformSlot * static_cast<u32>(UniformSlotSize);
                         nextUniformSlot += 2;
                     }
                 }
-                m_layers.PushBack(layer);
             }
+            // A composite samples its layer's target where its geometry lies: texcoords from
+            // positions, over the target's (bucketed) size.
             for (usize i = 0; i < batch.commands.Size(); ++i)
             {
                 const vg::VGCommand& cmd = batch.commands[i];
-                if (cmd.drawMode != vg::VGDrawMode::Layer || cmd.compositeLayer < 0 || cmd.indexCount < 6)
+                if (cmd.drawMode != vg::VGDrawMode::Layer || cmd.compositeLayer < 0)
                     continue;
                 const PreparedLayer& layer = m_layers[static_cast<usize>(cmd.compositeLayer + layerBase)];
-                const u32 base = batch.indices[static_cast<usize>(cmd.startIndex)];
-                if (!layer.valid || base + 3 >= renderVerts.Size())
+                if (!layer.valid)
                     continue; // the composite is skipped at Render
-                const Rectangle& b = layer.bounds;
-                const f32 u = static_cast<f32>(layer.width) / static_cast<f32>(layer.targetWidth);
-                const f32 v = static_cast<f32>(layer.height) / static_cast<f32>(layer.targetHeight);
-                const Float2 corners[4] = {{b.x, b.y}, {b.x + b.width, b.y}, {b.x + b.width, b.y + b.height},
-                                           {b.x, b.y + b.height}};
-                const Float2 uvs[4] = {{0.0f, 0.0f}, {u, 0.0f}, {u, v}, {0.0f, v}};
-                for (u32 k = 0; k < 4; ++k)
+                for (i32 k = 0; k < cmd.indexCount; ++k)
                 {
-                    VGRenderVertex& vertex = renderVerts[base + k];
-                    vertex.position[0] = corners[k].x;
-                    vertex.position[1] = corners[k].y;
-                    vertex.texCoord[0] = uvs[k].x;
-                    vertex.texCoord[1] = uvs[k].y;
+                    const u32 at = batch.indices[static_cast<usize>(cmd.startIndex + k)];
+                    if (at >= renderVerts.Size())
+                        continue;
+                    VGRenderVertex& vertex = renderVerts[at];
+                    vertex.texCoord[0] = (vertex.position[0] - layer.bounds.x) / static_cast<f32>(layer.targetWidth);
+                    vertex.texCoord[1] = (vertex.position[1] - layer.bounds.y) / static_cast<f32>(layer.targetHeight);
                 }
             }
             if (vertByteSize > 0)
@@ -478,13 +493,13 @@ export namespace foundation::vg::renderer
                                                      static_cast<f32>(layer.height));
                 WriteBuffer(m_uniformBuffers[static_cast<usize>(frameIndex)], layer.uniformOffset, &uniforms,
                             sizeof(VGUniforms));
-                if (layer.blur > 0.0f)
+                if (layer.blur > 0.0f || layer.backdropBlur > 0.0f)
                 {
                     VGBlurUniforms blur;
                     blur.region[0] = static_cast<f32>(layer.width) / static_cast<f32>(layer.targetWidth);
                     blur.region[1] = static_cast<f32>(layer.height) / static_cast<f32>(layer.targetHeight);
-                    blur.sigma = layer.blur;
-                    blur.radius = Ceil(3.0f * layer.blur);
+                    blur.sigma = Max(layer.blur, layer.backdropBlur);
+                    blur.radius = Ceil(3.0f * blur.sigma);
                     blur.step[0] = 1.0f / static_cast<f32>(layer.targetWidth); // across
                     WriteBuffer(m_uniformBuffers[static_cast<usize>(frameIndex)], layer.blurUniformOffset, &blur,
                                 sizeof(VGBlurUniforms));
@@ -577,9 +592,17 @@ export namespace foundation::vg::renderer
             m_lastLayerStats = RenderStats{};
             if (!slice.isValid || slice.layerCount == 0 || m_layerPipeline == nullptr)
                 return;
-            // A child is pushed after its parent and the parent draws the child's composite, so
-            // the layers go in reverse.
-            for (i32 l = slice.layerStart + slice.layerCount - 1; l >= slice.layerStart; --l)
+            // A parent draws its children's composites, so the deepest layers go first.
+            Array<i32> order;
+            order.Reserve(static_cast<usize>(slice.layerCount));
+            for (i32 l = slice.layerStart; l < slice.layerStart + slice.layerCount; ++l)
+                order.PushBack(l);
+            for (usize i = 1; i < order.Size(); ++i)
+                for (usize j = i; j > 0 && m_layers[static_cast<usize>(order[j - 1])].depth <
+                                               m_layers[static_cast<usize>(order[j])].depth;
+                     --j)
+                    Swap(order[j - 1], order[j]);
+            for (const i32 l : order)
             {
                 PreparedLayer& layer = m_layers[static_cast<usize>(l)];
                 if (!layer.valid)
@@ -625,7 +648,14 @@ export namespace foundation::vg::renderer
                 encoder.TransitionTexture(target.color, rhi::ResourceState::RenderTarget,
                                           rhi::ResourceState::ShaderRead);
                 if (layer.blur > 0.0f)
-                    BlurLayer(encoder, frameIndex, layer, targetIndex);
+                    BlurLayer(encoder, frameIndex, layer, targetIndex, targetIndex);
+                if (layer.backdropBlur > 0.0f)
+                {
+                    // A blurred copy for the backdrop shapes; the layer itself stays sharp.
+                    const i32 copy = AcquireLayerTarget(frameIndex, layer.targetWidth, layer.targetHeight, true);
+                    if (copy >= 0 && BlurLayer(encoder, frameIndex, layer, targetIndex, copy))
+                        layer.backdropTarget = copy;
+                }
                 layer.target = targetIndex;
                 ++m_lastLayerStats.layers;
             }
@@ -878,9 +908,10 @@ export namespace foundation::vg::renderer
                 rhi::BindGroup* compositeGroup = nullptr;
                 if (cmd.drawMode == foundation::vg::VGDrawMode::Layer)
                 {
-                    const i32 target = cmd.compositeLayer >= 0 && cmd.compositeLayer < static_cast<i32>(m_layers.Size())
-                                           ? m_layers[static_cast<usize>(cmd.compositeLayer)].target
-                                           : -1;
+                    const bool known = cmd.compositeLayer >= 0 && cmd.compositeLayer < static_cast<i32>(m_layers.Size());
+                    const i32 target = !known ? -1
+                                       : cmd.backdrop ? m_layers[static_cast<usize>(cmd.compositeLayer)].backdropTarget
+                                                      : m_layers[static_cast<usize>(cmd.compositeLayer)].target;
                     if (target < 0 || m_layerTargets[static_cast<usize>(target)].bindGroup == nullptr)
                     {
                         ++stats.skipped;
@@ -998,8 +1029,11 @@ export namespace foundation::vg::renderer
             u32 targetWidth = 0, targetHeight = 0; // the target's (bucketed)
             u32 uniformOffset = 0;
             f32 blur = 0.0f;            // sigma, 0 for none (or no blur pipeline)
+            f32 backdropBlur = 0.0f;    // a blurred copy's sigma, for backdrop composites
             u32 blurUniformOffset = 0;  // its two passes' slots, across then down
+            i32 depth = 0;              // ancestors: parents draw after their children
             i32 target = -1; // m_layerTargets, set by RenderLayers
+            i32 backdropTarget = -1; // the blurred copy, set by RenderLayers
             bool valid = false;
         };
 
@@ -1757,16 +1791,19 @@ export namespace foundation::vg::renderer
             return nullptr;
         }
 
-        // Blur a drawn layer in place: across into a scratch target, then down back into its own
-        // (both single-sampled, the content resolved already). No scratch target: left unblurred.
-        void BlurLayer(rhi::CommandEncoder& encoder, i32 frameIndex, const PreparedLayer& layer, i32 targetIndex)
+        // Blur a drawn layer's target into `intoIndex` (itself, or a copy): across into a scratch
+        // target, then down (single-sampled, the content resolved already). False, nothing done,
+        // without a scratch target. Leaves both ends in ShaderRead.
+        bool BlurLayer(rhi::CommandEncoder& encoder, i32 frameIndex, const PreparedLayer& layer, i32 targetIndex,
+                       i32 intoIndex)
         {
             const i32 scratchIndex = AcquireLayerTarget(frameIndex, layer.targetWidth, layer.targetHeight, true);
             if (scratchIndex < 0)
-                return;
+                return false;
             // Indices, not references: acquiring may have grown the pool.
             const LayerTarget& target = m_layerTargets[static_cast<usize>(targetIndex)];
             const LayerTarget& scratch = m_layerTargets[static_cast<usize>(scratchIndex)];
+            const LayerTarget& into = m_layerTargets[static_cast<usize>(intoIndex)];
             const auto pass = [&](const LayerTarget& from, const LayerTarget& into, u32 uniformOffset)
             {
                 rhi::RenderPassDesc desc{};
@@ -1793,9 +1830,12 @@ export namespace foundation::vg::renderer
             encoder.TransitionTexture(scratch.color, rhi::ResourceState::Undefined, rhi::ResourceState::RenderTarget);
             pass(target, scratch, layer.blurUniformOffset);
             encoder.TransitionTexture(scratch.color, rhi::ResourceState::RenderTarget, rhi::ResourceState::ShaderRead);
-            encoder.TransitionTexture(target.color, rhi::ResourceState::ShaderRead, rhi::ResourceState::RenderTarget);
-            pass(scratch, target, layer.blurUniformOffset + static_cast<u32>(UniformSlotSize));
-            encoder.TransitionTexture(target.color, rhi::ResourceState::RenderTarget, rhi::ResourceState::ShaderRead);
+            encoder.TransitionTexture(into.color, intoIndex == targetIndex ? rhi::ResourceState::ShaderRead
+                                                                            : rhi::ResourceState::Undefined,
+                                      rhi::ResourceState::RenderTarget);
+            pass(scratch, into, layer.blurUniformOffset + static_cast<u32>(UniformSlotSize));
+            encoder.TransitionTexture(into.color, rhi::ResourceState::RenderTarget, rhi::ResourceState::ShaderRead);
+            return true;
         }
 
         // The blur pipeline: no vertex buffer (one triangle from the vertex index), single-sampled,

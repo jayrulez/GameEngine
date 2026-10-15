@@ -49,6 +49,9 @@ export namespace foundation::vg
         i32 layer = -1;
         /// A Layer-mode composite: the layer whose target the quad samples.
         i32 compositeLayer = -1;
+        /// A Layer-mode composite that samples the layer's blurred copy (VGLayer::backdropBlur): a
+        /// backdrop blur's shape (VGContext::DrawBackdropBlur).
+        bool backdrop = false;
     };
 
     /// One offscreen layer (VGContext::PushLayer): drawn into a target of its own and composited
@@ -60,6 +63,8 @@ export namespace foundation::vg
         f32 opacity = 1.0f;  ///< Applied once, at the composite.
         VGBlendMode blendMode = VGBlendMode::Normal; ///< How the composite blends into the parent.
         f32 blur = 0.0f; ///< A Gaussian blur's sigma in device pixels, 0 for none (bounds carry 3 sigma).
+        /// A blurred copy to draw for backdrop composites, its sigma (the layer itself stays sharp).
+        f32 backdropBlur = 0.0f;
     };
 
     /// Batched vector-graphics geometry and draw commands. The output of

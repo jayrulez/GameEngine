@@ -461,10 +461,75 @@ export namespace foundation::vg
             {
                 return; // nothing drawn: nothing to composite
             }
-            // The composite: a device quad over the bounds, its alpha the layer's opacity (times
-            // the opacity around it), sampling the layer's target edge to edge.
             const VGLayer& layer = m_batch.layers[static_cast<usize>(index)];
-            const Color tint{1.0f, 1.0f, 1.0f, layer.opacity * m_currentState.opacity};
+            EmitComposite(index, layer.opacity * m_currentState.opacity, layer.blendMode, true);
+        }
+
+        /// Blur what is already drawn behind `rect` (rounded by `radii`) by a Gaussian of `sigma`
+        /// device pixels, as CSS's backdrop-filter does; a panel's own translucent background then
+        /// goes over it. The backdrop is what this canvas drew before, in the target the call is
+        /// in (a layer's, or the canvas's), not what lies under the canvas. Everything drawn there
+        /// so far moves into a layer of its own, composited as before, whose blurred copy the
+        /// shape shows. Without layers, past MaxLayers, or inside a clip path, nothing is drawn.
+        void DrawBackdropBlur(Rectangle rect, CornerRadii radii, f32 sigma)
+        {
+            if (!m_layersEnabled || m_batch.layers.Size() >= static_cast<usize>(MaxLayers) || !m_clipPaths.IsEmpty() ||
+                sigma <= 0.0f || rect.width <= 0.0f || rect.height <= 0.0f)
+            {
+                return;
+            }
+            FlushCurrentCommand();
+            const i32 first = m_layerStack.IsEmpty() ? 0 : m_layerStack.Back().firstCommand;
+            const i32 index = static_cast<i32>(m_batch.layers.Size());
+            // The target's commands so far, and the layers composited into it, move into the new layer.
+            for (usize c = static_cast<usize>(first); c < m_batch.commands.Size(); ++c)
+            {
+                if (m_batch.commands[c].layer == m_currentLayer)
+                {
+                    m_batch.commands[c].layer = index;
+                }
+            }
+            for (VGLayer& other : m_batch.layers)
+            {
+                if (other.parent == m_currentLayer && !IsOpenLayer(static_cast<i32>(&other - m_batch.layers.Data())))
+                {
+                    other.parent = index;
+                }
+            }
+            VGLayer behind;
+            behind.parent = m_currentLayer;
+            behind.backdropBlur = Clamp(sigma, 0.0f, MaxLayerBlur);
+            m_batch.layers.PushBack(behind);
+            const Rectangle bounds = LayerContentBounds(index, first);
+            m_batch.layers[static_cast<usize>(index)].bounds = bounds;
+            if (bounds.width <= 0.0f || bounds.height <= 0.0f)
+            {
+                return; // nothing behind it: nothing to blur (the empty layer is never drawn)
+            }
+            EmitComposite(index, 1.0f, VGBlendMode::Normal, false); // as drawn: its opacities and clips are its own
+            // The shape, tessellated, sampling the blurred copy.
+            PathBuilder builder;
+            ShapeBuilder::BuildRoundedRect(rect, radii, builder);
+            const usize firstShape = m_batch.commands.Size();
+            FillPath(builder.ToPath(), Color{1.0f, 1.0f, 1.0f, 1.0f}, FillRule::NonZero, true);
+            FlushCurrentCommand();
+            for (usize c = firstShape; c < m_batch.commands.Size(); ++c)
+            {
+                VGCommand& cmd = m_batch.commands[c];
+                cmd.drawMode = VGDrawMode::Layer;
+                cmd.compositeLayer = index;
+                cmd.backdrop = true;
+            }
+        }
+
+    private:
+        // A layer's composite in the current target: a device quad over its bounds, `alpha` its
+        // opacity, sampling its target (the renderer maps positions to texels). `clipped`: the
+        // current clips apply (a pushed layer's); else none (drawing moved aside keeps its own).
+        void EmitComposite(i32 index, f32 alpha, VGBlendMode blendMode, bool clipped)
+        {
+            const Rectangle bounds = m_batch.layers[static_cast<usize>(index)].bounds;
+            const Color tint{1.0f, 1.0f, 1.0f, alpha};
             const i32 start = static_cast<i32>(m_batch.indices.Size());
             const u32 base = static_cast<u32>(m_batch.vertices.Size());
             const f32 x0 = bounds.x, y0 = bounds.y, x1 = bounds.x + bounds.width, y1 = bounds.y + bounds.height;
@@ -481,17 +546,35 @@ export namespace foundation::vg
             cmd.startIndex = start;
             cmd.indexCount = 6;
             cmd.textureIndex = m_currentTextureIndex;
-            cmd.clipRect = m_currentState.clipRect;
-            cmd.blendMode = layer.blendMode;
-            cmd.clipMode = m_currentState.clipMode;
-            cmd.scissored = m_currentState.scissored && m_currentState.clipMode == VGClipMode::Stencil;
-            cmd.stencilRef = m_currentState.stencilRef;
+            if (clipped)
+            {
+                cmd.clipRect = m_currentState.clipRect;
+                cmd.clipMode = m_currentState.clipMode;
+                cmd.scissored = m_currentState.scissored && m_currentState.clipMode == VGClipMode::Stencil;
+                cmd.stencilRef = m_currentState.stencilRef;
+            }
+            cmd.blendMode = blendMode;
             cmd.drawMode = VGDrawMode::Layer;
             cmd.layer = m_currentLayer;
             cmd.compositeLayer = index;
             m_batch.commands.PushBack(cmd);
             m_commandStartIndex = static_cast<i32>(m_batch.indices.Size());
         }
+
+        // Whether a layer is still being drawn (on the stack).
+        [[nodiscard]] bool IsOpenLayer(i32 index) const
+        {
+            for (const LayerSave& save : m_layerStack)
+            {
+                if (save.layer == index)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+    public:
 
         // === Blend Mode ===
 

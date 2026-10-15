@@ -2761,3 +2761,54 @@ TEST_CASE("ui.subsystem: a tap where a turned screen draws a button presses it")
     ctx.BeginFrame(1.0f / 60.0f);
     CHECK(clicks == 1);
 }
+
+// The screen tier records itself before the host's overlay pass (PrepareOverlay), so a faded
+// group's layer is drawn in a pass of its own there, and the overlay pass only composites it. A
+// Render with no prepare step draws inside the pass, the group's layer an opacity push.
+TEST_CASE("ui.subsystem: the screen tier draws a faded group's layer before the overlay pass")
+{
+    runtime::Context ctx(foundation::core::DefaultAllocator());
+    auto* ui = ctx.AddSubsystem<UISubsystem>(DefaultAllocator(), DataFs());
+    ctx.Startup();
+    foundation::rhi::null::NullDevice device{DefaultAllocator()};
+    ui->EnsureRenderReady(device, 2);
+
+    RefPtr<UIDocument> doc = MakeRef<UIDocument>(DefaultAllocator());
+    doc->markup = String(u8"<Panel id=\"group\"/>");
+    RefPtr<View> overlay = ui->PushScreenOverlay(*doc);
+    REQUIRE(overlay.Get() != nullptr);
+    ctx.BeginFrame(1.0f / 60.0f);
+    ViewGroup* group = Cast<ViewGroup>(Cast<ViewGroup>(ui->ScreenRoot())->FindByName(u8"group"));
+    REQUIRE(group != nullptr);
+    group->Opacity = 0.5f;
+    RefPtr<ColorView> red = MakeRef<ColorView>(DefaultAllocator(), Color::Red, 40.0f, 40.0f);
+    RefPtr<ColorView> blue = MakeRef<ColorView>(DefaultAllocator(), Color::Blue, 40.0f, 40.0f);
+    group->AddView(red.Get());
+    group->AddView(blue.Get());
+
+    foundation::render::ScreenOverlayView view;
+    view.width = 128;
+    view.height = 128;
+    view.targetFormat = foundation::rhi::TextureFormat::RGBA8UnormSrgb;
+    foundation::rhi::null::NullCommandEncoder encoder;
+    ui->PrepareOverlay(encoder, view);
+    const u64 layerPasses = encoder.counters->Snapshot().renderPasses;
+    CHECK(layerPasses == 1); // the group's layer, before the overlay pass opens
+
+    foundation::rhi::RenderPassEncoder* pass = encoder.BeginRenderPass(foundation::rhi::RenderPassDesc{});
+    REQUIRE(pass != nullptr);
+    const u64 drawsBefore = encoder.counters->Snapshot().draws;
+    ui->Render(*pass, view);
+    CHECK(encoder.counters->Snapshot().draws > drawsBefore); // the composite, at least
+    CHECK(encoder.counters->Snapshot().renderPasses == layerPasses + 1); // Render opened none
+
+    // No prepare step: the screen draws in the pass all the same, and still opens no pass.
+    const u64 drawsUnprepared = encoder.counters->Snapshot().draws;
+    ui->Render(*pass, view);
+    CHECK(encoder.counters->Snapshot().draws > drawsUnprepared);
+    CHECK(encoder.counters->Snapshot().renderPasses == layerPasses + 1);
+    pass->End();
+
+    ui->RemoveScreenOverlay(overlay.Get());
+    ctx.Shutdown();
+}

@@ -657,7 +657,11 @@ export namespace engine::ui
         /// viewport rect - sub-rect views (split-screen) lay out at the viewport size and
         /// draw through the VG renderer's viewport seam, clipped to their rect.
         void Render(rhi::RenderPassEncoder& encoder, const render::SceneOverlayView& view) override;
-        /// Screen tier: draws the global overlay root.
+        /// Screen tier, before the pass: records the screens and draws their offscreen layers
+        /// (VGContext::PushLayer) on the host's encoder, for Render to composite.
+        void PrepareOverlay(rhi::CommandEncoder& encoder, const render::ScreenOverlayView& view) override;
+        /// Screen tier: draws the global overlay root (what PrepareOverlay recorded for this view,
+        /// else recorded now, its layers then opacity pushes).
         void Render(rhi::RenderPassEncoder& encoder,
                     const render::ScreenOverlayView& view) override;
 
@@ -787,8 +791,12 @@ export namespace engine::ui
         // The tier whose root is `root`, or null.
         [[nodiscard]] ScreenTier* TierOfRoot(const RootView* root) noexcept;
         static void ApplyResolution(ScreenTier& tier, u32 width, u32 height, FitMode fit);
-        void DrawTier(ScreenTier& tier, rhi::RenderPassEncoder& encoder,
-                      const render::ScreenOverlayView& view, bool stencil);
+        // One root recorded and uploaded for a pass (impl unit: it holds VG renderer types).
+        struct PreparedRoot;
+        // Record a tier for the view; `layers` lets its views draw offscreen layers, which the
+        // caller then draws before the pass (VGRenderer::RenderLayers).
+        [[nodiscard]] PreparedRoot PrepareTier(ScreenTier& tier, const render::ScreenOverlayView& view, bool stencil,
+                                               bool layers);
         // The screen resolution fitted into the last target the tier drew into.
         [[nodiscard]] static ContentFit ScreenFit(const ScreenTier& tier) noexcept;
         // A render-space point in the tier's layout units: offset by the part of the
@@ -817,6 +825,13 @@ export namespace engine::ui
                             u32 height, i32 frameIndex, bool stencilCapable = false,
                             u32 sampleCount = 1, const ScreenPlacement* placement = nullptr,
                             bool encoded = false);
+        // DrawRootInPass's first half: lay out, record and upload, outside any pass if need be.
+        [[nodiscard]] PreparedRoot PrepareRoot(RootView& root, rhi::TextureFormat format, i32 viewportX,
+                                               i32 viewportY, u32 width, u32 height, i32 frameIndex,
+                                               bool stencilCapable, u32 sampleCount,
+                                               const ScreenPlacement* placement, bool encoded, bool layers);
+        // Its second half: draw what was prepared into the active pass.
+        static void DrawPrepared(const PreparedRoot& prepared, rhi::RenderPassEncoder& encoder);
 
         [[nodiscard]] bool ReadDataFile(StringView path, Array<u8>& outBytes) const; // impl unit
 

@@ -167,6 +167,17 @@ namespace engine::ui
     }
 
     // Per-target-format VG pipeline (backbuffer vs viewport formats differ).
+    // One root recorded and uploaded for a pass: the renderer and slice it drew with and the
+    // viewport it draws into. No renderer: nothing to draw.
+    struct UISubsystem::PreparedRoot
+    {
+        vg::renderer::VGRenderer* renderer = nullptr;
+        vg::renderer::VGRenderSlice slice;
+        i32 viewportX = 0, viewportY = 0;
+        u32 width = 0, height = 0;
+        i32 frameIndex = 0;
+    };
+
     struct UISubsystem::RenderState
     {
         IAllocator* allocator;
@@ -180,6 +191,12 @@ namespace engine::ui
         rhi::ShaderModule* boxShadowShader = nullptr;    // blurred rounded rect (borrowed)
         rhi::ShaderModule* boxVertexShader = nullptr;    // analytic box (borrowed)
         rhi::ShaderModule* boxFragmentShader = nullptr;
+        rhi::ShaderModule* layerShader = nullptr; // layer composites (screen tier, PrepareOverlay)
+        // The tiers the next screen-overlay Render draws, as PrepareOverlay recorded them for
+        // preparedView; cleared when drawn.
+        Array<PreparedRoot> preparedScreens;
+        render::ScreenOverlayView preparedView;
+        bool screensPrepared = false;
         vg::VGContext vgContext;
         struct FormatRenderer
         {
@@ -463,7 +480,7 @@ namespace engine::ui
                 if (!renderer
                          ->Initialize(*device, *vertexShader, *fragmentShader, format, frameCount,
                                       distanceFieldShader, gradRadialShader, gradConicShader, targetConfig,
-                                      boxShadowShader, boxVertexShader, boxFragmentShader)
+                                      boxShadowShader, boxVertexShader, boxFragmentShader, layerShader)
                          .IsOk())
                 {
                     return nullptr;
@@ -1982,18 +1999,69 @@ namespace engine::ui
         {
             return;
         }
+        // What PrepareOverlay recorded for this very view, its layers drawn already.
+        const bool prepared = m_render->screensPrepared && m_render->preparedView.width == view.width &&
+                              m_render->preparedView.height == view.height && m_render->preparedView.frameIndex == view.frameIndex &&
+                              m_render->preparedView.targetFormat == view.targetFormat &&
+                              m_render->preparedView.encodedTarget == view.encodedTarget &&
+                              m_render->preparedView.depthStencilFormat == view.depthStencilFormat;
+        m_render->screensPrepared = false;
+        if (prepared)
+        {
+            for (const PreparedRoot& root : m_render->preparedScreens)
+            {
+                DrawPrepared(root, encoder);
+            }
+            m_render->preparedScreens.Clear();
+            return;
+        }
+        m_render->preparedScreens.Clear();
         const bool stencil = view.depthStencilFormat != rhi::TextureFormat::Undefined &&
                              view.depthStencilFormat == m_render->canvasStencilFormat;
         // A run's own screens (its Game tab), then the shared tier's global overlays above them.
         if (ScreenTier* runTier = m_runScreens ? FindRunTier(m_renderRun) : nullptr)
         {
-            DrawTier(*runTier, encoder, view, stencil);
+            DrawPrepared(PrepareTier(*runTier, view, stencil, false), encoder);
         }
-        DrawTier(m_screen, encoder, view, stencil);
+        DrawPrepared(PrepareTier(m_screen, view, stencil, false), encoder);
     }
 
-    void UISubsystem::DrawTier(ScreenTier& tier, rhi::RenderPassEncoder& encoder,
-                               const render::ScreenOverlayView& view, bool stencil)
+    void UISubsystem::PrepareOverlay(rhi::CommandEncoder& encoder, const render::ScreenOverlayView& view)
+    {
+        if (m_render.Get() == nullptr || m_render->device == nullptr)
+        {
+            return;
+        }
+        m_render->screensPrepared = false;
+        m_render->preparedScreens.Clear();
+        if (m_screen.root.Get() == nullptr || view.width == 0 || view.height == 0)
+        {
+            return;
+        }
+        const bool stencil = view.depthStencilFormat != rhi::TextureFormat::Undefined &&
+                             view.depthStencilFormat == m_render->canvasStencilFormat;
+        const bool layers = m_render->layerShader != nullptr;
+        const auto prepare = [&](ScreenTier& tier)
+        {
+            PreparedRoot root = PrepareTier(tier, view, stencil, layers);
+            if (root.renderer != nullptr)
+            {
+                root.renderer->RenderLayers(encoder, root.frameIndex, root.slice);
+            }
+            m_render->preparedScreens.PushBack(root);
+        };
+        // The same tiers in the same order as Render draws them.
+        if (ScreenTier* runTier = m_runScreens ? FindRunTier(m_renderRun) : nullptr)
+        {
+            prepare(*runTier);
+        }
+        prepare(m_screen);
+        m_render->preparedView = view;
+        m_render->screensPrepared = true;
+    }
+
+    UISubsystem::PreparedRoot UISubsystem::PrepareTier(ScreenTier& tier, const render::ScreenOverlayView& view,
+                                                       bool stencil, bool layers)
     {
         tier.targetSize = Float2{static_cast<f32>(view.width), static_cast<f32>(view.height)};
         const ScreenPlacement place = PlaceScreen(tier.resolution, tier.fitMode, tier.orientation, tier.targetSize);
@@ -2003,14 +2071,13 @@ namespace engine::ui
             // Laid out at the game's resolution (or shape), drawn crisp at the target's resolution
             // into the rectangle the game's image was fitted to, turned with it.
             tier.root->DpiScale = place.dpiScale;
-            DrawRootInPass(*tier.root, encoder, view.targetFormat, static_cast<i32>(place.rect.x),
-                           static_cast<i32>(place.rect.y), static_cast<u32>(Max(place.rect.width, 1.0f)),
-                           static_cast<u32>(Max(place.rect.height, 1.0f)), static_cast<i32>(view.frameIndex),
-                           stencil, 1, &place, view.encodedTarget);
-            return;
+            return PrepareRoot(*tier.root, view.targetFormat, static_cast<i32>(place.rect.x),
+                               static_cast<i32>(place.rect.y), static_cast<u32>(Max(place.rect.width, 1.0f)),
+                               static_cast<u32>(Max(place.rect.height, 1.0f)), static_cast<i32>(view.frameIndex),
+                               stencil, 1, &place, view.encodedTarget, layers);
         }
-        DrawRootInPass(*tier.root, encoder, view.targetFormat, 0, 0, view.width, view.height,
-                       static_cast<i32>(view.frameIndex), stencil, 1, nullptr, view.encodedTarget);
+        return PrepareRoot(*tier.root, view.targetFormat, 0, 0, view.width, view.height,
+                           static_cast<i32>(view.frameIndex), stencil, 1, nullptr, view.encodedTarget, layers);
     }
 
     void UISubsystem::ApplyResolution(ScreenTier& tier, u32 width, u32 height, FitMode fit)
@@ -2238,6 +2305,26 @@ namespace engine::ui
                                      u32 width, u32 height, i32 frameIndex, bool stencilCapable,
                                      u32 sampleCount, const ScreenPlacement* placement, bool encoded)
     {
+        // Inside a pass there is no drawing a layer first: they stay opacity pushes.
+        DrawPrepared(PrepareRoot(root, format, viewportX, viewportY, width, height, frameIndex, stencilCapable,
+                                 sampleCount, placement, encoded, false),
+                     encoder);
+    }
+
+    void UISubsystem::DrawPrepared(const PreparedRoot& prepared, rhi::RenderPassEncoder& encoder)
+    {
+        if (prepared.renderer != nullptr)
+        {
+            prepared.renderer->Render(encoder, prepared.viewportX, prepared.viewportY, prepared.width,
+                                      prepared.height, prepared.frameIndex, prepared.slice);
+        }
+    }
+
+    UISubsystem::PreparedRoot UISubsystem::PrepareRoot(RootView& root, rhi::TextureFormat format, i32 viewportX,
+                                                       i32 viewportY, u32 width, u32 height, i32 frameIndex,
+                                                       bool stencilCapable, u32 sampleCount,
+                                                       const ScreenPlacement* placement, bool encoded, bool layers)
+    {
         // A turned tier lays out in its own frame (the rectangle turned back) and draws through the
         // turn; everything else at the rectangle's size.
         root.ViewportSize = placement != nullptr ? placement->drawSize
@@ -2251,6 +2338,7 @@ namespace engine::ui
         const bool stencil =
             stencilCapable && m_render->canvasStencilFormat != rhi::TextureFormat::Undefined;
         m_render->vgContext.SetStencilFills(stencil);
+        m_render->vgContext.SetLayers(layers);
         m_render->vgContext.Clear();
         if (placement != nullptr)
         {
@@ -2259,22 +2347,29 @@ namespace engine::ui
         m_context.DrawRootView(&root, m_render->vgContext);
         vg::VGBatch& batch = m_render->vgContext.GetBatch();
         m_render->vgContext.SetStencilFills(false); // reset; each tier opts in per batch
+        m_render->vgContext.SetLayers(false);
+        PreparedRoot prepared;
         if (batch.commands.IsEmpty())
         {
-            return;
+            return prepared;
         }
 
         vg::renderer::VGRenderer* renderer =
             m_render->RendererFor(format, m_frameSerial, frameIndex, stencil, sampleCount, encoded);
         if (renderer == nullptr)
         {
-            return;
+            return prepared;
         }
         // The texture images the tree names (resolved as it drew) registered on this renderer.
         m_images->SyncOn(*renderer, m_frameSerial);
-        const vg::renderer::VGRenderSlice slice =
-            renderer->Prepare(batch, frameIndex, width, height);
-        renderer->Render(encoder, viewportX, viewportY, width, height, frameIndex, slice);
+        prepared.renderer = renderer;
+        prepared.slice = renderer->Prepare(batch, frameIndex, width, height);
+        prepared.viewportX = viewportX;
+        prepared.viewportY = viewportY;
+        prepared.width = width;
+        prepared.height = height;
+        prepared.frameIndex = frameIndex;
+        return prepared;
     }
 
     // RenderTexture canvases: draw each RT canvas's standalone root into
@@ -2786,6 +2881,10 @@ namespace engine::ui
             u8"vg_box", foundation::shaders::ShaderStage::Fragment, foundation::shaders::ShaderFlags::None);
         m_render->vgContext.SetAnalyticBoxes(m_render->boxVertexShader != nullptr &&
                                              m_render->boxFragmentShader != nullptr);
+        // Layer composites; without them a layer is an opacity push. Layers are turned on per
+        // batch, for the screen tier's PrepareOverlay only (the other draws are inside passes).
+        m_render->layerShader = m_render->shaderHost.GetVariant(
+            u8"vg_layer", foundation::shaders::ShaderStage::Fragment, foundation::shaders::ShaderFlags::None);
         // Stencil support for CANVAS render-to-texture passes (the only passes this
         // subsystem OWNS - the scene/screen overlay passes belong to the renderer/host
         // and stay color-only until they provide a DS attachment themselves). Canvas UI

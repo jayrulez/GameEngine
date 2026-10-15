@@ -57,6 +57,35 @@ export namespace foundation::vg
         [[nodiscard]] constexpr bool operator==(const CornerRadii&) const noexcept = default;
     };
 
+    /// A box's border width on each side (VGContext::DrawBox).
+    struct BorderWidths
+    {
+        f32 top = 0.0f;
+        f32 right = 0.0f;
+        f32 bottom = 0.0f;
+        f32 left = 0.0f;
+
+        constexpr BorderWidths() noexcept = default;
+
+        /// Every side the same width.
+        explicit constexpr BorderWidths(f32 uniform) noexcept
+            : top(uniform), right(uniform), bottom(uniform), left(uniform)
+        {
+        }
+
+        constexpr BorderWidths(f32 inTop, f32 inRight, f32 inBottom, f32 inLeft) noexcept
+            : top(inTop), right(inRight), bottom(inBottom), left(inLeft)
+        {
+        }
+
+        [[nodiscard]] constexpr bool IsZero() const noexcept
+        {
+            return top == 0.0f && right == 0.0f && bottom == 0.0f && left == 0.0f;
+        }
+
+        [[nodiscard]] constexpr bool operator==(const BorderWidths&) const noexcept = default;
+    };
+
     /// Style parameters for path stroking.
     struct StrokeStyle
     {

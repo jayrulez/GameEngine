@@ -533,6 +533,80 @@ TEST_CASE("vg.context: without stencil, a nested clip path's scissor pops back t
     CHECK(batch.commands[2].clipMode == VGClipMode::None);
 }
 
+TEST_CASE("vg.context: an analytic box is six box vertices in a Box command, batched with the next box")
+{
+    using foundation::vg::VGDrawMode;
+    VGContext ctx;
+    ctx.SetAnalyticBoxes(true);
+    ctx.DrawBox(Rectangle{10, 20, 40, 30}, CornerRadii(6.0f), Color::Red, foundation::vg::BorderWidths(2.0f),
+                Color::Blue);
+    ctx.DrawBox(Rectangle{60, 20, 10, 10}, CornerRadii(), Color::Green);
+    ctx.FillPath(Square(0, 0, 5, 5), Color::White, FillRule::NonZero, false); // other geometry
+    ctx.DrawBox(Rectangle{80, 20, 10, 10}, CornerRadii(), Color::Green);
+
+    const VGBatch& batch = ctx.GetBatch();
+    REQUIRE(batch.boxVertices.Size() == 18u);
+    REQUIRE(batch.commands.Size() == 3u);
+    CHECK(batch.commands[0].drawMode == VGDrawMode::Box); // the first two boxes, one command
+    CHECK(batch.commands[0].startIndex == 0);
+    CHECK(batch.commands[0].indexCount == 12);
+    CHECK(batch.commands[1].drawMode != VGDrawMode::Box); // the path, in order
+    CHECK(batch.commands[2].drawMode == VGDrawMode::Box);
+    CHECK(batch.commands[2].startIndex == 12);
+    CHECK(batch.commands[2].indexCount == 6);
+
+    // The first box: its centre, size, radii and borders in every vertex, in device units (it
+    // snapped: an identity transform keeps whole-pixel edges), and its quad a pixel larger.
+    const foundation::vg::VGBoxVertex& v = batch.boxVertices[0];
+    CHECK(v.halfSize.x == doctest::Approx(20.0f));
+    CHECK(v.halfSize.y == doctest::Approx(15.0f));
+    CHECK(v.radii.x == doctest::Approx(6.0f));
+    CHECK(v.borders.w == doctest::Approx(2.0f));
+    CHECK(v.fill.r == doctest::Approx(1.0f));
+    CHECK(v.borderColor.b == doctest::Approx(1.0f));
+    Float2 mn{1e9f, 1e9f}, mx{-1e9f, -1e9f};
+    for (usize i = 0; i < 6; ++i)
+    {
+        mn = Float2{Min(mn.x, batch.boxVertices[i].position.x), Min(mn.y, batch.boxVertices[i].position.y)};
+        mx = Float2{Max(mx.x, batch.boxVertices[i].position.x), Max(mx.y, batch.boxVertices[i].position.y)};
+    }
+    CHECK(mn.x == doctest::Approx(9.0f));
+    CHECK(mx.x == doctest::Approx(51.0f));
+    CHECK(mn.y == doctest::Approx(19.0f));
+    CHECK(mx.y == doctest::Approx(51.0f));
+}
+
+TEST_CASE("vg.context: a box's radii are clamped to it, and a scaled box snaps in device units")
+{
+    VGContext ctx;
+    ctx.SetAnalyticBoxes(true);
+    ctx.Scale(2.0f, 2.0f);
+    ctx.DrawBox(Rectangle{1.2f, 1.2f, 10, 6}, CornerRadii(20.0f), Color::Red, foundation::vg::BorderWidths(1.0f),
+                Color::Blue);
+    const VGBatch& batch = ctx.GetBatch();
+    REQUIRE(batch.boxVertices.Size() == 6u);
+    const foundation::vg::VGBoxVertex& v = batch.boxVertices[0];
+    CHECK(v.halfSize.x == doctest::Approx(10.0f)); // 2.4..22.4 device, snapped to 2..22
+    CHECK(v.halfSize.y == doctest::Approx(6.0f));
+    CHECK(v.radii.x == doctest::Approx(6.0f));     // clamped to half the short side (3), doubled
+    CHECK(v.borders.x == doctest::Approx(2.0f));   // a unit border, two device pixels
+}
+
+TEST_CASE("vg.context: without analytic boxes, DrawBox tessellates its fill and border")
+{
+    VGContext ctx; // analytic boxes off (the default)
+    ctx.DrawBox(Rectangle{10, 10, 40, 30}, CornerRadii(6.0f), Color::Red, foundation::vg::BorderWidths(2.0f),
+                Color::Blue);
+    const VGBatch& batch = ctx.GetBatch();
+    CHECK(batch.boxVertices.IsEmpty());
+    REQUIRE_FALSE(batch.commands.IsEmpty());
+    for (const VGCommand& cmd : batch.commands)
+    {
+        CHECK(cmd.drawMode != foundation::vg::VGDrawMode::Box);
+    }
+    CHECK(batch.vertices.Size() > 8u); // the rounded fill and the ring
+}
+
 TEST_CASE("vg.context: over-budget LUT cache eviction is announced through the batch")
 {
     VGContext ctx;

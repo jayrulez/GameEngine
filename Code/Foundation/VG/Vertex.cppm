@@ -68,6 +68,26 @@ export namespace foundation::vg
         }
     };
 
+    /// One corner of an analytic box (VGContext::DrawBox, VGDrawMode::Box): every vertex carries
+    /// the whole box, so the fragment shader evaluates its fill and border from one signed
+    /// distance with no tessellation. `local` is the point relative to the box's centre in the
+    /// box's own units (interpolated, it stays exact under any affine transform); the rest is the
+    /// same at every corner.
+    struct ENGINE_EXPORT_DATA VGBoxVertex
+    {
+        Float2 position;     ///< Device position (the box's quad, grown for the AA ramp).
+        Float2 local;        ///< Relative to the box's centre, in box units.
+        Float2 halfSize;     ///< Half the box's size, in box units.
+        Float4 radii;        ///< Corner radii: top left, top right, bottom right, bottom left.
+        Float4 borders;      ///< Border widths: top, right, bottom, left.
+        Color fill;          ///< The fill (authored sRGB, opacity applied).
+        Color borderColor;   ///< The border's colour, drawn over the fill.
+
+        static constexpr i32 SizeInBytes = 88; // 8 + 8 + 8 + 16 + 16 + 16 + 16
+    };
+
+    static_assert(sizeof(VGBoxVertex) == VGBoxVertex::SizeInBytes, "VGBoxVertex must stay 88 bytes");
+
     static_assert(sizeof(VGVertex) == VGVertex::SizeInBytes,
                   "VGVertex must stay 24 bytes for the renderer layout");
 }

@@ -63,8 +63,14 @@ namespace
                 u8"vg_grad_radial", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
             rhi::ShaderModule* gradC = host.GetVariant(
                 u8"vg_grad_conic", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
+            rhi::ShaderModule* boxVs =
+                host.GetVariant(u8"vg_box", shaders::ShaderStage::Vertex, shaders::ShaderFlags::None);
+            rhi::ShaderModule* boxFs =
+                host.GetVariant(u8"vg_box", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
             REQUIRE(vs != nullptr);
             REQUIRE(fs != nullptr);
+            REQUIRE(boxVs != nullptr); // else boxes would quietly tessellate, and the box probe prove nothing
+            REQUIRE(boxFs != nullptr);
 
             vg::renderer::VGTargetConfig config;
             config.sampleCount = sampleCount;
@@ -74,7 +80,7 @@ namespace
             vg::renderer::VGRenderer renderer{DefaultAllocator()};
             REQUIRE(renderer
                         .Initialize(device, *vs, *fs, drawFormat, 2, distanceFieldFragmentShader,
-                                    gradR, gradC, config)
+                                    gradR, gradC, config, nullptr, boxVs, boxFs)
                         .IsOk());
 
             rhi::TextureDesc cd = rhi::TextureDesc::RenderTarget(
@@ -121,6 +127,7 @@ namespace
             vg::VGContext ctx;
             ctx.SetStencilFills(true);
             ctx.SetPerPixelGradients(gradR != nullptr && gradC != nullptr);
+            ctx.SetAnalyticBoxes(boxVs != nullptr && boxFs != nullptr);
             record(ctx);
             vg::VGBatch& batch = ctx.GetBatch();
 
@@ -416,6 +423,95 @@ TEST_CASE("vg.pixels: fills, clip, colors, spreads and blends on real backends")
     if (!any)
     {
         MESSAGE("no GPU backend available - VG pixel probes skipped entirely");
+    }
+    if (vulkan != nullptr)
+    {
+        vulkan->Destroy();
+    }
+    if (webgpu != nullptr)
+    {
+        webgpu->Destroy();
+    }
+}
+
+// ============================================================================================
+// Analytic boxes (V4 of Specs/vg-and-gui-lab.md): a rounded fill, a one-pixel border with no halo,
+// and per-side borders, drawn by the box shader.
+// ============================================================================================
+
+namespace
+{
+    void ProbeBoxes(rhi::Device& device, const char* name)
+    {
+        INFO(doctest::String(name));
+        const Pixels px = RenderScene(
+            device,
+            [](vg::VGContext& ctx)
+            {
+                // A rounded fill.
+                ctx.DrawBox(Rectangle{16, 16, 48, 48}, vg::CornerRadii(16.0f), ByteColor(220, 40, 40));
+                // A one-pixel border, no fill.
+                ctx.DrawBox(Rectangle{80, 16, 32, 32}, vg::CornerRadii(), Color{0.0f, 0.0f, 0.0f, 0.0f},
+                            vg::BorderWidths(1.0f), ByteColor(60, 60, 240));
+                // Six pixels of border on the left, none on the right, two above and below.
+                ctx.DrawBox(Rectangle{16, 80, 48, 32}, vg::CornerRadii(), Color{0.0f, 0.0f, 0.0f, 0.0f},
+                            vg::BorderWidths(2.0f, 0.0f, 2.0f, 6.0f), ByteColor(40, 200, 40));
+            });
+        REQUIRE(px.valid);
+        const auto red = [&](u32 x, u32 y) { return px.At(x, y)[0] > 200 && px.At(x, y)[1] < 80; };
+        const auto blue = [&](u32 x, u32 y) { return px.At(x, y)[2] > 200 && px.At(x, y)[0] < 100; };
+        const auto green = [&](u32 x, u32 y) { return px.At(x, y)[1] > 180 && px.At(x, y)[0] < 100; };
+        const auto dark = [&](u32 x, u32 y) { return px.At(x, y)[0] < 12 && px.At(x, y)[1] < 12 && px.At(x, y)[2] < 12; };
+
+        // The fill: inside, its straight edges on whole pixels (no fringe), and clear outside its
+        // rounded corner.
+        CHECK(red(40, 40));
+        CHECK(red(40, 16));   // the top row, inside
+        CHECK(dark(40, 15));  // the row above: nothing
+        CHECK(dark(18, 18));  // outside the corner's arc
+        // The one-pixel border: its row lit, nothing outside it, the inside clear.
+        CHECK(blue(96, 16));
+        CHECK(dark(96, 15));  // no halo outside
+        CHECK(dark(96, 18));  // the inside: no fill
+        CHECK(blue(80, 30));
+        CHECK(dark(79, 30));
+        // Per side: six on the left, none on the right.
+        u32 left = 0;
+        for (u32 x = 14; x < 30; ++x)
+        {
+            left += green(x, 96) ? 1u : 0u;
+        }
+        CHECK(left == 6u);
+        CHECK(dark(62, 96));  // no right border
+        CHECK(dark(64, 96));
+        CHECK(green(40, 80)); // the top border
+        CHECK(dark(40, 83));  // under it, inside
+    }
+}
+
+TEST_CASE("vg.pixels: analytic boxes fill, border without a halo, and take a width per side")
+{
+    rhi::Backend* vulkan = nullptr;
+    (void)rhi::vk::CreateBackend(rhi::vk::VkBackendDesc{}, vulkan);
+    rhi::Backend* webgpu = nullptr;
+    (void)rhi::webgpu::CreateBackend(rhi::webgpu::WebGpuBackendDesc{}, webgpu, DefaultAllocator());
+    if (rhi::Device* device = MakeDevice(vulkan))
+    {
+        ProbeBoxes(*device, "vulkan");
+        device->Destroy();
+    }
+    else
+    {
+        MESSAGE("Vulkan unavailable - vulkan box probe skipped");
+    }
+    if (rhi::Device* device = MakeDevice(webgpu))
+    {
+        ProbeBoxes(*device, "webgpu");
+        device->Destroy();
+    }
+    else
+    {
+        MESSAGE("WebGPU unavailable - webgpu box probe skipped");
     }
     if (vulkan != nullptr)
     {

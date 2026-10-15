@@ -101,6 +101,7 @@ export namespace foundation::vg::renderer
     struct VGRenderSlice
     {
         u32 vertexByteOffset = 0;
+        u32 boxVertexByteOffset = 0; // the slice's analytic boxes, after its ordinary vertices
         u32 indexByteOffset = 0;
         u32 uniformByteOffset = 0;
         i32 drawCommandStart = 0;
@@ -144,7 +145,9 @@ export namespace foundation::vg::renderer
                           rhi::ShaderModule* gradRadialFragShader = nullptr,
                           rhi::ShaderModule* gradConicFragShader = nullptr,
                           VGTargetConfig targetConfig = {},
-                          rhi::ShaderModule* boxShadowFragShader = nullptr)
+                          rhi::ShaderModule* boxShadowFragShader = nullptr,
+                          rhi::ShaderModule* boxVertShader = nullptr,
+                          rhi::ShaderModule* boxFragShader = nullptr)
         {
             m_device = &device;
             m_queue = device.GetQueue(rhi::QueueType::Graphics, 0);
@@ -159,6 +162,8 @@ export namespace foundation::vg::renderer
             m_gradRadialModule = gradRadialFragShader;
             m_gradConicModule = gradConicFragShader;
             m_boxShadowModule = boxShadowFragShader;
+            m_boxVsModule = boxVertShader;
+            m_boxFsModule = boxFragShader;
 
             if (!CreateSampler().IsOk())
                 return ErrorCode::Unknown;
@@ -181,6 +186,12 @@ export namespace foundation::vg::renderer
             // Optional box-shadow pipeline (the UI's blurred rounded rects; direct fills only).
             if (boxShadowFragShader != nullptr &&
                 !CreatePipelineInto(vertShader, *boxShadowFragShader, m_boxShadowPipeline).IsOk())
+                return ErrorCode::Unknown;
+            // Optional analytic-box pipeline (VGContext::DrawBox): its own vertex layout and shaders.
+            if (boxVertShader != nullptr && boxFragShader != nullptr &&
+                !CreatePipelineVariant(*boxVertShader, *boxFragShader, StencilRole::None, m_boxPipeline,
+                                       vg::VGBlendMode::Normal, false, /*box*/ true)
+                     .IsOk())
                 return ErrorCode::Unknown;
             // Stencil-then-cover pipelines - only with a host-provided stencil attachment.
             // Write pass: color-masked fans accumulate winding (incr/decr-wrap = NonZero,
@@ -269,9 +280,12 @@ export namespace foundation::vg::renderer
 
             const u32 vertCountIn = static_cast<u32>(batch.vertices.Size());
             const u32 idxCountIn = static_cast<u32>(batch.indices.Size());
-            if (vertCountIn == 0 || idxCountIn == 0)
+            const u32 boxCountIn = static_cast<u32>(batch.boxVertices.Size());
+            if (batch.commands.IsEmpty() || ((vertCountIn == 0 || idxCountIn == 0) && boxCountIn == 0))
                 return VGRenderSlice{};
 
+            // The slice's boxes follow its ordinary vertices in the same buffer.
+            const u32 boxByteSize = boxCountIn * static_cast<u32>(sizeof(foundation::vg::VGBoxVertex));
             const u32 vertByteSize = vertCountIn * static_cast<u32>(sizeof(VGRenderVertex));
             const u32 idxByteSize = idxCountIn * static_cast<u32>(sizeof(u32));
             const u32 sliceVertOffset = m_frameVertexOffsets[static_cast<usize>(frameIndex)];
@@ -285,7 +299,7 @@ export namespace foundation::vg::renderer
                 static_cast<u32>(m_frameVertexCapacity[static_cast<usize>(frameIndex)]);
             const u32 maxVertBytes = curVertCap * static_cast<u32>(sizeof(VGRenderVertex));
             const u32 maxIdxBytes = curVertCap * 3u * static_cast<u32>(sizeof(u32));
-            if (sliceVertOffset + vertByteSize > maxVertBytes ||
+            if (sliceVertOffset + vertByteSize + boxByteSize > maxVertBytes ||
                 sliceIdxOffset + idxByteSize > maxIdxBytes)
             {
                 // The per-frame buffers are too small for this frame's accumulated geometry. Bump the
@@ -293,7 +307,7 @@ export namespace foundation::vg::renderer
                 // One frame may blank during a growth step, then it renders - vs the old behavior of
                 // blanking the whole surface for as long as the large draw list persists.
                 const u32 neededVerts =
-                    (sliceVertOffset + vertByteSize) / static_cast<u32>(sizeof(VGRenderVertex)) + 1u;
+                    (sliceVertOffset + vertByteSize + boxByteSize) / static_cast<u32>(sizeof(VGRenderVertex)) + 1u;
                 if (neededVerts > static_cast<u32>(MaxVertexCapacity))
                 {
                     if (!m_capacityWarned)
@@ -322,12 +336,17 @@ export namespace foundation::vg::renderer
             renderVerts.Reserve(batch.vertices.Size());
             for (usize i = 0; i < batch.vertices.Size(); ++i)
                 renderVerts.PushBack(VGRenderVertex(batch.vertices[i]));
-            WriteBuffer(m_vertexBuffers[static_cast<usize>(frameIndex)], sliceVertOffset,
-                        renderVerts.Data(), vertByteSize);
+            if (vertByteSize > 0)
+                WriteBuffer(m_vertexBuffers[static_cast<usize>(frameIndex)], sliceVertOffset,
+                            renderVerts.Data(), vertByteSize);
+            if (boxByteSize > 0)
+                WriteBuffer(m_vertexBuffers[static_cast<usize>(frameIndex)], sliceVertOffset + vertByteSize,
+                            batch.boxVertices.Data(), boxByteSize);
 
             // Upload indices verbatim (relative to the slice's vertex base).
-            WriteBuffer(m_indexBuffers[static_cast<usize>(frameIndex)], sliceIdxOffset,
-                        batch.indices.Data(), idxByteSize);
+            if (idxByteSize > 0)
+                WriteBuffer(m_indexBuffers[static_cast<usize>(frameIndex)], sliceIdxOffset,
+                            batch.indices.Data(), idxByteSize);
 
             // Append textures (commands index into the shared batch-texture list).
             for (usize i = 0; i < batch.textures.Size(); ++i)
@@ -355,12 +374,13 @@ export namespace foundation::vg::renderer
                  ++texIdx)
                 UpdateTextureBindGroup(texIdx, frameIndex);
 
-            m_frameVertexOffsets[static_cast<usize>(frameIndex)] = sliceVertOffset + vertByteSize;
+            m_frameVertexOffsets[static_cast<usize>(frameIndex)] = sliceVertOffset + vertByteSize + boxByteSize;
             m_frameIndexOffsets[static_cast<usize>(frameIndex)] = sliceIdxOffset + idxByteSize;
             m_frameUniformSlotCount[static_cast<usize>(frameIndex)] = sliceUniformSlot + 1;
 
             VGRenderSlice slice;
             slice.vertexByteOffset = sliceVertOffset;
+            slice.boxVertexByteOffset = sliceVertOffset + vertByteSize;
             slice.indexByteOffset = sliceIdxOffset;
             slice.uniformByteOffset = sliceUniformOffset;
             slice.drawCommandStart = sliceCmdStart;
@@ -428,6 +448,7 @@ export namespace foundation::vg::renderer
             vg::VGGradientSpread currentSpread = vg::VGGradientSpread::Pad;
             rhi::RenderPipeline* currentPipeline = m_pipeline;
             i32 currentStencilRef = -1; // sentinel: set on first stencil-relevant command
+            bool boxesBound = false;    // the vertex buffer sits at the slice's boxes
             if (m_coverPipeline != nullptr)
             {
                 renderPass.SetStencilReference(0); // cover tests NotEqual 0
@@ -505,8 +526,19 @@ export namespace foundation::vg::renderer
                     renderPass.SetScissor(viewportX, viewportY, width, height);
                 }
 
-                renderPass.DrawIndexed(static_cast<u32>(cmd.indexCount), 1,
-                                       static_cast<u32>(cmd.startIndex), 0, 0);
+                // Analytic boxes draw unindexed from their own part of the vertex buffer.
+                const bool box = cmd.drawMode == foundation::vg::VGDrawMode::Box;
+                if (box != boxesBound)
+                {
+                    renderPass.SetVertexBuffer(0, m_vertexBuffers[static_cast<usize>(frameIndex)],
+                                               box ? slice.boxVertexByteOffset : slice.vertexByteOffset);
+                    boxesBound = box;
+                }
+                if (box)
+                    renderPass.Draw(static_cast<u32>(cmd.indexCount), 1, static_cast<u32>(cmd.startIndex), 0);
+                else
+                    renderPass.DrawIndexed(static_cast<u32>(cmd.indexCount), 1,
+                                           static_cast<u32>(cmd.startIndex), 0, 0);
                 ++m_lastRenderStats.drawn;
             }
         }
@@ -648,6 +680,9 @@ export namespace foundation::vg::renderer
                 m_device->DestroyRenderPipeline(m_clippedWriteNonZero);
             if (m_clippedWriteEvenOdd)
                 m_device->DestroyRenderPipeline(m_clippedWriteEvenOdd);
+            if (m_boxPipeline)
+                m_device->DestroyRenderPipeline(m_boxPipeline);
+            m_boxPipeline = nullptr;
             if (m_clipApplyPipeline)
                 m_device->DestroyRenderPipeline(m_clipApplyPipeline);
             if (m_clipClearPipeline)
@@ -879,6 +914,13 @@ export namespace foundation::vg::renderer
                 return (blended || clipped)
                            ? Variant(PipelineKind::GradConic, cmd.blendMode, clipped)
                            : m_gradConicPipeline;
+            if (cmd.drawMode == foundation::vg::VGDrawMode::Box)
+                // Box vertices are not VG vertices: no other pipeline can read them. SKIP when the
+                // box shaders were not given (a context draws boxes analytically only when told).
+                return m_boxPipeline == nullptr
+                           ? nullptr
+                           : ((blended || clipped) ? Variant(PipelineKind::Box, cmd.blendMode, clipped)
+                                                   : m_boxPipeline);
             if (cmd.drawMode == foundation::vg::VGDrawMode::BoxShadow)
                 // No substitute: the default shader would paint the quadrant quads as flat
                 // colour over everything around the box. SKIP when the shader was not given.
@@ -904,8 +946,9 @@ export namespace foundation::vg::renderer
             CoverRadial,
             CoverConic,
             BoxShadow,
+            Box,
         };
-        static constexpr usize kPipelineKindCount = 8;
+        static constexpr usize kPipelineKindCount = 9;
         static constexpr usize kBlendVariantCount = 3; // Additive / Multiply / Screen
 
         /// Get-or-create the (kind, blend, clipped) pipeline. Built on FIRST use - most
@@ -956,16 +999,22 @@ export namespace foundation::vg::renderer
             case PipelineKind::BoxShadow:
                 frag = m_boxShadowModule;
                 break;
+            case PipelineKind::Box:
+                frag = m_boxFsModule;
+                break;
             }
-            if (m_vsModule == nullptr || frag == nullptr ||
+            const bool box = kind == PipelineKind::Box;
+            rhi::ShaderModule* vert = box ? m_boxVsModule : m_vsModule;
+            if (vert == nullptr || frag == nullptr ||
                 (clipped && m_targetConfig.depthStencilFormat == rhi::TextureFormat::Undefined) ||
-                !CreatePipelineVariant(*m_vsModule, *frag, role, slot, blendMode, clipped).IsOk())
+                !CreatePipelineVariant(*vert, *frag, role, slot, blendMode, clipped, box).IsOk())
             {
                 slot = nullptr;
                 // The default pipeline is a tolerable stand-in for a DF or gradient variant
-                // (flat colour), never for a box shadow: it would paint the quadrant quads as
-                // flat colour over everything around the box. Skip the command instead.
-                return (clipped || kind == PipelineKind::BoxShadow) ? nullptr : m_pipeline;
+                // (flat colour), never for a box shadow (it would paint the quadrant quads as
+                // flat colour over everything around the box) nor a box (its vertices are not
+                // VG vertices). Skip the command instead.
+                return (clipped || kind == PipelineKind::BoxShadow || box) ? nullptr : m_pipeline;
             }
             return slot;
         }
@@ -1008,7 +1057,7 @@ export namespace foundation::vg::renderer
         Status CreatePipelineVariant(rhi::ShaderModule& vertShader, rhi::ShaderModule& fragShader,
                                      StencilRole role, rhi::RenderPipeline*& outPipeline,
                                      vg::VGBlendMode blendMode = vg::VGBlendMode::Normal,
-                                     bool clipped = false)
+                                     bool clipped = false, bool box = false)
         {
             const rhi::VertexAttribute attributes[4] = {
                 {rhi::VertexFormat::Float32x2, 0, 0},  // position
@@ -1016,9 +1065,21 @@ export namespace foundation::vg::renderer
                 {rhi::VertexFormat::Float32x4, 16, 2}, // color
                 {rhi::VertexFormat::Float32, 32, 3},   // coverage
             };
+            // An analytic box's vertex (foundation::vg::VGBoxVertex).
+            const rhi::VertexAttribute boxAttributes[7] = {
+                {rhi::VertexFormat::Float32x2, 0, 0},  // position
+                {rhi::VertexFormat::Float32x2, 8, 1},  // local
+                {rhi::VertexFormat::Float32x2, 16, 2}, // halfSize
+                {rhi::VertexFormat::Float32x4, 24, 3}, // radii
+                {rhi::VertexFormat::Float32x4, 40, 4}, // borders
+                {rhi::VertexFormat::Float32x4, 56, 5}, // fill
+                {rhi::VertexFormat::Float32x4, 72, 6}, // borderColor
+            };
             rhi::VertexBufferLayout vbLayout{};
-            vbLayout.stride = static_cast<u32>(sizeof(VGRenderVertex));
-            vbLayout.attributes = Span<const rhi::VertexAttribute>(attributes, 4);
+            vbLayout.stride = box ? static_cast<u32>(sizeof(foundation::vg::VGBoxVertex))
+                                  : static_cast<u32>(sizeof(VGRenderVertex));
+            vbLayout.attributes = box ? Span<const rhi::VertexAttribute>(boxAttributes, 7)
+                                      : Span<const rhi::VertexAttribute>(attributes, 4);
             const rhi::VertexBufferLayout vertexBuffers[1] = {vbLayout};
 
             rhi::ColorTargetState colorTarget{};
@@ -1444,6 +1505,9 @@ export namespace foundation::vg::renderer
         rhi::ShaderModule* m_gradRadialModule = nullptr;
         rhi::ShaderModule* m_gradConicModule = nullptr;
         rhi::ShaderModule* m_boxShadowModule = nullptr;
+        rhi::ShaderModule* m_boxVsModule = nullptr; // analytic boxes (VGDrawMode::Box)
+        rhi::ShaderModule* m_boxFsModule = nullptr;
+        rhi::RenderPipeline* m_boxPipeline = nullptr;
         rhi::RenderPipeline* m_blendPipelines[3][8] = {}; // [blend-1][PipelineKind] (unclipped)
         rhi::RenderPipeline* m_clippedPipelines[4][8] = {}; // [blend][PipelineKind], lazy
         rhi::RenderPipeline* m_clippedWriteNonZero = nullptr; // lazy clipped write pair

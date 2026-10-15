@@ -150,6 +150,11 @@ export namespace foundation::vg
         /// pipeline. Off (default): radial/conic use the affine LUT approximation, which every
         /// renderer can draw. Linear gradients are exact either way.
         void SetPerPixelGradients(bool enabled) { m_perPixelGradients = enabled; }
+        /// DrawBox draws analytically (one quad, fill and border from a signed distance in the
+        /// box shader). Opt-in by the HOST, once it gave the renderer the box shaders; off, DrawBox
+        /// tessellates its fill and border as FillRoundedRect does.
+        void SetAnalyticBoxes(bool enabled) { m_analyticBoxes = enabled; }
+        [[nodiscard]] bool AnalyticBoxes() const { return m_analyticBoxes; }
         [[nodiscard]] bool PerPixelGradients() const { return m_perPixelGradients; }
 
         /// Enable stencil-then-cover for COMPLEX path fills (holes, self-intersection,
@@ -512,6 +517,82 @@ export namespace foundation::vg
             PathBuilder pb;
             ShapeBuilder::BuildRoundedRect(rect, radii, pb);
             FillPath(pb.ToPath(), color);
+        }
+
+        /// A box: `rect` filled with `fill` and rounded by `radii`, with a border of `borders`
+        /// widths (per side) in `borderColor` drawn over the fill inside its edge (V4 of
+        /// Specs/vg-and-gui-lab.md). Analytic when the host enabled it (SetAnalyticBoxes): one
+        /// quad whose fill and border come from one signed distance, so they cannot disagree, a
+        /// thin border has no halo and small radii are exact; where neighbouring borders differ,
+        /// the inner corner is a quarter ellipse. An axis-aligned box snaps to device pixels as
+        /// FillRect does.
+        void DrawBox(Rectangle rect, CornerRadii radii, Color fill, BorderWidths borders = {},
+                     Color borderColor = Color{0.0f, 0.0f, 0.0f, 0.0f})
+        {
+            if (rect.width <= 0.0f || rect.height <= 0.0f)
+            {
+                return;
+            }
+            if (!m_analyticBoxes)
+            {
+                TessellateBox(rect, radii, fill, borders, borderColor);
+                return;
+            }
+            // Radii no larger than the box allows, as BuildRoundedRect clamps them.
+            const f32 maxRadius = Min(rect.width, rect.height) * 0.5f;
+            radii = CornerRadii(Min(radii.topLeft, maxRadius), Min(radii.topRight, maxRadius),
+                                Min(radii.bottomRight, maxRadius), Min(radii.bottomLeft, maxRadius));
+
+            VGBoxVertex box{};
+            box.fill = ApplyOpacity(fill);
+            box.borderColor = ApplyOpacity(borderColor);
+            Float2 corner[4];
+            if (m_pixelSnap && TransformIsAxisAligned())
+            {
+                // Device units, the edges on whole pixels.
+                const Float2 p0 = TransformPoint(Float2{rect.x, rect.y});
+                const Float2 p1 = TransformPoint(Float2{rect.x + rect.width, rect.y + rect.height});
+                const f32 x0 = Round(Min(p0.x, p1.x));
+                const f32 y0 = Round(Min(p0.y, p1.y));
+                const f32 x1 = Round(Max(p0.x, p1.x));
+                const f32 y1 = Round(Max(p0.y, p1.y));
+                if (x1 <= x0 || y1 <= y0)
+                {
+                    return;
+                }
+                const Float2 scale = DeviceScale();
+                const f32 r = (scale.x + scale.y) * 0.5f;
+                box.halfSize = Float2{(x1 - x0) * 0.5f, (y1 - y0) * 0.5f};
+                box.radii = Float4{radii.topLeft * r, radii.topRight * r, radii.bottomRight * r, radii.bottomLeft * r};
+                box.borders = Float4{borders.top * scale.y, borders.right * scale.x, borders.bottom * scale.y,
+                                     borders.left * scale.x};
+                const Float2 center{(x0 + x1) * 0.5f, (y0 + y1) * 0.5f};
+                const f32 margin = 1.0f; // one device pixel for the AA ramp
+                const Float2 h{box.halfSize.x + margin, box.halfSize.y + margin};
+                corner[0] = Float2{center.x - h.x, center.y - h.y};
+                corner[1] = Float2{center.x + h.x, center.y - h.y};
+                corner[2] = Float2{center.x + h.x, center.y + h.y};
+                corner[3] = Float2{center.x - h.x, center.y + h.y};
+                const Float2 local[4] = {Float2{-h.x, -h.y}, Float2{h.x, -h.y}, Float2{h.x, h.y}, Float2{-h.x, h.y}};
+                EmitBox(box, corner, local);
+                return;
+            }
+            // Box units under the transform: grown by one device pixel's worth for the AA ramp.
+            const Float4x4& m = m_currentState.transform;
+            const f32 sx = Length(Float2{m(0, 0), m(0, 1)});
+            const f32 sy = Length(Float2{m(1, 0), m(1, 1)});
+            const f32 margin = 1.0f / Max(Min(sx, sy), 1e-4f);
+            box.halfSize = Float2{rect.width * 0.5f, rect.height * 0.5f};
+            box.radii = Float4{radii.topLeft, radii.topRight, radii.bottomRight, radii.bottomLeft};
+            box.borders = Float4{borders.top, borders.right, borders.bottom, borders.left};
+            const Float2 center{rect.x + box.halfSize.x, rect.y + box.halfSize.y};
+            const Float2 h{box.halfSize.x + margin, box.halfSize.y + margin};
+            const Float2 local[4] = {Float2{-h.x, -h.y}, Float2{h.x, -h.y}, Float2{h.x, h.y}, Float2{-h.x, h.y}};
+            for (i32 i = 0; i < 4; ++i)
+            {
+                corner[i] = TransformPoint(Float2{center.x + local[i].x, center.y + local[i].y});
+            }
+            EmitBox(box, corner, local);
         }
 
         /// A Gaussian-blurred rounded rectangle - the UI box-shadow. `rect`/`radii` are the
@@ -1554,6 +1635,76 @@ export namespace foundation::vg
             return Abs(Abs(totalTurn) - 2.0f * kPi) < 0.1f;
         }
 
+        // One analytic box: two triangles over its quad, appended to the batch's box vertices
+        // and to the open Box command when it shares the state (boxes batch with boxes).
+        void EmitBox(VGBoxVertex box, const Float2 (&corner)[4], const Float2 (&local)[4])
+        {
+            FlushCurrentCommand(); // close any indexed geometry first: draw order is kept
+            const i32 start = static_cast<i32>(m_batch.boxVertices.Size());
+            const i32 order[6] = {0, 1, 2, 0, 2, 3};
+            for (const i32 i : order)
+            {
+                box.position = corner[i];
+                box.local = local[i];
+                m_batch.boxVertices.PushBack(box);
+            }
+            if (!m_batch.commands.IsEmpty())
+            {
+                VGCommand& last = m_batch.commands.Back();
+                if (last.drawMode == VGDrawMode::Box && last.startIndex + last.indexCount == start &&
+                    last.blendMode == m_currentBlendMode && last.clipMode == m_currentState.clipMode &&
+                    last.scissored == (m_currentState.scissored && m_currentState.clipMode == VGClipMode::Stencil) &&
+                    last.clipRect.x == m_currentState.clipRect.x && last.clipRect.y == m_currentState.clipRect.y &&
+                    last.clipRect.width == m_currentState.clipRect.width &&
+                    last.clipRect.height == m_currentState.clipRect.height &&
+                    last.stencilRef == m_currentState.stencilRef)
+                {
+                    last.indexCount += 6;
+                    return;
+                }
+            }
+            VGCommand cmd;
+            cmd.startIndex = start;
+            cmd.indexCount = 6;
+            cmd.textureIndex = m_currentTextureIndex;
+            cmd.clipRect = m_currentState.clipRect;
+            cmd.blendMode = m_currentBlendMode;
+            cmd.clipMode = m_currentState.clipMode;
+            cmd.scissored = m_currentState.scissored && m_currentState.clipMode == VGClipMode::Stencil;
+            cmd.stencilRef = m_currentState.stencilRef;
+            cmd.drawMode = VGDrawMode::Box;
+            m_batch.commands.PushBack(cmd);
+        }
+
+        // DrawBox without the box shader: the fill as FillRoundedRect, the border as the ring
+        // between the box and its inset (even-odd), each inner corner rounded by what is left of
+        // its radius past the wider neighbouring border.
+        void TessellateBox(Rectangle rect, CornerRadii radii, Color fill, BorderWidths borders, Color borderColor)
+        {
+            if (fill.a > 0.0f)
+            {
+                FillRoundedRect(rect, radii, fill);
+            }
+            if (borders.IsZero() || borderColor.a <= 0.0f)
+            {
+                return;
+            }
+            const Rectangle inner{rect.x + borders.left, rect.y + borders.top,
+                                  rect.width - borders.left - borders.right,
+                                  rect.height - borders.top - borders.bottom};
+            PathBuilder ring;
+            ShapeBuilder::BuildRoundedRect(rect, radii, ring);
+            if (inner.width > 0.0f && inner.height > 0.0f)
+            {
+                const CornerRadii innerRadii(Max(0.0f, radii.topLeft - Max(borders.top, borders.left)),
+                                             Max(0.0f, radii.topRight - Max(borders.top, borders.right)),
+                                             Max(0.0f, radii.bottomRight - Max(borders.bottom, borders.right)),
+                                             Max(0.0f, radii.bottomLeft - Max(borders.bottom, borders.left)));
+                ShapeBuilder::BuildRoundedRect(inner, innerRadii, ring);
+            }
+            FillPath(ring.ToPath(), borderColor, FillRule::EvenOdd);
+        }
+
         // The clip mode the state's clips call for: the stencil while path clips are active (with
         // the scissor too when a rectangle clip is), the scissor alone, or none.
         void RefreshClipMode()
@@ -1959,6 +2110,7 @@ export namespace foundation::vg
         VGDrawMode m_currentDrawMode = VGDrawMode::Default;
         VGGradientSpread m_currentGradientSpread = VGGradientSpread::Pad;
         bool m_perPixelGradients = false;
+        bool m_analyticBoxes = false;
         bool m_stencilFills = false; // host opt-in: stencil-then-cover for complex fills // radial/conic use dedicated per-pixel shaders when set
         i32 m_currentTextureIndex = 0;
         i32 m_commandStartIndex = 0;

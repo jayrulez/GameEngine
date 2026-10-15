@@ -55,6 +55,8 @@ export namespace foundation::vg
         Array<VGVertex> vertices;  ///< Vertex data for all geometry.
         Array<u32> indices;        ///< Index data for all geometry.
         Array<VGCommand> commands; ///< Draw commands (batched by state).
+        /// Analytic boxes' vertices, six to a box, for Box-mode commands (no indices).
+        Array<VGBoxVertex> boxVertices;
         // Textures referenced by commands (by textureIndex). NOT owned by the
         // batch - VGContext manages lifetime. By convention index 0 is a 1x1
         // white texture for solid-color draws.
@@ -100,6 +102,7 @@ export namespace foundation::vg
             vertices.Clear();
             indices.Clear();
             commands.Clear();
+            boxVertices.Clear();
             textures.Clear();
             evictedTextures.Clear();
         }
@@ -117,7 +120,7 @@ export namespace foundation::vg
 
         [[nodiscard]] bool IsEmpty() const
         {
-            return vertices.IsEmpty() || indices.IsEmpty() || commands.IsEmpty();
+            return commands.IsEmpty() || ((vertices.IsEmpty() || indices.IsEmpty()) && boxVertices.IsEmpty());
         }
     };
 

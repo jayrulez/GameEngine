@@ -82,6 +82,10 @@ export namespace foundation::vg
         /// inset); the shader integrates a Gaussian over the signed distance. One shader, no
         /// texture, any number of shadows per command.
         BoxShadow,
+        /// An analytic box (VGContext::DrawBox): the command's vertices are VGBatch::boxVertices
+        /// (startIndex, indexCount count them, six to a box), drawn unindexed through the box
+        /// pipeline; fill and border come from one signed distance in the fragment shader.
+        Box,
     };
 
     /// Stencil-then-cover fill phases. Direct commands draw color immediately (the

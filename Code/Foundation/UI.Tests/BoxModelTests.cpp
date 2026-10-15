@@ -366,6 +366,47 @@ TEST_CASE("box-model: opacity composes down the tree")
     }
 }
 
+TEST_CASE("box-model: with layers, a faded view with children fades as one group; a faded leaf alone")
+{
+    UIContext ctx{DefaultAllocator()};
+    auto root = MakeRoot();
+    Init(ctx, root.Get(), 400, 300);
+    auto outer = New<FrameLayout>();
+    outer->Opacity = 0.5f;
+    auto inner = RV(50, 30, 1);
+    inner->Opacity = 0.5f;
+    outer->AddView(inner.Get());
+    root->AddView(outer.Get());
+    LayoutPass(ctx, root.Get());
+
+    vg::VGContext vgContext;
+    vgContext.SetLayers(true);
+    ctx.DrawRootView(root.Get(), vgContext);
+    const vg::VGBatch& batch = vgContext.GetBatch();
+    REQUIRE(batch.layers.Size() == 1u); // the frame's; the leaf fades its own fill
+    CHECK(batch.layers[0].opacity == doctest::Approx(0.5f));
+    bool sawFill = false;
+    bool sawComposite = false;
+    for (const vg::VGCommand& cmd : batch.commands)
+    {
+        const f32 alpha = batch.vertices[batch.indices[static_cast<usize>(cmd.startIndex)]].color.a;
+        if (cmd.drawMode == vg::VGDrawMode::Layer)
+        {
+            sawComposite = true;
+            CHECK(cmd.layer == -1);
+            CHECK(alpha == doctest::Approx(0.5f)); // the group's opacity, once
+        }
+        else
+        {
+            sawFill = true;
+            CHECK(cmd.layer == 0);
+            CHECK(alpha == doctest::Approx(0.5f)); // the leaf's own, inside the layer
+        }
+    }
+    CHECK(sawFill);
+    CHECK(sawComposite);
+}
+
 // === sheet-driven LayoutStyle ===
 
 TEST_CASE("box-model: the cascade fills undeclared LayoutStyle fields; inline wins")

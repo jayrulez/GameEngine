@@ -1258,7 +1258,16 @@ export namespace foundation::ui
                     }
                 }
 
-                if (child->Opacity < 1.0f)
+                // A faded view with children fades as one group, through a layer, so its parts
+                // never show through each other; a leaf fades its own drawing.
+                const bool faded = child->Opacity < 1.0f;
+                const ViewGroup* group = Cast<ViewGroup>(child);
+                const bool fadesAsGroup = faded && group != nullptr && group->VisualChildCount() > 0;
+                if (fadesAsGroup)
+                {
+                    ctx.VG().PushLayer(child->Opacity);
+                }
+                else if (faded)
                 {
                     ctx.VG().PushOpacity(child->Opacity);
                 }
@@ -1292,7 +1301,11 @@ export namespace foundation::ui
                 {
                     ctx.PopClip();
                 }
-                if (child->Opacity < 1.0f)
+                if (fadesAsGroup)
+                {
+                    ctx.VG().PopLayer();
+                }
+                else if (faded)
                 {
                     ctx.VG().PopOpacity();
                 }

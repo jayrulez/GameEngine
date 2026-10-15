@@ -322,9 +322,10 @@ export namespace foundation::ui::runtime
             data->renderer.Initialize(*m_device->Raw(), *m_vs, *m_fs, data->drawFormat,
                                       static_cast<i32>(m_device->FramesInFlight()), m_distanceFieldFragmentShader,
                                       m_gradRadialFs, m_gradConicFs, targetConfig, m_boxShadowFs, m_boxVs,
-                                      m_boxFs);
+                                      m_boxFs, m_layerFs);
             data->vg->SetPerPixelGradients(perPixelGrad);
             data->vg->SetAnalyticBoxes(m_boxVs != nullptr && m_boxFs != nullptr);
+            data->vg->SetLayers(m_layerFs != nullptr);
             data->vg->SetStencilFills(data->renderer.StencilFillsSupported());
 
             const f32 w = static_cast<f32>(window->Window().Width());
@@ -613,6 +614,11 @@ export namespace foundation::ui::runtime
             data->renderer.BeginFrame(static_cast<i32>(frame.frameIndex));
             const vg::renderer::VGRenderSlice slice = data->renderer.Prepare(
                 batch, static_cast<i32>(frame.frameIndex), frame.width, frame.height);
+            // Layers draw in passes of their own, before the window's.
+            if (frame.encoder != nullptr)
+            {
+                data->renderer.RenderLayers(*frame.encoder, static_cast<i32>(frame.frameIndex), slice);
+            }
 
             // Quality pass: render into the 4x MSAA color target (resolved into the
             // backbuffer by the pass) with the stencil attachment cleared to 0. Falls back
@@ -1084,6 +1090,9 @@ export namespace foundation::ui::runtime
             // Analytic boxes (VGContext::DrawBox); a pack that predates them means boxes tessellate.
             m_boxVs = m_shaderHost.GetVariant(u8"vg_box", shaders::ShaderStage::Vertex, shaders::ShaderFlags::None);
             m_boxFs = m_shaderHost.GetVariant(u8"vg_box", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
+            // Layer composites (VGContext::PushLayer); a pack that predates them means layers are
+            // opacity pushes.
+            m_layerFs = m_shaderHost.GetVariant(u8"vg_layer", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
         }
         core::IAllocator* m_allocator;
 
@@ -1099,6 +1108,7 @@ export namespace foundation::ui::runtime
         rhi::ShaderModule* m_boxShadowFs = nullptr;  // blurred rounded rect (borrowed)
         rhi::ShaderModule* m_boxVs = nullptr;        // analytic box (borrowed)
         rhi::ShaderModule* m_boxFs = nullptr;
+        rhi::ShaderModule* m_layerFs = nullptr;      // layer composite (borrowed)
 
         UIContext m_ctx; // shared context; owns N RootViews (allocator from the ctor)
         core::UniquePtr<shell::InputRouter> m_router;

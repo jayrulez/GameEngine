@@ -308,7 +308,7 @@ export namespace engine::render
         // per window target after the scene composed (post-EndRendering).
         void RenderOverlays(rhi::CommandEncoder& encoder, rhi::TextureView* target,
                             rhi::TextureFormat targetFormat, u32 width, u32 height,
-                            u32 frameIndex) override;
+                            u32 frameIndex, rhi::TextureView* encodedTarget = nullptr) override;
 
     protected:
         void OnInit() override;

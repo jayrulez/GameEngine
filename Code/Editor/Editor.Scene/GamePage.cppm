@@ -281,6 +281,10 @@ export namespace editor
 
             m_viewport = MakeRef<ui::viewport::ViewportView>(Allocator());
             m_viewport->ClearColor = rhi::ClearColor{0.248f, 0.248f, 0.272f, 1.0f};
+            // The finished game, as the player draws it into its sRGB window: 8-bit sRGB rather
+            // than the viewports' float default, so the Game tab matches the player and its screen
+            // UI can blend encoded values through the target's UNORM view (RenderOverlays).
+            m_viewport->SetFormats(rhi::TextureFormat::RGBA8UnormSrgb, m_viewport->DepthFormat());
 
             // THIS instance's exit request stops THIS tab's run, whichever tab it is: the
             // script asking fires inside the embedded app's update, which runs before the

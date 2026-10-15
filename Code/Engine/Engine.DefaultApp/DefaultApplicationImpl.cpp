@@ -873,8 +873,10 @@ namespace engine::runtime
 
         // Window-space overlays (screen-tier UI, diagnostics, ...) composite over the
         // finished frame through the generic registry - the host names no source.
+        // Through the backbuffer's UNORM view when the window has one: the screen UI blends encoded
+        // values, as browsers do (VG's Encoded blend space).
         render->RenderOverlays(*frame.encoder, frame.backbufferView, colorFormat, frame.width,
-                               frame.height, frame.frameIndex);
+                               frame.height, frame.frameIndex, frame.backbufferAlternateView);
     }
 
     void DefaultApplication::CaptureScreenshot(core::StringView path)

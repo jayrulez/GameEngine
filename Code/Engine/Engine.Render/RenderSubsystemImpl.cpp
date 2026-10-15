@@ -640,7 +640,7 @@ namespace engine::render
 
     void RenderSubsystem::RenderOverlays(rhi::CommandEncoder& encoder, rhi::TextureView* target,
                                          rhi::TextureFormat targetFormat, u32 width, u32 height,
-                                         u32 frameIndex)
+                                         u32 frameIndex, rhi::TextureView* encodedTarget)
     {
         if (target == nullptr || width == 0 || height == 0 || m_screenOverlays.IsEmpty())
         {
@@ -685,9 +685,11 @@ namespace engine::render
             m_overlayDsWidth = width;
             m_overlayDsHeight = height;
         }
+        // Drawn through the target's UNORM view when the host gave one (the overlays blend encoded).
+        const bool encoded = encodedTarget != nullptr && rhi::SrgbTwin(targetFormat) != rhi::TextureFormat::Undefined;
         rhi::RenderPassDesc pass;
         rhi::ColorAttachment color;
-        color.view = target;
+        color.view = encoded ? encodedTarget : target;
         color.loadOp = rhi::LoadOp::Load;
         color.storeOp = rhi::StoreOp::Store;
         pass.colorAttachments.Add(color);
@@ -712,7 +714,8 @@ namespace engine::render
             ScreenOverlayView view;
             view.width = width;
             view.height = height;
-            view.targetFormat = targetFormat;
+            view.targetFormat = encoded ? rhi::SrgbTwin(targetFormat) : targetFormat;
+            view.encodedTarget = encoded;
             view.depthStencilFormat = haveDs ? m_overlayDsFormat : rhi::TextureFormat::Undefined;
             view.frameIndex = frameIndex;
             for (IScreenOverlay* overlay : m_screenOverlays.Items())

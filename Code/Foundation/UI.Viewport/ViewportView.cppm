@@ -188,6 +188,8 @@ export namespace foundation::ui::viewport
             return m_colorView != nullptr && m_depthView != nullptr;
         }
         [[nodiscard]] rhi::TextureView* ColorTargetView() const noexcept { return m_colorView; }
+        /// The color target viewed in its sRGB or UNORM twin; null when its format has none.
+        [[nodiscard]] rhi::TextureView* ColorTargetAlternateView() const noexcept { return m_colorAlternateView; }
         [[nodiscard]] rhi::TextureView* DepthTargetView() const noexcept { return m_depthView; }
         [[nodiscard]] rhi::Texture* ColorTexture() const noexcept { return m_colorTexture; }
         [[nodiscard]] u32 RenderWidth() const noexcept { return m_textureWidth; }
@@ -535,6 +537,9 @@ export namespace foundation::ui::viewport
             // outside the Vulkan spec (a lenient driver lets it through) and a validation error
             // on WebGPU. Found by the Beef side.
             colorDesc.usage = colorDesc.usage | rhi::TextureUsage::CopySrc;
+            // Viewable in its sRGB or UNORM twin too, for a screen UI that blends encoded values
+            // over the game (RenderOverlays' encodedTarget); a format with no twin has none.
+            colorDesc.alternateViewFormat = rhi::SrgbTwin(m_colorFormat);
             if (!m_device->CreateTexture(colorDesc, m_colorTexture).IsOk())
             {
                 m_colorTexture = nullptr;
@@ -546,6 +551,15 @@ export namespace foundation::ui::viewport
             {
                 m_colorView = nullptr;
                 return;
+            }
+            if (colorDesc.alternateViewFormat != rhi::TextureFormat::Undefined)
+            {
+                rhi::TextureViewDesc alternateDesc{};
+                alternateDesc.format = colorDesc.alternateViewFormat;
+                if (!m_device->CreateTextureView(m_colorTexture, alternateDesc, m_colorAlternateView).IsOk())
+                {
+                    m_colorAlternateView = nullptr; // the screen UI then blends linear light
+                }
             }
 
             rhi::TextureDesc depthDesc =
@@ -596,6 +610,11 @@ export namespace foundation::ui::viewport
                 m_device->DestroyTextureView(m_colorView);
                 m_colorView = nullptr;
             }
+            if (m_colorAlternateView != nullptr)
+            {
+                m_device->DestroyTextureView(m_colorAlternateView);
+                m_colorAlternateView = nullptr;
+            }
             if (m_colorTexture != nullptr)
             {
                 m_device->DestroyTexture(m_colorTexture);
@@ -623,6 +642,7 @@ export namespace foundation::ui::viewport
         UniquePtr<image::ImageDataRef> m_imageRef;
         rhi::Texture* m_colorTexture = nullptr;
         rhi::TextureView* m_colorView = nullptr;
+        rhi::TextureView* m_colorAlternateView = nullptr; // in its sRGB or UNORM twin, if it has one
         rhi::Texture* m_depthTexture = nullptr;
         rhi::TextureView* m_depthView = nullptr;
         rhi::ResourceState m_colorState = rhi::ResourceState::Undefined;

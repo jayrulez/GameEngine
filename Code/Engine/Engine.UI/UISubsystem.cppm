@@ -815,7 +815,8 @@ export namespace engine::ui
         void DrawRootInPass(RootView& root, rhi::RenderPassEncoder& encoder,
                             rhi::TextureFormat format, i32 viewportX, i32 viewportY, u32 width,
                             u32 height, i32 frameIndex, bool stencilCapable = false,
-                            u32 sampleCount = 1, const ScreenPlacement* placement = nullptr);
+                            u32 sampleCount = 1, const ScreenPlacement* placement = nullptr,
+                            bool encoded = false);
 
         [[nodiscard]] bool ReadDataFile(StringView path, Array<u8>& outBytes) const; // impl unit
 

@@ -187,6 +187,7 @@ namespace engine::ui
             bool stencil = false; // stencil-configured variant (canvas + overlay passes
                                   // carry a DS attachment; pipelines must match their pass)
             u32 sampleCount = 1;  // pipeline multisample state (MSAA canvas passes)
+            bool encoded = false; // VG's Encoded blend space (a screen pass through a UNORM view)
             UniquePtr<vg::renderer::VGRenderer> renderer;
             u64 begunSerial = 0; // last UI frame this renderer's ring was reset for
         };
@@ -433,13 +434,13 @@ namespace engine::ui
         [[nodiscard]] vg::renderer::VGRenderer* RendererFor(rhi::TextureFormat format,
                                                             u64 frameSerial, i32 frameIndex,
                                                             bool stencil = false,
-                                                            u32 sampleCount = 1)
+                                                            u32 sampleCount = 1, bool encoded = false)
         {
             FormatRenderer* found = nullptr;
             for (auto& entry : renderers)
             {
                 if (entry.format == format && entry.stencil == stencil &&
-                    entry.sampleCount == sampleCount)
+                    entry.sampleCount == sampleCount && entry.encoded == encoded)
                 {
                     found = &entry;
                     break;
@@ -453,6 +454,7 @@ namespace engine::ui
                 }
                 vg::renderer::VGTargetConfig targetConfig;
                 targetConfig.sampleCount = sampleCount;
+                targetConfig.blendSpace = encoded ? vg::VGBlendSpace::Encoded : vg::VGBlendSpace::Linear;
                 if (stencil)
                 {
                     targetConfig.depthStencilFormat = canvasStencilFormat;
@@ -470,6 +472,7 @@ namespace engine::ui
                 entry.format = format;
                 entry.stencil = stencil;
                 entry.sampleCount = sampleCount;
+                entry.encoded = encoded;
                 entry.renderer = Move(renderer);
                 renderers.PushBack(Move(entry));
                 found = &renderers[renderers.Size() - 1];
@@ -2003,11 +2006,11 @@ namespace engine::ui
             DrawRootInPass(*tier.root, encoder, view.targetFormat, static_cast<i32>(place.rect.x),
                            static_cast<i32>(place.rect.y), static_cast<u32>(Max(place.rect.width, 1.0f)),
                            static_cast<u32>(Max(place.rect.height, 1.0f)), static_cast<i32>(view.frameIndex),
-                           stencil, 1, &place);
+                           stencil, 1, &place, view.encodedTarget);
             return;
         }
         DrawRootInPass(*tier.root, encoder, view.targetFormat, 0, 0, view.width, view.height,
-                       static_cast<i32>(view.frameIndex), stencil);
+                       static_cast<i32>(view.frameIndex), stencil, 1, nullptr, view.encodedTarget);
     }
 
     void UISubsystem::ApplyResolution(ScreenTier& tier, u32 width, u32 height, FitMode fit)
@@ -2233,7 +2236,7 @@ namespace engine::ui
     void UISubsystem::DrawRootInPass(RootView& root, rhi::RenderPassEncoder& encoder,
                                      rhi::TextureFormat format, i32 viewportX, i32 viewportY,
                                      u32 width, u32 height, i32 frameIndex, bool stencilCapable,
-                                     u32 sampleCount, const ScreenPlacement* placement)
+                                     u32 sampleCount, const ScreenPlacement* placement, bool encoded)
     {
         // A turned tier lays out in its own frame (the rectangle turned back) and draws through the
         // turn; everything else at the rectangle's size.
@@ -2262,7 +2265,7 @@ namespace engine::ui
         }
 
         vg::renderer::VGRenderer* renderer =
-            m_render->RendererFor(format, m_frameSerial, frameIndex, stencil, sampleCount);
+            m_render->RendererFor(format, m_frameSerial, frameIndex, stencil, sampleCount, encoded);
         if (renderer == nullptr)
         {
             return;

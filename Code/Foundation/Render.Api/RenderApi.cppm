@@ -252,6 +252,10 @@ export namespace foundation::render
         // Same contract as SceneOverlayView::depthStencilFormat.
         rhi::TextureFormat depthStencilFormat = rhi::TextureFormat::Undefined;
         u32 frameIndex = 0;
+        // The pass draws through a UNORM view of an sRGB target (targetFormat is that view's):
+        // overlays keep colours encoded and blend them so, as browsers composite UI (VG's
+        // Encoded blend space). False: the target as it is, linear light.
+        bool encodedTarget = false;
     };
 
     // Per-view overlay source (scene-attached UI). The pass and color target are already bound;
@@ -386,9 +390,11 @@ export namespace foundation::render
         // Open one Load-op render pass against `target` (must be in RenderTarget state; left
         // there), walk every registered overlay in order, and call each one's Render with the
         // active encoder. No-op when no overlays are registered or `target` is null.
+        // `encodedTarget`, when given, is a UNORM view of the same (sRGB) texture: the pass draws
+        // through it and the overlays blend encoded values (ScreenOverlayView::encodedTarget).
         virtual void RenderOverlays(rhi::CommandEncoder& encoder, rhi::TextureView* target,
                                     rhi::TextureFormat targetFormat, u32 width, u32 height,
-                                    u32 frameIndex) = 0;
+                                    u32 frameIndex, rhi::TextureView* encodedTarget = nullptr) = 0;
     };
 
 } // namespace foundation::render

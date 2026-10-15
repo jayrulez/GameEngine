@@ -2115,3 +2115,63 @@ TEST_CASE("extract: a material with its own depth program stays out of the depth
     CHECK(CategoryForMaterial(waves.Get()) == RenderCategories::Transparent);
     CHECK(CategoryForMaterial(nullptr) == RenderCategories::Opaque);
 }
+
+namespace
+{
+    // An overlay that records the view each pass hands it.
+    struct RecordingOverlay final : foundation::render::IScreenOverlay
+    {
+        void Render(rhi::RenderPassEncoder&, const foundation::render::ScreenOverlayView& view) override
+        {
+            last = view;
+            ++calls;
+        }
+        foundation::render::ScreenOverlayView last;
+        int calls = 0;
+    };
+}
+
+// A host with a UNORM view of its sRGB target hands it to the overlay pass: the overlays are told
+// the target is encoded, and its format is the view's (VG then blends encoded values). Without
+// one, the target as it is.
+TEST_CASE("render: the screen overlay pass draws through the target's UNORM view when given one")
+{
+    rhi::null::NullDevice device{DefaultAllocator()};
+    foundation::vfs::NativeFileSystem dataFs(foundation::vfs::FindDataRoot(), DefaultAllocator());
+    RenderSubsystem sub{DefaultAllocator(), device, 2, dataFs};
+    RecordingOverlay overlay;
+    sub.RegisterOverlay(&overlay);
+
+    rhi::TextureDesc td = rhi::TextureDesc::RenderTarget(rhi::TextureFormat::RGBA8UnormSrgb, 8, 8);
+    td.alternateViewFormat = rhi::TextureFormat::RGBA8Unorm;
+    rhi::Texture* target = nullptr;
+    REQUIRE(device.CreateTexture(td, target).IsOk());
+    rhi::TextureView* view = nullptr;
+    REQUIRE(device.CreateTextureView(target, rhi::TextureViewDesc{}, view).IsOk());
+    rhi::TextureViewDesc unormDesc{};
+    unormDesc.format = rhi::TextureFormat::RGBA8Unorm;
+    rhi::TextureView* unorm = nullptr;
+    REQUIRE(device.CreateTextureView(target, unormDesc, unorm).IsOk());
+    rhi::CommandPool* pool = nullptr;
+    REQUIRE(device.CreateCommandPool(rhi::QueueType::Graphics, pool).IsOk());
+    rhi::CommandEncoder* encoder = nullptr;
+    REQUIRE(pool->CreateEncoder(encoder).IsOk());
+
+    sub.RenderOverlays(*encoder, view, rhi::TextureFormat::RGBA8UnormSrgb, 8, 8, 0);
+    REQUIRE(overlay.calls == 1);
+    CHECK_FALSE(overlay.last.encodedTarget);
+    CHECK(overlay.last.targetFormat == rhi::TextureFormat::RGBA8UnormSrgb);
+
+    sub.RenderOverlays(*encoder, view, rhi::TextureFormat::RGBA8UnormSrgb, 8, 8, 0, unorm);
+    REQUIRE(overlay.calls == 2);
+    CHECK(overlay.last.encodedTarget);
+    CHECK(overlay.last.targetFormat == rhi::TextureFormat::RGBA8Unorm);
+
+    sub.UnregisterOverlay(&overlay);
+    pool->DestroyEncoder(encoder);
+    device.DestroyCommandPool(pool);
+    device.DestroyTextureView(unorm);
+    device.DestroyTextureView(view);
+    device.DestroyTexture(target);
+}
+

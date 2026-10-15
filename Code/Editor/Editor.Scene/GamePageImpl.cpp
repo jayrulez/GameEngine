@@ -813,7 +813,8 @@ namespace editor
             m_app->UI()->SetRenderRun(m_gameInstance);
         }
         render->RenderOverlays(*frame.encoder, m_viewport->ColorTargetView(),
-                               m_viewport->ColorFormat(), w, h, frame.frameIndex);
+                               m_viewport->ColorFormat(), w, h, frame.frameIndex,
+                               m_viewport->ColorTargetAlternateView()); // the screen UI blends encoded
         if (m_app != nullptr && m_app->UI() != nullptr)
         {
             m_app->UI()->SetRenderRun(nullptr);

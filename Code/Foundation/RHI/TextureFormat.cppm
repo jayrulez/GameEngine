@@ -190,6 +190,29 @@ export namespace foundation::rhi
         }
     }
 
+    /// The format's sRGB or UNORM twin (RGBA8Unorm <-> RGBA8UnormSrgb, the BGRA8 and block-
+    /// compressed pairs likewise): the same bytes read with or without the sRGB transfer.
+    /// Undefined for a format that has none.
+    [[nodiscard]] constexpr TextureFormat SrgbTwin(TextureFormat f)
+    {
+        switch (f)
+        {
+        case TextureFormat::RGBA8Unorm: return TextureFormat::RGBA8UnormSrgb;
+        case TextureFormat::RGBA8UnormSrgb: return TextureFormat::RGBA8Unorm;
+        case TextureFormat::BGRA8Unorm: return TextureFormat::BGRA8UnormSrgb;
+        case TextureFormat::BGRA8UnormSrgb: return TextureFormat::BGRA8Unorm;
+        case TextureFormat::BC1RGBAUnorm: return TextureFormat::BC1RGBAUnormSrgb;
+        case TextureFormat::BC1RGBAUnormSrgb: return TextureFormat::BC1RGBAUnorm;
+        case TextureFormat::BC2RGBAUnorm: return TextureFormat::BC2RGBAUnormSrgb;
+        case TextureFormat::BC2RGBAUnormSrgb: return TextureFormat::BC2RGBAUnorm;
+        case TextureFormat::BC3RGBAUnorm: return TextureFormat::BC3RGBAUnormSrgb;
+        case TextureFormat::BC3RGBAUnormSrgb: return TextureFormat::BC3RGBAUnorm;
+        case TextureFormat::BC7RGBAUnorm: return TextureFormat::BC7RGBAUnormSrgb;
+        case TextureFormat::BC7RGBAUnormSrgb: return TextureFormat::BC7RGBAUnorm;
+        default: return TextureFormat::Undefined;
+        }
+    }
+
     /// Returns bytes per pixel for uncompressed formats; 0 for compressed or unknown.
     /// Bytes per texel of an UNCOMPRESSED format; 0 for block-compressed formats (size those
     /// with BlockBytes / CompressedLevelBytes). Every uncompressed enumerator is listed - the

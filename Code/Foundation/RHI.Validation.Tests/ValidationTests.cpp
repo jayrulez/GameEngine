@@ -288,3 +288,47 @@ TEST_CASE("rhi.validation: pipeline statistics queries are one at a time, on a s
     device->Destroy();
     vb->Destroy();
 }
+
+TEST_CASE("rhi.validation: a view in a texture's sRGB or UNORM twin needs the texture to declare it")
+{
+    Backend* inner = nullptr;
+    REQUIRE(null::CreateNullBackend(inner).IsOk());
+    Backend* vb = validation::CreateValidatedBackend(inner, DefaultAllocator());
+    REQUIRE(vb != nullptr);
+    Device* device = nullptr;
+    REQUIRE(vb->EnumerateAdapters()[0]->CreateDevice(DeviceDesc{}, device).IsOk());
+
+    CHECK(SrgbTwin(TextureFormat::RGBA8UnormSrgb) == TextureFormat::RGBA8Unorm);
+    CHECK(SrgbTwin(TextureFormat::BGRA8Unorm) == TextureFormat::BGRA8UnormSrgb);
+    CHECK(SrgbTwin(TextureFormat::RGBA16Float) == TextureFormat::Undefined);
+
+    // Without the declaration, a UNORM view of an sRGB texture is refused.
+    TextureDesc plain = TextureDesc::RenderTarget(TextureFormat::RGBA8UnormSrgb, 4, 4);
+    Texture* texture = nullptr;
+    REQUIRE(device->CreateTexture(plain, texture).IsOk());
+    TextureViewDesc unorm{};
+    unorm.format = TextureFormat::RGBA8Unorm;
+    TextureView* view = nullptr;
+    CHECK_FALSE(device->CreateTextureView(texture, unorm, view).IsOk());
+    CHECK(view == nullptr);
+    device->DestroyTexture(texture);
+
+    // Declared, it is made, and so is a view in the texture's own format.
+    TextureDesc twin = plain;
+    twin.alternateViewFormat = TextureFormat::RGBA8Unorm;
+    REQUIRE(device->CreateTexture(twin, texture).IsOk());
+    CHECK(device->CreateTextureView(texture, unorm, view).IsOk());
+    TextureView* own = nullptr;
+    CHECK(device->CreateTextureView(texture, TextureViewDesc{}, own).IsOk());
+    device->DestroyTextureView(view);
+    device->DestroyTextureView(own);
+    device->DestroyTexture(texture);
+
+    // An alternate that is not the twin is refused at creation.
+    TextureDesc wrong = plain;
+    wrong.alternateViewFormat = TextureFormat::RGBA16Float;
+    CHECK_FALSE(device->CreateTexture(wrong, texture).IsOk());
+
+    device->Destroy();
+    vb->Destroy();
+}

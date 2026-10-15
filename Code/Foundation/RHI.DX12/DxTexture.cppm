@@ -30,8 +30,11 @@ export namespace foundation::rhi::dx12
         {
             desc = d;
 
-            DXGI_FORMAT format =
-                IsDepthFormat(d.format) ? toTypelessDepthFormat(d.format) : toDxgiFormat(d.format);
+            // A texture whose views may take its sRGB or UNORM twin is created typeless; its views
+            // (and its clear value) name the typed format.
+            DXGI_FORMAT format = IsDepthFormat(d.format)                            ? toTypelessDepthFormat(d.format)
+                                 : d.alternateViewFormat != TextureFormat::Undefined ? toTypelessColorFormat(d.format)
+                                                                                     : toDxgiFormat(d.format);
 
             D3D12_RESOURCE_DESC rd{};
             rd.Dimension = toResourceDimension(d.dimension);
@@ -62,7 +65,7 @@ export namespace foundation::rhi::dx12
             }
             else if (static_cast<u32>(d.usage & TextureUsage::RenderTarget))
             {
-                clearVal.Format = format;
+                clearVal.Format = toDxgiFormat(d.format); // typed: a typeless resource clears as its format
                 clearVal.Color[0] = 0;
                 clearVal.Color[1] = 0;
                 clearVal.Color[2] = 0;

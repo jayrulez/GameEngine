@@ -13,7 +13,7 @@ add_executable(Render.Backend.Tests
     InstanceFadeProbeTests.cpp
     DitherFadeProbeTests.cpp
     MaterialOverrideProbeTests.cpp
-    EmissiveProbeTests.cpp SubmeshShaderProbeTests.cpp
+    EmissiveProbeTests.cpp SubmeshShaderProbeTests.cpp ViewFormatProbeTests.cpp
     ScaledViewProbeTests.cpp ColorProbeTests.cpp DebugGridProbeTests.cpp ShadowControlProbeTests.cpp
     ScreenSpaceProbeTests.cpp TaaProbeTests.cpp OrthographicProbeTests.cpp SsgiTemporalProbeTests.cpp
     GpuProfileProbeTests.cpp)

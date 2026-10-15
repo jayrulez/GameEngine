@@ -417,6 +417,35 @@ export namespace foundation::rhi::dx12
         }
     }
 
+    /// The typeless family of a colour format with an sRGB or UNORM twin, so views of either
+    /// twin can be made over one resource (TextureDesc::alternateViewFormat).
+    inline DXGI_FORMAT toTypelessColorFormat(TextureFormat f)
+    {
+        switch (f)
+        {
+        case TextureFormat::RGBA8Unorm:
+        case TextureFormat::RGBA8UnormSrgb:
+            return DXGI_FORMAT_R8G8B8A8_TYPELESS;
+        case TextureFormat::BGRA8Unorm:
+        case TextureFormat::BGRA8UnormSrgb:
+            return DXGI_FORMAT_B8G8R8A8_TYPELESS;
+        case TextureFormat::BC1RGBAUnorm:
+        case TextureFormat::BC1RGBAUnormSrgb:
+            return DXGI_FORMAT_BC1_TYPELESS;
+        case TextureFormat::BC2RGBAUnorm:
+        case TextureFormat::BC2RGBAUnormSrgb:
+            return DXGI_FORMAT_BC2_TYPELESS;
+        case TextureFormat::BC3RGBAUnorm:
+        case TextureFormat::BC3RGBAUnormSrgb:
+            return DXGI_FORMAT_BC3_TYPELESS;
+        case TextureFormat::BC7RGBAUnorm:
+        case TextureFormat::BC7RGBAUnormSrgb:
+            return DXGI_FORMAT_BC7_TYPELESS;
+        default:
+            return toDxgiFormat(f);
+        }
+    }
+
     inline DXGI_FORMAT toDepthSrvFormat(TextureFormat f)
     {
         switch (f)

@@ -37,6 +37,11 @@ export namespace foundation::rhi
         u32 mipLevelCount = 1;
         u32 sampleCount = 1;
         TextureUsage usage = TextureUsage::None;
+        /// The one other format a view of this texture may take: its sRGB or UNORM twin
+        /// (SrgbTwin), the only reinterpretation every backend allows (WebGPU's viewFormats are
+        /// limited to it). An sRGB target with a UNORM view lets a pass blend encoded values, as
+        /// browsers composite UI; Undefined (the default) allows views of `format` only.
+        TextureFormat alternateViewFormat = TextureFormat::Undefined;
         StringView label;
 
         /// Convenience factory for a 2D render target.

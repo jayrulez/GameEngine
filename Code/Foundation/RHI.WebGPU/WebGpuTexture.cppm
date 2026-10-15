@@ -70,6 +70,13 @@ export namespace foundation::rhi::webgpu
             wgpuDesc.format = format;
             wgpuDesc.mipLevelCount = textureDesc.mipLevelCount;
             wgpuDesc.sampleCount = textureDesc.sampleCount;
+            // A view may also take the format's sRGB or UNORM twin.
+            const WGPUTextureFormat alternate = ToWgpuTextureFormat(textureDesc.alternateViewFormat);
+            if (textureDesc.alternateViewFormat != TextureFormat::Undefined)
+            {
+                wgpuDesc.viewFormatCount = 1;
+                wgpuDesc.viewFormats = &alternate;
+            }
 
             m_texture = api.wgpuDeviceCreateTexture(device, &wgpuDesc);
             return m_texture != nullptr ? Status(ErrorCode::Ok) : Status(ErrorCode::Unknown);

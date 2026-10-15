@@ -55,6 +55,20 @@ export namespace foundation::rhi::vk
             if (d.arrayLayerCount >= 6 && d.dimension == TextureDimension::Texture2D)
                 ci.flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
 
+            // A view may also take the format's sRGB or UNORM twin: mutable, listing exactly the
+            // two so the driver keeps its compression for them (Vulkan 1.2 core format list).
+            VkFormat viewFormats[2] = {ci.format, VK_FORMAT_UNDEFINED};
+            VkImageFormatListCreateInfo formatList{};
+            if (d.alternateViewFormat != TextureFormat::Undefined)
+            {
+                viewFormats[1] = toVkFormat(d.alternateViewFormat);
+                formatList.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO;
+                formatList.viewFormatCount = 2;
+                formatList.pViewFormats = viewFormats;
+                ci.pNext = &formatList;
+                ci.flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+            }
+
             if (vkCreateImage(device, &ci, nullptr, &m_image) != VK_SUCCESS)
                 return ErrorCode::Unknown;
 

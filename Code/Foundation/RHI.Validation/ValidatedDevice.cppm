@@ -114,6 +114,13 @@ export namespace foundation::rhi::validation
         {
             if (!checkAlive("CreateTexture", out)) return ErrorCode::Unknown;
             if (d.width == 0 || d.height == 0) { LogError("[Validation] CreateTexture: width or height is 0"); out = nullptr; return ErrorCode::InvalidArgument; }
+            // The one alternate view format a backend can honour is the format's sRGB or UNORM twin.
+            if (d.alternateViewFormat != TextureFormat::Undefined && d.alternateViewFormat != SrgbTwin(d.format))
+            {
+                LogError("[Validation] CreateTexture: alternateViewFormat must be the format's sRGB or UNORM twin");
+                out = nullptr;
+                return ErrorCode::InvalidArgument;
+            }
             Status r = m_inner->CreateTexture(d, out);
             if (r == ErrorCode::Ok && out) { m_liveTextures.PushBack(out); Remember(out, d.label); }
             return r;
@@ -274,6 +281,15 @@ export namespace foundation::rhi::validation
                 bool tracked = false;
                 for (usize i = 0; i < m_liveTextures.Size(); ++i) { if (m_liveTextures[i] == tex) { tracked = true; break; } }
                 if (!tracked) LogError("[Validation] CreateTextureView: texture has been destroyed or was not created by this device");
+            }
+            // A view in the texture's sRGB or UNORM twin needs the texture to have declared it.
+            if (d.format != TextureFormat::Undefined && d.format != tex->desc.format &&
+                d.format == SrgbTwin(tex->desc.format) && tex->desc.alternateViewFormat != d.format)
+            {
+                LogError("[Validation] CreateTextureView: a view in the texture's sRGB or UNORM twin needs "
+                         "TextureDesc::alternateViewFormat");
+                out = nullptr;
+                return ErrorCode::InvalidArgument;
             }
             Status r = m_inner->CreateTextureView(tex, d, out);
             if (r == ErrorCode::Ok && out)

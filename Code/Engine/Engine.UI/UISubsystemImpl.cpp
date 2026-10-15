@@ -192,6 +192,8 @@ namespace engine::ui
         rhi::ShaderModule* boxVertexShader = nullptr;    // analytic box (borrowed)
         rhi::ShaderModule* boxFragmentShader = nullptr;
         rhi::ShaderModule* layerShader = nullptr; // layer composites (screen tier, PrepareOverlay)
+        rhi::ShaderModule* blurVertexShader = nullptr; // layer blurs
+        rhi::ShaderModule* blurFragmentShader = nullptr;
         // The tiers the next screen-overlay Render draws, as PrepareOverlay recorded them for
         // preparedView; cleared when drawn.
         Array<PreparedRoot> preparedScreens;
@@ -480,7 +482,8 @@ namespace engine::ui
                 if (!renderer
                          ->Initialize(*device, *vertexShader, *fragmentShader, format, frameCount,
                                       distanceFieldShader, gradRadialShader, gradConicShader, targetConfig,
-                                      boxShadowShader, boxVertexShader, boxFragmentShader, layerShader)
+                                      boxShadowShader, boxVertexShader, boxFragmentShader, layerShader,
+                                      blurVertexShader, blurFragmentShader)
                          .IsOk())
                 {
                     return nullptr;
@@ -2885,6 +2888,10 @@ namespace engine::ui
         // batch, for the screen tier's PrepareOverlay only (the other draws are inside passes).
         m_render->layerShader = m_render->shaderHost.GetVariant(
             u8"vg_layer", foundation::shaders::ShaderStage::Fragment, foundation::shaders::ShaderFlags::None);
+        m_render->blurVertexShader = m_render->shaderHost.GetVariant(
+            u8"vg_blur", foundation::shaders::ShaderStage::Vertex, foundation::shaders::ShaderFlags::None);
+        m_render->blurFragmentShader = m_render->shaderHost.GetVariant(
+            u8"vg_blur", foundation::shaders::ShaderStage::Fragment, foundation::shaders::ShaderFlags::None);
         // Stencil support for CANVAS render-to-texture passes (the only passes this
         // subsystem OWNS - the scene/screen overlay passes belong to the renderer/host
         // and stay color-only until they provide a DS attachment themselves). Canvas UI

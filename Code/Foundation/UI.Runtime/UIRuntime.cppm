@@ -322,7 +322,7 @@ export namespace foundation::ui::runtime
             data->renderer.Initialize(*m_device->Raw(), *m_vs, *m_fs, data->drawFormat,
                                       static_cast<i32>(m_device->FramesInFlight()), m_distanceFieldFragmentShader,
                                       m_gradRadialFs, m_gradConicFs, targetConfig, m_boxShadowFs, m_boxVs,
-                                      m_boxFs, m_layerFs);
+                                      m_boxFs, m_layerFs, m_blurVs, m_blurFs);
             data->vg->SetPerPixelGradients(perPixelGrad);
             data->vg->SetAnalyticBoxes(m_boxVs != nullptr && m_boxFs != nullptr);
             data->vg->SetLayers(m_layerFs != nullptr);
@@ -1093,6 +1093,9 @@ export namespace foundation::ui::runtime
             // Layer composites (VGContext::PushLayer); a pack that predates them means layers are
             // opacity pushes.
             m_layerFs = m_shaderHost.GetVariant(u8"vg_layer", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
+            // Layer blurs; a pack that predates them leaves blurred layers sharp.
+            m_blurVs = m_shaderHost.GetVariant(u8"vg_blur", shaders::ShaderStage::Vertex, shaders::ShaderFlags::None);
+            m_blurFs = m_shaderHost.GetVariant(u8"vg_blur", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
         }
         core::IAllocator* m_allocator;
 
@@ -1109,6 +1112,8 @@ export namespace foundation::ui::runtime
         rhi::ShaderModule* m_boxVs = nullptr;        // analytic box (borrowed)
         rhi::ShaderModule* m_boxFs = nullptr;
         rhi::ShaderModule* m_layerFs = nullptr;      // layer composite (borrowed)
+        rhi::ShaderModule* m_blurVs = nullptr;       // layer blur (borrowed)
+        rhi::ShaderModule* m_blurFs = nullptr;
 
         UIContext m_ctx; // shared context; owns N RootViews (allocator from the ctor)
         core::UniquePtr<shell::InputRouter> m_router;

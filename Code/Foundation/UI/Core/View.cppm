@@ -1258,18 +1258,34 @@ export namespace foundation::ui
                     }
                 }
 
-                // A faded view with children fades as one group, through a layer, so its parts
-                // never show through each other; a leaf fades its own drawing.
-                const bool faded = child->Opacity < 1.0f;
+                // The view's opacity (its field times the sheet's) and filters. A faded view with
+                // children fades as one group, through a layer, so its parts never show through
+                // each other, and a blurred one blurs as one; a faded leaf fades its own drawing.
+                const f32 opacity =
+                    child->Opacity * Clamp(child->ResolveStyleFloat(StyleProperty::Opacity, 1.0f), 0.0f, 1.0f);
+                const f32 deviceScale = DeviceScale(ctx.VG().GetTransform());
+                const f32 blur = Max(0.0f, child->ResolveStyleFloat(StyleProperty::Filter, 0.0f)) * deviceScale;
+                const f32 backdrop =
+                    Max(0.0f, child->ResolveStyleFloat(StyleProperty::BackdropFilter, 0.0f)) * deviceScale;
+                if (backdrop > 0.0f)
+                {
+                    // What the parent drew behind the view, blurred inside its corners, fading with it.
+                    const f32 radius = Max(0.0f, child->ResolveStyleFloat(StyleProperty::CornerRadius, 0.0f));
+                    ctx.VG().PushOpacity(opacity);
+                    ctx.VG().DrawBackdropBlur(Rectangle{0, 0, child->Width(), child->Height()},
+                                              vg::CornerRadii{radius, radius, radius, radius}, backdrop);
+                    ctx.VG().PopOpacity();
+                }
+                const bool faded = opacity < 1.0f;
                 const ViewGroup* group = Cast<ViewGroup>(child);
-                const bool fadesAsGroup = faded && group != nullptr && group->VisualChildCount() > 0;
+                const bool fadesAsGroup = blur > 0.0f || (faded && group != nullptr && group->VisualChildCount() > 0);
                 if (fadesAsGroup)
                 {
-                    ctx.VG().PushLayer(child->Opacity);
+                    ctx.VG().PushLayer(opacity, vg::VGBlendMode::Normal, blur);
                 }
                 else if (faded)
                 {
-                    ctx.VG().PushOpacity(child->Opacity);
+                    ctx.VG().PushOpacity(opacity);
                 }
                 // The outer box-shadow sits UNDER the child's own drawing and outside its
                 // clip; an inset shadow is drawn over the child (after OnDraw) inside it.
@@ -1311,6 +1327,15 @@ export namespace foundation::ui
                 }
                 ctx.VG().PopState();
             }
+        }
+
+        // How many device pixels a unit is under `transform` (the larger axis): filter sigmas are
+        // written in dp and drawn in device pixels.
+        [[nodiscard]] static f32 DeviceScale(const Float4x4& transform)
+        {
+            const f32 sx = Length(Float2{transform(0, 0), transform(0, 1)});
+            const f32 sy = Length(Float2{transform(1, 0), transform(1, 1)});
+            return Max(sx, sy);
         }
 
         /// One `box-shadow` for `child` (the VG is already translated to the child's origin):

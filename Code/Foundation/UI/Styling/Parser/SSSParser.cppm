@@ -813,6 +813,8 @@ export namespace foundation::ui
                 return ParseBoxShadowValue();
             if (prop == StyleProperty::Transition)
                 return ParseTransitionValue();
+            if (prop == StyleProperty::Filter || prop == StyleProperty::BackdropFilter)
+                return ParseFilterValue();
             if (IsSizeSpecProperty(prop) && Peek().Kind == TokenKind::Ident &&
                 Peek().Text != StringView(u8"calc"))
             {
@@ -883,6 +885,23 @@ export namespace foundation::ui
                 }
             }
             return StyleValue::TransitionsRef(Move(list));
+        }
+
+        /// `blur(<sigma>)` or `none`: the blur's sigma in dp as a Float (0 for none). Other filter
+        /// functions are not drawn yet; one leaves the property unset.
+        StyleValue ParseFilterValue()
+        {
+            if (Peek().Kind != TokenKind::Ident)
+                return StyleValue::None();
+            const StringView name = Consume().Text;
+            if (name == StringView(u8"none"))
+                return StyleValue::FloatVal(0.0f);
+            if (name != StringView(u8"blur"))
+                return StyleValue::None();
+            Expect(TokenKind::LParen);
+            const f32 sigma = Peek().Kind == TokenKind::Number ? Max(0.0f, ParseFloatValue()) : 0.0f;
+            Expect(TokenKind::RParen);
+            return StyleValue::FloatVal(sigma);
         }
 
         /// A `<time>`: `120ms`, `0.2s`, or a bare number of milliseconds. Seconds out.
@@ -1144,6 +1163,12 @@ export namespace foundation::ui
                 return StyleProperty::FlexBasis;
             if (name == StringView(u8"text-overflow"))
                 return StyleProperty::TextOverflow;
+
+            // Filters
+            if (name == StringView(u8"filter"))
+                return StyleProperty::Filter;
+            if (name == StringView(u8"backdrop-filter"))
+                return StyleProperty::BackdropFilter;
 
             return {};
         }

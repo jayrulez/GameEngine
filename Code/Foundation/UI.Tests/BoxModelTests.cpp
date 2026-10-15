@@ -407,6 +407,72 @@ TEST_CASE("box-model: with layers, a faded view with children fades as one group
     CHECK(sawComposite);
 }
 
+TEST_CASE("box-model: the sheet's opacity fades a view, times its own")
+{
+    UIContext ctx{DefaultAllocator()};
+    auto root = MakeRoot();
+    EnsureGlobals();
+    Init(ctx, root.Get(), 400, 300);
+    ctx.SetStyleSheet(LoadSSS(u8"RecordingView { opacity: 0.5; }"));
+    auto view = RV(50, 30, 1);
+    view->Opacity = 0.5f;
+    root->AddView(view.Get());
+    LayoutPass(ctx, root.Get());
+
+    vg::VGContext vgContext;
+    ctx.DrawRootView(root.Get(), vgContext);
+    const vg::VGBatch& batch = vgContext.GetBatch();
+    REQUIRE(batch.vertices.Size() >= 4);
+    CHECK(batch.vertices[0].color.a == doctest::Approx(0.25f));
+}
+
+TEST_CASE("box-model: filter blurs a view through a layer; backdrop-filter blurs what is behind it")
+{
+    UIContext ctx{DefaultAllocator()};
+    auto root = MakeRoot();
+    EnsureGlobals();
+    Init(ctx, root.Get(), 400, 300);
+    ctx.SetStyleSheet(LoadSSS(u8".soft { filter: blur(4px); } .glass { backdrop-filter: blur(6); corner-radius: 8; } "
+                              u8".plain { filter: none; }"));
+    auto under = RV(200, 200, 1); // something to be behind the glass
+    auto soft = RV(50, 30, 2);
+    soft->AddClass(u8"soft");
+    auto glass = RV(80, 60, 3);
+    glass->AddClass(u8"glass");
+    auto plain = RV(20, 20, 4);
+    plain->AddClass(u8"plain");
+    auto frame = New<FrameLayout>();
+    frame->AddView(under.Get());
+    frame->AddView(soft.Get());
+    frame->AddView(glass.Get());
+    frame->AddView(plain.Get());
+    root->AddView(frame.Get());
+    LayoutPass(ctx, root.Get());
+
+    vg::VGContext vgContext;
+    vgContext.SetLayers(true);
+    ctx.DrawRootView(root.Get(), vgContext);
+    const vg::VGBatch& batch = vgContext.GetBatch();
+    int blurred = 0;
+    int backdrops = 0;
+    for (const vg::VGLayer& layer : batch.layers)
+    {
+        if (layer.blur > 0.0f)
+        {
+            CHECK(layer.blur == doctest::Approx(4.0f)); // a leaf blurs too: the filter needs the layer
+            ++blurred;
+        }
+        if (layer.backdropBlur > 0.0f)
+        {
+            CHECK(layer.backdropBlur == doctest::Approx(6.0f));
+            ++backdrops;
+        }
+    }
+    CHECK(blurred == 1);
+    CHECK(backdrops == 1);
+    CHECK(batch.layers.Size() == 2u); // `filter: none` makes none
+}
+
 // === sheet-driven LayoutStyle ===
 
 TEST_CASE("box-model: the cascade fills undeclared LayoutStyle fields; inline wins")

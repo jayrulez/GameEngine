@@ -81,6 +81,14 @@ export namespace foundation::ui
         /// `clip` | `ellipsis` (single-line text views truncate with the font's ellipsis).
         TextOverflow,
 
+        // === Filters (VG layers) ===
+        /// `filter: blur(<sigma>) | none`: the view and its children blurred, a Gaussian of that
+        /// sigma in dp (a Float, 0 for none).
+        Filter,
+        /// `backdrop-filter: blur(<sigma>) | none`: what is drawn behind the view blurred inside
+        /// its corner radius, under its own background (a Float, 0 for none).
+        BackdropFilter,
+
         /// Number of known properties (for array sizing).
         COUNT
     };
@@ -112,6 +120,8 @@ export namespace foundation::ui
         case StyleProperty::Overflow:
         case StyleProperty::Transition:
         case StyleProperty::TextOverflow:
+        case StyleProperty::Filter:
+        case StyleProperty::BackdropFilter:
             return true;
         default:
             return false;
@@ -156,6 +166,8 @@ export namespace foundation::ui
         case StyleProperty::FlexGrow:
         case StyleProperty::FlexShrink:
         case StyleProperty::FlexBasis:
+        case StyleProperty::Filter:
+        case StyleProperty::BackdropFilter:
             return true;
         default:
             return false;

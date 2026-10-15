@@ -81,6 +81,8 @@ export namespace foundation::vg
         /// Layers a batch holds before PushLayer falls back to an opacity push: each costs the
         /// renderer a pass and a uniform slot (VGRenderer has 256 a frame, one per slice besides).
         static constexpr i32 MaxLayers = 128;
+        /// The widest layer blur, a sigma in device pixels (a pass costs 6 sigma taps a pixel).
+        static constexpr f32 MaxLayerBlur = 32.0f;
         /// Distinct gradient ramps kept in the persistent LUT cache before a whole-cache
         /// eviction (announced via VGBatch::evictedTextures). Generous: a UI with a few
         /// static gradients never gets near it; only continuously ANIMATED ramp colors do.
@@ -385,9 +387,10 @@ export namespace foundation::vg
         /// PopLayer, with `opacity` and `blendMode`: a group fades as one, its overlapping parts
         /// never showing through each other (V3 of Specs/vg-and-gui-lab.md). Inside, opacity
         /// starts again at 1 and no clip applies (the clips around the layer apply to its
-        /// composite); the transform carries on. Without SetLayers, or past MaxLayers in a batch, an
-        /// opacity push instead.
-        void PushLayer(f32 opacity, VGBlendMode blendMode = VGBlendMode::Normal)
+        /// composite); the transform carries on. `blur` blurs the layer before its composite, a
+        /// Gaussian of that sigma in device pixels (up to MaxLayerBlur). Without SetLayers, or past
+        /// MaxLayers in a batch, an opacity push instead (and no blur).
+        void PushLayer(f32 opacity, VGBlendMode blendMode = VGBlendMode::Normal, f32 blur = 0.0f)
         {
             if (!m_layersEnabled || m_batch.layers.Size() >= static_cast<usize>(MaxLayers))
             {
@@ -415,6 +418,7 @@ export namespace foundation::vg
             layer.parent = m_currentLayer;
             layer.opacity = Clamp(opacity, 0.0f, 1.0f);
             layer.blendMode = blendMode;
+            layer.blur = Clamp(blur, 0.0f, MaxLayerBlur);
             save.layer = static_cast<i32>(m_batch.layers.Size());
             m_batch.layers.PushBack(layer);
             m_currentLayer = save.layer;
@@ -439,7 +443,13 @@ export namespace foundation::vg
             LayerSave save = Move(m_layerStack.Back());
             m_layerStack.PopBack();
             const i32 index = save.layer;
-            const Rectangle bounds = LayerContentBounds(index, save.firstCommand);
+            const Rectangle content = LayerContentBounds(index, save.firstCommand);
+            // A blur spreads three sigmas past what was drawn, and needs that margin transparent.
+            const f32 spread = Ceil(3.0f * m_batch.layers[static_cast<usize>(index)].blur);
+            const Rectangle bounds = content.width > 0.0f && content.height > 0.0f
+                                         ? Rectangle{content.x - spread, content.y - spread,
+                                                     content.width + 2.0f * spread, content.height + 2.0f * spread}
+                                         : content;
             m_batch.layers[static_cast<usize>(index)].bounds = bounds;
             m_currentState = save.state;
             m_clipPaths = Move(save.clipPaths);

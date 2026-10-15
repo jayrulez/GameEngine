@@ -692,3 +692,52 @@ TEST_CASE("vg.renderer: layers draw into targets of their own, then composite in
     device.DestroyShaderModule(fs);
     device.DestroyShaderModule(vs);
 }
+
+TEST_CASE("vg.renderer: a blurred layer runs two blur passes before its composite, or none without the shader")
+{
+    rhi::null::NullDevice device{DefaultAllocator()};
+    rhi::ShaderModule* vs = MakeModule(device);
+    rhi::ShaderModule* fs = MakeModule(device);
+    rhi::ShaderModule* layerFs = MakeModule(device);
+    rhi::ShaderModule* blurVs = MakeModule(device);
+    rhi::ShaderModule* blurFs = MakeModule(device);
+
+    VGContext ctx;
+    ctx.SetLayers(true);
+    ctx.PushLayer(1.0f, VGBlendMode::Normal, 3.0f);
+    ctx.FillRect(Rectangle{20, 20, 16, 16}, Color::White);
+    ctx.PopLayer();
+    VGBatch& batch = ctx.GetBatch();
+
+    VGTargetConfig config;
+    config.sampleCount = 4; // the content resolves; the blur passes run single-sampled
+    config.depthStencilFormat = rhi::TextureFormat::Depth24PlusStencil8;
+    const auto run = [&](rhi::ShaderModule* blurVertex, rhi::ShaderModule* blurFragment, u64& passes)
+    {
+        VGRenderer renderer{DefaultAllocator()};
+        REQUIRE(renderer
+                    .Initialize(device, *vs, *fs, rhi::TextureFormat::BGRA8UnormSrgb, 1, nullptr, nullptr, nullptr,
+                                config, nullptr, nullptr, nullptr, layerFs, blurVertex, blurFragment)
+                    .IsOk());
+        renderer.BeginFrame(0);
+        const VGRenderSlice slice = renderer.Prepare(batch, 0, 64, 64);
+        REQUIRE(slice.isValid);
+        rhi::null::NullCommandEncoder encoder;
+        renderer.RenderLayers(encoder, 0, slice);
+        passes = encoder.counters->Snapshot().renderPasses;
+        CHECK(renderer.LastLayerStats().layers == 1);
+        renderer.Dispose();
+    };
+    u64 blurred = 0;
+    u64 sharp = 0;
+    run(blurVs, blurFs, blurred);
+    run(nullptr, nullptr, sharp);
+    CHECK(blurred == 3); // the content, across, down
+    CHECK(sharp == 1);   // the content alone: drawn, composited, not blurred
+
+    device.DestroyShaderModule(blurFs);
+    device.DestroyShaderModule(blurVs);
+    device.DestroyShaderModule(layerFs);
+    device.DestroyShaderModule(fs);
+    device.DestroyShaderModule(vs);
+}

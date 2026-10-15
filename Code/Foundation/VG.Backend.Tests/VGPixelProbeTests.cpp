@@ -70,7 +70,13 @@ namespace
             rhi::ShaderModule* layerFs =
                 host.GetVariant(u8"vg_layer", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
             REQUIRE(vs != nullptr);
+            rhi::ShaderModule* blurVs =
+                host.GetVariant(u8"vg_blur", shaders::ShaderStage::Vertex, shaders::ShaderFlags::None);
+            rhi::ShaderModule* blurFs =
+                host.GetVariant(u8"vg_blur", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
             REQUIRE(layerFs != nullptr); // else layers would quietly be opacity pushes
+            REQUIRE(blurVs != nullptr);  // else blurred layers would quietly stay sharp
+            REQUIRE(blurFs != nullptr);
             REQUIRE(fs != nullptr);
             REQUIRE(boxVs != nullptr); // else boxes would quietly tessellate, and the box probe prove nothing
             REQUIRE(boxFs != nullptr);
@@ -83,7 +89,7 @@ namespace
             vg::renderer::VGRenderer renderer{DefaultAllocator()};
             REQUIRE(renderer
                         .Initialize(device, *vs, *fs, drawFormat, 2, distanceFieldFragmentShader,
-                                    gradR, gradC, config, nullptr, boxVs, boxFs, layerFs)
+                                    gradR, gradC, config, nullptr, boxVs, boxFs, layerFs, blurVs, blurFs)
                         .IsOk());
 
             rhi::TextureDesc cd = rhi::TextureDesc::RenderTarget(
@@ -1067,9 +1073,40 @@ namespace
         CHECK(px.At(45, 80)[0] <= 2);   // outside it
         CHECK(px.At(6, 80)[0] <= 2);    // left of the content: the layer lands where it was drawn
     }
+
+    // A white square 20 px wide blurred by a sigma of 4, read across its middle row in an Encoded
+    // canvas (the blur blends encoded values): the middle nearly white, the edge pixels either side
+    // of the boundary half each, a sigma out about a fifth, three sigmas out nothing.
+    void ProbeLayerBlur(rhi::Device& device, const char* name, u32 sampleCount)
+    {
+        INFO(doctest::String(name), " x", sampleCount);
+        const Pixels px = RenderScene(
+            device,
+            [](vg::VGContext& ctx)
+            {
+                ctx.PushLayer(1.0f, vg::VGBlendMode::Normal, 4.0f);
+                ctx.FillRect(Rectangle{40, 40, 20, 20}, ByteColor(255, 255, 255));
+                ctx.PopLayer();
+            },
+            sampleCount, vg::VGBlendSpace::Encoded);
+        REQUIRE(px.valid);
+        const i32 middle = px.At(50, 50)[0];
+        const i32 inside = px.At(40, 50)[0];
+        const i32 outside = px.At(39, 50)[0];
+        const i32 sigmaOut = px.At(36, 50)[0];
+        const i32 far = px.At(26, 50)[0];
+        INFO("middle ", middle, ", edge ", inside, "/", outside, ", a sigma out ", sigmaOut, ", far ", far);
+        CHECK(middle >= 240);
+        CHECK(Abs(inside + outside - 252) <= 10); // the two halves of the edge
+        CHECK(inside > outside);
+        CHECK(Abs(sigmaOut - 48) <= 10);
+        CHECK(far <= 2);
+        CHECK(Abs(static_cast<i32>(px.At(50, 39)[0]) - outside) <= 2); // down as across
+        CHECK(Abs(static_cast<i32>(px.At(60, 50)[0]) - outside) <= 2); // and symmetric
+    }
 }
 
-TEST_CASE("vg.pixels: a layer fades a group as one, nests, and clips inside")
+TEST_CASE("vg.pixels: a layer fades a group as one, nests, clips inside, and blurs")
 {
     rhi::Backend* vulkan = nullptr;
     (void)rhi::vk::CreateBackend(rhi::vk::VkBackendDesc{}, vulkan);
@@ -1080,6 +1117,8 @@ TEST_CASE("vg.pixels: a layer fades a group as one, nests, and clips inside")
         ProbeLayers(device, name, vg::VGBlendSpace::Linear, 1);
         ProbeLayers(device, name, vg::VGBlendSpace::Encoded, 1);
         ProbeLayers(device, name, vg::VGBlendSpace::Linear, 4);
+        ProbeLayerBlur(device, name, 1);
+        ProbeLayerBlur(device, name, 4);
     };
     if (rhi::Device* device = MakeDevice(vulkan))
     {

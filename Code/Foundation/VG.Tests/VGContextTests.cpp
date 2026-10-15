@@ -723,6 +723,25 @@ TEST_CASE("vg.context: a layer inside a layer composites into it")
     CHECK(composites == 2);
 }
 
+TEST_CASE("vg.context: a blurred layer carries its sigma and three sigmas of margin")
+{
+    VGContext ctx;
+    ctx.SetLayers(true);
+    ctx.PushLayer(1.0f, VGBlendMode::Normal, 4.0f);
+    ctx.FillPath(Square(10, 10, 30, 30), Color::Red, FillRule::NonZero, false);
+    ctx.PopLayer();
+    ctx.PushLayer(1.0f, VGBlendMode::Normal, 500.0f); // past the widest
+    ctx.FillPath(Square(10, 10, 30, 30), Color::Red, FillRule::NonZero, false);
+    ctx.PopLayer();
+
+    const VGBatch& batch = ctx.GetBatch();
+    REQUIRE(batch.layers.Size() == 2u);
+    CHECK(batch.layers[0].blur == doctest::Approx(4.0f));
+    CHECK(batch.layers[0].bounds.x == doctest::Approx(9.0f - 12.0f)); // the pixel margin, then 3 sigma
+    CHECK(batch.layers[0].bounds.width == doctest::Approx(22.0f + 24.0f));
+    CHECK(batch.layers[1].blur == doctest::Approx(VGContext::MaxLayerBlur));
+}
+
 TEST_CASE("vg.context: without layers, a layer is an opacity push")
 {
     VGContext ctx; // the host never said its renderer draws layers

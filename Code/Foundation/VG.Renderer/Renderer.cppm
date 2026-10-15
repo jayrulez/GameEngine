@@ -96,6 +96,16 @@ export namespace foundation::vg::renderer
         f32 blendSpace = 0.0f; // 1: VGBlendSpace::Encoded (the shaders keep colours encoded)
     };
 
+    /// One blur pass's uniform (vg_blur.ps's VGBlur), in a VGUniforms-sized slot.
+    struct VGBlurUniforms
+    {
+        f32 step[2] = {0.0f, 0.0f};   // one texel along the pass's axis, in texture coordinates
+        f32 region[2] = {1.0f, 1.0f}; // the content's extent in texture coordinates
+        f32 sigma = 1.0f;
+        f32 radius = 0.0f; // taps each side
+        f32 unused[2] = {0.0f, 0.0f};
+    };
+
     /// A handle to one batch's data inside the shared frame buffers. Returned by
     /// Prepare, consumed by Render. Invalid slices are no-ops.
     struct VGRenderSlice
@@ -153,7 +163,9 @@ export namespace foundation::vg::renderer
                           rhi::ShaderModule* boxShadowFragShader = nullptr,
                           rhi::ShaderModule* boxVertShader = nullptr,
                           rhi::ShaderModule* boxFragShader = nullptr,
-                          rhi::ShaderModule* layerFragShader = nullptr)
+                          rhi::ShaderModule* layerFragShader = nullptr,
+                          rhi::ShaderModule* blurVertShader = nullptr,
+                          rhi::ShaderModule* blurFragShader = nullptr)
         {
             m_device = &device;
             m_queue = device.GetQueue(rhi::QueueType::Graphics, 0);
@@ -203,6 +215,10 @@ export namespace foundation::vg::renderer
             // Optional layer composite pipeline (VGContext::PushLayer): samples a premultiplied target.
             if (layerFragShader != nullptr &&
                 !CreatePipelineInto(vertShader, *layerFragShader, m_layerPipeline).IsOk())
+                return ErrorCode::Unknown;
+            // Optional layer blur (a layer's `blur`): one axis of a Gaussian over its target.
+            if (blurVertShader != nullptr && blurFragShader != nullptr &&
+                !CreateBlurPipeline(*blurVertShader, *blurFragShader).IsOk())
                 return ErrorCode::Unknown;
             // Stencil-then-cover pipelines - only with a host-provided stencil attachment.
             // Write pass: color-masked fans accumulate winding (incr/decr-wrap = NonZero,
@@ -376,12 +392,20 @@ export namespace foundation::vg::renderer
                 layer.height = static_cast<u32>(layer.bounds.height);
                 layer.targetWidth = RoundUpToBucket(layer.width);
                 layer.targetHeight = RoundUpToBucket(layer.height);
+                // A blur takes two more slots (across, then down); without its pipeline, none.
+                layer.blur = m_blurPipeline != nullptr ? source.blur : 0.0f;
+                const u32 slots = layer.blur > 0.0f ? 3u : 1u;
                 layer.valid = parentValid && layer.width > 0 && layer.height > 0 &&
-                              nextUniformSlot < static_cast<u32>(MaxUniformSlots);
+                              nextUniformSlot + slots <= static_cast<u32>(MaxUniformSlots);
                 if (layer.valid)
                 {
                     layer.uniformOffset = nextUniformSlot * static_cast<u32>(UniformSlotSize);
                     ++nextUniformSlot;
+                    if (layer.blur > 0.0f)
+                    {
+                        layer.blurUniformOffset = nextUniformSlot * static_cast<u32>(UniformSlotSize);
+                        nextUniformSlot += 2;
+                    }
                 }
                 m_layers.PushBack(layer);
             }
@@ -454,6 +478,22 @@ export namespace foundation::vg::renderer
                                                      static_cast<f32>(layer.height));
                 WriteBuffer(m_uniformBuffers[static_cast<usize>(frameIndex)], layer.uniformOffset, &uniforms,
                             sizeof(VGUniforms));
+                if (layer.blur > 0.0f)
+                {
+                    VGBlurUniforms blur;
+                    blur.region[0] = static_cast<f32>(layer.width) / static_cast<f32>(layer.targetWidth);
+                    blur.region[1] = static_cast<f32>(layer.height) / static_cast<f32>(layer.targetHeight);
+                    blur.sigma = layer.blur;
+                    blur.radius = Ceil(3.0f * layer.blur);
+                    blur.step[0] = 1.0f / static_cast<f32>(layer.targetWidth); // across
+                    WriteBuffer(m_uniformBuffers[static_cast<usize>(frameIndex)], layer.blurUniformOffset, &blur,
+                                sizeof(VGBlurUniforms));
+                    blur.step[0] = 0.0f;
+                    blur.step[1] = 1.0f / static_cast<f32>(layer.targetHeight); // down
+                    WriteBuffer(m_uniformBuffers[static_cast<usize>(frameIndex)],
+                                layer.blurUniformOffset + static_cast<u32>(UniformSlotSize), &blur,
+                                sizeof(VGBlurUniforms));
+                }
             }
 
             // Bind groups for any newly-added textures.
@@ -544,7 +584,7 @@ export namespace foundation::vg::renderer
                 PreparedLayer& layer = m_layers[static_cast<usize>(l)];
                 if (!layer.valid)
                     continue;
-                const i32 targetIndex = AcquireLayerTarget(frameIndex, layer.targetWidth, layer.targetHeight);
+                const i32 targetIndex = AcquireLayerTarget(frameIndex, layer.targetWidth, layer.targetHeight, false);
                 if (targetIndex < 0)
                     continue;
                 const LayerTarget& target = m_layerTargets[static_cast<usize>(targetIndex)];
@@ -584,6 +624,8 @@ export namespace foundation::vg::renderer
                 pass->End();
                 encoder.TransitionTexture(target.color, rhi::ResourceState::RenderTarget,
                                           rhi::ResourceState::ShaderRead);
+                if (layer.blur > 0.0f)
+                    BlurLayer(encoder, frameIndex, layer, targetIndex);
                 layer.target = targetIndex;
                 ++m_lastLayerStats.layers;
             }
@@ -736,6 +778,9 @@ export namespace foundation::vg::renderer
             if (m_layerPipeline)
                 m_device->DestroyRenderPipeline(m_layerPipeline);
             m_layerPipeline = nullptr;
+            if (m_blurPipeline)
+                m_device->DestroyRenderPipeline(m_blurPipeline);
+            m_blurPipeline = nullptr;
             if (m_clipApplyPipeline)
                 m_device->DestroyRenderPipeline(m_clipApplyPipeline);
             if (m_clipClearPipeline)
@@ -952,6 +997,8 @@ export namespace foundation::vg::renderer
             u32 width = 0, height = 0;             // the content's size
             u32 targetWidth = 0, targetHeight = 0; // the target's (bucketed)
             u32 uniformOffset = 0;
+            f32 blur = 0.0f;            // sigma, 0 for none (or no blur pipeline)
+            u32 blurUniformOffset = 0;  // its two passes' slots, across then down
             i32 target = -1; // m_layerTargets, set by RenderLayers
             bool valid = false;
         };
@@ -971,6 +1018,7 @@ export namespace foundation::vg::renderer
             i32 frame = 0;
             i32 idleFrames = 0;
             bool inUse = false;
+            bool plain = false; // colour alone (a blur's scratch)
         };
 
         static constexpr usize kSpreadCount = 3; // Pad / Repeat / Reflect bind-group slots
@@ -1709,14 +1757,77 @@ export namespace foundation::vg::renderer
             return nullptr;
         }
 
+        // Blur a drawn layer in place: across into a scratch target, then down back into its own
+        // (both single-sampled, the content resolved already). No scratch target: left unblurred.
+        void BlurLayer(rhi::CommandEncoder& encoder, i32 frameIndex, const PreparedLayer& layer, i32 targetIndex)
+        {
+            const i32 scratchIndex = AcquireLayerTarget(frameIndex, layer.targetWidth, layer.targetHeight, true);
+            if (scratchIndex < 0)
+                return;
+            // Indices, not references: acquiring may have grown the pool.
+            const LayerTarget& target = m_layerTargets[static_cast<usize>(targetIndex)];
+            const LayerTarget& scratch = m_layerTargets[static_cast<usize>(scratchIndex)];
+            const auto pass = [&](const LayerTarget& from, const LayerTarget& into, u32 uniformOffset)
+            {
+                rhi::RenderPassDesc desc{};
+                rhi::ColorAttachment color{};
+                color.view = into.colorView;
+                color.loadOp = rhi::LoadOp::Clear;
+                color.storeOp = rhi::StoreOp::Store;
+                color.clearValue = rhi::ClearColor{0.0f, 0.0f, 0.0f, 0.0f};
+                desc.colorAttachments.Add(color);
+                desc.label = u8"VG layer blur";
+                rhi::RenderPassEncoder* rp = encoder.BeginRenderPass(desc);
+                if (rp == nullptr)
+                    return;
+                rp->SetViewport(0.0f, 0.0f, static_cast<f32>(layer.width), static_cast<f32>(layer.height), 0.0f,
+                                1.0f);
+                rp->SetScissor(0, 0, layer.width, layer.height);
+                rp->SetPipeline(m_blurPipeline);
+                const u32 dynOffsets[1] = {uniformOffset};
+                rp->SetBindGroup(0, from.bindGroup, Span<const u32>(dynOffsets, 1));
+                rp->Draw(3, 1, 0, 0);
+                rp->End();
+                ++m_lastLayerStats.drawn;
+            };
+            encoder.TransitionTexture(scratch.color, rhi::ResourceState::Undefined, rhi::ResourceState::RenderTarget);
+            pass(target, scratch, layer.blurUniformOffset);
+            encoder.TransitionTexture(scratch.color, rhi::ResourceState::RenderTarget, rhi::ResourceState::ShaderRead);
+            encoder.TransitionTexture(target.color, rhi::ResourceState::ShaderRead, rhi::ResourceState::RenderTarget);
+            pass(scratch, target, layer.blurUniformOffset + static_cast<u32>(UniformSlotSize));
+            encoder.TransitionTexture(target.color, rhi::ResourceState::RenderTarget, rhi::ResourceState::ShaderRead);
+        }
+
+        // The blur pipeline: no vertex buffer (one triangle from the vertex index), single-sampled,
+        // no stencil, writing what it computes (the target holds only the layer).
+        Status CreateBlurPipeline(rhi::ShaderModule& vertShader, rhi::ShaderModule& fragShader)
+        {
+            rhi::ColorTargetState colorTarget{};
+            colorTarget.format = m_targetFormat;
+            const rhi::ColorTargetState colorTargets[1] = {colorTarget};
+            rhi::RenderPipelineDesc desc{};
+            desc.layout = m_pipelineLayout;
+            desc.vertex.shader = rhi::StageOf(&vertShader, rhi::ShaderStage::Vertex);
+            rhi::FragmentState fragment{};
+            fragment.shader = rhi::StageOf(&fragShader, rhi::ShaderStage::Fragment);
+            fragment.targets = Span<const rhi::ColorTargetState>(colorTargets, 1);
+            desc.fragment = fragment;
+            desc.primitive.topology = rhi::PrimitiveTopology::TriangleList;
+            desc.primitive.cullMode = rhi::CullMode::None;
+            desc.multisample.count = 1;
+            return m_device->CreateRenderPipeline(desc, m_blurPipeline);
+        }
+
         // A free target of the size in the frame slot's pool, or a new one; -1 when the device
-        // cannot make it.
-        i32 AcquireLayerTarget(i32 frameIndex, u32 width, u32 height)
+        // cannot make it. `plain`: colour alone (a blur's scratch), else the renderer's sample
+        // count and stencil too.
+        i32 AcquireLayerTarget(i32 frameIndex, u32 width, u32 height, bool plain)
         {
             for (usize i = 0; i < m_layerTargets.Size(); ++i)
             {
                 LayerTarget& target = m_layerTargets[i];
-                if (target.frame == frameIndex && !target.inUse && target.width == width && target.height == height)
+                if (target.frame == frameIndex && !target.inUse && target.width == width && target.height == height &&
+                    target.plain == plain)
                 {
                     target.inUse = true;
                     return static_cast<i32>(i);
@@ -1727,10 +1838,11 @@ export namespace foundation::vg::renderer
             target.width = width;
             target.height = height;
             target.inUse = true;
+            target.plain = plain;
             rhi::TextureDesc cd = rhi::TextureDesc::RenderTarget(m_targetFormat, width, height, 1, u8"VG layer");
             bool made = m_device->CreateTexture(cd, target.color).IsOk() &&
                         m_device->CreateTextureView(target.color, rhi::TextureViewDesc{}, target.colorView).IsOk();
-            if (made && m_targetConfig.sampleCount > 1)
+            if (made && !plain && m_targetConfig.sampleCount > 1)
             {
                 rhi::TextureDesc md = rhi::TextureDesc::RenderTarget(m_targetFormat, width, height,
                                                                      m_targetConfig.sampleCount, u8"VG layer MSAA");
@@ -1738,7 +1850,7 @@ export namespace foundation::vg::renderer
                 made = m_device->CreateTexture(md, target.msaa).IsOk() &&
                        m_device->CreateTextureView(target.msaa, rhi::TextureViewDesc{}, target.msaaView).IsOk();
             }
-            if (made && m_targetConfig.depthStencilFormat != rhi::TextureFormat::Undefined)
+            if (made && !plain && m_targetConfig.depthStencilFormat != rhi::TextureFormat::Undefined)
             {
                 rhi::TextureDesc dd{};
                 dd.dimension = rhi::TextureDimension::Texture2D;
@@ -1867,6 +1979,7 @@ export namespace foundation::vg::renderer
         rhi::RenderPipeline* m_boxPipeline = nullptr;
         rhi::ShaderModule* m_layerFsModule = nullptr; // layer composites (VGDrawMode::Layer)
         rhi::RenderPipeline* m_layerPipeline = nullptr;
+        rhi::RenderPipeline* m_blurPipeline = nullptr; // layer blur (vg_blur), nullable
         rhi::RenderPipeline* m_blendPipelines[kBlendVariantCount][kPipelineKindCount] = {}; // [blend-1][kind] (unclipped)
         rhi::RenderPipeline* m_clippedPipelines[kBlendVariantCount + 1][kPipelineKindCount] = {}; // [blend][kind], lazy
         rhi::RenderPipeline* m_clippedWriteNonZero = nullptr; // lazy clipped write pair

@@ -59,6 +59,7 @@ export namespace foundation::vg
         Rectangle bounds{};  ///< Its content's device bounds, on whole pixels (empty: nothing drawn).
         f32 opacity = 1.0f;  ///< Applied once, at the composite.
         VGBlendMode blendMode = VGBlendMode::Normal; ///< How the composite blends into the parent.
+        f32 blur = 0.0f; ///< A Gaussian blur's sigma in device pixels, 0 for none (bounds carry 3 sigma).
     };
 
     /// Batched vector-graphics geometry and draw commands. The output of

@@ -87,7 +87,8 @@ export namespace foundation::rhi::vk
     {
     public:
         Status init(VkDevice device, VkPhysicalDevice physDevice, VkSurfaceKHR surface,
-                    const SwapChainDesc& desc, VkDeviceImpl* owner, IAllocator& allocator)
+                    const SwapChainDesc& desc, VkDeviceImpl* owner, IAllocator& allocator,
+                    bool mutableFormat)
         {
             m_device = device;
             m_physDevice = physDevice;
@@ -95,6 +96,8 @@ export namespace foundation::rhi::vk
             m_owner = owner;
             m_allocator = &allocator;
             m_presentMode = desc.presentMode;
+            m_mutableFormat = mutableFormat;
+            m_requestedAlternate = desc.alternateViewFormat;
             return CreateSwapChain(desc.width, desc.height, desc.format, desc.bufferCount,
                                    VK_NULL_HANDLE);
         }
@@ -115,6 +118,12 @@ export namespace foundation::rhi::vk
         TextureView* CurrentTextureView() override
         {
             return m_currentImageIndex < m_views.Size() ? m_views[m_currentImageIndex] : nullptr;
+        }
+        TextureFormat AlternateViewFormat() const override { return m_alternate; }
+        TextureView* CurrentAlternateTextureView() override
+        {
+            return m_currentImageIndex < m_alternateViews.Size() ? m_alternateViews[m_currentImageIndex]
+                                                                 : nullptr;
         }
         Status Present(Queue* queue) override;
         Status Resize(u32 w, u32 h) override;
@@ -154,6 +163,10 @@ export namespace foundation::rhi::vk
 
         Array<VkTextureImpl*> m_textures;
         Array<VkTextureViewImpl*> m_views;
+        Array<VkTextureViewImpl*> m_alternateViews; // in m_alternate, when honoured
+        bool m_mutableFormat = false;                // VK_KHR_swapchain_mutable_format enabled
+        TextureFormat m_requestedAlternate = TextureFormat::Undefined;
+        TextureFormat m_alternate = TextureFormat::Undefined;
         Array<VkSemaphore> m_acquireSems;
         Array<VkSemaphore> m_presentSems;
     };
@@ -239,6 +252,29 @@ export namespace foundation::rhi::vk
         ci.presentMode = presentMode;
         ci.clipped = VK_TRUE;
         ci.oldSwapchain = old;
+
+        // The images viewable in their sRGB or UNORM twin too, when asked and the device can.
+        m_alternate = (m_mutableFormat && m_requestedAlternate != TextureFormat::Undefined &&
+                       m_requestedAlternate == SrgbTwin(m_format))
+                          ? m_requestedAlternate
+                          : TextureFormat::Undefined;
+        if (m_requestedAlternate != TextureFormat::Undefined)
+        {
+            LogInfof("[RHI] swapchain alternate view format %s: %s", vkFormatName(toVkFormat(m_requestedAlternate)),
+                     m_alternate != TextureFormat::Undefined ? "honoured"
+                     : m_mutableFormat ? "not the swapchain format's sRGB or UNORM twin"
+                                       : "unavailable (no VK_KHR_swapchain_mutable_format)");
+        }
+        VkFormat viewFormats[2] = {surfFmt.format, toVkFormat(m_alternate)};
+        VkImageFormatListCreateInfo formatList{};
+        if (m_alternate != TextureFormat::Undefined)
+        {
+            formatList.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO;
+            formatList.viewFormatCount = 2;
+            formatList.pViewFormats = viewFormats;
+            ci.pNext = &formatList;
+            ci.flags |= VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR;
+        }
 
         if (vkCreateSwapchainKHR(m_device, &ci, nullptr, &m_swapchain) != VK_SUCCESS)
             return ErrorCode::Unknown;
@@ -344,6 +380,7 @@ export namespace foundation::rhi::vk
             td.mipLevelCount = 1;
             td.sampleCount = 1;
             td.usage = TextureUsage::RenderTarget;
+            td.alternateViewFormat = m_alternate;
 
             auto* tex = m_allocator->New<VkTextureImpl>();
             tex->initFromExisting(images[i], td);
@@ -361,6 +398,19 @@ export namespace foundation::rhi::vk
                 return ErrorCode::Unknown;
             }
             m_views.PushBack(view);
+
+            if (m_alternate != TextureFormat::Undefined)
+            {
+                TextureViewDesc ad = vd;
+                ad.format = m_alternate;
+                auto* alternate = m_allocator->New<VkTextureViewImpl>();
+                if (alternate->init(m_device, tex, ad) != ErrorCode::Ok)
+                {
+                    m_allocator->Delete(alternate);
+                    return ErrorCode::Unknown;
+                }
+                m_alternateViews.PushBack(alternate);
+            }
         }
         return ErrorCode::Ok;
     }
@@ -387,6 +437,12 @@ export namespace foundation::rhi::vk
             m_allocator->Delete(v);
         }
         m_views.Clear();
+        for (auto* v : m_alternateViews)
+        {
+            v->cleanup(m_device);
+            m_allocator->Delete(v);
+        }
+        m_alternateViews.Clear();
         for (auto* t : m_textures)
         {
             t->cleanup(m_device);

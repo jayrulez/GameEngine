@@ -126,6 +126,10 @@ export namespace foundation::rhi
         TextureFormat format = TextureFormat::BGRA8UnormSrgb;
         PresentMode presentMode = PresentMode::Fifo;
         u32 bufferCount = 2;
+        /// The back buffers' sRGB or UNORM twin, to be viewable in as well (TextureDesc's
+        /// alternateViewFormat). A request, not a guarantee: SwapChain::AlternateViewFormat says
+        /// whether the device and surface honoured it.
+        TextureFormat alternateViewFormat = TextureFormat::Undefined;
         StringView label;
     };
 

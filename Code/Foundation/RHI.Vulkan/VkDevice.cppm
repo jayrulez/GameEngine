@@ -115,6 +115,11 @@ export namespace foundation::rhi::vk
             // Extensions.
             Array<const char*> exts;
             exts.PushBack(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+            // Swapchain images viewable in their sRGB or UNORM twin (VG's encoded blend space),
+            // when the device has it; the swapchain falls back to its own format otherwise.
+            m_swapchainMutableFormat = adapter->supportsSwapchainMutableFormat();
+            if (m_swapchainMutableFormat)
+                exts.PushBack("VK_KHR_swapchain_mutable_format");
             if (meshEnabled)
                 exts.PushBack("VK_EXT_mesh_shader");
             if (rtEnabled)
@@ -670,12 +675,15 @@ export namespace foundation::rhi::vk
             out = q;
             return ErrorCode::Ok;
         }
+        /// VK_KHR_swapchain_mutable_format is enabled: a swapchain may honour an alternate view format.
+        [[nodiscard]] bool swapchainMutableFormat() const { return m_swapchainMutableFormat; }
+
         Status CreateSwapChain(Surface* surface, const SwapChainDesc& d, SwapChain*& out) override
         {
             auto* sc = m_allocator.New<VkSwapChainImpl>();
             auto* vkSurf = static_cast<VkSurfaceImpl*>(surface);
             if (sc->init(m_device, m_adapter->physicalDevice(), vkSurf->handle(), d, this,
-                         m_allocator) != ErrorCode::Ok)
+                         m_allocator, m_swapchainMutableFormat) != ErrorCode::Ok)
             {
                 m_allocator.Delete(sc);
                 out = nullptr;
@@ -1019,6 +1027,7 @@ export namespace foundation::rhi::vk
         VkAdapterImpl* m_adapter = nullptr;
         bool m_lost = false; // sticky device-lost latch (see markLost)
         bool m_meshEnabled = false;
+        bool m_swapchainMutableFormat = false;
         bool m_rtEnabled = false;
         bool m_bindlessEnabled = false;
         bool m_validationEnabled = false;

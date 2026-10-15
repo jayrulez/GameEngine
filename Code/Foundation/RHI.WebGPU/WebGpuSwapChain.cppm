@@ -133,6 +133,7 @@ export namespace foundation::rhi::webgpu
             m_queue = queue;
             m_surface = surface;
             m_format = swapDesc.format;
+            m_requestedAlternate = swapDesc.alternateViewFormat;
             m_presentMode = swapDesc.presentMode;
             m_bufferCount = swapDesc.bufferCount;
             return Configure(swapDesc.width, swapDesc.height);
@@ -179,6 +180,7 @@ export namespace foundation::rhi::webgpu
             textureDesc.width = m_width;
             textureDesc.height = m_height;
             textureDesc.usage = TextureUsage::RenderTarget;
+            textureDesc.alternateViewFormat = AlternateViewFormat();
             m_currentTexture.WrapExternal(*m_api, surfaceTexture.texture, textureDesc);
             m_ownedHandle = surfaceTexture.texture; // released at the next AcquireNextImage / Cleanup
 
@@ -190,6 +192,17 @@ export namespace foundation::rhi::webgpu
             {
                 DropCurrent();
                 return viewStatus;
+            }
+            if (AlternateViewFormat() != TextureFormat::Undefined)
+            {
+                TextureViewDesc alternateDesc;
+                alternateDesc.format = AlternateViewFormat();
+                if (!m_currentAlternateView.Initialize(*m_api, &m_currentTexture, alternateDesc).IsOk())
+                {
+                    m_haveImage = true; // so DropCurrent releases the view made above, and the image
+                    DropCurrent();
+                    return ErrorCode::Unknown;
+                }
             }
             m_haveImage = true;
             ++m_frameIndex;
@@ -203,6 +216,26 @@ export namespace foundation::rhi::webgpu
         TextureView* CurrentTextureView() override
         {
             return m_haveImage ? &m_currentView : nullptr;
+        }
+        // On the web the canvas is configured in its UNORM base format with the sRGB format as a
+        // view (Configure), so a UNORM view of it is always allowed: an asked-for twin is
+        // honoured. Desktop wgpu-native would need surface view formats, which webgpu.h gives no
+        // way to ask about ahead of configuring, so it says Undefined and the host draws through
+        // CurrentTextureView alone.
+        TextureFormat AlternateViewFormat() const override
+        {
+#if PLATFORM_WEB
+            return m_requestedAlternate != TextureFormat::Undefined && m_requestedAlternate == SrgbTwin(m_format)
+                       ? m_requestedAlternate
+                       : TextureFormat::Undefined;
+#else
+            return TextureFormat::Undefined;
+#endif
+        }
+        TextureView* CurrentAlternateTextureView() override
+        {
+            return m_haveImage && AlternateViewFormat() != TextureFormat::Undefined ? &m_currentAlternateView
+                                                                                     : nullptr;
         }
 
         Status Present(Queue*) override
@@ -490,6 +523,7 @@ export namespace foundation::rhi::webgpu
             if (m_haveImage)
             {
                 m_currentView.Release();
+                m_currentAlternateView.Release();
             }
             if (m_ownedHandle != nullptr)
             {
@@ -505,6 +539,7 @@ export namespace foundation::rhi::webgpu
         WebGpuQueue* m_queue = nullptr; // deferred surface-texture release on web
         WebGpuSurface* m_surface = nullptr;
         TextureFormat m_format = TextureFormat::BGRA8UnormSrgb;
+        TextureFormat m_requestedAlternate = TextureFormat::Undefined; // SwapChainDesc's
         PresentMode m_presentMode = PresentMode::Fifo;
         u32 m_width = 0;
         u32 m_height = 0;
@@ -514,6 +549,7 @@ export namespace foundation::rhi::webgpu
         bool m_haveImage = false;
         WebGpuTexture m_currentTexture;
         WebGpuTextureView m_currentView;
+        WebGpuTextureView m_currentAlternateView; // in AlternateViewFormat, when it is honoured
         WGPUTexture m_ownedHandle = nullptr;
     };
 }

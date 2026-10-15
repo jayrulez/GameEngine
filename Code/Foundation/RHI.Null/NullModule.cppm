@@ -310,7 +310,9 @@ export namespace foundation::rhi::null
     public:
         NullTexture tex;
         NullTextureView view;
+        NullTextureView alternateView;
         TextureFormat m_format = TextureFormat::BGRA8UnormSrgb;
+        TextureFormat m_alternate = TextureFormat::Undefined;
         u32 m_width = 0;
         u32 m_height = 0;
         u32 m_count = 2;
@@ -328,6 +330,11 @@ export namespace foundation::rhi::null
         }
         Texture* CurrentTexture() override { return &tex; }
         TextureView* CurrentTextureView() override { return &view; }
+        TextureFormat AlternateViewFormat() const override { return m_alternate; }
+        TextureView* CurrentAlternateTextureView() override
+        {
+            return m_alternate != TextureFormat::Undefined ? &alternateView : nullptr;
+        }
         Status Present(Queue*) override { return ErrorCode::Ok; }
         Status Resize(u32 w, u32 h) override
         {
@@ -515,6 +522,13 @@ export namespace foundation::rhi::null
         {
             auto* sc = m_allocator.New<NullSwapChain>();
             sc->m_format = d.format;
+            // Nothing to refuse: a twin request is honoured, as a capable device would.
+            sc->m_alternate = d.alternateViewFormat == SrgbTwin(d.format) ? d.alternateViewFormat
+                                                                          : TextureFormat::Undefined;
+            sc->tex.desc.format = d.format;
+            sc->tex.desc.alternateViewFormat = sc->m_alternate;
+            sc->view.desc.format = d.format;
+            sc->alternateView.desc.format = sc->m_alternate;
             sc->m_width = d.width;
             sc->m_height = d.height;
             sc->m_count = d.bufferCount;

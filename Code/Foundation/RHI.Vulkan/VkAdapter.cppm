@@ -228,6 +228,8 @@ export namespace foundation::rhi::vk
         /// That clock's time domain (CLOCK_MONOTONIC on Linux, QueryPerformanceCounter on Windows).
         [[nodiscard]] VkTimeDomainEXT hostTimeDomain() const { return m_hostTimeDomain; }
         [[nodiscard]] bool supportsMemoryBudget() const { return m_supportsMemoryBudget; }
+        /// Swapchain images viewable in another format (an sRGB swapchain's UNORM view).
+        [[nodiscard]] bool supportsSwapchainMutableFormat() const { return m_supportsSwapchainMutableFormat; }
         [[nodiscard]] IAllocator& allocator() const noexcept { return m_allocator; }
 
     private:
@@ -255,6 +257,8 @@ export namespace foundation::rhi::vk
                     m_supportsRayTracing = true;
                 if (std::strcmp(name, "VK_EXT_memory_budget") == 0)
                     m_supportsMemoryBudget = true;
+                if (std::strcmp(name, "VK_KHR_swapchain_mutable_format") == 0)
+                    m_supportsSwapchainMutableFormat = true;
                 if (std::strcmp(name, "VK_KHR_calibrated_timestamps") == 0)
                     m_calibratedTimestamps = "VK_KHR_calibrated_timestamps";
                 if (std::strcmp(name, "VK_EXT_calibrated_timestamps") == 0 && m_calibratedTimestamps == nullptr)
@@ -322,6 +326,7 @@ export namespace foundation::rhi::vk
         VkInstance m_instance = VK_NULL_HANDLE;
         const char* m_calibratedTimestamps = nullptr;
         bool m_supportsMemoryBudget = false;
+        bool m_supportsSwapchainMutableFormat = false;
 #if PLATFORM_WINDOWS
         VkTimeDomainEXT m_hostTimeDomain = VK_TIME_DOMAIN_QUERY_PERFORMANCE_COUNTER_EXT;
 #else

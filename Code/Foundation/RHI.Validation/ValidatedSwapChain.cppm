@@ -30,6 +30,8 @@ export namespace foundation::rhi::validation
         u32 CurrentImageIndex() const override { return m_inner->CurrentImageIndex(); }
         Texture* CurrentTexture() override { return m_inner->CurrentTexture(); }
         TextureView* CurrentTextureView() override { return m_inner->CurrentTextureView(); }
+        TextureFormat AlternateViewFormat() const override { return m_inner->AlternateViewFormat(); }
+        TextureView* CurrentAlternateTextureView() override { return m_inner->CurrentAlternateTextureView(); }
 
         Status AcquireNextImage() override
         {

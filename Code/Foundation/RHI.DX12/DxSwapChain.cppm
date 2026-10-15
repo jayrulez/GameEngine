@@ -38,6 +38,11 @@ export namespace foundation::rhi::dx12
         {
             m_d3dDevice = device;
             m_format = d.format;
+            // Flip-model buffers are created without sRGB (stripSrgb below) and viewed with it, so a
+            // view in either twin is always valid: an asked-for twin is honoured.
+            m_alternate = d.alternateViewFormat != TextureFormat::Undefined && d.alternateViewFormat == SrgbTwin(d.format)
+                              ? d.alternateViewFormat
+                              : TextureFormat::Undefined;
             m_width = d.width;
             m_height = d.height;
             m_bufferCount = d.bufferCount;
@@ -97,6 +102,11 @@ export namespace foundation::rhi::dx12
         TextureView* CurrentTextureView() override
         {
             return (m_currentIndex < m_views.Size()) ? m_views[m_currentIndex] : nullptr;
+        }
+        TextureFormat AlternateViewFormat() const override { return m_alternate; }
+        TextureView* CurrentAlternateTextureView() override
+        {
+            return (m_currentIndex < m_alternateViews.Size()) ? m_alternateViews[m_currentIndex] : nullptr;
         }
 
         Status AcquireNextImage() override
@@ -170,6 +180,7 @@ export namespace foundation::rhi::dx12
                 td.mipLevelCount = 1;
                 td.sampleCount = 1;
                 td.usage = TextureUsage::RenderTarget;
+                td.alternateViewFormat = m_alternate;
                 tex->initFromExisting(resource, td);
                 resource->Release(); // initFromExisting AddRef'd
                 m_textures.PushBack(tex);
@@ -182,6 +193,15 @@ export namespace foundation::rhi::dx12
                 vd.arrayLayerCount = 1;
                 view->init(m_d3dDevice, tex, vd, m_srvHeap, m_rtvHeap, m_dsvHeap);
                 m_views.PushBack(view);
+
+                if (m_alternate != TextureFormat::Undefined)
+                {
+                    auto* alternate = m_allocator->New<DxTextureViewImpl>();
+                    TextureViewDesc ad = vd;
+                    ad.format = m_alternate;
+                    alternate->init(m_d3dDevice, tex, ad, m_srvHeap, m_rtvHeap, m_dsvHeap);
+                    m_alternateViews.PushBack(alternate);
+                }
             }
             return ErrorCode::Ok;
         }
@@ -194,6 +214,12 @@ export namespace foundation::rhi::dx12
                 m_allocator->Delete(v);
             }
             m_views.Clear();
+            for (auto* v : m_alternateViews)
+            {
+                v->cleanup();
+                m_allocator->Delete(v);
+            }
+            m_alternateViews.Clear();
             for (auto* t : m_textures)
             {
                 t->cleanup();
@@ -206,11 +232,13 @@ export namespace foundation::rhi::dx12
         ID3D12Device* m_d3dDevice = nullptr;
         IAllocator* m_allocator = nullptr;
         TextureFormat m_format = TextureFormat::RGBA8UnormSrgb;
+        TextureFormat m_alternate = TextureFormat::Undefined; // honoured alternate view format
         u32 m_width = 0, m_height = 0, m_bufferCount = 2;
         u32 m_currentIndex = 0;
         PresentMode m_presentMode = PresentMode::Fifo;
         Array<DxTextureImpl*> m_textures;
         Array<DxTextureViewImpl*> m_views;
+        Array<DxTextureViewImpl*> m_alternateViews;
         DxDescriptorHeapAllocator* m_srvHeap = nullptr;
         DxDescriptorHeapAllocator* m_rtvHeap = nullptr;
         DxDescriptorHeapAllocator* m_dsvHeap = nullptr;

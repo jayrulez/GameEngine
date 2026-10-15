@@ -229,3 +229,41 @@ TEST_CASE("rhi.counters: memory held rises and falls with buffers and textures, 
     CHECK_FALSE(device.MemoryBudget(budget, used)); // no driver to ask
     CHECK(budget == 5u);
 }
+
+TEST_CASE("rhi.null: a swapchain honours an asked-for sRGB or UNORM twin view, and only that")
+{
+    Backend* backend = nullptr;
+    REQUIRE(null::CreateNullBackend(backend).IsOk());
+    Device* device = nullptr;
+    REQUIRE(backend->EnumerateAdapters()[0]->CreateDevice(DeviceDesc{}, device).IsOk());
+
+    SwapChainDesc desc{};
+    desc.width = 8;
+    desc.height = 8;
+    desc.format = TextureFormat::BGRA8UnormSrgb;
+    SwapChain* plain = nullptr;
+    REQUIRE(device->CreateSwapChain(nullptr, desc, plain).IsOk());
+    CHECK(plain->AlternateViewFormat() == TextureFormat::Undefined); // not asked for
+    CHECK(plain->CurrentAlternateTextureView() == nullptr);
+    device->DestroySwapChain(plain);
+
+    desc.alternateViewFormat = TextureFormat::BGRA8Unorm;
+    SwapChain* twin = nullptr;
+    REQUIRE(device->CreateSwapChain(nullptr, desc, twin).IsOk());
+    REQUIRE(twin->AcquireNextImage().IsOk());
+    CHECK(twin->AlternateViewFormat() == TextureFormat::BGRA8Unorm);
+    REQUIRE(twin->CurrentAlternateTextureView() != nullptr);
+    CHECK(twin->CurrentAlternateTextureView()->desc.format == TextureFormat::BGRA8Unorm);
+    CHECK(twin->CurrentTextureView()->desc.format == TextureFormat::BGRA8UnormSrgb);
+    CHECK(twin->CurrentTexture()->desc.alternateViewFormat == TextureFormat::BGRA8Unorm);
+    device->DestroySwapChain(twin);
+
+    desc.alternateViewFormat = TextureFormat::RGBA16Float; // not the twin: refused quietly
+    SwapChain* wrong = nullptr;
+    REQUIRE(device->CreateSwapChain(nullptr, desc, wrong).IsOk());
+    CHECK(wrong->AlternateViewFormat() == TextureFormat::Undefined);
+    device->DestroySwapChain(wrong);
+
+    device->Destroy();
+    backend->Destroy();
+}

@@ -34,6 +34,9 @@ export namespace foundation::vg
         i32 textureIndex = -1; ///< Index into the texture list (-1 for none).
         Rectangle clipRect;    ///< Clip rectangle in screen coordinates.
         VGClipMode clipMode = VGClipMode::None;
+        /// Stencil-clipped AND confined to clipRect (a rectangle clip inside a path clip); empty
+        /// clipRect hides the draw. Scissor-mode commands are always confined to clipRect.
+        bool scissored = false;
         VGBlendMode blendMode = VGBlendMode::Normal;
         i32 stencilRef = 0; ///< Stencil reference value (for stencil clipping).
         VGDrawMode drawMode = VGDrawMode::Default; ///< Straight sampling vs MSDF decode.

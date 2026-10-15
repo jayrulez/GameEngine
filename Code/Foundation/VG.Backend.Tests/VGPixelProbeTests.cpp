@@ -428,6 +428,106 @@ TEST_CASE("vg.pixels: fills, clip, colors, spreads and blends on real backends")
 }
 
 // ============================================================================================
+// Nested clips (V2 of Specs/vg-and-gui-lab.md): two rounded clips, the inner overlapping the outer's
+// top-left corner, then a clip rect inside the outer. Red fills the canvas under both clips: only
+// their intersection shows, the outer's rounded corner included. Popping the inner, blue fills
+// the outer alone; inside it, a clip rect confines green to its left part.
+// ============================================================================================
+
+namespace
+{
+    void ProbeNestedClips(rhi::Device& device, const char* name)
+    {
+        INFO(doctest::String(name));
+        const Pixels px = RenderScene(
+            device,
+            [](vg::VGContext& ctx)
+            {
+                const auto full = []()
+                {
+                    vg::PathBuilder b;
+                    b.MoveTo(0, 0);
+                    b.LineTo(128, 0);
+                    b.LineTo(128, 128);
+                    b.LineTo(0, 128);
+                    b.Close();
+                    return b.ToPath();
+                };
+                vg::PathBuilder outer;
+                vg::ShapeBuilder::BuildRoundedRect(Rectangle{16, 16, 96, 96}, vg::CornerRadii{24, 24, 24, 24}, outer);
+                vg::PathBuilder inner;
+                vg::ShapeBuilder::BuildRoundedRect(Rectangle{4, 4, 64, 64}, vg::CornerRadii{12, 12, 12, 12}, inner);
+                ctx.PushClipPath(outer.ToPath());
+                ctx.PushClipPath(inner.ToPath());
+                ctx.FillPath(full(), ByteColor(255, 0, 0), vg::FillRule::NonZero, false);
+                ctx.PopClipPath();
+                // The outer alone, below the inner's square: blue.
+                vg::PathBuilder lower;
+                lower.MoveTo(0, 72);
+                lower.LineTo(128, 72);
+                lower.LineTo(128, 128);
+                lower.LineTo(0, 128);
+                lower.Close();
+                ctx.FillPath(lower.ToPath(), ByteColor(0, 0, 255), vg::FillRule::NonZero, false);
+                // A clip rect inside the outer: green on its left part of the band x 72..128.
+                ctx.PushClipRect(Rectangle{72, 0, 24, 72});
+                ctx.FillPath(full(), ByteColor(0, 255, 0), vg::FillRule::NonZero, false);
+                ctx.PopClip();
+                ctx.PopClipPath();
+            });
+        REQUIRE(px.valid);
+        const auto red = [&](u32 x, u32 y) { return px.At(x, y)[0] > 200 && px.At(x, y)[2] < 60; };
+        const auto blue = [&](u32 x, u32 y) { return px.At(x, y)[2] > 200 && px.At(x, y)[0] < 60; };
+        const auto green = [&](u32 x, u32 y) { return px.At(x, y)[1] > 200 && px.At(x, y)[0] < 60; };
+        const auto dark = [&](u32 x, u32 y) { return px.At(x, y)[0] < 40 && px.At(x, y)[1] < 40 && px.At(x, y)[2] < 40; };
+        CHECK(red(40, 40));     // inside both
+        CHECK(dark(19, 19));    // inside the inner, outside the outer's rounded corner
+        CHECK(dark(10, 40));    // inside the inner, left of the outer
+        CHECK(dark(70, 40));    // inside the outer, right of the inner, before the clip rect
+        CHECK(dark(64, 66));    // inside the inner's square, outside its rounded corner
+        CHECK(blue(60, 100));   // the outer alone after the pop
+        CHECK(dark(108, 108));  // outside the outer's rounded corner
+        CHECK(green(84, 40));   // the clip rect inside the outer
+        CHECK(dark(100, 40));   // inside the outer, right of the clip rect
+        CHECK(dark(84, 8));     // inside the clip rect, above the outer
+    }
+}
+
+TEST_CASE("vg.pixels: clip paths nest as intersections, with a clip rect inside one")
+{
+    rhi::Backend* vulkan = nullptr;
+    (void)rhi::vk::CreateBackend(rhi::vk::VkBackendDesc{}, vulkan);
+    rhi::Backend* webgpu = nullptr;
+    (void)rhi::webgpu::CreateBackend(rhi::webgpu::WebGpuBackendDesc{}, webgpu, DefaultAllocator());
+    if (rhi::Device* device = MakeDevice(vulkan))
+    {
+        ProbeNestedClips(*device, "vulkan");
+        device->Destroy();
+    }
+    else
+    {
+        MESSAGE("Vulkan unavailable - vulkan nested clip probe skipped");
+    }
+    if (rhi::Device* device = MakeDevice(webgpu))
+    {
+        ProbeNestedClips(*device, "webgpu");
+        device->Destroy();
+    }
+    else
+    {
+        MESSAGE("WebGPU unavailable - webgpu nested clip probe skipped");
+    }
+    if (vulkan != nullptr)
+    {
+        vulkan->Destroy();
+    }
+    if (webgpu != nullptr)
+    {
+        webgpu->Destroy();
+    }
+}
+
+// ============================================================================================
 // Blend space (V1 of Specs/vg-and-gui-lab.md): the same scenes in a Linear and an Encoded canvas.
 // Linear blends linear light (half black over white is 73% grey, byte 188); Encoded blends the
 // encoded values as browsers do (50% grey, byte 128). A gradient's ramp is baked from the authored

@@ -421,6 +421,118 @@ TEST_CASE("vg.context: PushClipPath without stencil support degrades to bounds s
     CHECK(cmd.clipRect.width == doctest::Approx(20.0f));
 }
 
+namespace
+{
+    Path Square(f32 x0, f32 y0, f32 x1, f32 y1)
+    {
+        PathBuilder b;
+        b.MoveTo(x0, y0);
+        b.LineTo(x1, y0);
+        b.LineTo(x1, y1);
+        b.LineTo(x0, y1);
+        b.Close();
+        return b.ToPath();
+    }
+
+    // The device bounds of a command's vertices.
+    Rectangle CommandBounds(const VGBatch& batch, const VGCommand& cmd)
+    {
+        Float2 mn{3.4e38f, 3.4e38f};
+        Float2 mx{-3.4e38f, -3.4e38f};
+        for (i32 i = 0; i < cmd.indexCount; ++i)
+        {
+            const Float2 p = batch.vertices[batch.indices[static_cast<usize>(cmd.startIndex + i)]].position;
+            mn = Float2{Min(mn.x, p.x), Min(mn.y, p.y)};
+            mx = Float2{Max(mx.x, p.x), Max(mx.y, p.y)};
+        }
+        return Rectangle{mn.x, mn.y, mx.x - mn.x, mx.y - mn.y};
+    }
+}
+
+TEST_CASE("vg.context: a clip path inside another intersects it, and popping it restores the outer")
+{
+    using foundation::vg::VGClipMode;
+    using foundation::vg::VGFillPhase;
+    VGContext ctx;
+    ctx.SetStencilFills(true);
+    ctx.PushClipPath(Square(0, 0, 20, 20));
+    ctx.PushClipPath(Square(10, 10, 30, 30));
+    ctx.FillPath(Square(0, 0, 30, 30), Color::Red, FillRule::NonZero, false);
+    ctx.PopClipPath();
+    ctx.FillPath(Square(0, 0, 30, 30), Color::Blue, FillRule::NonZero, false);
+    ctx.PopClipPath();
+    ctx.FillPath(Square(0, 0, 30, 30), Color::Green, FillRule::NonZero, false);
+
+    const VGBatch& batch = ctx.GetBatch();
+    // outer write + apply; inner write (CLIPPED: only inside the outer mask) + apply over the
+    // OUTER's bounds; the red fill; the pop: clear, outer write + apply again; blue; clear; green.
+    REQUIRE(batch.commands.Size() == 11u);
+    CHECK(batch.commands[0].fillPhase == VGFillPhase::StencilWrite);
+    CHECK(batch.commands[0].clipMode == VGClipMode::None);
+    CHECK(batch.commands[1].fillPhase == VGFillPhase::ClipApply);
+    CHECK(batch.commands[2].fillPhase == VGFillPhase::StencilWrite);
+    CHECK(batch.commands[2].clipMode == VGClipMode::Stencil);
+    CHECK(batch.commands[3].fillPhase == VGFillPhase::ClipApply);
+    const Rectangle apply = CommandBounds(batch, batch.commands[3]);
+    CHECK(apply.x == doctest::Approx(0.0f)); // the outer's bounds: zeroes outer-only pixels
+    CHECK(apply.width == doctest::Approx(20.0f));
+    CHECK(batch.commands[4].clipMode == VGClipMode::Stencil); // red, inside both
+    CHECK(batch.commands[5].fillPhase == VGFillPhase::ClipClear);
+    CHECK(batch.commands[6].fillPhase == VGFillPhase::StencilWrite);
+    CHECK(batch.commands[6].clipMode == VGClipMode::None); // the outer rebuilt
+    CHECK(batch.commands[7].fillPhase == VGFillPhase::ClipApply);
+    CHECK(batch.commands[8].clipMode == VGClipMode::Stencil); // blue, inside the outer
+    CHECK(batch.commands[9].fillPhase == VGFillPhase::ClipClear);
+    CHECK(batch.commands[10].clipMode == VGClipMode::None); // green, unclipped
+}
+
+TEST_CASE("vg.context: a clip rect inside a clip path applies both")
+{
+    using foundation::vg::VGClipMode;
+    VGContext ctx;
+    ctx.SetStencilFills(true);
+    ctx.PushClipPath(Square(0, 0, 40, 40));
+    ctx.PushClipRect(Rectangle{5, 5, 10, 10});
+    ctx.FillPath(Square(0, 0, 40, 40), Color::Red, FillRule::NonZero, false);
+    ctx.PopClip();
+    ctx.FillPath(Square(0, 0, 40, 40), Color::Blue, FillRule::NonZero, false);
+    ctx.PopClipPath();
+
+    const VGBatch& batch = ctx.GetBatch();
+    REQUIRE(batch.commands.Size() == 5u);
+    const VGCommand& red = batch.commands[2];
+    CHECK(red.clipMode == VGClipMode::Stencil);
+    CHECK(red.scissored);
+    CHECK(red.clipRect.x == doctest::Approx(5.0f));
+    CHECK(red.clipRect.width == doctest::Approx(10.0f));
+    const VGCommand& blue = batch.commands[3];
+    CHECK(blue.clipMode == VGClipMode::Stencil);
+    CHECK_FALSE(blue.scissored);
+}
+
+TEST_CASE("vg.context: without stencil, a nested clip path's scissor pops back to the outer")
+{
+    using foundation::vg::VGClipMode;
+    VGContext ctx; // stencil fills off
+    ctx.PushClipPath(Square(0, 0, 20, 20));
+    ctx.PushClipPath(Square(10, 10, 30, 30));
+    ctx.FillPath(Square(0, 0, 30, 30), Color::Red, FillRule::NonZero, false);
+    ctx.PopClipPath();
+    ctx.FillPath(Square(0, 0, 30, 30), Color::Blue, FillRule::NonZero, false);
+    ctx.PopClipPath();
+    ctx.FillPath(Square(0, 0, 30, 30), Color::Green, FillRule::NonZero, false);
+
+    const VGBatch& batch = ctx.GetBatch();
+    REQUIRE(batch.commands.Size() == 3u);
+    CHECK(batch.commands[0].clipMode == VGClipMode::Scissor);
+    CHECK(batch.commands[0].clipRect.x == doctest::Approx(10.0f)); // the intersection
+    CHECK(batch.commands[0].clipRect.width == doctest::Approx(10.0f));
+    CHECK(batch.commands[1].clipMode == VGClipMode::Scissor);
+    CHECK(batch.commands[1].clipRect.x == doctest::Approx(0.0f)); // the outer again
+    CHECK(batch.commands[1].clipRect.width == doctest::Approx(20.0f));
+    CHECK(batch.commands[2].clipMode == VGClipMode::None);
+}
+
 TEST_CASE("vg.context: over-budget LUT cache eviction is announced through the batch")
 {
     VGContext ctx;

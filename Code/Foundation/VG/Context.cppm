@@ -39,6 +39,9 @@ export namespace foundation::vg
         Float4x4 transform = Float4x4::Identity();
         Rectangle clipRect{};
         VGClipMode clipMode = VGClipMode::None;
+        // A rectangle clip is active (clipRect, empty = nothing draws), alone (clipMode Scissor)
+        // or inside path clips (clipMode Stencil: the draw is scissored AND stencil-tested).
+        bool scissored = false;
         f32 opacity = 1.0f;
         i32 stencilRef = 0;
     };
@@ -47,6 +50,22 @@ export namespace foundation::vg
     /// geometry (VGBatch) for rendering.
     class VGContext
     {
+        // A rectangle clip's state before it was pushed (PushClipRect, and a path clip's scissor
+        // fallback).
+        struct ClipRectSave
+        {
+            Rectangle rect{};
+            bool scissored = false;
+        };
+        // One active path clip: its flattened path and the transform it was pushed under (a pop
+        // replays the clips that remain), and its DEVICE-space bounds.
+        struct ClipPathLevel
+        {
+            Array<FlattenedSubPath> subPaths;
+            Float4x4 transform = Float4x4::Identity();
+            Rectangle bounds{};
+        };
+
     public:
         /// Distinct gradient ramps kept in the persistent LUT cache before a whole-cache
         /// eviction (announced via VGBatch::evictedTextures). Generous: a UI with a few
@@ -89,6 +108,8 @@ export namespace foundation::vg
             m_batch.Clear();
             m_stateStack.Clear();
             m_clipStack.Clear();
+            m_clipPaths.Clear();
+            m_clipPathScissors.Clear();
             m_opacityStack.Clear();
             m_currentState = VGState{};
             m_currentBlendMode = VGBlendMode::Normal;
@@ -142,20 +163,22 @@ export namespace foundation::vg
         // === Path clipping (stencil bit 0x80; see VGFillPhase) ===
 
         /// Clip subsequent draws to `path` (NonZero winding; EvenOdd clip paths are not
-        /// supported in v1). Requires stencil fills (a host-provided stencil attachment);
-        /// without one this degrades to a SCISSOR of the path's transformed bounds.
-        /// One level deep: nested pushes replace the active clip. Balance with
-        /// PopClipPath before Clear()/frame end.
+        /// supported in v1), within any path clip already active: clips nest, each the
+        /// intersection of its path and the clips around it, so a rounded card can hold a list of
+        /// rounded items. A rectangle clip (PushClipRect) inside or around one still applies.
+        /// Requires stencil fills (a host-provided stencil attachment); without one this degrades
+        /// to a SCISSOR of the path's transformed bounds. Balance with PopClipPath before
+        /// Clear()/frame end.
         void PushClipPath(const Path& path)
         {
-            Array<FlattenedSubPath> subPaths;
-            PathFlattener::Flatten(path, GetScaledTolerance(), subPaths);
+            ClipPathLevel level;
+            PathFlattener::Flatten(path, GetScaledTolerance(), level.subPaths);
             if (!m_stencilFills)
             {
                 // Fallback: scissor to the transformed bounds - coarse but contained.
                 Float2 mn{3.4e38f, 3.4e38f};
                 Float2 mx{-3.4e38f, -3.4e38f};
-                for (const FlattenedSubPath& sp : subPaths)
+                for (const FlattenedSubPath& sp : level.subPaths)
                 {
                     for (const Float2& pt : sp.points)
                     {
@@ -166,52 +189,55 @@ export namespace foundation::vg
                         mx.y = Max(mx.y, d.y);
                     }
                 }
-                if (mx.x > mn.x && mx.y > mn.y)
-                {
-                    FlushCurrentCommand();
-                    const Rectangle deviceRect{mn.x, mn.y, mx.x - mn.x, mx.y - mn.y};
-                    if (m_currentState.clipRect.width > 0.0f &&
-                        m_currentState.clipRect.height > 0.0f)
-                        m_currentState.clipRect =
-                            Rectangle::Intersect(m_currentState.clipRect, deviceRect);
-                    else
-                        m_currentState.clipRect = deviceRect;
-                    m_currentState.clipMode = VGClipMode::Scissor;
-                }
+                FlushCurrentCommand();
+                m_clipPathScissors.PushBack(ClipRectSave{m_currentState.clipRect, m_currentState.scissored});
+                const Rectangle deviceRect = (mx.x > mn.x && mx.y > mn.y)
+                                                 ? Rectangle{mn.x, mn.y, mx.x - mn.x, mx.y - mn.y}
+                                                 : Rectangle{};
+                m_currentState.clipRect = m_currentState.scissored
+                                              ? Rectangle::Intersect(m_currentState.clipRect, deviceRect)
+                                              : deviceRect;
+                m_currentState.scissored = true;
+                RefreshClipMode();
                 return;
             }
 
-            // The clip geometry itself must not be clipped/scissored by prior state.
             FlushCurrentCommand();
-            const VGClipMode savedMode = m_currentState.clipMode;
-            m_currentState.clipMode = VGClipMode::None;
-
-            // Winding fans (device-transformed), then the ClipApply quad converts the
-            // winding to the 0x80 mask and zeroes the winding bits in one op.
-            const Rectangle deviceBounds = EmitWindingFans(subPaths);
-            m_clipPathBounds = deviceBounds;
-            if (deviceBounds.width <= 0.0f || deviceBounds.height <= 0.0f)
-            {
-                m_currentState.clipMode = savedMode;
-                return;
-            }
-            EmitDeviceQuad(deviceBounds, VGFillPhase::ClipApply);
-            m_clipPathActive = true;
-            m_currentState.clipMode = VGClipMode::Stencil;
+            level.transform = m_currentState.transform;
+            const Rectangle outer = m_clipPaths.IsEmpty() ? Rectangle{} : m_clipPaths.Back().bounds;
+            level.bounds = EmitClipLevel(level, !m_clipPaths.IsEmpty(), outer);
+            m_clipPaths.PushBack(Move(level));
+            RefreshClipMode();
         }
 
-        /// End the active path clip (zeroes the mask over its bounds).
+        /// End the innermost path clip: the clip around it applies again.
         void PopClipPath()
         {
-            if (!m_clipPathActive)
+            FlushCurrentCommand();
+            if (!m_clipPathScissors.IsEmpty() && m_clipPaths.IsEmpty())
             {
-                m_currentState.clipMode = VGClipMode::None;
+                m_currentState.clipRect = m_clipPathScissors.Back().rect;
+                m_currentState.scissored = m_clipPathScissors.Back().scissored;
+                m_clipPathScissors.PopBack();
+                RefreshClipMode();
                 return;
             }
-            FlushCurrentCommand();
-            m_currentState.clipMode = VGClipMode::None;
-            EmitDeviceQuad(m_clipPathBounds, VGFillPhase::ClipClear);
-            m_clipPathActive = false;
+            if (m_clipPaths.IsEmpty())
+            {
+                RefreshClipMode();
+                return;
+            }
+            // Every mask bit lies inside the outermost clip's bounds: clear them, then rebuild the
+            // clips that remain from the outermost in (nesting is shallow; the replay is cheap).
+            const Rectangle outermost = m_clipPaths[0].bounds;
+            m_clipPaths.PopBack();
+            ClearClipMask(outermost);
+            for (usize i = 0; i < m_clipPaths.Size(); ++i)
+            {
+                m_clipPaths[i].bounds =
+                    EmitClipLevel(m_clipPaths[i], i > 0, i > 0 ? m_clipPaths[i - 1].bounds : Rectangle{});
+            }
+            RefreshClipMode();
         }
 
         /// Pixel snapping: axis-aligned filled rects, borders and horizontal/vertical lines are
@@ -259,15 +285,16 @@ export namespace foundation::vg
         void PushClipRect(Rectangle rect)
         {
             FlushCurrentCommand();
-            m_clipStack.PushBack(m_currentState.clipRect);
+            m_clipStack.PushBack(ClipRectSave{m_currentState.clipRect, m_currentState.scissored});
 
             const Rectangle transformedRect = TransformRect(rect);
-            if (m_currentState.clipRect.width > 0.0f && m_currentState.clipRect.height > 0.0f)
+            if (m_currentState.scissored)
                 m_currentState.clipRect =
                     Rectangle::Intersect(m_currentState.clipRect, transformedRect);
             else
                 m_currentState.clipRect = transformedRect;
-            m_currentState.clipMode = VGClipMode::Scissor;
+            m_currentState.scissored = true;
+            RefreshClipMode(); // inside a path clip, both apply
         }
 
         /// Whether a rect (CURRENT local coordinates) can contribute any pixels under the active
@@ -277,7 +304,7 @@ export namespace foundation::vg
         /// exceeded the renderer's per-frame vertex ceiling).
         [[nodiscard]] bool IsRectVisible(Rectangle rect) const
         {
-            if (m_currentState.clipMode != VGClipMode::Scissor)
+            if (!m_currentState.scissored)
             {
                 return true;
             }
@@ -293,18 +320,16 @@ export namespace foundation::vg
             FlushCurrentCommand();
             if (!m_clipStack.IsEmpty())
             {
-                m_currentState.clipRect = m_clipStack.Back();
+                m_currentState.clipRect = m_clipStack.Back().rect;
+                m_currentState.scissored = m_clipStack.Back().scissored;
                 m_clipStack.PopBack();
-                m_currentState.clipMode =
-                    (m_currentState.clipRect.width > 0.0f && m_currentState.clipRect.height > 0.0f)
-                        ? VGClipMode::Scissor
-                        : VGClipMode::None;
             }
             else
             {
                 m_currentState.clipRect = Rectangle{};
-                m_currentState.clipMode = VGClipMode::None;
+                m_currentState.scissored = false;
             }
+            RefreshClipMode();
         }
 
         // === Opacity ===
@@ -1529,6 +1554,59 @@ export namespace foundation::vg
             return Abs(Abs(totalTurn) - 2.0f * kPi) < 0.1f;
         }
 
+        // The clip mode the state's clips call for: the stencil while path clips are active (with
+        // the scissor too when a rectangle clip is), the scissor alone, or none.
+        void RefreshClipMode()
+        {
+            m_currentState.clipMode = !m_clipPaths.IsEmpty()    ? VGClipMode::Stencil
+                                      : m_currentState.scissored ? VGClipMode::Scissor
+                                                                 : VGClipMode::None;
+        }
+
+        // Write one path clip into the stencil mask and return its device bounds. The outermost:
+        // its winding over the clear mask, then ClipApply over its bounds. A nested one: its
+        // winding only where the mask is already set (a clipped write), then ClipApply over the
+        // OUTER clip's bounds, which keeps the mask where the new winding is and zeroes it
+        // elsewhere - the intersection, with the pipelines fills already use.
+        Rectangle EmitClipLevel(const ClipPathLevel& level, bool nested, Rectangle outer)
+        {
+            const Float4x4 savedTransform = m_currentState.transform;
+            const Rectangle savedRect = m_currentState.clipRect;
+            const bool savedScissored = m_currentState.scissored;
+            const VGClipMode savedMode = m_currentState.clipMode;
+            m_currentState.transform = level.transform;
+            m_currentState.scissored = false; // clip geometry is never scissored itself
+            m_currentState.clipMode = nested ? VGClipMode::Stencil : VGClipMode::None;
+            const Rectangle bounds = EmitWindingFans(level.subPaths);
+            m_currentState.clipMode = VGClipMode::None;
+            const Rectangle apply = nested ? outer : bounds;
+            if (apply.width > 0.0f && apply.height > 0.0f)
+            {
+                EmitDeviceQuad(apply, VGFillPhase::ClipApply);
+            }
+            m_currentState.transform = savedTransform;
+            m_currentState.clipRect = savedRect;
+            m_currentState.scissored = savedScissored;
+            m_currentState.clipMode = savedMode;
+            return nested ? Rectangle::Intersect(bounds, outer) : bounds;
+        }
+
+        // Zero the clip mask (and any stray winding) over `rect`.
+        void ClearClipMask(Rectangle rect)
+        {
+            if (rect.width <= 0.0f || rect.height <= 0.0f)
+            {
+                return;
+            }
+            const bool savedScissored = m_currentState.scissored;
+            const VGClipMode savedMode = m_currentState.clipMode;
+            m_currentState.scissored = false;
+            m_currentState.clipMode = VGClipMode::None;
+            EmitDeviceQuad(rect, VGFillPhase::ClipClear);
+            m_currentState.scissored = savedScissored;
+            m_currentState.clipMode = savedMode;
+        }
+
         /// Emit a stencil-then-cover fill: a color-masked winding pass (per-contour fans
         /// from each contour's first point) then a bounding-quad cover carrying the fill's
         /// color/gradient data. `fill` null = solid `solidColor` (already opacity-applied);
@@ -1710,6 +1788,7 @@ export namespace foundation::vg
             cmd.clipRect = m_currentState.clipRect;
             cmd.blendMode = m_currentBlendMode;
             cmd.clipMode = m_currentState.clipMode;
+            cmd.scissored = m_currentState.scissored && m_currentState.clipMode == VGClipMode::Stencil;
             cmd.stencilRef = m_currentState.stencilRef;
             cmd.drawMode = m_currentDrawMode;
             cmd.gradientSpread = m_currentGradientSpread;
@@ -1731,6 +1810,7 @@ export namespace foundation::vg
                 cmd.clipRect = m_currentState.clipRect;
                 cmd.blendMode = m_currentBlendMode;
                 cmd.clipMode = m_currentState.clipMode;
+                cmd.scissored = m_currentState.scissored && m_currentState.clipMode == VGClipMode::Stencil;
                 cmd.stencilRef = m_currentState.stencilRef;
                 cmd.drawMode = m_currentDrawMode;
                 cmd.gradientSpread = m_currentGradientSpread;
@@ -1868,11 +1948,11 @@ export namespace foundation::vg
         fonts::IFontService* m_fontService = nullptr;
 
         Array<VGState> m_stateStack;
-        Rectangle m_clipPathBounds{}; // DEVICE-space bounds of the active stencil clip
-        bool m_clipPathActive = false;
         VGState m_currentState;
 
-        Array<Rectangle> m_clipStack;
+        Array<ClipPathLevel> m_clipPaths;        // the stencil clips, outermost first
+        Array<ClipRectSave> m_clipPathScissors;  // the scissor fallback's (no stencil)
+        Array<ClipRectSave> m_clipStack;
         Array<f32> m_opacityStack;
 
         VGBlendMode m_currentBlendMode = VGBlendMode::Normal;

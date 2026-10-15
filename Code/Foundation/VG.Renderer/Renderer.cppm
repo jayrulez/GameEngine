@@ -487,14 +487,16 @@ export namespace foundation::vg::renderer
                     currentSpread = cmd.gradientSpread;
                 }
 
-                if (cmd.clipMode == foundation::vg::VGClipMode::Scissor &&
-                    cmd.clipRect.width > 0.0f && cmd.clipRect.height > 0.0f)
+                // Scissored: a rectangle clip alone, or one inside a path clip (with the stencil).
+                const bool scissored = cmd.clipMode == foundation::vg::VGClipMode::Scissor ||
+                                       (cmd.clipMode == foundation::vg::VGClipMode::Stencil && cmd.scissored);
+                if (scissored && cmd.clipRect.width > 0.0f && cmd.clipRect.height > 0.0f)
                 {
                     const ScissorRect scissor =
                         ComputeScissor(cmd.clipRect, viewportX, viewportY, width, height);
                     renderPass.SetScissor(scissor.x, scissor.y, scissor.width, scissor.height);
                 }
-                else if (cmd.clipMode == foundation::vg::VGClipMode::Scissor)
+                else if (scissored)
                 {
                     renderPass.SetScissor(0, 0, 0, 0); // empty clip hides everything
                 }

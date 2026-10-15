@@ -56,6 +56,10 @@ with a 0.75 px fringe (`VG/Tessellation.cppm`).
   Encoded.
 - **V2 Nested clips.** Clip paths nest (an intersection, not a replacement), so a rounded card can
   hold a scrolled list of rounded items. Tests: two nested rounded clips probed at their corners.
+  As built on `vg` (519edf76d): a nested clip writes its winding inside the mask and applies over
+  the outer's bounds (the intersection, no new pipeline); a pop replays the clips that remain; a
+  clip rect inside a path clip scissors and stencil-tests together. `foundation.ui` does not use
+  path clips yet (rounded overflow clipping is G4's, or a later layer here).
 - **V3 Layers.** `PushLayer(opacity, blend)` draws a subtree into an offscreen target and
   composites it once, so a group fades as one (no children showing through each other, no
   double-blended cross-fades). Then filters on a layer (blur, desaturate, a colour matrix) and a

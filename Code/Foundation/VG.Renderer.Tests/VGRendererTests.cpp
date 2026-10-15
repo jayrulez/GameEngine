@@ -398,7 +398,11 @@ namespace
         rhi::CommandEncoder* encoder = nullptr;
         rhi::RenderPassEncoder* pass = nullptr;
 
-        bool Begin(rhi::Device& device)
+        bool Begin(rhi::Device& device) { return Open(device) && BeginPass(); }
+
+        // The target and the encoder, the pass not yet begun (work that goes before it, such as
+        // VGRenderer::RenderLayers, records on the encoder first).
+        bool Open(rhi::Device& device)
         {
             rhi::TextureDesc td{};
             td.width = 64;
@@ -411,8 +415,10 @@ namespace
                 return false;
             if (!device.CreateCommandPool(rhi::QueueType::Graphics, pool).IsOk())
                 return false;
-            if (!pool->CreateEncoder(encoder).IsOk())
-                return false;
+            return pool->CreateEncoder(encoder).IsOk();
+        }
+        bool BeginPass()
+        {
             rhi::RenderPassDesc desc;
             rhi::ColorAttachment color;
             color.view = view;
@@ -605,3 +611,84 @@ TEST_CASE("vg.renderer: every blend x draw mode, stencil phase x rule x clip, an
     device.DestroyShaderModule(vs);
 }
 
+
+TEST_CASE("vg.renderer: layers draw into targets of their own, then composite into what holds them")
+{
+    rhi::null::NullDevice device{DefaultAllocator()};
+    rhi::ShaderModule* vs = MakeModule(device);
+    rhi::ShaderModule* fs = MakeModule(device);
+    rhi::ShaderModule* layerFs = MakeModule(device);
+    REQUIRE(layerFs != nullptr);
+
+    VGContext ctx;
+    ctx.SetLayers(true);
+    ctx.FillRect(Rectangle{0, 0, 8, 8}, Color::White); // into the target
+    ctx.PushLayer(0.5f);
+    ctx.FillRect(Rectangle{10, 10, 20, 20}, Color::Red);
+    ctx.PushLayer(0.5f, VGBlendMode::Screen); // nested, with a blend of its own
+    ctx.FillRect(Rectangle{20, 20, 20, 20}, Color::Blue);
+    ctx.PopLayer();
+    ctx.PopLayer();
+    ctx.PushLayer(0.5f); // wholly off the canvas: never drawn, its composite skipped
+    ctx.FillRect(Rectangle{200, 200, 10, 10}, Color::Red);
+    ctx.PopLayer();
+    VGBatch& batch = ctx.GetBatch();
+    REQUIRE(batch.layers.Size() == 3u);
+
+    VGTargetConfig config;
+    config.sampleCount = 4; // layer targets resolve their own multisampled draws
+    config.depthStencilFormat = rhi::TextureFormat::Depth24PlusStencil8;
+    const auto run = [&](rhi::ShaderModule* layerShader, VGRenderer::RenderStats& layers,
+                         VGRenderer::RenderStats& main)
+    {
+        VGRenderer renderer{DefaultAllocator()};
+        REQUIRE(renderer
+                    .Initialize(device, *vs, *fs, rhi::TextureFormat::BGRA8UnormSrgb, 2, nullptr, nullptr,
+                                nullptr, config, nullptr, nullptr, nullptr, layerShader)
+                    .IsOk());
+        for (i32 frame = 0; frame < 3; ++frame) // the frame slots' targets are reused
+        {
+            renderer.BeginFrame(frame % 2);
+            const VGRenderSlice slice = renderer.Prepare(batch, frame % 2, 64, 64);
+            REQUIRE(slice.isValid);
+            CHECK(slice.layerCount == 3);
+            NullPass pass;
+            REQUIRE(pass.Open(device));
+            renderer.RenderLayers(*pass.encoder, frame % 2, slice);
+            REQUIRE(pass.BeginPass());
+            renderer.Render(*pass.pass, 64, 64, frame % 2, slice);
+            pass.End(device);
+            layers = renderer.LastLayerStats();
+            main = renderer.LastRenderStats();
+        }
+        renderer.Dispose();
+    };
+
+    // With the composite shader: the two layers on the canvas are drawn (each its own fill, the
+    // outer one also the inner one's composite); the target gets the white fill and the outer
+    // composite, the off-canvas layer's composite skipped.
+    {
+        VGRenderer::RenderStats layers;
+        VGRenderer::RenderStats main;
+        run(layerFs, layers, main);
+        CHECK(layers.layers == 2);
+        CHECK(layers.drawn == 3);
+        CHECK(layers.skipped == 0);
+        CHECK(main.drawn == 2);
+        CHECK(main.skipped == 1);
+    }
+    // Without it: no layer is drawn and every composite is skipped, never drawn by the default
+    // shader (it would multiply the premultiplied colour again).
+    {
+        VGRenderer::RenderStats layers;
+        VGRenderer::RenderStats main;
+        run(nullptr, layers, main);
+        CHECK(layers.layers == 0);
+        CHECK(main.drawn == 1);
+        CHECK(main.skipped == 2);
+    }
+
+    device.DestroyShaderModule(layerFs);
+    device.DestroyShaderModule(fs);
+    device.DestroyShaderModule(vs);
+}

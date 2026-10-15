@@ -106,6 +106,8 @@ export namespace foundation::vg::renderer
         u32 uniformByteOffset = 0;
         i32 drawCommandStart = 0;
         i32 drawCommandCount = 0;
+        i32 layerStart = 0; // the slice's offscreen layers (VGBatch::layers), drawn by RenderLayers
+        i32 layerCount = 0;
         bool isValid = false;
     };
 
@@ -130,8 +132,11 @@ export namespace foundation::vg::renderer
         {
             i32 drawn = 0;
             i32 skipped = 0;
+            i32 layers = 0; // offscreen layers drawn (RenderLayers)
         };
         [[nodiscard]] RenderStats LastRenderStats() const { return m_lastRenderStats; }
+        /// What the last RenderLayers did: the layers it drew and their commands.
+        [[nodiscard]] RenderStats LastLayerStats() const { return m_lastLayerStats; }
 
         /// True when Initialize was given a stencil-capable target (hosts gate
         /// VGContext::SetStencilFills on this).
@@ -147,7 +152,8 @@ export namespace foundation::vg::renderer
                           VGTargetConfig targetConfig = {},
                           rhi::ShaderModule* boxShadowFragShader = nullptr,
                           rhi::ShaderModule* boxVertShader = nullptr,
-                          rhi::ShaderModule* boxFragShader = nullptr)
+                          rhi::ShaderModule* boxFragShader = nullptr,
+                          rhi::ShaderModule* layerFragShader = nullptr)
         {
             m_device = &device;
             m_queue = device.GetQueue(rhi::QueueType::Graphics, 0);
@@ -164,6 +170,7 @@ export namespace foundation::vg::renderer
             m_boxShadowModule = boxShadowFragShader;
             m_boxVsModule = boxVertShader;
             m_boxFsModule = boxFragShader;
+            m_layerFsModule = layerFragShader;
 
             if (!CreateSampler().IsOk())
                 return ErrorCode::Unknown;
@@ -192,6 +199,10 @@ export namespace foundation::vg::renderer
                 !CreatePipelineVariant(*boxVertShader, *boxFragShader, StencilRole::None, m_boxPipeline,
                                        vg::VGBlendMode::Normal, false, /*box*/ true)
                      .IsOk())
+                return ErrorCode::Unknown;
+            // Optional layer composite pipeline (VGContext::PushLayer): samples a premultiplied target.
+            if (layerFragShader != nullptr &&
+                !CreatePipelineInto(vertShader, *layerFragShader, m_layerPipeline).IsOk())
                 return ErrorCode::Unknown;
             // Stencil-then-cover pipelines - only with a host-provided stencil attachment.
             // Write pass: color-masked fans accumulate winding (incr/decr-wrap = NonZero,
@@ -266,6 +277,8 @@ export namespace foundation::vg::renderer
             GrowFrameBuffers(frameIndex);
             m_drawCommands.Clear();
             m_batchTextures.Clear();
+            m_layers.Clear();
+            ReleaseLayerTargets(frameIndex);
         }
 
         /// Upload one batch into the shared frame buffers; returns a slice token.
@@ -292,7 +305,7 @@ export namespace foundation::vg::renderer
             const u32 sliceIdxOffset = m_frameIndexOffsets[static_cast<usize>(frameIndex)];
             const u32 sliceUniformSlot = m_frameUniformSlotCount[static_cast<usize>(frameIndex)];
 
-            // Uniform slots stay a hard cap (one per SURFACE/slice; exceeding 64 surfaces is rare).
+            // Uniform slots stay a hard cap (one per slice and one per layer, MaxUniformSlots a frame).
             if (sliceUniformSlot >= static_cast<u32>(MaxUniformSlots))
                 return VGRenderSlice{};
             const u32 curVertCap =
@@ -336,6 +349,66 @@ export namespace foundation::vg::renderer
             renderVerts.Reserve(batch.vertices.Size());
             for (usize i = 0; i < batch.vertices.Size(); ++i)
                 renderVerts.PushBack(VGRenderVertex(batch.vertices[i]));
+
+            // The slice's layers: each kept to its parent (the canvas for the outermost), given a
+            // uniform slot of its own (its projection over its bounds) and a target size; their
+            // composites' quads are fitted to that (a layer may be clamped, its target larger).
+            const i32 layerBase = static_cast<i32>(m_layers.Size());
+            u32 nextUniformSlot = sliceUniformSlot + 1;
+            for (usize l = 0; l < batch.layers.Size(); ++l)
+            {
+                const vg::VGLayer& source = batch.layers[l];
+                PreparedLayer layer;
+                layer.parent = source.parent >= 0 ? source.parent + layerBase : -1;
+                Rectangle outer{0.0f, 0.0f, static_cast<f32>(width), static_cast<f32>(height)};
+                bool parentValid = true;
+                if (layer.parent >= 0)
+                {
+                    outer = m_layers[static_cast<usize>(layer.parent)].bounds;
+                    parentValid = m_layers[static_cast<usize>(layer.parent)].valid;
+                }
+                const f32 x0 = Max(source.bounds.x, outer.x);
+                const f32 y0 = Max(source.bounds.y, outer.y);
+                const f32 x1 = Min(source.bounds.x + source.bounds.width, outer.x + outer.width);
+                const f32 y1 = Min(source.bounds.y + source.bounds.height, outer.y + outer.height);
+                layer.bounds = Rectangle{x0, y0, Max(0.0f, x1 - x0), Max(0.0f, y1 - y0)};
+                layer.width = static_cast<u32>(layer.bounds.width);
+                layer.height = static_cast<u32>(layer.bounds.height);
+                layer.targetWidth = RoundUpToBucket(layer.width);
+                layer.targetHeight = RoundUpToBucket(layer.height);
+                layer.valid = parentValid && layer.width > 0 && layer.height > 0 &&
+                              nextUniformSlot < static_cast<u32>(MaxUniformSlots);
+                if (layer.valid)
+                {
+                    layer.uniformOffset = nextUniformSlot * static_cast<u32>(UniformSlotSize);
+                    ++nextUniformSlot;
+                }
+                m_layers.PushBack(layer);
+            }
+            for (usize i = 0; i < batch.commands.Size(); ++i)
+            {
+                const vg::VGCommand& cmd = batch.commands[i];
+                if (cmd.drawMode != vg::VGDrawMode::Layer || cmd.compositeLayer < 0 || cmd.indexCount < 6)
+                    continue;
+                const PreparedLayer& layer = m_layers[static_cast<usize>(cmd.compositeLayer + layerBase)];
+                const u32 base = batch.indices[static_cast<usize>(cmd.startIndex)];
+                if (!layer.valid || base + 3 >= renderVerts.Size())
+                    continue; // the composite is skipped at Render
+                const Rectangle& b = layer.bounds;
+                const f32 u = static_cast<f32>(layer.width) / static_cast<f32>(layer.targetWidth);
+                const f32 v = static_cast<f32>(layer.height) / static_cast<f32>(layer.targetHeight);
+                const Float2 corners[4] = {{b.x, b.y}, {b.x + b.width, b.y}, {b.x + b.width, b.y + b.height},
+                                           {b.x, b.y + b.height}};
+                const Float2 uvs[4] = {{0.0f, 0.0f}, {u, 0.0f}, {u, v}, {0.0f, v}};
+                for (u32 k = 0; k < 4; ++k)
+                {
+                    VGRenderVertex& vertex = renderVerts[base + k];
+                    vertex.position[0] = corners[k].x;
+                    vertex.position[1] = corners[k].y;
+                    vertex.texCoord[0] = uvs[k].x;
+                    vertex.texCoord[1] = uvs[k].y;
+                }
+            }
             if (vertByteSize > 0)
                 WriteBuffer(m_vertexBuffers[static_cast<usize>(frameIndex)], sliceVertOffset,
                             renderVerts.Data(), vertByteSize);
@@ -356,6 +429,10 @@ export namespace foundation::vg::renderer
                 foundation::vg::VGCommand cmd = batch.commands[i];
                 if (cmd.textureIndex >= 0)
                     cmd.textureIndex = cmd.textureIndex + textureBase;
+                if (cmd.layer >= 0)
+                    cmd.layer += layerBase;
+                if (cmd.compositeLayer >= 0)
+                    cmd.compositeLayer += layerBase;
                 m_drawCommands.PushBack(cmd);
             }
 
@@ -368,6 +445,16 @@ export namespace foundation::vg::renderer
             uniforms.blendSpace = m_targetConfig.blendSpace == vg::VGBlendSpace::Encoded ? 1.0f : 0.0f;
             WriteBuffer(m_uniformBuffers[static_cast<usize>(frameIndex)], sliceUniformOffset,
                         &uniforms, sizeof(VGUniforms));
+            for (usize l = static_cast<usize>(layerBase); l < m_layers.Size(); ++l)
+            {
+                const PreparedLayer& layer = m_layers[l];
+                if (!layer.valid)
+                    continue;
+                uniforms.projection = OrthoOffCenter(layer.bounds.x, layer.bounds.y, static_cast<f32>(layer.width),
+                                                     static_cast<f32>(layer.height));
+                WriteBuffer(m_uniformBuffers[static_cast<usize>(frameIndex)], layer.uniformOffset, &uniforms,
+                            sizeof(VGUniforms));
+            }
 
             // Bind groups for any newly-added textures.
             for (i32 texIdx = textureBase; texIdx < static_cast<i32>(m_batchTextures.Size());
@@ -376,7 +463,7 @@ export namespace foundation::vg::renderer
 
             m_frameVertexOffsets[static_cast<usize>(frameIndex)] = sliceVertOffset + vertByteSize + boxByteSize;
             m_frameIndexOffsets[static_cast<usize>(frameIndex)] = sliceIdxOffset + idxByteSize;
-            m_frameUniformSlotCount[static_cast<usize>(frameIndex)] = sliceUniformSlot + 1;
+            m_frameUniformSlotCount[static_cast<usize>(frameIndex)] = nextUniformSlot;
 
             VGRenderSlice slice;
             slice.vertexByteOffset = sliceVertOffset;
@@ -385,6 +472,8 @@ export namespace foundation::vg::renderer
             slice.uniformByteOffset = sliceUniformOffset;
             slice.drawCommandStart = sliceCmdStart;
             slice.drawCommandCount = static_cast<i32>(m_drawCommands.Size()) - sliceCmdStart;
+            slice.layerStart = layerBase;
+            slice.layerCount = static_cast<i32>(m_layers.Size()) - layerBase;
             slice.isValid = true;
             return slice;
         }
@@ -434,112 +523,69 @@ export namespace foundation::vg::renderer
             m_lastRenderStats = RenderStats{};
             if (!slice.isValid || slice.drawCommandCount == 0)
                 return;
+            DrawCommands(renderPass, frameIndex, slice, -1, viewportX, viewportY, width, height,
+                         slice.uniformByteOffset, 0.0f, 0.0f, m_lastRenderStats);
+        }
 
-            renderPass.SetViewport(static_cast<f32>(viewportX), static_cast<f32>(viewportY),
-                                   static_cast<f32>(width), static_cast<f32>(height), 0.0f, 1.0f);
-            renderPass.SetPipeline(m_pipeline);
-            renderPass.SetVertexBuffer(0, m_vertexBuffers[static_cast<usize>(frameIndex)],
-                                       slice.vertexByteOffset);
-            renderPass.SetIndexBuffer(m_indexBuffers[static_cast<usize>(frameIndex)],
-                                      rhi::IndexFormat::UInt32, slice.indexByteOffset);
-
-            const u32 dynOffsets[1] = {slice.uniformByteOffset};
-            i32 currentTextureIndex = -2; // sentinel forces first SetBindGroup
-            vg::VGGradientSpread currentSpread = vg::VGGradientSpread::Pad;
-            rhi::RenderPipeline* currentPipeline = m_pipeline;
-            i32 currentStencilRef = -1; // sentinel: set on first stencil-relevant command
-            bool boxesBound = false;    // the vertex buffer sits at the slice's boxes
-            if (m_coverPipeline != nullptr)
+        /// Draw the slice's offscreen layers (VGContext::PushLayer) into targets of their own, each
+        /// in a pass of its own, innermost first, so the slice's Render can composite them. Call it
+        /// after Prepare and before the pass Render draws into (passes do not nest). A layer this
+        /// does not draw (no target, or the layer composite shader was not given) has its
+        /// composite skipped.
+        void RenderLayers(rhi::CommandEncoder& encoder, i32 frameIndex, const VGRenderSlice& slice)
+        {
+            m_lastLayerStats = RenderStats{};
+            if (!slice.isValid || slice.layerCount == 0 || m_layerPipeline == nullptr)
+                return;
+            // A child is pushed after its parent and the parent draws the child's composite, so
+            // the layers go in reverse.
+            for (i32 l = slice.layerStart + slice.layerCount - 1; l >= slice.layerStart; --l)
             {
-                renderPass.SetStencilReference(0); // cover tests NotEqual 0
-                currentStencilRef = 0;
-            }
-
-            const i32 cmdEnd = slice.drawCommandStart + slice.drawCommandCount;
-            for (i32 i = slice.drawCommandStart; i < cmdEnd; ++i)
-            {
-                const foundation::vg::VGCommand& cmd = m_drawCommands[static_cast<usize>(i)];
-                if (cmd.indexCount == 0)
+                PreparedLayer& layer = m_layers[static_cast<usize>(l)];
+                if (!layer.valid)
                     continue;
-
-                // Pipeline per (fill phase, draw mode); falls back to the default pipeline
-                // when a variant was not built. Stencil-phase commands are SKIPPED entirely
-                // without stencil pipelines (a context should not emit them then, but a
-                // stale batch must not draw winding fans as visible color). A pipeline swap
-                // forces a bind-group rebind.
-                rhi::RenderPipeline* pipeline = PipelineFor(cmd);
-                if (pipeline == nullptr)
-                {
-                    ++m_lastRenderStats.skipped;
+                const i32 targetIndex = AcquireLayerTarget(frameIndex, layer.targetWidth, layer.targetHeight);
+                if (targetIndex < 0)
                     continue;
-                }
-                if (pipeline != currentPipeline)
+                const LayerTarget& target = m_layerTargets[static_cast<usize>(targetIndex)];
+                encoder.TransitionTexture(target.color, rhi::ResourceState::Undefined,
+                                          rhi::ResourceState::RenderTarget);
+                if (target.msaa != nullptr)
+                    encoder.TransitionTexture(target.msaa, rhi::ResourceState::Undefined,
+                                              rhi::ResourceState::RenderTarget);
+                if (target.depthStencil != nullptr)
+                    encoder.TransitionTexture(target.depthStencil, rhi::ResourceState::Undefined,
+                                              rhi::ResourceState::DepthStencilWrite);
+                rhi::RenderPassDesc desc{};
+                rhi::ColorAttachment color{};
+                color.view = target.msaaView != nullptr ? target.msaaView : target.colorView;
+                color.resolveTarget = target.msaaView != nullptr ? target.colorView : nullptr;
+                color.loadOp = rhi::LoadOp::Clear;
+                color.storeOp = target.msaaView != nullptr ? rhi::StoreOp::DontCare : rhi::StoreOp::Store;
+                color.clearValue = rhi::ClearColor{0.0f, 0.0f, 0.0f, 0.0f};
+                desc.colorAttachments.Add(color);
+                if (target.depthStencilView != nullptr)
                 {
-                    renderPass.SetPipeline(pipeline);
-                    currentPipeline = pipeline;
-                    currentTextureIndex = -2;
+                    rhi::DepthStencilAttachment ds{};
+                    ds.view = target.depthStencilView;
+                    ds.depthLoadOp = rhi::LoadOp::Clear;
+                    ds.depthStoreOp = rhi::StoreOp::DontCare;
+                    ds.stencilLoadOp = rhi::LoadOp::Clear;
+                    ds.stencilStoreOp = rhi::StoreOp::DontCare;
+                    ds.stencilClearValue = 0;
+                    desc.depthStencilAttachment = ds;
                 }
-
-                // Dynamic stencil reference: 0x80 whenever the clip mask is involved
-                // (clipped draws test Equal against it; ClipApply/clipped-cover REPLACE
-                // with it), 0 otherwise (unclipped covers compare-to-zero; ClipClear
-                // replaces with 0).
-                if (m_coverPipeline != nullptr || m_clipApplyPipeline != nullptr)
-                {
-                    const bool wantsClipRef =
-                        cmd.clipMode == foundation::vg::VGClipMode::Stencil ||
-                        cmd.fillPhase == foundation::vg::VGFillPhase::ClipApply;
-                    const i32 wantedRef = wantsClipRef ? 0x80 : 0;
-                    if (wantedRef != currentStencilRef)
-                    {
-                        renderPass.SetStencilReference(static_cast<u32>(wantedRef));
-                        currentStencilRef = wantedRef;
-                    }
-                }
-
-                if (cmd.textureIndex != currentTextureIndex ||
-                    cmd.gradientSpread != currentSpread)
-                {
-                    if (rhi::BindGroup* bindGroup =
-                            GetBindGroupForTexture(cmd.textureIndex, frameIndex,
-                                                   cmd.gradientSpread))
-                        renderPass.SetBindGroup(0, bindGroup, Span<const u32>(dynOffsets, 1));
-                    currentTextureIndex = cmd.textureIndex;
-                    currentSpread = cmd.gradientSpread;
-                }
-
-                // Scissored: a rectangle clip alone, or one inside a path clip (with the stencil).
-                const bool scissored = cmd.clipMode == foundation::vg::VGClipMode::Scissor ||
-                                       (cmd.clipMode == foundation::vg::VGClipMode::Stencil && cmd.scissored);
-                if (scissored && cmd.clipRect.width > 0.0f && cmd.clipRect.height > 0.0f)
-                {
-                    const ScissorRect scissor =
-                        ComputeScissor(cmd.clipRect, viewportX, viewportY, width, height);
-                    renderPass.SetScissor(scissor.x, scissor.y, scissor.width, scissor.height);
-                }
-                else if (scissored)
-                {
-                    renderPass.SetScissor(0, 0, 0, 0); // empty clip hides everything
-                }
-                else
-                {
-                    renderPass.SetScissor(viewportX, viewportY, width, height);
-                }
-
-                // Analytic boxes draw unindexed from their own part of the vertex buffer.
-                const bool box = cmd.drawMode == foundation::vg::VGDrawMode::Box;
-                if (box != boxesBound)
-                {
-                    renderPass.SetVertexBuffer(0, m_vertexBuffers[static_cast<usize>(frameIndex)],
-                                               box ? slice.boxVertexByteOffset : slice.vertexByteOffset);
-                    boxesBound = box;
-                }
-                if (box)
-                    renderPass.Draw(static_cast<u32>(cmd.indexCount), 1, static_cast<u32>(cmd.startIndex), 0);
-                else
-                    renderPass.DrawIndexed(static_cast<u32>(cmd.indexCount), 1,
-                                           static_cast<u32>(cmd.startIndex), 0, 0);
-                ++m_lastRenderStats.drawn;
+                desc.label = u8"VG layer";
+                rhi::RenderPassEncoder* pass = encoder.BeginRenderPass(desc);
+                if (pass == nullptr)
+                    continue;
+                DrawCommands(*pass, frameIndex, slice, l, 0, 0, layer.width, layer.height, layer.uniformOffset,
+                             layer.bounds.x, layer.bounds.y, m_lastLayerStats);
+                pass->End();
+                encoder.TransitionTexture(target.color, rhi::ResourceState::RenderTarget,
+                                          rhi::ResourceState::ShaderRead);
+                layer.target = targetIndex;
+                ++m_lastLayerStats.layers;
             }
         }
 
@@ -657,6 +703,10 @@ export namespace foundation::vg::renderer
                 return;
 
             ClearTextureCache();
+            for (usize i = 0; i < m_layerTargets.Size(); ++i)
+                DisposeLayerTarget(m_layerTargets[i]);
+            m_layerTargets.Clear();
+            m_layers.Clear();
 
             DestroyBuffers(m_uniformBuffers);
             DestroyBuffers(m_indexBuffers);
@@ -683,6 +733,9 @@ export namespace foundation::vg::renderer
             if (m_boxPipeline)
                 m_device->DestroyRenderPipeline(m_boxPipeline);
             m_boxPipeline = nullptr;
+            if (m_layerPipeline)
+                m_device->DestroyRenderPipeline(m_layerPipeline);
+            m_layerPipeline = nullptr;
             if (m_clipApplyPipeline)
                 m_device->DestroyRenderPipeline(m_clipApplyPipeline);
             if (m_clipClearPipeline)
@@ -742,6 +795,142 @@ export namespace foundation::vg::renderer
         }
 
     private:
+        // Dispatch the slice's commands that draw into `layer` (-1: the pass's own target) into the
+        // active pass: content coordinates offset by the origin (a layer's bounds) map to the
+        // viewport, through the projection at `uniformOffset`.
+        void DrawCommands(rhi::RenderPassEncoder& renderPass, i32 frameIndex, const VGRenderSlice& slice, i32 layer,
+                          i32 viewportX, i32 viewportY, u32 width, u32 height, u32 uniformOffset, f32 originX,
+                          f32 originY, RenderStats& stats)
+        {
+            renderPass.SetViewport(static_cast<f32>(viewportX), static_cast<f32>(viewportY),
+                                   static_cast<f32>(width), static_cast<f32>(height), 0.0f, 1.0f);
+            renderPass.SetPipeline(m_pipeline);
+            renderPass.SetVertexBuffer(0, m_vertexBuffers[static_cast<usize>(frameIndex)],
+                                       slice.vertexByteOffset);
+            renderPass.SetIndexBuffer(m_indexBuffers[static_cast<usize>(frameIndex)],
+                                      rhi::IndexFormat::UInt32, slice.indexByteOffset);
+
+            const u32 dynOffsets[1] = {uniformOffset};
+            i32 currentTextureIndex = -2; // sentinel forces first SetBindGroup
+            vg::VGGradientSpread currentSpread = vg::VGGradientSpread::Pad;
+            rhi::RenderPipeline* currentPipeline = m_pipeline;
+            i32 currentStencilRef = -1; // sentinel: set on first stencil-relevant command
+            bool boxesBound = false;    // the vertex buffer sits at the slice's boxes
+            if (m_coverPipeline != nullptr)
+            {
+                renderPass.SetStencilReference(0); // cover tests NotEqual 0
+                currentStencilRef = 0;
+            }
+
+            const i32 cmdEnd = slice.drawCommandStart + slice.drawCommandCount;
+            for (i32 i = slice.drawCommandStart; i < cmdEnd; ++i)
+            {
+                const foundation::vg::VGCommand& cmd = m_drawCommands[static_cast<usize>(i)];
+                if (cmd.indexCount == 0 || cmd.layer != layer)
+                    continue;
+
+                // A layer's composite samples the target RenderLayers drew it into; none, no draw.
+                rhi::BindGroup* compositeGroup = nullptr;
+                if (cmd.drawMode == foundation::vg::VGDrawMode::Layer)
+                {
+                    const i32 target = cmd.compositeLayer >= 0 && cmd.compositeLayer < static_cast<i32>(m_layers.Size())
+                                           ? m_layers[static_cast<usize>(cmd.compositeLayer)].target
+                                           : -1;
+                    if (target < 0 || m_layerTargets[static_cast<usize>(target)].bindGroup == nullptr)
+                    {
+                        ++stats.skipped;
+                        continue;
+                    }
+                    compositeGroup = m_layerTargets[static_cast<usize>(target)].bindGroup;
+                }
+
+                // Pipeline per (fill phase, draw mode); falls back to the default pipeline
+                // when a variant was not built. Stencil-phase commands are SKIPPED entirely
+                // without stencil pipelines (a context should not emit them then, but a
+                // stale batch must not draw winding fans as visible color). A pipeline swap
+                // forces a bind-group rebind.
+                rhi::RenderPipeline* pipeline = PipelineFor(cmd);
+                if (pipeline == nullptr)
+                {
+                    ++stats.skipped;
+                    continue;
+                }
+                if (pipeline != currentPipeline)
+                {
+                    renderPass.SetPipeline(pipeline);
+                    currentPipeline = pipeline;
+                    currentTextureIndex = -2;
+                }
+
+                // Dynamic stencil reference: 0x80 whenever the clip mask is involved
+                // (clipped draws test Equal against it; ClipApply/clipped-cover REPLACE
+                // with it), 0 otherwise (unclipped covers compare-to-zero; ClipClear
+                // replaces with 0).
+                if (m_coverPipeline != nullptr || m_clipApplyPipeline != nullptr)
+                {
+                    const bool wantsClipRef =
+                        cmd.clipMode == foundation::vg::VGClipMode::Stencil ||
+                        cmd.fillPhase == foundation::vg::VGFillPhase::ClipApply;
+                    const i32 wantedRef = wantsClipRef ? 0x80 : 0;
+                    if (wantedRef != currentStencilRef)
+                    {
+                        renderPass.SetStencilReference(static_cast<u32>(wantedRef));
+                        currentStencilRef = wantedRef;
+                    }
+                }
+
+                if (compositeGroup != nullptr)
+                {
+                    renderPass.SetBindGroup(0, compositeGroup, Span<const u32>(dynOffsets, 1));
+                    currentTextureIndex = -2; // the next texture draw binds its own again
+                }
+                else if (cmd.textureIndex != currentTextureIndex ||
+                    cmd.gradientSpread != currentSpread)
+                {
+                    if (rhi::BindGroup* bindGroup =
+                            GetBindGroupForTexture(cmd.textureIndex, frameIndex,
+                                                   cmd.gradientSpread))
+                        renderPass.SetBindGroup(0, bindGroup, Span<const u32>(dynOffsets, 1));
+                    currentTextureIndex = cmd.textureIndex;
+                    currentSpread = cmd.gradientSpread;
+                }
+
+                // Scissored: a rectangle clip alone, or one inside a path clip (with the stencil).
+                const bool scissored = cmd.clipMode == foundation::vg::VGClipMode::Scissor ||
+                                       (cmd.clipMode == foundation::vg::VGClipMode::Stencil && cmd.scissored);
+                if (scissored && cmd.clipRect.width > 0.0f && cmd.clipRect.height > 0.0f)
+                {
+                    const Rectangle clip{cmd.clipRect.x - originX, cmd.clipRect.y - originY, cmd.clipRect.width,
+                                         cmd.clipRect.height};
+                    const ScissorRect scissor = ComputeScissor(clip, viewportX, viewportY, width, height);
+                    renderPass.SetScissor(scissor.x, scissor.y, scissor.width, scissor.height);
+                }
+                else if (scissored)
+                {
+                    renderPass.SetScissor(0, 0, 0, 0); // empty clip hides everything
+                }
+                else
+                {
+                    renderPass.SetScissor(viewportX, viewportY, width, height);
+                }
+
+                // Analytic boxes draw unindexed from their own part of the vertex buffer.
+                const bool box = cmd.drawMode == foundation::vg::VGDrawMode::Box;
+                if (box != boxesBound)
+                {
+                    renderPass.SetVertexBuffer(0, m_vertexBuffers[static_cast<usize>(frameIndex)],
+                                               box ? slice.boxVertexByteOffset : slice.vertexByteOffset);
+                    boxesBound = box;
+                }
+                if (box)
+                    renderPass.Draw(static_cast<u32>(cmd.indexCount), 1, static_cast<u32>(cmd.startIndex), 0);
+                else
+                    renderPass.DrawIndexed(static_cast<u32>(cmd.indexCount), 1,
+                                           static_cast<u32>(cmd.startIndex), 0, 0);
+                ++stats.drawn;
+            }
+        }
+
         struct CachedTexture
         {
             const image::ImageData* source = nullptr;
@@ -753,6 +942,35 @@ export namespace foundation::vg::renderer
             Array<rhi::BindGroup*> bindGroups;
             bool external =
                 false; // view is caller-owned (e.g. a viewport RT) - never destroyed here
+        };
+
+        // A layer as Prepare placed it: kept within its parent, with its projection's uniform slot.
+        struct PreparedLayer
+        {
+            i32 parent = -1;
+            Rectangle bounds{};     // device bounds, whole pixels
+            u32 width = 0, height = 0;             // the content's size
+            u32 targetWidth = 0, targetHeight = 0; // the target's (bucketed)
+            u32 uniformOffset = 0;
+            i32 target = -1; // m_layerTargets, set by RenderLayers
+            bool valid = false;
+        };
+
+        // An offscreen target layers draw into, owned by one frame slot (reused once that slot's
+        // frame has finished on the GPU).
+        struct LayerTarget
+        {
+            rhi::Texture* color = nullptr; // single-sampled, sampled by the composite
+            rhi::TextureView* colorView = nullptr;
+            rhi::Texture* msaa = nullptr; // when the renderer draws multisampled (resolved into color)
+            rhi::TextureView* msaaView = nullptr;
+            rhi::Texture* depthStencil = nullptr; // when the renderer's pipelines carry one
+            rhi::TextureView* depthStencilView = nullptr;
+            rhi::BindGroup* bindGroup = nullptr; // the frame's uniforms, colorView, clamp sampler
+            u32 width = 0, height = 0;
+            i32 frame = 0;
+            i32 idleFrames = 0;
+            bool inUse = false;
         };
 
         static constexpr usize kSpreadCount = 3; // Pad / Repeat / Reflect bind-group slots
@@ -767,7 +985,7 @@ export namespace foundation::vg::renderer
         // asset grid after a bulk drop) renders instead of blanking the whole surface. Index capacity
         // always tracks vertexCapacity * 3.
         static constexpr i32 MaxVertexCapacity = 131072 * 16; // ~2.1M verts (~64 MB/frame at 32 B/vert)
-        static constexpr i32 MaxUniformSlots = 64;
+        static constexpr i32 MaxUniformSlots = 256; // a slice's slot, then one per layer
         static constexpr i32 UniformSlotSize =
             256; // dynamic-offset alignment (>= sizeof(VGUniforms)=64)
 
@@ -780,6 +998,25 @@ export namespace foundation::vg::renderer
                 MemCopy(p + offset, data, size);
                 buf->Unmap();
             }
+        }
+
+        // The projection of a layer: device content from (x, y) over width by height onto its target.
+        static Float4x4 OrthoOffCenter(f32 x, f32 y, f32 width, f32 height)
+        {
+            Float4x4 m = OrthoOffCenter(width, height);
+            m.m[3][0] = -1.0f - 2.0f * x / width;
+            m.m[3][1] = 1.0f + 2.0f * y / height;
+            return m;
+        }
+
+        // Layer targets come in sizes rounded up to a bucket, so a layer that changes size a little
+        // (an animated panel) keeps its target; the composite samples just the content's part.
+        static constexpr u32 kLayerTargetBucket = 64;
+        // BeginFrames of a frame slot a layer target may go unused before it is freed.
+        static constexpr i32 kLayerTargetIdleFrames = 120;
+        static u32 RoundUpToBucket(u32 size)
+        {
+            return (size + kLayerTargetBucket - 1) / kLayerTargetBucket * kLayerTargetBucket;
         }
 
         static Float4x4 OrthoOffCenter(f32 width, f32 height)
@@ -929,6 +1166,13 @@ export namespace foundation::vg::renderer
                            : ((blended || clipped)
                                   ? Variant(PipelineKind::BoxShadow, cmd.blendMode, clipped)
                                   : m_boxShadowPipeline);
+            if (cmd.drawMode == foundation::vg::VGDrawMode::Layer)
+                // A layer target holds premultiplied colour; the default shader would multiply it
+                // again. SKIP when the composite shader was not given.
+                return m_layerPipeline == nullptr
+                           ? nullptr
+                           : ((blended || clipped) ? Variant(PipelineKind::Layer, cmd.blendMode, clipped)
+                                                   : m_layerPipeline);
             return (blended || clipped) ? Variant(PipelineKind::Default, cmd.blendMode, clipped)
                                         : m_pipeline;
         }
@@ -947,8 +1191,9 @@ export namespace foundation::vg::renderer
             CoverConic,
             BoxShadow,
             Box,
+            Layer, // keep last: the tables below are sized by it
         };
-        static constexpr usize kPipelineKindCount = 9;
+        static constexpr usize kPipelineKindCount = static_cast<usize>(PipelineKind::Layer) + 1;
         static constexpr usize kBlendVariantCount = 3; // Additive / Multiply / Screen
 
         /// Get-or-create the (kind, blend, clipped) pipeline. Built on FIRST use - most
@@ -1002,6 +1247,9 @@ export namespace foundation::vg::renderer
             case PipelineKind::Box:
                 frag = m_boxFsModule;
                 break;
+            case PipelineKind::Layer:
+                frag = m_layerFsModule;
+                break;
             }
             const bool box = kind == PipelineKind::Box;
             rhi::ShaderModule* vert = box ? m_boxVsModule : m_vsModule;
@@ -1012,9 +1260,11 @@ export namespace foundation::vg::renderer
                 slot = nullptr;
                 // The default pipeline is a tolerable stand-in for a DF or gradient variant
                 // (flat colour), never for a box shadow (it would paint the quadrant quads as
-                // flat colour over everything around the box) nor a box (its vertices are not
-                // VG vertices). Skip the command instead.
-                return (clipped || kind == PipelineKind::BoxShadow || box) ? nullptr : m_pipeline;
+                // flat colour over everything around the box), a box (its vertices are not
+                // VG vertices), nor a layer composite (it would multiply premultiplied colour again).
+                return (clipped || kind == PipelineKind::BoxShadow || box || kind == PipelineKind::Layer)
+                           ? nullptr
+                           : m_pipeline;
             }
             return slot;
         }
@@ -1459,6 +1709,113 @@ export namespace foundation::vg::renderer
             return nullptr;
         }
 
+        // A free target of the size in the frame slot's pool, or a new one; -1 when the device
+        // cannot make it.
+        i32 AcquireLayerTarget(i32 frameIndex, u32 width, u32 height)
+        {
+            for (usize i = 0; i < m_layerTargets.Size(); ++i)
+            {
+                LayerTarget& target = m_layerTargets[i];
+                if (target.frame == frameIndex && !target.inUse && target.width == width && target.height == height)
+                {
+                    target.inUse = true;
+                    return static_cast<i32>(i);
+                }
+            }
+            LayerTarget target;
+            target.frame = frameIndex;
+            target.width = width;
+            target.height = height;
+            target.inUse = true;
+            rhi::TextureDesc cd = rhi::TextureDesc::RenderTarget(m_targetFormat, width, height, 1, u8"VG layer");
+            bool made = m_device->CreateTexture(cd, target.color).IsOk() &&
+                        m_device->CreateTextureView(target.color, rhi::TextureViewDesc{}, target.colorView).IsOk();
+            if (made && m_targetConfig.sampleCount > 1)
+            {
+                rhi::TextureDesc md = rhi::TextureDesc::RenderTarget(m_targetFormat, width, height,
+                                                                     m_targetConfig.sampleCount, u8"VG layer MSAA");
+                md.usage = rhi::TextureUsage::RenderTarget;
+                made = m_device->CreateTexture(md, target.msaa).IsOk() &&
+                       m_device->CreateTextureView(target.msaa, rhi::TextureViewDesc{}, target.msaaView).IsOk();
+            }
+            if (made && m_targetConfig.depthStencilFormat != rhi::TextureFormat::Undefined)
+            {
+                rhi::TextureDesc dd{};
+                dd.dimension = rhi::TextureDimension::Texture2D;
+                dd.format = m_targetConfig.depthStencilFormat;
+                dd.width = width;
+                dd.height = height;
+                dd.depth = 1;
+                dd.usage = rhi::TextureUsage::DepthStencil;
+                dd.sampleCount = m_targetConfig.sampleCount;
+                dd.label = u8"VG layer stencil";
+                made = m_device->CreateTexture(dd, target.depthStencil).IsOk() &&
+                       m_device->CreateTextureView(target.depthStencil, rhi::TextureViewDesc{},
+                                                   target.depthStencilView)
+                           .IsOk();
+            }
+            if (made)
+            {
+                rhi::BindGroupEntry entries[3];
+                entries[0] = rhi::BindGroupEntry::BufferEntry(m_uniformBuffers[static_cast<usize>(frameIndex)], 0,
+                                                              sizeof(VGUniforms));
+                entries[1] = rhi::BindGroupEntry::TextureEntry(target.colorView);
+                entries[2] = rhi::BindGroupEntry::SamplerEntry(m_sampler);
+                rhi::BindGroupDesc desc{};
+                desc.layout = m_bindGroupLayout;
+                desc.entries = Span<const rhi::BindGroupEntry>(entries, 3);
+                made = m_device->CreateBindGroup(desc, target.bindGroup).IsOk();
+            }
+            if (!made)
+            {
+                DisposeLayerTarget(target);
+                return -1;
+            }
+            m_layerTargets.PushBack(target);
+            return static_cast<i32>(m_layerTargets.Size()) - 1;
+        }
+
+        // The frame slot's work is done: its targets are free again, and those unused for a while
+        // are freed.
+        void ReleaseLayerTargets(i32 frameIndex)
+        {
+            for (usize i = m_layerTargets.Size(); i > 0; --i)
+            {
+                LayerTarget& target = m_layerTargets[i - 1];
+                if (target.frame != frameIndex)
+                    continue;
+                if (target.inUse)
+                {
+                    target.inUse = false;
+                    target.idleFrames = 0;
+                }
+                else if (++target.idleFrames > kLayerTargetIdleFrames)
+                {
+                    DisposeLayerTarget(target);
+                    m_layerTargets.RemoveAt(i - 1);
+                }
+            }
+        }
+
+        void DisposeLayerTarget(LayerTarget& target)
+        {
+            if (target.bindGroup != nullptr)
+                m_device->DestroyBindGroup(target.bindGroup);
+            if (target.depthStencilView != nullptr)
+                m_device->DestroyTextureView(target.depthStencilView);
+            if (target.depthStencil != nullptr)
+                m_device->DestroyTexture(target.depthStencil);
+            if (target.msaaView != nullptr)
+                m_device->DestroyTextureView(target.msaaView);
+            if (target.msaa != nullptr)
+                m_device->DestroyTexture(target.msaa);
+            if (target.colorView != nullptr)
+                m_device->DestroyTextureView(target.colorView);
+            if (target.color != nullptr)
+                m_device->DestroyTexture(target.color);
+            target = LayerTarget{};
+        }
+
         void DisposeCachedTexture(CachedTexture& cached)
         {
             for (usize i = 0; i < cached.bindGroups.Size(); ++i)
@@ -1508,6 +1865,8 @@ export namespace foundation::vg::renderer
         rhi::ShaderModule* m_boxVsModule = nullptr; // analytic boxes (VGDrawMode::Box)
         rhi::ShaderModule* m_boxFsModule = nullptr;
         rhi::RenderPipeline* m_boxPipeline = nullptr;
+        rhi::ShaderModule* m_layerFsModule = nullptr; // layer composites (VGDrawMode::Layer)
+        rhi::RenderPipeline* m_layerPipeline = nullptr;
         rhi::RenderPipeline* m_blendPipelines[kBlendVariantCount][kPipelineKindCount] = {}; // [blend-1][kind] (unclipped)
         rhi::RenderPipeline* m_clippedPipelines[kBlendVariantCount + 1][kPipelineKindCount] = {}; // [blend][kind], lazy
         rhi::RenderPipeline* m_clippedWriteNonZero = nullptr; // lazy clipped write pair
@@ -1542,6 +1901,8 @@ export namespace foundation::vg::renderer
         Array<RetiredTexture> m_retiredTextures;
         Array<const image::ImageData*> m_batchTextures;
         Array<foundation::vg::VGCommand> m_drawCommands;
+        Array<PreparedLayer> m_layers;     // this frame's slices' layers (VGRenderSlice::layerStart)
+        Array<LayerTarget> m_layerTargets; // every frame slot's, tagged with it
 
         Array<u32> m_frameVertexOffsets;
         Array<u32> m_frameIndexOffsets;
@@ -1550,5 +1911,6 @@ export namespace foundation::vg::renderer
         bool m_initialized = false;
 
         RenderStats m_lastRenderStats;
+        RenderStats m_lastLayerStats;
     };
 }

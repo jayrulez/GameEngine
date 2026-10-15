@@ -67,7 +67,10 @@ namespace
                 host.GetVariant(u8"vg_box", shaders::ShaderStage::Vertex, shaders::ShaderFlags::None);
             rhi::ShaderModule* boxFs =
                 host.GetVariant(u8"vg_box", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
+            rhi::ShaderModule* layerFs =
+                host.GetVariant(u8"vg_layer", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
             REQUIRE(vs != nullptr);
+            REQUIRE(layerFs != nullptr); // else layers would quietly be opacity pushes
             REQUIRE(fs != nullptr);
             REQUIRE(boxVs != nullptr); // else boxes would quietly tessellate, and the box probe prove nothing
             REQUIRE(boxFs != nullptr);
@@ -80,7 +83,7 @@ namespace
             vg::renderer::VGRenderer renderer{DefaultAllocator()};
             REQUIRE(renderer
                         .Initialize(device, *vs, *fs, drawFormat, 2, distanceFieldFragmentShader,
-                                    gradR, gradC, config, nullptr, boxVs, boxFs)
+                                    gradR, gradC, config, nullptr, boxVs, boxFs, layerFs)
                         .IsOk());
 
             rhi::TextureDesc cd = rhi::TextureDesc::RenderTarget(
@@ -128,6 +131,7 @@ namespace
             ctx.SetStencilFills(true);
             ctx.SetPerPixelGradients(gradR != nullptr && gradC != nullptr);
             ctx.SetAnalyticBoxes(boxVs != nullptr && boxFs != nullptr);
+            ctx.SetLayers(true);
             record(ctx);
             vg::VGBatch& batch = ctx.GetBatch();
 
@@ -136,6 +140,7 @@ namespace
 
             rhi::CommandEncoder* encoder = nullptr;
             REQUIRE(pool->CreateEncoder(encoder).IsOk());
+            renderer.RenderLayers(*encoder, 0, slice); // their own passes, before the target's
             encoder->TransitionTexture(target, rhi::ResourceState::Undefined,
                                        rhi::ResourceState::RenderTarget);
             if (msaa != nullptr)
@@ -1000,4 +1005,106 @@ TEST_CASE("vg.pixels: the baked-font draw path matches the TTF path (fonts triad
 
     device->Destroy();
     vulkan->Destroy();
+}
+
+// ============================================================================================
+// Layers (V3 of Specs/vg-and-gui-lab.md): a group drawn offscreen and composited once, so it fades
+// as one. Half of opaque red over black is byte 188 linear, 128 encoded, where the overlap of two
+// half-red shapes would be 225 and 191; a quarter of white (a half layer in a half layer) is 137
+// and 64. A clip path and a clip rect inside a layer clip there, at the right place.
+// ============================================================================================
+
+namespace
+{
+    void ProbeLayers(rhi::Device& device, const char* name, vg::VGBlendSpace space, u32 sampleCount)
+    {
+        const bool encoded = space == vg::VGBlendSpace::Encoded;
+        INFO(doctest::String(name), encoded ? " encoded" : " linear", " x", sampleCount);
+        const Pixels px = RenderScene(
+            device,
+            [](vg::VGContext& ctx)
+            {
+                ctx.PushLayer(0.5f);
+                ctx.FillRect(Rectangle{8, 4, 40, 20}, ByteColor(255, 0, 0));
+                ctx.FillRect(Rectangle{28, 4, 40, 20}, ByteColor(255, 0, 0));
+                ctx.PopLayer();
+
+                ctx.PushLayer(0.5f);
+                ctx.PushLayer(0.5f);
+                ctx.FillRect(Rectangle{8, 32, 40, 20}, ByteColor(255, 255, 255));
+                ctx.PopLayer();
+                ctx.PopLayer();
+
+                ctx.PushLayer(1.0f);
+                vg::PathBuilder clip;
+                clip.MoveTo(70, 60);
+                clip.LineTo(95, 60);
+                clip.LineTo(95, 100);
+                clip.LineTo(70, 100);
+                clip.Close();
+                ctx.PushClipPath(clip.ToPath());
+                ctx.FillRect(Rectangle{70, 60, 50, 40}, ByteColor(255, 255, 255));
+                ctx.PopClipPath();
+                ctx.PushClipRect(Rectangle{8, 60, 20, 40});
+                ctx.FillRect(Rectangle{8, 60, 52, 40}, ByteColor(255, 255, 255));
+                ctx.PopClip();
+                ctx.PopLayer();
+            },
+            sampleCount, space);
+        REQUIRE(px.valid);
+        const i32 half = encoded ? 128 : 188;
+        const i32 quarter = encoded ? 64 : 137;
+        const i32 alone = px.At(18, 14)[0];
+        const i32 overlap = px.At(38, 14)[0];
+        INFO("alone ", alone, ", overlap ", overlap, ", quarter ", px.At(28, 42)[0]);
+        CHECK(Abs(alone - half) <= 2);
+        CHECK(Abs(overlap - half) <= 2); // drawn once, not twice
+        CHECK(px.At(38, 14)[1] <= 2);
+        CHECK(Abs(px.At(28, 42)[0] - quarter) <= 2);
+        CHECK(px.At(80, 80)[0] >= 253); // inside the clip path
+        CHECK(px.At(110, 80)[0] <= 2);  // outside it
+        CHECK(px.At(9, 80)[0] >= 253);  // inside the clip rect, at its edge
+        CHECK(px.At(45, 80)[0] <= 2);   // outside it
+        CHECK(px.At(6, 80)[0] <= 2);    // left of the content: the layer lands where it was drawn
+    }
+}
+
+TEST_CASE("vg.pixels: a layer fades a group as one, nests, and clips inside")
+{
+    rhi::Backend* vulkan = nullptr;
+    (void)rhi::vk::CreateBackend(rhi::vk::VkBackendDesc{}, vulkan);
+    rhi::Backend* webgpu = nullptr;
+    (void)rhi::webgpu::CreateBackend(rhi::webgpu::WebGpuBackendDesc{}, webgpu, DefaultAllocator());
+    const auto probe = [](rhi::Device& device, const char* name)
+    {
+        ProbeLayers(device, name, vg::VGBlendSpace::Linear, 1);
+        ProbeLayers(device, name, vg::VGBlendSpace::Encoded, 1);
+        ProbeLayers(device, name, vg::VGBlendSpace::Linear, 4);
+    };
+    if (rhi::Device* device = MakeDevice(vulkan))
+    {
+        probe(*device, "vulkan");
+        device->Destroy();
+    }
+    else
+    {
+        MESSAGE("Vulkan unavailable - vulkan layer probe skipped");
+    }
+    if (rhi::Device* device = MakeDevice(webgpu))
+    {
+        probe(*device, "webgpu");
+        device->Destroy();
+    }
+    else
+    {
+        MESSAGE("WebGPU unavailable - webgpu layer probe skipped");
+    }
+    if (vulkan != nullptr)
+    {
+        vulkan->Destroy();
+    }
+    if (webgpu != nullptr)
+    {
+        webgpu->Destroy();
+    }
 }

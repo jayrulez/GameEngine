@@ -960,6 +960,7 @@ private:
     void BuildOverlaysTab(ui::TabView* tabView);
     void BuildDragDropTab(ui::TabView* tabView);
     void BuildAnimationsTab(ui::TabView* tabView);
+    void BuildLayersTab(ui::TabView* tabView); // VG layers: group opacity, filter, backdrop-filter
     void BuildToolkitTab(
         ui::TabView* tabView); // foundation.ui.toolkit: bars + split + tree + color picker
     void
@@ -1263,6 +1264,7 @@ void UISandbox::BuildUI()
     BuildOverlaysTab(tabView.Get());
     BuildDragDropTab(tabView.Get());
     BuildAnimationsTab(tabView.Get());
+    BuildLayersTab(tabView.Get());
     BuildToolkitTab(tabView.Get());
     BuildPropertyGridTab(tabView.Get());
     BuildCurveEditorTab(tabView.Get());
@@ -1657,6 +1659,80 @@ void UISandbox::BuildPauseMenuTab(ui::TabView* tabView)
 }
 
 // === Tab 9: Animations (ViewAnimator / Storyboard + static-transform hit-testing) ===
+void UISandbox::BuildLayersTab(ui::TabView* tabView)
+{
+    using ui::SizeSpec;
+    using ui::Unit;
+
+    auto demo = VFlex(10.0f);
+    demo->Padding = ui::Thickness{12, 8};
+    tabView->AddTab(u8"Layers", demo.Get());
+
+    const Color red{0.86f, 0.24f, 0.24f, 1.0f};
+    const Color blue{0.24f, 0.45f, 0.9f, 1.0f};
+    // Two overlapping cards in a frame (the second offset as it draws).
+    auto cards = [&]()
+    {
+        auto frame = MakeRef<ui::FrameLayout>(AppRoot());
+        auto a = MakeRef<ui::ColorView>(AppRoot(), red, 90.0f, 60.0f);
+        auto b = MakeRef<ui::ColorView>(AppRoot(), blue, 90.0f, 60.0f);
+        b->Transform.Translation = Float2{45.0f, 25.0f};
+        frame->AddView(a.Get());
+        frame->AddView(b.Get());
+        return frame;
+    };
+
+    // Group opacity: the group fades as one; the same cards each at half show through each other.
+    demo->AddView(MakeRef<ui::Label>(AppRoot(), StringView(u8"Opacity 50%: as one group (left), each card alone (right)")).Get());
+    auto row = HFlex(80.0f);
+    auto group = cards();
+    group->Opacity = 0.5f;
+    row->AddView(group.Get(), LP(SizeSpec::Fixed(Unit::Px(140)), SizeSpec::Fixed(Unit::Px(90))));
+    auto each = cards();
+    for (usize i = 0; i < each->ChildCount(); ++i)
+        each->GetChildAt(i)->Opacity = 0.5f;
+    row->AddView(each.Get(), LP(SizeSpec::Fixed(Unit::Px(140)), SizeSpec::Fixed(Unit::Px(90))));
+    demo->AddView(row.Get());
+    ui::View* fadeTarget = group.Get();
+    ui::UIContext* ctx = &m_uiHost->Context();
+    auto fades = HFlex(6.0f);
+    auto fadeOut = MakeRef<ui::Button>(AppRoot(), StringView(u8"Fade group out"));
+    fadeOut->OnClick.Add(ui::Event<void(ui::ButtonBase*)>::Handler{[ctx, fadeTarget](ui::ButtonBase*)
+        { ctx->Animations()->Add(ui::ViewAnimator::FadeOut(fadeTarget, 0.6f, ui::Easing::EaseOutCubic)); }});
+    auto fadeIn = MakeRef<ui::Button>(AppRoot(), StringView(u8"Fade group in"));
+    fadeIn->OnClick.Add(ui::Event<void(ui::ButtonBase*)>::Handler{[ctx, fadeTarget](ui::ButtonBase*)
+        { ctx->Animations()->Add(ui::ViewAnimator::FadeIn(fadeTarget, 0.6f, ui::Easing::EaseOutCubic)); }});
+    fades->AddView(fadeOut.Get());
+    fades->AddView(fadeIn.Get());
+    demo->AddView(fades.Get());
+
+    // filter: blur(4) on the group and its label.
+    demo->AddView(MakeRef<ui::Label>(AppRoot(), StringView(u8"filter: blur(4)")).Get());
+    auto blurred = cards();
+    auto caption = MakeRef<ui::Label>(AppRoot(), StringView(u8"Blurred with its cards"));
+    caption->Transform.Translation = Float2{4.0f, 30.0f};
+    blurred->AddView(caption.Get());
+    blurred->SetStyle(ui::StyleProperty::Filter, 4.0f);
+    demo->AddView(blurred.Get(), LP(SizeSpec::Fixed(Unit::Px(140)), SizeSpec::Fixed(Unit::Px(90))));
+
+    // backdrop-filter: blur(8) on a translucent glass panel over stripes.
+    demo->AddView(MakeRef<ui::Label>(AppRoot(), StringView(u8"backdrop-filter: blur(8) under a translucent panel")).Get());
+    auto stage = MakeRef<ui::FrameLayout>(AppRoot());
+    auto stripes = HFlex(0.0f);
+    for (i32 i = 0; i < 12; ++i)
+    {
+        const Color c = (i % 3 == 0) ? red : (i % 3 == 1) ? blue : Color{0.95f, 0.85f, 0.3f, 1.0f};
+        stripes->AddView(MakeRef<ui::ColorView>(AppRoot(), c, 20.0f, 100.0f).Get(),
+                         LP(SizeSpec::Fixed(Unit::Px(20)), SizeSpec::Fixed(Unit::Px(100))));
+    }
+    stage->AddView(stripes.Get());
+    auto glass = MakeRef<ui::ColorView>(AppRoot(), Color{1.0f, 1.0f, 1.0f, 0.18f}, 150.0f, 60.0f);
+    glass->Transform.Translation = Float2{45.0f, 20.0f};
+    glass->SetStyle(ui::StyleProperty::BackdropFilter, 8.0f);
+    stage->AddView(glass.Get(), LP(SizeSpec::Fixed(Unit::Px(150)), SizeSpec::Fixed(Unit::Px(60))));
+    demo->AddView(stage.Get(), LP(SizeSpec::Fixed(Unit::Px(240)), SizeSpec::Fixed(Unit::Px(100))));
+}
+
 void UISandbox::BuildAnimationsTab(ui::TabView* tabView)
 {
     using ui::SizeSpec;

@@ -69,6 +69,19 @@ with a 0.75 px fringe (`VG/Tessellation.cppm`).
   group opacity, `filter: blur` and `backdrop-filter: blur` as a half-size downsample and a separable
   Gaussian); its offscreen target is the whole viewport, so ours sizes a layer to its bounds, for
   the web build's budget.
+  As built on `vg` (layers, filters not yet): `PushLayer`/`PopLayer` record a layer's draws apart
+  and one composite quad (a9f623693); `VGRenderer::RenderLayers` draws each layer, innermost first,
+  into a target of its own (the renderer's format, sample count and stencil, so clips work inside;
+  64-pixel size buckets from a pool per frame slot) before the host's pass, and the composite
+  scales the premultiplied target by the opacity through `vg_layer` (26a152b6c). Layers are a host
+  opt-in (`SetLayers`), and past 128 in a batch a layer is an opacity push. `foundation.ui` fades a
+  view group through a layer (a leaf keeps the opacity push) and a fading popup (308714c46); the
+  editor's windows draw them, and the game's screen UI does through a new step before the shared
+  overlay pass, `IScreenOverlay::PrepareOverlay` (7ac90c055, f5fda55fb). World panels, render
+  texture canvases and the scene tier draw inside passes and keep layers off. Fixed on the way: the
+  pipeline variant tables were one kind short since V4 (204a59959). Probes: two overlapping opaque
+  reds in a half layer read 188 linear and 128 encoded, overlap and not; a half layer in a half
+  layer is a quarter; clips inside a layer land in place; the same multisampled.
 - **V4 An analytic box.** A rounded box with border and shadow drawn as one signed-distance
   primitive (fill, border and shadow from one coverage function), so the three cannot disagree, a
   thin border has no halo, and small radii are exact; multiple shadows and per-side borders follow

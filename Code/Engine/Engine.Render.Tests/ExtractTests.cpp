@@ -2118,16 +2118,25 @@ TEST_CASE("extract: a material with its own depth program stays out of the depth
 
 namespace
 {
-    // An overlay that records the view each pass hands it.
+    // An overlay that records the view each pass hands it, and the one its prepare step had.
     struct RecordingOverlay final : foundation::render::IScreenOverlay
     {
+        void PrepareOverlay(rhi::CommandEncoder&, const foundation::render::ScreenOverlayView& view) override
+        {
+            prepared = view;
+            ++prepares;
+            preparedBeforeRender = prepares == calls + 1;
+        }
         void Render(rhi::RenderPassEncoder&, const foundation::render::ScreenOverlayView& view) override
         {
             last = view;
             ++calls;
         }
         foundation::render::ScreenOverlayView last;
+        foundation::render::ScreenOverlayView prepared;
         int calls = 0;
+        int prepares = 0;
+        bool preparedBeforeRender = false;
     };
 }
 
@@ -2166,6 +2175,12 @@ TEST_CASE("render: the screen overlay pass draws through the target's UNORM view
     REQUIRE(overlay.calls == 2);
     CHECK(overlay.last.encodedTarget);
     CHECK(overlay.last.targetFormat == rhi::TextureFormat::RGBA8Unorm);
+    // Each pass is prepared first, outside it, with the view the pass then hands the overlay.
+    CHECK(overlay.prepares == 2);
+    CHECK(overlay.preparedBeforeRender);
+    CHECK(overlay.prepared.encodedTarget);
+    CHECK(overlay.prepared.targetFormat == overlay.last.targetFormat);
+    CHECK(overlay.prepared.depthStencilFormat == overlay.last.depthStencilFormat);
 
     sub.UnregisterOverlay(&overlay);
     pool->DestroyEncoder(encoder);

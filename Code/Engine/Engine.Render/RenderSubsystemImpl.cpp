@@ -709,15 +709,19 @@ namespace engine::render
             ds.stencilClearValue = 0;
             pass.depthStencilAttachment = ds;
         }
+        ScreenOverlayView view;
+        view.width = width;
+        view.height = height;
+        view.targetFormat = encoded ? rhi::SrgbTwin(targetFormat) : targetFormat;
+        view.encodedTarget = encoded;
+        view.depthStencilFormat = haveDs ? m_overlayDsFormat : rhi::TextureFormat::Undefined;
+        view.frameIndex = frameIndex;
+        for (IScreenOverlay* overlay : m_screenOverlays.Items())
+        {
+            overlay->PrepareOverlay(encoder, view);
+        }
         if (rhi::RenderPassEncoder* rp = encoder.BeginRenderPass(pass))
         {
-            ScreenOverlayView view;
-            view.width = width;
-            view.height = height;
-            view.targetFormat = encoded ? rhi::SrgbTwin(targetFormat) : targetFormat;
-            view.encodedTarget = encoded;
-            view.depthStencilFormat = haveDs ? m_overlayDsFormat : rhi::TextureFormat::Undefined;
-            view.frameIndex = frameIndex;
             for (IScreenOverlay* overlay : m_screenOverlays.Items())
             {
                 overlay->Render(*rp, view);

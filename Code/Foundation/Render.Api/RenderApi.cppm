@@ -270,12 +270,21 @@ export namespace foundation::render
         virtual void Render(rhi::RenderPassEncoder& encoder, const SceneOverlayView& view) = 0;
     };
 
-    // Window-space overlay source. Same recording contract as ISceneOverlay.
+    // Window-space overlay source. Same recording contract as ISceneOverlay, plus a step before the
+    // shared pass opens.
     class IScreenOverlay
     {
     public:
         virtual ~IScreenOverlay() = default;
         [[nodiscard]] virtual i32 OverlayOrder() const noexcept { return 0; }
+        // Work recorded on the host's encoder before the shared pass begins (passes do not nest),
+        // such as offscreen layers Render then composites; `view` is the one Render receives.
+        // Most sources need none.
+        virtual void PrepareOverlay(rhi::CommandEncoder& encoder, const ScreenOverlayView& view)
+        {
+            (void)encoder;
+            (void)view;
+        }
         virtual void Render(rhi::RenderPassEncoder& encoder, const ScreenOverlayView& view) = 0;
     };
 

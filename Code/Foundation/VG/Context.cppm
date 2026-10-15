@@ -65,6 +65,17 @@ export namespace foundation::vg
             Float4x4 transform = Float4x4::Identity();
             Rectangle bounds{};
         };
+        // What a layer set aside (PushLayer) and gives back (PopLayer).
+        struct LayerSave
+        {
+            VGState state;
+            Array<ClipPathLevel> clipPaths;
+            Array<ClipRectSave> clipStack;
+            Array<ClipRectSave> clipPathScissors;
+            Array<f32> opacityStack;
+            i32 firstCommand = 0;
+            i32 layer = -1;
+        };
 
     public:
         /// Distinct gradient ramps kept in the persistent LUT cache before a whole-cache
@@ -110,6 +121,8 @@ export namespace foundation::vg
             m_clipStack.Clear();
             m_clipPaths.Clear();
             m_clipPathScissors.Clear();
+            m_layerStack.Clear();
+            m_currentLayer = -1;
             m_opacityStack.Clear();
             m_currentState = VGState{};
             m_currentBlendMode = VGBlendMode::Normal;
@@ -155,6 +168,11 @@ export namespace foundation::vg
         /// tessellates its fill and border as FillRoundedRect does.
         void SetAnalyticBoxes(bool enabled) { m_analyticBoxes = enabled; }
         [[nodiscard]] bool AnalyticBoxes() const { return m_analyticBoxes; }
+        /// PushLayer draws into offscreen layers. Opt-in by the HOST, once its renderer was given the
+        /// layer composite shader and the host calls VGRenderer::RenderLayers before its pass; off,
+        /// a layer is an opacity push (each shape fades on its own, overlaps show through).
+        void SetLayers(bool enabled) { m_layersEnabled = enabled; }
+        [[nodiscard]] bool Layers() const { return m_layersEnabled; }
         [[nodiscard]] bool PerPixelGradients() const { return m_perPixelGradients; }
 
         /// Enable stencil-then-cover for COMPLEX path fills (holes, self-intersection,
@@ -357,6 +375,109 @@ export namespace foundation::vg
             }
         }
         [[nodiscard]] f32 Opacity() const { return m_currentState.opacity; }
+
+        // === Layers ===
+
+        /// Draw what follows into an offscreen layer, composited into what is under it once, at
+        /// PopLayer, with `opacity` and `blendMode`: a group fades as one, its overlapping parts
+        /// never showing through each other (V3 of Specs/vg-and-gui-lab.md). Inside, opacity
+        /// starts again at 1 and no clip applies (the clips around the layer apply to its
+        /// composite); the transform carries on. Without SetLayers, an opacity push instead.
+        void PushLayer(f32 opacity, VGBlendMode blendMode = VGBlendMode::Normal)
+        {
+            if (!m_layersEnabled)
+            {
+                PushOpacity(opacity);
+                m_layerStack.PushBack(LayerSave{}); // layer -1: PopLayer pops the opacity
+                return;
+            }
+            FlushCurrentCommand();
+            LayerSave save;
+            save.state = m_currentState;
+            save.clipPaths = Move(m_clipPaths);
+            save.clipStack = Move(m_clipStack);
+            save.clipPathScissors = Move(m_clipPathScissors);
+            save.opacityStack = Move(m_opacityStack);
+            save.firstCommand = static_cast<i32>(m_batch.commands.Size());
+            m_clipPaths.Clear();
+            m_clipStack.Clear();
+            m_clipPathScissors.Clear();
+            m_opacityStack.Clear();
+            m_currentState.clipRect = Rectangle{};
+            m_currentState.scissored = false;
+            m_currentState.clipMode = VGClipMode::None;
+            m_currentState.opacity = 1.0f;
+            VGLayer layer;
+            layer.parent = m_currentLayer;
+            layer.opacity = Clamp(opacity, 0.0f, 1.0f);
+            layer.blendMode = blendMode;
+            save.layer = static_cast<i32>(m_batch.layers.Size());
+            m_batch.layers.PushBack(layer);
+            m_currentLayer = save.layer;
+            m_layerStack.PushBack(Move(save));
+        }
+
+        /// End the innermost layer: its content's bounds are taken, the state around it comes back,
+        /// and its composite is drawn there.
+        void PopLayer()
+        {
+            if (m_layerStack.IsEmpty())
+            {
+                return;
+            }
+            if (m_layerStack.Back().layer < 0)
+            {
+                m_layerStack.PopBack();
+                PopOpacity();
+                return;
+            }
+            FlushCurrentCommand();
+            LayerSave save = Move(m_layerStack.Back());
+            m_layerStack.PopBack();
+            const i32 index = save.layer;
+            const Rectangle bounds = LayerContentBounds(index, save.firstCommand);
+            m_batch.layers[static_cast<usize>(index)].bounds = bounds;
+            m_currentState = save.state;
+            m_clipPaths = Move(save.clipPaths);
+            m_clipStack = Move(save.clipStack);
+            m_clipPathScissors = Move(save.clipPathScissors);
+            m_opacityStack = Move(save.opacityStack);
+            m_currentLayer = m_batch.layers[static_cast<usize>(index)].parent;
+            if (bounds.width <= 0.0f || bounds.height <= 0.0f)
+            {
+                return; // nothing drawn: nothing to composite
+            }
+            // The composite: a device quad over the bounds, its alpha the layer's opacity (times
+            // the opacity around it), sampling the layer's target edge to edge.
+            const VGLayer& layer = m_batch.layers[static_cast<usize>(index)];
+            const Color tint{1.0f, 1.0f, 1.0f, layer.opacity * m_currentState.opacity};
+            const i32 start = static_cast<i32>(m_batch.indices.Size());
+            const u32 base = static_cast<u32>(m_batch.vertices.Size());
+            const f32 x0 = bounds.x, y0 = bounds.y, x1 = bounds.x + bounds.width, y1 = bounds.y + bounds.height;
+            m_batch.vertices.PushBack(VGVertex(Float2{x0, y0}, Float2{0.0f, 0.0f}, tint));
+            m_batch.vertices.PushBack(VGVertex(Float2{x1, y0}, Float2{1.0f, 0.0f}, tint));
+            m_batch.vertices.PushBack(VGVertex(Float2{x1, y1}, Float2{1.0f, 1.0f}, tint));
+            m_batch.vertices.PushBack(VGVertex(Float2{x0, y1}, Float2{0.0f, 1.0f}, tint));
+            const u32 quad[6] = {0, 1, 2, 0, 2, 3};
+            for (const u32 i : quad)
+            {
+                m_batch.indices.PushBack(base + i);
+            }
+            VGCommand cmd;
+            cmd.startIndex = start;
+            cmd.indexCount = 6;
+            cmd.textureIndex = m_currentTextureIndex;
+            cmd.clipRect = m_currentState.clipRect;
+            cmd.blendMode = layer.blendMode;
+            cmd.clipMode = m_currentState.clipMode;
+            cmd.scissored = m_currentState.scissored && m_currentState.clipMode == VGClipMode::Stencil;
+            cmd.stencilRef = m_currentState.stencilRef;
+            cmd.drawMode = VGDrawMode::Layer;
+            cmd.layer = m_currentLayer;
+            cmd.compositeLayer = index;
+            m_batch.commands.PushBack(cmd);
+            m_commandStartIndex = static_cast<i32>(m_batch.indices.Size());
+        }
 
         // === Blend Mode ===
 
@@ -1677,7 +1798,7 @@ export namespace foundation::vg
                     last.clipRect.x == m_currentState.clipRect.x && last.clipRect.y == m_currentState.clipRect.y &&
                     last.clipRect.width == m_currentState.clipRect.width &&
                     last.clipRect.height == m_currentState.clipRect.height &&
-                    last.stencilRef == m_currentState.stencilRef)
+                    last.stencilRef == m_currentState.stencilRef && last.layer == m_currentLayer)
                 {
                     last.indexCount += 6;
                     return;
@@ -1693,6 +1814,7 @@ export namespace foundation::vg
             cmd.scissored = m_currentState.scissored && m_currentState.clipMode == VGClipMode::Stencil;
             cmd.stencilRef = m_currentState.stencilRef;
             cmd.drawMode = VGDrawMode::Box;
+            cmd.layer = m_currentLayer;
             m_batch.commands.PushBack(cmd);
         }
 
@@ -1723,6 +1845,42 @@ export namespace foundation::vg
                 ShapeBuilder::BuildRoundedRect(inner, innerRadii, ring);
             }
             FillPath(ring.ToPath(), borderColor, FillRule::EvenOdd);
+        }
+
+        // The device bounds of what a layer drew (its commands from `firstCommand` on that draw into
+        // it, a nested layer's composite among them), on whole pixels with a pixel of margin for
+        // the edges' antialiasing; empty when it drew nothing.
+        Rectangle LayerContentBounds(i32 layer, i32 firstCommand) const
+        {
+            Float2 mn{3.4e38f, 3.4e38f};
+            Float2 mx{-3.4e38f, -3.4e38f};
+            const auto grow = [&](Float2 p)
+            {
+                mn = Float2{Min(mn.x, p.x), Min(mn.y, p.y)};
+                mx = Float2{Max(mx.x, p.x), Max(mx.y, p.y)};
+            };
+            for (usize c = static_cast<usize>(firstCommand); c < m_batch.commands.Size(); ++c)
+            {
+                const VGCommand& cmd = m_batch.commands[c];
+                if (cmd.layer != layer || cmd.fillPhase == VGFillPhase::StencilWrite ||
+                    cmd.fillPhase == VGFillPhase::ClipApply || cmd.fillPhase == VGFillPhase::ClipClear)
+                {
+                    continue; // only what draws colour counts (winding fans and masks do not)
+                }
+                for (i32 i = 0; i < cmd.indexCount; ++i)
+                {
+                    const usize at = static_cast<usize>(cmd.startIndex + i);
+                    grow(cmd.drawMode == VGDrawMode::Box ? m_batch.boxVertices[at].position
+                                                         : m_batch.vertices[m_batch.indices[at]].position);
+                }
+            }
+            if (mx.x < mn.x || mx.y < mn.y)
+            {
+                return Rectangle{};
+            }
+            const f32 x0 = Floor(mn.x) - 1.0f, y0 = Floor(mn.y) - 1.0f;
+            const f32 x1 = Ceil(mx.x) + 1.0f, y1 = Ceil(mx.y) + 1.0f;
+            return Rectangle{x0, y0, x1 - x0, y1 - y0};
         }
 
         // The clip mode the state's clips call for: the stencil while path clips are active (with
@@ -1965,6 +2123,7 @@ export namespace foundation::vg
             cmd.gradientSpread = m_currentGradientSpread;
             cmd.fillPhase = phase;
             cmd.fillRule = fillRule;
+            cmd.layer = m_currentLayer;
             m_batch.commands.PushBack(cmd);
             m_commandStartIndex = static_cast<i32>(m_batch.indices.Size());
         }
@@ -1985,6 +2144,7 @@ export namespace foundation::vg
                 cmd.stencilRef = m_currentState.stencilRef;
                 cmd.drawMode = m_currentDrawMode;
                 cmd.gradientSpread = m_currentGradientSpread;
+                cmd.layer = m_currentLayer;
 
                 m_batch.commands.PushBack(cmd);
                 m_commandStartIndex = static_cast<i32>(m_batch.indices.Size());
@@ -2124,6 +2284,8 @@ export namespace foundation::vg
         Array<ClipPathLevel> m_clipPaths;        // the stencil clips, outermost first
         Array<ClipRectSave> m_clipPathScissors;  // the scissor fallback's (no stencil)
         Array<ClipRectSave> m_clipStack;
+        Array<LayerSave> m_layerStack; // the open layers, innermost last
+        i32 m_currentLayer = -1;       // the layer draws go into, -1 for the target
         Array<f32> m_opacityStack;
 
         VGBlendMode m_currentBlendMode = VGBlendMode::Normal;
@@ -2131,6 +2293,7 @@ export namespace foundation::vg
         VGGradientSpread m_currentGradientSpread = VGGradientSpread::Pad;
         bool m_perPixelGradients = false;
         bool m_analyticBoxes = false;
+        bool m_layersEnabled = false;
         bool m_stencilFills = false; // host opt-in: stencil-then-cover for complex fills // radial/conic use dedicated per-pixel shaders when set
         i32 m_currentTextureIndex = 0;
         i32 m_commandStartIndex = 0;

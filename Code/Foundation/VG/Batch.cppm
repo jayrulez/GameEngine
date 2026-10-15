@@ -44,6 +44,21 @@ export namespace foundation::vg
         FillRule fillRule = FillRule::NonZero; ///< Winding rule for StencilWrite/Cover phases.
         VGGradientSpread gradientSpread =
             VGGradientSpread::Pad; ///< LUT sampler address mode for this draw.
+        /// The layer whose offscreen target this command draws into (VGBatch::layers), -1 for the
+        /// target itself.
+        i32 layer = -1;
+        /// A Layer-mode composite: the layer whose target the quad samples.
+        i32 compositeLayer = -1;
+    };
+
+    /// One offscreen layer (VGContext::PushLayer): drawn into a target of its own and composited
+    /// into its parent once, so a group fades as one (V3 of Specs/vg-and-gui-lab.md).
+    struct VGLayer
+    {
+        i32 parent = -1;     ///< The enclosing layer, -1 for the target itself.
+        Rectangle bounds{};  ///< Its content's device bounds, on whole pixels (empty: nothing drawn).
+        f32 opacity = 1.0f;  ///< Applied once, at the composite.
+        VGBlendMode blendMode = VGBlendMode::Normal; ///< How the composite blends into the parent.
     };
 
     /// Batched vector-graphics geometry and draw commands. The output of
@@ -57,6 +72,8 @@ export namespace foundation::vg
         Array<VGCommand> commands; ///< Draw commands (batched by state).
         /// Analytic boxes' vertices, six to a box, for Box-mode commands (no indices).
         Array<VGBoxVertex> boxVertices;
+        /// Offscreen layers, in the order they were pushed (a child after its parent).
+        Array<VGLayer> layers;
         // Textures referenced by commands (by textureIndex). NOT owned by the
         // batch - VGContext manages lifetime. By convention index 0 is a 1x1
         // white texture for solid-color draws.
@@ -103,6 +120,7 @@ export namespace foundation::vg
             indices.Clear();
             commands.Clear();
             boxVertices.Clear();
+            layers.Clear();
             textures.Clear();
             evictedTextures.Clear();
         }

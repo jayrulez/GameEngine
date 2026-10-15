@@ -82,6 +82,9 @@ export namespace foundation::vg
         /// inset); the shader integrates a Gaussian over the signed distance. One shader, no
         /// texture, any number of shadows per command.
         BoxShadow,
+        /// A layer's composite (VGContext::PopLayer): a quad sampling the layer's offscreen target,
+        /// which holds premultiplied colour, scaled by the quad's alpha (the layer's opacity).
+        Layer,
         /// An analytic box (VGContext::DrawBox): the command's vertices are VGBatch::boxVertices
         /// (startIndex, indexCount count them, six to a box), drawn unindexed through the box
         /// pipeline; fill and border come from one signed distance in the fragment shader.

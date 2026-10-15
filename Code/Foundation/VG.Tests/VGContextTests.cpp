@@ -623,6 +623,124 @@ TEST_CASE("vg.context: without analytic boxes, DrawBox tessellates its fill and 
     CHECK(batch.vertices.Size() > 8u); // the rounded fill and the ring
 }
 
+TEST_CASE("vg.context: a layer's draws go into it, and its composite into what is under it")
+{
+    using foundation::vg::VGDrawMode;
+    VGContext ctx;
+    ctx.SetLayers(true);
+    ctx.FillPath(Square(0, 0, 5, 5), Color::White, FillRule::NonZero, false); // before: the target
+    ctx.PushLayer(0.5f);
+    ctx.FillPath(Square(10, 10, 30, 30), Color::Red, FillRule::NonZero, false);
+    ctx.FillPath(Square(20, 20, 40, 40), Color::Blue, FillRule::NonZero, false);
+    ctx.PopLayer();
+    ctx.FillPath(Square(0, 0, 5, 5), Color::White, FillRule::NonZero, false); // after: the target
+
+    const VGBatch& batch = ctx.GetBatch();
+    REQUIRE(batch.layers.Size() == 1u);
+    const foundation::vg::VGLayer& layer = batch.layers[0];
+    CHECK(layer.parent == -1);
+    CHECK(layer.opacity == doctest::Approx(0.5f));
+    // The content's bounds, on whole pixels with a pixel of margin.
+    CHECK(layer.bounds.x == doctest::Approx(9.0f));
+    CHECK(layer.bounds.width == doctest::Approx(32.0f));
+    REQUIRE(batch.commands.Size() == 4u);
+    CHECK(batch.commands[0].layer == -1);
+    CHECK(batch.commands[1].layer == 0); // red and blue, one command, into the layer
+    CHECK(batch.commands[2].drawMode == VGDrawMode::Layer);
+    CHECK(batch.commands[2].layer == -1);
+    CHECK(batch.commands[2].compositeLayer == 0);
+    CHECK(batch.vertices[batch.indices[static_cast<usize>(batch.commands[2].startIndex)]].color.a ==
+          doctest::Approx(0.5f)); // the opacity, applied once, at the composite
+    CHECK(batch.commands[3].layer == -1);
+}
+
+TEST_CASE("vg.context: inside a layer no clip or opacity applies; around it they apply to its composite")
+{
+    using foundation::vg::VGClipMode;
+    VGContext ctx;
+    ctx.SetLayers(true);
+    ctx.SetStencilFills(true);
+    ctx.PushClipPath(Square(0, 0, 50, 50));
+    ctx.PushOpacity(0.5f);
+    ctx.PushLayer(0.8f);
+    ctx.FillPath(Square(10, 10, 20, 20), Color::Red, FillRule::NonZero, false);
+    ctx.PopLayer();
+    ctx.PopOpacity();
+    ctx.PopClipPath();
+
+    const VGBatch& batch = ctx.GetBatch();
+    const VGCommand* inside = nullptr;
+    const VGCommand* composite = nullptr;
+    for (const VGCommand& cmd : batch.commands)
+    {
+        if (cmd.layer == 0)
+            inside = &cmd;
+        if (cmd.compositeLayer == 0)
+            composite = &cmd;
+    }
+    REQUIRE(inside != nullptr);
+    REQUIRE(composite != nullptr);
+    CHECK(inside->clipMode == VGClipMode::None);
+    CHECK(batch.vertices[batch.indices[static_cast<usize>(inside->startIndex)]].color.a == doctest::Approx(1.0f));
+    CHECK(composite->clipMode == VGClipMode::Stencil);
+    CHECK(batch.vertices[batch.indices[static_cast<usize>(composite->startIndex)]].color.a ==
+          doctest::Approx(0.4f)); // 0.8 of the layer, times the 0.5 around it
+}
+
+TEST_CASE("vg.context: a layer inside a layer composites into it")
+{
+    VGContext ctx;
+    ctx.SetLayers(true);
+    ctx.PushLayer(0.5f);
+    ctx.FillPath(Square(0, 0, 10, 10), Color::Red, FillRule::NonZero, false);
+    ctx.PushLayer(0.5f);
+    ctx.FillPath(Square(40, 40, 50, 50), Color::Blue, FillRule::NonZero, false);
+    ctx.PopLayer();
+    ctx.PopLayer();
+    ctx.PushLayer(1.0f);
+    ctx.PopLayer(); // empty: no bounds, no composite
+
+    const VGBatch& batch = ctx.GetBatch();
+    REQUIRE(batch.layers.Size() == 3u);
+    CHECK(batch.layers[1].parent == 0);
+    CHECK(batch.layers[0].bounds.width == doctest::Approx(53.0f)); // its fill (0..10) and the inner composite (39..51), padded
+    CHECK(batch.layers[2].bounds.width == doctest::Approx(0.0f));
+    int composites = 0;
+    for (const VGCommand& cmd : batch.commands)
+    {
+        if (cmd.compositeLayer == 1)
+        {
+            CHECK(cmd.layer == 0);
+            ++composites;
+        }
+        if (cmd.compositeLayer == 0)
+        {
+            CHECK(cmd.layer == -1);
+            ++composites;
+        }
+        CHECK(cmd.compositeLayer != 2);
+    }
+    CHECK(composites == 2);
+}
+
+TEST_CASE("vg.context: without layers, a layer is an opacity push")
+{
+    VGContext ctx; // the host never said its renderer draws layers
+    ctx.PushOpacity(0.5f);
+    ctx.PushLayer(0.5f);
+    ctx.FillPath(Square(10, 10, 30, 30), Color::Red, FillRule::NonZero, false);
+    ctx.PopLayer();
+    ctx.FillPath(Square(40, 40, 50, 50), Color::Red, FillRule::NonZero, false);
+    ctx.PopOpacity();
+
+    const VGBatch& batch = ctx.GetBatch();
+    CHECK(batch.layers.IsEmpty());
+    REQUIRE(batch.commands.Size() == 1u); // no layer, no composite: one run of fills
+    CHECK(batch.commands[0].layer == -1);
+    CHECK(batch.vertices[batch.indices[0]].color.a == doctest::Approx(0.25f));
+    CHECK(batch.vertices.Back().color.a == doctest::Approx(0.5f)); // the layer's opacity popped
+}
+
 TEST_CASE("vg.context: over-budget LUT cache eviction is announced through the batch")
 {
     VGContext ctx;

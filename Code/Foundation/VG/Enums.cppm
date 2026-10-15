@@ -33,6 +33,18 @@ export namespace foundation::vg
         Screen,   ///< Screen blending.
     };
 
+    /// The values a target's blending works on (V1 of Specs/vg-and-gui-lab.md).
+    enum class VGBlendSpace
+    {
+        /// Linear light: authored colours are decoded and the target encodes on write, so half
+        /// black over white is 73% grey. Right for panels that sit in a lit scene.
+        Linear,
+        /// sRGB-encoded values, as browsers and design tools blend: half black over white is
+        /// 50% grey, and gradients and fades go as authored. The renderer draws into a UNORM
+        /// view of the target (its sRGB twin's), and colours stay as entered.
+        Encoded,
+    };
+
     /// Clipping mode for draw commands.
     enum class VGClipMode
     {

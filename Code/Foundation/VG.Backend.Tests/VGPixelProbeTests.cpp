@@ -37,9 +37,15 @@ namespace
     // Render one VG scene (recorded by `record`) and read the target back. sampleCount > 1
     // renders into an MSAA target resolved into the readback texture - the same
     // arrangement the UI canvas-RTT and window hosts use.
+    // An Encoded scene draws into the sRGB target through its UNORM view, as a host does for an
+    // Encoded canvas; the readback is the target's bytes either way.
     template <typename RecordFn>
-    Pixels RenderScene(rhi::Device& device, RecordFn&& record, u32 sampleCount = 1)
+    Pixels RenderScene(rhi::Device& device, RecordFn&& record, u32 sampleCount = 1,
+                       vg::VGBlendSpace blendSpace = vg::VGBlendSpace::Linear)
     {
+        const bool encoded = blendSpace == vg::VGBlendSpace::Encoded;
+        const rhi::TextureFormat drawFormat =
+            encoded ? rhi::TextureFormat::RGBA8Unorm : rhi::TextureFormat::RGBA8UnormSrgb;
         Pixels out;
         shaders::ShaderSystemHost host{DefaultAllocator()};
         if (!host.Initialize(device, testsupport::DataFileSystem()))
@@ -63,27 +69,30 @@ namespace
             vg::renderer::VGTargetConfig config;
             config.sampleCount = sampleCount;
             config.depthStencilFormat = rhi::TextureFormat::Depth24PlusStencil8;
+            config.blendSpace = blendSpace;
 
             vg::renderer::VGRenderer renderer{DefaultAllocator()};
             REQUIRE(renderer
-                        .Initialize(device, *vs, *fs, rhi::TextureFormat::RGBA8UnormSrgb, 2, distanceFieldFragmentShader,
+                        .Initialize(device, *vs, *fs, drawFormat, 2, distanceFieldFragmentShader,
                                     gradR, gradC, config)
                         .IsOk());
 
             rhi::TextureDesc cd = rhi::TextureDesc::RenderTarget(
                 rhi::TextureFormat::RGBA8UnormSrgb, kSize, kSize);
             cd.usage = cd.usage | rhi::TextureUsage::CopySrc;
+            cd.alternateViewFormat = encoded ? rhi::TextureFormat::RGBA8Unorm : rhi::TextureFormat::Undefined;
             rhi::Texture* target = nullptr;
             REQUIRE(device.CreateTexture(cd, target).IsOk());
+            rhi::TextureViewDesc targetViewDesc{};
+            targetViewDesc.format = drawFormat;
             rhi::TextureView* targetView = nullptr;
-            REQUIRE(device.CreateTextureView(target, rhi::TextureViewDesc{}, targetView).IsOk());
+            REQUIRE(device.CreateTextureView(target, targetViewDesc, targetView).IsOk());
 
             rhi::Texture* msaa = nullptr;
             rhi::TextureView* msaaView = nullptr;
             if (sampleCount > 1)
             {
-                rhi::TextureDesc md = rhi::TextureDesc::RenderTarget(
-                    rhi::TextureFormat::RGBA8UnormSrgb, kSize, kSize, sampleCount);
+                rhi::TextureDesc md = rhi::TextureDesc::RenderTarget(drawFormat, kSize, kSize, sampleCount);
                 md.usage = rhi::TextureUsage::RenderTarget;
                 REQUIRE(device.CreateTexture(md, msaa).IsOk());
                 REQUIRE(device.CreateTextureView(msaa, rhi::TextureViewDesc{}, msaaView).IsOk());
@@ -407,6 +416,113 @@ TEST_CASE("vg.pixels: fills, clip, colors, spreads and blends on real backends")
     if (!any)
     {
         MESSAGE("no GPU backend available - VG pixel probes skipped entirely");
+    }
+    if (vulkan != nullptr)
+    {
+        vulkan->Destroy();
+    }
+    if (webgpu != nullptr)
+    {
+        webgpu->Destroy();
+    }
+}
+
+// ============================================================================================
+// Blend space (V1 of Specs/vg-and-gui-lab.md): the same scenes in a Linear and an Encoded canvas.
+// Linear blends linear light (half black over white is 73% grey, byte 188); Encoded blends the
+// encoded values as browsers do (50% grey, byte 128). A gradient's ramp is baked from the authored
+// stops, so it runs as authored in both (its middle is byte 128), and a solid colour reads as
+// authored in both.
+// ============================================================================================
+
+namespace
+{
+    struct BlendSpaceReadings
+    {
+        i32 halfBlack = 0;    // half-transparent black over white
+        i32 gradientMid = 0;  // a black-to-white gradient's middle
+        i32 solid[3] = {0, 0, 0};
+    };
+
+    BlendSpaceReadings ReadBlendSpace(rhi::Device& device, vg::VGBlendSpace space)
+    {
+        const Pixels px = RenderScene(
+            device,
+            [](vg::VGContext& ctx)
+            {
+                const auto rect = [](f32 x0, f32 y0, f32 x1, f32 y1)
+                {
+                    vg::PathBuilder b;
+                    b.MoveTo(x0, y0);
+                    b.LineTo(x1, y0);
+                    b.LineTo(x1, y1);
+                    b.LineTo(x0, y1);
+                    b.Close();
+                    return b.ToPath();
+                };
+                ctx.FillPath(rect(0, 0, 128, 40), ByteColor(255, 255, 255), vg::FillRule::NonZero, false);
+                ctx.FillPath(rect(0, 0, 128, 40), Color{0.0f, 0.0f, 0.0f, 0.5f}, vg::FillRule::NonZero, false);
+                vg::VGLinearGradientFill ramp(Float2{0.0f, 0.0f}, Float2{128.0f, 0.0f});
+                ramp.AddStop(0.0f, ByteColor(0, 0, 0));
+                ramp.AddStop(1.0f, ByteColor(255, 255, 255));
+                ctx.FillPath(rect(0, 44, 128, 84), ramp, vg::FillRule::NonZero, false);
+                ctx.FillPath(rect(0, 88, 128, 128), ByteColor(180, 60, 40), vg::FillRule::NonZero, false);
+            },
+            1, space);
+        REQUIRE(px.valid);
+        BlendSpaceReadings out;
+        out.halfBlack = px.At(64, 20)[0];
+        out.gradientMid = px.At(64, 64)[0];
+        const u8* solid = px.At(64, 108);
+        out.solid[0] = solid[0];
+        out.solid[1] = solid[1];
+        out.solid[2] = solid[2];
+        return out;
+    }
+
+    void ProbeBlendSpaces(rhi::Device& device, const char* name)
+    {
+        INFO(doctest::String(name));
+        const BlendSpaceReadings linear = ReadBlendSpace(device, vg::VGBlendSpace::Linear);
+        const BlendSpaceReadings encoded = ReadBlendSpace(device, vg::VGBlendSpace::Encoded);
+        INFO("linear: half black ", linear.halfBlack, ", gradient middle ", linear.gradientMid);
+        INFO("encoded: half black ", encoded.halfBlack, ", gradient middle ", encoded.gradientMid);
+        CHECK(Abs(linear.halfBlack - 188) <= 2);
+        CHECK(Abs(encoded.halfBlack - 128) <= 2);
+        CHECK(Abs(linear.gradientMid - 128) <= 6);
+        CHECK(Abs(encoded.gradientMid - 128) <= 6);
+        for (i32 c = 0; c < 3; ++c)
+        {
+            const i32 authored[3] = {180, 60, 40};
+            CHECK(Abs(linear.solid[c] - authored[c]) <= 2);
+            CHECK(Abs(encoded.solid[c] - authored[c]) <= 2);
+        }
+    }
+}
+
+TEST_CASE("vg.pixels: an encoded canvas blends encoded values, a linear one linear light")
+{
+    rhi::Backend* vulkan = nullptr;
+    (void)rhi::vk::CreateBackend(rhi::vk::VkBackendDesc{}, vulkan);
+    rhi::Backend* webgpu = nullptr;
+    (void)rhi::webgpu::CreateBackend(rhi::webgpu::WebGpuBackendDesc{}, webgpu, DefaultAllocator());
+    if (rhi::Device* device = MakeDevice(vulkan))
+    {
+        ProbeBlendSpaces(*device, "vulkan");
+        device->Destroy();
+    }
+    else
+    {
+        MESSAGE("Vulkan unavailable - vulkan blend space probe skipped");
+    }
+    if (rhi::Device* device = MakeDevice(webgpu))
+    {
+        ProbeBlendSpaces(*device, "webgpu");
+        device->Destroy();
+    }
+    else
+    {
+        MESSAGE("WebGPU unavailable - webgpu blend space probe skipped");
     }
     if (vulkan != nullptr)
     {

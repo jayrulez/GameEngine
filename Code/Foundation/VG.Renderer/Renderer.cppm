@@ -76,6 +76,9 @@ export namespace foundation::vg::renderer
     {
         foundation::core::u32 sampleCount = 1;
         foundation::rhi::TextureFormat depthStencilFormat = foundation::rhi::TextureFormat::Undefined;
+        /// Encoded: the target format given to Initialize is the UNORM twin of an sRGB target (a
+        /// view of it), and the shaders keep colours encoded (VGBlendSpace).
+        foundation::vg::VGBlendSpace blendSpace = foundation::vg::VGBlendSpace::Linear;
     };
 
     namespace rhi = foundation::rhi;
@@ -90,7 +93,7 @@ export namespace foundation::vg::renderer
         f32 distanceFieldPixelRange = 4.0f;
         f32 distanceFieldAtlasWidth = 512.0f;
         f32 distanceFieldAtlasHeight = 512.0f;
-        f32 pad = 0.0f;
+        f32 blendSpace = 0.0f; // 1: VGBlendSpace::Encoded (the shaders keep colours encoded)
     };
 
     /// A handle to one batch's data inside the shared frame buffers. Returned by
@@ -343,6 +346,7 @@ export namespace foundation::vg::renderer
             uniforms.distanceFieldPixelRange = batch.distanceFieldPixelRange;
             uniforms.distanceFieldAtlasWidth = batch.distanceFieldAtlasWidth;
             uniforms.distanceFieldAtlasHeight = batch.distanceFieldAtlasHeight;
+            uniforms.blendSpace = m_targetConfig.blendSpace == vg::VGBlendSpace::Encoded ? 1.0f : 0.0f;
             WriteBuffer(m_uniformBuffers[static_cast<usize>(frameIndex)], sliceUniformOffset,
                         &uniforms, sizeof(VGUniforms));
 

@@ -592,6 +592,22 @@ TEST_CASE("vg.context: a box's radii are clamped to it, and a scaled box snaps i
     CHECK(v.borders.x == doctest::Approx(2.0f));   // a unit border, two device pixels
 }
 
+TEST_CASE("vg.context: a box's borders on a scaled canvas are whole device pixels, at least one")
+{
+    VGContext ctx;
+    ctx.SetAnalyticBoxes(true);
+    ctx.Scale(0.48f, 0.48f);
+    ctx.DrawBox(Rectangle{100, 100, 200, 100}, CornerRadii(), Color::Red, foundation::vg::BorderWidths(2.0f, 1.0f, 5.0f, 0.0f),
+                Color::Blue);
+    const VGBatch& batch = ctx.GetBatch();
+    REQUIRE(batch.boxVertices.Size() == 6u);
+    const foundation::vg::VGBoxVertex& v = batch.boxVertices[0];
+    CHECK(v.borders.x == doctest::Approx(1.0f)); // 2 x 0.48 = 0.96: one pixel
+    CHECK(v.borders.y == doctest::Approx(1.0f)); // 1 x 0.48: still one, never thinner
+    CHECK(v.borders.z == doctest::Approx(2.0f)); // 5 x 0.48 = 2.4: two
+    CHECK(v.borders.w == doctest::Approx(0.0f)); // none stays none
+}
+
 TEST_CASE("vg.context: without analytic boxes, DrawBox tessellates its fill and border")
 {
     VGContext ctx; // analytic boxes off (the default)

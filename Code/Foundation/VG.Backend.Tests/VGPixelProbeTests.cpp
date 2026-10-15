@@ -456,6 +456,13 @@ namespace
                 // Six pixels of border on the left, none on the right, two above and below.
                 ctx.DrawBox(Rectangle{16, 80, 48, 32}, vg::CornerRadii(), Color{0.0f, 0.0f, 0.0f, 0.0f},
                             vg::BorderWidths(2.0f, 0.0f, 2.0f, 6.0f), ByteColor(40, 200, 40));
+                // A canvas scaled to 0.48 (a game UI at a reference resolution): a 2 px border,
+                // snapped to one whole device pixel (V5).
+                ctx.PushState();
+                ctx.Scale(0.48f, 0.48f);
+                ctx.DrawBox(Rectangle{180, 152, 40, 16}, vg::CornerRadii(), Color{0.0f, 0.0f, 0.0f, 0.0f},
+                            vg::BorderWidths(2.0f), ByteColor(40, 200, 40));
+                ctx.PopState();
             });
         REQUIRE(px.valid);
         const auto red = [&](u32 x, u32 y) { return px.At(x, y)[0] > 200 && px.At(x, y)[1] < 80; };
@@ -486,6 +493,11 @@ namespace
         CHECK(dark(64, 96));
         CHECK(green(40, 80)); // the top border
         CHECK(dark(40, 83));  // under it, inside
+        // The scaled box: device 86.4..105.6 x 72.96..80.64, snapped to 86..106 x 73..81; its top
+        // border one full pixel row, nothing above it, nothing under it.
+        CHECK(green(96, 73));
+        CHECK(dark(96, 72));
+        CHECK(dark(96, 75));
     }
 }
 

@@ -569,8 +569,11 @@ export namespace foundation::vg
                 const f32 r = (scale.x + scale.y) * 0.5f;
                 box.halfSize = Float2{(x1 - x0) * 0.5f, (y1 - y0) * 0.5f};
                 box.radii = Float4{radii.topLeft * r, radii.topRight * r, radii.bottomRight * r, radii.bottomLeft * r};
-                box.borders = Float4{borders.top * scale.y, borders.right * scale.x, borders.bottom * scale.y,
-                                     borders.left * scale.x};
+                // Each border a whole number of device pixels, never thinner than one (V5): a 2 px
+                // border on a canvas scaled to 0.48 is one crisp pixel, not a 0.96 px blur.
+                const auto snapWidth = [](f32 w, f32 s) { return w > 0.0f ? Max(1.0f, Round(w * s)) : 0.0f; };
+                box.borders = Float4{snapWidth(borders.top, scale.y), snapWidth(borders.right, scale.x),
+                                     snapWidth(borders.bottom, scale.y), snapWidth(borders.left, scale.x)};
                 const Float2 center{(x0 + x1) * 0.5f, (y0 + y1) * 0.5f};
                 const f32 margin = 1.0f; // one device pixel for the AA ramp
                 const Float2 h{box.halfSize.x + margin, box.halfSize.y + margin};

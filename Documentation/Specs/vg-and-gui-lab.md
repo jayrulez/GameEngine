@@ -90,6 +90,10 @@ with a 0.75 px fringe (`VG/Tessellation.cppm`).
   at 0.48 scale lands on whole device pixels. GPUI's rules are the model: lengths rounded before
   layout, edges rounded in absolute device space after it, a stroke never thinner than one device
   pixel, and a clip that covers whole pixels rather than cutting them.
+  As found and built on `vg`: the screen tier already lays a scaled game UI out at its real scale
+  (its DpiScale) and VG snaps axis-aligned rects and boxes to device pixels; the box's border widths
+  now snap too (whole pixels, at least one). Clips still cut at fractional bounds (scissors round
+  inward); left until a case shows it.
 
 Each phase lands with its tests and is used by `foundation.ui` where it applies (its shadow radius
 bug and its unused `opacity` are fixed alongside, from the backlog).

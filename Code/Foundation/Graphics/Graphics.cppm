@@ -179,6 +179,9 @@ export namespace foundation::graphics
         rhi::CommandPool* pool = nullptr;       // this frame's pool (extra encoders)
         rhi::Texture* backbuffer = nullptr;
         rhi::TextureView* backbufferView = nullptr;
+        // The backbuffer viewed in its sRGB or UNORM twin (the window's swapchain asks for it);
+        // null where the device or surface could not. VG's Encoded blend space draws through it.
+        rhi::TextureView* backbufferAlternateView = nullptr;
 
         // Convenience for the common 2D/UI case: open a render pass that clears
         // and targets the backbuffer (the Undefined->RenderTarget transition was
@@ -186,8 +189,13 @@ export namespace foundation::graphics
         // ignores this and records on `encoder` directly.
         rhi::RenderPassEncoder* BeginBackbufferPass(rhi::ClearColor clear)
         {
+            return BeginBackbufferPass(clear, backbufferView);
+        }
+        // The same through a chosen view of the backbuffer (backbufferAlternateView).
+        rhi::RenderPassEncoder* BeginBackbufferPass(rhi::ClearColor clear, rhi::TextureView* view)
+        {
             rhi::ColorAttachment ca{};
-            ca.view = backbufferView;
+            ca.view = view;
             ca.loadOp = rhi::LoadOp::Clear;
             ca.storeOp = rhi::StoreOp::Store;
             ca.clearValue = clear;
@@ -410,6 +418,9 @@ export namespace foundation::graphics
             sd.format = desc.format;
             sd.presentMode = desc.presentMode;
             sd.bufferCount = desc.bufferCount;
+            // Viewable in its sRGB or UNORM twin too, for UI that blends encoded values (VG's
+            // Encoded blend space); the swapchain says whether it could.
+            sd.alternateViewFormat = rhi::SrgbTwin(desc.format);
             sd.label = u8"renderwindow";
             rhi::SwapChain* swapChain = nullptr;
             if (!m_device->CreateSwapChain(surface, sd, swapChain).IsOk())
@@ -580,6 +591,7 @@ export namespace foundation::graphics
         f.pool = m_pools[fi];
         f.backbuffer = m_swapChain->CurrentTexture();
         f.backbufferView = m_swapChain->CurrentTextureView();
+        f.backbufferAlternateView = m_swapChain->CurrentAlternateTextureView();
         return f;
     }
 

@@ -80,6 +80,10 @@ export namespace foundation::ui::runtime
         rhi::TextureFormat depthStencilFormat = rhi::TextureFormat::Undefined;
         u32 targetWidth = 0;
         u32 targetHeight = 0;
+        // Encoded: this window's UI blends encoded values, drawing through the backbuffer's
+        // UNORM view in drawFormat (its twin); else linear light in the backbuffer's own format.
+        bool encoded = false;
+        rhi::TextureFormat drawFormat = rhi::TextureFormat::Undefined;
 
         ~UIWindowData() override { DestroyTargets(); }
 
@@ -215,6 +219,13 @@ export namespace foundation::ui::runtime
 
         /// The damage gate's escape hatch (dogfooding): OFF = the old
         /// relayout-and-redraw-every-frame behavior. Counters expose the win/health.
+        /// The values a window's UI blends (VG's blend space), for windows added after the call.
+        /// Encoded (the default) blends as browsers and design tools do: half black over white is
+        /// 50% grey. It needs the window's swapchain to offer its UNORM view, else that window
+        /// blends linear light as before.
+        void SetBlendSpace(vg::VGBlendSpace space) noexcept { m_blendSpace = space; }
+        [[nodiscard]] vg::VGBlendSpace BlendSpace() const noexcept { return m_blendSpace; }
+
         void SetDamageGatingEnabled(bool enabled) noexcept { m_damageGateEnabled = enabled; }
         [[nodiscard]] bool DamageGatingEnabled() const noexcept { return m_damageGateEnabled; }
         [[nodiscard]] u64 FramesDrawn() const noexcept { return m_framesDrawn; }
@@ -234,6 +245,7 @@ export namespace foundation::ui::runtime
         {
             m_clear = rhi::ClearColor(core::SrgbToLinear(r), core::SrgbToLinear(g),
                                       core::SrgbToLinear(b), a);
+            m_clearEncoded = rhi::ClearColor(r, g, b, a); // an Encoded window clears as authored
         }
 
         /// Bake the SHARED theme chrome glyphs (close/chevrons/checkmark...) at the given UI
@@ -293,8 +305,12 @@ export namespace foundation::ui::runtime
             data->device = m_device->Raw();
             data->depthStencilFormat = vg::renderer::PickStencilCapableFormat(
                 *data->device, UIWindowData::kMsaaSamples);
+            // Encoded when asked for and the swapchain offers its UNORM view; else linear.
+            data->encoded = m_blendSpace == vg::VGBlendSpace::Encoded &&
+                            window->Swap()->AlternateViewFormat() != rhi::TextureFormat::Undefined;
+            data->drawFormat = data->encoded ? window->Swap()->AlternateViewFormat() : window->Swap()->Format();
             const bool targetsOk =
-                data->CreateTargets(window->Swap()->Format(), window->Window().Width(),
+                data->CreateTargets(data->drawFormat, window->Window().Width(),
                                     window->Window().Height());
             vg::renderer::VGTargetConfig targetConfig;
             if (targetsOk)
@@ -302,7 +318,8 @@ export namespace foundation::ui::runtime
                 targetConfig.sampleCount = UIWindowData::kMsaaSamples;
                 targetConfig.depthStencilFormat = data->depthStencilFormat;
             }
-            data->renderer.Initialize(*m_device->Raw(), *m_vs, *m_fs, window->Swap()->Format(),
+            targetConfig.blendSpace = data->encoded ? vg::VGBlendSpace::Encoded : vg::VGBlendSpace::Linear;
+            data->renderer.Initialize(*m_device->Raw(), *m_vs, *m_fs, data->drawFormat,
                                       static_cast<i32>(m_device->FramesInFlight()), m_distanceFieldFragmentShader,
                                       m_gradRadialFs, m_gradConicFs, targetConfig, m_boxShadowFs);
             data->vg->SetPerPixelGradients(perPixelGrad);
@@ -563,7 +580,7 @@ export namespace foundation::ui::runtime
                     (a.data->targetWidth != w || a.data->targetHeight != h))
                 {
                     m_device->Raw()->WaitIdle();
-                    (void)a.data->CreateTargets(a.window->Swap()->Format(), w, h);
+                    (void)a.data->CreateTargets(a.data->drawFormat, w, h);
                 }
             }
             m_ctx.ClearLayoutDamage(); // consumed by this frame's layout pass
@@ -612,10 +629,10 @@ export namespace foundation::ui::runtime
                                                  rhi::ResourceState::DepthStencilWrite);
                 rhi::ColorAttachment color{};
                 color.view = data->msaaColorView;
-                color.resolveTarget = frame.backbufferView;
+                color.resolveTarget = data->encoded ? frame.backbufferAlternateView : frame.backbufferView;
                 color.loadOp = rhi::LoadOp::Clear;
                 color.storeOp = rhi::StoreOp::DontCare; // resolved; the MSAA texels can drop
-                color.clearValue = m_clear;
+                color.clearValue = data->encoded ? m_clearEncoded : m_clear;
                 rhi::DepthStencilAttachment ds{};
                 ds.view = data->depthStencilView;
                 ds.depthLoadOp = rhi::LoadOp::Clear;
@@ -636,7 +653,9 @@ export namespace foundation::ui::runtime
                 return;
             }
 
-            rhi::RenderPassEncoder* rp = frame.BeginBackbufferPass(m_clear);
+            rhi::RenderPassEncoder* rp =
+                data->encoded ? frame.BeginBackbufferPass(m_clearEncoded, frame.backbufferAlternateView)
+                              : frame.BeginBackbufferPass(m_clear);
             if (rp != nullptr)
             {
                 data->renderer.Render(*rp, frame.width, frame.height,
@@ -1091,5 +1110,8 @@ export namespace foundation::ui::runtime
         u64 m_framesLaidOut = 0;
         f32 m_uiScale = 1.0f; // user preference multiplier on the OS content scale
         rhi::ClearColor m_clear = rhi::ClearColor(0.006f, 0.006f, 0.009f, 1.0f);
+        rhi::ClearColor m_clearEncoded = rhi::ClearColor(core::LinearToSrgb(0.006f), core::LinearToSrgb(0.006f),
+                                                         core::LinearToSrgb(0.009f), 1.0f);
+        vg::VGBlendSpace m_blendSpace = vg::VGBlendSpace::Encoded;
     };
 }

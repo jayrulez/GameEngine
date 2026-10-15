@@ -669,7 +669,7 @@ export namespace foundation::vg::renderer
                         m_device->DestroyRenderPipeline(m_blendPipelines[b][k]);
                     m_blendPipelines[b][k] = nullptr;
                 }
-            for (usize b = 0; b < 4; ++b)
+            for (usize b = 0; b < kBlendVariantCount + 1; ++b)
                 for (usize k = 0; k < kPipelineKindCount; ++k)
                 {
                     if (m_clippedPipelines[b][k] != nullptr)
@@ -1508,8 +1508,8 @@ export namespace foundation::vg::renderer
         rhi::ShaderModule* m_boxVsModule = nullptr; // analytic boxes (VGDrawMode::Box)
         rhi::ShaderModule* m_boxFsModule = nullptr;
         rhi::RenderPipeline* m_boxPipeline = nullptr;
-        rhi::RenderPipeline* m_blendPipelines[3][8] = {}; // [blend-1][PipelineKind] (unclipped)
-        rhi::RenderPipeline* m_clippedPipelines[4][8] = {}; // [blend][PipelineKind], lazy
+        rhi::RenderPipeline* m_blendPipelines[kBlendVariantCount][kPipelineKindCount] = {}; // [blend-1][kind] (unclipped)
+        rhi::RenderPipeline* m_clippedPipelines[kBlendVariantCount + 1][kPipelineKindCount] = {}; // [blend][kind], lazy
         rhi::RenderPipeline* m_clippedWriteNonZero = nullptr; // lazy clipped write pair
         rhi::RenderPipeline* m_clippedWriteEvenOdd = nullptr;
         rhi::RenderPipeline* m_clipApplyPipeline = nullptr; // winding -> clip mask

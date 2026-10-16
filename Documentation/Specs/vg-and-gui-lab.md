@@ -264,6 +264,24 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
 - **G2 The applier catches up with the parser.** `box-shadow` (several), `transform` (translate,
   rotate, scale, skew, with an origin), gradients from sheets with angles and stops, per-side
   borders, `var()` everywhere. Tests per property.
+  Decided with the user 2026-10-16: replace, not extend, the string applier: typed values parsed
+  once, one property table, the box as a value on the node; then each SceneRoot scaled on its own
+  (one per window or render target; SceneNode renamed SceneRoot, `GetSceneRoot()` beside
+  `GetRootNode()`).
+  As built on `vg`: VG boxes take a border colour per side (0cceb5d70). The style system
+  (209e92ca7): declarations expand into longhands and parse once into typed StyleValues (cached on
+  a declaration without var()); the cascade sets longhands; var() is substituted anywhere,
+  nested, with fallbacks, custom properties inheriting from the parent's style; StyleProperties
+  names the properties and grammars, and a property it does not name reaches a widget's
+  reflected property by its `css` attribute; the box properties become the node's NodeBox
+  (background colour and gradient or image layers, a border per side, radii, box shadows) drawn
+  through VG, owned by the sheet; `transform` and `transform-origin` a style transform whose
+  percentages follow the size; a border with no style draws none, as CSS has it. SceneRoot and
+  its display scale (7b7435d82): logical units mapped to device pixels by the root's own
+  transform, so drawing and hit testing agree; the media context gives logical size and density;
+  media queries take resolution. Per-property tests and a sandbox row of four cards (8c60c8d21).
+  Left: transitions still animate opacity only (G3); text at a scale is crisp through
+  distance-field fonts only, as in foundation.ui.
 - **G3 Motion.** Every animatable property transitions, with real easings (`cubic-bezier`,
   `steps`, the named ones); `@keyframes` animate any property, not only opacity and colour. Tests:
   sampled curves against the formula.

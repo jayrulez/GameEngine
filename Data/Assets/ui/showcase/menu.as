@@ -1,7 +1,8 @@
 // The GUI lab's showcase (G6 of Documentation/Specs/vg-and-gui-lab.md): the menu's behaviour, in
 // AngelScript, through the lab's reflection alone. The markup (menu.xml) holds the widgets and the
 // sheet (menu.css) their looks; this script only switches pages, screens and the modal, binds two
-// labels to functions of the GUI's data, and runs the loading bar. The host calls update(dt) while it returns true.
+// labels to functions of the GUI's data, and runs the loading bar and the modal's fade-out. The host
+// calls update(dt) while it returns true.
 
 funcdef string TextExpression();
 funcdef bool CommandHandler();
@@ -13,6 +14,8 @@ Node@ loadingScreen; // a screen of its own
 Node@ modal;         // over everything, the quit question
 bool loadingNow = false;
 double loadTime = 0;
+double modalClosing = -1; // seconds left of the modal's fade-out (-1: not closing)
+const double kModalCloseTime = 0.25;
 
 // Shows `node` and replays its entrance (`animationClass`; a node hidden earlier lost the class
 // then, so adding it again starts the animation over).
@@ -57,23 +60,36 @@ void onBack() { loadingNow = false; showPage(mainPanel); }
 // The quit question opens over the menu, which stays where it is behind the dimmed glass.
 void onQuit()
 {
+    // (Re)opening, a fade-out in progress included: its closing classes go.
+    modalClosing = -1;
+    UIWidget::of(modal).removeClass("modal-out");
     reveal(modal, "modal-in");
     Node@ confirm = gui::root().find("confirm");
+    UIWidget::of(confirm).removeClass("leave");
     conceal(confirm, "enter");
     reveal(confirm, "enter");
     modal.focus(); // Stay, the safe answer, unless one was chosen before
 }
+// Stay (and Back): the modal fades out, then hides (update counts it down); focus is back on Quit
+// at once.
 void onStay()
 {
-    conceal(modal, "modal-in");
-    mainPanel.focus(); // back to Quit, where the question came from
+    if (modalClosing >= 0)
+        return; // already closing
+    UIWidget::of(modal).removeClass("modal-in");
+    UIWidget::of(modal).addClass("modal-out");
+    UIWidget::of(gui::root().find("confirm")).addClass("leave");
+    modalClosing = kModalCloseTime;
+    mainPanel.focus();
 }
 
 // Back (Escape, a gamepad's East): closes what is open, one step at a time.
 bool onBackCommand()
 {
-    if (modal.visible)
+    if (modal.visible && modalClosing < 0)
         onStay();
+    else if (modal.visible)
+        return false; // closing already
     else if (loadingScreen.visible || settingsPanel.visible)
         onBack();
     return false;
@@ -117,8 +133,17 @@ void main()
 // The loading bar fills over two and a half seconds; true while there is more to do.
 bool update(double dt)
 {
+    if (modalClosing >= 0)
+    {
+        modalClosing -= dt;
+        if (modalClosing < 0)
+        {
+            conceal(modal, "modal-out");
+            UIWidget::of(gui::root().find("confirm")).removeClass("leave");
+        }
+    }
     if (!loadingNow)
-        return false;
+        return modalClosing >= 0;
     loadTime += dt;
     double progress = loadTime / 2.5;
     if (progress >= 1)
@@ -128,5 +153,5 @@ bool update(double dt)
         gui::set("status", "Ready");
     }
     gui::set("progress", progress);
-    return loadingNow;
+    return loadingNow || modalClosing >= 0;
 }

@@ -55,6 +55,13 @@
 .modal-in { animation: dim-in 0.35s ease-out; }
 @keyframes dim-in { from { background-color: rgba(6, 4, 14, 0); backdrop-filter: blur(0px); }
                     to { background-color: rgba(6, 4, 14, 0.55); backdrop-filter: blur(6px); } }
+/* Closing: the dim and blur shrink away and the panel sinks out, before the script hides the modal. */
+.modal-out { animation: dim-out 0.25s ease-in forwards; }
+@keyframes dim-out { from { background-color: rgba(6, 4, 14, 0.55); backdrop-filter: blur(6px); }
+                     to { background-color: rgba(6, 4, 14, 0); backdrop-filter: blur(0px); } }
+.leave { animation: sink 0.2s ease-in forwards; }
+@keyframes sink { from { opacity: 1; transform: translate(0, 0) scale(1); }
+                  to { opacity: 0; transform: translate(0, 14px) scale(0.98); } }
 .panel-title { width: 380px; height: 40px; font-family: Lilita; font-size: 32px; color: var(--ink);
                text-align: center; vertical-align: middle; text-shadow: 0 2px 3px rgba(0, 0, 0, 0.5); }
 

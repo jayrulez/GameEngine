@@ -9,6 +9,10 @@
 // elements become children;
 // attributes are applied in three tiers:
 //   - `id` / `class` set the widget's CSS identity,
+//   - a value with `{{name}}` in it binds the reflected property of that name to the loader's
+//     data model (G5): `value="{{volume}}"` follows `volume`, and writes it back when the property
+//     is one the user changes (a slider's value, a checkbox, a text field's text);
+//     `text="Score: {{score}}"` follows the text built from it,
 //   - an attribute a widget claims (via UINode::SetMarkupAttribute - e.g. Label "text",
 //     LinearLayout "orientation") is consumed structurally,
 //   - everything else is treated as an inline CSS property and run through the StyleApplier,
@@ -37,6 +41,7 @@ import :style_applier; // ApplyStyle
 import :css_values;    // LengthContext
 import :resource_provider;
 import :element_types; // ElementSet
+import :data_model;    // DataModel, FormatVariant
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -54,6 +59,10 @@ export namespace experimental::gui
               m_lengths(lengths)
         {
         }
+
+        /// The data model `{{name}}` values bind to (a SceneRoot's, GetDataRef); without one they
+        /// stay as written.
+        void SetDataModel(RefPtr<DataModel> model) { m_data = core::Move(model); }
 
         // Inflate the root element of `markup` into a widget tree; null on a parse error or an
         // unknown root element.
@@ -92,6 +101,8 @@ export namespace experimental::gui
                     AddClasses(uiwidget, value);
                     continue;
                 }
+                if (m_data && FindFrom(value, core::StringView(u8"{{"), 0) < value.Size() && Bind(*widget, name, value))
+                    continue;
                 if (uinode != nullptr && uinode->SetMarkupAttribute(name, value))
                     continue;
                 inlineStyle.Set(name, value); // an inline CSS property
@@ -105,6 +116,74 @@ export namespace experimental::gui
                     widget->AddChild(childWidget.Get());
 
             return widget;
+        }
+
+        // `text` split into its literal runs and `{{name}}`s (names trimmed); false when a `{{`
+        // is not closed or a name is empty.
+        struct TemplatePart
+        {
+            core::String Text;
+            bool IsName = false;
+        };
+        // Where `needle` starts in `text` at or after `from`; text.Size() when it does not.
+        [[nodiscard]] static usize FindFrom(core::StringView text, core::StringView needle, usize from)
+        {
+            for (usize i = from; i + needle.Size() <= text.Size(); ++i)
+                if (text.SubStr(i, needle.Size()) == needle)
+                    return i;
+            return text.Size();
+        }
+
+        [[nodiscard]] static bool SplitTemplate(core::StringView text, Array<TemplatePart>& parts)
+        {
+            usize at = 0;
+            while (at < text.Size())
+            {
+                const usize open = FindFrom(text, core::StringView(u8"{{"), at);
+                if (open > at)
+                    parts.PushBack(TemplatePart{core::String(text.SubStr(at, open - at)), false});
+                if (open == text.Size())
+                    break;
+                const usize start = open + 2;
+                const usize close = FindFrom(text, core::StringView(u8"}}"), start);
+                if (close == text.Size())
+                    return false;
+                const core::StringView name = core::Trim(text.SubStr(start, close - start));
+                if (name.Size() == 0)
+                    return false;
+                parts.PushBack(TemplatePart{core::String(name), true});
+                at = close + 2;
+            }
+            return true;
+        }
+
+        // Binds `property` of `node` to the template `value`: one `{{name}}` alone follows the
+        // value as it is (and writes it back where the property allows); text around names
+        // follows the text built from them. False when nothing bound (no such property, or a
+        // malformed template), so the attribute is handled as written.
+        bool Bind(Node& node, core::StringView property, core::StringView value)
+        {
+            Array<TemplatePart> parts;
+            if (!SplitTemplate(value, parts) || parts.IsEmpty())
+                return false;
+            RefPtr<DataModel> model = m_data;
+            if (parts.Size() == 1 && parts[0].IsName)
+            {
+                const core::String key = parts[0].Text;
+                if (!node.BindProperty(property, [model, key] { return model->Get(key.AsView()); }))
+                    return false;
+                (void)node.BindPropertyBack(property, [model, key](const Variant& v) { model->Set(key.AsView(), v); });
+                return true;
+            }
+            return node.BindProperty(property,
+                                     [model, parts = core::Move(parts)]
+                                     {
+                                         core::String text;
+                                         for (const TemplatePart& part : parts)
+                                             text.Append(part.IsName ? FormatVariant(model->Get(part.Text.AsView())).AsView()
+                                                                     : part.Text.AsView());
+                                         return Variant::From<core::String>(core::Move(text));
+                                     });
         }
 
         static void AddClasses(UIWidget* widget, core::StringView classes)
@@ -137,5 +216,6 @@ export namespace experimental::gui
         IResourceProvider* m_resources;
         fonts::IFontService* m_fontService;
         LengthContext m_lengths;
+        RefPtr<DataModel> m_data;
     };
 }

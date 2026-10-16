@@ -826,8 +826,8 @@ export namespace experimental::gui
         /// such writable property.
         bool BindProperty(core::StringView name, core::Function<Variant()> expression);
         /// The reverse: `write` takes the property's value now and whenever it changes (the user
-        /// moved a slider, typed). For the properties a widget's user changes (the `twoWay` property
-        /// attribute); false when the node has no such property.
+        /// moved a slider, typed). Only for the properties a widget's user changes (the `twoWay`
+        /// property attribute); false for any other.
         bool BindPropertyBack(core::StringView name, core::Function<void(const Variant&)> write);
         void ClearBindings() { m_bindings.Clear(); }
         [[nodiscard]] usize BindingCount() const noexcept { return m_bindings.Size(); }

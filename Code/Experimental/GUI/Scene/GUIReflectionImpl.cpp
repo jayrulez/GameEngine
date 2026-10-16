@@ -272,7 +272,7 @@ namespace experimental::gui
     bool Node::BindPropertyBack(StringView name, core::Function<void(const core::Variant&)> write)
     {
         const PropertyInfo* property = FindReflectedProperty(GetType(), name);
-        if (property == nullptr)
+        if (property == nullptr || FindAttribute(*property, u8"twoWay") == nullptr)
             return false;
         Bind([this, property, write = core::Move(write)]() mutable
              {

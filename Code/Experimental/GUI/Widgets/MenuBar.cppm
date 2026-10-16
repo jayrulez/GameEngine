@@ -50,6 +50,8 @@ export namespace experimental::gui
                 e.button->SetFont(font);
             Relayout();
         }
+        void SetThemeFont(fonts::CachedFont* font) override { SetFont(font); } // CSS font-family and font-size
+        [[nodiscard]] fonts::CachedFont* GetFont() const { return m_font; }
         void SetBarHeight(f32 height)
         {
             m_barHeight = core::Max(1.0f, height);

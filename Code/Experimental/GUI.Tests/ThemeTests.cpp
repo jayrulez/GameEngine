@@ -156,6 +156,32 @@ TEST_CASE("theme: font-family + font-size resolve a font via the font service")
     CHECK(label->GetFont() == &fs.font);
 }
 
+TEST_CASE("theme: every widget with text takes the sheet's font")
+{
+    // A widget that keeps its text in parts (rows, a title, tab buttons) still takes font-family:
+    // the sandbox's list showed empty rows when its ListBox did not.
+    MockFontService fs;
+    StyleManager mgr;
+    mgr.SetStyleSheet(CSSParser::Parse(core::StringView(
+        u8"listbox, menubar, tabwidget, window, messagebox, tooltip { font-family: Roboto; font-size: 15; }")));
+    mgr.SetFontService(&fs);
+    auto list = core::MakeRef<ListBox>(core::DefaultAllocator());
+    auto bar = core::MakeRef<MenuBar>(core::DefaultAllocator());
+    auto tabs = core::MakeRef<TabWidget>(core::DefaultAllocator());
+    auto window = core::MakeRef<Window>(core::DefaultAllocator());
+    auto box = core::MakeRef<MessageBox>(core::DefaultAllocator());
+    auto tip = core::MakeRef<Tooltip>(core::DefaultAllocator());
+    UIWidget* widgets[] = {list.Get(), bar.Get(), tabs.Get(), window.Get(), box.Get(), tip.Get()};
+    for (UIWidget* widget : widgets)
+        mgr.ApplyTo(*widget);
+    CHECK(list->GetFont() == &fs.font);
+    CHECK(bar->GetFont() == &fs.font);
+    CHECK(tabs->GetFont() == &fs.font);
+    CHECK(window->GetFont() == &fs.font);
+    CHECK(box->GetFont() == &fs.font);
+    CHECK(tip->GetFont() == &fs.font);
+}
+
 TEST_CASE("theme: without providers, resource props are skipped (no crash)")
 {
     auto label =

@@ -55,6 +55,8 @@ export namespace experimental::gui
             m_text.SetFont(font);
             Invalidate();
         }
+        void SetThemeFont(fonts::CachedFont* font) override { SetFont(font); } // CSS font-family and font-size
+        [[nodiscard]] fonts::CachedFont* GetFont() const { return m_text.GetFont(); }
         void SetTextColor(Color color)
         {
             m_text.SetColor(color);

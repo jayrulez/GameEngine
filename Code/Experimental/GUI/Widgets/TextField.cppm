@@ -402,6 +402,7 @@ export namespace experimental::gui
         {
             if (m_onChanged)
                 m_onChanged(m_value.AsView());
+            SendEvent(Event(EventType::Changed, this));
         }
         void ResetBlink()
         {
@@ -626,6 +627,4 @@ export namespace experimental::gui
         static constexpr f32 kDoubleClickSlop = 4.0f; // max px between the two presses
         static constexpr f32 kCaretWidth = 1.5f;
     };
-
-    RTTI_DEFINE_OBJECT(TextField, "rtti::gui")
 }

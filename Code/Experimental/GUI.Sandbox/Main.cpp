@@ -206,6 +206,7 @@ private:
 
 Status GUISandbox::OnInit()
 {
+    gui::RegisterGuiElements(); // the lab's widgets, creatable by tag from markup
     // Resolve the VG shaders through the shared ShaderSystemHost over the data mount (cooked pack
     // or dev DXC over Shaders/) - the same cooked corpus (vg.vs/vg.ps) the runtime UI uses.
     if (!m_shaderHost.Initialize(*m_device, DataFileSystem()))
@@ -691,8 +692,8 @@ void GUISandbox::BuildUI()
                 <Button text="Beta"  class="danger" font-family="Roboto" font-size="16" width="90" height="30"/>
             </LinearLayout>
         )";
-        gui::WidgetFactory factory = gui::DefaultWidgetFactory();
-        gui::MarkupLoader loader(factory, nullptr, m_fontService.Get());
+        const gui::ElementSet elements = gui::ElementSet::All();
+        gui::MarkupLoader loader(elements, DefaultAllocator(), nullptr, m_fontService.Get());
         if (RefPtr<gui::Node> markupRoot = loader.LoadFromString(StringView(kMarkup)))
             m_panel->AddChild(markupRoot.Get());
     }
@@ -713,8 +714,8 @@ void GUISandbox::BuildUI()
                 <Button text="Three" font-family="Roboto" font-size="16" width="90" height="28"/>
             </FlexLayout>
         )";
-        gui::WidgetFactory factory = gui::DefaultWidgetFactory();
-        gui::MarkupLoader loader(factory, nullptr, m_fontService.Get());
+        const gui::ElementSet elements = gui::ElementSet::All();
+        gui::MarkupLoader loader(elements, DefaultAllocator(), nullptr, m_fontService.Get());
         if (RefPtr<gui::Node> flexRoot = loader.LoadFromString(StringView(kFlex)))
             m_panel->AddChild(flexRoot.Get());
     }

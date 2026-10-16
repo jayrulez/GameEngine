@@ -139,6 +139,4 @@ export namespace experimental::gui
         bool m_wrapContent = false;
         bool m_layingOut = false;
     };
-
-    RTTI_DEFINE_OBJECT(LinearLayout, "rtti::gui")
 }

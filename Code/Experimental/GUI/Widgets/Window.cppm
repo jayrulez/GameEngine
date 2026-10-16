@@ -265,5 +265,4 @@ export namespace experimental::gui
     };
 
     RTTI_DEFINE_OBJECT(DragHandle, "rtti::gui")
-    RTTI_DEFINE_OBJECT(Window, "rtti::gui")
 }

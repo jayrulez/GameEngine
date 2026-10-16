@@ -180,5 +180,4 @@ export namespace experimental::gui
             SetSelectedState(true);
     }
 
-    RTTI_DEFINE_OBJECT(RadioButton, "rtti::gui")
 }

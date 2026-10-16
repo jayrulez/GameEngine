@@ -48,6 +48,7 @@ export namespace experimental::gui
             Invalidate();
             if (m_onChanged)
                 m_onChanged(m_value);
+            SendEvent(Event(EventType::Changed, this));
         }
 
         void SetOnValueChanged(core::Function<void(f32)> callback)
@@ -150,6 +151,4 @@ export namespace experimental::gui
         Color m_handleColor{0.86f, 0.89f, 0.93f, 1.0f};
         core::Function<void(f32)> m_onChanged;
     };
-
-    RTTI_DEFINE_OBJECT(Slider, "rtti::gui")
 }

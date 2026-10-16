@@ -250,5 +250,4 @@ export namespace experimental::gui
     };
 
     RTTI_DEFINE_OBJECT(ListBoxItem, "rtti::gui")
-    RTTI_DEFINE_OBJECT(ListBox, "rtti::gui")
 }

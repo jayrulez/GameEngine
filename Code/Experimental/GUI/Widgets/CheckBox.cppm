@@ -47,6 +47,7 @@ export namespace experimental::gui
             Invalidate();
             if (m_onChanged)
                 m_onChanged(m_checked);
+            SendEvent(Event(EventType::Changed, this));
         }
         void Toggle() { SetChecked(!m_checked); }
 
@@ -107,6 +108,4 @@ export namespace experimental::gui
         Color m_checkColor{0.31f, 0.63f, 0.85f, 1.0f};
         core::Function<void(bool)> m_onChanged;
     };
-
-    RTTI_DEFINE_OBJECT(CheckBox, "rtti::gui")
 }

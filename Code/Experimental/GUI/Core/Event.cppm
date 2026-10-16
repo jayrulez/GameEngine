@@ -57,6 +57,8 @@ export namespace experimental::gui
         DragOver,
         DragLeave,
         Drop,
+        // A widget's value changed (a check box, a slider, a text field), by the user or by code.
+        Changed,
     };
 
     enum class MouseButton : u32

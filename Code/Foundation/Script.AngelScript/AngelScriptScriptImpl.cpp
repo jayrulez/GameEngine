@@ -1221,11 +1221,16 @@ namespace foundation::script::angelscript
                 // Passed to a `?&in` sink (scene.events.emit / entity.send), AngelScript dereferences
                 // the handle and delivers the OBJECT by reference - WITHOUT the OBJHANDLE bit - so the
                 // arg-slot holds a pointer to the box; a by-value handle is the object direct.
+                // An explicit handle (`@node`, the OBJHANDLE bit set) arrives one level deeper: the slot
+                // holds the address of the handle variable, which holds the box.
                 const BoxedVariant* box = nullptr;
                 if (ArgIsInReference(gen, index))
                 {
                     void* addr = gen->GetAddressOfArg(index);
-                    box = (addr != nullptr) ? *static_cast<const BoxedVariant* const*>(addr) : nullptr;
+                    const void* referenced = (addr != nullptr) ? *static_cast<const void* const*>(addr) : nullptr;
+                    if ((typeId & asTYPEID_OBJHANDLE) != 0 && referenced != nullptr)
+                        referenced = *static_cast<const void* const*>(referenced);
+                    box = static_cast<const BoxedVariant*>(referenced);
                 }
                 else
                 {

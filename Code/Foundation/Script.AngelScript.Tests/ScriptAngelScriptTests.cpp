@@ -37,6 +37,12 @@ namespace
         int serial = 7; // published read-only: a script reads it, never assigns it
         int doubled() const { return id * 2; }
         int idOf(Widget* other) const { return other != nullptr ? other->id : -1; }
+        // A Variant sink (`?&in`): whatever arrives, read as a Widget when it is one.
+        int idOfAny(Variant value) const
+        {
+            Widget* other = value.AsObject<Widget>();
+            return other != nullptr ? other->id : -1;
+        }
     };
 }
 
@@ -46,6 +52,7 @@ REFLECT_MEMBERS(Widget, "rtti::script::test")
     builder.Property<&Widget::serial>("serial", PropertyFlags::ReadOnly);
     builder.Method<&Widget::doubled>("doubled");
     builder.Method<&Widget::idOf>("idOf");
+    builder.Method<&Widget::idOfAny>("idOfAny");
     builder.Constructor();
 }
 
@@ -1169,6 +1176,7 @@ TEST_CASE("angelscript: Object-derived type as a script-visible class")
     REQUIRE(ctx->Load(u8"double I = 0;\n"
                       u8"double D = 0;\n"
                       u8"double O = 0;\n"
+                      u8"double H = 0;\n"
                       u8"void main() {\n"
                       u8"  Widget@ w = Widget();\n"
                       u8"  w.id = 21;\n"
@@ -1177,12 +1185,14 @@ TEST_CASE("angelscript: Object-derived type as a script-visible class")
                       u8"  I = w.id;\n"
                       u8"  D = w.doubled();\n" // instance method -> 42
                       u8"  O = w.idOf(w2);\n"  // object argument -> 5
+                      u8"  H = w.idOfAny(@w2);\n" // an explicit handle into a Variant sink -> 5
                       u8"}\n",
                       u8"main")
                 .IsOk());
     CHECK(ctx->GetGlobal(u8"I").Get<f64>() == 21.0);
     CHECK(ctx->GetGlobal(u8"D").Get<f64>() == 42.0);
     CHECK(ctx->GetGlobal(u8"O").Get<f64>() == 5.0);
+    CHECK(ctx->GetGlobal(u8"H").Get<f64>() == 5.0); // read one level deeper than a bare object
 }
 
 TEST_CASE("angelscript: a default-constructed reflected type")

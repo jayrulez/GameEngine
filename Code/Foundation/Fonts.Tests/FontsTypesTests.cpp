@@ -225,6 +225,7 @@ namespace
         [[nodiscard]] u32 Width() const override { return 128; }
         [[nodiscard]] u32 Height() const override { return 128; }
         [[nodiscard]] Span<const u8> PixelData() const override { return {}; }
+        [[nodiscard]] i32 GlyphFor(i32 codepoint) const override { return codepoint; }
         [[nodiscard]] bool Contains(i32) const override { return true; }
         [[nodiscard]] Float2 WhitePixelUV() const override { return Float2(0.5f, 0.5f); }
         [[nodiscard]] AtlasMode Mode() const override { return AtlasMode::DistanceField; }

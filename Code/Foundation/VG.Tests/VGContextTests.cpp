@@ -7,6 +7,7 @@
 import foundation.core;
 import foundation.image;
 import foundation.vg;
+import foundation.fonts;
 
 using namespace foundation::core;
 using namespace foundation::vg;
@@ -1238,4 +1239,55 @@ TEST_CASE("vg.context: DrawImageRounded maps the texture onto a rounded rect, cu
     VGContext square;
     square.DrawImageRounded(&tex, dest, src, CornerRadii(0.0f));
     CHECK(square.GetBatch().VertexCount() == 4u);
+}
+
+namespace
+{
+    // An atlas whose glyphs are not their codepoints: 'A' is glyph 7 and 'B' has none, as a font's
+    // own glyph ids are.
+    class GlyphIdAtlas final : public foundation::fonts::IFontAtlas
+    {
+    public:
+        [[nodiscard]] u32 Width() const override { return 64; }
+        [[nodiscard]] u32 Height() const override { return 64; }
+        [[nodiscard]] Span<const u8> PixelData() const override { return {}; }
+        [[nodiscard]] Float2 WhitePixelUV() const override { return Float2(0.5f, 0.5f); }
+        [[nodiscard]] i32 GlyphFor(i32 codepoint) const override { return codepoint == 'A' ? 7 : -1; }
+        [[nodiscard]] bool Contains(i32 glyph) const override { return glyph == 7; }
+        [[nodiscard]] bool TryGetRegion(i32 glyph, foundation::fonts::AtlasRegion& region) const override
+        {
+            if (glyph != 7)
+                return false;
+            region = foundation::fonts::AtlasRegion(0, 0, 8, 8, 0.0f, -8.0f, 10.0f);
+            return true;
+        }
+        [[nodiscard]] bool GetGlyphQuad(i32 glyph, f32& cursorX, f32 cursorY,
+                                        foundation::fonts::GlyphQuad& quad) const override
+        {
+            if (glyph != 7)
+                return false;
+            quad = foundation::fonts::GlyphQuad(cursorX, cursorY - 8.0f, cursorX + 8.0f, cursorY, 0, 0, 0.125f, 0.125f);
+            cursorX += 10.0f;
+            return true;
+        }
+        [[nodiscard]] bool GetGlyphQuadAt(i32 glyph, f32 x, f32 y, foundation::fonts::GlyphQuad& quad) const override
+        {
+            f32 cursor = x;
+            return GetGlyphQuad(glyph, cursor, y, quad);
+        }
+    };
+}
+
+TEST_CASE("vg.context: unshaped text draws each codepoint's glyph by the atlas's glyph id")
+{
+    GlyphIdAtlas atlas;
+    image::ImageDataRef texture(64, 64);
+    VGContext ctx;
+    ctx.DrawText(u8"AAB", &atlas, &texture, Float2{0.0f, 20.0f}, Color::White);
+    const VGBatch& batch = ctx.GetBatch();
+    // Two quads (glyph 7 twice); 'B' has no glyph and draws nothing.
+    usize quads = 0;
+    for (const VGCommand& cmd : batch.commands)
+        quads += static_cast<usize>(cmd.indexCount) / 6u;
+    CHECK(quads == 2u);
 }

@@ -142,6 +142,8 @@ export namespace foundation::fonts
             return true;
         }
 
+        // Keyed by codepoint for now: a codepoint is its own glyph id.
+        [[nodiscard]] i32 GlyphFor(i32 codepoint) const override { return codepoint; }
         [[nodiscard]] bool Contains(i32 codepoint) const override
         {
             if (codepoint < m_firstCodepoint || codepoint > m_lastCodepoint)

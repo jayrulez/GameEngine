@@ -1333,9 +1333,10 @@ export namespace foundation::vg
             usize ci = 0;
             while (ci < text.Size())
             {
-                const i32 ch = static_cast<i32>(fonts::DecodeCodepoint(text, ci));
+                // Unshaped: each codepoint draws its atlas's glyph for it (none: nothing, no advance).
+                const i32 glyph = atlas->GlyphFor(static_cast<i32>(fonts::DecodeCodepoint(text, ci)));
                 fonts::GlyphQuad quad;
-                if (atlas->GetGlyphQuad(ch, cursorX, cursorY, quad))
+                if (glyph >= 0 && atlas->GetGlyphQuad(glyph, cursorX, cursorY, quad))
                     EmitGlyphQuad(quad, opColor);
             }
 

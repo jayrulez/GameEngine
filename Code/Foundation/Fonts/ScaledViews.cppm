@@ -122,6 +122,7 @@ export namespace foundation::fonts
         {
             return m_base->DistanceFieldRange();
         }
+        [[nodiscard]] i32 GlyphFor(i32 codepoint) const override { return m_base->GlyphFor(codepoint); }
         [[nodiscard]] bool Contains(i32 codepoint) const override
         {
             return m_base->Contains(codepoint);

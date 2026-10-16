@@ -55,12 +55,16 @@ export namespace foundation::fonts
         [[nodiscard]] virtual u32 Height() const = 0;
         [[nodiscard]] virtual Span<const u8> PixelData() const = 0; // single-channel 8-bit coverage
 
-        [[nodiscard]] virtual bool TryGetRegion(i32 codepoint, AtlasRegion& region) const = 0;
-        [[nodiscard]] virtual bool GetGlyphQuad(i32 codepoint, f32& cursorX, f32 cursorY,
+        // Glyphs are looked up by glyph id (what a shaper writes into GlyphPosition::glyphId). Text
+        // drawn without a shaper maps each codepoint to its glyph with GlyphFor first.
+        /// The glyph this atlas draws `codepoint` with, or -1 when it has none.
+        [[nodiscard]] virtual i32 GlyphFor(i32 codepoint) const = 0;
+        [[nodiscard]] virtual bool TryGetRegion(i32 glyphId, AtlasRegion& region) const = 0;
+        [[nodiscard]] virtual bool GetGlyphQuad(i32 glyphId, f32& cursorX, f32 cursorY,
                                                 GlyphQuad& quad) const = 0;
-        [[nodiscard]] virtual bool GetGlyphQuadAt(i32 codepoint, f32 x, f32 y,
+        [[nodiscard]] virtual bool GetGlyphQuadAt(i32 glyphId, f32 x, f32 y,
                                                   GlyphQuad& quad) const = 0;
-        [[nodiscard]] virtual bool Contains(i32 codepoint) const = 0;
+        [[nodiscard]] virtual bool Contains(i32 glyphId) const = 0;
         [[nodiscard]] virtual Float2 WhitePixelUV() const = 0; // UV of a solid white texel
 
         // Storage mode + the distance-field spread (in texels) for MSDF atlases. Default to a

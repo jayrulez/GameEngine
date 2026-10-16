@@ -257,7 +257,7 @@ namespace editor
             UniquePtr<fonts::IFontAtlas> atlas(baked.Value(), editor::EditorRootAllocator());
             for (i32 cp = options.firstCodepoint; cp <= options.lastCodepoint; ++cp)
             {
-                if (atlas->Contains(cp))
+                if (atlas->Contains(atlas->GlyphFor(cp)))
                 {
                     ++outcome.glyphs;
                 }

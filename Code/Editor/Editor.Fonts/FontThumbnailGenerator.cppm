@@ -84,7 +84,7 @@ export namespace editor
             fonts::AtlasRegion regions[2];
             for (usize i = 0; i < 2; ++i)
             {
-                if (!data->atlas->TryGetRegion(kSample[i], regions[i]))
+                if (!data->atlas->TryGetRegion(data->atlas->GlyphFor(kSample[i]), regions[i]))
                 {
                     return Status{ErrorCode::NotFound};
                 }

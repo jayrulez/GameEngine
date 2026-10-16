@@ -121,3 +121,19 @@ TEST_CASE("combobox: Escape dismisses the dropdown")
     CHECK_FALSE(cb->IsOpen());
     CHECK(d->GetPopup() == nullptr);
 }
+
+TEST_CASE("combobox: the dropdown opens below the box at a display scale")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetDisplayScale(2.0f); // device pixels are twice the root's units
+    root->SetSize(core::Float2{300.0f, 300.0f});
+    auto cb = MakeCombo(root.Get());
+    cb->SetPosition(core::Float2{10.0f, 20.0f});
+    EventDispatcher* d = root->GetEventDispatcher();
+    d->InjectMouseDown(core::Float2{60.0f, 60.0f}, MouseButton::Left); // device pixels, inside the box
+    d->InjectMouseUp(core::Float2{60.0f, 60.0f}, MouseButton::Left);
+    REQUIRE(cb->IsOpen());
+    REQUIRE(d->GetPopup() != nullptr);
+    CHECK(d->GetPopup()->GetPosition().x == doctest::Approx(10.0f));
+    CHECK(d->GetPopup()->GetPosition().y == doctest::Approx(46.0f)); // the box's bottom, in root units
+}

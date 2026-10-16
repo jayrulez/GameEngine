@@ -649,7 +649,7 @@ void GUISandbox::FillNativeHosts()
                                {
                                    const auto& mouse = static_cast<const gui::MouseEvent&>(e);
                                    if (mouse.Button == gui::MouseButton::Right)
-                                       menu->Open(*area, mouse.Position);
+                                       menu->Open(*area, area->GetRootNode()->ConvertToNodeSpace(mouse.Position));
                                });
     }
 }

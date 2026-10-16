@@ -88,3 +88,23 @@ TEST_CASE("tooltip: changing the hovered node hides and resets the timer")
     CHECK_FALSE(tips.IsShown());
     CHECK(tips.GetTooltip()->GetParent() == nullptr);
 }
+
+TEST_CASE("tooltip: sits by the cursor at a display scale")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetDisplayScale(2.0f);
+    root->SetSize(core::Float2{300.0f, 300.0f});
+    auto w = Make<UIWidget>();
+    w->SetSize(core::Float2{80.0f, 30.0f});
+    w->SetTooltip(core::StringView(u8"Click me"));
+    root->AddChild(w.Get());
+    EventDispatcher* d = root->GetEventDispatcher();
+    TooltipManager tips;
+    tips.SetDelay(0.1);
+    d->InjectMouseMove(core::Float2{80.0f, 30.0f}); // device pixels: (40, 15) in the root's units
+    REQUIRE(d->GetOverNode() == w.Get());
+    tips.Update(*d, *root.Get(), 0.2);
+    REQUIRE(tips.IsShown());
+    CHECK(tips.GetTooltip()->GetPosition().x == doctest::Approx(52.0f));
+    CHECK(tips.GetTooltip()->GetPosition().y == doctest::Approx(33.0f));
+}

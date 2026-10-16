@@ -164,7 +164,7 @@ export namespace experimental::gui
                 return;
             BuildDropdown();
 
-            const core::Float2 below = ConvertToWorldSpace(core::Float2{0.0f, GetSize().y});
+            const core::Float2 below = ConvertToRootSpace(core::Float2{0.0f, GetSize().y});
             const f32 h =
                 core::Min(static_cast<f32>(m_items.Size()) * m_itemHeight, m_dropdownMaxHeight);
             m_dropdown->SetPosition(below);

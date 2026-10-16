@@ -101,6 +101,7 @@ public:
     void SetKeys(StringView keys) { m_keys = String(keys); }
     void SetAlwaysRedraw(bool always) { m_alwaysRedraw = always; }
     void SetFrameStats(bool stats) { m_frameStats = stats; }
+    void SetSweep(bool sweep) { m_sweep = sweep; }
 
     GUISandbox()
     {
@@ -141,6 +142,7 @@ private:
     void RouteInput();
     void UpdateMenu();
     void TypeKeys(gui::SceneRoot& root);
+    void Sweep();
     void DrawAndPresent(gui::SceneRoot& root);
     [[nodiscard]] gui::SceneRoot& Shown() { return m_showingMenu ? *m_menuRoot : *m_root; }
 
@@ -151,6 +153,18 @@ private:
     String m_keys;     // keystrokes to type into the root on show, one every 15 frames
     bool m_alwaysRedraw = false;
     bool m_frameStats = false;
+    // --sweep: every page, then the game menu, each widget hovered, clicked and right-clicked, one
+    // step a frame, each printed first (a crash's last line names its widget); then exit.
+    bool m_sweep = false;
+    struct SweepStep
+    {
+        String page;     // a page to show first (empty: none)
+        bool menu = false; // the game menu's root
+        Float2 at{};
+        String what;
+    };
+    Array<SweepStep> m_sweepSteps;
+    usize m_sweepNext = 0;
     f32 m_nextStatsTime = 1.0f;
     u64 m_frames = 0;      // frames the loop ran
     u64 m_drawnFrames = 0; // of them, the ones that drew
@@ -879,6 +893,86 @@ void GUISandbox::TypeKeys(gui::SceneRoot& root)
     }
 }
 
+namespace
+{
+    // The widgets under `node` a sweep visits: shown, sized, in the tree's order.
+    void CollectSweep(gui::Node& node, Array<gui::Node*>& out)
+    {
+        if (!node.IsVisible())
+            return;
+        if (node.GetSize().x > 0.0f && node.GetSize().y > 0.0f && Cast<gui::UIWidget>(&node) != nullptr)
+            out.PushBack(&node);
+        for (usize i = 0; i < node.ChildCount(); ++i)
+            CollectSweep(*node.GetChildAt(i), out);
+    }
+
+    String Describe(gui::Node& node)
+    {
+        const gui::UIWidget* widget = Cast<gui::UIWidget>(&node);
+        String text(node.GetType() != nullptr ? StringView(reinterpret_cast<const utf8char*>(node.GetType()->name)) : StringView(u8"?"));
+        if (widget != nullptr && widget->GetId().Size() != 0)
+        {
+            text += StringView(u8" #");
+            text += widget->GetId();
+        }
+        return text;
+    }
+}
+
+void GUISandbox::Sweep()
+{
+    if (m_frames < 10)
+        return;
+    if (m_sweepSteps.IsEmpty() && m_sweepNext == 0)
+    {
+        // Plan it: each page shown in turn, its widgets' centres as they lie once shown.
+        for (const Page& page : m_pages)
+        {
+            ShowPage(page.id.AsView());
+            m_root->UpdateLayout();
+            Array<gui::Node*> nodes;
+            CollectSweep(*page.node, nodes);
+            for (gui::Node* node : nodes)
+            {
+                const gui::Rect bounds = node->GetScreenBounds();
+                if (bounds.y + bounds.height * 0.5f > static_cast<f32>(m_height))
+                    continue; // below the fold
+                m_sweepSteps.PushBack(SweepStep{page.id, false, Float2{bounds.x + bounds.width * 0.5f, bounds.y + bounds.height * 0.5f}, Describe(*node)});
+            }
+        }
+        ShowPage(m_startPage.AsView());
+        m_sweepSteps.PushBack(SweepStep{String(), true, Float2{}, String(u8"open the game menu")});
+        std::printf("GUISandbox sweep: %llu steps\n", static_cast<unsigned long long>(m_sweepSteps.Size()));
+    }
+    if (m_sweepNext >= m_sweepSteps.Size())
+    {
+        std::printf("GUISandbox sweep: done\n");
+        std::fflush(stdout);
+        Exit();
+        return;
+    }
+    const SweepStep& step = m_sweepSteps[m_sweepNext++];
+    std::printf("GUISandbox sweep %llu: %s %s at %.0f, %.0f\n", static_cast<unsigned long long>(m_sweepNext),
+                reinterpret_cast<const char*>(step.page.CStr()), reinterpret_cast<const char*>(step.what.CStr()), step.at.x, step.at.y);
+    std::fflush(stdout);
+    if (step.menu)
+    {
+        OpenMenu();
+        return;
+    }
+    if (step.page.AsView() != m_current.AsView())
+        ShowPage(step.page.AsView());
+    // Device pixels: the root's transform maps them (its display scale).
+    const Float2 at{step.at.x * m_root->GetDisplayScale(), step.at.y * m_root->GetDisplayScale()};
+    gui::EventDispatcher& d = *m_root->GetEventDispatcher();
+    d.InjectMouseMove(at);
+    d.InjectMouseDown(at, gui::MouseButton::Left);
+    d.InjectMouseUp(at, gui::MouseButton::Left);
+    d.InjectMouseDown(at, gui::MouseButton::Right);
+    d.InjectMouseUp(at, gui::MouseButton::Right);
+    d.InjectKeyDown(static_cast<u32>(gui::KeyCode::Escape)); // close what a click opened
+}
+
 void GUISandbox::UpdateMenu()
 {
     // --menu-call: once the menu has been up a few frames, as a click would come.
@@ -906,6 +1000,8 @@ void GUISandbox::OnRender()
     RouteInput();
     gui::SceneRoot& shown = Shown();
     TypeKeys(shown);
+    if (m_sweep)
+        Sweep();
 
     // A window moved to a monitor of another density takes its scale.
     const Float2 viewport{static_cast<f32>(m_width), static_cast<f32>(m_height)};
@@ -1059,8 +1155,9 @@ int main(int argc, char** argv)
     // --menu-call <function>: call one of the game menu's script functions once it is up (onSettings,
     // onPlay, onQuit). --keys "<keys>": type keystrokes into what is shown, one every 15 frames
     // ("down down return", "pad-east"). --always-redraw: draw every frame. --frame-stats: print,
-    // each second, how many frames drew. With the framework's --screenshot flags, a picture of any
-    // of it.
+    // each second, how many frames drew. --sweep: hover, click and right-click every widget of every
+    // page, then open the game menu, printing each step, and exit (a smoke test; a crash's last line
+    // names its widget). With the framework's --screenshot flags, a picture of any of it.
     for (int i = 1; i < argc; ++i)
     {
         const StringView arg(reinterpret_cast<const utf8char*>(argv[i]));
@@ -1077,6 +1174,8 @@ int main(int argc, char** argv)
             app.SetAlwaysRedraw(true);
         else if (arg == StringView(u8"--frame-stats"))
             app.SetFrameStats(true);
+        else if (arg == StringView(u8"--sweep"))
+            app.SetSweep(true);
     }
     return app.Run(argc, argv);
 }

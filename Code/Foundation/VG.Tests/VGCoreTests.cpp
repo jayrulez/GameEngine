@@ -12,8 +12,8 @@ using namespace foundation::vg;
 
 TEST_CASE("vg.vertex: layout and solid helpers")
 {
-    CHECK(sizeof(VGVertex) == 36u);
-    CHECK(VGVertex::SizeInBytes == 36);
+    CHECK(sizeof(VGVertex) == 44u);
+    CHECK(VGVertex::SizeInBytes == 44);
 
     const VGVertex v = VGVertex::Solid(Float2{3.0f, 4.0f}, Color::Red);
     CHECK(v.position == Float2{3.0f, 4.0f});

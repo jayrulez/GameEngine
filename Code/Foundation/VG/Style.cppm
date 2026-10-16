@@ -4,7 +4,8 @@
 // Foundation::VG - :style partition.
 //
 // Geometry/stroke style descriptors: CornerRadii (rounded rects) and
-// StrokeStyle (width/cap/join/miter/dash). Ported from Sedulous.VG.
+// StrokeStyle (width/cap/join/miter/dash). Ported from Sedulous.VG. TextEffects (an outline, a
+// shadow and a glow drawn under text) is ours (F4 of Specs/vg-and-gui-lab.md).
 
 module;
 #include "Core/Prelude.h"
@@ -104,5 +105,33 @@ export namespace foundation::vg
             : width(inWidth), cap(inCap), join(inJoin), miterLimit(inMiterLimit)
         {
         }
+    };
+
+    /// Effects drawn under text (VGContext::SetTextEffects), in the text's own pixels: a shadow,
+    /// then a glow, then an outline, then the glyphs. The glow and the outline, and a shadow's
+    /// blur, read a distance-field font's true distance; a coverage font draws a shadow's offset
+    /// copy only. They reach as far past the edge as the field holds: half the atlas's distance
+    /// range, in its bake's pixels (2 px for the default 4-texel range at the bake size), and
+    /// what asks for more is scaled down to fit.
+    struct TextEffects
+    {
+        f32 outlineWidth = 0.0f; ///< Pixels past the edge; 0 for none.
+        Color outlineColor = Color{0.0f, 0.0f, 0.0f, 1.0f};
+        Float2 shadowOffset{};   ///< The shadow's offset from the text, in pixels.
+        f32 shadowBlur = 0.0f;   ///< The width of the shadow's soft edge, in pixels; 0 for hard.
+        Color shadowColor = Color{0.0f, 0.0f, 0.0f, 0.0f}; ///< Transparent: no shadow.
+        f32 glowRadius = 0.0f;   ///< How far the glow fades out past the edge; 0 for none.
+        Color glowColor = Color{1.0f, 1.0f, 1.0f, 1.0f};
+
+        [[nodiscard]] constexpr bool HasOutline() const noexcept
+        {
+            return outlineWidth > 0.0f && outlineColor.a > 0.0f;
+        }
+        [[nodiscard]] constexpr bool HasShadow() const noexcept
+        {
+            return shadowColor.a > 0.0f && (shadowOffset.x != 0.0f || shadowOffset.y != 0.0f || shadowBlur > 0.0f);
+        }
+        [[nodiscard]] constexpr bool HasGlow() const noexcept { return glowRadius > 0.0f && glowColor.a > 0.0f; }
+        [[nodiscard]] constexpr bool Any() const noexcept { return HasOutline() || HasShadow() || HasGlow(); }
     };
 }

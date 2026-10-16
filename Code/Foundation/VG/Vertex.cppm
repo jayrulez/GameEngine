@@ -31,9 +31,13 @@ export namespace foundation::vg
         Float2 texCoord;     ///< Texture coordinates (UV).
         Color color;         ///< Vertex color in full float RGBA (no 8-bit quantization).
         f32 coverage = 1.0f; ///< Analytical-AA coverage (0 = transparent fringe, 1 = opaque).
+        /// A distance-field glyph's effect pass (TextEffects), in the field's units (0.5 is the
+        /// edge): x moves the edge outward, y widens it into a soft ramp. Either nonzero reads
+        /// the field's true distance (alpha) instead of the multi-channel median. Zero elsewhere.
+        Float2 effect{};
 
         /// Size in bytes of this vertex structure.
-        static constexpr i32 SizeInBytes = 36; // 8 + 8 + 16 + 4
+        static constexpr i32 SizeInBytes = 44; // 8 + 8 + 16 + 4 + 8
 
         /// Fixed UV for solid-color drawing.
         static constexpr f32 SolidUV = 0.5f;
@@ -89,5 +93,5 @@ export namespace foundation::vg
     static_assert(sizeof(VGBoxVertex) == VGBoxVertex::SizeInBytes, "VGBoxVertex must stay 88 bytes");
 
     static_assert(sizeof(VGVertex) == VGVertex::SizeInBytes,
-                  "VGVertex must stay 24 bytes for the renderer layout");
+                  "VGVertex must match the renderer layout (VGRenderVertex)");
 }

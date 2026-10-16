@@ -1391,11 +1391,12 @@ export namespace foundation::vg::renderer
                                      vg::VGBlendMode blendMode = vg::VGBlendMode::Normal,
                                      bool clipped = false, bool box = false)
         {
-            const rhi::VertexAttribute attributes[4] = {
+            const rhi::VertexAttribute attributes[5] = {
                 {rhi::VertexFormat::Float32x2, 0, 0},  // position
                 {rhi::VertexFormat::Float32x2, 8, 1},  // texCoord
                 {rhi::VertexFormat::Float32x4, 16, 2}, // color
                 {rhi::VertexFormat::Float32, 32, 3},   // coverage
+                {rhi::VertexFormat::Float32x2, 36, 4}, // effect (distance-field text effects)
             };
             // An analytic box's vertex (foundation::vg::VGBoxVertex).
             const rhi::VertexAttribute boxAttributes[7] = {
@@ -1411,7 +1412,7 @@ export namespace foundation::vg::renderer
             vbLayout.stride = box ? static_cast<u32>(sizeof(foundation::vg::VGBoxVertex))
                                   : static_cast<u32>(sizeof(VGRenderVertex));
             vbLayout.attributes = box ? Span<const rhi::VertexAttribute>(boxAttributes, 7)
-                                      : Span<const rhi::VertexAttribute>(attributes, 4);
+                                      : Span<const rhi::VertexAttribute>(attributes, 5);
             const rhi::VertexBufferLayout vertexBuffers[1] = {vbLayout};
 
             rhi::ColorTargetState colorTarget{};

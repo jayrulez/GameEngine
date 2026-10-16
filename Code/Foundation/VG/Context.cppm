@@ -44,6 +44,7 @@ export namespace foundation::vg
         bool scissored = false;
         f32 opacity = 1.0f;
         i32 stencilRef = 0;
+        TextEffects textEffects; ///< Drawn under every text draw (SetTextEffects).
     };
 
     /// Main user-facing API for vector graphics drawing. Produces batched
@@ -380,6 +381,14 @@ export namespace foundation::vg
             }
         }
         [[nodiscard]] f32 Opacity() const { return m_currentState.opacity; }
+
+        // === Text effects ===
+
+        /// Effects drawn under the text drawn from here (an outline, a shadow, a glow), until
+        /// changed, cleared or a PopState; part of the state PushState saves.
+        void SetTextEffects(const TextEffects& effects) { m_currentState.textEffects = effects; }
+        void ClearTextEffects() { m_currentState.textEffects = TextEffects{}; }
+        [[nodiscard]] const TextEffects& GetTextEffects() const { return m_currentState.textEffects; }
 
         // === Layers ===
 
@@ -1326,19 +1335,22 @@ export namespace foundation::vg
             SetupForTextureDraw(textureIndex);
 
             const usize startVertex = m_batch.vertices.Size();
-            const Color opColor = ApplyOpacity(color);
-            f32 cursorX = position.x;
-            const f32 cursorY = position.y;
-
-            usize ci = 0;
-            while (ci < text.Size())
-            {
-                // Unshaped: each codepoint draws its atlas's glyph for it (none: nothing, no advance).
-                const i32 glyph = atlas->GlyphFor(static_cast<i32>(fonts::DecodeCodepoint(text, ci)));
-                fonts::GlyphQuad quad;
-                if (glyph >= 0 && atlas->GetGlyphQuad(glyph, cursorX, cursorY, quad))
-                    EmitGlyphQuad(quad, opColor);
-            }
+            EmitGlyphPasses(*atlas, ApplyOpacity(color),
+                            [&](auto&& emit)
+                            {
+                                f32 cursorX = position.x;
+                                usize ci = 0;
+                                while (ci < text.Size())
+                                {
+                                    // Unshaped: each codepoint draws its atlas's glyph for it (none:
+                                    // nothing, no advance).
+                                    const i32 glyph =
+                                        atlas->GlyphFor(static_cast<i32>(fonts::DecodeCodepoint(text, ci)));
+                                    fonts::GlyphQuad quad;
+                                    if (glyph >= 0 && atlas->GetGlyphQuad(glyph, cursorX, position.y, quad))
+                                        emit(quad);
+                                }
+                            });
 
             TransformVertices(startVertex);
 
@@ -1530,16 +1542,19 @@ export namespace foundation::vg
             SetupForTextureDraw(textureIndex);
 
             const usize startVertex = m_batch.vertices.Size();
-            const Color opColor = ApplyOpacity(color);
-
-            for (usize p = 0; p < positions.Size(); ++p)
-            {
-                const fonts::GlyphPosition& pos = positions[p];
-                fonts::GlyphQuad quad;
-                f32 glyphX = offsetX + pos.x + pos.xOffset;
-                if (font->atlas->GetGlyphQuad(pos.glyphId, glyphX, offsetY + pos.y + pos.yOffset, quad))
-                    EmitGlyphQuad(quad, opColor);
-            }
+            EmitGlyphPasses(*font->atlas, ApplyOpacity(color),
+                            [&](auto&& emit)
+                            {
+                                for (usize p = 0; p < positions.Size(); ++p)
+                                {
+                                    const fonts::GlyphPosition& pos = positions[p];
+                                    fonts::GlyphQuad quad;
+                                    f32 glyphX = offsetX + pos.x + pos.xOffset;
+                                    if (font->atlas->GetGlyphQuad(pos.glyphId, glyphX, offsetY + pos.y + pos.yOffset,
+                                                                  quad))
+                                        emit(quad);
+                                }
+                            });
 
             TransformVertices(startVertex);
 
@@ -1676,18 +1691,67 @@ export namespace foundation::vg
         }
 
         /// Emit a glyph quad into the batch in untransformed coordinates.
-        void EmitGlyphQuad(const fonts::GlyphQuad& quad, Color color)
+        /// Emits a run of glyphs under the current text effects: `forEachQuad(emit)` calls
+        /// `emit(quad)` for each glyph's quad, once per pass (shadow, glow, outline, then the
+        /// glyphs themselves in `color`). Effects in pixels become field units per glyph (a quad's
+        /// atlas texels per pixel over the atlas's distance range), so they follow the text's
+        /// size and the transform, and are scaled down to what the field holds (half its range).
+        template <typename ForEachQuad>
+        void EmitGlyphPasses(const fonts::IFontAtlas& atlas, Color color, ForEachQuad&& forEachQuad)
+        {
+            const TextEffects& effects = m_currentState.textEffects;
+            const bool distanceField = atlas.Mode() == fonts::AtlasMode::DistanceField;
+            const f32 range = atlas.DistanceFieldRange();
+            const f32 atlasWidth = static_cast<f32>(atlas.Width());
+            const auto pass = [&](Float2 offset, Color passColor, f32 shiftPixels, f32 softPixels)
+            {
+                forEachQuad(
+                    [&](fonts::GlyphQuad quad)
+                    {
+                        Float2 effect{};
+                        if (distanceField && range > 0.0f && quad.x1 > quad.x0 && (shiftPixels > 0.0f || softPixels > 0.0f))
+                        {
+                            const f32 unitsPerPixel = (quad.u1 - quad.u0) * atlasWidth / (quad.x1 - quad.x0) / range;
+                            effect = Float2{shiftPixels * unitsPerPixel, softPixels * unitsPerPixel};
+                            // The ramp's outer end past the edge, in field units; the field ends at 0.5.
+                            const f32 reach = effect.x + effect.y * 0.5f;
+                            constexpr f32 kMaxReach = 0.49f;
+                            if (reach > kMaxReach)
+                                effect = effect * (kMaxReach / reach);
+                        }
+                        quad.x0 += offset.x;
+                        quad.x1 += offset.x;
+                        quad.y0 += offset.y;
+                        quad.y1 += offset.y;
+                        EmitGlyphQuad(quad, passColor, effect);
+                    });
+            };
+            if (effects.HasShadow())
+                pass(effects.shadowOffset, ApplyOpacity(effects.shadowColor), 0.0f,
+                     distanceField ? effects.shadowBlur : 0.0f);
+            if (distanceField && effects.HasGlow()) // full at the edge, gone glowRadius past it
+                pass(Float2{}, ApplyOpacity(effects.glowColor), effects.glowRadius * 0.5f, effects.glowRadius);
+            if (distanceField && effects.HasOutline())
+                pass(Float2{}, ApplyOpacity(effects.outlineColor), effects.outlineWidth, 0.0f);
+            pass(Float2{}, color, 0.0f, 0.0f);
+        }
+
+        void EmitGlyphQuad(const fonts::GlyphQuad& quad, Color color, Float2 effect = Float2{})
         {
             const u32 baseIndex = static_cast<u32>(m_batch.vertices.Size());
 
-            m_batch.vertices.PushBack(
-                VGVertex(Float2{quad.x0, quad.y0}, Float2{quad.u0, quad.v0}, color, 1.0f));
-            m_batch.vertices.PushBack(
-                VGVertex(Float2{quad.x1, quad.y0}, Float2{quad.u1, quad.v0}, color, 1.0f));
-            m_batch.vertices.PushBack(
-                VGVertex(Float2{quad.x1, quad.y1}, Float2{quad.u1, quad.v1}, color, 1.0f));
-            m_batch.vertices.PushBack(
-                VGVertex(Float2{quad.x0, quad.y1}, Float2{quad.u0, quad.v1}, color, 1.0f));
+            VGVertex vertex(Float2{quad.x0, quad.y0}, Float2{quad.u0, quad.v0}, color, 1.0f);
+            vertex.effect = effect;
+            m_batch.vertices.PushBack(vertex);
+            vertex.position = Float2{quad.x1, quad.y0};
+            vertex.texCoord = Float2{quad.u1, quad.v0};
+            m_batch.vertices.PushBack(vertex);
+            vertex.position = Float2{quad.x1, quad.y1};
+            vertex.texCoord = Float2{quad.u1, quad.v1};
+            m_batch.vertices.PushBack(vertex);
+            vertex.position = Float2{quad.x0, quad.y1};
+            vertex.texCoord = Float2{quad.u0, quad.v1};
+            m_batch.vertices.PushBack(vertex);
 
             m_batch.indices.PushBack(baseIndex + 0);
             m_batch.indices.PushBack(baseIndex + 1);

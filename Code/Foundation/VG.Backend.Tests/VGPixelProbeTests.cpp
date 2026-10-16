@@ -1183,3 +1183,162 @@ TEST_CASE("vg.pixels: a layer fades a group as one, nests, clips inside, blurs, 
         webgpu->Destroy();
     }
 }
+
+// ============================================================================================
+// Text effects (F4 of Specs/vg-and-gui-lab.md): a distance-field 'I' (one rectangle) baked at
+// 48 px and drawn at that size, so a pixel of the text is a texel of the bake. In an Encoded
+// canvas a byte is coverage, so a row's coverage sums to the widths it crosses: an outline adds
+// its width each side of the stem and leaves the stem as it was; a hard shadow lands its offset
+// away.
+// ============================================================================================
+
+import foundation.fonts.distancefield;
+import foundation.fonts.distancefield.baker;
+
+namespace
+{
+    struct DistanceFieldI
+    {
+        fonts::IFont* font = nullptr;
+        fonts::IFontAtlas* atlas = nullptr;
+        UniquePtr<image::ImageDataRef> texture;
+        f32 capTop = 0.0f; // the stem's top above the baseline, in pixels
+
+        explicit DistanceFieldI()
+        {
+            fonts::TrueTypeFontParser parser;
+            fonts::FontLoadOptions options = fonts::FontLoadOptions::DistanceField();
+            options.pixelHeight = 48.0f;
+            auto parsed = parser.ParseFromFile(
+                testsupport::DataPath(u8"Assets/fonts/roboto/Roboto-Regular.ttf").AsView(), options,
+                DefaultAllocator());
+            REQUIRE(parsed.HasValue());
+            font = parsed.Value();
+            fonts::DistanceFieldFontAtlasBaker baker;
+            auto baked = baker.Bake(*font, options, DefaultAllocator());
+            REQUIRE(baked.HasValue());
+            atlas = baked.Value();
+            texture = UniquePtr<image::ImageDataRef>(
+                DefaultAllocator().New<image::ImageDataRef>(atlas->Width(), atlas->Height(), image::PixelFormat::RGBA8,
+                                                            atlas->PixelData().Data(), atlas->PixelData().Size(),
+                                                            image::ImageColorSpace::Linear),
+                DefaultAllocator());
+            fonts::AtlasRegion region;
+            REQUIRE(atlas->TryGetRegion(atlas->GlyphFor('I'), region));
+            capTop = -region.offsetY - static_cast<f32>(options.padding) - 1.0f;
+        }
+        ~DistanceFieldI()
+        {
+            DefaultAllocator().Delete(atlas);
+            DefaultAllocator().Delete(font);
+        }
+    };
+
+    constexpr f32 kStemX = 40.0f;
+    constexpr f32 kBaseline = 90.0f;
+
+    // Coverage summed along row y, of one channel.
+    f32 RowCoverage(const Pixels& px, u32 y, i32 channel)
+    {
+        f32 sum = 0.0f;
+        for (u32 x = 0; x < kSize; ++x)
+            sum += static_cast<f32>(px.At(x, y)[channel]) / 255.0f;
+        return sum;
+    }
+
+    // The last column (or row) along a line where a channel passes half.
+    i32 LastInked(const Pixels& px, bool alongRow, u32 line, i32 channel)
+    {
+        i32 last = -1;
+        for (u32 i = 0; i < kSize; ++i)
+            if ((alongRow ? px.At(i, line) : px.At(line, i))[channel] > 127)
+                last = static_cast<i32>(i);
+        return last;
+    }
+
+    void ProbeTextEffects(rhi::Device& device, const char* name)
+    {
+        INFO(doctest::String(name));
+        DistanceFieldI glyph;
+        const auto draw = [&](const vg::TextEffects& effects)
+        {
+            return RenderScene(
+                device,
+                [&](vg::VGContext& ctx)
+                {
+                    ctx.SetTextEffects(effects);
+                    ctx.DrawText(u8"I", glyph.atlas, glyph.texture.Get(), Float2{kStemX, kBaseline},
+                                 Color{0.0f, 1.0f, 0.0f, 1.0f});
+                },
+                1, vg::VGBlendSpace::Encoded);
+        };
+        const u32 middle = static_cast<u32>(kBaseline - glyph.capTop * 0.5f);
+
+        const Pixels plain = draw(vg::TextEffects{});
+        vg::TextEffects outlined;
+        outlined.outlineWidth = 1.5f;
+        outlined.outlineColor = Color{1.0f, 0.0f, 0.0f, 1.0f};
+        const Pixels outline = draw(outlined);
+        REQUIRE(plain.valid);
+        REQUIRE(outline.valid);
+        SaveProbePng(outline, u8"text-effects-outline.png");
+
+        const f32 stem = RowCoverage(plain, middle, 1);
+        const f32 stemOutlined = RowCoverage(outline, middle, 1);
+        const f32 ring = RowCoverage(outline, middle, 0);
+        INFO("stem ", stem, " px, outlined ", stemOutlined, " px, outline ", ring, " px across");
+        CHECK(stem > 3.0f);
+        CHECK(Abs(stemOutlined - stem) < 0.5f); // the glyph is drawn as it was, over the outline
+        CHECK(Abs(ring - 3.0f) < 0.6f);         // 1.5 px each side
+
+        vg::TextEffects shadowed;
+        shadowed.shadowOffset = Float2{5.0f, 3.0f};
+        shadowed.shadowColor = Color{0.0f, 0.0f, 1.0f, 1.0f};
+        const Pixels shadow = draw(shadowed);
+        REQUIRE(shadow.valid);
+        SaveProbePng(shadow, u8"text-effects-shadow.png");
+        const i32 stemRight = LastInked(shadow, true, middle, 1);
+        const i32 shadowRight = LastInked(shadow, true, middle, 2);
+        const u32 stemColumn = static_cast<u32>(stemRight - 1);
+        const i32 stemBottom = LastInked(shadow, false, stemColumn, 1);
+        const i32 shadowBottom = LastInked(shadow, false, stemColumn + 5u, 2);
+        INFO("right edges ", stemRight, "/", shadowRight, ", bottoms ", stemBottom, "/", shadowBottom);
+        CHECK(stemRight >= 0);
+        CHECK(shadowRight - stemRight == 5);
+        CHECK(shadowBottom - stemBottom == 3);
+    }
+}
+
+TEST_CASE("vg.pixels: a distance-field outline's width and a shadow's offset, in pixels")
+{
+    rhi::Backend* vulkan = nullptr;
+    (void)rhi::vk::CreateBackend(rhi::vk::VkBackendDesc{}, vulkan);
+    rhi::Backend* webgpu = nullptr;
+    (void)rhi::webgpu::CreateBackend(rhi::webgpu::WebGpuBackendDesc{}, webgpu, DefaultAllocator());
+    if (rhi::Device* device = MakeDevice(vulkan))
+    {
+        ProbeTextEffects(*device, "vulkan");
+        device->Destroy();
+    }
+    else
+    {
+        MESSAGE("Vulkan unavailable - vulkan text effect probe skipped");
+    }
+    if (rhi::Device* device = MakeDevice(webgpu))
+    {
+        ProbeTextEffects(*device, "webgpu");
+        device->Destroy();
+    }
+    else
+    {
+        MESSAGE("WebGPU unavailable - webgpu text effect probe skipped");
+    }
+    if (vulkan != nullptr)
+    {
+        vulkan->Destroy();
+    }
+    if (webgpu != nullptr)
+    {
+        webgpu->Destroy();
+    }
+}

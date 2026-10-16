@@ -11,7 +11,8 @@ add_executable(VG.Backend.Tests
 target_link_libraries(VG.Backend.Tests PRIVATE
     Foundation::VG Foundation::VG.Renderer Foundation::Shaders.System
     Foundation::Fonts Foundation::Fonts.TrueType Foundation::Fonts.Coverage.Baker Foundation::Fonts.Coverage
-    Foundation::Fonts.Resource Foundation::Image Foundation::Image.IO
+    Foundation::Fonts.Resource Foundation::Fonts.DistanceField Foundation::Fonts.DistanceField.Baker
+    Foundation::Image Foundation::Image.IO
     Foundation::RHI.TestSupport Foundation::RHI.Vulkan Foundation::RHI.WebGPU doctest::doctest)
 
 target_compile_definitions(VG.Backend.Tests PRIVATE

@@ -4,7 +4,7 @@
 // Foundation::VG.Renderer::Renderer - :vertex partition.
 //
 // VGRenderVertex: the GPU vertex layout (float2 pos, float2 uv, float4 color,
-// float coverage) the vg shader expects. Built from the CPU VGVertex; the color
+// float coverage, float2 effect) the vg shader expects. Built from the CPU VGVertex; the color
 // passes through UNCONVERTED - vertex colors are authored sRGB and the vg vertex
 // shader performs the single sRGB->linear decode (decoding here too would double-
 // decode). Ported from Sedulous.VG.Renderer/VGRenderVertex.bf.
@@ -27,6 +27,7 @@ export namespace foundation::vg::renderer
         f32 texCoord[2];
         f32 color[4];
         f32 coverage;
+        f32 effect[2];
 
         VGRenderVertex() = default;
 
@@ -41,9 +42,11 @@ export namespace foundation::vg::renderer
             color[2] = v.color.b;
             color[3] = v.color.a;
             coverage = v.coverage;
+            effect[0] = v.effect.x;
+            effect[1] = v.effect.y;
         }
     };
 
-    static_assert(sizeof(VGRenderVertex) == 36,
-                  "VGRenderVertex must be 36 bytes (8+8+16+4) for the shader layout");
+    static_assert(sizeof(VGRenderVertex) == 44,
+                  "VGRenderVertex must be 44 bytes (8+8+16+4+8) for the shader layout");
 }

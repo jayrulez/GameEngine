@@ -1248,6 +1248,13 @@ namespace
     class GlyphIdAtlas final : public foundation::fonts::IFontAtlas
     {
     public:
+        // A distance-field atlas when asked (effects read its range): 4 texels, one texel a pixel.
+        foundation::fonts::AtlasMode mode = foundation::fonts::AtlasMode::Coverage;
+        [[nodiscard]] foundation::fonts::AtlasMode Mode() const override { return mode; }
+        [[nodiscard]] f32 DistanceFieldRange() const override
+        {
+            return mode == foundation::fonts::AtlasMode::DistanceField ? 4.0f : 0.0f;
+        }
         [[nodiscard]] u32 Width() const override { return 64; }
         [[nodiscard]] u32 Height() const override { return 64; }
         [[nodiscard]] Span<const u8> PixelData() const override { return {}; }
@@ -1290,6 +1297,100 @@ TEST_CASE("vg.context: unshaped text draws each codepoint's glyph by the atlas's
     for (const VGCommand& cmd : batch.commands)
         quads += static_cast<usize>(cmd.indexCount) / 6u;
     CHECK(quads == 2u);
+}
+
+namespace
+{
+    // The quads of a batch's text in draw order: each one's first vertex.
+    Array<VGVertex> QuadCorners(const VGBatch& batch)
+    {
+        Array<VGVertex> corners;
+        for (usize i = 0; i + 3 < batch.vertices.Size(); i += 4)
+            corners.PushBack(batch.vertices[i]);
+        return corners;
+    }
+}
+
+TEST_CASE("vg.context: text effects draw a shadow, a glow and an outline under the glyphs")
+{
+    GlyphIdAtlas atlas;
+    atlas.mode = foundation::fonts::AtlasMode::DistanceField;
+    image::ImageDataRef texture(64, 64);
+    VGContext ctx;
+    TextEffects effects;
+    effects.shadowOffset = Float2{3.0f, 2.0f};
+    effects.shadowBlur = 1.0f;
+    effects.shadowColor = Color{0.0f, 0.0f, 1.0f, 1.0f};
+    effects.glowRadius = 1.0f;
+    effects.glowColor = Color{0.0f, 1.0f, 0.0f, 1.0f};
+    effects.outlineWidth = 1.0f;
+    effects.outlineColor = Color{1.0f, 0.0f, 0.0f, 1.0f};
+    ctx.SetTextEffects(effects);
+    ctx.DrawText(u8"A", &atlas, &texture, Float2{10.0f, 20.0f}, Color::White);
+
+    const Array<VGVertex> quads = QuadCorners(ctx.GetBatch());
+    REQUIRE(quads.Size() == 4u);
+    // One texel a pixel over a 4-texel range: a pixel is a quarter of the field's unit.
+    // The shadow: offset, blurred over a pixel, its edge where the glyph's is.
+    CHECK(quads[0].position.x == doctest::Approx(13.0f));
+    CHECK(quads[0].position.y == doctest::Approx(14.0f));
+    CHECK(quads[0].color.b == doctest::Approx(1.0f));
+    CHECK(quads[0].effect.x == doctest::Approx(0.0f));
+    CHECK(quads[0].effect.y == doctest::Approx(0.25f));
+    // The glow: full at the edge, gone a pixel past it (centred half a pixel out).
+    CHECK(quads[1].position.x == doctest::Approx(10.0f));
+    CHECK(quads[1].color.g == doctest::Approx(1.0f));
+    CHECK(quads[1].effect.x == doctest::Approx(0.125f));
+    CHECK(quads[1].effect.y == doctest::Approx(0.25f));
+    // The outline: the edge moved a pixel out, sharp.
+    CHECK(quads[2].color.r == doctest::Approx(1.0f));
+    CHECK(quads[2].effect.x == doctest::Approx(0.25f));
+    CHECK(quads[2].effect.y == doctest::Approx(0.0f));
+    // The glyphs last, as without effects.
+    CHECK(quads[3].position.x == doctest::Approx(10.0f));
+    CHECK(quads[3].effect.x == doctest::Approx(0.0f));
+    CHECK(quads[3].effect.y == doctest::Approx(0.0f));
+}
+
+TEST_CASE("vg.context: a text effect wider than the field holds is scaled down to fit")
+{
+    GlyphIdAtlas atlas;
+    atlas.mode = foundation::fonts::AtlasMode::DistanceField;
+    image::ImageDataRef texture(64, 64);
+    VGContext ctx;
+    TextEffects effects;
+    effects.outlineWidth = 6.0f; // 1.5 field units; the field ends half a unit past the edge
+    ctx.SetTextEffects(effects);
+    ctx.DrawText(u8"A", &atlas, &texture, Float2{0.0f, 20.0f}, Color::White);
+    const Array<VGVertex> quads = QuadCorners(ctx.GetBatch());
+    REQUIRE(quads.Size() == 2u);
+    CHECK(quads[0].effect.x == doctest::Approx(0.49f));
+}
+
+TEST_CASE("vg.context: a coverage font draws only a shadow's offset copy, and effects are state")
+{
+    GlyphIdAtlas atlas; // coverage: no field to grow or soften
+    image::ImageDataRef texture(64, 64);
+    VGContext ctx;
+    TextEffects effects;
+    effects.shadowOffset = Float2{2.0f, 2.0f};
+    effects.shadowBlur = 3.0f;
+    effects.shadowColor = Color{0.0f, 0.0f, 0.0f, 1.0f};
+    effects.outlineWidth = 1.0f;
+    effects.glowRadius = 2.0f;
+    ctx.PushState();
+    ctx.SetTextEffects(effects);
+    ctx.DrawText(u8"A", &atlas, &texture, Float2{0.0f, 20.0f}, Color::White);
+    {
+        const Array<VGVertex> quads = QuadCorners(ctx.GetBatch());
+        REQUIRE(quads.Size() == 2u); // the shadow, then the glyph
+        CHECK(quads[0].position.x == doctest::Approx(2.0f));
+        CHECK(quads[0].effect.y == doctest::Approx(0.0f));
+    }
+    ctx.PopState();
+    CHECK_FALSE(ctx.GetTextEffects().Any());
+    ctx.DrawText(u8"A", &atlas, &texture, Float2{0.0f, 40.0f}, Color::White);
+    CHECK(QuadCorners(ctx.GetBatch()).Size() == 3u); // one more: the glyph alone
 }
 
 namespace

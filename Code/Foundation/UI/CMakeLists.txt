@@ -131,6 +131,7 @@ target_sources(UI
             Controls/CheckBox.cppm
             Controls/Label.cppm
             Text/TextRuns.cppm
+            Text/TextLayout.cppm
             Controls/Panel.cppm
             Controls/Spacer.cppm
             Controls/Separator.cppm

@@ -28,6 +28,7 @@ add_executable(UI.Tests
     EditingTests.cpp
     EditTextTests.cpp
     TextRunsTests.cpp
+    TextLayoutTests.cpp
     FontFamilyTests.cpp
     InlineStyleTests.cpp
     NumericFieldTests.cpp
@@ -59,7 +60,7 @@ add_executable(UI.Tests
     ControlTests.cpp)
 
 target_link_libraries(UI.Tests PRIVATE
-    Foundation::UI doctest::doctest)
+    Foundation::UI Foundation::Fonts.TrueType Foundation::VFS doctest::doctest)
 
 target_compile_definitions(UI.Tests PRIVATE
     DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS)

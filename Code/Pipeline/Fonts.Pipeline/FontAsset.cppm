@@ -123,7 +123,9 @@ export namespace pipeline{
         // 8 (2026-10-15): the atlas also holds the glyphs HarfBuzz's substitutions reach from the
         // range (ligatures, joined forms); the cook installs HarfBuzz itself, so every cook bakes
         // the same glyphs whichever host runs it.
-        [[nodiscard]] u32 Version() const override { return 8; }
+        // 9 (2026-10-15): a distance-field cook writes the region of every glyph the atlas holds,
+        // not only those the range's codepoints map to (8 baked the ligatures but dropped them).
+        [[nodiscard]] u32 Version() const override { return 9; }
 
         [[nodiscard]] Status Build(const pipeline::Asset& asset,
                                    pipeline::AssetBuildContext& ctx) override
@@ -306,12 +308,12 @@ export namespace pipeline{
                 resource.family = String(font.FamilyName());
             }
 
-            // Every codepoint the atlas maps keeps its glyph row; every glyph its region, once.
-            HashMap<i32, bool> regionWritten;
+            // Every codepoint the atlas maps keeps its glyph row, and every glyph the atlas holds its
+            // region: those the codepoints map to and those a shaper's substitutions reach (a
+            // ligature, which no codepoint maps to, is drawn from its region alone).
             for (i32 cp = fa.firstCodepoint; cp <= fa.lastCodepoint; ++cp)
             {
-                const i32 glyphId = atlas->GlyphFor(cp);
-                if (glyphId < 0)
+                if (atlas->GlyphFor(cp) < 0)
                 {
                     continue;
                 }
@@ -319,15 +321,14 @@ export namespace pipeline{
                 glyph.codepoint = cp;
                 glyph.info = font.GetGlyphInfo(cp);
                 entry.glyphs.PushBack(glyph);
-                AtlasRegion region;
-                if (regionWritten.Find(glyphId) == nullptr && atlas->TryGetRegion(glyphId, region))
-                {
-                    regionWritten.InsertOrAssign(glyphId, true);
-                    FontResourceRegion rr;
-                    rr.glyph = glyphId;
-                    rr.region = region;
-                    entry.regions.PushBack(rr);
-                }
+            }
+            const auto& field = static_cast<const DistanceFieldFontAtlas&>(*atlas); // the DF baker's
+            for (const auto& pair : field.Regions())
+            {
+                FontResourceRegion rr;
+                rr.glyph = pair.key;
+                rr.region = pair.value;
+                entry.regions.PushBack(rr);
             }
             for (i32 a = fa.firstCodepoint; a <= fa.lastCodepoint; ++a)
             {

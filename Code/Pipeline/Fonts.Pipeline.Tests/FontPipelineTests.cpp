@@ -19,6 +19,7 @@ import pipeline.core;
 import editor.core;
 import pipeline.importer;
 import foundation.fonts;
+import foundation.fonts.harfbuzz;
 import foundation.image;
 import foundation.fonts.resource;
 import fonts.pipeline;
@@ -188,6 +189,67 @@ TEST_CASE("font.importer: claims font extensions only")
     CHECK(importer.Accepts(u8"ttc"));
     CHECK_FALSE(importer.Accepts(u8"png"));
     CHECK_FALSE(importer.Accepts(u8"xasset"));
+}
+
+// A cooked distance-field font draws everything HarfBuzz shapes from its range: the joined Arabic
+// forms no codepoint maps to are baked and their regions kept (a cook that kept only the
+// codepoints' own glyphs drew joined Arabic, and every fi ligature, as nothing).
+TEST_CASE("font.pipeline: a distance-field cook keeps the glyphs shaping reaches, not only the codepoints'")
+{
+    RegisterFontAsset();
+    RemoveTree();
+    REQUIRE(StageSourceFont());
+
+    NativeFileSystem outMount(u8"scratch_fontpipe_out_db", DefaultAllocator());
+    Guid id;
+    {
+        foundation::content::ContentDatabase outDb(foundation::core::DefaultAllocator(), outMount,
+                                                   foundation::core::BinarySerializerFactory(), u8".rasset");
+        auto* inst = outDb.RootGroup()->CreateInstance(u8"uifont", FontResource::StaticType());
+        id = inst->Id();
+        FontAsset asset;
+        asset.fileName = foundation::vfs::SourcePath(kSourceFont);
+        asset.mode = FontBakeMode::DistanceField;
+        asset.distanceFieldSize = 32.0f;
+        asset.firstCodepoint = 0x0621; // the Arabic letters
+        asset.lastCodepoint = 0x064A;
+        asset.atlasWidth = 1024;
+        asset.atlasHeight = 1024;
+        FontAssetBuilder builder;
+        NativeFileSystem srcMount(u8".", DefaultAllocator());
+        pipeline::AssetBuildContext ctx{DefaultAllocator()};
+        ctx.sources = &srcMount;
+        ctx.output = inst;
+        REQUIRE(builder.Build(asset, ctx).IsOk());
+    }
+
+    foundation::content::ContentDatabase outDb(foundation::core::DefaultAllocator(), outMount,
+                                               foundation::core::BinarySerializerFactory(), u8".rasset");
+    FontFactory factory(DefaultAllocator());
+    ResourceManager manager(DefaultAllocator(), outDb);
+    manager.AddFactory(&factory);
+    Proxy<Font> font = manager.Bind<Font>(id);
+    REQUIRE(font);
+    const Font::Entry& entry = font->EntryAt(0);
+    REQUIRE(entry.font);
+    REQUIRE(entry.atlas);
+
+    ITextShaper* shaper = HarfBuzzShaping::CreateShaper(DefaultAllocator());
+    Array<GlyphPosition> glyphs;
+    REQUIRE(shaper->ShapeText(*entry.font, u8"\u0633\u0644\u0627\u0645", glyphs).HasValue());
+    CHECK(glyphs.Size() == 3u); // joined: shaped from the cooked font's own file
+    usize joinedForms = 0;
+    for (const GlyphPosition& g : glyphs)
+    {
+        CHECK(entry.atlas->Contains(g.glyphId)); // every glyph has its place in the atlas
+        bool nominal = false;
+        for (i32 cp = 0x0621; cp <= 0x064A; ++cp)
+            nominal = nominal || entry.atlas->GlyphFor(cp) == g.glyphId;
+        joinedForms += nominal ? 0u : 1u;
+    }
+    CHECK(joinedForms > 0u); // and some are forms no codepoint maps to
+    DefaultAllocator().Delete(shaper);
+    RemoveTree();
 }
 
 TEST_CASE("font.pipeline: builder fails on a missing source file")

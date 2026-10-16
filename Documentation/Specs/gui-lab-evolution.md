@@ -158,6 +158,14 @@ moves follow the finger; a second finger is ignored; double taps within the wide
 `CancelPointer` mid-press; the bridge forwarding touch from events and from a surface, and dropping
 the mouse copies.
 
+As built on `vg` (2026-10-16): the dispatcher's `InjectTouchDown`, `Move` and `Up` share the
+mouse's pointer paths, with `PointerType` and the finger's id on each event and `pointer` in a
+script's `GuiEvent`; taps count within 24 device pixels (clicks 6); `CancelPointer` and
+`PointerCancel`, which Slider, ScrollBar, a window's drag handles and TextField handle (33edce325).
+The bridge forwards touch from `Dispatch` (placed with `SetWindowSize`) and from a surface's polled
+fingers, and drops SDL's mouse copies (18b6df7f8). Not yet tried on a touch screen.
+Left: long press (E5) and panning (E6).
+
 ### E2 Measure and arrange
 
 Facts: no node measures itself; layouts place children at the sizes they have; `LinearLayout`,

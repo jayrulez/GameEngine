@@ -979,6 +979,60 @@ TEST_CASE("rtti: A6 - authored parameter names reach ParamInfo; unnamed methods 
     CHECK(std::strcmp(legsOf->params[0].name, "") == 0);
 }
 
+namespace
+{
+    // What a resolve-mode handle's context points into (a GUI's element table): emptied by its
+    // owner when the owner goes, kept alive by the handles that still point at it.
+    class AnchorTable : public Object
+    {
+        RTTI_OBJECT(AnchorTable, Object)
+    public:
+        int value = 5;
+        bool open = true;
+    };
+}
+RTTI_DEFINE_OBJECT(AnchorTable, "rtti::tests")
+
+TEST_CASE("rtti: an anchored resolve-mode handle keeps its table alive, and copies and moves share it")
+{
+    RefPtr<AnchorTable> owner = MakeRef<AnchorTable>(DefaultAllocator());
+    AnchorTable* table = owner.Get();
+    struct Ctx
+    {
+        AnchorTable* table;
+    };
+    auto resolver = [](const Variant& v) -> void*
+    {
+        AnchorTable* t = static_cast<const Ctx*>(v.ResolveContext())->table;
+        return t->open ? &t->value : nullptr;
+    };
+    CHECK(table->RefCount() == 1u);
+    {
+        Variant handle = Variant::Resolving(&TypeOf<int>(), resolver, Ctx{table}, table);
+        CHECK(handle.ResolveAnchor() == table);
+        CHECK(table->RefCount() == 2u);
+        Variant copy = handle;
+        CHECK(table->RefCount() == 3u);
+        Variant moved = Move(copy);
+        CHECK(table->RefCount() == 3u); // a move carries the reference, takes none
+        CHECK(copy.ResolveAnchor() == nullptr);
+        Variant assigned;
+        assigned = handle;
+        CHECK(table->RefCount() == 4u);
+        assigned = Variant{};
+        CHECK(table->RefCount() == 3u);
+
+        // The owner goes: it empties the table and drops its reference; the handles still read it.
+        table->open = false;
+        owner = RefPtr<AnchorTable>{};
+        CHECK(table->RefCount() == 2u);
+        CHECK(ToInstance(handle).Pointer() == nullptr); // gone, not freed memory
+        CHECK(ToInstance(moved).Pointer() == nullptr);
+        handle.Reset();
+        CHECK(table->RefCount() == 1u);
+    } // the last handle releases the table
+}
+
 TEST_CASE("rtti: Variant RESOLVE mode re-computes the live address every deref (entity.get core)")
 {
     // A movable "component": `slot` selects which array element is live; the resolver returns its

@@ -199,6 +199,26 @@ export namespace foundation::core
             return v;
         }
 
+        // Resolving, with a retained ANCHOR: the handle (and every copy of it) holds a strong
+        // reference to `anchor`, the object the resolver's context points into (a GUI's element
+        // table), so a handle that outlives its owner resolves to null instead of reading freed
+        // memory. The owner empties the anchor when it goes; the anchor itself lives on while
+        // handles do.
+        template <typename Ctx>
+        [[nodiscard]] static Variant Resolving(const TypeInfo* type, void* (*resolver)(const Variant&),
+                                               const Ctx& ctx, const RefCounted* anchor)
+        {
+            Variant v = Resolving(type, resolver, ctx);
+            if (v.m_resolver != nullptr && anchor != nullptr)
+            {
+                anchor->AddRef();
+                v.m_anchor = anchor;
+            }
+            return v;
+        }
+        // The anchor a resolve-mode handle retains, or null.
+        [[nodiscard]] const RefCounted* ResolveAnchor() const noexcept { return m_anchor; }
+
         // Resolve mode (see Resolving): a live re-resolving handle over external value state.
         [[nodiscard]] bool IsResolving() const noexcept { return m_resolver != nullptr; }
         // Raw resolve-context bytes; the owning layer casts back to its Ctx. Valid in resolve mode.
@@ -222,6 +242,7 @@ export namespace foundation::core
             else if (m_resolver != nullptr)
             {
                 m_storage = other.m_storage; // resolve mode: trivially copy the inline context
+                RetainAnchor(other.m_anchor);
             }
         }
 
@@ -247,6 +268,8 @@ export namespace foundation::core
             else if (m_resolver != nullptr)
             {
                 m_storage = other.m_storage; // resolve mode: POD context, move == copy
+                m_anchor = other.m_anchor;   // the reference moves with it
+                other.m_anchor = nullptr;
             }
             other.m_vtable = nullptr;
             other.m_isHeap = false;
@@ -274,6 +297,7 @@ export namespace foundation::core
                 else if (m_resolver != nullptr)
                 {
                     m_storage = other.m_storage;
+                    RetainAnchor(other.m_anchor);
                 }
             }
             return *this;
@@ -306,6 +330,8 @@ export namespace foundation::core
                 else if (m_resolver != nullptr)
                 {
                     m_storage = other.m_storage;
+                    m_anchor = other.m_anchor;
+                    other.m_anchor = nullptr;
                 }
                 other.m_vtable = nullptr;
                 other.m_isHeap = false;
@@ -334,7 +360,13 @@ export namespace foundation::core
             m_dynamicType = nullptr;
             m_borrowAddr = nullptr;
             m_borrowGeneration = 0;
-            m_resolver = nullptr; // resolve mode owns no heap/value; just drop the handle
+            m_resolver = nullptr; // resolve mode owns no heap/value; drop the handle and its anchor
+            if (m_anchor != nullptr)
+            {
+                const RefCounted* anchor = m_anchor;
+                m_anchor = nullptr;
+                anchor->Release();
+            }
         }
 
         [[nodiscard]] bool IsEmpty() const noexcept
@@ -522,7 +554,17 @@ export namespace foundation::core
         u64 m_borrowGeneration = 0;   // mutation generation captured at Borrow(); revalidated on deref
         // non-null => RESOLVE mode: recompute the value's CURRENT address on every deref (live scene
         // state a borrow cannot safely hold). Context lives in m_storage's inline bytes; no owned
-        // value (m_vtable == nullptr), no heap, weak (no keep-alive). See Resolving() / ToInstance.
+        // value (m_vtable == nullptr), no heap, weak toward the value (m_anchor may retain what the context points into). See Resolving() / ToInstance.
         void* (*m_resolver)(const Variant&) = nullptr;
+        // RESOLVE mode only: the object the context points into, retained (Resolving's anchored
+        // overload); null for a plain weak handle.
+        const RefCounted* m_anchor = nullptr;
+
+        void RetainAnchor(const RefCounted* anchor) noexcept
+        {
+            m_anchor = anchor;
+            if (anchor != nullptr)
+                anchor->AddRef();
+        }
     };
 }

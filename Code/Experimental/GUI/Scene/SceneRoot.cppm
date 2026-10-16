@@ -50,6 +50,27 @@ export namespace experimental::gui
             m_actionManager.Update(elapsed);
             OnUpdate(elapsed);
             m_mutationQueue.Drain();
+            UpdateLayout();
+        }
+
+        /// Runs the layout pass: every container that requested a layout, parents first, again
+        /// while a layout requests more (a child's new size can move its parent), at most a few
+        /// rounds. A host runs it after styling and before drawing; Update runs it too.
+        void UpdateLayout()
+        {
+            m_lastLayoutCount = 0;
+            for (i32 round = 0; round < 8 && (IsLayoutDirty() || HasLayoutDirtyDescendant()); ++round)
+                m_lastLayoutCount += RunLayout();
+        }
+        /// How many containers the last layout pass laid out (none in a frame where nothing moved).
+        [[nodiscard]] u32 LastLayoutCount() const noexcept { return m_lastLayoutCount; }
+
+        /// Whether this GUI has anything to show that it has not drawn: something invalidated,
+        /// an animation or another action running, or a layout waiting. A host skips a frame that
+        /// needs none: an idle GUI costs nothing.
+        [[nodiscard]] bool NeedsFrame() const noexcept
+        {
+            return NeedsRedraw() || !m_actionManager.IsEmpty() || IsLayoutDirty() || HasLayoutDirtyDescendant();
         }
 
         [[nodiscard]] ActionManager* GetActionManager() override { return &m_actionManager; }
@@ -98,6 +119,7 @@ export namespace experimental::gui
         RefPtr<ElementTable> m_elements;          // what weak references to this GUI's nodes resolve through
         ElementSet m_elementSet = ElementSet::All();
         f32 m_displayScale = 1.0f;
+        u32 m_lastLayoutCount = 0;
         core::Float2 m_viewport{0.0f, 0.0f};
 
         void ApplyViewport()

@@ -101,25 +101,19 @@ export namespace experimental::gui
         }
 
     protected:
-        void OnMouseEnter(const MouseEvent&) override
+        // A state change restyles the node and its subtree (:hover, :active, and selectors through
+        // them), and redraws it.
+        void OnMouseEnter(const MouseEvent&) override { SetPointerState(true, m_pressed); }
+        void OnMouseLeave(const MouseEvent&) override { SetPointerState(false, false); }
+        void OnMouseDown(const MouseEvent&) override { SetPointerState(m_hovered, true); }
+        void OnMouseUp(const MouseEvent&) override { SetPointerState(m_hovered, false); }
+        void SetPointerState(bool hovered, bool pressed)
         {
-            m_hovered = true;
-            Invalidate();
-        }
-        void OnMouseLeave(const MouseEvent&) override
-        {
-            m_hovered = false;
-            m_pressed = false;
-            Invalidate();
-        }
-        void OnMouseDown(const MouseEvent&) override
-        {
-            m_pressed = true;
-            Invalidate();
-        }
-        void OnMouseUp(const MouseEvent&) override
-        {
-            m_pressed = false;
+            if (hovered == m_hovered && pressed == m_pressed)
+                return;
+            m_hovered = hovered;
+            m_pressed = pressed;
+            MarkStyleDirty(true);
             Invalidate();
         }
 

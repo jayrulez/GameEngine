@@ -61,25 +61,25 @@ export namespace experimental::gui
         {
             m_direction = direction;
             m_basis = {};
-            PerformLayout();
+            RequestLayout();
         }
         [[nodiscard]] FlexDirection GetDirection() const noexcept { return m_direction; }
         void SetJustifyContent(JustifyContent justify)
         {
             m_justify = justify;
-            PerformLayout();
+            RequestLayout();
         }
         [[nodiscard]] JustifyContent GetJustifyContent() const noexcept { return m_justify; }
         void SetAlignItems(AlignItems align)
         {
             m_align = align;
-            PerformLayout();
+            RequestLayout();
         }
         [[nodiscard]] AlignItems GetAlignItems() const noexcept { return m_align; }
         void SetGap(f32 gap)
         {
             m_gap = core::Max(0.0f, gap);
-            PerformLayout();
+            RequestLayout();
         }
         [[nodiscard]] f32 GetGap() const noexcept { return m_gap; }
 
@@ -93,7 +93,7 @@ export namespace experimental::gui
                 m_grow.Remove(child);
             else
                 m_grow.InsertOrAssign(child, grow);
-            PerformLayout();
+            RequestLayout();
         }
         [[nodiscard]] f32 GetChildGrow(Node* child) const
         {
@@ -201,8 +201,9 @@ export namespace experimental::gui
         }
 
     protected:
-        void OnSizeChange() override { PerformLayout(); }
-        void OnChildrenChanged() override { PerformLayout(); }
+        void OnLayout() override { PerformLayout(); } // the SceneRoot's pass, or at once when detached
+        void OnSizeChange() override { RequestLayout(); }
+        void OnChildrenChanged() override { RequestLayout(); }
 
     private:
         [[nodiscard]] static f32 CrossOf(Node* child, bool row)

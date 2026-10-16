@@ -35,7 +35,7 @@ export namespace experimental::gui
         void SetColumns(u32 columns)
         {
             m_columns = columns < 1u ? 1u : columns;
-            PerformLayout();
+            RequestLayout();
         }
         [[nodiscard]] u32 GetColumns() const noexcept { return m_columns; }
 
@@ -43,7 +43,7 @@ export namespace experimental::gui
         {
             m_hSpacing = horizontal;
             m_vSpacing = vertical;
-            PerformLayout();
+            RequestLayout();
         }
         [[nodiscard]] f32 GetHorizontalSpacing() const noexcept { return m_hSpacing; }
         [[nodiscard]] f32 GetVerticalSpacing() const noexcept { return m_vSpacing; }
@@ -84,8 +84,9 @@ export namespace experimental::gui
         }
 
     protected:
-        void OnSizeChange() override { PerformLayout(); }
-        void OnChildrenChanged() override { PerformLayout(); }
+        void OnLayout() override { PerformLayout(); } // the SceneRoot's pass, or at once when detached
+        void OnSizeChange() override { RequestLayout(); }
+        void OnChildrenChanged() override { RequestLayout(); }
 
         u32 m_columns = 1;
         f32 m_hSpacing = 0.0f;

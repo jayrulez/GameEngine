@@ -179,6 +179,7 @@ export namespace experimental::gui
                 child->m_parent->RemoveChild(child);
             child->m_parent = this;
             m_children.PushBack(core::Move(keepAlive));
+            child->MarkStyleDirty(true); // its selectors may match differently here
             child->HandleParentChange();
             OnChildrenChanged();
             Invalidate();
@@ -420,6 +421,66 @@ export namespace experimental::gui
             if (pushedOpacity)
                 ctx.PopOpacity();
             ctx.Restore();
+            m_needsRedraw = false; // drawn: clean until something invalidates it again
+        }
+
+        // === What a frame must redo (only what changed: a clean subtree costs nothing) ===
+
+        /// This node must be restyled (with its subtree when `withDescendants`: a selector with a
+        /// combinator may match them differently): a class, id, tag or state changed, or it joined
+        /// a tree. Its ancestors learn a descendant waits, so the style pass finds it.
+        void MarkStyleDirty(bool withDescendants)
+        {
+            m_styleDirty = true;
+            m_styleSubtreeDirty = m_styleSubtreeDirty || withDescendants;
+            for (Node* p = m_parent; p != nullptr && !p->m_childStyleDirty; p = p->m_parent)
+                p->m_childStyleDirty = true;
+        }
+        [[nodiscard]] bool IsStyleDirty() const noexcept { return m_styleDirty; }
+        [[nodiscard]] bool IsStyleSubtreeDirty() const noexcept { return m_styleSubtreeDirty; }
+        [[nodiscard]] bool HasStyleDirtyDescendant() const noexcept { return m_childStyleDirty; }
+        void ClearStyleDirty() noexcept
+        {
+            m_styleDirty = false;
+            m_styleSubtreeDirty = false;
+            m_childStyleDirty = false;
+        }
+
+        /// This node's layout must run again. In a GUI it waits for its SceneRoot's layout pass, so
+        /// a burst of changes in a frame costs one layout; a detached node lays out at once.
+        void RequestLayout()
+        {
+            if (GetElementTable() == nullptr) // in no GUI: no pass to wait for
+            {
+                OnLayout();
+                return;
+            }
+            m_layoutDirty = true;
+            for (Node* p = m_parent; p != nullptr && !p->m_childLayoutDirty; p = p->m_parent)
+                p->m_childLayoutDirty = true;
+            Invalidate();
+        }
+        [[nodiscard]] bool IsLayoutDirty() const noexcept { return m_layoutDirty; }
+        [[nodiscard]] bool HasLayoutDirtyDescendant() const noexcept { return m_childLayoutDirty; }
+
+        /// Lays out the dirty containers of this subtree, parents before children (the pass a
+        /// SceneRoot runs); how many containers laid out.
+        u32 RunLayout()
+        {
+            u32 count = 0;
+            if (m_layoutDirty)
+            {
+                m_layoutDirty = false;
+                OnLayout();
+                ++count;
+            }
+            if (m_childLayoutDirty)
+            {
+                m_childLayoutDirty = false;
+                for (usize i = 0; i < m_children.Size(); ++i)
+                    count += m_children[i]->RunLayout();
+            }
+            return count;
         }
 
         // === The box (G2 of Specs/vg-and-gui-lab.md) ===
@@ -449,6 +510,9 @@ export namespace experimental::gui
         }
         [[nodiscard]] bool IsTransformFromStyle() const noexcept { return m_transformFromStyle; }
         [[nodiscard]] const Array<TransformFunction>& GetStyleTransforms() const noexcept { return m_styleTransforms; }
+
+        /// A container places its children here (RequestLayout schedules it).
+        virtual void OnLayout() {}
 
         // Subclass-drawn content, between background and children.
         virtual void OnDraw(DrawContext& ctx, const Rect& localBounds)
@@ -608,12 +672,14 @@ export namespace experimental::gui
         void HandleFocusGained()
         {
             m_focused = true;
+            MarkStyleDirty(true); // :focus
             OnFocusGained();
             SendEvent(Event(EventType::FocusGained, this));
         }
         void HandleFocusLost()
         {
             m_focused = false;
+            MarkStyleDirty(true);
             OnFocusLost();
             SendEvent(Event(EventType::FocusLost, this));
         }
@@ -688,18 +754,26 @@ export namespace experimental::gui
         void ClearNeedsRedraw() noexcept { m_needsRedraw = false; }
 
         // === Transformable overrides: geometry changes invalidate + notify ===
+        // An unchanged value is no change: hosts and layouts set geometry every pass, and an idle
+        // frame must find nothing to redraw.
         void SetPosition(core::Float2 position) override
         {
+            if (position == GetPosition())
+                return;
             Transformable::SetPosition(position);
             HandlePositionChange();
         }
         void SetRotation(f32 radians) override
         {
+            if (radians == GetRotation())
+                return;
             Transformable::SetRotation(radians);
             Invalidate();
         }
         void SetScale(core::Float2 factors) override
         {
+            if (factors == GetScale())
+                return;
             Transformable::SetScale(factors);
             Invalidate();
         }
@@ -793,6 +867,7 @@ export namespace experimental::gui
         void HandleEnabledChange()
         {
             OnEnabledChange();
+            MarkStyleDirty(true); // :disabled
             Invalidate();
             SendEvent(Event(EventType::EnabledChanged, this));
         }
@@ -824,6 +899,11 @@ export namespace experimental::gui
         bool m_visible = true;
         bool m_enabled = true;
         bool m_needsRedraw = true;
+        bool m_styleDirty = true;          // restyle this node
+        bool m_styleSubtreeDirty = true;   // ... and every descendant
+        bool m_childStyleDirty = false;    // some descendant waits for a restyle
+        bool m_layoutDirty = false;        // this container's layout must run
+        bool m_childLayoutDirty = false;   // some descendant's must
         bool m_clipChildren = false;
         bool m_focused = false;
         bool m_tabFocusable = false;

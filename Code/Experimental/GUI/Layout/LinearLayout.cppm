@@ -5,7 +5,8 @@
 //
 // LinearLayout: stacks its children in a row or column with spacing, starting from the
 // padding-inset content bounds. Modeled on eepp's UILinearLayout (role, not a line-for-line
-// port). Re-runs on size change and on child add/remove (via Node::OnChildrenChanged).
+// port). Re-runs after a size change or a child added or removed (it requests its layout, which
+// its SceneRoot's layout pass runs once a frame; at once when detached).
 // Children keep their own sizes here; measurement (wrap-content), weights/stretch, and
 // gravity are not implemented.
 
@@ -42,14 +43,14 @@ export namespace experimental::gui
         void SetOrientation(Orientation orientation)
         {
             m_orientation = orientation;
-            PerformLayout();
+            RequestLayout();
         }
         [[nodiscard]] Orientation GetOrientation() const noexcept { return m_orientation; }
 
         void SetSpacing(f32 spacing)
         {
             m_spacing = spacing;
-            PerformLayout();
+            RequestLayout();
         }
         [[nodiscard]] f32 GetSpacing() const noexcept { return m_spacing; }
 
@@ -59,7 +60,7 @@ export namespace experimental::gui
         void SetWrapContent(bool wrap)
         {
             m_wrapContent = wrap;
-            PerformLayout();
+            RequestLayout();
         }
         [[nodiscard]] bool IsWrapContent() const noexcept { return m_wrapContent; }
 
@@ -131,8 +132,9 @@ export namespace experimental::gui
         }
 
     protected:
-        void OnSizeChange() override { PerformLayout(); }
-        void OnChildrenChanged() override { PerformLayout(); }
+        void OnLayout() override { PerformLayout(); } // the SceneRoot's pass, or at once when detached
+        void OnSizeChange() override { RequestLayout(); }
+        void OnChildrenChanged() override { RequestLayout(); }
 
         Orientation m_orientation = Orientation::Vertical;
         f32 m_spacing = 0.0f;

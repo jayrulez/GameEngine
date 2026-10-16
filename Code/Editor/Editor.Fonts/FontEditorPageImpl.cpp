@@ -190,6 +190,7 @@ namespace editor
         request.distanceField = m_asset->mode == pipeline::FontBakeMode::DistanceField;
         // Coverage previews at the ramp's LARGEST size (the most informative atlas).
         request.size = m_asset->distanceFieldSize;
+        request.distanceFieldRange = m_asset->distanceFieldRange;
         if (!request.distanceField)
         {
             request.size = 14.0f;
@@ -234,6 +235,8 @@ namespace editor
         options.lastCodepoint = request.lastCodepoint;
         options.atlasWidth = request.atlasWidth;
         options.atlasHeight = request.atlasHeight;
+        if (request.distanceField)
+            options.distanceFieldRange = request.distanceFieldRange;
 
         if (request.distanceField)
         {
@@ -427,6 +430,7 @@ namespace editor
         m_modeRow = nullptr;
         m_sizesRow = nullptr;
         m_distanceFieldSizeRow = nullptr;
+        m_distanceFieldRangeRow = nullptr;
         m_firstRow = nullptr;
         m_lastRow = nullptr;
         m_atlasWidthRow = nullptr;
@@ -496,6 +500,17 @@ namespace editor
             u8"Distance Field");
         m_distanceFieldSizeRow = distanceFieldSize.Get();
         m_grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(distanceFieldSize.Get()));
+        // The field's spread: what an outline or a glow can reach past the edge (half of it).
+        auto distanceFieldRange = MakeRef<ui::toolkit::FloatEditor>(
+            Allocator(), u8"Field Range (texels)", static_cast<f64>(m_asset->distanceFieldRange), 1.0, 32.0, 0.5, 1,
+            Function<void(f64)>{[self](f64 v)
+                                {
+                                    self->m_asset->distanceFieldRange = static_cast<f32>(v);
+                                    self->CommitEdit(u8"df-range");
+                                }},
+            u8"Distance Field");
+        m_distanceFieldRangeRow = distanceFieldRange.Get();
+        m_grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(distanceFieldRange.Get()));
         }
 
         auto first = MakeRef<ui::toolkit::IntEditor>(
@@ -662,6 +677,10 @@ namespace editor
         if (m_distanceFieldSizeRow != nullptr)
         {
             m_distanceFieldSizeRow->SetValue(static_cast<f64>(m_asset->distanceFieldSize));
+        }
+        if (m_distanceFieldRangeRow != nullptr)
+        {
+            m_distanceFieldRangeRow->SetValue(static_cast<f64>(m_asset->distanceFieldRange));
         }
         if (m_firstRow != nullptr)
         {

@@ -59,6 +59,9 @@ export namespace pipeline{
         FontBakeMode mode = FontBakeMode::RasterRamp;
         Array<f32> sizes;   // RasterRamp: one cooked entry per size
         f32 distanceFieldSize = 48.0f; // DistanceField: the single bake size
+        // DistanceField: the field's spread in texels of the bake; text effects reach half of it
+        // past an edge (FontLoadOptions::distanceFieldRange).
+        f32 distanceFieldRange = 4.0f;
         i32 firstCodepoint = 32;
         i32 lastCodepoint = 255; // ExtendedLatin default (matches the runtime rasterizer)
         u32 atlasWidth = 1024;
@@ -87,6 +90,8 @@ export namespace pipeline{
             mode = static_cast<FontBakeMode>(bakeMode);
             foundation::core::Serialize(ar, "sizes", sizes);
             foundation::core::Serialize(ar, "distanceFieldSize", distanceFieldSize);
+            if (ar.Mode() == SerializeMode::Write || ar.Version() >= 2) // v1 assets bake the 4-texel default
+                foundation::core::Serialize(ar, "distanceFieldRange", distanceFieldRange);
             foundation::core::Serialize(ar, "firstCodepoint", firstCodepoint);
             foundation::core::Serialize(ar, "lastCodepoint", lastCodepoint);
             foundation::core::Serialize(ar, "atlasWidth", atlasWidth);
@@ -205,6 +210,8 @@ export namespace pipeline{
             options.lastCodepoint = fa.lastCodepoint;
             options.atlasWidth = fa.atlasWidth;
             options.atlasHeight = fa.atlasHeight;
+            if (distanceField)
+                options.distanceFieldRange = fa.distanceFieldRange;
             return options;
         }
 

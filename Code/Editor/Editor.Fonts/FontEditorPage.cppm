@@ -65,6 +65,7 @@ export namespace editor
             String path;
             bool distanceField = false;
             f32 size = 0.0f;
+            f32 distanceFieldRange = 4.0f;
             i32 firstCodepoint = 0;
             i32 lastCodepoint = 0;
             u32 atlasWidth = 0;
@@ -162,6 +163,7 @@ export namespace editor
         ui::toolkit::EnumEditor* m_modeRow = nullptr;
         ui::toolkit::StringEditor* m_sizesRow = nullptr;
         ui::toolkit::FloatEditor* m_distanceFieldSizeRow = nullptr;
+        ui::toolkit::FloatEditor* m_distanceFieldRangeRow = nullptr;
         ui::toolkit::IntEditor* m_firstRow = nullptr;
         ui::toolkit::IntEditor* m_lastRow = nullptr;
         ui::toolkit::IntEditor* m_atlasWidthRow = nullptr;

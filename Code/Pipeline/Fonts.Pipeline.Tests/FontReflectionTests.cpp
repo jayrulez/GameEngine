@@ -41,10 +41,11 @@ TEST_CASE("reflection-p1: FontAsset exposes its flat authored fields with attrib
     const TypeInfo& type = pipeline::FontAsset::StaticType();
 
     CHECK(CEq(type.name, "FontAsset"));
-    // family + mode + distanceFieldSize + first/lastCodepoint + atlasWidth/Height = 7 (sizes is unreflected).
-    CHECK(PropertyCount(type) == 7u);
-    for (const char* name : {"family", "mode", "distanceFieldSize", "firstCodepoint", "lastCodepoint",
-                             "atlasWidth", "atlasHeight"})
+    // family + mode + distanceFieldSize/Range + first/lastCodepoint + atlasWidth/Height = 8 (sizes is
+    // unreflected).
+    CHECK(PropertyCount(type) == 8u);
+    for (const char* name : {"family", "mode", "distanceFieldSize", "distanceFieldRange", "firstCodepoint",
+                             "lastCodepoint", "atlasWidth", "atlasHeight"})
     {
         CHECK_MESSAGE(FindProperty(type, name) != nullptr, name);
     }

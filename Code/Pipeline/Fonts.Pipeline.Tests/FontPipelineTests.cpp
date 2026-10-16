@@ -148,6 +148,7 @@ TEST_CASE("font.pipeline: MSDF bake cooks a DistanceField resource")
         asset.fileName = foundation::vfs::SourcePath(kSourceFont);
         asset.mode = FontBakeMode::DistanceField;
         asset.distanceFieldSize = 32.0f;
+        asset.distanceFieldRange = 8.0f; // an effects font's wider field
         asset.firstCodepoint = 'A';
         asset.lastCodepoint = 'Z'; // a small range keeps msdfgen quick
         asset.atlasWidth = 256;
@@ -173,7 +174,7 @@ TEST_CASE("font.pipeline: MSDF bake cooks a DistanceField resource")
     const Font::Entry& entry = font->EntryAt(0);
     REQUIRE(entry.atlas);
     CHECK(entry.atlas->Mode() == AtlasMode::DistanceField);
-    CHECK(entry.atlas->DistanceFieldRange() > 0.0f);
+    CHECK(entry.atlas->DistanceFieldRange() == doctest::Approx(8.0f)); // the asset's range, cooked
     CHECK(entry.atlas->Contains(entry.atlas->GlyphFor('Q')));
     REQUIRE(entry.atlasImage);
     CHECK(entry.atlasImage->ColorSpace() == foundation::image::ImageColorSpace::Linear);

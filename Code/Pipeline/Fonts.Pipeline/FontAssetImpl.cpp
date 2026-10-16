@@ -32,8 +32,10 @@ namespace pipeline{
     REFLECT_MEMBERS(FontAsset, "rtti::pipeline::fonts")
     {
         // v1 (2026-09-06): the distance-field size key is "distanceFieldSize"; v0 payloads
-        // read the abbreviated "dfSize" in Serialize.
-        builder.DataVersion(1)
+        // read the abbreviated "dfSize" in Serialize. v2 (2026-10-16): "distanceFieldRange"; v1
+        // payloads read on (the legacy reader) and take the 4-texel default.
+        builder.DataVersion(2)
+            .ReadsDataVersionsFrom(1)
             .Attribute("displayName", String(u8"Font"))
             .Attribute("category", String(u8"Fonts"))
             .Property<&FontAsset::family>("family")
@@ -46,6 +48,12 @@ namespace pipeline{
             .PropAttribute("displayName", String(u8"Distance-Field Size"))
             .PropAttribute("range", Float4{8.0f, 128.0f, 1.0f, 0.0f})
             .PropAttribute("visibleWhen", String(u8"mode=1")) // DistanceField only
+            .Property<&FontAsset::distanceFieldRange>("distanceFieldRange")
+            .PropAttribute("displayName", String(u8"Distance-Field Range"))
+            .PropAttribute("description",
+                           String(u8"The field's spread in texels of the bake; outlines and glows reach half of it"))
+            .PropAttribute("range", Float4{1.0f, 32.0f, 0.5f, 0.0f})
+            .PropAttribute("visibleWhen", String(u8"mode=1"))
             .Property<&FontAsset::firstCodepoint>("firstCodepoint")
             .PropAttribute("displayName", String(u8"First Codepoint"))
             .Property<&FontAsset::lastCodepoint>("lastCodepoint")

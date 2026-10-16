@@ -68,6 +68,8 @@ export namespace experimental::gui
         Origin,
         Layers,
         Filters,
+        TextOutline, ///< `<width> [color]`, a Shadows value (the width as the spread)
+        TextGlow,    ///< `<radius> [color]`, a Shadows value (the radius as the blur)
         Text, ///< kept as written (font-family, transition, animation)
     };
 
@@ -129,6 +131,9 @@ export namespace experimental::gui
             {u8"transform", StyleGrammar::Transforms},
             {u8"transform-origin", StyleGrammar::Origin},
             {u8"filter", StyleGrammar::Filters, u8"none"},
+            {u8"text-shadow", StyleGrammar::Shadows},
+            {u8"text-outline", StyleGrammar::TextOutline},
+            {u8"text-glow", StyleGrammar::TextGlow},
             {u8"backdrop-filter", StyleGrammar::Filters, u8"none"},
             {u8"mix-blend-mode", StyleGrammar::Keyword, u8"normal"},
             {u8"overflow", StyleGrammar::Keyword},
@@ -218,6 +223,15 @@ export namespace experimental::gui
             {
                 out.Kind = StyleValueKind::Layers;
                 out.Layers = Move(l.Value());
+                return true;
+            }
+            return false;
+        case StyleGrammar::TextOutline:
+        case StyleGrammar::TextGlow:
+            if (Optional<Array<ShadowValue>> s = ParseTextEffectShadow(v, grammar == StyleGrammar::TextOutline); s.HasValue())
+            {
+                out.Kind = StyleValueKind::Shadows;
+                out.Shadows = Move(s.Value());
                 return true;
             }
             return false;

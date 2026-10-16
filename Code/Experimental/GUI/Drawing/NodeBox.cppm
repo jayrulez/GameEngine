@@ -75,6 +75,34 @@ export namespace experimental::gui
         f32 FilterBlur = 0.0f;   ///< filter: blur(): the node and its subtree blur as one (a sigma, logical units)
         f32 BackdropBlur = 0.0f; ///< backdrop-filter: blur(): what this canvas drew behind the box blurs
         vg::VGBlendMode BlendMode = vg::VGBlendMode::Normal; ///< mix-blend-mode: the node's composite
+        /// text-shadow, text-outline, text-glow: drawn under this node's text and its children's
+        /// (inherited, as CSS's text-shadow is, through the VG's state); each the node sets
+        /// (TextEffectsSet's bits, kTextShadow and the rest) replaces its parent's.
+        vg::TextEffects TextEffects{};
+        u8 TextEffectsSet = 0;
+        static constexpr u8 kTextShadow = 1, kTextOutline = 2, kTextGlow = 4;
+
+        /// The text effects this node draws under: `inherited` with what it sets replaced.
+        [[nodiscard]] vg::TextEffects MergeTextEffects(vg::TextEffects inherited) const noexcept
+        {
+            if ((TextEffectsSet & kTextShadow) != 0)
+            {
+                inherited.shadowOffset = TextEffects.shadowOffset;
+                inherited.shadowBlur = TextEffects.shadowBlur;
+                inherited.shadowColor = TextEffects.shadowColor;
+            }
+            if ((TextEffectsSet & kTextOutline) != 0)
+            {
+                inherited.outlineWidth = TextEffects.outlineWidth;
+                inherited.outlineColor = TextEffects.outlineColor;
+            }
+            if ((TextEffectsSet & kTextGlow) != 0)
+            {
+                inherited.glowRadius = TextEffects.glowRadius;
+                inherited.glowColor = TextEffects.glowColor;
+            }
+            return inherited;
+        }
 
         [[nodiscard]] bool IsEmpty() const noexcept
         {

@@ -406,6 +406,8 @@ export namespace experimental::gui
 
             ctx.Save();
             ctx.ConcatTransform(GetTransform());
+            if (m_box.TextEffectsSet != 0)
+                ctx.VG().SetTextEffects(m_box.MergeTextEffects(ctx.VG().GetTextEffects()));
             // A node with children fades as one picture (CSS's opacity), as does one with a filter
             // or a blend: through a VG layer, composited once. A leaf's opacity multiplies into
             // what it draws (no offscreen target for a label).

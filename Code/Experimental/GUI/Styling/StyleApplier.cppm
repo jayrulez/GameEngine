@@ -99,6 +99,8 @@ export namespace experimental::gui
                 if (n == core::StringView(u8"background-color") || n == core::StringView(u8"background-image") ||
                     n == core::StringView(u8"box-shadow") || n == core::StringView(u8"filter") ||
                     n == core::StringView(u8"backdrop-filter") || n == core::StringView(u8"mix-blend-mode") ||
+                    n == core::StringView(u8"text-shadow") || n == core::StringView(u8"text-outline") ||
+                    n == core::StringView(u8"text-glow") ||
                     (n.Size() > 7 && n.SubStr(0, 7) == core::StringView(u8"border-")))
                     return true;
             }
@@ -196,6 +198,37 @@ export namespace experimental::gui
             box.BackdropBlur = blurOf(u8"backdrop-filter");
             if (const StyleValue* blend = style.Value(u8"mix-blend-mode"))
                 box.BlendMode = BlendModeOf(blend->Keyword.AsView());
+            // Text effects: each set (none included) replaces the inherited one.
+            if (const StyleValue* v = style.Value(u8"text-shadow"))
+            {
+                box.TextEffectsSet |= NodeBox::kTextShadow;
+                if (!v->Shadows.IsEmpty())
+                {
+                    const ShadowValue& s = v->Shadows[0];
+                    box.TextEffects.shadowOffset =
+                        core::Float2{ResolveLengthValue(s.OffsetX, lengths), ResolveLengthValue(s.OffsetY, lengths)};
+                    box.TextEffects.shadowBlur = ResolveLengthValue(s.Blur, lengths);
+                    box.TextEffects.shadowColor = s.ShadowColor;
+                }
+            }
+            if (const StyleValue* v = style.Value(u8"text-outline"))
+            {
+                box.TextEffectsSet |= NodeBox::kTextOutline;
+                if (!v->Shadows.IsEmpty())
+                {
+                    box.TextEffects.outlineWidth = ResolveLengthValue(v->Shadows[0].Spread, lengths);
+                    box.TextEffects.outlineColor = v->Shadows[0].ShadowColor;
+                }
+            }
+            if (const StyleValue* v = style.Value(u8"text-glow"))
+            {
+                box.TextEffectsSet |= NodeBox::kTextGlow;
+                if (!v->Shadows.IsEmpty())
+                {
+                    box.TextEffects.glowRadius = ResolveLengthValue(v->Shadows[0].Blur, lengths);
+                    box.TextEffects.glowColor = v->Shadows[0].ShadowColor;
+                }
+            }
             return box;
         }
 

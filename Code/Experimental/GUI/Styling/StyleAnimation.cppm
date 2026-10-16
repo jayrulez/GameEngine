@@ -58,6 +58,8 @@ export namespace experimental::gui
         case StyleGrammar::Origin:
         case StyleGrammar::Layers:
         case StyleGrammar::Filters:
+        case StyleGrammar::TextOutline:
+        case StyleGrammar::TextGlow:
             return true;
         case StyleGrammar::Keyword:
         case StyleGrammar::Text:

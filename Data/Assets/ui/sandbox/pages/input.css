@@ -1,0 +1,15 @@
+.input-card { width: 590px; height: 64px; padding: 14px; background-color: var(--surface-2); border-radius: 10;
+              transition: background-color 120ms, box-shadow 120ms; }
+.input-card:hover { background-color: #2f3746; box-shadow: 0 0 0 2px var(--accent); }
+.input-card:active { background-color: #3a4456; }
+.shell.light .input-card:hover { background-color: #dde6f3; }
+.shell.light .input-card:active { background-color: #ccd9ec; }
+.clickable { cursor: pointer; }
+.input-pad { width: 590px; height: 90px; background-color: var(--surface-2); border-radius: 10; cursor: crosshair; }
+.glass-stage { width: 120px; height: 36px; }
+.input-glass { width: 120px; height: 36px; background-color: rgba(79, 156, 255, 0.25); border: 1px solid var(--accent);
+               border-radius: 8; pointer-events: none; }
+.cursor-pointer { cursor: pointer; }
+.cursor-move { cursor: move; }
+.cursor-not-allowed { width: 110px; cursor: not-allowed; background-color: var(--bad); }
+.cursor-crosshair { width: 100px; cursor: crosshair; }

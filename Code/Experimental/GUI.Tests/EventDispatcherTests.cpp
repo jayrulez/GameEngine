@@ -54,6 +54,7 @@ TEST_CASE("dispatch: press+release on the same node is a click and focuses it")
 {
     auto root = MakeScene(core::Float2{200.0f, 200.0f});
     auto child = MakePanel(core::Float2{10.0f, 10.0f}, core::Float2{50.0f, 50.0f});
+    child->SetTabFocusable(true); // a widget that takes focus
     root->AddChild(child.Get());
     EventDispatcher* d = root->GetEventDispatcher();
 
@@ -65,6 +66,21 @@ TEST_CASE("dispatch: press+release on the same node is a click and focuses it")
     CHECK(clicks == 1);
     CHECK(d->GetFocusNode() == child.Get());
     CHECK(child->IsFocused());
+
+    // A click on what does not take focus (a backdrop) clears it, still delivering the click; one
+    // on a child of a focusable widget focuses that widget.
+    auto backdrop = MakePanel(core::Float2{100.0f, 100.0f}, core::Float2{50.0f, 50.0f});
+    root->AddChild(backdrop.Get());
+    int backdropClicks = 0;
+    backdrop->AddEventListener(EventType::MouseClick, [&](const Event&) { ++backdropClicks; });
+    d->InjectMouseDown(core::Float2{120.0f, 120.0f}, MouseButton::Left);
+    d->InjectMouseUp(core::Float2{120.0f, 120.0f}, MouseButton::Left);
+    CHECK(backdropClicks == 1);
+    CHECK(d->GetFocusNode() == nullptr);
+    auto inner = MakePanel(core::Float2{5.0f, 5.0f}, core::Float2{10.0f, 10.0f});
+    child->AddChild(inner.Get());
+    d->InjectMouseDown(core::Float2{20.0f, 20.0f}, MouseButton::Left);
+    CHECK(d->GetFocusNode() == child.Get());
 }
 
 TEST_CASE("dispatch: mouse event payload is accessible via static_cast")

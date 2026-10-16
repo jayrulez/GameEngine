@@ -45,6 +45,7 @@ TEST_CASE("uinode: control state follows pointer, focus, and enabled")
     root->SetSize(core::Float2{200.0f, 200.0f});
     auto w = Make<UINode>();
     w->SetSize(core::Float2{100.0f, 100.0f});
+    w->SetTabFocusable(true); // a click focuses what takes focus
     root->AddChild(w.Get());
     EventDispatcher* d = root->GetEventDispatcher();
 

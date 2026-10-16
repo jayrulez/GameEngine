@@ -396,3 +396,27 @@ TEST_CASE("navigation: a held d-pad direction reaches the focused widget before 
     bed.d.PressDirection(NavDirection::Right); // at its end: given back
     CHECK(bed.Focused() == SV(u8"after"));
 }
+
+TEST_CASE("navigation: after a click on the backdrop, an arrow starts from the GUI's entry")
+{
+    // The showcase at launch: Play focused, a click on the backdrop, then Down. Down from the
+    // full-window backdrop found nothing below it (and Up found Quit); it must enter again.
+    Bed bed;
+    auto backdrop = Make<UIWidget>();
+    backdrop->SetSize(core::Float2{400.0f, 400.0f});
+    bed.root->AddChild(backdrop.Get());
+    auto play = Cell(*bed.root.Get(), u8"play", 100.0f, 100.0f);
+    auto quit = Cell(*bed.root.Get(), u8"quit", 100.0f, 160.0f);
+    bed.d.SetFocusNode(play.Get());
+    CHECK(play->IsFocusVisible()); // before any pointer use, focus shows
+    bed.d.InjectMouseDown(core::Float2{300.0f, 350.0f}, MouseButton::Left);
+    bed.d.InjectMouseUp(core::Float2{300.0f, 350.0f}, MouseButton::Left);
+    CHECK(bed.d.GetFocusNode() == nullptr);
+    bed.Key(KeyCode::Down);
+    CHECK(bed.Focused() == SV(u8"play"));
+
+    // Focus left on something that does not take focus (a program's doing) also enters.
+    bed.d.SetFocusNode(backdrop.Get());
+    bed.Key(KeyCode::Down);
+    CHECK(bed.Focused() == SV(u8"play"));
+}

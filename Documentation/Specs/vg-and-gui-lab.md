@@ -345,8 +345,10 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   As built on `vg`: `GUISandbox --showcase` (2ea5e9e11) shows a main menu from
   `Data/Assets/ui/showcase`: markup for the widgets, a sheet for every look (a radial background,
   drifting orbs under blur filters, a distance-field title with a breathing glow, gradient buttons
-  that lean in on hover and give on a press, frosted settings, loading and confirm panels that rise
-  in), and an AngelScript that switches the panels, binds two labels to functions of the GUI's
+  that lean in on hover and give on a press; the title fixed in the upper third with one slot under
+  it that the main menu and the frosted settings take in turn, loading as a screen of its own, and
+  the quit question as a modal over the dimmed and blurred menu, each rising or fading in), and an
+  AngelScript that switches the pages, screens and modal, binds two labels to functions of the GUI's
   data and fills a loading bar through `update(dt)`, which the host calls only while it asks.
   Native code sizes the layers, seeds the data and closes the window once Leave has faded;
   `--showcase-call <function>` opens another panel for a screenshot. The sheet's text effects came

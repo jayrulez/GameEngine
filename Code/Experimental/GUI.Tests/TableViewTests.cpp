@@ -144,3 +144,31 @@ TEST_CASE("table-view: reacts to model updates and rebuilds the header")
     CHECK(table->GetSelectedRow() == -1);
     CHECK(table->VisibleRowCount() == 0);
 }
+
+TEST_CASE("table-view: sorting from a header click survives the header it rebuilds")
+{
+    // The sandbox's table (where it crashed): a header click sorts through a proxy, the proxy's
+    // update rebuilds the header, and neither the click nor the next mouse move may reach the
+    // freed header cell.
+    TableModel model;
+    FillPeople(model, 5);
+    SortingProxyModel proxy(&model);
+    core::RefPtr<SceneRoot> root;
+    auto table = MountTable(root, &proxy);
+    table->SetOnColumnHeaderClicked([&](core::usize col) { proxy.ToggleSort(col); });
+    EventDispatcher* d = root->GetEventDispatcher();
+    for (int i = 0; i < 3; ++i) // ascending, descending, ascending
+    {
+        d->InjectMouseMove(core::Float2{200.0f, 13.0f});
+        d->InjectMouseDown(core::Float2{200.0f, 13.0f}, MouseButton::Left);
+        d->InjectMouseUp(core::Float2{200.0f, 13.0f}, MouseButton::Left);
+        root->GetContext().Update(core::Duration::FromSeconds(0.016));
+        // The rebuild freed the hovered header cell: the dispatcher let go of it, so moving on
+        // leaves nothing freed.
+        CHECK(d->GetOverNode() == nullptr);
+    }
+    d->InjectMouseMove(core::Float2{200.0f, 60.0f});
+    CHECK(d->GetOverNode() != nullptr);
+    CHECK(proxy.GetSortColumn() == 1);
+    CHECK(proxy.GetSortOrder() == SortOrder::Ascending);
+}

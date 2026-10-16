@@ -212,6 +212,12 @@ export namespace experimental::gui
 
         void RemoveChild(Node* child)
         {
+            if (GetChildIndex(child) == kInvalidIndex)
+                return;
+            // The dispatcher first drops its refs into the subtree (hover, press, focus, a popup):
+            // the tree stops keeping those nodes alive. It may close a popup, which edits the
+            // tree, so the index is found after.
+            NotifyRemovingChild(*child);
             const usize index = GetChildIndex(child);
             if (index == kInvalidIndex)
                 return;
@@ -1198,6 +1204,10 @@ export namespace experimental::gui
             EventType Type;
             EventCallback Callback;
         };
+
+        // Tells this GUI's dispatcher a child's subtree is leaving (GUIClusterImpl.cpp, which
+        // sees :event_dispatcher).
+        void NotifyRemovingChild(Node& child);
 
         Node* m_parent = nullptr;       // non-owning back-pointer
         Array<RefPtr<Node>> m_children; // owning

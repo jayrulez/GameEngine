@@ -148,21 +148,59 @@ TEST_CASE("dispatch: programmatic focus gains and releases")
     CHECK_FALSE(b->IsFocused());
 }
 
-TEST_CASE("dispatch: NotifyNodeRemoved clears interaction refs")
+TEST_CASE("dispatch: a subtree leaving the tree takes the hover, press and focus refs into it")
 {
     auto root = MakeScene(core::Float2{200.0f, 200.0f});
+    auto panel = MakePanel(core::Float2{0.0f, 0.0f}, core::Float2{100.0f, 100.0f});
     auto child = MakePanel(core::Float2{0.0f, 0.0f}, core::Float2{50.0f, 50.0f});
-    root->AddChild(child.Get());
+    auto other = MakePanel(core::Float2{100.0f, 100.0f}, core::Float2{50.0f, 50.0f});
+    panel->AddChild(child.Get());
+    root->AddChild(panel.Get());
+    root->AddChild(other.Get());
     EventDispatcher* d = root->GetEventDispatcher();
 
     d->InjectMouseMove(core::Float2{10.0f, 10.0f});
+    d->InjectMouseDown(core::Float2{10.0f, 10.0f}, MouseButton::Left);
     d->SetFocusNode(child.Get());
-    CHECK(d->GetOverNode() == child.Get());
-    CHECK(d->GetFocusNode() == child.Get());
+    REQUIRE(d->GetOverNode() == child.Get());
+    REQUIRE(d->GetFocusNode() == child.Get());
 
-    d->NotifyNodeRemoved(child.Get());
+    root->RemoveChild(panel.Get()); // the child goes with its parent
     CHECK(d->GetOverNode() == nullptr);
     CHECK(d->GetFocusNode() == nullptr);
+    CHECK_FALSE(child->IsFocused()); // told it lost focus while it still lived
+    d->InjectMouseUp(core::Float2{10.0f, 10.0f}, MouseButton::Left); // no press to finish
+    d->InjectMouseMove(core::Float2{120.0f, 120.0f});
+    CHECK(d->GetOverNode() == other.Get());
+
+    // A node leaving elsewhere leaves the refs alone.
+    d->SetFocusNode(other.Get());
+    root->AddChild(panel.Get());
+    root->RemoveChild(panel.Get());
+    CHECK(d->GetOverNode() == other.Get());
+    CHECK(d->GetFocusNode() == other.Get());
+}
+
+TEST_CASE("dispatch: a popup leaving the tree is forgotten, and one whose opener leaves is dismissed")
+{
+    auto root = MakeScene(core::Float2{200.0f, 200.0f});
+    auto opener = MakePanel(core::Float2{0.0f, 0.0f}, core::Float2{50.0f, 20.0f});
+    auto popup = MakePanel(core::Float2{0.0f, 20.0f}, core::Float2{50.0f, 80.0f});
+    root->AddChild(opener.Get());
+    root->AddChild(popup.Get());
+    EventDispatcher* d = root->GetEventDispatcher();
+    int closes = 0;
+    d->OpenPopup(popup.Get(), opener.Get(), [&] { ++closes; popup->RemoveFromParent(); });
+    root->RemoveChild(popup.Get());
+    CHECK(d->GetPopup() == nullptr);
+    CHECK(closes == 0); // it is already gone: nothing to dismiss
+
+    root->AddChild(popup.Get());
+    d->OpenPopup(popup.Get(), opener.Get(), [&] { ++closes; popup->RemoveFromParent(); });
+    root->RemoveChild(opener.Get());
+    CHECK(d->GetPopup() == nullptr);
+    CHECK(closes == 1);
+    CHECK(popup->GetParent() == nullptr);
 }
 
 TEST_CASE("dispatch: Tab navigation cycles through tab-focusable nodes in order")

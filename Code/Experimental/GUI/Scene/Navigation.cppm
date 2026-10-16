@@ -47,7 +47,7 @@ export namespace experimental::gui
         // its ancestors.
         [[nodiscard]] inline bool IsNavigable(const Node& node)
         {
-            if (!node.IsTabFocusable() || !node.IsEnabled())
+            if (!node.IsTabFocusable() || !node.IsTreeEnabled())
                 return false;
             for (const Node* n = &node; n != nullptr; n = n->GetParent())
                 if (!n->IsVisible())

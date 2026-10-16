@@ -134,7 +134,7 @@ export namespace experimental::gui
 
         // An enabled TextField wants platform text input while focused (the bridge enables
         // the window's IME accordingly).
-        [[nodiscard]] bool WantsTextInput() const override { return IsEnabled(); }
+        [[nodiscard]] bool WantsTextInput() const override { return IsTreeEnabled(); }
 
         // === Appearance ===
         void SetFont(fonts::CachedFont* font)
@@ -203,14 +203,14 @@ export namespace experimental::gui
     protected:
         void OnTextInput(const TextInputEvent& event) override
         {
-            if (!IsEnabled() || event.Text.Size() == 0)
+            if (!IsTreeEnabled() || event.Text.Size() == 0)
                 return;
             InsertText(event.Text);
         }
 
         void OnKeyDown(const KeyEvent& event) override
         {
-            if (!IsEnabled())
+            if (!IsTreeEnabled())
                 return;
             const bool shift = (event.Modifiers & static_cast<u32>(KeyModShift)) != 0;
             const bool ctrl = (event.Modifiers & static_cast<u32>(KeyModCtrl)) != 0;

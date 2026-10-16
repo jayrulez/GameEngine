@@ -271,7 +271,7 @@ namespace experimental::gui
             RegisterGuiElements();
             TypeRegistry& registry = GlobalTypeRegistry();
             registry.Register(Node::StaticType()); // the bases a script names (Node.of, UIWidget.of)
-            registry.Register(SceneNode::StaticType());
+            registry.Register(SceneRoot::StaticType());
             registry.Register(UINode::StaticType());
             registry.Register(UIWidget::StaticType());
             registry.Register(Gui::StaticType()); // binds as `gui` (its scriptName)
@@ -301,9 +301,9 @@ namespace experimental::gui
         builder.Method<&ElementOf<Node>, Node>("of");
     }
 
-    REFLECT_MEMBERS(SceneNode, "rtti::gui")
+    REFLECT_MEMBERS(SceneRoot, "rtti::gui")
     {
-        builder.Method<&ElementOf<SceneNode>, SceneNode>("of");
+        builder.Method<&ElementOf<SceneRoot>, SceneRoot>("of");
     }
 
     REFLECT_MEMBERS(UINode, "rtti::gui")

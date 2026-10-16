@@ -36,9 +36,9 @@ namespace
         }
     }
 
-    core::RefPtr<TableView> MountTable(core::RefPtr<SceneNode>& root, IModel* model)
+    core::RefPtr<TableView> MountTable(core::RefPtr<SceneRoot>& root, IModel* model)
     {
-        root = Make<SceneNode>();
+        root = Make<SceneRoot>();
         root->SetSize(core::Float2{400.0f, 400.0f});
         auto table = Make<TableView>();
         table->SetSize(core::Float2{300.0f, 200.0f});
@@ -69,7 +69,7 @@ TEST_CASE("table-view: virtualizes rows over the body viewport")
 {
     TableModel model;
     FillPeople(model, 1000);
-    core::RefPtr<SceneNode> root;
+    core::RefPtr<SceneRoot> root;
     auto table = MountTable(root, &model);
 
     // body = 200 - 26 header = 174; 174/24 + 2 buffer = 9 realized, not 1000.
@@ -81,7 +81,7 @@ TEST_CASE("table-view: clicking a row selects it")
 {
     TableModel model;
     FillPeople(model, 5); // fits (no scrollbar), body width = 300, 2 cols of 150
-    core::RefPtr<SceneNode> root;
+    core::RefPtr<SceneRoot> root;
     auto table = MountTable(root, &model);
     EventDispatcher* d = root->GetEventDispatcher();
 
@@ -99,7 +99,7 @@ TEST_CASE("table-view: keyboard navigation moves the selection")
 {
     TableModel model;
     FillPeople(model, 8);
-    core::RefPtr<SceneNode> root;
+    core::RefPtr<SceneRoot> root;
     auto table = MountTable(root, &model);
     EventDispatcher* d = root->GetEventDispatcher();
     table->RequestFocus();
@@ -116,7 +116,7 @@ TEST_CASE("table-view: clicking a column header reports its index")
 {
     TableModel model;
     FillPeople(model, 3);
-    core::RefPtr<SceneNode> root;
+    core::RefPtr<SceneRoot> root;
     auto table = MountTable(root, &model);
     EventDispatcher* d = root->GetEventDispatcher();
 
@@ -134,7 +134,7 @@ TEST_CASE("table-view: reacts to model updates and rebuilds the header")
 {
     TableModel model;
     FillPeople(model, 4);
-    core::RefPtr<SceneNode> root;
+    core::RefPtr<SceneRoot> root;
     auto table = MountTable(root, &model);
 
     table->SetSelectedRow(3);

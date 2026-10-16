@@ -16,7 +16,7 @@ The progressive slice reached a working, CSS-driven, on-screen framework:
 - **Skeleton + type adapters** (`experimental.gui`), **Transformable + Node**, and the **render seam**
   `DrawContext` over VG + core drawables (there is no immediate-mode GL as in eepp; the seam was
   invented against VG).
-- **SceneNode + coordinator + actions** (`ActionManager`), the platform-agnostic `EventDispatcher`
+- **SceneRoot + coordinator + actions** (`ActionManager`), the platform-agnostic `EventDispatcher`
   (Inject* API), and the `experimental.gui.shell` input bridge (`GuiInputBridge`, fed by the shell).
 - **Text/Font** (`Text` over `foundation.fonts`), **UINode / UIWidget** chrome (padding, control state).
 - **A CSS engine, essentially complete**: parsing + `StyleManager` (StyleSheet + MediaContext +

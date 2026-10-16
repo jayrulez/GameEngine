@@ -34,7 +34,7 @@ namespace
 
 TEST_CASE("window: OpenModal centers, adds a scrim, and sets the dispatcher modal root")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{400.0f, 400.0f});
     EventDispatcher* d = root->GetEventDispatcher();
 
@@ -53,7 +53,7 @@ TEST_CASE("window: OpenModal centers, adds a scrim, and sets the dispatcher moda
 
 TEST_CASE("window: a modal swallows clicks on the background")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{400.0f, 400.0f});
     EventDispatcher* d = root->GetEventDispatcher();
 
@@ -77,7 +77,7 @@ TEST_CASE("window: a modal swallows clicks on the background")
 
 TEST_CASE("window: Close removes the window + scrim, releases the modal, and fires onClose")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{400.0f, 400.0f});
     EventDispatcher* d = root->GetEventDispatcher();
 
@@ -98,7 +98,7 @@ TEST_CASE("window: Close removes the window + scrim, releases the modal, and fir
 
 TEST_CASE("window: non-modal Open adds no scrim and no modal root")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{400.0f, 400.0f});
     EventDispatcher* d = root->GetEventDispatcher();
 
@@ -132,7 +132,7 @@ TEST_CASE("messagebox: Configure shows the right buttons per style")
 
 TEST_CASE("messagebox: pressing a button reports the result and closes")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{500.0f, 500.0f});
     EventDispatcher* d = root->GetEventDispatcher();
 

@@ -393,7 +393,7 @@ export namespace experimental::gui
             return true;
         }
 
-        Node* m_root;                      // non-owning (the SceneNode owns this dispatcher)
+        Node* m_root;                      // non-owning (the SceneRoot owns this dispatcher)
         Node* m_modalRoot = nullptr;       // non-owning; confines input while a modal is open
         IClipboard* m_clipboard = nullptr; // non-owning system-clipboard adapter (optional)
         Node* m_overNode = nullptr;        // non-owning

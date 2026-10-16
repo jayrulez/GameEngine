@@ -80,7 +80,7 @@ TEST_CASE("selector: descendant vs child combinators")
 
 TEST_CASE("selector: pseudo-classes track control state")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{200.0f, 200.0f});
     auto w = Widget(u8"button");
     w->SetSize(core::Float2{100.0f, 100.0f});

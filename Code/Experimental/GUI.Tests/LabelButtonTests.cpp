@@ -58,7 +58,7 @@ TEST_CASE("button: defaults - tag and centered text")
 
 TEST_CASE("button: click callback fires on press+release")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{200.0f, 200.0f});
     auto btn = Make<Button>();
     btn->SetSize(core::Float2{100.0f, 100.0f});
@@ -81,7 +81,7 @@ TEST_CASE("button: click callback fires on press+release")
 
 TEST_CASE("button: control state reacts to the pointer")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{200.0f, 200.0f});
     auto btn = Make<Button>();
     btn->SetSize(core::Float2{100.0f, 100.0f});
@@ -97,7 +97,7 @@ TEST_CASE("button: control state reacts to the pointer")
 
 TEST_CASE("button: styled by CSS through the default tag")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{200.0f, 200.0f});
     auto btn = Make<Button>();
     btn->SetSize(core::Float2{100.0f, 100.0f});

@@ -56,7 +56,7 @@ TEST_CASE("keyframes: a comma offset list shares the block")
 
 TEST_CASE("keyframes: the animation property drives opacity across the stops")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     auto w = Make<UIWidget>();
     w->AddClass(core::StringView(u8"anim"));
     root->AddChild(w.Get());
@@ -84,7 +84,7 @@ TEST_CASE("keyframes: the animation property drives opacity across the stops")
 
 TEST_CASE("keyframes: infinite animations loop")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     auto w = Make<UIWidget>();
     w->AddClass(core::StringView(u8"loop"));
     root->AddChild(w.Get());
@@ -105,7 +105,7 @@ TEST_CASE("keyframes: infinite animations loop")
 
 TEST_CASE("keyframes: the animation is spawned once, not re-spawned each ApplyTree")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     auto w = Make<UIWidget>();
     w->AddClass(core::StringView(u8"anim"));
     root->AddChild(w.Get());
@@ -123,7 +123,7 @@ TEST_CASE("keyframes: the animation is spawned once, not re-spawned each ApplyTr
 
 TEST_CASE("keyframes: animates background-color across the stops")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     auto w = Make<UIWidget>();
     w->AddClass(core::StringView(u8"cycle"));
     root->AddChild(w.Get());

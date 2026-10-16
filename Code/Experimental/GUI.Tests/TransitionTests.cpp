@@ -47,7 +47,7 @@ TEST_CASE("transition: parse shorthand")
 
 TEST_CASE("transition: opacity change animates through the ActionManager")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     auto node = Make<UINode>();
     root->AddChild(node.Get());
 
@@ -70,7 +70,7 @@ TEST_CASE("transition: opacity change animates through the ActionManager")
 
 TEST_CASE("transition: without a transition declaration, opacity snaps")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     auto node = Make<UINode>();
     root->AddChild(node.Get());
 
@@ -84,7 +84,7 @@ TEST_CASE("transition: without a transition declaration, opacity snaps")
 
 TEST_CASE("transition: unchanged value spawns no animation")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     auto node = Make<UINode>();
     root->AddChild(node.Get());
 

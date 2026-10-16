@@ -20,7 +20,7 @@ namespace
         return core::MakeRef<T>(core::DefaultAllocator());
     }
 
-    core::RefPtr<ComboBox> MakeCombo(SceneNode* root)
+    core::RefPtr<ComboBox> MakeCombo(SceneRoot* root)
     {
         auto cb = core::MakeRef<ComboBox>(core::DefaultAllocator());
         cb->SetSize(core::Float2{120.0f, 26.0f});
@@ -53,7 +53,7 @@ TEST_CASE("combobox: item management and selection")
 
 TEST_CASE("combobox: click opens the dropdown; it registers as the dispatcher popup")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{400.0f, 400.0f});
     auto cb = MakeCombo(root.Get());
     EventDispatcher* d = root->GetEventDispatcher();
@@ -70,7 +70,7 @@ TEST_CASE("combobox: click opens the dropdown; it registers as the dispatcher po
 
 TEST_CASE("combobox: clicking a dropdown row selects it and closes")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{400.0f, 400.0f});
     auto cb = MakeCombo(root.Get());
     EventDispatcher* d = root->GetEventDispatcher();
@@ -91,7 +91,7 @@ TEST_CASE("combobox: clicking a dropdown row selects it and closes")
 
 TEST_CASE("combobox: clicking outside dismisses the dropdown")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{400.0f, 400.0f});
     auto cb = MakeCombo(root.Get());
     EventDispatcher* d = root->GetEventDispatcher();
@@ -108,7 +108,7 @@ TEST_CASE("combobox: clicking outside dismisses the dropdown")
 
 TEST_CASE("combobox: Escape dismisses the dropdown")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{400.0f, 400.0f});
     auto cb = MakeCombo(root.Get());
     EventDispatcher* d = root->GetEventDispatcher();

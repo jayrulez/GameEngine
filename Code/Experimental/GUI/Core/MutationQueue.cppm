@@ -3,9 +3,9 @@
 
 // GUI - :mutation_queue partition
 //
-// MutationQueue: deferred operations drained at a safe sync point (end of the SceneNode
+// MutationQueue: deferred operations drained at a safe sync point (end of the SceneRoot
 // update). This is how tree edits made mid-traversal (notably Node::Close) are applied
-// without mutating the tree while it is being walked - eepp's SceneNode close-queue role,
+// without mutating the tree while it is being walked - eepp's SceneRoot close-queue role,
 // generalized to arbitrary deferred ops (same shape as foundation.ui's MutationQueue).
 
 module;

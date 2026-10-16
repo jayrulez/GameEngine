@@ -36,9 +36,9 @@ namespace
         }
     };
 
-    core::RefPtr<TreeView> MountTree(core::RefPtr<SceneNode>& root, IModel* model)
+    core::RefPtr<TreeView> MountTree(core::RefPtr<SceneRoot>& root, IModel* model)
     {
-        root = Make<SceneNode>();
+        root = Make<SceneRoot>();
         root->SetSize(core::Float2{400.0f, 400.0f});
         auto tree = Make<TreeView>();
         tree->SetSize(core::Float2{260.0f, 300.0f}); // tall enough to realize all visible rows
@@ -72,7 +72,7 @@ TEST_CASE("tree-model: hierarchy navigation")
 TEST_CASE("tree-view: collapsed shows only roots; expanding reveals children")
 {
     Tree t;
-    core::RefPtr<SceneNode> root;
+    core::RefPtr<SceneRoot> root;
     auto tree = MountTree(root, &t.model);
 
     CHECK(tree->VisibleRowCount() == 2); // A, B (collapsed)
@@ -93,7 +93,7 @@ TEST_CASE("tree-view: collapsed shows only roots; expanding reveals children")
 TEST_CASE("tree-view: clicking the arrow toggles expansion")
 {
     Tree t;
-    core::RefPtr<SceneNode> root;
+    core::RefPtr<SceneRoot> root;
     auto tree = MountTree(root, &t.model);
     EventDispatcher* d = root->GetEventDispatcher();
 
@@ -111,7 +111,7 @@ TEST_CASE("tree-view: clicking the arrow toggles expansion")
 TEST_CASE("tree-view: selection is remapped by node id across expand/collapse")
 {
     Tree t;
-    core::RefPtr<SceneNode> root;
+    core::RefPtr<SceneRoot> root;
     auto tree = MountTree(root, &t.model);
 
     tree->ExpandItem(0);      // flat: A(0), A1(1), A2(2), B(3)
@@ -126,7 +126,7 @@ TEST_CASE("tree-view: selection is remapped by node id across expand/collapse")
 TEST_CASE("tree-view: keyboard Right expands and Left collapses the selection")
 {
     Tree t;
-    core::RefPtr<SceneNode> root;
+    core::RefPtr<SceneRoot> root;
     auto tree = MountTree(root, &t.model);
     EventDispatcher* d = root->GetEventDispatcher();
     tree->RequestFocus();

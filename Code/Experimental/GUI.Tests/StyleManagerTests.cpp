@@ -34,7 +34,7 @@ namespace
 
 TEST_CASE("style-manager: applies a sheet across the tree")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{200.0f, 200.0f});
     auto btn = Widget(u8"button", core::Float2{0.0f, 0.0f}, core::Float2{100.0f, 100.0f});
     root->AddChild(btn.Get());
@@ -48,7 +48,7 @@ TEST_CASE("style-manager: applies a sheet across the tree")
 
 TEST_CASE("style-manager: hover re-resolve drives a live transition")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{200.0f, 200.0f});
     auto btn = Widget(u8"button", core::Float2{0.0f, 0.0f}, core::Float2{100.0f, 100.0f});
     root->AddChild(btn.Get());
@@ -76,7 +76,7 @@ TEST_CASE("style-manager: hover re-resolve drives a live transition")
 
 TEST_CASE("style-manager: media context gates what applies")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{200.0f, 200.0f});
     auto btn = Widget(u8"button", core::Float2{0.0f, 0.0f}, core::Float2{100.0f, 100.0f});
     root->AddChild(btn.Get());
@@ -96,7 +96,7 @@ TEST_CASE("style-manager: media context gates what applies")
 
 TEST_CASE("style-manager: SetStyleSheet swaps styles (hot-reload)")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{200.0f, 200.0f});
     auto btn = Widget(u8"button", core::Float2{0.0f, 0.0f}, core::Float2{100.0f, 100.0f});
     root->AddChild(btn.Get());

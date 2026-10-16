@@ -19,7 +19,7 @@ export module experimental.gui:gui_script;
 import foundation.core;
 import foundation.script;
 import :node;
-import :scene_node;
+import :scene_root;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -31,7 +31,7 @@ export namespace experimental::gui
     /// What a host gives a script context: the root its scripts build under.
     struct GuiScriptBinding
     {
-        SceneNode* root = nullptr;
+        SceneRoot* root = nullptr;
     };
 
     inline void InstallGuiScriptService(foundation::script::IScriptContext& context, GuiScriptBinding& binding)

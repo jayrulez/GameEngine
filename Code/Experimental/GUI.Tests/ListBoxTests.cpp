@@ -19,7 +19,7 @@ namespace
         return core::MakeRef<T>(core::DefaultAllocator());
     }
 
-    core::RefPtr<ListBox> MakeList(SceneNode* root, float w, float h)
+    core::RefPtr<ListBox> MakeList(SceneRoot* root, float w, float h)
     {
         auto lb = core::MakeRef<ListBox>(core::DefaultAllocator());
         lb->SetSize(core::Float2{w, h});
@@ -77,7 +77,7 @@ TEST_CASE("listbox: SetSelectedIndex highlights and fires the callback, only on 
 
 TEST_CASE("listbox: clicking a row selects it")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{300.0f, 300.0f});
     auto lb = MakeList(root.Get(), 200.0f, 100.0f);
     for (int i = 0; i < 10; ++i)
@@ -92,7 +92,7 @@ TEST_CASE("listbox: clicking a row selects it")
 
 TEST_CASE("listbox: keyboard navigation moves the selection")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{300.0f, 300.0f});
     auto lb = MakeList(root.Get(), 200.0f, 100.0f);
     for (int i = 0; i < 6; ++i)

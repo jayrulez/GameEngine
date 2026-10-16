@@ -22,7 +22,7 @@ namespace
 
 TEST_CASE("tooltip: appears after the delay while hovering a widget with tooltip text")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{300.0f, 300.0f});
     auto w = Make<UIWidget>();
     w->SetSize(core::Float2{80.0f, 30.0f});
@@ -48,7 +48,7 @@ TEST_CASE("tooltip: appears after the delay while hovering a widget with tooltip
 
 TEST_CASE("tooltip: hidden until the delay, and no tooltip for widgets without text")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{300.0f, 300.0f});
     auto plain = Make<UIWidget>(); // no tooltip text
     plain->SetSize(core::Float2{80.0f, 30.0f});
@@ -64,7 +64,7 @@ TEST_CASE("tooltip: hidden until the delay, and no tooltip for widgets without t
 
 TEST_CASE("tooltip: changing the hovered node hides and resets the timer")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{300.0f, 300.0f});
     auto a = Make<UIWidget>();
     a->SetSize(core::Float2{80.0f, 30.0f});

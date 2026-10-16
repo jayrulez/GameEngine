@@ -166,7 +166,7 @@ private:
     fonts::CachedFont* m_fontLarge = nullptr;
 
     // GUI.
-    RefPtr<gui::SceneNode> m_root;
+    RefPtr<gui::SceneRoot> m_root;
     RefPtr<gui::LinearLayout> m_panel;
     RefPtr<gui::Label> m_counter;
     RefPtr<gui::TextField> m_textField;
@@ -264,8 +264,10 @@ void GUISandbox::LoadFontSize(StringView path, f32 pixelHeight)
 
 void GUISandbox::BuildUI()
 {
-    m_root = MakeRef<gui::SceneNode>(AppRoot());
-    m_root->SetSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)});
+    m_root = MakeRef<gui::SceneRoot>(AppRoot());
+    // The window's device pixels at its monitor's scale: the tree lays out in logical units.
+    m_root->SetDisplayScale(m_window != nullptr ? m_window->ContentScale() : 1.0f);
+    m_root->SetViewportSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)});
 
     // Full-window scroller so the (now tall) page can scroll when content runs off-screen.
     m_pageScroll = MakeRef<gui::ScrollView>(AppRoot());
@@ -1119,13 +1121,18 @@ void GUISandbox::OnRender()
 
     // Advance + style the tree. The panel keeps the window width but wrap-content owns its
     // height; the page scroller fills the window.
-    m_root->SetSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)});
-    m_pageScroll->SetSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)});
-    m_panel->SetSize(Float2{static_cast<f32>(m_width), m_panel->GetSize().y});
+    // height; the page scroller fills the window. A window moved to a monitor of another
+    // density takes its scale.
+    if (m_window != nullptr && m_window->ContentScale() != m_root->GetDisplayScale())
+        m_root->SetDisplayScale(m_window->ContentScale());
+    m_root->SetViewportSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)});
+    m_pageScroll->SetSize(m_root->GetSize());
+    m_panel->SetSize(Float2{m_root->GetSize().x, m_panel->GetSize().y});
     m_root->Update(Duration::FromSeconds(static_cast<f64>(m_deltaTime)));
     if (m_tooltips)
         m_tooltips->Update(*m_root->GetEventDispatcher(), *m_root.Get(),
                            static_cast<f64>(m_deltaTime));
+    m_styles.SetMediaContext(m_root->GetMediaContext()); // its logical size and density
     m_styles.ApplyTree(*m_root.Get());
 
     // Keep the scroller's content size in sync with the wrapped panel height (a hidden widget

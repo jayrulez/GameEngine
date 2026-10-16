@@ -83,7 +83,7 @@ namespace
 
 TEST_CASE("textfield: typed text is inserted at the caret and the caret advances")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{200.0f, 100.0f});
     auto f = Make<TextField>();
     f->SetSize(core::Float2{100.0f, 24.0f});
@@ -108,7 +108,7 @@ TEST_CASE("textfield: typed text is inserted at the caret and the caret advances
 
 TEST_CASE("textfield: text only reaches a focused field")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{200.0f, 100.0f});
     auto f = Make<TextField>();
     f->SetSize(core::Float2{100.0f, 24.0f});
@@ -121,7 +121,7 @@ TEST_CASE("textfield: text only reaches a focused field")
 
 TEST_CASE("textfield: backspace and delete remove whole codepoints (UTF-8)")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{200.0f, 100.0f});
     auto f = Make<TextField>();
     f->SetSize(core::Float2{100.0f, 24.0f});
@@ -151,7 +151,7 @@ TEST_CASE("textfield: caret navigation steps by codepoint and clamps")
 {
     auto f = Make<TextField>();
     f->SetSize(core::Float2{100.0f, 24.0f});
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->AddChild(f.Get());
     EventDispatcher* d = root->GetEventDispatcher();
     f->RequestFocus();
@@ -175,7 +175,7 @@ TEST_CASE("textfield: change callback fires on edits")
 {
     auto f = Make<TextField>();
     f->SetSize(core::Float2{100.0f, 24.0f});
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->AddChild(f.Get());
     EventDispatcher* d = root->GetEventDispatcher();
     f->RequestFocus();
@@ -205,7 +205,7 @@ TEST_CASE("textfield: change callback fires on edits")
 TEST_CASE("textfield: mouse press focuses and places the caret at the nearest boundary")
 {
     fonts::CachedFont cf(core::DefaultAllocator(), NewMock(), nullptr, nullptr); // 6px/byte
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{200.0f, 100.0f});
     auto f = Make<TextField>();
     f->SetSize(core::Float2{100.0f, 24.0f});
@@ -244,7 +244,7 @@ TEST_CASE("textfield: caret draws only while focused")
     }
 
     // Focused (via a coordinator root so RequestFocus routes): caret rect is drawn.
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->AddChild(f.Get());
     f->RequestFocus();
     {
@@ -257,7 +257,7 @@ TEST_CASE("textfield: caret draws only while focused")
 
 TEST_CASE("textfield: WantsTextInput drives the dispatcher's text-input wish by focus")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{200.0f, 100.0f});
     auto f = Make<TextField>();
     f->SetSize(core::Float2{100.0f, 24.0f});
@@ -285,7 +285,7 @@ TEST_CASE("textfield: WantsTextInput drives the dispatcher's text-input wish by 
 
 TEST_CASE("textfield: blink toggles the caret over time while focused")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     auto f = Make<TextField>();
     root->AddChild(f.Get());
     f->RequestFocus(); // ResetBlink -> visible
@@ -307,7 +307,7 @@ namespace
     // A focused field holding `value`, wired under a scene so it has a dispatcher.
     struct Fixture
     {
-        core::RefPtr<SceneNode> root = Make<SceneNode>();
+        core::RefPtr<SceneRoot> root = Make<SceneRoot>();
         core::RefPtr<TextField> field = Make<TextField>();
         fonts::CachedFont font{core::DefaultAllocator(), NewMock(), nullptr, nullptr};
 

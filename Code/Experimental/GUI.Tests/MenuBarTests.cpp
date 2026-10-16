@@ -24,7 +24,7 @@ namespace
     // A menu bar (2 menus) under a scene root, ready to receive input.
     struct BarFixture
     {
-        core::RefPtr<SceneNode> root = Make<SceneNode>();
+        core::RefPtr<SceneRoot> root = Make<SceneRoot>();
         core::RefPtr<MenuBar> bar = Make<MenuBar>();
         Menu* fileMenu = nullptr;
         Menu* editMenu = nullptr;

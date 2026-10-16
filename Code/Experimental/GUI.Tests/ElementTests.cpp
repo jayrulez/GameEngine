@@ -15,10 +15,10 @@ namespace core = foundation::core;
 
 namespace
 {
-    core::RefPtr<SceneNode> MakeGui()
+    core::RefPtr<SceneRoot> MakeGui()
     {
         RegisterGuiElements();
-        return core::MakeRef<SceneNode>(core::DefaultAllocator());
+        return core::MakeRef<SceneRoot>(core::DefaultAllocator());
     }
 
     // A widget from outside the lab's core (as a toolkit or a game kit adds one): reflected with
@@ -59,7 +59,7 @@ REFLECT_MEMBERS(Impostor, "rtti::gui::tests")
 
 TEST_CASE("elements: a weak reference resolves while the element lives and not after")
 {
-    core::RefPtr<SceneNode> gui = MakeGui();
+    core::RefPtr<SceneRoot> gui = MakeGui();
     core::RefPtr<Button> button = core::MakeRef<Button>(core::DefaultAllocator());
     // Detached, an element has no GUI a reference could resolve through.
     CHECK_FALSE(Element<Button>(*button).IsValid());
@@ -76,7 +76,7 @@ TEST_CASE("elements: a weak reference resolves while the element lives and not a
 
 TEST_CASE("elements: a freed slot taken by a new element does not answer to the old reference")
 {
-    core::RefPtr<SceneNode> gui = MakeGui();
+    core::RefPtr<SceneRoot> gui = MakeGui();
     core::RefPtr<Label> first = core::MakeRef<Label>(core::DefaultAllocator());
     gui->AddChild(first.Get());
     Element<Label> old(*first);
@@ -96,8 +96,8 @@ TEST_CASE("elements: a freed slot taken by a new element does not answer to the 
 
 TEST_CASE("elements: two GUIs keep their own tables, and a GUI going leaves its references gone")
 {
-    core::RefPtr<SceneNode> a = MakeGui();
-    core::RefPtr<SceneNode> b = MakeGui();
+    core::RefPtr<SceneRoot> a = MakeGui();
+    core::RefPtr<SceneRoot> b = MakeGui();
     CHECK(a->GetElementTable() != b->GetElementTable());
     core::RefPtr<Label> inA = core::MakeRef<Label>(core::DefaultAllocator());
     core::RefPtr<Label> inB = core::MakeRef<Label>(core::DefaultAllocator());
@@ -110,7 +110,7 @@ TEST_CASE("elements: two GUIs keep their own tables, and a GUI going leaves its 
 
     // A's GUI goes while its label lives on elsewhere and a reference to it is held: the table
     // closes (held alive by the reference), so the reference reads as gone; B is untouched.
-    a = core::RefPtr<SceneNode>{};
+    a = core::RefPtr<SceneRoot>{};
     CHECK_FALSE(weakA.IsValid());
     CHECK(weakB.Get() == inB.Get());
 }
@@ -171,7 +171,7 @@ TEST_CASE("elements: a GUI's element set decides what its markup may create")
 
 TEST_CASE("elements: a node adds children by tag through its GUI's set, from its own allocator")
 {
-    core::RefPtr<SceneNode> gui = MakeGui();
+    core::RefPtr<SceneRoot> gui = MakeGui();
     ElementSet buttonsOnly = ElementSet::None();
     buttonsOnly.Allow(u8"Button");
     gui->SetElementSet(core::Move(buttonsOnly));

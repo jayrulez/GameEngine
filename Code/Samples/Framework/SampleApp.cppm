@@ -29,6 +29,8 @@ import foundation.rhi.validation;
 import foundation.shell;
 import foundation.shell.desktop;
 import foundation.vfs; // ResolveDataRoot + the NativeFileSystem mounted over the data root
+import foundation.rhi.capture; // ScreenshotCapture + the --screenshot flags
+import foundation.image;       // Image (the written screenshot)
 
 using namespace foundation::core;
 using namespace foundation;
@@ -112,6 +114,20 @@ export namespace samples::framework
 
         void Exit() { m_running = false; }
 
+        // === Screenshots ===
+        // A sample calls CaptureBackbuffer once a frame, after it has drawn and before the
+        // backbuffer goes to present; the framework arms it from F12 (to <user-data>/screenshots)
+        // or the --screenshot flags (--screenshot <png> [--screenshot-frame N |
+        // --screenshot-after S] [--screenshot-count N] [--screenshot-exit]), and writes the PNG
+        // once the GPU has run the copy.
+
+        /// Arms a screenshot of the next frame to `path` (empty: a new file under
+        /// <user-data>/screenshots).
+        void RequestScreenshot(StringView path = {});
+        /// Records the armed screenshot's copy of `backbuffer` (the swapchain's current image, in
+        /// RenderTarget) into `encoder`, leaving it as it found it.
+        void CaptureBackbuffer(rhi::CommandEncoder& encoder, rhi::Texture* backbuffer);
+
     private:
         BackendType m_backendType;
         bool m_validationEnabled;
@@ -119,6 +135,14 @@ export namespace samples::framework
         String m_dataRoot;
         UniquePtr<vfs::NativeFileSystem> m_dataFileSystem;
 
+        rhi::ScreenshotCapture m_screenshot;
+        rhi::ScreenshotOptions m_screenshotOptions;
+        u64 m_renderedFrames = 0;
+        u32 m_screenshotsTaken = 0;
+        u32 m_screenshotSerial = 0;
+        bool m_screenshotExitPending = false;
+
+        void FinishScreenshot();
         Status Init();
         void MainLoop();
         void Shutdown();
@@ -149,6 +173,7 @@ export namespace samples::framework
             }
         }
 
+        m_screenshotOptions = rhi::ScreenshotOptionsFromArguments(argc, argv);
         m_dataRoot = vfs::ResolveDataRoot(argc, argv);
         if (m_dataRoot.IsEmpty())
         {
@@ -352,9 +377,71 @@ export namespace samples::framework
             if (!m_window->IsMinimized())
             {
                 CheckAndResize();
+                if (shell::IInputManager* input = m_shell->Input();
+                    input != nullptr && input->Keyboard() != nullptr && input->Keyboard()->IsKeyPressed(shell::KeyCode::F12))
+                {
+                    RequestScreenshot();
+                }
                 OnRender();
+                FinishScreenshot();
             }
         }
+    }
+
+    inline void SampleApp::RequestScreenshot(StringView path)
+    {
+        if (!path.IsEmpty())
+        {
+            m_screenshot.Request(path);
+            return;
+        }
+        const String dir = PathJoin(GetUserDataDirectory().AsView(), u8"screenshots");
+        if (!CreateDirectories(dir.AsView()))
+        {
+            rhi::LogError("SampleApp: could not create the screenshots directory");
+            return;
+        }
+        const String file = PathJoin(dir.AsView(), Format(u8"sample-{}-{}.png", ProcessId(), ++m_screenshotSerial).AsView());
+        m_screenshot.Request(file.AsView());
+    }
+
+    inline void SampleApp::CaptureBackbuffer(rhi::CommandEncoder& encoder, rhi::Texture* backbuffer)
+    {
+        ++m_renderedFrames;
+        // The --screenshot run: from the due frame, one file a frame until --screenshot-count are
+        // taken, and --screenshot-exit only after the last.
+        if (m_screenshotOptions.Requested() && m_screenshotsTaken < m_screenshotOptions.count &&
+            (m_screenshotsTaken > 0 || m_screenshotOptions.Due(m_renderedFrames, m_totalTime)))
+        {
+            m_screenshot.Request(m_screenshotOptions.PathFor(m_screenshotsTaken).AsView());
+            ++m_screenshotsTaken;
+            m_screenshotExitPending = m_screenshotOptions.exitAfter && m_screenshotsTaken == m_screenshotOptions.count;
+        }
+        if (!m_screenshot.Armed() || m_swapChain == nullptr)
+            return;
+        if (!m_screenshot.Record(*m_device, encoder, backbuffer, m_swapChain->Format(), m_width, m_height) &&
+            m_screenshotExitPending)
+        {
+            std::fprintf(stderr, "SampleApp: the screenshot could not be taken (this surface cannot be copied)\n");
+            Exit();
+        }
+    }
+
+    // A screenshot recorded this frame: once the GPU has run it (a one-off, so wait for all),
+    // map, write, and honour --screenshot-exit.
+    inline void SampleApp::FinishScreenshot()
+    {
+        if (!m_screenshot.Recorded())
+            return;
+        m_device->WaitIdle();
+        foundation::image::Image written;
+        if (m_screenshot.Complete(*m_device, foundation::core::DefaultAllocator(), written).IsOk())
+        {
+            const String path(m_screenshot.Path());
+            std::printf("SampleApp: screenshot written to %s\n", reinterpret_cast<const char*>(path.CStr()));
+        }
+        if (m_screenshotExitPending)
+            Exit();
     }
 
     inline void SampleApp::CheckAndResize()
@@ -377,6 +464,8 @@ export namespace samples::framework
         if (m_device)
             m_device->WaitIdle();
         OnShutdown();
+        if (m_device)
+            m_screenshot.Release(*m_device);
         if (m_swapChain)
         {
             m_device->DestroySwapChain(m_swapChain);

@@ -15,6 +15,7 @@ target_link_libraries(SamplesFramework PUBLIC
     Foundation::VFS
     Foundation::RHI
     Foundation::RHI.Validation
+    Foundation::RHI.Capture
     Foundation::Shell
     Foundation::Shell.Desktop Foundation::Runtime.Desktop
     Foundation::Shaders

@@ -505,8 +505,11 @@ export namespace experimental::gui
                     return false;
             }
             core::Array<Node*> stops;
-            CollectTabStops(m_modalRoot != nullptr ? m_modalRoot : m_root,
-                            stops); // confine to a modal
+            // Confined to a modal, or to the containing scope (a dialog) focus is in.
+            Node* within = m_modalRoot != nullptr ? m_modalRoot : m_root;
+            if (Node* contain = ContainingScopeOf(m_focusNode))
+                within = contain;
+            CollectTabStops(within, stops);
             const usize count = stops.Size();
             if (count == 0)
                 return false;

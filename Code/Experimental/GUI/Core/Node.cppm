@@ -667,6 +667,10 @@ export namespace experimental::gui
         /// Binds `property` to this GUI's data value `key` (BindData with its scene's model); false
         /// outside a scene or with no such property.
         bool BindSceneData(core::StringView property, core::StringView key);
+        /// Focuses this widget, or, for a container (a page, a dialog), its entry: what was last
+        /// focused in it, else its default focus (nav-default), else its first focusable widget.
+        /// False when there is nothing to focus.
+        bool FocusElement();
         /// Handles command `id` with a script function, in the bubble phase; the function returning
         /// true lets the command go on up the focus path.
         void OnCommandScript(core::StringView id, RefPtr<foundation::script::IScriptDelegate> handler);

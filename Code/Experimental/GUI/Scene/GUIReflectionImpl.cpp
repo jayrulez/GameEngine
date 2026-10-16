@@ -372,6 +372,16 @@ namespace experimental::gui
         return root != nullptr && root->RunCommand(id);
     }
 
+    bool Node::FocusElement()
+    {
+        EventDispatcher* dispatcher = GetEventDispatcher();
+        Node* target = dispatcher != nullptr ? FocusTargetOf(*this) : nullptr;
+        if (target == nullptr)
+            return false;
+        dispatcher->SetFocusNode(target);
+        return true;
+    }
+
     bool Gui::BindKey(StringView keys, StringView command, StringView context)
     {
         SceneRoot* root = ScriptRoot();
@@ -471,6 +481,7 @@ namespace experimental::gui
         builder.Method<&Node::BindScript>("bind");
         builder.Method<&Node::BindSceneData>("bindData");
         builder.Method<&Node::OnCommandScript>("onCommand");
+        builder.Method<&Node::FocusElement>("focus");
         builder.Method<&Node::Destroy>("destroy");
         builder.Method<&ElementOf<Node>, Node, Node>("of");
     }

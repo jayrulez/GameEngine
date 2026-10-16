@@ -257,6 +257,26 @@ export namespace experimental::gui
         }
     }
 
+    /// Where focus goes when `node` is focused by a program: itself when it takes focus, else its
+    /// entry (remembered, default, or first focusable widget under it); null when nothing does.
+    [[nodiscard]] inline Node* FocusTargetOf(Node& node)
+    {
+        if (detail::IsNavigable(node))
+            return &node;
+        Array<Node*> all;
+        detail::CollectNavigable(node, all);
+        return EntryInto(node, all.IsEmpty() ? nullptr : all[0]);
+    }
+
+    /// The innermost containing scope holding `node` (a dialog's: Tab stays inside it), or null.
+    [[nodiscard]] inline Node* ContainingScopeOf(Node* node)
+    {
+        for (Node* scope = detail::ScopeOf(node); scope != nullptr; scope = detail::ScopeOf(scope))
+            if (scope->GetNavScope() == NavScope::Contain)
+                return scope;
+        return nullptr;
+    }
+
     /// Records `focused` as the remembered focus of every scope holding it.
     inline void RememberInScopes(Node& focused)
     {

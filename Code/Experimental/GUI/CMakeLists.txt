@@ -16,6 +16,7 @@ target_sources(GUI
             Core/Event.cppm
             Core/Clipboard.cppm
             Core/MutationQueue.cppm
+            Core/Reactive.cppm
             Core/Node.cppm
             Scene/Action.cppm
             Scene/ActionManager.cppm
@@ -95,5 +96,6 @@ target_sources(GUI
         # Module implementation unit: Node method bodies that call the EventDispatcher
         # (kept out of :node to avoid a :node <-> :event_dispatcher partition cycle).
         Scene/GUIClusterImpl.cpp
-        Scene/GUIReflectionImpl.cpp)
+        Scene/GUIReflectionImpl.cpp
+        Core/ReactiveImpl.cpp)
 

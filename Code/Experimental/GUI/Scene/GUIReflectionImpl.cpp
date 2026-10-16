@@ -84,6 +84,63 @@ namespace experimental::gui
             return false;
         }
 
+        // An event as a script handler sees it: positions in the GUI's units (from device pixels
+        // through the root's display scale).
+        [[nodiscard]] GuiEvent ScriptEventOf(const Event& event, StringView name)
+        {
+            GuiEvent out;
+            out.type = core::String(name);
+            out.phase = core::String(event.Phase == EventPhase::Capture ? u8"capture" : event.Phase == EventPhase::Target ? u8"target" : u8"bubble");
+            const auto place = [&](core::Float2 world)
+            {
+                if (Node* current = event.CurrentTarget; current != nullptr)
+                {
+                    const core::Float2 inRoot = current->GetRootNode()->ConvertToNodeSpace(world);
+                    const core::Float2 local = current->ConvertToNodeSpace(world);
+                    out.x = inRoot.x;
+                    out.y = inRoot.y;
+                    out.localX = local.x;
+                    out.localY = local.y;
+                }
+            };
+            switch (event.Type)
+            {
+            case EventType::MouseDown:
+            case EventType::MouseUp:
+            case EventType::MouseMove:
+            case EventType::MouseClick:
+            case EventType::MouseEnter:
+            case EventType::MouseLeave:
+            {
+                const MouseEvent& mouse = static_cast<const MouseEvent&>(event);
+                place(mouse.Position);
+                out.button = static_cast<i32>(mouse.Button);
+                out.clickCount = static_cast<i32>(mouse.ClickCount);
+                out.modifiers = static_cast<i32>(mouse.Modifiers);
+                break;
+            }
+            case EventType::MouseWheel:
+            {
+                const WheelEvent& wheel = static_cast<const WheelEvent&>(event);
+                place(wheel.Position);
+                out.deltaX = wheel.Delta.x;
+                out.deltaY = wheel.Delta.y;
+                break;
+            }
+            case EventType::KeyDown:
+            case EventType::KeyUp:
+            {
+                const KeyEvent& key = static_cast<const KeyEvent&>(event);
+                out.key = static_cast<i32>(key.KeyCode);
+                out.modifiers = static_cast<i32>(key.Modifiers);
+                break;
+            }
+            case EventType::TextInput: out.text = core::String(static_cast<const TextInputEvent&>(event).Text); break;
+            default: break;
+            }
+            return out;
+        }
+
         [[nodiscard]] Node* FindById(Node& node, StringView id)
         {
             if (const UIWidget* widget = Cast<UIWidget>(&node); widget != nullptr && widget->GetId() == id)
@@ -232,7 +289,17 @@ namespace experimental::gui
             return;
         // The node holds the handler (and with it the script function); the script holds the node
         // only weakly, so neither keeps the other alive.
-        (void)AddEventListener(type, [handler](const Event&) { (void)handler->Invoke(Span<core::Variant>{}); });
+        // The handler gets the event's data (one ignoring it may take no parameter), and takes the
+        // event by returning true.
+        (void)AddEventListener(type,
+                               [handler, name = core::String(eventName)](const Event& event)
+                               {
+                                   core::Variant args[1] = {core::Variant::From<GuiEvent>(ScriptEventOf(event, name.AsView()))};
+                                   Result<core::Variant> result = handler->Invoke(Span<core::Variant>(args, 1));
+                                   const bool* took = result.HasValue() ? result.Value().TryGet<bool>() : nullptr;
+                                   if (took != nullptr && *took)
+                                       event.Handled = true;
+                               });
     }
 
     // === Bindings ===
@@ -435,12 +502,16 @@ namespace experimental::gui
         (void)once;
     }
 
+    void RttiRegisterValue_GuiEvent(); // REFLECT_VALUE below
+
     void RegisterGuiScriptSurface()
     {
         static const bool once = []()
         {
             RegisterGuiElements();
+            RttiRegisterValue_GuiEvent();
             TypeRegistry& registry = GlobalTypeRegistry();
+            registry.Register(TypeOf<GuiEvent>()); // what a handler is given
             registry.Register(Node::StaticType()); // the bases a script names (Node.of, UIWidget.of)
             registry.Register(SceneRoot::StaticType());
             registry.Register(UINode::StaticType());
@@ -452,6 +523,26 @@ namespace experimental::gui
     }
 
     // === Reflection ===
+
+    REFLECT_VALUE(GuiEvent, "rtti::gui")
+    {
+        builder.Property<&GuiEvent::type>("type")
+            .Property<&GuiEvent::phase>("phase")
+            .Property<&GuiEvent::x>("x")
+            .Property<&GuiEvent::y>("y")
+            .Property<&GuiEvent::localX>("localX")
+            .Property<&GuiEvent::localY>("localY")
+            .Property<&GuiEvent::button>("button")
+            .Property<&GuiEvent::clickCount>("clickCount")
+            .Property<&GuiEvent::key>("key")
+            .Property<&GuiEvent::modifiers>("modifiers")
+            .Property<&GuiEvent::text>("text")
+            .Property<&GuiEvent::deltaX>("deltaX")
+            .Property<&GuiEvent::deltaY>("deltaY")
+            // Constructible, so both languages take it by value and Luau binds it (a type a script
+            // can make is one it can be handed).
+            .Constructor<>();
+    }
 
     REFLECT_MEMBERS(Node, "rtti::gui")
     {

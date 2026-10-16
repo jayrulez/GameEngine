@@ -9,7 +9,9 @@
 //   Your mark wears [color=#d04060][b]a rose gown[/b][/color] [icon=Icons/rose.png] [link=hint]?[/link]
 //
 // Tags: [b] bold, [i] italic, [u] underline, [color=#rrggbb | #rrggbbaa | name],
-// [size=<dp>], [font=<family>], [link=<id>] (a span the control reports when clicked), each
+// [size=<dp>], [font=<family>], [link=<id>] (a span the control reports when clicked),
+// [outline=<width> [colour]], [shadow=<x> <y> [blur] [colour]], [glow=<radius> [colour]] (text
+// effects, F4: drawn under the span's glyphs; a width or radius of 0 turns one off), each
 // closed by [/name] or [/] (the innermost); [icon=<image path>] stands alone. "[[" is a literal
 // "[". A tag that is malformed or unknown, or a close that matches nothing, is kept as text and
 // reported in the diagnostics, never dropped.
@@ -20,6 +22,7 @@ module;
 export module foundation.ui:text_runs;
 
 import foundation.core;
+import foundation.vg;
 import :style_value_parser;
 
 using namespace foundation::core;
@@ -39,6 +42,10 @@ export namespace foundation::ui
         bool italic = false;
         bool underline = false;
         String link; ///< A link id the control reports when the run is clicked; empty for none.
+        /// The effects the markup set, those parts named in `effectParts` (TextEffectPart); the
+        /// parts left out take the control's.
+        foundation::vg::TextEffects effects;
+        u8 effectParts = 0;
 
         [[nodiscard]] bool IsIcon() const noexcept { return !icon.IsEmpty(); }
         /// Same style (and link), so two runs may merge.
@@ -46,9 +53,42 @@ export namespace foundation::ui
         {
             return icon.IsEmpty() && other.icon.IsEmpty() && family == other.family && size == other.size &&
                    color == other.color && bold == other.bold && italic == other.italic &&
-                   underline == other.underline && link == other.link;
+                   underline == other.underline && link == other.link && effectParts == other.effectParts &&
+                   effects == other.effects;
         }
+        /// `inherited` (the control's effects) with the parts this run sets in their place.
+        [[nodiscard]] foundation::vg::TextEffects EffectsOver(const foundation::vg::TextEffects& inherited) const;
     };
+
+    /// The parts of TextEffects a run may set apart from each other.
+    enum TextEffectPart : u8
+    {
+        TextEffectOutline = 1,
+        TextEffectShadow = 2,
+        TextEffectGlow = 4,
+    };
+
+    inline foundation::vg::TextEffects TextRun::EffectsOver(const foundation::vg::TextEffects& inherited) const
+    {
+        foundation::vg::TextEffects out = inherited;
+        if ((effectParts & TextEffectOutline) != 0)
+        {
+            out.outlineWidth = effects.outlineWidth;
+            out.outlineColor = effects.outlineColor;
+        }
+        if ((effectParts & TextEffectShadow) != 0)
+        {
+            out.shadowOffset = effects.shadowOffset;
+            out.shadowBlur = effects.shadowBlur;
+            out.shadowColor = effects.shadowColor;
+        }
+        if ((effectParts & TextEffectGlow) != 0)
+        {
+            out.glowRadius = effects.glowRadius;
+            out.glowColor = effects.glowColor;
+        }
+        return out;
+    }
 
     /// A markup problem: where, in bytes, and what. The offending text stays in the runs.
     struct TextMarkupDiagnostic
@@ -89,7 +129,7 @@ export namespace foundation::ui
     {
         struct MarkupFrame
         {
-            String tag; // the tag that opened it (b, i, u, color, size, font, link)
+            String tag; // the tag that opened it (b, i, u, color, size, font, link, outline, shadow, glow)
             TextRun style;
         };
 
@@ -196,6 +236,18 @@ export namespace foundation::ui
                         return Reject(at, u8"[link=] takes an id");
                     style.link = String(value);
                 }
+                else if (name == StringView(u8"outline") || name == StringView(u8"shadow") ||
+                         name == StringView(u8"glow"))
+                {
+                    if (!ApplyEffect(name, value, style))
+                    {
+                        return Reject(at, name == StringView(u8"outline")
+                                              ? u8"[outline=] takes a width and a colour"
+                                          : name == StringView(u8"shadow")
+                                              ? u8"[shadow=] takes x and y offsets, a blur and a colour"
+                                              : u8"[glow=] takes a radius and a colour");
+                    }
+                }
                 else if (name == StringView(u8"icon"))
                 {
                     if (value.IsEmpty())
@@ -273,6 +325,66 @@ export namespace foundation::ui
                     m_document.runs.PushBack(Move(run));
                 }
                 m_text = String();
+            }
+
+            // An effect tag's value: numbers then an optional colour, space separated
+            // ([outline=2 #000], [shadow=2 2 3 black], [glow=6 yellow]).
+            bool ApplyEffect(StringView name, StringView value, TextRun& style) const
+            {
+                f32 numbers[3] = {};
+                usize count = 0;
+                Optional<Color> color;
+                usize k = 0;
+                while (k < value.Size())
+                {
+                    while (k < value.Size() && value[k] == u8' ')
+                        ++k;
+                    usize end = k;
+                    while (end < value.Size() && value[end] != u8' ')
+                        ++end;
+                    if (end == k)
+                        break;
+                    const StringView token = value.SubStr(k, end - k);
+                    k = end;
+                    if (color.HasValue())
+                        return false; // the colour comes last
+                    if (const Optional<f64> number = ParseFloat(token); number.HasValue())
+                    {
+                        if (count == 3)
+                            return false;
+                        numbers[count++] = static_cast<f32>(number.Value());
+                        continue;
+                    }
+                    color = ParseColor(token);
+                    if (!color.HasValue())
+                        return false;
+                }
+                if (name == StringView(u8"outline"))
+                {
+                    if (count != 1 || numbers[0] < 0.0f)
+                        return false;
+                    style.effects.outlineWidth = numbers[0];
+                    style.effects.outlineColor = color.HasValue() ? color.Value() : Color{0.0f, 0.0f, 0.0f, 1.0f};
+                    style.effectParts |= TextEffectOutline;
+                }
+                else if (name == StringView(u8"shadow"))
+                {
+                    if (count < 2 || (count == 3 && numbers[2] < 0.0f))
+                        return false;
+                    style.effects.shadowOffset = Float2{numbers[0], numbers[1]};
+                    style.effects.shadowBlur = count == 3 ? numbers[2] : 0.0f;
+                    style.effects.shadowColor = color.HasValue() ? color.Value() : Color{0.0f, 0.0f, 0.0f, 0.5f};
+                    style.effectParts |= TextEffectShadow;
+                }
+                else
+                {
+                    if (count != 1 || numbers[0] < 0.0f)
+                        return false;
+                    style.effects.glowRadius = numbers[0];
+                    style.effects.glowColor = color.HasValue() ? color.Value() : Color{1.0f, 1.0f, 1.0f, 1.0f};
+                    style.effectParts |= TextEffectGlow;
+                }
+                return true;
             }
 
             [[nodiscard]] Optional<Color> ParseColor(StringView value) const

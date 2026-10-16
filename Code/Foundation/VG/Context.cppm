@@ -45,6 +45,7 @@ export namespace foundation::vg
         f32 opacity = 1.0f;
         i32 stencilRef = 0;
         TextEffects textEffects; ///< Drawn under every text draw (SetTextEffects).
+        bool textEffectsOnly = false; ///< Text draws its effects and not its glyphs (SetTextEffectsOnly).
     };
 
     /// Main user-facing API for vector graphics drawing. Produces batched
@@ -389,6 +390,10 @@ export namespace foundation::vg
         void SetTextEffects(const TextEffects& effects) { m_currentState.textEffects = effects; }
         void ClearTextEffects() { m_currentState.textEffects = TextEffects{}; }
         [[nodiscard]] const TextEffects& GetTextEffects() const { return m_currentState.textEffects; }
+        /// Text draws only its effects, not its glyphs: a paragraph of runs draws every run's
+        /// effects first and its glyphs after, so no run's outline or shadow covers a neighbour.
+        void SetTextEffectsOnly(bool only) { m_currentState.textEffectsOnly = only; }
+        [[nodiscard]] bool TextEffectsOnly() const { return m_currentState.textEffectsOnly; }
 
         // === Layers ===
 
@@ -1733,7 +1738,8 @@ export namespace foundation::vg
                 pass(Float2{}, ApplyOpacity(effects.glowColor), effects.glowRadius * 0.5f, effects.glowRadius);
             if (distanceField && effects.HasOutline())
                 pass(Float2{}, ApplyOpacity(effects.outlineColor), effects.outlineWidth, 0.0f);
-            pass(Float2{}, color, 0.0f, 0.0f);
+            if (!m_currentState.textEffectsOnly)
+                pass(Float2{}, color, 0.0f, 0.0f);
         }
 
         void EmitGlyphQuad(const fonts::GlyphQuad& quad, Color color, Float2 effect = Float2{})

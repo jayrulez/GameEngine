@@ -247,3 +247,97 @@ TEST_CASE("rich text: malformed markup is drawn as written, and runs set directl
     REQUIRE(text->Document().runs.Size() == 1u);
     CHECK(text->Document().runs[0].italic);
 }
+
+namespace
+{
+    // How many glyph quads a batch drew in `color` (each quad's first corner).
+    usize QuadsIn(const foundation::vg::VGBatch& batch, Color color)
+    {
+        usize count = 0;
+        for (usize i = 0; i + 3 < batch.vertices.Size(); i += 4)
+        {
+            const Color c = batch.vertices[i].color;
+            if (Abs(c.r - color.r) < 0.01f && Abs(c.g - color.g) < 0.01f && Abs(c.b - color.b) < 0.01f &&
+                Abs(c.a - color.a) < 0.01f)
+                ++count;
+        }
+        return count;
+    }
+}
+
+TEST_CASE("rich text: an effect on one run draws under that run's glyphs and not its neighbours'")
+{
+    RobotoService fonts;
+    UIContext ctx{DefaultAllocator()};
+    ctx.SetFontService(&fonts.service);
+    auto root = MakeRef<RootView>(DefaultAllocator());
+    tests::Init(ctx, root.Get(), 400, 300);
+    auto text = MakeRef<RichText>(DefaultAllocator(), StringView(u8"the [shadow=2 2 #0000ff]mask[/shadow] falls"));
+    text->FontFamily.SetValue(String(u8"Roboto"));
+    root->AddView(text.Get());
+    tests::LayoutPass(ctx, root.Get());
+
+    foundation::vg::VGContext canvas;
+    ctx.DrawRootView(root.Get(), canvas);
+    const foundation::vg::VGBatch& batch = canvas.GetBatch();
+    // A shadow quad for each letter of "mask", none for "the" or "falls".
+    CHECK(QuadsIn(batch, Color{0.0f, 0.0f, 1.0f, 1.0f}) == 4u);
+    // The shadows all come before the first glyph: no run's shadow covers a neighbour.
+    usize lastShadow = 0;
+    usize firstGlyph = batch.vertices.Size();
+    for (usize i = 0; i + 3 < batch.vertices.Size(); i += 4)
+    {
+        if (batch.vertices[i].color.b > 0.99f && batch.vertices[i].color.r < 0.01f)
+            lastShadow = i;
+        else if (firstGlyph == batch.vertices.Size())
+            firstGlyph = i;
+    }
+    CHECK(lastShadow < firstGlyph);
+}
+
+TEST_CASE("text effects: a sheet's text-shadow reaches the view's text and its children's, none turns it off")
+{
+    RobotoService fonts;
+    UIContext ctx{DefaultAllocator()};
+    ctx.SetFontService(&fonts.service);
+    StyleSheetLoader loader(DefaultAllocator());
+    ctx.SetStyleSheet(loader.Load(u8".hud { text-shadow: 3 3 #ff00ff; } .quiet { text-shadow: none; }"));
+    auto root = MakeRef<RootView>(DefaultAllocator());
+    tests::Init(ctx, root.Get(), 400, 300);
+    auto hud = MakeRef<FlowLayout>(DefaultAllocator());
+    hud->AddClass(u8"hud");
+    auto loud = MakeRef<Label>(DefaultAllocator(), StringView(u8"Score"));
+    auto quiet = MakeRef<Label>(DefaultAllocator(), StringView(u8"Time"));
+    quiet->AddClass(u8"quiet");
+    hud->AddView(loud.Get());
+    hud->AddView(quiet.Get());
+    root->AddView(hud.Get());
+    tests::LayoutPass(ctx, root.Get());
+
+    foundation::vg::VGContext canvas;
+    ctx.DrawRootView(root.Get(), canvas);
+    // "Score" is shadowed through its parent's rule; "Time" turns it off.
+    CHECK(QuadsIn(canvas.GetBatch(), Color{1.0f, 0.0f, 1.0f, 1.0f}) == 5u);
+}
+
+TEST_CASE("text effects: text-shadow, text-outline and text-glow parse as shadows")
+{
+    StyleSheetLoader loader(DefaultAllocator());
+    const RefPtr<StyleSheet> sheet = loader.Load(
+        u8"a { text-shadow: 1 2 3 #ff0000; } b { text-outline: 2; } c { text-glow: 6 #00ff00; } d { text-outline: none; }");
+    REQUIRE(sheet);
+    REQUIRE(sheet->RuleCount() == 4);
+    const BoxShadow shadow = sheet->GetRule(0).GetValue(StyleProperty::TextShadow).Value().AsShadow().Value();
+    CHECK(shadow.OffsetX == doctest::Approx(1.0f));
+    CHECK(shadow.OffsetY == doctest::Approx(2.0f));
+    CHECK(shadow.Blur == doctest::Approx(3.0f));
+    CHECK(shadow.Color.r == doctest::Approx(1.0f));
+    const BoxShadow outline = sheet->GetRule(1).GetValue(StyleProperty::TextOutline).Value().AsShadow().Value();
+    CHECK(outline.Spread == doctest::Approx(2.0f));
+    CHECK(outline.Color.a == doctest::Approx(1.0f)); // opaque black by default
+    const BoxShadow glow = sheet->GetRule(2).GetValue(StyleProperty::TextGlow).Value().AsShadow().Value();
+    CHECK(glow.Blur == doctest::Approx(6.0f));
+    CHECK(glow.Color.g == doctest::Approx(1.0f));
+    const BoxShadow none = sheet->GetRule(3).GetValue(StyleProperty::TextOutline).Value().AsShadow().Value();
+    CHECK(none.Color.a == doctest::Approx(0.0f));
+}

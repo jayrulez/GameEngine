@@ -8,6 +8,7 @@
 
 import foundation.core;
 import foundation.ui;
+import foundation.vg;
 
 using namespace foundation::core;
 using namespace foundation::ui;
@@ -105,4 +106,59 @@ TEST_CASE("text runs: a close past inner tags closes them too, and colour names 
     REQUIRE(doc.runs[2].color.HasValue()); // a named CSS colour without the resolver's help
     CHECK(doc.runs[2].color.Value().r == doctest::Approx(1.0f));
     CHECK(doc.diagnostics.Size() == 1u); // [/color] closing the [b] inside it
+}
+
+TEST_CASE("text runs: outline, shadow and glow tags set their part of a run's effects")
+{
+    const TextDocument doc = ParseTextMarkup(
+        u8"[outline=2 #102030]Hunt[shadow=1 2 3 red] the[/shadow][/outline] [glow=6]mask[/glow] [shadow=4 5]free[/]");
+    REQUIRE(doc.diagnostics.IsEmpty());
+    REQUIRE(doc.runs.Size() == 6u);
+    // An outline alone, its colour as written.
+    CHECK(doc.runs[0].effectParts == TextEffectOutline);
+    CHECK(doc.runs[0].effects.outlineWidth == doctest::Approx(2.0f));
+    CHECK(doc.runs[0].effects.outlineColor.g == doctest::Approx(0x20 / 255.0f));
+    // A shadow inside it: both parts.
+    CHECK(doc.runs[1].effectParts == (TextEffectOutline | TextEffectShadow));
+    CHECK(doc.runs[1].effects.shadowOffset.x == doctest::Approx(1.0f));
+    CHECK(doc.runs[1].effects.shadowOffset.y == doctest::Approx(2.0f));
+    CHECK(doc.runs[1].effects.shadowBlur == doctest::Approx(3.0f));
+    CHECK(doc.runs[1].effects.shadowColor.r == doctest::Approx(1.0f));
+    CHECK(doc.runs[2].effectParts == 0); // the space after both closed
+    // A glow takes white without a colour, a shadow half black and no blur.
+    CHECK(doc.runs[3].effectParts == TextEffectGlow);
+    CHECK(doc.runs[3].effects.glowRadius == doctest::Approx(6.0f));
+    CHECK(doc.runs[3].effects.glowColor.r == doctest::Approx(1.0f));
+    CHECK(doc.runs[5].effects.shadowBlur == doctest::Approx(0.0f));
+    CHECK(doc.runs[5].effects.shadowColor.a == doctest::Approx(0.5f));
+}
+
+TEST_CASE("text runs: a run's effects take the control's for the parts it leaves out")
+{
+    const TextDocument doc = ParseTextMarkup(u8"[outline=0]plain[/] [glow=3 yellow]bright");
+    REQUIRE(doc.runs.Size() == 3u);
+    foundation::vg::TextEffects control;
+    control.outlineWidth = 1.0f;
+    control.shadowColor = Color{0.0f, 0.0f, 0.0f, 1.0f};
+    control.shadowOffset = Float2{2.0f, 2.0f};
+    // [outline=0] turns the control's outline off and keeps its shadow.
+    const foundation::vg::TextEffects plain = doc.runs[0].EffectsOver(control);
+    CHECK_FALSE(plain.HasOutline());
+    CHECK(plain.HasShadow());
+    // An unmarked run is the control's.
+    CHECK(doc.runs[1].EffectsOver(control) == control);
+    const foundation::vg::TextEffects bright = doc.runs[2].EffectsOver(control);
+    CHECK(bright.HasOutline());
+    CHECK(bright.HasGlow());
+    CHECK(bright.glowRadius == doctest::Approx(3.0f));
+}
+
+TEST_CASE("text runs: malformed effect tags are reported and kept as text")
+{
+    // A width without a number, a shadow with one offset, a glow with two radii, a colour not last.
+    const TextDocument doc = ParseTextMarkup(u8"[outline=red]a [shadow=2]b [glow=1 2]c [outline=#fff 1]d");
+    CHECK(doc.PlainText() == StringView(u8"[outline=red]a [shadow=2]b [glow=1 2]c [outline=#fff 1]d"));
+    CHECK(doc.diagnostics.Size() == 4u);
+    for (const TextRun& run : doc.runs)
+        CHECK(run.effectParts == 0);
 }

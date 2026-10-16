@@ -1300,6 +1300,7 @@ export namespace foundation::ui
                     ctx.PushClip(Rectangle{0, 0, child->Width(), child->Height()});
                 }
 
+                ApplyTextEffects(ctx, *child);
                 const DrawBlend previousBlend = ctx.SetBlend(child->CurrentDrawBlend());
                 child->OnDraw(ctx);
                 ctx.SetBlend(previousBlend);
@@ -1327,6 +1328,36 @@ export namespace foundation::ui
                 }
                 ctx.VG().PopState();
             }
+        }
+
+        /// The view's text-shadow, text-outline and text-glow onto the VG's text effects (the
+        /// state the child's draw pushed), so its text and its children's draw them; a property
+        /// the view leaves unset keeps what its parent set.
+        static void ApplyTextEffects(UIDrawContext& ctx, View& child)
+        {
+            const Optional<BoxShadow> shadow = child.ResolveStyle(StyleProperty::TextShadow).AsShadow();
+            const Optional<BoxShadow> outline = child.ResolveStyle(StyleProperty::TextOutline).AsShadow();
+            const Optional<BoxShadow> glow = child.ResolveStyle(StyleProperty::TextGlow).AsShadow();
+            if (!shadow.HasValue() && !outline.HasValue() && !glow.HasValue())
+                return;
+            vg::TextEffects effects = ctx.VG().GetTextEffects();
+            if (shadow.HasValue())
+            {
+                effects.shadowOffset = Float2{shadow.Value().OffsetX, shadow.Value().OffsetY};
+                effects.shadowBlur = shadow.Value().Blur;
+                effects.shadowColor = shadow.Value().Color;
+            }
+            if (outline.HasValue())
+            {
+                effects.outlineWidth = outline.Value().Spread;
+                effects.outlineColor = outline.Value().Color;
+            }
+            if (glow.HasValue())
+            {
+                effects.glowRadius = glow.Value().Blur;
+                effects.glowColor = glow.Value().Color;
+            }
+            ctx.VG().SetTextEffects(effects);
         }
 
         // How many device pixels a unit is under `transform` (the larger axis): filter sigmas are

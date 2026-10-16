@@ -19,6 +19,7 @@ export module foundation.ui:rich_text;
 import foundation.core;
 import foundation.fonts;
 import foundation.image;
+import foundation.vg;
 import :view;
 import :event;
 import :property;
@@ -35,6 +36,7 @@ import :text_layout;
 using namespace foundation::core;
 namespace core = foundation::core;
 namespace fonts = foundation::fonts;
+namespace vg = foundation::vg;
 
 export namespace foundation::ui
 {
@@ -163,6 +165,31 @@ export namespace foundation::ui
             MeasuredSize = Float2{constraints.ConstrainWidth(width), constraints.ConstrainHeight(height)};
         }
 
+        // One run's glyphs, slanted when its italic is synthesized and twice when its bold is.
+        void DrawRunGlyphs(UIDrawContext& ctx, const LaidOutGlyphs& run, Color color)
+        {
+            const bool slanted = run.syntheticItalic;
+            if (slanted)
+            {
+                // Lean the glyphs about their baseline: x moves right by a fifth of the height
+                // above it.
+                ctx.VG().PushState();
+                Float4x4 lean = Float4x4::Identity();
+                const f32 baseline = m_drawOffset.y + run.baseline;
+                lean.m[1][0] = -0.2f;
+                lean.m[3][0] = 0.2f * baseline;
+                ctx.VG().SetTransform(lean * ctx.VG().GetTransform());
+            }
+            ctx.VG().DrawPositionedGlyphs(run.glyphs, run.font, m_drawOffset.x, m_drawOffset.y, color);
+            if (run.syntheticBold && !ctx.VG().TextEffectsOnly()) // effects once, under both strokes
+            {
+                ctx.VG().DrawPositionedGlyphs(run.glyphs, run.font, m_drawOffset.x + Max(0.5f, run.size / 24.0f),
+                                              m_drawOffset.y, color);
+            }
+            if (slanted)
+                ctx.VG().PopState();
+        }
+
         void OnDraw(UIDrawContext& ctx) override
         {
             if (ctx.FontService() == nullptr)
@@ -175,29 +202,25 @@ export namespace foundation::ui
                                                                                 : 0.0f};
             const bool dim = !IsEffectivelyEnabled();
             const auto tone = [dim](Color c) { return dim ? Palette::ComputeDisabled(c) : c; };
+            // Every run's effects (the view's, with what its markup sets in their place) go under
+            // every run's glyphs, so one run's outline or shadow never covers its neighbour.
+            const vg::TextEffects inherited = ctx.VG().GetTextEffects();
+            ctx.VG().PushState();
+            ctx.VG().SetTextEffectsOnly(true);
             for (const LaidOutGlyphs& run : layout.glyphRuns)
             {
-                const bool slanted = run.syntheticItalic;
-                if (slanted)
-                {
-                    // Lean the glyphs about their baseline: x moves right by a fifth of the height
-                    // above it.
-                    ctx.VG().PushState();
-                    Float4x4 lean = Float4x4::Identity();
-                    const f32 baseline = m_drawOffset.y + run.baseline;
-                    lean.m[1][0] = -0.2f;
-                    lean.m[3][0] = 0.2f * baseline;
-                    ctx.VG().SetTransform(lean * ctx.VG().GetTransform());
-                }
-                ctx.VG().DrawPositionedGlyphs(run.glyphs, run.font, m_drawOffset.x, m_drawOffset.y, tone(run.color));
-                if (run.syntheticBold)
-                {
-                    ctx.VG().DrawPositionedGlyphs(run.glyphs, run.font, m_drawOffset.x + Max(0.5f, run.size / 24.0f),
-                                                  m_drawOffset.y, tone(run.color));
-                }
-                if (slanted)
-                    ctx.VG().PopState();
+                const vg::TextEffects effects = m_document.runs[static_cast<usize>(run.run)].EffectsOver(inherited);
+                if (!effects.Any())
+                    continue;
+                ctx.VG().SetTextEffects(effects);
+                DrawRunGlyphs(ctx, run, tone(run.color));
             }
+            ctx.VG().PopState();
+            ctx.VG().PushState();
+            ctx.VG().ClearTextEffects();
+            for (const LaidOutGlyphs& run : layout.glyphRuns)
+                DrawRunGlyphs(ctx, run, tone(run.color));
+            ctx.VG().PopState();
             for (const LaidOutBox& underline : layout.underlines)
             {
                 const Rectangle r = underline.rect;

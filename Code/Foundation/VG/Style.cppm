@@ -133,5 +133,6 @@ export namespace foundation::vg
         }
         [[nodiscard]] constexpr bool HasGlow() const noexcept { return glowRadius > 0.0f && glowColor.a > 0.0f; }
         [[nodiscard]] constexpr bool Any() const noexcept { return HasOutline() || HasShadow() || HasGlow(); }
+        [[nodiscard]] constexpr bool operator==(const TextEffects&) const noexcept = default;
     };
 }

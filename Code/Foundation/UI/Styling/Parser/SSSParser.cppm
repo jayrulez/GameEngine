@@ -815,6 +815,9 @@ export namespace foundation::ui
                 return ParseTransitionValue();
             if (prop == StyleProperty::Filter || prop == StyleProperty::BackdropFilter)
                 return ParseFilterValue();
+            if (prop == StyleProperty::TextShadow || prop == StyleProperty::TextOutline ||
+                prop == StyleProperty::TextGlow)
+                return ParseTextEffectValue(prop);
             if (IsSizeSpecProperty(prop) && Peek().Kind == TokenKind::Ident &&
                 Peek().Text != StringView(u8"calc"))
             {
@@ -902,6 +905,43 @@ export namespace foundation::ui
             const f32 sigma = Peek().Kind == TokenKind::Number ? Max(0.0f, ParseFloatValue()) : 0.0f;
             Expect(TokenKind::RParen);
             return StyleValue::FloatVal(sigma);
+        }
+
+        /// `text-shadow: <x> <y> [blur] [color]`, `text-outline: <width> [color]`, `text-glow:
+        /// <radius> [color]`, or `none` (a zero Shadow, so it turns off what a parent set). The
+        /// outline's width is the shadow's spread and the glow's radius its blur.
+        StyleValue ParseTextEffectValue(StyleProperty prop)
+        {
+            BoxShadow effect;
+            effect.Color = prop == StyleProperty::TextGlow ? Color{1.0f, 1.0f, 1.0f, 1.0f}
+                           : prop == StyleProperty::TextOutline ? Color{0.0f, 0.0f, 0.0f, 1.0f}
+                                                                : Color{0.0f, 0.0f, 0.0f, 0.5f};
+            if (Peek().Kind == TokenKind::Ident && Peek().Text == StringView(u8"none"))
+            {
+                Consume();
+                effect.Color = Color{0.0f, 0.0f, 0.0f, 0.0f};
+                return StyleValue::ShadowVal(effect);
+            }
+            f32 lengths[3] = {};
+            i32 count = 0;
+            while (count < 3 && Peek().Kind == TokenKind::Number)
+                lengths[count++] = ParseFloatValue();
+            const i32 wanted = prop == StyleProperty::TextShadow ? 2 : 1;
+            if (count < wanted || (prop != StyleProperty::TextShadow && count > 1))
+                return StyleValue::None();
+            if (prop == StyleProperty::TextShadow)
+            {
+                effect.OffsetX = lengths[0];
+                effect.OffsetY = lengths[1];
+                effect.Blur = count > 2 ? Max(0.0f, lengths[2]) : 0.0f;
+            }
+            else if (prop == StyleProperty::TextOutline)
+                effect.Spread = Max(0.0f, lengths[0]);
+            else
+                effect.Blur = Max(0.0f, lengths[0]);
+            if (Peek().Kind != TokenKind::Semicolon && Peek().Kind != TokenKind::RBrace)
+                effect.Color = ParseColorValue();
+            return StyleValue::ShadowVal(effect);
         }
 
         /// A `<time>`: `120ms`, `0.2s`, or a bare number of milliseconds. Seconds out.
@@ -1169,6 +1209,14 @@ export namespace foundation::ui
                 return StyleProperty::Filter;
             if (name == StringView(u8"backdrop-filter"))
                 return StyleProperty::BackdropFilter;
+
+            // Text effects
+            if (name == StringView(u8"text-shadow"))
+                return StyleProperty::TextShadow;
+            if (name == StringView(u8"text-outline"))
+                return StyleProperty::TextOutline;
+            if (name == StringView(u8"text-glow"))
+                return StyleProperty::TextGlow;
 
             return {};
         }

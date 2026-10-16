@@ -89,6 +89,16 @@ export namespace foundation::ui
         /// its corner radius, under its own background (a Float, 0 for none).
         BackdropFilter,
 
+        // === Text effects (F4: VG TextEffects, drawn under text) ===
+        // A Shadow value each. They carry to what the view draws and its children, as CSS's
+        // text-shadow does, through the VG's state rather than the cascade; `none` turns one off.
+        /// `text-shadow: <x> <y> [blur] [color]`.
+        TextShadow,
+        /// `text-outline: <width> [color]` (the width rides as the shadow's spread).
+        TextOutline,
+        /// `text-glow: <radius> [color]` (the radius rides as the shadow's blur).
+        TextGlow,
+
         /// Number of known properties (for array sizing).
         COUNT
     };
@@ -122,6 +132,9 @@ export namespace foundation::ui
         case StyleProperty::TextOverflow:
         case StyleProperty::Filter:
         case StyleProperty::BackdropFilter:
+        case StyleProperty::TextShadow:
+        case StyleProperty::TextOutline:
+        case StyleProperty::TextGlow:
             return true;
         default:
             return false;
@@ -168,6 +181,9 @@ export namespace foundation::ui
         case StyleProperty::FlexBasis:
         case StyleProperty::Filter:
         case StyleProperty::BackdropFilter:
+        case StyleProperty::TextShadow:
+        case StyleProperty::TextOutline:
+        case StyleProperty::TextGlow:
             return true;
         default:
             return false;

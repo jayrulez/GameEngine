@@ -235,6 +235,22 @@ TEST_CASE("scrollview: auto-measures content from its children")
     CHECK(sv->ScrollRange().y == doctest::Approx(150.0f)); // 250 - 100
 }
 
+TEST_CASE("scrollview: auto-measure follows a child that grows or hides after it was added")
+{
+    // The sandbox's page loads small and is sized by its sheet later: the scroller must follow.
+    auto sv = Make<ScrollView>();
+    sv->SetSize(core::Float2{100.0f, 100.0f});
+    sv->SetAutoMeasureContent(true);
+    auto page = Cell(80.0f, 50.0f);
+    sv->GetContent()->AddChild(page.Get());
+    REQUIRE(sv->ScrollRange().y == doctest::Approx(0.0f));
+    page->SetSize(core::Float2{80.0f, 400.0f});
+    CHECK(sv->GetContentSize().y == doctest::Approx(400.0f));
+    CHECK(sv->ScrollRange().y == doctest::Approx(300.0f));
+    page->SetVisible(false);
+    CHECK(sv->ScrollRange().y == doctest::Approx(0.0f));
+}
+
 TEST_CASE("scrollview: keyboard scrolls when focused")
 {
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));

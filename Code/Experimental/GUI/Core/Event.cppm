@@ -62,6 +62,16 @@ export namespace experimental::gui
         Changed,
         // A node lost the pointer it had captured (released, taken by another, or the node left).
         PointerCaptureLost,
+        // The press in progress was cancelled (a scroller began panning under a finger): no
+        // release and no click follow; a widget drops what the press started.
+        PointerCancel,
+    };
+
+    /// What drives the pointer: the mouse, or a finger (the first one down).
+    enum class PointerType : u8
+    {
+        Mouse,
+        Touch,
     };
 
     /// The pointer's look over a node (CSS `cursor`). Auto takes the look of the node around it,
@@ -202,6 +212,8 @@ export namespace experimental::gui
         /// 1 for a press, 2 for the second of a double press, 3 for a triple (near in time and
         /// place, the same button): a press, its release and its click carry the same count.
         u32 ClickCount = 1;
+        PointerType Pointer = PointerType::Mouse;
+        u64 PointerId = 0; ///< the finger, for touch
 
         MouseEvent(EventType type, Node* target, core::Float2 position,
                    MouseButton button = MouseButton::Left, u32 modifiers = 0) noexcept

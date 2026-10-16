@@ -372,3 +372,104 @@ TEST_CASE("routing: pointer-events and cursor come from a sheet; the cursor is t
     d->InjectMouseUp(core::Float2{300.0f, 300.0f}, MouseButton::Left);
     CHECK(d->GetCursor() == Cursor::Default);
 }
+
+TEST_CASE("routing: a tap is a press, a release and a click marked as touch, with no hover left behind")
+{
+    auto root = MakeRoot();
+    auto button = Make<Button>();
+    button->SetPosition(core::Float2{10.0f, 10.0f});
+    button->SetSize(core::Float2{80.0f, 30.0f});
+    root->AddChild(button.Get());
+    core::Array<core::String> seen;
+    const EventType kinds[] = {EventType::MouseDown, EventType::MouseUp, EventType::MouseClick};
+    for (EventType type : kinds)
+        (void)button->AddEventListener(type, [&seen](const Event& e) {
+            const MouseEvent& m = static_cast<const MouseEvent&>(e);
+            if (m.Pointer == PointerType::Touch && m.PointerId == 7u)
+                seen.PushBack(core::String(e.Type == EventType::MouseDown ? u8"down" : e.Type == EventType::MouseUp ? u8"up" : u8"click"));
+        });
+    EventDispatcher* d = root->GetEventDispatcher();
+    CHECK(d->InjectTouchDown(7u, core::Float2{20.0f, 20.0f}));
+    CHECK(button->IsHovered()); // while the finger is down
+    CHECK(button->IsPressed());
+    CHECK(d->InjectTouchUp(7u, core::Float2{20.0f, 20.0f}));
+    REQUIRE(seen.Size() == 3u);
+    CHECK(seen[0] == core::String(u8"down"));
+    CHECK(seen[1] == core::String(u8"up"));
+    CHECK(seen[2] == core::String(u8"click"));
+    CHECK_FALSE(button->IsHovered()); // the finger lifted: nothing under it
+    CHECK(d->GetOverNode() == nullptr);
+}
+
+TEST_CASE("routing: the first finger drives the pointer; moves follow it and a second finger is ignored")
+{
+    auto root = MakeRoot();
+    auto a = Box(*root.Get(), 0, 0, 50, 50, u8"a");
+    auto b = Box(*root.Get(), 100, 0, 50, 50, u8"b");
+    int downs = 0, moves = 0;
+    (void)root->AddEventListener(EventType::MouseDown, [&](const Event&) { ++downs; });
+    (void)a->AddEventListener(EventType::MouseMove, [&](const Event&) { ++moves; });
+    EventDispatcher* d = root->GetEventDispatcher();
+    d->InjectTouchDown(1u, core::Float2{10.0f, 10.0f});
+    CHECK_FALSE(d->InjectTouchDown(2u, core::Float2{110.0f, 10.0f})); // a second finger
+    CHECK_FALSE(d->InjectTouchMove(2u, core::Float2{120.0f, 10.0f}));
+    CHECK(downs == 1);
+    d->InjectTouchMove(1u, core::Float2{110.0f, 10.0f}); // the press holds the moves for a
+    CHECK(moves == 1);
+    CHECK(b->IsHovered()); // and hover follows the finger
+    CHECK_FALSE(d->InjectTouchUp(2u, core::Float2{120.0f, 10.0f}));
+    CHECK(d->IsTouchActive());
+    d->InjectTouchUp(1u, core::Float2{110.0f, 10.0f});
+    CHECK_FALSE(d->IsTouchActive());
+}
+
+TEST_CASE("routing: taps count as a double tap over a wider distance than clicks")
+{
+    auto root = MakeRoot();
+    auto box = Box(*root.Get(), 0, 0, 200, 200, u8"box");
+    core::Array<core::u32> counts;
+    (void)box->AddEventListener(EventType::MouseDown, [&](const Event& e) {
+        counts.PushBack(static_cast<const MouseEvent&>(e).ClickCount);
+    });
+    EventDispatcher* d = root->GetEventDispatcher();
+    d->InjectTouchDown(1u, core::Float2{50.0f, 50.0f});
+    d->InjectTouchUp(1u, core::Float2{50.0f, 50.0f});
+    d->InjectTouchDown(2u, core::Float2{68.0f, 50.0f}); // 18 apart: a finger's wobble
+    d->InjectTouchUp(2u, core::Float2{68.0f, 50.0f});
+    d->Tick(1.0f);
+    d->InjectMouseDown(core::Float2{50.0f, 50.0f}, MouseButton::Left);
+    d->InjectMouseUp(core::Float2{50.0f, 50.0f}, MouseButton::Left);
+    d->InjectMouseDown(core::Float2{68.0f, 50.0f}, MouseButton::Left); // too far for a mouse
+    REQUIRE(counts.Size() == 4u);
+    CHECK(counts[1] == 2u);
+    CHECK(counts[3] == 1u);
+}
+
+TEST_CASE("routing: CancelPointer ends a press with no click, and a slider drops its drag")
+{
+    auto root = MakeRoot();
+    auto button = Make<Button>();
+    button->SetSize(core::Float2{80.0f, 30.0f});
+    root->AddChild(button.Get());
+    int clicks = 0, cancels = 0;
+    button->SetOnClick([&] { ++clicks; });
+    (void)button->AddEventListener(EventType::PointerCancel, [&](const Event&) { ++cancels; });
+    EventDispatcher* d = root->GetEventDispatcher();
+    d->InjectTouchDown(1u, core::Float2{10.0f, 10.0f});
+    d->CancelPointer(); // a scroller began panning under the finger
+    CHECK(cancels == 1);
+    CHECK_FALSE(button->IsPressed());
+    d->InjectTouchUp(1u, core::Float2{10.0f, 10.0f});
+    CHECK(clicks == 0);
+
+    auto slider = Make<Slider>();
+    slider->SetPosition(core::Float2{0.0f, 100.0f});
+    slider->SetSize(core::Float2{200.0f, 20.0f});
+    root->AddChild(slider.Get());
+    d->InjectMouseDown(core::Float2{100.0f, 110.0f}, MouseButton::Left);
+    const f32 before = slider->GetValue();
+    d->CancelPointer();
+    d->InjectMouseMove(core::Float2{190.0f, 110.0f});
+    CHECK(slider->GetValue() == doctest::Approx(before)); // the drag ended with the press
+    d->InjectMouseUp(core::Float2{190.0f, 110.0f}, MouseButton::Left);
+}

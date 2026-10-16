@@ -70,123 +70,63 @@ export namespace experimental::gui
         // === Injection API (fed by the shell bridge) ===
         // Each returns whether the GUI used the input: a handler took it, or the pointer is over a
         // node that takes it (IsPointerOver), so a game host knows a click was the UI's.
-        bool InjectMouseMove(core::Float2 position)
-        {
-            m_mousePos = position;
-            // While a drag-and-drop is in progress, route to the drop target (enter/leave/over)
-            // instead of the normal hover/capture path.
-            if (m_dragActive)
-            {
-                Node* target = FindDropTarget(HitTest(position));
-                if (target != m_dropTarget)
-                {
-                    if (m_dropTarget)
-                        m_dropTarget->HandleDragLeave(m_dragPayload);
-                    m_dropTarget = target;
-                    if (m_dropTarget)
-                        m_dropTarget->HandleDragEnter(m_dragPayload);
-                }
-                if (m_dropTarget)
-                    m_dropTarget->HandleDragOver(m_dragPayload);
-                return true;
-            }
-            Node* hit = HitTest(position);
-            UpdateHoverPath(hit, position);
-            // The captured node (explicitly, or the pressed one while a button is held) keeps the
-            // moves, so a drag goes on when the pointer leaves it; otherwise the hovered node.
-            Node* target = PointerTarget(hit);
-            bool used = false;
-            if (target != nullptr && target->IsTreeEnabled())
-            {
-                MouseEvent event(EventType::MouseMove, target, position);
-                used = target->RouteEvent(event);
-            }
-            return used || IsPointerTaken(hit);
-        }
-
+        bool InjectMouseMove(core::Float2 position) { return PointerMove(position, PointerType::Mouse, 0); }
         bool InjectMouseDown(core::Float2 position, MouseButton button, u32 modifiers = 0)
         {
-            NoteInput();
-            // A pointer in use: the focus ring hides (shown again by the next key or d-pad move).
-            m_keyboardMode = false;
-            if (m_focusNode != nullptr)
-                m_focusNode->SetFocusVisible(false);
-            m_mousePos = position;
-            Node* hit = HitTest(position);
-            UpdateHoverPath(hit, position);
-            // A press outside the active popup (and its owner) dismisses it - the click still
-            // proceeds normally afterwards. The optional `contains` predicate lets a popup claim
-            // nodes outside its own subtree as still "inside" it (e.g. a menu's open submenus,
-            // which are siblings in the tree, not descendants - eepp's isChildOrSubMenu).
-            if (m_popup != nullptr && !IsInSubtree(hit, m_popup) &&
-                !IsInSubtree(hit, m_popupOwner) && !(m_popupContains && m_popupContains(hit)))
-                ClosePopup();
-            CountClick(position, button);
-            m_downNode = hit;
-            SetPressPath(hit);
-            // Click-to-focus: the nearest widget that takes focus, at or above what was hit; none
-            // (a click on a backdrop or a label) clears focus, as browsers do, so navigation
-            // starts again from the GUI's entry rather than from the backdrop.
-            Node* focusable = hit;
-            while (focusable != nullptr && !(focusable->IsTabFocusable() && focusable->IsTreeEnabled()))
-                focusable = focusable->GetParent();
-            SetFocusNode(focusable);
-            // A disabled widget still takes the press (nothing behind it does) but is not told.
-            bool used = false;
-            if (hit != nullptr && hit->IsTreeEnabled())
-            {
-                MouseEvent event(EventType::MouseDown, hit, position, button, modifiers);
-                event.ClickCount = m_clickCount;
-                used = hit->RouteEvent(event);
-            }
-            return used || IsPointerTaken(hit);
+            return PointerDown(position, button, modifiers, PointerType::Mouse, 0);
         }
-
         bool InjectMouseUp(core::Float2 position, MouseButton button, u32 modifiers = 0)
         {
-            m_mousePos = position;
-            // A release while dragging completes the drop on the target under the cursor, then
-            // ends the drag. The normal up (below) still fires so the source resets its state.
-            if (m_dragActive)
-            {
-                Node* target = FindDropTarget(HitTest(position));
-                if (target != nullptr)
-                    target->HandleDrop(m_dragPayload);
-                else if (m_dropTarget)
-                    m_dropTarget->HandleDragLeave(m_dragPayload);
-                EndDrag();
-            }
-            Node* hit = HitTest(position);
-            // Both nodes are pinned for the rest of this call: a handler may mutate the tree
-            // (e.g. a header click re-sorts a model and the view rebuilds its header cells),
-            // dropping the last owning reference to the very node still on the call stack.
-            const core::RefPtr<Node> hitPin{hit};
-            Node* target = PointerTarget(hit); // the captured or pressed node gets the release
-            const core::RefPtr<Node> targetPin{target};
-            const core::RefPtr<Node> downPin{m_downNode};
-            bool used = false;
-            if (target != nullptr && target->IsTreeEnabled())
-            {
-                MouseEvent event(EventType::MouseUp, target, position, button, modifiers);
-                event.ClickCount = m_clickCount;
-                used = target->RouteEvent(event);
-            }
-            // A click (activation) for the left button only, on the nearest node holding both the
-            // pressed node and the one released over (a press dragged onto a sibling clicks their
-            // container, not either), as the DOM does. Right and middle presses still deliver
-            // down and up (a context menu) but never activate a control.
-            if (button == MouseButton::Left && m_downNode != nullptr && hit != nullptr)
-                if (Node* clicked = CommonAncestor(m_downNode, hit); clicked != nullptr && clicked->IsTreeEnabled())
-                {
-                    MouseEvent event(EventType::MouseClick, clicked, position, button, modifiers);
-                    event.ClickCount = m_clickCount;
-                    used = clicked->RouteEvent(event) || used;
-                }
+            return PointerUp(position, button, modifiers, PointerType::Mouse, 0);
+        }
+
+        // === Touch === The first finger down drives the pointer as the mouse does (a press,
+        // moves, a release, a click), its events marked as touch; other fingers are ignored. A
+        // finger hovers only while it is down, so nothing stays hovered after a tap.
+        bool InjectTouchDown(u64 finger, core::Float2 position)
+        {
+            if (m_touchActive)
+                return false; // a second finger
+            m_touchActive = true;
+            m_touchFinger = finger;
+            return PointerDown(position, MouseButton::Left, 0, PointerType::Touch, finger);
+        }
+        bool InjectTouchMove(u64 finger, core::Float2 position)
+        {
+            if (!m_touchActive || finger != m_touchFinger)
+                return false;
+            return PointerMove(position, PointerType::Touch, finger);
+        }
+        bool InjectTouchUp(u64 finger, core::Float2 position)
+        {
+            if (!m_touchActive || finger != m_touchFinger)
+                return false;
+            m_touchActive = false;
+            const bool used = PointerUp(position, MouseButton::Left, 0, PointerType::Touch, finger);
+            UpdateHoverPath(nullptr, position); // the finger lifted: nothing is under it
+            return used;
+        }
+        [[nodiscard]] bool IsTouchActive() const noexcept { return m_touchActive; }
+
+        /// Cancels the press in progress: the pressed node hears PointerCancel (a widget drops its
+        /// drag), no release or click follows, and the press path and any capture clear. A
+        /// scroller that starts panning under a finger calls it, so the row under the finger is
+        /// not clicked at the end of the scroll.
+        void CancelPointer()
+        {
+            Node* pressed = m_downNode;
+            const core::RefPtr<Node> pin{pressed};
             m_downNode = nullptr;
             ClearPressPath();
+            if (pressed != nullptr && pressed->IsTreeEnabled())
+            {
+                MouseEvent event(EventType::PointerCancel, pressed, m_mousePos);
+                event.Pointer = m_touchActive ? PointerType::Touch : PointerType::Mouse;
+                event.PointerId = m_touchActive ? m_touchFinger : 0;
+                (void)pressed->RouteEvent(event);
+            }
             if (m_captureNode != nullptr)
-                ReleasePointer(*m_captureNode); // a capture ends with the press, as the DOM's does
-            return used || IsPointerTaken(hit);
+                ReleasePointer(*m_captureNode);
         }
 
         bool InjectMouseWheel(core::Float2 position, core::Float2 delta)
@@ -523,6 +463,134 @@ export namespace experimental::gui
             return hit;
         }
 
+        bool PointerMove(core::Float2 position, PointerType pointer, u64 id)
+        {
+            m_mousePos = position;
+            // While a drag-and-drop is in progress, route to the drop target (enter/leave/over)
+            // instead of the normal hover/capture path.
+            if (m_dragActive)
+            {
+                Node* target = FindDropTarget(HitTest(position));
+                if (target != m_dropTarget)
+                {
+                    if (m_dropTarget)
+                        m_dropTarget->HandleDragLeave(m_dragPayload);
+                    m_dropTarget = target;
+                    if (m_dropTarget)
+                        m_dropTarget->HandleDragEnter(m_dragPayload);
+                }
+                if (m_dropTarget)
+                    m_dropTarget->HandleDragOver(m_dragPayload);
+                return true;
+            }
+            Node* hit = HitTest(position);
+            UpdateHoverPath(hit, position);
+            // The captured node (explicitly, or the pressed one while a button is held) keeps the
+            // moves, so a drag goes on when the pointer leaves it; otherwise the hovered node.
+            Node* target = PointerTarget(hit);
+            bool used = false;
+            if (target != nullptr && target->IsTreeEnabled())
+            {
+                MouseEvent event(EventType::MouseMove, target, position);
+                event.Pointer = pointer;
+                event.PointerId = id;
+                used = target->RouteEvent(event);
+            }
+            return used || IsPointerTaken(hit);
+        }
+
+        bool PointerDown(core::Float2 position, MouseButton button, u32 modifiers, PointerType pointer, u64 id)
+        {
+            NoteInput();
+            // A pointer in use: the focus ring hides (shown again by the next key or d-pad move).
+            m_keyboardMode = false;
+            if (m_focusNode != nullptr)
+                m_focusNode->SetFocusVisible(false);
+            m_mousePos = position;
+            Node* hit = HitTest(position);
+            UpdateHoverPath(hit, position);
+            // A press outside the active popup (and its owner) dismisses it - the click still
+            // proceeds normally afterwards. The optional `contains` predicate lets a popup claim
+            // nodes outside its own subtree as still "inside" it (e.g. a menu's open submenus,
+            // which are siblings in the tree, not descendants - eepp's isChildOrSubMenu).
+            if (m_popup != nullptr && !IsInSubtree(hit, m_popup) &&
+                !IsInSubtree(hit, m_popupOwner) && !(m_popupContains && m_popupContains(hit)))
+                ClosePopup();
+            CountClick(position, button, pointer);
+            m_downNode = hit;
+            SetPressPath(hit);
+            // Click-to-focus: the nearest widget that takes focus, at or above what was hit; none
+            // (a click on a backdrop or a label) clears focus, as browsers do, so navigation
+            // starts again from the GUI's entry rather than from the backdrop.
+            Node* focusable = hit;
+            while (focusable != nullptr && !(focusable->IsTabFocusable() && focusable->IsTreeEnabled()))
+                focusable = focusable->GetParent();
+            SetFocusNode(focusable);
+            // A disabled widget still takes the press (nothing behind it does) but is not told.
+            bool used = false;
+            if (hit != nullptr && hit->IsTreeEnabled())
+            {
+                MouseEvent event(EventType::MouseDown, hit, position, button, modifiers);
+                event.ClickCount = m_clickCount;
+                event.Pointer = pointer;
+                event.PointerId = id;
+                used = hit->RouteEvent(event);
+            }
+            return used || IsPointerTaken(hit);
+        }
+
+        bool PointerUp(core::Float2 position, MouseButton button, u32 modifiers, PointerType pointer, u64 id)
+        {
+            m_mousePos = position;
+            // A release while dragging completes the drop on the target under the cursor, then
+            // ends the drag. The normal up (below) still fires so the source resets its state.
+            if (m_dragActive)
+            {
+                Node* target = FindDropTarget(HitTest(position));
+                if (target != nullptr)
+                    target->HandleDrop(m_dragPayload);
+                else if (m_dropTarget)
+                    m_dropTarget->HandleDragLeave(m_dragPayload);
+                EndDrag();
+            }
+            Node* hit = HitTest(position);
+            // Both nodes are pinned for the rest of this call: a handler may mutate the tree
+            // (e.g. a header click re-sorts a model and the view rebuilds its header cells),
+            // dropping the last owning reference to the very node still on the call stack.
+            const core::RefPtr<Node> hitPin{hit};
+            Node* target = PointerTarget(hit); // the captured or pressed node gets the release
+            const core::RefPtr<Node> targetPin{target};
+            const core::RefPtr<Node> downPin{m_downNode};
+            bool used = false;
+            if (target != nullptr && target->IsTreeEnabled())
+            {
+                MouseEvent event(EventType::MouseUp, target, position, button, modifiers);
+                event.ClickCount = m_clickCount;
+                event.Pointer = pointer;
+                event.PointerId = id;
+                used = target->RouteEvent(event);
+            }
+            // A click (activation) for the left button only, on the nearest node holding both the
+            // pressed node and the one released over (a press dragged onto a sibling clicks their
+            // container, not either), as the DOM does. Right and middle presses still deliver
+            // down and up (a context menu) but never activate a control. A cancelled press has no
+            // pressed node, so no click.
+            if (button == MouseButton::Left && m_downNode != nullptr && hit != nullptr)
+                if (Node* clicked = CommonAncestor(m_downNode, hit); clicked != nullptr && clicked->IsTreeEnabled())
+                {
+                    MouseEvent event(EventType::MouseClick, clicked, position, button, modifiers);
+                    event.ClickCount = m_clickCount;
+                    event.Pointer = pointer;
+                    event.PointerId = id;
+                    used = clicked->RouteEvent(event) || used;
+                }
+            m_downNode = nullptr;
+            ClearPressPath();
+            if (m_captureNode != nullptr)
+                ReleasePointer(*m_captureNode); // a capture ends with the press, as the DOM's does
+            return used || IsPointerTaken(hit);
+        }
+
         // The node a pointer move or release goes to: the captured node, else the pressed one
         // while a button is held, else the one under the pointer.
         [[nodiscard]] Node* PointerTarget(Node* hit) const
@@ -639,11 +707,12 @@ export namespace experimental::gui
         }
         // A second press of the same button near in time and place is a double click, a third a
         // triple (positions in device pixels).
-        void CountClick(core::Float2 position, MouseButton button)
+        void CountClick(core::Float2 position, MouseButton button, PointerType pointer)
         {
             const f32 dx = position.x - m_lastPressAt.x;
             const f32 dy = position.y - m_lastPressAt.y;
-            const bool near = dx * dx + dy * dy <= kClickSlop * kClickSlop;
+            const f32 slop = pointer == PointerType::Touch ? kTapSlop : kClickSlop; // a finger wobbles more
+            const bool near = dx * dx + dy * dy <= slop * slop;
             const bool soon = m_time - m_lastPressTime <= kClickInterval;
             m_clickCount = (button == m_lastPressButton && near && soon && m_clickCount > 0) ? m_clickCount + 1 : 1;
             m_lastPressTime = m_time;
@@ -652,6 +721,7 @@ export namespace experimental::gui
         }
         static constexpr f32 kClickInterval = 0.45f; // seconds between the presses of a double click
         static constexpr f32 kClickSlop = 6.0f;      // device pixels between them
+        static constexpr f32 kTapSlop = 24.0f;       // device pixels between two taps
 
         // True if `node` is `ancestor` or a descendant of it.
         [[nodiscard]] static bool IsInSubtree(Node* node, Node* ancestor)
@@ -753,6 +823,8 @@ export namespace experimental::gui
         core::Float2 m_lastPressAt{0.0f, 0.0f};
         MouseButton m_lastPressButton = MouseButton::Left;
         u32 m_clickCount = 0;
+        bool m_touchActive = false; // the first finger is down (it drives the pointer)
+        u64 m_touchFinger = 0;
         Node* m_downNode = nullptr;        // non-owning
         Node* m_focusNode = nullptr;       // non-owning
         Node* m_popup = nullptr;           // non-owning active popup

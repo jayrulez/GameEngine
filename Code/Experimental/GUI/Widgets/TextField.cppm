@@ -354,6 +354,7 @@ export namespace experimental::gui
             (void)event;
             m_selecting = false;
         }
+        void OnPointerCancel(const MouseEvent&) override { m_selecting = false; }
 
         void OnFocusGained() override
         {

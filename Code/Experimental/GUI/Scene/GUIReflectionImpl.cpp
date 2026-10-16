@@ -71,7 +71,7 @@ namespace experimental::gui
                 {u8"wheel", EventType::MouseWheel},      {u8"keydown", EventType::KeyDown},
                 {u8"keyup", EventType::KeyUp},           {u8"textinput", EventType::TextInput},
                 {u8"focus", EventType::FocusGained},     {u8"blur", EventType::FocusLost},
-                {u8"change", EventType::Changed},
+                {u8"change", EventType::Changed},        {u8"pointercancel", EventType::PointerCancel},
             };
             for (const Named& entry : kNames)
             {
@@ -111,9 +111,11 @@ namespace experimental::gui
             case EventType::MouseClick:
             case EventType::MouseEnter:
             case EventType::MouseLeave:
+            case EventType::PointerCancel:
             {
                 const MouseEvent& mouse = static_cast<const MouseEvent&>(event);
                 place(mouse.Position);
+                out.pointer = core::String(mouse.Pointer == PointerType::Touch ? u8"touch" : u8"mouse");
                 out.button = static_cast<i32>(mouse.Button);
                 out.clickCount = static_cast<i32>(mouse.ClickCount);
                 out.modifiers = static_cast<i32>(mouse.Modifiers);
@@ -528,6 +530,7 @@ namespace experimental::gui
     {
         builder.Property<&GuiEvent::type>("type")
             .Property<&GuiEvent::phase>("phase")
+            .Property<&GuiEvent::pointer>("pointer")
             .Property<&GuiEvent::x>("x")
             .Property<&GuiEvent::y>("y")
             .Property<&GuiEvent::localX>("localX")

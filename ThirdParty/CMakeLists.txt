@@ -260,6 +260,20 @@ target_include_directories(meshoptimizer SYSTEM PUBLIC ${CMAKE_CURRENT_SOURCE_DI
 set_target_properties(meshoptimizer PROPERTIES POSITION_INDEPENDENT_CODE ON
                                                OUTPUT_NAME thirdparty_meshoptimizer)
 
+# HarfBuzz - vendored text shaper (github.com/harfbuzz/harfbuzz 14.5.1, Old MIT; trim manifest in
+# harfbuzz/README.md). Built from its own amalgamation with no FreeType/glib/ICU: its built-in
+# Unicode data and OpenType shaping. Linked only by Fonts.HarfBuzz, one implementation of our
+# ITextShaper (HarfBuzz is never used directly). Optimized in Debug too, as bc7enc is: UI text
+# shapes every frame something changes. SYSTEM include suppresses its header warnings.
+add_library(harfbuzz STATIC harfbuzz/src/harfbuzz.cc)
+add_library(ThirdParty::HarfBuzz ALIAS harfbuzz)
+if(NOT MSVC)
+    target_compile_options(harfbuzz PRIVATE $<$<CONFIG:Debug>:-O2>)
+endif()
+target_include_directories(harfbuzz SYSTEM PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/harfbuzz/src)
+set_target_properties(harfbuzz PROPERTIES POSITION_INDEPENDENT_CODE ON
+                                          OUTPUT_NAME thirdparty_harfbuzz)
+
 # astcenc - vendored ASTC encoder/decoder (github.com/ARM-software/astc-encoder; Apache-2.0). The
 # mobile-web compressed family (asset-variants Decision 4). Only the astcenc_*.cpp core is vendored -
 # no astcenccli_* front end, no test/bench harness (see astcenc/README.draconic.md). Forced onto the

@@ -109,6 +109,24 @@ Tests: capture and bubble order and stopping; a handler removing its own ancesto
 `pointer-events: none`; double and triple click; `Inject*` results; script handlers reading event
 data in both languages.
 
+As built on `vg` (2026-10-16): the route (`Node::RouteEvent`, d8a87b8e2): capture listeners from
+the root down, then at each node from the target up its own handler and its bubble listeners;
+everything at a node runs and Handled ends the route after it (the DOM's stopPropagation); the
+path is held for the walk. The hover and press paths set `Node::IsHovered` and `IsPressed`
+(pointer state moved from UINode to Node); enter and leave go to each node joining or leaving.
+Explicit capture with `PointerCaptureLost`, released with the press; a click on the nearest node
+holding the press and the release; click counts (0.45 s, 6 device pixels) on the dispatcher's
+clock; `Node::TakesPointer` (a painted box, focus, or pointer listeners) behind every `Inject*`
+result and `IsPointerOver`. `WantsWheel` is gone: scrollers mark the wheel handled only when they
+moved, and act on keys only when focused. `pointer-events` and `cursor` are reflected with their
+CSS names, the dispatcher answers `GetCursor`, and the shell bridge applies it and reports use
+from `Dispatch` (1da80863d). Script handlers get a constructible `GuiEvent` value and take the
+event by returning true (cac74aaff). The sandbox's Input page (bc1ad7a4a).
+Left: drag and drop still goes to its target alone (E7); Escape closing a popup is still the
+dispatcher's special case (E5); the first hover restyles the hovered top-level node's subtree
+(E3's restyle cost); the click thresholds are device pixels, not scaled; the sandbox has no plain
+container element, so its page uses layouts for boxes (E2).
+
 ### E2 Measure and arrange
 
 Facts: no node measures itself; layouts place children at the sizes they have; `LinearLayout`,

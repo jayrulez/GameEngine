@@ -196,6 +196,24 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   already bakes (`Fonts.DistanceField.Baker`), so a HUD's text reads over any scene without a
   panel behind it. Tests: an outline's width and a shadow's offset probed in pixels; effects on one
   run of a rich paragraph and not its neighbours.
+  As built on `vg`: the distance-field baker writes MTSDF, the true signed distance in alpha beside
+  the multi-channel field (6cf7438a7; font builder 10, editor cache 4), so contours past the edge
+  round a corner. `VGContext::SetTextEffects` (dd8e7fc70) puts a `TextEffects` (outline, shadow,
+  glow) on the state; a text draw emits its glyphs once per pass, shadow, glow, outline, then the
+  glyphs, each pass carrying two values per vertex (`VGVertex::effect`: the edge moved out and its
+  ramp widened, in field units converted from the text's pixels per glyph), and the shader reads
+  alpha for those passes and the median for the glyphs. An effect reaches as far as the field
+  holds (half its range) and is scaled down past that; a coverage font draws a shadow's offset copy
+  only. Probed on Vulkan and WebGPU: a 1.5 px outline adds 1.5 px each side of a 48 px stem and
+  leaves the stem, a shadow lands its offset. Markup and sheets (1403695e1): `[outline=<w>
+  [colour]]`, `[shadow=<x> <y> [blur] [colour]]`, `[glow=<r> [colour]]` per run, the parts a run
+  leaves out the control's; RichText draws every run's effects before any run's glyphs
+  (`SetTextEffectsOnly`); `text-shadow`, `text-outline` and `text-glow` in sheets go onto the VG
+  state as a view draws, reaching its children as CSS's text-shadow does, `none` turning one off.
+  A field's range is a load option and a font asset field (0d8c3da3b and after; 4 texels by
+  default), so an effects font bakes a wider field; the UI sandbox's Rich Text tab shows effects
+  over bright stripes from a 12-texel Roboto. Left: a coverage font (a raster-ramp asset, the
+  sandbox's other faces) draws a shadow's copy only; a glow is a linear ramp, not a Gaussian.
 
 ## Part 2: the GUI lab (`Code/Experimental/GUI`)
 

@@ -21,6 +21,16 @@
   skinned mesh in its current pose (today its bind pose, the pose its CPU vertices hold); the
   instanced meshes and other drawn surfaces answering `ISceneSurfaceQuery` too.
 
+- **Move the non-scene pages out of Editor.Scene into their domains** (user 2026-10-16): Editor.Scene
+  holds pages of other domains beside the scene page: AnimationClipPage, AnimationGraphPage and
+  SkeletonPage (animation), MaterialPage (materials), MeshPage (meshes and models),
+  ParticleEffectPage (particles) and SettingsProfilePage (render settings profiles); GamePage and
+  PieInstancePage (play in editor) belong to neither the scene nor an asset domain. Each goes to
+  its domain's editor library, as the audio, font, texture and shader pages already live in
+  Editor.Audio, Editor.Fonts, Editor.Texture and Editor.Shaders, making those libraries where none
+  exists (an Editor.Animation, an Editor.Materials, ...), so Editor.Scene keeps the scene page and
+  what scenes share, and a domain's page builds and is tested with its domain. Decide where play
+  in editor lives.
 - **An icon set for the editor** (UI survey 2026-10-14): the clearest visible gap against
   LunarSong's editor is icons, not effects: it ships 377 SVG icons; we have about 34 editor icons
   and 10 window-chrome glyphs, so our toolbars and menus are mostly text. Draw or license a

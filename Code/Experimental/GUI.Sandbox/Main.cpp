@@ -8,6 +8,7 @@
 // through GuiInputBridge, so hover/click/CSS-transitions are live.
 
 #include <new>
+#include <cstdlib> // atof (--scroll)
 
 import foundation.core;
 import foundation.rhi;
@@ -136,6 +137,8 @@ namespace
 class GUISandbox : public samples::framework::SampleApp
 {
 public:
+    void SetInitialScroll(f32 y) { m_initialScroll = y; }
+
     GUISandbox()
     {
         m_width = 900;
@@ -150,6 +153,8 @@ protected:
     void OnShutdown() override;
 
 private:
+    f32 m_initialScroll = 0.0f;
+    u32 m_initialScrollFrames = 0;
     static constexpr u32 kFrames = 2;
 
     void BuildUI();
@@ -1155,6 +1160,12 @@ void GUISandbox::OnRender()
     m_pageScroll->SetSize(m_root->GetSize());
     m_panel->SetSize(Float2{m_root->GetSize().x, m_panel->GetSize().y});
     m_root->Update(Duration::FromSeconds(static_cast<f64>(m_deltaTime)));
+    // --scroll: held for the first frames, while layout settles the page's height.
+    if (m_initialScroll > 0.0f && m_initialScrollFrames < 10)
+    {
+        m_pageScroll->SetScrollOffset(Float2{0.0f, m_initialScroll});
+        ++m_initialScrollFrames;
+    }
     if (m_tooltips)
         m_tooltips->Update(*m_root->GetEventDispatcher(), *m_root.Get(),
                            static_cast<f64>(m_deltaTime));
@@ -1262,5 +1273,10 @@ void GUISandbox::OnShutdown()
 int main(int argc, char** argv)
 {
     GUISandbox app;
+    // --scroll <y>: open the page scrolled down by y logical units (a screenshot of a later
+    // section: --scroll 900 --screenshot shot.png --screenshot-exit).
+    for (int i = 1; i + 1 < argc; ++i)
+        if (StringView(reinterpret_cast<const utf8char*>(argv[i])) == StringView(u8"--scroll"))
+            app.SetInitialScroll(static_cast<f32>(std::atof(argv[i + 1])));
     return app.Run(argc, argv);
 }

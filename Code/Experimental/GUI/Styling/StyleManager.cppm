@@ -76,7 +76,13 @@ export namespace experimental::gui
         // Resolve + apply one widget; animate any transitioned change versus its last apply.
         void ApplyTo(UIWidget& widget)
         {
-            ResolvedStyle resolved = m_sheet.Resolve(widget, m_context);
+            // Custom properties inherit: the nearest styled ancestor's resolved style gives those
+            // this widget does not set (ApplyTree styles parents first, so theirs are current).
+            const ResolvedStyle* inherited = nullptr;
+            for (Node* ancestor = widget.GetParent(); ancestor != nullptr && inherited == nullptr;
+                 ancestor = ancestor->GetParent())
+                inherited = m_cache.Find(ancestor);
+            ResolvedStyle resolved = m_sheet.Resolve(widget, m_context, true, {}, inherited);
 
             // Build the length-resolution context: viewport from the media context, root font
             // size configurable, element font size from this widget's resolved font-size (for em).

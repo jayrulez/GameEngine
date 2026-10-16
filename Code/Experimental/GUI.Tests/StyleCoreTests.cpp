@@ -158,3 +158,18 @@ TEST_CASE("style-core: the box belongs to the sheet: a restyle without box prope
     ApplyStyle(*native.Get(), sheet.Resolve(*native.Get()));
     CHECK(native->GetBox().BackgroundColor.b == doctest::Approx(1.0f));
 }
+
+TEST_CASE("style-core: the style manager gives each widget its ancestors' custom properties")
+{
+    // A var() set on a row reaches its children through ApplyTree (it was dropped when the
+    // manager resolved each widget alone).
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator());
+    auto row = Widget(u8"row");
+    auto card = Widget(u8"card");
+    root->AddChild(row.Get());
+    row->AddChild(card.Get());
+    StyleManager styles(CSSParser::Parse(SV(u8"row { --glow: #00ff00; } card { box-shadow: 0 0 4px var(--glow); }")));
+    styles.ApplyTree(*root.Get());
+    REQUIRE(card->GetBox().Shadows.Size() == 1u);
+    CHECK(card->GetBox().Shadows[0].ShadowColor.g == doctest::Approx(1.0f));
+}

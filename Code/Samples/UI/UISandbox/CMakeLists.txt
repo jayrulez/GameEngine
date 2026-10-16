@@ -5,6 +5,6 @@ target_link_libraries(UISandbox PRIVATE
     Foundation::Core Foundation::RHI Foundation::Shaders
     Foundation::Runtime Foundation::Runtime.Client Foundation::Runtime.Desktop Foundation::Shell.Desktop
     Foundation::Graphics Foundation::Graphics.Gpu Foundation::UI.Runtime Foundation::UI.Application
-    Foundation::Shell Foundation::Image Foundation::Fonts Foundation::Fonts.TrueType Foundation::Fonts.HarfBuzz
+    Foundation::Shell Foundation::Image Foundation::Fonts Foundation::Fonts.TrueType Foundation::Fonts.HarfBuzz Foundation::Fonts.Bidi
     Foundation::VG Foundation::VG.Renderer Foundation::UI Foundation::UI.Toolkit Foundation::UI.Viewport Foundation::UI.Shell Foundation::UI.VFS Foundation::VFS)
 util_copy_sdl3_dll(UISandbox)

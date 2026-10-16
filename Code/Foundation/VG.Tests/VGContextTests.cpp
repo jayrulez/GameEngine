@@ -1291,3 +1291,153 @@ TEST_CASE("vg.context: unshaped text draws each codepoint's glyph by the atlas's
         quads += static_cast<usize>(cmd.indexCount) / 6u;
     CHECK(quads == 2u);
 }
+
+namespace
+{
+    // A font with a shaper that turns "fi" into one glyph (77), as a real shaper's ligature does,
+    // and an atlas that holds glyphs 70 ('f' alone), 77 and 73 ('i' alone).
+    class LigatureFont final : public foundation::fonts::IFont
+    {
+    public:
+        [[nodiscard]] StringView FamilyName() const override { return u8"Lig"; }
+        [[nodiscard]] Span<const u8> SourceData() const override { return {}; }
+        [[nodiscard]] foundation::fonts::FontMetrics Metrics() const override
+        {
+            return foundation::fonts::FontMetrics(10.0f, -3.0f, 0.0f, 13.0f, 1.0f);
+        }
+        [[nodiscard]] f32 PixelHeight() const override { return 13.0f; }
+        [[nodiscard]] foundation::fonts::GlyphInfo GetGlyphInfo(i32 codepoint) const override
+        {
+            foundation::fonts::GlyphInfo info;
+            info.codepoint = codepoint;
+            info.glyphIndex = codepoint == 'f' ? 70 : 73;
+            info.advanceWidth = 8.0f;
+            return info;
+        }
+        [[nodiscard]] f32 GetKerning(i32, i32) const override { return 0.0f; }
+        [[nodiscard]] bool HasGlyph(i32) const override { return true; }
+        [[nodiscard]] f32 MeasureString(StringView text) const override { return 8.0f * static_cast<f32>(text.Size()); }
+        [[nodiscard]] f32 MeasureString(StringView text, Array<foundation::fonts::GlyphPosition>& out) const override
+        {
+            out.Clear();
+            return MeasureString(text);
+        }
+    };
+
+    class LigatureShaper final : public foundation::fonts::ClusterTextShaper
+    {
+    public:
+        i32* calls = nullptr;
+        [[nodiscard]] Result<f32> ShapeText(foundation::fonts::IFont& font, StringView text,
+                                            Array<foundation::fonts::GlyphPosition>& out) override
+        {
+            return ShapeText(font, text, 0.0f, 0.0f, out);
+        }
+        [[nodiscard]] Result<f32> ShapeText(foundation::fonts::IFont&, StringView text, f32 x, f32 y,
+                                            Array<foundation::fonts::GlyphPosition>& out) override
+        {
+            ++*calls;
+            out.Clear();
+            foundation::fonts::GlyphPosition g;
+            g.x = x;
+            g.y = y;
+            g.advance = 12.0f;
+            g.glyphId = text == StringView(u8"fi") ? 77 : 70;
+            g.clusterLength = static_cast<i32>(text.Size());
+            out.PushBack(g);
+            return 12.0f;
+        }
+        [[nodiscard]] Status ShapeTextWrapped(foundation::fonts::IFont& font, StringView text, f32,
+                                              Array<foundation::fonts::GlyphPosition>& out, f32& height) override
+        {
+            height = 13.0f;
+            return ShapeText(font, text, out).HasValue() ? Status() : Status(ErrorCode::Unknown);
+        }
+        [[nodiscard]] Result<f32> Shape(const foundation::fonts::ShapeRequest& request,
+                                        Array<foundation::fonts::GlyphPosition>& out) override
+        {
+            return ShapeText(*request.fonts[0], request.text, request.startX, request.startY, out);
+        }
+        void CollectReachableGlyphs(const foundation::fonts::IFont&, Span<const i32>, Array<i32>& out) override
+        {
+            out.Clear();
+        }
+    };
+
+    class LigatureAtlas final : public foundation::fonts::IFontAtlas
+    {
+    public:
+        [[nodiscard]] u32 Width() const override { return 64; }
+        [[nodiscard]] u32 Height() const override { return 64; }
+        [[nodiscard]] Span<const u8> PixelData() const override { return {}; }
+        [[nodiscard]] Float2 WhitePixelUV() const override { return Float2(0.5f, 0.5f); }
+        [[nodiscard]] i32 GlyphFor(i32 codepoint) const override { return codepoint == 'f' ? 70 : 73; }
+        [[nodiscard]] bool Contains(i32 glyph) const override { return glyph == 70 || glyph == 73 || glyph == 77; }
+        [[nodiscard]] bool TryGetRegion(i32 glyph, foundation::fonts::AtlasRegion& region) const override
+        {
+            if (!Contains(glyph))
+                return false;
+            region = foundation::fonts::AtlasRegion(0, 0, 8, 8, 0.0f, -8.0f, 8.0f);
+            return true;
+        }
+        [[nodiscard]] bool GetGlyphQuad(i32 glyph, f32& cursorX, f32 cursorY,
+                                        foundation::fonts::GlyphQuad& quad) const override
+        {
+            if (!Contains(glyph))
+                return false;
+            quad = foundation::fonts::GlyphQuad(cursorX, cursorY - 8.0f, cursorX + 8.0f, cursorY, 0, 0, 0.125f, 0.125f);
+            cursorX += 8.0f;
+            return true;
+        }
+        [[nodiscard]] bool GetGlyphQuadAt(i32 glyph, f32 x, f32 y, foundation::fonts::GlyphQuad& quad) const override
+        {
+            f32 cursor = x;
+            return GetGlyphQuad(glyph, cursor, y, quad);
+        }
+    };
+
+    class OneFontService final : public foundation::fonts::IFontService
+    {
+    public:
+        foundation::fonts::CachedFont* font = nullptr;
+        image::ImageDataRef texture{64, 64};
+        [[nodiscard]] foundation::fonts::CachedFont* GetFont(f32) override { return font; }
+        [[nodiscard]] foundation::fonts::CachedFont* GetFont(StringView, f32) override { return font; }
+        [[nodiscard]] image::ImageData* GetAtlasTexture(foundation::fonts::CachedFont*) override { return &texture; }
+        [[nodiscard]] image::ImageData* GetAtlasTexture(StringView, f32) override { return &texture; }
+        void ReleaseFont(foundation::fonts::CachedFont*) override {}
+        [[nodiscard]] StringView DefaultFontFamily() const override { return u8"Lig"; }
+        [[nodiscard]] bool HasFamily(StringView) const override { return true; }
+    };
+}
+
+TEST_CASE("vg.context: text drawn in a font with a shaper is shaped (once), so ligatures draw")
+{
+    i32 calls = 0;
+    auto* shaper = DefaultAllocator().New<LigatureShaper>();
+    shaper->calls = &calls;
+    foundation::fonts::CachedFont font(DefaultAllocator(), DefaultAllocator().New<LigatureFont>(),
+                                       DefaultAllocator().New<LigatureAtlas>(), shaper);
+    OneFontService service;
+    service.font = &font;
+    VGContext ctx;
+    ctx.SetFontService(&service);
+
+    const auto quads = [&]()
+    {
+        usize n = 0;
+        for (const VGCommand& cmd : ctx.GetBatch().commands)
+            n += static_cast<usize>(cmd.indexCount) / 6u;
+        return n;
+    };
+    ctx.DrawText(u8"fi", &font, Float2{0.0f, 20.0f}, Color::White);
+    CHECK(quads() == 1u); // one ligature glyph, not f and i
+    ctx.DrawText(u8"fi", &font, Rectangle{0, 0, 100, 20}, foundation::fonts::TextAlignment::Center,
+                 foundation::fonts::VerticalAlignment::Middle, Color::White);
+    CHECK(quads() == 2u);
+    CHECK(calls == 1); // shaped once, then drawn from the cache
+    CHECK(ctx.ShapedTextCount() == 1u);
+    ctx.Clear();
+    ctx.DrawText(u8"fi", &font, Float2{0.0f, 20.0f}, Color::White);
+    CHECK(calls == 1); // across frames too
+}

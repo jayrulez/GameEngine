@@ -1419,11 +1419,18 @@ export namespace foundation::vg
             DrawText(text, atlas, atlasTexture, Float2{offsetX, offsetY}, color);
         }
 
-        /// Convenience: draw text using a CachedFont (requires a FontService).
+        /// Convenience: draw text using a CachedFont (requires a FontService). Shaped by the font's
+        /// shaper when it has one (ligatures, joined forms), at a baseline position.
         void DrawText(StringView text, fonts::CachedFont* font, Float2 position, Color color)
         {
             if (font == nullptr || m_fontService == nullptr)
                 return;
+            f32 width = 0.0f;
+            if (const Array<fonts::GlyphPosition>* glyphs = ShapedText(text, font, width))
+            {
+                DrawPositionedGlyphs(*glyphs, font, position.x, position.y, color);
+                return;
+            }
             image::ImageData* atlasTex = m_fontService->GetAtlasTexture(font);
             if (atlasTex == nullptr)
                 return;
@@ -1439,7 +1446,60 @@ export namespace foundation::vg
             image::ImageData* atlasTex = m_fontService->GetAtlasTexture(font);
             if (atlasTex == nullptr)
                 return;
+            f32 width = 0.0f;
+            if (const Array<fonts::GlyphPosition>* glyphs = ShapedText(text, font, width))
+            {
+                // Shaped: aligned by the shaped width, as the unshaped path aligns by the measured one.
+                const fonts::FontMetrics fm = font->font->Metrics();
+                const f32 x = hAlign == fonts::TextAlignment::Center ? bounds.x + (bounds.width - width) * 0.5f
+                              : hAlign == fonts::TextAlignment::Right ? bounds.x + bounds.width - width
+                                                                       : bounds.x;
+                const f32 y = vAlign == fonts::VerticalAlignment::Top      ? bounds.y + fm.ascent
+                              : vAlign == fonts::VerticalAlignment::Middle ? bounds.y + (bounds.height - fm.lineHeight) * 0.5f + fm.ascent
+                              : vAlign == fonts::VerticalAlignment::Bottom ? bounds.y + bounds.height - fm.descent
+                                                                           : bounds.y;
+                DrawPositionedGlyphs(*glyphs, font, x, y, color);
+                return;
+            }
             DrawText(text, font->font, font->atlas, atlasTex, bounds, hAlign, vAlign, color);
+        }
+
+        /// How many texts DrawText has shaped rather than found shaped already (for tests).
+        [[nodiscard]] u64 ShapedTextCount() const noexcept { return m_shapeCount; }
+
+        /// The glyphs of `text` shaped by `font`'s shaper on one line from 0 (the baseline at y 0),
+        /// cached; null when the font has no shaper (draw it unshaped).
+        const Array<fonts::GlyphPosition>* ShapedText(StringView text, fonts::CachedFont* font, f32& outWidth)
+        {
+            if (font == nullptr || font->shaper == nullptr || font->font == nullptr || text.IsEmpty())
+                return nullptr;
+            const u64 key = HashBytes(text.Data(), text.Size()) ^
+                            HashInteger(static_cast<u64>(reinterpret_cast<uptr>(font)));
+            if (ShapedTextEntry* entry = m_shapedText.Find(key))
+            {
+                if (entry->cached == font && entry->font == font->font && entry->atlas == font->atlas &&
+                    entry->text.AsView() == text)
+                {
+                    outWidth = entry->width;
+                    return &entry->glyphs;
+                }
+            }
+            if (m_shapedText.Size() >= kShapedTextLimit)
+                m_shapedText.Clear();
+            ShapedTextEntry entry;
+            entry.text = String(text);
+            entry.cached = font;
+            entry.font = font->font;
+            entry.atlas = font->atlas;
+            const Result<f32> width = font->shaper->ShapeText(*font->font, text, 0.0f, 0.0f, entry.glyphs);
+            if (!width.HasValue())
+                return nullptr;
+            entry.width = width.Value();
+            ++m_shapeCount;
+            m_shapedText.InsertOrAssign(key, Move(entry));
+            ShapedTextEntry* stored = m_shapedText.Find(key);
+            outWidth = stored->width;
+            return &stored->glyphs;
         }
 
         /// Draw pre-shaped glyphs at an offset (for scroll-offset text rendering).
@@ -2375,6 +2435,22 @@ export namespace foundation::vg
         Array<UniquePtr<image::OwnedImageData>> m_evictedLutHold;
         PathBuilder m_currentPath;
         fonts::IFontService* m_fontService = nullptr;
+
+        // Shaped single-line text, kept across frames: drawing a label shapes it once, not every
+        // frame it redraws. An entry is good while the CachedFont, its font and its atlas are the
+        // ones it was shaped for; the cache is dropped whole when it grows past kShapedTextLimit.
+        struct ShapedTextEntry
+        {
+            String text;
+            const fonts::CachedFont* cached = nullptr; // identities, never dereferenced
+            const fonts::IFont* font = nullptr;
+            const fonts::IFontAtlas* atlas = nullptr;
+            Array<fonts::GlyphPosition> glyphs;
+            f32 width = 0.0f;
+        };
+        static constexpr usize kShapedTextLimit = 4096;
+        HashMap<u64, ShapedTextEntry> m_shapedText;
+        u64 m_shapeCount = 0; // texts shaped (not served from the cache), for tests
 
         Array<VGState> m_stateStack;
         VGState m_currentState;

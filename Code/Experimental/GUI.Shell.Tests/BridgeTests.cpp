@@ -449,3 +449,95 @@ TEST_CASE("bridge: the cursor follows the node under the pointer; Dispatch says 
     CHECK(mouse.cursorSets == sets); // unchanged: not set again
     CHECK_FALSE(bridge.IsPointerOverGui());
 }
+
+namespace
+{
+    shell::InputEvent Finger(shell::InputEventKind kind, core::u64 id, float nx, float ny)
+    {
+        shell::InputEvent e;
+        e.kind = kind;
+        e.touchId = id;
+        e.x = nx;
+        e.y = ny;
+        return e;
+    }
+    class MockTouch final : public shell::ITouch
+    {
+    public:
+        core::Array<shell::TouchPoint> points;
+        core::i32 TouchCount() const override { return static_cast<core::i32>(points.Size()); }
+        bool GetTouchPoint(core::i32 index, shell::TouchPoint& out) const override
+        {
+            if (index < 0 || index >= TouchCount())
+                return false;
+            out = points[static_cast<core::usize>(index)];
+            return true;
+        }
+        bool HasTouch() const override { return !points.IsEmpty(); }
+    };
+    class TouchInputManager final : public shell::IInputManager
+    {
+    public:
+        MockKeyboard keyboard;
+        MockMouse mouse;
+        MockTouch touch;
+        shell::IKeyboard* Keyboard() override { return &keyboard; }
+        shell::IMouse* Mouse() override { return &mouse; }
+        shell::ITouch* Touch() override { return &touch; }
+        core::i32 GamepadCount() const override { return 0; }
+        shell::IGamepad* GetGamepad(core::i32) override { return nullptr; }
+        core::Span<const shell::InputEvent> Events() const override { return {}; }
+        core::u32 HoverWindow() const override { return 0; }
+        core::u32 FocusedWindow() const override { return 0; }
+        void Update() override {}
+    };
+}
+
+TEST_CASE("bridge: touch events tap a button, placed with the window's size; SDL's mouse copies are dropped")
+{
+    auto root = MakeScene(core::Float2{200.0f, 200.0f});
+    auto button = core::MakeRef<Button>(core::DefaultAllocator());
+    button->SetPosition(core::Float2{20.0f, 20.0f});
+    button->SetSize(core::Float2{80.0f, 40.0f});
+    root->AddChild(button.Get());
+    int clicks = 0;
+    button->SetOnClick([&] { ++clicks; });
+    GuiInputBridge bridge{root->GetEventDispatcher()};
+    CHECK_FALSE(bridge.Dispatch(Finger(shell::InputEventKind::TouchDown, 3u, 0.2f, 0.2f))); // no window size yet
+    bridge.SetWindowSize(core::Float2{200.0f, 200.0f});
+    CHECK(bridge.Dispatch(Finger(shell::InputEventKind::TouchDown, 3u, 0.2f, 0.2f))); // (40, 40)
+    // SDL's copy of the finger as the mouse: ignored while it is down...
+    CHECK_FALSE(bridge.Dispatch(MakeButtonEvent(shell::InputEventKind::MouseButtonDown, 40.0f, 40.0f, shell::MouseButton::Left)));
+    CHECK(bridge.Dispatch(Finger(shell::InputEventKind::TouchUp, 3u, 0.2f, 0.2f)));
+    CHECK(clicks == 1);
+    // ...and after it, at the finger's last place.
+    CHECK_FALSE(bridge.Dispatch(MakeButtonEvent(shell::InputEventKind::MouseButtonUp, 40.0f, 40.0f, shell::MouseButton::Left)));
+    CHECK_FALSE(bridge.Dispatch(MouseMove(40.0f, 40.0f)));
+    CHECK_FALSE(button->IsHovered()); // no hover left behind by the copy
+    CHECK(clicks == 1);
+    CHECK(bridge.Dispatch(MouseMove(60.0f, 50.0f))); // the real mouse, elsewhere
+    CHECK(button->IsHovered());
+}
+
+TEST_CASE("bridge: PumpFromSurface forwards the polled finger: down when it appears, up when it is gone")
+{
+    auto root = MakeScene(core::Float2{200.0f, 200.0f});
+    auto button = core::MakeRef<Button>(core::DefaultAllocator());
+    button->SetSize(core::Float2{100.0f, 100.0f});
+    root->AddChild(button.Get());
+    int clicks = 0;
+    button->SetOnClick([&] { ++clicks; });
+    GuiInputBridge bridge{root->GetEventDispatcher()};
+    TouchInputManager manager;
+    shell::InputSurface surface{&manager, 1u,
+                                core::ContentFit{core::Rectangle{0.0f, 0.0f, 200.0f, 200.0f}, core::Float2{200.0f, 200.0f}, core::FitMode::Stretch}};
+    surface.SetWindowSize(core::Float2{200.0f, 200.0f});
+    manager.touch.points.PushBack(shell::TouchPoint{9u, 0.25f, 0.25f, 1.0f, 50.0f, 50.0f});
+    bridge.PumpFromSurface(surface);
+    CHECK(root->GetEventDispatcher()->IsTouchActive());
+    CHECK(button->IsPressed());
+    manager.touch.points.Clear();
+    bridge.PumpFromSurface(surface);
+    CHECK_FALSE(root->GetEventDispatcher()->IsTouchActive());
+    CHECK(clicks == 1);
+}

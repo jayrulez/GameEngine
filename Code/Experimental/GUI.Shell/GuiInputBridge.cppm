@@ -43,6 +43,11 @@ export namespace experimental::gui
         }
         void ClearContentFit() noexcept { m_hasFit = false; }
 
+        // The window's size in the coordinates its mouse reports in: touch events arrive
+        // normalized over the window, and Dispatch() places them with it (without it, touch
+        // events are not forwarded). PumpFromSurface() needs none: its surface places fingers.
+        void SetWindowSize(core::Float2 size) noexcept { m_windowSize = size; }
+
         // The window whose platform text input (IME) follows GUI focus. Once set, the bridge
         // enables text input while a text-editing widget holds focus and disables it
         // otherwise - reconciled after each Dispatch()/PumpFromSurface(), so no per-widget or
@@ -94,16 +99,38 @@ export namespace experimental::gui
             switch (event.kind)
             {
             case shell::InputEventKind::MouseMove:
-                routed = m_dispatcher->InjectMouseMove(ToContent(core::Float2{event.x, event.y}));
+            {
+                const core::Float2 at = ToContent(core::Float2{event.x, event.y});
+                routed = !IsTouchCopy(at) && m_dispatcher->InjectMouseMove(at);
                 break;
+            }
             case shell::InputEventKind::MouseButtonDown:
-                routed = m_dispatcher->InjectMouseDown(ToContent(core::Float2{event.x, event.y}),
-                                                       MapButton(event.button), MapModifiers(event.modifiers));
+            {
+                const core::Float2 at = ToContent(core::Float2{event.x, event.y});
+                routed = !IsTouchCopy(at) &&
+                         m_dispatcher->InjectMouseDown(at, MapButton(event.button), MapModifiers(event.modifiers));
                 break;
+            }
             case shell::InputEventKind::MouseButtonUp:
-                routed = m_dispatcher->InjectMouseUp(ToContent(core::Float2{event.x, event.y}),
-                                                     MapButton(event.button), MapModifiers(event.modifiers));
+            {
+                const core::Float2 at = ToContent(core::Float2{event.x, event.y});
+                routed = !IsTouchCopy(at) &&
+                         m_dispatcher->InjectMouseUp(at, MapButton(event.button), MapModifiers(event.modifiers));
                 break;
+            }
+            case shell::InputEventKind::TouchDown:
+            case shell::InputEventKind::TouchMove:
+            case shell::InputEventKind::TouchUp:
+            {
+                if (m_windowSize.x <= 0.0f || m_windowSize.y <= 0.0f)
+                {
+                    routed = false; // no window size: a finger cannot be placed
+                    break;
+                }
+                const core::Float2 at = ToContent(core::Float2{event.x * m_windowSize.x, event.y * m_windowSize.y});
+                routed = ForwardTouch(event.kind, event.touchId, at);
+                break;
+            }
             case shell::InputEventKind::MouseWheel:
                 // For wheel, x/y is the scroll delta; position is the last known cursor spot.
                 routed = m_dispatcher->InjectMouseWheel(m_dispatcher->GetMousePosition(),
@@ -126,7 +153,7 @@ export namespace experimental::gui
                 routed = DispatchStick(event.padAxis, event.value);
                 break;
             default:
-                routed = false; // touch is not routed to the GUI yet
+                routed = false;
                 break;
             }
             SyncTextInput();
@@ -147,7 +174,18 @@ export namespace experimental::gui
             if (mouse == nullptr)
                 return;
 
+            // Fingers first (the surface places them in content space): the first one down drives
+            // the pointer; it went down, moved or lifted since the last pump.
+            if (shell::ITouch* touch = surface.Touch(); touch != nullptr)
+                PumpTouch(*touch);
+
             const core::Float2 position{mouse->X(), mouse->Y()};
+            if (IsTouchCopy(position))
+            {
+                SyncTextInput();
+                SyncCursor();
+                return; // the mouse is SDL's copy of a finger this frame
+            }
             m_dispatcher->InjectMouseMove(position);
 
             // Current keyboard modifiers, so a modified click (Shift+click to extend a text
@@ -189,6 +227,75 @@ export namespace experimental::gui
             [[maybe_unused]] const bool inside =
                 m_fit.ToContent(windowPos, out); // out set regardless
             return out;
+        }
+
+        // A finger's event to the dispatcher, remembering where it was for IsTouchCopy.
+        bool ForwardTouch(shell::InputEventKind kind, u64 finger, core::Float2 at)
+        {
+            m_touchSeen = true;
+            m_lastTouchAt = at;
+            switch (kind)
+            {
+            case shell::InputEventKind::TouchDown: return m_dispatcher->InjectTouchDown(finger, at);
+            case shell::InputEventKind::TouchMove: return m_dispatcher->InjectTouchMove(finger, at);
+            default: return m_dispatcher->InjectTouchUp(finger, at);
+            }
+        }
+        // The polled fingers against the one driving the pointer: down when one appears, moves
+        // while it stays, up when it is gone.
+        void PumpTouch(shell::ITouch& touch)
+        {
+            shell::TouchPoint point;
+            bool found = false;
+            shell::TouchPoint first;
+            bool any = false;
+            for (core::i32 i = 0; i < touch.TouchCount(); ++i)
+                if (touch.GetTouchPoint(i, point))
+                {
+                    if (!any)
+                    {
+                        first = point;
+                        any = true;
+                    }
+                    if (m_pumpedFinger.HasValue() && point.id == m_pumpedFinger.Value())
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+            if (m_pumpedFinger.HasValue())
+            {
+                if (found)
+                {
+                    const core::Float2 at{point.pointerX, point.pointerY};
+                    if (at.x != m_lastTouchAt.x || at.y != m_lastTouchAt.y)
+                        (void)ForwardTouch(shell::InputEventKind::TouchMove, point.id, at);
+                    return;
+                }
+                (void)ForwardTouch(shell::InputEventKind::TouchUp, m_pumpedFinger.Value(), m_lastTouchAt);
+                m_pumpedFinger = {};
+            }
+            if (any)
+            {
+                m_pumpedFinger = first.id;
+                (void)ForwardTouch(shell::InputEventKind::TouchDown, first.id, core::Float2{first.pointerX, first.pointerY});
+            }
+        }
+        // SDL copies a finger into mouse events by default: a mouse event while a finger is down,
+        // or at the place a finger last was, is taken for that copy and ignored. The mouse moving
+        // anywhere else is the mouse again.
+        [[nodiscard]] bool IsTouchCopy(core::Float2 at)
+        {
+            if (!m_touchSeen)
+                return false;
+            if (m_dispatcher->IsTouchActive())
+                return true;
+            const f32 dx = at.x - m_lastTouchAt.x;
+            const f32 dy = at.y - m_lastTouchAt.y;
+            if (dx * dx + dy * dy <= 4.0f)
+                return true;
+            m_touchSeen = false;
+            return false;
         }
 
         // The GUI's cursor as the shell has it; the shell has no grab cursors or help, so those take
@@ -401,6 +508,10 @@ export namespace experimental::gui
         shell::CursorType m_shownCursor = shell::CursorType::Count; // last applied (Count: none yet)
         core::ContentFit m_fit{};
         bool m_hasFit = false;
+        core::Float2 m_windowSize{0.0f, 0.0f}; // for placing touch events (SetWindowSize)
+        bool m_touchSeen = false;              // a finger was used: the mouse may be SDL's copy of it
+        core::Float2 m_lastTouchAt{0.0f, 0.0f}; // where the driving finger last was (content space)
+        core::Optional<u64> m_pumpedFinger;    // the polled finger driving the pointer
     };
 
     /// One action of the game's input map and what it does in the GUI.

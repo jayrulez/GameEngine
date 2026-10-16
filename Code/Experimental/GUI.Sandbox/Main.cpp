@@ -860,6 +860,7 @@ void GUISandbox::RouteInput()
         }
     }
     m_inputSurface->SetRegion(region);
+    m_inputSurface->SetWindowSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)}); // places fingers
     m_inputSurface->SetContentSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)});
     m_router->Update();
     bridge.PumpFromSurface(*m_inputSurface);

@@ -48,9 +48,13 @@
 .screen-in { animation: fade-in 0.4s ease-out; }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 
-/* The modal: the screen behind dims and blurs, and its panel rises in over it. */
+/* The modal: the screen behind dims and blurs, and its panel rises in over it. The blur and the dim
+   grow in (not the modal's opacity: a faded modal draws through a layer of its own, where its backdrop
+   blur sees nothing behind it, so the blur would snap on only as the fade ended). */
 .modal { background-color: rgba(6, 4, 14, 0.55); backdrop-filter: blur(6px); }
-.modal-in { animation: fade-in 0.25s ease-out; }
+.modal-in { animation: dim-in 0.35s ease-out; }
+@keyframes dim-in { from { background-color: rgba(6, 4, 14, 0); backdrop-filter: blur(0px); }
+                    to { background-color: rgba(6, 4, 14, 0.55); backdrop-filter: blur(6px); } }
 .panel-title { width: 380px; height: 40px; font-family: Lilita; font-size: 32px; color: var(--ink);
                text-align: center; vertical-align: middle; text-shadow: 0 2px 3px rgba(0, 0, 0, 0.5); }
 

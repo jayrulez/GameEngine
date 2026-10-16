@@ -65,6 +65,7 @@ namespace
         [[nodiscard]] f64 Number(const char8_t* function)
         {
             Result<Variant> result = context->Call(function, Span<Variant>{});
+            INFO(doctest::String(reinterpret_cast<const char*>(errors.last.CStr())));
             REQUIRE(result.HasValue());
             const f64* value = result.Value().TryGet<f64>();
             REQUIRE(value != nullptr);
@@ -434,5 +435,77 @@ TEST_CASE("gui-script: Luau builds, styles and clicks the lab's widgets, and hol
     REQUIRE(loaded.IsOk());
     CheckStory(bed);
     CheckHandles(bed);
+}
+#endif // OPTION_HAS_LUAU
+
+namespace
+{
+    // The native half of the event story: a press on the button reaches the script with its data;
+    // the handler takes it, so the root's handler never hears it; a second press counts two.
+    void CheckEvents(GuiBed& bed)
+    {
+        gui::EventDispatcher* dispatcher = bed.root->GetEventDispatcher();
+        dispatcher->InjectMouseDown(Float2{30.0f, 15.0f}, gui::MouseButton::Left); // the button is at (20, 10)
+        dispatcher->InjectMouseUp(Float2{30.0f, 15.0f}, gui::MouseButton::Left);
+        CHECK(bed.Number(u8"lastX") == doctest::Approx(30.0));
+        CHECK(bed.Number(u8"lastLocalX") == doctest::Approx(10.0));
+        CHECK(bed.Number(u8"lastCount") == doctest::Approx(1.0));
+        CHECK(bed.Number(u8"rootSaw") == doctest::Approx(0.0));
+        dispatcher->InjectMouseDown(Float2{30.0f, 15.0f}, gui::MouseButton::Left);
+        CHECK(bed.Number(u8"lastCount") == doctest::Approx(2.0));
+        dispatcher->InjectMouseUp(Float2{30.0f, 15.0f}, gui::MouseButton::Left);
+        dispatcher->InjectMouseDown(Float2{300.0f, 200.0f}, gui::MouseButton::Left); // off the button
+        CHECK(bed.Number(u8"rootSaw") == doctest::Approx(1.0));
+    }
+}
+
+#ifdef OPTION_HAS_ANGELSCRIPT
+TEST_CASE("gui-script: an AngelScript handler reads the event and takes it")
+{
+    RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    const Status loaded = bed.context->Load(
+        u8"funcdef bool EventHandler(GuiEvent e);\n"
+        u8"double x = -1; double localX = -1; double count = 0; double saw = 0;\n"
+        u8"bool onDown(GuiEvent e) { x = e.x; localX = e.localX; count = e.clickCount; return true; }\n"
+        u8"bool onRoot(GuiEvent e) { saw += 1; return false; }\n"
+        u8"void main() {\n"
+        u8"  Node@ root = gui::root();\n"
+        u8"  Node@ button = root.add(\"Button\");\n"
+        u8"  button.x = 20; button.y = 10; button.width = 80; button.height = 30;\n"
+        u8"  button.on(\"mousedown\", EventHandler(onDown));\n"
+        u8"  root.on(\"mousedown\", EventHandler(onRoot));\n"
+        u8"}\n"
+        u8"double lastX() { return x; }\n"
+        u8"double lastLocalX() { return localX; }\n"
+        u8"double lastCount() { return count; }\n"
+        u8"double rootSaw() { return saw; }\n",
+        u8"main");
+    INFO(doctest::String(reinterpret_cast<const char*>(bed.errors.last.CStr())));
+    REQUIRE(loaded.IsOk());
+    CheckEvents(bed);
+}
+#endif // OPTION_HAS_ANGELSCRIPT
+
+#ifdef OPTION_HAS_LUAU
+TEST_CASE("gui-script: a Luau handler reads the event and takes it")
+{
+    RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    const Status loaded = bed.context->Load(
+        u8"local x, localX, count, saw = -1, -1, 0, 0\n"
+        u8"local root = gui.root()\n"
+        u8"local button = root:add(\"Button\")\n"
+        u8"button.x = 20; button.y = 10; button.width = 80; button.height = 30\n"
+        u8"button:on(\"mousedown\", function(e) x = e.x; localX = e.localX; count = e.clickCount; return true end)\n"
+        u8"root:on(\"mousedown\", function(e) saw = saw + 1; return false end)\n"
+        u8"function lastX() return x end\n"
+        u8"function lastLocalX() return localX end\n"
+        u8"function lastCount() return count end\n"
+        u8"function rootSaw() return saw end\n",
+        u8"main");
+    INFO(doctest::String(reinterpret_cast<const char*>(bed.errors.last.CStr())));
+    REQUIRE(loaded.IsOk());
+    CheckEvents(bed);
 }
 #endif // OPTION_HAS_LUAU

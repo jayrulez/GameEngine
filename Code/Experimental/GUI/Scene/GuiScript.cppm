@@ -69,6 +69,26 @@ export namespace experimental::gui
         static bool BindKey(core::StringView keys, core::StringView command, core::StringView context);
     };
 
+    /// What a script handler (`node.on(name, fn)`) is given: the event's data, positions in the
+    /// GUI's own units (`x`, `y` from the root, `localX`, `localY` from the node the handler is
+    /// on). A handler returning true takes the event: it goes no further on its route.
+    struct GuiEvent
+    {
+        core::String type;  ///< the name it was listened for: "click", "mousedown", "keydown", ...
+        core::String phase; ///< "capture", "target" or "bubble"
+        f32 x = 0.0f;
+        f32 y = 0.0f;
+        f32 localX = 0.0f;
+        f32 localY = 0.0f;
+        i32 button = 0; ///< 0 left, 1 right, 2 middle, 3 and 4 the extra buttons
+        i32 clickCount = 0;
+        i32 key = 0; ///< a KeyCode value for keys
+        i32 modifiers = 0; ///< shift 1, ctrl 2, alt 4, super 8
+        core::String text; ///< typed text
+        f32 deltaX = 0.0f; ///< the wheel
+        f32 deltaY = 0.0f;
+    };
+
     /// Registers the lab's own element types (ElementTypes::Register: Label, Button, the layouts,
     /// ...), once. A host calls it at start-up, as a library adding widgets of its own registers
     /// those.

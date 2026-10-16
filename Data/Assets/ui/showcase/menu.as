@@ -1,33 +1,40 @@
 // The GUI lab's showcase (G6 of Documentation/Specs/vg-and-gui-lab.md): the menu's behaviour, in
 // AngelScript, through the lab's reflection alone. The markup (menu.xml) holds the widgets and the
-// sheet (menu.css) their looks; this script only switches panels, binds two labels to functions of
-// the GUI's data, and runs the loading bar. The host calls update(dt) while it returns true.
+// sheet (menu.css) their looks; this script only switches pages, screens and the modal, binds two
+// labels to functions of the GUI's data, and runs the loading bar. The host calls update(dt) while it returns true.
 
 funcdef string TextExpression();
 
-Node@ mainPanel;
-Node@ settingsPanel;
-Node@ loadingPanel;
-Node@ confirmPanel;
+Node@ stage;         // the menu screen: the title and the slot
+Node@ mainPanel;     // in the slot
+Node@ settingsPanel; // in the slot, in the main menu's place
+Node@ loadingScreen; // a screen of its own
+Node@ modal;         // over everything, the quit question
 bool loadingNow = false;
 double loadTime = 0;
 
-// Shows one panel, replaying its entrance (a panel hidden earlier lost its "enter" class then, so
-// adding it again starts the animation over).
-void hide(Node@ panel)
+// Shows `node` and replays its entrance (`animationClass`; a node hidden earlier lost the class
+// then, so adding it again starts the animation over).
+void reveal(Node@ node, const string &in animationClass)
 {
-    panel.visible = false;
-    UIWidget::of(panel).removeClass("enter");
+    node.visible = true;
+    UIWidget::of(node).addClass(animationClass);
+}
+void conceal(Node@ node, const string &in animationClass)
+{
+    node.visible = false;
+    UIWidget::of(node).removeClass(animationClass);
 }
 
-void show(Node@ panel)
+// A page of the menu in the slot under the title (the main menu or the settings).
+void showPage(Node@ page)
 {
-    hide(mainPanel);
-    hide(settingsPanel);
-    hide(loadingPanel);
-    hide(confirmPanel);
-    panel.visible = true;
-    UIWidget::of(panel).addClass("enter");
+    conceal(loadingScreen, "screen-in");
+    conceal(modal, "modal-in");
+    stage.visible = true;
+    conceal(mainPanel, "enter");
+    conceal(settingsPanel, "enter");
+    reveal(page, "enter");
 }
 
 string volumeText() { return "" + int(gui::getNumber("volume") * 100 + 0.5) + "%"; }
@@ -39,11 +46,20 @@ void onPlay()
     gui::set("progress", 0);
     loadTime = 0;
     loadingNow = true;
-    show(loadingPanel);
+    stage.visible = false; // the loading screen replaces the menu
+    reveal(loadingScreen, "screen-in");
 }
-void onSettings() { show(settingsPanel); }
-void onBack() { loadingNow = false; show(mainPanel); }
-void onQuit() { show(confirmPanel); }
+void onSettings() { showPage(settingsPanel); }
+void onBack() { loadingNow = false; showPage(mainPanel); }
+// The quit question opens over the menu, which stays where it is behind the dimmed glass.
+void onQuit()
+{
+    reveal(modal, "modal-in");
+    Node@ confirm = gui::root().find("confirm");
+    conceal(confirm, "enter");
+    reveal(confirm, "enter");
+}
+void onStay() { conceal(modal, "modal-in"); }
 void onLeave()
 {
     // The whole menu fades out; the host closes once `quit` is set and the fade has run.
@@ -54,10 +70,11 @@ void onLeave()
 void main()
 {
     Node@ root = gui::root();
+    @stage = root.find("stage");
     @mainPanel = root.find("main");
     @settingsPanel = root.find("settings");
-    @loadingPanel = root.find("loading");
-    @confirmPanel = root.find("confirm");
+    @loadingScreen = root.find("loading");
+    @modal = root.find("modal");
 
     root.find("play").on("click", Action(onPlay));
     root.find("settings-btn").on("click", Action(onSettings));
@@ -65,13 +82,13 @@ void main()
     root.find("settings-back").on("click", Action(onBack));
     root.find("loading-back").on("click", Action(onBack));
     root.find("confirm-yes").on("click", Action(onLeave));
-    root.find("confirm-no").on("click", Action(onBack));
+    root.find("confirm-no").on("click", Action(onStay));
 
     // Labels that follow the data through functions of it: no handler updates them.
     root.find("volume-text").bind("text", TextExpression(volumeText));
     root.find("music-text").bind("text", TextExpression(musicText));
 
-    show(mainPanel);
+    showPage(mainPanel);
 }
 
 // The loading bar fills over two and a half seconds; true while there is more to do.

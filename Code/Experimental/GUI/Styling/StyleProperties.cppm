@@ -37,6 +37,7 @@ export namespace experimental::gui
         Transforms, ///< transform
         Origin,     ///< transform-origin (two lengths)
         Layers,     ///< background-image
+        Filters,    ///< filter, backdrop-filter
     };
 
     /// A declaration's value once parsed.
@@ -52,6 +53,7 @@ export namespace experimental::gui
         LengthValue OriginX{50.0f, LengthUnit::Percent};
         LengthValue OriginY{50.0f, LengthUnit::Percent};
         Array<BackgroundLayer> Layers;
+        Array<FilterFunction> Filters;
     };
 
     /// How a property's value parses.
@@ -65,6 +67,7 @@ export namespace experimental::gui
         Transforms,
         Origin,
         Layers,
+        Filters,
         Text, ///< kept as written (font-family, transition, animation)
     };
 
@@ -125,6 +128,10 @@ export namespace experimental::gui
             {u8"box-shadow", StyleGrammar::Shadows},
             {u8"transform", StyleGrammar::Transforms},
             {u8"transform-origin", StyleGrammar::Origin},
+            {u8"filter", StyleGrammar::Filters, u8"none"},
+            {u8"backdrop-filter", StyleGrammar::Filters, u8"none"},
+            {u8"mix-blend-mode", StyleGrammar::Keyword, u8"normal"},
+            {u8"overflow", StyleGrammar::Keyword},
             {u8"transition-property", StyleGrammar::Text},
             {u8"transition-duration", StyleGrammar::Text},
             {u8"transition-timing-function", StyleGrammar::Text},
@@ -211,6 +218,14 @@ export namespace experimental::gui
             {
                 out.Kind = StyleValueKind::Layers;
                 out.Layers = Move(l.Value());
+                return true;
+            }
+            return false;
+        case StyleGrammar::Filters:
+            if (Optional<Array<FilterFunction>> f = ParseFilters(v); f.HasValue())
+            {
+                out.Kind = StyleValueKind::Filters;
+                out.Filters = Move(f.Value());
                 return true;
             }
             return false;

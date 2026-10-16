@@ -17,6 +17,7 @@ export module experimental.gui:node;
 
 import foundation.core; // Object, RefPtr, Array, Move, Float2
 import foundation.script; // IScriptDelegate (the script surface's event handlers)
+import foundation.vg;     // PathBuilder, ShapeBuilder (rounded clips), layers
 import :rect;
 import :transform2d;
 import :transformable;
@@ -33,6 +34,7 @@ import :style_value; // TransformFunction
 
 using namespace foundation::core;
 namespace core = foundation::core;
+namespace vg = foundation::vg;
 
 export namespace experimental::gui
 {
@@ -377,7 +379,13 @@ export namespace experimental::gui
         }
         [[nodiscard]] Drawable* GetForeground() const noexcept { return m_foreground.Get(); }
 
-        void SetClipChildren(bool clip) noexcept { m_clipChildren = clip; }
+        void SetClipChildren(bool clip)
+        {
+            if (clip == m_clipChildren)
+                return;
+            m_clipChildren = clip;
+            Invalidate();
+        }
         [[nodiscard]] bool ClipsChildren() const noexcept { return m_clipChildren; }
 
         // The visual state drawables render in (skins/StateList). Base: enabled-driven.
@@ -396,8 +404,14 @@ export namespace experimental::gui
 
             ctx.Save();
             ctx.ConcatTransform(GetTransform());
-            const bool pushedOpacity = m_alpha < 1.0f;
-            if (pushedOpacity)
+            // A node with children fades as one picture (CSS's opacity), as does one with a filter
+            // or a blend: through a VG layer, composited once. A leaf's opacity multiplies into
+            // what it draws (no offscreen target for a label).
+            const bool layered = m_box.NeedsLayer() || (m_alpha < 1.0f && !m_children.IsEmpty());
+            const bool pushedOpacity = !layered && m_alpha < 1.0f;
+            if (layered)
+                ctx.VG().PushLayer(m_alpha, m_box.BlendMode, m_box.FilterBlur * ctx.DeviceScale());
+            else if (pushedOpacity)
                 ctx.PushOpacity(m_alpha);
 
             const Rect local = GetLocalBounds();
@@ -408,17 +422,30 @@ export namespace experimental::gui
                 m_background->Draw(ctx, local, state);
             OnDraw(ctx, local);
 
-            if (m_clipChildren)
+            // Children clip to the box, its rounded corners included (a path clip; a host without
+            // stencil fills gets the bounds' scissor).
+            const bool roundedClip = m_clipChildren && !m_box.Radii.IsZero();
+            if (roundedClip)
+            {
+                vg::PathBuilder shape;
+                vg::ShapeBuilder::BuildRoundedRect(local.ToRectangle(), m_box.Radii, shape);
+                ctx.VG().PushClipPath(shape.ToPath());
+            }
+            else if (m_clipChildren)
                 ctx.PushClip(local);
             for (const RefPtr<Node>& child : m_children)
                 child->Draw(ctx);
-            if (m_clipChildren)
+            if (roundedClip)
+                ctx.VG().PopClipPath();
+            else if (m_clipChildren)
                 ctx.PopClip();
 
             if (m_foreground)
                 m_foreground->Draw(ctx, local, state);
 
-            if (pushedOpacity)
+            if (layered)
+                ctx.VG().PopLayer();
+            else if (pushedOpacity)
                 ctx.PopOpacity();
             ctx.Restore();
             m_needsRedraw = false; // drawn: clean until something invalidates it again

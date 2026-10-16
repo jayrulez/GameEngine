@@ -266,9 +266,31 @@ export namespace experimental::gui
             }
             return true;
         }
+
+        // Filter lists: the shorter padded with the other's functions at their identity (blur(0)),
+        // then function by function; lists of different functions switch.
+        [[nodiscard]] inline bool MixFilters(const Array<FilterFunction>& a, const Array<FilterFunction>& b, f32 t,
+                                             Array<FilterFunction>& out, const StyleInterpolationContext* ctx)
+        {
+            const usize n = Max(a.Size(), b.Size());
+            out.Clear();
+            for (usize i = 0; i < n; ++i)
+            {
+                FilterFunction from = i < a.Size() ? a[i] : FilterFunction{b[i].Kind, LengthValue{}};
+                FilterFunction to = i < b.Size() ? b[i] : FilterFunction{a[i].Kind, LengthValue{}};
+                if (from.Kind != to.Kind)
+                    return false;
+                FilterFunction mixed{from.Kind, LengthValue{}};
+                if (!MixLength(from.Amount, to.Amount, t, mixed.Amount, ctx))
+                    return false;
+                mixed.Amount.Value = Max(0.0f, mixed.Amount.Value); // an overshooting easing
+                out.PushBack(mixed);
+            }
+            return true;
+        }
     }
 
-    /// `a` toward `b` at `t` (0: a, 1: b; t may leave [0, 1] for an overshooting easing). Values
+        /// `a` toward `b` at `t` (0: a, 1: b; t may leave [0, 1] for an overshooting easing). Values
     /// that cannot interpolate switch at t = 0.5.
     [[nodiscard]] inline StyleValue InterpolateStyleValue(const StyleValue& a, const StyleValue& b, f32 t,
                                                           const StyleInterpolationContext* ctx = nullptr)
@@ -298,6 +320,8 @@ export namespace experimental::gui
             return discrete();
         case StyleValueKind::Layers:
             return detail::MixLayers(a.Layers, b.Layers, t, out.Layers) ? out : discrete();
+        case StyleValueKind::Filters:
+            return detail::MixFilters(a.Filters, b.Filters, t, out.Filters, ctx) ? out : discrete();
         case StyleValueKind::Keyword:
         case StyleValueKind::None:
             return discrete();

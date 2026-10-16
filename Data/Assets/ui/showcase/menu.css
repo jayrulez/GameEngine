@@ -1,0 +1,76 @@
+/* The GUI lab's showcase (G6 of Documentation/Specs/vg-and-gui-lab.md): every look here comes
+   from the lab's sheet: gradients, shadows, borders, transforms, blur filters, a frosted backdrop,
+   text glow, transitions and keyframes. No colour or position is set in code. */
+
+.showcase { --ink: #fff4e2; --muted: #b9b2d0; --accent: #f3a047; --accent-deep: #c4552c; --glow: rgba(255, 176, 86, 0.55);
+             background: radial-gradient(#2a1f4d, #120d24 70%, #07050f); }
+
+/* The backdrop's orbs: big soft gradients, blurred, drifting slowly. */
+.orb { width: 340px; height: 340px; border-radius: 170; filter: blur(14px); }
+.orb-a { background: radial-gradient(rgba(243, 160, 71, 0.55), rgba(243, 160, 71, 0) 70%);
+         transform: translate(-60px, 420px); animation: drift-a 9s ease-in-out infinite alternate; }
+.orb-b { background: radial-gradient(rgba(120, 110, 255, 0.5), rgba(120, 110, 255, 0) 70%);
+         transform: translate(560px, -40px); animation: drift-b 11s ease-in-out infinite alternate; }
+.orb-c { background: radial-gradient(rgba(80, 210, 230, 0.35), rgba(80, 210, 230, 0) 70%);
+         transform: translate(620px, 560px); animation: drift-c 13s ease-in-out infinite alternate; }
+@keyframes drift-a { from { transform: translate(-60px, 420px) scale(1); } to { transform: translate(40px, 330px) scale(1.15); } }
+@keyframes drift-b { from { transform: translate(560px, -40px) scale(1.1); } to { transform: translate(470px, 40px) scale(0.95); } }
+@keyframes drift-c { from { transform: translate(620px, 560px) scale(0.9); } to { transform: translate(540px, 470px) scale(1.1); } }
+
+/* The title glows, breathing. */
+.title { width: 520px; height: 96px; font-family: Lilita; font-size: 84px; color: var(--ink);
+         text-align: center; vertical-align: middle; text-shadow: 0 4px 6px rgba(0, 0, 0, 0.6);
+         animation: breathe 2.6s ease-in-out infinite alternate; }
+@keyframes breathe { from { text-glow: 5px rgba(255, 176, 86, 0.45); } to { text-glow: 16px rgba(255, 176, 86, 0.9); } }
+.subtitle { width: 520px; height: 28px; font-family: Roboto; font-size: 18px; color: var(--muted);
+            text-align: center; vertical-align: middle; }
+
+/* Panels enter by rising into place. */
+.panel { width: 440px; }
+.menu { height: 196px; }
+.enter { animation: rise 0.42s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes rise { from { opacity: 0; transform: translate(0, 26px) scale(0.97); } to { opacity: 1; transform: translate(0, 0) scale(1); } }
+
+/* Frosted glass over the backdrop. */
+.glass { height: 300px; padding: 22px; background-color: rgba(255, 255, 255, 0.08); backdrop-filter: blur(12px);
+         border: 1px solid rgba(255, 255, 255, 0.22); border-radius: 22;
+         box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.12); }
+#loading { height: 190px; }
+#confirm { height: 160px; }
+.panel-title { width: 380px; height: 40px; font-family: Lilita; font-size: 32px; color: var(--ink);
+               text-align: center; vertical-align: middle; text-shadow: 0 2px 3px rgba(0, 0, 0, 0.5); }
+
+/* The menu's buttons: a gradient card that leans forward on hover and gives on a press. */
+.menu-btn { width: 280px; height: 52px; font-family: Lilita; font-size: 26px; color: var(--ink);
+            text-align: center; vertical-align: middle;
+            background: linear-gradient(180deg, #3d2f63, #251b40); border: 1px solid rgba(255, 255, 255, 0.16);
+            border-radius: 14; box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45); text-shadow: 0 2px 2px rgba(0, 0, 0, 0.6);
+            transition: transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.24s ease-out; }
+.menu-btn:hover { transform: translate(8px, 0) scale(1.05);
+                  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5), 0 0 24px 3px var(--glow); }
+.menu-btn:active { transform: translate(8px, 0) scale(0.97); }
+.primary { background: linear-gradient(180deg, var(--accent), var(--accent-deep)); }
+.danger { background: linear-gradient(180deg, #e0607a, #9c2f4a); }
+.small { width: 160px; height: 44px; font-size: 22px; }
+
+/* Settings rows. */
+.row { width: 400px; height: 36px; }
+.confirm-row { width: 334px; height: 52px; }
+.row-label { width: 90px; height: 34px; font-family: Roboto; font-size: 18px; color: var(--muted); vertical-align: middle; }
+.row-value { width: 70px; height: 34px; font-family: Roboto; font-size: 18px; color: var(--ink); vertical-align: middle; }
+.row-slider { width: 200px; height: 34px; }
+.row-check { width: 26px; height: 26px; }
+.row-field { width: 260px; height: 34px; font-family: Roboto; font-size: 18px; color: var(--ink);
+             background-color: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 8; }
+slider::track { background-color: rgba(255, 255, 255, 0.15); }
+slider::fill { background-color: #f3a047; }
+slider::thumb { background-color: #fff4e2; }
+checkbox::box { background-color: rgba(255, 255, 255, 0.15); }
+checkbox::mark { background-color: #f3a047; }
+progressbar::track { background-color: rgba(255, 255, 255, 0.12); }
+progressbar::fill { background-color: #f3a047; }
+.loading-bar { width: 360px; height: 14px; }
+
+/* Leaving: the whole menu fades to black before the window closes. */
+.leaving { animation: fade-out 0.6s ease-in forwards; }
+@keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }

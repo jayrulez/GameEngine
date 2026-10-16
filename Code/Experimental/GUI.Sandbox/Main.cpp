@@ -20,10 +20,15 @@ import foundation.shell;
 import foundation.image;
 import foundation.fonts;
 import foundation.fonts.truetype;
+import foundation.fonts.distancefield.baker; // the showcase's distance-field face
 import foundation.vg;
 import foundation.vg.renderer;
 import experimental.gui;
 import experimental.gui.shell;
+import foundation.script; // the showcase's script host
+#ifdef OPTION_HAS_ANGELSCRIPT
+import foundation.script.angelscript;
+#endif
 
 using namespace foundation::core;
 namespace rhi = foundation::rhi;
@@ -161,6 +166,8 @@ public:
     void SetInitialScroll(f32 y) { m_initialScroll = y; }
     void SetAlwaysRedraw(bool always) { m_alwaysRedraw = always; }
     void SetFrameStats(bool stats) { m_frameStats = stats; }
+    void SetShowcase(bool showcase) { m_showcaseMode = showcase; }
+    void SetShowcaseCall(StringView function) { m_showcaseCall = String(function); }
 
     GUISandbox()
     {
@@ -180,6 +187,8 @@ private:
     f32 m_initialScroll = 0.0f;
     u32 m_initialScrollFrames = 0;
     bool m_alwaysRedraw = false;
+    bool m_showcaseMode = false;
+    String m_showcaseCall; // a script function to call once loaded (a screenshot of another panel)
     bool m_frameStats = false;
     f32 m_nextStatsTime = 1.0f;
     u64 m_frames = 0;      // frames the loop ran
@@ -187,6 +196,26 @@ private:
     static constexpr u32 kFrames = 2;
 
     void BuildUI();
+    void BuildShowcase();
+    void UpdateShowcase();
+
+    // The showcase (G6): a game menu from Data/Assets/ui/showcase, its behaviour in AngelScript.
+    struct ScriptErrors final : foundation::script::IScriptErrorHandler
+    {
+        void OnError(const foundation::script::ScriptError& error) override
+        {
+            const String message(error.message);
+            std::fprintf(stderr, "GUISandbox showcase script, line %d: %s\n", static_cast<int>(error.line),
+                         reinterpret_cast<const char*>(message.CStr()));
+        }
+    };
+    RefPtr<gui::Node> m_showcase;
+    RefPtr<foundation::script::IScriptManager> m_scripts;
+    RefPtr<foundation::script::IScriptContext> m_script;
+    gui::GuiScriptBinding m_scriptBinding;
+    ScriptErrors m_scriptErrors;
+    bool m_scriptWantsUpdate = false;
+    f32 m_quitAt = -1.0f; // when the menu's Leave has faded out
     void LoadFontSize(StringView path, f32 pixelHeight);
     [[nodiscard]] bool HasFonts() const { return FileExists(DataPath(kFontAsset).AsView()); }
 
@@ -315,6 +344,8 @@ Status GUISandbox::OnInit()
     m_vg->SetStencilFills(m_renderer.StencilFillsSupported());
 
     BuildUI();
+    if (m_showcaseMode)
+        BuildShowcase();
     return ErrorCode::Ok;
 }
 
@@ -1309,6 +1340,8 @@ void GUISandbox::OnRender()
     if (m_tooltips)
         m_tooltips->Update(*m_root->GetEventDispatcher(), *m_root.Get(),
                            static_cast<f64>(m_deltaTime));
+    if (m_showcase)
+        UpdateShowcase();
     m_styles.SetMediaContext(m_root->GetMediaContext()); // its logical size and density
     m_styles.ApplyTree(*m_root.Get());
 
@@ -1398,12 +1431,121 @@ void GUISandbox::OnRender()
     m_frameIndex = (m_frameIndex + 1) % kFrames;
 }
 
+// The showcase (G6 of Specs/vg-and-gui-lab.md): the menu's markup, sheet and script, from
+// Data/Assets/ui/showcase, replace the gallery. Native code only sizes the layers to the window,
+// seeds the GUI's data, runs the script and closes the window when the menu says so.
+void GUISandbox::BuildShowcase()
+{
+    const auto readText = [this](StringView relative) -> String
+    {
+        Result<Array<byte>> bytes = ReadFile(DataPath(relative).AsView(), AppRoot());
+        if (!bytes.HasValue())
+        {
+            std::fprintf(stderr, "GUISandbox: could not read %s\n", reinterpret_cast<const char*>(String(relative).CStr()));
+            return {};
+        }
+        return String(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
+    };
+
+    // The menu's face as a distance-field family: one bake drawn crisp at any size, whose field
+    // the title's glow and the buttons' shadows read (12 texels wide: effects reach 6 past the edge
+    // at the bake size).
+    {
+        fonts::DistanceFieldFonts::Initialize();
+        fonts::FontLoadOptions options = fonts::FontLoadOptions::DistanceField();
+        options.pixelHeight = 48.0f;
+        options.distanceFieldRange = 12.0f;
+        if (m_fontService->LoadFont(u8"Lilita", DataPath(u8"Assets/fonts/lilita-one/LilitaOne-Regular.ttf").AsView(), options) !=
+            fonts::FontLoadResult::Success)
+            std::fprintf(stderr, "GUISandbox: the showcase's title font did not load\n");
+    }
+
+    gui::DataModel& data = m_root->GetData();
+    data.Set(StringView(u8"volume"), Variant::From<f32>(0.7f));
+    data.Set(StringView(u8"music"), Variant::From<bool>(true));
+    data.Set(StringView(u8"name"), Variant::From<String>(String(u8"Ada")));
+    data.Set(StringView(u8"status"), Variant::From<String>(String(u8"Loading...")));
+    data.Set(StringView(u8"progress"), Variant::From<f32>(0.0f));
+    data.Set(StringView(u8"quit"), Variant::From<bool>(false));
+
+    const String markup = readText(u8"Assets/ui/showcase/menu.xml");
+    const gui::ElementSet elements = gui::ElementSet::All();
+    gui::MarkupLoader loader(elements, AppRoot(), nullptr, m_fontService.Get());
+    loader.SetDataModel(m_root->GetDataRef());
+    m_showcase = loader.LoadFromString(markup.AsView());
+    if (!m_showcase)
+    {
+        std::fprintf(stderr, "GUISandbox: the showcase markup did not load\n");
+        return;
+    }
+    m_root->RemoveAllChildren(); // the gallery steps aside
+    m_root->AddChild(m_showcase.Get());
+    m_styles.SetStyleSheet(gui::CSSParser::Parse(readText(u8"Assets/ui/showcase/menu.css").AsView()));
+
+    // Leave: the menu fades, then the window closes.
+    RefPtr<gui::DataModel> model = m_root->GetDataRef();
+    m_showcase->Bind([this, model]()
+                     {
+                         const Variant quit = gui::ConvertVariant(model->Get(StringView(u8"quit")), TypeOf<bool>());
+                         if (!quit.IsEmpty() && quit.Get<bool>() && m_quitAt < 0.0f)
+                             m_quitAt = m_totalTime + 0.7f;
+                     });
+
+#ifdef OPTION_HAS_ANGELSCRIPT
+    RegisterCoreTypes();
+    gui::RegisterGuiScriptSurface();
+    m_scripts = foundation::script::angelscript::CreateScriptManager(AppRoot());
+    foundation::script::RegisterReflectedTypes(*m_scripts);
+    m_script = m_scripts->CreateContext();
+    m_script->SetErrorHandler(&m_scriptErrors);
+    m_scriptBinding.root = m_root.Get();
+    gui::InstallGuiScriptService(*m_script, m_scriptBinding);
+    if (!m_script->Load(readText(u8"Assets/ui/showcase/menu.as").AsView(), u8"main").IsOk())
+        std::fprintf(stderr, "GUISandbox: the showcase script did not load\n");
+    else if (m_showcaseCall.Size() != 0 && !m_script->Call(m_showcaseCall.AsView(), Span<Variant>{}).HasValue())
+        std::fprintf(stderr, "GUISandbox: the showcase script has no %s()\n", reinterpret_cast<const char*>(m_showcaseCall.CStr()));
+    else if (m_showcaseCall.Size() != 0)
+        m_scriptWantsUpdate = true; // what it started may want ticks
+#else
+    std::fprintf(stderr, "GUISandbox: built without AngelScript; the showcase's menu does nothing\n");
+#endif
+}
+
+void GUISandbox::UpdateShowcase()
+{
+    // The showcase and its layers fill the window.
+    m_showcase->SetSize(m_root->GetSize());
+    for (usize i = 0; i < m_showcase->ChildCount(); ++i)
+        m_showcase->GetChildAt(i)->SetSize(m_root->GetSize());
+
+    // The script's update runs while it asks for more, and on a frame with input (a click may
+    // have started something); an idle menu calls no script.
+    const bool input = m_shell != nullptr && m_shell->Input() != nullptr && !m_shell->Input()->Events().IsEmpty();
+    if (m_script && (m_scriptWantsUpdate || input) && m_script->HasFunction(u8"update"))
+    {
+        Variant args[1] = {Variant::From<f64>(static_cast<f64>(m_deltaTime))};
+        Result<Variant> result = m_script->Call(u8"update", Span<Variant>(args, 1));
+        const bool* more = result.HasValue() ? result.Value().TryGet<bool>() : nullptr;
+        m_scriptWantsUpdate = more != nullptr && *more;
+    }
+    if (m_quitAt >= 0.0f && m_totalTime >= m_quitAt)
+        Exit();
+}
+
 void GUISandbox::OnShutdown()
 {
     std::printf("GUISandbox: drew %llu of %llu frames\n", static_cast<unsigned long long>(m_drawnFrames),
                 static_cast<unsigned long long>(m_frames));
     if (m_device)
         m_device->WaitIdle();
+    // The script's handles and handlers go before the tree they reach.
+    if (m_script)
+    {
+        gui::ClearGuiScriptService(*m_script);
+        m_script->SetErrorHandler(nullptr);
+    }
+    m_script.Reset();
+    m_scripts.Reset();
     m_router.Reset();
     m_inputSurface.Reset();
     m_bridge.Reset();
@@ -1448,7 +1590,9 @@ int main(int argc, char** argv)
     // --scroll <y>: open the page scrolled down by y logical units (a screenshot of a later
     // section: --scroll 900 --screenshot shot.png --screenshot-exit).
     // --always-redraw: draw every frame, even an idle one (to compare the cost). --frame-stats:
-    // print, each second, how many of the frames drew.
+    // print, each second, how many of the frames drew. --showcase: the game menu (G6) in place of
+    // the widget gallery; --showcase-call <function>: call one of its script's functions once
+    // loaded (onSettings, onPlay, onQuit: a screenshot of another panel).
     for (int i = 1; i < argc; ++i)
     {
         const StringView arg(reinterpret_cast<const utf8char*>(argv[i]));
@@ -1458,6 +1602,10 @@ int main(int argc, char** argv)
             app.SetAlwaysRedraw(true);
         else if (arg == StringView(u8"--frame-stats"))
             app.SetFrameStats(true);
+        else if (arg == StringView(u8"--showcase"))
+            app.SetShowcase(true);
+        else if (arg == StringView(u8"--showcase-call") && i + 1 < argc)
+            app.SetShowcaseCall(StringView(reinterpret_cast<const utf8char*>(argv[++i])));
     }
     return app.Run(argc, argv);
 }

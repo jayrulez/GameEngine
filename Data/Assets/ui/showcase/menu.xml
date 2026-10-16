@@ -1,0 +1,61 @@
+<!--
+  The GUI lab's showcase (G6 of Documentation/Specs/vg-and-gui-lab.md): a game's main menu in
+  markup, styled by menu.css and brought to life by menu.as. The host loads this, sizes the root
+  and its two layers to the window, binds {{name}} values to the GUI's data, and runs the script.
+-->
+<RelativeLayout id="showcase" class="showcase">
+    <!-- The backdrop: soft orbs drifting behind everything (their places are transforms). -->
+    <RelativeLayout id="backdrop" class="backdrop">
+        <Label class="orb orb-a"/>
+        <Label class="orb orb-b"/>
+        <Label class="orb orb-c"/>
+    </RelativeLayout>
+
+    <FlexLayout id="stage" class="stage" direction="column" justify-content="center" align-items="center" gap="18">
+        <Label id="title" class="title" text="AURORA"/>
+        <Label id="subtitle" class="subtitle" text="Welcome back, {{name}}"/>
+
+        <!-- The main menu. -->
+        <FlexLayout id="main" class="panel menu enter" direction="column" align-items="center" gap="12">
+            <Button id="play" class="menu-btn primary" text="Play"/>
+            <Button id="settings-btn" class="menu-btn" text="Settings"/>
+            <Button id="quit" class="menu-btn" text="Quit"/>
+        </FlexLayout>
+
+        <!-- Settings: a frosted panel bound to the GUI's data, both ways. -->
+        <FlexLayout id="settings" class="panel glass" direction="column" align-items="center" gap="14">
+            <Label class="panel-title" text="Settings"/>
+            <LinearLayout orientation="horizontal" spacing="14" class="row">
+                <Label class="row-label" text="Volume"/>
+                <Slider value="{{volume}}" class="row-slider"/>
+                <Label id="volume-text" class="row-value"/>
+            </LinearLayout>
+            <LinearLayout orientation="horizontal" spacing="14" class="row">
+                <Label class="row-label" text="Music"/>
+                <CheckBox checked="{{music}}" class="row-check"/>
+                <Label id="music-text" class="row-value"/>
+            </LinearLayout>
+            <LinearLayout orientation="horizontal" spacing="14" class="row">
+                <Label class="row-label" text="Name"/>
+                <TextField text="{{name}}" class="row-field"/>
+            </LinearLayout>
+            <Button id="settings-back" class="menu-btn small" text="Back"/>
+        </FlexLayout>
+
+        <!-- Loading: a bar the script fills, its text bound to the status. -->
+        <FlexLayout id="loading" class="panel glass" direction="column" align-items="center" gap="14">
+            <Label class="panel-title" text="{{status}}"/>
+            <ProgressBar progress="{{progress}}" class="loading-bar"/>
+            <Button id="loading-back" class="menu-btn small" text="Back"/>
+        </FlexLayout>
+
+        <!-- Quit: are you sure? -->
+        <FlexLayout id="confirm" class="panel glass" direction="column" align-items="center" gap="14">
+            <Label class="panel-title" text="Leave so soon?"/>
+            <LinearLayout orientation="horizontal" spacing="14" class="confirm-row">
+                <Button id="confirm-yes" class="menu-btn small danger" text="Leave"/>
+                <Button id="confirm-no" class="menu-btn small" text="Stay"/>
+            </LinearLayout>
+        </FlexLayout>
+    </FlexLayout>
+</RelativeLayout>

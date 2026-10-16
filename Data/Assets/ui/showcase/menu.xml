@@ -1,6 +1,7 @@
 <!--
   The GUI lab's showcase (G6 of Documentation/Specs/vg-and-gui-lab.md): a game's main menu in
-  markup, styled by menu.css and brought to life by menu.as. The host loads this, sizes the root
+  markup, played by mouse, keyboard or gamepad (G7: the menu wraps, settings, loading and the modal
+  keep focus inside them, Stay is the modal's safe default), styled by menu.css and brought to life by menu.as. The host loads this, sizes the root
   and its layers (backdrop, menu screen, loading screen, modal) to the window, binds {{name}}
   values to the GUI's data, and runs the script.
 -->
@@ -18,14 +19,16 @@
         <Label id="title" class="title" text="AURORA"/>
         <Label id="subtitle" class="subtitle" text="Welcome back, {{name}}"/>
 
-        <FlexLayout id="main" class="panel menu enter" direction="column" align-items="center" gap="12">
+        <FlexLayout id="main" class="panel menu enter" direction="column" align-items="center" gap="12"
+                    nav-scope="wrap" nav-default="play">
             <Button id="play" class="menu-btn primary" text="Play"/>
             <Button id="settings-btn" class="menu-btn" text="Settings"/>
             <Button id="quit" class="menu-btn" text="Quit"/>
         </FlexLayout>
 
         <!-- Settings: a page of the menu, in its place; frosted, bound to the GUI's data both ways. -->
-        <FlexLayout id="settings" class="panel glass" direction="column" align-items="center" gap="14">
+        <FlexLayout id="settings" class="panel glass" direction="column" align-items="center" gap="14"
+                    nav-scope="contain">
             <Label class="panel-title" text="Settings"/>
             <LinearLayout orientation="horizontal" spacing="14" class="row">
                 <Label class="row-label" text="Volume"/>
@@ -46,7 +49,8 @@
     </FlexLayout>
 
     <!-- Loading: a screen of its own, the status and bar low and centred. -->
-    <FlexLayout id="loading" class="loading-screen" direction="column" justify-content="end" align-items="center" gap="16">
+    <FlexLayout id="loading" class="loading-screen" direction="column" justify-content="end" align-items="center" gap="16"
+                nav-scope="contain">
         <Label class="loading-status" text="{{status}}"/>
         <ProgressBar progress="{{progress}}" class="loading-bar"/>
         <Button id="loading-back" class="menu-btn small" text="Back"/>
@@ -54,7 +58,8 @@
 
     <!-- Quit: a modal over the whole screen, which dims and blurs what is behind it and takes
          every click until it is answered. -->
-    <FlexLayout id="modal" class="modal" direction="column" justify-content="center" align-items="center">
+    <FlexLayout id="modal" class="modal" direction="column" justify-content="center" align-items="center"
+                nav-scope="contain" nav-default="confirm-no">
         <FlexLayout id="confirm" class="panel glass" direction="column" align-items="center" gap="14">
             <Label class="panel-title" text="Leave so soon?"/>
             <LinearLayout orientation="horizontal" spacing="14" class="confirm-row">

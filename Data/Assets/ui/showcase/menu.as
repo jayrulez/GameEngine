@@ -4,6 +4,7 @@
 // labels to functions of the GUI's data, and runs the loading bar. The host calls update(dt) while it returns true.
 
 funcdef string TextExpression();
+funcdef bool CommandHandler();
 
 Node@ stage;         // the menu screen: the title and the slot
 Node@ mainPanel;     // in the slot
@@ -35,6 +36,7 @@ void showPage(Node@ page)
     conceal(mainPanel, "enter");
     conceal(settingsPanel, "enter");
     reveal(page, "enter");
+    page.focus(); // its remembered or default widget: the keyboard and a gamepad carry on there
 }
 
 string volumeText() { return "" + int(gui::getNumber("volume") * 100 + 0.5) + "%"; }
@@ -48,6 +50,7 @@ void onPlay()
     loadingNow = true;
     stage.visible = false; // the loading screen replaces the menu
     reveal(loadingScreen, "screen-in");
+    loadingScreen.focus();
 }
 void onSettings() { showPage(settingsPanel); }
 void onBack() { loadingNow = false; showPage(mainPanel); }
@@ -58,8 +61,23 @@ void onQuit()
     Node@ confirm = gui::root().find("confirm");
     conceal(confirm, "enter");
     reveal(confirm, "enter");
+    modal.focus(); // Stay, the safe answer, unless one was chosen before
 }
-void onStay() { conceal(modal, "modal-in"); }
+void onStay()
+{
+    conceal(modal, "modal-in");
+    mainPanel.focus(); // back to Quit, where the question came from
+}
+
+// Back (Escape, a gamepad's East): closes what is open, one step at a time.
+bool onBackCommand()
+{
+    if (modal.visible)
+        onStay();
+    else if (loadingScreen.visible || settingsPanel.visible)
+        onBack();
+    return false;
+}
 void onLeave()
 {
     // The whole menu fades out; the host closes once `quit` is set and the fade has run.
@@ -87,6 +105,11 @@ void main()
     // Labels that follow the data through functions of it: no handler updates them.
     root.find("volume-text").bind("text", TextExpression(volumeText));
     root.find("music-text").bind("text", TextExpression(musicText));
+
+    // Played by keyboard and gamepad too: Back is Escape and the East button.
+    root.onCommand("back", CommandHandler(onBackCommand));
+    gui::bindKey("escape", "back", "");
+    gui::bindKey("pad-east", "back", "");
 
     showPage(mainPanel);
 }

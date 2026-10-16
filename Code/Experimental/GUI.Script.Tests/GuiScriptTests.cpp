@@ -211,7 +211,7 @@ namespace
 namespace
 {
     // The command story (G7) both languages tell. The script defines "music" (label "Music"),
-    // handles it on the root by toggling its checked state, binds a CheckBox to it, and offers
+    // handles it on the root by toggling its checked state, binds a CheckBox and F5 to it, and offers
     // switchOff() (disables it) and runIt() (runs it, returning 1 when a handler ran).
     void CheckCommands(GuiBed& bed)
     {
@@ -226,6 +226,10 @@ namespace
         CHECK(bed.Number(u8"runIt") == doctest::Approx(1.0)); // the script's handler toggles it
         bed.Update();
         CHECK(box->IsChecked());
+        // The script bound F5 to it.
+        bed.root->GetEventDispatcher()->InjectKeyDown(static_cast<u32>(gui::KeyCode::F5));
+        bed.Update();
+        CHECK_FALSE(box->IsChecked());
         bed.Run(u8"switchOff");
         bed.Update();
         CHECK_FALSE(box->IsEnabled());
@@ -248,6 +252,7 @@ TEST_CASE("gui-script: AngelScript defines, handles and runs commands")
         u8"  root.onCommand(\"music\", CommandHandler(toggleMusic));\n"
         u8"  Node@ box = root.add(\"CheckBox\");\n"
         u8"  box.command = \"music\";\n"
+        u8"  gui::bindKey(\"f5\", \"music\", \"\");\n"
         u8"}\n"
         u8"void switchOff() { gui::setCommandEnabled(\"music\", false); }\n"
         u8"double runIt() { return gui::runCommand(\"music\") ? 1 : 0; }\n",
@@ -268,6 +273,7 @@ TEST_CASE("gui-script: Luau defines, handles and runs commands")
         u8"root:onCommand(\"music\", function() gui.setCommandChecked(\"music\", not gui.isCommandChecked(\"music\")); return false end)\n"
         u8"local box = root:add(\"CheckBox\")\n"
         u8"box.command = \"music\"\n"
+        u8"gui.bindKey(\"f5\", \"music\", \"\")\n"
         u8"function switchOff() gui.setCommandEnabled(\"music\", false) end\n"
         u8"function runIt() return gui.runCommand(\"music\") and 1 or 0 end\n",
         u8"main");

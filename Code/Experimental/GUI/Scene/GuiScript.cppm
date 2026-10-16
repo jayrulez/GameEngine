@@ -64,6 +64,9 @@ export namespace experimental::gui
         static void SetCommandChecked(core::StringView id, bool checked);
         [[nodiscard]] static bool IsCommandChecked(core::StringView id);
         static bool RunCommand(core::StringView id);
+        /// Binds `keys` ("ctrl-s", "pad-east", a chord) to `command` where `context` holds (empty:
+        /// everywhere); false when they do not parse.
+        static bool BindKey(core::StringView keys, core::StringView command, core::StringView context);
     };
 
     /// Registers the lab's own element types (ElementTypes::Register: Label, Button, the layouts,

@@ -98,6 +98,17 @@ export namespace experimental::gui
         C,
         V,
         X,
+        // The rest of the keyboard bindings name (G7), after the first set so its values hold.
+        B, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, W, Y, Z,
+        Num0, Num1, Num2, Num3, Num4, Num5, Num6, Num7, Num8, Num9,
+        F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12,
+    };
+
+    /// The letter keys in alphabetical order (their codes are not contiguous: A, C, V and X came first).
+    inline constexpr KeyCode kLetterKeys[26] = {
+        KeyCode::A, KeyCode::B, KeyCode::C, KeyCode::D, KeyCode::E, KeyCode::F, KeyCode::G, KeyCode::H, KeyCode::I,
+        KeyCode::J, KeyCode::K, KeyCode::L, KeyCode::M, KeyCode::N, KeyCode::O, KeyCode::P, KeyCode::Q, KeyCode::R,
+        KeyCode::S, KeyCode::T, KeyCode::U, KeyCode::V, KeyCode::W, KeyCode::X, KeyCode::Y, KeyCode::Z,
     };
 
     // Key modifier bitmask (unscoped for easy OR-ing).

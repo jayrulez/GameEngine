@@ -372,6 +372,12 @@ namespace experimental::gui
         return root != nullptr && root->RunCommand(id);
     }
 
+    bool Gui::BindKey(StringView keys, StringView command, StringView context)
+    {
+        SceneRoot* root = ScriptRoot();
+        return root != nullptr && root->GetKeymap().Bind(keys, command, context);
+    }
+
     void Node::OnCommandScript(StringView id, RefPtr<foundation::script::IScriptDelegate> handler)
     {
         if (!handler)
@@ -455,6 +461,7 @@ namespace experimental::gui
         builder.AccessorProperty<&Node::GetNavScopeName, &Node::SetNavScopeName>("navScope").PropAttribute("css", core::String(u8"nav-scope"));
         builder.AccessorProperty<&Node::GetDefaultFocusId, &Node::SetDefaultFocusId>("navDefault").PropAttribute("css", core::String(u8"nav-default"));
         builder.AccessorProperty<&Node::GetCommand, &Node::SetCommand>("command").PropAttribute("css", core::String(u8"command"));
+        builder.AccessorProperty<&Node::GetKeyContext, &Node::SetKeyContext>("keyContext").PropAttribute("css", core::String(u8"key-context"));
         builder.Method<&Node::AddElement, Node>("add");
         builder.Method<&Node::FindElement, Node>("find");
         builder.Method<&Node::ParentElement, Node>("parent");
@@ -600,5 +607,6 @@ namespace experimental::gui
         builder.Method<&Gui::SetCommandChecked>("setCommandChecked");
         builder.Method<&Gui::IsCommandChecked>("isCommandChecked");
         builder.Method<&Gui::RunCommand>("runCommand");
+        builder.Method<&Gui::BindKey>("bindKey");
     }
 }

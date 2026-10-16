@@ -22,6 +22,7 @@ import :node;
 import :event;
 import :clipboard;
 import :navigation; // directional focus (G7)
+import :keymap;     // Keystroke, PadButton
 import :reactive;   // Observable (focus, for commands)
 
 using namespace foundation::core;
@@ -220,7 +221,12 @@ export namespace experimental::gui
             KeyEvent event(EventType::KeyDown, m_focusNode, keyCode, modifiers);
             if (m_focusNode)
                 m_focusNode->HandleKeyDown(event);
-            if (event.Handled || modifiers != 0)
+            if (event.Handled)
+                return;
+            // Then the bindings (a keystroke bound to a command where the focus path's contexts allow).
+            if (m_keystrokes && m_keystrokes(Keystroke{keyCode, modifiers, false}))
+                return;
+            if (modifiers != 0)
                 return;
             switch (static_cast<KeyCode>(keyCode))
             {
@@ -250,6 +256,19 @@ export namespace experimental::gui
             SetFocusNode(target);
             return true;
         }
+        /// A gamepad button (the d-pad goes to PressDirection): the bindings first; unbound, South
+        /// activates and East goes back (the `back` command).
+        void InjectPadButton(PadButton button)
+        {
+            UseKeyboard();
+            if (m_keystrokes && m_keystrokes(Keystroke{static_cast<u32>(button), 0, true}))
+                return;
+            if (button == PadButton::South)
+                (void)Activate();
+        }
+        /// Where unhandled keystrokes go: the SceneRoot's keymap (true when it took one).
+        void SetKeystrokeRouter(core::Function<bool(const Keystroke&)> router) { m_keystrokes = core::Move(router); }
+
         /// Activates the focused widget (Return, Space, a gamepad's South): what a click does.
         bool Activate() { return m_focusNode != nullptr && m_focusNode->IsEnabled() && m_focusNode->HandleActivate(); }
         void InjectKeyUp(u32 keyCode, u32 modifiers = 0)
@@ -529,6 +548,7 @@ export namespace experimental::gui
         DragPayload m_dragPayload;
         core::Float2 m_mousePos{0.0f, 0.0f};
         Observable m_focusChanged;   // told when focus moves
+        core::Function<bool(const Keystroke&)> m_keystrokes; // the keymap (SceneRoot)
         bool m_keyboardMode = false; // the last input was a key or a d-pad move, not the pointer
         bool m_holding = false;      // a direction held (PressDirection)
         NavDirection m_heldDirection = NavDirection::Down;

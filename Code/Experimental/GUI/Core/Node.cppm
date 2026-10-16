@@ -331,6 +331,16 @@ export namespace experimental::gui
         {
             return GetWorldTransform().GetInverse().TransformPoint(worldPoint);
         }
+        /// A point of this node in its root's own space, where a popup attached to the root is
+        /// placed. The root's transform (its display scale) maps that space to device pixels, which
+        /// is what world space is.
+        [[nodiscard]] core::Float2 ConvertToRootSpace(core::Float2 nodePoint) const
+        {
+            const Node* root = this;
+            while (root->m_parent != nullptr)
+                root = root->m_parent;
+            return root->ConvertToNodeSpace(ConvertToWorldSpace(nodePoint));
+        }
         [[nodiscard]] core::Float2 GetScreenPosition() const
         {
             return ConvertToWorldSpace(core::Float2{0.0f, 0.0f});

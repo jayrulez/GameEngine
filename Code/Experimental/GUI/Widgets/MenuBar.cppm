@@ -118,10 +118,9 @@ export namespace experimental::gui
         }
         void OpenMenu(Button* button, Menu* menu)
         {
-            const core::Float2 origin = RootLocalOrigin(button);
-            // The button is the popup owner: clicking it again toggles the menu closed instead
+                        // The button is the popup owner: clicking it again toggles the menu closed instead
             // of the outside-click path dismissing it before the toggle runs.
-            menu->Open(*this, core::Float2{origin.x, origin.y + button->GetSize().y}, button);
+            menu->Open(*this, button->ConvertToRootSpace(core::Float2{0.0f, button->GetSize().y}), button);
             // Opening closed any previous menu (its OnMenuClosed cleared m_current + deselected
             // its button); now record the new one.
             m_current = menu;
@@ -153,14 +152,6 @@ export namespace experimental::gui
 
         // Top-left of `node` in root-local space (sum of positions up to, but excluding, the
         // root). Assumes identity scale/rotation on the path, matching the menu popup model.
-        [[nodiscard]] static core::Float2 RootLocalOrigin(Node* node)
-        {
-            core::Float2 p{0.0f, 0.0f};
-            for (Node* c = node; c != nullptr && c->GetParent() != nullptr; c = c->GetParent())
-                p += c->GetPosition();
-            return p;
-        }
-
         struct BarEntry
         {
             Button* button;

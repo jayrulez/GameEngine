@@ -115,7 +115,7 @@ export namespace experimental::gui
             {
                 m_timer += dt;
                 if (m_timer >= m_delay)
-                    Show(root, dispatcher.GetMousePosition(), text);
+                    Show(root, root.ConvertToNodeSpace(dispatcher.GetMousePosition()), text); // device pixels to the root's units
             }
         }
 

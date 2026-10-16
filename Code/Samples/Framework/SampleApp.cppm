@@ -160,6 +160,8 @@ export namespace samples::framework
 
     inline int SampleApp::Run(int argc, char** argv)
     {
+        // A crash prints its backtrace (as the runtime's hosts do): without it a sample died silently.
+        InstallCrashBacktrace();
         for (int i = 1; i < argc; ++i)
         {
             if (std::strcmp(argv[i], "--dx12") == 0 || std::strcmp(argv[i], "--d3d12") == 0)

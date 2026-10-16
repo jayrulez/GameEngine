@@ -118,7 +118,7 @@ export namespace experimental::gui
 
         /// What goes under the content: outer shadows, the backdrop blur, the background colour, the
         /// layers (the last first), inset shadows, then the border.
-        void DrawUnder(DrawContext& ctx, const Rect& box) const
+        void DrawUnder(DrawContext& ctx, const Rect& box, bool withBackdrop = true) const
         {
             if (IsEmpty() || box.width <= 0.0f || box.height <= 0.0f)
                 return;
@@ -133,8 +133,8 @@ export namespace experimental::gui
                 canvas.FillBoxShadow(grown, Grown(Radii, shadow.Spread), shadow.Blur, shadow.ShadowColor, false);
             }
             // The backdrop blurs inside the box's shape, under its (translucent) background.
-            if (BackdropBlur > 0.0f)
-                canvas.DrawBackdropBlur(rect, Radii, BackdropBlur * ctx.DeviceScale());
+            if (withBackdrop)
+                DrawBackdrop(ctx, box);
             if (BackgroundColor.a > 0.0f)
                 canvas.DrawBox(rect, Radii, BackgroundColor);
             for (usize i = Layers.Size(); i-- > 0;)
@@ -149,6 +149,13 @@ export namespace experimental::gui
             }
             if (!BorderWidths.IsZero() && !BorderColors.IsTransparent())
                 canvas.DrawBox(rect, Radii, Color{0.0f, 0.0f, 0.0f, 0.0f}, BorderWidths, BorderColors);
+        }
+
+        /// The backdrop blur alone (a node drawing through a layer draws it first, behind the layer).
+        void DrawBackdrop(DrawContext& ctx, const Rect& box) const
+        {
+            if (BackdropBlur > 0.0f && box.width > 0.0f && box.height > 0.0f)
+                ctx.VG().DrawBackdropBlur(Rectangle{box.x, box.y, box.width, box.height}, Radii, BackdropBlur * ctx.DeviceScale());
         }
 
     private:

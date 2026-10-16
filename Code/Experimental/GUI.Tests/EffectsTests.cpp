@@ -222,3 +222,40 @@ TEST_CASE("effects: text-shadow, text-outline and text-glow reach the text, inhe
     StyleValue bad;
     CHECK_FALSE(ParseStyleValue(StyleGrammar::TextOutline, SV(u8"#ffffff"), bad)); // no width
 }
+
+TEST_CASE("effects: a fading panel's backdrop blur is of what lies behind it, at its opacity")
+{
+    // Frosted settings rising in (opacity 0 -> 1, with children): the blur must see the orbs behind
+    // it while it fades, not the panel's own empty layer.
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    auto orb = Box(u8"orb");
+    auto panel = Box(u8"panel");
+    auto row = Box(u8"row");
+    root->AddChild(orb.Get());
+    root->AddChild(panel.Get());
+    panel->AddChild(row.Get());
+    Apply(*orb.Get(), u8"orb { background-color: blue; }");
+    Apply(*panel.Get(), u8"panel { background-color: rgba(255,255,255,0.1); backdrop-filter: blur(8px); }");
+    Apply(*row.Get(), u8"row { background-color: red; }");
+    panel->SetAlpha(0.5f); // mid-fade: a layer of its own
+    vg::VGContext canvas;
+    DrawWith(*root.Get(), canvas);
+    const vg::VGBatch& batch = canvas.GetBatch();
+    core::i32 backdrop = -1, group = -1;
+    for (core::usize i = 0; i < batch.layers.Size(); ++i)
+    {
+        if (batch.layers[i].backdropBlur > 0.0f)
+            backdrop = static_cast<core::i32>(i);
+        else if (batch.layers[i].opacity == doctest::Approx(0.5f))
+            group = static_cast<core::i32>(i);
+    }
+    REQUIRE(backdrop >= 0);
+    REQUIRE(group >= 0);
+    CHECK(batch.layers[static_cast<core::usize>(backdrop)].parent == -1); // the canvas behind, not the panel's layer
+    CHECK(batch.layers[static_cast<core::usize>(backdrop)].bounds.width > 0.0f); // the orb is in it
+    // The blurred shape is drawn at the panel's opacity.
+    bool halfShape = false;
+    for (const vg::VGVertex& v : batch.vertices)
+        halfShape = halfShape || (v.color.a == doctest::Approx(0.5f) && v.color.r == doctest::Approx(1.0f) && v.color.g == doctest::Approx(1.0f));
+    CHECK(halfShape);
+}

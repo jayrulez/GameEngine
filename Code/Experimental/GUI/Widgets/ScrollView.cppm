@@ -97,6 +97,7 @@ export namespace experimental::gui
         // The container holding the scrollable content: set its size to the scrollable extent
         // (or use SetAutoMeasureContent) and add your widgets to it.
         [[nodiscard]] Node* GetContent() const noexcept { return m_content.Get(); }
+        [[nodiscard]] Node* GetChildHost() override { return m_content.Get(); } // markup's children scroll
         [[nodiscard]] ScrollBar* GetVerticalScrollBar() const noexcept { return m_vBar.Get(); }
         [[nodiscard]] ScrollBar* GetHorizontalScrollBar() const noexcept { return m_hBar.Get(); }
 

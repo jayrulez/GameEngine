@@ -113,7 +113,7 @@ export namespace experimental::gui
             for (xml::XmlElement* child = element.FirstChildElement(); child != nullptr;
                  child = child->NextSiblingElement())
                 if (RefPtr<Node> childWidget = Inflate(*child))
-                    widget->AddChild(childWidget.Get());
+                    widget->GetChildHost()->AddChild(childWidget.Get()); // a scroller's content, a window's
 
             return widget;
         }

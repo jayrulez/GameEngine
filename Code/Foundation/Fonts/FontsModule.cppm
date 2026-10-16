@@ -19,3 +19,4 @@ export import :scaled_views;
 export import :backend_interfaces; // parser/baker/cache seam (was Fonts.IO)
 export import :factories;
 export import :font_manager;
+export import :cluster_text_shaper;

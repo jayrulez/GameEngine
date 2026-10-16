@@ -154,6 +154,17 @@ export namespace foundation::fonts
         void ReleaseFont(CachedFont*) override {}
 
     private:
+        // The shaper a font gets: the registered backend's (HarfBuzz, when installed), else the
+        // basic one.
+        [[nodiscard]] ITextShaper* MakeShaper()
+        {
+            if (ITextShaper* shaper = TextShaperFactory::Create(*m_allocator))
+            {
+                return shaper;
+            }
+            return m_allocator->New<TrueTypeTextShaper>();
+        }
+
         // Where a family came from, to bake it again at another size (a coverage family).
         struct FamilySource
         {
@@ -332,7 +343,7 @@ export namespace foundation::fonts
                 m_allocator->New<ScaledFontView>(*base.cachedFont->font, pixelHeight);
             auto* atlasView = m_allocator->New<ScaledFontAtlasView>(
                 *base.cachedFont->atlas, fontView->Scale());
-            ITextShaper* shaper = m_allocator->New<TrueTypeTextShaper>();
+            ITextShaper* shaper = MakeShaper();
             CachedFont* cachedFont =
                 m_allocator->New<CachedFont>(*m_allocator, fontView, atlasView, shaper);
 
@@ -375,7 +386,7 @@ export namespace foundation::fonts
                 return FontLoadResult::OutOfMemory;
             }
 
-            ITextShaper* shaper = m_allocator->New<TrueTypeTextShaper>();
+            ITextShaper* shaper = MakeShaper();
             CachedFont* cachedFont =
                 m_allocator->New<CachedFont>(*m_allocator, font, atlas, shaper);
 

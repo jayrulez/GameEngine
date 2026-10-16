@@ -18,5 +18,8 @@ target_sources(Fonts
             BackendInterfaces.cppm
             Factories.cppm
             FontManager.cppm
-            FontsModule.cppm)
+            ClusterTextShaper.cppm
+            FontsModule.cppm
+    PRIVATE
+        FontsImpl.cpp)
 

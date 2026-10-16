@@ -497,7 +497,7 @@ export namespace foundation::fonts
                 entry.pixelHeight = productEntry.pixelHeight;
                 entry.cached = m_allocator->New<CachedFont>(
                     *m_allocator, productEntry.font.Get(), productEntry.atlas.Get(),
-                    m_allocator->New<TrueTypeTextShaper>());
+                    MakeShaper());
                 entry.image = productEntry.atlasImage.Get();
                 m_entries.PushBack(Move(entry));
             }
@@ -584,6 +584,17 @@ export namespace foundation::fonts
         }
 
     private:
+        // The shaper a font gets: the registered backend's (HarfBuzz, when installed), else the
+        // basic one.
+        [[nodiscard]] ITextShaper* MakeShaper()
+        {
+            if (ITextShaper* shaper = TextShaperFactory::Create(*m_allocator))
+            {
+                return shaper;
+            }
+            return m_allocator->New<TrueTypeTextShaper>();
+        }
+
         struct Entry
         {
             String family;
@@ -626,7 +637,7 @@ export namespace foundation::fonts
             auto* atlasView = m_allocator->New<ScaledFontAtlasView>(*base.cached->atlas,
                                                                           fontView->Scale());
             entry.cached = m_allocator->New<CachedFont>(
-                *m_allocator, fontView, atlasView, m_allocator->New<TrueTypeTextShaper>());
+                *m_allocator, fontView, atlasView, MakeShaper());
 
             CachedFont* result = entry.cached;
             m_entries.PushBack(Move(entry));

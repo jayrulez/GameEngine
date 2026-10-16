@@ -21,6 +21,7 @@ target_sources(GUI
             Scene/Action.cppm
             Scene/ActionManager.cppm
             Scene/Actions.cppm
+            Scene/Navigation.cppm
             Scene/EventDispatcher.cppm
             Scene/ElementTypes.cppm
             Scene/DataModel.cppm

@@ -102,6 +102,24 @@ export namespace experimental::gui
         // BEFORE the routed OnMouseMove, so gating the move on IsPressed() would stop the
         // drag the instant the cursor left. Pointer capture guarantees the release reaches
         // us, so OnMouseUp reliably clears m_dragging.
+        // Left and right step the value, given back at its ends (focus moves on); Home and End jump.
+        void OnKeyDown(const KeyEvent& event) override
+        {
+            const KeyCode key = static_cast<KeyCode>(event.KeyCode);
+            const f32 before = m_value;
+            if (key == KeyCode::Left)
+                SetValue(m_value - m_keyStep);
+            else if (key == KeyCode::Right)
+                SetValue(m_value + m_keyStep);
+            else if (key == KeyCode::Home)
+                SetValue(0.0f);
+            else if (key == KeyCode::End)
+                SetValue(1.0f);
+            else
+                return;
+            event.Handled = m_value != before || key == KeyCode::Home || key == KeyCode::End;
+        }
+
         void OnMouseDown(const MouseEvent& event) override
         {
             UINode::OnMouseDown(event);
@@ -152,6 +170,7 @@ export namespace experimental::gui
         }
 
         f32 m_value = 0.0f;
+        f32 m_keyStep = 0.05f; // an arrow's step
         Observable m_valueChanged; // what bindings reading the value follow
         bool m_dragging = false;
         Color m_trackColor{0.28f, 0.30f, 0.35f, 1.0f};

@@ -152,6 +152,9 @@ export namespace experimental::gui
     {
         u32 KeyCode;
         u32 Modifiers;
+        /// Set by a widget that used the key (G7): an arrow a widget leaves unhandled moves focus,
+        /// a Return or Space activates; a list or a slider gives an arrow back at its ends.
+        mutable bool Handled = false;
 
         KeyEvent(EventType type, Node* target, u32 keyCode, u32 modifiers = 0) noexcept
             : Event(type, target), KeyCode(keyCode), Modifiers(modifiers)

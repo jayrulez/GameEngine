@@ -215,6 +215,9 @@ export namespace experimental::gui
             const bool shift = (event.Modifiers & static_cast<u32>(KeyModShift)) != 0;
             const bool ctrl = (event.Modifiers & static_cast<u32>(KeyModCtrl)) != 0;
             const KeyCode key = static_cast<KeyCode>(event.KeyCode);
+            // A field keeps the keys it edits with; up and down (and leaving) are navigation's.
+            if (key != KeyCode::Up && key != KeyCode::Down && key != KeyCode::Escape && key != KeyCode::Tab)
+                event.Handled = true;
 
             // Editing shortcuts take precedence over plain letter handling.
             if (ctrl)

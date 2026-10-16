@@ -214,6 +214,7 @@ export namespace experimental::gui
         void OnKeyDown(const KeyEvent& event) override
         {
             const Rect vp = Viewport();
+            const core::Float2 before = m_offset;
             switch (static_cast<KeyCode>(event.KeyCode))
             {
             case KeyCode::Down:
@@ -241,8 +242,12 @@ export namespace experimental::gui
                 SetScrollOffset(core::Float2{m_offset.x, ScrollRange().y});
                 break;
             default:
-                break;
+                return;
             }
+            // An arrow that could not scroll further is given back (focus moves on).
+            const KeyCode key = static_cast<KeyCode>(event.KeyCode);
+            const bool arrow = key == KeyCode::Up || key == KeyCode::Down || key == KeyCode::Left || key == KeyCode::Right;
+            event.Handled = !arrow || m_offset.x != before.x || m_offset.y != before.y;
         }
 
         void OnSizeChange() override { Relayout(); }

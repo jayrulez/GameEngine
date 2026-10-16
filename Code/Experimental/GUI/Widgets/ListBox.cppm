@@ -187,22 +187,30 @@ export namespace experimental::gui
         {
             switch (static_cast<KeyCode>(event.KeyCode))
             {
+            // An arrow at the list's end is given back (focus moves on).
             case KeyCode::Down:
-                if (!m_items.IsEmpty())
-                    SetSelectedIndex(
-                        core::Min(m_selected + 1, static_cast<i32>(m_items.Size()) - 1));
+                if (!m_items.IsEmpty() && m_selected < static_cast<i32>(m_items.Size()) - 1)
+                {
+                    SetSelectedIndex(m_selected + 1);
+                    event.Handled = true;
+                }
                 break;
             case KeyCode::Up:
-                if (!m_items.IsEmpty())
-                    SetSelectedIndex(core::Max(m_selected <= 0 ? 0 : m_selected - 1, 0));
+                if (!m_items.IsEmpty() && m_selected > 0)
+                {
+                    SetSelectedIndex(m_selected - 1);
+                    event.Handled = true;
+                }
                 break;
             case KeyCode::Home:
                 if (!m_items.IsEmpty())
                     SetSelectedIndex(0);
+                event.Handled = true;
                 break;
             case KeyCode::End:
                 if (!m_items.IsEmpty())
                     SetSelectedIndex(static_cast<i32>(m_items.Size()) - 1);
+                event.Handled = true;
                 break;
             default:
                 break;

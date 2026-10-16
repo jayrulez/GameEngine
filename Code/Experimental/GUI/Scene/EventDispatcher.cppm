@@ -21,6 +21,7 @@ import foundation.core; // Float2, StringView
 import :node;
 import :event;
 import :clipboard;
+import :navigation; // directional focus (G7)
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -203,10 +204,42 @@ export namespace experimental::gui
                     FocusNext();
                 return;
             }
+            // The focused widget first; what it leaves is navigation's: an arrow moves focus, Return
+            // or Space activates (G7).
+            KeyEvent event(EventType::KeyDown, m_focusNode, keyCode, modifiers);
             if (m_focusNode)
-                m_focusNode->HandleKeyDown(
-                    KeyEvent(EventType::KeyDown, m_focusNode, keyCode, modifiers));
+                m_focusNode->HandleKeyDown(event);
+            if (event.Handled || modifiers != 0)
+                return;
+            switch (static_cast<KeyCode>(keyCode))
+            {
+            case KeyCode::Up: (void)MoveFocus(NavDirection::Up); break;
+            case KeyCode::Down: (void)MoveFocus(NavDirection::Down); break;
+            case KeyCode::Left: (void)MoveFocus(NavDirection::Left); break;
+            case KeyCode::Right: (void)MoveFocus(NavDirection::Right); break;
+            case KeyCode::Return:
+            case KeyCode::Space: (void)Activate(); break;
+            default: break;
+            }
         }
+
+        /// Moves focus to the best widget in `direction` (inside a modal while one is open, within
+        /// focus scopes); with nothing focused, to the GUI's entry. True when focus moved. The
+        /// gamepad's d-pad and stick arrive here as the arrows do.
+        bool MoveFocus(NavDirection direction)
+        {
+            Node* root = m_modalRoot != nullptr ? m_modalRoot : m_root;
+            if (root == nullptr)
+                return false;
+            (void)HitTest(core::Float2{}); // the layout as it is now (a pending pass runs first)
+            Node* target = NavigateFrom(*root, m_focusNode, direction);
+            if (target == nullptr || target == m_focusNode)
+                return false;
+            SetFocusNode(target);
+            return true;
+        }
+        /// Activates the focused widget (Return, Space, a gamepad's South): what a click does.
+        bool Activate() { return m_focusNode != nullptr && m_focusNode->IsEnabled() && m_focusNode->HandleActivate(); }
         void InjectKeyUp(u32 keyCode, u32 modifiers = 0)
         {
             if (m_focusNode)
@@ -229,7 +262,10 @@ export namespace experimental::gui
             if (previous)
                 previous->HandleFocusLost();
             if (m_focusNode)
+            {
+                RememberInScopes(*m_focusNode); // coming back to a scope returns here
                 m_focusNode->HandleFocusGained();
+            }
         }
 
         // === Drag-and-drop ===

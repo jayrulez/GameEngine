@@ -170,6 +170,11 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   codepoints; an `fi` ligature is one glyph over a shared cluster; an RTL paragraph with embedded
   Latin lays out and hit tests; the stb backend still passes F1's suite. The atlas question that
   spec names (bake by glyph id, or by codepoint with a runtime fallback) is decided here.
+  Decided 2026-10-15 (the user): atlases key by glyph id. Bakers bake the glyphs a codepoint set
+  maps to plus every glyph its substitutions can reach (the closure), cooked fonts carry the font
+  tables the shaper reads, the stb shaper writes glyph ids too, and the font data version bumps
+  with a migration, so shipped games shape as the editor does. HarfBuzz 14.5.1 is vendored
+  (ac3396dab).
 - **F4 Text effects.** Outline, shadow and glow per run, from the distance-field fonts the engine
   already bakes (`Fonts.DistanceField.Baker`), so a HUD's text reads over any scene without a
   panel behind it. Tests: an outline's width and a shadow's offset probed in pixels; effects on one

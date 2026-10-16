@@ -34,17 +34,41 @@ export namespace experimental::gui
             m_actions.PushBack(core::Move(action));
         }
 
-        // Ticks all actions; drops finished ones.
-        void Update(core::Duration elapsed)
+        /// How fast an action's time runs (its target's root may be paused, 0, or slowed).
+        using TimeScale = core::Function<f32(Node& target)>;
+
+        // Ticks all actions, each by `elapsed` times its target's time scale (1 without one);
+        // drops finished ones and those whose target is gone.
+        void Update(core::Duration elapsed, const TimeScale& scaleOf = {})
         {
             for (usize i = 0; i < m_actions.Size();)
             {
-                m_actions[i]->Update(elapsed);
+                Node* target = m_actions[i]->ResolveTarget();
+                if (target == nullptr && m_actions[i]->GetTarget() != nullptr)
+                {
+                    m_actions.RemoveAt(i); // its target was destroyed
+                    continue;
+                }
+                const f32 scale = (scaleOf && target != nullptr) ? scaleOf(*target) : 1.0f;
+                if (scale == 1.0f)
+                    m_actions[i]->Update(elapsed);
+                else if (scale > 0.0f)
+                    m_actions[i]->Update(core::Duration::FromSeconds(static_cast<f64>(elapsed.AsSecondsF()) * static_cast<f64>(scale)));
                 if (m_actions[i]->IsDone())
                     m_actions.RemoveAt(i);
                 else
                     ++i;
             }
+        }
+
+        /// Whether an action is running on a target `matches` takes (a root's own, for its frames).
+        template <typename Predicate>
+        [[nodiscard]] bool AnyTarget(Predicate&& matches) const
+        {
+            for (const RefPtr<Action>& a : m_actions)
+                if (Node* target = a->ResolveTarget(); target != nullptr && matches(*target))
+                    return true;
+            return false;
         }
 
         bool RemoveAllActionsFromTarget(Node* target)

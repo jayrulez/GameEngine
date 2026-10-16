@@ -54,6 +54,19 @@ export namespace experimental::gui
         }
         [[nodiscard]] Node* GetTarget() const noexcept { return m_target; }
 
+        /// A weak hold on the target, resolved through its GUI's element table (Node::RunAction
+        /// sets it): an action whose target is gone is dropped rather than run on freed memory.
+        struct WeakTarget
+        {
+            const void* table = nullptr;
+            u32 slot = 0;
+            u32 generation = 0;
+            Node* (*resolve)(const WeakTarget&) = nullptr;
+        };
+        void SetWeakTarget(const WeakTarget& weak) noexcept { m_weak = weak; }
+        /// The target when it is alive (or when none was held weakly), null once it is gone.
+        [[nodiscard]] Node* ResolveTarget() const { return m_weak.resolve != nullptr ? m_weak.resolve(m_weak) : m_target; }
+
         void SetId(u64 id) noexcept { m_id = id; }
         [[nodiscard]] u64 GetId() const noexcept { return m_id; }
         void SetTag(u64 tag) noexcept { m_tag = tag; }
@@ -69,7 +82,8 @@ export namespace experimental::gui
                 m_onDone(*this);
         }
 
-        Node* m_target = nullptr; // non-owning
+        Node* m_target = nullptr; // non-owning; read through ResolveTarget when held weakly
+        WeakTarget m_weak{};
         Callback m_onDone;
         u64 m_id = 0;
         u64 m_tag = 0;

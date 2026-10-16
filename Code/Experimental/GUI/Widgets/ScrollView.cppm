@@ -53,6 +53,13 @@ export namespace experimental::gui
             if (OnContentChanged)
                 OnContentChanged();
         }
+        // A child grown or shown after it was added (a sheet sizing a page that loaded before it
+        // was styled) changes the extent as much as a new child does.
+        void OnChildLayoutChange(Node&, bool) override
+        {
+            if (OnContentChanged)
+                OnContentChanged();
+        }
     };
 
     class ScrollView : public UIWidget
@@ -125,7 +132,8 @@ export namespace experimental::gui
             m_content->SetSize(core::Float2{w, h});
             Relayout();
         }
-        // When on, MeasureContent runs automatically whenever the content's children change.
+        // When on, MeasureContent runs automatically whenever the content's children change, are
+        // resized, or are shown or hidden.
         void SetAutoMeasureContent(bool enabled)
         {
             m_autoMeasure = enabled;

@@ -37,6 +37,8 @@ import :grid_layout;
 import :panel;
 import :scroll_view;
 import :label;
+import :rich_text;
+import foundation.fonts; // TextAlignment (a rich text's text-align)
 import :button;
 import :icon_button;
 import :content_button;
@@ -63,6 +65,7 @@ import :tree_view;
 import :grid_view;
 
 using namespace foundation::core;
+namespace fonts = foundation::fonts;
 
 export namespace foundation::ui
 {
@@ -865,6 +868,55 @@ export namespace foundation::ui
                              if (Label* c = Cast<Label>(v))
                              {
                                  c->Ellipsis.SetValue(PB(val));
+                             }
+                         });
+
+        // Rich text: its text is markup ([b], [color=], [link=], ...; see :text_runs).
+        RegisterView(u8"RichText",
+                     [](IAllocator& allocator) -> RefPtr<View> { return MakeRef<RichText>(allocator); });
+        RegisterProperty(u8"RichText", u8"markup",
+                         [](View* v, StringView val)
+                         {
+                             if (RichText* c = Cast<RichText>(v))
+                             {
+                                 c->Markup.SetValue(String(val));
+                             }
+                         });
+        RegisterProperty(u8"RichText", u8"font-size",
+                         [](View* v, StringView val)
+                         {
+                             if (RichText* c = Cast<RichText>(v))
+                             {
+                                 if (auto f = PF(val); f.HasValue())
+                                 {
+                                     c->FontSize.SetValue(f);
+                                 }
+                             }
+                         });
+        RegisterProperty(u8"RichText", u8"font-family",
+                         [](View* v, StringView val)
+                         {
+                             if (RichText* c = Cast<RichText>(v))
+                             {
+                                 c->FontFamily.SetValue(String(val));
+                             }
+                         });
+        RegisterProperty(u8"RichText", u8"word-wrap",
+                         [](View* v, StringView val)
+                         {
+                             if (RichText* c = Cast<RichText>(v))
+                             {
+                                 c->WordWrap.SetValue(PB(val));
+                             }
+                         });
+        RegisterProperty(u8"RichText", u8"text-align",
+                         [](View* v, StringView val)
+                         {
+                             if (RichText* c = Cast<RichText>(v))
+                             {
+                                 c->HAlign.SetValue(val == StringView(u8"center")  ? fonts::TextAlignment::Center
+                                                    : val == StringView(u8"right") ? fonts::TextAlignment::Right
+                                                                                   : fonts::TextAlignment::Left);
                              }
                          });
 

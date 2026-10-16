@@ -12,6 +12,8 @@ import foundation.vfs;
 import foundation.fonts;
 import foundation.fonts.truetype;
 import foundation.ui;
+import foundation.vg;
+#include "TestHelpers.h"
 
 using namespace foundation::core;
 using namespace foundation::ui;
@@ -166,4 +168,82 @@ TEST_CASE("text layout: underlines and links cover their runs")
     // The underline runs on under the space between the words, and stops at the last letter.
     CHECK(layout.underlines[0].rect.x + layout.underlines[0].rect.width ==
           doctest::Approx(layout.underlines[1].rect.x));
+}
+
+// ============================================================================================
+// The RichText control over the formatter.
+// ============================================================================================
+
+TEST_CASE("rich text: measures wrapped at its width and draws every run")
+{
+    RobotoService fonts;
+    UIContext ctx{DefaultAllocator()};
+    ctx.SetFontService(&fonts.service);
+    auto root = MakeRef<RootView>(DefaultAllocator());
+    tests::Init(ctx, root.Get(), 400, 300);
+    auto text = MakeRef<RichText>(DefaultAllocator(),
+                                  StringView(u8"The [color=#ff0000]guests in red[/color] dance while [b]the band[/b] "
+                                             u8"plays on into the night and the masks turn"));
+    text->FontFamily.SetValue(String(u8"Roboto"));
+    root->AddView(text.Get());
+    tests::LayoutPass(ctx, root.Get());
+    // Measured loosely at a width: wrapped there, as tall as its lines.
+    text->Measure(BoxConstraints::Loose(160.0f, 1000.0f));
+    CHECK(text->Layout().lines.Size() >= 3u);
+    CHECK(text->MeasuredSize.x <= 160.0f + 0.01f);
+    CHECK(text->MeasuredSize.y == doctest::Approx(text->Layout().height));
+
+    foundation::vg::VGContext canvas;
+    ctx.DrawRootView(root.Get(), canvas);
+    CHECK(canvas.GetBatch().commands.Size() > 0u);
+}
+
+TEST_CASE("rich text: a click on a link raises OnLink with its id; a click elsewhere does not")
+{
+    RobotoService fonts;
+    UIContext ctx{DefaultAllocator()};
+    ctx.SetFontService(&fonts.service);
+    auto root = MakeRef<RootView>(DefaultAllocator());
+    tests::Init(ctx, root.Get(), 400, 300);
+    auto text = MakeRef<RichText>(DefaultAllocator(), StringView(u8"go [link=door]open the door[/link] now"));
+    text->FontFamily.SetValue(String(u8"Roboto"));
+    root->AddView(text.Get());
+    tests::LayoutPass(ctx, root.Get());
+    String heard;
+    text->OnLink.Add([&heard](RichText*, StringView id) { heard = String(id); });
+
+    REQUIRE_FALSE(text->Layout().links.IsEmpty());
+    const Rectangle link = text->Layout().links[0].rect;
+    const f32 x = text->Bounds.x + link.x + link.width * 0.5f;
+    const f32 y = text->Bounds.y + link.y + link.height * 0.5f;
+    CHECK(text->CursorAt(Float2{link.x + 1.0f, link.y + 1.0f}) == CursorType::Hand);
+    ctx.GetInputManager()->ProcessMouseDown(MouseButton::Left, x, y, 0);
+    ctx.GetInputManager()->ProcessMouseUp(MouseButton::Left, x, y);
+    CHECK(heard == StringView(u8"door"));
+
+    heard.Clear();
+    const f32 before = text->Bounds.x + 2.0f; // on "go"
+    ctx.GetInputManager()->ProcessMouseDown(MouseButton::Left, before, y, 0);
+    ctx.GetInputManager()->ProcessMouseUp(MouseButton::Left, before, y);
+    CHECK(heard.IsEmpty());
+}
+
+TEST_CASE("rich text: malformed markup is drawn as written, and runs set directly replace it")
+{
+    RobotoService fonts;
+    auto text = MakeRef<RichText>(DefaultAllocator(), StringView(u8"a [blink]b"));
+    CHECK(text->Document().PlainText() == StringView(u8"a [blink]b"));
+    CHECK(text->Document().diagnostics.Size() == 1u);
+
+    Array<TextRun> runs;
+    TextRun run;
+    run.text = String(u8"set");
+    run.bold = true;
+    runs.PushBack(run);
+    text->SetRuns(Move(runs));
+    REQUIRE(text->Document().runs.Size() == 1u);
+    CHECK(text->Document().runs[0].bold);
+    text->SetMarkup(u8"[i]again[/i]");
+    REQUIRE(text->Document().runs.Size() == 1u);
+    CHECK(text->Document().runs[0].italic);
 }

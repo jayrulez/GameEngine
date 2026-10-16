@@ -108,6 +108,7 @@ export import :checkbox;
 export import :label;
 export import :text_runs;
 export import :text_layout;
+export import :rich_text;
 export import :panel;
 export import :spacer;
 export import :separator;

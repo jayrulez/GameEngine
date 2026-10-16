@@ -132,6 +132,7 @@ target_sources(UI
             Controls/Label.cppm
             Text/TextRuns.cppm
             Text/TextLayout.cppm
+            Controls/RichText.cppm
             Controls/Panel.cppm
             Controls/Spacer.cppm
             Controls/Separator.cppm

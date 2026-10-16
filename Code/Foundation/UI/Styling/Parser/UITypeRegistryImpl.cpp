@@ -68,6 +68,7 @@ namespace foundation::ui
         // Controls.
         Register(u8"Panel", &Panel::StaticType());
         Register(u8"Label", &Label::StaticType());
+        Register(u8"RichText", &RichText::StaticType());
         Register(u8"Button", &Button::StaticType());
         Register(u8"IconButton", &IconButton::StaticType());
         Register(u8"ButtonBase", &ButtonBase::StaticType());

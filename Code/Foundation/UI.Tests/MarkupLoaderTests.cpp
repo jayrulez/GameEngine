@@ -10,6 +10,7 @@
 import foundation.core;
 import foundation.ui;
 import foundation.vg; // CornerRadii
+import foundation.fonts; // TextAlignment (a RichText's text-align)
 #include "TestHelpers.h"
 
 using namespace foundation::ui;
@@ -45,6 +46,24 @@ TEST_CASE("markup: an ImageView's source attribute names what it shows")
     ImageView* image = Cast<ImageView>(view.Get());
     REQUIRE(image != nullptr);
     CHECK(image->Source.Value() == u8"{0a1b}");
+}
+
+TEST_CASE("markup: a RichText takes its markup, font and alignment")
+{
+    EnsureInit();
+    auto view = MarkupLoader::LoadFromString(
+        DefaultAllocator(),
+        u8"<RichText markup=\"Your mark wears [color=#d04060]a rose gown[/color]\" font-size=\"20\" "
+        u8"text-align=\"center\" word-wrap=\"false\"/>");
+    REQUIRE(view);
+    RichText* text = Cast<RichText>(view.Get());
+    REQUIRE(text != nullptr);
+    CHECK(text->Markup.Value() == u8"Your mark wears [color=#d04060]a rose gown[/color]");
+    CHECK(text->FontSize.Value().Value() == doctest::Approx(20.0f));
+    CHECK(text->HAlign.Value() == foundation::fonts::TextAlignment::Center);
+    CHECK_FALSE(text->IsWordWrapped());
+    REQUIRE(text->Document().runs.Size() == 2u);
+    CHECK(text->Document().runs[1].color.HasValue());
 }
 
 TEST_CASE("markup: CreatesButton")

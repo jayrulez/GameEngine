@@ -131,6 +131,7 @@ export namespace experimental::gui
             if (enabled)
                 MeasureContent();
         }
+        [[nodiscard]] bool IsAutoMeasureContent() const noexcept { return m_autoMeasure; }
 
         // The viewport (padding-inset content box). Overlay scrollbars float over it, so the
         // viewport is the full box (content under a bar's right/bottom strip is covered).

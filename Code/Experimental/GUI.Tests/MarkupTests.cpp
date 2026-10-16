@@ -132,3 +132,35 @@ TEST_CASE("markup: {{name}} binds to the GUI's data model, two-way where the use
     CHECK(score->GetText() == SV(u8"Score: 7 of 10"));
     CHECK(volume->GetText() == SV(u8"0.25"));
 }
+
+TEST_CASE("markup: widget properties reflected with CSS names are markup attributes")
+{
+    auto tree = Load(u8R"(
+        <LinearLayout orientation="vertical">
+            <TextField placeholder="Your name" max-length="12" tooltip="Who are you?"/>
+            <GridLayout columns="3" spacing="6"/>
+            <ScrollView auto-measure="true"/>
+            <ComboBox items="Apple | Banana|Cherry"/>
+            <ListBox items="One|Two"/>
+            <Window title="Tools"/>
+        </LinearLayout>
+    )");
+    REQUIRE(tree.Get() != nullptr);
+    REQUIRE(tree->ChildCount() == 6u);
+    auto* field = core::Cast<TextField>(tree->GetChildAt(0));
+    REQUIRE(field != nullptr);
+    CHECK(field->GetPlaceholder() == SV(u8"Your name"));
+    CHECK(field->GetMaxLength() == 12u); // a whole number, converted from the attribute's text
+    CHECK(field->GetTooltipText() == SV(u8"Who are you?"));
+    auto* grid = core::Cast<GridLayout>(tree->GetChildAt(1));
+    REQUIRE(grid != nullptr);
+    CHECK(grid->GetColumns() == 3u);
+    CHECK(grid->GetVerticalSpacing() == doctest::Approx(6.0f));
+    CHECK(core::Cast<ScrollView>(tree->GetChildAt(2))->IsAutoMeasureContent());
+    auto* combo = core::Cast<ComboBox>(tree->GetChildAt(3)); // creatable by tag now
+    REQUIRE(combo != nullptr);
+    REQUIRE(combo->ItemCount() == 3u);
+    CHECK(combo->GetItemsText() == core::String(u8"Apple|Banana|Cherry"));
+    CHECK(core::Cast<ListBox>(tree->GetChildAt(4))->GetItem(1) == SV(u8"Two"));
+    CHECK(core::Cast<Window>(tree->GetChildAt(5))->GetTitle() == SV(u8"Tools"));
+}

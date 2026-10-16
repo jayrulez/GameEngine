@@ -426,6 +426,7 @@ namespace experimental::gui
                 &TextField::StaticType(),    &LinearLayout::StaticType(), &GridLayout::StaticType(),
                 &RelativeLayout::StaticType(), &FlexLayout::StaticType(), &ScrollView::StaticType(),
                 &Image::StaticType(),        &ListBox::StaticType(),      &Window::StaticType(),
+                &ComboBox::StaticType(),
             };
             for (const TypeInfo* type : kLabElements)
                 (void)ElementTypes::Register(*type);
@@ -499,6 +500,7 @@ namespace experimental::gui
     REFLECT_MEMBERS(UIWidget, "rtti::gui")
     {
         builder.AccessorProperty<&UIWidget::GetId, &UIWidget::SetId>("id");
+        builder.AccessorProperty<&UIWidget::GetTooltipText, &UIWidget::SetTooltip>("tooltip").PropAttribute("css", core::String(u8"tooltip"));
         builder.Method<&UIWidget::AddClass>("addClass");
         builder.Method<&UIWidget::RemoveClass>("removeClass");
         builder.Method<&UIWidget::HasClass>("hasClass");
@@ -551,6 +553,8 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(TextField, "rtti::gui")
     {
+        builder.AccessorProperty<&TextField::GetPlaceholder, &TextField::SetPlaceholder>("placeholder").PropAttribute("css", core::String(u8"placeholder"));
+        builder.AccessorProperty<&TextField::GetMaxLength, &TextField::SetMaxLength>("maxLength").PropAttribute("css", core::String(u8"max-length"));
         builder.AccessorProperty<&TextField::GetText, &TextField::SetText>("text")
             .PropAttribute("twoWay", true); // the user changes it: a binding may write it back
         builder.Method<&ElementOf<TextField>, TextField, Node>("of");
@@ -565,6 +569,8 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(GridLayout, "rtti::gui")
     {
+        builder.AccessorProperty<&GridLayout::GetColumns, &GridLayout::SetColumns>("columns").PropAttribute("css", core::String(u8"columns"));
+        builder.AccessorProperty<&GridLayout::GetHorizontalSpacing, &GridLayout::SetUniformSpacing>("spacing").PropAttribute("css", core::String(u8"spacing"));
         builder.Method<&ElementOf<GridLayout>, GridLayout, Node>("of");
         builder.Creator();
     }
@@ -583,6 +589,7 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(ScrollView, "rtti::gui")
     {
+        builder.AccessorProperty<&ScrollView::IsAutoMeasureContent, &ScrollView::SetAutoMeasureContent>("autoMeasure").PropAttribute("css", core::String(u8"auto-measure"));
         builder.Method<&ElementOf<ScrollView>, ScrollView, Node>("of");
         builder.Creator();
     }
@@ -595,12 +602,21 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(ListBox, "rtti::gui")
     {
+        builder.AccessorProperty<&ListBox::GetItemsText, &ListBox::SetItemsText>("items").PropAttribute("css", core::String(u8"items"));
         builder.Method<&ElementOf<ListBox>, ListBox, Node>("of");
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(ComboBox, "rtti::gui")
+    {
+        builder.AccessorProperty<&ComboBox::GetItemsText, &ComboBox::SetItemsText>("items").PropAttribute("css", core::String(u8"items"));
+        builder.Method<&ElementOf<ComboBox>, ComboBox, Node>("of");
         builder.Creator();
     }
 
     REFLECT_MEMBERS(Window, "rtti::gui")
     {
+        builder.AccessorProperty<&Window::GetTitle, &Window::SetTitle>("title").PropAttribute("css", core::String(u8"title"));
         builder.Method<&ElementOf<Window>, Window, Node>("of");
         builder.Creator();
     }

@@ -118,6 +118,7 @@ export namespace experimental::gui
         [[nodiscard]] Node* GetContent() const noexcept { return m_contentHost.Get(); }
 
         void SetTitle(core::StringView text) { m_title->SetText(text); }
+        [[nodiscard]] core::StringView GetTitle() const { return m_title->GetText(); }
         void SetFont(fonts::CachedFont* font) { m_title->SetFont(font); }
         void SetMinSize(core::Float2 size) { m_minSize = size; }
         void SetTitleBarHeight(f32 height)

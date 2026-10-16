@@ -111,6 +111,7 @@ export namespace experimental::gui
                 core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_gripColor));
             m_resizeGrip->OnDrag = [self](core::Float2 d) { self->ResizeBy(d); };
             m_resizeGrip->OnPressed = [self]() { self->ToFront(); };
+            m_resizeGrip->SetCursor(Cursor::NwseResize);
             AddChild(m_resizeGrip.Get());
         }
 

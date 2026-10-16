@@ -473,6 +473,8 @@ namespace experimental::gui
         builder.AccessorProperty<&Node::GetDefaultFocusId, &Node::SetDefaultFocusId>("navDefault").PropAttribute("css", core::String(u8"nav-default"));
         builder.AccessorProperty<&Node::GetCommand, &Node::SetCommand>("command").PropAttribute("css", core::String(u8"command"));
         builder.AccessorProperty<&Node::GetKeyContext, &Node::SetKeyContext>("keyContext").PropAttribute("css", core::String(u8"key-context"));
+        builder.AccessorProperty<&Node::GetPointerEvents, &Node::SetPointerEvents>("pointerEvents").PropAttribute("css", core::String(u8"pointer-events"));
+        builder.AccessorProperty<&Node::GetCursorName, &Node::SetCursorName>("cursor").PropAttribute("css", core::String(u8"cursor"));
         builder.Method<&Node::AddElement, Node>("add");
         builder.Method<&Node::FindElement, Node>("find");
         builder.Method<&Node::ParentElement, Node>("parent");

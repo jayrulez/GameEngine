@@ -49,6 +49,24 @@ export namespace experimental::gui
         // per-app wiring is needed. Pass nullptr to disable the feature.
         void SetTextInputTarget(shell::IWindow* window) noexcept { m_textInputTarget = window; }
 
+        // The mouse whose cursor follows the GUI's (CSS `cursor` on the node under the pointer),
+        // reconciled after each Dispatch()/PumpFromSurface(). Pass nullptr to leave the cursor alone.
+        void SetCursorTarget(shell::IMouse* mouse) noexcept
+        {
+            m_cursorTarget = mouse;
+            m_shownCursor = shell::CursorType::Count; // apply on the next sync
+        }
+        void SyncCursor()
+        {
+            if (m_cursorTarget == nullptr || m_dispatcher == nullptr)
+                return;
+            const shell::CursorType cursor = MapCursor(m_dispatcher->GetCursor());
+            if (cursor == m_shownCursor)
+                return;
+            m_shownCursor = cursor;
+            m_cursorTarget->SetCursor(cursor);
+        }
+
         // Reconcile the target window's text-input state with the focused node's wish. Called
         // automatically from Dispatch()/PumpFromSurface(); exposed for apps that drive focus
         // by other means.
@@ -63,10 +81,11 @@ export namespace experimental::gui
                 m_textInputTarget->StopTextInput();
         }
 
-        // Translate one platform input event into a dispatcher injection. Returns true if the
-        // event was routed to the GUI, false if it was ignored (touch, an unmapped button).
-        // Reconciles the text-input target afterwards, since a routed event (a click, a Tab)
-        // can change focus.
+        // Translate one platform input event into a dispatcher injection. Returns true if the GUI
+        // used it (a handler took it, or the pointer is over a node that takes it), so a game host
+        // leaves it alone; false if the GUI did not (or the event is not routed: touch, an
+        // unmapped button). Reconciles text input and the cursor afterwards, since a routed event
+        // (a click, a Tab) can change focus and what is under the pointer.
         bool Dispatch(const shell::InputEvent& event)
         {
             if (m_dispatcher == nullptr)
@@ -75,30 +94,29 @@ export namespace experimental::gui
             switch (event.kind)
             {
             case shell::InputEventKind::MouseMove:
-                m_dispatcher->InjectMouseMove(ToContent(core::Float2{event.x, event.y}));
+                routed = m_dispatcher->InjectMouseMove(ToContent(core::Float2{event.x, event.y}));
                 break;
             case shell::InputEventKind::MouseButtonDown:
-                m_dispatcher->InjectMouseDown(ToContent(core::Float2{event.x, event.y}),
-                                              MapButton(event.button),
-                                              MapModifiers(event.modifiers));
+                routed = m_dispatcher->InjectMouseDown(ToContent(core::Float2{event.x, event.y}),
+                                                       MapButton(event.button), MapModifiers(event.modifiers));
                 break;
             case shell::InputEventKind::MouseButtonUp:
-                m_dispatcher->InjectMouseUp(ToContent(core::Float2{event.x, event.y}),
-                                            MapButton(event.button), MapModifiers(event.modifiers));
+                routed = m_dispatcher->InjectMouseUp(ToContent(core::Float2{event.x, event.y}),
+                                                     MapButton(event.button), MapModifiers(event.modifiers));
                 break;
             case shell::InputEventKind::MouseWheel:
                 // For wheel, x/y is the scroll delta; position is the last known cursor spot.
-                m_dispatcher->InjectMouseWheel(m_dispatcher->GetMousePosition(),
-                                               core::Float2{event.x, event.y});
+                routed = m_dispatcher->InjectMouseWheel(m_dispatcher->GetMousePosition(),
+                                                        core::Float2{event.x, event.y});
                 break;
             case shell::InputEventKind::KeyDown:
-                m_dispatcher->InjectKeyDown(MapKey(event.key), MapModifiers(event.modifiers));
+                routed = m_dispatcher->InjectKeyDown(MapKey(event.key), MapModifiers(event.modifiers));
                 break;
             case shell::InputEventKind::KeyUp:
-                m_dispatcher->InjectKeyUp(MapKey(event.key), MapModifiers(event.modifiers));
+                routed = m_dispatcher->InjectKeyUp(MapKey(event.key), MapModifiers(event.modifiers));
                 break;
             case shell::InputEventKind::TextInput:
-                m_dispatcher->InjectText(core::StringView(event.text));
+                routed = m_dispatcher->InjectText(core::StringView(event.text));
                 break;
             case shell::InputEventKind::GamepadButtonDown:
             case shell::InputEventKind::GamepadButtonUp:
@@ -112,6 +130,7 @@ export namespace experimental::gui
                 break;
             }
             SyncTextInput();
+            SyncCursor();
             return routed;
         }
 
@@ -152,6 +171,13 @@ export namespace experimental::gui
                 m_dispatcher->InjectMouseWheel(position, core::Float2{scrollX, scrollY});
 
             SyncTextInput(); // a click this frame may have focused (or blurred) an editable widget
+            SyncCursor();
+        }
+
+        /// Whether the pointer is over the GUI now (a node that takes it), for a host that polls.
+        [[nodiscard]] bool IsPointerOverGui() const
+        {
+            return m_dispatcher != nullptr && m_dispatcher->IsPointerOver(m_dispatcher->GetMousePosition());
         }
 
     private:
@@ -163,6 +189,29 @@ export namespace experimental::gui
             [[maybe_unused]] const bool inside =
                 m_fit.ToContent(windowPos, out); // out set regardless
             return out;
+        }
+
+        // The GUI's cursor as the shell has it; the shell has no grab cursors or help, so those take
+        // the nearest it has.
+        [[nodiscard]] static shell::CursorType MapCursor(Cursor cursor) noexcept
+        {
+            switch (cursor)
+            {
+            case Cursor::Pointer: return shell::CursorType::Pointer;
+            case Cursor::Text: return shell::CursorType::Text;
+            case Cursor::Move:
+            case Cursor::Grab:
+            case Cursor::Grabbing: return shell::CursorType::Move;
+            case Cursor::NotAllowed: return shell::CursorType::NotAllowed;
+            case Cursor::Wait: return shell::CursorType::Wait;
+            case Cursor::Progress: return shell::CursorType::Progress;
+            case Cursor::Crosshair: return shell::CursorType::Crosshair;
+            case Cursor::EwResize: return shell::CursorType::ResizeEW;
+            case Cursor::NsResize: return shell::CursorType::ResizeNS;
+            case Cursor::NwseResize: return shell::CursorType::ResizeNWSE;
+            case Cursor::NeswResize: return shell::CursorType::ResizeNESW;
+            default: return shell::CursorType::Default;
+            }
         }
 
         // shell::MouseButton order is Left/Middle/Right - map explicitly, not by value.
@@ -348,6 +397,8 @@ export namespace experimental::gui
         EventDispatcher* m_dispatcher;
         shell::IWindow* m_textInputTarget =
             nullptr; // window whose IME follows GUI focus (optional)
+        shell::IMouse* m_cursorTarget = nullptr; // mouse whose cursor follows the GUI's (optional)
+        shell::CursorType m_shownCursor = shell::CursorType::Count; // last applied (Count: none yet)
         core::ContentFit m_fit{};
         bool m_hasFit = false;
     };

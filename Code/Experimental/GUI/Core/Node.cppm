@@ -389,6 +389,14 @@ export namespace experimental::gui
         // (a title-bar caption, an image over a draggable area). Children are still hit-tested.
         void SetHitTestVisible(bool visible) noexcept { m_hitTestVisible = visible; }
         [[nodiscard]] bool IsHitTestVisible() const noexcept { return m_hitTestVisible; }
+        /// CSS `pointer-events`: `none` is SetHitTestVisible(false), `auto` the default.
+        [[nodiscard]] core::String GetPointerEvents() const { return core::String(m_hitTestVisible ? u8"auto" : u8"none"); }
+        void SetPointerEvents(const core::String& value) { SetHitTestVisible(value.AsView() != core::StringView(u8"none")); }
+        /// The pointer's look over this node (CSS `cursor`); Auto takes its parent's.
+        void SetCursor(Cursor cursor) noexcept { m_cursor = cursor; }
+        [[nodiscard]] Cursor GetCursor() const noexcept { return m_cursor; }
+        [[nodiscard]] core::String GetCursorName() const { return core::String(CursorName(m_cursor)); }
+        void SetCursorName(const core::String& name) { m_cursor = CursorNamed(name.AsView()); }
 
         [[nodiscard]] virtual bool PointInside(core::Float2 worldPoint) const
         {
@@ -1268,6 +1276,7 @@ export namespace experimental::gui
         // sees :event_dispatcher).
         void NotifyRemovingChild(Node& child);
 
+        Cursor m_cursor = Cursor::Auto;
         bool m_hovered = false; // on the dispatcher's hover path
         bool m_pressed = false; // on its press path
         Node* m_parent = nullptr;       // non-owning back-pointer

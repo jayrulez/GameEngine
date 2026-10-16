@@ -16,6 +16,7 @@ export module foundation.fonts:cluster_text_shaper;
 import foundation.core;
 import :types;
 import :interfaces;
+import :text_util; // DecodeCodepoint
 
 using namespace foundation::core;
 
@@ -23,6 +24,89 @@ export namespace foundation::fonts
 {
     class ClusterTextShaper : public ITextShaper
     {
+    protected:
+        /// Characters [start, end) shaped in one font of the request's list, and their UTF-8 bytes.
+        struct FontRun
+        {
+            usize start = 0, end = 0;
+            usize byteStart = 0, byteEnd = 0;
+            u8 font = 0;
+        };
+
+        /// The text's codepoints, and each one's byte offset (with one more: the text's size).
+        static void DecodeWithOffsets(StringView text, Array<u32>& codepoints, Array<usize>& byteOffsets)
+        {
+            codepoints.Clear();
+            byteOffsets.Clear();
+            usize i = 0;
+            while (i < text.Size())
+            {
+                byteOffsets.PushBack(i);
+                codepoints.PushBack(DecodeCodepoint(text, i));
+            }
+            byteOffsets.PushBack(text.Size());
+        }
+
+        /// Runs by font: a character takes the first font of the list that has its glyph (the list
+        /// is in order of preference); a neutral one (a space, an ASCII digit or punctuation) stays
+        /// in the current run's font when that has it, so runs do not split at spaces; one no font
+        /// has stays in the current run.
+        static void ItemizeByFont(Span<IFont* const> fonts, const Array<u32>& codepoints,
+                                  const Array<usize>& byteOffsets, Array<FontRun>& runs)
+        {
+            runs.Clear();
+            if (codepoints.IsEmpty() || fonts.IsEmpty())
+                return;
+            const auto has = [&](usize font, u32 cp)
+            { return fonts[font] != nullptr && fonts[font]->HasGlyph(static_cast<i32>(cp)); };
+            const auto neutral = [](u32 cp)
+            { return cp == U' ' || cp == U'\t' || cp == 0xA0 || (cp >= 0x21 && cp <= 0x40) || (cp >= 0x5B && cp <= 0x60) ||
+                     (cp >= 0x7B && cp <= 0x7E); };
+            FontRun run;
+            for (usize i = 0; i < codepoints.Size(); ++i)
+            {
+                usize font = run.font;
+                if (i == 0 || !neutral(codepoints[i]) || !has(font, codepoints[i]))
+                {
+                    for (usize f = 0; f < fonts.Size() && f < 256; ++f)
+                    {
+                        if (has(f, codepoints[i]))
+                        {
+                            font = f;
+                            break;
+                        }
+                    }
+                }
+                if (i == 0)
+                {
+                    run.font = static_cast<u8>(font);
+                }
+                else if (font != run.font)
+                {
+                    run.end = i;
+                    run.byteEnd = byteOffsets[i];
+                    runs.PushBack(run);
+                    run = FontRun{};
+                    run.start = i;
+                    run.byteStart = byteOffsets[i];
+                    run.font = static_cast<u8>(font);
+                }
+            }
+            run.end = codepoints.Size();
+            run.byteEnd = byteOffsets[codepoints.Size()];
+            runs.PushBack(run);
+        }
+
+        /// Lay glyphs laid out left to right from `startX` out right to left over the same width,
+        /// in drawing order (a right-to-left request to a shaper that only goes left to right).
+        static void MirrorLine(Array<GlyphPosition>& glyphs, usize first, f32 startX, f32 width)
+        {
+            for (usize i = first; i < glyphs.Size(); ++i)
+                glyphs[i].x = startX + width - (glyphs[i].x - startX) - glyphs[i].advance;
+            for (usize a = first, b = glyphs.Size(); a + 1 < b; ++a, --b)
+                Swap(glyphs[a], glyphs[b - 1]);
+        }
+
     public:
         // === UI support ===
         // All in characters through clusters (GlyphPosition::cluster), so they hold for any

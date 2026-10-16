@@ -274,3 +274,113 @@ TEST_CASE("harfbuzz: through a font service, every glyph of shaped text has its 
     }
     HarfBuzzShaping::Uninstall();
 }
+
+// ============================================================================================
+// The widened request: a font list with fallback, a direction, a script, a language.
+// ============================================================================================
+
+TEST_CASE("harfbuzz: a character no font before has takes the next font in the list")
+{
+    IFont* roboto = Load("/roboto/Roboto-Regular.ttf");
+    IFont* dejavu = Load("/dejavu/DejaVuSansMono.ttf");
+    REQUIRE(roboto != nullptr);
+    REQUIRE(dejavu != nullptr);
+    IFont* const fonts[2] = {roboto, dejavu};
+    Shaper s;
+    ShapeRequest request;
+    request.text = u8"a \u0633\u0644\u0627\u0645 b"; // Roboto has no Arabic
+    request.fonts = Span<IFont* const>(fonts, 2);
+    Array<GlyphPosition> glyphs;
+    REQUIRE(s.shaper->Shape(request, glyphs).HasValue());
+    // a and the space after it in Roboto; the Arabic in DejaVu, with the space after it (a
+    // character keeps the run's font when that font has it); b in Roboto again.
+    usize arabic = 0;
+    for (const GlyphPosition& g : glyphs)
+    {
+        const bool inDejaVu = g.cluster >= 2 && g.cluster <= 6;
+        CHECK(g.font == (inDejaVu ? 1 : 0));
+        arabic += (g.cluster >= 2 && g.cluster <= 5) ? 1u : 0u;
+    }
+    CHECK(arabic == 3u); // joined in DejaVu: three glyphs for four characters
+    // Runs follow on, left to right; the Arabic run reads right to left inside itself.
+    for (usize i = 1; i < glyphs.Size(); ++i)
+        CHECK(glyphs[i].x >= glyphs[i - 1].x);
+    CHECK(glyphs.Back().cluster == 7); // b, last
+
+    DefaultAllocator().Delete(dejavu);
+    DefaultAllocator().Delete(roboto);
+}
+
+TEST_CASE("harfbuzz: a right-to-left request reads right to left, and a language picks its forms")
+{
+    IFont* roboto = Load("/roboto/Roboto-Regular.ttf");
+    IFont* dejavu = Load("/dejavu/DejaVuSansMono.ttf");
+    REQUIRE(roboto != nullptr);
+    REQUIRE(dejavu != nullptr);
+    Shaper s;
+    {
+        IFont* const fonts[1] = {roboto};
+        ShapeRequest request;
+        request.text = u8"abc";
+        request.fonts = Span<IFont* const>(fonts, 1);
+        request.direction = TextDirection::RightToLeft;
+        Array<GlyphPosition> glyphs;
+        REQUIRE(s.shaper->Shape(request, glyphs).HasValue());
+        REQUIRE(glyphs.Size() == 3u);
+        CHECK(glyphs[0].cluster == 2); // c drawn first, leftmost
+        CHECK(glyphs[2].cluster == 0);
+    }
+    {
+        // DejaVu draws a Serbian be differently from the Russian one.
+        IFont* const fonts[1] = {dejavu};
+        ShapeRequest request;
+        request.text = u8"\u0431";
+        request.fonts = Span<IFont* const>(fonts, 1);
+        Array<GlyphPosition> plain;
+        REQUIRE(s.shaper->Shape(request, plain).HasValue());
+        request.language = u8"sr";
+        Array<GlyphPosition> serbian;
+        REQUIRE(s.shaper->Shape(request, serbian).HasValue());
+        REQUIRE(plain.Size() == 1u);
+        REQUIRE(serbian.Size() == 1u);
+        CHECK(serbian[0].glyphId != plain[0].glyphId);
+        CHECK(plain[0].glyphId == dejavu->GetGlyphInfo(0x0431).glyphIndex);
+        // A script given outright is used for the whole text.
+        request.language = {};
+        request.script = ScriptTag("Cyrl");
+        Array<GlyphPosition> cyrillic;
+        REQUIRE(s.shaper->Shape(request, cyrillic).HasValue());
+        CHECK(cyrillic.Size() == 1u);
+    }
+    DefaultAllocator().Delete(dejavu);
+    DefaultAllocator().Delete(roboto);
+}
+
+TEST_CASE("harfbuzz: the basic shaper takes the same request: fallback by font, and a mirrored line")
+{
+    IFont* roboto = Load("/roboto/Roboto-Regular.ttf");
+    IFont* dejavu = Load("/dejavu/DejaVuSansMono.ttf");
+    REQUIRE(roboto != nullptr);
+    REQUIRE(dejavu != nullptr);
+    IFont* const fonts[2] = {roboto, dejavu};
+    TrueTypeTextShaper basic;
+    ShapeRequest request;
+    request.text = u8"a\u0633b";
+    request.fonts = Span<IFont* const>(fonts, 2);
+    Array<GlyphPosition> glyphs;
+    REQUIRE(basic.Shape(request, glyphs).HasValue());
+    REQUIRE(glyphs.Size() == 3u);
+    CHECK(glyphs[0].font == 0);
+    CHECK(glyphs[1].font == 1);
+    CHECK(glyphs[1].cluster == 1);
+    CHECK(glyphs[2].font == 0);
+    request.direction = TextDirection::RightToLeft;
+    Array<GlyphPosition> mirrored;
+    REQUIRE(basic.Shape(request, mirrored).HasValue());
+    REQUIRE(mirrored.Size() == 3u);
+    CHECK(mirrored[0].cluster == 2); // b leftmost
+    CHECK(mirrored[0].x == doctest::Approx(0.0f));
+    CHECK(mirrored[2].x + mirrored[2].advance == doctest::Approx(glyphs[2].x + glyphs[2].advance));
+    DefaultAllocator().Delete(dejavu);
+    DefaultAllocator().Delete(roboto);
+}

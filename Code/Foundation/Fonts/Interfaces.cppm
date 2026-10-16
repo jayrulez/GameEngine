@@ -76,11 +76,40 @@ export namespace foundation::fonts
         [[nodiscard]] virtual f32 DistanceFieldRange() const { return 0.0f; }
     };
 
+    /// What to shape: text in a list of fonts (a character takes the first font that has its glyph;
+    /// one no font has takes the first), read in a direction, as a script and a language. The
+    /// shaper splits the text into runs where the font or the script changes.
+    struct ShapeRequest
+    {
+        StringView text;
+        Span<IFont* const> fonts;
+        TextDirection direction = TextDirection::Auto;
+        /// An ISO 15924 script tag ('Arab', 'Latn', ...), 0 to find each run's from its characters.
+        u32 script = 0;
+        /// A BCP 47 language ("sr", "ar"), empty for none: a font may draw some characters as that
+        /// language writes them (a Serbian б).
+        StringView language;
+        f32 startX = 0.0f;
+        f32 startY = 0.0f;
+    };
+
+    /// ISO 15924 script tag from its four letters ("Arab" -> 'Arab').
+    [[nodiscard]] constexpr u32 ScriptTag(const char (&letters)[5]) noexcept
+    {
+        return (static_cast<u32>(static_cast<u8>(letters[0])) << 24) |
+               (static_cast<u32>(static_cast<u8>(letters[1])) << 16) |
+               (static_cast<u32>(static_cast<u8>(letters[2])) << 8) | static_cast<u32>(static_cast<u8>(letters[3]));
+    }
+
     // Text shaping/layout + UI helpers.
     class ITextShaper
     {
     public:
         virtual ~ITextShaper() = default;
+
+        /// Shape a request on one line: glyphs in drawing order from (startX, startY), each with
+        /// its cluster, its glyph id and the font of the list it belongs to. Returns the advance.
+        [[nodiscard]] virtual Result<f32> Shape(const ShapeRequest& request, Array<GlyphPosition>& outPositions) = 0;
 
         [[nodiscard]] virtual Result<f32> ShapeText(IFont& font, StringView text,
                                                     Array<GlyphPosition>& outPositions) = 0;

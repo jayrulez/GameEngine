@@ -44,15 +44,83 @@ namespace foundation::fonts
             [[nodiscard]] Result<f32> ShapeText(IFont& font, StringView text, f32 startX, f32 startY,
                                                 Array<GlyphPosition>& outPositions) override
             {
-                hb_font_t* hbFont = FontFor(font);
-                if (hbFont == nullptr)
-                {
-                    return m_fallback.ShapeText(font, text, startX, startY, outPositions);
-                }
+                IFont* const fonts[1] = {&font};
+                ShapeRequest request;
+                request.text = text;
+                request.fonts = Span<IFont* const>(fonts, 1);
+                request.startX = startX;
+                request.startY = startY;
+                return Shape(request, outPositions);
+            }
+
+            // Runs by font, then by script within each (a character of no particular script, a
+            // space or a digit, joins the run around it), each shaped with its direction, script
+            // and language; runs are laid one after the other (reordering runs is bidi's).
+            [[nodiscard]] Result<f32> Shape(const ShapeRequest& request, Array<GlyphPosition>& outPositions) override
+            {
                 outPositions.Clear();
                 Array<u32> codepoints;
-                Decode(text, codepoints);
-                return ShapeCodepoints(font, hbFont, codepoints, 0, startX, startY, outPositions);
+                Array<usize> bytes;
+                DecodeWithOffsets(request.text, codepoints, bytes);
+                Array<FontRun> runs;
+                ItemizeByFont(request.fonts, codepoints, bytes, runs);
+                const hb_language_t language =
+                    request.language.IsEmpty()
+                        ? HB_LANGUAGE_INVALID
+                        : hb_language_from_string(reinterpret_cast<const char*>(request.language.Data()),
+                                                  static_cast<int>(request.language.Size()));
+                f32 x = request.startX;
+                Array<GlyphPosition> fallback;
+                for (const FontRun& r : runs)
+                {
+                    IFont* font = request.fonts[r.font];
+                    if (font == nullptr)
+                        continue;
+                    hb_font_t* hbFont = FontFor(*font);
+                    const usize first = outPositions.Size();
+                    if (hbFont == nullptr)
+                    {
+                        // No file to read: the basic shaper, run by run.
+                        const Result<f32> advance = m_fallback.ShapeText(
+                            *font, request.text.SubStr(r.byteStart, r.byteEnd - r.byteStart), x, request.startY,
+                            fallback);
+                        if (advance.HasValue())
+                        {
+                            for (GlyphPosition g : fallback)
+                            {
+                                g.cluster += static_cast<i32>(r.start);
+                                outPositions.PushBack(g);
+                            }
+                            x += advance.Value();
+                        }
+                    }
+                    else
+                    {
+                        usize start = r.start;
+                        while (start < r.end)
+                        {
+                            hb_script_t script = HB_SCRIPT_INVALID;
+                            const usize end = request.script != 0 ? r.end : ScriptRunEnd(codepoints, start, r.end, script);
+                            if (request.script != 0)
+                                script = hb_script_from_iso15924_tag(request.script);
+                            Array<u32> run;
+                            for (usize i = start; i < end; ++i)
+                                run.PushBack(codepoints[i]);
+                            hb_direction_t direction = request.direction == TextDirection::LeftToRight   ? HB_DIRECTION_LTR
+                                                       : request.direction == TextDirection::RightToLeft ? HB_DIRECTION_RTL
+                                                                                                         : HB_DIRECTION_INVALID;
+                            const Result<f32> advance =
+                                ShapeCodepoints(*font, hbFont, run, static_cast<i32>(start), x, request.startY,
+                                                outPositions, script, direction, language);
+                            if (advance.HasValue())
+                                x += advance.Value();
+                            start = end;
+                        }
+                    }
+                    for (usize i = first; i < outPositions.Size(); ++i)
+                        outPositions[i].font = r.font;
+                }
+                return x - request.startX;
             }
 
             [[nodiscard]] Status ShapeTextWrapped(IFont& font, StringView text, f32 maxWidth,
@@ -87,7 +155,8 @@ namespace foundation::fonts
                             run.PushBack(U' '); // keep the character count; a CR draws as a space
                     }
                     paragraph.Clear();
-                    (void)ShapeCodepoints(font, hbFont, run, static_cast<i32>(start), 0.0f, 0.0f, paragraph);
+                    (void)ShapeCodepoints(font, hbFont, run, static_cast<i32>(start), 0.0f, 0.0f, paragraph,
+                                          HB_SCRIPT_INVALID, HB_DIRECTION_INVALID, HB_LANGUAGE_INVALID);
                     y = WrapParagraph(paragraph, codepoints, maxWidth, lineHeight, y, outPositions);
                     if (end >= codepoints.Size())
                         break;
@@ -145,8 +214,10 @@ namespace foundation::fonts
         private:
             // Shape `codepoints` (the characters from `clusterBase` on) and append their glyphs at
             // (startX, startY); the advance comes back.
+            // Script, direction and language left invalid are guessed from the characters.
             Result<f32> ShapeCodepoints(IFont& font, hb_font_t* hbFont, const Array<u32>& codepoints,
-                                        i32 clusterBase, f32 startX, f32 startY, Array<GlyphPosition>& out)
+                                        i32 clusterBase, f32 startX, f32 startY, Array<GlyphPosition>& out,
+                                        hb_script_t script, hb_direction_t direction, hb_language_t language)
             {
                 if (codepoints.IsEmpty())
                     return 0.0f;
@@ -154,7 +225,15 @@ namespace foundation::fonts
                 hb_buffer_set_cluster_level(buffer, HB_BUFFER_CLUSTER_LEVEL_MONOTONE_CHARACTERS);
                 hb_buffer_add_utf32(buffer, codepoints.Data(), static_cast<int>(codepoints.Size()), 0,
                                     static_cast<int>(codepoints.Size()));
-                hb_buffer_guess_segment_properties(buffer);
+                if (script != HB_SCRIPT_INVALID)
+                    hb_buffer_set_script(buffer, script);
+                if (direction == HB_DIRECTION_INVALID && script != HB_SCRIPT_INVALID)
+                    direction = hb_script_get_horizontal_direction(script);
+                if (direction != HB_DIRECTION_INVALID)
+                    hb_buffer_set_direction(buffer, direction);
+                if (language != HB_LANGUAGE_INVALID)
+                    hb_buffer_set_language(buffer, language);
+                hb_buffer_guess_segment_properties(buffer); // fills only what is still unset
                 hb_shape(hbFont, buffer, nullptr, 0);
 
                 unsigned int count = 0;
@@ -248,39 +327,67 @@ namespace foundation::fonts
 
             // The HarfBuzz font for `font`, made once per font file (a shaper serves one font);
             // null when the font has no file to read.
+            // The end of the script run starting at `start` (within [start, end)), and its script. A
+            // character of no particular script (common, inherited) belongs to the run it is in.
+            static usize ScriptRunEnd(const Array<u32>& codepoints, usize start, usize end, hb_script_t& outScript)
+            {
+                hb_unicode_funcs_t* unicode = hb_unicode_funcs_get_default();
+                outScript = HB_SCRIPT_INVALID;
+                for (usize i = start; i < end; ++i)
+                {
+                    const hb_script_t script = hb_unicode_script(unicode, codepoints[i]);
+                    if (script == HB_SCRIPT_COMMON || script == HB_SCRIPT_INHERITED || script == HB_SCRIPT_UNKNOWN)
+                        continue;
+                    if (outScript == HB_SCRIPT_INVALID)
+                        outScript = script;
+                    else if (script != outScript)
+                    {
+                        return i; // the new script starts a run (spaces before it stay behind)
+                    }
+                }
+                return end;
+            }
+
             hb_font_t* FontFor(const IFont& font)
             {
                 const Span<const u8> data = font.SourceData();
                 if (data.IsEmpty())
                     return nullptr;
-                if (m_hbFont != nullptr && m_data == data.Data() && m_size == data.Size())
-                    return m_hbFont;
-                Release();
+                for (const CachedHbFont& cached : m_fonts)
+                    if (cached.data == data.Data() && cached.size == data.Size())
+                        return cached.font;
                 hb_blob_t* blob = hb_blob_create(reinterpret_cast<const char*>(data.Data()),
                                                  static_cast<unsigned int>(data.Size()), HB_MEMORY_MODE_READONLY,
                                                  nullptr, nullptr);
                 hb_face_t* face = hb_face_create(blob, 0);
                 hb_blob_destroy(blob); // the face holds it
-                m_hbFont = hb_font_create(face); // scale = units per em: positions in font units
-                hb_face_destroy(face);           // the font holds it
-                m_data = data.Data();
-                m_size = data.Size();
-                return m_hbFont;
+                CachedHbFont cached;
+                cached.font = hb_font_create(face); // scale = units per em: positions in font units
+                hb_face_destroy(face);              // the font holds it
+                cached.data = data.Data();
+                cached.size = data.Size();
+                m_fonts.PushBack(cached);
+                return cached.font;
             }
 
             void Release()
             {
-                if (m_hbFont != nullptr)
-                    hb_font_destroy(m_hbFont);
-                m_hbFont = nullptr;
-                m_data = nullptr;
-                m_size = 0;
+                for (const CachedHbFont& cached : m_fonts)
+                    hb_font_destroy(cached.font);
+                m_fonts.Clear();
             }
 
+            // A HarfBuzz font per font file this shaper has shaped with (its own font, and any a
+            // request falls back to).
+            struct CachedHbFont
+            {
+                hb_font_t* font = nullptr;
+                const u8* data = nullptr; // identity of the file it reads (never dereferenced)
+                usize size = 0;
+            };
+
             TrueTypeTextShaper m_fallback;
-            hb_font_t* m_hbFont = nullptr;
-            const u8* m_data = nullptr; // identity of the file m_hbFont reads (never dereferenced)
-            usize m_size = 0;
+            Array<CachedHbFont> m_fonts;
         };
 
         bool& InstalledSlot()

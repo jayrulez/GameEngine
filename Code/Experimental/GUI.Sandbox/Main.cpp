@@ -168,6 +168,7 @@ public:
     void SetFrameStats(bool stats) { m_frameStats = stats; }
     void SetShowcase(bool showcase) { m_showcaseMode = showcase; }
     void SetShowcaseCall(StringView function) { m_showcaseCall = String(function); }
+    void SetShowcaseKeys(StringView keys) { m_showcaseKeys = String(keys); }
 
     GUISandbox()
     {
@@ -189,6 +190,7 @@ private:
     bool m_alwaysRedraw = false;
     bool m_showcaseMode = false;
     String m_showcaseCall; // a script function to call once the menu is up (a screenshot of another panel)
+    String m_showcaseKeys; // keystrokes to type into it, one every 15 frames (a screenshot of keyboard play)
     bool m_frameStats = false;
     f32 m_nextStatsTime = 1.0f;
     u64 m_frames = 0;      // frames the loop ran
@@ -1309,6 +1311,9 @@ void GUISandbox::OnRender()
             case shell::InputEventKind::KeyDown:
             case shell::InputEventKind::KeyUp:
             case shell::InputEventKind::TextInput:
+            case shell::InputEventKind::GamepadButtonDown: // the d-pad, the stick and the buttons (G7)
+            case shell::InputEventKind::GamepadButtonUp:
+            case shell::InputEventKind::GamepadAxis:
                 m_bridge->Dispatch(ev);
                 break;
             default:
@@ -1523,6 +1528,22 @@ void GUISandbox::UpdateShowcase()
         m_scriptWantsUpdate = true; // what it started may want ticks
     }
 
+    // --showcase-keys: the named keystrokes, typed one every 15 frames once the menu is up.
+    if (m_showcaseKeys.Size() != 0 && m_frames >= 10 && (m_frames - 10) % 15 == 0)
+    {
+        const Array<StringView> keys = gui::SplitTopLevel(m_showcaseKeys.AsView(), u8' ');
+        const usize index = static_cast<usize>((m_frames - 10) / 15);
+        if (index < keys.Size())
+            if (const Optional<gui::Keystroke> stroke = gui::ParseKeystroke(keys[index]); stroke.HasValue())
+            {
+                if (stroke.Value().Pad)
+                    m_root->GetEventDispatcher()->InjectPadButton(static_cast<gui::PadButton>(stroke.Value().Code));
+                else
+                    m_root->GetEventDispatcher()->InjectKeyDown(stroke.Value().Code, stroke.Value().Modifiers);
+                m_scriptWantsUpdate = true;
+            }
+    }
+
     // The script's update runs while it asks for more, and on a frame with input (a click may
     // have started something); an idle menu calls no script.
     const bool input = m_shell != nullptr && m_shell->Input() != nullptr && !m_shell->Input()->Events().IsEmpty();
@@ -1598,7 +1619,8 @@ int main(int argc, char** argv)
     // print, each second, how many of the frames drew. --showcase: the game menu (G6) in place of
     // the widget gallery; --showcase-call <function>: call one of its script's functions once the
     // menu has been up a few frames, as a click would (onSettings, onPlay, onQuit: a screenshot of
-    // another panel).
+    // another panel); --showcase-keys "<keys>": type keystrokes into it, one every 15 frames
+    // ("down down return", "pad-east": a screenshot of keyboard or gamepad play).
     for (int i = 1; i < argc; ++i)
     {
         const StringView arg(reinterpret_cast<const utf8char*>(argv[i]));
@@ -1612,6 +1634,8 @@ int main(int argc, char** argv)
             app.SetShowcase(true);
         else if (arg == StringView(u8"--showcase-call") && i + 1 < argc)
             app.SetShowcaseCall(StringView(reinterpret_cast<const utf8char*>(argv[++i])));
+        else if (arg == StringView(u8"--showcase-keys") && i + 1 < argc)
+            app.SetShowcaseKeys(StringView(reinterpret_cast<const utf8char*>(argv[++i])));
     }
     return app.Run(argc, argv);
 }

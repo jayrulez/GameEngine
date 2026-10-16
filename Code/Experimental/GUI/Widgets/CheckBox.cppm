@@ -93,7 +93,17 @@ export namespace experimental::gui
         void OnMouseClick(const MouseEvent& event) override
         {
             (void)event;
-            Toggle();
+            // Bound to a command, the command decides (its handler toggles its checked state, which
+            // comes back here); else the box toggles itself.
+            if (HasCommand())
+                (void)RunBoundCommand();
+            else
+                Toggle();
+        }
+        void OnBoundCommandState(bool available, bool checked) override
+        {
+            SetEnabled(available);
+            SetChecked(checked);
         }
 
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override

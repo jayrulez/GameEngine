@@ -334,6 +334,57 @@ namespace experimental::gui
         return !value.IsEmpty() && value.Get<bool>();
     }
 
+    namespace
+    {
+        SceneRoot* ScriptRoot()
+        {
+            foundation::script::IScriptContext* context = foundation::script::CurrentScriptContext();
+            const auto* binding =
+                context != nullptr ? static_cast<const GuiScriptBinding*>(context->GetService(kGuiScriptService)) : nullptr;
+            return binding != nullptr ? binding->root : nullptr;
+        }
+    }
+
+    void Gui::DefineCommand(StringView id, StringView label)
+    {
+        if (SceneRoot* root = ScriptRoot())
+            root->DefineCommand(id).SetLabel(label.Size() != 0 ? label : id);
+    }
+    void Gui::SetCommandEnabled(StringView id, bool enabled)
+    {
+        if (SceneRoot* root = ScriptRoot())
+            root->DefineCommand(id).SetEnabled(enabled);
+    }
+    void Gui::SetCommandChecked(StringView id, bool checked)
+    {
+        if (SceneRoot* root = ScriptRoot())
+            root->DefineCommand(id).SetChecked(checked);
+    }
+    bool Gui::IsCommandChecked(StringView id)
+    {
+        SceneRoot* root = ScriptRoot();
+        const Command* command = root != nullptr ? root->GetCommands().Find(id) : nullptr;
+        return command != nullptr && command->IsChecked();
+    }
+    bool Gui::RunCommand(StringView id)
+    {
+        SceneRoot* root = ScriptRoot();
+        return root != nullptr && root->RunCommand(id);
+    }
+
+    void Node::OnCommandScript(StringView id, RefPtr<foundation::script::IScriptDelegate> handler)
+    {
+        if (!handler)
+            return;
+        (void)OnCommand(id,
+                        [handler](CommandEvent& event)
+                        {
+                            Result<core::Variant> result = handler->Invoke(Span<core::Variant>{});
+                            const bool* goOn = result.HasValue() ? result.Value().TryGet<bool>() : nullptr;
+                            event.Propagate = goOn != nullptr && *goOn;
+                        });
+    }
+
     void Gui::Set(StringView name, const core::Variant& value)
     {
         if (DataModel* data = ScriptDataModel())
@@ -403,6 +454,7 @@ namespace experimental::gui
         builder.AccessorProperty<&Node::GetNavPrevious, &Node::SetNavPrevious>("navPrev").PropAttribute("css", core::String(u8"nav-prev"));
         builder.AccessorProperty<&Node::GetNavScopeName, &Node::SetNavScopeName>("navScope").PropAttribute("css", core::String(u8"nav-scope"));
         builder.AccessorProperty<&Node::GetDefaultFocusId, &Node::SetDefaultFocusId>("navDefault").PropAttribute("css", core::String(u8"nav-default"));
+        builder.AccessorProperty<&Node::GetCommand, &Node::SetCommand>("command").PropAttribute("css", core::String(u8"command"));
         builder.Method<&Node::AddElement, Node>("add");
         builder.Method<&Node::FindElement, Node>("find");
         builder.Method<&Node::ParentElement, Node>("parent");
@@ -411,6 +463,7 @@ namespace experimental::gui
         builder.Method<&Node::On>("on");
         builder.Method<&Node::BindScript>("bind");
         builder.Method<&Node::BindSceneData>("bindData");
+        builder.Method<&Node::OnCommandScript>("onCommand");
         builder.Method<&Node::Destroy>("destroy");
         builder.Method<&ElementOf<Node>, Node, Node>("of");
     }
@@ -542,5 +595,10 @@ namespace experimental::gui
         builder.Method<&Gui::GetText>("getText");
         builder.Method<&Gui::GetBool>("getBool");
         builder.Method<&Gui::Set>("set");
+        builder.Method<&Gui::DefineCommand>("defineCommand");
+        builder.Method<&Gui::SetCommandEnabled>("setCommandEnabled");
+        builder.Method<&Gui::SetCommandChecked>("setCommandChecked");
+        builder.Method<&Gui::IsCommandChecked>("isCommandChecked");
+        builder.Method<&Gui::RunCommand>("runCommand");
     }
 }

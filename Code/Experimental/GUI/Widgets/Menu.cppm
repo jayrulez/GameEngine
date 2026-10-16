@@ -179,6 +179,12 @@ export namespace experimental::gui
             m_checked = checked;
             Invalidate();
         } // no callback (init)
+        void OnBoundCommandState(bool available, bool checked) override
+        {
+            SetEnabled(available);
+            if (m_checkable)
+                SetCheckedSilently(checked);
+        }
         void SetOnToggled(core::Function<void(bool)> callback)
         {
             m_onToggled = core::Move(callback);
@@ -223,7 +229,9 @@ export namespace experimental::gui
         // Run the item: toggle (if checkable), fire the user's action, then close the chain.
         virtual void Activate()
         {
-            if (m_checkable)
+            if (HasCommand())
+                (void)RunBoundCommand(); // a bound command decides its own checked state (G7)
+            else if (m_checkable)
                 SetChecked(!m_checked);
             if (m_onPicked)
                 m_onPicked();

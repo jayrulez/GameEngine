@@ -208,6 +208,74 @@ namespace
     }
 }
 
+namespace
+{
+    // The command story (G7) both languages tell. The script defines "music" (label "Music"),
+    // handles it on the root by toggling its checked state, binds a CheckBox to it, and offers
+    // switchOff() (disables it) and runIt() (runs it, returning 1 when a handler ran).
+    void CheckCommands(GuiBed& bed)
+    {
+        REQUIRE(bed.errors.count == 0);
+        gui::CheckBox* box = Cast<gui::CheckBox>(bed.root->GetChildAt(0));
+        REQUIRE(box != nullptr);
+        const gui::Command* music = bed.root->GetCommands().Find(StringView(u8"music"));
+        REQUIRE(music != nullptr);
+        CHECK(music->GetLabel() == StringView(u8"Music"));
+        bed.Update();
+        CHECK(box->IsEnabled());
+        CHECK(bed.Number(u8"runIt") == doctest::Approx(1.0)); // the script's handler toggles it
+        bed.Update();
+        CHECK(box->IsChecked());
+        bed.Run(u8"switchOff");
+        bed.Update();
+        CHECK_FALSE(box->IsEnabled());
+        CHECK(bed.Number(u8"runIt") == doctest::Approx(0.0)); // disabled: nothing runs
+        CHECK(bed.errors.count == 0);
+    }
+}
+
+#ifdef OPTION_HAS_ANGELSCRIPT
+TEST_CASE("gui-script: AngelScript defines, handles and runs commands")
+{
+    RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    const Status loaded = bed.context->Load(
+        u8"funcdef bool CommandHandler();\n"
+        u8"bool toggleMusic() { gui::setCommandChecked(\"music\", !gui::isCommandChecked(\"music\")); return false; }\n"
+        u8"void main() {\n"
+        u8"  Node@ root = gui::root();\n"
+        u8"  gui::defineCommand(\"music\", \"Music\");\n"
+        u8"  root.onCommand(\"music\", CommandHandler(toggleMusic));\n"
+        u8"  Node@ box = root.add(\"CheckBox\");\n"
+        u8"  box.command = \"music\";\n"
+        u8"}\n"
+        u8"void switchOff() { gui::setCommandEnabled(\"music\", false); }\n"
+        u8"double runIt() { return gui::runCommand(\"music\") ? 1 : 0; }\n",
+        u8"main");
+    REQUIRE(loaded.IsOk());
+    CheckCommands(bed);
+}
+#endif
+
+#ifdef OPTION_HAS_LUAU
+TEST_CASE("gui-script: Luau defines, handles and runs commands")
+{
+    RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    const Status loaded = bed.context->Load(
+        u8"local root = gui.root()\n"
+        u8"gui.defineCommand(\"music\", \"Music\")\n"
+        u8"root:onCommand(\"music\", function() gui.setCommandChecked(\"music\", not gui.isCommandChecked(\"music\")); return false end)\n"
+        u8"local box = root:add(\"CheckBox\")\n"
+        u8"box.command = \"music\"\n"
+        u8"function switchOff() gui.setCommandEnabled(\"music\", false) end\n"
+        u8"function runIt() return gui.runCommand(\"music\") and 1 or 0 end\n",
+        u8"main");
+    REQUIRE(loaded.IsOk());
+    CheckCommands(bed);
+}
+#endif
+
 #ifdef OPTION_HAS_ANGELSCRIPT
 TEST_CASE("gui-script: AngelScript binds widgets to data and to each other")
 {

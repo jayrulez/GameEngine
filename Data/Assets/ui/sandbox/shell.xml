@@ -25,6 +25,7 @@
             <Button id="nav-motion" class="nav" text="Motion" command="page.motion"/>
             <Label class="nav-heading" text="BEHAVIOUR"/>
             <Button id="nav-binding" class="nav" text="Data binding" command="page.binding"/>
+            <Button id="nav-input" class="nav" text="Input" command="page.input"/>
             <Button id="nav-navigation" class="nav" text="Navigation and commands" command="page.navigation"/>
             <Label class="nav-heading" text="DEMO"/>
             <Button id="nav-game-menu" class="nav" text="Game menu" command="page.game-menu"/>

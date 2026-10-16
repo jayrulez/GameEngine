@@ -285,6 +285,18 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
 - **G3 Motion.** Every animatable property transitions, with real easings (`cubic-bezier`,
   `steps`, the named ones); `@keyframes` animate any property, not only opacity and colour. Tests:
   sampled curves against the formula.
+  As built on `vg` (29258e66f): easing (cubic-bezier solved for x, steps() with every jump
+  position, linear and the named curves, ease the default); interpolation over the typed values
+  (numbers, lengths of one unit, colours, shadow lists padded with transparent shadows, transform
+  lists of the same functions, origins, gradient layers of one shape; the rest switches halfway);
+  one StyleAnimation per moving widget, an action on its SceneRoot's clock holding the target and a
+  track per property (transitions retargeting from a running track; keyframes with per-stop
+  timing, implicit end keys, delay, iteration count, direction, fill mode), ended tracks returning
+  to the target or the property's initial value, the widget held weakly. The sandbox's cards lift
+  on hover and the tilted one sways (24e75de17). Left: transform lists of different functions
+  switch halfway instead of interpolating their matrices; lengths in different units likewise;
+  transition-property and the other longhands of transition and animation are not parsed (the
+  shorthands are); play state is not.
 - **G4 Effects through VG.** Group opacity and filters through V3's layers, rounded clipping
   through V2, boxes through V4.
 - **G5 Data binding.** Properties that update what depends on them (AUI's model: dependency

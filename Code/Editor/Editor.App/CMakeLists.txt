@@ -8,6 +8,7 @@ target_link_libraries(Editor.App
         Foundation::Shell Foundation::Graphics Foundation::Runtime Foundation::Runtime.Client Engine::DefaultApp
         Foundation::Render.Api
         Foundation::Fonts Foundation::Fonts.TrueType Foundation::Fonts.Resource Foundation::Fonts.DistanceField.Baker
+        Foundation::Fonts.HarfBuzz
         Foundation::UI Foundation::UI.Toolkit Foundation::UI.Runtime Foundation::UI.Application
         Foundation::UI.Resource Engine::UI
         Foundation::Input Engine::Input Editor::Preview Foundation::Profiler.UI

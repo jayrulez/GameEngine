@@ -2,7 +2,7 @@
 util_add_engine_library(Engine.UI ALIAS Engine::UI)
 target_link_libraries(Engine.UI
     PUBLIC Foundation::Core Foundation::Runtime Foundation::Scene Engine::Scene
-           Foundation::Resource Foundation::Shell Foundation::RHI Foundation::Fonts Foundation::Fonts.TrueType Foundation::Fonts.Resource
+           Foundation::Resource Foundation::Shell Foundation::RHI Foundation::Fonts Foundation::Fonts.TrueType Foundation::Fonts.Resource Foundation::Fonts.HarfBuzz
            Foundation::Input Engine::Input Foundation::UI Foundation::UI.Shell Foundation::UI.Gamekit
            Foundation::UI.Resource
            Foundation::Script Foundation::Script.Facades Engine::UI.Script

@@ -24,6 +24,7 @@ import foundation.graphics;
 import foundation.fonts;
 import foundation.fonts.truetype;
 import foundation.fonts.resource;
+import foundation.fonts.harfbuzz; // the shaper the editor's fonts get
 import foundation.fonts.distancefield.baker; // DistanceFieldFonts (MSDF baker registration) for the DF font path
 import foundation.runtime;
 import foundation.runtime.client;
@@ -158,6 +159,8 @@ namespace editor::app
         // family: the Preferences override -> the dev-tree compile define -> the
         // exe-EMBEDDED Roboto (a relocated editor must never come up textless). Every
         // failure is LOUD - the old silent (void)LoadFont left a blank editor with no clue.
+        // Before any font loads: a font gets its shaper and its atlas's glyphs when it loads.
+        fonts::HarfBuzzShaping::Install();
         m_fontService = MakeUnique<fonts::TrueTypeFontService>(m_editorAllocator,
                                                                m_editorAllocator);
         // MSDF bakes below hit the per-user disk cache: first launch bakes (in parallel)

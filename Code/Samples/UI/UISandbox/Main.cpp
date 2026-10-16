@@ -21,6 +21,7 @@ import foundation.shell;
 import foundation.image;
 import foundation.fonts;
 import foundation.fonts.truetype;
+import foundation.fonts.harfbuzz;
 import foundation.vg;
 import foundation.vg.renderer;
 import foundation.ui;
@@ -1060,7 +1061,8 @@ void UISandbox::OnStartup(runtime::IApplicationHost& host)
     }
     m_dataFileSystem = MakeUnique<vfs::NativeFileSystem>(AppRoot(), m_dataRoot.AsView(), AppRoot());
 
-    // Fonts (CPU rasterization; no device needed).
+    // Fonts (CPU rasterization; no device needed), shaped by HarfBuzz (installed before any loads).
+    fonts::HarfBuzzShaping::Install();
     m_fontService = MakeUnique<fonts::TrueTypeFontService>(AppRoot(),
                                                            AppRoot());
     if (HasFonts())

@@ -29,6 +29,7 @@ import foundation.rhi;
 import foundation.fonts;
 import foundation.fonts.truetype;
 import foundation.fonts.resource;
+import foundation.fonts.harfbuzz; // the shaper the UI's fonts get
 import foundation.input;
 import engine.input;
 import foundation.shaders;
@@ -721,6 +722,8 @@ namespace engine::ui
     {
         MarkupLoader::Initialize();
         foundation::ui::gamekit::RegisterGamekitMarkup(); // the `<screen>` element for authored screens
+        // Before any font loads: a font gets its shaper and its atlas's glyphs when it loads.
+        foundation::fonts::HarfBuzzShaping::Install();
         m_fonts = MakeUnique<foundation::fonts::TrueTypeFontService>(m_allocator,
                                                                      m_allocator);
         // The built-in default font, read through the data mount (present in a dev tree and in

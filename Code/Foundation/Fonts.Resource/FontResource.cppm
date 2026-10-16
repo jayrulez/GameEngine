@@ -528,6 +528,18 @@ export namespace foundation::fonts
 
         void ReleaseFont(CachedFont*) override {} // products own the payload lifetime
 
+        [[nodiscard]] bool HasFamily(StringView familyName) const override
+        {
+            for (const Entry& entry : m_entries)
+            {
+                if (entry.family.AsView() == familyName)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         [[nodiscard]] StringView DefaultFontFamily() const override
         {
             return m_defaultFamily.AsView();

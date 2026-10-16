@@ -43,6 +43,7 @@ namespace
         }
         void ReleaseFont(fonts::CachedFont*) override {}
         [[nodiscard]] StringView DefaultFontFamily() const override { return u8"StubDefault"; }
+        [[nodiscard]] bool HasFamily(StringView) const override { return false; }
     };
 
     core::RefPtr<RootView> MakeRoot() { return core::MakeRef<RootView>(core::DefaultAllocator()); }

@@ -151,5 +151,8 @@ export namespace foundation::fonts
                                                                           f32 pixelHeight) = 0;
         virtual void ReleaseFont(CachedFont* font) = 0;
         [[nodiscard]] virtual StringView DefaultFontFamily() const = 0;
+        /// Whether a family by this name is loaded (GetFont falls back to the default family for
+        /// one that is not, so asking it cannot tell).
+        [[nodiscard]] virtual bool HasFamily(StringView familyName) const = 0;
     };
 }

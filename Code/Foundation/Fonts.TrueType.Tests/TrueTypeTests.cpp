@@ -357,6 +357,9 @@ TEST_CASE("ttf.service: a coverage family answers each size with its own bake, c
     CachedFont* fallback = service.GetFont(u8"Nope", 24.0f);
     REQUIRE(fallback != nullptr);
     CHECK(fallback->font->PixelHeight() == doctest::Approx(FontLoadOptions::ExtendedLatin().pixelHeight));
+    // Which is why HasFamily is asked, not GetFont.
+    CHECK(service.HasFamily(u8"Roboto"));
+    CHECK_FALSE(service.HasFamily(u8"Nope"));
 }
 
 TEST_CASE("ttf.service: a family loaded from memory bakes its other sizes from the kept bytes")

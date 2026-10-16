@@ -34,5 +34,6 @@ export namespace foundation::fonts
         }
         void ReleaseFont(CachedFont*) override {}
         [[nodiscard]] StringView DefaultFontFamily() const override { return u8""; }
+        [[nodiscard]] bool HasFamily(StringView) const override { return false; }
     };
 }

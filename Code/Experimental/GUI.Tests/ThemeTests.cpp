@@ -100,6 +100,7 @@ namespace
         image::ImageData* GetAtlasTexture(core::StringView, core::f32) override { return nullptr; }
         void ReleaseFont(fonts::CachedFont*) override {}
         core::StringView DefaultFontFamily() const override { return core::StringView(u8"mock"); }
+        bool HasFamily(core::StringView) const override { return false; }
     };
 
     core::RefPtr<Label> ApplyCSS(const char8_t* css, IResourceProvider* res = nullptr)

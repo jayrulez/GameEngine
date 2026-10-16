@@ -341,6 +341,8 @@ TEST_CASE("font.service: ResourceFontService resolves (family, size) over bound 
     CHECK(at100->font->PixelHeight() == doctest::Approx(24.0f));
     CachedFont* unknownFamily = service.GetFont(u8"NoSuchFamily", 12.0f);
     CHECK(unknownFamily == at12); // falls back to the default family
+    CHECK(service.HasFamily(u8"TestFamily")); // so HasFamily is what tells them apart
+    CHECK_FALSE(service.HasFamily(u8"NoSuchFamily"));
 
     // The atlas texture resolves per cached font and per (family, size).
     CHECK(service.GetAtlasTexture(at12) != nullptr);

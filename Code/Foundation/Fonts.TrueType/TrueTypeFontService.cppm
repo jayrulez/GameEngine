@@ -88,6 +88,13 @@ export namespace foundation::fonts
 
         // --- IFontService --------------------------------------------------
         [[nodiscard]] StringView DefaultFontFamily() const override { return m_defaultFontFamily; }
+        [[nodiscard]] bool HasFamily(StringView familyName) const override
+        {
+            for (const FontEntry* entry : m_fonts)
+                if (FamilyEquals(entry->family, familyName))
+                    return true;
+            return false;
+        }
 
         [[nodiscard]] CachedFont* GetFont(f32 pixelHeight) override
         {

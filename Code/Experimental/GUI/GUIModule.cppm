@@ -32,6 +32,8 @@ export import :action_manager;
 export import :actions;
 export import :event_dispatcher;
 export import :scene_node;
+export import :element_types;
+export import :gui_script;
 
 // Drawing / render seam (Phase 2)
 export import :control_state;

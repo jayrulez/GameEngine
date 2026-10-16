@@ -4,7 +4,7 @@
 # and the gui.shell input bridge is a separate library. Built bottom-up.
 util_add_engine_library(GUI ALIAS Experimental::GUI)
 target_link_libraries(GUI
-    PUBLIC Foundation::Core Foundation::VG Foundation::Image Foundation::Fonts Foundation::Xml Foundation::Policy)
+    PUBLIC Foundation::Core Foundation::Script Foundation::VG Foundation::Image Foundation::Fonts Foundation::Xml Foundation::Policy)
 
 target_sources(GUI
     PUBLIC
@@ -21,7 +21,9 @@ target_sources(GUI
             Scene/ActionManager.cppm
             Scene/Actions.cppm
             Scene/EventDispatcher.cppm
+            Scene/ElementTypes.cppm
             Scene/SceneNode.cppm
+            Scene/GuiScript.cppm
             Drawing/ControlState.cppm
             Drawing/DrawContext.cppm
             Drawing/Drawable.cppm
@@ -86,5 +88,6 @@ target_sources(GUI
     PRIVATE
         # Module implementation unit: Node method bodies that call the EventDispatcher
         # (kept out of :node to avoid a :node <-> :event_dispatcher partition cycle).
-        Scene/GUIClusterImpl.cpp)
+        Scene/GUIClusterImpl.cpp
+        Scene/GUIReflectionImpl.cpp)
 

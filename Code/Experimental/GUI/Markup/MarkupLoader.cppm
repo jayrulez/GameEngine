@@ -4,7 +4,9 @@
 // GUI - :markup partition
 //
 // MarkupLoader: inflate a widget tree from XML markup. Modeled on eepp's layout loading (role
-// only). An element name selects a widget from a WidgetFactory; nested elements become children;
+// only). An element name is a tag the loader's ElementSet resolves to a registered element type
+// (ElementTypes: the lab's widgets and any library's), made from the loader's allocator; nested
+// elements become children;
 // attributes are applied in three tiers:
 //   - `id` / `class` set the widget's CSS identity,
 //   - an attribute a widget claims (via UINode::SetMarkupAttribute - e.g. Label "text",
@@ -34,22 +36,7 @@ import :style_sheet;   // ResolvedStyle
 import :style_applier; // ApplyStyle
 import :css_values;    // LengthContext
 import :resource_provider;
-// Widget partitions registered by the default factory:
-import :label;
-import :button;
-import :check_box;
-import :radio;
-import :slider;
-import :progress_bar;
-import :text_field;
-import :linear_layout;
-import :grid_layout;
-import :relative_layout;
-import :flex_layout;
-import :scroll_view;
-import :image;
-import :list_box;
-import :window;
+import :element_types; // ElementSet
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -58,95 +45,12 @@ namespace xml = foundation::xml;
 
 export namespace experimental::gui
 {
-    // Maps markup element names to widget constructors.
-    class WidgetFactory
-    {
-    public:
-        using Factory = core::Function<RefPtr<Node>()>;
-
-        void Register(core::StringView name, Factory factory)
-        {
-            m_entries.PushBack(Entry{core::String(name), core::Move(factory)});
-        }
-        [[nodiscard]] bool Has(core::StringView name) const
-        {
-            for (const Entry& e : m_entries)
-                if (e.Name.AsView() == name)
-                    return true;
-            return false;
-        }
-        [[nodiscard]] RefPtr<Node> Create(core::StringView name) const
-        {
-            for (const Entry& e : m_entries)
-                if (e.Name.AsView() == name)
-                    return e.Make ? e.Make() : RefPtr<Node>{};
-            return RefPtr<Node>{};
-        }
-
-    private:
-        struct Entry
-        {
-            core::String Name;
-            Factory Make;
-        };
-        Array<Entry> m_entries;
-    };
-
-    // A factory pre-registered with the common built-in widgets (element name = class name).
-    [[nodiscard]] inline WidgetFactory DefaultWidgetFactory()
-    {
-        WidgetFactory f;
-        // `maker` is typed, NOT `auto`. As a generic lambda this instantiates
-        // operator()<Maker> in whichever TU imports the module, and MSVC cannot re-parse the
-        // serialized body out of the .ifc - it reports a bogus "C2187: syntax error: 'newline'
-        // was unexpected here" against this line while compiling an unrelated consumer, then
-        // notes "IFC import detected". Taking Factory directly moves the conversion to the call
-        // site (Function accepts any callable whose result converts to RefPtr<Node>, so the
-        // registrations below are unchanged) and leaves nothing generic to instantiate.
-        auto reg = [&f](core::StringView name, WidgetFactory::Factory maker)
-        {
-            f.Register(name, core::Move(maker));
-        };
-        reg(core::StringView(u8"Label"),
-            [] { return core::MakeRef<Label>(foundation::core::DefaultAllocator()); });
-        reg(core::StringView(u8"Button"),
-            [] { return core::MakeRef<Button>(foundation::core::DefaultAllocator()); });
-        reg(core::StringView(u8"CheckBox"),
-            [] { return core::MakeRef<CheckBox>(foundation::core::DefaultAllocator()); });
-        reg(core::StringView(u8"RadioButton"),
-            [] { return core::MakeRef<RadioButton>(foundation::core::DefaultAllocator()); });
-        reg(core::StringView(u8"Slider"),
-            [] { return core::MakeRef<Slider>(foundation::core::DefaultAllocator()); });
-        reg(core::StringView(u8"ProgressBar"),
-            [] { return core::MakeRef<ProgressBar>(foundation::core::DefaultAllocator()); });
-        reg(core::StringView(u8"TextField"),
-            [] { return core::MakeRef<TextField>(foundation::core::DefaultAllocator()); });
-        reg(core::StringView(u8"LinearLayout"),
-            [] { return core::MakeRef<LinearLayout>(foundation::core::DefaultAllocator()); });
-        reg(core::StringView(u8"GridLayout"),
-            [] { return core::MakeRef<GridLayout>(foundation::core::DefaultAllocator()); });
-        reg(core::StringView(u8"RelativeLayout"),
-            [] { return core::MakeRef<RelativeLayout>(foundation::core::DefaultAllocator()); });
-        reg(core::StringView(u8"FlexLayout"),
-            [] { return core::MakeRef<FlexLayout>(foundation::core::DefaultAllocator()); });
-        reg(core::StringView(u8"ScrollView"),
-            [] { return core::MakeRef<ScrollView>(foundation::core::DefaultAllocator()); });
-        reg(core::StringView(u8"Image"),
-            [] { return core::MakeRef<Image>(foundation::core::DefaultAllocator()); });
-        reg(core::StringView(u8"ListBox"),
-            [] { return core::MakeRef<ListBox>(foundation::core::DefaultAllocator()); });
-        reg(core::StringView(u8"Window"),
-            [] { return core::MakeRef<Window>(foundation::core::DefaultAllocator()); });
-        return f;
-    }
-
     class MarkupLoader
     {
     public:
-        explicit MarkupLoader(const WidgetFactory& factory, IResourceProvider* resources = nullptr,
-                              fonts::IFontService* fontService = nullptr,
-                              LengthContext lengths = {}) noexcept
-            : m_factory(&factory), m_resources(resources), m_fontService(fontService),
+        MarkupLoader(const ElementSet& elements, IAllocator& allocator, IResourceProvider* resources = nullptr,
+                     fonts::IFontService* fontService = nullptr, LengthContext lengths = {}) noexcept
+            : m_elements(&elements), m_allocator(&allocator), m_resources(resources), m_fontService(fontService),
               m_lengths(lengths)
         {
         }
@@ -155,7 +59,7 @@ export namespace experimental::gui
         // unknown root element.
         [[nodiscard]] RefPtr<Node> LoadFromString(core::StringView markup)
         {
-            xml::XmlDocument document(foundation::core::DefaultAllocator());
+            xml::XmlDocument document(*m_allocator);
             if (document.Parse(markup) != xml::XmlResult::Ok)
                 return {};
             xml::XmlElement* root = FirstElementChild(document);
@@ -165,7 +69,7 @@ export namespace experimental::gui
     private:
         [[nodiscard]] RefPtr<Node> Inflate(xml::XmlElement& element)
         {
-            RefPtr<Node> widget = m_factory->Create(element.TagName());
+            RefPtr<Node> widget = m_elements->Create(element.TagName(), *m_allocator);
             if (!widget)
                 return {}; // unknown element name
 
@@ -228,7 +132,8 @@ export namespace experimental::gui
             return nullptr;
         }
 
-        const WidgetFactory* m_factory;
+        const ElementSet* m_elements;
+        IAllocator* m_allocator;
         IResourceProvider* m_resources;
         fonts::IFontService* m_fontService;
         LengthContext m_lengths;

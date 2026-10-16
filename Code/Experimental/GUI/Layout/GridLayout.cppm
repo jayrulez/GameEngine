@@ -91,6 +91,4 @@ export namespace experimental::gui
         f32 m_hSpacing = 0.0f;
         f32 m_vSpacing = 0.0f;
     };
-
-    RTTI_DEFINE_OBJECT(GridLayout, "rtti::gui")
 }

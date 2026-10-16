@@ -103,6 +103,4 @@ export namespace experimental::gui
         RefPtr<Drawable> m_drawable;
         ImageScaleMode m_mode = ImageScaleMode::Stretch;
     };
-
-    RTTI_DEFINE_OBJECT(Image, "rtti::gui")
 }

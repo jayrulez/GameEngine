@@ -19,6 +19,7 @@ export module experimental.gui:scene_node;
 
 import foundation.core; // Duration
 import :node;
+import :element_types;
 import :action_manager;
 import :mutation_queue;
 import :event_dispatcher;
@@ -32,7 +33,9 @@ export namespace experimental::gui
     {
         RTTI_OBJECT(SceneNode, Node)
     public:
-        SceneNode() = default;
+        // The element table is this GUI's own (MemoryAllocator is valid in a constructor).
+        SceneNode() : m_elements(core::MakeRef<ElementTable>(MemoryAllocator())) {}
+        ~SceneNode() override { m_elements->Close(); }
 
         // Advance the tree by `elapsed`: tick actions, run the per-frame hook, then drain
         // deferred tree edits (e.g. queued Node::Close removals).
@@ -46,6 +49,10 @@ export namespace experimental::gui
         [[nodiscard]] ActionManager* GetActionManager() override { return &m_actionManager; }
         [[nodiscard]] MutationQueue* GetMutationQueue() override { return &m_mutationQueue; }
         [[nodiscard]] EventDispatcher* GetEventDispatcher() override { return &m_eventDispatcher; }
+        [[nodiscard]] ElementTable* GetElementTable() override { return m_elements.Get(); }
+        [[nodiscard]] const ElementSet* GetElementSet() const override { return &m_elementSet; }
+        /// What this GUI's markup and scripts may create (every registered element by default).
+        void SetElementSet(ElementSet set) { m_elementSet = core::Move(set); }
 
         // Per-frame hook for subclasses (layout, timers, ...).
         virtual void OnUpdate(core::Duration elapsed) { (void)elapsed; }
@@ -54,7 +61,7 @@ export namespace experimental::gui
         ActionManager m_actionManager;
         MutationQueue m_mutationQueue;
         EventDispatcher m_eventDispatcher{this}; // root = this SceneNode
+        RefPtr<ElementTable> m_elements;          // what weak references to this GUI's nodes resolve through
+        ElementSet m_elementSet = ElementSet::All();
     };
-
-    RTTI_DEFINE_OBJECT(SceneNode, "rtti::gui")
 }

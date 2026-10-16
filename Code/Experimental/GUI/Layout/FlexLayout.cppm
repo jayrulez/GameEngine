@@ -307,6 +307,4 @@ export namespace experimental::gui
         HashMap<Node*, f32> m_grow;  // per-child grow factor (non-owning keys)
         HashMap<Node*, f32> m_basis; // per-child flex-basis (main-axis size, captured once)
     };
-
-    RTTI_DEFINE_OBJECT(FlexLayout, "rtti::gui")
 }

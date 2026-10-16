@@ -119,6 +119,4 @@ export namespace experimental::gui
 
         Text m_text;
     };
-
-    RTTI_DEFINE_OBJECT(Label, "rtti::gui")
 }

@@ -129,8 +129,9 @@ TEST_CASE("flex: column direction stacks on the y (main) axis")
 
 TEST_CASE("flex: markup structural attributes configure the layout")
 {
-    static WidgetFactory factory = DefaultWidgetFactory();
-    MarkupLoader loader(factory);
+    RegisterGuiElements();
+    static const ElementSet elements = ElementSet::All();
+    MarkupLoader loader(elements, foundation::core::DefaultAllocator());
     auto root = loader.LoadFromString(core::StringView(
         u8R"(<FlexLayout direction="column" justify-content="center" align-items="stretch" gap="6"/>)"));
     REQUIRE(root.Get() != nullptr);

@@ -8,6 +8,7 @@ add_executable(GUI.Tests
     CompositorTests.cpp
     TransformableTests.cpp
     NodeTests.cpp
+    ElementTests.cpp
     NodeDrawTests.cpp
     ActionTests.cpp
     SceneNodeTests.cpp

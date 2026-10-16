@@ -98,6 +98,4 @@ export namespace experimental::gui
 
         HashMap<Node*, u32> m_anchors; // per-child anchor flags (non-owning keys)
     };
-
-    RTTI_DEFINE_OBJECT(RelativeLayout, "rtti::gui")
 }

@@ -18,8 +18,9 @@ namespace
 
     core::RefPtr<Node> Load(const char8_t* markup)
     {
-        static WidgetFactory factory = DefaultWidgetFactory();
-        MarkupLoader loader(factory);
+        RegisterGuiElements();
+        static const ElementSet elements = ElementSet::All();
+        MarkupLoader loader(elements, foundation::core::DefaultAllocator());
         return loader.LoadFromString(core::StringView(markup));
     }
 }
@@ -71,10 +72,11 @@ TEST_CASE("markup: unclaimed attributes are applied as inline CSS")
 
 TEST_CASE("markup: CSS length units work in markup (via the applier)")
 {
-    static WidgetFactory factory = DefaultWidgetFactory();
+    RegisterGuiElements();
+    static const ElementSet elements = ElementSet::All();
     LengthContext ctx;
     ctx.RootFontSize = 10.0f; // 2rem -> 20
-    MarkupLoader loader(factory, nullptr, nullptr, ctx);
+    MarkupLoader loader(elements, foundation::core::DefaultAllocator(), nullptr, nullptr, ctx);
     auto root = loader.LoadFromString(SV(u8R"(<Button width="2rem"/>)"));
     REQUIRE(root.Get() != nullptr);
     CHECK(core::Cast<Button>(root.Get())->GetSize().x == doctest::Approx(20.0f));

@@ -127,6 +127,4 @@ export namespace experimental::gui
         bool m_hovered = false;
         bool m_pressed = false;
     };
-
-    RTTI_DEFINE_OBJECT(UINode, "rtti::gui")
 }

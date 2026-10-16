@@ -52,6 +52,4 @@ export namespace experimental::gui
 
         core::Function<void()> m_onClick;
     };
-
-    RTTI_DEFINE_OBJECT(Button, "rtti::gui")
 }

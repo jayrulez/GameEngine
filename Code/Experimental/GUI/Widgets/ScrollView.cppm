@@ -313,5 +313,4 @@ export namespace experimental::gui
     };
 
     RTTI_DEFINE_OBJECT(ScrollContent, "rtti::gui")
-    RTTI_DEFINE_OBJECT(ScrollView, "rtti::gui")
 }

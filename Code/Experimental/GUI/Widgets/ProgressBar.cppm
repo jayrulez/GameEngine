@@ -83,6 +83,4 @@ export namespace experimental::gui
         Color m_trackColor{0.24f, 0.26f, 0.30f, 1.0f};
         Color m_fillColor{0.31f, 0.63f, 0.85f, 1.0f};
     };
-
-    RTTI_DEFINE_OBJECT(ProgressBar, "rtti::gui")
 }

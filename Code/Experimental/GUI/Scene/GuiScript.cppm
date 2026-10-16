@@ -1,0 +1,63 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026-Present Robert Campbell
+
+// GUI - :gui_script partition
+//
+// The lab's script surface (G1 of Specs/vg-and-gui-lab.md). There is no separate UI-script layer:
+// the widgets and their properties are reflected through our RTTI (GUIReflectionImpl.cpp), so the
+// engine's reflection-driven binding reaches the node tree from AngelScript and Luau alike, and
+// markup creates the same reflected element types by tag (ElementTypes). What lives here is the way in: the
+// `gui` facade (`gui.root()`, the root the host installed for the calling script), the binding a
+// host installs per script context, and the registry of element types creatable by name.
+
+module;
+#include "Core/Prelude.h"
+#include "Core/Reflection/Reflect.h"
+
+export module experimental.gui:gui_script;
+
+import foundation.core;
+import foundation.script;
+import :node;
+import :scene_node;
+
+using namespace foundation::core;
+namespace core = foundation::core;
+
+export namespace experimental::gui
+{
+    inline constexpr core::StringView kGuiScriptService = u8"gui.runtime";
+
+    /// What a host gives a script context: the root its scripts build under.
+    struct GuiScriptBinding
+    {
+        SceneNode* root = nullptr;
+    };
+
+    inline void InstallGuiScriptService(foundation::script::IScriptContext& context, GuiScriptBinding& binding)
+    {
+        context.SetService(kGuiScriptService, &binding);
+    }
+    inline void ClearGuiScriptService(foundation::script::IScriptContext& context)
+    {
+        context.SetService(kGuiScriptService, nullptr);
+    }
+
+    /// The `gui` facade: statics only (script name `gui`).
+    class Gui : public Object
+    {
+        RTTI_OBJECT(Gui, Object)
+    public:
+        /// The calling script's root (a Node handle), or null when its host installed none.
+        [[nodiscard]] static Variant Root();
+    };
+
+    /// Registers the lab's own element types (ElementTypes::Register: Label, Button, the layouts,
+    /// ...), once. A host calls it at start-up, as a library adding widgets of its own registers
+    /// those.
+    void RegisterGuiElements();
+
+    /// Registers the lab's element types and the `gui` facade for scripts, once (before a script
+    /// manager binds the reflection registry).
+    void RegisterGuiScriptSurface();
+}

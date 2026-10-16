@@ -101,6 +101,4 @@ export namespace experimental::gui
         Thickness m_margin{};
         core::String m_tooltip;
     };
-
-    RTTI_DEFINE_OBJECT(UIWidget, "rtti::gui")
 }

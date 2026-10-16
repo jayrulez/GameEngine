@@ -16,6 +16,7 @@ module;
 export module experimental.gui:node;
 
 import foundation.core; // Object, RefPtr, Array, Move, Float2
+import foundation.script; // IScriptDelegate (the script surface's event handlers)
 import :rect;
 import :transform2d;
 import :transformable;
@@ -33,6 +34,71 @@ namespace core = foundation::core;
 export namespace experimental::gui
 {
     class EventDispatcher; // owned by the SceneNode; reached via GetEventDispatcher()
+    class ElementSet;      // what a GUI may create (:element_types); its SceneNode holds one
+    class Node;
+
+    /// One GUI's element table (G1 of Specs/vg-and-gui-lab.md): what a script's handle to a node
+    /// resolves through, a slot and a generation, so the tree owns its nodes and a script only
+    /// ever holds them weakly. Each SceneNode owns one, so two GUIs never share slots. Handles
+    /// retain the table (an anchored resolve-mode Variant): when its SceneNode goes, the table is
+    /// closed and every handle into it reads as gone, never as freed memory.
+    class ElementTable : public RefCounted
+    {
+    public:
+        /// A slot for `node` (1-based), reusing a freed one under a new generation.
+        u32 Take(Node& node)
+        {
+            u32 slot = 0;
+            if (!m_free.IsEmpty())
+            {
+                slot = m_free.Back();
+                m_free.PopBack();
+            }
+            else
+            {
+                m_slots.PushBack(Slot{});
+                slot = static_cast<u32>(m_slots.Size());
+            }
+            m_slots[slot - 1].node = &node;
+            return slot;
+        }
+        /// The node is gone: its handles stop resolving and the slot is free for another.
+        void Free(u32 slot) noexcept
+        {
+            if (slot == 0 || slot > m_slots.Size())
+                return;
+            Slot& entry = m_slots[slot - 1];
+            entry.node = nullptr;
+            ++entry.generation;
+            if (!m_closed)
+                m_free.PushBack(slot);
+        }
+        /// The node in `slot` if `generation` is still its, else null.
+        [[nodiscard]] Node* Resolve(u32 slot, u32 generation) const noexcept
+        {
+            if (m_closed || slot == 0 || slot > m_slots.Size())
+                return nullptr;
+            const Slot& entry = m_slots[slot - 1];
+            return entry.generation == generation ? entry.node : nullptr;
+        }
+        [[nodiscard]] u32 Generation(u32 slot) const noexcept
+        {
+            return slot != 0 && slot <= m_slots.Size() ? m_slots[slot - 1].generation : 0;
+        }
+        /// The owning GUI is going: every handle into this table reads as gone from now on.
+        void Close() noexcept { m_closed = true; }
+        [[nodiscard]] bool IsClosed() const noexcept { return m_closed; }
+
+    private:
+        struct Slot
+        {
+            Node* node = nullptr;
+            u32 generation = 1;
+        };
+        Array<Slot> m_slots;
+        Array<u32> m_free;
+        bool m_closed = false;
+    };
 
     class Node : public Object, public Transformable
     {
@@ -40,7 +106,20 @@ export namespace experimental::gui
     public:
         static constexpr usize kInvalidIndex = static_cast<usize>(-1);
 
+        /// Where a weak reference to a node resolves: its GUI's table, a slot and a generation.
+        struct ElementRef
+        {
+            ElementTable* table = nullptr;
+            u32 slot = 0;
+            u32 generation = 0;
+        };
+
         Node() = default;
+        ~Node() override
+        {
+            if (m_elementTable)
+                m_elementTable->Free(m_elementSlot);
+        }
 
         // === Tree query ===
         [[nodiscard]] Node* GetParent() const noexcept { return m_parent; }
@@ -354,6 +433,16 @@ export namespace experimental::gui
             return m_parent ? m_parent->GetMutationQueue() : nullptr;
         }
         // The SceneNode's EventDispatcher (pointer walk to the root; SceneNode returns its own).
+        /// What the GUI this node is in may create (its SceneNode's set), or null when detached.
+        [[nodiscard]] virtual const ElementSet* GetElementSet() const
+        {
+            return m_parent ? m_parent->GetElementSet() : nullptr;
+        }
+        /// The element table of the GUI this node is in (its SceneNode's), or null when detached.
+        [[nodiscard]] virtual ElementTable* GetElementTable()
+        {
+            return m_parent ? m_parent->GetElementTable() : nullptr;
+        }
         [[nodiscard]] virtual EventDispatcher* GetEventDispatcher()
         {
             return m_parent ? m_parent->GetEventDispatcher() : nullptr;
@@ -373,6 +462,44 @@ export namespace experimental::gui
             if (ActionManager* manager = GetActionManager())
                 manager->AddAction(core::Move(action));
         }
+
+        // === Weak references and the script surface (G1 of Specs/vg-and-gui-lab.md) ===
+        // The tree owns its nodes. Anything else holds one weakly: a slot and a generation in its
+        // GUI's element table, resolved on every use (Element<T> natively, a handle in a script),
+        // reading as gone once the node is destroyed. Reflected in GUIReflectionImpl.cpp.
+
+        /// This node's place in its GUI's element table, taking a slot the first time; an empty
+        /// ref (null table) for a node in no GUI.
+        [[nodiscard]] ElementRef TakeElementRef();
+
+        /// A handle to this node typed as `type` (this node's type or a base of it); empty when the
+        /// node is in no GUI (a detached element has no owner a handle could resolve through).
+        [[nodiscard]] Variant HandleAs(const TypeInfo& type);
+        /// The node a handle resolves to now, or null (gone, or not a node's handle).
+        [[nodiscard]] static Node* FromHandle(const Variant& handle);
+        /// Creates the element `tag` names in this GUI's element set as this node's last child,
+        /// from this node's allocator; its handle, or empty when the set does not allow `tag`.
+        Variant AddElement(core::StringView tag);
+        /// The first widget in this subtree (depth first, this node first) whose id is `id`.
+        [[nodiscard]] Variant FindElement(core::StringView id);
+        [[nodiscard]] Variant ParentElement();
+        [[nodiscard]] Variant ChildElement(i32 index);
+        [[nodiscard]] i32 ElementChildCount() const noexcept { return static_cast<i32>(m_children.Size()); }
+        /// Calls `handler` on each event named `eventName` (click, mousedown, mouseup,
+        /// mouseenter, mouseleave, mousemove, wheel, keydown, keyup, textinput, focus, blur).
+        void On(core::StringView eventName, RefPtr<foundation::script::IScriptDelegate> handler);
+        /// Removes this node from its tree at the end of the UI's update (Close): never under a
+        /// running handler.
+        void Destroy() { Close(); }
+
+        [[nodiscard]] f32 GetWidth() const noexcept { return m_size.x; }
+        void SetWidth(f32 width) { SetSize(core::Float2{width, m_size.y}); }
+        [[nodiscard]] f32 GetHeight() const noexcept { return m_size.y; }
+        void SetHeight(f32 height) { SetSize(core::Float2{m_size.x, height}); }
+        [[nodiscard]] f32 GetX() const noexcept { return GetPosition().x; }
+        void SetX(f32 x) { SetPosition(core::Float2{x, GetPosition().y}); }
+        [[nodiscard]] f32 GetY() const noexcept { return GetPosition().y; }
+        void SetY(f32 y) { SetPosition(core::Float2{GetPosition().x, y}); }
 
         // Detach this node from its tree at the next safe sync point (SceneNode drain).
         // Falls back to immediate removal if there is no coordinator.
@@ -663,7 +790,7 @@ export namespace experimental::gui
         bool m_tabFocusable = false;
         bool m_hitTestVisible = true;
         u32 m_nextListenerId = 0;
+        RefPtr<ElementTable> m_elementTable; // the table a handle took a slot in (null: none yet)
+        u32 m_elementSlot = 0;
     };
-
-    RTTI_DEFINE_OBJECT(Node, "rtti::gui")
 }

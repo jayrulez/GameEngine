@@ -306,6 +306,39 @@ export namespace experimental::gui
         return filters;
     }
 
+    /// `text-outline: <width> [color]` and `text-glow: <radius> [color]` (either order), as a
+    /// one-shadow list so they interpolate as shadows do: the outline's width rides as the spread,
+    /// the glow's radius as the blur (as foundation.ui reads them). `none`: an empty list.
+    [[nodiscard]] inline Optional<Array<ShadowValue>> ParseTextEffectShadow(core::StringView value, bool outline)
+    {
+        Array<ShadowValue> shadows;
+        if (Trim(value) == core::StringView(u8"none"))
+            return shadows;
+        ShadowValue shadow;
+        shadow.ShadowColor = outline ? Color{0.0f, 0.0f, 0.0f, 1.0f} : Color{1.0f, 1.0f, 1.0f, 1.0f};
+        bool sized = false, colored = false;
+        for (const core::StringView token : SplitTopLevel(value, u8' '))
+        {
+            if (Optional<LengthValue> length = ParseLengthValue(token); length.HasValue() && !sized)
+            {
+                if (length.Value().Value < 0.0f)
+                    return {};
+                (outline ? shadow.Spread : shadow.Blur) = length.Value();
+                sized = true;
+                continue;
+            }
+            Optional<Color> color = ParseColor(token);
+            if (!color.HasValue() || colored)
+                return {};
+            shadow.ShadowColor = color.Value();
+            colored = true;
+        }
+        if (!sized)
+            return {};
+        shadows.PushBack(shadow);
+        return shadows;
+    }
+
     // === Transforms ===
 
     enum class TransformKind : u8

@@ -183,3 +183,42 @@ TEST_CASE("effects: a transition moves a filter's blur")
     styles.ApplyTree(*root.Get());
     CHECK(card->GetBox().FilterBlur == doctest::Approx(5.0f).epsilon(0.05));
 }
+
+namespace
+{
+    // A widget that records the text effects its draw sees.
+    struct EffectProbe : UIWidget
+    {
+        vg::TextEffects seen{};
+        void OnDraw(DrawContext& ctx, const Rect&) override { seen = ctx.VG().GetTextEffects(); }
+    };
+}
+
+TEST_CASE("effects: text-shadow, text-outline and text-glow reach the text, inherited and overridden")
+{
+    auto parent = Box(u8"menu");
+    auto child = core::MakeRef<EffectProbe>(core::DefaultAllocator());
+    child->SetTag(SV(u8"item"));
+    child->SetSize(core::Float2{40.0f, 20.0f});
+    parent->AddChild(child.Get());
+    Apply(*parent.Get(), u8"menu { text-shadow: 1px 2px 3px rgba(0,0,0,0.5); text-glow: 6px #ffcc66; }");
+    Apply(*child.Get(), u8"item { text-outline: 2px #101010; text-glow: none; }");
+    {
+        vg::VGContext canvas;
+        DrawWith(*parent.Get(), canvas);
+        const vg::TextEffects& e = child->seen;
+        CHECK(e.shadowOffset.y == doctest::Approx(2.0f)); // the parent's, inherited
+        CHECK(e.shadowBlur == doctest::Approx(3.0f));
+        CHECK(e.outlineWidth == doctest::Approx(2.0f));   // its own
+        CHECK(e.outlineColor.r == doctest::Approx(16.0f / 255.0f).epsilon(0.01));
+        CHECK_FALSE(e.HasGlow());                          // none: the parent's turned off
+    }
+    // A text-glow interpolates (an animated title).
+    StyleValue from, to;
+    REQUIRE(ParseStyleValue(StyleGrammar::TextGlow, SV(u8"2px #ffffff"), from));
+    REQUIRE(ParseStyleValue(StyleGrammar::TextGlow, SV(u8"10px #ffffff"), to));
+    CHECK(InterpolateStyleValue(from, to, 0.5f).Shadows[0].Blur.Value == doctest::Approx(6.0f));
+    CHECK(IsTransitionable(SV(u8"text-glow")));
+    StyleValue bad;
+    CHECK_FALSE(ParseStyleValue(StyleGrammar::TextOutline, SV(u8"#ffffff"), bad)); // no width
+}

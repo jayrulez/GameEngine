@@ -961,6 +961,7 @@ private:
     void BuildDragDropTab(ui::TabView* tabView);
     void BuildAnimationsTab(ui::TabView* tabView);
     void BuildLayersTab(ui::TabView* tabView); // VG layers: group opacity, filter, backdrop-filter
+    void BuildRichTextTab(ui::TabView* tabView); // runs from markup: colour, weight, size, links
     void BuildToolkitTab(
         ui::TabView* tabView); // foundation.ui.toolkit: bars + split + tree + color picker
     void
@@ -1068,6 +1069,11 @@ void UISandbox::OnStartup(runtime::IApplicationHost& host)
         LoadFontSize(u8"Roboto", fontPath.AsView(), 14.0f);
         LoadFontSize(u8"Roboto", fontPath.AsView(), 16.0f);
         LoadFontSize(u8"Roboto", fontPath.AsView(), 24.0f);
+        // The bold face, as its own family: rich text's [b] takes "<family> Bold" when there is one.
+        const String boldPath = DataPath(u8"Assets/fonts/roboto/Roboto-Bold.ttf");
+        LoadFontSize(u8"Roboto Bold", boldPath.AsView(), 14.0f);
+        LoadFontSize(u8"Roboto Bold", boldPath.AsView(), 16.0f);
+        LoadFontSize(u8"Roboto Bold", boldPath.AsView(), 24.0f);
 
         // Decorative families for the pause-menu FontFamily demo (freely licensed: Lilita One OFL,
         // Chewy Apache 2.0).
@@ -1265,6 +1271,7 @@ void UISandbox::BuildUI()
     BuildDragDropTab(tabView.Get());
     BuildAnimationsTab(tabView.Get());
     BuildLayersTab(tabView.Get());
+    BuildRichTextTab(tabView.Get());
     BuildToolkitTab(tabView.Get());
     BuildPropertyGridTab(tabView.Get());
     BuildCurveEditorTab(tabView.Get());
@@ -1659,6 +1666,46 @@ void UISandbox::BuildPauseMenuTab(ui::TabView* tabView)
 }
 
 // === Tab 9: Animations (ViewAnimator / Storyboard + static-transform hit-testing) ===
+void UISandbox::BuildRichTextTab(ui::TabView* tabView)
+{
+    using ui::SizeSpec;
+    using ui::Unit;
+
+    auto demo = VFlex(12.0f);
+    demo->Padding = ui::Thickness{12, 8};
+    tabView->AddTab(u8"Rich Text", demo.Get());
+
+    const auto paragraph = [&](StringView markup, f32 width, fonts::TextAlignment align)
+    {
+        auto text = MakeRef<ui::RichText>(AppRoot(), markup);
+        text->HAlign.SetValue(align);
+        demo->AddView(text.Get(), LP(width > 0.0f ? SizeSpec::Fixed(Unit::Px(width)) : SizeSpec::Match(),
+                                     SizeSpec::Wrap()));
+        return text;
+    };
+    paragraph(u8"Your mark wears [color=#e05a7a][b]a rose gown[/b][/color], and [i]slanted[/i] words lean "
+              u8"without an italic face. [u]Underlined[/u], [size=24]bigger[/size] and [font=Chewy]Chewy[/font] "
+              u8"share one baseline.",
+              0.0f, fonts::TextAlignment::Left);
+    paragraph(u8"A centred paragraph that wraps at three hundred pixels: [color=#f0c040]gold[/color], "
+              u8"[color=#60c0f0]sky[/color] and [color=#80e080]leaf[/color] runs flow from line to line as one text.",
+              300.0f, fonts::TextAlignment::Center);
+
+    auto heard = MakeRef<ui::Label>(AppRoot(), StringView(u8"No link clicked yet."));
+    ui::Label* heardLabel = heard.Get();
+    auto links = paragraph(u8"Links: [link=north][u]go north[/u][/link] or [link=south][u]go south[/u][/link]. "
+                           u8"Malformed tags such as [blink] stay as text.",
+                           0.0f, fonts::TextAlignment::Left);
+    links->OnLink.Add([heardLabel](ui::RichText*, StringView id)
+                      {
+                          String message(u8"Clicked the link \"");
+                          message.Append(id);
+                          message.Append(StringView(u8"\"."));
+                          heardLabel->SetText(message.AsView());
+                      });
+    demo->AddView(heard.Get());
+}
+
 void UISandbox::BuildLayersTab(ui::TabView* tabView)
 {
     using ui::SizeSpec;

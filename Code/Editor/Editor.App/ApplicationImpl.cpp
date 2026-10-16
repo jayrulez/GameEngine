@@ -3378,6 +3378,12 @@ namespace editor::app
         // key-downs handled - a focused textbox keeps Ctrl+Z for its own text undo.
         m_actionMenus = MakeUnique<ActionMenuBar>(m_editorAllocator, *m_shell.Menus(),
                                                   m_context.Actions());
+        // The application's menus in their places; a domain's menu (Scene) or an extension's
+        // takes the "*" slot, so Help stays last however late they register.
+        {
+            const StringView order[] = {u8"File", u8"Edit", u8"Project", u8"Build", u8"Game", u8"View", u8"*", u8"Help"};
+            m_actionMenus->SetMenuOrder(Span<const StringView>(order, sizeof(order) / sizeof(order[0])));
+        }
         m_actionMenus->AddLeadingItems(
             u8"File",
             [this](foundation::ui::ContextMenu& file)

@@ -125,6 +125,23 @@ TEST_CASE("action-menus: the bar is generated from the registry - menus in first
                           { recent.AddItem(u8"yesterday.scene", []() {}); });
     REQUIRE(bar->MenuCount() == 5u);
     CHECK(Labels(*bar->MenuAt(4)) == u8"yesterday.scene");
+
+    // A declared order: the named menus in their places, the rest at "*", in the order they first
+    // appear; a domain's menu registered after Help still lands before it.
+    const StringView order[] = {u8"File", u8"Edit", u8"*", u8"Help", u8"Nowhere"};
+    menus.SetMenuOrder(Span<const StringView>(order, 5));
+    REQUIRE(bar->MenuCount() == 5u); // "Nowhere" has nothing in it: no menu
+    CHECK(bar->MenuTitle(0) == u8"File");
+    CHECK(bar->MenuTitle(1) == u8"Edit");
+    CHECK(bar->MenuTitle(2) == u8"Scene");
+    CHECK(bar->MenuTitle(3) == u8"Recent");
+    CHECK(bar->MenuTitle(4) == u8"Help");
+    REQUIRE(actions.Register(Declare(u8"tools.bake", u8"Bake", u8"Tools/Bake", 100))); // late
+    REQUIRE(bar->MenuCount() == 6u);
+    CHECK(bar->MenuTitle(3) == u8"Tools"); // with the action menus, before the leading-only Recent
+    CHECK(bar->MenuTitle(4) == u8"Recent");
+    CHECK(bar->MenuTitle(5) == u8"Help");
+    CHECK(Labels(*bar->MenuAt(0)) == u8"New Scene|New Material|-|Save|Save As...|-|Exit"); // items unchanged
 }
 
 TEST_CASE("action-surfaces: a generated bar or shortcut set that dies leaves nothing behind - the "

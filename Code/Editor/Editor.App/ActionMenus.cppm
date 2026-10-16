@@ -4,9 +4,11 @@
 //
 // ActionMenuBar: the menu bar GENERATED from the action registry. Every action with a
 // menuPath ("File/Save", "Scene/Simulate/Start") lands in the menu its first segment names,
-// the rest as nested submenus; menus appear in the order their names first appear among the
-// registrations (the application registers its set in menu order, domains add later; a menu
-// holding only leading items comes after them); items
+// the rest as nested submenus. The application declares its menus' order (SetMenuOrder: names,
+// and "*" where every other menu goes), so a domain's menu (Scene), or an extension's, registered
+// later still lands before Help; without a declaration, and for the menus "*" holds, the order
+// their names first appear among the registrations (a menu holding only leading items after
+// them); items
 // order by menuOrder with a separator between order bands (hundreds). A menu's items are
 // rebuilt when it opens (ContextMenu::OnOpening), so every item's enabled state is the
 // registry's answer at that moment; every item executes through the registry, the one
@@ -59,22 +61,91 @@ export namespace editor::app
             Rebuild();
         }
 
+        /// The top-level menus' order: these names in this order, "*" where every menu not named
+        /// goes (in the order it first appears; at the end when there is no "*"). A name with no
+        /// actions and no leading items makes no menu.
+        void SetMenuOrder(Span<const StringView> order)
+        {
+            m_order.Clear();
+            for (const StringView name : order)
+            {
+                m_order.PushBack(String(name));
+            }
+            Rebuild();
+        }
+
         /// The whole bar from the registry: the menus and their current items.
         void Rebuild()
         {
             m_bar->ClearMenus();
-            // Menus in the order their names first appear among the actions; a menu that
-            // holds only leading items comes after them.
+            // The menus there are, in the order their names first appear among the actions; a
+            // menu that holds only leading items comes after them.
+            Array<String> present;
+            const auto note = [&present](StringView name)
+            {
+                for (const String& seen : present)
+                {
+                    if (seen.AsView() == name)
+                    {
+                        return;
+                    }
+                }
+                present.PushBack(String(name));
+            };
             for (const EditorActionDeclaration& action : m_actions->Actions())
             {
                 if (!action.menuPath.IsEmpty())
                 {
-                    (void)MenuFor(TopLevel(action.menuPath.AsView()));
+                    note(TopLevel(action.menuPath.AsView()));
                 }
             }
             for (const Leading& leading : m_leading)
             {
-                (void)MenuFor(leading.menu.AsView());
+                note(leading.menu.AsView());
+            }
+            // Then laid out by the declared order.
+            const auto declared = [this](StringView name)
+            {
+                for (const String& entry : m_order)
+                {
+                    if (entry.AsView() == name)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            };
+            const auto placeRest = [&]()
+            {
+                for (const String& name : present)
+                {
+                    if (!declared(name.AsView()))
+                    {
+                        (void)MenuFor(name.AsView());
+                    }
+                }
+            };
+            bool restPlaced = false;
+            for (const String& entry : m_order)
+            {
+                if (entry.AsView() == StringView(u8"*"))
+                {
+                    placeRest();
+                    restPlaced = true;
+                    continue;
+                }
+                for (const String& name : present)
+                {
+                    if (name.AsView() == entry.AsView())
+                    {
+                        (void)MenuFor(name.AsView());
+                        break;
+                    }
+                }
+            }
+            if (!restPlaced)
+            {
+                placeRest();
             }
             for (usize i = 0; i < m_bar->MenuCount(); ++i)
             {
@@ -211,6 +282,7 @@ export namespace editor::app
         foundation::ui::toolkit::MenuBar* m_bar;
         EditorActionRegistry* m_actions;
         Array<Leading> m_leading;
+        Array<String> m_order; // SetMenuOrder: names, "*" for every other menu
         foundation::ui::Event<void()>::Token m_changed = 0;
     };
 }

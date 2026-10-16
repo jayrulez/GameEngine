@@ -30,33 +30,70 @@ void conceal(Node@ node, const string &in animationClass)
     UIWidget::of(node).removeClass(animationClass);
 }
 
-// A page of the menu in the slot under the title (the main menu or the settings).
-void showPage(Node@ page)
+// === Pages ===
+// A change of page is two steps: the page on show sinks out (the "leave" class), then the next rises
+// in (its own entrance), so pages sharing the slot never stack. Input mid-change is ignored until the
+// next page is up, and focus moves there with it.
+Node@ leaving;            // the page or screen sinking out
+string leavingEntrance;   // its entrance class, removed with it
+Node@ arriving;           // what comes next: a page of the menu, or the loading screen
+double leaveLeft = -1;    // seconds left of the sink (-1: no change under way)
+const double kLeaveTime = 0.2; // the sheet's .leave
+
+bool changing() { return leaveLeft >= 0; }
+
+// What is on show now: the loading screen, or the page in the slot.
+Node@ current()
 {
-    conceal(loadingScreen, "screen-in");
-    conceal(modal, "modal-in");
+    if (loadingScreen.visible)
+        return loadingScreen;
+    return mainPanel.visible ? mainPanel : settingsPanel;
+}
+
+// Starts the change to `next` (a page, or the loading screen).
+void changeTo(Node@ next)
+{
+    if (changing())
+        return;
+    Node@ from = current();
+    if (from is next)
+        return;
+    @leaving = from;
+    leavingEntrance = (from is loadingScreen) ? "screen-in" : "enter";
+    UIWidget::of(from).removeClass(leavingEntrance); // its entrance is over; the sink takes over
+    UIWidget::of(from).addClass("leave");
+    @arriving = next;
+    leaveLeft = kLeaveTime;
+}
+
+// The sink ended: the old one goes, the next one comes in.
+void arrive()
+{
+    conceal(leaving, leavingEntrance);
+    UIWidget::of(leaving).removeClass("leave");
+    leaveLeft = -1;
+    if (arriving is loadingScreen)
+    {
+        gui::set("status", "Loading...");
+        gui::set("progress", 0);
+        loadTime = 0;
+        loadingNow = true;
+        stage.visible = false; // the loading screen replaces the menu
+        reveal(loadingScreen, "screen-in");
+        loadingScreen.focus();
+        return;
+    }
     stage.visible = true;
-    conceal(mainPanel, "enter");
-    conceal(settingsPanel, "enter");
-    reveal(page, "enter");
-    page.focus(); // its remembered or default widget: the keyboard and a gamepad carry on there
+    reveal(arriving, "enter");
+    arriving.focus(); // its remembered or default widget: the keyboard and a gamepad carry on there
 }
 
 string volumeText() { return "" + int(gui::getNumber("volume") * 100 + 0.5) + "%"; }
 string musicText() { return gui::getBool("music") ? "On" : "Off"; }
 
-void onPlay()
-{
-    gui::set("status", "Loading...");
-    gui::set("progress", 0);
-    loadTime = 0;
-    loadingNow = true;
-    stage.visible = false; // the loading screen replaces the menu
-    reveal(loadingScreen, "screen-in");
-    loadingScreen.focus();
-}
-void onSettings() { showPage(settingsPanel); }
-void onBack() { loadingNow = false; showPage(mainPanel); }
+void onPlay() { changeTo(loadingScreen); }
+void onSettings() { changeTo(settingsPanel); }
+void onBack() { loadingNow = false; changeTo(mainPanel); }
 // The quit question opens over the menu, which stays where it is behind the dimmed glass.
 void onQuit()
 {
@@ -90,7 +127,7 @@ bool onBackCommand()
         onStay();
     else if (modal.visible)
         return false; // closing already
-    else if (loadingScreen.visible || settingsPanel.visible)
+    else if (!changing() && (loadingScreen.visible || settingsPanel.visible))
         onBack();
     return false;
 }
@@ -127,12 +164,23 @@ void main()
     gui::bindKey("escape", "back", "");
     gui::bindKey("pad-east", "back", "");
 
-    showPage(mainPanel);
+    // The menu as it starts: the main page rising in, the rest hidden.
+    conceal(settingsPanel, "enter");
+    conceal(loadingScreen, "screen-in");
+    modal.visible = false;
+    reveal(mainPanel, "enter");
+    mainPanel.focus();
 }
 
 // The loading bar fills over two and a half seconds; true while there is more to do.
 bool update(double dt)
 {
+    if (leaveLeft >= 0)
+    {
+        leaveLeft -= dt;
+        if (leaveLeft < 0)
+            arrive();
+    }
     if (modalClosing >= 0)
     {
         modalClosing -= dt;
@@ -143,7 +191,7 @@ bool update(double dt)
         }
     }
     if (!loadingNow)
-        return modalClosing >= 0;
+        return modalClosing >= 0 || leaveLeft >= 0;
     loadTime += dt;
     double progress = loadTime / 2.5;
     if (progress >= 1)
@@ -153,5 +201,5 @@ bool update(double dt)
         gui::set("status", "Ready");
     }
     gui::set("progress", progress);
-    return loadingNow || modalClosing >= 0;
+    return loadingNow || modalClosing >= 0 || leaveLeft >= 0;
 }

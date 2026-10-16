@@ -852,8 +852,12 @@ void GUISandbox::RouteInput()
         m_router = MakeUnique<shell::InputRouter>(AppRoot(), &input);
         m_router->AddSurface(m_inputSurface.Get());
         m_bridge->SetTextInputTarget(m_window);
+        m_bridge->SetCursorTarget(input.Mouse()); // the pointer takes the look of what it is over
         if (m_menuBridge)
+        {
             m_menuBridge->SetTextInputTarget(m_window);
+            m_menuBridge->SetCursorTarget(input.Mouse());
+        }
     }
     m_inputSurface->SetRegion(region);
     m_inputSurface->SetContentSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)});

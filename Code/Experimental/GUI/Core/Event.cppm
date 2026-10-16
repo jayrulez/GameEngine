@@ -64,6 +64,45 @@ export namespace experimental::gui
         PointerCaptureLost,
     };
 
+    /// The pointer's look over a node (CSS `cursor`). Auto takes the look of the node around it,
+    /// as CSS's inherited cursor does; the host shows the dispatcher's answer (GetCursor).
+    enum class Cursor : u8
+    {
+        Auto,
+        Default,
+        Pointer,
+        Text,
+        Move,
+        Grab,
+        Grabbing,
+        NotAllowed,
+        Wait,
+        Progress,
+        Crosshair,
+        Help,
+        EwResize,
+        NsResize,
+        NwseResize,
+        NeswResize,
+    };
+    inline constexpr const char8_t* kCursorNames[] = {
+        u8"auto", u8"default", u8"pointer", u8"text", u8"move", u8"grab", u8"grabbing", u8"not-allowed",
+        u8"wait", u8"progress", u8"crosshair", u8"help", u8"ew-resize", u8"ns-resize", u8"nwse-resize",
+        u8"nesw-resize",
+    };
+    /// The cursor CSS names `name`; Auto for an unknown name.
+    [[nodiscard]] inline Cursor CursorNamed(core::StringView name) noexcept
+    {
+        for (usize i = 0; i < sizeof(kCursorNames) / sizeof(kCursorNames[0]); ++i)
+            if (core::StringView(kCursorNames[i]) == name)
+                return static_cast<Cursor>(i);
+        return Cursor::Auto;
+    }
+    [[nodiscard]] inline core::StringView CursorName(Cursor cursor) noexcept
+    {
+        return core::StringView(kCursorNames[static_cast<usize>(cursor)]);
+    }
+
     /// Where on its route an input event is: going down from the root (Capture), at the node it
     /// is for (Target), or coming back up (Bubble).
     enum class EventPhase : u8

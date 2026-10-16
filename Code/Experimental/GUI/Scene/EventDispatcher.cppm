@@ -305,6 +305,18 @@ export namespace experimental::gui
         }
         [[nodiscard]] Node* GetPointerCapture() const noexcept { return m_captureNode; }
 
+        /// The pointer's look now: the nearest set `cursor` up from the node under the pointer
+        /// (from the captured node while one holds the pointer, so a drag keeps its look), else
+        /// Default. The host shows it (the shell bridge does).
+        [[nodiscard]] Cursor GetCursor() const
+        {
+            Node* from = m_captureNode != nullptr ? m_captureNode : m_downNode != nullptr ? m_downNode : m_overNode;
+            for (Node* n = from; n != nullptr; n = n->GetParent())
+                if (n->GetCursor() != Cursor::Auto)
+                    return n->GetCursor();
+            return Cursor::Default;
+        }
+
         /// Whether a pointer at `position` (device pixels) is over the GUI: over a node that takes
         /// the pointer (Node::TakesPointer), not only over a layout container. A game host asks
         /// before treating a click as its own.

@@ -83,7 +83,7 @@ TEST_CASE("bridge: mouse move drives hover")
     int enter = 0;
     child->AddEventListener(EventType::MouseEnter, [&](const Event&) { ++enter; });
 
-    CHECK(bridge.Dispatch(MouseMove(20.0f, 20.0f)));
+    CHECK_FALSE(bridge.Dispatch(MouseMove(20.0f, 20.0f))); // a bare panel leaves the pointer to the game
     CHECK(root->GetEventDispatcher()->GetOverNode() == child.Get());
     CHECK(enter == 1);
 }
@@ -292,8 +292,14 @@ namespace
         void SetRelativeMode(bool) override {}
         bool CursorVisible() const override { return true; }
         void SetCursorVisible(bool) override {}
-        void SetCursor(shell::CursorType) override {}
+        void SetCursor(shell::CursorType c) override
+        {
+            cursor = c;
+            ++cursorSets;
+        }
         void SetGlobalCapture(bool) override {}
+        shell::CursorType cursor = shell::CursorType::Default;
+        int cursorSets = 0;
     };
 
     class MockInputManager final : public shell::IInputManager
@@ -422,4 +428,24 @@ TEST_CASE("bridge: a keymap filled from the game's input map follows its binding
     d.InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
     d.InjectPadButton(PadButton::East);
     CHECK(backs == 2);
+}
+
+TEST_CASE("bridge: the cursor follows the node under the pointer; Dispatch says whether the GUI used it")
+{
+    auto root = MakeScene(core::Float2{200.0f, 200.0f});
+    auto field = core::MakeRef<TextField>(core::DefaultAllocator());
+    field->SetSize(core::Float2{100.0f, 24.0f});
+    root->AddChild(field.Get());
+    field->SetCursor(Cursor::Text);
+    GuiInputBridge bridge(root->GetEventDispatcher());
+    MockMouse mouse;
+    bridge.SetCursorTarget(&mouse);
+    CHECK(bridge.Dispatch(MouseMove(10.0f, 10.0f))); // over the field: the GUI's
+    CHECK(mouse.cursor == shell::CursorType::Text);
+    CHECK_FALSE(bridge.Dispatch(MouseMove(150.0f, 150.0f))); // over nothing that takes it
+    CHECK(mouse.cursor == shell::CursorType::Default);
+    const int sets = mouse.cursorSets;
+    (void)bridge.Dispatch(MouseMove(160.0f, 150.0f));
+    CHECK(mouse.cursorSets == sets); // unchanged: not set again
+    CHECK_FALSE(bridge.IsPointerOverGui());
 }

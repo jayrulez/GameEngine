@@ -9,6 +9,7 @@
 #include "Core/Prelude.h"
 import foundation.core;
 import foundation.ui;
+import foundation.vg; // VGContext (the indeterminate bar's draw)
 import foundation.image; // ImageDataRef (the provider's answer in the Source tests)
 #include "TestHelpers.h"
 
@@ -362,6 +363,50 @@ TEST_CASE("control: ProgressBar_ValueClamped")
     CHECK(bar->Value.Value() == 0.0f);
     bar->Value.SetValue(2.0f);
     CHECK(bar->Value.Value() == 1.0f);
+}
+
+namespace
+{
+    class CountingDrawable final : public Drawable
+    {
+    public:
+        i32 draws = 0;
+        void Draw(UIDrawContext&, const core::Rectangle&) override { ++draws; }
+    };
+}
+
+TEST_CASE("control: ProgressBar_IndeterminateDrawsAndAsksForFrames")
+{
+    // Declared and themed, the indeterminate state drew nothing and asked for no frames.
+    UIContext ctx{DefaultAllocator()};
+    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    Init(ctx, root.Get(), 300, 100);
+    auto sheet = core::MakeRef<StyleSheet>(core::DefaultAllocator());
+    auto fill = core::MakeRef<CountingDrawable>(core::DefaultAllocator());
+    CountingDrawable* raw = fill.Get();
+    sheet->ForTypePseudo(&ProgressBar::StaticType(), u8"fill").Set(StyleProperty::Background, RefPtr<Drawable>(fill));
+    ctx.SetStyleSheet(sheet);
+    auto bar = core::MakeRef<ProgressBar>(core::DefaultAllocator());
+    root->AddView(bar.Get());
+    LayoutPass(ctx, root.Get());
+    foundation::vg::VGContext vg;
+
+    ctx.DrawRootView(root.Get(), vg); // value 0: no fill, and nothing more to draw
+    CHECK(raw->draws == 0);
+    ctx.BeginFrame(0.016f);
+    CHECK_FALSE(ctx.NeedsRedraw());
+
+    bar->IsIndeterminate.SetValue(true);
+    ctx.DrawRootView(root.Get(), vg);
+    CHECK(raw->draws == 1); // the sliding segment
+    CHECK_FALSE(ctx.NeedsRedraw()); // the draw took the damage...
+    ctx.BeginFrame(0.016f);
+    CHECK(ctx.NeedsRedraw()); // ...and the next frame is asked for while it shows
+
+    bar->IsIndeterminate.SetValue(false);
+    ctx.DrawRootView(root.Get(), vg);
+    ctx.BeginFrame(0.016f);
+    CHECK_FALSE(ctx.NeedsRedraw());
 }
 
 // === Panel ===

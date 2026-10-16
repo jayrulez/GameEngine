@@ -1848,6 +1848,10 @@ export namespace foundation::ui
 
         // === Frame lifecycle ===
         void MarkNeedsRedraw() noexcept { m_needsRedraw = true; }
+        /// A view that moves on its own while it shows (an indeterminate progress bar) asks from
+        /// its draw for the next frame: drawing clears the damage, so the request carries to the
+        /// next BeginFrame, which marks it. A view no longer drawn stops asking.
+        void RequestNextFrame() noexcept { m_nextFrameRequested = true; }
         void MarkNeedsLayout() noexcept
         {
             m_needsLayout = true;
@@ -1873,10 +1877,12 @@ export namespace foundation::ui
                 }
             }
             // Continuous-damage producers (the redraw gate has no free per-frame redraws):
-            // live animations move things every tick, and a focused text input needs its
-            // caret blink serviced. Both mark BEFORE the host samples the damage state.
-            if (m_animationManager.ActiveCount() > 0 || WantsTextInput())
+            // live animations move things every tick, a focused text input needs its caret
+            // blink serviced, and a view may have asked for this frame (RequestNextFrame). All
+            // mark BEFORE the host samples the damage state.
+            if (m_animationManager.ActiveCount() > 0 || WantsTextInput() || m_nextFrameRequested)
             {
+                m_nextFrameRequested = false;
                 MarkNeedsRedraw();
             }
             // Animation onComplete callbacks may mutate the view tree (a screen transition that
@@ -1987,6 +1993,7 @@ export namespace foundation::ui
         fonts::IFontService* m_fontService = nullptr;
         Phase m_phase = Phase::Idle;
         bool m_needsRedraw = true;
+        bool m_nextFrameRequested = false; // RequestNextFrame, carried across a draw
         bool m_needsLayout = true;
         u64 m_measureGeneration = 1;
         f32 m_deltaTime = 0.0f;

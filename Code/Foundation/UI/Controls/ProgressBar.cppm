@@ -3,7 +3,8 @@
 
 // UI - :progress_bar partition
 //
-// Progress indicator showing a filled bar from 0 to 1. Ported from Sedulous.UI/src/Controls/ProgressBar.bf.
+// Progress indicator showing a filled bar from 0 to 1, or, indeterminate, a segment sliding across
+// the track while it shows. Ported from Sedulous.UI/src/Controls/ProgressBar.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -71,21 +72,46 @@ export namespace foundation::ui
                                   Color{50.0f / 255.0f, 52.0f / 255.0f, 62.0f / 255.0f, 1.0f});
             }
 
-            if (Value.Value() > 0)
+            if (IsIndeterminate.Value())
+            {
+                // No known amount: a segment a third of the track slides across it, entering at
+                // the left and leaving at the right, once every kIndeterminatePeriod seconds.
+                const f32 t = Context != nullptr ? Context->TotalTime() : 0.0f;
+                const f32 phase = t / kIndeterminatePeriod - Floor(t / kIndeterminatePeriod);
+                const f32 segment = Width() / 3.0f;
+                const f32 left = Max(0.0f, phase * (Width() + segment) - segment);
+                const f32 right = Min(Width(), phase * (Width() + segment));
+                ctx.VG().PushClipRect(Rectangle{left, 0, Max(0.0f, right - left), Height()});
+                DrawFill(ctx, bounds, state);
+                ctx.VG().PopClip();
+                if (Context != nullptr)
+                {
+                    Context->RequestNextFrame(); // it moves while it shows
+                }
+            }
+            else if (Value.Value() > 0)
             {
                 const f32 fillW = Width() * Value.Value();
                 ctx.VG().PushClipRect(Rectangle{0, 0, fillW, Height()});
-                if (Drawable* fill =
-                        ResolvePartDrawable(u8"fill", StyleProperty::Background, state))
-                {
-                    fill->Draw(ctx, bounds);
-                }
-                else
-                {
-                    ctx.VG().FillRect(
-                        bounds, Color{80.0f / 255.0f, 150.0f / 255.0f, 240.0f / 255.0f, 1.0f});
-                }
+                DrawFill(ctx, bounds, state);
                 ctx.VG().PopClip();
+            }
+        }
+
+    public:
+        /// Seconds the indeterminate segment takes to cross the track.
+        static constexpr f32 kIndeterminatePeriod = 1.5f;
+
+    private:
+        void DrawFill(UIDrawContext& ctx, const Rectangle& bounds, ControlState state)
+        {
+            if (Drawable* fill = ResolvePartDrawable(u8"fill", StyleProperty::Background, state))
+            {
+                fill->Draw(ctx, bounds);
+            }
+            else
+            {
+                ctx.VG().FillRect(bounds, Color{80.0f / 255.0f, 150.0f / 255.0f, 240.0f / 255.0f, 1.0f});
             }
         }
     };

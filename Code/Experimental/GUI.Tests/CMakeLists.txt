@@ -27,6 +27,7 @@ add_executable(GUI.Tests
     TransitionTests.cpp
     IncrementalFrameTests.cpp
     EffectsTests.cpp
+    ReactiveTests.cpp
     EasingTests.cpp
     StyleManagerTests.cpp
     LabelButtonTests.cpp

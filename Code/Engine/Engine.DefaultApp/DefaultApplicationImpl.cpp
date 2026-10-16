@@ -795,7 +795,7 @@ namespace engine::runtime
 
     void DefaultApplication::OnCommandLine(int argc, char** argv)
     {
-        SetScreenshotOptions(ScreenshotOptionsFromArguments(argc, argv));
+        SetScreenshotOptions(rhi::ScreenshotOptionsFromArguments(argc, argv));
         for (int i = 1; i < argc; ++i)
         {
             if (core::StringView(reinterpret_cast<const core::utf8char*>(argv[i])) == core::StringView(u8"--profile-overlay"))

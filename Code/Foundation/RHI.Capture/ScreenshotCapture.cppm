@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Engine::DefaultApp - the `engine.defaultapp:screenshot` partition: the backbuffer -> PNG
-// capture behind DefaultApplication::CaptureScreenshot, the F11 hotkey and the --screenshot
-// flags. Legacy Sedulous had the request and the GPU copy and stopped there (the readback buffer
+// Foundation::RHI.Capture - `foundation.rhi.capture`: the backbuffer -> PNG capture behind
+// DefaultApplication::CaptureScreenshot, the editor's window and viewport captures, the sample
+// framework's F12 and every host's --screenshot flags. RHI and image only, so a sample or a tool
+// captures without the engine. Legacy Sedulous had the request and the GPU copy and stopped there (the readback buffer
 // was filled and nothing mapped it); this is the whole path: arm, copy the presented backbuffer
 // inside the frame (RenderTarget -> CopySrc -> RenderTarget, so the host's own Present
 // transition still holds), then after the GPU is done map the 256-byte-aligned rows into a
@@ -16,7 +17,7 @@ module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
 
-export module engine.defaultapp:screenshot;
+export module foundation.rhi.capture;
 
 import foundation.core;
 import foundation.rhi;
@@ -24,10 +25,10 @@ import foundation.image;
 import foundation.image.io;
 
 using namespace foundation::core;
-namespace rhi = foundation::rhi;
+namespace rhi = foundation::rhi; // inside foundation::rhi too, as the bodies spell it
 namespace image = foundation::image;
 
-export namespace engine::runtime
+export namespace foundation::rhi
 {
     /// The --screenshot flags: capture to `path` at rendered frame `frame` (1-based) or, when
     /// `afterSeconds` is set, at the first frame past that many seconds of run time (frame

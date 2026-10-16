@@ -22,7 +22,7 @@ target_link_libraries(Engine.DefaultApp
            Foundation::Heightfield.Resource Foundation::Terrain.Resource Foundation::Vegetation.Resource
             Foundation::Net Foundation::Net.Manager Engine::Net
             Foundation::Profiler Foundation::Profiler.UI Foundation::Policy Engine::Composition 
-            Foundation::Image Foundation::Image.IO)
+            Foundation::Image Foundation::Image.IO Foundation::RHI.Capture)
 
 # Script VM backends - AngelScript and Luau. Each is independently toggleable via
 # its option; a run resolves the backend by the game script's LANGUAGE, so with both ON a project can
@@ -42,5 +42,4 @@ target_sources(Engine.DefaultApp
     PUBLIC
         FILE_SET runtime_defaultapp_modules TYPE CXX_MODULES FILES
             DefaultApplication.cppm
-            ScreenshotCapture.cppm
             ProfilerOverlayHost.cppm)

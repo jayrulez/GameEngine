@@ -63,7 +63,7 @@ proposed one but it was never added; per-window rendering is driven by `IApplica
 
 `DefaultApplication::CaptureScreenshot(path)` writes the next presented frame of the main window
 as a PNG. Legacy Sedulous had the request and the GPU copy and stopped there (the readback was
-never mapped); Raptor's `ScreenshotCapture` (`engine.defaultapp:screenshot`) is the whole path:
+never mapped); Raptor's `ScreenshotCapture` (`foundation.rhi.capture`, Foundation/RHI.Capture) is the whole path:
 armed by the request, `FinishFrame` records the copy off the backbuffer inside the frame
 (RenderTarget -> CopySrc -> RenderTarget, so the host's own Present transition still holds) into a
 256-byte-pitch GpuToCpu buffer; the next `OnUpdate` waits the device idle (a one-off hitch),

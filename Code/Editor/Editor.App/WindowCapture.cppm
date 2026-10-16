@@ -15,7 +15,7 @@ export module editor.app:window_capture;
 import foundation.core;
 import foundation.rhi;
 import foundation.image;
-import engine.defaultapp; // ScreenshotCapture
+import foundation.rhi.capture; // ScreenshotCapture
 
 using namespace foundation::core;
 
@@ -176,7 +176,7 @@ export namespace editor::app
             u32 window = 0;
             bool requested = false;
             WindowShot shot;
-            UniquePtr<engine::runtime::ScreenshotCapture> capture;
+            UniquePtr<foundation::rhi::ScreenshotCapture> capture;
         };
 
         // One slot per window, kept across requests so its readback buffer is made once.
@@ -191,7 +191,7 @@ export namespace editor::app
             }
             Slot slot;
             slot.window = windowId;
-            slot.capture = MakeUnique<engine::runtime::ScreenshotCapture>(*m_allocator);
+            slot.capture = MakeUnique<foundation::rhi::ScreenshotCapture>(*m_allocator);
             m_slots.PushBack(Move(slot));
             return m_slots[m_slots.Size() - 1];
         }

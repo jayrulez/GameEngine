@@ -15,7 +15,7 @@ export module editor.scene:viewport_capture;
 import foundation.core;
 import foundation.rhi;
 import foundation.image;
-import engine.defaultapp; // ScreenshotCapture
+import foundation.rhi.capture; // ScreenshotCapture
 import :scene_page_interface; // ViewportCapture
 
 using namespace foundation::core;
@@ -90,7 +90,7 @@ export namespace editor
         }
 
     private:
-        engine::runtime::ScreenshotCapture m_screenshot;
+        foundation::rhi::ScreenshotCapture m_screenshot;
         ViewportCapture m_state;
     };
 }

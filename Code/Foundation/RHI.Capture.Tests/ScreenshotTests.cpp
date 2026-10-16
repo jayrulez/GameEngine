@@ -21,12 +21,12 @@ import foundation.rhi.webgpu;
 import foundation.rhi.testsupport;
 import foundation.image;
 import foundation.image.io;
-import engine.defaultapp;
+import foundation.rhi.capture;
 
 using namespace foundation::core;
-using engine::runtime::ScreenshotCapture;
-using engine::runtime::ScreenshotOptions;
-using engine::runtime::ScreenshotOptionsFromArguments;
+using foundation::rhi::ScreenshotCapture;
+using foundation::rhi::ScreenshotOptions;
+using foundation::rhi::ScreenshotOptionsFromArguments;
 namespace rhi = foundation::rhi;
 namespace testsupport = foundation::rhi::testsupport;
 namespace image = foundation::image;

@@ -21,7 +21,7 @@ module;
 #include "Core/Log/Log.h"
 
 export module engine.defaultapp;
-export import :screenshot; // ScreenshotCapture + the --screenshot flags
+export import foundation.rhi.capture; // ScreenshotCapture + the --screenshot flags (this API takes ScreenshotOptions)
 export import :profiler_overlay; // ProfilerOverlayHost (F3, --profile-overlay)
 
 import foundation.core;
@@ -196,7 +196,7 @@ export namespace engine::runtime
         void CaptureScreenshot(core::StringView path);
         /// The --screenshot flags (ScreenshotOptionsFromArguments): capture at frame N or after
         /// S seconds, optionally exit once written. OnCommandLine reads them for every app.
-        void SetScreenshotOptions(ScreenshotOptions options) { m_screenshotOptions = core::Move(options); }
+        void SetScreenshotOptions(foundation::rhi::ScreenshotOptions options) { m_screenshotOptions = core::Move(options); }
         void OnCommandLine(int argc, char** argv) override; // --screenshot ..., --profile-overlay
         /// Show the profiler overlay once the UI is up (`--profile-overlay`; the web player's
         /// `?profile-overlay`). F3 toggles it at any time.
@@ -355,8 +355,8 @@ export namespace engine::runtime
         /// manager: SetContentDatabase and the manager's creation can both land after scenes exist.
         void PointSpawnersAtContent();
 
-        ScreenshotCapture m_screenshot;
-        ScreenshotOptions m_screenshotOptions;
+        foundation::rhi::ScreenshotCapture m_screenshot;
+        foundation::rhi::ScreenshotOptions m_screenshotOptions;
         core::u64 m_renderedFrames = 0; // frames FinishFrame saw (the --screenshot-frame count)
         core::u32 m_screenshotsTaken = 0; // of the --screenshot run (--screenshot-count frames, then done)
         bool m_screenshotExitPending = false;

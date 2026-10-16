@@ -76,6 +76,12 @@ namespace
     // type is (or is NOT) the declared return type.
     Variant MakeAnimalVariant() { return Variant::FromObject(MakeRef<Animal>(DefaultAllocator())); }
     Variant MakeWrongVariant() { return Variant::From<int>(7); }
+    // A narrowing factory taking any handle as a Variant, declared as taking an Animal.
+    Variant NarrowAnimal(Variant handle, int tag)
+    {
+        (void)tag;
+        return handle.Type() == &Animal::StaticType() ? handle : Variant{};
+    }
 }
 
 REFLECT_MEMBERS(Animal, "rtti::test")
@@ -96,6 +102,7 @@ REFLECT_MEMBERS(Animal, "rtti::test")
     // Animal; the dispatch validates the runtime type.
     builder.Method<&MakeAnimalVariant, Animal>("makeAnimal");
     builder.Method<&MakeWrongVariant, Animal>("makeWrong"); // body returns int -> validated to empty
+    builder.Method<&NarrowAnimal, Animal, Animal>("narrow"); // its Variant parameter declared Animal
 }
 RTTI_DEFINE_OBJECT(Dog, "rtti::test")
 RTTI_DEFINE_OBJECT(Cat, "rtti::test")
@@ -1116,6 +1123,22 @@ TEST_CASE("rtti: Method<Member, ReturnAs> overrides the declared return type and
     Result<Variant> rw = InvokeStatic(*wrong, Span<Variant>{});
     REQUIRE(rw.HasValue());
     CHECK(rw.Value().IsEmpty()); // ...but the body returned int -> validated to empty
+}
+
+TEST_CASE("rtti: Method<Member, ReturnAs, ParamAs> declares a Variant parameter's type")
+{
+    const MethodInfo* narrow = FindMethod(Animal::StaticType(), "narrow");
+    REQUIRE(narrow != nullptr);
+    REQUIRE(narrow->paramCount == 2u);
+    CHECK(narrow->params[0].type() == &Animal::StaticType()); // the Variant, declared Animal
+    CHECK(narrow->params[1].type() == &TypeOf<int>());        // the rest as they are
+    CHECK(narrow->returnType() == &Animal::StaticType());
+
+    // The body still receives the Variant.
+    Variant args[2] = {MakeAnimalVariant(), Variant::From<int>(1)};
+    Result<Variant> r = InvokeStatic(*narrow, Span<Variant>(args, 2));
+    REQUIRE(r.HasValue());
+    CHECK(r.Value().Type() == &Animal::StaticType());
 }
 
 TEST_CASE("rtti: const method and zero-arg invoke")

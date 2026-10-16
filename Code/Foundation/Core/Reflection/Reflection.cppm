@@ -1903,6 +1903,28 @@ export namespace foundation::core
             return *this;
         }
 
+        /// As above, and every Variant parameter is DECLARED as `ParamAs`: a method taking any handle
+        /// as a Variant (a narrowing `Label.of(node)`) tells the bindings what it takes, so a typed
+        /// language spells it `Node@` and a script passes a handle held in a variable as it is (a
+        /// bare Variant parameter is a `?&in` sink there, which copies a variable's object). The C++
+        /// body still receives the Variant.
+        template <auto Member, typename ReturnAs, typename ParamAs>
+        TypeBuilder& Method(const char* name)
+        {
+            using Reflect = detail::MethodReflect<Member>;
+            const Span<const ParamInfo> base = Reflect::Params();
+            Array<ParamInfo> declared;
+            declared.Reserve(base.Size());
+            for (const ParamInfo& param : base)
+                declared.PushBack(ParamInfo{param.type() == &TypeOf<Variant>() ? &detail::ReturnTypeInfo<ParamAs> : param.type,
+                                            param.name});
+            m_data.namedParams.PushBack(Move(declared));
+            m_data.methods.PushBack(MethodInfo{name, &detail::ReturnTypeInfo<ReturnAs>, m_data.namedParams.Back().Data(),
+                                               static_cast<u32>(base.Size()), Reflect::isStatic, Reflect::isConst,
+                                               &detail::InvokeReturningAs<Member, ReturnAs>});
+            return *this;
+        }
+
         template <typename V>
         TypeBuilder& Attribute(const char* key, V value)
         {

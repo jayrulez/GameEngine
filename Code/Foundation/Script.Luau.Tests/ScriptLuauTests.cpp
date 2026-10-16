@@ -1192,6 +1192,10 @@ TEST_CASE("script.luau: backend conformance battery")
     dialect.coroutineClass = kCoroutine;
     dialect.delegateModule = kDelegate;
     dialect.overloadModule = kOverload;
+    dialect.inheritModule = u8"square = Square.new()\n"
+                            u8"IA = square.sides\n"
+                            u8"IB = square:twice()\n"
+                            u8"IC = square.edge\n";
     dialect.goneModule = u8"lamp = Lamp.take(0)\n"
                          u8"function valid() return lamp:isValid() and 1 or 0 end\n"
                          u8"function readLevel() return lamp.level end\n"

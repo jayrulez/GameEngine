@@ -2317,6 +2317,50 @@ namespace foundation::script::angelscript
         }
 
         // Phase 2: bind the declared type's members.
+        // A type's reflected properties and its bases', derived first; a base's property of a name
+        // the derived type already has is left out.
+        [[nodiscard]] static core::Array<const core::PropertyInfo*> ChainProperties(const core::TypeInfo& type)
+        {
+            core::Array<const core::PropertyInfo*> out;
+            for (const core::TypeInfo* owner = &type; owner != nullptr; owner = owner->base)
+            {
+                for (core::usize i = 0; i < core::PropertyCount(*owner); ++i)
+                {
+                    const core::PropertyInfo& property = core::PropertyAt(*owner, i);
+                    bool shadowed = false;
+                    for (const core::PropertyInfo* seen : out)
+                    {
+                        shadowed = shadowed || (seen->name != nullptr && property.name != nullptr &&
+                                                core::StringView(reinterpret_cast<const char8_t*>(seen->name)) ==
+                                                    core::StringView(reinterpret_cast<const char8_t*>(property.name)));
+                    }
+                    if (!shadowed)
+                    {
+                        out.PushBack(&property);
+                    }
+                }
+            }
+            return out;
+        }
+
+        // A type's reflected methods and its bases' instance methods, derived first.
+        [[nodiscard]] static core::Array<const core::MethodInfo*> ChainMethods(const core::TypeInfo& type)
+        {
+            core::Array<const core::MethodInfo*> out;
+            for (const core::TypeInfo* owner = &type; owner != nullptr; owner = owner->base)
+            {
+                for (core::usize i = 0; i < core::MethodCount(*owner); ++i)
+                {
+                    const core::MethodInfo& method = core::MethodAt(*owner, i);
+                    if (owner == &type || !method.isStatic)
+                    {
+                        out.PushBack(&method);
+                    }
+                }
+            }
+            return out;
+        }
+
         void BindType(const core::TypeInfo& type)
         {
             // An enum is fully declared by DeclareEnum (a native enum + its values); it has no object
@@ -2380,10 +2424,11 @@ namespace foundation::script::angelscript
                 }
             }
 
-            // Properties -> virtual property accessors (`v.x`, `v.x = 9`).
-            for (core::usize i = 0; i < core::PropertyCount(type); ++i)
+            // Properties -> virtual property accessors (`v.x`, `v.x = 9`), the type's own and its
+            // bases' (a Button's `text` and its Node's `width`), as Luau's dispatch walks the chain.
+            for (const core::PropertyInfo* inherited : ChainProperties(type))
             {
-                const core::PropertyInfo& property = core::PropertyAt(type, i);
+                const core::PropertyInfo& property = *inherited;
                 if (!IsValidIdentifier(property.name))
                 {
                     continue;
@@ -2440,10 +2485,12 @@ namespace foundation::script::angelscript
             // overload registers distinctly (no arity collapsing).
             // Statics become global functions in a namespace named after the class
             // - script calls read `Float3::Dot(a, b)`.
+            // Instance methods come from the bases too (derived first, so an override's declaration
+            // wins the dedupe); statics stay on the type that declares them (`Button::of`).
             core::Array<core::String> usedStatics;
-            for (core::usize i = 0; i < core::MethodCount(type); ++i)
+            for (const core::MethodInfo* inherited : ChainMethods(type))
             {
-                const core::MethodInfo& method = core::MethodAt(type, i);
+                const core::MethodInfo& method = *inherited;
                 if (!IsValidIdentifier(method.name))
                 {
                     continue;

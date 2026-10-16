@@ -128,6 +128,33 @@ namespace foundation::script::conformance
         builder.Nested<&Crate::items>("items");
     }
 
+    // Inheritance contract fixtures: a derived type's handle reaches its base's reflected
+    // properties and instance methods in every backend. Registered on demand.
+    class Shape : public Object
+    {
+        RTTI_OBJECT(Shape, Object)
+    public:
+        f64 sides = 0.0;
+        [[nodiscard]] f64 Twice() const { return sides * 2.0; }
+    };
+    class Square : public Shape
+    {
+        RTTI_OBJECT(Square, Shape)
+    public:
+        Square() { sides = 4.0; }
+        f64 edge = 3.0;
+    };
+    REFLECT_MEMBERS(Shape, "rtti::script::conformance")
+    {
+        builder.Property<&Shape::sides>("sides");
+        builder.Method<&Shape::Twice>("twice");
+    }
+    REFLECT_MEMBERS(Square, "rtti::script::conformance")
+    {
+        builder.Constructor();
+        builder.Property<&Square::edge>("edge");
+    }
+
     // Gone-handle contract fixtures: a script holds a Lamp by a RESOLVE-mode handle (a slot and a
     // generation into a native table, as an element or a component is held), so the native side
     // can take the lamp away while the script still holds it. Registered on demand.
@@ -227,6 +254,10 @@ namespace foundation::script::conformance
         // `bump()` calling `lamp:bump()`. Once the lamp is taken away, every one but `valid()` is
         // the script's error, in every backend.
         StringView goneModule;
+        // Optional inheritance module: constructs a global `square` of the native Square type and
+        // computes module globals IA = square.sides (-> 4, the base's property), IB = square.twice()
+        // (-> 8, the base's method) and IC = square.edge (-> 3, its own).
+        StringView inheritModule;
         // Optional (certified only when the backend declares the Debugger capability): a module
         // with a zero-arg entry function `debugFunction`. Execution reaching `debugBreakLine`
         // (1-based, in the section named `debugSection`) must have a local named `debugLocalName`
@@ -561,6 +592,19 @@ namespace foundation::script::conformance
             CHECK(cctx->GetGlobal(u8"KM").Get<f64>() == doctest::Approx(9.0)); // move(1, 0)
             CHECK(cctx->GetGlobal(u8"KR").Get<f64>() == doctest::Approx(1.0)); // removeAt(0)
             CHECK(cctx->GetGlobal(u8"KL").Get<f64>() == doctest::Approx(5.0)); // survivor intact
+        }
+
+        // --- Inherited members: a derived handle reaches its base's properties and methods. ---
+        if (!dialect.inheritModule.IsEmpty())
+        {
+            manager->RegisterType(Shape::StaticType());
+            manager->RegisterType(Square::StaticType()); // late registration, like DelegateSignal
+            RefPtr<IScriptContext> ictx = manager->CreateContext();
+            REQUIRE(ictx.Get() != nullptr);
+            REQUIRE(ictx->Load(dialect.inheritModule, u8"main").IsOk());
+            CHECK(ictx->GetGlobal(u8"IA").Get<f64>() == doctest::Approx(4.0));
+            CHECK(ictx->GetGlobal(u8"IB").Get<f64>() == doctest::Approx(8.0));
+            CHECK(ictx->GetGlobal(u8"IC").Get<f64>() == doctest::Approx(3.0));
         }
 
         // --- Gone handles (one rule for every handle): isValid() answers, any other use errors. ---

@@ -106,6 +106,7 @@ export import :button;
 export import :repeat_button;
 export import :checkbox;
 export import :label;
+export import :text_runs;
 export import :panel;
 export import :spacer;
 export import :separator;

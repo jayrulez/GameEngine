@@ -27,6 +27,7 @@ add_executable(UI.Tests
     InputTests.cpp
     EditingTests.cpp
     EditTextTests.cpp
+    TextRunsTests.cpp
     FontFamilyTests.cpp
     InlineStyleTests.cpp
     NumericFieldTests.cpp

@@ -68,7 +68,7 @@ TEST_CASE("scrollview: content is clipped to the viewport")
 
 TEST_CASE("scrollview: wheel bubbles from hovered content and scrolls")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{200.0f, 200.0f});
     auto sv = Make<ScrollView>();
     sv->SetSize(core::Float2{100.0f, 100.0f});
@@ -128,7 +128,7 @@ TEST_CASE("scrollbar: value clamps and notifies; thumb proportion clamps")
 
 TEST_CASE("scrollbar: drag keeps tracking after the cursor leaves it (capture + hover leave)")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{200.0f, 400.0f});
     auto sb = Make<ScrollBar>();
     sb->SetOrientation(Orientation::Vertical);
@@ -237,7 +237,7 @@ TEST_CASE("scrollview: auto-measures content from its children")
 
 TEST_CASE("scrollview: keyboard scrolls when focused")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{200.0f, 200.0f});
     auto sv = Make<ScrollView>();
     sv->SetSize(core::Float2{100.0f, 100.0f});
@@ -259,7 +259,7 @@ TEST_CASE("scrollview: keyboard scrolls when focused")
 
 TEST_CASE("scrollbar: clicking the track pages toward the click")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{200.0f, 400.0f});
     auto sb = Make<ScrollBar>();
     sb->SetOrientation(Orientation::Vertical);
@@ -276,7 +276,7 @@ TEST_CASE("scrollbar: clicking the track pages toward the click")
 
 TEST_CASE("scrollbar: grabbing the thumb drags by cursor delta (no jump-to-center)")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{200.0f, 400.0f});
     auto sb = Make<ScrollBar>();
     sb->SetOrientation(Orientation::Vertical);

@@ -86,7 +86,7 @@ TEST_CASE("tabwidget: content panels are sized to the content host")
 
 TEST_CASE("tabwidget: clicking a tab button switches the panel")
 {
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{400.0f, 300.0f});
     auto tw = Make<TabWidget>();
     tw->SetSize(core::Float2{300.0f, 200.0f});

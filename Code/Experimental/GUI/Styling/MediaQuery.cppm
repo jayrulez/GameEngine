@@ -37,7 +37,10 @@ export namespace experimental::gui
         MinHeight,
         MaxHeight,
         Width,
-        Height
+        Height,
+        MinResolution, ///< in dpi: 1dppx (1x) is 96dpi
+        MaxResolution,
+        Resolution,
     };
 
     struct MediaFeature
@@ -82,6 +85,12 @@ export namespace experimental::gui
                 return c.Width == f.Value;
             case MediaFeatureType::Height:
                 return c.Height == f.Value;
+            case MediaFeatureType::MinResolution:
+                return c.Dpi >= f.Value;
+            case MediaFeatureType::MaxResolution:
+                return c.Dpi <= f.Value;
+            case MediaFeatureType::Resolution:
+                return c.Dpi == f.Value;
             }
             return true;
         }
@@ -120,8 +129,11 @@ export namespace experimental::gui
                 return;
 
             const core::StringView name = core::Trim(group.SubStr(0, colon));
-            const Optional<f32> value =
-                ParseLength(core::Trim(group.SubStr(colon + 1, group.Size() - colon - 1)));
+            const core::StringView text = core::Trim(group.SubStr(colon + 1, group.Size() - colon - 1));
+            const bool resolution = name == core::StringView(u8"min-resolution") ||
+                                    name == core::StringView(u8"max-resolution") ||
+                                    name == core::StringView(u8"resolution");
+            const Optional<f32> value = resolution ? ParseResolution(text) : ParseLength(text);
             if (!value.HasValue())
                 return;
 
@@ -138,10 +150,36 @@ export namespace experimental::gui
                 type = MediaFeatureType::Width;
             else if (name == core::StringView(u8"height"))
                 type = MediaFeatureType::Height;
+            else if (name == core::StringView(u8"min-resolution"))
+                type = MediaFeatureType::MinResolution;
+            else if (name == core::StringView(u8"max-resolution"))
+                type = MediaFeatureType::MaxResolution;
+            else if (name == core::StringView(u8"resolution"))
+                type = MediaFeatureType::Resolution;
             else
                 return; // unknown feature ignored
 
             m_features.PushBack(MediaFeature{type, value.Value()});
+        }
+
+        // `2dppx`, `2x` or `192dpi`, in dpi.
+        [[nodiscard]] static Optional<f32> ParseResolution(core::StringView text)
+        {
+            const auto number = [&](usize suffix) { return ParseLength(text.SubStr(0, text.Size() - suffix)); };
+            const auto endsWith = [&](const char8_t* unit)
+            {
+                const core::StringView u(unit);
+                return text.Size() > u.Size() && text.SubStr(text.Size() - u.Size(), u.Size()) == u;
+            };
+            if (endsWith(u8"dppx"))
+                if (Optional<f32> n = number(4); n.HasValue())
+                    return n.Value() * 96.0f;
+            if (endsWith(u8"dpi"))
+                return number(3);
+            if (endsWith(u8"x"))
+                if (Optional<f32> n = number(1); n.HasValue())
+                    return n.Value() * 96.0f;
+            return {};
         }
 
         Array<MediaFeature> m_features;

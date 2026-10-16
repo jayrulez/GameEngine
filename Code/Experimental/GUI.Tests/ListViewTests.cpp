@@ -32,7 +32,7 @@ namespace
 TEST_CASE("listview: virtualizes - only visible rows are realized")
 {
     StringListModel model(MakeItems(1000));
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{300.0f, 300.0f});
     auto list = Make<ListView>();
     list->SetSize(core::Float2{200.0f, 100.0f});
@@ -48,7 +48,7 @@ TEST_CASE("listview: virtualizes - only visible rows are realized")
 TEST_CASE("listview: clicking a row selects it and fires the callback")
 {
     StringListModel model(MakeItems(10));
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{300.0f, 300.0f});
     auto list = Make<ListView>();
     list->SetSize(core::Float2{200.0f, 100.0f});
@@ -78,7 +78,7 @@ TEST_CASE("listview: clicking a row selects it and fires the callback")
 TEST_CASE("listview: keyboard navigation moves the selection")
 {
     StringListModel model(MakeItems(10));
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{300.0f, 300.0f});
     auto list = Make<ListView>();
     list->SetSize(core::Float2{200.0f, 100.0f});
@@ -105,7 +105,7 @@ TEST_CASE("listview: keyboard navigation moves the selection")
 TEST_CASE("listview: selecting a far row scrolls it into view")
 {
     StringListModel model(MakeItems(20)); // content 400, viewport 100 -> maxScroll 300
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{300.0f, 300.0f});
     auto list = Make<ListView>();
     list->SetSize(core::Float2{200.0f, 100.0f});
@@ -122,7 +122,7 @@ TEST_CASE("listview: selecting a far row scrolls it into view")
 TEST_CASE("listview: wheel scrolls and clamps")
 {
     StringListModel model(MakeItems(20));
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{300.0f, 300.0f});
     auto list = Make<ListView>();
     list->SetSize(core::Float2{200.0f, 100.0f});
@@ -141,7 +141,7 @@ TEST_CASE("listview: wheel scrolls and clamps")
 TEST_CASE("listview: reacts to model updates and clamps a stale selection")
 {
     StringListModel model(MakeItems(5));
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{300.0f, 300.0f});
     auto list = Make<ListView>();
     list->SetSize(core::Float2{200.0f, 100.0f});
@@ -164,7 +164,7 @@ TEST_CASE("listview: reacts to model updates and clamps a stale selection")
 TEST_CASE("itemview: Ctrl-click toggles items in multi-selection mode")
 {
     StringListModel model(MakeItems(10));
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{300.0f, 300.0f});
     auto list = Make<ListView>();
     list->SetSize(core::Float2{200.0f, 120.0f});
@@ -194,7 +194,7 @@ TEST_CASE("itemview: Ctrl-click toggles items in multi-selection mode")
 TEST_CASE("itemview: Shift-click selects a range from the anchor")
 {
     StringListModel model(MakeItems(10));
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{300.0f, 300.0f});
     auto list = Make<ListView>();
     list->SetSize(core::Float2{200.0f, 120.0f});
@@ -218,7 +218,7 @@ TEST_CASE("itemview: Shift-click selects a range from the anchor")
 TEST_CASE("itemview: single-selection mode ignores Ctrl (stays single)")
 {
     StringListModel model(MakeItems(10));
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{300.0f, 300.0f});
     auto list = Make<ListView>();
     list->SetSize(core::Float2{200.0f, 120.0f});

@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // GUI - Action tests: Move/Fade/Scale/Delay/Runnable/Sequence driven through a
-// SceneNode's ActionManager. Derived from eepp scene/actions behavior.
+// SceneRoot's ActionManager. Derived from eepp scene/actions behavior.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -13,9 +13,9 @@ namespace core = foundation::core;
 
 namespace
 {
-    core::RefPtr<SceneNode> MakeScene()
+    core::RefPtr<SceneRoot> MakeScene()
     {
-        return core::MakeRef<SceneNode>(core::DefaultAllocator());
+        return core::MakeRef<SceneRoot>(core::DefaultAllocator());
     }
     core::RefPtr<Node> MakeNode() { return core::MakeRef<Node>(core::DefaultAllocator()); }
     core::Duration Sec(double s) { return core::Duration::FromSeconds(s); }
@@ -106,7 +106,7 @@ TEST_CASE("action: sequence runs children in order")
 
 TEST_CASE("action: run on unattached node is a no-op")
 {
-    auto node = MakeNode(); // no SceneNode root
+    auto node = MakeNode(); // no SceneRoot root
     node->RunAction(core::MakeRef<MoveAction>(core::DefaultAllocator(), core::Float2{0.0f, 0.0f},
                                               core::Float2{100.0f, 0.0f}, Sec(1.0)));
     CHECK(node->GetActionManager() == nullptr);

@@ -14,8 +14,12 @@ module;
 
 module experimental.gui;
 
+namespace core = foundation::core;
+
 namespace experimental::gui
 {
+    SceneRoot* Node::GetSceneRoot() { return core::Cast<SceneRoot>(GetRootNode()); }
+
     void Node::RequestFocus()
     {
         if (EventDispatcher* dispatcher = GetEventDispatcher())

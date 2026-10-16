@@ -17,9 +17,9 @@ namespace shell = foundation::shell;
 
 namespace
 {
-    core::RefPtr<SceneNode> MakeScene(core::Float2 size)
+    core::RefPtr<SceneRoot> MakeScene(core::Float2 size)
     {
-        auto s = core::MakeRef<SceneNode>(core::DefaultAllocator());
+        auto s = core::MakeRef<SceneRoot>(core::DefaultAllocator());
         s->SetSize(size);
         return s;
     }

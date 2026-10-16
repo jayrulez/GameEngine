@@ -41,7 +41,7 @@ namespace
     // A GUI for one script: its root, 400 x 300, installed as the script's `gui.root()`.
     struct GuiBed
     {
-        RefPtr<gui::SceneNode> root = MakeRef<gui::SceneNode>(DefaultAllocator());
+        RefPtr<gui::SceneRoot> root = MakeRef<gui::SceneRoot>(DefaultAllocator());
         gui::GuiScriptBinding binding;
         Errors errors;
         RefPtr<IScriptContext> context;
@@ -152,7 +152,7 @@ namespace
         CHECK(bed.Number(u8"goValid") == doctest::Approx(1.0));
         gui::ClearGuiScriptService(*bed.context);
         bed.binding.root = nullptr;
-        bed.root = RefPtr<gui::SceneNode>{};
+        bed.root = RefPtr<gui::SceneRoot>{};
         CHECK(bed.Number(u8"goValid") == doctest::Approx(0.0));
         bed.Refused(u8"readGo");
     }

@@ -175,7 +175,7 @@ export namespace experimental::gui
             Invalidate();
         }
 
-        // The caret blink is advanced by the owner (SceneNode::Update path) if wired; a static
+        // The caret blink is advanced by the owner (SceneRoot::Update path) if wired; a static
         // caret (always shown while focused) is the default when not ticked. The same clock
         // drives double-click detection (see OnMouseDown).
         void Update(f64 deltaSeconds)

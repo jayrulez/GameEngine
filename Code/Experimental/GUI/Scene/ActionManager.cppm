@@ -4,7 +4,7 @@
 // GUI - :action_manager partition
 //
 // ActionManager: owns and ticks running Actions. Ported from eepp's Scene::ActionManager
-// (include/eepp/scene/actionmanager.hpp). Owned by the SceneNode; Node::RunAction forwards
+// (include/eepp/scene/actionmanager.hpp). Owned by the SceneRoot; Node::RunAction forwards
 // here. Actions are RefPtr-owned; a finished action is dropped after Update.
 
 module;

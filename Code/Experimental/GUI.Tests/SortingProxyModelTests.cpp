@@ -119,7 +119,7 @@ TEST_CASE("sorting-proxy: TableView header click wired to ToggleSort re-sorts th
     FillBAC(source);
     SortingProxyModel proxy(&source);
 
-    auto root = Make<SceneNode>();
+    auto root = Make<SceneRoot>();
     root->SetSize(core::Float2{400.0f, 400.0f});
     auto table = Make<TableView>();
     table->SetSize(core::Float2{300.0f, 200.0f});

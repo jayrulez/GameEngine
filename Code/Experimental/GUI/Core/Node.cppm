@@ -36,14 +36,15 @@ namespace core = foundation::core;
 
 export namespace experimental::gui
 {
-    class EventDispatcher; // owned by the SceneNode; reached via GetEventDispatcher()
-    class ElementSet;      // what a GUI may create (:element_types); its SceneNode holds one
+    class EventDispatcher; // owned by the SceneRoot; reached via GetEventDispatcher()
+    class ElementSet;      // what a GUI may create (:element_types); its SceneRoot holds one
+    class SceneRoot;       // the root of a GUI (:scene_root)
     class Node;
 
     /// One GUI's element table (G1 of Specs/vg-and-gui-lab.md): what a script's handle to a node
     /// resolves through, a slot and a generation, so the tree owns its nodes and a script only
-    /// ever holds them weakly. Each SceneNode owns one, so two GUIs never share slots. Handles
-    /// retain the table (an anchored resolve-mode Variant): when its SceneNode goes, the table is
+    /// ever holds them weakly. Each SceneRoot owns one, so two GUIs never share slots. Handles
+    /// retain the table (an anchored resolve-mode Variant): when its SceneRoot goes, the table is
     /// closed and every handle into it reads as gone, never as freed memory.
     class ElementTable : public RefCounted
     {
@@ -216,7 +217,11 @@ export namespace experimental::gui
                 m_parent->RemoveChild(this);
         }
 
-        // The topmost ancestor (the SceneNode root, once one is installed).
+        /// The root of the GUI this node is in, or null when it is in none (a detached subtree:
+        /// GetRootNode gives its topmost node).
+        [[nodiscard]] SceneRoot* GetSceneRoot();
+
+        // The topmost ancestor (the SceneRoot, when the node is in a GUI).
         [[nodiscard]] Node* GetRootNode()
         {
             Node* n = this;
@@ -453,9 +458,9 @@ export namespace experimental::gui
         }
 
         // === Coordinator lookup + lifecycle ===
-        // The SceneNode's ActionManager / MutationQueue, found by walking to the root.
-        // Base returns the parent's; SceneNode overrides to return its own. Null if the
-        // node is not yet attached under a SceneNode.
+        // The SceneRoot's ActionManager / MutationQueue, found by walking to the root.
+        // Base returns the parent's; SceneRoot overrides to return its own. Null if the
+        // node is not yet attached under a SceneRoot.
         [[nodiscard]] virtual ActionManager* GetActionManager()
         {
             return m_parent ? m_parent->GetActionManager() : nullptr;
@@ -464,13 +469,13 @@ export namespace experimental::gui
         {
             return m_parent ? m_parent->GetMutationQueue() : nullptr;
         }
-        // The SceneNode's EventDispatcher (pointer walk to the root; SceneNode returns its own).
-        /// What the GUI this node is in may create (its SceneNode's set), or null when detached.
+        // The SceneRoot's EventDispatcher (pointer walk to the root; SceneRoot returns its own).
+        /// What the GUI this node is in may create (its SceneRoot's set), or null when detached.
         [[nodiscard]] virtual const ElementSet* GetElementSet() const
         {
             return m_parent ? m_parent->GetElementSet() : nullptr;
         }
-        /// The element table of the GUI this node is in (its SceneNode's), or null when detached.
+        /// The element table of the GUI this node is in (its SceneRoot's), or null when detached.
         [[nodiscard]] virtual ElementTable* GetElementTable()
         {
             return m_parent ? m_parent->GetElementTable() : nullptr;
@@ -484,8 +489,8 @@ export namespace experimental::gui
         void RequestFocus();
         void ReleaseFocus();
 
-        // Run an action on this node (targets it, hands it to the SceneNode's manager).
-        // No-op (the action is dropped) if the node is not attached under a SceneNode.
+        // Run an action on this node (targets it, hands it to the SceneRoot's manager).
+        // No-op (the action is dropped) if the node is not attached under a SceneRoot.
         void RunAction(RefPtr<Action> action)
         {
             if (!action)
@@ -533,7 +538,7 @@ export namespace experimental::gui
         [[nodiscard]] f32 GetY() const noexcept { return GetPosition().y; }
         void SetY(f32 y) { SetPosition(core::Float2{GetPosition().x, y}); }
 
-        // Detach this node from its tree at the next safe sync point (SceneNode drain).
+        // Detach this node from its tree at the next safe sync point (SceneRoot drain).
         // Falls back to immediate removal if there is no coordinator.
         void Close()
         {

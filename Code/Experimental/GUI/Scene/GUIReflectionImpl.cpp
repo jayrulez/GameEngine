@@ -492,8 +492,7 @@ namespace experimental::gui
             const TypeInfo* const kLabElements[] = {
                 &Label::StaticType(),        &Button::StaticType(),       &CheckBox::StaticType(),
                 &RadioButton::StaticType(),  &Slider::StaticType(),       &ProgressBar::StaticType(),
-                &TextField::StaticType(),    &LinearLayout::StaticType(), &GridLayout::StaticType(),
-                &RelativeLayout::StaticType(), &FlexLayout::StaticType(), &ScrollView::StaticType(),
+                &TextField::StaticType(),    &Panel::StaticType(),        &ScrollView::StaticType(),
                 &Image::StaticType(),        &ListBox::StaticType(),      &Window::StaticType(),
                 &ComboBox::StaticType(),
             };
@@ -553,7 +552,8 @@ namespace experimental::gui
         builder.AccessorProperty<&Node::GetY, &Node::SetY>("y");
         builder.AccessorProperty<&Node::GetWidth, &Node::SetWidth>("width");
         builder.AccessorProperty<&Node::GetHeight, &Node::SetHeight>("height");
-        builder.AccessorProperty<&Node::IsVisible, &Node::SetVisible>("visible");
+        builder.AccessorProperty<&Node::IsVisible, &Node::SetVisible>("visible"); // hidden keeps its place
+        builder.AccessorProperty<&Node::IsDisplayed, &Node::SetDisplayed>("displayed"); // out of the layout when false
         builder.AccessorProperty<&Node::IsEnabled, &Node::SetEnabled>("enabled");
         builder.AccessorProperty<&Node::GetAlpha, &Node::SetAlpha>("opacity");
         // Navigation (G7): reflected with their CSS names, so a sheet, markup and a script set them.
@@ -661,35 +661,14 @@ namespace experimental::gui
         builder.Creator();
     }
 
-    REFLECT_MEMBERS(LinearLayout, "rtti::gui")
+    REFLECT_MEMBERS(Panel, "rtti::gui")
     {
-        builder.Method<&ElementOf<LinearLayout>, LinearLayout, Node>("of");
-        builder.Creator();
-    }
-
-    REFLECT_MEMBERS(GridLayout, "rtti::gui")
-    {
-        builder.AccessorProperty<&GridLayout::GetColumns, &GridLayout::SetColumns>("columns").PropAttribute("css", core::String(u8"columns"));
-        builder.AccessorProperty<&GridLayout::GetHorizontalSpacing, &GridLayout::SetUniformSpacing>("spacing").PropAttribute("css", core::String(u8"spacing"));
-        builder.Method<&ElementOf<GridLayout>, GridLayout, Node>("of");
-        builder.Creator();
-    }
-
-    REFLECT_MEMBERS(RelativeLayout, "rtti::gui")
-    {
-        builder.Method<&ElementOf<RelativeLayout>, RelativeLayout, Node>("of");
-        builder.Creator();
-    }
-
-    REFLECT_MEMBERS(FlexLayout, "rtti::gui")
-    {
-        builder.Method<&ElementOf<FlexLayout>, FlexLayout, Node>("of");
+        builder.Method<&ElementOf<Panel>, Panel, Node>("of");
         builder.Creator();
     }
 
     REFLECT_MEMBERS(ScrollView, "rtti::gui")
     {
-        builder.AccessorProperty<&ScrollView::IsAutoMeasureContent, &ScrollView::SetAutoMeasureContent>("autoMeasure").PropAttribute("css", core::String(u8"auto-measure"));
         builder.Method<&ElementOf<ScrollView>, ScrollView, Node>("of");
         builder.Creator();
     }

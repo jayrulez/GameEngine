@@ -5,7 +5,7 @@
 //
 // UIWidget: a UINode with the CSS identity + layout inputs the styling engine matches on.
 // Ported from eepp's UI::UIWidget - element tag, id, and style classes (the selector
-// surface for Phase 6's CSS engine), plus a layout margin. Size policies + attribute/markup
+// surface for Phase 6's CSS engine). Size policies + attribute/markup
 // loading arrive with the layout and CSS phases.
 
 module;
@@ -83,14 +83,6 @@ export namespace experimental::gui
         [[nodiscard]] usize ClassCount() const noexcept { return m_classes.Size(); }
         [[nodiscard]] const Array<core::String>& Classes() const noexcept { return m_classes; }
 
-        // === Layout margin ===
-        void SetMargin(Thickness margin)
-        {
-            m_margin = margin;
-            Invalidate();
-        }
-        [[nodiscard]] Thickness GetMargin() const noexcept { return m_margin; }
-
         // === Hover tooltip ===
         void SetTooltip(core::StringView text) { m_tooltip = text; }
         [[nodiscard]] core::StringView GetTooltipText() const override
@@ -102,7 +94,6 @@ export namespace experimental::gui
         core::String m_tag;
         core::String m_id;
         Array<core::String> m_classes;
-        Thickness m_margin{};
         core::String m_tooltip;
     };
 }

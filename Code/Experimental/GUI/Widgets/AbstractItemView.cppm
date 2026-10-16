@@ -30,7 +30,7 @@ import :rectangle_drawable;
 import :node;
 import :ui_widget;
 import :scroll_bar;
-import :linear_layout; // Orientation
+import :layout_style; // Orientation
 import :model_index;
 import :model;
 

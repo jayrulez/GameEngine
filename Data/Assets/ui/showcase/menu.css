@@ -96,7 +96,7 @@
 .row-value { width: 70px; height: 34px; font-family: Roboto; font-size: 18px; color: var(--ink); vertical-align: middle; }
 .row-slider { width: 200px; height: 34px; }
 .row-check { width: 26px; height: 26px; }
-.row-field { width: 260px; height: 34px; font-family: Roboto; font-size: 18px; color: var(--ink);
+.row-field { width: 260px; height: 34px; font-family: Roboto; font-size: 18px; color: var(--ink); padding: 0 10px;
              background-color: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 8; }
 slider::track { background-color: rgba(255, 255, 255, 0.15); }
 slider::fill { background-color: #f3a047; }

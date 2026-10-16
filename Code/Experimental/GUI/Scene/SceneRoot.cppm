@@ -161,12 +161,7 @@ export namespace experimental::gui
         /// Runs this root's layout pass: every container that requested a layout, parents first,
         /// again while a layout requests more (a child's new size can move its parent), at most a
         /// few rounds. A host runs it after styling and before drawing; Update runs it too.
-        void UpdateLayout()
-        {
-            m_lastLayoutCount = 0;
-            for (i32 round = 0; round < 8 && (IsLayoutDirty() || HasLayoutDirtyDescendant()); ++round)
-                m_lastLayoutCount += RunLayout();
-        }
+        void UpdateLayout() { m_lastLayoutCount = Node::UpdateLayout(); }
         /// How many containers the last layout pass laid out (none in a frame where nothing moved).
         [[nodiscard]] u32 LastLayoutCount() const noexcept { return m_lastLayoutCount; }
 

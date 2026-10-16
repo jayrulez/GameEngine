@@ -17,6 +17,7 @@ target_sources(GUI
             Core/Clipboard.cppm
             Core/MutationQueue.cppm
             Core/Reactive.cppm
+            Layout/LayoutStyle.cppm
             Core/Node.cppm
             Scene/Action.cppm
             Scene/ActionManager.cppm
@@ -57,10 +58,7 @@ target_sources(GUI
             Widgets/Radio.cppm
             Widgets/Slider.cppm
             Widgets/ProgressBar.cppm
-            Layout/LinearLayout.cppm
-            Layout/GridLayout.cppm
-            Layout/RelativeLayout.cppm
-            Layout/FlexLayout.cppm
+            Widgets/Panel.cppm
             Widgets/TextField.cppm
             Widgets/ScrollBar.cppm
             Widgets/ScrollView.cppm
@@ -100,6 +98,7 @@ target_sources(GUI
         # Module implementation unit: Node method bodies that call the EventDispatcher
         # (kept out of :node to avoid a :node <-> :event_dispatcher partition cycle).
         Scene/GUIClusterImpl.cpp
+        Layout/LayoutImpl.cpp
         Scene/GUIReflectionImpl.cpp
         Core/ReactiveImpl.cpp)
 

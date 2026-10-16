@@ -453,7 +453,7 @@ export namespace experimental::gui
             // first (nothing to do when none waits).
             for (i32 round = 0; m_root != nullptr && round < 8 && (m_root->IsLayoutDirty() || m_root->HasLayoutDirtyDescendant());
                  ++round)
-                (void)m_root->RunLayout();
+                m_root->ArrangeAgain();
             Node* hit = m_root ? m_root->OverFind(position) : nullptr;
             // A modal confines the pointer: hits outside the modal subtree are swallowed.
             if (m_modalRoot != nullptr && !IsInSubtree(hit, m_modalRoot))
@@ -612,6 +612,7 @@ export namespace experimental::gui
         }
         bool RouteKey(EventType type, u32 keyCode, u32 modifiers)
         {
+            (void)HitTest(core::Float2{}); // keys see the layout as it is now, as the pointer does
             Node* target = KeyTarget();
             if (target == nullptr)
                 return false;

@@ -21,12 +21,12 @@ const double kModalCloseTime = 0.25;
 // then, so adding it again starts the animation over).
 void reveal(Node@ node, const string &in animationClass)
 {
-    node.visible = true;
+    node.displayed = true;
     UIWidget::of(node).addClass(animationClass);
 }
 void conceal(Node@ node, const string &in animationClass)
 {
-    node.visible = false;
+    node.displayed = false;
     UIWidget::of(node).removeClass(animationClass);
 }
 
@@ -45,9 +45,9 @@ bool changing() { return leaveLeft >= 0; }
 // What is on show now: the loading screen, or the page in the slot.
 Node@ current()
 {
-    if (loadingScreen.visible)
+    if (loadingScreen.displayed)
         return loadingScreen;
-    return mainPanel.visible ? mainPanel : settingsPanel;
+    return mainPanel.displayed ? mainPanel : settingsPanel;
 }
 
 // Starts the change to `next` (a page, or the loading screen).
@@ -78,12 +78,12 @@ void arrive()
         gui::set("progress", 0);
         loadTime = 0;
         loadingNow = true;
-        stage.visible = false; // the loading screen replaces the menu
+        stage.displayed = false; // the loading screen replaces the menu
         reveal(loadingScreen, "screen-in");
         loadingScreen.focus();
         return;
     }
-    stage.visible = true;
+    stage.displayed = true;
     reveal(arriving, "enter");
     arriving.focus(); // its remembered or default widget: the keyboard and a gamepad carry on there
 }
@@ -123,11 +123,11 @@ void onStay()
 // Back (Escape, a gamepad's East): closes what is open, one step at a time.
 bool onBackCommand()
 {
-    if (modal.visible && modalClosing < 0)
+    if (modal.displayed && modalClosing < 0)
         onStay();
-    else if (modal.visible)
+    else if (modal.displayed)
         return false; // closing already
-    else if (!changing() && (loadingScreen.visible || settingsPanel.visible))
+    else if (!changing() && (loadingScreen.displayed || settingsPanel.displayed))
         onBack();
     return false;
 }
@@ -184,7 +184,7 @@ void enter()
     conceal(loadingScreen, "screen-in");
     UIWidget::of(loadingScreen).removeClass("leave");
     UIWidget::of(mainPanel).removeClass("leave");
-    stage.visible = true;
+    stage.displayed = true;
     conceal(mainPanel, "enter");
     reveal(mainPanel, "enter");
     mainPanel.focus();

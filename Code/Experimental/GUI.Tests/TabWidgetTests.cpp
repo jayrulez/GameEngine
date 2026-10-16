@@ -18,7 +18,7 @@ namespace
     {
         return core::MakeRef<T>(core::DefaultAllocator());
     }
-    core::RefPtr<Node> Panel() { return core::MakeRef<UIWidget>(core::DefaultAllocator()); }
+    core::RefPtr<Node> Page() { return core::MakeRef<UIWidget>(core::DefaultAllocator()); }
 }
 
 TEST_CASE("tabwidget: first tab is auto-selected; panels switch visibility")
@@ -26,9 +26,9 @@ TEST_CASE("tabwidget: first tab is auto-selected; panels switch visibility")
     auto tw = Make<TabWidget>();
     tw->SetSize(core::Float2{300.0f, 200.0f});
 
-    auto p0 = Panel();
-    auto p1 = Panel();
-    auto p2 = Panel();
+    auto p0 = Page();
+    auto p1 = Page();
+    auto p2 = Page();
     tw->AddTab(core::StringView(u8"One"), p0.Get());
     tw->AddTab(core::StringView(u8"Two"), p1.Get());
     tw->AddTab(core::StringView(u8"Three"), p2.Get());
@@ -58,10 +58,10 @@ TEST_CASE("tabwidget: tab-changed callback fires with the index")
             last = i;
         });
 
-    tw->AddTab(core::StringView(u8"A"), Panel().Get()); // auto-select 0 -> callback
+    tw->AddTab(core::StringView(u8"A"), Page().Get()); // auto-select 0 -> callback
     CHECK(changes == 1);
     CHECK(last == 0);
-    tw->AddTab(core::StringView(u8"B"), Panel().Get()); // not auto-selected (not first)
+    tw->AddTab(core::StringView(u8"B"), Page().Get()); // not auto-selected (not first)
     CHECK(changes == 1);
     tw->SelectTab(1);
     CHECK(changes == 2);
@@ -77,7 +77,7 @@ TEST_CASE("tabwidget: content panels are sized to the content host")
     tw->SetSize(core::Float2{300.0f, 200.0f});
     tw->SetTabBarHeight(30.0f);
 
-    auto p0 = Panel();
+    auto p0 = Page();
     tw->AddTab(core::StringView(u8"One"), p0.Get());
     // Host = full width, height minus the tab bar.
     CHECK(p0->GetSize().x == doctest::Approx(300.0f));
@@ -94,8 +94,8 @@ TEST_CASE("tabwidget: clicking a tab button switches the panel")
     tw->SetTabBarHeight(30.0f);
     root->AddChild(tw.Get());
 
-    auto p0 = Panel();
-    auto p1 = Panel();
+    auto p0 = Page();
+    auto p1 = Page();
     tw->AddTab(core::StringView(u8"One"), p0.Get());
     tw->AddTab(core::StringView(u8"Two"), p1.Get());
     EventDispatcher* d = root->GetEventDispatcher();

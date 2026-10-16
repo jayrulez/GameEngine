@@ -14,6 +14,7 @@ add_executable(GUI.Tests
     SceneRootTests.cpp
     EventDispatcherTests.cpp
     RoutingTests.cpp
+    LayoutEngineTests.cpp
     TextTests.cpp
     ModelTests.cpp
     WidgetTests.cpp
@@ -37,13 +38,10 @@ add_executable(GUI.Tests
     EasingTests.cpp
     StyleManagerTests.cpp
     LabelButtonTests.cpp
-    LinearLayoutTests.cpp
-    FlexLayoutTests.cpp
     CheckBoxTests.cpp
     SliderTests.cpp
     ProgressBarTests.cpp
     TextFieldTests.cpp
-    LayoutTests.cpp
     ScrollTests.cpp
     RadioTests.cpp
     ImageWidgetTests.cpp

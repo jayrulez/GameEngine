@@ -105,6 +105,7 @@ TEST_CASE("style-applier: width/height, enabled, visibility, margin")
                                            u8"visibility: hidden; margin: 1 2 3 4; }"));
     auto w = Widget(u8"button");
     ApplyStyle(*w.Get(), sheet.Resolve(*w.Get(), MediaContext{}, /*applyPseudo*/ false));
+    (void)w->UpdateLayout(); // the size is the layout's, from the style
 
     CHECK(w->GetSize().x == doctest::Approx(120.0f));
     CHECK(w->GetSize().y == doctest::Approx(40.0f));
@@ -141,30 +142,30 @@ TEST_CASE("style-applier: text-align / vertical-align reach a label")
     CHECK(l->GetTextAlignV() == TextVAlign::Bottom); // unchanged (only H specified)
 }
 
-TEST_CASE("style-applier: min/max-width/height clamp the applied size")
+TEST_CASE("style-applier: sizes, min and max, percentages and auto reach the layout style")
 {
     StyleSheet sheet = CSSParser::Parse(SV(u8"box { min-width: 50; max-width: 100; min-height: 20; "
-                                           u8"max-height: 80; width: 200; height: 5; }"));
+                                           u8"max-height: 80; width: 50%; height: auto; }"));
     auto w = Widget(u8"box");
     ApplyStyle(*w.Get(), sheet.Resolve(*w.Get(), MediaContext{}, /*applyPseudo*/ false));
-    CHECK(w->GetSize().x == doctest::Approx(100.0f)); // 200 clamped down to max 100
-    CHECK(w->GetSize().y == doctest::Approx(20.0f));  // 5 clamped up to min 20
-    CHECK(w->GetMinSize().x == doctest::Approx(50.0f));
-    CHECK(w->GetMaxSize().y == doctest::Approx(80.0f));
+    const LayoutStyle& s = w->GetLayoutStyle();
+    CHECK(s.Width.Kind == LayoutLengthKind::Percent);
+    CHECK(s.Width.Value == doctest::Approx(50.0f));
+    CHECK(s.Height.IsAuto());
+    CHECK(s.MinWidth.Value == doctest::Approx(50.0f));
+    CHECK(s.MaxHeight.Value == doctest::Approx(80.0f));
 }
 
-TEST_CASE("node: SetSize clamps to min/max size constraints")
+TEST_CASE("node: a size from code is its width and height; min and max keep it within them")
 {
     auto w = Make<UIWidget>();
-    w->SetMaxSize(core::Float2{100.0f, 100.0f});
+    w->EditLayoutStyle([](LayoutStyle& s) { s.MaxWidth = LayoutLength::Px(100.0f); s.MinHeight = LayoutLength::Px(60.0f); });
     w->SetSize(core::Float2{200.0f, 50.0f});
-    CHECK(w->GetSize().x == doctest::Approx(100.0f)); // clamped to max
-    CHECK(w->GetSize().y == doctest::Approx(50.0f));  // within bounds
-
-    w->SetMinSize(core::Float2{60.0f, 60.0f});
-    CHECK(w->GetSize().y == doctest::Approx(60.0f)); // re-clamped up when the min grows
+    (void)w->UpdateLayout();
+    CHECK(w->GetLayoutStyle().Width.Value == doctest::Approx(200.0f));
+    CHECK(w->GetSize().x == doctest::Approx(100.0f)); // within max
+    CHECK(w->GetSize().y == doctest::Approx(60.0f));  // within min
 }
-
 TEST_CASE("css-values: ParseCornerRadii (1 and 4 values)")
 {
     auto one = ParseCornerRadii(SV(u8"6"));
@@ -266,6 +267,7 @@ TEST_CASE("style-applier: width/height resolve rem and vh via the length context
     ctx.ViewportHeight = 200.0f; // 50vh -> 100
     ApplyStyle(*w.Get(), sheet.Resolve(*w.Get(), MediaContext{}, /*applyPseudo*/ false), nullptr,
                nullptr, ctx);
+    (void)w->UpdateLayout();
     CHECK(w->GetSize().x == doctest::Approx(20.0f));
     CHECK(w->GetSize().y == doctest::Approx(100.0f));
 }

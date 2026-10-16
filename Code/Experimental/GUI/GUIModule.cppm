@@ -18,6 +18,7 @@ export module experimental.gui;
 export import :rect;
 export import :transform2d;
 export import :thickness;
+export import :layout_style;
 
 // Scene-graph core (Phase 1: tree)
 export import :transformable;
@@ -68,10 +69,7 @@ export import :check_box;
 export import :radio;
 export import :slider;
 export import :progress_bar;
-export import :linear_layout;
-export import :grid_layout;
-export import :relative_layout;
-export import :flex_layout;
+export import :panel;
 export import :text_field;
 export import :scroll_bar;
 export import :scroll_view;

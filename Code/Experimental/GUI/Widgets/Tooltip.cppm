@@ -64,7 +64,7 @@ export namespace experimental::gui
         }
 
         // Natural size for the text plus padding.
-        [[nodiscard]] core::Float2 MeasureContent() const
+        [[nodiscard]] core::Float2 MeasureText() const
         {
             const core::Float2 t = m_text.Measure();
             const Thickness pad = GetPadding();
@@ -127,7 +127,7 @@ export namespace experimental::gui
         void Show(Node& root, core::Float2 mouse, core::StringView text)
         {
             m_tooltip->SetText(text);
-            const core::Float2 size = m_tooltip->MeasureContent();
+            const core::Float2 size = m_tooltip->MeasureText();
             m_tooltip->SetSize(size);
             m_tooltip->SetPosition(core::Float2{mouse.x + 12.0f, mouse.y + 18.0f});
             root.AddChild(m_tooltip.Get());

@@ -23,7 +23,7 @@ import :event;
 import :draw_context;
 import :rectangle_drawable;
 import :ui_widget;
-import :linear_layout; // Orientation
+import :layout_style; // Orientation
 
 using namespace foundation::core;
 namespace core = foundation::core;

@@ -22,6 +22,7 @@ import foundation.vg;    // CornerRadii
 import :thickness;
 import :text; // TextHAlign / TextVAlign
 import :node;
+import :layout_style;
 import :ui_node;
 import :ui_widget;
 import :drawable;
@@ -61,6 +62,220 @@ export namespace experimental::gui
 
     namespace detail
     {
+        // === Layout keywords and grid values (E2) ===
+        [[nodiscard]] inline LayoutLength LayoutKeyword(core::StringView k) noexcept
+        {
+            if (k == core::StringView(u8"fit-content"))
+                return LayoutLength{LayoutLengthKind::FitContent, 0.0f};
+            if (k == core::StringView(u8"min-content"))
+                return LayoutLength{LayoutLengthKind::MinContent, 0.0f};
+            if (k == core::StringView(u8"max-content"))
+                return LayoutLength{LayoutLengthKind::MaxContent, 0.0f};
+            if (k == core::StringView(u8"none"))
+                return LayoutLength::None();
+            return LayoutLength{};
+        }
+        template <typename E, usize N>
+        [[nodiscard]] Optional<E> Named(core::StringView k, const core::StringView (&names)[N], const E (&values)[N])
+        {
+            for (usize i = 0; i < N; ++i)
+                if (names[i] == k)
+                    return values[i];
+            return {};
+        }
+        [[nodiscard]] inline Optional<Display> DisplayNamed(core::StringView k)
+        {
+            static constexpr core::StringView names[] = {u8"flex", u8"grid", u8"stack", u8"dock", u8"none", u8"block"};
+            static constexpr Display values[] = {Display::Flex, Display::Grid, Display::Stack, Display::Dock, Display::None, Display::Flex};
+            return Named(k, names, values);
+        }
+        [[nodiscard]] inline Optional<Position> PositionNamed(core::StringView k)
+        {
+            static constexpr core::StringView names[] = {u8"static", u8"relative", u8"absolute"};
+            static constexpr Position values[] = {Position::Static, Position::Relative, Position::Absolute};
+            return Named(k, names, values);
+        }
+        [[nodiscard]] inline Optional<BoxSizing> BoxSizingNamed(core::StringView k)
+        {
+            static constexpr core::StringView names[] = {u8"border-box", u8"content-box"};
+            static constexpr BoxSizing values[] = {BoxSizing::BorderBox, BoxSizing::ContentBox};
+            return Named(k, names, values);
+        }
+        [[nodiscard]] inline Optional<Overflow> OverflowNamed(core::StringView k)
+        {
+            static constexpr core::StringView names[] = {u8"visible", u8"hidden", u8"clip", u8"scroll", u8"auto"};
+            static constexpr Overflow values[] = {Overflow::Visible, Overflow::Hidden, Overflow::Hidden, Overflow::Scroll, Overflow::Auto};
+            return Named(k, names, values);
+        }
+        [[nodiscard]] inline Optional<FlexDirection> DirectionNamed(core::StringView k)
+        {
+            static constexpr core::StringView names[] = {u8"row", u8"column", u8"row-reverse", u8"column-reverse"};
+            static constexpr FlexDirection values[] = {FlexDirection::Row, FlexDirection::Column, FlexDirection::RowReverse, FlexDirection::ColumnReverse};
+            return Named(k, names, values);
+        }
+        [[nodiscard]] inline Optional<FlexWrap> WrapNamed(core::StringView k)
+        {
+            static constexpr core::StringView names[] = {u8"nowrap", u8"wrap", u8"wrap-reverse"};
+            static constexpr FlexWrap values[] = {FlexWrap::NoWrap, FlexWrap::Wrap, FlexWrap::WrapReverse};
+            return Named(k, names, values);
+        }
+        [[nodiscard]] inline Optional<Justify> JustifyNamed(core::StringView k)
+        {
+            static constexpr core::StringView names[] = {u8"start", u8"flex-start", u8"end", u8"flex-end", u8"center", u8"space-between",
+                                                         u8"space-around", u8"space-evenly", u8"stretch", u8"normal"};
+            static constexpr Justify values[] = {Justify::Start, Justify::Start, Justify::End, Justify::End, Justify::Center, Justify::SpaceBetween,
+                                                 Justify::SpaceAround, Justify::SpaceEvenly, Justify::Stretch, Justify::Stretch};
+            return Named(k, names, values);
+        }
+        [[nodiscard]] inline Optional<Align> AlignNamed(core::StringView k)
+        {
+            static constexpr core::StringView names[] = {u8"auto", u8"start", u8"flex-start", u8"end", u8"flex-end", u8"center",
+                                                         u8"stretch", u8"baseline", u8"normal"};
+            static constexpr Align values[] = {Align::Auto, Align::Start, Align::Start, Align::End, Align::End, Align::Center,
+                                               Align::Stretch, Align::Baseline, Align::Stretch};
+            return Named(k, names, values);
+        }
+        [[nodiscard]] inline Optional<GridAutoFlow> AutoFlowNamed(core::StringView k)
+        {
+            static constexpr core::StringView names[] = {u8"row", u8"column"};
+            static constexpr GridAutoFlow values[] = {GridAutoFlow::Row, GridAutoFlow::Column};
+            return Named(k, names, values);
+        }
+        [[nodiscard]] inline Optional<Dock> DockNamed(core::StringView k)
+        {
+            static constexpr core::StringView names[] = {u8"fill", u8"left", u8"top", u8"right", u8"bottom"};
+            static constexpr Dock values[] = {Dock::Fill, Dock::Left, Dock::Top, Dock::Right, Dock::Bottom};
+            return Named(k, names, values);
+        }
+
+        // One track size: a length or percentage, auto, min-content, max-content, <n>fr.
+        [[nodiscard]] inline Optional<LayoutLength> TrackLength(core::StringView t, const LengthContext& lengths)
+        {
+            if (t == core::StringView(u8"auto"))
+                return LayoutLength{};
+            if (t == core::StringView(u8"min-content") || t == core::StringView(u8"max-content"))
+                return LayoutLength{}; // sized by content, as auto
+            if (Optional<LengthValue> l = ParseLengthValue(t); l.HasValue())
+                return l.Value().Unit == LengthUnit::Percent ? LayoutLength::Percent(l.Value().Value)
+                                                             : LayoutLength::Px(ResolveLengthValue(l.Value(), lengths, 0.0f));
+            return {};
+        }
+        [[nodiscard]] inline Optional<f32> Fraction(core::StringView t)
+        {
+            if (t.Size() < 3 || t.SubStr(t.Size() - 2, 2) != core::StringView(u8"fr"))
+                return {};
+            return ParseLength(t.SubStr(0, t.Size() - 2));
+        }
+        [[nodiscard]] inline Optional<GridTrack> ParseTrack(core::StringView t, const LengthContext& lengths)
+        {
+            if (const Optional<f32> fr = Fraction(t); fr.HasValue())
+                return GridTrack::Flex(fr.Value());
+            if (t.Size() > 8 && t.SubStr(0, 7) == core::StringView(u8"minmax(") && t[t.Size() - 1] == u8')')
+            {
+                const Array<core::StringView> args = SplitTopLevel(t.SubStr(7, t.Size() - 8), u8',');
+                if (args.Size() != 2)
+                    return {};
+                const Optional<LayoutLength> lo = TrackLength(Trim(args[0]), lengths);
+                if (!lo.HasValue())
+                    return {};
+                if (const Optional<f32> fr = Fraction(Trim(args[1])); fr.HasValue())
+                    return GridTrack{lo.Value(), LayoutLength{}, fr.Value()};
+                const Optional<LayoutLength> hi = TrackLength(Trim(args[1]), lengths);
+                if (!hi.HasValue())
+                    return {};
+                return GridTrack{lo.Value(), hi.Value(), 0.0f};
+            }
+            if (const Optional<LayoutLength> l = TrackLength(t, lengths); l.HasValue())
+                return GridTrack{l.Value(), l.Value(), 0.0f};
+            return {};
+        }
+        // A track list: sizes separated by spaces, `repeat(<n>, <sizes>)` among them.
+        [[nodiscard]] inline Optional<Array<GridTrack>> ParseGridTracks(core::StringView text, const LengthContext& lengths)
+        {
+            Array<GridTrack> tracks;
+            if (Trim(text) == core::StringView(u8"none"))
+                return tracks;
+            for (const core::StringView part : SplitTopLevel(Trim(text), u8' '))
+            {
+                if (part.Size() > 8 && part.SubStr(0, 7) == core::StringView(u8"repeat(") && part[part.Size() - 1] == u8')')
+                {
+                    const Array<core::StringView> args = SplitTopLevel(part.SubStr(7, part.Size() - 8), u8',');
+                    if (args.Size() != 2)
+                        return {};
+                    const Optional<f32> count = ParseLength(Trim(args[0]));
+                    if (!count.HasValue() || count.Value() < 1.0f)
+                        return {};
+                    Array<GridTrack> unit;
+                    for (const core::StringView size : SplitTopLevel(Trim(args[1]), u8' '))
+                    {
+                        const Optional<GridTrack> track = ParseTrack(size, lengths);
+                        if (!track.HasValue())
+                            return {};
+                        unit.PushBack(track.Value());
+                    }
+                    for (i32 n = 0; n < static_cast<i32>(count.Value()); ++n)
+                        for (const GridTrack& track : unit)
+                            tracks.PushBack(track);
+                    continue;
+                }
+                const Optional<GridTrack> track = ParseTrack(part, lengths);
+                if (!track.HasValue())
+                    return {};
+                tracks.PushBack(track.Value());
+            }
+            return tracks;
+        }
+        [[nodiscard]] inline bool SameTracks(const Array<GridTrack>& a, const Array<GridTrack>& b)
+        {
+            if (a.Size() != b.Size())
+                return false;
+            for (usize i = 0; i < a.Size(); ++i)
+                if (!(a[i] == b[i]))
+                    return false;
+            return true;
+        }
+        // grid-column / grid-row: `2`, `1 / 3`, `span 2`, `2 / span 3`, `auto`.
+        [[nodiscard]] inline Optional<GridPlacement> ParseGridPlacement(core::StringView text)
+        {
+            const Array<core::StringView> sides = SplitTopLevel(Trim(text), u8'/');
+            if (sides.IsEmpty() || sides.Size() > 2)
+                return {};
+            const auto spanOf = [](core::StringView t) -> Optional<i32>
+            {
+                t = Trim(t);
+                if (t.Size() > 5 && t.SubStr(0, 5) == core::StringView(u8"span "))
+                    if (const Optional<f32> n = ParseLength(Trim(t.SubStr(5, t.Size() - 5))); n.HasValue() && n.Value() >= 1.0f)
+                        return static_cast<i32>(n.Value());
+                return {};
+            };
+            const auto lineOf = [](core::StringView t) -> Optional<i32>
+            {
+                t = Trim(t);
+                if (t == core::StringView(u8"auto"))
+                    return 0;
+                if (const Optional<f32> n = ParseLength(t); n.HasValue() && n.Value() >= 1.0f)
+                    return static_cast<i32>(n.Value());
+                return {};
+            };
+            GridPlacement out;
+            if (const Optional<i32> span = spanOf(sides[0]); span.HasValue())
+                out.Span = span.Value();
+            else if (const Optional<i32> line = lineOf(sides[0]); line.HasValue())
+                out.Start = line.Value();
+            else
+                return {};
+            if (sides.Size() == 2)
+            {
+                if (const Optional<i32> span = spanOf(sides[1]); span.HasValue())
+                    out.Span = span.Value();
+                else if (const Optional<i32> end = lineOf(sides[1]); end.HasValue() && out.Start > 0 && end.Value() > out.Start)
+                    out.Span = end.Value() - out.Start;
+                else
+                    return {};
+            }
+            return out;
+        }
+
         [[nodiscard]] inline f32 PixelsOf(const StyleValue* v, const LengthContext& lengths, f32 percentBase, f32 fallback)
         {
             return v != nullptr && v->Kind == StyleValueKind::Length ? ResolveLengthValue(v->Length, lengths, percentBase)
@@ -302,10 +517,6 @@ export namespace experimental::gui
         }
         const ResolvedStyle& style = *settled;
 
-        // The containing dimensions percentages resolve against (the parent's size).
-        core::Float2 percentBase{0.0f, 0.0f};
-        if (Node* parent = node.GetParent())
-            percentBase = parent->GetSize();
         const auto length = [&](const char8_t* name, f32 base) -> Optional<f32>
         {
             const StyleValue* v = style.Value(name);
@@ -322,7 +533,7 @@ export namespace experimental::gui
         if (const StyleValue* o = style.Value(u8"opacity"))
             node.SetAlpha(o->Number);
 
-        // Padding (and margin, a widget's) per side; the sides not declared keep their value.
+        // Padding and margin per side; the sides not declared keep their value.
         {
             Thickness padding = node.GetPadding();
             bool changed = false;
@@ -330,49 +541,118 @@ export namespace experimental::gui
             if (Optional<f32> v = length(u8"padding-right", 0.0f); v.HasValue()) { padding.Right = v.Value(); changed = true; }
             if (Optional<f32> v = length(u8"padding-bottom", 0.0f); v.HasValue()) { padding.Bottom = v.Value(); changed = true; }
             if (Optional<f32> v = length(u8"padding-left", 0.0f); v.HasValue()) { padding.Left = v.Value(); changed = true; }
-            if (changed)
+            if (changed && !(padding == node.GetPadding()))
                 node.SetPadding(padding);
         }
-        if (UIWidget* widget = core::Cast<UIWidget>(&node))
-        {
-            Thickness margin = widget->GetMargin();
-            bool changed = false;
-            if (Optional<f32> v = length(u8"margin-top", 0.0f); v.HasValue()) { margin.Top = v.Value(); changed = true; }
-            if (Optional<f32> v = length(u8"margin-right", 0.0f); v.HasValue()) { margin.Right = v.Value(); changed = true; }
-            if (Optional<f32> v = length(u8"margin-bottom", 0.0f); v.HasValue()) { margin.Bottom = v.Value(); changed = true; }
-            if (Optional<f32> v = length(u8"margin-left", 0.0f); v.HasValue()) { margin.Left = v.Value(); changed = true; }
-            if (changed)
-                widget->SetMargin(margin);
-        }
 
-        // min/max-width/height: set the size constraints before width/height so the applied
-        // size is clamped to them.
+        // Layout (E2): what the sheet declares reaches the node's layout style; what it does not
+        // keeps its value (code's, markup's). Percentages and auto wait for layout.
         {
-            core::Float2 mn = node.GetMinSize();
-            core::Float2 mx = node.GetMaxSize();
-            bool changedMin = false, changedMax = false;
-            if (Optional<f32> v = length(u8"min-width", percentBase.x); v.HasValue()) { mn.x = v.Value(); changedMin = true; }
-            if (Optional<f32> v = length(u8"min-height", percentBase.y); v.HasValue()) { mn.y = v.Value(); changedMin = true; }
-            if (Optional<f32> v = length(u8"max-width", percentBase.x); v.HasValue()) { mx.x = v.Value(); changedMax = true; }
-            if (Optional<f32> v = length(u8"max-height", percentBase.y); v.HasValue()) { mx.y = v.Value(); changedMax = true; }
-            if (changedMin)
-                node.SetMinSize(mn);
-            if (changedMax)
-                node.SetMaxSize(mx);
-        }
-        {
-            core::Float2 size = node.GetSize();
+            LayoutStyle ls = node.GetLayoutStyle();
             bool changed = false;
-            if (Optional<f32> w = length(u8"width", percentBase.x); w.HasValue()) { size.x = w.Value(); changed = true; }
-            if (Optional<f32> h = length(u8"height", percentBase.y); h.HasValue()) { size.y = h.Value(); changed = true; }
+            const auto assign = [&changed](auto& field, const auto& value)
+            {
+                if (!(field == value))
+                {
+                    field = value;
+                    changed = true;
+                }
+            };
+            const auto size = [&](const char8_t* name, LayoutLength& field)
+            {
+                const StyleValue* v = style.Value(name);
+                if (v == nullptr)
+                    return;
+                if (v->Kind == StyleValueKind::Length)
+                    assign(field, v->Length.Unit == LengthUnit::Percent ? LayoutLength::Percent(v->Length.Value)
+                                                                       : LayoutLength::Px(ResolveLengthValue(v->Length, lengths, 0.0f)));
+                else if (v->Kind == StyleValueKind::Keyword)
+                    assign(field, detail::LayoutKeyword(v->Keyword.AsView()));
+            };
+            size(u8"width", ls.Width);
+            size(u8"height", ls.Height);
+            size(u8"min-width", ls.MinWidth);
+            size(u8"min-height", ls.MinHeight);
+            size(u8"max-width", ls.MaxWidth);
+            size(u8"max-height", ls.MaxHeight);
+            size(u8"top", ls.Top);
+            size(u8"right", ls.Right);
+            size(u8"bottom", ls.Bottom);
+            size(u8"left", ls.Left);
+            size(u8"flex-basis", ls.Basis);
+            {
+                Thickness margin = ls.Margin;
+                if (Optional<f32> v = length(u8"margin-top", 0.0f); v.HasValue()) margin.Top = v.Value();
+                if (Optional<f32> v = length(u8"margin-right", 0.0f); v.HasValue()) margin.Right = v.Value();
+                if (Optional<f32> v = length(u8"margin-bottom", 0.0f); v.HasValue()) margin.Bottom = v.Value();
+                if (Optional<f32> v = length(u8"margin-left", 0.0f); v.HasValue()) margin.Left = v.Value();
+                assign(ls.Margin, margin);
+            }
+            const auto number = [&](const char8_t* name) -> Optional<f32>
+            {
+                if (const StyleValue* v = style.Value(name); v != nullptr && v->Kind == StyleValueKind::Number)
+                    return v->Number;
+                return {};
+            };
+            if (const Optional<f32> n = number(u8"flex-grow"); n.HasValue()) assign(ls.Grow, n.Value());
+            if (const Optional<f32> n = number(u8"flex-shrink"); n.HasValue()) assign(ls.Shrink, n.Value());
+            if (const Optional<f32> n = number(u8"order"); n.HasValue()) assign(ls.Order, static_cast<i32>(n.Value()));
+            if (const Optional<f32> n = number(u8"z-index"); n.HasValue()) assign(ls.ZIndex, static_cast<i32>(n.Value()));
+            if (Optional<f32> v = length(u8"row-gap", 0.0f); v.HasValue()) assign(ls.RowGap, v.Value());
+            if (Optional<f32> v = length(u8"column-gap", 0.0f); v.HasValue()) assign(ls.ColumnGap, v.Value());
+            const auto choose = [&](const char8_t* name, auto& field, auto parse)
+            {
+                if (const StringView k = keyword(name); k.Size() != 0)
+                    if (const auto parsed = parse(k); parsed.HasValue())
+                        assign(field, parsed.Value());
+            };
+            choose(u8"display", ls.Kind, detail::DisplayNamed);
+            choose(u8"position", ls.Placement, detail::PositionNamed);
+            choose(u8"box-sizing", ls.Sizing, detail::BoxSizingNamed);
+            choose(u8"overflow-x", ls.OverflowX, detail::OverflowNamed);
+            choose(u8"overflow-y", ls.OverflowY, detail::OverflowNamed);
+            choose(u8"flex-direction", ls.Direction, detail::DirectionNamed);
+            choose(u8"flex-wrap", ls.Wrap, detail::WrapNamed);
+            choose(u8"justify-content", ls.JustifyContent, detail::JustifyNamed);
+            choose(u8"align-content", ls.AlignContent, detail::JustifyNamed);
+            choose(u8"align-items", ls.AlignItems, detail::AlignNamed);
+            choose(u8"justify-items", ls.JustifyItems, detail::AlignNamed);
+            choose(u8"align-self", ls.AlignSelf, detail::AlignNamed);
+            choose(u8"justify-self", ls.JustifySelf, detail::AlignNamed);
+            choose(u8"grid-auto-flow", ls.AutoFlow, detail::AutoFlowNamed);
+            choose(u8"dock", ls.DockSide, detail::DockNamed);
+            if (const StringView t = keyword(u8"grid-template-columns"); t.Size() != 0)
+                if (Optional<Array<GridTrack>> tracks = detail::ParseGridTracks(t, lengths); tracks.HasValue() && !detail::SameTracks(ls.Columns, tracks.Value()))
+                {
+                    ls.Columns = Move(tracks.Value());
+                    changed = true;
+                }
+            if (const StringView t = keyword(u8"grid-template-rows"); t.Size() != 0)
+                if (Optional<Array<GridTrack>> tracks = detail::ParseGridTracks(t, lengths); tracks.HasValue() && !detail::SameTracks(ls.Rows, tracks.Value()))
+                {
+                    ls.Rows = Move(tracks.Value());
+                    changed = true;
+                }
+            if (const StringView t = keyword(u8"grid-auto-rows"); t.Size() != 0)
+                if (Optional<Array<GridTrack>> tracks = detail::ParseGridTracks(t, lengths); tracks.HasValue() && tracks.Value().Size() == 1)
+                    assign(ls.AutoRows, tracks.Value()[0]);
+            if (const StringView t = keyword(u8"grid-auto-columns"); t.Size() != 0)
+                if (Optional<Array<GridTrack>> tracks = detail::ParseGridTracks(t, lengths); tracks.HasValue() && tracks.Value().Size() == 1)
+                    assign(ls.AutoColumns, tracks.Value()[0]);
+            if (const StringView t = keyword(u8"grid-column"); t.Size() != 0)
+                if (const Optional<GridPlacement> g = detail::ParseGridPlacement(t); g.HasValue())
+                    assign(ls.Column, g.Value());
+            if (const StringView t = keyword(u8"grid-row"); t.Size() != 0)
+                if (const Optional<GridPlacement> g = detail::ParseGridPlacement(t); g.HasValue())
+                    assign(ls.Row, g.Value());
             if (changed)
-                node.SetSize(size);
+                node.SetLayoutStyle(ls);
+            // Anything but visible clips the children to the box (and scroll and auto scroll them);
+            // a widget that clips its own parts (an item view's rows) keeps doing so unless the
+            // sheet says.
+            if (keyword(u8"overflow-x").Size() != 0 || keyword(u8"overflow-y").Size() != 0)
+                node.SetClipChildren(ls.OverflowX != Overflow::Visible || ls.OverflowY != Overflow::Visible);
         }
-
-        // overflow: any value but visible clips the children to the box (the lab does not scroll
-        // a box by it; ScrollView does).
-        if (const StringView v = keyword(u8"overflow"); v.Size() != 0)
-            node.SetClipChildren(v != StringView(u8"visible"));
 
         if (const StringView e = keyword(u8"enabled"); e.Size() != 0)
             if (Optional<bool> b = ParseBool(e); b.HasValue())

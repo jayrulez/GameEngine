@@ -99,14 +99,14 @@ namespace
     }
 
     // The native half of the story both languages tell. The script, once loaded, has built under
-    // the root a FlexLayout "panel" holding a Label "title" (text "Hunt") and, at the root, a Button
+    // the root a Panel "panel" holding a Label "title" (text "Hunt") and, at the root, a Button
     // "go" (80 x 30 at the origin, text "Go", class "primary") listening for clicks.
     void CheckStory(GuiBed& bed)
     {
         REQUIRE(bed.errors.count == 0);
         gui::Node* panel = bed.root->GetChildAt(0);
         REQUIRE(panel != nullptr);
-        CHECK(Cast<gui::FlexLayout>(panel) != nullptr);
+        CHECK(Cast<gui::Panel>(panel) != nullptr);
         gui::Label* title = Cast<gui::Label>(panel->GetChildAt(0));
         REQUIRE(title != nullptr);
         CHECK(title->GetText() == StringView(u8"Hunt"));
@@ -360,7 +360,7 @@ TEST_CASE("gui-script: AngelScript builds, styles and clicks the lab's widgets, 
         u8"double byeValidInHandler() { return byeInHandler; }\n"
         u8"void main() {\n"
         u8"  Node@ root = gui::root();\n"
-        u8"  Node@ panel = root.add(\"FlexLayout\");\n"
+        u8"  Node@ panel = root.add(\"Panel\");\n"
         u8"  Label@ title = Label::of(panel.add(\"Label\"));\n"
         u8"  title.text = \"Hunt\";\n"
         u8"  title.id = \"title\";\n"
@@ -401,7 +401,7 @@ TEST_CASE("gui-script: Luau builds, styles and clicks the lab's widgets, and hol
         u8"local clickCount = 0\n"
         u8"local byeInHandler = -1\n"
         u8"local root = gui.root()\n"
-        u8"local panel = root:add(\"FlexLayout\")\n"
+        u8"local panel = root:add(\"Panel\")\n"
         u8"local title = Label.of(panel:add(\"Label\"))\n"
         u8"title.text = \"Hunt\"\n"
         u8"title.id = \"title\"\n"
@@ -432,6 +432,7 @@ TEST_CASE("gui-script: Luau builds, styles and clicks the lab's widgets, and hol
         u8"function goValid() return go:isValid() and 1 or 0 end\n"
         u8"function readGo() return go.text end\n",
         u8"main");
+    INFO(doctest::String(reinterpret_cast<const char*>(bed.errors.last.CStr())));
     REQUIRE(loaded.IsOk());
     CheckStory(bed);
     CheckHandles(bed);

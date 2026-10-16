@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - ScrollBar + ScrollView tests: scroll offset clamping, wheel bubbling from
-// hovered content, drag (with the leave-during-capture regression), and ScrollBar<->ScrollView
-// composition.
+// GUI - scrolling: the ScrollBar control, and any node that scrolls (overflow: scroll or auto, E2
+// of Specs/gui-lab-evolution.md): its range over the laid-out content, the content moving without a
+// new layout, the wheel, the keys while focused, its bars (drag, page, over the content), a focused
+// descendant brought into view, and the extent following the content.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -13,6 +14,7 @@ import experimental.gui;
 using namespace experimental::gui;
 namespace core = foundation::core;
 namespace vg = foundation::vg;
+using core::f32;
 
 namespace
 {
@@ -22,85 +24,29 @@ namespace
         return core::MakeRef<T>(core::DefaultAllocator());
     }
 
-    core::RefPtr<UIWidget> Cell(float w, float h)
+    // A 100 x 100 scroller at the root's corner holding `rows` 50-high rows.
+    struct Scroller
     {
-        auto n = core::MakeRef<UIWidget>(core::DefaultAllocator());
-        n->SetSize(core::Float2{w, h});
-        return n;
-    }
-}
-
-TEST_CASE("scrollview: range and offset clamp to the content extent")
-{
-    auto sv = Make<ScrollView>();
-    sv->SetSize(core::Float2{100.0f, 100.0f});        // viewport 100x100
-    sv->SetContentSize(core::Float2{100.0f, 300.0f}); // vertical scroll only, range 200
-
-    CHECK(sv->ScrollRange().x == doctest::Approx(0.0f));
-    CHECK(sv->ScrollRange().y == doctest::Approx(200.0f));
-
-    sv->SetScrollOffset(core::Float2{50.0f, 50.0f}); // x clamps to 0, y ok
-    CHECK(sv->GetScrollOffset().x == doctest::Approx(0.0f));
-    CHECK(sv->GetScrollOffset().y == doctest::Approx(50.0f));
-
-    sv->SetScrollOffset(core::Float2{0.0f, 999.0f}); // clamps to range.y
-    CHECK(sv->GetScrollOffset().y == doctest::Approx(200.0f));
-}
-
-TEST_CASE("scrollview: scrolling offsets the content container")
-{
-    auto sv = Make<ScrollView>();
-    sv->SetSize(core::Float2{100.0f, 100.0f});
-    sv->SetContentSize(core::Float2{100.0f, 300.0f});
-
-    // Content starts at the viewport origin (no padding here).
-    CHECK(sv->GetContent()->GetPosition().y == doctest::Approx(0.0f));
-    sv->SetScrollOffset(core::Float2{0.0f, 40.0f});
-    CHECK(sv->GetContent()->GetPosition().y == doctest::Approx(-40.0f)); // scrolled up
-}
-
-TEST_CASE("scrollview: content is clipped to the viewport")
-{
-    auto sv = Make<ScrollView>();
-    sv->SetSize(core::Float2{100.0f, 100.0f});
-    CHECK(sv->ClipsChildren());
-}
-
-TEST_CASE("scrollview: wheel bubbles from hovered content and scrolls")
-{
-    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
-    root->SetSize(core::Float2{200.0f, 200.0f});
-    auto sv = Make<ScrollView>();
-    sv->SetSize(core::Float2{100.0f, 100.0f});
-    sv->SetContentSize(core::Float2{100.0f, 300.0f});
-    root->AddChild(sv.Get());
-
-    // A child inside the content (so the wheel lands on it, not the ScrollView).
-    auto item = Cell(100.0f, 40.0f);
-    sv->GetContent()->AddChild(item.Get());
-    EventDispatcher* d = root->GetEventDispatcher();
-
-    // Wheel down (negative y) over the item -> ScrollView scrolls down by wheelSpeed.
-    sv->SetWheelSpeed(30.0f);
-    d->InjectMouseWheel(core::Float2{20.0f, 20.0f}, core::Float2{0.0f, -1.0f});
-    CHECK(sv->GetScrollOffset().y == doctest::Approx(30.0f));
-
-    // Wheel up brings it back.
-    d->InjectMouseWheel(core::Float2{20.0f, 20.0f}, core::Float2{0.0f, 1.0f});
-    CHECK(sv->GetScrollOffset().y == doctest::Approx(0.0f));
-}
-
-TEST_CASE("scrollview: scroll fraction round-trips with SetVerticalFraction")
-{
-    auto sv = Make<ScrollView>();
-    sv->SetSize(core::Float2{100.0f, 100.0f});
-    sv->SetContentSize(core::Float2{100.0f, 300.0f}); // range 200
-
-    sv->SetVerticalFraction(0.5f);
-    CHECK(sv->GetScrollOffset().y == doctest::Approx(100.0f));
-    CHECK(sv->GetScrollFraction().y == doctest::Approx(0.5f));
-    sv->SetVerticalFraction(1.0f);
-    CHECK(sv->GetScrollOffset().y == doctest::Approx(200.0f));
+        core::RefPtr<SceneRoot> root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+        core::RefPtr<ScrollView> view = Make<ScrollView>();
+        core::Array<core::RefPtr<Panel>> rows;
+        explicit Scroller(int count = 6)
+        {
+            root->SetSize(core::Float2{300.0f, 300.0f});
+            view->SetPosition(core::Float2{0.0f, 0.0f});
+            view->SetSize(core::Float2{100.0f, 100.0f});
+            root->AddChild(view.Get());
+            for (int i = 0; i < count; ++i)
+            {
+                rows.PushBack(Make<Panel>());
+                rows[rows.Size() - 1]->EditLayoutStyle([](LayoutStyle& s) { s.Height = LayoutLength::Px(50.0f); });
+                rows[rows.Size() - 1]->SetTabFocusable(true);
+                view->AddChild(rows[rows.Size() - 1].Get());
+            }
+            root->UpdateLayout();
+        }
+        EventDispatcher& D() { return *root->GetEventDispatcher(); }
+    };
 }
 
 TEST_CASE("scrollbar: value clamps and notifies; thumb proportion clamps")
@@ -153,22 +99,6 @@ TEST_CASE("scrollbar: drag keeps tracking after the cursor leaves it (capture + 
     CHECK(sb->GetValue() == doctest::Approx(1.0f));
 }
 
-TEST_CASE("scrollbar + scrollview compose: bar value drives the view")
-{
-    auto sv = Make<ScrollView>();
-    sv->SetSize(core::Float2{100.0f, 100.0f});
-    sv->SetContentSize(core::Float2{100.0f, 300.0f}); // range 200
-
-    auto sb = Make<ScrollBar>();
-    ScrollView* view = sv.Get();
-    sb->SetOnValueChanged([view](float v) { view->SetVerticalFraction(v); });
-
-    sb->SetValue(0.25f);
-    CHECK(sv->GetScrollOffset().y == doctest::Approx(50.0f)); // 0.25 * 200
-    sb->SetValue(1.0f);
-    CHECK(sv->GetScrollOffset().y == doctest::Approx(200.0f));
-}
-
 TEST_CASE("scrollbar: draws track + thumb")
 {
     auto sb = Make<ScrollBar>();
@@ -179,98 +109,6 @@ TEST_CASE("scrollbar: draws track + thumb")
     DrawContext dc{ctx};
     sb->Draw(dc);
     CHECK(ctx.GetBatch().vertices.Size() > 0);
-}
-
-TEST_CASE("scrollview: internal scrollbar shows/hides by policy")
-{
-    auto sv = Make<ScrollView>();
-    sv->SetSize(core::Float2{100.0f, 100.0f});
-
-    // Auto: hidden when content fits, shown when it overflows.
-    sv->SetContentSize(core::Float2{100.0f, 50.0f});
-    CHECK_FALSE(sv->GetVerticalScrollBar()->IsVisible());
-    sv->SetContentSize(core::Float2{100.0f, 300.0f});
-    CHECK(sv->GetVerticalScrollBar()->IsVisible());
-
-    // AlwaysOff hides even when overflowing; AlwaysOn shows even when it fits.
-    sv->SetVerticalScrollBarPolicy(ScrollBarPolicy::AlwaysOff);
-    CHECK_FALSE(sv->GetVerticalScrollBar()->IsVisible());
-    sv->SetVerticalScrollBarPolicy(ScrollBarPolicy::AlwaysOn);
-    sv->SetContentSize(core::Float2{100.0f, 50.0f});
-    CHECK(sv->GetVerticalScrollBar()->IsVisible());
-}
-
-TEST_CASE("scrollview: internal bar and offset stay in two-way sync")
-{
-    auto sv = Make<ScrollView>();
-    sv->SetSize(core::Float2{100.0f, 100.0f});
-    sv->SetContentSize(core::Float2{100.0f, 300.0f}); // range 200
-
-    // Scrolling the view updates the bar's value.
-    sv->SetScrollOffset(core::Float2{0.0f, 50.0f});
-    CHECK(sv->GetVerticalScrollBar()->GetValue() == doctest::Approx(0.25f)); // 50/200
-
-    // Setting the bar's value scrolls the view (the wired OnValueChanged callback).
-    sv->GetVerticalScrollBar()->SetValue(0.5f);
-    CHECK(sv->GetScrollOffset().y == doctest::Approx(100.0f)); // 0.5 * 200
-}
-
-TEST_CASE("scrollview: thumb proportion reflects the visible fraction")
-{
-    auto sv = Make<ScrollView>();
-    sv->SetSize(core::Float2{100.0f, 100.0f});
-    sv->SetContentSize(core::Float2{100.0f, 400.0f}); // viewport/content = 100/400 = 0.25
-    CHECK(sv->GetVerticalScrollBar()->GetThumbProportion() == doctest::Approx(0.25f));
-}
-
-TEST_CASE("scrollview: auto-measures content from its children")
-{
-    auto sv = Make<ScrollView>();
-    sv->SetSize(core::Float2{100.0f, 100.0f});
-    sv->SetAutoMeasureContent(true);
-
-    auto item = Cell(80.0f, 250.0f);
-    sv->GetContent()->AddChild(item.Get()); // OnChildrenChanged -> MeasureContent
-    CHECK(sv->GetContentSize().y == doctest::Approx(250.0f));
-    CHECK(sv->ScrollRange().y == doctest::Approx(150.0f)); // 250 - 100
-}
-
-TEST_CASE("scrollview: auto-measure follows a child that grows or hides after it was added")
-{
-    // The sandbox's page loads small and is sized by its sheet later: the scroller must follow.
-    auto sv = Make<ScrollView>();
-    sv->SetSize(core::Float2{100.0f, 100.0f});
-    sv->SetAutoMeasureContent(true);
-    auto page = Cell(80.0f, 50.0f);
-    sv->GetContent()->AddChild(page.Get());
-    REQUIRE(sv->ScrollRange().y == doctest::Approx(0.0f));
-    page->SetSize(core::Float2{80.0f, 400.0f});
-    CHECK(sv->GetContentSize().y == doctest::Approx(400.0f));
-    CHECK(sv->ScrollRange().y == doctest::Approx(300.0f));
-    page->SetVisible(false);
-    CHECK(sv->ScrollRange().y == doctest::Approx(0.0f));
-}
-
-TEST_CASE("scrollview: keyboard scrolls when focused")
-{
-    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
-    root->SetSize(core::Float2{200.0f, 200.0f});
-    auto sv = Make<ScrollView>();
-    sv->SetSize(core::Float2{100.0f, 100.0f});
-    sv->SetContentSize(core::Float2{100.0f, 300.0f}); // range 200, viewport 100
-    sv->SetLineStep(20.0f);
-    root->AddChild(sv.Get());
-    EventDispatcher* d = root->GetEventDispatcher();
-    sv->RequestFocus();
-
-    d->InjectKeyDown(static_cast<core::u32>(KeyCode::Down));
-    CHECK(sv->GetScrollOffset().y == doctest::Approx(20.0f));
-    d->InjectKeyDown(static_cast<core::u32>(KeyCode::PageDown));
-    CHECK(sv->GetScrollOffset().y == doctest::Approx(120.0f)); // +viewport(100)
-    d->InjectKeyDown(static_cast<core::u32>(KeyCode::End));
-    CHECK(sv->GetScrollOffset().y == doctest::Approx(200.0f)); // clamped to range
-    d->InjectKeyDown(static_cast<core::u32>(KeyCode::Home));
-    CHECK(sv->GetScrollOffset().y == doctest::Approx(0.0f));
 }
 
 TEST_CASE("scrollbar: clicking the track pages toward the click")
@@ -307,4 +145,104 @@ TEST_CASE("scrollbar: grabbing the thumb drags by cursor delta (no jump-to-cente
     // Move the cursor down 20px -> thumb moves 20px -> value 20/100 = 0.2.
     d->InjectMouseMove(core::Float2{8.0f, 60.0f});
     CHECK(sb->GetValue() == doctest::Approx(0.2f));
+}
+
+TEST_CASE("scroll: a node that overflows scrolls over its laid-out content, the content moving with no layout")
+{
+    Scroller s;
+    CHECK(s.view->IsScrollContainer());
+    CHECK(s.view->GetContentExtent().y == doctest::Approx(300.0f));
+    CHECK(s.view->GetScrollRange().x == doctest::Approx(0.0f)); // nothing wider than it
+    CHECK(s.view->GetScrollRange().y == doctest::Approx(200.0f));
+    s.view->SetScrollOffset(core::Float2{0.0f, 500.0f});
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(200.0f));
+    s.view->SetScrollOffset(core::Float2{0.0f, 60.0f});
+    s.root->UpdateLayout();
+    CHECK(s.root->LastLayoutCount() == 0u);                         // scrolling lays nothing out
+    CHECK(s.rows[2]->GetPosition().y == doctest::Approx(100.0f));     // where the layout put it
+    CHECK(s.rows[2]->GetScreenBounds().y == doctest::Approx(40.0f));  // where it shows
+    CHECK(s.root->GetEventDispatcher()->IsPointerOver(core::Float2{10.0f, 45.0f}));
+}
+
+TEST_CASE("scroll: the wheel scrolls it from the content; keys scroll it only while it is focused")
+{
+    Scroller s;
+    CHECK(s.D().InjectMouseWheel(core::Float2{20.0f, 20.0f}, core::Float2{0.0f, -1.0f}));
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(s.view->GetScrollStep()));
+    s.D().SetFocusNode(s.rows[0].Get());
+    const f32 before = s.view->GetScrollOffset().y;
+    s.D().InjectKeyDown(static_cast<core::u32>(KeyCode::PageDown));
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(before)); // the row's key, left to navigation
+    s.D().SetFocusNode(s.view.Get());
+    CHECK(s.D().InjectKeyDown(static_cast<core::u32>(KeyCode::End)));
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(200.0f));
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(200.0f)); // already at the end
+}
+
+TEST_CASE("scroll: its bar lies over the content; the thumb drags, the track pages")
+{
+    Scroller s;
+    const Rect track = s.view->ScrollBarTrack(1);
+    REQUIRE(track.height > 0.0f);
+    CHECK(track.x == doctest::Approx(92.0f)); // over the right edge, on top of the rows
+    const Rect thumb = s.view->ScrollBarThumb(1);
+    CHECK(thumb.height == doctest::Approx(100.0f * 100.0f / 300.0f));
+    int rowPresses = 0;
+    (void)s.rows[0]->AddEventListener(EventType::MouseDown, [&](const Event&) { ++rowPresses; });
+    const core::Float2 grab{96.0f, thumb.y + 5.0f};
+    s.D().InjectMouseDown(grab, MouseButton::Left);
+    CHECK(rowPresses == 0); // the bar's, not the row's under it
+    CHECK(s.D().GetPointerCapture() == s.view.Get());
+    s.D().InjectMouseMove(core::Float2{96.0f, grab.y + (100.0f - thumb.height) * 0.5f});
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(100.0f)); // half the travel: half the range
+    s.D().InjectMouseUp(core::Float2{96.0f, 90.0f}, MouseButton::Left);
+    s.view->SetScrollOffset(core::Float2{0.0f, 0.0f});
+    s.D().InjectMouseDown(core::Float2{96.0f, 90.0f}, MouseButton::Left); // the track below the thumb
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(100.0f));        // a page down
+    s.D().InjectMouseUp(core::Float2{96.0f, 90.0f}, MouseButton::Left);
+}
+
+TEST_CASE("scroll: a focused descendant comes into view, by the least that shows it")
+{
+    Scroller s;
+    s.D().SetFocusNode(s.rows[4].Get()); // y 200..250
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(150.0f));
+    s.D().SetFocusNode(s.rows[1].Get()); // y 50..100: above the view now
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(50.0f));
+}
+
+TEST_CASE("scroll: the extent follows the content as it grows and shrinks; the offset stays in range")
+{
+    Scroller s(2);
+    CHECK(s.view->GetScrollRange().y == doctest::Approx(0.0f));
+    s.rows[1]->EditLayoutStyle([](LayoutStyle& st) { st.Height = LayoutLength::Px(250.0f); }); // a child styled taller later
+    s.root->UpdateLayout();
+    CHECK(s.view->GetScrollRange().y == doctest::Approx(200.0f));
+    s.view->SetScrollOffset(core::Float2{0.0f, 200.0f});
+    s.rows[1]->SetDisplayed(false);
+    s.root->UpdateLayout();
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(0.0f));
+}
+
+TEST_CASE("scroll: overflow from a sheet makes any node scroll; hidden clips without scrolling")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{300.0f, 300.0f});
+    auto panel = Make<Panel>();
+    panel->AddClass(core::StringView(u8"list"));
+    root->AddChild(panel.Get());
+    auto tall = Make<Panel>();
+    tall->EditLayoutStyle([](LayoutStyle& st) { st.Height = LayoutLength::Px(500.0f); st.Shrink = 0.0f; });
+    panel->AddChild(tall.Get());
+    StyleManager styles(CSSParser::Parse(core::StringView(u8".list { height: 120px; overflow-y: auto; }")));
+    styles.ApplyTree(*root.Get());
+    root->UpdateLayout();
+    CHECK(panel->IsScrollContainer());
+    CHECK(panel->ClipsChildren());
+    CHECK(panel->GetScrollRange().y == doctest::Approx(380.0f));
+    StyleManager hidden(CSSParser::Parse(core::StringView(u8".list { overflow: hidden; }")));
+    hidden.ApplyTree(*root.Get());
+    root->UpdateLayout();
+    CHECK_FALSE(panel->IsScrollContainer());
+    CHECK(panel->ClipsChildren());
 }

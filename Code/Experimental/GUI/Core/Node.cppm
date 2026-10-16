@@ -34,6 +34,8 @@ import :data_model; // DataModel (BindData)
 import :commands;   // CommandHandler, CommandPhase (G7)
 import :css_values;  // LengthValue
 import :style_value; // TransformFunction
+import :thickness;
+import :layout_style; // LayoutStyle, LayoutConstraints (E2)
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -199,6 +201,7 @@ export namespace experimental::gui
             child->MarkStyleDirty(true); // its selectors may match differently here
             child->HandleParentChange();
             OnChildrenChanged();
+            RequestLayout(); // what it holds changed
             Invalidate();
             return this;
         }
@@ -226,6 +229,7 @@ export namespace experimental::gui
             m_children.RemoveAt(index);
             child->HandleParentChange();
             OnChildrenChanged();
+            RequestLayout();
             Invalidate();
         }
 
@@ -274,6 +278,7 @@ export namespace experimental::gui
             RefPtr<Node> ref = m_children[cur];
             m_children.RemoveAt(cur);
             m_children.Insert(newIndex, core::Move(ref));
+            RequestLayout(); // the flow follows the child order
             Invalidate();
         }
         void ToFront()
@@ -288,13 +293,27 @@ export namespace experimental::gui
         }
 
         // === Size / bounds ===
+        /// The node's size. From code, it is the node's width and height in pixels (inline `width`
+        /// and `height`), kept by every layout; a layout placing the node (Arrange) sets it without.
         void SetSize(core::Float2 size)
         {
-            const core::Float2 clamped = ClampToSizeConstraints(size);
-            if (clamped == m_size)
-                return;
-            m_size = clamped;
-            HandleSizeChange();
+            bool styleChanged = false;
+            if (!IsBeingPlaced())
+            {
+                const LayoutLength w = LayoutLength::Px(size.x);
+                const LayoutLength h = LayoutLength::Px(size.y);
+                styleChanged = !(m_layoutStyle.Width == w) || !(m_layoutStyle.Height == h);
+                m_layoutStyle.Width = w;
+                m_layoutStyle.Height = h;
+            }
+            const bool changed = size != m_size;
+            if (changed)
+            {
+                m_size = size;
+                HandleSizeChange();
+            }
+            if (styleChanged || (changed && !IsBeingPlaced()))
+                RequestBoxLayout();
         }
         [[nodiscard]] core::Float2 GetSize() const noexcept { return m_size; }
         [[nodiscard]] Rect GetLocalBounds() const noexcept
@@ -302,26 +321,20 @@ export namespace experimental::gui
             return Rect{0.0f, 0.0f, m_size.x, m_size.y};
         }
 
-        // Min/max size constraints (CSS min/max-width/height). A negative max component means
-        // "unbounded" on that axis. SetSize clamps to [min, max]; changing a bound re-clamps.
-        void SetMinSize(core::Float2 minSize)
-        {
-            m_minSize = minSize;
-            SetSize(m_size);
-        }
-        void SetMaxSize(core::Float2 maxSize)
-        {
-            m_maxSize = maxSize;
-            SetSize(m_size);
-        }
-        [[nodiscard]] core::Float2 GetMinSize() const noexcept { return m_minSize; }
-        [[nodiscard]] core::Float2 GetMaxSize() const noexcept { return m_maxSize; }
-
         // World transform accumulates the parent chain (parentWorld * local).
         [[nodiscard]] Transform2D GetWorldTransform() const
         {
-            return m_parent != nullptr ? (m_parent->GetWorldTransform() * GetTransform())
+            return m_parent != nullptr ? (m_parent->GetChildrenTransform() * GetTransform())
                                        : GetTransform();
+        }
+        /// Where this node's children sit in the world: its own world transform, moved by its
+        /// scroll offset (a scroll container's content scrolls without being laid out again).
+        [[nodiscard]] Transform2D GetChildrenTransform() const
+        {
+            Transform2D t = GetWorldTransform();
+            if (m_scrollOffset.x != 0.0f || m_scrollOffset.y != 0.0f)
+                t.Translate(-m_scrollOffset.x, -m_scrollOffset.y);
+            return t;
         }
         [[nodiscard]] core::Float2 ConvertToWorldSpace(core::Float2 nodePoint) const
         {
@@ -358,11 +371,30 @@ export namespace experimental::gui
             m_visible = visible;
             HandleVisibilityChange();
         }
+        /// Hidden (CSS `visibility: hidden`): not drawn and takes no input, but keeps its place in
+        /// the layout. SetDisplayed(false) takes it out.
         [[nodiscard]] bool IsVisible() const noexcept { return m_visible; }
         [[nodiscard]] bool IsTreeVisible() const
         {
-            return m_visible && (m_parent == nullptr || m_parent->IsTreeVisible());
+            return m_visible && IsDisplayed() && (m_parent == nullptr || m_parent->IsTreeVisible());
         }
+        /// In the layout, or out of it with its subtree (CSS `display: none`): a page switched away,
+        /// a panel collapsed. Shown again, it takes back the display kind it had.
+        void SetDisplayed(bool displayed)
+        {
+            if (displayed == IsDisplayed())
+                return;
+            if (displayed)
+                m_layoutStyle.Kind = m_displayBeforeNone;
+            else
+            {
+                m_displayBeforeNone = m_layoutStyle.Kind;
+                m_layoutStyle.Kind = Display::None;
+            }
+            RequestBoxLayout();
+            Invalidate();
+        }
+        [[nodiscard]] bool IsDisplayed() const noexcept { return m_layoutStyle.Kind != Display::None; }
         void SetEnabled(bool enabled)
         {
             if (enabled == m_enabled)
@@ -408,8 +440,15 @@ export namespace experimental::gui
         // Topmost visible descendant (or self) under a world point; nullptr if none.
         [[nodiscard]] virtual Node* OverFind(core::Float2 worldPoint)
         {
-            if (!m_visible)
+            if (!m_visible || !IsDisplayed())
                 return nullptr;
+            // A scroll container's bars lie over its content: a press on one is the container's.
+            if (IsScrollContainer() && m_hitTestVisible)
+            {
+                const core::Float2 p = ConvertToNodeSpace(worldPoint);
+                if (ScrollBarTrack(0).Contains(p) || ScrollBarTrack(1).Contains(p))
+                    return this;
+            }
             for (usize i = m_children.Size(); i-- > 0;)
                 if (Node* hit = m_children[i]->OverFind(worldPoint))
                     return hit;
@@ -437,7 +476,11 @@ export namespace experimental::gui
             m_clipChildren = clip;
             Invalidate();
         }
-        [[nodiscard]] bool ClipsChildren() const noexcept { return m_clipChildren; }
+        /// Clips its children to its box: set so, or its overflow is not visible (hidden, scroll, auto).
+        [[nodiscard]] bool ClipsChildren() const noexcept
+        {
+            return m_clipChildren || m_layoutStyle.OverflowX != Overflow::Visible || m_layoutStyle.OverflowY != Overflow::Visible;
+        }
 
         // The visual state drawables render in (skins/StateList). Base: enabled-driven.
         [[nodiscard]] virtual ControlState GetControlState() const
@@ -450,7 +493,7 @@ export namespace experimental::gui
         // children (back-to-front) -> foreground.
         void Draw(DrawContext& ctx)
         {
-            if (!m_visible || m_alpha <= 0.0f)
+            if (!m_visible || m_alpha <= 0.0f || !IsDisplayed())
                 return;
 
             ctx.Save();
@@ -488,22 +531,33 @@ export namespace experimental::gui
 
             // Children clip to the box, its rounded corners included (a path clip; a host without
             // stencil fills gets the bounds' scissor).
-            const bool roundedClip = m_clipChildren && !m_box.Radii.IsZero();
+            const bool clips = ClipsChildren();
+            const bool roundedClip = clips && !m_box.Radii.IsZero();
             if (roundedClip)
             {
                 vg::PathBuilder shape;
                 vg::ShapeBuilder::BuildRoundedRect(local.ToRectangle(), m_box.Radii, shape);
                 ctx.VG().PushClipPath(shape.ToPath());
             }
-            else if (m_clipChildren)
+            else if (clips)
                 ctx.PushClip(local);
+            const bool scrolled = m_scrollOffset.x != 0.0f || m_scrollOffset.y != 0.0f;
+            if (scrolled)
+            {
+                ctx.Save();
+                ctx.ConcatTransform(Transform2D{}.Translate(-m_scrollOffset.x, -m_scrollOffset.y));
+            }
             for (const RefPtr<Node>& child : m_children)
                 child->Draw(ctx);
+            if (scrolled)
+                ctx.Restore();
             if (roundedClip)
                 ctx.VG().PopClipPath();
-            else if (m_clipChildren)
+            else if (clips)
                 ctx.PopClip();
 
+            if (IsScrollContainer())
+                DrawScrollBars(ctx);
             if (m_foreground)
                 m_foreground->Draw(ctx, local, state);
 
@@ -537,50 +591,141 @@ export namespace experimental::gui
             m_childStyleDirty = false;
         }
 
-        /// This node's layout must run again. In a GUI it waits for its SceneRoot's layout pass, so
-        /// a burst of changes in a frame costs one layout; a detached node lays out at once.
-        void RequestLayout()
+        // === Layout (E2 of Specs/gui-lab-evolution.md) ===
+        // A node asks for a size within constraints (Measure: the size its style and content want,
+        // cached until either changes) and is placed by its container (Arrange), which lays out its
+        // own children when its size changed or they did (OnLayout: by its display kind, or a
+        // composite widget's own arrangement).
+
+        [[nodiscard]] const LayoutStyle& GetLayoutStyle() const noexcept { return m_layoutStyle; }
+        /// The layout style as a whole (a sheet's, or code's); lays out again.
+        void SetLayoutStyle(const LayoutStyle& style)
         {
-            if (GetElementTable() == nullptr) // in no GUI: no pass to wait for
-            {
-                if (!m_layingOut) // a layout resizing its own children asks for nothing more
-                    LayOut();
-                return;
-            }
-            m_layoutDirty = true;
-            for (Node* p = m_parent; p != nullptr && !p->m_childLayoutDirty; p = p->m_parent)
-                p->m_childLayoutDirty = true;
+            m_layoutStyle = style;
+            RequestBoxLayout();
+        }
+        /// Edits the layout style in place (`edit(LayoutStyle&)`), then lays out again.
+        template <typename F>
+        void EditLayoutStyle(F&& edit)
+        {
+            edit(m_layoutStyle);
+            RequestBoxLayout();
+        }
+
+        /// The space inside the border the content starts from.
+        void SetPadding(Thickness padding)
+        {
+            m_padding = padding;
+            RequestLayout();
             Invalidate();
         }
-        [[nodiscard]] bool IsLayoutDirty() const noexcept { return m_layoutDirty; }
-        // Runs OnLayout, marking the sizes it sets on children as its own.
-        void LayOut()
+        [[nodiscard]] Thickness GetPadding() const noexcept { return m_padding; }
+        /// The space outside the border its container keeps clear.
+        void SetMargin(Thickness margin)
         {
-            m_layingOut = true;
-            OnLayout();
-            m_layingOut = false;
+            m_layoutStyle.Margin = margin;
+            RequestBoxLayout();
         }
-        [[nodiscard]] bool HasLayoutDirtyDescendant() const noexcept { return m_childLayoutDirty; }
+        [[nodiscard]] Thickness GetMargin() const noexcept { return m_layoutStyle.Margin; }
+        /// The box's border widths (its NodeBox's), the part of its chrome a sheet's border gives.
+        [[nodiscard]] Thickness GetBorderThickness() const noexcept
+        {
+            const vg::BorderWidths& w = m_box.BorderWidths;
+            return Thickness{w.left, w.top, w.right, w.bottom};
+        }
+        /// Padding and border: what lies between the box's edge and its content.
+        [[nodiscard]] Thickness GetChrome() const noexcept
+        {
+            const Thickness b = GetBorderThickness();
+            return Thickness{m_padding.Left + b.Left, m_padding.Top + b.Top, m_padding.Right + b.Right,
+                             m_padding.Bottom + b.Bottom};
+        }
+        /// The local bounds inset by the padding and border: where content and children go.
+        [[nodiscard]] Rect GetContentBounds() const
+        {
+            const Thickness c = GetChrome();
+            return Rect{c.Left, c.Top, core::Max(0.0f, m_size.x - c.TotalHorizontal()),
+                        core::Max(0.0f, m_size.y - c.TotalVertical())};
+        }
 
-        /// Lays out the dirty containers of this subtree, parents before children (the pass a
-        /// SceneRoot runs); how many containers laid out.
-        u32 RunLayout()
+        /// The border-box size this node wants within `constraints`: its width and height where
+        /// its style gives them (a length, or a percentage of the constraints' base), its content's
+        /// (MeasureContent) plus its chrome where they are auto, then kept within its min and max
+        /// and the constraints. Cached until its style, content or children change.
+        core::Float2 Measure(const LayoutConstraints& constraints);
+        /// The size of what is inside the chrome, given the space `available` there (kUnbounded on
+        /// an axis with no limit). A widget with content of its own (text, an image) answers it;
+        /// the default measures the children by the display kind.
+        [[nodiscard]] virtual core::Float2 MeasureContent(core::Float2 available);
+        /// Places this node at `rect` (its border box, in its parent's space) and lays out its
+        /// children when its size changed or they need it.
+        void Arrange(const Rect& rect);
+        /// Lays out the children again where something in this subtree asked (the pass a GUI runs
+        /// each frame), keeping this node where it is.
+        void ArrangeAgain() { Arrange(Rect{GetPosition().x, GetPosition().y, m_size.x, m_size.y}); }
+
+        /// This node's content or children changed: it measures and lays out again, and so do the
+        /// containers above it whose size follows it, at the next layout pass (a GUI runs one each
+        /// frame, so a burst of changes costs one layout).
+        void RequestLayout();
+        /// The layout pass for the tree this node tops: lays out what asked, a few rounds while
+        /// layouts resize what they hold. A GUI runs it each frame; a tree in no GUI when its
+        /// owner wants its geometry. How many containers laid out.
+        u32 UpdateLayout();
+        /// Its own box changed (its size, margin, display, position): its container lays out again too.
+        void RequestBoxLayout()
         {
-            u32 count = 0;
-            if (m_layoutDirty)
-            {
-                m_layoutDirty = false;
-                LayOut();
-                ++count;
-            }
-            if (m_childLayoutDirty)
-            {
-                m_childLayoutDirty = false;
-                for (usize i = 0; i < m_children.Size(); ++i)
-                    count += m_children[i]->RunLayout();
-            }
-            return count;
+            RequestLayout();
+            if (m_parent != nullptr)
+                m_parent->RequestLayout();
         }
+        [[nodiscard]] bool IsLayoutDirty() const noexcept { return m_layoutDirty; }
+        [[nodiscard]] bool HasLayoutDirtyDescendant() const noexcept { return m_childLayoutDirty; }
+        /// Inside this node's own placement or its parent's layout: a size or a position set now is
+        /// the layout's, not code's.
+        [[nodiscard]] bool IsBeingPlaced() const noexcept { return m_placing || (m_parent != nullptr && m_parent->m_layingOut); }
+
+        // === Scrolling (overflow: scroll or auto) ===
+        /// Whether this node scrolls its content on either axis.
+        [[nodiscard]] bool IsScrollContainer() const noexcept
+        {
+            const auto scrolls = [](Overflow o) { return o == Overflow::Scroll || o == Overflow::Auto; };
+            return scrolls(m_layoutStyle.OverflowX) || scrolls(m_layoutStyle.OverflowY);
+        }
+        /// How far the content is scrolled (its children move by minus this).
+        [[nodiscard]] core::Float2 GetScrollOffset() const noexcept { return m_scrollOffset; }
+        /// Scrolls to `offset`, kept within the range on the axes that scroll (with a layout pending,
+        /// kept as asked until the layout knows the content's extent and clamps it).
+        void SetScrollOffset(core::Float2 offset)
+        {
+            const bool pending = m_layoutDirty || m_childLayoutDirty;
+            const core::Float2 range = pending ? core::Float2{kUnbounded, kUnbounded} : GetScrollRange();
+            const core::Float2 clamped{core::Clamp(offset.x, 0.0f, range.x), core::Clamp(offset.y, 0.0f, range.y)};
+            if (clamped == m_scrollOffset)
+                return;
+            m_scrollOffset = clamped;
+            Invalidate();
+        }
+        void ScrollBy(core::Float2 delta) { SetScrollOffset(core::Float2{m_scrollOffset.x + delta.x, m_scrollOffset.y + delta.y}); }
+        /// How far the content can scroll on each axis that scrolls (0 on one that does not).
+        [[nodiscard]] core::Float2 GetScrollRange() const
+        {
+            const Rect box = GetContentBounds();
+            const auto scrolls = [](Overflow o) { return o == Overflow::Scroll || o == Overflow::Auto; };
+            return core::Float2{scrolls(m_layoutStyle.OverflowX) ? core::Max(0.0f, m_contentExtent.x - box.width) : 0.0f,
+                                scrolls(m_layoutStyle.OverflowY) ? core::Max(0.0f, m_contentExtent.y - box.height) : 0.0f};
+        }
+        /// The content's size as last laid out: what a scroll container scrolls over.
+        [[nodiscard]] core::Float2 GetContentExtent() const noexcept { return m_contentExtent; }
+        /// How far the wheel scrolls per notch, and the arrow keys per press.
+        void SetScrollStep(f32 step) noexcept { m_scrollStep = step; }
+        [[nodiscard]] f32 GetScrollStep() const noexcept { return m_scrollStep; }
+        /// Where a scroll container's bar and thumb are on an axis (0 horizontal, 1 vertical), in
+        /// local space; empty rects when it shows none.
+        [[nodiscard]] Rect ScrollBarTrack(u32 axis) const;
+        [[nodiscard]] Rect ScrollBarThumb(u32 axis) const;
+        /// How many containers laid out on this thread (a GUI's pass reads the difference).
+        static u32& LayoutRunCounter() noexcept;
 
         // === The box (G2 of Specs/vg-and-gui-lab.md) ===
         // Background colour and layers, a border per side, radii and shadows, drawn under the
@@ -610,16 +755,13 @@ export namespace experimental::gui
         [[nodiscard]] bool IsTransformFromStyle() const noexcept { return m_transformFromStyle; }
         [[nodiscard]] const Array<TransformFunction>& GetStyleTransforms() const noexcept { return m_styleTransforms; }
 
-        /// A container places its children here (RequestLayout schedules it).
-        virtual void OnLayout() {}
-        /// A child's size (`resized`) or visibility changed, by anything but this node's own layout
-        /// (a sheet, code, a script showing a panel, the child's own layout): a container lays out
-        /// again.
-        virtual void OnChildLayoutChange(Node& child, bool resized)
-        {
-            (void)child;
-            (void)resized;
-        }
+        void DrawScrollBars(DrawContext& ctx) const;
+        /// Places the children in the content box (Arrange calls it when needed). The default lays
+        /// them out by the display kind (LayoutChildren); a composite widget arranges its own.
+        virtual void OnLayout() { LayoutChildren(); }
+        /// Lays out the children by this node's display kind, the out-of-flow ones by their insets,
+        /// and records the content's extent (what a scroll container scrolls over).
+        void LayoutChildren();
 
         // Subclass-drawn content, between background and children.
         virtual void OnDraw(DrawContext& ctx, const Rect& localBounds)
@@ -829,10 +971,13 @@ export namespace experimental::gui
                 MarkStyleDirty(true); // :focus-visible
         }
         /// A widget under this node took focus (G7): a scroller brings it into view.
-        virtual void OnDescendantFocused(Node& focused) { (void)focused; }
+        /// A scroll container scrolls by the least that shows it.
+        virtual void OnDescendantFocused(Node& focused) { ScrollIntoView(focused); }
         /// Whether this node brings a focused descendant into view, so a widget its clip hides is
         /// still one navigation reaches (a scroller).
-        [[nodiscard]] virtual bool ScrollsDescendantsIntoView() const { return false; }
+        [[nodiscard]] virtual bool ScrollsDescendantsIntoView() const { return IsScrollContainer(); }
+        /// Scrolls (a scroll container) by the least that shows `descendant` in the content box.
+        void ScrollIntoView(Node& descendant);
 
         // === Drag-and-drop target ===
         // Set a predicate deciding which payloads this node accepts; when it returns true the
@@ -985,8 +1130,22 @@ export namespace experimental::gui
         // === Transformable overrides: geometry changes invalidate + notify ===
         // An unchanged value is no change: hosts and layouts set geometry every pass, and an idle
         // frame must find nothing to redraw.
+        /// The node's place in its parent. From code (not a layout placing it), it takes the node
+        /// out of its container's flow to that place, as `position: absolute` with `left` and `top`
+        /// does; every layout keeps it there.
         void SetPosition(core::Float2 position) override
         {
+            if (!IsBeingPlaced())
+            {
+                const bool wasInFlow = m_layoutStyle.Placement != Position::Absolute;
+                m_layoutStyle.Placement = Position::Absolute;
+                m_layoutStyle.Left = LayoutLength::Px(position.x);
+                m_layoutStyle.Top = LayoutLength::Px(position.y);
+                m_layoutStyle.Right = LayoutLength{};
+                m_layoutStyle.Bottom = LayoutLength{};
+                if (wasInFlow && m_parent != nullptr)
+                    m_parent->RequestLayout(); // its siblings close the gap
+            }
             if (position == GetPosition())
                 return;
             Transformable::SetPosition(position);
@@ -1190,31 +1349,12 @@ export namespace experimental::gui
             OnSizeChange();
             Invalidate();
             SendEvent(Event(EventType::SizeChanged, this));
-            if (m_parent != nullptr && !m_parent->m_layingOut)
-                m_parent->OnChildLayoutChange(*this, true);
-        }
-
-        // Clamp a size to [m_minSize, m_maxSize] per axis (a negative max = unbounded).
-        [[nodiscard]] core::Float2 ClampToSizeConstraints(core::Float2 size) const noexcept
-        {
-            core::Float2 out = size;
-            if (out.x < m_minSize.x)
-                out.x = m_minSize.x;
-            if (out.y < m_minSize.y)
-                out.y = m_minSize.y;
-            if (m_maxSize.x >= 0.0f && out.x > m_maxSize.x)
-                out.x = m_maxSize.x;
-            if (m_maxSize.y >= 0.0f && out.y > m_maxSize.y)
-                out.y = m_maxSize.y;
-            return out;
         }
         void HandleVisibilityChange()
         {
             OnVisibilityChange();
             Invalidate();
-            SendEvent(Event(EventType::VisibilityChanged, this));
-            if (m_parent != nullptr && !m_parent->m_layingOut)
-                m_parent->OnChildLayoutChange(*this, false); // shown or hidden: the others move
+            SendEvent(Event(EventType::VisibilityChanged, this)); // hidden keeps its place: no layout
         }
         void HandleEnabledChange()
         {
@@ -1273,7 +1413,12 @@ export namespace experimental::gui
             case EventType::PointerCancel: OnPointerCancel(static_cast<const MouseEvent&>(event)); break;
             default: break;
             }
+            if (!event.Handled && IsScrollContainer())
+                ScrollDefaultAction(event);
         }
+        // A scroll container's own handling, after its widget's: the wheel (taken when it moved),
+        // the keys while it is focused, and its bars (a press on one drags its thumb or pages).
+        void ScrollDefaultAction(const Event& event);
 
         // Tells this GUI's dispatcher a child's subtree is leaving (GUIClusterImpl.cpp, which
         // sees :event_dispatcher).
@@ -1304,8 +1449,18 @@ export namespace experimental::gui
         RefPtr<Drawable> m_background;
         RefPtr<Drawable> m_foreground;
         core::Float2 m_size{0.0f, 0.0f};
-        core::Float2 m_minSize{0.0f, 0.0f};   // CSS min-width/height
-        core::Float2 m_maxSize{-1.0f, -1.0f}; // CSS max-width/height (<0 = unbounded)
+        LayoutStyle m_layoutStyle;              // what it asks of layout (E2)
+        Display m_displayBeforeNone = Display::Flex; // what SetDisplayed(true) gives back
+        Thickness m_padding{};
+        core::Float2 m_scrollOffset{0.0f, 0.0f}; // a scroll container's (its children move by minus it)
+        core::Float2 m_contentExtent{0.0f, 0.0f}; // the children's extent as last laid out
+        LayoutConstraints m_measureKey{};        // what the cached measure was for
+        core::Float2 m_measured{0.0f, 0.0f};
+        bool m_measureValid = false;
+        bool m_placing = false;                  // inside Arrange: the size and place set are the layout's
+        f32 m_scrollStep = 40.0f;                // the wheel's notch and an arrow key's step
+        u32 m_scrollDragAxis = 2;                // a bar being dragged (0, 1), 2 for none
+        f32 m_scrollDragGrab = 0.0f;             // where on the thumb it was taken
         f32 m_alpha = 1.0f;
         bool m_visible = true;
         bool m_enabled = true;

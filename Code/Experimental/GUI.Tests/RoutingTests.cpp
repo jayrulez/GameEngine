@@ -150,9 +150,10 @@ TEST_CASE("routing: keys bubble from the focus; a scroller scrolls only when it 
 
     auto scroller = Make<ScrollView>();
     scroller->SetSize(core::Float2{100.0f, 100.0f});
-    scroller->SetContentSize(core::Float2{100.0f, 400.0f});
     root->AddChild(scroller.Get());
-    auto inside = Box(*scroller->GetContent(), 0, 0, 50, 20, u8"inside");
+    (void)Box(*scroller.Get(), 0, 0, 10, 400, u8"tall"); // what it scrolls over
+    auto inside = Box(*scroller.Get(), 0, 0, 50, 20, u8"inside");
+    root->UpdateLayout();
     inside->SetTabFocusable(true);
     d->SetFocusNode(inside.Get());
     d->InjectKeyDown(static_cast<core::u32>(KeyCode::PageDown));
@@ -167,19 +168,20 @@ TEST_CASE("routing: the wheel goes up from the pointer; a scroller at its end le
     auto root = MakeRoot();
     auto outer = Make<ScrollView>();
     outer->SetSize(core::Float2{200.0f, 200.0f});
-    outer->SetContentSize(core::Float2{200.0f, 800.0f});
     root->AddChild(outer.Get());
+    (void)Box(*outer.Get(), 150, 0, 10, 800, u8"outer-tall");
     auto inner = Make<ScrollView>();
     inner->SetSize(core::Float2{100.0f, 100.0f});
-    inner->SetContentSize(core::Float2{100.0f, 150.0f});
-    outer->GetContent()->AddChild(inner.Get());
+    outer->AddChild(inner.Get());
+    (void)Box(*inner.Get(), 0, 0, 10, 150, u8"inner-tall");
+    root->UpdateLayout();
     EventDispatcher* d = root->GetEventDispatcher();
     CHECK(d->InjectMouseWheel(core::Float2{50.0f, 50.0f}, core::Float2{0.0f, -10.0f}));
     CHECK(inner->GetScrollOffset().y > 0.0f);
     CHECK(outer->GetScrollOffset().y == doctest::Approx(0.0f));
     for (int i = 0; i < 20; ++i) // to the inner one's end, and on
         d->InjectMouseWheel(core::Float2{50.0f, 50.0f}, core::Float2{0.0f, -10.0f});
-    CHECK(inner->GetScrollOffset().y == doctest::Approx(inner->ScrollRange().y));
+    CHECK(inner->GetScrollOffset().y == doctest::Approx(inner->GetScrollRange().y));
     CHECK(outer->GetScrollOffset().y > 0.0f);
 }
 

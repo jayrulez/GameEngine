@@ -154,7 +154,7 @@ TEST_CASE("incremental: a sheet change restyles everything once")
 TEST_CASE("incremental: many adds to a layout in a scene lay it out once, at the frame")
 {
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
-    auto column = Make<LinearLayout>();
+    auto column = Make<Panel>();
     column->SetSize(core::Float2{100.0f, 400.0f});
     root->AddChild(column.Get());
     root->UpdateLayout();
@@ -176,14 +176,15 @@ TEST_CASE("incremental: many adds to a layout in a scene lay it out once, at the
     CHECK(root->LastLayoutCount() == 0u);
 }
 
-TEST_CASE("incremental: a layout outside a scene still lays out at once")
+TEST_CASE("incremental: a layout outside a scene lays out when asked")
 {
-    auto column = Make<LinearLayout>();
+    auto column = Make<Panel>();
     column->SetSize(core::Float2{100.0f, 400.0f});
     auto a = Widget(u8"row");
     auto b = Widget(u8"row");
     column->AddChild(a.Get());
     column->AddChild(b.Get());
+    CHECK(column->UpdateLayout() == 1u);
     CHECK(b->GetPosition().y == doctest::Approx(20.0f));
 }
 
@@ -229,8 +230,8 @@ TEST_CASE("incremental: setting geometry to what it is changes nothing")
 TEST_CASE("incremental: a child resized after a layout lays its container out again, once")
 {
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
-    auto column = Make<FlexLayout>();
-    column->SetDirection(FlexDirection::Column);
+    auto column = Make<Panel>();
+    column->EditLayoutStyle([](LayoutStyle& s) { s.AlignItems = Align::Start; });
     column->SetSize(core::Float2{200.0f, 400.0f});
     root->AddChild(column.Get());
     auto a = Make<UIWidget>(); // unsized when the layout first meets them
@@ -253,13 +254,12 @@ TEST_CASE("incremental: a child resized after a layout lays its container out ag
     CHECK(root->LastLayoutCount() == 0u);
 }
 
-TEST_CASE("incremental: a child shown or hidden lays its container out again")
+TEST_CASE("incremental: a child displayed or not lays its container out again")
 {
     // The showcase's panels: one shown in place of another after the first layout lands in the
     // slot the other had, not wherever it was left.
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
-    auto column = Make<FlexLayout>();
-    column->SetDirection(FlexDirection::Column);
+    auto column = Make<Panel>();
     column->SetSize(core::Float2{200.0f, 400.0f});
     root->AddChild(column.Get());
     auto title = Widget(u8"title");
@@ -268,12 +268,12 @@ TEST_CASE("incremental: a child shown or hidden lays its container out again")
     column->AddChild(title.Get());
     column->AddChild(menu.Get());
     column->AddChild(settings.Get());
-    settings->SetVisible(false);
+    settings->SetDisplayed(false);
     root->UpdateLayout();
     CHECK(menu->GetPosition().y == doctest::Approx(20.0f));
 
-    menu->SetVisible(false);
-    settings->SetVisible(true);
+    menu->SetDisplayed(false);
+    settings->SetDisplayed(true);
     root->UpdateLayout();
     CHECK(root->LastLayoutCount() >= 1u);
     CHECK(settings->GetPosition().y == doctest::Approx(20.0f)); // under the title, where the menu was

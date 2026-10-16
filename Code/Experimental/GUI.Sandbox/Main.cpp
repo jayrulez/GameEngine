@@ -8,6 +8,7 @@
 // through GuiInputBridge, so hover/click/CSS-transitions are live.
 
 #include <new>
+#include <cstdio>  // printf (frame counts)
 #include <cstdlib> // atof (--scroll)
 
 import foundation.core;
@@ -143,6 +144,8 @@ class GUISandbox : public samples::framework::SampleApp
 {
 public:
     void SetInitialScroll(f32 y) { m_initialScroll = y; }
+    void SetAlwaysRedraw(bool always) { m_alwaysRedraw = always; }
+    void SetFrameStats(bool stats) { m_frameStats = stats; }
 
     GUISandbox()
     {
@@ -160,6 +163,11 @@ protected:
 private:
     f32 m_initialScroll = 0.0f;
     u32 m_initialScrollFrames = 0;
+    bool m_alwaysRedraw = false;
+    bool m_frameStats = false;
+    f32 m_nextStatsTime = 1.0f;
+    u64 m_frames = 0;      // frames the loop ran
+    u64 m_drawnFrames = 0; // of them, the ones that drew
     static constexpr u32 kFrames = 2;
 
     void BuildUI();
@@ -1180,6 +1188,24 @@ void GUISandbox::OnRender()
     // Keep the scroller's content size in sync with the wrapped panel height (a hidden widget
     // or a size change makes the page taller/shorter).
     m_pageScroll->SetContentSize(m_panel->GetSize());
+    m_root->UpdateLayout(); // what styling moved
+
+    // Nothing changed, nothing animating: skip the frame (the last one stays on screen) and
+    // wait a little instead of spinning. --always-redraw draws every frame.
+    ++m_frames;
+    if (m_frameStats && m_totalTime >= m_nextStatsTime)
+    {
+        std::printf("GUISandbox: drew %llu of %llu frames\n", static_cast<unsigned long long>(m_drawnFrames),
+                    static_cast<unsigned long long>(m_frames));
+        std::fflush(stdout);
+        m_nextStatsTime = m_totalTime + 1.0f;
+    }
+    if (!m_alwaysRedraw && !m_root->NeedsFrame() && !ScreenshotPending())
+    {
+        SleepMilliseconds(8);
+        return;
+    }
+    ++m_drawnFrames;
 
     // Draw the tree into the VG batch.
     m_vg->Clear();
@@ -1236,6 +1262,8 @@ void GUISandbox::OnRender()
 
 void GUISandbox::OnShutdown()
 {
+    std::printf("GUISandbox: drew %llu of %llu frames\n", static_cast<unsigned long long>(m_drawnFrames),
+                static_cast<unsigned long long>(m_frames));
     if (m_device)
         m_device->WaitIdle();
     m_router.Reset();
@@ -1280,8 +1308,17 @@ int main(int argc, char** argv)
     GUISandbox app;
     // --scroll <y>: open the page scrolled down by y logical units (a screenshot of a later
     // section: --scroll 900 --screenshot shot.png --screenshot-exit).
-    for (int i = 1; i + 1 < argc; ++i)
-        if (StringView(reinterpret_cast<const utf8char*>(argv[i])) == StringView(u8"--scroll"))
+    // --always-redraw: draw every frame, even an idle one (to compare the cost). --frame-stats:
+    // print, each second, how many of the frames drew.
+    for (int i = 1; i < argc; ++i)
+    {
+        const StringView arg(reinterpret_cast<const utf8char*>(argv[i]));
+        if (arg == StringView(u8"--scroll") && i + 1 < argc)
             app.SetInitialScroll(static_cast<f32>(std::atof(argv[i + 1])));
+        else if (arg == StringView(u8"--always-redraw"))
+            app.SetAlwaysRedraw(true);
+        else if (arg == StringView(u8"--frame-stats"))
+            app.SetFrameStats(true);
+    }
     return app.Run(argc, argv);
 }

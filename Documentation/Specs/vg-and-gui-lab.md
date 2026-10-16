@@ -301,6 +301,16 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   pauses an animation's clock.
 - **G4 Effects through VG.** Group opacity and filters through V3's layers, rounded clipping
   through V2, boxes through V4.
+  First, cheap frames (user 2026-10-16: only relayout or rerender what changed): a state, class,
+  tag, id, focus, enabled or parent change marks the widget's style dirty with its subtree (a
+  descendant selector may read it), and the StyleManager restyles only marked subtrees, the
+  children of a widget whose custom properties changed, and everything after a new sheet, media,
+  root font size or fonts. Inside a SceneRoot a container's layout waits for the root's one pass
+  a frame (parents first, again while a child's new size moves its parent; input flushes it
+  before a hit test); a container outside a scene still lays out at once. Setting geometry to
+  what it is changes nothing. `SceneRoot::NeedsFrame` says whether anything is waiting (a redraw,
+  a running action, a layout), and GUISandbox skips a frame that needs none (drawing while a
+  screenshot waits; `--always-redraw`, `--frame-stats`) (9f26b72b0, 7855ce02d).
 - **G5 Data binding.** Properties that update what depends on them (AUI's model: dependency
   tracking, no manual subscriptions), bound from markup and script. Tests: a bound label follows
   its source.
@@ -361,6 +371,11 @@ list when it is done or the user rules it out.
 - **Accepted for now, revisit if a game needs it:** text at a display scale is crisp through
   distance-field fonts only (a coverage font is stretched), as in foundation.ui; a coverage font's
   text effects are a shadow's copy only; a glow is a linear ramp, not a Gaussian.
+- **G4, when a screen's restyles show in a profile:** a state change restyles the whole subtree
+  even when no sheet rule reads that state through an ancestor; the sheet could say which states
+  and classes its non-subject selectors use, and a change to any other restyle the widget alone.
+  An animation keeps frames coming while its widget is scrolled out of view or clipped, and a
+  frame redraws the whole tree, not only the regions that changed.
 - **F3, after the lab (foundation.ui text):** a label measures with its font's unshaped
   MeasureString, so a ligated label lays out a little wide; the basic shaper's wrapping knows no
   bidi; editing right-to-left text (caret movement by arrow keys, selection across a direction

@@ -136,3 +136,32 @@ TEST_CASE("reactive: an untracked read records nothing")
     a.Set(2);
     CHECK(runs == 1);
 }
+
+TEST_CASE("reactive: an effect that changes what it read reruns after itself, never inside itself")
+{
+    // No scheduler: the effect would otherwise run again inside its own run, recursing.
+    Property<int> a{0};
+    int depth = 0, deepest = 0;
+    Effect settles([&] {
+        ++depth;
+        deepest = core::Max(deepest, depth);
+        if (a.Get() < 3)
+            a.Set(a.Peek() + 1);
+        --depth;
+    });
+    CHECK(a.Peek() == 3);
+    CHECK(deepest == 1);
+    CHECK(settles.RunCount() == 4u); // 0, 1, 2, 3
+
+    // One that never settles is cut off, still flat.
+    Property<int> b{0};
+    deepest = 0;
+    Effect runaway([&] {
+        ++depth;
+        deepest = core::Max(deepest, depth);
+        b.Set(b.Get() + 1);
+        --depth;
+    });
+    CHECK(deepest == 1);
+    CHECK(runaway.RunCount() <= 16u);
+}

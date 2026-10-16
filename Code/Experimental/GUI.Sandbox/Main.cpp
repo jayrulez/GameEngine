@@ -823,6 +823,54 @@ void GUISandbox::BuildUI()
         m_panel->AddChild(stage.Get());
     }
 
+    // Data binding (G5): markup bound to the GUI's data model with {{name}}. The slider, the
+    // checkbox and the text field write their values back, and everything reading them follows;
+    // the percentage is a native binding reading the same value. No handler is wired.
+    {
+        gui::DataModel& data = m_root->GetData();
+        data.Set(StringView(u8"volume"), Variant::From<f32>(0.4f));
+        data.Set(StringView(u8"muted"), Variant::From<bool>(false));
+        data.Set(StringView(u8"name"), Variant::From<String>(String(u8"Ada")));
+        static const char8_t* kBound = u8R"(
+            <LinearLayout orientation="vertical" spacing="6" width="560" height="104">
+                <LinearLayout orientation="horizontal" spacing="10" width="560" height="28">
+                    <Label text="Volume" font-family="Roboto" font-size="16" color="#cfd6e0" width="70" height="26" vertical-align="middle"/>
+                    <Slider value="{{volume}}" width="200" height="24"/>
+                    <ProgressBar progress="{{volume}}" width="120" height="12"/>
+                </LinearLayout>
+                <LinearLayout orientation="horizontal" spacing="10" width="560" height="28">
+                    <CheckBox checked="{{muted}}" width="24" height="24"/>
+                    <Label text="Muted: {{muted}}" font-family="Roboto" font-size="16" color="#cfd6e0" width="200" height="26" vertical-align="middle"/>
+                </LinearLayout>
+                <LinearLayout orientation="horizontal" spacing="10" width="560" height="32">
+                    <TextField text="{{name}}" font-family="Roboto" font-size="16" width="200" height="30"/>
+                    <Label text="Hello, {{name}}!" font-family="Roboto" font-size="16" color="#cfd6e0" width="300" height="30" vertical-align="middle"/>
+                </LinearLayout>
+            </LinearLayout>
+        )";
+        const gui::ElementSet elements = gui::ElementSet::All();
+        gui::MarkupLoader loader(elements, AppRoot(), nullptr, m_fontService.Get());
+        loader.SetDataModel(m_root->GetDataRef());
+        if (RefPtr<gui::Node> bound = loader.LoadFromString(StringView(kBound)))
+        {
+            // A native binding beside the markup's: the volume as a percentage.
+            auto percent = MakeRef<gui::Label>(AppRoot());
+            percent->SetFont(m_font);
+            percent->SetTextColor(Col(0.78f, 0.82f, 0.88f));
+            percent->SetSize(Float2{60.0f, 26.0f});
+            RefPtr<gui::DataModel> model = m_root->GetDataRef();
+            gui::Label* label = percent.Get();
+            percent->Bind([label, model]()
+                          {
+                              const Variant v = gui::ConvertVariant(model->Get(StringView(u8"volume")), TypeOf<f32>());
+                              const f32 volume = v.IsEmpty() ? 0.0f : v.Get<f32>();
+                              label->SetText(Format(u8"{}%", static_cast<i32>(volume * 100.0f + 0.5f)).AsView());
+                          });
+            bound->GetChildAt(0)->AddChild(percent.Get());
+            m_panel->AddChild(bound.Get());
+        }
+    }
+
     // A FlexLayout (markup) spreading three buttons across the row via justify-content.
     {
         auto flexCaption = MakeRef<gui::Label>(AppRoot());

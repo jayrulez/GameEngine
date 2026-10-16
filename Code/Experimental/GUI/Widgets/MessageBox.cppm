@@ -87,6 +87,7 @@ export namespace experimental::gui
             for (const RefPtr<Button>& b : m_buttons)
                 b->SetFont(font);
         }
+        void SetThemeFont(fonts::CachedFont* font) override { SetFont(font); } // CSS font-family and font-size
         void SetMessageColor(Color color) { m_message->SetTextColor(color); }
 
         [[nodiscard]] core::StringView GetMessage() const { return m_message->GetText(); }

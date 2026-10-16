@@ -113,6 +113,8 @@ export namespace experimental::gui
             for (const Tab& t : m_tabs)
                 t.TabButton->SetFont(font);
         }
+        void SetThemeFont(fonts::CachedFont* font) override { SetFont(font); } // CSS font-family and font-size
+        [[nodiscard]] fonts::CachedFont* GetFont() const { return m_font; }
         void SetTabBarHeight(f32 height)
         {
             m_tabBarHeight = core::Max(1.0f, height);

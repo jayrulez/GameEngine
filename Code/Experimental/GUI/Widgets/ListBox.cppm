@@ -124,6 +124,8 @@ export namespace experimental::gui
             for (ListBoxItem* it : m_items)
                 it->SetFont(font);
         }
+        void SetThemeFont(fonts::CachedFont* font) override { SetFont(font); } // CSS font-family and font-size
+        [[nodiscard]] fonts::CachedFont* GetFont() const { return m_font; }
         void SetItemHeight(f32 height)
         {
             m_itemHeight = core::Max(1.0f, height);

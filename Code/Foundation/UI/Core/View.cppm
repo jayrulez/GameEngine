@@ -1328,7 +1328,7 @@ export namespace foundation::ui
 
                 if (ctx.DebugSettings().AnyEnabled())
                 {
-                    UIDebugOverlay::DrawOverlays(ctx, *child);
+                    UIDebugOverlay::DrawOverlays(ctx, *child, i);
                 }
 
                 if (clips)
@@ -1632,6 +1632,9 @@ export namespace foundation::ui
         /// on the editor) installs one for the duration of its call and records what it
         /// suppressed; unset = every dialog shows.
         Function<bool(Dialog&)> DialogInterceptor;
+        /// Debug overlays drawn over every root this context draws (bounds, padding, focus path,
+        /// draw and tab order); all off by default, and free while off.
+        UIDebugDrawSettings DebugDraw{};
 
         // (m_animationManager is default-constructed - it holds no back-pointer to the context.)
         ~UIContext()
@@ -1766,7 +1769,7 @@ export namespace foundation::ui
             }
             vg.SetFontService(m_fontService); // the one source of truth, re-asserted per draw
             m_phase = Phase::Drawing;
-            UIDrawContext ctx{vg, root->DpiScale, m_fontService};
+            UIDrawContext ctx{vg, root->DpiScale, m_fontService, DebugDraw};
             if (root->DpiScale != 1.0f)
             {
                 vg.Scale(root->DpiScale, root->DpiScale);

@@ -880,3 +880,43 @@ TEST_CASE("control: WantsArrowKeys_NumericFieldTrue")
     root->AddView(nf.Get());
     CHECK(nf->WantsArrowKeys);
 }
+
+TEST_CASE("control: DebugOverlay_ContextSettingsReachTheDraw_AndEveryFlagDraws")
+{
+    // DrawRootView built its draw context without the debug settings, so no overlay could be
+    // turned on through it; ShowZOrder and ShowTabOrder drew nothing even when passed directly.
+    UIContext ctx{DefaultAllocator()};
+    auto root = core::MakeRef<RootView>(core::DefaultAllocator());
+    Init(ctx, root.Get(), 300, 100);
+    auto column = core::MakeRef<FlexLayout>(core::DefaultAllocator());
+    column->Direction = Orientation::Vertical;
+    auto a = core::MakeRef<TestView>(core::DefaultAllocator(), 100.0f, 30.0f);
+    auto b = core::MakeRef<TestView>(core::DefaultAllocator(), 100.0f, 30.0f);
+    a->IsFocusable = true;
+    b->IsFocusable = true;
+    a->IsTabStop = true;
+    b->IsTabStop = true;
+    column->AddView(a.Get());
+    column->AddView(b.Get());
+    root->AddView(column.Get());
+    LayoutPass(ctx, root.Get());
+    const auto verticesDrawn = [&]
+    {
+        foundation::vg::VGContext vg;
+        ctx.DrawRootView(root.Get(), vg);
+        return vg.GetBatch().vertices.Size() + vg.GetBatch().boxVertices.Size(); // paths and analytic boxes
+    };
+    const usize plain = verticesDrawn();
+    bool UIDebugDrawSettings::* each[] = {&UIDebugDrawSettings::ShowBounds, &UIDebugDrawSettings::ShowZOrder,
+                                          &UIDebugDrawSettings::ShowTabOrder};
+    for (usize i = 0; i < 3; ++i)
+    {
+        bool UIDebugDrawSettings::* flag = each[i];
+        CAPTURE(i);
+        ctx.DebugDraw = UIDebugDrawSettings{};
+        ctx.DebugDraw.*flag = true;
+        CHECK(verticesDrawn() > plain);
+    }
+    ctx.DebugDraw = UIDebugDrawSettings{};
+    CHECK(verticesDrawn() == plain); // off again: nothing extra
+}

@@ -186,6 +186,12 @@ namespace foundation::ui
         m_capturedId = (view != nullptr) ? view->Id : ViewId::Invalid;
     }
 
+    void FocusManager::CollectTabStops(Array<View*>& out) const
+    {
+        CollectFocusable(GetFocusRoot(), out);
+        SortByTabIndex(out);
+    }
+
     void FocusManager::FocusNext()
     {
         Array<View*> focusables;

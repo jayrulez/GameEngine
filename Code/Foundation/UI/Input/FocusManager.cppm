@@ -81,6 +81,9 @@ export namespace foundation::ui
         void FocusNext();                         // impl unit
         void FocusPrev();                         // impl unit
         bool MoveFocus(FocusDirection direction); // impl unit
+        /// The views Tab visits, in the order it visits them (within the topmost focus-taking
+        /// popup when one is open).
+        void CollectTabStops(Array<View*>& out) const; // impl unit
 
         // === Deletion safety ===
         void OnViewDeleted(View* view); // impl unit

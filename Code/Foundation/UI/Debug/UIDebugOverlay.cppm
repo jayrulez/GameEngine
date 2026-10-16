@@ -23,7 +23,8 @@ export namespace foundation::ui
 
     struct UIDebugOverlay
     {
-        /// Draw debug overlays for a single view (called in the view's local coordinate space).
-        static void DrawOverlays(UIDrawContext& ctx, View& view);
+        /// Draw debug overlays for a single view (called in the view's local coordinate space);
+        /// `drawIndex` is its place in its parent's draw order (ShowZOrder).
+        static void DrawOverlays(UIDrawContext& ctx, View& view, usize drawIndex);
     };
 }

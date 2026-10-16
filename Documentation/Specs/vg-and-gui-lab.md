@@ -417,6 +417,22 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   reactive core is re-entrant found an effect without a scheduler rerunning inside its own run;
   fixed (5dce386d8).
 
+- **After G7: GUIContext (user direction 2026-10-16).** One GUI of several roots (windows, render
+  targets, a panel in the world). The context holds what is the GUI's: one animation clock (each root
+  pausing or slowing its own time on it, user ruling), deferred tree edits, one bindings flush a
+  frame for every root, the data, the commands and keymap, and the element table (moved from the
+  root, user ruling: a weak handle survives its node moving between roots) and element set; it
+  tracks the active root, the one last given input, which keystrokes, the gamepad and command
+  availability follow (user ruling). A root keeps its dispatcher, display scale, viewport, media
+  context, layout and drawing; a root made alone makes a context of its own. Before it, actions
+  learnt to hold their target weakly and run on a per-target time scale (0b0fa7b9b); the context
+  itself is f4bc06def. Playing the showcase found four defects, each fixed with a test: a held
+  d-pad direction skipped the focused widget (d8c0b19f6); a click focused the full-window backdrop,
+  so the first arrow found nothing (25a9872ee: a click focuses what takes focus, navigation from
+  what does not starts from the entry, and focus shows until the pointer is used); a slider gave its
+  arrows back at its ends (fd7e5f95c: it keeps them, user ruling); and Right took a wide field in
+  the row above (dd8341bc7: a candidate must start past the focused widget's edge).
+
 ## Open limits
 
 What the phases left, gathered so each has a home (from each phase's "Left"); an item leaves this

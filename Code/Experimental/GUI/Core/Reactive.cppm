@@ -279,17 +279,38 @@ export namespace experimental::gui
                 m_queuedOn->Forget(*this);
         }
 
+        /// Runs the body. An effect told to run again while it runs (its body changed what it read,
+        /// with no scheduler to wait on) runs again after it finishes, not inside itself, a few times
+        /// at most: one that never settles is cut off rather than recursing without end.
         void Run()
         {
             m_queuedOn = nullptr;
-            ++m_runs;
-            Evaluate(m_body);
+            if (m_running)
+            {
+                m_rerun = true;
+                return;
+            }
+            m_running = true;
+            for (i32 round = 0; round < 16; ++round)
+            {
+                m_rerun = false;
+                ++m_runs;
+                Evaluate(m_body);
+                if (!m_rerun)
+                    break;
+            }
+            m_running = false;
         }
         [[nodiscard]] u32 RunCount() const noexcept { return m_runs; }
         [[nodiscard]] bool IsQueued() const noexcept { return m_queuedOn != nullptr; }
 
         void Invalidate() override
         {
+            if (m_running)
+            {
+                m_rerun = true; // after this run, not inside it
+                return;
+            }
             if (m_queuedOn != nullptr)
                 return;
             EffectScheduler* scheduler = m_scheduler ? m_scheduler() : nullptr;
@@ -308,6 +329,8 @@ export namespace experimental::gui
         SchedulerSource m_scheduler;
         EffectScheduler* m_queuedOn = nullptr;
         u32 m_runs = 0;
+        bool m_running = false; // inside the body
+        bool m_rerun = false;   // told to run again meanwhile
     };
 
     inline EffectScheduler::~EffectScheduler()

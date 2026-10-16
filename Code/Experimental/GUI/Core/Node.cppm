@@ -55,6 +55,7 @@ export namespace experimental::gui
     class EventDispatcher; // owned by the SceneRoot; reached via GetEventDispatcher()
     class ElementSet;      // what a GUI may create (:element_types); its SceneRoot holds one
     class SceneRoot;       // the root of a GUI (:scene_root)
+    class GUIContext;      // the GUI a root is part of (:scene_root)
     class Node;
 
     /// One GUI's element table (G1 of Specs/vg-and-gui-lab.md): what a script's handle to a node
@@ -591,6 +592,8 @@ export namespace experimental::gui
         // The SceneRoot's ActionManager / MutationQueue, found by walking to the root.
         // Base returns the parent's; SceneRoot overrides to return its own. Null if the
         // node is not yet attached under a SceneRoot.
+        /// The GUI this node is in (its root's context), or null outside one.
+        [[nodiscard]] virtual GUIContext* GetGUIContext() { return m_parent ? m_parent->GetGUIContext() : nullptr; }
         /// Where this node's bindings wait for the frame: its SceneRoot's scheduler, or none
         /// outside a scene (a binding then runs at once).
         [[nodiscard]] virtual EffectScheduler* GetEffectScheduler()

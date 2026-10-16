@@ -116,6 +116,7 @@ export namespace experimental::gui
 
         void InjectMouseDown(core::Float2 position, MouseButton button, u32 modifiers = 0)
         {
+            NoteInput();
             // A pointer in use: the focus ring hides (shown again by the next key or d-pad move).
             m_keyboardMode = false;
             if (m_focusNode != nullptr)
@@ -203,6 +204,7 @@ export namespace experimental::gui
 
         void InjectKeyDown(u32 keyCode, u32 modifiers = 0)
         {
+            NoteInput();
             // Escape dismisses an open popup (menu / dropdown / tooltip) and is consumed.
             if (m_popup != nullptr && keyCode == static_cast<u32>(KeyCode::Escape))
             {
@@ -264,12 +266,16 @@ export namespace experimental::gui
         /// activates and East goes back (the `back` command).
         void InjectPadButton(PadButton button)
         {
+            NoteInput();
             UseKeyboard();
             if (m_keystrokes && m_keystrokes(Keystroke{static_cast<u32>(button), 0, true}))
                 return;
             if (button == PadButton::South)
                 (void)Activate();
         }
+        /// Told on input a user gave this root (a press, a key, the gamepad): its GUI makes it the
+        /// active root.
+        void SetOnInput(core::Function<void()> onInput) { m_onInput = core::Move(onInput); }
         /// Where unhandled keystrokes go: the SceneRoot's keymap (true when it took one).
         void SetKeystrokeRouter(core::Function<bool(const Keystroke&)> router) { m_keystrokes = core::Move(router); }
 
@@ -386,6 +392,7 @@ export namespace experimental::gui
         // system's own key repeat.) The SceneRoot's update ticks it.
         void PressDirection(NavDirection direction)
         {
+            NoteInput();
             m_holding = true;
             m_heldDirection = direction;
             m_heldFor = 0.0f;
@@ -574,6 +581,12 @@ export namespace experimental::gui
         core::Float2 m_mousePos{0.0f, 0.0f};
         Observable m_focusChanged;   // told when focus moves
         core::Function<bool(const Keystroke&)> m_keystrokes; // the keymap (SceneRoot)
+        core::Function<void()> m_onInput;                    // this root took input (GUIContext)
+        void NoteInput()
+        {
+            if (m_onInput)
+                m_onInput();
+        }
         // The last input was a key or a d-pad move, not the pointer; true until the pointer is
         // used, so a menu opening with focus on its first button shows it (as games do).
         bool m_keyboardMode = true;

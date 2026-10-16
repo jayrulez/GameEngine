@@ -34,7 +34,8 @@ namespace experimental::gui
                  SceneRoot* root = ObserveSceneRoot();
                  if (commandId.Size() == 0 || root == nullptr)
                      return;
-                 const bool available = root->IsCommandAvailable(commandId.AsView());
+                 // Availability on the active root's focus path (the window the user is in).
+                 const bool available = root->GetContext().IsCommandAvailable(commandId.AsView());
                  const Command* command = root->GetCommands().Find(commandId.AsView());
                  const bool checked = command != nullptr && command->IsChecked();
                  Untracked([&] { OnBoundCommandState(available, checked); });

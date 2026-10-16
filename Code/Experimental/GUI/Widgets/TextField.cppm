@@ -139,8 +139,11 @@ export namespace experimental::gui
         // === Appearance ===
         void SetFont(fonts::CachedFont* font)
         {
+            if (font == m_text.GetFont())
+                return;
             m_text.SetFont(font);
             m_hintText.SetFont(font);
+            RequestLayout(); // one line of the font tall
             Invalidate();
         }
         [[nodiscard]] fonts::CachedFont* GetFont() const { return m_text.GetFont(); }
@@ -196,6 +199,12 @@ export namespace experimental::gui
                 m_caretVisible = !m_caretVisible;
                 Invalidate();
             }
+        }
+
+        /// One line of its font, a field's usual width, when nothing sizes it (E2).
+        [[nodiscard]] core::Float2 MeasureContent(core::Float2) override
+        {
+            return core::Float2{160.0f, (m_text.GetFont() != nullptr) ? m_text.GetLineHeight() : 20.0f};
         }
 
     protected:

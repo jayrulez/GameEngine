@@ -8,10 +8,12 @@
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
+import foundation.fonts;
 import experimental.gui;
 
 using namespace experimental::gui;
 namespace core = foundation::core;
+namespace fonts = foundation::fonts;
 using core::f32;
 
 namespace
@@ -373,3 +375,93 @@ TEST_CASE("layout: a sheet's display, flex, grid and size properties reach the l
     CHECK(cards[0]->GetLayoutStyle().Grow == doctest::Approx(1.0f));
     CHECK(cards[0]->GetLayoutStyle().Width.Kind == LayoutLengthKind::Percent);
 }
+
+namespace
+{
+    // 6px a byte, 12px a line.
+    class SixFont : public fonts::IFont
+    {
+    public:
+        core::StringView FamilyName() const override { return core::StringView(u8"six"); }
+        core::Span<const core::u8> SourceData() const override { return {}; }
+        fonts::FontMetrics Metrics() const override
+        {
+            fonts::FontMetrics m;
+            m.ascent = 10.0f;
+            m.descent = -2.0f;
+            m.lineHeight = 12.0f;
+            m.pixelHeight = 10.0f;
+            m.scale = 1.0f;
+            return m;
+        }
+        f32 PixelHeight() const override { return 10.0f; }
+        fonts::GlyphInfo GetGlyphInfo(core::i32 cp) const override
+        {
+            fonts::GlyphInfo g;
+            g.codepoint = cp;
+            g.advanceWidth = 6.0f;
+            return g;
+        }
+        f32 GetKerning(core::i32, core::i32) const override { return 0.0f; }
+        bool HasGlyph(core::i32) const override { return true; }
+        f32 MeasureString(core::StringView text) const override { return static_cast<f32>(text.Size()) * 6.0f; }
+        f32 MeasureString(core::StringView text, core::Array<fonts::GlyphPosition>&) const override
+        {
+            return static_cast<f32>(text.Size()) * 6.0f;
+        }
+    };
+}
+
+TEST_CASE("layout: a label and a button size to their text, and follow it")
+{
+    fonts::CachedFont font(core::DefaultAllocator(), core::DefaultAllocator().New<SixFont>(), nullptr, nullptr);
+    Bed bed;
+    auto row = Box(*bed.root.Get(), [](LayoutStyle& s) { s.Direction = FlexDirection::Row; s.AlignItems = Align::Start; s.ColumnGap = 10.0f; });
+    auto label = core::MakeRef<Label>(core::DefaultAllocator());
+    label->SetFont(&font);
+    label->SetText(SV(u8"Score"));
+    label->SetPadding(Thickness{4.0f});
+    row->AddChild(label.Get());
+    auto button = core::MakeRef<Button>(core::DefaultAllocator());
+    button->SetFont(&font);
+    button->SetText(SV(u8"Play"));
+    button->SetPadding(Thickness{10.0f, 6.0f});
+    row->AddChild(button.Get());
+    auto box = core::MakeRef<CheckBox>(core::DefaultAllocator());
+    row->AddChild(box.Get());
+    bed.Layout();
+    CheckRect(*label, 0, 0, 5 * 6 + 8, 12 + 8);
+    CheckRect(*button, 38 + 10, 0, 4 * 6 + 20, 12 + 12);
+    CHECK(box->GetSize().x == doctest::Approx(20.0f));
+    label->SetText(SV(u8"Score: 120"));
+    bed.Layout();
+    CHECK(label->GetSize().x == doctest::Approx(10 * 6 + 8));
+    CHECK(button->GetPosition().x == doctest::Approx(68.0f + 10.0f)); // moved along with it
+}
+
+TEST_CASE("layout: a wrapping label wraps to the width it is given, and shrinks no narrower than its longest word")
+{
+    fonts::CachedFont font(core::DefaultAllocator(), core::DefaultAllocator().New<SixFont>(), nullptr, nullptr);
+    Bed bed(400.0f, 300.0f);
+    auto column = Box(*bed.root.Get(), [](LayoutStyle& s) { s.Width = LayoutLength::Px(100.0f); });
+    auto text = core::MakeRef<Label>(core::DefaultAllocator());
+    text->SetFont(&font);
+    text->SetWordWrap(true);
+    text->SetText(SV(u8"aaaa bbbb cccc dddd")); // words of 24, a space 6: four words take 114
+    column->AddChild(text.Get());
+    bed.Layout();
+    CHECK(text->GetSize().x == doctest::Approx(100.0f)); // stretched across
+    CHECK(text->GetSize().y == doctest::Approx(24.0f));  // two lines at 100 wide
+
+    auto row = Box(*bed.root.Get(), [](LayoutStyle& s) { s.Direction = FlexDirection::Row; s.Width = LayoutLength::Px(60.0f); s.AlignItems = Align::Start; });
+    auto squeezed = core::MakeRef<Label>(core::DefaultAllocator());
+    squeezed->SetFont(&font);
+    squeezed->SetWordWrap(true);
+    squeezed->SetText(SV(u8"aaaaaaaa bb"));
+    row->AddChild(squeezed.Get());
+    (void)Fixed(*row.Get(), 50.0f, 10.0f);
+    bed.Layout();
+    CHECK(squeezed->GetSize().x == doctest::Approx(48.0f)); // its longest word: the sibling overflows
+    CHECK(squeezed->GetSize().y == doctest::Approx(24.0f));
+}
+

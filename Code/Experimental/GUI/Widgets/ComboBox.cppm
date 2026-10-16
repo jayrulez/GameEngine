@@ -54,6 +54,7 @@ export namespace experimental::gui
             m_text.SetFont(font);
             if (m_dropdown)
                 m_dropdown->SetFont(font);
+            RequestLayout();
         }
         void SetTextColor(Color color)
         {
@@ -74,6 +75,7 @@ export namespace experimental::gui
             m_items.PushBack(core::String(text));
             if (m_dropdown)
                 m_dropdown->AddItem(text);
+            RequestLayout(); // as wide as its widest item
         }
         [[nodiscard]] usize ItemCount() const noexcept { return m_items.Size(); }
         /// The items as one text, '|' between them (markup's and a sheet's `items`).
@@ -114,6 +116,16 @@ export namespace experimental::gui
 
         [[nodiscard]] bool IsOpen() const noexcept { return m_open; }
         void SetItemHeight(f32 height) { m_itemHeight = height; }
+
+        /// Its widest item and the arrow beside it, one line of its font tall (E2).
+        [[nodiscard]] core::Float2 MeasureContent(core::Float2) override
+        {
+            f32 widest = 0.0f;
+            if (m_font != nullptr)
+                for (const core::String& item : m_items)
+                    widest = core::Max(widest, m_font->font->MeasureString(item.AsView()));
+            return core::Float2{widest + 24.0f, m_font != nullptr ? m_font->font->Metrics().lineHeight : 20.0f};
+        }
 
     protected:
         void OnMouseClick(const MouseEvent& event) override

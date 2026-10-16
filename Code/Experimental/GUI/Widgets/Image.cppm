@@ -19,6 +19,7 @@ import :rect;
 import :draw_context;
 import :drawable;
 import :ui_widget;
+import :layout_style; // kUnbounded
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -43,6 +44,7 @@ export namespace experimental::gui
         void SetDrawable(RefPtr<Drawable> drawable)
         {
             m_drawable = core::Move(drawable);
+            RequestLayout(); // its size follows its picture's
             Invalidate();
         }
         [[nodiscard]] Drawable* GetDrawable() const noexcept { return m_drawable.Get(); }
@@ -55,6 +57,11 @@ export namespace experimental::gui
         [[nodiscard]] ImageScaleMode GetScaleMode() const noexcept { return m_mode; }
 
         // Natural size of the drawable (for layout), if it has one.
+        /// Its picture's size (E2), when the picture has one.
+        [[nodiscard]] core::Float2 MeasureContent(core::Float2) override
+        {
+            return IntrinsicSize().ValueOr(core::Float2{0.0f, 0.0f});
+        }
         [[nodiscard]] Optional<core::Float2> IntrinsicSize() const
         {
             return m_drawable ? m_drawable->IntrinsicSize() : Optional<core::Float2>{};

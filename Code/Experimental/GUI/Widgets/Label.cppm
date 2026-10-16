@@ -21,6 +21,7 @@ import :rect;
 import :draw_context;
 import :text;
 import :ui_widget;
+import :layout_style; // kUnbounded
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -43,6 +44,7 @@ export namespace experimental::gui
             if (text == m_text.GetString())
                 return;
             m_text.SetString(text);
+            RequestLayout(); // its size follows its text
             Invalidate();
             m_textChanged.Notify();
         }
@@ -55,7 +57,10 @@ export namespace experimental::gui
 
         void SetFont(fonts::CachedFont* font)
         {
+            if (font == m_text.GetFont())
+                return;
             m_text.SetFont(font);
+            RequestLayout();
             Invalidate();
         }
         [[nodiscard]] fonts::CachedFont* GetFont() const { return m_text.GetFont(); }
@@ -107,12 +112,21 @@ export namespace experimental::gui
         void SetWordWrap(bool enabled)
         {
             m_text.SetWordWrap(enabled);
+            RequestLayout();
             Invalidate();
         }
         [[nodiscard]] bool IsWordWrap() const { return m_text.IsWordWrap(); }
 
         // The natural size of the text (for layout).
         [[nodiscard]] core::Float2 MeasureText() const { return m_text.Measure(); }
+        /// Its text's size (E2): one line, or wrapped to the width available (its longest word when
+        /// none is), lines broken where the text breaks them.
+        [[nodiscard]] core::Float2 MeasureContent(core::Float2 available) override
+        {
+            if (!(m_text.GetFont() != nullptr) || m_text.GetString().Size() == 0)
+                return core::Float2{0.0f, (m_text.GetFont() != nullptr) ? m_text.GetLineHeight() : 0.0f};
+            return m_text.MeasureWrapped(m_text.IsWordWrap() && !IsUnbounded(available.x) ? available.x : kUnbounded);
+        }
         // The size wrapped text occupies at `maxWidth` (widest line x total height).
         [[nodiscard]] core::Float2 MeasureWrapped(f32 maxWidth) const
         {

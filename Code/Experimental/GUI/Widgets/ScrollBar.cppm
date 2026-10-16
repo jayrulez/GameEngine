@@ -98,6 +98,12 @@ export namespace experimental::gui
                 SetThumbColor(color);
         }
 
+        /// A bar's thickness and length when nothing sizes it (E2).
+        [[nodiscard]] core::Float2 MeasureContent(core::Float2) override
+        {
+            return m_orientation == Orientation::Vertical ? core::Float2{12.0f, 120.0f} : core::Float2{120.0f, 12.0f};
+        }
+
     protected:
         // Press on the thumb starts a grab-drag (the thumb keeps its offset under the cursor,
         // so it doesn't jump); press on the track above/below the thumb pages toward the click

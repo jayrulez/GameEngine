@@ -370,3 +370,29 @@ TEST_CASE("navigation: focusing a page lands on its entry, and Tab stays in a di
     bed.Key(KeyCode::Tab);
     CHECK(bed.Focused() == SV(u8"second"));
 }
+
+TEST_CASE("navigation: a held d-pad direction reaches the focused widget before navigation")
+{
+    // The showcase's slider: the d-pad must change its value, not move focus away from it.
+    Bed bed;
+    auto slider = Make<Slider>();
+    slider->SetPosition(core::Float2{10.0f, 10.0f});
+    slider->SetSize(core::Float2{100.0f, 20.0f});
+    bed.root->AddChild(slider.Get());
+    auto after = Cell(*bed.root.Get(), u8"after", 200.0f, 10.0f);
+    bed.d.SetFocusNode(slider.Get());
+    slider->SetValue(0.5f);
+    bed.d.PressDirection(NavDirection::Right);
+    CHECK(slider->GetValue() == doctest::Approx(0.55f));
+    CHECK(bed.d.GetFocusNode() == slider.Get());
+    bed.root->Update(core::Duration::FromSeconds(0.45)); // a repeat steps it again
+    CHECK(slider->GetValue() == doctest::Approx(0.6f));
+    bed.d.ReleaseDirection(NavDirection::Right);
+    // Down is not the slider's: focus moves.
+    bed.d.PressDirection(NavDirection::Down);
+    bed.d.ReleaseDirection(NavDirection::Down);
+    CHECK(bed.d.GetFocusNode() == slider.Get()); // nothing below it: stays
+    slider->SetValue(1.0f);
+    bed.d.PressDirection(NavDirection::Right); // at its end: given back
+    CHECK(bed.Focused() == SV(u8"after"));
+}

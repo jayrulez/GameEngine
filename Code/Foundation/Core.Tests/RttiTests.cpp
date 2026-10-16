@@ -1467,3 +1467,66 @@ TEST_CASE("rtti-shared: the registration observer fires only on real inserts")
     REQUIRE(recorded.Size() == 1u);
     CHECK(recorded[0] == info.id);
 }
+
+namespace
+{
+    // A native API spelled with StringView (a view into the owner's text) and a creator, as a GUI
+    // element is: reflected as it is, with no script twin.
+    class Signboard : public Object
+    {
+        RTTI_OBJECT(Signboard, Object)
+    public:
+        [[nodiscard]] StringView GetCaption() const { return m_caption.AsView(); }
+        void SetCaption(StringView caption) { m_caption = String(caption); }
+        [[nodiscard]] bool Says(StringView text) const { return m_caption.AsView() == text; }
+        [[nodiscard]] StringView Shout() const { return m_caption.AsView(); }
+
+    private:
+        String m_caption = String(u8"open");
+    };
+}
+
+REFLECT_MEMBERS(Signboard, "rtti::test")
+{
+    builder.AccessorProperty<&Signboard::GetCaption, &Signboard::SetCaption>("caption");
+    builder.Method<&Signboard::Says>("says");
+    builder.Method<&Signboard::Shout>("shout");
+    builder.Creator();
+}
+
+TEST_CASE("rtti: StringView accessors and methods cross as String")
+{
+    RefPtr<Signboard> board = MakeRef<Signboard>(DefaultAllocator());
+    Instance inst = Instance::From(board.Get());
+    const PropertyInfo* caption = FindProperty(Signboard::StaticType(), "caption");
+    REQUIRE(caption != nullptr);
+    CHECK(caption->type == &TypeOf<String>());
+    Variant read = GetProperty(*caption, inst);
+    REQUIRE(read.TryGet<String>() != nullptr);
+    CHECK(read.TryGet<String>()->AsView() == StringView(u8"open"));
+    CHECK(SetProperty(*caption, inst, Variant::From<String>(String(u8"closed"))).IsOk());
+    CHECK(board->GetCaption() == StringView(u8"closed"));
+
+    const MethodInfo* says = FindMethod(Signboard::StaticType(), "says");
+    REQUIRE(says != nullptr);
+    CHECK(ParamAt(*says, 0).type() == &TypeOf<String>());
+    Variant args[] = {Variant::From<String>(String(u8"closed"))};
+    CHECK(InvokeMethod(*says, inst, Span<Variant>{args, 1}).Value().Get<bool>());
+    // Native callers may pass the view itself.
+    Variant viewArgs[] = {Variant::From(StringView(u8"closed"))};
+    CHECK(InvokeMethod(*says, inst, Span<Variant>{viewArgs, 1}).Value().Get<bool>());
+    Variant shouted = InvokeMethod(*FindMethod(Signboard::StaticType(), "shout"), inst, Span<Variant>{}).Value();
+    REQUIRE(shouted.TryGet<String>() != nullptr); // an owned copy, never a view into the board
+    CHECK(shouted.TryGet<String>()->AsView() == StringView(u8"closed"));
+}
+
+TEST_CASE("rtti: a creator makes an Object from an owner's allocator; a type without one makes none")
+{
+    REQUIRE(Signboard::StaticType().creator != nullptr);
+    CHECK(Signboard::StaticType().constructorCount == 0u); // nothing a script could construct
+    RefPtr<Object> made = CreateObject(Signboard::StaticType(), DefaultAllocator());
+    REQUIRE(made);
+    CHECK(made->GetType() == &Signboard::StaticType());
+    CHECK(&made->MemoryAllocator() == &DefaultAllocator());
+    CHECK_FALSE(CreateObject(Animal::StaticType(), DefaultAllocator()));
+}

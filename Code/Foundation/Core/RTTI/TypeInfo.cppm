@@ -27,6 +27,7 @@ export namespace foundation::core
     struct ContainerInfo;   // fully defined in :reflection
     struct ConstantInfo;    // fully defined in :reflection (named static values)
     struct ConstructorInfo; // fully defined in :reflection
+    struct CreatorInfo;     // fully defined in :reflection
 
     struct EnumValue
     {
@@ -71,6 +72,10 @@ export namespace foundation::core
         u32 constantCount = 0;
         const ConstructorInfo* constructors = nullptr; // reflected constructors (overloads)
         u32 constructorCount = 0;
+        // How native code makes one from an owner's allocator (TypeBuilder::Creator), for an
+        // Object type created by name (a GUI element from markup); null when the type declares
+        // none. Not a constructor: script binders never bind it.
+        const CreatorInfo* creator = nullptr;
         // DATA version of the serialized layout: bump when it changes. The reader accepts the
         // current version (BeginVersionedPayload), and older ones only down to
         // `minReadDataVersion` when a type keeps a legacy reader (its Serialize body branches

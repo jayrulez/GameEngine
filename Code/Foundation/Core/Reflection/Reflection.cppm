@@ -101,6 +101,33 @@ namespace foundation::core::detail
     // the returned value through a Variant; set is not supported (read-only); there is no
     // field address. Emits as a parens-less getter in the script backends, exactly like a
     // stored property, but the value is computed on each read.
+    // How a reflected value crosses a Variant: a StringView (a view into its owner's text, the
+    // native API's spelling) crosses as an owned String, so a native accessor or method taking or
+    // returning one reflects as it is, with no script twin.
+    template <typename R>
+    struct VariantValue
+    {
+        using Type = R;
+    };
+    template <>
+    struct VariantValue<StringView>
+    {
+        using Type = String;
+    };
+    template <typename R, typename V>
+    [[nodiscard]] Variant ToVariantValue(V&& value)
+    {
+        using Bare = std::remove_cvref_t<R>;
+        if constexpr (std::is_same_v<Bare, StringView>)
+        {
+            return Variant::From<String>(String(value));
+        }
+        else
+        {
+            return Variant::From<Bare>(std::forward<V>(value));
+        }
+    }
+
     template <typename Getter>
     struct GetterTraits;
     template <typename C, typename R>
@@ -120,7 +147,7 @@ namespace foundation::core::detail
     Variant GetterPropertyGet(const Instance& instance)
     {
         const T* object = static_cast<const T*>(instance.Pointer());
-        return Variant::From<R>((object->*Getter)());
+        return ToVariantValue<R>((object->*Getter)());
     }
 
     template <typename T, typename R, auto Getter>
@@ -151,7 +178,20 @@ namespace foundation::core::detail
     Status SetterPropertySet(const Instance& instance, const Variant& value)
     {
         T* object = static_cast<T*>(instance.Pointer());
-        if (const R* typed = value.TryGet<R>())
+        if constexpr (std::is_same_v<R, StringView>)
+        {
+            if (const String* text = value.TryGet<String>())
+            {
+                (object->*Setter)(text->AsView());
+                return Status{};
+            }
+            if (const StringView* view = value.TryGet<StringView>())
+            {
+                (object->*Setter)(*view);
+                return Status{};
+            }
+        }
+        else if (const R* typed = value.TryGet<R>())
         {
             (object->*Setter)(*typed);
             return Status{};
@@ -407,6 +447,19 @@ export namespace foundation::core
     // args and returns the new instance as a Variant (a value, or object mode
     // for Object-derived types). A type may have several (overloads).
     // =======================================================================
+    /// An Object type's creator (TypeBuilder::Creator): a new instance from `allocator`, owned by
+    /// the returned RefPtr. Native creation by type (markup, tooling); never a script constructor.
+    struct CreatorInfo
+    {
+        RefPtr<Object> (*create)(IAllocator& allocator);
+    };
+
+    /// A new instance of `type` from `allocator` through its creator, or null when it declares none.
+    [[nodiscard]] inline RefPtr<Object> CreateObject(const TypeInfo& type, IAllocator& allocator)
+    {
+        return type.creator != nullptr ? type.creator->create(allocator) : RefPtr<Object>{};
+    }
+
     struct ConstructorInfo
     {
         const ParamInfo* params;
@@ -1233,7 +1286,11 @@ namespace foundation::core::detail
     [[nodiscard]] const TypeInfo* ParamTypeOf() noexcept
     {
         using Bare = std::remove_cvref_t<A>;
-        if constexpr (ArgRefPtr<Bare>::value)
+        if constexpr (std::is_same_v<Bare, StringView>)
+        {
+            return &TypeOf<String>(); // crosses as a String (VariantValue)
+        }
+        else if constexpr (ArgRefPtr<Bare>::value)
         {
             return &ArgRefPtr<Bare>::Pointee::StaticType();
         }
@@ -1260,6 +1317,11 @@ namespace foundation::core::detail
         {
             (void)v;
             return true; // a Variant parameter is the generic sink: it accepts ANY argument as-is
+        }
+        else if constexpr (std::is_same_v<Bare, StringView>)
+        {
+            // A script's text arrives as a String; native code may pass a view it keeps alive.
+            return v.TryGet<String>() != nullptr || v.TryGet<StringView>() != nullptr;
         }
         else if constexpr (ArgRefPtr<Bare>::value)
         {
@@ -1316,6 +1378,14 @@ namespace foundation::core::detail
         if constexpr (std::is_same_v<Bare, Variant>)
         {
             return (v); // pass the Variant through unchanged (the generic payload sink)
+        }
+        else if constexpr (std::is_same_v<Bare, StringView>)
+        {
+            if (const String* text = v.template TryGet<String>())
+            {
+                return text->AsView(); // a view of the argument, alive for the call
+            }
+            return StringView(*v.template TryGet<StringView>());
         }
         else if constexpr (ArgRefPtr<Bare>::value)
         {
@@ -1422,8 +1492,7 @@ namespace foundation::core::detail
         }
         else
         {
-            return Variant::From<std::remove_cvref_t<R>>(
-                (object->*Member)(ConvertArg<A>(args[I])...));
+            return ToVariantValue<R>((object->*Member)(ConvertArg<A>(args[I])...));
         }
     }
 
@@ -1448,7 +1517,7 @@ namespace foundation::core::detail
         }
         else
         {
-            return Variant::From<std::remove_cvref_t<R>>(Func(ConvertArg<A>(args[I])...));
+            return ToVariantValue<R>(Func(ConvertArg<A>(args[I])...));
         }
     }
 
@@ -1679,7 +1748,8 @@ export namespace foundation::core
         TypeBuilder& ComputedProperty(const char* name)
         {
             using R = typename detail::GetterTraits<decltype(Getter)>::Return;
-            m_data.properties.PushBack(PropertyInfo{name, &TypeOf<R>(), PropertyFlags::ReadOnly,
+            m_data.properties.PushBack(PropertyInfo{name, &TypeOf<typename detail::VariantValue<R>::Type>(),
+                                                    PropertyFlags::ReadOnly,
                                                     &detail::GetterPropertyGet<T, R, Getter>,
                                                     &detail::GetterPropertySet<T, R, Getter>,
                                                     nullptr});
@@ -1697,7 +1767,8 @@ export namespace foundation::core
             using R = typename detail::GetterTraits<decltype(Getter)>::Return;
             static_assert(std::is_same_v<R, typename detail::SetterTraits<decltype(Setter)>::Argument>,
                           "AccessorProperty: the getter's return and the setter's argument differ");
-            m_data.properties.PushBack(PropertyInfo{name, &TypeOf<R>(), PropertyFlags::None,
+            m_data.properties.PushBack(PropertyInfo{name, &TypeOf<typename detail::VariantValue<R>::Type>(),
+                                                    PropertyFlags::None,
                                                     &detail::GetterPropertyGet<T, R, Getter>,
                                                     &detail::SetterPropertySet<T, R, Setter>,
                                                     nullptr});
@@ -1892,9 +1963,23 @@ export namespace foundation::core
             return *this;
         }
 
+        /// Declares how native code creates a T by its type (`MakeRef<T>(allocator)`), for an
+        /// Object type made by name: a GUI element from markup or a script's `add`, where the
+        /// owner names the parent and the allocator. Unlike Constructor(), no script backend
+        /// binds it, so a script can never construct a detached one.
+        TypeBuilder& Creator()
+        {
+            static_assert(std::is_base_of_v<Object, T>, "Creator(): an Object type, owned by a RefPtr");
+            static constexpr CreatorInfo kCreator{
+                [](IAllocator& allocator) -> RefPtr<Object> { return RefPtr<Object>(MakeRef<T>(allocator).Get()); }};
+            m_creator = &kCreator;
+            return *this;
+        }
+
         [[nodiscard]] TypeData Build()
         {
             m_data.info = MakeTypeInfo<T>(m_name, m_namespace, m_base, m_dataVersion);
+            m_data.info.creator = m_creator;
             m_data.info.minReadDataVersion = m_minReadDataVersion;
             // Wire per-property attribute spans (the inner Array buffers survive TypeData's
             // move - only the outer array's control block moves).
@@ -1945,5 +2030,6 @@ export namespace foundation::core
         u32 m_dataVersion = 0;
         u32 m_minReadDataVersion = 0;
         TypeData m_data;
+        const CreatorInfo* m_creator = nullptr;
     };
 }

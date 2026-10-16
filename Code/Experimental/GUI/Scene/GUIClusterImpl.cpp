@@ -66,4 +66,10 @@ namespace experimental::gui
             if (dispatcher->GetFocusNode() == this)
                 dispatcher->SetFocusNode(nullptr);
     }
+
+    void Node::NotifyRemovingChild(Node& child)
+    {
+        if (EventDispatcher* dispatcher = GetEventDispatcher())
+            dispatcher->NotifySubtreeRemoved(child);
+    }
 }

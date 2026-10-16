@@ -442,24 +442,37 @@ export namespace experimental::gui
         }
 
 
-        // Clear any interaction refs pointing at `node` (call before removing/destroying it).
-        void NotifyNodeRemoved(Node* node)
+        // A subtree is leaving the tree (Node::RemoveChild tells the dispatcher before it
+        // detaches): every ref into it is dropped, since the tree no longer keeps those nodes
+        // alive. A sort that rebuilds a table's header frees the hovered header cell, and the next
+        // mouse move would otherwise leave a freed node. A popup inside it is simply gone; a popup
+        // whose opener leaves is dismissed while the opener still lives.
+        void NotifySubtreeRemoved(Node& removed)
         {
-            if (m_overNode == node)
+            if (IsInSubtree(m_popupOwner, &removed) && !IsInSubtree(m_popup, &removed))
+                ClosePopup();
+            if (IsInSubtree(m_popup, &removed) || IsInSubtree(m_popupOwner, &removed))
+            {
+                m_popup = nullptr;
+                m_popupOwner = nullptr;
+                m_onPopupClose = {};
+                m_popupContains = {};
+            }
+            if (IsInSubtree(m_overNode, &removed))
                 m_overNode = nullptr;
-            if (m_downNode == node)
+            if (IsInSubtree(m_downNode, &removed))
                 m_downNode = nullptr;
-            if (m_focusNode == node)
-                m_focusNode = nullptr;
-            if (m_dropTarget == node)
+            if (IsInSubtree(m_focusNode, &removed))
+                SetFocusNode(nullptr);
+            if (IsInSubtree(m_dropTarget, &removed))
                 m_dropTarget = nullptr;
-            if (m_dragSource == node)
+            if (IsInSubtree(m_dragSource, &removed))
             {
                 m_dragSource = nullptr;
                 if (m_dragActive)
                     EndDrag();
             }
-            if (m_modalRoot == node)
+            if (IsInSubtree(m_modalRoot, &removed))
                 m_modalRoot = nullptr;
         }
 

@@ -1,0 +1,21 @@
+<LinearLayout id="page-data-views" class="page" orientation="vertical" spacing="18" wrap-content="true">
+    <Label class="page-title" text="Data views"/>
+    <Label class="page-lead" wrap="true"
+           text="Views over models: they realise only the rows on screen, and follow the model when it changes. The models are native (a list, a table behind a sorting proxy, a tree)."/>
+
+    <LinearLayout class="section" orientation="vertical" spacing="12" wrap-content="true">
+        <Label class="section-title" text="ListView: 500 rows, virtualised"/>
+        <RelativeLayout id="views-list" class="view-host"/>
+        <Label id="views-picked" class="caption" text="Click a row, or focus the list and use the arrows."/>
+    </LinearLayout>
+
+    <LinearLayout class="section" orientation="vertical" spacing="12" wrap-content="true">
+        <Label class="section-title" text="TableView: click a header to sort"/>
+        <RelativeLayout id="views-table" class="view-host"/>
+    </LinearLayout>
+
+    <LinearLayout class="section" orientation="vertical" spacing="12" wrap-content="true">
+        <Label class="section-title" text="TreeView: click the arrows, or use the arrow keys"/>
+        <RelativeLayout id="views-tree" class="view-host"/>
+    </LinearLayout>
+</LinearLayout>

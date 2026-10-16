@@ -133,7 +133,8 @@ bool onBackCommand()
 }
 void onLeave()
 {
-    // The whole menu fades out; the host closes once `quit` is set and the fade has run.
+    // The whole menu fades out; once `quit` is set and the fade has run, the host takes the player
+    // back to where they came from (the sandbox).
     UIWidget::of(gui::root().find("showcase")).addClass("leaving");
     gui::set("quit", true);
 }
@@ -164,10 +165,27 @@ void main()
     gui::bindKey("escape", "back", "");
     gui::bindKey("pad-east", "back", "");
 
-    // The menu as it starts: the main page rising in, the rest hidden.
+    enter();
+}
+
+// The menu as it opens (the host calls this each time it shows the menu): the main page rising in,
+// the rest hidden, nothing left over from the last visit (a fade, a page change, the loading bar).
+void enter()
+{
+    leaveLeft = -1;
+    modalClosing = -1;
+    loadingNow = false;
+    UIWidget::of(gui::root().find("showcase")).removeClass("leaving");
+    UIWidget::of(modal).removeClass("modal-out");
+    UIWidget::of(gui::root().find("confirm")).removeClass("leave");
+    conceal(modal, "modal-in");
     conceal(settingsPanel, "enter");
+    UIWidget::of(settingsPanel).removeClass("leave");
     conceal(loadingScreen, "screen-in");
-    modal.visible = false;
+    UIWidget::of(loadingScreen).removeClass("leave");
+    UIWidget::of(mainPanel).removeClass("leave");
+    stage.visible = true;
+    conceal(mainPanel, "enter");
     reveal(mainPanel, "enter");
     mainPanel.focus();
 }

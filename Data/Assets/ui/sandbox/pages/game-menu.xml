@@ -1,0 +1,10 @@
+<LinearLayout id="page-game-menu" class="page" orientation="vertical" spacing="18" wrap-content="true">
+    <Label class="page-title" text="Game menu"/>
+    <Label class="page-lead" wrap="true"
+           text="A game's main menu built from markup, a sheet and AngelScript, with nothing native but its host. It is a second root of this GUI: it shares the data (your name, the volume) and returns here when you leave it."/>
+    <LinearLayout class="section" orientation="vertical" spacing="14" wrap-content="true">
+        <Label class="section-title" text="AURORA"/>
+        <Label class="caption" text="Mouse, keyboard or gamepad. Escape or East goes back; Quit, then Leave, returns here."/>
+        <Button class="btn launch" text="Open the game menu" command="showcase.open"/>
+    </LinearLayout>
+</LinearLayout>

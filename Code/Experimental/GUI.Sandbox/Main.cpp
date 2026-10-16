@@ -1,15 +1,20 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI Sandbox - the first on-screen test of experimental.gui. Builds a small widget tree
-// (panel + labels + buttons in a LinearLayout), styles it with CSS via a StyleManager, and
-// renders it through the same VG -> VGRenderer -> RHI path as VGSandbox. Input is driven by
-// an InputSurface (fullscreen, gated by an InputRouter) polled into the GUI EventDispatcher
-// through GuiInputBridge, so hover/click/CSS-transitions are live.
+// GUI Sandbox - the experimental GUI's demo (Documentation/Specs/vg-and-gui-lab.md), built from the
+// lab itself. A shell (Data/Assets/ui/sandbox/shell.xml: a header, a sidebar of pages, the page on
+// show) whose sidebar buttons run page.<id> commands; each page is pages/<id>.xml with an optional
+// pages/<id>.css and pages/<id>.as, so a new page is a button and its files. This host only sizes
+// the shell, fills the few hosts that need native models or widgets (the data views, the menu bar,
+// the context menu, the floating window, the message box, a radio group, an image, anchors), and
+// switches the theme. The game menu (Data/Assets/ui/showcase) is a second root of the same GUI:
+// it shares the data, and its Leave brings the player back here.
+//
+// Drawn through VG with everything it has (analytic boxes, layers and blurs, the MSAA and stencil
+// pass), only on frames that need it. Input reaches the root on show through GuiInputBridge.
 
 #include <new>
-#include <cstdio>  // printf (frame counts)
-#include <cstdlib> // atof (--scroll)
+#include <cstdio> // printf, fprintf
 
 import foundation.core;
 import foundation.rhi;
@@ -20,12 +25,12 @@ import foundation.shell;
 import foundation.image;
 import foundation.fonts;
 import foundation.fonts.truetype;
-import foundation.fonts.distancefield.baker; // the showcase's distance-field face
+import foundation.fonts.distancefield.baker; // the Lilita distance-field face
 import foundation.vg;
 import foundation.vg.renderer;
 import experimental.gui;
 import experimental.gui.shell;
-import foundation.script; // the showcase's script host
+import foundation.script; // the pages' and the game menu's scripts
 #ifdef OPTION_HAS_ANGELSCRIPT
 import foundation.script.angelscript;
 #endif
@@ -38,142 +43,69 @@ namespace image = foundation::image;
 namespace fonts = foundation::fonts;
 namespace vg = foundation::vg;
 namespace gui = experimental::gui;
+namespace script = foundation::script;
 
 namespace
 {
     // This binary's composition root: the ONE ambient-allocator decision here.
-    [[nodiscard]] foundation::core::IAllocator& AppRoot() noexcept
+    [[nodiscard]] IAllocator& AppRoot() noexcept { return DefaultAllocator(); }
+
+    constexpr StringView kRoboto = u8"Assets/fonts/roboto/Roboto-Regular.ttf";
+    constexpr StringView kLilita = u8"Assets/fonts/lilita-one/LilitaOne-Regular.ttf";
+    constexpr StringView kSandboxDir = u8"Assets/ui/sandbox/";
+    constexpr StringView kMenuDir = u8"Assets/ui/showcase/";
+    constexpr StringView kPageCommand = u8"page.";
+
+    constexpr f32 kHeaderHeight = 60.0f;
+    constexpr f32 kSidebarWidth = 210.0f;
+
+    // The first widget under `node` (itself included) whose id is `id`.
+    [[nodiscard]] gui::Node* FindById(gui::Node& node, StringView id)
     {
-        return foundation::core::DefaultAllocator();
+        if (const gui::UIWidget* widget = Cast<gui::UIWidget>(&node); widget != nullptr && widget->GetId() == id)
+            return &node;
+        for (usize i = 0; i < node.ChildCount(); ++i)
+            if (gui::Node* found = FindById(*node.GetChildAt(i), id))
+                return found;
+        return nullptr;
     }
-}
 
-
-
-
-namespace
-{
-    // VG shaders ship in the engine corpus (vg.vs/vg.ps); resolved via ShaderSystemHost in OnInit.
-    // The demo font is the engine's built-in Roboto under the data root.
-    constexpr StringView kFontAsset = u8"Assets/fonts/roboto/Roboto-Regular.ttf";
-
-    // App-specific rules layered on top of the built-in theme: two button accent classes, a
-    // font-family rule resolved through the font service, and a @keyframes pulse animation.
-    const char8_t* kThemeExtras = u8R"(
-        .danger { background-color: #b5453f; } /* class beats tag -> red */
-        .accent { background-color: #3fa06a; } /*                  -> green */
-        .highlight { color: #55d67f; }          /* survives per-frame theme re-apply */
-        button  { font-family: Roboto; font-size: 18; border-radius: 6; } /* rounded + font via service */
-        textfield { border-radius: 4; border: 1 solid #5a6474; } /* rounded + 1px border */
-        .accent { border: 2 solid #7fe0a8; }    /* border shorthand demo (green button gets an outline) */
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.25; } 100% { opacity: 1; } }
-        @keyframes blink { 0% { opacity: 1; } 40% { opacity: 0.08; } 60% { opacity: 0.08; } 100% { opacity: 1; } }
-        @keyframes colorcycle {
-            0%   { background-color: #e05555; }
-            33%  { background-color: #55c07a; }
-            66%  { background-color: #5580e0; }
-            100% { background-color: #e05555; }
-        }
-        .pulse       { animation: pulse 1.4s infinite; }   /* opacity keyframes */
-        .pulse-fast  { animation: pulse 0.7s infinite; }
-        .pulse-slow  { animation: pulse 2.3s infinite; }
-        .blink       { animation: blink 1.1s infinite; }
-        .colorcycle  { animation: colorcycle 3s infinite; } /* background-color keyframes */
-        /* Box properties from the sheet (G2): gradients, several shadows, a border per side, a
-           transform about its origin, and var() inside them. */
-        .cards { --glow: rgba(120, 200, 255, 0.55); }
-        .card { color: #f4f7fb; text-align: center; border-radius: 10; }
-        .card-gradient { background: linear-gradient(135deg, #e0607a, #f0b040 60%, #60c0f0); }
-        .card-shadow { background-color: #2a3442; box-shadow: 0 6px 14px rgba(0,0,0,0.6), 0 0 18px 2px var(--glow), inset 0 0 6px #000000; }
-        .card-borders { background-color: #1e2530; border-top: 4px solid #e0607a; border-right: 4px solid #f0b040;
-                        border-bottom: 4px solid #60c0f0; border-left: 4px solid #7fe0a8; border-radius: 0; }
-        .card-tilt { background: conic-gradient(from 0deg, #e0607a, #f0b040, #60c0f0, #e0607a);
-                     transform: rotate(-8deg) scale(0.9); animation: sway 2.4s ease-in-out infinite alternate; }
-        /* Motion (G3): hover lifts a card (an eased transition of its transform and shadow); the
-           tilted card sways (keyframes of a transform, eased, alternating). */
-        .card { transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease-out; }
-        .card:hover { transform: translate(0, -6px) scale(1.06); box-shadow: 0 10px 18px rgba(0,0,0,0.55); }
-        @keyframes sway { from { transform: rotate(-8deg) scale(0.9); } to { transform: rotate(8deg) scale(0.95); } }
-        /* Effects through VG's layers (G4): frosted glass over stripes, a group fading as one, a
-           card that blurs on hover, a multiply blend, and children clipped to rounded corners. */
-        .fx-stage { background: repeating-linear-gradient(90deg, #2b3a55 0%, #2b3a55 2%, #c8d2e0 2%, #c8d2e0 4%);
-                    border-radius: 12; }
-        .fx-card { color: #f4f7fb; text-align: center; vertical-align: middle; border-radius: 10; }
-        .fx-glass { background-color: rgba(255, 255, 255, 0.18); backdrop-filter: blur(6px);
-                    border: 1px solid rgba(255, 255, 255, 0.45); }
-        .fx-group { opacity: 0.5; }
-        .fx-red { background-color: #e0607a; border-radius: 8; }
-        .fx-blue { background-color: #60c0f0; border-radius: 8; }
-        .fx-soft { background: linear-gradient(135deg, #e0607a, #f0b040); transition: filter 0.3s ease-out; }
-        .fx-soft:hover { filter: blur(3px); }
-        .fx-multiply { background-color: #f0b040; mix-blend-mode: multiply; color: #202020; }
-        .fx-clip { overflow: hidden; border-radius: 24; background-color: #1e2530; }
-        .fx-clip-inner { background: conic-gradient(from 0deg, #e0607a, #f0b040, #60c0f0, #e0607a); }
-    )";
-
-    inline Color Col(f32 r, f32 g, f32 b, f32 a = 1.0f) { return Color{r, g, b, a}; }
-
-    // "Clicks: N" -> label (small non-negative values).
-    void SetCounterText(gui::Label* label, i32 n)
+    // Every node under `node` (itself included) whose bound command starts with `prefix`.
+    void CollectCommands(gui::Node& node, StringView prefix, Array<gui::Node*>& out)
     {
-        char8_t buf[32] = u8"Clicks: ";
-        usize pos = 8;
-        char8_t digits[12];
-        usize dc = 0;
-        i32 v = n < 0 ? -n : n;
-        if (v == 0)
-            digits[dc++] = u8'0';
-        while (v > 0)
+        const StringView command = node.GetCommand();
+        if (command.Size() > prefix.Size() && command.SubStr(0, prefix.Size()) == prefix)
+            out.PushBack(&node);
+        for (usize i = 0; i < node.ChildCount(); ++i)
+            CollectCommands(*node.GetChildAt(i), prefix, out);
+    }
+
+    struct ScriptErrors final : script::IScriptErrorHandler
+    {
+        void OnError(const script::ScriptError& error) override
         {
-            digits[dc++] = static_cast<char8_t>(u8'0' + (v % 10));
-            v /= 10;
+            const String message(error.message);
+            const String module(error.module);
+            std::fprintf(stderr, "GUISandbox script %s, line %d: %s\n", reinterpret_cast<const char*>(module.CStr()),
+                         static_cast<int>(error.line), reinterpret_cast<const char*>(message.CStr()));
         }
-        if (n < 0)
-            buf[pos++] = u8'-';
-        for (usize k = 0; k < dc; ++k)
-            buf[pos++] = digits[dc - 1 - k];
-        buf[pos] = 0;
-        label->SetText(StringView(buf));
-    }
-
-    // "N%" (0..1 -> 0..100) -> label.
-    void SetPercentText(gui::Label* label, f32 value01)
-    {
-        const i32 pct = static_cast<i32>(value01 * 100.0f + 0.5f);
-        char8_t buf[8];
-        usize pos = 0;
-        char8_t digits[4];
-        usize dc = 0;
-        i32 v = pct;
-        if (v == 0)
-            digits[dc++] = u8'0';
-        while (v > 0)
-        {
-            digits[dc++] = static_cast<char8_t>(u8'0' + (v % 10));
-            v /= 10;
-        }
-        for (usize k = 0; k < dc; ++k)
-            buf[pos++] = digits[dc - 1 - k];
-        buf[pos++] = u8'%';
-        buf[pos] = 0;
-        label->SetText(StringView(buf));
-    }
+    };
 }
 
 class GUISandbox : public samples::framework::SampleApp
 {
 public:
-    void SetInitialScroll(f32 y) { m_initialScroll = y; }
+    void SetStartPage(StringView id) { m_startPage = String(id); }
+    void SetOpenMenu(bool open) { m_openMenuAtStart = open; }
+    void SetMenuCall(StringView function) { m_menuCall = String(function); }
+    void SetKeys(StringView keys) { m_keys = String(keys); }
     void SetAlwaysRedraw(bool always) { m_alwaysRedraw = always; }
     void SetFrameStats(bool stats) { m_frameStats = stats; }
-    void SetShowcase(bool showcase) { m_showcaseMode = showcase; }
-    void SetShowcaseCall(StringView function) { m_showcaseCall = String(function); }
-    void SetShowcaseKeys(StringView keys) { m_showcaseKeys = String(keys); }
 
     GUISandbox()
     {
-        m_width = 900;
-        m_height = 860;
+        m_width = 960;
+        m_height = 820;
     }
     StringView Title() const override { return u8"GUI Sandbox"; }
     u32 BufferCount() const override { return kFrames; }
@@ -185,1010 +117,366 @@ protected:
     void OnShutdown() override;
 
 private:
-    f32 m_initialScroll = 0.0f;
-    u32 m_initialScrollFrames = 0;
+    static constexpr u32 kFrames = 2;
+
+    // === Building ===
+    void LoadFonts();
+    [[nodiscard]] String ReadText(StringView relative);
+    [[nodiscard]] RefPtr<gui::Node> LoadMarkup(StringView text);
+    RefPtr<script::IScriptContext> RunScript(StringView relative, gui::GuiScriptBinding& binding);
+    void BuildSandbox();
+    void LoadPages();
+    void FillNativeHosts();
+    void ApplySandboxSheet();
+    void BuildMenu();
+
+    // === Running ===
+    void ShowPage(StringView id);
+    void ToggleTheme();
+    void OpenWindow();
+    void ShowMessage();
+    void OpenMenu();
+    void CloseMenu();
+    void LayOutShell();
+    void RouteInput();
+    void UpdateMenu();
+    void TypeKeys(gui::SceneRoot& root);
+    void DrawAndPresent(gui::SceneRoot& root);
+    [[nodiscard]] gui::SceneRoot& Shown() { return m_showingMenu ? *m_menuRoot : *m_root; }
+
+    // === Options ===
+    String m_startPage = String(u8"controls");
+    bool m_openMenuAtStart = false;
+    String m_menuCall; // a game-menu script function to call once it is up (a screenshot of a panel)
+    String m_keys;     // keystrokes to type into the root on show, one every 15 frames
     bool m_alwaysRedraw = false;
-    bool m_showcaseMode = false;
-    String m_showcaseCall; // a script function to call once the menu is up (a screenshot of another panel)
-    String m_showcaseKeys; // keystrokes to type into it, one every 15 frames (a screenshot of keyboard play)
     bool m_frameStats = false;
     f32 m_nextStatsTime = 1.0f;
     u64 m_frames = 0;      // frames the loop ran
     u64 m_drawnFrames = 0; // of them, the ones that drew
-    static constexpr u32 kFrames = 2;
 
-    void BuildUI();
-    void BuildShowcase();
-    void UpdateShowcase();
-
-    // The showcase (G6): a game menu from Data/Assets/ui/showcase, its behaviour in AngelScript.
-    struct ScriptErrors final : foundation::script::IScriptErrorHandler
-    {
-        void OnError(const foundation::script::ScriptError& error) override
-        {
-            const String message(error.message);
-            std::fprintf(stderr, "GUISandbox showcase script, line %d: %s\n", static_cast<int>(error.line),
-                         reinterpret_cast<const char*>(message.CStr()));
-        }
-    };
-    RefPtr<gui::Node> m_showcase;
-    RefPtr<foundation::script::IScriptManager> m_scripts;
-    RefPtr<foundation::script::IScriptContext> m_script;
-    gui::GuiScriptBinding m_scriptBinding;
-    ScriptErrors m_scriptErrors;
-    bool m_scriptWantsUpdate = false;
-    f32 m_quitAt = -1.0f; // when the menu's Leave has faded out
-    void LoadFontSize(StringView path, f32 pixelHeight);
-    [[nodiscard]] bool HasFonts() const { return FileExists(DataPath(kFontAsset).AsView()); }
-
-    // Render plumbing (mirrors VGSandbox).
+    // === Render plumbing ===
     shaders::ShaderSystemHost m_shaderHost{AppRoot()}; // owns the ShaderSystem + the VG modules
-    rhi::ShaderModule* m_vs = nullptr;      // borrowed from m_shaderHost
+    rhi::ShaderModule* m_vs = nullptr; // borrowed from m_shaderHost
     rhi::ShaderModule* m_fs = nullptr;
-    rhi::ShaderModule* m_gradRadialFs = nullptr; // per-pixel radial gradient fragment shader
-    rhi::ShaderModule* m_gradConicFs = nullptr;  // per-pixel conic gradient fragment shader
-    rhi::ShaderModule* m_distanceFieldFragmentShader = nullptr;         // distance-field text fragment shader
-    rhi::ShaderModule* m_boxShadowFs = nullptr; // blurred rounded rect fragment shader
-    rhi::ShaderModule* m_boxVs = nullptr;       // analytic boxes
+    rhi::ShaderModule* m_gradRadialFs = nullptr;
+    rhi::ShaderModule* m_gradConicFs = nullptr;
+    rhi::ShaderModule* m_distanceFieldFs = nullptr;
+    rhi::ShaderModule* m_boxShadowFs = nullptr;
+    rhi::ShaderModule* m_boxVs = nullptr;
     rhi::ShaderModule* m_boxFs = nullptr;
-    rhi::ShaderModule* m_layerFs = nullptr;     // layer composites (group opacity, filters, blends)
-    rhi::ShaderModule* m_blurVs = nullptr;      // layer and backdrop blurs
+    rhi::ShaderModule* m_layerFs = nullptr;
+    rhi::ShaderModule* m_blurVs = nullptr;
     rhi::ShaderModule* m_blurFs = nullptr;
-    vg::renderer::VGPassTargets m_targets;      // MSAA + stencil (clip paths, complex fills)
+    vg::renderer::VGPassTargets m_targets; // MSAA + stencil (clip paths, complex fills)
     rhi::CommandPool* m_pool = nullptr;
     rhi::Fence* m_fence = nullptr;
     u64 m_fenceVal = 0;
     u32 m_frameIndex = 0;
-
     UniquePtr<fonts::TrueTypeFontService> m_fontService;
     UniquePtr<vg::VGContext> m_vg;
     vg::renderer::VGRenderer m_renderer{AppRoot()};
-    fonts::CachedFont* m_font = nullptr;
-    fonts::CachedFont* m_fontLarge = nullptr;
+    fonts::CachedFont* m_font = nullptr; // Roboto 16, for what native code builds
 
-    // GUI.
-    RefPtr<gui::GUIContext> m_gui; // the GUI: its clock, data, bindings, commands
-    RefPtr<gui::SceneRoot> m_root; // its one root, this window
-    RefPtr<gui::LinearLayout> m_panel;
-    RefPtr<gui::Label> m_counter;
-    RefPtr<gui::TextField> m_textField;
-    RefPtr<gui::Label> m_echo;
-    RefPtr<gui::ScrollView> m_scroll;
-    RefPtr<gui::ScrollView> m_pageScroll; // full-window scroller for the whole panel
-    RefPtr<gui::RelativeLayout> m_relative;
-    gui::StyleManager m_styles;
+    // === The GUI: one context, two roots ===
+    RefPtr<gui::GUIContext> m_gui;
+    RefPtr<gui::SceneRoot> m_root;     // the sandbox
+    RefPtr<gui::SceneRoot> m_menuRoot; // the game menu
+    gui::StyleManager m_styles;        // the sandbox's sheet
+    gui::StyleManager m_menuStyles;    // the game menu's
     UniquePtr<gui::GuiInputBridge> m_bridge;
-    UniquePtr<gui::ShellClipboard> m_clipboard; // adapts the shell clipboard to gui::IClipboard
+    UniquePtr<gui::GuiInputBridge> m_menuBridge;
+    UniquePtr<gui::ShellClipboard> m_clipboard;
     UniquePtr<shell::InputSurface> m_inputSurface;
     UniquePtr<shell::InputRouter> m_router;
-    i32 m_clicks = 0;
+    UniquePtr<gui::TooltipManager> m_tooltips;
+    bool m_showingMenu = false;
+    f32 m_menuLeaveAt = -1.0f; // when the game menu's Leave has faded: back to the sandbox
 
-    // Priority-2 widget showcase (a floating Window with tabs + a right-click menu + tooltips).
-    void BuildShowcaseWindow();
-    void ConfirmQuit(); // modal MessageBox: confirm before exiting
-    void ApplyTheme();  // (re)build the stylesheet from the current theme + extras
-    bool m_darkTheme = true;
-    RefPtr<gui::Window> m_widgetWindow;
-    RefPtr<gui::Menu> m_contextMenu;
-    RefPtr<gui::MenuBar> m_menuBar;
-    RefPtr<gui::MessageBox> m_dialog;
-    RefPtr<gui::ListView> m_listView;
+    // The shell and its pages.
+    RefPtr<gui::Node> m_shellNode;
+    gui::Node* m_header = nullptr;
+    gui::Node* m_body = nullptr;
+    gui::Node* m_sidebar = nullptr;
+    gui::ScrollView* m_content = nullptr;
+    gui::Button* m_themeToggle = nullptr;
+    struct Page
+    {
+        String id;
+        gui::Node* node = nullptr;      // in the content scroller
+        gui::Node* navButton = nullptr; // in the sidebar
+        RefPtr<script::IScriptContext> script;
+    };
+    Array<Page> m_pages;
+    String m_current;
+    String m_pageSheets; // every page's .css, joined
+    bool m_light = false;
+
+    // Scripts: one manager, a context per page that has a script, one for the game menu.
+    RefPtr<script::IScriptManager> m_scripts;
+    gui::GuiScriptBinding m_sandboxBinding;
+    gui::GuiScriptBinding m_menuBinding;
+    ScriptErrors m_scriptErrors;
+    RefPtr<script::IScriptContext> m_menuScript;
+    bool m_menuWantsUpdate = false;
+
+    // What native hosts hold.
+    gui::RadioGroup m_radios;
+    UniquePtr<image::OwnedImageData> m_checker;
     UniquePtr<gui::StringListModel> m_listModel;
-    RefPtr<gui::TableView> m_tableView;
     UniquePtr<gui::TableModel> m_tableModel;
     UniquePtr<gui::SortingProxyModel> m_tableProxy;
-    RefPtr<gui::TreeView> m_treeView;
     UniquePtr<gui::TreeModel> m_treeModel;
-    RefPtr<gui::Label> m_pickEcho;
-    gui::RadioGroup m_radioGroup;
-    UniquePtr<gui::TooltipManager> m_tooltips;
-    UniquePtr<image::OwnedImageData> m_showcaseImage;
-    RefPtr<gui::ImageDrawable> m_showcaseDrawable;
+    RefPtr<gui::Menu> m_contextMenu;
+    RefPtr<gui::Window> m_floating; // the Menus page's floating window
+    RefPtr<gui::MessageBox> m_dialog;
 };
+
+// === Building ===
 
 Status GUISandbox::OnInit()
 {
     gui::RegisterGuiElements(); // the lab's widgets, creatable by tag from markup
-    // Resolve the VG shaders through the shared ShaderSystemHost over the data mount (cooked pack
-    // or dev DXC over Shaders/) - the same cooked corpus (vg.vs/vg.ps) the runtime UI uses.
+    // The VG shaders through the shared ShaderSystemHost over the data mount (cooked pack or dev
+    // DXC over Shaders/), the same corpus the runtime UI uses, and everything VG draws with.
     if (!m_shaderHost.Initialize(*m_device, DataFileSystem()))
         return ErrorCode::Unknown;
-    m_vs = m_shaderHost.GetVariant(u8"vg", shaders::ShaderStage::Vertex, shaders::ShaderFlags::None);
-    m_fs =
-        m_shaderHost.GetVariant(u8"vg", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
-    m_gradRadialFs = m_shaderHost.GetVariant(u8"vg_grad_radial", shaders::ShaderStage::Fragment,
-                                             shaders::ShaderFlags::None);
-    m_gradConicFs = m_shaderHost.GetVariant(u8"vg_grad_conic", shaders::ShaderStage::Fragment,
-                                            shaders::ShaderFlags::None);
-    m_distanceFieldFragmentShader = m_shaderHost.GetVariant(u8"vg_df", shaders::ShaderStage::Fragment,
-                                     shaders::ShaderFlags::None);
-    m_boxShadowFs = m_shaderHost.GetVariant(u8"vg_shadow", shaders::ShaderStage::Fragment,
-                                            shaders::ShaderFlags::None);
-    // Everything VG draws, as the runtime UI has it: analytic boxes, layers with their blurs, and
-    // the quality pass's targets (rounded clips need the stencil).
-    m_boxVs = m_shaderHost.GetVariant(u8"vg_box", shaders::ShaderStage::Vertex, shaders::ShaderFlags::None);
-    m_boxFs = m_shaderHost.GetVariant(u8"vg_box", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
-    m_layerFs = m_shaderHost.GetVariant(u8"vg_layer", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
-    m_blurVs = m_shaderHost.GetVariant(u8"vg_blur", shaders::ShaderStage::Vertex, shaders::ShaderFlags::None);
-    m_blurFs = m_shaderHost.GetVariant(u8"vg_blur", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
+    const auto variant = [this](StringView name, shaders::ShaderStage stage)
+    { return m_shaderHost.GetVariant(name, stage, shaders::ShaderFlags::None); };
+    m_vs = variant(u8"vg", shaders::ShaderStage::Vertex);
+    m_fs = variant(u8"vg", shaders::ShaderStage::Fragment);
+    m_gradRadialFs = variant(u8"vg_grad_radial", shaders::ShaderStage::Fragment);
+    m_gradConicFs = variant(u8"vg_grad_conic", shaders::ShaderStage::Fragment);
+    m_distanceFieldFs = variant(u8"vg_df", shaders::ShaderStage::Fragment);
+    m_boxShadowFs = variant(u8"vg_shadow", shaders::ShaderStage::Fragment);
+    m_boxVs = variant(u8"vg_box", shaders::ShaderStage::Vertex);
+    m_boxFs = variant(u8"vg_box", shaders::ShaderStage::Fragment);
+    m_layerFs = variant(u8"vg_layer", shaders::ShaderStage::Fragment);
+    m_blurVs = variant(u8"vg_blur", shaders::ShaderStage::Vertex);
+    m_blurFs = variant(u8"vg_blur", shaders::ShaderStage::Fragment);
     if (m_vs == nullptr || m_fs == nullptr || m_gradRadialFs == nullptr || m_gradConicFs == nullptr)
         return ErrorCode::Unknown;
 
     m_targets.Configure(*m_device);
     const bool targetsOk = m_targets.Create(m_swapChain->Format(), m_width, m_height);
     if (!m_renderer
-             .Initialize(*m_device, *m_vs, *m_fs, m_swapChain->Format(), static_cast<i32>(kFrames),
-                         m_distanceFieldFragmentShader, m_gradRadialFs, m_gradConicFs,
-                         targetsOk ? m_targets.ConfigFor() : vg::renderer::VGTargetConfig{}, m_boxShadowFs, m_boxVs,
-                         m_boxFs, m_layerFs, m_blurVs, m_blurFs)
+             .Initialize(*m_device, *m_vs, *m_fs, m_swapChain->Format(), static_cast<i32>(kFrames), m_distanceFieldFs,
+                         m_gradRadialFs, m_gradConicFs, targetsOk ? m_targets.ConfigFor() : vg::renderer::VGTargetConfig{},
+                         m_boxShadowFs, m_boxVs, m_boxFs, m_layerFs, m_blurVs, m_blurFs)
              .IsOk())
         return ErrorCode::Unknown;
-
     if (m_device->CreateCommandPool(rhi::QueueType::Graphics, m_pool) != ErrorCode::Ok)
         return ErrorCode::Unknown;
     if (m_device->CreateFence(0, m_fence) != ErrorCode::Ok)
         return ErrorCode::Unknown;
 
-    m_fontService = MakeUnique<fonts::TrueTypeFontService>(AppRoot(),
-                                                           AppRoot());
-    if (HasFonts())
-    {
-        const String fontPath = DataPath(kFontAsset);
-        LoadFontSize(fontPath.AsView(), 18.0f);
-        LoadFontSize(fontPath.AsView(), 30.0f);
-        m_font = m_fontService->GetFont(u8"Roboto", 18.0f);
-        m_fontLarge = m_fontService->GetFont(u8"Roboto", 30.0f);
-    }
-
+    m_fontService = MakeUnique<fonts::TrueTypeFontService>(AppRoot(), AppRoot());
+    LoadFonts();
     m_vg = MakeUnique<vg::VGContext>(AppRoot(), m_fontService.Get());
-    m_vg->SetPerPixelGradients(true); // renderer was given the radial/conic gradient shaders
+    m_vg->SetPerPixelGradients(true);
     m_vg->SetAnalyticBoxes(m_boxVs != nullptr && m_boxFs != nullptr);
     m_vg->SetLayers(m_layerFs != nullptr);
     m_vg->SetStencilFills(m_renderer.StencilFillsSupported());
 
-    BuildUI();
-    if (m_showcaseMode)
-        BuildShowcase();
+#ifdef OPTION_HAS_ANGELSCRIPT
+    RegisterCoreTypes();
+    gui::RegisterGuiScriptSurface();
+    m_scripts = script::angelscript::CreateScriptManager(AppRoot());
+    script::RegisterReflectedTypes(*m_scripts);
+#else
+    std::fprintf(stderr, "GUISandbox: built without AngelScript; the pages' and the game menu's scripts do not run\n");
+#endif
+
+    m_gui = MakeRef<gui::GUIContext>(AppRoot());
+    // The data the pages and the game menu share.
+    gui::DataModel& data = m_gui->GetData();
+    data.Set(StringView(u8"volume"), Variant::From<f32>(0.7f));
+    data.Set(StringView(u8"music"), Variant::From<bool>(true));
+    data.Set(StringView(u8"name"), Variant::From<String>(String(u8"Ada")));
+    data.Set(StringView(u8"clicks"), Variant::From<i32>(0));
+    data.Set(StringView(u8"cuts"), Variant::From<i32>(0));
+    data.Set(StringView(u8"menu"), Variant::From<String>(String(u8"pick an item")));
+    data.Set(StringView(u8"status"), Variant::From<String>(String(u8"Loading...")));
+    data.Set(StringView(u8"progress"), Variant::From<f32>(0.0f));
+    data.Set(StringView(u8"quit"), Variant::From<bool>(false));
+
+    BuildSandbox();
+    BuildMenu();
+    if (m_openMenuAtStart)
+        OpenMenu();
     return ErrorCode::Ok;
 }
 
-void GUISandbox::LoadFontSize(StringView path, f32 pixelHeight)
+void GUISandbox::LoadFonts()
 {
-    fonts::FontLoadOptions options = fonts::FontLoadOptions::ExtendedLatin();
-    options.pixelHeight = pixelHeight;
-    (void)m_fontService->LoadFont(u8"Roboto", path, options);
+    // Roboto in coverage atlases (a size baked on first use), Lilita as one distance-field bake
+    // drawn crisp at any size, whose field text effects read (12 texels: effects reach 6 past the
+    // edge at the bake size).
+    fonts::FontLoadOptions roboto = fonts::FontLoadOptions::ExtendedLatin();
+    roboto.pixelHeight = 16.0f;
+    (void)m_fontService->LoadFont(u8"Roboto", DataPath(kRoboto).AsView(), roboto);
+    m_font = m_fontService->GetFont(u8"Roboto", 16.0f);
+    fonts::DistanceFieldFonts::Initialize();
+    fonts::FontLoadOptions lilita = fonts::FontLoadOptions::DistanceField();
+    lilita.pixelHeight = 48.0f;
+    lilita.distanceFieldRange = 12.0f;
+    if (m_fontService->LoadFont(u8"Lilita", DataPath(kLilita).AsView(), lilita) != fonts::FontLoadResult::Success)
+        std::fprintf(stderr, "GUISandbox: the Lilita face did not load\n");
 }
 
-void GUISandbox::BuildUI()
+String GUISandbox::ReadText(StringView relative)
 {
-    m_gui = MakeRef<gui::GUIContext>(AppRoot());
+    Result<Array<byte>> bytes = ReadFile(DataPath(relative).AsView(), AppRoot());
+    if (!bytes.HasValue())
+        return {};
+    return String(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
+}
+
+RefPtr<gui::Node> GUISandbox::LoadMarkup(StringView text)
+{
+    const gui::ElementSet elements = gui::ElementSet::All();
+    gui::MarkupLoader loader(elements, AppRoot(), nullptr, m_fontService.Get());
+    loader.SetDataModel(m_gui->GetDataRef());
+    return loader.LoadFromString(text);
+}
+
+RefPtr<script::IScriptContext> GUISandbox::RunScript(StringView relative, gui::GuiScriptBinding& binding)
+{
+    if (!m_scripts)
+        return {};
+    const String source = ReadText(relative);
+    if (source.Size() == 0)
+        return {};
+    RefPtr<script::IScriptContext> context = m_scripts->CreateContext();
+    context->SetErrorHandler(&m_scriptErrors);
+    gui::InstallGuiScriptService(*context, binding);
+    if (!context->Load(source.AsView(), relative).IsOk())
+        std::fprintf(stderr, "GUISandbox: %s did not load\n", reinterpret_cast<const char*>(String(relative).CStr()));
+    return context;
+}
+
+void GUISandbox::BuildSandbox()
+{
     m_root = MakeRef<gui::SceneRoot>(AppRoot(), m_gui);
-    // The window's device pixels at its monitor's scale: the tree lays out in logical units.
     m_root->SetDisplayScale(m_window != nullptr ? m_window->ContentScale() : 1.0f);
     m_root->SetViewportSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)});
+    m_sandboxBinding.root = m_root.Get();
 
-    // Full-window scroller so the (now tall) page can scroll when content runs off-screen.
-    m_pageScroll = MakeRef<gui::ScrollView>(AppRoot());
-    m_pageScroll->SetSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)});
-    m_root->AddChild(m_pageScroll.Get());
-
-    // The panel stacks its children vertically and wraps its height to fit them (so the
-    // scroller knows how tall the page is). Width stays the window width.
-    m_panel = MakeRef<gui::LinearLayout>(AppRoot());
-    m_panel->SetSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)});
-    m_panel->SetWrapContent(true);
-    m_panel->SetPadding(gui::Thickness{28.0f});
-    m_panel->SetSpacing(16.0f);
-    m_panel->AddClass(
-        StringView(u8"panel")); // themed surface (dark/light) instead of a hardcoded bg
-    m_pageScroll->GetContent()->AddChild(m_panel.Get());
-
-    // A menu bar across the top: File/Edit/View, each dropping a menu (with a submenu, a
-    // separator, and a checkable item) below its button; hovering another button while one is
-    // open switches to it.
-    m_menuBar = MakeRef<gui::MenuBar>(AppRoot());
-    m_menuBar->SetSize(Float2{600.0f, 28.0f});
-    m_menuBar->SetFont(m_font);
-    GUISandbox* menuSelf = this;
+    String path(kSandboxDir);
+    path += StringView(u8"shell.xml");
+    m_shellNode = LoadMarkup(ReadText(path.AsView()).AsView());
+    if (!m_shellNode)
     {
-        gui::Menu* file = m_menuBar->AddMenu(u8"File");
-        file->AddItem(u8"Reset counter",
-                      [menuSelf]()
-                      {
-                          menuSelf->m_clicks = 0;
-                          SetCounterText(menuSelf->m_counter.Get(), 0);
-                      });
-        file->AddSeparator();
-        file->AddItem(u8"Quit", [menuSelf]() { menuSelf->ConfirmQuit(); });
-
-        gui::Menu* edit = m_menuBar->AddMenu(u8"Edit");
-        edit->AddItem(u8"Add +1",
-                      [menuSelf]()
-                      {
-                          ++menuSelf->m_clicks;
-                          SetCounterText(menuSelf->m_counter.Get(), menuSelf->m_clicks);
-                      });
-        gui::Menu* by = edit->AddSubMenu(u8"Add by");
-        by->AddItem(u8"+5",
-                    [menuSelf]()
-                    {
-                        menuSelf->m_clicks += 5;
-                        SetCounterText(menuSelf->m_counter.Get(), menuSelf->m_clicks);
-                    });
-        by->AddItem(u8"+10",
-                    [menuSelf]()
-                    {
-                        menuSelf->m_clicks += 10;
-                        SetCounterText(menuSelf->m_counter.Get(), menuSelf->m_clicks);
-                    });
-
-        gui::Menu* view = m_menuBar->AddMenu(u8"View");
-        view->AddCheckItem(u8"Widgets window", true,
-                           [menuSelf](bool on) { menuSelf->m_widgetWindow->SetVisible(on); });
+        std::fprintf(stderr, "GUISandbox: the shell did not load\n");
+        return;
     }
-    m_panel->AddChild(m_menuBar.Get());
+    m_root->AddChild(m_shellNode.Get());
+    m_header = FindById(*m_shellNode, u8"header");
+    m_body = FindById(*m_shellNode, u8"body");
+    m_sidebar = FindById(*m_shellNode, u8"sidebar");
+    m_content = Cast<gui::ScrollView>(FindById(*m_shellNode, u8"content"));
+    m_themeToggle = Cast<gui::Button>(FindById(*m_shellNode, u8"theme-toggle"));
 
-    auto title = MakeRef<gui::Label>(AppRoot());
-    title->SetSize(Float2{600.0f, 46.0f});
-    title->SetText(u8"GUI Sandbox");
-    title->SetFont(m_fontLarge);
-    title->SetTextColor(Col(0.92f, 0.94f, 0.98f));
-    m_panel->AddChild(title.Get());
+    LoadPages();
+    FillNativeHosts();
 
-    m_counter = MakeRef<gui::Label>(AppRoot());
-    m_counter->SetSize(Float2{500.0f, 28.0f});
-    m_counter->SetText(u8"Clicks: 0");
-    m_counter->SetFont(m_font);
-    m_counter->SetTextColor(Col(0.75f, 0.82f, 0.9f));
-    m_panel->AddChild(m_counter.Get());
+    // The shell's commands; the sidebar's buttons are bound to page.<id>, the header's to the theme.
+    GUISandbox* self = this;
+    (void)m_root->OnCommand(u8"theme.toggle", [self](gui::CommandEvent&) { self->ToggleTheme(); });
+    (void)m_root->OnCommand(u8"demo.window", [self](gui::CommandEvent&) { self->OpenWindow(); });
+    (void)m_root->OnCommand(u8"demo.message", [self](gui::CommandEvent&) { self->ShowMessage(); });
+    (void)m_root->OnCommand(u8"showcase.open", [self](gui::CommandEvent&) { self->OpenMenu(); });
 
-    auto hint = MakeRef<gui::Label>(AppRoot());
-    hint->SetSize(Float2{600.0f, 22.0f});
-    hint->SetText(u8"Tip: right-click the empty background for a context menu.");
-    hint->SetFont(m_font);
-    hint->SetTextColor(Col(0.55f, 0.60f, 0.68f));
-    hint->SetHitTestVisible(false); // don't let it swallow right-clicks meant for the panel
-    m_panel->AddChild(hint.Get());
-
-    // CSS @keyframes animation: a row of "activity light" dots pulsing/blinking at different
-    // rates (all opacity-driven), plus a pulsing caption. Each animation is a CSS class.
-    auto animRow = MakeRef<gui::LinearLayout>(AppRoot());
-    animRow->SetOrientation(gui::Orientation::Horizontal);
-    animRow->SetSize(Float2{600.0f, 24.0f});
-    animRow->SetSpacing(10.0f);
-    m_panel->AddChild(animRow.Get());
-
-    struct Dot
-    {
-        const char8_t* cssClass;
-        Color color;
-    };
-    const Dot dots[4] = {
-        {u8"pulse-fast", Col(0.42f, 0.85f, 0.52f)}, // green, fast
-        {u8"pulse", Col(0.36f, 0.66f, 0.95f)},      // blue, medium
-        {u8"pulse-slow", Col(0.95f, 0.78f, 0.35f)}, // amber, slow
-        {u8"blink", Col(0.90f, 0.42f, 0.42f)},      // red, blink
-    };
-    for (const Dot& d : dots)
-    {
-        auto dot = MakeRef<gui::Label>(AppRoot());
-        dot->SetSize(Float2{18.0f, 18.0f});
-        dot->SetBackground(MakeRef<gui::RectangleDrawable>(AppRoot(), d.color));
-        dot->AddClass(StringView(d.cssClass));
-        animRow->AddChild(dot.Get());
-    }
-
-    // A color-cycling box (background-color keyframes, not opacity).
-    auto colorBox = MakeRef<gui::Label>(AppRoot());
-    colorBox->SetSize(Float2{34.0f, 18.0f});
-    colorBox->AddClass(StringView(u8"colorcycle"));
-    animRow->AddChild(colorBox.Get());
-
-    auto pulseCaption = MakeRef<gui::Label>(AppRoot());
-    pulseCaption->SetSize(Float2{430.0f, 22.0f});
-    pulseCaption->SetText(u8"@keyframes: opacity (dots) + background-color (box), varied rates");
-    pulseCaption->SetFont(m_font);
-    pulseCaption->AddClass(StringView(u8"pulse-slow"));
-    animRow->AddChild(pulseCaption.Get());
-
-    // A row of buttons.
-    auto row = MakeRef<gui::LinearLayout>(AppRoot());
-    row->SetOrientation(gui::Orientation::Horizontal);
-    row->SetSize(Float2{static_cast<f32>(m_width) - 56.0f, 50.0f});
-    row->SetSpacing(14.0f);
-    m_panel->AddChild(row.Get());
-
-    // Three buttons that are genuinely different: distinct style classes (so CSS gives them
-    // distinct colors - class beats tag) and distinct behaviors.
-    gui::Label* counter = m_counter.Get();
-    i32* clicks = &m_clicks;
-
-    auto makeButton = [&](const char8_t* label, const char8_t* cssClass, Function<void()> onClick)
-    {
-        auto btn = MakeRef<gui::Button>(AppRoot());
-        btn->SetSize(Float2{170.0f, 46.0f});
-        btn->SetText(StringView(label));
-        btn->SetFont(m_font);
-        btn->SetTextColor(Col(1.0f, 1.0f, 1.0f));
-        if (cssClass[0] != 0)
-            btn->AddClass(StringView(cssClass));
-        btn->SetOnClick(Move(onClick));
-        row->AddChild(btn.Get());
-    };
-
-    makeButton(u8"Add +1", u8"",
-               [counter, clicks]()
-               {
-                   ++(*clicks);
-                   SetCounterText(counter, *clicks);
-               });
-    makeButton(u8"Reset", u8"danger",
-               [counter, clicks]()
-               {
-                   *clicks = 0;
-                   SetCounterText(counter, 0);
-               });
-    makeButton(u8"Add +5", u8"accent",
-               [counter, clicks]()
-               {
-                   *clicks += 5;
-                   SetCounterText(counter, *clicks);
-               });
-    makeButton(u8"Theme", u8"",
-               [this]()
-               {
-                   m_darkTheme = !m_darkTheme;
-                   ApplyTheme();
-               }); // dark <-> light
-
-    // A checkbox + label row: toggling it highlights the counter.
-    auto checkRow = MakeRef<gui::LinearLayout>(AppRoot());
-    checkRow->SetOrientation(gui::Orientation::Horizontal);
-    checkRow->SetSize(Float2{360.0f, 30.0f});
-    checkRow->SetSpacing(10.0f);
-    m_panel->AddChild(checkRow.Get());
-
-    auto check = MakeRef<gui::CheckBox>(AppRoot());
-    check->SetSize(Float2{22.0f, 22.0f});
-    check->SetOnCheckedChanged(
-        [counter](bool on)
-        {
-            // Drive the highlight via a CSS class so it survives the per-frame theme re-apply.
-            if (on)
-                counter->AddClass(StringView(u8"highlight"));
-            else
-                counter->RemoveClass(StringView(u8"highlight"));
-        });
-    checkRow->AddChild(check.Get());
-
-    auto checkLabel = MakeRef<gui::Label>(AppRoot());
-    checkLabel->SetSize(Float2{220.0f, 26.0f});
-    checkLabel->SetText(u8"Highlight counter");
-    checkLabel->SetFont(m_font);
-    checkLabel->SetTextColor(Col(0.8f, 0.85f, 0.9f));
-    checkRow->AddChild(checkLabel.Get());
-
-    // A slider + live percent label.
-    auto sliderRow = MakeRef<gui::LinearLayout>(AppRoot());
-    sliderRow->SetOrientation(gui::Orientation::Horizontal);
-    sliderRow->SetSize(Float2{380.0f, 30.0f});
-    sliderRow->SetSpacing(12.0f);
-    m_panel->AddChild(sliderRow.Get());
-
-    auto slider = MakeRef<gui::Slider>(AppRoot());
-    slider->SetSize(Float2{220.0f, 24.0f});
-    sliderRow->AddChild(slider.Get());
-
-    auto sliderLabel = MakeRef<gui::Label>(AppRoot());
-    sliderLabel->SetSize(Float2{80.0f, 26.0f});
-    sliderLabel->SetFont(m_font);
-    sliderLabel->SetTextColor(Col(0.8f, 0.85f, 0.9f));
-    sliderRow->AddChild(sliderLabel.Get());
-
-    // A progress bar driven by the slider (so they move together).
-    auto bar = MakeRef<gui::ProgressBar>(AppRoot());
-    bar->SetSize(Float2{340.0f, 14.0f});
-    m_panel->AddChild(bar.Get());
-
-    gui::Label* pct = sliderLabel.Get();
-    gui::ProgressBar* barPtr = bar.Get();
-    slider->SetOnValueChanged(
-        [pct, barPtr](f32 v)
-        {
-            SetPercentText(pct, v);
-            barPtr->SetProgress(v);
-        });
-    slider->SetValue(0.5f); // fires the callback -> label "50%", bar half-filled
-
-    // An editable text field (the keyboard/text path) + a live echo label.
-    auto fieldRow = MakeRef<gui::LinearLayout>(AppRoot());
-    fieldRow->SetOrientation(gui::Orientation::Horizontal);
-    fieldRow->SetSize(Float2{560.0f, 40.0f});
-    fieldRow->SetSpacing(12.0f);
-    m_panel->AddChild(fieldRow.Get());
-
-    auto fieldPrompt = MakeRef<gui::Label>(AppRoot());
-    fieldPrompt->SetSize(Float2{60.0f, 34.0f});
-    fieldPrompt->SetText(u8"Name:");
-    fieldPrompt->SetFont(m_font);
-    fieldPrompt->SetTextColor(Col(0.8f, 0.85f, 0.9f));
-    fieldRow->AddChild(fieldPrompt.Get());
-
-    m_textField = MakeRef<gui::TextField>(AppRoot());
-    m_textField->SetSize(Float2{300.0f, 34.0f});
-    m_textField->SetPadding(gui::Thickness{8.0f, 6.0f, 8.0f, 6.0f});
-    m_textField->SetFont(m_font);
-    m_textField->SetTextColor(Col(0.96f, 0.97f, 0.99f));
-    m_textField->SetBackground(
-        MakeRef<gui::RectangleDrawable>(AppRoot(), Col(0.20f, 0.22f, 0.27f)));
-    // Placeholder shows while empty; select (shift+arrows / drag / double-click word),
-    // Ctrl+A/C/X/V for select-all/copy/cut/paste; capped at 24 codepoints.
-    m_textField->SetPlaceholder(u8"type here - select, Ctrl+C/V...");
-    m_textField->SetMaxLength(24);
-    fieldRow->AddChild(m_textField.Get());
-
-    m_echo = MakeRef<gui::Label>(AppRoot());
-    m_echo->SetSize(Float2{500.0f, 26.0f});
-    m_echo->SetFont(m_font);
-    m_echo->SetTextColor(Col(0.62f, 0.72f, 0.82f));
-    m_echo->SetText(u8"echo: (empty)");
-    m_panel->AddChild(m_echo.Get());
-
-    gui::Label* echo = m_echo.Get();
-    m_textField->SetOnTextChanged(
-        [echo](StringView v)
-        {
-            char8_t buf[64] = u8"echo: ";
-            usize pos = 6;
-            for (usize i = 0; i < v.Size() && pos < 62; ++i)
-                buf[pos++] = v[i];
-            buf[pos] = 0;
-            echo->SetText(StringView(buf));
-        });
-
-    // A word-wrapped multi-line paragraph (fixed width, SetWordWrap breaks at whitespace).
-    auto wrapLabel = MakeRef<gui::Label>(AppRoot());
-    wrapLabel->SetSize(Float2{560.0f, 66.0f});
-    wrapLabel->SetFont(m_font);
-    wrapLabel->SetTextColor(Col(0.78f, 0.82f, 0.88f));
-    wrapLabel->SetTextAlignment(gui::TextHAlign::Left, gui::TextVAlign::Top);
-    wrapLabel->SetWordWrap(true);
-    wrapLabel->SetText(
-        u8"Word wrap: this paragraph is a single Label with SetWordWrap(true), so "
-        u8"the text greedily breaks at whitespace to fit the label's width and flows "
-        u8"onto multiple lines - explicit newlines break too.");
-    m_panel->AddChild(wrapLabel.Get());
-
-    // A virtualized, model-backed ListView: 500 rows but only the visible handful are realized.
-    auto listCaption = MakeRef<gui::Label>(AppRoot());
-    listCaption->SetSize(Float2{560.0f, 22.0f});
-    listCaption->SetFont(m_font);
-    listCaption->SetTextColor(Col(0.78f, 0.82f, 0.88f));
-    listCaption->SetText(u8"ListView (MVC, virtualized 500 rows) - click / arrow keys:");
-    m_panel->AddChild(listCaption.Get());
-
-    m_listModel = MakeUnique<gui::StringListModel>(AppRoot());
-    {
-        Array<String> rows;
-        for (i32 i = 0; i < 500; ++i)
-        {
-            char8_t buf[24] = u8"Row ";
-            usize pos = 4;
-            char8_t digits[12];
-            usize dc = 0;
-            i32 v = i;
-            if (v == 0)
-                digits[dc++] = u8'0';
-            while (v > 0)
-            {
-                digits[dc++] = static_cast<char8_t>(u8'0' + (v % 10));
-                v /= 10;
-            }
-            while (dc > 0)
-                buf[pos++] = digits[--dc];
-            buf[pos] = 0;
-            rows.PushBack(String(StringView(buf)));
-        }
-        m_listModel->SetItems(Move(rows));
-    }
-
-    m_listView = MakeRef<gui::ListView>(AppRoot());
-    m_listView->SetSize(Float2{260.0f, 160.0f});
-    m_listView->SetFont(m_font);
-    m_listView->SetRowHeight(24.0f);
-    m_listView->SetModel(m_listModel.Get());
-    gui::Label* echoRef = m_echo.Get();
-    gui::StringListModel* modelRef = m_listModel.Get();
-    m_listView->SetOnSelectionChanged(
-        [echoRef, modelRef](gui::ModelIndex idx)
-        {
-            if (!idx.IsValid())
-                return;
-            char8_t buf[64] = u8"picked: ";
-            usize pos = 8;
-            const StringView picked = modelRef->ItemAt(static_cast<usize>(idx.Row));
-            for (usize i = 0; i < picked.Size() && pos < 62; ++i)
-                buf[pos++] = picked[i];
-            buf[pos] = 0;
-            echoRef->SetText(StringView(buf));
-        });
-    m_panel->AddChild(m_listView.Get());
-
-    // A sortable TableView: a TableModel behind a SortingProxyModel; clicking a column header
-    // sorts by that column (numeric columns sort by value). No view changes needed - the header
-    // click just calls the proxy, and the table (a client of the proxy) refreshes.
-    auto tableCaption = MakeRef<gui::Label>(AppRoot());
-    tableCaption->SetSize(Float2{560.0f, 22.0f});
-    tableCaption->SetFont(m_font);
-    tableCaption->SetTextColor(Col(0.78f, 0.82f, 0.88f));
-    tableCaption->SetText(u8"TableView (MVC) - click a column header to sort:");
-    m_panel->AddChild(tableCaption.Get());
-
-    m_tableModel = MakeUnique<gui::TableModel>(AppRoot());
-    {
-        Array<String> cols;
-        cols.PushBack(String(u8"Name"));
-        cols.PushBack(String(u8"Score"));
-        m_tableModel->SetColumns(Move(cols));
-        const char8_t* names[6] = {u8"Ivy", u8"Cara", u8"Bo", u8"Ada", u8"Eve", u8"Dan"};
-        const i32 scores[6] = {42, 7, 91, 15, 68, 30};
-        for (usize i = 0; i < 6; ++i)
-        {
-            Array<gui::Variant> cells;
-            cells.PushBack(gui::Variant(StringView(names[i])));
-            cells.PushBack(gui::Variant(static_cast<i64>(scores[i])));
-            m_tableModel->AddRow(Move(cells));
-        }
-    }
-    m_tableProxy = MakeUnique<gui::SortingProxyModel>(AppRoot(), m_tableModel.Get());
-
-    m_tableView = MakeRef<gui::TableView>(AppRoot());
-    m_tableView->SetSize(Float2{300.0f, 180.0f});
-    m_tableView->SetFont(m_font);
-    m_tableView->SetRowHeight(24.0f);
-    m_tableView->SetModel(m_tableProxy.Get());
-    gui::SortingProxyModel* proxyRef = m_tableProxy.Get();
-    m_tableView->SetOnColumnHeaderClicked([proxyRef](usize col) { proxyRef->ToggleSort(col); });
-    m_panel->AddChild(m_tableView.Get());
-
-    // A TreeView over a small hierarchical TreeModel - click the arrows (or use arrow keys) to
-    // expand/collapse; only the visible nodes are realized.
-    auto treeCaption = MakeRef<gui::Label>(AppRoot());
-    treeCaption->SetSize(Float2{560.0f, 22.0f});
-    treeCaption->SetFont(m_font);
-    treeCaption->SetTextColor(Col(0.78f, 0.82f, 0.88f));
-    treeCaption->SetText(u8"TreeView (MVC) - click arrows / arrow keys to expand:");
-    m_panel->AddChild(treeCaption.Get());
-
-    m_treeModel = MakeUnique<gui::TreeModel>(AppRoot());
-    {
-        const i32 src = m_treeModel->AddNode(gui::TreeModel::kRoot, u8"src");
-        const i32 engine = m_treeModel->AddNode(src, u8"Engine");
-        m_treeModel->AddNode(engine, u8"GUI");
-        m_treeModel->AddNode(engine, u8"Core");
-        m_treeModel->AddNode(engine, u8"Shell");
-        const i32 samples = m_treeModel->AddNode(src, u8"Samples");
-        m_treeModel->AddNode(samples, u8"GUISandbox");
-        const i32 docs = m_treeModel->AddNode(gui::TreeModel::kRoot, u8"docs");
-        m_treeModel->AddNode(docs, u8"design");
-    }
-
-    m_treeView = MakeRef<gui::TreeView>(AppRoot());
-    m_treeView->SetSize(Float2{300.0f, 180.0f});
-    m_treeView->SetFont(m_font);
-    m_treeView->SetRowHeight(24.0f);
-    m_treeView->SetModel(m_treeModel.Get());
-    m_treeView->ExpandItem(0); // expand "src" so there's something to see
-    m_panel->AddChild(m_treeView.Get());
-
-    // A row built declaratively from XML markup (element -> widget, attributes -> text /
-    // structural props / inline CSS through the same StyleApplier the stylesheet uses).
-    {
-        static const char8_t* kMarkup = u8R"(
-            <LinearLayout orientation="horizontal" spacing="10" width="420" height="34">
-                <Label text="Loaded from XML markup:" font-family="Roboto" font-size="16"
-                       color="#cfd6e0" width="180" height="30" vertical-align="middle"/>
-                <Button text="Alpha" class="accent" font-family="Roboto" font-size="16" width="90" height="30"/>
-                <Button text="Beta"  class="danger" font-family="Roboto" font-size="16" width="90" height="30"/>
-            </LinearLayout>
-        )";
-        const gui::ElementSet elements = gui::ElementSet::All();
-        gui::MarkupLoader loader(elements, DefaultAllocator(), nullptr, m_fontService.Get());
-        if (RefPtr<gui::Node> markupRoot = loader.LoadFromString(StringView(kMarkup)))
-            m_panel->AddChild(markupRoot.Get());
-    }
-
-    // Box properties from the sheet (G2): four cards, each styled only by its classes.
-    {
-        static const char8_t* kCards = u8R"(
-            <LinearLayout orientation="horizontal" spacing="24" width="560" height="96" padding="12" class="cards">
-                <Label text="gradient" class="card card-gradient" font-family="Roboto" font-size="16" width="110" height="64"/>
-                <Label text="shadows" class="card card-shadow" font-family="Roboto" font-size="16" width="110" height="64"/>
-                <Label text="borders" class="card card-borders" font-family="Roboto" font-size="16" width="110" height="64"/>
-                <Label text="transform" class="card card-tilt" font-family="Roboto" font-size="16" width="110" height="64"/>
-            </LinearLayout>
-        )";
-        const gui::ElementSet elements = gui::ElementSet::All();
-        gui::MarkupLoader loader(elements, DefaultAllocator(), nullptr, m_fontService.Get());
-        if (RefPtr<gui::Node> cards = loader.LoadFromString(StringView(kCards)))
-            m_panel->AddChild(cards.Get());
-    }
-
-    // Effects through VG (G4): five cards over a striped stage, placed by hand (the stage is no
-    // layout), each styled only by its classes.
-    {
-        auto stage = MakeRef<gui::UIWidget>(AppRoot());
-        stage->AddClass(StringView(u8"fx-stage"));
-        stage->SetSize(Float2{560.0f, 112.0f});
-        const auto card = [&](gui::Node& parent, const char8_t* text, const char8_t* classes, Float2 position,
-                              Float2 size) -> RefPtr<gui::Label>
-        {
-            auto label = MakeRef<gui::Label>(AppRoot());
-            label->SetFont(m_font);
-            label->SetText(StringView(text));
-            for (const StringView c : gui::SplitTopLevel(StringView(classes), u8' '))
-                label->AddClass(c);
-            label->SetPosition(position);
-            label->SetSize(size);
-            parent.AddChild(label.Get());
-            return label;
-        };
-        const Float2 cardSize{96.0f, 80.0f};
-        card(*stage.Get(), u8"glass", u8"fx-card fx-glass", Float2{16.0f, 16.0f}, cardSize);
-        {
-            // Two overlapping squares fading as one: where they overlap, red does not show through.
-            auto group = MakeRef<gui::UIWidget>(AppRoot());
-            group->AddClass(StringView(u8"fx-group"));
-            group->SetPosition(Float2{126.0f, 16.0f});
-            group->SetSize(cardSize);
-            card(*group.Get(), u8"", u8"fx-red", Float2{0.0f, 0.0f}, Float2{60.0f, 60.0f});
-            card(*group.Get(), u8"group", u8"fx-card fx-blue", Float2{30.0f, 20.0f}, Float2{66.0f, 60.0f});
-            stage->AddChild(group.Get());
-        }
-        card(*stage.Get(), u8"hover me", u8"fx-card fx-soft", Float2{236.0f, 16.0f}, cardSize);
-        card(*stage.Get(), u8"multiply", u8"fx-card fx-multiply", Float2{346.0f, 16.0f}, cardSize);
-        {
-            auto clip = MakeRef<gui::UIWidget>(AppRoot());
-            clip->AddClass(StringView(u8"fx-clip"));
-            clip->SetPosition(Float2{456.0f, 16.0f});
-            clip->SetSize(cardSize);
-            card(*clip.Get(), u8"clipped", u8"fx-card fx-clip-inner", Float2{-20.0f, -20.0f}, Float2{136.0f, 120.0f});
-            stage->AddChild(clip.Get());
-        }
-        m_panel->AddChild(stage.Get());
-    }
-
-    // Data binding (G5): markup bound to the GUI's data model with {{name}}. The slider, the
-    // checkbox and the text field write their values back, and everything reading them follows;
-    // the percentage is a native binding reading the same value. No handler is wired.
-    {
-        gui::DataModel& data = m_gui->GetData();
-        data.Set(StringView(u8"volume"), Variant::From<f32>(0.4f));
-        data.Set(StringView(u8"muted"), Variant::From<bool>(false));
-        data.Set(StringView(u8"name"), Variant::From<String>(String(u8"Ada")));
-        static const char8_t* kBound = u8R"(
-            <LinearLayout orientation="vertical" spacing="6" width="560" height="104">
-                <LinearLayout orientation="horizontal" spacing="10" width="560" height="28">
-                    <Label text="Volume" font-family="Roboto" font-size="16" color="#cfd6e0" width="70" height="26" vertical-align="middle"/>
-                    <Slider value="{{volume}}" width="200" height="24"/>
-                    <ProgressBar progress="{{volume}}" width="120" height="12"/>
-                </LinearLayout>
-                <LinearLayout orientation="horizontal" spacing="10" width="560" height="28">
-                    <CheckBox checked="{{muted}}" width="24" height="24"/>
-                    <Label text="Muted: {{muted}}" font-family="Roboto" font-size="16" color="#cfd6e0" width="200" height="26" vertical-align="middle"/>
-                </LinearLayout>
-                <LinearLayout orientation="horizontal" spacing="10" width="560" height="32">
-                    <TextField text="{{name}}" font-family="Roboto" font-size="16" width="200" height="30"/>
-                    <Label text="Hello, {{name}}!" font-family="Roboto" font-size="16" color="#cfd6e0" width="300" height="30" vertical-align="middle"/>
-                </LinearLayout>
-            </LinearLayout>
-        )";
-        const gui::ElementSet elements = gui::ElementSet::All();
-        gui::MarkupLoader loader(elements, AppRoot(), nullptr, m_fontService.Get());
-        loader.SetDataModel(m_gui->GetDataRef());
-        if (RefPtr<gui::Node> bound = loader.LoadFromString(StringView(kBound)))
-        {
-            // A native binding beside the markup's: the volume as a percentage.
-            auto percent = MakeRef<gui::Label>(AppRoot());
-            percent->SetFont(m_font);
-            percent->SetTextColor(Col(0.78f, 0.82f, 0.88f));
-            percent->SetSize(Float2{60.0f, 26.0f});
-            RefPtr<gui::DataModel> model = m_gui->GetDataRef();
-            gui::Label* label = percent.Get();
-            percent->Bind([label, model]()
-                          {
-                              const Variant v = gui::ConvertVariant(model->Get(StringView(u8"volume")), TypeOf<f32>());
-                              const f32 volume = v.IsEmpty() ? 0.0f : v.Get<f32>();
-                              label->SetText(Format(u8"{}%", static_cast<i32>(volume * 100.0f + 0.5f)).AsView());
-                          });
-            bound->GetChildAt(0)->AddChild(percent.Get());
-            m_panel->AddChild(bound.Get());
-        }
-    }
-
-    // A FlexLayout (markup) spreading three buttons across the row via justify-content.
-    {
-        auto flexCaption = MakeRef<gui::Label>(AppRoot());
-        flexCaption->SetSize(Float2{560.0f, 22.0f});
-        flexCaption->SetFont(m_font);
-        flexCaption->SetTextColor(Col(0.78f, 0.82f, 0.88f));
-        flexCaption->SetText(u8"FlexLayout (justify-content: space-between):");
-        m_panel->AddChild(flexCaption.Get());
-
-        static const char8_t* kFlex = u8R"(
-            <FlexLayout direction="row" justify-content="space-between" align-items="center" width="420" height="34">
-                <Button text="One"   font-family="Roboto" font-size="16" width="90" height="28"/>
-                <Button text="Two"   font-family="Roboto" font-size="16" width="90" height="28"/>
-                <Button text="Three" font-family="Roboto" font-size="16" width="90" height="28"/>
-            </FlexLayout>
-        )";
-        const gui::ElementSet elements = gui::ElementSet::All();
-        gui::MarkupLoader loader(elements, DefaultAllocator(), nullptr, m_fontService.Get());
-        if (RefPtr<gui::Node> flexRoot = loader.LoadFromString(StringView(kFlex)))
-            m_panel->AddChild(flexRoot.Get());
-    }
-
-    // A scrollable grid: GridLayout of numbered cells inside a ScrollView. Scroll it with the
-    // mouse wheel, by dragging the auto-managed scrollbar, or by clicking it (Tab-focus) and
-    // using the arrow / PageUp-Down / Home-End keys.
-    auto scrollLabel = MakeRef<gui::Label>(AppRoot());
-    scrollLabel->SetSize(Float2{600.0f, 24.0f});
-    scrollLabel->SetText(u8"Scrollable grid - wheel, drag the bar, or focus + arrow keys:");
-    scrollLabel->SetFont(m_font);
-    scrollLabel->SetTextColor(Col(0.8f, 0.85f, 0.9f));
-    m_panel->AddChild(scrollLabel.Get());
-
-    m_scroll = MakeRef<gui::ScrollView>(AppRoot());
-    m_scroll->SetSize(Float2{360.0f, 150.0f});
-    m_scroll->SetPadding(gui::Thickness{6.0f});
-    m_scroll->SetBackground(
-        MakeRef<gui::RectangleDrawable>(AppRoot(), Col(0.08f, 0.09f, 0.11f)));
-    m_panel->AddChild(m_scroll.Get());
-
-    auto grid = MakeRef<gui::GridLayout>(AppRoot());
-    grid->SetColumns(3);
-    grid->SetSpacing(8.0f, 8.0f);
-    grid->SetSize(Float2{336.0f, 7.0f * 48.0f - 8.0f}); // 7 rows of 40px cells + 8px gaps
-    m_scroll->GetContent()->AddChild(grid.Get());
-
-    for (i32 i = 0; i < 21; ++i)
-    {
-        auto cell = MakeRef<gui::Label>(AppRoot());
-        cell->SetSize(Float2{100.0f, 40.0f});
-        const f32 t = static_cast<f32>(i) / 20.0f;
-        cell->SetBackground(MakeRef<gui::RectangleDrawable>(
-            AppRoot(), Col(0.20f + 0.30f * t, 0.35f, 0.55f - 0.25f * t)));
-        cell->SetFont(m_font);
-        cell->SetTextColor(Col(0.96f, 0.97f, 0.99f));
-        cell->SetTextAlignment(gui::TextHAlign::Center, gui::TextVAlign::Middle);
-        char8_t buf[8] = u8"#";
-        usize p = 1;
-        const i32 n = i + 1;
-        if (n >= 10)
-            buf[p++] = static_cast<char8_t>(u8'0' + (n / 10));
-        buf[p++] = static_cast<char8_t>(u8'0' + (n % 10));
-        buf[p] = 0;
-        cell->SetText(StringView(buf));
-        grid->AddChild(cell.Get());
-    }
-    m_scroll->SetAutoMeasureContent(true); // content sizes to the grid -> vertical bar appears
-
-    // A RelativeLayout: five labels pinned to the corners and centre of a box.
-    auto relLabel = MakeRef<gui::Label>(AppRoot());
-    relLabel->SetSize(Float2{600.0f, 24.0f});
-    relLabel->SetText(u8"RelativeLayout - anchored to corners + centre:");
-    relLabel->SetFont(m_font);
-    relLabel->SetTextColor(Col(0.8f, 0.85f, 0.9f));
-    m_panel->AddChild(relLabel.Get());
-
-    m_relative = MakeRef<gui::RelativeLayout>(AppRoot());
-    m_relative->SetSize(Float2{360.0f, 90.0f});
-    m_relative->AddClass(StringView(u8"panel")); // themed surface
-    m_panel->AddChild(m_relative.Get());
-
-    struct Pin
-    {
-        const char8_t* text;
-        u32 anchor;
-    };
-    const Pin pins[5] = {
-        {u8"TL", gui::AnchorLeft | gui::AnchorTop},
-        {u8"TR", gui::AnchorRight | gui::AnchorTop},
-        {u8"BL", gui::AnchorLeft | gui::AnchorBottom},
-        {u8"BR", gui::AnchorRight | gui::AnchorBottom},
-        {u8"middle", gui::AnchorCenter},
-    };
-    for (const Pin& pin : pins)
-    {
-        auto tag = MakeRef<gui::Label>(AppRoot());
-        tag->SetSize(Float2{70.0f, 26.0f});
-        tag->SetText(StringView(pin.text));
-        tag->SetFont(m_font);
-        tag->SetTextColor(Col(0.85f, 0.9f, 0.95f));
-        tag->SetTextAlignment(gui::TextHAlign::Center, gui::TextVAlign::Middle);
-        tag->SetBackground(
-            MakeRef<gui::RectangleDrawable>(AppRoot(), Col(0.25f, 0.40f, 0.30f)));
-        m_relative->AddChild(tag.Get());
-        m_relative->SetAnchor(tag.Get(), pin.anchor);
-    }
-
-    BuildShowcaseWindow();
-
-    // Theme: the built-in default theme drives the widget look; the font service resolves the
-    // font-family rule (the GUI is agnostic to how it loads fonts). A toggle button (added in
-    // BuildShowcaseWindow) flips dark/light. No image resource provider (no url() in the theme).
     m_styles.SetFontService(m_fontService.Get());
-    ApplyTheme();
+    ApplySandboxSheet();
+    ShowPage(m_startPage.AsView());
 
     m_bridge = MakeUnique<gui::GuiInputBridge>(AppRoot(), m_root->GetEventDispatcher());
-
-    // Give the dispatcher a clipboard so TextField cut/copy/paste (Ctrl+X/C/V) reach the OS
-    // clipboard - the same seam headless tests exercise with an in-memory one.
     if (m_shell != nullptr)
     {
         m_clipboard = MakeUnique<gui::ShellClipboard>(AppRoot(), m_shell);
         m_root->GetEventDispatcher()->SetClipboard(m_clipboard.Get());
     }
+    m_tooltips = MakeUnique<gui::TooltipManager>(AppRoot());
+    m_tooltips->SetFont(m_font);
+    m_tooltips->SetDelay(0.4);
 }
 
-void GUISandbox::ConfirmQuit()
+void GUISandbox::LoadPages()
 {
-    if (!m_dialog)
-    {
-        m_dialog = MakeRef<gui::MessageBox>(AppRoot());
-        m_dialog->SetFont(m_font);
-    }
-    m_dialog->Configure(u8"Quit?", u8"Close the GUI sandbox? Any unsaved changes will be lost.",
-                        gui::MessageBox::Buttons::YesNo);
+    // The pages are what the sidebar names: each button bound to page.<id>.
+    Array<gui::Node*> buttons;
+    if (m_sidebar != nullptr)
+        CollectCommands(*m_sidebar, kPageCommand, buttons);
     GUISandbox* self = this;
-    m_dialog->SetOnResult(
-        [self](gui::MessageBox::Result r)
-        {
-            if (r == gui::MessageBox::Result::Yes)
-                self->m_shell->RequestExit();
-        });
-    m_dialog->OpenModal(*m_root.Get());
-}
-
-void GUISandbox::ApplyTheme()
-{
-    // Combine the built-in theme with the app extras and hot-reload the manager's sheet.
-    const StringView theme = m_darkTheme ? gui::DefaultDarkThemeCSS() : gui::DefaultLightThemeCSS();
-    String combined(theme);
-    combined += StringView(kThemeExtras);
-    m_styles.SetStyleSheet(gui::CSSParser::Parse(combined.AsView()));
-}
-
-void GUISandbox::BuildShowcaseWindow()
-{
-    // A floating Window (drag its title bar, resize from the bottom-right grip) hosting a
-    // TabWidget that surfaces the Priority-2 controls: ComboBox, ListBox, Radios, Image.
-    m_widgetWindow = MakeRef<gui::Window>(AppRoot());
-    m_widgetWindow->SetSize(Float2{340.0f, 320.0f});
-    m_widgetWindow->SetPosition(Float2{470.0f, 150.0f});
-    m_widgetWindow->SetTitle(u8"Widgets  (drag / resize me)");
-    m_widgetWindow->SetFont(m_font);
-    m_root->AddChild(m_widgetWindow.Get());
-
-    auto tabs = MakeRef<gui::TabWidget>(AppRoot());
-    tabs->SetFont(m_font);
-    tabs->SetTabWidth(80.0f);
-    tabs->SetTabBarHeight(28.0f);
-    m_widgetWindow->GetContent()->AddChild(tabs.Get());
-    // The content host sizes tabs to fill it; make it fill the window body.
-    tabs->SetSize(m_widgetWindow->GetContent()->GetSize());
-
-    // --- Tab 1: a ComboBox + a ListBox + an echo label ---
-    auto pick = MakeRef<gui::LinearLayout>(AppRoot());
-    pick->SetPadding(gui::Thickness{10.0f});
-    pick->SetSpacing(8.0f);
-
-    auto combo = MakeRef<gui::ComboBox>(AppRoot());
-    combo->SetSize(Float2{200.0f, 26.0f});
-    combo->SetFont(m_font);
-    combo->SetTextColor(Col(0.92f, 0.94f, 0.98f));
-    combo->SetTooltip(u8"Pick a fruit");
-    const char8_t* fruits[5] = {u8"Apple", u8"Banana", u8"Cherry", u8"Date", u8"Elderberry"};
-    for (const char8_t* f : fruits)
-        combo->AddItem(StringView(f));
-    pick->AddChild(combo.Get());
-
-    auto list = MakeRef<gui::ListBox>(AppRoot());
-    list->SetSize(Float2{260.0f, 140.0f});
-    list->SetFont(m_font);
-    for (i32 i = 1; i <= 14; ++i)
+    for (gui::Node* button : buttons)
     {
-        char8_t buf[16] = u8"Item ";
-        usize p = 5;
-        const i32 n = i;
-        if (n >= 10)
-            buf[p++] = static_cast<char8_t>(u8'0' + n / 10);
-        buf[p++] = static_cast<char8_t>(u8'0' + n % 10);
-        buf[p] = 0;
-        list->AddItem(StringView(buf));
+        Page page;
+        page.id = String(button->GetCommand().SubStr(kPageCommand.Size(), button->GetCommand().Size() - kPageCommand.Size()));
+        page.navButton = button;
+        String base(kSandboxDir);
+        base += StringView(u8"pages/");
+        base += page.id.AsView();
+        String xml = base;
+        xml += StringView(u8".xml");
+        RefPtr<gui::Node> node = LoadMarkup(ReadText(xml.AsView()).AsView());
+        if (!node)
+        {
+            std::fprintf(stderr, "GUISandbox: page %s did not load\n", reinterpret_cast<const char*>(xml.CStr()));
+            continue;
+        }
+        node->SetVisible(false);
+        m_content->GetContent()->AddChild(node.Get());
+        page.node = node.Get();
+        String css = base;
+        css += StringView(u8".css");
+        m_pageSheets += ReadText(css.AsView()).AsView();
+        m_pageSheets += StringView(u8"\n");
+        const String id = page.id;
+        String command(kPageCommand);
+        command += id.AsView();
+        (void)m_root->OnCommand(command.AsView(), [self, id](gui::CommandEvent&) { self->ShowPage(id.AsView()); });
+        m_pages.PushBack(Move(page));
     }
-    pick->AddChild(list.Get());
+    // Their scripts, once every page is in the tree (a script may reach another page's widgets).
+    for (Page& page : m_pages)
+    {
+        String as(kSandboxDir);
+        as += StringView(u8"pages/");
+        as += page.id.AsView();
+        as += StringView(u8".as");
+        if (FileExists(DataPath(as.AsView()).AsView()))
+            page.script = RunScript(as.AsView(), m_sandboxBinding);
+    }
+}
 
-    m_pickEcho = MakeRef<gui::Label>(AppRoot());
-    m_pickEcho->SetSize(Float2{260.0f, 24.0f});
-    m_pickEcho->SetFont(m_font);
-    m_pickEcho->SetTextColor(Col(0.62f, 0.82f, 0.68f));
-    m_pickEcho->SetText(u8"selection -");
-    pick->AddChild(m_pickEcho.Get());
-
-    gui::Label* pickEcho = m_pickEcho.Get();
-    gui::ComboBox* comboPtr = combo.Get();
-    combo->SetOnSelectionChanged(
-        [pickEcho, comboPtr](i32)
-        {
-            char8_t buf[48] = u8"fruit: ";
-            usize pos = 7;
-            const StringView t = comboPtr->GetSelectedText();
-            for (usize i = 0; i < t.Size() && pos < 46; ++i)
-                buf[pos++] = t[i];
-            buf[pos] = 0;
-            pickEcho->SetText(StringView(buf));
-        });
-    gui::ListBox* listPtr = list.Get();
-    list->SetOnSelectionChanged(
-        [pickEcho, listPtr](i32 idx)
-        {
-            char8_t buf[48] = u8"row: ";
-            usize pos = 5;
-            const StringView t = listPtr->GetItem(static_cast<usize>(idx));
-            for (usize i = 0; i < t.Size() && pos < 46; ++i)
-                buf[pos++] = t[i];
-            buf[pos] = 0;
-            pickEcho->SetText(StringView(buf));
-        });
-
-    // --- Tab 2: a radio group + a checkbox ---
-    auto opts = MakeRef<gui::LinearLayout>(AppRoot());
-    opts->SetPadding(gui::Thickness{10.0f});
-    opts->SetSpacing(8.0f);
-
-    const char8_t* choices[3] = {u8"Low", u8"Medium", u8"High"};
-    for (const char8_t* c : choices)
+void GUISandbox::FillNativeHosts()
+{
+    // Controls: a radio group and a generated image.
+    if (gui::Node* host = FindById(*m_shellNode, u8"controls-radios"))
     {
         auto row = MakeRef<gui::LinearLayout>(AppRoot());
         row->SetOrientation(gui::Orientation::Horizontal);
-        row->SetSize(Float2{260.0f, 24.0f});
-        row->SetSpacing(8.0f);
-
-        auto radio = MakeRef<gui::RadioButton>(AppRoot());
-        radio->SetSize(Float2{20.0f, 20.0f});
-        m_radioGroup.Add(radio.Get());
-        row->AddChild(radio.Get());
-
-        auto lbl = MakeRef<gui::Label>(AppRoot());
-        lbl->SetSize(Float2{200.0f, 22.0f});
-        lbl->SetFont(m_font);
-        lbl->SetTextColor(Col(0.85f, 0.88f, 0.92f));
-        lbl->SetText(StringView(c));
-        row->AddChild(lbl.Get());
-        opts->AddChild(row.Get());
+        row->SetSpacing(10.0f);
+        row->SetSize(Float2{590.0f, 26.0f});
+        const char8_t* choices[3] = {u8"Low", u8"Medium", u8"High"};
+        for (const char8_t* choice : choices)
+        {
+            auto radio = MakeRef<gui::RadioButton>(AppRoot());
+            radio->SetSize(Float2{20.0f, 20.0f});
+            m_radios.Add(radio.Get());
+            row->AddChild(radio.Get());
+            auto label = MakeRef<gui::Label>(AppRoot());
+            label->SetSize(Float2{90.0f, 22.0f});
+            label->SetFont(m_font);
+            label->SetText(StringView(choice));
+            label->AddClass(u8"text");
+            row->AddChild(label.Get());
+        }
+        host->AddChild(row.Get());
     }
-
-    auto checkRow2 = MakeRef<gui::LinearLayout>(AppRoot());
-    checkRow2->SetOrientation(gui::Orientation::Horizontal);
-    checkRow2->SetSize(Float2{260.0f, 24.0f});
-    checkRow2->SetSpacing(8.0f);
-    auto check2 = MakeRef<gui::CheckBox>(AppRoot());
-    check2->SetSize(Float2{20.0f, 20.0f});
-    check2->SetTooltip(u8"A checkbox with a tooltip");
-    checkRow2->AddChild(check2.Get());
-    auto check2Label = MakeRef<gui::Label>(AppRoot());
-    check2Label->SetSize(Float2{200.0f, 22.0f});
-    check2Label->SetFont(m_font);
-    check2Label->SetTextColor(Col(0.85f, 0.88f, 0.92f));
-    check2Label->SetText(u8"Enable feature");
-    checkRow2->AddChild(check2Label.Get());
-    opts->AddChild(checkRow2.Get());
-
-    // --- Tab 3: an Image (a generated checker) in Fit mode ---
-    auto picTab = MakeRef<gui::UIWidget>(AppRoot());
+    if (gui::Node* host = FindById(*m_shellNode, u8"controls-image"))
     {
-        // Build a 16x16 RGBA checker/gradient image the Image widget can display.
         static u8 pixels[16 * 16 * 4];
         for (i32 y = 0; y < 16; ++y)
             for (i32 x = 0; x < 16; ++x)
@@ -1200,165 +488,452 @@ void GUISandbox::BuildShowcaseWindow()
                 pixels[o + 2] = static_cast<u8>(checker ? 160 : 80);
                 pixels[o + 3] = 255;
             }
-        m_showcaseImage =
-            MakeUnique<image::OwnedImageData>(AppRoot(), 16, 16, image::PixelFormat::RGBA8,
-                                              Span<const u8>(pixels, sizeof(pixels)));
-        m_showcaseDrawable = MakeRef<gui::ImageDrawable>(AppRoot(), m_showcaseImage.Get());
+        m_checker = MakeUnique<image::OwnedImageData>(AppRoot(), 16, 16, image::PixelFormat::RGBA8, Span<const u8>(pixels, sizeof(pixels)));
+        auto view = MakeRef<gui::Image>(AppRoot());
+        view->SetSize(host->GetSize().x > 0.0f ? host->GetSize() : Float2{220.0f, 160.0f});
+        view->SetDrawable(MakeRef<gui::ImageDrawable>(AppRoot(), m_checker.Get()));
+        view->SetScaleMode(gui::ImageScaleMode::Fit);
+        view->SetTooltip(u8"An Image widget, Fit mode");
+        host->AddChild(view.Get());
     }
-    auto imageView = MakeRef<gui::Image>(AppRoot());
-    imageView->SetSize(Float2{260.0f, 200.0f});
-    imageView->SetPadding(gui::Thickness{12.0f});
-    imageView->SetDrawable(m_showcaseDrawable);
-    imageView->SetScaleMode(gui::ImageScaleMode::Fit);
-    imageView->SetTooltip(u8"An Image widget (Fit mode)");
-    picTab->AddChild(imageView.Get());
 
-    tabs->AddTab(u8"Pick", pick.Get());
-    tabs->AddTab(u8"Opts", opts.Get());
-    tabs->AddTab(u8"Pic", picTab.Get());
-
-    // A right-click context menu on the main panel.
-    m_contextMenu = MakeRef<gui::Menu>(AppRoot());
-    m_contextMenu->SetFont(m_font);
-    m_contextMenu->SetWidth(220.0f);
-    GUISandbox* self = this;
-    gui::MenuItem* addItem =
-        m_contextMenu->AddItem(u8"Add +1 to counter",
-                               [self]()
-                               {
-                                   ++self->m_clicks;
-                                   SetCounterText(self->m_counter.Get(), self->m_clicks);
-                               });
-    addItem->SetShortcut(u8"Ctrl+A");
-    m_contextMenu->AddItem(u8"Reset counter",
-                           [self]()
-                           {
-                               self->m_clicks = 0;
-                               SetCounterText(self->m_counter.Get(), 0);
-                           });
-    m_contextMenu->AddSeparator();
-    // A checkable item: toggle the widgets window's visibility, reflecting its state.
-    m_contextMenu->AddCheckItem(u8"Show widgets window", true,
-                                [self](bool on) { self->m_widgetWindow->SetVisible(on); });
-    // A submenu of counter presets.
-    gui::Menu* presets = m_contextMenu->AddSubMenu(u8"Set counter to");
-    presets->SetFont(m_font);
-    presets->SetWidth(120.0f);
-    const i32 presetValues[3] = {0, 10, 100};
-    const StringView presetLabels[3] = {StringView(u8"0"), StringView(u8"10"), StringView(u8"100")};
-    for (usize i = 0; i < 3; ++i)
+    // Layout: labels anchored to a box's corners and centre.
+    if (auto* relative = Cast<gui::RelativeLayout>(FindById(*m_shellNode, u8"layout-relative")))
     {
-        const i32 value = presetValues[i];
-        presets->AddItem(presetLabels[i],
-                         [self, value]()
-                         {
-                             self->m_clicks = value;
-                             SetCounterText(self->m_counter.Get(), value);
-                         });
+        struct Pin
+        {
+            const char8_t* text;
+            u32 anchor;
+        };
+        const Pin pins[5] = {{u8"top left", gui::AnchorLeft | gui::AnchorTop},
+                             {u8"top right", gui::AnchorRight | gui::AnchorTop},
+                             {u8"bottom left", gui::AnchorLeft | gui::AnchorBottom},
+                             {u8"bottom right", gui::AnchorRight | gui::AnchorBottom},
+                             {u8"centre", gui::AnchorCenter}};
+        for (const Pin& pin : pins)
+        {
+            auto tag = MakeRef<gui::Label>(AppRoot());
+            tag->SetSize(Float2{110.0f, 28.0f});
+            tag->SetText(StringView(pin.text));
+            tag->AddClass(u8"chip");
+            relative->AddChild(tag.Get());
+            relative->SetAnchor(tag.Get(), pin.anchor);
+        }
     }
 
-    // Open the context menu on a right-click of the empty panel background (a node listener on
-    // the panel, so right-clicking a widget or the floating window does NOT open it). The menu
-    // has no persistent owner, so any click outside it dismisses; right-clicking another empty
-    // spot dismisses the old one and the listener reopens it there.
-    gui::Menu* menuPtr = m_contextMenu.Get();
-    gui::LinearLayout* panelPtr = m_panel.Get();
-    m_panel->AddEventListener(gui::EventType::MouseDown,
-                              [menuPtr, panelPtr](const gui::Event& e)
-                              {
-                                  const gui::MouseEvent& me =
-                                      static_cast<const gui::MouseEvent&>(e);
-                                  if (me.Button == gui::MouseButton::Right)
-                                      menuPtr->Open(*panelPtr, me.Position);
-                              });
+    // Data views over native models.
+    if (gui::Node* host = FindById(*m_shellNode, u8"views-list"))
+    {
+        m_listModel = MakeUnique<gui::StringListModel>(AppRoot());
+        Array<String> rows;
+        for (i32 i = 0; i < 500; ++i)
+            rows.PushBack(Format(u8"Row {}", i));
+        m_listModel->SetItems(Move(rows));
+        auto list = MakeRef<gui::ListView>(AppRoot());
+        list->SetSize(Float2{320.0f, 180.0f});
+        list->SetFont(m_font);
+        list->SetRowHeight(24.0f);
+        list->SetModel(m_listModel.Get());
+        auto* picked = Cast<gui::Label>(FindById(*m_shellNode, u8"views-picked"));
+        gui::StringListModel* model = m_listModel.Get();
+        list->SetOnSelectionChanged(
+            [picked, model](gui::ModelIndex index)
+            {
+                if (picked != nullptr && index.IsValid())
+                    picked->SetText(Format(u8"picked: {}", model->ItemAt(static_cast<usize>(index.Row))).AsView());
+            });
+        host->AddChild(list.Get());
+    }
+    if (gui::Node* host = FindById(*m_shellNode, u8"views-table"))
+    {
+        m_tableModel = MakeUnique<gui::TableModel>(AppRoot());
+        Array<String> columns;
+        columns.PushBack(String(u8"Name"));
+        columns.PushBack(String(u8"Score"));
+        m_tableModel->SetColumns(Move(columns));
+        const char8_t* names[6] = {u8"Ivy", u8"Cara", u8"Bo", u8"Ada", u8"Eve", u8"Dan"};
+        const i32 scores[6] = {42, 7, 91, 15, 68, 30};
+        for (usize i = 0; i < 6; ++i)
+        {
+            Array<gui::Variant> cells;
+            cells.PushBack(gui::Variant(StringView(names[i])));
+            cells.PushBack(gui::Variant(static_cast<i64>(scores[i])));
+            m_tableModel->AddRow(Move(cells));
+        }
+        m_tableProxy = MakeUnique<gui::SortingProxyModel>(AppRoot(), m_tableModel.Get());
+        auto table = MakeRef<gui::TableView>(AppRoot());
+        table->SetSize(Float2{320.0f, 180.0f});
+        table->SetFont(m_font);
+        table->SetRowHeight(24.0f);
+        table->SetModel(m_tableProxy.Get());
+        gui::SortingProxyModel* proxy = m_tableProxy.Get();
+        table->SetOnColumnHeaderClicked([proxy](usize column) { proxy->ToggleSort(column); });
+        host->AddChild(table.Get());
+    }
+    if (gui::Node* host = FindById(*m_shellNode, u8"views-tree"))
+    {
+        m_treeModel = MakeUnique<gui::TreeModel>(AppRoot());
+        const i32 code = m_treeModel->AddNode(gui::TreeModel::kRoot, u8"Code");
+        const i32 experimental = m_treeModel->AddNode(code, u8"Experimental");
+        m_treeModel->AddNode(experimental, u8"GUI");
+        m_treeModel->AddNode(experimental, u8"GUI.Sandbox");
+        const i32 foundation = m_treeModel->AddNode(code, u8"Foundation");
+        m_treeModel->AddNode(foundation, u8"VG");
+        m_treeModel->AddNode(foundation, u8"Script");
+        const i32 data = m_treeModel->AddNode(gui::TreeModel::kRoot, u8"Data");
+        m_treeModel->AddNode(data, u8"Assets");
+        auto tree = MakeRef<gui::TreeView>(AppRoot());
+        tree->SetSize(Float2{320.0f, 180.0f});
+        tree->SetFont(m_font);
+        tree->SetRowHeight(24.0f);
+        tree->SetModel(m_treeModel.Get());
+        tree->ExpandItem(0);
+        host->AddChild(tree.Get());
+    }
 
-    // Tooltips: ticked each frame in OnRender.
-    m_tooltips = MakeUnique<gui::TooltipManager>(AppRoot());
-    m_tooltips->SetFont(m_font);
-    m_tooltips->SetDelay(0.4);
+    // Menus: a menu bar and a context menu, each saying what was picked through the data.
+    RefPtr<gui::DataModel> data = m_gui->GetDataRef();
+    const auto said = [data](const char8_t* what) { return [data, what]() { data->Set(u8"menu", Variant::From<String>(String(what))); }; };
+    if (gui::Node* host = FindById(*m_shellNode, u8"menus-bar"))
+    {
+        auto bar = MakeRef<gui::MenuBar>(AppRoot());
+        bar->SetSize(Float2{590.0f, 28.0f});
+        bar->SetFont(m_font);
+        gui::Menu* file = bar->AddMenu(u8"File");
+        file->AddItem(u8"New", said(u8"File > New"));
+        file->AddItem(u8"Open...", said(u8"File > Open"));
+        file->AddSeparator();
+        file->AddItem(u8"Close", said(u8"File > Close"));
+        gui::Menu* edit = bar->AddMenu(u8"Edit");
+        edit->AddItem(u8"Undo", said(u8"Edit > Undo"))->SetShortcut(u8"Ctrl+Z");
+        edit->AddItem(u8"Redo", said(u8"Edit > Redo"))->SetShortcut(u8"Ctrl+Y");
+        gui::Menu* insert = edit->AddSubMenu(u8"Insert");
+        insert->AddItem(u8"Image", said(u8"Edit > Insert > Image"));
+        insert->AddItem(u8"Table", said(u8"Edit > Insert > Table"));
+        gui::Menu* view = bar->AddMenu(u8"View");
+        view->AddCheckItem(u8"Show grid", true,
+                           [data](bool on) { data->Set(u8"menu", Variant::From<String>(String(on ? u8"grid on" : u8"grid off"))); });
+        host->AddChild(bar.Get());
+    }
+    if (gui::Node* area = FindById(*m_shellNode, u8"menus-context"))
+    {
+        for (usize i = 0; i < area->ChildCount(); ++i)
+            area->GetChildAt(i)->SetHitTestVisible(false); // the hint lets the click reach the box
+        m_contextMenu = MakeRef<gui::Menu>(AppRoot());
+        m_contextMenu->SetFont(m_font);
+        m_contextMenu->SetWidth(200.0f);
+        m_contextMenu->AddItem(u8"Cut", said(u8"context > Cut"))->SetShortcut(u8"Ctrl+X");
+        m_contextMenu->AddItem(u8"Copy", said(u8"context > Copy"))->SetShortcut(u8"Ctrl+C");
+        m_contextMenu->AddSeparator();
+        gui::Menu* more = m_contextMenu->AddSubMenu(u8"More");
+        more->SetFont(m_font);
+        more->SetWidth(140.0f);
+        more->AddItem(u8"Rename", said(u8"context > More > Rename"));
+        gui::Menu* menu = m_contextMenu.Get();
+        area->AddEventListener(gui::EventType::MouseDown,
+                               [menu, area](const gui::Event& e)
+                               {
+                                   const auto& mouse = static_cast<const gui::MouseEvent&>(e);
+                                   if (mouse.Button == gui::MouseButton::Right)
+                                       menu->Open(*area, mouse.Position);
+                               });
+    }
+}
+
+void GUISandbox::ApplySandboxSheet()
+{
+    // The built-in theme for the widgets, then the sandbox's look, then the pages'.
+    String sheet(m_light ? gui::DefaultLightThemeCSS() : gui::DefaultDarkThemeCSS());
+    String path(kSandboxDir);
+    path += StringView(u8"sandbox.css");
+    sheet += ReadText(path.AsView()).AsView();
+    sheet += m_pageSheets.AsView();
+    m_styles.SetStyleSheet(gui::CSSParser::Parse(sheet.AsView()));
+}
+
+void GUISandbox::BuildMenu()
+{
+    m_menuRoot = MakeRef<gui::SceneRoot>(AppRoot(), m_gui);
+    m_menuRoot->SetDisplayScale(m_window != nullptr ? m_window->ContentScale() : 1.0f);
+    m_menuRoot->SetViewportSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)});
+    m_menuBinding.root = m_menuRoot.Get();
+    String path(kMenuDir);
+    path += StringView(u8"menu.xml");
+    RefPtr<gui::Node> menu = LoadMarkup(ReadText(path.AsView()).AsView());
+    if (!menu)
+    {
+        std::fprintf(stderr, "GUISandbox: the game menu did not load\n");
+        return;
+    }
+    m_menuRoot->AddChild(menu.Get());
+    String css(kMenuDir);
+    css += StringView(u8"menu.css");
+    m_menuStyles.SetFontService(m_fontService.Get());
+    m_menuStyles.SetStyleSheet(gui::CSSParser::Parse(ReadText(css.AsView()).AsView()));
+    // Leave: the menu fades out, then the sandbox comes back.
+    RefPtr<gui::DataModel> model = m_gui->GetDataRef();
+    menu->Bind([this, model]()
+               {
+                   const Variant quit = gui::ConvertVariant(model->Get(u8"quit"), TypeOf<bool>());
+                   if (!quit.IsEmpty() && quit.Get<bool>() && m_menuLeaveAt < 0.0f)
+                       m_menuLeaveAt = m_totalTime + 0.7f;
+               });
+    String as(kMenuDir);
+    as += StringView(u8"menu.as");
+    m_menuScript = RunScript(as.AsView(), m_menuBinding);
+    m_menuBridge = MakeUnique<gui::GuiInputBridge>(AppRoot(), m_menuRoot->GetEventDispatcher());
+}
+
+// === Running ===
+
+void GUISandbox::ShowPage(StringView id)
+{
+    for (Page& page : m_pages)
+    {
+        const bool shown = page.id.AsView() == id;
+        page.node->SetVisible(shown);
+        if (auto* button = Cast<gui::UIWidget>(page.navButton))
+        {
+            if (shown)
+                button->AddClass(u8"current");
+            else
+                button->RemoveClass(u8"current");
+        }
+    }
+    m_current = String(id);
+    if (m_content != nullptr)
+    {
+        m_content->MeasureContent();
+        m_content->SetScrollOffset(Float2{0.0f, 0.0f});
+    }
+}
+
+void GUISandbox::ToggleTheme()
+{
+    m_light = !m_light;
+    if (auto* shellWidget = Cast<gui::UIWidget>(m_shellNode.Get()))
+    {
+        if (m_light)
+            shellWidget->AddClass(u8"light");
+        else
+            shellWidget->RemoveClass(u8"light");
+    }
+    if (m_themeToggle != nullptr)
+        m_themeToggle->SetText(m_light ? StringView(u8"Dark theme") : StringView(u8"Light theme"));
+    ApplySandboxSheet();
+}
+
+void GUISandbox::OpenWindow()
+{
+    if (!m_floating)
+    {
+        // A window to drag by its title and resize from its corner, holding tabs.
+        m_floating = MakeRef<gui::Window>(AppRoot());
+        m_floating->SetSize(Float2{340.0f, 280.0f});
+        m_floating->SetPosition(Float2{520.0f, 160.0f});
+        m_floating->SetTitle(u8"A floating window");
+        m_floating->SetFont(m_font);
+        m_root->AddChild(m_floating.Get());
+        auto tabs = MakeRef<gui::TabWidget>(AppRoot());
+        tabs->SetFont(m_font);
+        tabs->SetTabWidth(96.0f);
+        tabs->SetTabBarHeight(28.0f);
+        m_floating->GetContent()->AddChild(tabs.Get());
+        tabs->SetSize(m_floating->GetContent()->GetSize());
+        const char8_t* names[3] = {u8"First", u8"Second", u8"Third"};
+        const char8_t* bodies[3] = {u8"Tabs switch the page below them.", u8"Drag the title bar to move the window.",
+                                    u8"Drag the bottom-right corner to resize it."};
+        for (usize i = 0; i < 3; ++i)
+        {
+            auto body = MakeRef<gui::Label>(AppRoot());
+            body->SetSize(Float2{300.0f, 120.0f});
+            body->SetPadding(gui::Thickness{12.0f});
+            body->SetFont(m_font);
+            body->SetWordWrap(true);
+            body->SetText(StringView(bodies[i]));
+            body->AddClass(u8"text");
+            tabs->AddTab(StringView(names[i]), body.Get());
+        }
+        return;
+    }
+    m_floating->SetVisible(!m_floating->IsVisible());
+}
+
+void GUISandbox::ShowMessage()
+{
+    if (!m_dialog)
+    {
+        m_dialog = MakeRef<gui::MessageBox>(AppRoot());
+        m_dialog->SetFont(m_font);
+    }
+    m_dialog->Configure(u8"A message box", u8"A modal dialog: the page behind it takes no clicks until it is answered.",
+                        gui::MessageBox::Buttons::Ok);
+    m_dialog->OpenModal(*m_root.Get());
+}
+
+void GUISandbox::OpenMenu()
+{
+    if (!m_menuRoot)
+        return;
+    m_showingMenu = true;
+    m_menuLeaveAt = -1.0f;
+    m_gui->GetData().Set(u8"quit", Variant::From<bool>(false));
+    m_gui->SetActiveRoot(m_menuRoot.Get());
+    if (m_menuScript && m_menuScript->HasFunction(u8"enter"))
+        (void)m_menuScript->Call(u8"enter", Span<Variant>{});
+    m_menuWantsUpdate = true;
+}
+
+void GUISandbox::CloseMenu()
+{
+    m_showingMenu = false;
+    m_menuLeaveAt = -1.0f;
+    m_gui->GetData().Set(u8"quit", Variant::From<bool>(false));
+    m_gui->SetActiveRoot(m_root.Get());
+    if (gui::Node* back = FindById(*m_shellNode, u8"nav-game-menu"))
+        (void)back->FocusElement(); // where the player left from
+}
+
+void GUISandbox::LayOutShell()
+{
+    // The shell fills the window: the header across the top, the sidebar down the left, the page's
+    // scroller the rest; the game menu's layers fill it too.
+    const Float2 size = m_root->GetSize();
+    if (m_shellNode)
+        m_shellNode->SetSize(size);
+    if (m_header != nullptr)
+        m_header->SetSize(Float2{size.x, kHeaderHeight});
+    const Float2 body{size.x, Max(0.0f, size.y - kHeaderHeight)};
+    if (m_body != nullptr)
+        m_body->SetSize(body);
+    if (m_sidebar != nullptr)
+        m_sidebar->SetSize(Float2{kSidebarWidth, body.y});
+    if (m_content != nullptr)
+        m_content->SetSize(Float2{Max(0.0f, body.x - kSidebarWidth), body.y});
+    if (m_menuRoot && m_menuRoot->ChildCount() != 0)
+    {
+        gui::Node* menu = m_menuRoot->GetChildAt(0);
+        menu->SetSize(m_menuRoot->GetSize());
+        for (usize i = 0; i < menu->ChildCount(); ++i)
+            menu->GetChildAt(i)->SetSize(m_menuRoot->GetSize());
+    }
+}
+
+void GUISandbox::RouteInput()
+{
+    // A fullscreen InputSurface, gated by a router: the pointer through the surface, keys, text and
+    // the gamepad from the event stream, all to the root on show.
+    if (m_shell == nullptr || m_shell->Input() == nullptr || m_window == nullptr)
+        return;
+    shell::IInputManager& input = *m_shell->Input();
+    gui::GuiInputBridge& bridge = m_showingMenu ? *m_menuBridge : *m_bridge;
+    const Rectangle region{0.0f, 0.0f, static_cast<f32>(m_width), static_cast<f32>(m_height)};
+    if (!m_inputSurface)
+    {
+        const ContentFit fit{region, Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)}, FitMode::Stretch};
+        m_inputSurface = MakeUnique<shell::InputSurface>(AppRoot(), &input, m_window->Id(), fit);
+        m_router = MakeUnique<shell::InputRouter>(AppRoot(), &input);
+        m_router->AddSurface(m_inputSurface.Get());
+        m_bridge->SetTextInputTarget(m_window);
+        if (m_menuBridge)
+            m_menuBridge->SetTextInputTarget(m_window);
+    }
+    m_inputSurface->SetRegion(region);
+    m_inputSurface->SetContentSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)});
+    m_router->Update();
+    bridge.PumpFromSurface(*m_inputSurface);
+    for (const shell::InputEvent& event : input.Events())
+    {
+        switch (event.kind)
+        {
+        case shell::InputEventKind::KeyDown:
+        case shell::InputEventKind::KeyUp:
+        case shell::InputEventKind::TextInput:
+        case shell::InputEventKind::GamepadButtonDown:
+        case shell::InputEventKind::GamepadButtonUp:
+        case shell::InputEventKind::GamepadAxis:
+            bridge.Dispatch(event);
+            break;
+        default:
+            break;
+        }
+    }
+}
+
+void GUISandbox::TypeKeys(gui::SceneRoot& root)
+{
+    // --keys: the named keystrokes, one every 15 frames once the GUI is up.
+    if (m_keys.Size() == 0 || m_frames < 10 || (m_frames - 10) % 15 != 0)
+        return;
+    const Array<StringView> keys = gui::SplitTopLevel(m_keys.AsView(), u8' ');
+    const usize index = static_cast<usize>((m_frames - 10) / 15);
+    if (index >= keys.Size())
+        return;
+    if (const Optional<gui::Keystroke> stroke = gui::ParseKeystroke(keys[index]); stroke.HasValue())
+    {
+        if (stroke.Value().Pad)
+            root.GetEventDispatcher()->InjectPadButton(static_cast<gui::PadButton>(stroke.Value().Code));
+        else
+            root.GetEventDispatcher()->InjectKeyDown(stroke.Value().Code, stroke.Value().Modifiers);
+        m_menuWantsUpdate = true;
+    }
+}
+
+void GUISandbox::UpdateMenu()
+{
+    // --menu-call: once the menu has been up a few frames, as a click would come.
+    if (m_menuScript && m_menuCall.Size() != 0 && m_frames == 10)
+    {
+        if (!m_menuScript->Call(m_menuCall.AsView(), Span<Variant>{}).HasValue())
+            std::fprintf(stderr, "GUISandbox: the game menu's script has no %s()\n", reinterpret_cast<const char*>(m_menuCall.CStr()));
+        m_menuWantsUpdate = true;
+    }
+    // Its update runs while it asks, and on a frame with input; an idle menu calls no script.
+    const bool input = m_shell != nullptr && m_shell->Input() != nullptr && !m_shell->Input()->Events().IsEmpty();
+    if (m_menuScript && (m_menuWantsUpdate || input) && m_menuScript->HasFunction(u8"update"))
+    {
+        Variant args[1] = {Variant::From<f64>(static_cast<f64>(m_deltaTime))};
+        Result<Variant> result = m_menuScript->Call(u8"update", Span<Variant>(args, 1));
+        const bool* more = result.HasValue() ? result.Value().TryGet<bool>() : nullptr;
+        m_menuWantsUpdate = more != nullptr && *more;
+    }
+    if (m_menuLeaveAt >= 0.0f && m_totalTime >= m_menuLeaveAt)
+        CloseMenu();
 }
 
 void GUISandbox::OnRender()
 {
-    // Input: a fullscreen InputSurface, gated by a router, polled into the dispatcher.
-    if (m_shell != nullptr && m_shell->Input() != nullptr && m_window != nullptr)
+    RouteInput();
+    gui::SceneRoot& shown = Shown();
+    TypeKeys(shown);
+
+    // A window moved to a monitor of another density takes its scale.
+    const Float2 viewport{static_cast<f32>(m_width), static_cast<f32>(m_height)};
+    gui::SceneRoot* roots[2] = {m_root.Get(), m_menuRoot.Get()};
+    for (gui::SceneRoot* root : roots)
     {
-        shell::IInputManager& input = *m_shell->Input();
-        const Rectangle region{0.0f, 0.0f, static_cast<f32>(m_width), static_cast<f32>(m_height)};
-        if (!m_inputSurface)
-        {
-            const ContentFit fit{region,
-                                 Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)},
-                                 FitMode::Stretch};
-            m_inputSurface =
-                MakeUnique<shell::InputSurface>(AppRoot(), &input, m_window->Id(), fit);
-            m_router = MakeUnique<shell::InputRouter>(AppRoot(), &input);
-            m_router->AddSurface(m_inputSurface.Get());
-            m_bridge->SetTextInputTarget(m_window); // the bridge drives IME on/off from focus
-        }
-        m_inputSurface->SetRegion(region);
-        m_inputSurface->SetContentSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)});
-        m_router->Update();
-        m_bridge->PumpFromSurface(*m_inputSurface);
-
-        // Keyboard/text is NOT part of the mouse-only surface pump: dispatch the raw event
-        // stream's key/text events through the bridge's event path (mouse events are skipped
-        // here, since PumpFromSurface already handled them). Text-input enable/disable is
-        // handled generically by the bridge (SetTextInputTarget below) from the focused
-        // widget's WantsTextInput() - no per-widget wiring here.
-        for (const shell::InputEvent& ev : input.Events())
-        {
-            switch (ev.kind)
-            {
-            case shell::InputEventKind::KeyDown:
-            case shell::InputEventKind::KeyUp:
-            case shell::InputEventKind::TextInput:
-            case shell::InputEventKind::GamepadButtonDown: // the d-pad, the stick and the buttons (G7)
-            case shell::InputEventKind::GamepadButtonUp:
-            case shell::InputEventKind::GamepadAxis:
-                m_bridge->Dispatch(ev);
-                break;
-            default:
-                break;
-            }
-        }
+        if (root == nullptr)
+            continue;
+        if (m_window != nullptr && m_window->ContentScale() != root->GetDisplayScale())
+            root->SetDisplayScale(m_window->ContentScale());
+        root->SetViewportSize(viewport);
     }
-
-    // Blink the text field's caret while it holds focus.
-    if (m_textField)
-        m_textField->Update(static_cast<f64>(m_deltaTime));
-
-    // Advance + style the tree. The panel keeps the window width but wrap-content owns its
-    // height; the page scroller fills the window.
-    // height; the page scroller fills the window. A window moved to a monitor of another
-    // density takes its scale.
-    if (m_window != nullptr && m_window->ContentScale() != m_root->GetDisplayScale())
-        m_root->SetDisplayScale(m_window->ContentScale());
-    m_root->SetViewportSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)});
-    m_pageScroll->SetSize(m_root->GetSize());
-    m_panel->SetSize(Float2{m_root->GetSize().x, m_panel->GetSize().y});
+    LayOutShell();
     m_gui->Update(Duration::FromSeconds(static_cast<f64>(m_deltaTime)));
-    // --scroll: held for the first frames, while layout settles the page's height.
-    if (m_initialScroll > 0.0f && m_initialScrollFrames < 10)
-    {
-        m_pageScroll->SetScrollOffset(Float2{0.0f, m_initialScroll});
-        ++m_initialScrollFrames;
-    }
-    if (m_tooltips)
-        m_tooltips->Update(*m_root->GetEventDispatcher(), *m_root.Get(),
-                           static_cast<f64>(m_deltaTime));
-    if (m_showcase)
-        UpdateShowcase();
-    m_styles.SetMediaContext(m_root->GetMediaContext()); // its logical size and density
-    m_styles.ApplyTree(*m_root.Get());
+    if (m_showingMenu)
+        UpdateMenu();
+    else if (m_tooltips)
+        m_tooltips->Update(*m_root->GetEventDispatcher(), *m_root.Get(), static_cast<f64>(m_deltaTime));
 
-    // Keep the scroller's content size in sync with the wrapped panel height (a hidden widget
-    // or a size change makes the page taller/shorter).
-    m_pageScroll->SetContentSize(m_panel->GetSize());
-    m_root->UpdateLayout(); // what styling moved
+    // Style the root on show (the other draws nothing), then the layout styling moved.
+    gui::SceneRoot& drawn = Shown(); // the menu may have closed this frame
+    gui::StyleManager& styles = m_showingMenu ? m_menuStyles : m_styles;
+    styles.SetMediaContext(drawn.GetMediaContext());
+    styles.ApplyTree(drawn);
+    drawn.UpdateLayout();
 
-    // Nothing changed, nothing animating: skip the frame (the last one stays on screen) and
-    // wait a little instead of spinning. --always-redraw draws every frame.
+    // Nothing changed, nothing animating: skip the frame (the last one stays on screen) and wait a
+    // little instead of spinning. --always-redraw draws every frame.
     ++m_frames;
     if (m_frameStats && m_totalTime >= m_nextStatsTime)
     {
@@ -1367,41 +942,36 @@ void GUISandbox::OnRender()
         std::fflush(stdout);
         m_nextStatsTime = m_totalTime + 1.0f;
     }
-    if (!m_alwaysRedraw && !m_root->NeedsFrame() && !ScreenshotPending())
+    if (!m_alwaysRedraw && !drawn.NeedsFrame() && !ScreenshotPending())
     {
         SleepMilliseconds(8);
         return;
     }
     ++m_drawnFrames;
+    DrawAndPresent(drawn);
+}
 
-    // Draw the tree into the VG batch.
+void GUISandbox::DrawAndPresent(gui::SceneRoot& root)
+{
     m_vg->Clear();
     {
         gui::DrawContext dc{*m_vg};
-        m_root->Draw(dc);
+        root.Draw(dc);
     }
     vg::VGBatch& batch = m_vg->GetBatch();
 
-    // Present (same path as VGSandbox).
     if (m_fenceVal > 0)
         m_fence->Wait(m_fenceVal, ~0ull);
     if (m_swapChain->AcquireNextImage() != ErrorCode::Ok)
         return;
-
     m_renderer.BeginFrame(static_cast<i32>(m_frameIndex));
-    const vg::renderer::VGRenderSlice slice =
-        m_renderer.Prepare(batch, static_cast<i32>(m_frameIndex), m_width, m_height);
-
+    const vg::renderer::VGRenderSlice slice = m_renderer.Prepare(batch, static_cast<i32>(m_frameIndex), m_width, m_height);
     m_pool->Reset();
     rhi::CommandEncoder* enc = nullptr;
     if (m_pool->CreateEncoder(enc) != ErrorCode::Ok || enc == nullptr)
         return;
-
-    enc->TransitionTexture(m_swapChain->CurrentTexture(), rhi::ResourceState::Undefined,
-                           rhi::ResourceState::RenderTarget);
-
-    // Layers draw in passes of their own, before the window's.
-    m_renderer.RenderLayers(*enc, static_cast<i32>(m_frameIndex), slice);
+    enc->TransitionTexture(m_swapChain->CurrentTexture(), rhi::ResourceState::Undefined, rhi::ResourceState::RenderTarget);
+    m_renderer.RenderLayers(*enc, static_cast<i32>(m_frameIndex), slice); // layers draw in passes of their own, first
 
     const rhi::ClearColor clear = rhi::ClearColor(0.07f, 0.07f, 0.09f, 1.0f);
     rhi::RenderPassDesc rpd{};
@@ -1418,146 +988,19 @@ void GUISandbox::OnRender()
         ca.clearValue = clear;
         rpd.colorAttachments.Add(ca);
     }
-
     rhi::RenderPassEncoder* rp = enc->BeginRenderPass(rpd);
     m_renderer.Render(*rp, m_width, m_height, static_cast<i32>(m_frameIndex), slice);
     rp->End();
 
     CaptureBackbuffer(*enc, m_swapChain->CurrentTexture()); // F12 or --screenshot: this frame, as presented
-    enc->TransitionTexture(m_swapChain->CurrentTexture(), rhi::ResourceState::RenderTarget,
-                           rhi::ResourceState::Present);
-
+    enc->TransitionTexture(m_swapChain->CurrentTexture(), rhi::ResourceState::RenderTarget, rhi::ResourceState::Present);
     rhi::CommandBuffer* cb = enc->Finish();
     ++m_fenceVal;
     rhi::CommandBuffer* cbs[1] = {cb};
     m_graphicsQueue->Submit(Span<rhi::CommandBuffer* const>(cbs, 1), m_fence, m_fenceVal);
-
     m_swapChain->Present(m_graphicsQueue);
     m_pool->DestroyEncoder(enc);
-
     m_frameIndex = (m_frameIndex + 1) % kFrames;
-}
-
-// The showcase (G6 of Specs/vg-and-gui-lab.md): the menu's markup, sheet and script, from
-// Data/Assets/ui/showcase, replace the gallery. Native code only sizes the layers to the window,
-// seeds the GUI's data, runs the script and closes the window when the menu says so.
-void GUISandbox::BuildShowcase()
-{
-    const auto readText = [this](StringView relative) -> String
-    {
-        Result<Array<byte>> bytes = ReadFile(DataPath(relative).AsView(), AppRoot());
-        if (!bytes.HasValue())
-        {
-            std::fprintf(stderr, "GUISandbox: could not read %s\n", reinterpret_cast<const char*>(String(relative).CStr()));
-            return {};
-        }
-        return String(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
-    };
-
-    // The menu's face as a distance-field family: one bake drawn crisp at any size, whose field
-    // the title's glow and the buttons' shadows read (12 texels wide: effects reach 6 past the edge
-    // at the bake size).
-    {
-        fonts::DistanceFieldFonts::Initialize();
-        fonts::FontLoadOptions options = fonts::FontLoadOptions::DistanceField();
-        options.pixelHeight = 48.0f;
-        options.distanceFieldRange = 12.0f;
-        if (m_fontService->LoadFont(u8"Lilita", DataPath(u8"Assets/fonts/lilita-one/LilitaOne-Regular.ttf").AsView(), options) !=
-            fonts::FontLoadResult::Success)
-            std::fprintf(stderr, "GUISandbox: the showcase's title font did not load\n");
-    }
-
-    gui::DataModel& data = m_gui->GetData();
-    data.Set(StringView(u8"volume"), Variant::From<f32>(0.7f));
-    data.Set(StringView(u8"music"), Variant::From<bool>(true));
-    data.Set(StringView(u8"name"), Variant::From<String>(String(u8"Ada")));
-    data.Set(StringView(u8"status"), Variant::From<String>(String(u8"Loading...")));
-    data.Set(StringView(u8"progress"), Variant::From<f32>(0.0f));
-    data.Set(StringView(u8"quit"), Variant::From<bool>(false));
-
-    const String markup = readText(u8"Assets/ui/showcase/menu.xml");
-    const gui::ElementSet elements = gui::ElementSet::All();
-    gui::MarkupLoader loader(elements, AppRoot(), nullptr, m_fontService.Get());
-    loader.SetDataModel(m_gui->GetDataRef());
-    m_showcase = loader.LoadFromString(markup.AsView());
-    if (!m_showcase)
-    {
-        std::fprintf(stderr, "GUISandbox: the showcase markup did not load\n");
-        return;
-    }
-    m_root->RemoveAllChildren(); // the gallery steps aside
-    m_root->AddChild(m_showcase.Get());
-    m_styles.SetStyleSheet(gui::CSSParser::Parse(readText(u8"Assets/ui/showcase/menu.css").AsView()));
-
-    // Leave: the menu fades, then the window closes.
-    RefPtr<gui::DataModel> model = m_gui->GetDataRef();
-    m_showcase->Bind([this, model]()
-                     {
-                         const Variant quit = gui::ConvertVariant(model->Get(StringView(u8"quit")), TypeOf<bool>());
-                         if (!quit.IsEmpty() && quit.Get<bool>() && m_quitAt < 0.0f)
-                             m_quitAt = m_totalTime + 0.7f;
-                     });
-
-#ifdef OPTION_HAS_ANGELSCRIPT
-    RegisterCoreTypes();
-    gui::RegisterGuiScriptSurface();
-    m_scripts = foundation::script::angelscript::CreateScriptManager(AppRoot());
-    foundation::script::RegisterReflectedTypes(*m_scripts);
-    m_script = m_scripts->CreateContext();
-    m_script->SetErrorHandler(&m_scriptErrors);
-    m_scriptBinding.root = m_root.Get();
-    gui::InstallGuiScriptService(*m_script, m_scriptBinding);
-    if (!m_script->Load(readText(u8"Assets/ui/showcase/menu.as").AsView(), u8"main").IsOk())
-        std::fprintf(stderr, "GUISandbox: the showcase script did not load\n");
-#else
-    std::fprintf(stderr, "GUISandbox: built without AngelScript; the showcase's menu does nothing\n");
-#endif
-}
-
-void GUISandbox::UpdateShowcase()
-{
-    // The showcase and its layers fill the window.
-    m_showcase->SetSize(m_root->GetSize());
-    for (usize i = 0; i < m_showcase->ChildCount(); ++i)
-        m_showcase->GetChildAt(i)->SetSize(m_root->GetSize());
-
-    // --showcase-call: once the menu has been up a few frames, as a click would come.
-    if (m_script && m_showcaseCall.Size() != 0 && m_frames == 10)
-    {
-        if (!m_script->Call(m_showcaseCall.AsView(), Span<Variant>{}).HasValue())
-            std::fprintf(stderr, "GUISandbox: the showcase script has no %s()\n",
-                         reinterpret_cast<const char*>(m_showcaseCall.CStr()));
-        m_scriptWantsUpdate = true; // what it started may want ticks
-    }
-
-    // --showcase-keys: the named keystrokes, typed one every 15 frames once the menu is up.
-    if (m_showcaseKeys.Size() != 0 && m_frames >= 10 && (m_frames - 10) % 15 == 0)
-    {
-        const Array<StringView> keys = gui::SplitTopLevel(m_showcaseKeys.AsView(), u8' ');
-        const usize index = static_cast<usize>((m_frames - 10) / 15);
-        if (index < keys.Size())
-            if (const Optional<gui::Keystroke> stroke = gui::ParseKeystroke(keys[index]); stroke.HasValue())
-            {
-                if (stroke.Value().Pad)
-                    m_root->GetEventDispatcher()->InjectPadButton(static_cast<gui::PadButton>(stroke.Value().Code));
-                else
-                    m_root->GetEventDispatcher()->InjectKeyDown(stroke.Value().Code, stroke.Value().Modifiers);
-                m_scriptWantsUpdate = true;
-            }
-    }
-
-    // The script's update runs while it asks for more, and on a frame with input (a click may
-    // have started something); an idle menu calls no script.
-    const bool input = m_shell != nullptr && m_shell->Input() != nullptr && !m_shell->Input()->Events().IsEmpty();
-    if (m_script && (m_scriptWantsUpdate || input) && m_script->HasFunction(u8"update"))
-    {
-        Variant args[1] = {Variant::From<f64>(static_cast<f64>(m_deltaTime))};
-        Result<Variant> result = m_script->Call(u8"update", Span<Variant>(args, 1));
-        const bool* more = result.HasValue() ? result.Value().TryGet<bool>() : nullptr;
-        m_scriptWantsUpdate = more != nullptr && *more;
-    }
-    if (m_quitAt >= 0.0f && m_totalTime >= m_quitAt)
-        Exit();
 }
 
 void GUISandbox::OnShutdown()
@@ -1566,41 +1009,37 @@ void GUISandbox::OnShutdown()
                 static_cast<unsigned long long>(m_frames));
     if (m_device)
         m_device->WaitIdle();
-    // The script's handles and handlers go before the tree they reach.
-    if (m_script)
+    // Scripts first: their handles and handlers reach the trees.
+    const auto closeScript = [](RefPtr<script::IScriptContext>& context)
     {
-        gui::ClearGuiScriptService(*m_script);
-        m_script->SetErrorHandler(nullptr);
-    }
-    m_script.Reset();
+        if (!context)
+            return;
+        gui::ClearGuiScriptService(*context);
+        context->SetErrorHandler(nullptr);
+        context.Reset();
+    };
+    for (Page& page : m_pages)
+        closeScript(page.script);
+    closeScript(m_menuScript);
     m_scripts.Reset();
     m_router.Reset();
     m_inputSurface.Reset();
     m_bridge.Reset();
-    m_root.Reset();
-    m_gui.Reset();
-    m_counter.Reset();
-    m_textField.Reset();
-    m_echo.Reset();
-    m_scroll.Reset();
-    m_pageScroll.Reset();
-    m_relative.Reset();
+    m_menuBridge.Reset();
     m_tooltips.Reset();
+    m_pages.Clear();
     m_contextMenu.Reset();
-    m_menuBar.Reset();
+    m_floating.Reset();
     m_dialog.Reset();
-    m_listView.Reset(); // release before the model it references
-    m_listModel.Reset();
-    m_tableView.Reset(); // release before the proxy/model it references
+    m_shellNode.Reset();
+    m_root.Reset(); // the views go with the tree, before the models they read
+    m_menuRoot.Reset();
+    m_gui.Reset();
     m_tableProxy.Reset();
     m_tableModel.Reset();
-    m_treeView.Reset(); // release before its model
+    m_listModel.Reset();
     m_treeModel.Reset();
-    m_widgetWindow.Reset();
-    m_pickEcho.Reset();
-    m_showcaseDrawable.Reset();
-    m_showcaseImage.Reset();
-    m_panel.Reset();
+    m_checker.Reset();
     m_renderer.Dispose();
     m_targets.Destroy(); // before the framework releases the device
     m_vg.Reset();
@@ -1609,36 +1048,35 @@ void GUISandbox::OnShutdown()
         m_device->DestroyFence(m_fence);
     if (m_pool)
         m_device->DestroyCommandPool(m_pool);
-    // m_vs/m_fs are borrowed from m_shaderHost's ShaderSystem, which frees them.
-    m_shaderHost.Shutdown();
+    m_shaderHost.Shutdown(); // the shader modules are its
 }
 
 int main(int argc, char** argv)
 {
     GUISandbox app;
-    // --scroll <y>: open the page scrolled down by y logical units (a screenshot of a later
-    // section: --scroll 900 --screenshot shot.png --screenshot-exit).
-    // --always-redraw: draw every frame, even an idle one (to compare the cost). --frame-stats:
-    // print, each second, how many of the frames drew. --showcase: the game menu (G6) in place of
-    // the widget gallery; --showcase-call <function>: call one of its script's functions once the
-    // menu has been up a few frames, as a click would (onSettings, onPlay, onQuit: a screenshot of
-    // another panel); --showcase-keys "<keys>": type keystrokes into it, one every 15 frames
-    // ("down down return", "pad-east": a screenshot of keyboard or gamepad play).
+    // --page <id>: open on that page (controls, text, layout, data-views, menus, styling, effects,
+    // motion, binding, navigation, game-menu). --showcase: open the game menu at once.
+    // --menu-call <function>: call one of the game menu's script functions once it is up (onSettings,
+    // onPlay, onQuit). --keys "<keys>": type keystrokes into what is shown, one every 15 frames
+    // ("down down return", "pad-east"). --always-redraw: draw every frame. --frame-stats: print,
+    // each second, how many frames drew. With the framework's --screenshot flags, a picture of any
+    // of it.
     for (int i = 1; i < argc; ++i)
     {
         const StringView arg(reinterpret_cast<const utf8char*>(argv[i]));
-        if (arg == StringView(u8"--scroll") && i + 1 < argc)
-            app.SetInitialScroll(static_cast<f32>(std::atof(argv[i + 1])));
+        const auto next = [&]() { return StringView(reinterpret_cast<const utf8char*>(argv[++i])); };
+        if (arg == StringView(u8"--page") && i + 1 < argc)
+            app.SetStartPage(next());
+        else if (arg == StringView(u8"--showcase"))
+            app.SetOpenMenu(true);
+        else if (arg == StringView(u8"--menu-call") && i + 1 < argc)
+            app.SetMenuCall(next());
+        else if (arg == StringView(u8"--keys") && i + 1 < argc)
+            app.SetKeys(next());
         else if (arg == StringView(u8"--always-redraw"))
             app.SetAlwaysRedraw(true);
         else if (arg == StringView(u8"--frame-stats"))
             app.SetFrameStats(true);
-        else if (arg == StringView(u8"--showcase"))
-            app.SetShowcase(true);
-        else if (arg == StringView(u8"--showcase-call") && i + 1 < argc)
-            app.SetShowcaseCall(StringView(reinterpret_cast<const utf8char*>(argv[++i])));
-        else if (arg == StringView(u8"--showcase-keys") && i + 1 < argc)
-            app.SetShowcaseKeys(StringView(reinterpret_cast<const utf8char*>(argv[++i])));
     }
     return app.Run(argc, argv);
 }

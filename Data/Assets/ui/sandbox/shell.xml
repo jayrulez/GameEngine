@@ -1,0 +1,34 @@
+<!--
+  The GUI sandbox's shell (Documentation/Specs/vg-and-gui-lab.md): a header, a sidebar of pages
+  and the page on show. Each sidebar button runs the command page.<id>; the host finds the pages
+  from them and loads pages/<id>.xml (with pages/<id>.css and pages/<id>.as when there are), so a
+  new page is a button and its files. The game menu is a second root of the same GUI.
+-->
+<LinearLayout id="shell" class="shell" orientation="vertical">
+    <FlexLayout id="header" class="header" direction="row" align-items="center" gap="16">
+        <Label class="app-title" text="GUI Sandbox"/>
+        <Label class="app-subtitle" text="experimental.gui: the lab's widgets, styles, motion and input"/>
+        <Button id="theme-toggle" class="header-btn" text="Light theme" command="theme.toggle"
+                tooltip="Switch the built-in theme and the sandbox's colours"/>
+    </FlexLayout>
+    <LinearLayout id="body" orientation="horizontal">
+        <FlexLayout id="sidebar" class="sidebar" direction="column" gap="4" nav-scope="pass" nav-default="nav-controls">
+            <Label class="nav-heading" text="WIDGETS"/>
+            <Button id="nav-controls" class="nav" text="Controls" command="page.controls"/>
+            <Button id="nav-text" class="nav" text="Text" command="page.text"/>
+            <Button id="nav-layout" class="nav" text="Layout" command="page.layout"/>
+            <Button id="nav-data-views" class="nav" text="Data views" command="page.data-views"/>
+            <Button id="nav-menus" class="nav" text="Menus and windows" command="page.menus"/>
+            <Label class="nav-heading" text="LOOKS"/>
+            <Button id="nav-styling" class="nav" text="Styling" command="page.styling"/>
+            <Button id="nav-effects" class="nav" text="Effects" command="page.effects"/>
+            <Button id="nav-motion" class="nav" text="Motion" command="page.motion"/>
+            <Label class="nav-heading" text="BEHAVIOUR"/>
+            <Button id="nav-binding" class="nav" text="Data binding" command="page.binding"/>
+            <Button id="nav-navigation" class="nav" text="Navigation and commands" command="page.navigation"/>
+            <Label class="nav-heading" text="DEMO"/>
+            <Button id="nav-game-menu" class="nav" text="Game menu" command="page.game-menu"/>
+        </FlexLayout>
+        <ScrollView id="content" class="content" auto-measure="true"/>
+    </LinearLayout>
+</LinearLayout>

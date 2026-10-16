@@ -1,0 +1,29 @@
+<LinearLayout id="page-menus" class="page" orientation="vertical" spacing="18" wrap-content="true">
+    <Label class="page-title" text="Menus and windows"/>
+    <Label class="page-lead" wrap="true"
+           text="A menu bar with submenus and a checkable item, a context menu, a floating window with tabs, a modal message box, and tooltips."/>
+
+    <LinearLayout class="section" orientation="vertical" spacing="12" wrap-content="true">
+        <Label class="section-title" text="Menu bar"/>
+        <RelativeLayout id="menus-bar" class="bar-host"/>
+        <Label id="menus-said" class="caption" text="Menus: {{menu}}"/>
+    </LinearLayout>
+
+    <LinearLayout class="section" orientation="vertical" spacing="12" wrap-content="true">
+        <Label class="section-title" text="Context menu"/>
+        <RelativeLayout id="menus-context" class="context-area">
+            <Label class="context-hint" text="Right-click anywhere in this box"/>
+        </RelativeLayout>
+    </LinearLayout>
+
+    <LinearLayout class="section" orientation="vertical" spacing="12" wrap-content="true">
+        <Label class="section-title" text="Windows and dialogs"/>
+        <LinearLayout class="row" orientation="horizontal" spacing="12">
+            <Button class="btn wide" text="Open a window" command="demo.window"
+                    tooltip="A window you can drag by its title and resize from its corner"/>
+            <Button class="btn wide" text="Show a message box" command="demo.message"
+                    tooltip="A modal dialog: the page behind takes no clicks until it is answered"/>
+        </LinearLayout>
+        <Label class="caption" text="Hover the buttons for their tooltips."/>
+    </LinearLayout>
+</LinearLayout>

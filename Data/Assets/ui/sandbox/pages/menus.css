@@ -1,0 +1,4 @@
+.bar-host { width: 590px; height: 30px; }
+.context-area { width: 590px; height: 90px; background-color: var(--surface-2); border: 1px dashed var(--line); border-radius: 8; }
+.context-hint { width: 590px; height: 90px; font-family: Roboto; font-size: 15px; color: var(--muted); text-align: center; vertical-align: middle; }
+.wide { width: 190px; }

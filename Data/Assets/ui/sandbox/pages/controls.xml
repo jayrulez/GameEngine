@@ -1,0 +1,52 @@
+<LinearLayout id="page-controls" class="page" orientation="vertical" spacing="18" wrap-content="true">
+    <Label class="page-title" text="Controls"/>
+    <Label class="page-lead" wrap="true"
+           text="The lab's widgets as markup makes them, themed by the built-in sheet. Each keeps its own state here; the Data binding page binds the same widgets to data."/>
+
+    <LinearLayout class="section" orientation="vertical" spacing="12" wrap-content="true">
+        <Label class="section-title" text="Buttons"/>
+        <LinearLayout class="row" orientation="horizontal" spacing="12">
+            <Button id="controls-add" class="btn" text="Add +1" tooltip="Counts a click"/>
+            <Button id="controls-add5" class="btn accent" text="Add +5"/>
+            <Button id="controls-reset" class="btn danger" text="Reset"/>
+            <Button class="btn" text="Disabled" enabled="false"/>
+        </LinearLayout>
+        <Label class="caption" text="Clicks: {{clicks}}  (a label bound to the GUI's data; the script only counts)"/>
+    </LinearLayout>
+
+    <LinearLayout class="section" orientation="vertical" spacing="12" wrap-content="true">
+        <Label class="section-title" text="Toggles and choices"/>
+        <LinearLayout class="row" orientation="horizontal" spacing="10">
+            <CheckBox id="controls-check" class="check"/>
+            <Label class="text" text="A checkbox" width="200" height="26" vertical-align="middle"/>
+        </LinearLayout>
+        <RelativeLayout id="controls-radios" class="radios"/>
+        <LinearLayout class="row" orientation="horizontal" spacing="12">
+            <ComboBox id="controls-combo" class="combo" items="Apple|Banana|Cherry|Date|Elderberry" tooltip="A combo box"/>
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout class="section" orientation="vertical" spacing="12" wrap-content="true">
+        <Label class="section-title" text="Values"/>
+        <LinearLayout class="row" orientation="horizontal" spacing="12">
+            <Slider id="controls-slider" class="slider" value="0.35"/>
+            <Label id="controls-slider-value" class="text" width="60" height="26" vertical-align="middle"/>
+        </LinearLayout>
+        <ProgressBar id="controls-progress" class="progress"/>
+        <Label class="caption" text="The bar and the number follow the slider through script bindings."/>
+    </LinearLayout>
+
+    <LinearLayout class="section" orientation="vertical" spacing="12" wrap-content="true">
+        <Label class="section-title" text="Text input"/>
+        <TextField id="controls-field" class="field" placeholder="Type here: select, Ctrl+C/V..." max-length="32"/>
+        <Label id="controls-echo" class="caption"/>
+    </LinearLayout>
+
+    <LinearLayout class="section" orientation="vertical" spacing="12" wrap-content="true">
+        <Label class="section-title" text="A list and an image"/>
+        <LinearLayout orientation="horizontal" spacing="16" width="590" height="170">
+            <ListBox id="controls-list" class="list" items="Item 1|Item 2|Item 3|Item 4|Item 5|Item 6|Item 7|Item 8|Item 9|Item 10|Item 11|Item 12"/>
+            <RelativeLayout id="controls-image" class="image-host"/>
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

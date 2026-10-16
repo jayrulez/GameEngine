@@ -1,0 +1,40 @@
+<LinearLayout id="page-motion" class="page" orientation="vertical" spacing="18" wrap-content="true">
+    <Label class="page-title" text="Motion"/>
+    <Label class="page-lead" wrap="true"
+           text="Every property transitions and animates, with real easings: transitions on hover, keyframes of opacity, colour and transforms, and the easing functions side by side."/>
+
+    <LinearLayout class="section" orientation="vertical" spacing="12" wrap-content="true">
+        <Label class="section-title" text="Transitions: hover the cards"/>
+        <LinearLayout class="card-row" orientation="horizontal" spacing="16">
+            <Label class="lift lift-back" text="overshoot"/>
+            <Label class="lift lift-ease" text="ease"/>
+            <Label class="lift lift-steps" text="steps(4)"/>
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout class="section" orientation="vertical" spacing="12" wrap-content="true">
+        <Label class="section-title" text="Keyframes"/>
+        <LinearLayout class="row" orientation="horizontal" spacing="12">
+            <Label class="dot pulse-fast"/><Label class="dot pulse"/><Label class="dot pulse-slow"/><Label class="dot blink"/>
+            <Label class="swatch colorcycle"/>
+            <Label class="sway" text="sway"/>
+        </LinearLayout>
+        <Label class="caption" text="Opacity at three rates and a blink, a background colour cycling, a transform swaying back and forth."/>
+    </LinearLayout>
+
+    <LinearLayout class="section" orientation="vertical" spacing="8" wrap-content="true">
+        <Label class="section-title" text="Easing functions"/>
+        <LinearLayout class="ease-row" orientation="horizontal" spacing="12">
+            <Label class="ease-name" text="linear"/><RelativeLayout class="track"><Label class="ball e-linear"/></RelativeLayout>
+        </LinearLayout>
+        <LinearLayout class="ease-row" orientation="horizontal" spacing="12">
+            <Label class="ease-name" text="ease-in-out"/><RelativeLayout class="track"><Label class="ball e-inout"/></RelativeLayout>
+        </LinearLayout>
+        <LinearLayout class="ease-row" orientation="horizontal" spacing="12">
+            <Label class="ease-name" text="cubic-bezier"/><RelativeLayout class="track"><Label class="ball e-back"/></RelativeLayout>
+        </LinearLayout>
+        <LinearLayout class="ease-row" orientation="horizontal" spacing="12">
+            <Label class="ease-name" text="steps(6)"/><RelativeLayout class="track"><Label class="ball e-steps"/></RelativeLayout>
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

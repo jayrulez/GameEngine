@@ -3,6 +3,15 @@
 
 // GUI - :scene_root partition
 //
+// GUIContext: one GUI, of any number of roots (windows, render targets, a panel in the world). It
+// holds what is the GUI's rather than a window's: the animation clock (roots may pause or slow
+// their own time on it), deferred tree edits, the bindings' scheduler (one flush a frame for every
+// root, so a binding in one root reading a value another wrote runs once, in order), the named
+// data, the commands and the keymap, the element table weak handles resolve through (so a handle
+// survives its node moving between roots) and the element set. It tracks the active root, the one
+// last given input: keystrokes, the gamepad and command availability follow its focus path. A root
+// made on its own makes a context of its own, so a GUI of one root needs nothing more.
+//
 // SceneRoot: the root of one GUI's widget tree AND its coordinator (eepp's Scene::SceneNode, by
 // role). A Node subclass that sits at the top; it owns the ActionManager, the MutationQueue, the
 // event dispatcher, the element table and set, and its display scale. Update ticks running
@@ -39,35 +48,120 @@ namespace core = foundation::core;
 
 export namespace experimental::gui
 {
+    class SceneRoot;
+
+    class GUIContext : public RefCounted
+    {
+    public:
+        // MemoryAllocator is valid in a constructor (MakeRef sets it first).
+        GUIContext()
+            : m_elements(core::MakeRef<ElementTable>(MemoryAllocator())), m_data(core::MakeRef<DataModel>(MemoryAllocator()))
+        {
+        }
+        GUIContext(const GUIContext&) = delete;
+        GUIContext& operator=(const GUIContext&) = delete;
+        ~GUIContext() override { m_elements->Close(); }
+
+        /// Advances every root by `elapsed`, once a frame: the clock (each root's actions at its own
+        /// time scale), each root's input repeat and per-frame hook, the bindings whose values
+        /// changed, the deferred tree edits, then each root's layout.
+        void Update(core::Duration elapsed);
+
+        [[nodiscard]] ActionManager& GetActionManager() noexcept { return m_actionManager; }
+        [[nodiscard]] MutationQueue& GetMutationQueue() noexcept { return m_mutationQueue; }
+        [[nodiscard]] EffectScheduler& GetEffectScheduler() noexcept { return m_effects; }
+        /// The GUI's named values, which markup and scripts bind to.
+        [[nodiscard]] DataModel& GetData() noexcept { return *m_data; }
+        [[nodiscard]] const RefPtr<DataModel>& GetDataRef() const noexcept { return m_data; }
+        [[nodiscard]] CommandSet& GetCommands() noexcept { return m_commands; }
+        Command& DefineCommand(core::StringView id) { return m_commands.Define(id, MemoryAllocator()); }
+        [[nodiscard]] Keymap& GetKeymap() noexcept { return m_keymap; }
+        [[nodiscard]] ElementTable* GetElementTable() noexcept { return m_elements.Get(); }
+        [[nodiscard]] const ElementSet& GetElementSet() const noexcept { return m_elementSet; }
+        /// What this GUI's markup and scripts may create (every registered element by default).
+        void SetElementSet(ElementSet set) { m_elementSet = core::Move(set); }
+
+        // === Roots ===
+        [[nodiscard]] usize RootCount() const noexcept { return m_roots.Size(); }
+        [[nodiscard]] SceneRoot* GetRootAt(usize index) const noexcept { return index < m_roots.Size() ? m_roots[index] : nullptr; }
+        /// The root last given input (keys, the gamepad, a press), or the first: where keystrokes,
+        /// the gamepad and command availability go. A host or a script may set it.
+        [[nodiscard]] SceneRoot* GetActiveRoot() const noexcept
+        {
+            return m_active != nullptr ? m_active : (m_roots.IsEmpty() ? nullptr : m_roots[0]);
+        }
+        void SetActiveRoot(SceneRoot* root)
+        {
+            if (root == m_active)
+                return;
+            m_active = root;
+            m_activeChanged.Notify();
+        }
+
+        // === Commands across roots ===
+        /// Runs command `id` along the active root's focus path.
+        bool RunCommand(core::StringView id);
+        /// Whether command `id` is available on the active root's focus path (a read a binding
+        /// follows: the active root, its focus, the command, the handlers).
+        [[nodiscard]] bool IsCommandAvailable(core::StringView id);
+
+        /// How many bindings the last Update ran.
+        [[nodiscard]] u32 LastBindingCount() const noexcept { return m_lastBindingCount; }
+
+    private:
+        friend class SceneRoot;
+        ActionManager m_actionManager;
+        MutationQueue m_mutationQueue;
+        EffectScheduler m_effects;
+        RefPtr<ElementTable> m_elements; // what weak references to this GUI's nodes resolve through
+        ElementSet m_elementSet = ElementSet::All();
+        RefPtr<DataModel> m_data;        // shared with the bindings to it
+        CommandSet m_commands;
+        Keymap m_keymap;
+        Array<Keystroke> m_chord; // a chord typed so far (in the active root)
+        f32 m_chordAge = 0.0f;
+        static constexpr f32 kChordTimeout = 1.0f;
+        Array<SceneRoot*> m_roots; // non-owning: each root registers itself and leaves on destruction
+        SceneRoot* m_active = nullptr;
+        Observable m_activeChanged;
+        u32 m_lastBindingCount = 0;
+
+        void AddRoot(SceneRoot& root) { m_roots.PushBack(&root); }
+        void RemoveRoot(SceneRoot& root)
+        {
+            for (usize i = 0; i < m_roots.Size(); ++i)
+                if (m_roots[i] == &root)
+                {
+                    m_roots.RemoveAt(i);
+                    break;
+                }
+            if (m_active == &root)
+                SetActiveRoot(nullptr);
+        }
+    };
+
     class SceneRoot : public Node
     {
         RTTI_OBJECT(SceneRoot, Node)
     public:
-        // The element table is this GUI's own (MemoryAllocator is valid in a constructor).
-        SceneRoot()
-            : m_data(core::MakeRef<DataModel>(MemoryAllocator())), m_elements(core::MakeRef<ElementTable>(MemoryAllocator()))
-        {
-            m_eventDispatcher.SetKeystrokeRouter([this](const Keystroke& stroke) { return RouteKeystroke(stroke); });
-        }
-        ~SceneRoot() override { m_elements->Close(); }
+        /// A root of a GUI of its own (a context made for it, from this root's allocator: a member
+        /// initialiser, which runs after the base records it, unlike a delegating constructor's
+        /// argument).
+        SceneRoot() : m_context(core::MakeRef<GUIContext>(MemoryAllocator())) { Join(); }
+        /// A root of `context`'s GUI, beside its other roots.
+        explicit SceneRoot(RefPtr<GUIContext> context) : m_context(core::Move(context)) { Join(); }
+        ~SceneRoot() override { m_context->RemoveRoot(*this); }
 
-        // Advance the tree by `elapsed`: tick actions, run the per-frame hook, run the bindings
-        // whose values changed, then drain deferred tree edits (e.g. queued Node::Close removals).
-        void Update(core::Duration elapsed)
-        {
-            m_actionManager.Update(elapsed);
-            m_eventDispatcher.Tick(static_cast<f32>(elapsed.AsSecondsF()));
-            if (!m_chord.IsEmpty() && (m_chordAge += static_cast<f32>(elapsed.AsSecondsF())) > kChordTimeout)
-                m_chord.Clear(); // a chord not finished in time is dropped
-            OnUpdate(elapsed);
-            m_lastBindingCount = m_effects.Flush();
-            m_mutationQueue.Drain();
-            UpdateLayout();
-        }
+        [[nodiscard]] GUIContext& GetContext() noexcept { return *m_context; }
+        [[nodiscard]] const RefPtr<GUIContext>& GetContextRef() const noexcept { return m_context; }
+        [[nodiscard]] GUIContext* GetGUIContext() override { return m_context.Get(); }
 
-        /// Runs the layout pass: every container that requested a layout, parents first, again
-        /// while a layout requests more (a child's new size can move its parent), at most a few
-        /// rounds. A host runs it after styling and before drawing; Update runs it too.
+        /// Advances the whole GUI (GUIContext::Update: every root of its context), once a frame.
+        void Update(core::Duration elapsed) { m_context->Update(elapsed); }
+
+        /// Runs this root's layout pass: every container that requested a layout, parents first,
+        /// again while a layout requests more (a child's new size can move its parent), at most a
+        /// few rounds. A host runs it after styling and before drawing; Update runs it too.
         void UpdateLayout()
         {
             m_lastLayoutCount = 0;
@@ -77,35 +171,48 @@ export namespace experimental::gui
         /// How many containers the last layout pass laid out (none in a frame where nothing moved).
         [[nodiscard]] u32 LastLayoutCount() const noexcept { return m_lastLayoutCount; }
 
-        /// Whether this GUI has anything to show that it has not drawn: something invalidated,
-        /// an animation or another action running, or a layout waiting. A host skips a frame that
-        /// needs none: an idle GUI costs nothing.
-        [[nodiscard]] bool NeedsFrame() const noexcept
+        /// Whether this root has anything to show that it has not drawn: something invalidated, an
+        /// animation running on it, a layout or a binding waiting, a direction held. A host skips a
+        /// frame that needs none: an idle GUI costs nothing.
+        [[nodiscard]] bool NeedsFrame()
         {
-            return NeedsRedraw() || !m_actionManager.IsEmpty() || IsLayoutDirty() || HasLayoutDirtyDescendant() ||
-                   m_effects.HasPending() || m_eventDispatcher.IsHoldingDirection();
+            return NeedsRedraw() || IsLayoutDirty() || HasLayoutDirtyDescendant() || m_context->m_effects.HasPending() ||
+                   m_eventDispatcher.IsHoldingDirection() ||
+                   (!IsPaused() && m_context->m_actionManager.AnyTarget([this](Node& target) { return target.GetSceneRoot() == this; }));
         }
 
-        /// How many bindings the last Update ran (none in a frame where no bound value changed).
-        [[nodiscard]] u32 LastBindingCount() const noexcept { return m_lastBindingCount; }
-        /// This GUI's named values, which markup and scripts bind to.
-        [[nodiscard]] DataModel& GetData() noexcept { return *m_data; }
-        [[nodiscard]] const RefPtr<DataModel>& GetDataRef() const noexcept { return m_data; }
+        // === This root's time on the GUI's clock ===
+        /// Its animations' time scale (1: real time; 0.5: half speed). A paused root's stand still.
+        void SetTimeScale(f32 scale) noexcept { m_timeScale = core::Max(0.0f, scale); }
+        [[nodiscard]] f32 GetTimeScale() const noexcept { return m_timeScale; }
+        void SetPaused(bool paused) noexcept { m_paused = paused; }
+        [[nodiscard]] bool IsPaused() const noexcept { return m_paused; }
+        [[nodiscard]] f32 EffectiveTimeScale() const noexcept { return m_paused ? 0.0f : m_timeScale; }
 
-        [[nodiscard]] EffectScheduler* GetEffectScheduler() override { return &m_effects; }
+        // === What the GUI holds, reached from its root ===
+        [[nodiscard]] u32 LastBindingCount() const noexcept { return m_context->LastBindingCount(); }
+        [[nodiscard]] DataModel& GetData() noexcept { return m_context->GetData(); }
+        [[nodiscard]] const RefPtr<DataModel>& GetDataRef() const noexcept { return m_context->GetDataRef(); }
+        [[nodiscard]] CommandSet& GetCommands() noexcept { return m_context->GetCommands(); }
+        Command& DefineCommand(core::StringView id) { return m_context->DefineCommand(id); }
+        [[nodiscard]] Keymap& GetKeymap() noexcept { return m_context->GetKeymap(); }
+        void SetElementSet(ElementSet set) { m_context->SetElementSet(core::Move(set)); }
 
-        // === Commands (G7) ===
-        [[nodiscard]] CommandSet& GetCommands() noexcept { return m_commands; }
-        /// The command `id`, defined now if new.
-        Command& DefineCommand(core::StringView id) { return m_commands.Define(id, MemoryAllocator()); }
+        [[nodiscard]] EffectScheduler* GetEffectScheduler() override { return &m_context->m_effects; }
+        [[nodiscard]] ActionManager* GetActionManager() override { return &m_context->m_actionManager; }
+        [[nodiscard]] MutationQueue* GetMutationQueue() override { return &m_context->m_mutationQueue; }
+        [[nodiscard]] EventDispatcher* GetEventDispatcher() override { return &m_eventDispatcher; }
+        [[nodiscard]] ElementTable* GetElementTable() override { return m_context->m_elements.Get(); }
+        [[nodiscard]] const ElementSet* GetElementSet() const override { return &m_context->m_elementSet; }
 
-        /// Runs command `id` along the focus path (the root alone when nothing here is focused):
-        /// capture handlers from the root down, then bubble handlers from the focused widget up, the
-        /// first bubble handler stopping it unless it sets Propagate. False when it is disabled or
-        /// nothing handled it.
+        // === Commands (G7), along this root's focus path ===
+        /// Runs command `id` along this root's focus path (the root alone when nothing here is
+        /// focused): capture handlers from the root down, then bubble handlers from the focused
+        /// widget up, the first bubble handler stopping it unless it sets Propagate. False when it is
+        /// disabled or nothing handled it.
         bool RunCommand(core::StringView id)
         {
-            if (const Command* command = m_commands.Find(id); command != nullptr && !Untracked([&] { return command->IsEnabled(); }))
+            if (const Command* command = GetCommands().Find(id); command != nullptr && !Untracked([&] { return command->IsEnabled(); }))
                 return false;
             Array<Node*> path; // focused first, this root last
             for (Node* n = FocusInThisTree(); n != nullptr; n = n->GetParent())
@@ -128,12 +235,23 @@ export namespace experimental::gui
             return ran;
         }
 
-        /// This GUI's bindings from keys and gamepad buttons to commands.
-        [[nodiscard]] Keymap& GetKeymap() noexcept { return m_keymap; }
+        /// Whether command `id` is enabled and a handler for it is on this root's focus path: a read
+        /// a binding follows (focus, the command's state, the handlers).
+        [[nodiscard]] bool IsCommandAvailable(core::StringView id)
+        {
+            GetCommands().TrackChanges();
+            (void)m_eventDispatcher.ObserveFocus();
+            if (const Command* command = GetCommands().Find(id); command != nullptr && !command->IsEnabled())
+                return false;
+            for (Node* n = FocusInThisTree(); n != nullptr; n = n->GetParent())
+                if (n->HandlesCommand(id))
+                    return true;
+            return false;
+        }
 
-        /// A keystroke no widget used: matched against the keymap in the focus path's contexts (a
-        /// chord waits for its next keystroke); a match runs its command. True when it was taken
-        /// (a match, an unbinding, or the start of a chord).
+        /// A keystroke no widget used: matched against the GUI's keymap in this root's focus-path
+        /// contexts (a chord waits for its next keystroke); a match runs its command. True when it
+        /// was taken (a match, or the start of a chord).
         bool RouteKeystroke(const Keystroke& stroke)
         {
             Array<KeyContextLayer> stack; // root first, one layer per node declaring a context
@@ -149,46 +267,25 @@ export namespace experimental::gui
                         stack.PushBack(layer);
                     }
             }
-            m_chord.PushBack(stroke);
-            m_chordAge = 0.0f;
+            Array<Keystroke>& chord = m_context->m_chord;
+            chord.PushBack(stroke);
+            m_context->m_chordAge = 0.0f;
             core::String command;
-            KeymapMatch match = m_keymap.Match(m_chord.AsSpan(), stack.AsSpan(), command);
-            if (match == KeymapMatch::None && m_chord.Size() > 1)
+            KeymapMatch match = GetKeymap().Match(chord.AsSpan(), stack.AsSpan(), command);
+            if (match == KeymapMatch::None && chord.Size() > 1)
             {
-                m_chord.Clear(); // a chord broken off: the keystroke alone
-                m_chord.PushBack(stroke);
-                match = m_keymap.Match(m_chord.AsSpan(), stack.AsSpan(), command);
+                chord.Clear(); // a chord broken off: the keystroke alone
+                chord.PushBack(stroke);
+                match = GetKeymap().Match(chord.AsSpan(), stack.AsSpan(), command);
             }
             if (match == KeymapMatch::Pending)
                 return true;
-            m_chord.Clear();
-            if (match == KeymapMatch::None)
-                return false;
-            if (command.Size() == 0)
-                return false; // unbound here: as if no binding
+            chord.Clear();
+            if (match == KeymapMatch::None || command.Size() == 0)
+                return false; // no binding, or unbound here: as if none
             (void)RunCommand(command.AsView());
             return true;
         }
-
-        /// Whether command `id` is enabled and a handler for it is on the focus path: a read a
-        /// binding follows (focus, the command's state, the handlers), so a control bound to the
-        /// command greys and lights as focus moves.
-        [[nodiscard]] bool IsCommandAvailable(core::StringView id)
-        {
-            m_commands.TrackChanges();
-            (void)m_eventDispatcher.ObserveFocus();
-            if (const Command* command = m_commands.Find(id); command != nullptr && !command->IsEnabled())
-                return false;
-            for (Node* n = FocusInThisTree(); n != nullptr; n = n->GetParent())
-                if (n->HandlesCommand(id))
-                    return true;
-            return false;
-        }
-        [[nodiscard]] ActionManager* GetActionManager() override { return &m_actionManager; }
-        [[nodiscard]] MutationQueue* GetMutationQueue() override { return &m_mutationQueue; }
-        [[nodiscard]] EventDispatcher* GetEventDispatcher() override { return &m_eventDispatcher; }
-        [[nodiscard]] ElementTable* GetElementTable() override { return m_elements.Get(); }
-        [[nodiscard]] const ElementSet* GetElementSet() const override { return &m_elementSet; }
 
         /// Device pixels per logical unit: the window's content scale times a UI scale. The tree
         /// lays out, styles and handles input in logical units; the root's transform maps them to
@@ -217,29 +314,26 @@ export namespace experimental::gui
         {
             return MediaContext{GetSize().x, GetSize().y, 96.0f * m_displayScale};
         }
-        /// What this GUI's markup and scripts may create (every registered element by default).
-        void SetElementSet(ElementSet set) { m_elementSet = core::Move(set); }
 
         // Per-frame hook for subclasses (layout, timers, ...).
         virtual void OnUpdate(core::Duration elapsed) { (void)elapsed; }
 
     private:
-        ActionManager m_actionManager;
-        EffectScheduler m_effects;  // the bindings waiting for this frame
-        CommandSet m_commands;      // this GUI's commands
-        Keymap m_keymap;            // keys and gamepad buttons to commands
-        Array<Keystroke> m_chord;   // a chord typed so far
-        f32 m_chordAge = 0.0f;
-        static constexpr f32 kChordTimeout = 1.0f;
-        RefPtr<DataModel> m_data;   // shared with the bindings to it
-        u32 m_lastBindingCount = 0;
-        MutationQueue m_mutationQueue;
-        EventDispatcher m_eventDispatcher{this}; // root = this SceneRoot
-        RefPtr<ElementTable> m_elements;          // what weak references to this GUI's nodes resolve through
-        ElementSet m_elementSet = ElementSet::All();
+        friend class GUIContext;
+        RefPtr<GUIContext> m_context;            // the GUI this root is part of (declared first: outlives the rest)
+        EventDispatcher m_eventDispatcher{this}; // pointer, hover and focus: this root's own
         f32 m_displayScale = 1.0f;
+        f32 m_timeScale = 1.0f;
+        bool m_paused = false;
         u32 m_lastLayoutCount = 0;
         core::Float2 m_viewport{0.0f, 0.0f};
+
+        void Join()
+        {
+            m_context->AddRoot(*this);
+            m_eventDispatcher.SetKeystrokeRouter([this](const Keystroke& stroke) { return RouteKeystroke(stroke); });
+            m_eventDispatcher.SetOnInput([this]() { m_context->SetActiveRoot(this); });
+        }
 
         // The focused node when it is in this tree, else this root.
         [[nodiscard]] Node* FocusInThisTree()
@@ -257,4 +351,41 @@ export namespace experimental::gui
                 SetSize(core::Float2{m_viewport.x / m_displayScale, m_viewport.y / m_displayScale});
         }
     };
+
+    inline void GUIContext::Update(core::Duration elapsed)
+    {
+        const f32 seconds = static_cast<f32>(elapsed.AsSecondsF());
+        m_actionManager.Update(elapsed,
+                               [](Node& target)
+                               {
+                                   const SceneRoot* root = target.GetSceneRoot();
+                                   return root != nullptr ? root->EffectiveTimeScale() : 1.0f;
+                               });
+        if (!m_chord.IsEmpty() && (m_chordAge += seconds) > kChordTimeout)
+            m_chord.Clear(); // a chord not finished in time is dropped
+        // A root's hook may add or remove roots: walk a copy.
+        const Array<SceneRoot*> roots = m_roots;
+        for (SceneRoot* root : roots)
+        {
+            root->m_eventDispatcher.Tick(seconds);
+            root->OnUpdate(elapsed);
+        }
+        m_lastBindingCount = m_effects.Flush();
+        m_mutationQueue.Drain();
+        for (SceneRoot* root : m_roots)
+            root->UpdateLayout();
+    }
+
+    inline bool GUIContext::RunCommand(core::StringView id)
+    {
+        SceneRoot* root = GetActiveRoot();
+        return root != nullptr && root->RunCommand(id);
+    }
+
+    inline bool GUIContext::IsCommandAvailable(core::StringView id)
+    {
+        m_activeChanged.Track();
+        SceneRoot* root = GetActiveRoot();
+        return root != nullptr && root->IsCommandAvailable(id);
+    }
 }

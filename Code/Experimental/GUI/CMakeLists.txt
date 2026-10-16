@@ -83,7 +83,9 @@ target_sources(GUI
             Styling/StyleValue.cppm
             Styling/StyleProperties.cppm
             Styling/StyleApplier.cppm
-            Styling/Transition.cppm
+            Styling/Easing.cppm
+            Styling/StyleInterpolation.cppm
+            Styling/StyleAnimation.cppm
             Styling/StyleManager.cppm
             Styling/Theme.cppm
             Markup/MarkupLoader.cppm

@@ -27,10 +27,9 @@ import :style_rule; // StyleProperty
 import :style_sheet;
 import :media_query;
 import :style_applier;
-import :transition;
+import :style_animation;
 import :resource_provider;
 import :css_values; // ParseLength
-import :actions;    // KeyframeAction
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -73,7 +72,9 @@ export namespace experimental::gui
         }
         [[nodiscard]] fonts::IFontService* GetFontService() const noexcept { return m_fontService; }
 
-        // Resolve + apply one widget; animate any transitioned change versus its last apply.
+        // Resolve + apply one widget. A property that changed and has a `transition` moves from
+        // the value showing toward its new one, an `animation` runs its @keyframes, both through
+        // the widget's StyleAnimation on its GUI's clock; otherwise the style applies at once.
         void ApplyTo(UIWidget& widget)
         {
             // Custom properties inherit: the nearest styled ancestor's resolved style gives those
@@ -86,19 +87,109 @@ export namespace experimental::gui
 
             // Build the length-resolution context: viewport from the media context, root font
             // size configurable, element font size from this widget's resolved font-size (for em).
-            LengthContext lengths;
-            lengths.RootFontSize = m_rootFontSize;
-            lengths.ViewportWidth = m_context.Width;
-            lengths.ViewportHeight = m_context.Height;
-            lengths.ElementFontSize =
+            StyleApplyContext context;
+            context.Resources = m_resources;
+            context.FontService = m_fontService;
+            context.Lengths.RootFontSize = m_rootFontSize;
+            context.Lengths.ViewportWidth = m_context.Width;
+            context.Lengths.ViewportHeight = m_context.Height;
+            context.Lengths.ElementFontSize =
                 ParseLength(resolved.Get(core::StringView(u8"font-size"), core::StringView(u8"")))
                     .ValueOr(m_rootFontSize);
 
+            RefPtr<StyleAnimation>* running = m_animations.Find(&widget);
+            if (running != nullptr && (*running)->IsDone())
+            {
+                m_animations.Remove(&widget);
+                running = nullptr;
+            }
+            RefPtr<StyleAnimation> animation = running != nullptr ? *running : RefPtr<StyleAnimation>{};
+            bool created = false;
+            const auto ensure = [&]()
+            {
+                if (!animation && widget.GetActionManager() != nullptr)
+                {
+                    animation = core::MakeRef<StyleAnimation>(widget.MemoryAllocator(), widget);
+                    animation->SetTargetStyle(resolved, context);
+                    created = true;
+                }
+                return animation.Get() != nullptr;
+            };
+
+            // Transitions: each property that changed since the last apply and a `transition`
+            // entry covers, from what shows now.
             if (const ResolvedStyle* previous = m_cache.Find(&widget))
-                ApplyStyleAnimated(widget, *previous, resolved, m_resources, m_fontService,
-                                   lengths);
+            {
+                const Array<TransitionSpec> transitions = ParseTransitionList(resolved.Get(core::StringView(u8"transition")));
+                if (!transitions.IsEmpty())
+                    StartTransitions(transitions, *previous, resolved, animation, ensure);
+            }
+
+            // Keyframe animations: start those newly named (once: one that has ended stays ended
+            // while it is named), stop those no longer named.
+            const Array<AnimationSpec> animations = ParseAnimationList(resolved.Get(core::StringView(u8"animation")));
+            Array<core::String>* startedSlot = m_startedAnimations.Find(&widget);
+            Array<core::String>& started =
+                startedSlot != nullptr ? *startedSlot : m_startedAnimations.InsertOrAssign(&widget, Array<core::String>{});
+            for (usize i = 0; i < started.Size();)
+            {
+                bool named = false;
+                for (const AnimationSpec& spec : animations)
+                    named = named || spec.Name.AsView() == started[i].AsView();
+                if (named)
+                {
+                    ++i;
+                    continue;
+                }
+                if (animation)
+                    animation->StopKeyframes(started[i].AsView());
+                started.RemoveAt(i);
+            }
+            for (const AnimationSpec& spec : animations)
+            {
+                bool already = false;
+                for (const core::String& name : started)
+                    already = already || name.AsView() == spec.Name.AsView();
+                const Keyframes* keyframes = m_sheet.FindKeyframes(spec.Name.AsView());
+                if (already || keyframes == nullptr)
+                    continue;
+                if (ensure())
+                {
+                    animation->SetTargetStyle(resolved, context);
+                    animation->StartKeyframes(spec, *keyframes);
+                    started.PushBack(spec.Name);
+                }
+            }
+
+            if (animation && animation->TrackCount() > 0)
+            {
+                animation->SetTargetStyle(resolved, context);
+                if (created)
+                {
+                    m_animations.InsertOrAssign(&widget, animation);
+                    widget.RunAction(animation); // Start applies it now
+                }
+                else
+                {
+                    animation->ApplyNow();
+                }
+            }
             else
-                ApplyStyle(widget, resolved, m_resources, m_fontService, lengths);
+            {
+                if (animation)
+                {
+                    // Nothing moves any more: the target, with what the stopped tracks moved
+                    // returned to it (or to its initial value).
+                    animation->SetTargetStyle(resolved, context);
+                    animation->ApplyNow();
+                    animation->Stop();
+                    m_animations.Remove(&widget);
+                }
+                else
+                {
+                    ApplyStyle(widget, resolved, context.Resources, context.FontService, context.Lengths);
+                }
+            }
             m_cache.InsertOrAssign(&widget, core::Move(resolved));
 
             // Pseudo-element parts (tag::part): resolve + apply each part the widget declares.
@@ -109,15 +200,6 @@ export namespace experimental::gui
                 const ResolvedStyle partStyle = m_sheet.Resolve(widget, m_context, true, part);
                 ApplyPartStyle(widget, part, partStyle);
             }
-
-            // @keyframes animation: spawn a KeyframeAction when the `animation` property names
-            // one, and only once per (widget, animation-name) so ApplyTree doesn't re-spawn it.
-            //
-            // Read the CACHED style, not `resolved` - that was moved into m_cache above, so it is
-            // an empty shell by now and every `animation` declaration looked absent. Animations
-            // silently never started.
-            if (const ResolvedStyle* stored = m_cache.Find(&widget))
-                ApplyAnimation(widget, *stored);
         }
 
         // Apply to every UIWidget in the subtree.
@@ -135,119 +217,43 @@ export namespace experimental::gui
         {
             m_cache.Remove(widget);
             m_animations.Remove(widget);
+            m_startedAnimations.Remove(widget);
         }
         void Clear()
         {
             m_cache = {};
             m_animations = {};
+            m_startedAnimations = {};
         }
 
     private:
-        // Spawn the @keyframes animation named by the `animation` property (if any), once.
-        void ApplyAnimation(UIWidget& widget, const ResolvedStyle& style)
+        // A transition for each property that changed between `previous` and `resolved` and an
+        // entry covers (its own name, or `all` for the transitionable ones; the last entry naming
+        // a property wins), from the value showing now toward the new one.
+        template <typename Ensure>
+        static void StartTransitions(const Array<TransitionSpec>& transitions, const ResolvedStyle& previous,
+                                     const ResolvedStyle& resolved, RefPtr<StyleAnimation>& animation, Ensure&& ensure)
         {
-            if (!style.Has(core::StringView(u8"animation")))
+            for (const ResolvedProperty& p : resolved.Properties())
             {
-                m_animations.Remove(
-                    &widget); // (a running loop keeps going; re-appearance re-spawns)
-                return;
+                const core::StringView name = p.Name.AsView();
+                if (ResolvedStyle::IsCustomProperty(name) || p.Typed.Kind == StyleValueKind::None)
+                    continue;
+                const TransitionSpec* spec = nullptr;
+                for (const TransitionSpec& t : transitions)
+                    if (t.Property.AsView() == name || (t.Property.AsView() == core::StringView(u8"all") && IsTransitionable(name)))
+                        spec = &t;
+                if (spec == nullptr || spec->Duration <= 0.0f)
+                    continue;
+                const StyleValue* before = previous.Value(name);
+                if (before == nullptr || previous.Get(name) == p.Value.AsView())
+                    continue; // no starting value, or no change
+                StyleValue from = *before;
+                if (animation)
+                    (void)animation->TrackValue(name, from); // retarget from where a running track is
+                if (ensure())
+                    animation->StartTransition(name, from, p.Typed, *spec);
             }
-            core::String name;
-            f32 durationSecs = 0.0f;
-            bool loop = false;
-            if (!ParseAnimation(style.Get(core::StringView(u8"animation")), name, durationSecs,
-                                loop))
-                return;
-
-            const core::String* running = m_animations.Find(&widget);
-            if (running != nullptr && running->AsView() == name.AsView())
-                return; // already running this one
-
-            const Keyframes* kf = m_sheet.FindKeyframes(name.AsView());
-            if (kf == nullptr)
-                return;
-            widget.RunAction(core::MakeRef<KeyframeAction>(
-                foundation::core::DefaultAllocator(), ExtractOpacityTrack(*kf), ExtractColorTrack(*kf),
-                core::Duration::FromSeconds(static_cast<f64>(durationSecs)), loop));
-            m_animations.InsertOrAssign(&widget, core::Move(name));
-        }
-
-        // Parse `animation: name duration [infinite]` (timing/direction/etc. ignored for v1).
-        [[nodiscard]] static bool ParseAnimation(core::StringView value, core::String& name,
-                                                 f32& durationSecs, bool& loop)
-        {
-            bool haveName = false;
-            usize start = 0;
-            const usize n = value.Size();
-            for (usize i = 0; i <= n; ++i)
-            {
-                if (i == n || IsWhiteSpace(value[i]))
-                {
-                    if (i > start)
-                    {
-                        const core::StringView tok = value.SubStr(start, i - start);
-                        if (!haveName)
-                        {
-                            name = core::String(tok);
-                            haveName = true;
-                        }
-                        else if (tok == core::StringView(u8"infinite"))
-                            loop = true;
-                        else if (Optional<f32> d = ParseLength(tok); d.HasValue())
-                            durationSecs = d.Value();
-                    }
-                    start = i + 1;
-                }
-            }
-            return haveName;
-        }
-
-        // Pull the opacity track {offset, opacity} from a keyframes definition, sorted by offset.
-        [[nodiscard]] static Array<core::Float2> ExtractOpacityTrack(const Keyframes& kf)
-        {
-            Array<core::Float2> track;
-            for (const KeyframeStop& stop : kf.Stops)
-                for (const StyleProperty& p : stop.Properties)
-                    if (p.Name.AsView() == core::StringView(u8"opacity"))
-                        if (Optional<f32> o = ParseLength(p.Value.AsView()); o.HasValue())
-                            track.PushBack(core::Float2{stop.Offset, o.Value()});
-
-            for (usize a = 1; a < track.Size(); ++a) // insertion sort by offset
-            {
-                const core::Float2 key = track[a];
-                usize b = a;
-                while (b > 0 && track[b - 1].x > key.x)
-                {
-                    track[b] = track[b - 1];
-                    --b;
-                }
-                track[b] = key;
-            }
-            return track;
-        }
-
-        // Pull the background-color track from a keyframes definition, sorted by offset.
-        [[nodiscard]] static Array<ColorKey> ExtractColorTrack(const Keyframes& kf)
-        {
-            Array<ColorKey> track;
-            for (const KeyframeStop& stop : kf.Stops)
-                for (const StyleProperty& p : stop.Properties)
-                    if (p.Name.AsView() == core::StringView(u8"background-color"))
-                        if (Optional<Color> c = ParseColor(p.Value.AsView()); c.HasValue())
-                            track.PushBack(ColorKey{stop.Offset, c.Value()});
-
-            for (usize a = 1; a < track.Size(); ++a) // insertion sort by offset
-            {
-                const ColorKey key = track[a];
-                usize b = a;
-                while (b > 0 && track[b - 1].Offset > key.Offset)
-                {
-                    track[b] = track[b - 1];
-                    --b;
-                }
-                track[b] = key;
-            }
-            return track;
         }
 
         StyleSheet m_sheet;
@@ -256,6 +262,7 @@ export namespace experimental::gui
         fonts::IFontService* m_fontService = nullptr; // non-owning; resolves font-family
         f32 m_rootFontSize = 16.0f;                   // CSS `rem` base
         HashMap<Node*, ResolvedStyle> m_cache; // last-applied style per widget (non-owning keys)
-        HashMap<Node*, core::String> m_animations; // widget -> running @keyframes animation name
+        HashMap<Node*, RefPtr<StyleAnimation>> m_animations; // widget -> its running transitions and animations
+        HashMap<Node*, Array<core::String>> m_startedAnimations; // widget -> the @keyframes it has started
     };
 }

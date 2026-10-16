@@ -188,3 +188,21 @@ TEST_CASE("box-style: a border per side, each its own width, style and colour")
     // A radius in percent is of the box's smaller side.
     CHECK(Styled(u8"box { border-radius: 50%; background-color: red; }")->GetBox().Radii.topLeft == doctest::Approx(25.0f));
 }
+
+TEST_CASE("box-style: a repeating gradient repeats the span of its stops")
+{
+    // Stops over the first quarter: the line is cut to that quarter, so across the box the
+    // gradient parameter runs to 4 (four repeats), on VG's repeat spread.
+    auto w = Styled(u8"box { background: repeating-linear-gradient(90deg, red 0%, blue 25%); }");
+    vg::VGContext canvas;
+    DrawContext dc{canvas};
+    w->Draw(dc);
+    bool repeat = false;
+    for (const vg::VGCommand& cmd : canvas.GetBatch().commands)
+        repeat = repeat || cmd.gradientSpread == vg::VGGradientSpread::Repeat;
+    CHECK(repeat);
+    core::f32 maxU = 0.0f;
+    for (const vg::VGVertex& v : canvas.GetBatch().vertices)
+        maxU = core::Max(maxU, v.texCoord.x);
+    CHECK(maxU == doctest::Approx(4.0f).epsilon(0.05));
+}

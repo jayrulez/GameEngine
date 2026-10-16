@@ -130,11 +130,17 @@ export namespace experimental::gui
             vg::PathBuilder shape;
             vg::ShapeBuilder::BuildRoundedRect(rect, Radii, shape);
             const core::Float2 center{rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f};
-            const auto addStops = [&g](auto& fill)
+            // A repeating gradient repeats the span of its stops (CSS), and VG repeats its whole
+            // line: the line is cut to the stops' span (linear: its ends; radial: its radius, from
+            // the centre) and the stops spread over it.
+            const f32 first = g.Repeating ? g.Stops[0].offset : 0.0f;
+            const f32 last = g.Repeating ? g.Stops[g.Stops.Size() - 1].offset : 1.0f;
+            const bool repeating = g.Repeating && last - first > 1e-4f;
+            const auto addStops = [&](auto& fill, f32 from, f32 to)
             {
                 for (const vg::GradientStop& stop : g.Stops)
-                    fill.AddStop(stop.offset, stop.color);
-                fill.spread = g.Repeating ? vg::VGGradientSpread::Repeat : vg::VGGradientSpread::Pad;
+                    fill.AddStop(repeating ? (stop.offset - from) / (to - from) : stop.offset, stop.color);
+                fill.spread = repeating ? vg::VGGradientSpread::Repeat : vg::VGGradientSpread::Pad;
             };
             if (g.Kind == BoxGradientKind::Linear)
             {
@@ -142,16 +148,19 @@ export namespace experimental::gui
                 // the box's extent along it, so the corners take the end colours.
                 const core::Float2 dir{Sin(g.Angle), -Cos(g.Angle)};
                 const f32 half = (Abs(rect.width * dir.x) + Abs(rect.height * dir.y)) * 0.5f;
-                vg::VGLinearGradientFill fill{center - dir * half, center + dir * half};
-                addStops(fill);
+                const core::Float2 start = center - dir * half;
+                const core::Float2 line = dir * (2.0f * half);
+                vg::VGLinearGradientFill fill{start + line * first, start + line * last};
+                addStops(fill, first, last);
                 canvas.FillPath(shape.ToPath(), fill);
             }
             else if (g.Kind == BoxGradientKind::Radial)
             {
                 // A circle at the centre reaching the farthest corner (CSS's default extent).
                 const f32 radius = Sqrt(rect.width * rect.width + rect.height * rect.height) * 0.5f;
-                vg::VGRadialGradientFill fill{center, radius};
-                addStops(fill);
+                // The radius ends at the last stop; the stops keep their distance from the centre.
+                vg::VGRadialGradientFill fill{center, radius * last};
+                addStops(fill, 0.0f, last);
                 canvas.FillPath(shape.ToPath(), fill);
             }
             else

@@ -19,6 +19,7 @@ add_executable(GUI.Tests
     StyleSelectorTests.cpp
     StyleSheetTests.cpp
     StyleCoreTests.cpp
+    BoxStyleTests.cpp
     CSSParserTests.cpp
     StyleApplierTests.cpp
     CssCascadeTests.cpp

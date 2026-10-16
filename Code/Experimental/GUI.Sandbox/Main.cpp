@@ -72,6 +72,16 @@ namespace
         .pulse-slow  { animation: pulse 2.3s infinite; }
         .blink       { animation: blink 1.1s infinite; }
         .colorcycle  { animation: colorcycle 3s infinite; } /* background-color keyframes */
+        /* Box properties from the sheet (G2): gradients, several shadows, a border per side, a
+           transform about its origin, and var() inside them. */
+        .cards { --glow: rgba(120, 200, 255, 0.55); }
+        .card { color: #f4f7fb; text-align: center; border-radius: 10; }
+        .card-gradient { background: linear-gradient(135deg, #e0607a, #f0b040 60%, #60c0f0); }
+        .card-shadow { background-color: #2a3442; box-shadow: 0 6px 14px rgba(0,0,0,0.6), 0 0 18px 2px var(--glow), inset 0 0 6px #000000; }
+        .card-borders { background-color: #1e2530; border-top: 4px solid #e0607a; border-right: 4px solid #f0b040;
+                        border-bottom: 4px solid #60c0f0; border-left: 4px solid #7fe0a8; border-radius: 0; }
+        .card-tilt { background: conic-gradient(from 0deg, #e0607a, #f0b040, #60c0f0, #e0607a);
+                     transform: rotate(-8deg) scale(0.9); }
     )";
 
     inline Color Col(f32 r, f32 g, f32 b, f32 a = 1.0f) { return Color{r, g, b, a}; }
@@ -698,6 +708,22 @@ void GUISandbox::BuildUI()
         gui::MarkupLoader loader(elements, DefaultAllocator(), nullptr, m_fontService.Get());
         if (RefPtr<gui::Node> markupRoot = loader.LoadFromString(StringView(kMarkup)))
             m_panel->AddChild(markupRoot.Get());
+    }
+
+    // Box properties from the sheet (G2): four cards, each styled only by its classes.
+    {
+        static const char8_t* kCards = u8R"(
+            <LinearLayout orientation="horizontal" spacing="24" width="560" height="96" padding="12" class="cards">
+                <Label text="gradient" class="card card-gradient" font-family="Roboto" font-size="16" width="110" height="64"/>
+                <Label text="shadows" class="card card-shadow" font-family="Roboto" font-size="16" width="110" height="64"/>
+                <Label text="borders" class="card card-borders" font-family="Roboto" font-size="16" width="110" height="64"/>
+                <Label text="transform" class="card card-tilt" font-family="Roboto" font-size="16" width="110" height="64"/>
+            </LinearLayout>
+        )";
+        const gui::ElementSet elements = gui::ElementSet::All();
+        gui::MarkupLoader loader(elements, DefaultAllocator(), nullptr, m_fontService.Get());
+        if (RefPtr<gui::Node> cards = loader.LoadFromString(StringView(kCards)))
+            m_panel->AddChild(cards.Get());
     }
 
     // A FlexLayout (markup) spreading three buttons across the row via justify-content.

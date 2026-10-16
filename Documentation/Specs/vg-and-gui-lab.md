@@ -424,7 +424,10 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   root, user ruling: a weak handle survives its node moving between roots) and element set; it
   tracks the active root, the one last given input, which keystrokes, the gamepad and command
   availability follow (user ruling). A root keeps its dispatcher, display scale, viewport, media
-  context, layout and drawing; a root made alone makes a context of its own. Before it, actions
+  context, layout and drawing. Every root is made in a context and the host advances the GUI through
+  GUIContext::Update; the first cut's shims for single-root code (a private context, a forwarding
+  SceneRoot::Update and accessors) went (4a700e9c6, user direction: the lab has no users to keep
+  them for). Before it, actions
   learnt to hold their target weakly and run on a per-target time scale (0b0fa7b9b); the context
   itself is f4bc06def. Playing the showcase found four defects, each fixed with a test: a held
   d-pad direction skipped the focused widget (d8c0b19f6); a click focused the full-window backdrop,

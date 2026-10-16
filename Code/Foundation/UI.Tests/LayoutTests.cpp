@@ -1255,3 +1255,35 @@ TEST_CASE("flex: Shrink_StopsAtMinimumAndTheRestGiveMore")
     CHECK(row.a->Width() == doctest::Approx(120.0f)); // its share would take it to 100
     CHECK(row.b->Width() == doctest::Approx(80.0f));
 }
+
+TEST_CASE("layout: LocalToScreen and ScreenToLocal follow a view's transform, as hit testing does")
+{
+    UIContext ctx{DefaultAllocator()};
+    auto root = MakeRoot();
+    Init(ctx, root.Get(), 400, 300);
+    auto frame = New<AbsoluteLayout>();
+    auto child = TV(100, 50);
+    frame->AddView(child.Get());
+    root->AddView(frame.Get());
+    LayoutPass(ctx, root.Get());
+    child->Transform.Scale = Float2{2.0f, 2.0f};
+    child->Transform.Origin = Float2{0.0f, 0.0f};
+    child->Transform.Translation = Float2{10.0f, 20.0f};
+    const Float2 corner = child->LocalToScreen(Float2{100.0f, 50.0f}); // the drawn bottom-right
+    CHECK(corner.x == doctest::Approx(child->Bounds.x + 10.0f + 200.0f));
+    CHECK(corner.y == doctest::Approx(child->Bounds.y + 20.0f + 100.0f));
+    const Float2 back = child->ScreenToLocal(corner);
+    CHECK(back.x == doctest::Approx(100.0f));
+    CHECK(back.y == doctest::Approx(50.0f));
+    // A point inside the drawn (scaled) area but outside the untransformed bounds hits it.
+    CHECK(root->HitTest(Float2{child->Bounds.x + 150.0f, child->Bounds.y + 90.0f}) == child.Get());
+
+    // Rotated a quarter turn about its centre, then scaled unevenly: the round trip holds.
+    child->Transform = ViewTransform{};
+    child->Transform.Rotation = 1.5707963f;
+    child->Transform.Scale = Float2{2.0f, 0.5f};
+    const Float2 p = child->LocalToScreen(Float2{10.0f, 5.0f});
+    const Float2 q = child->ScreenToLocal(p);
+    CHECK(q.x == doctest::Approx(10.0f).epsilon(0.001));
+    CHECK(q.y == doctest::Approx(5.0f).epsilon(0.001));
+}

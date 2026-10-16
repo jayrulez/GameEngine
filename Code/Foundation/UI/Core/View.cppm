@@ -281,29 +281,68 @@ export namespace foundation::ui
         }
 
         // === Coordinate conversion ===
+        /// A point of this view in its parent's space: through its Transform as DrawChildren
+        /// draws it (about the origin, rotated, then scaled, then translated) and its Bounds.
+        [[nodiscard]] Float2 LocalToParent(Float2 local) const
+        {
+            Float2 p = local;
+            if (!Transform.IsIdentity())
+            {
+                const f32 ox = Width() * Transform.Origin.x;
+                const f32 oy = Height() * Transform.Origin.y;
+                p.x -= ox;
+                p.y -= oy;
+                if (Transform.Rotation != 0.0f)
+                {
+                    const f32 c = Cos(Transform.Rotation);
+                    const f32 s = Sin(Transform.Rotation);
+                    p = Float2{p.x * c - p.y * s, p.x * s + p.y * c};
+                }
+                p.x = p.x * Transform.Scale.x + ox + Transform.Translation.x;
+                p.y = p.y * Transform.Scale.y + oy + Transform.Translation.y;
+            }
+            return Float2{p.x + Bounds.x, p.y + Bounds.y};
+        }
+        /// The inverse of LocalToParent: a point of the parent's space in this view's.
+        [[nodiscard]] Float2 ParentToLocal(Float2 parent) const
+        {
+            Float2 p{parent.x - Bounds.x, parent.y - Bounds.y};
+            if (!Transform.IsIdentity())
+            {
+                const f32 ox = Width() * Transform.Origin.x;
+                const f32 oy = Height() * Transform.Origin.y;
+                p.x -= Transform.Translation.x + ox;
+                p.y -= Transform.Translation.y + oy;
+                if (Transform.Scale.x != 0.0f && Transform.Scale.y != 0.0f)
+                {
+                    p.x /= Transform.Scale.x;
+                    p.y /= Transform.Scale.y;
+                }
+                if (Transform.Rotation != 0.0f)
+                {
+                    const f32 c = Cos(-Transform.Rotation);
+                    const f32 s = Sin(-Transform.Rotation);
+                    p = Float2{p.x * c - p.y * s, p.x * s + p.y * c};
+                }
+                p.x += ox;
+                p.y += oy;
+            }
+            return p;
+        }
+        /// A point of this view in its root's space, through every view's bounds and transform.
         [[nodiscard]] Float2 LocalToScreen(Float2 local) const
         {
             Float2 result = local;
-            const View* v = this;
-            while (v != nullptr)
+            for (const View* v = this; v != nullptr; v = v->Parent)
             {
-                result.x += v->Bounds.x;
-                result.y += v->Bounds.y;
-                v = v->Parent;
+                result = v->LocalToParent(result);
             }
             return result;
         }
+        /// The inverse of LocalToScreen (applied from the root down).
         [[nodiscard]] Float2 ScreenToLocal(Float2 screen) const
         {
-            Float2 result = screen;
-            const View* v = this;
-            while (v != nullptr)
-            {
-                result.x -= v->Bounds.x;
-                result.y -= v->Bounds.y;
-                v = v->Parent;
-            }
-            return result;
+            return Parent != nullptr ? ParentToLocal(Parent->ScreenToLocal(screen)) : ParentToLocal(screen);
         }
 
         // === Draw invalidation ===
@@ -1108,34 +1147,9 @@ export namespace foundation::ui
                     continue;
                 }
 
-                Float2 childLocal{localPoint.x - child->Bounds.x, localPoint.y - child->Bounds.y};
-                // Apply the inverse ViewTransform so a transformed child hit-tests at its drawn position
-                // (the draw path applies translate -> origin -> scale -> rotate -> -origin; undo in reverse).
-                if (!child->Transform.IsIdentity())
-                {
-                    const f32 ox = child->Width() * child->Transform.Origin.x;
-                    const f32 oy = child->Height() * child->Transform.Origin.y;
-                    childLocal.x -= child->Transform.Translation.x;
-                    childLocal.y -= child->Transform.Translation.y;
-                    childLocal.x -= ox;
-                    childLocal.y -= oy;
-                    if (child->Transform.Rotation != 0.0f)
-                    {
-                        const f32 c = Cos(-child->Transform.Rotation);
-                        const f32 s = Sin(-child->Transform.Rotation);
-                        const f32 rx = childLocal.x * c - childLocal.y * s;
-                        const f32 ry = childLocal.x * s + childLocal.y * c;
-                        childLocal.x = rx;
-                        childLocal.y = ry;
-                    }
-                    if (child->Transform.Scale.x != 0.0f && child->Transform.Scale.y != 0.0f)
-                    {
-                        childLocal.x /= child->Transform.Scale.x;
-                        childLocal.y /= child->Transform.Scale.y;
-                    }
-                    childLocal.x += ox;
-                    childLocal.y += oy;
-                }
+                // Into the child's space through its transform, so a transformed child hit-tests
+                // where it is drawn.
+                const Float2 childLocal = child->ParentToLocal(localPoint);
                 if (View* hit = child->HitTest(childLocal))
                 {
                     return hit;

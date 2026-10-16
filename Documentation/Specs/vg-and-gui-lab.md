@@ -236,6 +236,31 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   GPUI, a stale use here is an error, not ignored. Tests: a handle to a destroyed element is invalid
   and its use is a script error in both backends; a slot reused by a new element does not answer
   to the old handle; a destroy inside a click handler completes after it.
+  Decided with the user 2026-10-16: no state the lab assumes one of. Each GUI owns its element
+  table; handles retain it (an anchored resolve-mode Variant), so one outliving its GUI reads as
+  gone. Element types are not a list in the lab's core: any library (a toolkit, a game kit, a
+  viewport) registers its reflected widgets, a type's knowledge being process-wide as reflection
+  is, and each GUI decides what it may create. Native code is first-class: the typed API stays
+  as it is, and holds widgets weakly through the same table.
+  As built on `vg`: script backends share one gone-handle rule, `isValid()` on every handle and
+  any other use an error, Luau raising on a gone read and write as AngelScript did (7b92d7582);
+  AngelScript binds a type's bases' members as Luau does (62c44a3f6); a resolve-mode Variant may
+  retain an anchor (cc77c6efa); reflection takes a StringView API as it is and declares creators
+  (`TypeBuilder::Creator`, never a script constructor; 0442029d4). The lab (472df48af): each
+  SceneNode's ElementTable, `Element<T>` natively and handles in scripts; `ElementTypes`
+  (register a reflected Node type with a creator under its tag, the `element` attribute or the
+  type name; a taken tag refused, loudly) and a GUI's `ElementSet` (all, or allowed tags with
+  aliases), through which markup and a script's `add` create, from the GUI's allocator; the
+  widgets' native API reflected (geometry, visibility, opacity, id, classes, text, checked,
+  value, progress; add, find, parent, childAt, destroy, `on(event, fn)`, `X.of(node)`), and
+  `gui.root()` from a per-context binding. GUI.Script.Tests runs the G1 tests in both languages;
+  GUI.Tests covers the native half (separate tables, reuse, a GUI going, the registry's refusals,
+  sets and aliases, a library's widget in markup).
+  Left: unloading a library while elements of its types live is not yet refused (it must be,
+  before dynamic extensions ship widgets); the lab's script names (Label, Button) would collide
+  with foundation.ui's handle types were both bound in one manager, so they want a namespace;
+  sheets and an inspector reading the reflected table come with G2; Entity handles could take
+  the same anchor for their Scene (not done, the user to decide).
 - **G2 The applier catches up with the parser.** `box-shadow` (several), `transform` (translate,
   rotate, scale, skew, with an origin), gradients from sheets with angles and stops, per-side
   borders, `var()` everywhere. Tests per property.

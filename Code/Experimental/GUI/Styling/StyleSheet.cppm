@@ -53,6 +53,21 @@ export namespace experimental::gui
             Put(name, value, typed, important);
         }
 
+        /// Puts `typed` in place of `name`'s value, whatever its importance: a transition's or an
+        /// animation's value over the cascade's.
+        void Override(core::StringView name, const StyleValue& typed)
+        {
+            for (ResolvedProperty& p : m_props)
+            {
+                if (p.Name.AsView() == name)
+                {
+                    p.Typed = typed;
+                    return;
+                }
+            }
+            m_props.PushBack(ResolvedProperty{core::String(name), core::String{}, typed, false});
+        }
+
         [[nodiscard]] bool Has(core::StringView name) const { return Find(name) != nullptr; }
 
         /// The text of `name`, or `fallback`.

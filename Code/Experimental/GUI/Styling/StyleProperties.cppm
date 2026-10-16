@@ -71,29 +71,33 @@ export namespace experimental::gui
     {
         const char8_t* Name;
         StyleGrammar Grammar;
+        /// CSS's initial value, for a property applied through a setter that an ended animation
+        /// returns to when the sheet sets none (null: the node keeps its own value). The box
+        /// properties need none: the box is rebuilt from the style on every apply.
+        const char8_t* Initial = nullptr;
     };
 
     /// The longhands the lab knows, by name.
     [[nodiscard]] inline const StylePropertySpec* FindStyleProperty(core::StringView name)
     {
         static constexpr StylePropertySpec kProperties[] = {
-            {u8"opacity", StyleGrammar::Number},
+            {u8"opacity", StyleGrammar::Number, u8"1"},
             {u8"width", StyleGrammar::Length},
             {u8"height", StyleGrammar::Length},
             {u8"min-width", StyleGrammar::Length},
             {u8"min-height", StyleGrammar::Length},
             {u8"max-width", StyleGrammar::Length},
             {u8"max-height", StyleGrammar::Length},
-            {u8"padding-top", StyleGrammar::Length},
-            {u8"padding-right", StyleGrammar::Length},
-            {u8"padding-bottom", StyleGrammar::Length},
-            {u8"padding-left", StyleGrammar::Length},
-            {u8"margin-top", StyleGrammar::Length},
-            {u8"margin-right", StyleGrammar::Length},
-            {u8"margin-bottom", StyleGrammar::Length},
-            {u8"margin-left", StyleGrammar::Length},
+            {u8"padding-top", StyleGrammar::Length, u8"0"},
+            {u8"padding-right", StyleGrammar::Length, u8"0"},
+            {u8"padding-bottom", StyleGrammar::Length, u8"0"},
+            {u8"padding-left", StyleGrammar::Length, u8"0"},
+            {u8"margin-top", StyleGrammar::Length, u8"0"},
+            {u8"margin-right", StyleGrammar::Length, u8"0"},
+            {u8"margin-bottom", StyleGrammar::Length, u8"0"},
+            {u8"margin-left", StyleGrammar::Length, u8"0"},
             {u8"enabled", StyleGrammar::Keyword},
-            {u8"visibility", StyleGrammar::Keyword},
+            {u8"visibility", StyleGrammar::Keyword, u8"visible"},
             {u8"color", StyleGrammar::Color},
             {u8"text-align", StyleGrammar::Keyword},
             {u8"vertical-align", StyleGrammar::Keyword},

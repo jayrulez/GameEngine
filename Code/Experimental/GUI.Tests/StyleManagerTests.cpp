@@ -56,7 +56,7 @@ TEST_CASE("style-manager: hover re-resolve drives a live transition")
 
     // transition on the base rule (applies both directions); :hover changes opacity.
     StyleManager mgr(CSSParser::Parse(
-        SV(u8"button { opacity: 1; transition: opacity 0.5s; } button:hover { opacity: 0.4; }")));
+        SV(u8"button { opacity: 1; transition: opacity 0.5s linear; } button:hover { opacity: 0.4; }")));
 
     mgr.ApplyTree(*root.Get()); // first apply (snap)
     CHECK(btn->GetAlpha() == doctest::Approx(1.0f));
@@ -66,7 +66,7 @@ TEST_CASE("style-manager: hover re-resolve drives a live transition")
 
     mgr.ApplyTree(*root.Get()); // re-resolve: :hover now matches -> transition animates
     CHECK(root->GetActionManager()->Count() == 1);
-    CHECK(btn->GetAlpha() == doctest::Approx(1.0f)); // rewound to start
+    CHECK(btn->GetAlpha() == doctest::Approx(1.0f)); // starts where it was
 
     root->Update(Sec(0.25));
     CHECK(btn->GetAlpha() == doctest::Approx(0.7f)); // 1 + (0.4-1)*0.5

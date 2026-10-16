@@ -16,17 +16,31 @@ export module experimental.gui:style_rule;
 import foundation.core; // String, StringView, Array, i64, Move
 import :style_selector;
 import :media_query;
+import :style_properties; // StyleValue
 
 using namespace foundation::core;
 namespace core = foundation::core;
 
 export namespace experimental::gui
 {
+    /// One longhand a declaration sets, with its value parsed (Kind None when it does not parse).
+    struct StyleLonghandValue
+    {
+        core::String Name;
+        core::String Text;
+        StyleValue Value;
+    };
+
     struct StyleProperty
     {
         core::String Name;
         core::String Value;
         bool Important = false;
+        // The longhands this declaration sets, parsed once (a declaration without var(): its
+        // value cannot change); filled by the first cascade that reaches it (StyleSheet).
+        mutable bool Cached = false;
+        mutable bool CacheValid = false;
+        mutable Array<StyleLonghandValue> Longhands;
 
         StyleProperty() = default;
         StyleProperty(core::StringView name, core::StringView value, bool important = false)
@@ -53,6 +67,9 @@ export namespace experimental::gui
                 {
                     p.Value = value;
                     p.Important = important;
+                    p.Cached = false; // re-expanded and re-parsed on the next cascade
+                    p.CacheValid = false;
+                    p.Longhands.Clear();
                     return;
                 }
             m_properties.PushBack(StyleProperty(name, value, important));

@@ -47,6 +47,7 @@ export import :radial_gradient_drawable;
 export import :image_drawable;
 export import :nine_slice_drawable;
 export import :layer_drawable;
+export import :node_box;
 
 // Text (Phase 4)
 export import :text;
@@ -104,6 +105,8 @@ export import :style_rule;
 export import :style_sheet;
 export import :css_parser;
 export import :css_values;
+export import :style_value;
+export import :style_properties;
 export import :style_applier;
 export import :transition;
 export import :style_manager;

@@ -27,6 +27,9 @@ import :control_state;
 import :action;
 import :action_manager;
 import :mutation_queue;
+import :node_box;
+import :css_values;  // LengthValue
+import :style_value; // TransformFunction
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -394,6 +397,7 @@ export namespace experimental::gui
             const Rect local = GetLocalBounds();
             const ControlState state = GetControlState();
 
+            m_box.DrawUnder(ctx, local);
             if (m_background)
                 m_background->Draw(ctx, local, state);
             OnDraw(ctx, local);
@@ -412,6 +416,34 @@ export namespace experimental::gui
                 ctx.PopOpacity();
             ctx.Restore();
         }
+
+        // === The box (G2 of Specs/vg-and-gui-lab.md) ===
+        // Background colour and layers, a border per side, radii and shadows, drawn under the
+        // node's content. A sheet sets it (fromStyle: the next restyle replaces or clears it);
+        // native code may set it directly.
+        void SetBox(NodeBox box, bool fromStyle = false)
+        {
+            m_box = core::Move(box);
+            m_boxFromStyle = fromStyle;
+            Invalidate();
+        }
+        [[nodiscard]] const NodeBox& GetBox() const noexcept { return m_box; }
+        [[nodiscard]] bool IsBoxFromStyle() const noexcept { return m_boxFromStyle; }
+
+        /// CSS's `transform` about `transform-origin`: functions applied left to right after the
+        /// node's own position, scale and rotation; translations and the origin in percentages
+        /// resolve against the node's size, now and whenever it changes.
+        void SetStyleTransform(Array<TransformFunction> functions, LengthValue originX, LengthValue originY,
+                               bool fromStyle = true)
+        {
+            m_styleTransforms = core::Move(functions);
+            m_transformOriginX = originX;
+            m_transformOriginY = originY;
+            m_transformFromStyle = fromStyle;
+            UpdateStyleTransform();
+        }
+        [[nodiscard]] bool IsTransformFromStyle() const noexcept { return m_transformFromStyle; }
+        [[nodiscard]] const Array<TransformFunction>& GetStyleTransforms() const noexcept { return m_styleTransforms; }
 
         // Subclass-drawn content, between background and children.
         virtual void OnDraw(DrawContext& ctx, const Rect& localBounds)
@@ -724,6 +756,8 @@ export namespace experimental::gui
         }
         void HandleSizeChange()
         {
+            if (!m_styleTransforms.IsEmpty())
+                UpdateStyleTransform();
             OnSizeChange();
             Invalidate();
             SendEvent(Event(EventType::SizeChanged, this));
@@ -788,6 +822,43 @@ export namespace experimental::gui
         bool m_tabFocusable = false;
         bool m_hitTestVisible = true;
         u32 m_nextListenerId = 0;
+        // The style transform's matrix and origin in local units, from the functions and the size.
+        void UpdateStyleTransform()
+        {
+            const auto resolve = [](LengthValue v, f32 size)
+            { return v.Unit == LengthUnit::Percent ? v.Value * size / 100.0f : v.Value; };
+            Transform2D m;
+            for (const TransformFunction& f : m_styleTransforms)
+            {
+                switch (f.Kind)
+                {
+                case TransformKind::Translate:
+                    m.Translate(resolve(f.A, m_size.x), resolve(f.B, m_size.y));
+                    break;
+                case TransformKind::Rotate:
+                    m.Rotate(f.Angle);
+                    break;
+                case TransformKind::Scale:
+                    m.Scale(f.ScaleX, f.ScaleY);
+                    break;
+                case TransformKind::Skew:
+                    m.Combine(Transform2D{1.0f, core::Tan(f.AngleY), core::Tan(f.Angle), 1.0f, 0.0f, 0.0f});
+                    break;
+                case TransformKind::Matrix:
+                    m.Combine(Transform2D{f.M[0], f.M[1], f.M[2], f.M[3], f.M[4], f.M[5]});
+                    break;
+                }
+            }
+            SetExtraTransform(m, core::Float2{resolve(m_transformOriginX, m_size.x), resolve(m_transformOriginY, m_size.y)});
+            Invalidate();
+        }
+
+        NodeBox m_box;
+        bool m_boxFromStyle = false;
+        Array<TransformFunction> m_styleTransforms;
+        LengthValue m_transformOriginX{50.0f, LengthUnit::Percent};
+        LengthValue m_transformOriginY{50.0f, LengthUnit::Percent};
+        bool m_transformFromStyle = false;
         RefPtr<ElementTable> m_elementTable; // the table a handle took a slot in (null: none yet)
         u32 m_elementSlot = 0;
     };

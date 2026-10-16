@@ -124,7 +124,7 @@ TEST_CASE("theme: color styles a label's text color")
     CHECK(label->GetTextColor().b == doctest::Approx(0.0f));
 }
 
-TEST_CASE("theme: background-image loads via the provider and is wrapped in an ImageDrawable")
+TEST_CASE("theme: background-image loads via the provider into a box layer")
 {
     MockResources res;
     auto label = core::MakeRef<Label>(core::DefaultAllocator());
@@ -135,10 +135,10 @@ TEST_CASE("theme: background-image loads via the provider and is wrapped in an I
     mgr.ApplyTo(*label.Get());
 
     CHECK(res.lastPath.AsView() == core::StringView(u8"panel"));
-    // The GUI wraps the provider's raw image in an ImageDrawable (it does not return a Drawable).
-    ImageDrawable* d = core::Cast<ImageDrawable>(label->GetBackground());
-    REQUIRE(d != nullptr);
-    CHECK(d->Image == &res.img);
+    // The provider's raw image becomes a layer of the label's box.
+    REQUIRE(label->GetBox().Layers.Size() == 1u);
+    CHECK(label->GetBox().Layers[0].IsImage);
+    CHECK(label->GetBox().Layers[0].Image == &res.img);
 }
 
 TEST_CASE("theme: font-family + font-size resolve a font via the font service")
@@ -160,7 +160,7 @@ TEST_CASE("theme: without providers, resource props are skipped (no crash)")
 {
     auto label =
         ApplyCSS(u8"label { background-image: url(panel); font-family: Roboto; color: #ffffff; }");
-    CHECK(label->GetBackground() == nullptr); // no provider -> background-image ignored
+    CHECK(label->GetBox().Layers.IsEmpty()); // no provider -> background-image ignored
     CHECK(label->GetTextColor().r == doctest::Approx(1.0f)); // color still applied
 }
 
@@ -184,15 +184,15 @@ TEST_CASE("theme: the built-in default theme restyles the standard widgets")
     mgr.ApplyTree(*root.Get());
 
     // The theme gives the button a background + padding and the textfield padding.
-    CHECK(button->GetBackground() != nullptr);
+    CHECK(button->GetBox().BackgroundColor.a > 0.0f);
     CHECK(button->GetPadding().Left == doctest::Approx(9.0f));
-    CHECK(textfield->GetBackground() != nullptr);
+    CHECK(textfield->GetBox().BackgroundColor.a > 0.0f);
     CHECK(textfield->GetPadding().Left == doctest::Approx(6.0f));
 
     // Switching to the light theme is just swapping the sheet (hot-reload).
     mgr.SetStyleSheet(CSSParser::Parse(DefaultLightThemeCSS()));
     mgr.ApplyTree(*root.Get());
-    CHECK(button->GetBackground() != nullptr); // restyled, still has a bg
+    CHECK(button->GetBox().BackgroundColor.a > 0.0f); // restyled, still has a bg
 }
 
 TEST_CASE("theme: pseudo-element (::part) rules resolve separately from the element style")

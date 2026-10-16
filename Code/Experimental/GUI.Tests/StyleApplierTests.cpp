@@ -93,10 +93,8 @@ TEST_CASE("style-applier: background-color / padding / opacity")
     auto w = Widget(u8"button");
     ApplyStyle(*w.Get(), sheet.Resolve(*w.Get()));
 
-    REQUIRE(w->GetBackground() != nullptr);
-    auto* bg = core::Cast<RectangleDrawable>(w->GetBackground());
-    REQUIRE(bg != nullptr);
-    CHECK(bg->GetColor().b == doctest::Approx(1.0f)); // blue
+    CHECK(w->GetBox().BackgroundColor.b == doctest::Approx(1.0f)); // blue
+    CHECK(w->IsBoxFromStyle());
     CHECK(w->GetPadding().Left == doctest::Approx(4.0f));
     CHECK(w->GetAlpha() == doctest::Approx(0.5f));
 }
@@ -124,10 +122,8 @@ TEST_CASE("style-applier: cascade drives the applied value")
     w->AddClass(SV(u8"primary"));
     ApplyStyle(*w.Get(), sheet.Resolve(*w.Get()));
 
-    auto* bg = core::Cast<RectangleDrawable>(w->GetBackground());
-    REQUIRE(bg != nullptr);
-    CHECK(bg->GetColor().r == doctest::Approx(1.0f)); // .primary (red) beats button (black)
-    CHECK(bg->GetColor().g == doctest::Approx(0.0f));
+    CHECK(w->GetBox().BackgroundColor.r == doctest::Approx(1.0f)); // .primary (red) beats button (black)
+    CHECK(w->GetBox().BackgroundColor.g == doctest::Approx(0.0f));
 }
 
 TEST_CASE("style-applier: text-align / vertical-align reach a label")
@@ -201,35 +197,35 @@ TEST_CASE("css-values: ParseBorder (width + style + color, any order)")
     CHECK(none.Value().Width == doctest::Approx(0.0f));
 }
 
-TEST_CASE("style-applier: border + border-radius round the background and set a border foreground")
+TEST_CASE("style-applier: border and border-radius make the node's box")
 {
     StyleSheet sheet = CSSParser::Parse(
         SV(u8"box { background-color: #ffffff; border-radius: 6; border: 2 solid #ff0000; }"));
     auto w = Widget(u8"box");
     ApplyStyle(*w.Get(), sheet.Resolve(*w.Get(), MediaContext{}, /*applyPseudo*/ false));
-
-    // Background rounded.
-    auto* bg = core::Cast<RectangleDrawable>(w->GetBackground());
-    REQUIRE(bg != nullptr);
-    CHECK(bg->GetCornerRadii().topLeft == doctest::Approx(6.0f));
-
-    // Border foreground: width + color + radii.
-    auto* border = core::Cast<BorderDrawable>(w->GetForeground());
-    REQUIRE(border != nullptr);
-    CHECK(border->GetWidth() == doctest::Approx(2.0f));
-    CHECK(border->GetColor().r == doctest::Approx(1.0f));
-    CHECK(border->GetCornerRadii().topLeft == doctest::Approx(6.0f));
+    const NodeBox& box = w->GetBox();
+    CHECK(box.BackgroundColor.r == doctest::Approx(1.0f));
+    CHECK(box.Radii.topLeft == doctest::Approx(6.0f));
+    CHECK(box.Radii.bottomRight == doctest::Approx(6.0f));
+    CHECK(box.BorderWidths.top == doctest::Approx(2.0f));
+    CHECK(box.BorderWidths.left == doctest::Approx(2.0f));
+    CHECK(box.BorderColors.top.r == doctest::Approx(1.0f));
+    CHECK(box.BorderColors.IsUniform());
 }
 
-TEST_CASE("style-applier: border-color / border-width overrides without the shorthand")
+TEST_CASE("style-applier: border longhands override the shorthand, and a border with no style draws none")
 {
-    StyleSheet sheet = CSSParser::Parse(SV(u8"box { border-width: 4; border-color: blue; }"));
+    StyleSheet sheet = CSSParser::Parse(
+        SV(u8"box { border-width: 4; border-color: blue; } .styled { border-style: solid; border-left-color: red; }"));
     auto w = Widget(u8"box");
     ApplyStyle(*w.Get(), sheet.Resolve(*w.Get(), MediaContext{}, /*applyPseudo*/ false));
-    auto* border = core::Cast<BorderDrawable>(w->GetForeground());
-    REQUIRE(border != nullptr);
-    CHECK(border->GetWidth() == doctest::Approx(4.0f));
-    CHECK(border->GetColor().b == doctest::Approx(1.0f));
+    CHECK(w->GetBox().BorderWidths.IsZero()); // no border-style: none (CSS)
+
+    w->AddClass(SV(u8"styled"));
+    ApplyStyle(*w.Get(), sheet.Resolve(*w.Get(), MediaContext{}, /*applyPseudo*/ false));
+    CHECK(w->GetBox().BorderWidths.top == doctest::Approx(4.0f));
+    CHECK(w->GetBox().BorderColors.top.b == doctest::Approx(1.0f));
+    CHECK(w->GetBox().BorderColors.left.r == doctest::Approx(1.0f)); // its own colour
 }
 
 TEST_CASE("css-values: ParseLengthValue recognizes units")

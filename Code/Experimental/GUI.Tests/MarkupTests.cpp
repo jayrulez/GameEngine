@@ -65,9 +65,7 @@ TEST_CASE("markup: unclaimed attributes are applied as inline CSS")
     CHECK(label->GetSize().x == doctest::Approx(120.0f));
     CHECK(label->GetSize().y == doctest::Approx(30.0f));
     CHECK(label->GetPadding().Left == doctest::Approx(4.0f));
-    auto* bg = core::Cast<RectangleDrawable>(label->GetBackground());
-    REQUIRE(bg != nullptr);
-    CHECK(bg->GetColor().r == doctest::Approx(1.0f));
+    CHECK(label->GetBox().BackgroundColor.r == doctest::Approx(1.0f));
 }
 
 TEST_CASE("markup: CSS length units work in markup (via the applier)")

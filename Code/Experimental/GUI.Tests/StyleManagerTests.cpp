@@ -43,7 +43,7 @@ TEST_CASE("style-manager: applies a sheet across the tree")
     mgr.ApplyTree(*root.Get());
 
     CHECK(btn->GetAlpha() == doctest::Approx(0.5f));
-    CHECK(btn->GetBackground() != nullptr);
+    CHECK(btn->GetBox().BackgroundColor.r == doctest::Approx(1.0f));
 }
 
 TEST_CASE("style-manager: hover re-resolve drives a live transition")

@@ -403,17 +403,17 @@ namespace experimental::gui
         builder.Method<&Node::BindScript>("bind");
         builder.Method<&Node::BindSceneData>("bindData");
         builder.Method<&Node::Destroy>("destroy");
-        builder.Method<&ElementOf<Node>, Node>("of");
+        builder.Method<&ElementOf<Node>, Node, Node>("of");
     }
 
     REFLECT_MEMBERS(SceneRoot, "rtti::gui")
     {
-        builder.Method<&ElementOf<SceneRoot>, SceneRoot>("of");
+        builder.Method<&ElementOf<SceneRoot>, SceneRoot, Node>("of");
     }
 
     REFLECT_MEMBERS(UINode, "rtti::gui")
     {
-        builder.Method<&ElementOf<UINode>, UINode>("of");
+        builder.Method<&ElementOf<UINode>, UINode, Node>("of");
     }
 
     REFLECT_MEMBERS(UIWidget, "rtti::gui")
@@ -423,20 +423,20 @@ namespace experimental::gui
         builder.Method<&UIWidget::RemoveClass>("removeClass");
         builder.Method<&UIWidget::HasClass>("hasClass");
         builder.Method<&UIWidget::ToggleClass>("toggleClass");
-        builder.Method<&ElementOf<UIWidget>, UIWidget>("of");
+        builder.Method<&ElementOf<UIWidget>, UIWidget, Node>("of");
     }
 
     REFLECT_MEMBERS(Label, "rtti::gui")
     {
         builder.AccessorProperty<&Label::GetText, &Label::SetText>("text");
         builder.AccessorProperty<&Label::GetTextColor, &Label::SetTextColor>("textColor");
-        builder.Method<&ElementOf<Label>, Label>("of");
+        builder.Method<&ElementOf<Label>, Label, Node>("of");
         builder.Creator();
     }
 
     REFLECT_MEMBERS(Button, "rtti::gui")
     {
-        builder.Method<&ElementOf<Button>, Button>("of");
+        builder.Method<&ElementOf<Button>, Button, Node>("of");
         builder.Creator();
     }
 
@@ -444,13 +444,13 @@ namespace experimental::gui
     {
         builder.AccessorProperty<&CheckBox::IsChecked, &CheckBox::SetChecked>("checked")
             .PropAttribute("twoWay", true); // the user changes it: a binding may write it back
-        builder.Method<&ElementOf<CheckBox>, CheckBox>("of");
+        builder.Method<&ElementOf<CheckBox>, CheckBox, Node>("of");
         builder.Creator();
     }
 
     REFLECT_MEMBERS(RadioButton, "rtti::gui")
     {
-        builder.Method<&ElementOf<RadioButton>, RadioButton>("of");
+        builder.Method<&ElementOf<RadioButton>, RadioButton, Node>("of");
         builder.Creator();
     }
 
@@ -458,14 +458,14 @@ namespace experimental::gui
     {
         builder.AccessorProperty<&Slider::GetValue, &Slider::SetValue>("value")
             .PropAttribute("twoWay", true); // the user changes it: a binding may write it back
-        builder.Method<&ElementOf<Slider>, Slider>("of");
+        builder.Method<&ElementOf<Slider>, Slider, Node>("of");
         builder.Creator();
     }
 
     REFLECT_MEMBERS(ProgressBar, "rtti::gui")
     {
         builder.AccessorProperty<&ProgressBar::GetProgress, &ProgressBar::SetProgress>("progress");
-        builder.Method<&ElementOf<ProgressBar>, ProgressBar>("of");
+        builder.Method<&ElementOf<ProgressBar>, ProgressBar, Node>("of");
         builder.Creator();
     }
 
@@ -473,55 +473,55 @@ namespace experimental::gui
     {
         builder.AccessorProperty<&TextField::GetText, &TextField::SetText>("text")
             .PropAttribute("twoWay", true); // the user changes it: a binding may write it back
-        builder.Method<&ElementOf<TextField>, TextField>("of");
+        builder.Method<&ElementOf<TextField>, TextField, Node>("of");
         builder.Creator();
     }
 
     REFLECT_MEMBERS(LinearLayout, "rtti::gui")
     {
-        builder.Method<&ElementOf<LinearLayout>, LinearLayout>("of");
+        builder.Method<&ElementOf<LinearLayout>, LinearLayout, Node>("of");
         builder.Creator();
     }
 
     REFLECT_MEMBERS(GridLayout, "rtti::gui")
     {
-        builder.Method<&ElementOf<GridLayout>, GridLayout>("of");
+        builder.Method<&ElementOf<GridLayout>, GridLayout, Node>("of");
         builder.Creator();
     }
 
     REFLECT_MEMBERS(RelativeLayout, "rtti::gui")
     {
-        builder.Method<&ElementOf<RelativeLayout>, RelativeLayout>("of");
+        builder.Method<&ElementOf<RelativeLayout>, RelativeLayout, Node>("of");
         builder.Creator();
     }
 
     REFLECT_MEMBERS(FlexLayout, "rtti::gui")
     {
-        builder.Method<&ElementOf<FlexLayout>, FlexLayout>("of");
+        builder.Method<&ElementOf<FlexLayout>, FlexLayout, Node>("of");
         builder.Creator();
     }
 
     REFLECT_MEMBERS(ScrollView, "rtti::gui")
     {
-        builder.Method<&ElementOf<ScrollView>, ScrollView>("of");
+        builder.Method<&ElementOf<ScrollView>, ScrollView, Node>("of");
         builder.Creator();
     }
 
     REFLECT_MEMBERS(Image, "rtti::gui")
     {
-        builder.Method<&ElementOf<Image>, Image>("of");
+        builder.Method<&ElementOf<Image>, Image, Node>("of");
         builder.Creator();
     }
 
     REFLECT_MEMBERS(ListBox, "rtti::gui")
     {
-        builder.Method<&ElementOf<ListBox>, ListBox>("of");
+        builder.Method<&ElementOf<ListBox>, ListBox, Node>("of");
         builder.Creator();
     }
 
     REFLECT_MEMBERS(Window, "rtti::gui")
     {
-        builder.Method<&ElementOf<Window>, Window>("of");
+        builder.Method<&ElementOf<Window>, Window, Node>("of");
         builder.Creator();
     }
 

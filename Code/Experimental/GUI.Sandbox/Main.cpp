@@ -82,7 +82,12 @@ namespace
         .card-borders { background-color: #1e2530; border-top: 4px solid #e0607a; border-right: 4px solid #f0b040;
                         border-bottom: 4px solid #60c0f0; border-left: 4px solid #7fe0a8; border-radius: 0; }
         .card-tilt { background: conic-gradient(from 0deg, #e0607a, #f0b040, #60c0f0, #e0607a);
-                     transform: rotate(-8deg) scale(0.9); }
+                     transform: rotate(-8deg) scale(0.9); animation: sway 2.4s ease-in-out infinite alternate; }
+        /* Motion (G3): hover lifts a card (an eased transition of its transform and shadow); the
+           tilted card sways (keyframes of a transform, eased, alternating). */
+        .card { transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease-out; }
+        .card:hover { transform: translate(0, -6px) scale(1.06); box-shadow: 0 10px 18px rgba(0,0,0,0.55); }
+        @keyframes sway { from { transform: rotate(-8deg) scale(0.9); } to { transform: rotate(8deg) scale(0.95); } }
     )";
 
     inline Color Col(f32 r, f32 g, f32 b, f32 a = 1.0f) { return Color{r, g, b, a}; }

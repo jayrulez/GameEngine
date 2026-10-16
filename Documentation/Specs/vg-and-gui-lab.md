@@ -395,6 +395,26 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
     action; those stay as specified above.
   Tests: the picker over grid and irregular layouts, overrides and scopes (wrap, contain, focus
   memory), repeat timing, and a command's state reaching a button, a menu item and a binding.
+  As built on `vg`: directional navigation (e70e353b8), a picker preferring neighbours overlapping
+  on the cross axis, then the nearest along it, skipping hidden, disabled and clipped-away widgets
+  (a scroller's clip excepted) and the focused widget's own ancestors; focus scopes that pass, wrap
+  or contain and remember their last focus; keys to the focused widget first, its unused arrows
+  (KeyEvent::Handled) moving focus, so a slider or a list gives them back at its ends; Return or
+  Space activating as a click. Overrides and scopes from sheets, markup and scripts alike
+  (f4daab463: nav-up and the rest, nav-scope, nav-default, reflected properties carrying their CSS
+  names). A held direction repeating after 0.4 s from 0.16 s down to 0.05 s, focus scrolling into
+  view, and `:focus-visible` for a keyboard or gamepad focus ring (ff5ffc297). One command model
+  dispatched along the focus path, capture then bubble, available while enabled with a handler on
+  the path, its state reaching a bound button, checkbox and menu item as a binding follows it, and
+  scripts defining, switching, handling and running commands (3c7af4cf9). A keymap after GPUI's,
+  keystrokes and chords bound to commands under context predicates, the deepest match then the
+  later binding winning, unbinding by binding to nothing; the lab's KeyCode grew every letter,
+  digit and F1 to F12; the shell bridge routes the d-pad, the left stick (with hysteresis) and the
+  buttons, and BindFromInputMap fills a keymap from the game's input map (ac79e5e2a). Focusing a
+  page lands on its entry, and Tab stays in a containing scope (6725ec1bd). The showcase plays by
+  keyboard and gamepad, its Back on Escape and the East button (b004a0a6e). Answering whether the
+  reactive core is re-entrant found an effect without a scheduler rerunning inside its own run;
+  fixed (5dce386d8).
 
 ## Open limits
 
@@ -431,6 +451,16 @@ list when it is done or the user rules it out.
 - **G6, with G7:** the menu takes keyboard and gamepad navigation when G7 brings it; the host
   sizes the showcase's layers to the window by hand (a fill-the-parent size, or anchors in markup,
   would let the sheet say it).
+- **G7, when a game asks:** a held keyboard arrow repeats at the system's key repeat, not the
+  lab's curve; a command's label and icon do not yet reach the controls bound to it (their text is
+  their own); the keymap matches the lab's keys only (no punctuation, keypad or media keys); an
+  input map's composite and axis bindings are not keystrokes, so they are skipped; Back is the
+  script's to define, not built in.
+- **The reactive core, as a rule to keep:** a binding must not yield (a script coroutine paused
+  inside a bound function would leave the evaluating observer set while other code runs on the
+  thread; nothing enforces it yet); values are linked to their readers without locks, so two GUIs on
+  different threads must not share a value (one DataModel, one widget), and a change crossing
+  threads is to be posted to the other thread's queue.
 - **F3, after the lab (foundation.ui text):** a label measures with its font's unshaped
   MeasureString, so a ligated label lays out a little wide; the basic shaper's wrapping knows no
   bidi; editing right-to-left text (caret movement by arrow keys, selection across a direction

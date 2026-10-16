@@ -280,12 +280,12 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   its display scale (7b7435d82): logical units mapped to device pixels by the root's own
   transform, so drawing and hit testing agree; the media context gives logical size and density;
   media queries take resolution. Per-property tests and a sandbox row of four cards (8c60c8d21).
-  Left: transitions still animate opacity only (G3); text at a scale is crisp through
-  distance-field fonts only, as in foundation.ui.
+  Left: text at a scale is crisp through distance-field fonts only, as in foundation.ui (see Open
+  limits).
 - **G3 Motion.** Every animatable property transitions, with real easings (`cubic-bezier`,
   `steps`, the named ones); `@keyframes` animate any property, not only opacity and colour. Tests:
   sampled curves against the formula.
-  As built on `vg` (29258e66f): easing (cubic-bezier solved for x, steps() with every jump
+  As built on `vg` (96f14996f): easing (cubic-bezier solved for x, steps() with every jump
   position, linear and the named curves, ease the default); interpolation over the typed values
   (numbers, lengths of one unit, colours, shadow lists padded with transparent shadows, transform
   lists of the same functions, origins, gradient layers of one shape; the rest switches halfway);
@@ -293,7 +293,7 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   track per property (transitions retargeting from a running track; keyframes with per-stop
   timing, implicit end keys, delay, iteration count, direction, fill mode), ended tracks returning
   to the target or the property's initial value, the widget held weakly. The sandbox's cards lift
-  on hover and the tilted one sways (24e75de17). Left: transform lists of different functions
+  on hover and the tilted one sways (ebf0fcd29). Left (see Open limits): transform lists of different functions
   switch halfway instead of interpolating their matrices; lengths in different units likewise;
   transition-property and the other longhands of transition and animation are not parsed (the
   shorthands are); play state is not.
@@ -342,6 +342,33 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   Tests: the picker over grid and irregular layouts, overrides and scopes (wrap, contain, focus
   memory), repeat timing, and a command's state reaching a button, a menu item and a binding.
 
+## Open limits
+
+What the phases left, gathered so each has a home (from each phase's "Left"); an item leaves this
+list when it is done or the user rules it out.
+
+- **G3, before the showcase (G6 will use them):** transform lists of different functions
+  interpolate through their matrices (decomposed: translate, rotate, scale, skew) instead of
+  switching halfway; lengths in different units interpolate once both resolve to pixels; the
+  longhands `transition-property`, `-duration`, `-timing-function`, `-delay` and the
+  `animation-*` ones parse; `animation-play-state` pauses.
+- **G1, before dynamic extensions ship widgets:** unloading a library while elements of its types
+  live is refused, not only documented.
+- **G1, when the lab's script surface and foundation.ui's are bound in one manager (the move into
+  foundation.ui):** the lab's script names (Label, Button) take a namespace, as they would collide
+  with foundation.ui's handle types.
+- **G1, with the showcase or the move:** an inspector reading the reflected table (sheets read it
+  since G2, through the `css` property attribute).
+- **The user to decide:** Entity handles taking the anchored Variant for their Scene, so an entity
+  handle outliving its scene reads as gone rather than dangling.
+- **Accepted for now, revisit if a game needs it:** text at a display scale is crisp through
+  distance-field fonts only (a coverage font is stretched), as in foundation.ui; a coverage font's
+  text effects are a shadow's copy only; a glow is a linear ramp, not a Gaussian.
+- **F3, after the lab (foundation.ui text):** a label measures with its font's unshaped
+  MeasureString, so a ligated label lays out a little wide; the basic shaper's wrapping knows no
+  bidi; editing right-to-left text (caret movement by arrow keys, selection across a direction
+  change) is untested.
+
 ## Moving into `foundation.ui`
 
 Once a lab feature is proven (tests, the showcase, the user's look), it moves into `foundation.ui`
@@ -351,8 +378,8 @@ then; likely the CSS front end and the motion first, the reflected object model 
 ## Open questions
 
 - V3: the offscreen pool's budget on the web build.
-- G1: whether the lab's widgets become `Object`s with reflected properties directly, or are
-  described to the binding by a reflected facade; to decide in G1's first layer.
+- G1 (decided in G1, 2026-10-16): the lab's widgets are reflected directly, their native API
+  as it is (no facade, no script twins).
 - G1: whether `foundation.ui`'s script handles, which own their views today (a stale one is a quiet
   no-op), move to the lab's weak handles when lab features move over: one rule everywhere, but a
   change for existing scripts (a stale handle becomes an error).

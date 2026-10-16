@@ -741,3 +741,31 @@ TEST_CASE("vg.renderer: a blurred layer runs two blur passes before its composit
     device.DestroyShaderModule(fs);
     device.DestroyShaderModule(vs);
 }
+
+TEST_CASE("vg.renderer: pass targets configure, create, resize and describe the quality pass")
+{
+    rhi::null::NullDevice device{DefaultAllocator()};
+    VGPassTargets targets;
+    CHECK_FALSE(targets.IsValid());
+    CHECK(targets.ConfigFor().sampleCount == 1u); // off: a plain pass
+
+    targets.Configure(device);
+    REQUIRE(targets.IsValid());
+    CHECK(targets.StencilFormat() != rhi::TextureFormat::Undefined);
+    const VGTargetConfig config = targets.ConfigFor();
+    CHECK(config.sampleCount == VGPassTargets::kDefaultSamples);
+    CHECK(config.depthStencilFormat == targets.StencilFormat());
+
+    REQUIRE(targets.Create(rhi::TextureFormat::BGRA8Unorm, 64, 32));
+    CHECK(targets.Matches(64, 32));
+    CHECK_FALSE(targets.NeedsResize(64, 32));
+    CHECK(targets.NeedsResize(80, 32));
+    CHECK_FALSE(targets.NeedsResize(0, 0)); // a minimised window keeps its targets
+    REQUIRE(targets.Resize(80, 32));
+    CHECK(targets.Matches(80, 32));
+
+    // A zero size creates nothing, and leaves the targets off until the next Create.
+    CHECK_FALSE(targets.Create(rhi::TextureFormat::BGRA8Unorm, 0, 0));
+    CHECK_FALSE(targets.Matches(80, 32));
+    CHECK_FALSE(targets.NeedsResize(80, 32));
+}

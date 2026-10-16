@@ -71,99 +71,12 @@ export namespace foundation::ui::runtime
         // VG quality targets (host-provided per the stencil-then-cover design): a 4x MSAA
         // color target resolved into the backbuffer + a stencil attachment for the fill
         // pipelines. Sized to the swapchain; Update() recreates on resize (desktop hosts -
-        // the WaitIdle there is outside any open frame). Null = plain single-sampled pass.
-        rhi::Device* device = nullptr; // borrowed, for target destruction
-        rhi::Texture* msaaColor = nullptr;
-        rhi::TextureView* msaaColorView = nullptr;
-        rhi::Texture* depthStencil = nullptr;
-        rhi::TextureView* depthStencilView = nullptr;
-        rhi::TextureFormat depthStencilFormat = rhi::TextureFormat::Undefined;
-        u32 targetWidth = 0;
-        u32 targetHeight = 0;
+        // the WaitIdle there is outside any open frame). None = plain single-sampled pass.
+        vg::renderer::VGPassTargets targets;
         // Encoded: this window's UI blends encoded values, drawing through the backbuffer's
         // UNORM view in drawFormat (its twin); else linear light in the backbuffer's own format.
         bool encoded = false;
         rhi::TextureFormat drawFormat = rhi::TextureFormat::Undefined;
-
-        ~UIWindowData() override { DestroyTargets(); }
-
-        void DestroyTargets()
-        {
-            if (device == nullptr)
-            {
-                return;
-            }
-            if (msaaColorView != nullptr)
-            {
-                device->DestroyTextureView(msaaColorView);
-                msaaColorView = nullptr;
-            }
-            if (msaaColor != nullptr)
-            {
-                device->DestroyTexture(msaaColor);
-                msaaColor = nullptr;
-            }
-            if (depthStencilView != nullptr)
-            {
-                device->DestroyTextureView(depthStencilView);
-                depthStencilView = nullptr;
-            }
-            if (depthStencil != nullptr)
-            {
-                device->DestroyTexture(depthStencil);
-                depthStencil = nullptr;
-            }
-            targetWidth = 0;
-            targetHeight = 0;
-        }
-
-        /// (Re)create the MSAA + stencil targets at the given size. Any failure tears
-        /// everything down: the window falls back to the plain pass as a unit (a stencil
-        /// pipeline without its attachment would be an invalid pass).
-        [[nodiscard]] bool CreateTargets(rhi::TextureFormat colorFormat, u32 width, u32 height)
-        {
-            DestroyTargets();
-            if (device == nullptr || width == 0 || height == 0 ||
-                depthStencilFormat == rhi::TextureFormat::Undefined)
-            {
-                return false;
-            }
-            rhi::TextureDesc cd = rhi::TextureDesc::RenderTarget(colorFormat, width, height);
-            cd.sampleCount = kMsaaSamples;
-            cd.label = u8"UI MSAA color";
-            if (!device->CreateTexture(cd, msaaColor).IsOk())
-            {
-                DestroyTargets();
-                return false;
-            }
-            rhi::TextureDesc dd{};
-            dd.dimension = rhi::TextureDimension::Texture2D;
-            dd.format = depthStencilFormat;
-            dd.width = width;
-            dd.height = height;
-            dd.depth = 1;
-            dd.usage = rhi::TextureUsage::DepthStencil;
-            dd.sampleCount = kMsaaSamples;
-            dd.label = u8"UI stencil";
-            if (!device->CreateTexture(dd, depthStencil).IsOk())
-            {
-                DestroyTargets();
-                return false;
-            }
-            if (!device->CreateTextureView(msaaColor, rhi::TextureViewDesc{}, msaaColorView)
-                     .IsOk() ||
-                !device->CreateTextureView(depthStencil, rhi::TextureViewDesc{}, depthStencilView)
-                     .IsOk())
-            {
-                DestroyTargets();
-                return false;
-            }
-            targetWidth = width;
-            targetHeight = height;
-            return true;
-        }
-
-        static constexpr u32 kMsaaSamples = 4;
     };
 
     /// Renders foundation.ui on the runtime graphics host. Construct once (compiles the VG shaders), attach
@@ -302,22 +215,15 @@ export namespace foundation::ui::runtime
             // (stencil-then-cover correctness for holes/self-intersection/even-odd). The
             // renderer's pipelines must match the pass, so the target config is decided
             // BEFORE Initialize; any creation failure falls back to the plain pass wholesale.
-            data->device = m_device->Raw();
-            data->depthStencilFormat = vg::renderer::PickStencilCapableFormat(
-                *data->device, UIWindowData::kMsaaSamples);
+            data->targets.Configure(*m_device->Raw());
             // Encoded when asked for and the swapchain offers its UNORM view; else linear.
             data->encoded = m_blendSpace == vg::VGBlendSpace::Encoded &&
                             window->Swap()->AlternateViewFormat() != rhi::TextureFormat::Undefined;
             data->drawFormat = data->encoded ? window->Swap()->AlternateViewFormat() : window->Swap()->Format();
             const bool targetsOk =
-                data->CreateTargets(data->drawFormat, window->Window().Width(),
-                                    window->Window().Height());
-            vg::renderer::VGTargetConfig targetConfig;
-            if (targetsOk)
-            {
-                targetConfig.sampleCount = UIWindowData::kMsaaSamples;
-                targetConfig.depthStencilFormat = data->depthStencilFormat;
-            }
+                data->targets.Create(data->drawFormat, window->Window().Width(), window->Window().Height());
+            vg::renderer::VGTargetConfig targetConfig =
+                targetsOk ? data->targets.ConfigFor() : vg::renderer::VGTargetConfig{};
             targetConfig.blendSpace = data->encoded ? vg::VGBlendSpace::Encoded : vg::VGBlendSpace::Linear;
             data->renderer.Initialize(*m_device->Raw(), *m_vs, *m_fs, data->drawFormat,
                                       static_cast<i32>(m_device->FramesInFlight()), m_distanceFieldFragmentShader,
@@ -579,11 +485,10 @@ export namespace foundation::ui::runtime
                 // reference the old targets, hence the idle before recreation.
                 const u32 w = static_cast<u32>(a.window->Window().Width());
                 const u32 h = static_cast<u32>(a.window->Window().Height());
-                if (a.data->msaaColorView != nullptr && w != 0 && h != 0 &&
-                    (a.data->targetWidth != w || a.data->targetHeight != h))
+                if (a.data->targets.NeedsResize(w, h))
                 {
                     m_device->Raw()->WaitIdle();
-                    (void)a.data->CreateTargets(a.data->drawFormat, w, h);
+                    (void)a.data->targets.Resize(w, h);
                 }
             }
             m_ctx.ClearLayoutDamage(); // consumed by this frame's layout pass
@@ -624,34 +529,11 @@ export namespace foundation::ui::runtime
             // backbuffer by the pass) with the stencil attachment cleared to 0. Falls back
             // to the plain backbuffer pass when targets are absent or stale-sized (the
             // resize recreate happens in Update, outside the frame).
-            if (data->msaaColorView != nullptr && data->targetWidth == frame.width &&
-                data->targetHeight == frame.height && frame.encoder != nullptr)
+            if (data->targets.Matches(frame.width, frame.height) && frame.encoder != nullptr)
             {
-                // The host transitions only the backbuffer (BeginFrame); the per-window
-                // MSAA + stencil attachments need their own transitions. From Undefined
-                // every frame: both are fully cleared, previous contents discardable.
-                frame.encoder->TransitionTexture(data->msaaColor, rhi::ResourceState::Undefined,
-                                                 rhi::ResourceState::RenderTarget);
-                frame.encoder->TransitionTexture(data->depthStencil,
-                                                 rhi::ResourceState::Undefined,
-                                                 rhi::ResourceState::DepthStencilWrite);
-                rhi::ColorAttachment color{};
-                color.view = data->msaaColorView;
-                color.resolveTarget = data->encoded ? frame.backbufferAlternateView : frame.backbufferView;
-                color.loadOp = rhi::LoadOp::Clear;
-                color.storeOp = rhi::StoreOp::DontCare; // resolved; the MSAA texels can drop
-                color.clearValue = data->encoded ? m_clearEncoded : m_clear;
-                rhi::DepthStencilAttachment ds{};
-                ds.view = data->depthStencilView;
-                ds.depthLoadOp = rhi::LoadOp::Clear;
-                ds.depthStoreOp = rhi::StoreOp::DontCare;
-                ds.stencilLoadOp = rhi::LoadOp::Clear; // stencil-then-cover expects 0
-                ds.stencilStoreOp = rhi::StoreOp::DontCare;
-                ds.stencilClearValue = 0;
-                rhi::RenderPassDesc rpd{};
-                rpd.colorAttachments.Add(color);
-                rpd.depthStencilAttachment = ds;
-                rpd.label = u8"UI (msaa+stencil)";
+                const rhi::RenderPassDesc rpd = data->targets.BeginPass(
+                    *frame.encoder, data->encoded ? frame.backbufferAlternateView : frame.backbufferView,
+                    data->encoded ? m_clearEncoded : m_clear, u8"UI (msaa+stencil)");
                 if (rhi::RenderPassEncoder* rp = frame.encoder->BeginRenderPass(rpd))
                 {
                     data->renderer.Render(*rp, frame.width, frame.height,

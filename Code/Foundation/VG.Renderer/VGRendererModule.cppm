@@ -8,3 +8,4 @@ export module foundation.vg.renderer;
 
 export import :vertex;
 export import :renderer;
+export import :pass_targets;

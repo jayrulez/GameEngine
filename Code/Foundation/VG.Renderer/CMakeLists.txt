@@ -12,5 +12,6 @@ target_sources(VG.Renderer
         FILE_SET vgrenderer_modules TYPE CXX_MODULES FILES
             RenderVertex.cppm
             Renderer.cppm
+            PassTargets.cppm
             VGRendererModule.cppm)
 

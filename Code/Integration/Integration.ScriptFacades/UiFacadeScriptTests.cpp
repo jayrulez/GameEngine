@@ -66,6 +66,9 @@ namespace
                     auto image = MakeRef<ui::ImageView>(DefaultAllocator());
                     image->Name = String(u8"minimap");
                     group->AddView(image.Get());
+                    auto story = MakeRef<ui::RichText>(DefaultAllocator());
+                    story->Name = String(u8"story");
+                    group->AddView(story.Get());
                     return group;
                 }};
         }
@@ -501,5 +504,93 @@ TEST_CASE("ui-facade: Luau binds a button click to a script function; firing run
     bed.context.MutationQueueRef().Drain();
     CHECK(ctx->GetGlobal(u8"clicked").template Get<bool>() == true);
     CHECK(bed.stack.Count() == 0); // the handler's ui.pop() took effect
+}
+#endif // OPTION_HAS_LUAU
+
+// Rich text from a script (F2 of Specs/vg-and-gui-lab.md): the markup set and read back, its words
+// without markup, a link's handler (deferred, reading the id it was given), and runs added one by
+// one, the same from both languages.
+namespace
+{
+    void CheckRichText(UiBed& bed, IScriptContext& ctx)
+    {
+        CHECK(ctx.GetGlobal(u8"words").template Get<String>() == StringView(u8"Your mark wears a rose gown"));
+        CHECK(ctx.GetGlobal(u8"wrong").template Get<bool>() == false); // a label is no rich text
+        ui::RichText* story = bed.root->FindByName<ui::RichText>(u8"story");
+        REQUIRE(story != nullptr);
+        // A click on the link runs the handler at the next drain, which reads the id it was for.
+        story->ActivateLink(StringView(u8"hint"));
+        CHECK(ctx.GetGlobal(u8"heard").template Get<String>().IsEmpty());
+        bed.context.MutationQueueRef().Drain();
+        CHECK(ctx.GetGlobal(u8"heard").template Get<String>() == StringView(u8"hint"));
+        CHECK(ctx.GetGlobal(u8"links").template Get<String>() == StringView(u8"1"));
+        // Runs added by the script after: the markup is gone, the runs are there.
+        REQUIRE(story->Document().runs.Size() == 2u);
+        CHECK(story->Document().runs[1].bold);
+        CHECK(story->Markup.Value().IsEmpty());
+    }
+}
+
+#ifdef OPTION_HAS_ANGELSCRIPT
+TEST_CASE("ui-facade: AngelScript writes rich text by markup and by runs, and hears its links")
+{
+    RegisterCoreTypes();
+    engine::uiscript::RegisterUiScriptSurface();
+    RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
+    RegisterReflectedTypes(*manager);
+    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    UiBed bed;
+    engine::uiscript::InstallUiScreenScriptService(*ctx, bed.binding);
+
+    const Status status =
+        ctx->Load(u8"string words;\n"
+                  u8"string heard;\n"
+                  u8"string links;\n"
+                  u8"bool wrong = true;\n"
+                  u8"int count = 0;\n"
+                  u8"void onHint() { count += 1; links = \"\" + count; heard = ui::findRichText(\"story\").clickedLink; }\n"
+                  u8"void main() {\n"
+                  u8"  ui::push(Guid(17, 34));\n"
+                  u8"  ui::findRichText(\"story\").setMarkup(\"Your mark wears [color=#d04060]a rose gown[/color]\");\n"
+                  u8"  words = ui::findRichText(\"story\").plainText;\n"
+                  u8"  wrong = ui::findRichText(\"status\").isValid();\n"
+                  u8"  ui::findRichText(\"story\").onLink(Action(onHint));\n"
+                  u8"  ui::findRichText(\"story\").clearRuns();\n"
+                  u8"  ui::findRichText(\"story\").addRun(\"Masks \");\n"
+                  u8"  ui::findRichText(\"story\").addRun(\"off\", Color(1, 0, 0, 1), 0, true, false);\n"
+                  u8"}\n",
+                  u8"main");
+    REQUIRE(status.IsOk());
+    CheckRichText(bed, *ctx);
+}
+#endif // OPTION_HAS_ANGELSCRIPT
+
+#ifdef OPTION_HAS_LUAU
+TEST_CASE("ui-facade: Luau writes rich text by markup and by runs, and hears its links")
+{
+    RegisterCoreTypes();
+    engine::uiscript::RegisterUiScriptSurface();
+    RefPtr<IScriptManager> manager = CreateLuauScriptManager(DefaultAllocator());
+    RegisterReflectedTypes(*manager);
+    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    UiBed bed;
+    engine::uiscript::InstallUiScreenScriptService(*ctx, bed.binding);
+
+    const Status status =
+        ctx->Load(u8"heard = \"\"\n"
+                  u8"links = \"\"\n"
+                  u8"local count = 0\n"
+                  u8"ui.push(Guid.new(17, 34))\n"
+                  u8"local story = ui.findRichText(\"story\")\n"
+                  u8"story:setMarkup(\"Your mark wears [color=#d04060]a rose gown[/color]\")\n"
+                  u8"words = story.plainText\n"
+                  u8"wrong = ui.findRichText(\"status\"):isValid()\n"
+                  u8"story:onLink(function() count = count + 1; links = tostring(count); heard = story.clickedLink end)\n"
+                  u8"story:clearRuns()\n"
+                  u8"story:addRun(\"Masks \")\n"
+                  u8"story:addRun(\"off\", Color.new(1, 0, 0, 1), 0, true, false)\n",
+                  u8"main");
+    REQUIRE(status.IsOk());
+    CheckRichText(bed, *ctx);
 }
 #endif // OPTION_HAS_LUAU

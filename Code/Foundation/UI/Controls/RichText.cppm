@@ -87,6 +87,27 @@ export namespace foundation::ui
             Invalidate();
         }
 
+        /// Add a run after the others, as SetRuns would with it on the end (the markup's runs, when
+        /// there is markup, are kept and the markup cleared).
+        void AppendRun(TextRun run)
+        {
+            Array<TextRun> runs = Document().runs;
+            runs.PushBack(Move(run));
+            SetRuns(Move(runs));
+        }
+
+        /// The id of the link last clicked: what an OnLink handler that runs later (a deferred script
+        /// handler) reads.
+        [[nodiscard]] StringView LastLink() const noexcept { return m_lastLink.AsView(); }
+
+        /// Raise OnLink as a click on the link `id` does (keyboard activation, tools, tests).
+        void ActivateLink(StringView id)
+        {
+            m_lastLink = String(id); // kept: the handler may change the text
+            const String held = m_lastLink;
+            OnLink.Invoke(this, held.AsView());
+        }
+
         /// The runs the control draws (its markup's, or those set directly).
         [[nodiscard]] const TextDocument& Document()
         {
@@ -205,8 +226,7 @@ export namespace foundation::ui
             const StringView link = LinkAt(e.Position());
             if (link.IsEmpty())
                 return;
-            const String id(link); // the handler may change the text
-            OnLink.Invoke(this, id.AsView());
+            ActivateLink(link);
             e.Handled = true;
         }
 
@@ -262,6 +282,7 @@ export namespace foundation::ui
         }
 
         TextDocument m_document;
+        String m_lastLink;
         String m_parsedMarkup;
         bool m_parsed = false;
         bool m_runsSet = false;

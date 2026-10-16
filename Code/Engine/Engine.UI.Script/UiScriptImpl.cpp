@@ -287,6 +287,7 @@ namespace engine::uiscript
     UI_SCRIPT_DEFINE_COMMON(Button)
     UI_SCRIPT_DEFINE_COMMON(ProgressBar)
     UI_SCRIPT_DEFINE_COMMON(Slider)
+    UI_SCRIPT_DEFINE_COMMON(RichText)
     UI_SCRIPT_DEFINE_COMMON(TextBox)
     UI_SCRIPT_DEFINE_COMMON(Image)
     UI_SCRIPT_DEFINE_COMMON(ViewGroup)
@@ -448,6 +449,94 @@ namespace engine::uiscript
             });
     }
 
+    // ------------------------------------------------------------------------------------ RichText ---
+    String RichText::markup() const
+    {
+        auto* t = As<ui::RichText>(view);
+        return (t != nullptr) ? String(t->Markup.Value().AsView()) : String{};
+    }
+    void RichText::setMarkup(String value)
+    {
+        if (auto* t = As<ui::RichText>(view))
+        {
+            t->SetMarkup(value.AsView());
+        }
+    }
+    String RichText::plainText() const
+    {
+        auto* t = As<ui::RichText>(view);
+        return (t != nullptr) ? t->Document().PlainText() : String{};
+    }
+    String RichText::clickedLink() const
+    {
+        auto* t = As<ui::RichText>(view);
+        return (t != nullptr) ? String(t->LastLink()) : String{};
+    }
+    void RichText::onLink(RefPtr<foundation::script::IScriptDelegate> handler)
+    {
+        auto* t = As<ui::RichText>(view);
+        if (t == nullptr || !handler)
+        {
+            return;
+        }
+        // As Button::onClick: deferred through the mutation queue; the id waits in LastLink.
+        t->OnLink.Add(
+            [handler](ui::RichText* clicked, StringView)
+            {
+                ui::UIContext* ctx = (clicked != nullptr) ? clicked->Context : nullptr;
+                if (ctx != nullptr)
+                {
+                    ctx->MutationQueueRef().QueueAction([handler] { (void)handler->Invoke(Span<Variant>{}); });
+                }
+                else
+                {
+                    (void)handler->Invoke(Span<Variant>{});
+                }
+            });
+    }
+    void RichText::clearRuns()
+    {
+        if (auto* t = As<ui::RichText>(view))
+        {
+            t->SetRuns(Array<ui::TextRun>{});
+        }
+    }
+    void RichText::addRun(String text)
+    {
+        if (auto* t = As<ui::RichText>(view))
+        {
+            ui::TextRun run;
+            run.text = Move(text);
+            t->AppendRun(Move(run));
+        }
+    }
+    void RichText::addRun(String text, Color color)
+    {
+        if (auto* t = As<ui::RichText>(view))
+        {
+            ui::TextRun run;
+            run.text = Move(text);
+            run.color = color;
+            t->AppendRun(Move(run));
+        }
+    }
+    void RichText::addRun(String text, Color color, f32 size, bool bold, bool italic)
+    {
+        if (auto* t = As<ui::RichText>(view))
+        {
+            ui::TextRun run;
+            run.text = Move(text);
+            run.color = color;
+            if (size > 0.0f)
+            {
+                run.size = size;
+            }
+            run.bold = bold;
+            run.italic = italic;
+            t->AppendRun(Move(run));
+        }
+    }
+
     // ------------------------------------------------------------------------------------- TextBox ---
     String TextBox::text() const
     {
@@ -514,6 +603,10 @@ namespace engine::uiscript
         return FindAs<ui::ProgressBar, ProgressBar>(view, name.AsView());                               \
     }                                                                                                   \
     Slider H::findSlider(String name) const { return FindAs<ui::Slider, Slider>(view, name.AsView()); } \
+    RichText H::findRichText(String name) const                                                         \
+    {                                                                                                   \
+        return FindAs<ui::RichText, RichText>(view, name.AsView());                                     \
+    }                                                                                                   \
     TextBox H::findTextBox(String name) const                                                           \
     {                                                                                                   \
         return FindAs<ui::EditText, TextBox>(view, name.AsView());                                      \
@@ -586,6 +679,7 @@ namespace engine::uiscript
     Button Ui::findButton(String name) { return root().findButton(Move(name)); }
     ProgressBar Ui::findProgressBar(String name) { return root().findProgressBar(Move(name)); }
     Slider Ui::findSlider(String name) { return root().findSlider(Move(name)); }
+    RichText Ui::findRichText(String name) { return root().findRichText(Move(name)); }
     TextBox Ui::findTextBox(String name) { return root().findTextBox(Move(name)); }
     Image Ui::findImage(String name) { return root().findImage(Move(name)); }
     ViewGroup Ui::findGroup(String name) { return root().findGroup(Move(name)); }
@@ -758,6 +852,35 @@ namespace engine::uiscript
         builder.Constructor();
     }
 
+    REFLECT_VALUE(RichText, "rtti::engine.ui.script")
+    {
+        builder.Method<&RichText::isValid>("isValid");
+        builder.ComputedProperty<&RichText::name>("name");
+        builder.ComputedProperty<&RichText::visible>("visible");
+        builder.ComputedProperty<&RichText::enabled>("enabled");
+        builder.Method<&RichText::setVisible>("setVisible", {"value"});
+        builder.Method<&RichText::setEnabled>("setEnabled", {"value"});
+        builder.ComputedProperty<&RichText::opacity>("opacity");
+        builder.Method<&RichText::setOpacity>("setOpacity", {"value"});
+        builder.Method<static_cast<void (RichText::*)(f32, f32)>(&RichText::fadeTo)>("fadeTo", {"opacity", "seconds"});
+        builder.ComputedProperty<&RichText::translation>("translation");
+        builder.Method<&RichText::setTranslation>("setTranslation", {"x", "y"});
+        builder.ComputedProperty<&RichText::rotation>("rotation");
+        builder.Method<&RichText::setRotation>("setRotation", {"degrees"});
+        UI_SCRIPT_REFLECT_MOTION(RichText);
+        builder.ComputedProperty<&RichText::markup>("markup");
+        builder.Method<&RichText::setMarkup>("setMarkup", {"value"});
+        builder.ComputedProperty<&RichText::plainText>("plainText");
+        builder.ComputedProperty<&RichText::clickedLink>("clickedLink");
+        builder.Method<&RichText::onLink>("onLink", {"handler"});
+        builder.Method<&RichText::clearRuns>("clearRuns");
+        builder.Method<static_cast<void (RichText::*)(String)>(&RichText::addRun)>("addRun", {"text"});
+        builder.Method<static_cast<void (RichText::*)(String, Color)>(&RichText::addRun)>("addRun", {"text", "color"});
+        builder.Method<static_cast<void (RichText::*)(String, Color, f32, bool, bool)>(&RichText::addRun)>(
+            "addRun", {"text", "color", "size", "bold", "italic"});
+        builder.Constructor();
+    }
+
     REFLECT_VALUE(ProgressBar, "rtti::engine.ui.script")
     {
         builder.Method<&ProgressBar::isValid>("isValid");
@@ -841,6 +964,7 @@ namespace engine::uiscript
         builder.Method<&ViewGroup::findButton>("findButton", {"name"});
         builder.Method<&ViewGroup::findProgressBar>("findProgressBar", {"name"});
         builder.Method<&ViewGroup::findSlider>("findSlider", {"name"});
+        builder.Method<&ViewGroup::findRichText>("findRichText", {"name"});
         builder.Method<&ViewGroup::findTextBox>("findTextBox", {"name"});
         builder.Method<&ViewGroup::findImage>("findImage", {"name"});
         builder.Method<&ViewGroup::findGroup>("findGroup", {"name"});
@@ -870,6 +994,7 @@ namespace engine::uiscript
         builder.Method<&Screen::findButton>("findButton", {"name"});
         builder.Method<&Screen::findProgressBar>("findProgressBar", {"name"});
         builder.Method<&Screen::findSlider>("findSlider", {"name"});
+        builder.Method<&Screen::findRichText>("findRichText", {"name"});
         builder.Method<&Screen::findTextBox>("findTextBox", {"name"});
         builder.Method<&Screen::findImage>("findImage", {"name"});
         builder.Method<&Screen::findGroup>("findGroup", {"name"});
@@ -887,6 +1012,7 @@ namespace engine::uiscript
         builder.Method<&Ui::findButton>("findButton", {"name"});
         builder.Method<&Ui::findProgressBar>("findProgressBar", {"name"});
         builder.Method<&Ui::findSlider>("findSlider", {"name"});
+        builder.Method<&Ui::findRichText>("findRichText", {"name"});
         builder.Method<&Ui::findTextBox>("findTextBox", {"name"});
         builder.Method<&Ui::findImage>("findImage", {"name"});
         builder.Method<&Ui::findGroup>("findGroup", {"name"});
@@ -907,6 +1033,7 @@ namespace engine::uiscript
             RttiRegisterValue_Button();
             RttiRegisterValue_ProgressBar();
             RttiRegisterValue_Slider();
+            RttiRegisterValue_RichText();
             RttiRegisterValue_TextBox();
             RttiRegisterValue_Image();
             RttiRegisterValue_ViewGroup();
@@ -916,6 +1043,7 @@ namespace engine::uiscript
             GlobalTypeRegistry().Register(TypeOf<Button>());
             GlobalTypeRegistry().Register(TypeOf<ProgressBar>());
             GlobalTypeRegistry().Register(TypeOf<Slider>());
+            GlobalTypeRegistry().Register(TypeOf<RichText>());
             GlobalTypeRegistry().Register(TypeOf<TextBox>());
             GlobalTypeRegistry().Register(TypeOf<Image>());
             GlobalTypeRegistry().Register(TypeOf<ViewGroup>());

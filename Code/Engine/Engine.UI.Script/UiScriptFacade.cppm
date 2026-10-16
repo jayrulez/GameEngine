@@ -78,6 +78,7 @@ export namespace engine::uiscript
         [[nodiscard]] static Button findButton(String name);
         [[nodiscard]] static ProgressBar findProgressBar(String name);
         [[nodiscard]] static Slider findSlider(String name);
+        [[nodiscard]] static RichText findRichText(String name);
         [[nodiscard]] static TextBox findTextBox(String name);
         [[nodiscard]] static Image findImage(String name);
         [[nodiscard]] static ViewGroup findGroup(String name);

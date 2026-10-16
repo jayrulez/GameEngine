@@ -31,6 +31,7 @@ export namespace engine::uiscript
     struct Button;
     struct ProgressBar;
     struct Slider;
+    struct RichText;
     struct TextBox;
     struct Image;
     struct ViewGroup;
@@ -151,6 +152,27 @@ export namespace engine::uiscript
         void onChanged(RefPtr<foundation::script::IScriptDelegate> handler);
     };
 
+    /// A paragraph of styled text: its markup (`text.setMarkup("Your mark wears [color=#d04060]a
+    /// rose gown[/color]")`; [b] [i] [u] [color=] [size=] [font=] [link=id] [icon=path]), or runs
+    /// added one by one. `text.markup` reads the markup (empty once runs were added), `text.plainText`
+    /// the words without it. `onLink` runs a handler when a [link=id] span is clicked, through the
+    /// mutation queue as a button's click does; the handler reads the id from `text.clickedLink`.
+    struct RichText
+    {
+        UI_SCRIPT_COMMON_HANDLE_MEMBERS
+        [[nodiscard]] String markup() const;
+        void setMarkup(String value);
+        [[nodiscard]] String plainText() const;
+        [[nodiscard]] String clickedLink() const;
+        void onLink(RefPtr<foundation::script::IScriptDelegate> handler);
+        /// No text at all, to add runs to.
+        void clearRuns();
+        /// A run in the control's own style, or in a colour, or styled further.
+        void addRun(String text);
+        void addRun(String text, Color color);
+        void addRun(String text, Color color, f32 size, bool bold, bool italic);
+    };
+
     /// A text input. `box.text` reads/writes the edited text.
     struct TextBox
     {
@@ -180,6 +202,7 @@ export namespace engine::uiscript
         [[nodiscard]] Button findButton(String name) const;
         [[nodiscard]] ProgressBar findProgressBar(String name) const;
         [[nodiscard]] Slider findSlider(String name) const;
+        [[nodiscard]] RichText findRichText(String name) const;
         [[nodiscard]] TextBox findTextBox(String name) const;
         [[nodiscard]] Image findImage(String name) const;
         [[nodiscard]] ViewGroup findGroup(String name) const;
@@ -198,6 +221,7 @@ export namespace engine::uiscript
         [[nodiscard]] Button findButton(String name) const;
         [[nodiscard]] ProgressBar findProgressBar(String name) const;
         [[nodiscard]] Slider findSlider(String name) const;
+        [[nodiscard]] RichText findRichText(String name) const;
         [[nodiscard]] TextBox findTextBox(String name) const;
         [[nodiscard]] Image findImage(String name) const;
         [[nodiscard]] ViewGroup findGroup(String name) const;

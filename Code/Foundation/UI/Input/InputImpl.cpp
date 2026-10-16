@@ -104,6 +104,15 @@ namespace foundation::ui
         m_focusSource = source;
         view->OnFocusGained();
         view->InvalidateVisual();
+        // Focus a click gave is already where the pointer is; focus by keys, a pad or code may be
+        // out of sight, and the scrollers around it bring it into view.
+        if (source != FocusSource::Pointer)
+        {
+            for (View* ancestor = view->Parent; ancestor != nullptr; ancestor = ancestor->Parent)
+            {
+                ancestor->OnDescendantFocused(*view);
+            }
+        }
     }
 
     void FocusManager::ClearFocus()

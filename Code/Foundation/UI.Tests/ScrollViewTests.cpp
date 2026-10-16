@@ -173,3 +173,32 @@ TEST_CASE("scroll-view: ScrollBar_ValueChanged")
     bar->SetValue(42);
     CHECK(lastVal == 42);
 }
+
+TEST_CASE("scroll-view: a child focused by keys or code scrolls into view; one clicked does not move it")
+{
+    UIContext ctx{DefaultAllocator()};
+    auto root = MakeRoot();
+    Init(ctx, root.Get(), 200, 100);
+    auto scroll = MakeScroll();
+    auto column = core::MakeRef<FlexLayout>(core::DefaultAllocator());
+    column->Direction = Orientation::Vertical;
+    core::RefPtr<TestView> rows[10];
+    for (auto& row : rows)
+    {
+        row = MakeContent(200, 50);
+        row->IsFocusable = true;
+        column->AddView(row.Get());
+    }
+    scroll->AddView(column.Get());
+    root->AddView(scroll.Get());
+    LayoutPass(ctx, root.Get());
+    REQUIRE(scroll->ScrollY() == doctest::Approx(0.0f));
+
+    ctx.GetFocusManager()->SetFocus(rows[1].Get(), FocusSource::Pointer); // the pointer is on it
+    CHECK(scroll->ScrollY() == doctest::Approx(0.0f));
+    ctx.GetFocusManager()->SetFocus(rows[6].Get(), FocusSource::Keyboard); // y 300..350
+    CHECK(scroll->ScrollY() == doctest::Approx(250.0f)); // the least that shows it
+    LayoutPass(ctx, root.Get());
+    ctx.GetFocusManager()->SetFocus(rows[0].Get(), FocusSource::Programmatic);
+    CHECK(scroll->ScrollY() == doctest::Approx(0.0f));
+}

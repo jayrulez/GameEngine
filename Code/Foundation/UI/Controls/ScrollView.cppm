@@ -175,6 +175,9 @@ export namespace foundation::ui
             SetScrollY(m_scrollY + dy);
         }
 
+        /// A descendant focused by keys, a pad or code comes into view.
+        void OnDescendantFocused(View& focused) override { ScrollToView(&focused); }
+
         /// Scroll to make `child` (a descendant) visible within the viewport.
         void ScrollToView(View* child)
         {

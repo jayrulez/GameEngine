@@ -453,6 +453,9 @@ export namespace foundation::ui
         virtual void OnTextInput(TextInputEventArgs& e) { (void)e; }
         virtual void OnFocusGained() {}
         virtual void OnFocusLost() {}
+        /// Focus moved, by keys, a pad or code, onto `focused` somewhere below this view: a
+        /// scroller brings it into view. Called on each ancestor, nearest first.
+        virtual void OnDescendantFocused(View& focused) { (void)focused; }
 
         // === Input events (capture phase; root->target before the target sees it) ===
         virtual void OnMouseDownCapture(MouseEventArgs& e) { (void)e; }

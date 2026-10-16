@@ -115,9 +115,14 @@ export namespace experimental::gui
             const f32 toCenter = vertical ? to.y + to.height * 0.5f : to.x + to.width * 0.5f;
             const f32 fromCenter = vertical ? from.y + from.height * 0.5f : from.x + from.width * 0.5f;
             const bool forward = direction == NavDirection::Down || direction == NavDirection::Right;
-            // Beyond: its centre past ours, and its near edge not behind our near edge (a little
-            // overlap along the axis is allowed: neighbours that touch).
+            // Beyond: its centre past ours, and its near edge at or past our leading edge, give or
+            // take a quarter of the smaller one's size (neighbours that touch or overlap a little).
+            // A wide field in the row above is not to the right of a button under it, though its
+            // centre is (user report: Back, then right, took the settings' text field).
             if (forward ? toCenter <= fromCenter : toCenter >= fromCenter)
+                return -1.0f;
+            const f32 slack = 0.25f * Min(vertical ? from.height : from.width, vertical ? to.height : to.width);
+            if (forward ? toNear < fromNear - slack : toNear > fromNear + slack)
                 return -1.0f;
             const f32 along = Max(0.0f, forward ? toNear - fromNear : fromNear - toNear);
             const f32 crossFromLo = vertical ? from.x : from.y;

@@ -68,7 +68,10 @@ export namespace experimental::gui
         // Fraction of the track the thumb fills = viewport / content (clamped to [0,1]).
         void SetThumbProportion(f32 proportion)
         {
-            m_proportion = core::Max(0.0f, core::Min(1.0f, proportion));
+            proportion = core::Max(0.0f, core::Min(1.0f, proportion));
+            if (proportion == m_proportion)
+                return;
+            m_proportion = proportion;
             Invalidate();
         }
         [[nodiscard]] f32 GetThumbProportion() const noexcept { return m_proportion; }

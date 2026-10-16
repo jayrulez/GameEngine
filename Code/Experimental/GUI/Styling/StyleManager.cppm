@@ -9,8 +9,9 @@
 // Re-applying after a state change (e.g. :hover) therefore drives CSS transitions live.
 //
 // The per-widget cache lives here (not on UIWidget) to avoid a :ui_widget <-> :style_sheet
-// partition cycle. Re-resolves the whole subtree on ApplyTree; dirty-tracking (only
-// re-resolve invalidated widgets) is not implemented. Cache entries are keyed by raw
+// partition cycle. ApplyTree re-resolves only what changed: the widgets a state, class, tag, id
+// or parent change marked (Node::MarkStyleDirty) and their subtrees, the children of a widget
+// whose custom properties changed, and everything after a new sheet, media or fonts. Cache entries are keyed by raw
 // Node* - call Forget()/Clear() when widgets are destroyed (no automatic lifecycle wiring).
 
 module;
@@ -47,18 +48,33 @@ export namespace experimental::gui
         {
             m_sheet = core::Move(sheet);
             m_cache = {};
-        } // hot-reload: drop cache
+            m_allDirty = true; // hot-reload: every widget restyles
+        }
         [[nodiscard]] const StyleSheet& GetStyleSheet() const noexcept { return m_sheet; }
 
-        void SetMediaContext(const MediaContext& context) { m_context = context; }
+        void SetMediaContext(const MediaContext& context)
+        {
+            if (context.Width == m_context.Width && context.Height == m_context.Height && context.Dpi == m_context.Dpi)
+                return; // unchanged: nothing to restyle (a host may set it every frame)
+            m_context = context;
+            m_allDirty = true;
+        }
         [[nodiscard]] const MediaContext& GetMediaContext() const noexcept { return m_context; }
 
         // Root font size for CSS `rem` units (default 16px).
-        void SetRootFontSize(f32 pixels) noexcept { m_rootFontSize = pixels; }
+        void SetRootFontSize(f32 pixels) noexcept
+        {
+            m_allDirty = m_allDirty || pixels != m_rootFontSize;
+            m_rootFontSize = pixels;
+        }
         [[nodiscard]] f32 GetRootFontSize() const noexcept { return m_rootFontSize; }
 
         // Loads background-image assets referenced by the sheet. Null = background-image skipped.
-        void SetResourceProvider(IResourceProvider* resources) noexcept { m_resources = resources; }
+        void SetResourceProvider(IResourceProvider* resources) noexcept
+        {
+            m_allDirty = m_allDirty || resources != m_resources;
+            m_resources = resources;
+        }
         [[nodiscard]] IResourceProvider* GetResourceProvider() const noexcept
         {
             return m_resources;
@@ -68,6 +84,7 @@ export namespace experimental::gui
         // the GUI is agnostic). Null = font-family skipped.
         void SetFontService(fonts::IFontService* fontService) noexcept
         {
+            m_allDirty = m_allDirty || fontService != m_fontService;
             m_fontService = fontService;
         }
         [[nodiscard]] fonts::IFontService* GetFontService() const noexcept { return m_fontService; }
@@ -75,7 +92,62 @@ export namespace experimental::gui
         // Resolve + apply one widget. A property that changed and has a `transition` moves from
         // the value showing toward its new one, an `animation` runs its @keyframes, both through
         // the widget's StyleAnimation on its GUI's clock; otherwise the style applies at once.
-        void ApplyTo(UIWidget& widget)
+        void ApplyTo(UIWidget& widget) { (void)ApplyOne(widget); }
+
+        /// Restyles what changed in the subtree (only what changed: a widget whose class, id, tag
+        /// or state changed, or that joined the tree, with its descendants; the children of one
+        /// whose custom properties changed; everything after the sheet, the media, the fonts or
+        /// the resources changed). A clean subtree is not visited.
+        void ApplyTree(Node& root)
+        {
+            m_lastRestyleCount = 0;
+            const bool all = m_allDirty;
+            m_allDirty = false;
+            Visit(root, all, false);
+        }
+
+        /// How many widgets the last ApplyTree restyled (none in a frame where nothing changed).
+        [[nodiscard]] u32 LastRestyleCount() const noexcept { return m_lastRestyleCount; }
+
+    private:
+        void Visit(Node& node, bool forceSubtree, bool forceSelf)
+        {
+            const bool self = forceSubtree || forceSelf || node.IsStyleDirty();
+            const bool subtree = forceSubtree || node.IsStyleSubtreeDirty();
+            const bool descend = subtree || node.HasStyleDirtyDescendant();
+            node.ClearStyleDirty();
+            bool customsChanged = false;
+            if (self)
+            {
+                if (UIWidget* widget = core::Cast<UIWidget>(&node))
+                {
+                    customsChanged = ApplyOne(*widget);
+                    ++m_lastRestyleCount;
+                }
+            }
+            if (!descend && !customsChanged)
+                return;
+            for (usize i = 0; i < node.ChildCount(); ++i)
+                if (Node* child = node.GetChildAt(i))
+                    Visit(*child, subtree, customsChanged);
+        }
+
+        [[nodiscard]] static bool SameCustomProperties(const ResolvedStyle& a, const ResolvedStyle& b)
+        {
+            const auto contains = [](const ResolvedStyle& in, const ResolvedProperty& p)
+            { return in.Get(p.Name.AsView()) == p.Value.AsView() && in.Has(p.Name.AsView()); };
+            for (const ResolvedProperty& p : a.Properties())
+                if (ResolvedStyle::IsCustomProperty(p.Name.AsView()) && !contains(b, p))
+                    return false;
+            for (const ResolvedProperty& p : b.Properties())
+                if (ResolvedStyle::IsCustomProperty(p.Name.AsView()) && !contains(a, p))
+                    return false;
+            return true;
+        }
+
+        // Restyles one widget; whether its custom properties changed (its children then restyle,
+        // as they inherit them).
+        bool ApplyOne(UIWidget& widget)
         {
             // Custom properties inherit: the nearest styled ancestor's resolved style gives those
             // this widget does not set (ApplyTree styles parents first, so theirs are current).
@@ -198,6 +270,8 @@ export namespace experimental::gui
                     ApplyStyle(widget, resolved, context.Resources, context.FontService, context.Lengths);
                 }
             }
+            const ResolvedStyle* before = m_cache.Find(&widget);
+            const bool customsChanged = before == nullptr || !SameCustomProperties(*before, resolved);
             m_cache.InsertOrAssign(&widget, core::Move(resolved));
 
             // Pseudo-element parts (tag::part): resolve + apply each part the widget declares.
@@ -208,18 +282,10 @@ export namespace experimental::gui
                 const ResolvedStyle partStyle = m_sheet.Resolve(widget, m_context, true, part);
                 ApplyPartStyle(widget, part, partStyle);
             }
+            return customsChanged;
         }
 
-        // Apply to every UIWidget in the subtree.
-        void ApplyTree(Node& root)
-        {
-            if (UIWidget* widget = core::Cast<UIWidget>(&root))
-                ApplyTo(*widget);
-            for (usize i = 0; i < root.ChildCount(); ++i)
-                if (Node* child = root.GetChildAt(i))
-                    ApplyTree(*child);
-        }
-
+    public:
         // Drop a widget's cached style (call before it is destroyed).
         void Forget(Node* widget)
         {
@@ -272,5 +338,7 @@ export namespace experimental::gui
         HashMap<Node*, ResolvedStyle> m_cache; // last-applied style per widget (non-owning keys)
         HashMap<Node*, RefPtr<StyleAnimation>> m_animations; // widget -> its running transitions and animations
         HashMap<Node*, Array<core::String>> m_startedAnimations; // widget -> the @keyframes it has started
+        bool m_allDirty = true; // the next ApplyTree restyles everything (a new sheet, media, fonts)
+        u32 m_lastRestyleCount = 0;
     };
 }

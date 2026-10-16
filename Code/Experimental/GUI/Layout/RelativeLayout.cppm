@@ -56,7 +56,7 @@ export namespace experimental::gui
                 m_anchors.Remove(child);
             else
                 m_anchors.InsertOrAssign(child, anchor);
-            PerformLayout();
+            RequestLayout();
         }
         [[nodiscard]] u32 GetAnchor(Node* child) const
         {
@@ -93,8 +93,9 @@ export namespace experimental::gui
         }
 
     protected:
-        void OnSizeChange() override { PerformLayout(); }
-        void OnChildrenChanged() override { PerformLayout(); }
+        void OnLayout() override { PerformLayout(); } // the SceneRoot's pass, or at once when detached
+        void OnSizeChange() override { RequestLayout(); }
+        void OnChildrenChanged() override { RequestLayout(); }
 
         HashMap<Node*, u32> m_anchors; // per-child anchor flags (non-owning keys)
     };

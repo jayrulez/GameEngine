@@ -33,6 +33,7 @@ export namespace experimental::gui
         void SetTag(core::StringView tag)
         {
             m_tag = tag;
+            MarkStyleDirty(true); // the selectors it matches change
             Invalidate();
         }
         [[nodiscard]] core::StringView GetTag() const { return m_tag.AsView(); }
@@ -40,6 +41,7 @@ export namespace experimental::gui
         void SetId(core::StringView id)
         {
             m_id = id;
+            MarkStyleDirty(true);
             Invalidate();
         }
         [[nodiscard]] core::StringView GetId() const { return m_id.AsView(); }
@@ -49,6 +51,7 @@ export namespace experimental::gui
             if (cls.Size() != 0 && !HasClass(cls))
             {
                 m_classes.PushBack(core::String(cls));
+                MarkStyleDirty(true);
                 Invalidate();
             }
         }
@@ -58,6 +61,7 @@ export namespace experimental::gui
                 if (m_classes[i] == cls)
                 {
                     m_classes.RemoveAt(i);
+                    MarkStyleDirty(true);
                     Invalidate();
                     return;
                 }

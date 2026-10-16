@@ -316,6 +316,11 @@ export namespace experimental::gui
     private:
         [[nodiscard]] Node* HitTest(core::Float2 position) const
         {
+            // Input sees the layout as it is now: a layout still waiting for the frame's pass runs
+            // first (nothing to do when none waits).
+            for (i32 round = 0; m_root != nullptr && round < 8 && (m_root->IsLayoutDirty() || m_root->HasLayoutDirtyDescendant());
+                 ++round)
+                (void)m_root->RunLayout();
             Node* hit = m_root ? m_root->OverFind(position) : nullptr;
             // A modal confines the pointer: hits outside the modal subtree are swallowed.
             if (m_modalRoot != nullptr && !IsInSubtree(hit, m_modalRoot))

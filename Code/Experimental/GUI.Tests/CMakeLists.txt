@@ -25,6 +25,7 @@ add_executable(GUI.Tests
     CssCascadeTests.cpp
     MediaQueryTests.cpp
     TransitionTests.cpp
+    IncrementalFrameTests.cpp
     EasingTests.cpp
     StyleManagerTests.cpp
     LabelButtonTests.cpp

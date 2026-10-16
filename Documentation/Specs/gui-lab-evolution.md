@@ -1,0 +1,413 @@
+# The GUI lab's evolution: a core that can stand where foundation.ui's does
+
+> STATUS: APPROVED 2026-10-16 (user: "Let's build it"). Follows `vg-and-gui-lab.md` (G1 to G7
+> done on `vg`). Read CONVENTIONS.md first.
+
+## Why
+
+On 2026-10-16 the lab was measured against foundation.ui (its core systems, and its controls by
+function rather than by name), Godot, eepp, RmlUi, GPUI, AUI, Zero and the UI systems of traktor,
+LunarSong, Lumix, ezEngine and doriax. The assessments are kept locally, not in the repository
+(`Code/Experimental/GUI/Assessments/`, `README.md` the index). They agree on one picture:
+
+- The lab is behind on the foundations: nothing measures itself (a label never fits its text,
+  margins are stored and never read), events reach one node and stop, text editing is thin,
+  popups are one at a time and placed blindly, and its controls are thinner than foundation.ui's
+  nearly everywhere.
+- The lab is ahead on the layer games feel: navigation by keys and pad with scopes and memory,
+  commands along the focus path and a keymap with contexts and chords, bindings that track what
+  they read, CSS motion and effects, several roots on one clock, and scripting through reflection.
+
+The bugs the assessments found are fixed (lab and foundation.ui, 2026-10-16). This document is the
+design for the rest: closing the gaps against foundation.ui without porting it, so the lab's core
+can stand where foundation.ui's does.
+
+## Principles
+
+- **Not a frankengui.** Each concern gets one mechanism, chosen for the lab and its future, with
+  the references as evidence, not as parts to bolt on. A feature that only one framework has and
+  no screen of ours asks for is left out.
+- **The core is the core.** Editor widgets (docking, property grids, colour pickers, curve,
+  timeline and node graph canvases, toolbars, split views, file dialogs) go to a future lab
+  toolkit; game screens (screen stacks, toasts, tickers, button prompts, menu lists) to a future
+  lab gamekit. Both are libraries over the core's public API that register their element types
+  (G1's `ElementTypes`). The core holds what foundation.ui's core holds: the systems and the
+  controls in `Foundation/UI/Controls`.
+- **CSS-shaped.** Where CSS has a name and a behaviour for something, the lab uses them, so what
+  an author knows from the web holds here. Where CSS has a document model the lab does not want
+  (block and inline flow, floats, tables), the lab does not copy it.
+- **Reflected, scriptable, tested.** Every new property is reflected and reachable from sheets,
+  markup and both script languages; every behaviour lands with a test; every phase ends with the
+  sandbox showing it.
+- **No compatibility shims.** The lab has no users: a design that moves something changes the call
+  sites (user ruling 2026-10-16).
+
+## Rulings so far (user, 2026-10-16)
+
+1. Layout: support every layout foundation.ui supports, designed to fit the lab and its future,
+   not ported. The design below is the proposal (E2).
+2. Events: capture and bubble.
+3. Text and editing: a mixture of taking and writing, for the best future of the lab.
+4. Data binding stays in code and scripts: no binding attributes or expressions in markup beyond
+   the `{{name}}` text templates the lab has.
+5. Hosting (a scene component, world-space canvases, reference-resolution scaling) is not a
+   concern yet.
+
+On the draft's open questions (user, 2026-10-16): the layout defaults as proposed; scrolling as
+recommended, `overflow` on any node; the text engine copied into the lab, not shared; one popup
+layer per root, as foundation.ui's `RootView` has; image tests that the user approves; E9's three
+parts before 0.1, accessibility through a bridge the host provides. Work starts once this spec is
+approved.
+
+## The phases
+
+Each phase is a layer with its tests and a sandbox page or section. The order follows what each
+needs: events and layout first, since every widget's behaviour and size rests on them.
+
+### E1 Events: capture, bubble and a hover path
+
+Facts: the dispatcher sends each pointer and key event to one node (`Scene/EventDispatcher.cppm`);
+a node's handlers are its `On*` overrides and its listeners; only the wheel walks up, to the
+nearest node that wants it. `:hover` matches the node under the pointer only. Script handlers get
+no event data. Disabled widgets are filtered since 337969cc3.
+
+Design:
+
+- **Phases.** Pointer, key, text and wheel events travel the path from the root to the target and
+  back: a capture phase (root first) and a bubble phase (target first), each listener told its
+  phase, any of them able to mark the event handled, which ends the walk. The target sees both.
+  The widget's own handling (`OnMouseDown` and the rest) runs at the target in the bubble phase,
+  so a parent listening in capture can intercept a child's input (a list taking a drag from its
+  rows) and one listening in bubble only sees what the child left. The path is snapshot as weak
+  handles before the walk, so a handler that removes nodes does not break it (LunarSong's
+  bubbling over instance ids; the lab's handles make this cheap).
+- **Keys and text bubble from the focus**: a key the focused widget leaves reaches its ancestors,
+  then the keymap, then navigation, the order G7 set, now through the bubble phase instead of
+  special cases.
+- **A hover path.** The dispatcher keeps the chain from the root to the hovered node; enter and
+  leave go to each node that joins or leaves it, and `:hover` matches every node on it, as CSS
+  does. `:active` follows the pressed path the same way. (Godot's `mouse_over_hierarchy`, RmlUi's
+  hover chain.)
+- **Pointer capture.** Explicit `CapturePointer()` and `ReleasePointer()`, with a lost-capture
+  event when it is taken away (a popup opening, the node leaving), on top of the implicit capture a
+  press gives today.
+- **`pointer-events`.** A CSS property, `auto` or `none`: a node with `none` is skipped by hit
+  testing and its children are still tested (decorations over controls). With the phases, this
+  covers what Godot's stop, pass and ignore filter is for, without a second mechanism.
+- **Click count and gestures** in the event: a second press near in time and space is a double
+  click, a third a triple, with the thresholds on the context (Zero's root gestures). TextField's
+  own double-click detection moves here.
+- **Results for the host.** Every `Inject*` returns whether the GUI used the input, and the root
+  answers whether a point is over something that takes the pointer, so a game knows when a click
+  belongs to the UI.
+- **Script handlers get the event**: position, button, modifiers, key, text, click count, phase,
+  and a `handled` the script can set.
+- **Cursors**: a `cursor` CSS property read from the hovered path, reported to the host.
+
+Tests: capture and bubble order and stopping; a handler removing its own ancestors mid-walk;
+`:hover` on ancestors and enter and leave along the path; capture and lost capture;
+`pointer-events: none`; double and triple click; `Inject*` results; script handlers reading event
+data in both languages.
+
+### E2 Measure and arrange
+
+Facts: no node measures itself; layouts place children at the sizes they have; `LinearLayout`,
+`FlexLayout` (no wrap, shrink, basis property or align-self; grow from C++ only), `GridLayout`
+(equal columns, no spans) and `RelativeLayout` (anchors from C++ only) are the containers; margins
+are never read; `visibility: hidden` removes a node from layout; the lab schedules layout per dirty
+container, parents first, which foundation.ui does not.
+
+Design, one protocol and a few layout kinds:
+
+- **The protocol.** Every node answers `Measure(constraints)` with the size it wants within a
+  minimum and maximum width and height, then is placed with `Arrange(rect)`. The base class owns
+  everything every layout would otherwise repeat: margin, padding, border, `width` and `height`,
+  `min-*` and `max-*`, `box-sizing`, and the units (px, %, em, rem, vw, vh, and `calc()` of them).
+  A widget supplies only its content's size through `MeasureContent(available)`: a label its
+  shaped text wrapped to the available width, a button its label plus its padding, an image its
+  pixels, a text field one line of its font. A size is `auto` (the content's size, or what the
+  parent's layout gives), a length, a percentage of the parent's content box, or `fit-content`;
+  "fill the parent" is the layout's business (`flex-grow`, `align-self: stretch`, a grid cell),
+  as in CSS. (foundation.ui's contract, with AUI's and traktor's shape: a preferred size within
+  a hint.)
+- **Caching and damage.** A node's measure is cached against its constraints and kept until its
+  content, style or children change; each style property is declared layout-affecting or visual
+  in the property table, so hover, press, focus and colour changes never measure or arrange. The
+  dirty-container scheduling stays: a node of definite size whose content changes arranges its own
+  children without disturbing its parent.
+- **Device pixels.** Arranged edges round to the device grid of the root's display scale, so
+  borders and text sit on whole pixels at any scale.
+- **Layout kinds, chosen by `display`**:
+  - `flex`, by the CSS rules: `flex-direction` (with reverse), `flex-wrap`, `justify-content`,
+    `align-items`, `align-self`, `align-content`, `gap`, `row-gap`, `column-gap`, `flex-grow`,
+    `flex-shrink`, `flex-basis`, `order`, and baseline alignment (each node reports a baseline: a
+    text node its first line's, any other the bottom of its content box). It absorbs
+    `LinearLayout` (one direction, no wrap) and foundation.ui's Flow (flex with wrap).
+  - `grid`: `grid-template-columns` and `-rows` with px, %, `fr`, `auto`, `minmax()` and
+    `repeat()`; `grid-column` and `grid-row` with spans; `grid-auto-flow` row or column; gaps;
+    `justify-items` and `align-items` with per-cell `justify-self` and `align-self`. Named areas
+    wait for a screen that asks.
+  - `stack`: children laid over each other in the content box, each aligned by its
+    `justify-self` and `align-self` (start, end, center, stretch). It replaces foundation.ui's
+    Frame and covers most of what anchors are for.
+  - `dock`: children docked by a `dock` property (left, top, right, bottom, fill) in child order,
+    the last filling what remains. It is what editors and HUD frames want, and it is small.
+  - `none`: the node and its subtree take no space and do not draw.
+- **Positioning on top of any kind.** `position: absolute` takes a node out of its parent's flow
+  and places it by `left`, `top`, `right`, `bottom` (lengths or percentages of the parent's
+  padding box; left and right together stretch it), which covers foundation.ui's Absolute layout
+  and the lab's RelativeLayout. `position: relative` offsets a node after layout without moving
+  its siblings. `z-index` orders siblings for drawing and hit testing.
+- **Visibility.** `visibility: hidden` keeps the node's space and stops it drawing and taking
+  input; `display: none` removes it from layout (AUI's three flags, under CSS's two names).
+- **Scrolling is `overflow`, on any node.** `overflow` (and `overflow-x`, `overflow-y`):
+  `visible`, `hidden` (clip to the padding box), `scroll` (always scrollable, bars shown) or
+  `auto` (scrollable with bars when the content overflows). A scroll container measures its
+  content unbounded on its scrolled axes, keeps a scroll offset, takes the wheel, keys and the pad
+  stick, and brings a focused descendant into view (G7, now for every scroll container); its bars
+  are parts (`::scrollbar`, `::scrollbar-thumb`, `::scrollbar-track`) styled like any other, with
+  `scrollbar-width` and an overlay mode. A flex or grid container scrolls itself, with no wrapper.
+  `ScrollView` stays as a markup element meaning a node with `overflow: auto`, not a class of its
+  own; its internal content node and `GetChildHost`, and `auto-measure`, go.
+- **Defaults.** A plain container is `display: flex; flex-direction: column; align-items:
+  stretch`, which reads like a CSS block (children stacked, as wide as the parent) while staying
+  one algorithm (Yoga's default). `flex-shrink` defaults to 1 with `min-width: auto` meaning the
+  content's minimum (a label's longest word), so an overfull row shrinks without crushing text,
+  as in CSS. (foundation.ui keeps 0 for its existing screens; the lab has none to keep.)
+- **What goes.** `LinearLayout`, `RelativeLayout`, `GridLayout`'s equal columns, `SetChildGrow`,
+  `SetAnchor`, the ScrollView class and `auto-measure`; their call sites (the sandbox, the
+  showcase, tests) move to the properties above.
+
+Not taken: CSS block and inline flow, floats and tables (inline flow belongs to rich text, E4);
+Godot's anchors and offsets as a separate model (insets and `stack` cover them).
+
+Tests: per property, against hand-computed boxes; the CSS flex resolution cases (grow, shrink with
+minimums freezing, basis, wrap with align-content, baseline); grid tracks with `fr`, `minmax` and
+spans; dock order; absolute insets; `visibility` against `display`; a label and a button sizing
+to their text and re-measuring when the text or font changes; measure cache hits on a hover;
+pixel rounding at scales 1, 1.25 and 2; scroll containers (`overflow` per axis, content
+measured unbounded, offsets clamped, the wheel and keys, a focused descendant brought into view,
+styled bar parts, a flex container scrolling itself). A debug overlay for bounds, padding, margin and baselines
+comes with this phase, since layout work needs it.
+
+### E3 Styling structure
+
+Facts: properties applied through widget setters (size, padding, opacity, visibility, colour,
+font) keep their last value when the rule that set them stops matching; `color` and fonts do not
+inherit, so six widgets needed a per-widget font hook (8e9964e39); parts take only
+`background-color`; there are no sibling, structural, attribute or `:not` selectors; an unknown
+pseudo-class is ignored, so a rule with a typo matches more than it should.
+
+Design:
+
+- **Computed style, recomputed whole.** A restyle computes every property a node uses from the
+  cascade, defaults included, and the node reads its computed style; setters from code or script
+  are the highest-priority origin (inline), not a write that a sheet later fails to undo. A rule
+  that stops matching stops applying.
+- **Inheritance.** The property table marks the CSS-inherited properties (`color`, the `font-*`
+  family, `line-height`, `letter-spacing`, `text-align`, `white-space`, `visibility`, `cursor`);
+  `inherit`, `initial` and `unset` work on any property. The per-widget `SetThemeFont` and
+  `SetThemeTextColor` hooks go: a widget reads its inherited font and colour.
+- **Origins.** A user-agent sheet (the built-in theme, recoloured through custom properties on
+  `:root`) at the lowest origin, then the GUI's sheets, then a subtree's own sheet (a page's
+  `.css`), then inline. Themes become a user-agent sheet plus a palette of custom properties.
+- **Selectors.** Adjacent and general siblings (`+`, `~`), `:first-child`, `:last-child`,
+  `:nth-child()` and `:nth-of-type()`, `:empty`, `:not()`, `:is()`, attribute selectors (`[type]`,
+  `[type=value]`), and the state pseudo-classes the controls need (`:checked`,
+  `:indeterminate`, `:disabled`, `:enabled`, `:focus-within`, `:read-only`, `:placeholder-shown`).
+  An unknown pseudo-class makes its rule match nothing (eepp's rule).
+- **Parts take every property.** `slider::fill`, `scrollbar::thumb` and the rest take the box,
+  text and motion properties, not only a background colour.
+- **Restyle cost.** A state change restyles the subtree only when a rule reads that state through
+  an ancestor (the sheet records which states its non-subject selectors use); otherwise the node
+  alone. (The spec's G4 open limit.)
+
+Tests: a rule that stops matching restores every property it set, setters included; inheritance
+and the three keywords; each selector form; an unknown pseudo-class; parts with box and text
+properties; restyle counts for a hover with and without an ancestor-state rule.
+
+### E4 Text and editing
+
+Facts: the lab's `Text` is one font and one colour per string, measured unshaped, with word wrap
+and no ellipsis, line height or `white-space` (`Text/Text.cppm`); `TextField` is one line with
+selection, clipboard, double-click word select, placeholder and a length limit, and no undo, word
+movement, horizontal scroll, multiline, password, read-only, submit or IME composition.
+foundation.ui has, from F1 to F4: `TextRuns` (styled spans, inline icons, a small markup) and
+`TextLayout` (shaped lines, mixed sizes on one baseline); and an editing engine:
+`TextEditingBehavior`, `UndoStack` with coalescing, `InputFilter`. They depend on core, fonts and
+vg, with three ties to foundation.ui: a colour parser, the key enums and the clipboard interface.
+
+Design, take and write:
+
+- **Take, by copy.** `TextRuns`, `TextLayout`, `UndoStack` and `InputFilter` are copied into the
+  lab (its namespace, its colour parsing, no foundation.ui key enums or clipboard), with their
+  tests, and from then on are the lab's own; foundation.ui is not touched (user ruling: copy, not
+  a shared module). When the lab and foundation.ui come together (see "The end state"), one copy
+  goes.
+- **Write the editing model.** A text document with a selection, edited by named commands (insert,
+  delete backward and forward by grapheme, by word and to the line's ends, move by grapheme, word,
+  line and page, select the same, undo, redo, cut, copy, paste), on byte offsets kept on grapheme
+  boundaries, word boundaries from the shaper's segmentation. Keys map to commands through the
+  keymap (G7), so editing keys are rebindable and shown in menus like any other command (eepp's
+  text input over a document and a command map). foundation.ui's behaviour is the reference for
+  what each command does; the model is new because the lab's offsets, keymap and multiline needs
+  differ.
+- **Text everywhere goes through the copied layout**: a label measures shaped text (no more
+  unshaped widths), wraps by `white-space` (`normal`, `nowrap`, `pre`, `pre-wrap`), sets
+  `line-height` and `letter-spacing`, ends an overflowing line by `text-overflow` (`clip`,
+  `ellipsis`, and an ellipsis at the start or middle for paths), and clamps lines
+  (`line-clamp`). Rich text is a label whose text is runs (`rich="true"` or a `RichText`
+  element), with links reported as events.
+- **The fields.** `TextField` on the model: horizontal scroll with the caret kept in view,
+  `read-only`, an input filter, `changing` on each edit and `changed` on commit (Return or focus
+  leaving), `submit`, a context menu (cut, copy, paste, select all) once E5 has popups, IME
+  composition shown in place (the shell already reports text input; it adds the preedit). A
+  `password` mode draws a mask over the same model. `TextArea` is the multiline field (wrapping,
+  line movement, page keys, scrolling). `NumberField` (E6) builds on it.
+
+Tests: the copied tests come with the copied code; the editing model per command, on multi-byte and
+combining text; undo coalescing; filters; ellipsis and clamp; label sizes from shaped text;
+password masking; preedit; `changing` against `changed`.
+
+### E5 Overlays and the keyboard in composite widgets
+
+Facts: the dispatcher holds one popup and one modal root; ComboBox, Menu and Tooltip place
+themselves with no edge awareness; Menu has no keyboard at all; ComboBox cannot be opened from the
+keyboard or a pad; MessageBox has no Escape or default button.
+
+Design:
+
+- **A popup layer per root** (as foundation.ui's `RootView` holds one): a stack of entries, each with its popup, its owner, whether it is
+  modal, whether it takes focus (and the focus it saved, restored on close unless that node has
+  gone or been disabled meanwhile), and how it is dismissed (a press outside, Escape, the owner
+  pressed again); closing an entry closes the entries above it (submenus). The topmost
+  focus-taking entry is a navigation scope (G7), so a modal traps Tab, arrows and the pad.
+- **One placement helper**: place a size against an anchor rectangle with a preferred side, an
+  alignment and an offset, flipping to the other side and then clamping into the root's bounds,
+  all in the root's units (Godot's popup clamping, GPUI's `anchored`, foundation.ui's
+  positioner). ComboBox, Menu and submenus, Tooltip and context menus all use it.
+- **Tooltips**: the text found up the parent chain from the hovered node, placed by the helper,
+  any node as content, shown and hidden on the context clock (they read the frame time today).
+- **Keyboard and pad**: Menu (arrows, Return, Escape, Left and Right through submenus, a disabled
+  item skipped, shortcut text from the keymap's binding for the item's command); MenuBar (Left and
+  Right between menus, a key to enter the bar); ComboBox (open on activate or Down, arrows while
+  closed change the selection, type-ahead, the current item highlighted when it opens);
+  MessageBox (Escape is the cancel button, Return the default).
+- **The keymap's leftovers** (from the GPUI assessment): a descendant operator (`>`) in context
+  predicates, the bindings for a command (for shortcut text), and a command's label and icon
+  reaching the controls bound to it.
+
+Tests: stacking, nested dismissal, modal trapping, focus restore including a node that went away;
+placement flips and clamps at every edge and at display scales; tooltips found from a child;
+keyboard and pad walks through a menu bar, a submenu, a combo box and a message box.
+
+### E6 The controls, to foundation.ui's depth
+
+The foundation.ui controls assessment lists, control by control, what foundation.ui's do that the
+lab's do not; this phase closes that list, with the systems above under it. In outline:
+
+- **A range base** (`min`, `max`, `step`, `page`, `value`) under Slider (vertical, ticks, keyboard
+  steps, wheel), ScrollBar and ProgressBar (indeterminate). (Godot's `Range`.)
+- **Buttons hold content**: a Button's text is shorthand for a label child, so any content (an
+  icon and a label) is markup, not a class; `toggle` makes a button a toggle with `:checked`;
+  `repeat` makes it fire while held. foundation.ui's IconButton, ContentButton, ToggleButton and
+  RepeatButton become these. ToggleSwitch is its own control. CheckBox gains the indeterminate
+  state; radio groups come from a `group` name in markup.
+- **New controls**: NumberField (a TextField with a filter, steps, arrows and wheel), PasswordField
+  (E4's mask), EditableLabel, Expander, Separator and Spacer as elements, and GridView (a
+  virtualised grid of items).
+- **Item views** (List, Tree, Table, Grid): rows from a template (native or markup) instead of a
+  fixed row widget, variable row heights, activation and context events, type-ahead, an editing
+  hook, horizontal scroll; models report inserted, removed, moved and changed ranges instead of a
+  whole reset (Zero's model with stable ids); drag reordering after E7.
+- **ScrollView feel**: momentum, Shift and wheel for the other axis, drag to pan for touch and pad
+  sticks, scrollbar policies (auto, always, never, overlay), stick-to-end.
+- **TabWidget**: closable tabs, reordering, overflow scrolling.
+- **Image**: `src` from markup, fit (`object-fit`: contain, cover, fill, none, scale-down), tint.
+- **Every control is a markup element** (9 of the 25 widget types are not today).
+
+Tests: a feature matrix per control, the same rows as the assessment's, each a test.
+
+### E7 Drag and drop
+
+Facts: the lab drags a payload with enter, over, leave and drop; no effects, no preview, no
+threshold, no cancel.
+
+Design: a typed payload (a type name and a Variant); a drag starts past a distance threshold from a
+press (E1's gestures); each move asks the node under the pointer whether it accepts the payload
+and with which effect (none, copy, move, link), and the answer sets the cursor and the preview
+(Zero's drop test, Godot's `can_drop_data`); the source gives a preview node that follows the
+pointer; Escape cancels; the source is told the outcome. A control may claim a press for its own
+drag before a draggable ancestor sees it (a scrollbar thumb inside a draggable row).
+
+Tests: threshold, acceptance per move, effects, cancel, the source's outcome, nested claims.
+
+### E8 Tooling and performance
+
+- **An inspector** built from the lab's own widgets in a second root of the same context: the
+  tree, a node's computed style with the rules that set each property and their sheet and line,
+  the box model, pick by hover, toggling pseudo-classes, and the bindings and commands on a node.
+  It reads the reflected table (G1). (RmlUi's debugger as documents in a second context; eepp's
+  inspector server, whose protocol would also map onto the engine's MCP tools.)
+- **The debug overlay** grows: focus path, navigation candidates and the chosen target, tab order,
+  redraw regions.
+- **Redraw only what changed**: damage rectangles from the nodes that changed, merged per frame,
+  drawn with a clip; a node can cache its drawing in an offscreen layer (VG has layers since V3).
+  Animations scrolled out of view or clipped stop asking for frames. (The spec's G4 open limit.)
+- **Test helpers**: find by id, text or tag, click, type, press keys, hold a direction, over the
+  injection API (AUI's `By::` and LunarSong's semantic replay; GUISandbox's `--keys` and `--sweep`
+  are the start), and image tests of sandbox pages at fixed frames: the user approves each
+  reference image, and a changed image fails until approved again.
+
+### E9 Translation, right to left, and accessibility groundwork
+
+Before 0.1 (user, 2026-10-16), all three.
+
+- **Translation**: text and templates resolved through a translator the host sets on the context
+  (an interface, like the clipboard), auto-translation inherited down the tree and switched off
+  per node (Godot's `AutoTranslateMode`), the language a media feature so a sheet can restyle for
+  it. A language change re-resolves every translated text.
+- **Right to left**: `direction: rtl`, inherited, mirrors flex rows, grid columns, docking, insets
+  given as `inset-inline-start` and `-end`, and text alignment (`start` and `end` follow the
+  direction); bidi in wrapping comes from the lab's text layout. Navigation's left and right follow
+  what is on screen, so they need nothing.
+- **Accessibility, the host's bridge** (user question 2026-10-16: an interface the host provides,
+  like the clipboard? Yes, with the data flowing both ways):
+  - The lab owns an accessibility tree per root, built from the reflected table: each node's role,
+    name, value, states (focused, checked, disabled, expanded, selected), bounds and the actions
+    it supports. A widget type declares its role and which reflected properties give its name and
+    value; nothing is a list of type names.
+  - The host sets an `IAccessibilityBridge` on the context. The lab pushes tree updates to it (the
+    whole tree when it becomes active, then only the nodes that changed, and focus moves), and the
+    bridge sends back action requests (focus, activate, set a value, increment, decrement, scroll
+    into view), which the lab routes as input.
+  - The bridge says whether anything is listening; the tree is built and kept only while it is, so
+    an unused bridge costs nothing.
+  - This is AccessKit's model (tree updates out, action requests in) without depending on it: the
+    platform adapters (UI Automation, NSAccessibility, AT-SPI) are host work, with hosting. The
+    same interface lets a game narrate focus changes with text to speech, which suits consoles and
+    the Deck better than a desktop screen reader.
+
+Tests: translated text and templates, a language change, auto-translate inheritance; each layout
+kind mirrored under `rtl`; the accessibility tree for each control, incremental updates after a
+change, actions routed as input, and no tree built while the bridge is inactive (a mock bridge).
+
+## Not taken
+
+Left out on purpose, with where it comes from: CSS block, inline, float and table layout (RmlUi);
+binding attributes and an expression language in markup (RmlUi; ruling 4); a widget per entity
+(doriax, Zero's UiWidget, Lumix's removed ECS GUI); an immediate-mode API (GPUI's elements);
+BBCode (Godot; the text runs markup already exists); theme sounds (Godot; a gamekit concern if
+ever); per-character text effect plug-ins (Godot; the F4 effects suffice until a screen asks).
+
+## The end state
+
+When E1 to E6 are done, the lab's core does what foundation.ui's core does, the editor-only
+pieces aside, with the lab's lead kept. Then the toolkit and gamekit start, and the question the
+first spec left ("Moving into `foundation.ui`") becomes concrete: whether the lab replaces
+foundation.ui's core, with the editor and samples moving over, or pieces move across one at a time.
+That is decided then.
+
+## Open questions
+
+None left from the draft; new ones go here as the phases meet them.

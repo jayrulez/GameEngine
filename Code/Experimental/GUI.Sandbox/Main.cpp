@@ -89,6 +89,21 @@ namespace
         .card { transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease-out; }
         .card:hover { transform: translate(0, -6px) scale(1.06); box-shadow: 0 10px 18px rgba(0,0,0,0.55); }
         @keyframes sway { from { transform: rotate(-8deg) scale(0.9); } to { transform: rotate(8deg) scale(0.95); } }
+        /* Effects through VG's layers (G4): frosted glass over stripes, a group fading as one, a
+           card that blurs on hover, a multiply blend, and children clipped to rounded corners. */
+        .fx-stage { background: repeating-linear-gradient(90deg, #2b3a55 0%, #2b3a55 2%, #c8d2e0 2%, #c8d2e0 4%);
+                    border-radius: 12; }
+        .fx-card { color: #f4f7fb; text-align: center; vertical-align: middle; border-radius: 10; }
+        .fx-glass { background-color: rgba(255, 255, 255, 0.18); backdrop-filter: blur(6px);
+                    border: 1px solid rgba(255, 255, 255, 0.45); }
+        .fx-group { opacity: 0.5; }
+        .fx-red { background-color: #e0607a; border-radius: 8; }
+        .fx-blue { background-color: #60c0f0; border-radius: 8; }
+        .fx-soft { background: linear-gradient(135deg, #e0607a, #f0b040); transition: filter 0.3s ease-out; }
+        .fx-soft:hover { filter: blur(3px); }
+        .fx-multiply { background-color: #f0b040; mix-blend-mode: multiply; color: #202020; }
+        .fx-clip { overflow: hidden; border-radius: 24; background-color: #1e2530; }
+        .fx-clip-inner { background: conic-gradient(from 0deg, #e0607a, #f0b040, #60c0f0, #e0607a); }
     )";
 
     inline Color Col(f32 r, f32 g, f32 b, f32 a = 1.0f) { return Color{r, g, b, a}; }
@@ -158,6 +173,7 @@ public:
 protected:
     Status OnInit() override;
     void OnRender() override;
+    void OnResize(u32 width, u32 height) override { (void)m_targets.Resize(width, height); } // the GPU is idle here
     void OnShutdown() override;
 
 private:
@@ -182,6 +198,12 @@ private:
     rhi::ShaderModule* m_gradConicFs = nullptr;  // per-pixel conic gradient fragment shader
     rhi::ShaderModule* m_distanceFieldFragmentShader = nullptr;         // distance-field text fragment shader
     rhi::ShaderModule* m_boxShadowFs = nullptr; // blurred rounded rect fragment shader
+    rhi::ShaderModule* m_boxVs = nullptr;       // analytic boxes
+    rhi::ShaderModule* m_boxFs = nullptr;
+    rhi::ShaderModule* m_layerFs = nullptr;     // layer composites (group opacity, filters, blends)
+    rhi::ShaderModule* m_blurVs = nullptr;      // layer and backdrop blurs
+    rhi::ShaderModule* m_blurFs = nullptr;
+    vg::renderer::VGPassTargets m_targets;      // MSAA + stencil (clip paths, complex fills)
     rhi::CommandPool* m_pool = nullptr;
     rhi::Fence* m_fence = nullptr;
     u64 m_fenceVal = 0;
@@ -250,13 +272,23 @@ Status GUISandbox::OnInit()
                                      shaders::ShaderFlags::None);
     m_boxShadowFs = m_shaderHost.GetVariant(u8"vg_shadow", shaders::ShaderStage::Fragment,
                                             shaders::ShaderFlags::None);
+    // Everything VG draws, as the runtime UI has it: analytic boxes, layers with their blurs, and
+    // the quality pass's targets (rounded clips need the stencil).
+    m_boxVs = m_shaderHost.GetVariant(u8"vg_box", shaders::ShaderStage::Vertex, shaders::ShaderFlags::None);
+    m_boxFs = m_shaderHost.GetVariant(u8"vg_box", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
+    m_layerFs = m_shaderHost.GetVariant(u8"vg_layer", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
+    m_blurVs = m_shaderHost.GetVariant(u8"vg_blur", shaders::ShaderStage::Vertex, shaders::ShaderFlags::None);
+    m_blurFs = m_shaderHost.GetVariant(u8"vg_blur", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
     if (m_vs == nullptr || m_fs == nullptr || m_gradRadialFs == nullptr || m_gradConicFs == nullptr)
         return ErrorCode::Unknown;
 
+    m_targets.Configure(*m_device);
+    const bool targetsOk = m_targets.Create(m_swapChain->Format(), m_width, m_height);
     if (!m_renderer
              .Initialize(*m_device, *m_vs, *m_fs, m_swapChain->Format(), static_cast<i32>(kFrames),
                          m_distanceFieldFragmentShader, m_gradRadialFs, m_gradConicFs,
-                         foundation::vg::renderer::VGTargetConfig{}, m_boxShadowFs)
+                         targetsOk ? m_targets.ConfigFor() : vg::renderer::VGTargetConfig{}, m_boxShadowFs, m_boxVs,
+                         m_boxFs, m_layerFs, m_blurVs, m_blurFs)
              .IsOk())
         return ErrorCode::Unknown;
 
@@ -278,6 +310,9 @@ Status GUISandbox::OnInit()
 
     m_vg = MakeUnique<vg::VGContext>(AppRoot(), m_fontService.Get());
     m_vg->SetPerPixelGradients(true); // renderer was given the radial/conic gradient shaders
+    m_vg->SetAnalyticBoxes(m_boxVs != nullptr && m_boxFs != nullptr);
+    m_vg->SetLayers(m_layerFs != nullptr);
+    m_vg->SetStencilFills(m_renderer.StencilFillsSupported());
 
     BuildUI();
     return ErrorCode::Ok;
@@ -742,6 +777,50 @@ void GUISandbox::BuildUI()
         gui::MarkupLoader loader(elements, DefaultAllocator(), nullptr, m_fontService.Get());
         if (RefPtr<gui::Node> cards = loader.LoadFromString(StringView(kCards)))
             m_panel->AddChild(cards.Get());
+    }
+
+    // Effects through VG (G4): five cards over a striped stage, placed by hand (the stage is no
+    // layout), each styled only by its classes.
+    {
+        auto stage = MakeRef<gui::UIWidget>(AppRoot());
+        stage->AddClass(StringView(u8"fx-stage"));
+        stage->SetSize(Float2{560.0f, 112.0f});
+        const auto card = [&](gui::Node& parent, const char8_t* text, const char8_t* classes, Float2 position,
+                              Float2 size) -> RefPtr<gui::Label>
+        {
+            auto label = MakeRef<gui::Label>(AppRoot());
+            label->SetFont(m_font);
+            label->SetText(StringView(text));
+            for (const StringView c : gui::SplitTopLevel(StringView(classes), u8' '))
+                label->AddClass(c);
+            label->SetPosition(position);
+            label->SetSize(size);
+            parent.AddChild(label.Get());
+            return label;
+        };
+        const Float2 cardSize{96.0f, 80.0f};
+        card(*stage.Get(), u8"glass", u8"fx-card fx-glass", Float2{16.0f, 16.0f}, cardSize);
+        {
+            // Two overlapping squares fading as one: where they overlap, red does not show through.
+            auto group = MakeRef<gui::UIWidget>(AppRoot());
+            group->AddClass(StringView(u8"fx-group"));
+            group->SetPosition(Float2{126.0f, 16.0f});
+            group->SetSize(cardSize);
+            card(*group.Get(), u8"", u8"fx-red", Float2{0.0f, 0.0f}, Float2{60.0f, 60.0f});
+            card(*group.Get(), u8"group", u8"fx-card fx-blue", Float2{30.0f, 20.0f}, Float2{66.0f, 60.0f});
+            stage->AddChild(group.Get());
+        }
+        card(*stage.Get(), u8"hover me", u8"fx-card fx-soft", Float2{236.0f, 16.0f}, cardSize);
+        card(*stage.Get(), u8"multiply", u8"fx-card fx-multiply", Float2{346.0f, 16.0f}, cardSize);
+        {
+            auto clip = MakeRef<gui::UIWidget>(AppRoot());
+            clip->AddClass(StringView(u8"fx-clip"));
+            clip->SetPosition(Float2{456.0f, 16.0f});
+            clip->SetSize(cardSize);
+            card(*clip.Get(), u8"clipped", u8"fx-card fx-clip-inner", Float2{-20.0f, -20.0f}, Float2{136.0f, 120.0f});
+            stage->AddChild(clip.Get());
+        }
+        m_panel->AddChild(stage.Get());
     }
 
     // A FlexLayout (markup) spreading three buttons across the row via justify-content.
@@ -1233,13 +1312,24 @@ void GUISandbox::OnRender()
     enc->TransitionTexture(m_swapChain->CurrentTexture(), rhi::ResourceState::Undefined,
                            rhi::ResourceState::RenderTarget);
 
-    rhi::ColorAttachment ca{};
-    ca.view = m_swapChain->CurrentTextureView();
-    ca.loadOp = rhi::LoadOp::Clear;
-    ca.storeOp = rhi::StoreOp::Store;
-    ca.clearValue = rhi::ClearColor(0.07f, 0.07f, 0.09f, 1.0f);
+    // Layers draw in passes of their own, before the window's.
+    m_renderer.RenderLayers(*enc, static_cast<i32>(m_frameIndex), slice);
+
+    const rhi::ClearColor clear = rhi::ClearColor(0.07f, 0.07f, 0.09f, 1.0f);
     rhi::RenderPassDesc rpd{};
-    rpd.colorAttachments.Add(ca);
+    if (m_targets.Matches(m_width, m_height))
+    {
+        rpd = m_targets.BeginPass(*enc, m_swapChain->CurrentTextureView(), clear);
+    }
+    else
+    {
+        rhi::ColorAttachment ca{};
+        ca.view = m_swapChain->CurrentTextureView();
+        ca.loadOp = rhi::LoadOp::Clear;
+        ca.storeOp = rhi::StoreOp::Store;
+        ca.clearValue = clear;
+        rpd.colorAttachments.Add(ca);
+    }
 
     rhi::RenderPassEncoder* rp = enc->BeginRenderPass(rpd);
     m_renderer.Render(*rp, m_width, m_height, static_cast<i32>(m_frameIndex), slice);
@@ -1293,6 +1383,7 @@ void GUISandbox::OnShutdown()
     m_showcaseImage.Reset();
     m_panel.Reset();
     m_renderer.Dispose();
+    m_targets.Destroy(); // before the framework releases the device
     m_vg.Reset();
     m_fontService.Reset();
     if (m_fence)

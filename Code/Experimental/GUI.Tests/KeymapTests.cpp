@@ -94,6 +94,42 @@ TEST_CASE("keymap: the deepest matching context wins, then the later binding")
     CHECK(bed.ran[2] == core::String(u8"quit"));
 }
 
+TEST_CASE("keymap: an outer node's context does not outrank the focused one's")
+{
+    // The game screen declares "game"; the menu inside it declares "menu". Escape pauses in the
+    // game and closes in the menu, whichever was bound later.
+    Bed bed;
+    bed.Handle(u8"pause");
+    bed.Handle(u8"close");
+    auto game = Make<UIWidget>();
+    bed.root->RemoveChild(bed.screen.Get());
+    bed.root->AddChild(game.Get());
+    game->AddChild(bed.screen.Get());
+    game->SetKeyContext(SV(u8"game"));
+    bed.root->GetEventDispatcher()->SetFocusNode(bed.item.Get());
+    Keymap& keys = bed.root->GetContext().GetKeymap();
+    REQUIRE(keys.Bind(SV(u8"escape"), SV(u8"close"), SV(u8"menu")));
+    REQUIRE(keys.Bind(SV(u8"escape"), SV(u8"pause"), SV(u8"game"))); // later, but outer
+    bed.Key(KeyCode::Escape);
+    REQUIRE(bed.ran.Size() == 1u);
+    CHECK(bed.ran[0] == core::String(u8"close"));
+
+    // "not in a menu" holds only outside it.
+    REQUIRE(keys.Bind(SV(u8"f1"), SV(u8"pause"), SV(u8"game && !menu")));
+    bed.Key(KeyCode::F1);
+    CHECK(bed.ran.Size() == 1u);
+    auto hud = Make<Button>();
+    hud->SetTabFocusable(true);
+    game->AddChild(hud.Get());
+    bed.root->GetEventDispatcher()->SetFocusNode(hud.Get());
+    bed.Key(KeyCode::F1);
+    REQUIRE(bed.ran.Size() == 2u);
+    CHECK(bed.ran[1] == core::String(u8"pause"));
+    bed.Key(KeyCode::Escape); // outside the menu: the game's binding
+    REQUIRE(bed.ran.Size() == 3u);
+    CHECK(bed.ran[2] == core::String(u8"pause"));
+}
+
 TEST_CASE("keymap: a binding to nothing unbinds a key there")
 {
     Bed bed;

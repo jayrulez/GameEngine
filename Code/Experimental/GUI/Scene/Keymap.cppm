@@ -432,7 +432,7 @@ export namespace experimental::gui
                     continue;
                 const i32 depth = MatchDepth(binding, stack);
                 if (depth < -1)
-                    continue; // its context holds nowhere on the focus path
+                    continue; // its context does not hold at the focus
                 if (binding.Sequence.Size() > typed.Size())
                 {
                     pending = true;
@@ -461,16 +461,22 @@ export namespace experimental::gui
         };
         Array<KeyBinding> m_bindings;
 
-        // The deepest layer whose contexts satisfy the binding's (-1 for one with no context: the
-        // least specific; -2 when none does).
+        // How deep the binding's context sits: it must hold at the focus (the deepest layer, which
+        // carries every context declared above it), and its depth is the shallowest layer from
+        // which it holds all the way down. A layer repeats its ancestors' contexts, so "game" set
+        // on the screen holds at the menu's layer too, yet it sits at the screen's depth and the
+        // menu's own bindings outrank it. -1 for a binding with no context (the least specific);
+        // -2 when its context does not hold at the focus.
         [[nodiscard]] static i32 MatchDepth(const KeyBinding& binding, Span<const KeyContextLayer> stack)
         {
             if (binding.Context.IsEmpty())
                 return -1;
-            for (usize d = stack.Size(); d-- > 0;)
-                if (binding.Context.Eval(stack[d]))
-                    return static_cast<i32>(d);
-            return -2;
+            if (stack.Size() == 0 || !binding.Context.Eval(stack[stack.Size() - 1]))
+                return -2;
+            usize depth = stack.Size() - 1;
+            while (depth > 0 && binding.Context.Eval(stack[depth - 1]))
+                --depth;
+            return static_cast<i32>(depth);
         }
     };
 }

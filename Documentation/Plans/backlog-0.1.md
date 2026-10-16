@@ -151,6 +151,13 @@ gaps in it, ranked by how much polish they cost, and two bugs.
   script.
 - **Box paint**: one shadow per box; no per-side borders or border styles; `var()` cannot reach
   inside a drawable's arguments.
+- **Baseline alignment in FlexLayout** (user 2026-10-16; found by the GUI lab assessments): markup
+  takes `align-items="baseline"` and `align-self="baseline"` (`MarkupRegistry.cppm:397`, `:683`)
+  and `Align::Baseline` exists, but FlexLayout treats it as `start` (`FlexLayout.cppm:500`), so a
+  row of mixed text sizes asking for baseline alignment is top-aligned instead. Views need to
+  report a baseline (a text view its first line's, others the bottom of their content box) for
+  the cross-axis placement to use. The GUI lab has no baseline alignment yet either; its layout
+  design covers it.
 - **To check visually**: the fill is drawn over the full bounds and the border stroked inset on
   top (`RoundedRectDrawable.cppm`), which may leave a faint fill-coloured halo outside a thin or
   translucent border at the corners.

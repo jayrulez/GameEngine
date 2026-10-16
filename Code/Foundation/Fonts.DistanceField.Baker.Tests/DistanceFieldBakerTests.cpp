@@ -276,6 +276,58 @@ TEST_CASE("df.baker: alpha holds the true distance, round where the multi-channe
     DefaultAllocator().Delete(font);
 }
 
+TEST_CASE("df.baker: a wider distance range spreads the field further and pads the cells for it")
+{
+    // An effects font bakes a wider field so an outline or a glow reaches further past the edge.
+    IFont* font = LoadRoboto();
+    REQUIRE(font != nullptr);
+    DistanceFieldFontAtlasBaker distanceFieldBaker;
+    const auto bake = [&](f32 range)
+    {
+        FontLoadOptions df = FontLoadOptions::DistanceField();
+        df.pixelHeight = 48.0f;
+        df.atlasWidth = df.atlasHeight = 1024;
+        df.distanceFieldRange = range;
+        Result<IFontAtlas*, FontLoadResult> baked = distanceFieldBaker.Bake(*font, df, DefaultAllocator());
+        REQUIRE(baked.HasValue());
+        return baked.Value();
+    };
+    IFontAtlas* narrow = bake(4.0f);
+    IFontAtlas* wide = bake(12.0f);
+    CHECK(narrow->DistanceFieldRange() == doctest::Approx(4.0f));
+    CHECK(wide->DistanceFieldRange() == doctest::Approx(12.0f));
+
+    AtlasRegion narrowI, wideI;
+    REQUIRE(narrow->TryGetRegion(narrow->GlyphFor('I'), narrowI));
+    REQUIRE(wide->TryGetRegion(wide->GlyphFor('I'), wideI));
+    // Half the range is 6 texels, past the default padding of 4: two more each side.
+    CHECK(wideI.width == narrowI.width + 4);
+    CHECK(wideI.offsetX == doctest::Approx(narrowI.offsetX - 2.0f));
+
+    // Along the middle row, from the stem out, alpha falls a third as fast: the texels that still
+    // read above zero past the edge are about three times as many.
+    const auto reach = [](const IFontAtlas* atlas, const AtlasRegion& reg)
+    {
+        const Span<const u8> px = atlas->PixelData();
+        const i32 row = reg.y + reg.height / 2;
+        i32 count = 0;
+        for (i32 col = 0; col < reg.width; ++col)
+        {
+            const u8 a = px[(static_cast<usize>(row) * atlas->Width() + (reg.x + col)) * 4 + 3];
+            count += a > 0 && a < 128 ? 1 : 0;
+        }
+        return count;
+    };
+    const i32 narrowReach = reach(narrow, narrowI);
+    const i32 wideReach = reach(wide, wideI);
+    std::printf("outside texels reading the field: range 4 %d, range 12 %d\n", narrowReach, wideReach);
+    CHECK(wideReach >= narrowReach * 5 / 2);
+
+    DefaultAllocator().Delete(narrow);
+    DefaultAllocator().Delete(wide);
+    DefaultAllocator().Delete(font);
+}
+
 TEST_CASE("df.baker: the atlas is sized to its glyphs, every glyph inside it and none overlapping")
 {
     // The asset's atlas size is a maximum. A Latin set at 48 px fills a fraction of 1024 x 1024,

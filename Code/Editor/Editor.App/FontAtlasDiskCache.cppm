@@ -251,6 +251,9 @@ export namespace editor
             mix(options.atlasWidth);
             mix(options.atlasHeight);
             mix(options.padding);
+            u32 rangeBits = 0;
+            MemCopy(&rangeBits, &options.distanceFieldRange, sizeof(rangeBits));
+            mix(rangeBits);
             // The glyphs the shaper's substitutions reach are baked too: a different shaper (or
             // none) bakes a different atlas.
             for (const i32 glyph : foundation::fonts::ReachableGlyphs(font, options, *m_allocator))

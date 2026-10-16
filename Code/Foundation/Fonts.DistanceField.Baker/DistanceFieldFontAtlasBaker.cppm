@@ -186,8 +186,11 @@ export namespace foundation::fonts
             // The asset's atlas size is the most the atlas may take; it is cropped to its glyphs.
             const u32 maxAtlasW = options.atlasWidth;
             const u32 maxAtlasH = options.atlasHeight;
-            const u32 padding = options.padding;
-            const f64 pxRange = kDefaultPxRange;
+            const f64 pxRange = options.distanceFieldRange > 0.0f ? static_cast<f64>(options.distanceFieldRange)
+                                                                  : kDefaultPxRange;
+            // The cell holds the field's reach past the glyph's box (half the range), so an effect
+            // drawn out to it is not cut at the cell's edge.
+            const u32 padding = Max(static_cast<u32>(options.padding), static_cast<u32>(Ceil(static_cast<f32>(pxRange) * 0.5f)));
             const f32 pixelHeight = options.pixelHeight;
 
             // Init stb_truetype for metrics.

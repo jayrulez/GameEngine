@@ -238,6 +238,10 @@ export namespace foundation::fonts
         u8 oversampleY = 2;
         u8 padding = 2;
         AtlasMode atlasMode = AtlasMode::Coverage;
+        /// A distance-field atlas's spread, in texels of the bake: the field reads half of it
+        /// either side of an edge, so text effects (VG TextEffects) reach that far out. Wider
+        /// costs precision in the 8-bit field and atlas space in the padding it takes.
+        f32 distanceFieldRange = 4.0f;
 
         [[nodiscard]] i32 CharacterCount() const { return lastCodepoint - firstCodepoint + 1; }
 

@@ -108,10 +108,10 @@ TEST_CASE("font.pipeline: FontAsset raster ramp -> cook -> rasterizer-free Font"
     CHECK(entry->font->Metrics().ascent > 0.0f);
     REQUIRE(entry->atlas);
     CHECK(entry->atlas->Mode() == AtlasMode::Coverage);
-    CHECK(entry->atlas->Contains('A'));
+    CHECK(entry->atlas->Contains(entry->atlas->GlyphFor('A')));
     GlyphQuad quad;
     f32 cursor = 0.0f;
-    CHECK(entry->atlas->GetGlyphQuad('A', cursor, 0.0f, quad));
+    CHECK(entry->atlas->GetGlyphQuad(entry->atlas->GlyphFor('A'), cursor, 0.0f, quad));
     CHECK(cursor > 0.0f); // the advance moved
     REQUIRE(entry->atlasImage);
     CHECK(entry->atlasImage->Width() == 512u);
@@ -168,7 +168,7 @@ TEST_CASE("font.pipeline: MSDF bake cooks a DistanceField resource")
     REQUIRE(entry.atlas);
     CHECK(entry.atlas->Mode() == AtlasMode::DistanceField);
     CHECK(entry.atlas->DistanceFieldRange() > 0.0f);
-    CHECK(entry.atlas->Contains('Q'));
+    CHECK(entry.atlas->Contains(entry.atlas->GlyphFor('Q')));
     REQUIRE(entry.atlasImage);
     CHECK(entry.atlasImage->ColorSpace() == foundation::image::ImageColorSpace::Linear);
 

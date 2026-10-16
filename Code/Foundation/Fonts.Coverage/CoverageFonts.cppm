@@ -105,7 +105,7 @@ export namespace foundation::fonts
                 if (prevCodepoint != 0)
                     x += GetKerning(prevCodepoint, codepoint);
                 outPositions.PushBack(
-                    GlyphPosition(index, codepoint, x, 0, info.advanceWidth, info));
+                    GlyphPosition(index, info.glyphIndex, x, 0, info.advanceWidth, info));
                 x += info.advanceWidth;
                 prevCodepoint = codepoint;
                 ++index;
@@ -154,6 +154,7 @@ export namespace foundation::fonts
         void ClearForReload()
         {
             m_regions.Clear();
+            m_cmap.Clear();
             m_pixels.Clear();
             m_width = 0;
             m_height = 0;
@@ -170,10 +171,13 @@ export namespace foundation::fonts
             m_pixels = Move(takenPixels);
         }
 
-        void SetRegion(i32 codepoint, AtlasRegion region)
+        /// A glyph's region, by glyph index.
+        void SetRegion(i32 glyphId, AtlasRegion region)
         {
-            m_regions.InsertOrAssign(codepoint, region);
+            m_regions.InsertOrAssign(glyphId, region);
         }
+        /// The glyph a codepoint draws with, for unshaped text.
+        void SetGlyphFor(i32 codepoint, i32 glyphId) { m_cmap.InsertOrAssign(codepoint, glyphId); }
 
         void SetWhitePixelUV(f32 u, f32 v)
         {
@@ -191,9 +195,9 @@ export namespace foundation::fonts
                                         : Span<const u8>();
         }
 
-        [[nodiscard]] bool TryGetRegion(i32 codepoint, AtlasRegion& region) const override
+        [[nodiscard]] bool TryGetRegion(i32 glyphId, AtlasRegion& region) const override
         {
-            if (const AtlasRegion* r = m_regions.Find(codepoint))
+            if (const AtlasRegion* r = m_regions.Find(glyphId))
             {
                 region = *r;
                 return true;
@@ -201,40 +205,41 @@ export namespace foundation::fonts
             return false;
         }
 
-        // Keyed by codepoint for now: a codepoint is its own glyph id.
-        [[nodiscard]] i32 GlyphFor(i32 codepoint) const override { return codepoint; }
-        [[nodiscard]] bool Contains(i32 codepoint) const override
+        [[nodiscard]] i32 GlyphFor(i32 codepoint) const override
         {
-            return m_regions.Contains(codepoint);
+            const i32* glyph = m_cmap.Find(codepoint);
+            return glyph != nullptr ? *glyph : -1;
         }
+        [[nodiscard]] bool Contains(i32 glyphId) const override { return m_regions.Contains(glyphId); }
 
         [[nodiscard]] Float2 WhitePixelUV() const override
         {
             return Float2(m_whitePixelU, m_whitePixelV);
         }
 
-        [[nodiscard]] bool GetGlyphQuad(i32 codepoint, f32& cursorX, f32 cursorY,
+        [[nodiscard]] bool GetGlyphQuad(i32 glyphId, f32& cursorX, f32 cursorY,
                                         GlyphQuad& quad) const override
         {
             quad = GlyphQuad();
-            const AtlasRegion* region = m_regions.Find(codepoint);
+            const AtlasRegion* region = m_regions.Find(glyphId);
             if (region == nullptr)
                 return false;
             return BuildQuad(*region, cursorX, cursorY, true, cursorX, quad);
         }
 
-        [[nodiscard]] bool GetGlyphQuadAt(i32 codepoint, f32 x, f32 y,
+        [[nodiscard]] bool GetGlyphQuadAt(i32 glyphId, f32 x, f32 y,
                                           GlyphQuad& quad) const override
         {
             quad = GlyphQuad();
-            const AtlasRegion* region = m_regions.Find(codepoint);
+            const AtlasRegion* region = m_regions.Find(glyphId);
             if (region == nullptr)
                 return false;
             f32 dummy = x;
             return BuildQuad(*region, x, y, false, dummy, quad);
         }
 
-        [[nodiscard]] const HashMap<i32, AtlasRegion>& Regions() const { return m_regions; }
+        [[nodiscard]] const HashMap<i32, AtlasRegion>& Regions() const { return m_regions; } // by glyph
+        [[nodiscard]] const HashMap<i32, i32>& CodepointGlyphs() const { return m_cmap; }
 
     private:
         bool BuildQuad(const AtlasRegion& region, f32 x, f32 y, bool advance, f32& cursorX,
@@ -277,7 +282,8 @@ export namespace foundation::fonts
         f32 m_oversampleX = 1.0f;
         f32 m_oversampleY = 1.0f;
         Array<u8> m_pixels;
-        HashMap<i32, AtlasRegion> m_regions;
+        HashMap<i32, AtlasRegion> m_regions; // glyph index -> region
+        HashMap<i32, i32> m_cmap;            // codepoint -> glyph index
         f32 m_whitePixelU = 0;
         f32 m_whitePixelV = 0;
     };

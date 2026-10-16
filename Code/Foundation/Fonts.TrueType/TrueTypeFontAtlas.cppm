@@ -3,14 +3,15 @@
 
 // Foundation::Fonts.TrueType - foundation.fonts.truetype:atlas partition
 //
-// IFontAtlas produced by stb_truetype's packed-font API. Holds the packed
-// 8-bit coverage buffer + per-codepoint stbtt_packedchar records and maps
-// codepoints to atlas regions / glyph quads. Ported from
-// Sedulous.Fonts.TTF/TrueTypeFontAtlas.bf.
+// IFontAtlas produced by stb_truetype's packer, keyed by glyph index: the glyphs a codepoint range
+// maps to (and any further glyphs asked for, such as what a shaper's substitutions reach), packed
+// through EngineStbPackGlyphs, with the range's codepoint -> glyph map for unshaped text. Ported
+// from Sedulous.Fonts.TTF/TrueTypeFontAtlas.bf (which packed codepoints).
 
 module;
 #include "Core/Prelude.h"
 #include "stb_truetype.h"
+#include "stb_truetype_glyphs.h"
 
 export module foundation.fonts.truetype:atlas;
 
@@ -31,18 +32,35 @@ export namespace foundation::fonts
         TrueTypeFontAtlas(const TrueTypeFontAtlas&) = delete;
         TrueTypeFontAtlas& operator=(const TrueTypeFontAtlas&) = delete;
 
-        // Pack `font` into a new atlas per `options`. Returns Success or a
-        // specific failure.
-        [[nodiscard]] FontLoadResult Create(const TrueTypeFont& font, FontLoadOptions options)
+        // Pack `font` into a new atlas per `options`: the glyphs of its codepoint range, plus
+        // `extraGlyphs` (glyph indices no codepoint reaches). Returns Success or a specific failure.
+        [[nodiscard]] FontLoadResult Create(const TrueTypeFont& font, FontLoadOptions options,
+                                            Span<const i32> extraGlyphs = {})
         {
             m_width = options.atlasWidth;
             m_height = options.atlasHeight;
-            m_firstCodepoint = options.firstCodepoint;
-            m_lastCodepoint = options.lastCodepoint;
-            m_numChars = m_lastCodepoint - m_firstCodepoint + 1;
-
             m_pixelData.Resize(static_cast<usize>(m_width) * m_height);
-            m_packedChars.Resize(static_cast<usize>(m_numChars));
+
+            stbtt_fontinfo info{};
+            const int offset = stbtt_GetFontOffsetForIndex(font.RawData(), 0);
+            if (offset < 0 || stbtt_InitFont(&info, font.RawData(), offset) == 0)
+                return FontLoadResult::CorruptedData;
+
+            // The range's glyphs (a codepoint the font lacks maps to none), then the extras, each once.
+            for (i32 cp = options.firstCodepoint; cp <= options.lastCodepoint; ++cp)
+            {
+                const i32 glyph = stbtt_FindGlyphIndex(&info, cp);
+                if (glyph <= 0)
+                    continue;
+                m_cmap.InsertOrAssign(cp, glyph);
+                AddGlyph(glyph);
+            }
+            for (const i32 glyph : extraGlyphs)
+            {
+                if (glyph > 0 && glyph < info.numGlyphs)
+                    AddGlyph(glyph);
+            }
+            m_packedChars.Resize(m_glyphs.Size());
 
             stbtt_pack_context packContext{};
             if (stbtt_PackBegin(&packContext, m_pixelData.Data(), static_cast<int>(m_width),
@@ -52,8 +70,8 @@ export namespace foundation::fonts
 
             stbtt_PackSetOversampling(&packContext, options.oversampleX, options.oversampleY);
 
-            if (stbtt_PackFontRange(&packContext, font.RawData(), 0, options.pixelHeight,
-                                    m_firstCodepoint, m_numChars, m_packedChars.Data()) == 0)
+            if (EngineStbPackGlyphs(&packContext, &info, options.pixelHeight, m_glyphs.Data(),
+                                    static_cast<int>(m_glyphs.Size()), m_packedChars.Data()) == 0)
             {
                 stbtt_PackEnd(&packContext);
                 return FontLoadResult::AtlasPackingFailed;
@@ -85,82 +103,98 @@ export namespace foundation::fonts
             return Float2(m_whitePixelU, m_whitePixelV);
         }
 
-        [[nodiscard]] bool TryGetRegion(i32 codepoint, AtlasRegion& region) const override
+        [[nodiscard]] i32 GlyphFor(i32 codepoint) const override
+        {
+            const i32* glyph = m_cmap.Find(codepoint);
+            return glyph != nullptr ? *glyph : -1;
+        }
+
+        [[nodiscard]] bool TryGetRegion(i32 glyphId, AtlasRegion& region) const override
         {
             region = AtlasRegion();
-            if (codepoint < m_firstCodepoint || codepoint > m_lastCodepoint)
+            const stbtt_packedchar* pc = Packed(glyphId);
+            if (pc == nullptr || pc->x1 <= pc->x0 || pc->y1 <= pc->y0)
                 return false;
 
-            const stbtt_packedchar& pc =
-                m_packedChars[static_cast<usize>(codepoint - m_firstCodepoint)];
-            if (pc.x1 <= pc.x0 || pc.y1 <= pc.y0)
-                return false;
-
-            region.x = pc.x0;
-            region.y = pc.y0;
-            region.width = static_cast<u16>(pc.x1 - pc.x0);
-            region.height = static_cast<u16>(pc.y1 - pc.y0);
-            region.offsetX = pc.xoff;
-            region.offsetY = pc.yoff;
-            region.advanceX = pc.xadvance;
+            region.x = pc->x0;
+            region.y = pc->y0;
+            region.width = static_cast<u16>(pc->x1 - pc->x0);
+            region.height = static_cast<u16>(pc->y1 - pc->y0);
+            region.offsetX = pc->xoff;
+            region.offsetY = pc->yoff;
+            region.advanceX = pc->xadvance;
             return true;
         }
 
-        [[nodiscard]] bool GetGlyphQuad(i32 codepoint, f32& cursorX, f32 cursorY,
+        [[nodiscard]] bool GetGlyphQuad(i32 glyphId, f32& cursorX, f32 cursorY,
                                         GlyphQuad& quad) const override
         {
             quad = GlyphQuad();
-            if (codepoint < m_firstCodepoint || codepoint > m_lastCodepoint)
+            const usize* index = m_glyphIndex.Find(glyphId);
+            if (index == nullptr)
                 return false;
 
-            const int index = codepoint - m_firstCodepoint;
             stbtt_aligned_quad q{};
             f32 xpos = cursorX;
             f32 ypos = cursorY;
             stbtt_GetPackedQuad(m_packedChars.Data(), static_cast<int>(m_width),
-                                static_cast<int>(m_height), index, &xpos, &ypos, &q,
+                                static_cast<int>(m_height), static_cast<int>(*index), &xpos, &ypos, &q,
                                 0); // 0 = don't align to integer
             cursorX = xpos;
             quad = GlyphQuad(q.x0, q.y0, q.x1, q.y1, q.s0, q.t0, q.s1, q.t1);
             return true;
         }
 
-        [[nodiscard]] bool GetGlyphQuadAt(i32 codepoint, f32 x, f32 y,
+        [[nodiscard]] bool GetGlyphQuadAt(i32 glyphId, f32 x, f32 y,
                                           GlyphQuad& quad) const override
         {
             quad = GlyphQuad();
-            if (codepoint < m_firstCodepoint || codepoint > m_lastCodepoint)
+            const usize* index = m_glyphIndex.Find(glyphId);
+            if (index == nullptr)
                 return false;
 
-            const int index = codepoint - m_firstCodepoint;
             stbtt_aligned_quad q{};
             f32 xpos = x;
             f32 ypos = y;
             stbtt_GetPackedQuad(m_packedChars.Data(), static_cast<int>(m_width),
-                                static_cast<int>(m_height), index, &xpos, &ypos, &q, 0);
+                                static_cast<int>(m_height), static_cast<int>(*index), &xpos, &ypos, &q, 0);
             quad = GlyphQuad(q.x0, q.y0, q.x1, q.y1, q.s0, q.t0, q.s1, q.t1);
             return true;
         }
 
-        // Keyed by codepoint for now: a codepoint is its own glyph id.
-        [[nodiscard]] i32 GlyphFor(i32 codepoint) const override { return codepoint; }
-        [[nodiscard]] bool Contains(i32 codepoint) const override
+        [[nodiscard]] bool Contains(i32 glyphId) const override
         {
-            if (codepoint < m_firstCodepoint || codepoint > m_lastCodepoint)
-                return false;
-            const stbtt_packedchar& pc =
-                m_packedChars[static_cast<usize>(codepoint - m_firstCodepoint)];
-            return pc.x1 > pc.x0 && pc.y1 > pc.y0;
+            const stbtt_packedchar* pc = Packed(glyphId);
+            return pc != nullptr && pc->x1 > pc->x0 && pc->y1 > pc->y0;
         }
 
+        /// The glyphs packed, in packing order, and the codepoint -> glyph map (for bakers that copy
+        /// this atlas into their own).
+        [[nodiscard]] Span<const i32> Glyphs() const { return Span<const i32>(m_glyphs.Data(), m_glyphs.Size()); }
+        [[nodiscard]] const HashMap<i32, i32>& CodepointGlyphs() const { return m_cmap; }
+
     private:
+        void AddGlyph(i32 glyph)
+        {
+            if (m_glyphIndex.Find(glyph) != nullptr)
+                return;
+            m_glyphIndex.InsertOrAssign(glyph, m_glyphs.Size());
+            m_glyphs.PushBack(glyph);
+        }
+
+        [[nodiscard]] const stbtt_packedchar* Packed(i32 glyphId) const
+        {
+            const usize* index = m_glyphIndex.Find(glyphId);
+            return index != nullptr ? &m_packedChars[*index] : nullptr;
+        }
+
         u32 m_width = 0;
         u32 m_height = 0;
         Array<u8> m_pixelData;
-        Array<stbtt_packedchar> m_packedChars;
-        i32 m_firstCodepoint = 0;
-        i32 m_lastCodepoint = 0;
-        i32 m_numChars = 0;
+        Array<i32> m_glyphs;                 // glyph indices, in packing order
+        Array<stbtt_packedchar> m_packedChars; // parallel to m_glyphs
+        HashMap<i32, usize> m_glyphIndex;    // glyph index -> its slot
+        HashMap<i32, i32> m_cmap;            // codepoint -> glyph index (the range's)
         f32 m_whitePixelU = 0;
         f32 m_whitePixelV = 0;
     };

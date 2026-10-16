@@ -78,7 +78,7 @@ export namespace foundation::fonts
     struct GlyphPosition
     {
         i32 cluster = 0;  // the first character of the cluster this glyph belongs to
-        i32 glyphId = 0;  // what the atlas draws: the codepoint, under the stb shaper
+        i32 glyphId = 0;  // what the atlas draws: the font's glyph index (0: none)
         f32 x = 0, y = 0; // the pen position (the baseline origin, before the offsets)
         f32 advance = 0;
         GlyphInfo glyphInfo;

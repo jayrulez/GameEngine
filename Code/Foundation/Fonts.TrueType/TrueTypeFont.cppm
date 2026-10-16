@@ -169,7 +169,7 @@ export namespace foundation::fonts
                 if (prevCodepoint != 0)
                     x += GetKerning(prevCodepoint, codepoint);
                 outPositions.PushBack(
-                    GlyphPosition(index, codepoint, x, 0, info.advanceWidth, info));
+                    GlyphPosition(index, info.glyphIndex, x, 0, info.advanceWidth, info));
                 x += info.advanceWidth;
                 prevCodepoint = codepoint;
                 ++index;

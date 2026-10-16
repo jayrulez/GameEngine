@@ -68,7 +68,7 @@ namespace foundation::fonts::df
         return shape.contours.size() > 0;
     }
 
-    bool GenerateGlyphMSDF(const u8* fontData, i32 fontDataSize, i32 codepoint, i32 width,
+    bool GenerateGlyphMSDF(const u8* fontData, i32 fontDataSize, i32 glyphIndex, i32 width,
                            i32 height, f64 pxRange, f64 scaleX, f64 scaleY, f64 translateX,
                            f64 translateY, u8* rgbaOut)
     {
@@ -78,8 +78,7 @@ namespace foundation::fonts::df
         if (!stbtt_InitFont(&info, fontData, stbtt_GetFontOffsetForIndex(fontData, 0)))
             return false;
 
-        const int glyphIndex = stbtt_FindGlyphIndex(&info, codepoint);
-        if (glyphIndex <= 0)
+        if (glyphIndex <= 0 || glyphIndex >= info.numGlyphs)
             return false;
 
         msdfgen::Shape shape;

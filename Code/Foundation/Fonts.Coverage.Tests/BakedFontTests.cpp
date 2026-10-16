@@ -91,8 +91,10 @@ TEST_CASE("baked.font: MeasureString with glyph positions")
     BakedFont font;
     GlyphInfo a;
     a.advanceWidth = 10.0f;
+    a.glyphIndex = 36; // the font's glyph ids, not the codepoints
     GlyphInfo b;
     b.advanceWidth = 10.0f;
+    b.glyphIndex = 37;
     font.SetGlyph(static_cast<i32>('A'), a);
     font.SetGlyph(static_cast<i32>('B'), b);
     font.SetKerning(static_cast<i32>('A'), static_cast<i32>('B'), -3.0f);
@@ -103,9 +105,9 @@ TEST_CASE("baked.font: MeasureString with glyph positions")
     CHECK(total == 17.0f);
     CHECK(positions.Size() == 2);
     CHECK(positions[0].x == 0);
-    CHECK(positions[0].glyphId == static_cast<i32>('A'));
+    CHECK(positions[0].glyphId == 36); // the glyph each draws with
     CHECK(positions[1].x == 7.0f); // first advance + kerning
-    CHECK(positions[1].glyphId == static_cast<i32>('B'));
+    CHECK(positions[1].glyphId == 37);
 }
 
 TEST_CASE("baked.atlas: SetPixels takes ownership")

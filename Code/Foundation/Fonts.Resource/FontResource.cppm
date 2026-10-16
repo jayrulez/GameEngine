@@ -99,14 +99,15 @@ export namespace foundation::fonts
         ar.EndObject();
     }
 
+    // A glyph's place in the atlas, by glyph index (the glyph rows map codepoints to glyphs).
     struct FontResourceRegion
     {
-        i32 codepoint = 0;
+        i32 glyph = 0;
         AtlasRegion region;
 
         void Serialize(ISerializer& ar)
         {
-            foundation::core::Serialize(ar, "codepoint", codepoint);
+            foundation::core::Serialize(ar, "glyph", glyph);
             foundation::core::Serialize(ar, "x", region.x);
             foundation::core::Serialize(ar, "y", region.y);
             foundation::core::Serialize(ar, "width", region.width);
@@ -355,7 +356,14 @@ export namespace foundation::fonts
                     atlas->SetWhitePixelUV(e.whitePixelU, e.whitePixelV);
                     for (const FontResourceRegion& r : e.regions)
                     {
-                        atlas->SetRegion(r.codepoint, r.region);
+                        atlas->SetRegion(r.glyph, r.region);
+                    }
+                    for (const FontResourceGlyph& g : e.glyphs)
+                    {
+                        if (g.info.glyphIndex > 0)
+                        {
+                            atlas->SetGlyphFor(g.codepoint, g.info.glyphIndex);
+                        }
                     }
                     // RGBA8 MSDF channels, LINEAR (geometric data, not color).
                     entry.atlasImage = MakeUnique<image::OwnedImageData>(
@@ -373,7 +381,14 @@ export namespace foundation::fonts
                     atlas->SetOversample(e.oversampleX, e.oversampleY);
                     for (const FontResourceRegion& r : e.regions)
                     {
-                        atlas->SetRegion(r.codepoint, r.region);
+                        atlas->SetRegion(r.glyph, r.region);
+                    }
+                    for (const FontResourceGlyph& g : e.glyphs)
+                    {
+                        if (g.info.glyphIndex > 0)
+                        {
+                            atlas->SetGlyphFor(g.codepoint, g.info.glyphIndex);
+                        }
                     }
                     atlas->SetPixels(e.atlasWidth, e.atlasHeight, Move(slice));
                     // Same RGBA8 expansion the TTF service performs for coverage atlases.
@@ -629,7 +644,9 @@ export namespace foundation::fonts
         RegisterSerializable<FontResource>();
     }
 
-    RTTI_DEFINE_OBJECT_VERSIONED(FontResource, "rtti::fonts", 2) // 2: glyph bounds keys use full names
+    // 2: glyph bounds keys use full names. 3: regions key by glyph index ("glyph"), the codepoint ->
+    // glyph map coming from the glyph rows (F3 of vg-and-gui-lab.md; re-cooked by the builder bump).
+    RTTI_DEFINE_OBJECT_VERSIONED(FontResource, "rtti::fonts", 3)
     RTTI_DEFINE_OBJECT(Font, "rtti::fonts")
 }
 

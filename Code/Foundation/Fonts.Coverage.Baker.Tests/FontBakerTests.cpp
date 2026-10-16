@@ -64,9 +64,15 @@ TEST_CASE("importer: bake produces glyphs, metrics, atlas regions")
     CHECK(baked->font->HasGlyph(static_cast<i32>('A')));
     CHECK(baked->font->HasGlyph(static_cast<i32>('z')));
     CHECK(baked->font->HasGlyph(static_cast<i32>('0')));
-    CHECK(baked->atlas->Contains(static_cast<i32>('A')));
-    CHECK(baked->atlas->Contains(static_cast<i32>('z')));
-    CHECK(baked->atlas->Contains(static_cast<i32>('0')));
+    CHECK(baked->atlas->Contains(baked->atlas->GlyphFor(static_cast<i32>('A'))));
+    CHECK(baked->atlas->Contains(baked->atlas->GlyphFor(static_cast<i32>('z'))));
+    CHECK(baked->atlas->Contains(baked->atlas->GlyphFor(static_cast<i32>('0'))));
+    // A space keeps its glyph (it advances) but has nothing to draw.
+    CHECK(baked->font->GetGlyphInfo(static_cast<i32>(' ')).advanceWidth > 0);
+    AtlasRegion space;
+    CHECK(baked->atlas->TryGetRegion(baked->atlas->GlyphFor(static_cast<i32>(' ')), space));
+    CHECK(space.IsEmpty());
+    CHECK(space.advanceX > 0);
 
     CHECK(baked->font->GetGlyphInfo(static_cast<i32>('A')).advanceWidth > 0);
 

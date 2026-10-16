@@ -60,7 +60,7 @@ namespace
     {
         InkStats s;
         AtlasRegion reg;
-        if (!atlas->TryGetRegion(codepoint, reg))
+        if (!atlas->TryGetRegion(atlas->GlyphFor(codepoint), reg))
             return s;
         const Span<const u8> px = atlas->PixelData();
         const u32 W = atlas->Width();
@@ -203,14 +203,14 @@ TEST_CASE("df.baker: blank glyphs (space) get an advance-only region")
     // Space has no outline but MUST carry its advance, or cursor-walk draw paths
     // render "hello world" as "helloworld".
     AtlasRegion space;
-    REQUIRE(atlas->TryGetRegion(' ', space));
+    REQUIRE(atlas->TryGetRegion(atlas->GlyphFor(' '), space));
     CHECK(space.IsEmpty());       // nothing to draw
     CHECK(space.advanceX > 0.0f); // but the cursor steps
 
     // GetGlyphQuad on it: cursor advances, nothing is emitted.
     f32 cursorX = 10.0f;
     GlyphQuad quad{};
-    CHECK_FALSE(atlas->GetGlyphQuad(' ', cursorX, 20.0f, quad));
+    CHECK_FALSE(atlas->GetGlyphQuad(atlas->GlyphFor(' '), cursorX, 20.0f, quad));
     CHECK(cursorX == doctest::Approx(10.0f + space.advanceX));
 
     // The advance matches the font's own metric for space, rescaled from the font's
@@ -255,7 +255,7 @@ TEST_CASE("df.baker: the atlas is sized to its glyphs, every glyph inside it and
     for (i32 cp = df.firstCodepoint; cp <= df.lastCodepoint; ++cp)
     {
         AtlasRegion r;
-        const bool has = atlas->TryGetRegion(cp, r);
+        const bool has = atlas->TryGetRegion(atlas->GlyphFor(cp), r);
         if (cp >= 33 && cp <= 126)
             CHECK(has);
         if (!has || r.IsEmpty())
@@ -351,8 +351,8 @@ TEST_CASE("df baker: baking is deterministic across runs (parallel-bake regressi
     for (i32 cp = df.firstCodepoint; cp <= df.lastCodepoint; ++cp)
     {
         AtlasRegion ra, rb;
-        const bool ha = a->TryGetRegion(cp, ra);
-        const bool hb = b->TryGetRegion(cp, rb);
+        const bool ha = a->TryGetRegion(a->GlyphFor(cp), ra);
+        const bool hb = b->TryGetRegion(b->GlyphFor(cp), rb);
         CHECK(ha == hb);
         if (ha && hb)
         {

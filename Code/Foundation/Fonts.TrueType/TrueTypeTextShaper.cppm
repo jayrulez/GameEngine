@@ -43,7 +43,7 @@ export namespace foundation::fonts
                 if (prevCodepoint != 0)
                     x += font.GetKerning(prevCodepoint, codepoint);
                 outPositions.PushBack(
-                    GlyphPosition(index, codepoint, x, startY, glyphInfo.advanceWidth, glyphInfo));
+                    GlyphPosition(index, glyphInfo.glyphIndex, x, startY, glyphInfo.advanceWidth, glyphInfo));
                 x += glyphInfo.advanceWidth;
                 prevCodepoint = codepoint;
                 ++index;
@@ -113,7 +113,7 @@ export namespace foundation::fonts
                             pos.x = reflowX;
                             pos.y = y;
                             reflowX += pos.advance;
-                            lastReflowedCodepoint = pos.glyphId;
+                            lastReflowedCodepoint = pos.glyphInfo.codepoint;
                         }
                         kern = (lastReflowedCodepoint != 0)
                                    ? font.GetKerning(lastReflowedCodepoint, codepoint)
@@ -132,7 +132,7 @@ export namespace foundation::fonts
                     lastSpaceIdx = -1;
                 }
 
-                outPositions.PushBack(GlyphPosition(index, codepoint, x + kern, y,
+                outPositions.PushBack(GlyphPosition(index, glyphInfo.glyphIndex, x + kern, y,
                                                     glyphInfo.advanceWidth, glyphInfo));
                 x = x + kern + glyphInfo.advanceWidth;
                 prevCodepoint = codepoint;

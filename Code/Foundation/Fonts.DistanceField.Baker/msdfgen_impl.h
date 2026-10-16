@@ -16,7 +16,8 @@ namespace foundation::fonts::df
 
     // Generate an MSDF bitmap for a single glyph and write RGBA8 pixels to rgbaOut.
     // Returns false on failure (e.g. glyph not found).
-    bool GenerateGlyphMSDF(const u8* fontData, i32 fontDataSize, i32 codepoint, i32 width,
+    // `glyphIndex` is the font's glyph index (what atlases key by).
+    bool GenerateGlyphMSDF(const u8* fontData, i32 fontDataSize, i32 glyphIndex, i32 width,
                            i32 height, f64 pxRange, f64 scaleX, f64 scaleY, f64 translateX,
                            f64 translateY, u8* rgbaOut);
 

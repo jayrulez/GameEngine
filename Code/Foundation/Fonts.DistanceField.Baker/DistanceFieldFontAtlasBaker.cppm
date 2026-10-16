@@ -205,7 +205,7 @@ export namespace foundation::fonts
             // the pack order (and so the atlas layout) never depends on worker scheduling.
             struct GlyphWork
             {
-                i32 codepoint = 0;
+                i32 glyph = 0; // the font's glyph index
                 i32 cellW = 0, cellH = 0;
                 u32 packX = 0, packY = 0;
                 f64 translateX = 0.0, translateY = 0.0;
@@ -214,22 +214,34 @@ export namespace foundation::fonts
             };
             Array<GlyphWork> work;
 
+            // The glyphs the range maps to, each once, keyed by glyph index; the range's codepoints
+            // map to them for unshaped text.
+            Array<i32> glyphs;
             for (i32 cp = options.firstCodepoint; cp <= options.lastCodepoint; ++cp)
             {
                 const int glyphIdx = stbtt_FindGlyphIndex(&stbFont, cp);
                 if (glyphIdx <= 0)
                     continue;
+                atlas->SetGlyphFor(cp, glyphIdx);
+                bool seen = false;
+                for (const i32 g : glyphs)
+                    seen = seen || g == glyphIdx;
+                if (!seen)
+                    glyphs.PushBack(glyphIdx);
+            }
+            for (const i32 glyphIdx : glyphs)
+            {
 
                 // Blank glyphs (space, NBSP - no outline) still carry an advance. Record an
                 // advance-only region or the cursor-walk draw paths, which step by
                 // region.advanceX, render "hello world" as "helloworld". The raster baker
                 // gets this for free from stb's packed chars.
-                const auto addAdvanceOnlyRegion = [&](i32 codepoint, int glyphIndex)
+                const auto addAdvanceOnlyRegion = [&](int glyphIndex)
                 {
                     int advW, lsb;
                     stbtt_GetGlyphHMetrics(&stbFont, glyphIndex, &advW, &lsb);
-                    atlas->SetRegion(codepoint, AtlasRegion(0, 0, 0, 0, 0.0f, 0.0f,
-                                                            static_cast<f32>(advW) * scale));
+                    atlas->SetRegion(glyphIndex, AtlasRegion(0, 0, 0, 0, 0.0f, 0.0f,
+                                                             static_cast<f32>(advW) * scale));
                 };
 
                 // Get pixel-space bitmap box from stb (Y-down screen coords, consistent
@@ -240,7 +252,7 @@ export namespace foundation::fonts
                 int fuX0, fuY0, fuX1, fuY1;
                 if (!stbtt_GetGlyphBox(&stbFont, glyphIdx, &fuX0, &fuY0, &fuX1, &fuY1))
                 {
-                    addAdvanceOnlyRegion(cp, glyphIdx);
+                    addAdvanceOnlyRegion(glyphIdx);
                     continue;
                 }
 
@@ -251,7 +263,7 @@ export namespace foundation::fonts
                 const i32 glyphH = iy1 - iy0;
                 if (glyphW <= 0 || glyphH <= 0)
                 {
-                    addAdvanceOnlyRegion(cp, glyphIdx);
+                    addAdvanceOnlyRegion(glyphIdx);
                     continue;
                 }
 
@@ -270,7 +282,7 @@ export namespace foundation::fonts
                 const f32 offsetY = static_cast<f32>(iy0 - pad - 1);
 
                 GlyphWork item;
-                item.codepoint = cp;
+                item.glyph = glyphIdx;
                 item.cellW = cellW;
                 item.cellH = cellH;
                 // msdfgen's Projection is scale*(coord + translate), so translate is in FONT
@@ -326,7 +338,7 @@ export namespace foundation::fonts
                     GlyphWork& item = work[static_cast<usize>(index)];
                     Array<u8> cellPixels(static_cast<usize>(item.cellW) * item.cellH * 4);
                     MemSet(cellPixels.Data(), 0, cellPixels.Size());
-                    if (!df::GenerateGlyphMSDF(rawData, rawDataSize, item.codepoint, item.cellW,
+                    if (!df::GenerateGlyphMSDF(rawData, rawDataSize, item.glyph, item.cellW,
                                                item.cellH, pxRange, static_cast<f64>(scale),
                                                static_cast<f64>(scale), item.translateX,
                                                item.translateY, cellPixels.Data()))
@@ -356,7 +368,7 @@ export namespace foundation::fonts
             {
                 if (!item.generated)
                     continue;
-                atlas->SetRegion(item.codepoint, item.region);
+                atlas->SetRegion(item.glyph, item.region);
                 anyGlyphs = true;
             }
 

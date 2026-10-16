@@ -128,25 +128,34 @@ export namespace foundation::fonts
             bakedAtlas->SetOversample(static_cast<f32>(options.oversampleX),
                                       static_cast<f32>(options.oversampleY));
 
-            // Copy GlyphInfo + AtlasRegion for every codepoint that packed.
-            for (i32 cp = options.firstCodepoint; cp <= options.lastCodepoint; ++cp)
+            // Every codepoint the range maps to keeps its glyph info and its glyph (a space too: it
+            // draws nothing but advances), and every glyph that packed its region, by glyph index; a
+            // mapped glyph with nothing to draw gets an advance-only region.
+            for (const auto& pair : ttAtlas->CodepointGlyphs())
+            {
+                const GlyphInfo info = ttFont->GetGlyphInfo(pair.key);
+                baked->SetGlyph(pair.key, info);
+                bakedAtlas->SetGlyphFor(pair.key, pair.value);
+                AtlasRegion region;
+                if (!ttAtlas->TryGetRegion(pair.value, region))
+                    bakedAtlas->SetRegion(pair.value, AtlasRegion(0, 0, 0, 0, 0.0f, 0.0f, info.advanceWidth));
+            }
+            for (const i32 glyph : ttAtlas->Glyphs())
             {
                 AtlasRegion region;
-                if (!ttAtlas->TryGetRegion(cp, region))
-                    continue;
-                baked->SetGlyph(cp, ttFont->GetGlyphInfo(cp));
-                bakedAtlas->SetRegion(cp, region);
+                if (ttAtlas->TryGetRegion(glyph, region))
+                    bakedAtlas->SetRegion(glyph, region);
             }
 
             // Capture non-zero kerning pairs within the range (quadratic but
             // trivial per pair; ~9k lookups for the default ASCII range).
             for (i32 a = options.firstCodepoint; a <= options.lastCodepoint; ++a)
             {
-                if (!ttAtlas->Contains(a))
+                if (!ttAtlas->Contains(ttAtlas->GlyphFor(a)))
                     continue;
                 for (i32 b = options.firstCodepoint; b <= options.lastCodepoint; ++b)
                 {
-                    if (!ttAtlas->Contains(b))
+                    if (!ttAtlas->Contains(ttAtlas->GlyphFor(b)))
                         continue;
                     const f32 adj = ttFont->GetKerning(a, b);
                     if (adj != 0)

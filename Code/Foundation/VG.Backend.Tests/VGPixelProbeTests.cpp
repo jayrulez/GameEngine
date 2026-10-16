@@ -950,14 +950,14 @@ TEST_CASE("vg.pixels: the baked-font draw path matches the TTF path (fonts triad
     {
         fonts::AtlasRegion ttfRegion;
         fonts::AtlasRegion bakedRegion;
-        (void)ttfFont->atlas->TryGetRegion('A', ttfRegion);
-        (void)cookedFont->atlas->TryGetRegion('A', bakedRegion);
+        (void)ttfFont->atlas->TryGetRegion(ttfFont->atlas->GlyphFor('A'), ttfRegion);
+        (void)cookedFont->atlas->TryGetRegion(cookedFont->atlas->GlyphFor('A'), bakedRegion);
         fonts::GlyphQuad ttfQuad;
         fonts::GlyphQuad bakedQuad;
         f32 cx = 4.0f;
-        (void)ttfFont->atlas->GetGlyphQuad('A', cx, 60.0f, ttfQuad);
+        (void)ttfFont->atlas->GetGlyphQuad(ttfFont->atlas->GlyphFor('A'), cx, 60.0f, ttfQuad);
         cx = 4.0f;
-        (void)cookedFont->atlas->GetGlyphQuad('A', cx, 60.0f, bakedQuad);
+        (void)cookedFont->atlas->GetGlyphQuad(cookedFont->atlas->GlyphFor('A'), cx, 60.0f, bakedQuad);
         MESSAGE("ttf   region 'A': xy=" << ttfRegion.x << "," << ttfRegion.y
                 << " wh=" << ttfRegion.width << "x" << ttfRegion.height
                 << " off=" << ttfRegion.offsetX << "," << ttfRegion.offsetY

@@ -31,10 +31,13 @@ export namespace foundation::fonts
             m_pixels = Move(pixels);
         }
 
-        void SetRegion(i32 codepoint, AtlasRegion region)
+        /// A glyph's region, by glyph index.
+        void SetRegion(i32 glyphId, AtlasRegion region)
         {
-            m_regions.InsertOrAssign(codepoint, region);
+            m_regions.InsertOrAssign(glyphId, region);
         }
+        /// The glyph a codepoint draws with, for unshaped text.
+        void SetGlyphFor(i32 codepoint, i32 glyphId) { m_cmap.InsertOrAssign(codepoint, glyphId); }
         void SetWhitePixelUV(f32 u, f32 v)
         {
             m_whitePixelU = u;
@@ -52,9 +55,9 @@ export namespace foundation::fonts
                                         : Span<const u8>();
         }
 
-        [[nodiscard]] bool TryGetRegion(i32 codepoint, AtlasRegion& region) const override
+        [[nodiscard]] bool TryGetRegion(i32 glyphId, AtlasRegion& region) const override
         {
-            if (const AtlasRegion* r = m_regions.Find(codepoint))
+            if (const AtlasRegion* r = m_regions.Find(glyphId))
             {
                 region = *r;
                 return true;
@@ -62,33 +65,33 @@ export namespace foundation::fonts
             return false;
         }
 
-        // Keyed by codepoint for now: a codepoint is its own glyph id.
-        [[nodiscard]] i32 GlyphFor(i32 codepoint) const override { return codepoint; }
-        [[nodiscard]] bool Contains(i32 codepoint) const override
+        [[nodiscard]] i32 GlyphFor(i32 codepoint) const override
         {
-            return m_regions.Contains(codepoint);
+            const i32* glyph = m_cmap.Find(codepoint);
+            return glyph != nullptr ? *glyph : -1;
         }
+        [[nodiscard]] bool Contains(i32 glyphId) const override { return m_regions.Contains(glyphId); }
 
         [[nodiscard]] Float2 WhitePixelUV() const override
         {
             return Float2(m_whitePixelU, m_whitePixelV);
         }
 
-        [[nodiscard]] bool GetGlyphQuad(i32 codepoint, f32& cursorX, f32 cursorY,
+        [[nodiscard]] bool GetGlyphQuad(i32 glyphId, f32& cursorX, f32 cursorY,
                                         GlyphQuad& quad) const override
         {
             quad = GlyphQuad();
-            const AtlasRegion* region = m_regions.Find(codepoint);
+            const AtlasRegion* region = m_regions.Find(glyphId);
             if (region == nullptr)
                 return false;
             return BuildQuad(*region, cursorX, cursorY, true, cursorX, quad);
         }
 
-        [[nodiscard]] bool GetGlyphQuadAt(i32 codepoint, f32 x, f32 y,
+        [[nodiscard]] bool GetGlyphQuadAt(i32 glyphId, f32 x, f32 y,
                                           GlyphQuad& quad) const override
         {
             quad = GlyphQuad();
-            const AtlasRegion* region = m_regions.Find(codepoint);
+            const AtlasRegion* region = m_regions.Find(glyphId);
             if (region == nullptr)
                 return false;
             f32 dummy = x;
@@ -98,7 +101,8 @@ export namespace foundation::fonts
         [[nodiscard]] AtlasMode Mode() const override { return AtlasMode::DistanceField; }
         [[nodiscard]] f32 DistanceFieldRange() const override { return m_pxRange; }
 
-        [[nodiscard]] const HashMap<i32, AtlasRegion>& Regions() const { return m_regions; }
+        [[nodiscard]] const HashMap<i32, AtlasRegion>& Regions() const { return m_regions; } // by glyph
+        [[nodiscard]] const HashMap<i32, i32>& CodepointGlyphs() const { return m_cmap; }
 
     private:
         bool BuildQuad(const AtlasRegion& region, f32 x, f32 y, bool advance, f32& cursorX,
@@ -136,7 +140,8 @@ export namespace foundation::fonts
         u32 m_height = 0;
         f32 m_pxRange = 4.0f;
         Array<u8> m_pixels; // RGBA8 linear, size = w * h * 4
-        HashMap<i32, AtlasRegion> m_regions;
+        HashMap<i32, AtlasRegion> m_regions; // glyph index -> region
+        HashMap<i32, i32> m_cmap;            // codepoint -> glyph index
         f32 m_whitePixelU = 0;
         f32 m_whitePixelV = 0;
     };

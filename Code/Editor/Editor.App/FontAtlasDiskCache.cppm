@@ -25,8 +25,9 @@ using namespace foundation::core;
 namespace
 {
     // Bump on any layout change - old cache files then miss and rebake. 2: distance-field atlases
-    // are sized to their glyphs, so a cached full-size atlas is stale.
-    constexpr u32 kCacheFormatVersion = 2;
+    // are sized to their glyphs, so a cached full-size atlas is stale. 3: regions key by glyph
+    // index, followed by the codepoint -> glyph map.
+    constexpr u32 kCacheFormatVersion = 3;
     constexpr u32 kCacheMagic = 0x43414644u; // 'DFAC'
 
     struct CacheHeader
@@ -40,14 +41,21 @@ namespace
         u32 width = 0;
         u32 height = 0;
         u32 regionCount = 0;
+        u32 glyphMapCount = 0;
         u32 pixelBytes = 0;
     };
 
     struct CacheRegion
     {
-        i32 codepoint = 0;
+        i32 glyph = 0;
         u16 x = 0, y = 0, width = 0, height = 0;
         f32 offsetX = 0.0f, offsetY = 0.0f, advanceX = 0.0f;
+    };
+
+    struct CacheGlyphMapping
+    {
+        i32 codepoint = 0;
+        i32 glyph = 0;
     };
 }
 
@@ -98,9 +106,19 @@ export namespace editor
                     allocator.Delete(atlas);
                     return nullptr;
                 }
-                atlas->SetRegion(r.codepoint,
+                atlas->SetRegion(r.glyph,
                                  foundation::fonts::AtlasRegion(r.x, r.y, r.width, r.height,
                                                                 r.offsetX, r.offsetY, r.advanceX));
+            }
+            for (u32 i = 0; i < header.glyphMapCount; ++i)
+            {
+                CacheGlyphMapping m;
+                if (stream->Read(&m, sizeof(m)) != sizeof(m))
+                {
+                    allocator.Delete(atlas);
+                    return nullptr;
+                }
+                atlas->SetGlyphFor(m.codepoint, m.glyph);
             }
             Array<u8> pixels(static_cast<usize>(header.pixelBytes));
             if (stream->Read(pixels.Data(), pixels.Size()) != pixels.Size())
@@ -129,12 +147,13 @@ export namespace editor
                 return;
             }
 
-            // Regions sorted by codepoint: cache files are byte-stable for identical bakes.
+            // Regions sorted by glyph and the map by codepoint: cache files are byte-stable for
+            // identical bakes.
             Array<CacheRegion> regions;
             for (const auto& pair : df.Regions())
             {
                 CacheRegion r;
-                r.codepoint = pair.key;
+                r.glyph = pair.key;
                 r.x = pair.value.x;
                 r.y = pair.value.y;
                 r.width = pair.value.width;
@@ -148,12 +167,31 @@ export namespace editor
             {
                 CacheRegion item = regions[i];
                 usize j = i;
-                while (j > 0 && regions[j - 1].codepoint > item.codepoint)
+                while (j > 0 && regions[j - 1].glyph > item.glyph)
                 {
                     regions[j] = regions[j - 1];
                     --j;
                 }
                 regions[j] = item;
+            }
+            Array<CacheGlyphMapping> mappings;
+            for (const auto& pair : df.CodepointGlyphs())
+            {
+                CacheGlyphMapping m;
+                m.codepoint = pair.key;
+                m.glyph = pair.value;
+                mappings.PushBack(m);
+            }
+            for (usize i = 1; i < mappings.Size(); ++i)
+            {
+                CacheGlyphMapping item = mappings[i];
+                usize j = i;
+                while (j > 0 && mappings[j - 1].codepoint > item.codepoint)
+                {
+                    mappings[j] = mappings[j - 1];
+                    --j;
+                }
+                mappings[j] = item;
             }
 
             CacheHeader header;
@@ -167,12 +205,15 @@ export namespace editor
             header.width = df.Width();
             header.height = df.Height();
             header.regionCount = static_cast<u32>(regions.Size());
+            header.glyphMapCount = static_cast<u32>(mappings.Size());
             header.pixelBytes = static_cast<u32>(pixels.Size());
 
             Array<u8> blob;
-            blob.Reserve(sizeof(header) + regions.Size() * sizeof(CacheRegion) + pixels.Size());
+            blob.Reserve(sizeof(header) + regions.Size() * sizeof(CacheRegion) +
+                         mappings.Size() * sizeof(CacheGlyphMapping) + pixels.Size());
             AppendBytes(blob, &header, sizeof(header));
             AppendBytes(blob, regions.Data(), regions.Size() * sizeof(CacheRegion));
+            AppendBytes(blob, mappings.Data(), mappings.Size() * sizeof(CacheGlyphMapping));
             AppendBytes(blob, pixels.Data(), pixels.Size());
 
             (void)CreateDirectory(m_directory.AsView());

@@ -61,7 +61,7 @@ namespace
             entry.kerning.PushBack(kerning);
 
             FontResourceRegion region;
-            region.codepoint = 'A';
+            region.glyph = 1; // by glyph index; the glyph row maps 'A' to it
             region.region = AtlasRegion(0, 0, 2, 2, 0.0f, -entry.ascent, glyph.info.advanceWidth);
             entry.regions.PushBack(region);
 
@@ -133,7 +133,9 @@ TEST_CASE("font.factory: cooked Coverage FontResource -> rasterizer-free Font pr
     REQUIRE(closest->atlas);
     CHECK(closest->atlas->Mode() == AtlasMode::Coverage);
     AtlasRegion region;
-    CHECK(closest->atlas->TryGetRegion('A', region));
+    CHECK(closest->atlas->GlyphFor('A') == 1); // the glyph row's codepoint -> glyph
+    CHECK(closest->atlas->GlyphFor('B') == -1);
+    CHECK(closest->atlas->TryGetRegion(closest->atlas->GlyphFor('A'), region));
     CHECK(region.width == 2);
     REQUIRE(closest->atlasImage);
     CHECK(closest->atlasImage->Format() == foundation::image::PixelFormat::RGBA8);

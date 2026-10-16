@@ -190,13 +190,17 @@ TEST_CASE("ttf.atlas: Contains respects the codepoint range")
     REQUIRE(baked.HasValue());
     IFontAtlas* atlas = baked.Value();
 
-    CHECK(atlas->Contains(static_cast<i32>('A')));
-    CHECK(atlas->Contains(static_cast<i32>('z')));
-    CHECK(atlas->Contains(static_cast<i32>('0')));
+    // The range's codepoints map to their glyphs (by glyph index), the rest to none.
+    CHECK(atlas->Contains(atlas->GlyphFor(static_cast<i32>('A'))));
+    CHECK(atlas->Contains(atlas->GlyphFor(static_cast<i32>('z'))));
+    CHECK(atlas->Contains(atlas->GlyphFor(static_cast<i32>('0'))));
+    CHECK(atlas->GlyphFor(static_cast<i32>('A')) == font->GetGlyphInfo('A').glyphIndex);
+    CHECK(atlas->GlyphFor(static_cast<i32>('A')) != static_cast<i32>('A'));
+    CHECK(atlas->GlyphFor(0) == -1);
+    CHECK(atlas->GlyphFor(31) == -1);
+    CHECK(atlas->GlyphFor(127) == -1);
+    CHECK(atlas->GlyphFor(200) == -1); // extended Latin not in default range
     CHECK_FALSE(atlas->Contains(0));
-    CHECK_FALSE(atlas->Contains(31));
-    CHECK_FALSE(atlas->Contains(127));
-    CHECK_FALSE(atlas->Contains(200)); // extended Latin not in default range
 
     DefaultAllocator().Delete(atlas);
     DefaultAllocator().Delete(font);
@@ -216,7 +220,7 @@ TEST_CASE("ttf.atlas: GetGlyphQuad")
 
     f32 cursorX = 0;
     GlyphQuad quad;
-    CHECK(atlas->GetGlyphQuad(static_cast<i32>('A'), cursorX, 0, quad));
+    CHECK(atlas->GetGlyphQuad(atlas->GlyphFor(static_cast<i32>('A')), cursorX, 0, quad));
     CHECK(quad.Width() > 0);
     CHECK(quad.Height() > 0);
     CHECK((quad.u0 >= 0 && quad.u0 <= 1));
@@ -247,9 +251,11 @@ TEST_CASE("ttf.shaper: ShapeText")
     CHECK(shaped.Value() > 0);
     CHECK(positions[0].x < positions[1].x);
     CHECK(positions[1].x < positions[2].x);
-    CHECK(positions[0].glyphId == static_cast<i32>('A'));
-    CHECK(positions[1].glyphId == static_cast<i32>('B'));
-    CHECK(positions[2].glyphId == static_cast<i32>('C'));
+    // Glyph ids: the font's glyph indices for the characters.
+    CHECK(positions[0].glyphId == font->GetGlyphInfo('A').glyphIndex);
+    CHECK(positions[1].glyphId == font->GetGlyphInfo('B').glyphIndex);
+    CHECK(positions[2].glyphId == font->GetGlyphInfo('C').glyphIndex);
+    CHECK(positions[0].glyphId > 0);
 
     DefaultAllocator().Delete(font);
     TrueTypeFonts::Shutdown();

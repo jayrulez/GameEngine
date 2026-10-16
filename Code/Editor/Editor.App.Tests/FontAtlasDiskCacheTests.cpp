@@ -96,8 +96,9 @@ TEST_CASE("font-atlas-cache: DF bakes round-trip byte-identically through the di
     for (i32 cp = options.firstCodepoint; cp <= options.lastCodepoint; ++cp)
     {
         AtlasRegion a, b;
-        const bool ha = atlas->TryGetRegion(cp, a);
-        const bool hb = loaded->TryGetRegion(cp, b);
+        CHECK(atlas->GlyphFor(cp) == loaded->GlyphFor(cp)); // the codepoint map round-trips too
+        const bool ha = atlas->TryGetRegion(atlas->GlyphFor(cp), a);
+        const bool hb = loaded->TryGetRegion(loaded->GlyphFor(cp), b);
         CHECK(ha == hb);
         if (ha && hb)
         {

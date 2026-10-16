@@ -115,7 +115,9 @@ export namespace pipeline{
         // 4 (2026-09-08): FontResource 2 - the glyph bounds keys use full names.
         // 5 (2026-10-04): a distance-field atlas is sized to its glyphs (the asset's atlas size
         // is a maximum), and a glyph that does not fit fails the bake instead of vanishing.
-        [[nodiscard]] u32 Version() const override { return 5; }
+        // 6 (2026-10-15): FontResource 3 - atlases key by glyph index, so a shaper's glyphs can
+        // draw; every codepoint the range maps to keeps its glyph row (a space's too).
+        [[nodiscard]] u32 Version() const override { return 6; }
 
         [[nodiscard]] Status Build(const pipeline::Asset& asset,
                                    pipeline::AssetBuildContext& ctx) override
@@ -240,7 +242,7 @@ export namespace pipeline{
             for (const auto& pair : data->atlas->Regions())
             {
                 FontResourceRegion region;
-                region.codepoint = pair.key;
+                region.glyph = pair.key;
                 region.region = pair.value;
                 entry.regions.PushBack(region);
             }
@@ -292,10 +294,12 @@ export namespace pipeline{
                 resource.family = String(font.FamilyName());
             }
 
+            // Every codepoint the atlas maps keeps its glyph row; every glyph its region, once.
+            HashMap<i32, bool> regionWritten;
             for (i32 cp = fa.firstCodepoint; cp <= fa.lastCodepoint; ++cp)
             {
-                AtlasRegion region;
-                if (!atlas->TryGetRegion(cp, region))
+                const i32 glyphId = atlas->GlyphFor(cp);
+                if (glyphId < 0)
                 {
                     continue;
                 }
@@ -303,20 +307,25 @@ export namespace pipeline{
                 glyph.codepoint = cp;
                 glyph.info = font.GetGlyphInfo(cp);
                 entry.glyphs.PushBack(glyph);
-                FontResourceRegion rr;
-                rr.codepoint = cp;
-                rr.region = region;
-                entry.regions.PushBack(rr);
+                AtlasRegion region;
+                if (regionWritten.Find(glyphId) == nullptr && atlas->TryGetRegion(glyphId, region))
+                {
+                    regionWritten.InsertOrAssign(glyphId, true);
+                    FontResourceRegion rr;
+                    rr.glyph = glyphId;
+                    rr.region = region;
+                    entry.regions.PushBack(rr);
+                }
             }
             for (i32 a = fa.firstCodepoint; a <= fa.lastCodepoint; ++a)
             {
-                if (!atlas->Contains(a))
+                if (!atlas->Contains(atlas->GlyphFor(a)))
                 {
                     continue;
                 }
                 for (i32 b = fa.firstCodepoint; b <= fa.lastCodepoint; ++b)
                 {
-                    if (!atlas->Contains(b))
+                    if (!atlas->Contains(atlas->GlyphFor(b)))
                     {
                         continue;
                     }

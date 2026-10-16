@@ -291,8 +291,8 @@ TEST_CASE("ttf.ui: clusters count characters, not bytes, and a line break has no
         CHECK(positions[static_cast<usize>(i)].clusterLength == 1);
         CHECK(positions[static_cast<usize>(i)].xOffset == 0.0f);
     }
-    CHECK(positions[1].glyphId == 0xE9);
-    CHECK(positions[2].glyphId == 0x20AC);
+    CHECK(positions[1].glyphId == font->GetGlyphInfo(0xE9).glyphIndex);
+    CHECK(positions[2].glyphId == font->GetGlyphInfo(0x20AC).glyphIndex);
 
     // "ab\ncd" wrapped: the break is character 2 and draws nothing.
     Array<GlyphPosition> lines;

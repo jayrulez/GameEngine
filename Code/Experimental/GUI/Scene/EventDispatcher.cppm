@@ -375,8 +375,10 @@ export namespace experimental::gui
         }
 
         // === A held direction (G7) ===
-        // A gamepad's d-pad or stick held in a direction: focus moves at once, then, after a delay,
-        // again and again, faster the longer it is held. (A keyboard's held arrow repeats by the
+        // A gamepad's d-pad or stick held in a direction: a step at once, then, after a delay,
+        // again and again, faster the longer it is held. Each step reaches the focused widget as an
+        // arrow key does, so a slider moves its value and a list its selection, and only what it
+        // leaves moves focus. (A keyboard's held arrow repeats by the
         // system's own key repeat.) The SceneRoot's update ticks it.
         void PressDirection(NavDirection direction)
         {
@@ -384,7 +386,7 @@ export namespace experimental::gui
             m_heldDirection = direction;
             m_heldFor = 0.0f;
             m_nextRepeatAt = kRepeatDelay;
-            (void)MoveFocus(direction);
+            StepDirection(direction);
         }
         void ReleaseDirection(NavDirection direction)
         {
@@ -399,7 +401,7 @@ export namespace experimental::gui
             m_heldFor += seconds;
             for (i32 guard = 0; guard < 8 && m_heldFor >= m_nextRepeatAt; ++guard)
             {
-                (void)MoveFocus(m_heldDirection);
+                StepDirection(m_heldDirection);
                 // From the first interval down to the fastest, over the time held past the delay.
                 const f32 ramp = core::Min(1.0f, (m_heldFor - kRepeatDelay) / kRepeatRampTime);
                 m_nextRepeatAt += kRepeatSlowest + (kRepeatFastest - kRepeatSlowest) * ramp;
@@ -409,6 +411,22 @@ export namespace experimental::gui
         static constexpr f32 kRepeatSlowest = 0.16f; // the first repeats' interval
         static constexpr f32 kRepeatFastest = 0.05f; // once held long
         static constexpr f32 kRepeatRampTime = 1.2f; // from slowest to fastest
+
+        // One step of a held direction, as an arrow key takes it: the focused widget first (a
+        // slider steps its value, a list its selection), navigation with what it leaves.
+        void StepDirection(NavDirection direction)
+        {
+            UseKeyboard();
+            const KeyCode key = direction == NavDirection::Up     ? KeyCode::Up
+                                : direction == NavDirection::Down ? KeyCode::Down
+                                : direction == NavDirection::Left ? KeyCode::Left
+                                                                  : KeyCode::Right;
+            KeyEvent event(EventType::KeyDown, m_focusNode, static_cast<u32>(key), 0);
+            if (m_focusNode)
+                m_focusNode->HandleKeyDown(event);
+            if (!event.Handled)
+                (void)MoveFocus(direction);
+        }
 
 
         // Clear any interaction refs pointing at `node` (call before removing/destroying it).

@@ -102,11 +102,12 @@ export namespace experimental::gui
         // BEFORE the routed OnMouseMove, so gating the move on IsPressed() would stop the
         // drag the instant the cursor left. Pointer capture guarantees the release reaches
         // us, so OnMouseUp reliably clears m_dragging.
-        // Left and right step the value, given back at its ends (focus moves on); Home and End jump.
+        // Left and right step the value, and stay the slider's at its ends: holding the d-pad to
+        // reach 0 or 100 must not throw focus off it (user ruling); up and down navigate. Home and
+        // End jump.
         void OnKeyDown(const KeyEvent& event) override
         {
             const KeyCode key = static_cast<KeyCode>(event.KeyCode);
-            const f32 before = m_value;
             if (key == KeyCode::Left)
                 SetValue(m_value - m_keyStep);
             else if (key == KeyCode::Right)
@@ -117,7 +118,7 @@ export namespace experimental::gui
                 SetValue(1.0f);
             else
                 return;
-            event.Handled = m_value != before || key == KeyCode::Home || key == KeyCode::End;
+            event.Handled = true;
         }
 
         void OnMouseDown(const MouseEvent& event) override

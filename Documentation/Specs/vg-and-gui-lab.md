@@ -399,7 +399,8 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   on the cross axis, then the nearest along it, skipping hidden, disabled and clipped-away widgets
   (a scroller's clip excepted) and the focused widget's own ancestors; focus scopes that pass, wrap
   or contain and remember their last focus; keys to the focused widget first, its unused arrows
-  (KeyEvent::Handled) moving focus, so a slider or a list gives them back at its ends; Return or
+  (KeyEvent::Handled) moving focus, so a list gives them back at its ends (a slider keeps left
+  and right even there: holding the d-pad to its end must not throw focus off it, user ruling); Return or
   Space activating as a click. Overrides and scopes from sheets, markup and scripts alike
   (f4daab463: nav-up and the rest, nav-scope, nav-default, reflected properties carrying their CSS
   names). A held direction repeating after 0.4 s from 0.16 s down to 0.05 s, focus scrolling into

@@ -174,7 +174,7 @@ TEST_CASE("navigation: a modal confines it")
     CHECK(bed.Focused() == SV(u8"no"));
 }
 
-TEST_CASE("navigation: a slider and a list use the arrows, and give them back at their ends")
+TEST_CASE("navigation: a slider keeps its arrows at its ends; a list gives them back")
 {
     Bed bed;
     auto slider = Make<Slider>();
@@ -187,8 +187,9 @@ TEST_CASE("navigation: a slider and a list use the arrows, and give them back at
     bed.Key(KeyCode::Right);
     CHECK(slider->GetValue() == doctest::Approx(0.95f));
     bed.Key(KeyCode::Right);
-    bed.Key(KeyCode::Right); // at 1: given back
-    CHECK(bed.Focused() == SV(u8"after"));
+    bed.Key(KeyCode::Right); // at 1: still the slider's (holding to the end must not leave it)
+    CHECK(slider->GetValue() == doctest::Approx(1.0f));
+    CHECK(bed.d.GetFocusNode() == slider.Get());
 
     auto list = Make<ListBox>();
     list->SetPosition(core::Float2{10.0f, 100.0f});
@@ -393,8 +394,9 @@ TEST_CASE("navigation: a held d-pad direction reaches the focused widget before 
     bed.d.ReleaseDirection(NavDirection::Down);
     CHECK(bed.d.GetFocusNode() == slider.Get()); // nothing below it: stays
     slider->SetValue(1.0f);
-    bed.d.PressDirection(NavDirection::Right); // at its end: given back
-    CHECK(bed.Focused() == SV(u8"after"));
+    bed.d.PressDirection(NavDirection::Right); // at its end: still the slider's
+    CHECK(bed.d.GetFocusNode() == slider.Get());
+    bed.d.ReleaseDirection(NavDirection::Right);
 }
 
 TEST_CASE("navigation: after a click on the backdrop, an arrow starts from the GUI's entry")

@@ -31,6 +31,7 @@ export import :node;
 export import :action;
 export import :action_manager;
 export import :actions;
+export import :navigation;
 export import :event_dispatcher;
 export import :data_model;
 export import :scene_root;

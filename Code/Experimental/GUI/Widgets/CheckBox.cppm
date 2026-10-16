@@ -89,6 +89,7 @@ export namespace experimental::gui
         }
 
     protected:
+        bool OnActivate() override { return ActivateAsClick(); } // Return, Space: a click
         void OnMouseClick(const MouseEvent& event) override
         {
             (void)event;

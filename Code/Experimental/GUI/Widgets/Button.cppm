@@ -43,6 +43,7 @@ export namespace experimental::gui
         [[nodiscard]] bool HasOnClick() const noexcept { return static_cast<bool>(m_onClick); }
 
     protected:
+        bool OnActivate() override { return ActivateAsClick(); } // Return, Space: a click
         void OnMouseClick(const MouseEvent& event) override
         {
             (void)event;

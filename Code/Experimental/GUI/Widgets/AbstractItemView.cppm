@@ -260,7 +260,10 @@ export namespace experimental::gui
         {
             const KeyCode key = static_cast<KeyCode>(event.KeyCode);
             if (OnExtraKey(key))
+            {
+                event.Handled = true;
                 return;
+            }
             const i32 items = static_cast<i32>(ItemCount());
             if (items == 0)
                 return;
@@ -291,6 +294,11 @@ export namespace experimental::gui
             default:
                 return;
             }
+            // An arrow at the view's end is given back (focus moves on).
+            const bool arrow = key == KeyCode::Up || key == KeyCode::Down;
+            if (arrow && target == primary)
+                return;
+            event.Handled = true;
             if (shift && m_selectionMode == SelectionMode::Multi)
                 SelectRange(target, /*scroll*/ true);
             else

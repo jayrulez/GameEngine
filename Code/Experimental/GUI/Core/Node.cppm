@@ -40,6 +40,17 @@ namespace vg = foundation::vg;
 
 export namespace experimental::gui
 {
+    /// What a focus scope does when navigation reaches its edge (G7 of Specs/vg-and-gui-lab.md):
+    /// not a scope; pass to the neighbours outside it (the default for a scope); wrap around to its
+    /// other side (menus, carousels); or contain focus (a dialog).
+    enum class NavScope : u8
+    {
+        None,
+        Pass,
+        Wrap,
+        Contain,
+    };
+
     class EventDispatcher; // owned by the SceneRoot; reached via GetEventDispatcher()
     class ElementSet;      // what a GUI may create (:element_types); its SceneRoot holds one
     class SceneRoot;       // the root of a GUI (:scene_root)
@@ -723,6 +734,7 @@ export namespace experimental::gui
             OnKeyUp(e);
             SendEvent(e);
         }
+        bool HandleActivate() { return OnActivate(); }
         void HandleTextInput(const TextInputEvent& e)
         {
             OnTextInput(e);
@@ -799,6 +811,23 @@ export namespace experimental::gui
         // UI_TAB_FOCUSABLE flag.
         void SetTabFocusable(bool focusable) noexcept { m_tabFocusable = focusable; }
         [[nodiscard]] bool IsTabFocusable() const noexcept { return m_tabFocusable; }
+
+        // === Focus scopes (G7) ===
+        // A scope groups what directional and tab navigation move between: it says what happens
+        // at its edge, remembers what was last focused inside it (so coming back returns there),
+        // and may name the widget focus starts on (its id).
+        void SetNavScope(NavScope scope) noexcept { m_navScope = scope; }
+        [[nodiscard]] NavScope GetNavScope() const noexcept { return m_navScope; }
+        void SetDefaultFocusId(core::StringView id) { m_defaultFocusId = core::String(id); }
+        [[nodiscard]] core::StringView GetDefaultFocusId() const noexcept { return m_defaultFocusId.AsView(); }
+        /// What was last focused inside this scope (weakly: null once it is gone).
+        [[nodiscard]] Node* GetRememberedFocus() const noexcept
+        {
+            return m_rememberedFocus.table != nullptr
+                       ? m_rememberedFocus.table->Resolve(m_rememberedFocus.slot, m_rememberedFocus.generation)
+                       : nullptr;
+        }
+        void RememberFocus(Node& focused) { m_rememberedFocus = focused.TakeElementRef(); }
 
         // === Invalidation === (marks self + ancestors until an already-dirty one)
         void Invalidate()
@@ -910,6 +939,17 @@ export namespace experimental::gui
         virtual void OnMouseClick(const MouseEvent&) {}
         virtual void OnMouseWheel(const WheelEvent&) {}
         virtual void OnKeyDown(const KeyEvent&) {}
+        /// Return or Space (a gamepad's South) on the focused widget, when it used neither: what a
+        /// click does, for the widgets a click acts on. True when it did something.
+        virtual bool OnActivate() { return false; }
+
+        // A click at the centre, as activation delivers it (listeners see a click, as with a mouse).
+        bool ActivateAsClick()
+        {
+            HandleMouseClick(MouseEvent(EventType::MouseClick, this,
+                                        ConvertToWorldSpace(core::Float2{m_size.x * 0.5f, m_size.y * 0.5f})));
+            return true;
+        }
         virtual void OnKeyUp(const KeyEvent&) {}
         virtual void OnTextInput(const TextInputEvent&) {}
         virtual void OnFocusGained() {}
@@ -1001,6 +1041,9 @@ export namespace experimental::gui
         bool m_childLayoutDirty = false;   // some descendant's must
         bool m_layingOut = false;          // inside OnLayout: the sizes it sets are its own
         bool m_clipChildren = false;
+        NavScope m_navScope = NavScope::None;
+        core::String m_defaultFocusId;
+        ElementRef m_rememberedFocus{}; // weak: resolved through the GUI's element table
         bool m_focused = false;
         bool m_tabFocusable = false;
         bool m_hitTestVisible = true;

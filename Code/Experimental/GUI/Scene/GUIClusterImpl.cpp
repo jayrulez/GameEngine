@@ -20,6 +20,39 @@ namespace experimental::gui
 {
     SceneRoot* Node::GetSceneRoot() { return core::Cast<SceneRoot>(GetRootNode()); }
 
+    void Node::SetCommand(StringView id)
+    {
+        m_command.Set(core::String(id));
+        if (m_commandBound)
+            return;
+        m_commandBound = true;
+        // One binding follows the id, the GUI the control is in, focus, the command's state and its
+        // handlers: whichever changes, the control's state follows.
+        Bind([this]()
+             {
+                 const core::String commandId(m_command.Get());
+                 SceneRoot* root = ObserveSceneRoot();
+                 if (commandId.Size() == 0 || root == nullptr)
+                     return;
+                 const bool available = root->IsCommandAvailable(commandId.AsView());
+                 const Command* command = root->GetCommands().Find(commandId.AsView());
+                 const bool checked = command != nullptr && command->IsChecked();
+                 Untracked([&] { OnBoundCommandState(available, checked); });
+             });
+    }
+
+    bool Node::RunBoundCommand()
+    {
+        SceneRoot* root = HasCommand() ? GetSceneRoot() : nullptr;
+        return root != nullptr && root->RunCommand(GetCommand());
+    }
+
+    void Node::NotifyCommandsChanged()
+    {
+        if (SceneRoot* root = GetSceneRoot())
+            root->GetCommands().NotifyChanged();
+    }
+
     void Node::RequestFocus()
     {
         if (EventDispatcher* dispatcher = GetEventDispatcher())

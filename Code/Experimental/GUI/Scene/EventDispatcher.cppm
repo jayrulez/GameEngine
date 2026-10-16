@@ -22,6 +22,7 @@ import :node;
 import :event;
 import :clipboard;
 import :navigation; // directional focus (G7)
+import :reactive;   // Observable (focus, for commands)
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -49,6 +50,12 @@ export namespace experimental::gui
 
         [[nodiscard]] Node* GetOverNode() const noexcept { return m_overNode; }
         [[nodiscard]] Node* GetFocusNode() const noexcept { return m_focusNode; }
+        /// The focused node, read as a binding's dependency (a command's availability follows it).
+        [[nodiscard]] Node* ObserveFocus() const
+        {
+            m_focusChanged.Track();
+            return m_focusNode;
+        }
         [[nodiscard]] core::Float2 GetMousePosition() const noexcept { return m_mousePos; }
 
         // True if the currently focused node wants platform text input (the gui.shell bridge
@@ -262,6 +269,7 @@ export namespace experimental::gui
                 return;
             Node* previous = m_focusNode;
             m_focusNode = node;
+            m_focusChanged.Notify(); // the focus path: which commands are available
             if (previous)
                 previous->HandleFocusLost();
             if (m_focusNode)
@@ -518,6 +526,7 @@ export namespace experimental::gui
         Node* m_dropTarget = nullptr;                // non-owning current target
         DragPayload m_dragPayload;
         core::Float2 m_mousePos{0.0f, 0.0f};
+        Observable m_focusChanged;   // told when focus moves
         bool m_keyboardMode = false; // the last input was a key or a d-pad move, not the pointer
         bool m_holding = false;      // a direction held (PressDirection)
         NavDirection m_heldDirection = NavDirection::Down;

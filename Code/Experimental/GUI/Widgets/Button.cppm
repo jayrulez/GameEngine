@@ -47,6 +47,7 @@ export namespace experimental::gui
         void OnMouseClick(const MouseEvent& event) override
         {
             (void)event;
+            (void)RunBoundCommand(); // a command it is bound to (G7)
             if (m_onClick)
                 m_onClick();
         }

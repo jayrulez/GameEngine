@@ -57,6 +57,13 @@ export namespace experimental::gui
         [[nodiscard]] static bool GetBool(core::StringView name);
         /// Sets the GUI's data value `name` (whatever is bound to it follows).
         static void Set(core::StringView name, const Variant& value);
+        /// Commands (G7): define one (with its label), switch it on or off, set its checked state,
+        /// run it along the focus path (true when a handler ran).
+        static void DefineCommand(core::StringView id, core::StringView label);
+        static void SetCommandEnabled(core::StringView id, bool enabled);
+        static void SetCommandChecked(core::StringView id, bool checked);
+        [[nodiscard]] static bool IsCommandChecked(core::StringView id);
+        static bool RunCommand(core::StringView id);
     };
 
     /// Registers the lab's own element types (ElementTypes::Register: Label, Button, the layouts,

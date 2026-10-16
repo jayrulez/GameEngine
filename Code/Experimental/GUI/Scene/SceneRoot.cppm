@@ -31,6 +31,7 @@ import :event_dispatcher;
 import :media_query; // MediaContext
 import :reactive;    // EffectScheduler
 import :data_model;
+import :commands;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -88,6 +89,55 @@ export namespace experimental::gui
         [[nodiscard]] const RefPtr<DataModel>& GetDataRef() const noexcept { return m_data; }
 
         [[nodiscard]] EffectScheduler* GetEffectScheduler() override { return &m_effects; }
+
+        // === Commands (G7) ===
+        [[nodiscard]] CommandSet& GetCommands() noexcept { return m_commands; }
+        /// The command `id`, defined now if new.
+        Command& DefineCommand(core::StringView id) { return m_commands.Define(id, MemoryAllocator()); }
+
+        /// Runs command `id` along the focus path (the root alone when nothing here is focused):
+        /// capture handlers from the root down, then bubble handlers from the focused widget up, the
+        /// first bubble handler stopping it unless it sets Propagate. False when it is disabled or
+        /// nothing handled it.
+        bool RunCommand(core::StringView id)
+        {
+            if (const Command* command = m_commands.Find(id); command != nullptr && !Untracked([&] { return command->IsEnabled(); }))
+                return false;
+            Array<Node*> path; // focused first, this root last
+            for (Node* n = FocusInThisTree(); n != nullptr; n = n->GetParent())
+                path.PushBack(n);
+            bool ran = false;
+            CommandEvent event{id, CommandPhase::Capture, false};
+            for (usize i = path.Size(); i-- > 0;)
+                ran |= path[i]->RunCommandHandlers(event);
+            event.Phase = CommandPhase::Bubble;
+            for (Node* n : path)
+            {
+                event.Propagate = false;
+                if (n->RunCommandHandlers(event))
+                {
+                    ran = true;
+                    if (!event.Propagate)
+                        break;
+                }
+            }
+            return ran;
+        }
+
+        /// Whether command `id` is enabled and a handler for it is on the focus path: a read a
+        /// binding follows (focus, the command's state, the handlers), so a control bound to the
+        /// command greys and lights as focus moves.
+        [[nodiscard]] bool IsCommandAvailable(core::StringView id)
+        {
+            m_commands.TrackChanges();
+            (void)m_eventDispatcher.ObserveFocus();
+            if (const Command* command = m_commands.Find(id); command != nullptr && !command->IsEnabled())
+                return false;
+            for (Node* n = FocusInThisTree(); n != nullptr; n = n->GetParent())
+                if (n->HandlesCommand(id))
+                    return true;
+            return false;
+        }
         [[nodiscard]] ActionManager* GetActionManager() override { return &m_actionManager; }
         [[nodiscard]] MutationQueue* GetMutationQueue() override { return &m_mutationQueue; }
         [[nodiscard]] EventDispatcher* GetEventDispatcher() override { return &m_eventDispatcher; }
@@ -130,6 +180,7 @@ export namespace experimental::gui
     private:
         ActionManager m_actionManager;
         EffectScheduler m_effects;  // the bindings waiting for this frame
+        CommandSet m_commands;      // this GUI's commands
         RefPtr<DataModel> m_data;   // shared with the bindings to it
         u32 m_lastBindingCount = 0;
         MutationQueue m_mutationQueue;
@@ -139,6 +190,16 @@ export namespace experimental::gui
         f32 m_displayScale = 1.0f;
         u32 m_lastLayoutCount = 0;
         core::Float2 m_viewport{0.0f, 0.0f};
+
+        // The focused node when it is in this tree, else this root.
+        [[nodiscard]] Node* FocusInThisTree()
+        {
+            Node* focus = m_eventDispatcher.GetFocusNode();
+            for (Node* n = focus; n != nullptr; n = n->GetParent())
+                if (n == this)
+                    return focus;
+            return this;
+        }
 
         void ApplyViewport()
         {

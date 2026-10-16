@@ -31,6 +31,7 @@ import :mutation_queue;
 import :node_box;
 import :reactive; // Effect, EffectScheduler (bindings)
 import :data_model; // DataModel (BindData)
+import :commands;   // CommandHandler, CommandPhase (G7)
 import :css_values;  // LengthValue
 import :style_value; // TransformFunction
 
@@ -236,6 +237,13 @@ export namespace experimental::gui
         /// The root of the GUI this node is in, or null when it is in none (a detached subtree:
         /// GetRootNode gives its topmost node).
         [[nodiscard]] SceneRoot* GetSceneRoot();
+        /// The GUI this node is in, read as a binding's dependency: the binding reruns when the node
+        /// joins or leaves one (a control bound to a command, made by markup before it is attached).
+        [[nodiscard]] SceneRoot* ObserveSceneRoot()
+        {
+            m_sceneRootChanged.Track();
+            return GetSceneRoot();
+        }
 
         // The topmost ancestor (the SceneRoot, when the node is in a GUI).
         [[nodiscard]] Node* GetRootNode()
@@ -659,6 +667,9 @@ export namespace experimental::gui
         /// Binds `property` to this GUI's data value `key` (BindData with its scene's model); false
         /// outside a scene or with no such property.
         bool BindSceneData(core::StringView property, core::StringView key);
+        /// Handles command `id` with a script function, in the bubble phase; the function returning
+        /// true lets the command go on up the focus path.
+        void OnCommandScript(core::StringView id, RefPtr<foundation::script::IScriptDelegate> handler);
         /// Removes this node from its tree at the end of the UI's update (Close): never under a
         /// running handler.
         void Destroy() { Close(); }
@@ -961,6 +972,67 @@ export namespace experimental::gui
         void ClearBindings() { m_bindings.Clear(); }
         [[nodiscard]] usize BindingCount() const noexcept { return m_bindings.Size(); }
 
+        // === Command handlers (G7 of Specs/vg-and-gui-lab.md) ===
+        // A node handles commands by id: running one walks the focus path (capture from the root
+        // down, then bubble from the focused widget up), and a command is available while a handler
+        // for it is on that path. A screen's commands live on the screen; the GUI's own on its root.
+
+        /// Handles command `id` in `phase`; a token for RemoveCommandHandler.
+        u32 OnCommand(core::StringView id, CommandHandler handler, CommandPhase phase = CommandPhase::Bubble)
+        {
+            m_commandHandlers.PushBack(CommandHandlerEntry{core::String(id), phase, core::Move(handler), ++m_nextListenerId});
+            NotifyCommandsChanged();
+            return m_nextListenerId;
+        }
+        void RemoveCommandHandler(u32 token)
+        {
+            for (usize i = 0; i < m_commandHandlers.Size(); ++i)
+                if (m_commandHandlers[i].Token == token)
+                {
+                    m_commandHandlers.RemoveAt(i);
+                    NotifyCommandsChanged();
+                    return;
+                }
+        }
+        [[nodiscard]] bool HandlesCommand(core::StringView id) const
+        {
+            for (const CommandHandlerEntry& entry : m_commandHandlers)
+                if (entry.Id.AsView() == id)
+                    return true;
+            return false;
+        }
+        /// Binds this control to command `id` (empty: none): it is enabled while the command is
+        /// available and shows its checked state (OnBoundCommandState), and runs it when used
+        /// (RunBoundCommand, from the widget's click). Reflected as `command`, so markup and sheets
+        /// set it too.
+        void SetCommand(core::StringView id);
+        [[nodiscard]] core::StringView GetCommand() const noexcept { return m_command.Peek().AsView(); }
+        [[nodiscard]] bool HasCommand() const noexcept { return m_command.Peek().Size() != 0; }
+        /// Runs the bound command along the focus path; false with none, or none ran.
+        bool RunBoundCommand();
+        /// The bound command's state reached the control: enabled by availability; a checkable
+        /// control shows `checked` too.
+        virtual void OnBoundCommandState(bool available, bool checked)
+        {
+            (void)checked;
+            SetEnabled(available);
+        }
+
+        /// Runs this node's handlers for `event` in its phase; whether any ran.
+        bool RunCommandHandlers(CommandEvent& event)
+        {
+            bool ran = false;
+            for (usize i = 0; i < m_commandHandlers.Size(); ++i)
+            {
+                CommandHandlerEntry& entry = m_commandHandlers[i];
+                if (entry.Phase != event.Phase || entry.Id.AsView() != event.Id)
+                    continue;
+                entry.Handler(event);
+                ran = true;
+            }
+            return ran;
+        }
+
         // === Event listeners ===
         u32 AddEventListener(EventType type, EventCallback callback)
         {
@@ -1074,6 +1146,15 @@ export namespace experimental::gui
             OnParentChange();
             Invalidate();
             SendEvent(Event(EventType::ParentChanged, this));
+            NotifySceneRootChanged(); // the subtree may have joined or left a GUI
+        }
+        // Tells the bindings that read which GUI this subtree is in (ObserveSceneRoot); a node with
+        // none costs a visit.
+        void NotifySceneRootChanged()
+        {
+            m_sceneRootChanged.Notify();
+            for (const RefPtr<Node>& child : m_children)
+                child->NotifySceneRootChanged();
         }
 
         struct Listener
@@ -1087,6 +1168,19 @@ export namespace experimental::gui
         Array<RefPtr<Node>> m_children; // owning
         Array<Listener> m_listeners;
         Array<UniquePtr<Effect>> m_bindings; // this node's bindings (Bind, BindProperty)
+        Observable m_sceneRootChanged;       // told when this subtree joins or leaves a GUI
+        struct CommandHandlerEntry
+        {
+            core::String Id;
+            CommandPhase Phase;
+            CommandHandler Handler;
+            u32 Token;
+        };
+        Array<CommandHandlerEntry> m_commandHandlers;
+        Property<core::String> m_command; // the bound command's id (SetCommand)
+        bool m_commandBound = false;      // its binding made (once)
+        // Tells this GUI's commands that what decides availability changed (GUIClusterImpl.cpp).
+        void NotifyCommandsChanged();
         Function<bool(const DragPayload&)>
             m_dropAcceptor; // drop-target predicate (empty = rejects)
         RefPtr<Drawable> m_background;

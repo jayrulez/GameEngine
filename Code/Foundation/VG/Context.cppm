@@ -1475,8 +1475,8 @@ export namespace foundation::vg
             {
                 const fonts::GlyphPosition& pos = positions[p];
                 fonts::GlyphQuad quad;
-                f32 glyphX = offsetX + pos.x;
-                if (font->atlas->GetGlyphQuad(pos.codepoint, glyphX, offsetY + pos.y, quad))
+                f32 glyphX = offsetX + pos.x + pos.xOffset;
+                if (font->atlas->GetGlyphQuad(pos.glyphId, glyphX, offsetY + pos.y + pos.yOffset, quad))
                     EmitGlyphQuad(quad, opColor);
             }
 

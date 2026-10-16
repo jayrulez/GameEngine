@@ -103,9 +103,9 @@ TEST_CASE("baked.font: MeasureString with glyph positions")
     CHECK(total == 17.0f);
     CHECK(positions.Size() == 2);
     CHECK(positions[0].x == 0);
-    CHECK(positions[0].codepoint == static_cast<i32>('A'));
+    CHECK(positions[0].glyphId == static_cast<i32>('A'));
     CHECK(positions[1].x == 7.0f); // first advance + kerning
-    CHECK(positions[1].codepoint == static_cast<i32>('B'));
+    CHECK(positions[1].glyphId == static_cast<i32>('B'));
 }
 
 TEST_CASE("baked.atlas: SetPixels takes ownership")

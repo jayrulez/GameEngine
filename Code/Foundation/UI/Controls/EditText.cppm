@@ -718,12 +718,12 @@ export namespace foundation::ui
                         Color{60.0f / 255.0f, 120.0f / 255.0f, 200.0f / 255.0f, 80.0f / 255.0f});
                     if (Multiline.Value())
                     {
-                        const i32 glyphStart = CharToGlyphIndex(m_behavior.SelectionStart());
-                        const i32 glyphEnd = CharToGlyphIndex(m_behavior.SelectionEnd());
+                        // The selection is in characters; the shaper maps it to glyphs by cluster.
                         Array<fonts::Rectangle> rects;
-                        font->shaper->GetSelectionRects(*font->font, GlyphSpan(),
-                                                        fonts::SelectionRange(glyphStart, glyphEnd),
-                                                        lineH, rects);
+                        font->shaper->GetSelectionRects(
+                            *font->font, GlyphSpan(),
+                            fonts::SelectionRange(m_behavior.SelectionStart(), m_behavior.SelectionEnd()), lineH,
+                            rects);
                         for (const fonts::Rectangle& r : rects)
                         {
                             ctx.VG().FillRect(
@@ -865,7 +865,7 @@ export namespace foundation::ui
 
             const fonts::HitTestResult r =
                 font->shaper->HitTestWrapped(*font->font, GlyphSpan(), hitX, hitY, lineH);
-            return GlyphToCharIndex(r.InsertionIndex(), r.isTrailingHit);
+            return r.InsertionIndex(); // a character index: the shaper hit tests by cluster
         }
 
         [[nodiscard]] i32 GetCharIndexForLine(i32 line)
@@ -924,11 +924,11 @@ export namespace foundation::ui
 
             for (usize i = 0; i < m_glyphPositions.Size(); ++i)
             {
-                if (m_glyphPositions[i].stringIndex == charIndex)
+                if (m_glyphPositions[i].cluster == charIndex)
                 {
                     return m_glyphPositions[i].x;
                 }
-                if (m_glyphPositions[i].stringIndex > charIndex)
+                if (m_glyphPositions[i].cluster > charIndex)
                 {
                     if (i > 0)
                     {
@@ -943,43 +943,6 @@ export namespace foundation::ui
             }
             const fonts::GlyphPosition& last = m_glyphPositions[m_glyphPositions.Size() - 1];
             return last.x + last.advance;
-        }
-
-        [[nodiscard]] i32 GlyphToCharIndex(i32 glyphInsertionIndex, bool isTrailingHit)
-        {
-            if (m_glyphPositions.Size() == 0)
-            {
-                return 0;
-            }
-            if (glyphInsertionIndex <= 0)
-            {
-                return m_glyphPositions[0].stringIndex;
-            }
-            if (glyphInsertionIndex >= static_cast<i32>(m_glyphPositions.Size()))
-            {
-                return m_glyphPositions[m_glyphPositions.Size() - 1].stringIndex + 1;
-            }
-            const fonts::GlyphPosition& prevGlyph =
-                m_glyphPositions[static_cast<usize>(glyphInsertionIndex - 1)];
-            const fonts::GlyphPosition& nextGlyph =
-                m_glyphPositions[static_cast<usize>(glyphInsertionIndex)];
-            if (nextGlyph.y != prevGlyph.y && nextGlyph.stringIndex > prevGlyph.stringIndex + 1)
-            {
-                return isTrailingHit ? prevGlyph.stringIndex + 1 : nextGlyph.stringIndex;
-            }
-            return prevGlyph.stringIndex + 1;
-        }
-
-        [[nodiscard]] i32 CharToGlyphIndex(i32 charIndex)
-        {
-            for (usize i = 0; i < m_glyphPositions.Size(); ++i)
-            {
-                if (m_glyphPositions[i].stringIndex >= charIndex)
-                {
-                    return static_cast<i32>(i);
-                }
-            }
-            return static_cast<i32>(m_glyphPositions.Size());
         }
 
         [[nodiscard]] f32 GetCursorYFromCharIndex(i32 charIndex, f32 lineHeight)

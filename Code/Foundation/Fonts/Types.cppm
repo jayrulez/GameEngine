@@ -70,14 +70,22 @@ export namespace foundation::fonts
         [[nodiscard]] constexpr f32 Height() const { return y1 - y0; }
     };
 
-    // A positioned glyph in laid-out text.
+    // A positioned glyph in laid-out text. A shaper maps a string's characters to glyphs N to M:
+    // several glyphs may share a cluster (a base and its mark), one glyph may cover several
+    // characters (a ligature), and characters such as a line break may have no glyph at all.
+    // Clusters count characters (codepoints) of the source string, the unit text editing works
+    // in. Positions keep logical order.
     struct GlyphPosition
     {
-        i32 stringIndex = 0;
-        i32 codepoint = 0;
-        f32 x = 0, y = 0;
+        i32 cluster = 0;  // the first character of the cluster this glyph belongs to
+        i32 glyphId = 0;  // what the atlas draws: the codepoint, under the stb shaper
+        f32 x = 0, y = 0; // the pen position (the baseline origin, before the offsets)
         f32 advance = 0;
         GlyphInfo glyphInfo;
+        i32 clusterLength = 1;   // the characters its cluster covers
+        f32 xOffset = 0, yOffset = 0; // a shaper's placement deltas: drawn, never advanced
+
+        [[nodiscard]] constexpr i32 ClusterEnd() const { return cluster + clusterLength; }
     };
 
     // A region within a font-atlas texture.
@@ -172,23 +180,31 @@ export namespace foundation::fonts
     };
 
     // Result of a hit test on text.
+    // Where a point falls in laid-out text: the cluster it hit (its first character) and which
+    // half, so the caret goes before the cluster or after it (`clusterEnd`).
     struct HitTestResult
     {
         i32 characterIndex = 0;
         bool isTrailingHit = false;
         bool isInside = false;
         i32 lineIndex = 0;
+        i32 clusterEnd = 1; // the character after the hit cluster
 
         constexpr HitTestResult() = default;
         constexpr HitTestResult(i32 charIndex, bool trailing, bool inside, i32 line = 0)
-            : characterIndex(charIndex), isTrailingHit(trailing), isInside(inside), lineIndex(line)
+            : characterIndex(charIndex), isTrailingHit(trailing), isInside(inside), lineIndex(line),
+              clusterEnd(charIndex + 1)
         {
+        }
+        // A hit on `glyph`'s cluster.
+        static constexpr HitTestResult OnCluster(const GlyphPosition& glyph, bool trailing, bool inside, i32 line = 0)
+        {
+            HitTestResult result(glyph.cluster, trailing, inside, line);
+            result.clusterEnd = glyph.ClusterEnd();
+            return result;
         }
 
-        [[nodiscard]] i32 InsertionIndex() const
-        {
-            return isTrailingHit ? characterIndex + 1 : characterIndex;
-        }
+        [[nodiscard]] i32 InsertionIndex() const { return isTrailingHit ? clusterEnd : characterIndex; }
     };
 
     // How an atlas stores its glyphs: 8-bit coverage (the classic rasterized alpha) or a

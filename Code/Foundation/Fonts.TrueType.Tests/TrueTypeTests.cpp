@@ -247,9 +247,9 @@ TEST_CASE("ttf.shaper: ShapeText")
     CHECK(shaped.Value() > 0);
     CHECK(positions[0].x < positions[1].x);
     CHECK(positions[1].x < positions[2].x);
-    CHECK(positions[0].codepoint == static_cast<i32>('A'));
-    CHECK(positions[1].codepoint == static_cast<i32>('B'));
-    CHECK(positions[2].codepoint == static_cast<i32>('C'));
+    CHECK(positions[0].glyphId == static_cast<i32>('A'));
+    CHECK(positions[1].glyphId == static_cast<i32>('B'));
+    CHECK(positions[2].glyphId == static_cast<i32>('C'));
 
     DefaultAllocator().Delete(font);
     TrueTypeFonts::Shutdown();

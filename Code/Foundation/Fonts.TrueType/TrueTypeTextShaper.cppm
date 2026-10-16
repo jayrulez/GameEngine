@@ -113,7 +113,7 @@ export namespace foundation::fonts
                             pos.x = reflowX;
                             pos.y = y;
                             reflowX += pos.advance;
-                            lastReflowedCodepoint = pos.codepoint;
+                            lastReflowedCodepoint = pos.glyphId;
                         }
                         kern = (lastReflowedCodepoint != 0)
                                    ? font.GetKerning(lastReflowedCodepoint, codepoint)
@@ -144,6 +144,8 @@ export namespace foundation::fonts
         }
 
         // === UI support ===
+        // All in characters through clusters (GlyphPosition::cluster), so they hold for any
+        // shaper's N to M mapping; under this one every cluster is one character and one glyph.
 
         [[nodiscard]] HitTestResult HitTest(IFont&, Span<const GlyphPosition> positions, f32 x,
                                             f32 /*y*/) override
@@ -151,7 +153,7 @@ export namespace foundation::fonts
             if (positions.Size() == 0)
                 return HitTestResult(0, false, false);
             if (x < positions[0].x)
-                return HitTestResult(0, false, false);
+                return HitTestResult::OnCluster(positions[0], false, false);
 
             for (usize i = 0; i < positions.Size(); ++i)
             {
@@ -160,10 +162,10 @@ export namespace foundation::fonts
                 if (x >= pos.x && x < charRight)
                 {
                     const f32 midpoint = pos.x + pos.advance * 0.5f;
-                    return HitTestResult(static_cast<i32>(i), x >= midpoint, true);
+                    return HitTestResult::OnCluster(pos, x >= midpoint, true);
                 }
             }
-            return HitTestResult(static_cast<i32>(positions.Size() - 1), true, false);
+            return HitTestResult::OnCluster(positions[positions.Size() - 1], true, false);
         }
 
         [[nodiscard]] HitTestResult HitTestWrapped(IFont&, Span<const GlyphPosition> positions,
@@ -202,8 +204,7 @@ export namespace foundation::fonts
             }
 
             if (lineStart < 0)
-                return HitTestResult(static_cast<i32>(positions.Size() - 1), true, false,
-                                     targetLine);
+                return HitTestResult::OnCluster(positions[positions.Size() - 1], true, false, targetLine);
 
             for (i32 i = lineStart; i <= lineEnd; ++i)
             {
@@ -212,30 +213,47 @@ export namespace foundation::fonts
                 if (x >= pos.x && x < charRight)
                 {
                     const f32 midpoint = pos.x + pos.advance * 0.5f;
-                    return HitTestResult(i, x >= midpoint, true, targetLine);
+                    return HitTestResult::OnCluster(pos, x >= midpoint, true, targetLine);
                 }
             }
 
             if (x < positions[static_cast<usize>(lineStart)].x)
-                return HitTestResult(lineStart, false, false, targetLine);
-            return HitTestResult(lineEnd, true, false, targetLine);
+                return HitTestResult::OnCluster(positions[static_cast<usize>(lineStart)], false, false, targetLine);
+            return HitTestResult::OnCluster(positions[static_cast<usize>(lineEnd)], true, false, targetLine);
         }
 
+        // The caret's x before `characterIndex`: the start of its cluster's first glyph; inside a
+        // cluster, the cluster's start; on a character with no glyph (a line break), the end of
+        // the glyph before it; past the end, the end of the last glyph.
         [[nodiscard]] f32 GetCursorPosition(IFont&, Span<const GlyphPosition> positions,
                                             i32 characterIndex) override
         {
             if (positions.Size() == 0)
                 return 0;
-            if (characterIndex <= 0)
-                return positions[0].x;
-            if (characterIndex >= static_cast<i32>(positions.Size()))
+            for (usize i = 0; i < positions.Size(); ++i)
             {
-                const GlyphPosition& last = positions[positions.Size() - 1];
-                return last.x + last.advance;
+                const GlyphPosition& pos = positions[i];
+                if (pos.cluster < characterIndex)
+                    continue;
+                if (pos.cluster == characterIndex || i == 0)
+                    return pos.x;
+                const GlyphPosition& prev = positions[i - 1];
+                return prev.ClusterEnd() <= characterIndex ? prev.x + prev.advance : ClusterStartX(positions, i - 1);
             }
-            return positions[static_cast<usize>(characterIndex)].x;
+            const GlyphPosition& last = positions[positions.Size() - 1];
+            return characterIndex < last.ClusterEnd() ? ClusterStartX(positions, positions.Size() - 1)
+                                                      : last.x + last.advance;
         }
 
+        // The x of the first glyph of glyph `index`'s cluster (a mark shares its base's).
+        [[nodiscard]] static f32 ClusterStartX(Span<const GlyphPosition> positions, usize index)
+        {
+            while (index > 0 && positions[index - 1].cluster == positions[index].cluster)
+                --index;
+            return positions[index].x;
+        }
+
+        // Rectangles over the glyphs whose clusters fall in the character range, one per line.
         void GetSelectionRects(IFont&, Span<const GlyphPosition> positions,
                                SelectionRange selection, f32 lineHeight,
                                Array<Rectangle>& outRects) override
@@ -244,33 +262,32 @@ export namespace foundation::fonts
             if (positions.Size() == 0 || selection.IsEmpty())
                 return;
 
-            const i32 startIdx = Max(0, selection.start);
-            const i32 endIdx = Min(static_cast<i32>(positions.Size()), selection.end);
-            if (startIdx >= endIdx)
-                return;
-
-            const f32 rectHeight = lineHeight;
-            f32 currentLineY = positions[static_cast<usize>(startIdx)].y;
-            f32 rectStartX = positions[static_cast<usize>(startIdx)].x;
-            f32 rectEndX = rectStartX;
-
-            for (i32 i = startIdx; i < endIdx; ++i)
+            const i32 start = Min(selection.start, selection.end);
+            const i32 end = Max(selection.start, selection.end);
+            bool open = false;
+            f32 currentLineY = 0;
+            f32 rectStartX = 0;
+            f32 rectEndX = 0;
+            for (const GlyphPosition& pos : positions)
             {
-                const GlyphPosition& pos = positions[static_cast<usize>(i)];
-                if (Abs(pos.y - currentLineY) > lineHeight * 0.5f)
+                if (pos.cluster < start || pos.cluster >= end)
+                    continue;
+                if (open && Abs(pos.y - currentLineY) > lineHeight * 0.5f)
                 {
                     if (rectEndX > rectStartX)
-                        outRects.PushBack(
-                            Rectangle(rectStartX, currentLineY, rectEndX - rectStartX, rectHeight));
+                        outRects.PushBack(Rectangle(rectStartX, currentLineY, rectEndX - rectStartX, lineHeight));
+                    open = false;
+                }
+                if (!open)
+                {
+                    open = true;
                     currentLineY = pos.y;
                     rectStartX = pos.x;
                 }
                 rectEndX = pos.x + pos.advance;
             }
-
-            if (rectEndX > rectStartX)
-                outRects.PushBack(
-                    Rectangle(rectStartX, currentLineY, rectEndX - rectStartX, rectHeight));
+            if (open && rectEndX > rectStartX)
+                outRects.PushBack(Rectangle(rectStartX, currentLineY, rectEndX - rectStartX, lineHeight));
         }
     };
 }

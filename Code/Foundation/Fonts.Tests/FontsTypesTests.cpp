@@ -134,6 +134,13 @@ TEST_CASE("fonts.hitTestResult: insertion index")
 {
     CHECK(HitTestResult(5, false, true).InsertionIndex() == 5); // leading edge
     CHECK(HitTestResult(5, true, true).InsertionIndex() == 6);  // trailing edge
+    // On a cluster of three characters (a ligature): trailing goes past all three.
+    GlyphPosition ligature;
+    ligature.cluster = 5;
+    ligature.clusterLength = 3;
+    CHECK(ligature.ClusterEnd() == 8);
+    CHECK(HitTestResult::OnCluster(ligature, false, true).InsertionIndex() == 5);
+    CHECK(HitTestResult::OnCluster(ligature, true, true).InsertionIndex() == 8);
 }
 
 TEST_CASE("fonts.selectionRange: normalization, empty, contains")

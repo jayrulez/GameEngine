@@ -23,6 +23,7 @@ import foundation.fonts;
 import foundation.fonts.truetype;
 import foundation.fonts.harfbuzz;
 import foundation.fonts.bidi;
+import foundation.fonts.distancefield.baker;
 import foundation.vg;
 import foundation.vg.renderer;
 import foundation.ui;
@@ -963,7 +964,7 @@ private:
     void BuildDragDropTab(ui::TabView* tabView);
     void BuildAnimationsTab(ui::TabView* tabView);
     void BuildLayersTab(ui::TabView* tabView); // VG layers: group opacity, filter, backdrop-filter
-    void BuildRichTextTab(ui::TabView* tabView); // runs from markup: colour, weight, size, links
+    void BuildRichTextTab(ui::TabView* tabView); // runs from markup: colour, weight, size, links, effects
     void BuildToolkitTab(
         ui::TabView* tabView); // foundation.ui.toolkit: bars + split + tree + color picker
     void
@@ -1078,6 +1079,14 @@ void UISandbox::OnStartup(runtime::IApplicationHost& host)
         LoadFontSize(u8"Roboto Bold", boldPath.AsView(), 14.0f);
         LoadFontSize(u8"Roboto Bold", boldPath.AsView(), 16.0f);
         LoadFontSize(u8"Roboto Bold", boldPath.AsView(), 24.0f);
+        // A distance-field face for the text effects (outline, shadow, glow read the field): one
+        // bake at 48 px, drawn at any size, its field 12 texels wide so effects reach 6 past the
+        // edge at the bake size.
+        fonts::DistanceFieldFonts::Initialize();
+        fonts::FontLoadOptions fieldOptions = fonts::FontLoadOptions::DistanceField();
+        fieldOptions.pixelHeight = 48.0f;
+        fieldOptions.distanceFieldRange = 12.0f;
+        (void)m_fontService->LoadFont(u8"Roboto Field", boldPath.AsView(), fieldOptions);
 
         // Decorative families for the pause-menu FontFamily demo (freely licensed: Lilita One OFL,
         // Chewy Apache 2.0).
@@ -1708,6 +1717,28 @@ void UISandbox::BuildRichTextTab(ui::TabView* tabView)
                           heardLabel->SetText(message.AsView());
                       });
     demo->AddView(heard.Get());
+
+    // Text effects over bright stripes, from a distance-field face: no panel behind the text.
+    auto stage = MakeRef<ui::FrameLayout>(AppRoot());
+    auto stripes = HFlex(0.0f);
+    for (i32 i = 0; i < 24; ++i)
+    {
+        const Color c = (i % 3 == 0)   ? Color{0.95f, 0.85f, 0.3f, 1.0f}
+                        : (i % 3 == 1) ? Color{0.98f, 0.98f, 0.95f, 1.0f}
+                                       : Color{0.3f, 0.65f, 0.95f, 1.0f};
+        stripes->AddView(MakeRef<ui::ColorView>(AppRoot(), c, 24.0f, 120.0f).Get(),
+                         LP(SizeSpec::Fixed(Unit::Px(24)), SizeSpec::Fixed(Unit::Px(120))));
+    }
+    stage->AddView(stripes.Get());
+    auto effects = MakeRef<ui::RichText>(
+        AppRoot(), StringView(u8"Plain, [outline=2 #000000]outlined[/outline], [shadow=3 3 2 #000000c0]shadowed[/shadow], "
+                              u8"[glow=6 #ff9020]glowing[/glow] and [outline=1.5 #301000][glow=5 #ffd040][color=#fff4d0]all at "
+                              u8"once[/color][/glow][/outline]."));
+    effects->FontFamily.SetValue(String(u8"Roboto Field"));
+    effects->FontSize.SetValue(Optional<f32>(30.0f));
+    effects->Transform.Translation = Float2{12.0f, 14.0f};
+    stage->AddView(effects.Get(), LP(SizeSpec::Fixed(Unit::Px(540)), SizeSpec::Wrap()));
+    demo->AddView(stage.Get(), LP(SizeSpec::Fixed(Unit::Px(576)), SizeSpec::Fixed(Unit::Px(120))));
 }
 
 void UISandbox::BuildLayersTab(ui::TabView* tabView)

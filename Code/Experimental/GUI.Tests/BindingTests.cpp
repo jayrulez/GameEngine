@@ -30,6 +30,8 @@ TEST_CASE("binding: values convert to the property's type, and compare across nu
 {
     CHECK(FormatVariant(core::Variant::From<f64>(3.0)) == core::String(u8"3"));
     CHECK(FormatVariant(core::Variant::From<f32>(0.25f)) == core::String(u8"0.25"));
+    CHECK(FormatVariant(core::Variant::From<f32>(0.4f)) == core::String(u8"0.4")); // not 0.4000000059604645
+    CHECK(FormatVariant(core::Variant::From<f32>(2.0f)) == core::String(u8"2"));
     CHECK(FormatVariant(core::Variant::From<bool>(true)) == core::String(u8"true"));
     const core::Variant f = ConvertVariant(core::Variant::From<f64>(0.5), core::TypeOf<f32>());
     REQUIRE(f.TryGet<f32>() != nullptr);

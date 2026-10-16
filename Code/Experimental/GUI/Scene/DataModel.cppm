@@ -66,6 +66,8 @@ export namespace experimental::gui
         f64 n = 0.0;
         if (!detail::NumberOf(value, n))
             return {};
+        if (const f32* f = value.TryGet<f32>(); f != nullptr && *f != static_cast<f32>(static_cast<i64>(*f)))
+            return Format(u8"{}", *f); // its own shortest form (0.4), not its widening's
         if (Abs(n) < 1e15 && n == static_cast<f64>(static_cast<i64>(n)))
             return Format(u8"{}", static_cast<i64>(n));
         return Format(u8"{}", n); // the shortest form that reads back as the same number

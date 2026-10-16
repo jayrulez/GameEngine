@@ -18,6 +18,7 @@ target_sources(Fonts
             BackendInterfaces.cppm
             Factories.cppm
             FontManager.cppm
+            Bidi.cppm
             ClusterTextShaper.cppm
             FontsModule.cppm
     PRIVATE

@@ -19,4 +19,10 @@ namespace foundation::fonts
         static Array<Creator> store;
         return store;
     }
+
+    IBidiResolver*& BidiResolverFactory::Slot()
+    {
+        static IBidiResolver* resolver = nullptr;
+        return resolver;
+    }
 }

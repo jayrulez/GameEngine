@@ -85,6 +85,7 @@ export namespace foundation::fonts
         i32 clusterLength = 1;   // the characters its cluster covers
         f32 xOffset = 0, yOffset = 0; // a shaper's placement deltas: drawn, never advanced
         u8 font = 0; // which font of the shape request's list drew it (0: the first, or the only)
+        bool rightToLeft = false; // in a right-to-left run: its cluster's start is on its right
 
         [[nodiscard]] constexpr i32 ClusterEnd() const { return cluster + clusterLength; }
     };

@@ -53,81 +53,14 @@ namespace foundation::fonts
                 return Shape(request, outPositions);
             }
 
-            // Runs by font, then by script within each (a character of no particular script, a
-            // space or a digit, joins the run around it), each shaped with its direction, script
-            // and language; runs are laid one after the other (reordering runs is bidi's).
-            [[nodiscard]] Result<f32> Shape(const ShapeRequest& request, Array<GlyphPosition>& outPositions) override
-            {
-                outPositions.Clear();
-                Array<u32> codepoints;
-                Array<usize> bytes;
-                DecodeWithOffsets(request.text, codepoints, bytes);
-                Array<FontRun> runs;
-                ItemizeByFont(request.fonts, codepoints, bytes, runs);
-                const hb_language_t language =
-                    request.language.IsEmpty()
-                        ? HB_LANGUAGE_INVALID
-                        : hb_language_from_string(reinterpret_cast<const char*>(request.language.Data()),
-                                                  static_cast<int>(request.language.Size()));
-                f32 x = request.startX;
-                Array<GlyphPosition> fallback;
-                for (const FontRun& r : runs)
-                {
-                    IFont* font = request.fonts[r.font];
-                    if (font == nullptr)
-                        continue;
-                    hb_font_t* hbFont = FontFor(*font);
-                    const usize first = outPositions.Size();
-                    if (hbFont == nullptr)
-                    {
-                        // No file to read: the basic shaper, run by run.
-                        const Result<f32> advance = m_fallback.ShapeText(
-                            *font, request.text.SubStr(r.byteStart, r.byteEnd - r.byteStart), x, request.startY,
-                            fallback);
-                        if (advance.HasValue())
-                        {
-                            for (GlyphPosition g : fallback)
-                            {
-                                g.cluster += static_cast<i32>(r.start);
-                                outPositions.PushBack(g);
-                            }
-                            x += advance.Value();
-                        }
-                    }
-                    else
-                    {
-                        usize start = r.start;
-                        while (start < r.end)
-                        {
-                            hb_script_t script = HB_SCRIPT_INVALID;
-                            const usize end = request.script != 0 ? r.end : ScriptRunEnd(codepoints, start, r.end, script);
-                            if (request.script != 0)
-                                script = hb_script_from_iso15924_tag(request.script);
-                            Array<u32> run;
-                            for (usize i = start; i < end; ++i)
-                                run.PushBack(codepoints[i]);
-                            hb_direction_t direction = request.direction == TextDirection::LeftToRight   ? HB_DIRECTION_LTR
-                                                       : request.direction == TextDirection::RightToLeft ? HB_DIRECTION_RTL
-                                                                                                         : HB_DIRECTION_INVALID;
-                            const Result<f32> advance =
-                                ShapeCodepoints(*font, hbFont, run, static_cast<i32>(start), x, request.startY,
-                                                outPositions, script, direction, language);
-                            if (advance.HasValue())
-                                x += advance.Value();
-                            start = end;
-                        }
-                    }
-                    for (usize i = first; i < outPositions.Size(); ++i)
-                        outPositions[i].font = r.font;
-                }
-                return x - request.startX;
-            }
-
+            // Each paragraph (up to a line break, which draws nothing): its levels resolved, its
+            // characters measured in logical order, lines broken after the last space that fits (or
+            // before the character that overflows when a word alone is too wide), and each line laid
+            // out in visual order, so a ligature is never split and right-to-left text reorders by line.
             [[nodiscard]] Status ShapeTextWrapped(IFont& font, StringView text, f32 maxWidth,
                                                   Array<GlyphPosition>& outPositions, f32& outTotalHeight) override
             {
-                hb_font_t* hbFont = FontFor(font);
-                if (hbFont == nullptr)
+                if (FontFor(font) == nullptr)
                 {
                     return m_fallback.ShapeTextWrapped(font, text, maxWidth, outPositions, outTotalHeight);
                 }
@@ -135,29 +68,75 @@ namespace foundation::fonts
                 outTotalHeight = 0.0f;
                 const f32 lineHeight = font.Metrics().lineHeight;
                 Array<u32> codepoints;
-                Decode(text, codepoints);
+                Array<usize> bytes;
+                DecodeWithOffsets(text, codepoints, bytes);
+                IFont* const fonts[1] = {&font};
+                ShapeRequest request;
+                request.text = text;
+                request.fonts = Span<IFont* const>(fonts, 1);
 
                 f32 y = 0.0f;
                 usize start = 0;
-                Array<GlyphPosition> paragraph;
+                Array<GlyphPosition> measured;
                 while (start <= codepoints.Size())
                 {
-                    // One paragraph: up to the next line break (which draws nothing).
                     usize end = start;
                     while (end < codepoints.Size() && codepoints[end] != U'\n')
                         ++end;
-                    Array<u32> run;
-                    for (usize i = start; i < end; ++i)
+                    if (end > start)
                     {
-                        if (codepoints[i] != U'\r')
-                            run.PushBack(codepoints[i]);
-                        else
-                            run.PushBack(U' '); // keep the character count; a CR draws as a space
+                        BidiLevels levels;
+                        const bool resolved = ResolveLevels(TextDirection::Auto, codepoints, start, end, levels);
+                        // Each character's share of the advance, shaped in logical runs of one level.
+                        Array<f32> widths;
+                        widths.Resize(end - start);
+                        for (f32& w : widths)
+                            w = 0.0f;
+                        usize runStart = start;
+                        while (runStart < end)
+                        {
+                            usize runEnd = end;
+                            RunDirection direction = RunDirection::Auto;
+                            if (resolved)
+                            {
+                                runEnd = runStart + 1;
+                                while (runEnd < end && levels.levels[runEnd - start] == levels.levels[runStart - start])
+                                    ++runEnd;
+                                direction = (levels.levels[runStart - start] & 1u) != 0 ? RunDirection::RightToLeft
+                                                                                         : RunDirection::LeftToRight;
+                            }
+                            measured.Clear();
+                            (void)ShapeRun(request, codepoints, bytes, runStart, runEnd, direction, 0.0f, 0.0f, measured);
+                            for (const GlyphPosition& g : measured)
+                                if (g.cluster >= static_cast<i32>(start) && static_cast<usize>(g.cluster) < end)
+                                    widths[static_cast<usize>(g.cluster) - start] += g.advance;
+                            runStart = runEnd;
+                        }
+                        usize lineStart = start;
+                        while (lineStart < end)
+                        {
+                            f32 width = 0.0f;
+                            usize lastSpace = end; // none yet
+                            usize e = lineStart;
+                            for (; e < end; ++e)
+                            {
+                                const bool space = codepoints[e] == U' ';
+                                if (width + widths[e - start] > maxWidth && e > lineStart && !space)
+                                    break;
+                                if (space)
+                                    lastSpace = e;
+                                width += widths[e - start];
+                            }
+                            usize next = e;
+                            if (e < end && lastSpace < end && lastSpace >= lineStart)
+                                next = lastSpace + 1;
+                            (void)ShapeLine(request, codepoints, bytes, lineStart, next, resolved ? &levels : nullptr, 0.0f, y,
+                                            outPositions, start);
+                            lineStart = next;
+                            if (lineStart < end)
+                                y += lineHeight;
+                        }
                     }
-                    paragraph.Clear();
-                    (void)ShapeCodepoints(font, hbFont, run, static_cast<i32>(start), 0.0f, 0.0f, paragraph,
-                                          HB_SCRIPT_INVALID, HB_DIRECTION_INVALID, HB_LANGUAGE_INVALID);
-                    y = WrapParagraph(paragraph, codepoints, maxWidth, lineHeight, y, outPositions);
                     if (end >= codepoints.Size())
                         break;
                     y += lineHeight; // the break starts the next paragraph on a line of its own
@@ -211,6 +190,109 @@ namespace foundation::fonts
                 hb_set_destroy(nominal);
             }
 
+        protected:
+            // Characters [start, end) as runs by font, then by script; each shaped in the run's
+            // direction (or its script's), with the request's script and language. In a
+            // right-to-left run the pieces are laid right to left. A font without its file is shaped
+            // by the basic shaper.
+            Result<f32> ShapeRun(const ShapeRequest& request, const Array<u32>& codepoints, const Array<usize>& bytes,
+                                 usize start, usize end, RunDirection direction, f32 x, f32 y,
+                                 Array<GlyphPosition>& out) override
+            {
+                const hb_language_t language =
+                    request.language.IsEmpty()
+                        ? HB_LANGUAGE_INVALID
+                        : hb_language_from_string(reinterpret_cast<const char*>(request.language.Data()),
+                                                  static_cast<int>(request.language.Size()));
+                // The pieces, in logical order.
+                struct Piece
+                {
+                    usize start = 0, end = 0;
+                    u8 font = 0;
+                    hb_script_t script = HB_SCRIPT_INVALID;
+                };
+                Array<Piece> pieces;
+                Array<u32> sub;
+                Array<usize> subBytes;
+                for (usize i = start; i < end; ++i)
+                {
+                    sub.PushBack(codepoints[i]);
+                    subBytes.PushBack(bytes[i]);
+                }
+                subBytes.PushBack(bytes[end]);
+                Array<FontRun> runs;
+                ItemizeByFont(request.fonts, sub, subBytes, runs);
+                for (const FontRun& r : runs)
+                {
+                    usize at = start + r.start;
+                    const usize runEnd = start + r.end;
+                    while (at < runEnd)
+                    {
+                        Piece piece;
+                        piece.start = at;
+                        piece.font = r.font;
+                        if (request.script != 0)
+                        {
+                            piece.end = runEnd;
+                            piece.script = hb_script_from_iso15924_tag(request.script);
+                        }
+                        else
+                        {
+                            piece.end = ScriptRunEnd(codepoints, at, runEnd, piece.script);
+                        }
+                        pieces.PushBack(piece);
+                        at = piece.end;
+                    }
+                }
+                const bool reversed = direction == RunDirection::RightToLeft;
+                const f32 startX = x;
+                Array<GlyphPosition> fallback;
+                for (usize k = 0; k < pieces.Size(); ++k)
+                {
+                    const Piece& piece = pieces[reversed ? pieces.Size() - 1 - k : k];
+                    IFont* font = request.fonts[piece.font];
+                    if (font == nullptr)
+                        continue;
+                    const usize first = out.Size();
+                    hb_font_t* hbFont = FontFor(*font);
+                    if (hbFont == nullptr)
+                    {
+                        const Result<f32> advance = m_fallback.ShapeText(
+                            *font, request.text.SubStr(bytes[piece.start], bytes[piece.end] - bytes[piece.start]), x, y,
+                            fallback);
+                        if (advance.HasValue())
+                        {
+                            for (GlyphPosition g : fallback)
+                            {
+                                g.cluster += static_cast<i32>(piece.start);
+                                out.PushBack(g);
+                            }
+                            x += advance.Value();
+                        }
+                    }
+                    else
+                    {
+                        Array<u32> run;
+                        for (usize i = piece.start; i < piece.end; ++i)
+                            run.PushBack(codepoints[i]);
+                        const hb_direction_t hbDirection = direction == RunDirection::LeftToRight    ? HB_DIRECTION_LTR
+                                                           : direction == RunDirection::RightToLeft ? HB_DIRECTION_RTL
+                                                                                                    : HB_DIRECTION_INVALID;
+                        const Result<f32> advance = ShapeCodepoints(*font, hbFont, run, static_cast<i32>(piece.start), x, y,
+                                                                    out, piece.script, hbDirection, language);
+                        if (advance.HasValue())
+                            x += advance.Value();
+                    }
+                    for (usize i = first; i < out.Size(); ++i)
+                    {
+                        out[i].font = piece.font;
+                        if (direction == RunDirection::RightToLeft)
+                            out[i].rightToLeft = true;
+                    }
+                }
+                return x - startX;
+            }
+
         private:
             // Shape `codepoints` (the characters from `clusterBase` on) and append their glyphs at
             // (startX, startY); the advance comes back.
@@ -256,6 +338,7 @@ namespace foundation::fonts
                 };
 
                 const f32 scale = font.Metrics().scale;
+                const bool rightToLeft = hb_buffer_get_direction(buffer) == HB_DIRECTION_RTL;
                 f32 x = startX;
                 for (unsigned int i = 0; i < count; ++i)
                 {
@@ -271,6 +354,7 @@ namespace foundation::fonts
                     glyph.glyphInfo.codepoint = static_cast<i32>(codepoints[infos[i].cluster]);
                     glyph.glyphInfo.glyphIndex = glyph.glyphId;
                     glyph.glyphInfo.advanceWidth = glyph.advance;
+                    glyph.rightToLeft = rightToLeft;
                     out.PushBack(glyph);
                     x += glyph.advance;
                 }
@@ -278,55 +362,6 @@ namespace foundation::fonts
                 return x - startX;
             }
 
-            // Lay one shaped paragraph into lines no wider than `maxWidth`, breaking after the
-            // last space that fits (or before an overflowing glyph when a word alone is too wide).
-            // Returns the y of its last line.
-            static f32 WrapParagraph(Array<GlyphPosition>& glyphs, const Array<u32>& text, f32 maxWidth,
-                                     f32 lineHeight, f32 y, Array<GlyphPosition>& out)
-            {
-                usize lineStart = 0;
-                while (lineStart < glyphs.Size())
-                {
-                    const f32 origin = glyphs[lineStart].x;
-                    usize lastBreak = glyphs.Size(); // the glyph after which the line may end
-                    usize end = lineStart;
-                    for (; end < glyphs.Size(); ++end)
-                    {
-                        const GlyphPosition& g = glyphs[end];
-                        const bool space = g.cluster >= 0 && static_cast<usize>(g.cluster) < text.Size() &&
-                                           text[static_cast<usize>(g.cluster)] == U' ';
-                        if (g.x + g.advance - origin > maxWidth && end > lineStart && !space)
-                            break;
-                        if (space)
-                            lastBreak = end;
-                    }
-                    usize next = end;
-                    if (end < glyphs.Size() && lastBreak < glyphs.Size() && lastBreak >= lineStart)
-                        next = lastBreak + 1; // wrap after the space
-                    for (usize i = lineStart; i < next; ++i)
-                    {
-                        GlyphPosition g = glyphs[i];
-                        g.x -= origin;
-                        g.y = y;
-                        out.PushBack(g);
-                    }
-                    lineStart = next;
-                    if (lineStart < glyphs.Size())
-                        y += lineHeight;
-                }
-                return y;
-            }
-
-            static void Decode(StringView text, Array<u32>& out)
-            {
-                out.Clear();
-                usize i = 0;
-                while (i < text.Size())
-                    out.PushBack(DecodeCodepoint(text, i));
-            }
-
-            // The HarfBuzz font for `font`, made once per font file (a shaper serves one font);
-            // null when the font has no file to read.
             // The end of the script run starting at `start` (within [start, end)), and its script. A
             // character of no particular script (common, inherited) belongs to the run it is in.
             static usize ScriptRunEnd(const Array<u32>& codepoints, usize start, usize end, hb_script_t& outScript)

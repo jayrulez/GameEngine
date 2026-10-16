@@ -335,3 +335,48 @@ TEST_CASE("fonts.scaledViews: atlas view scales geometry, keeps texels + UVs + D
     CHECK(cursorX == doctest::Approx(106.0f)); // 12 * 0.5
     CHECK_FALSE(view.GetGlyphQuadAt(' ', 10.0f, 10.0f, quad));
 }
+
+// --- bidi line reordering (UAX #9 rules L1, L2) ---------------------------
+
+TEST_CASE("fonts.bidi: a line's runs come out in visual order")
+{
+    // Left to right with a right-to-left run inside: the runs stay in place.
+    BidiLevels levels;
+    const u32 text[6] = {'a', 'b', 0x05D0, 0x05D1, 0x05D2, 'c'};
+    const u8 l1[] = {0, 0, 1, 1, 1, 0};
+    for (const u8 level : l1)
+        levels.levels.PushBack(level);
+    Array<BidiRun> runs;
+    ReorderLine(levels, Span<const u32>(text, 6), 0, 6, runs);
+    REQUIRE(runs.Size() == 3u);
+    CHECK(runs[0].start == 0u);
+    CHECK(runs[1].start == 2u);
+    CHECK(runs[1].RightToLeft());
+    CHECK(runs[2].start == 5u);
+
+    // A right-to-left paragraph (level 1) with a left-to-right run (level 2) inside: the whole
+    // line reverses, the inner run reversed back.
+    BidiLevels rtl;
+    rtl.paragraphLevel = 1;
+    const u8 l2[] = {1, 1, 2, 2, 1};
+    for (const u8 level : l2)
+        rtl.levels.PushBack(level);
+    const u32 mixed[5] = {0x05D0, ' ', 'a', 'b', 0x05D1};
+    ReorderLine(rtl, Span<const u32>(mixed, 5), 0, 5, runs);
+    REQUIRE(runs.Size() == 3u);
+    CHECK(runs[0].start == 4u); // the last character, leftmost
+    CHECK(runs[1].start == 2u);
+    CHECK_FALSE(runs[1].RightToLeft());
+    CHECK(runs[2].start == 0u);
+
+    // L1: a line's trailing space takes the paragraph's level.
+    BidiLevels trailing;
+    const u8 l3[] = {1, 1, 1};
+    for (const u8 level : l3)
+        trailing.levels.PushBack(level);
+    const u32 spaced[3] = {0x05D0, 0x05D1, ' '};
+    ReorderLine(trailing, Span<const u32>(spaced, 3), 0, 3, runs);
+    REQUIRE(runs.Size() == 2u);
+    CHECK(runs[1].start == 2u); // the space, at level 0, stays on the right
+    CHECK_FALSE(runs[1].RightToLeft());
+}

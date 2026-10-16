@@ -24,40 +24,6 @@ export namespace foundation::fonts
     class TrueTypeTextShaper final : public ClusterTextShaper
     {
     public:
-        // Each font run shaped as ShapeText does; no script or language changes what it draws. A
-        // right-to-left request lays the line out mirrored (no joining, no reordering of runs).
-        [[nodiscard]] Result<f32> Shape(const ShapeRequest& request, Array<GlyphPosition>& outPositions) override
-        {
-            outPositions.Clear();
-            Array<u32> codepoints;
-            Array<usize> bytes;
-            DecodeWithOffsets(request.text, codepoints, bytes);
-            Array<FontRun> runs;
-            ItemizeByFont(request.fonts, codepoints, bytes, runs);
-            f32 x = request.startX;
-            Array<GlyphPosition> run;
-            for (const FontRun& r : runs)
-            {
-                IFont* font = request.fonts[r.font];
-                if (font == nullptr)
-                    continue;
-                const Result<f32> advance =
-                    ShapeText(*font, request.text.SubStr(r.byteStart, r.byteEnd - r.byteStart), x, request.startY, run);
-                if (!advance.HasValue())
-                    return advance;
-                for (GlyphPosition& g : run)
-                {
-                    g.cluster += static_cast<i32>(r.start);
-                    g.font = r.font;
-                    outPositions.PushBack(g);
-                }
-                x += advance.Value();
-            }
-            if (request.direction == TextDirection::RightToLeft)
-                MirrorLine(outPositions, 0, request.startX, x - request.startX);
-            return x - request.startX;
-        }
-
         // One glyph per character: nothing beyond what the codepoints map to.
         void CollectReachableGlyphs(const IFont&, Span<const i32>, Array<i32>& outGlyphs) override
         {
@@ -185,5 +151,48 @@ export namespace foundation::fonts
             return Status();
         }
 
+
+    protected:
+        // Each font run shaped as ShapeText does (no script or language changes what it draws); a
+        // right-to-left run is laid out mirrored (no joining: the basic shaper's limit).
+        Result<f32> ShapeRun(const ShapeRequest& request, const Array<u32>& codepoints, const Array<usize>& bytes,
+                             usize start, usize end, RunDirection direction, f32 x, f32 y,
+                             Array<GlyphPosition>& out) override
+        {
+            Array<u32> sub;
+            Array<usize> subBytes;
+            for (usize i = start; i < end; ++i)
+            {
+                sub.PushBack(codepoints[i]);
+                subBytes.PushBack(bytes[i]);
+            }
+            subBytes.PushBack(bytes[end]);
+            Array<FontRun> runs;
+            ItemizeByFont(request.fonts, sub, subBytes, runs);
+            const usize first = out.Size();
+            const f32 startX = x;
+            Array<GlyphPosition> run;
+            for (const FontRun& r : runs)
+            {
+                IFont* font = request.fonts[r.font];
+                if (font == nullptr)
+                    continue;
+                const Result<f32> advance =
+                    ShapeText(*font, request.text.SubStr(r.byteStart, r.byteEnd - r.byteStart), x, y, run);
+                if (!advance.HasValue())
+                    return advance;
+                for (GlyphPosition& g : run)
+                {
+                    g.cluster += static_cast<i32>(start + r.start);
+                    g.font = r.font;
+                    g.rightToLeft = direction == RunDirection::RightToLeft;
+                    out.PushBack(g);
+                }
+                x += advance.Value();
+            }
+            if (direction == RunDirection::RightToLeft)
+                MirrorLine(out, first, startX, x - startX);
+            return x - startX;
+        }
     };
 }

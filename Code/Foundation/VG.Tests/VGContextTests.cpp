@@ -1353,14 +1353,16 @@ namespace
             height = 13.0f;
             return ShapeText(font, text, out).HasValue() ? Status() : Status(ErrorCode::Unknown);
         }
-        [[nodiscard]] Result<f32> Shape(const foundation::fonts::ShapeRequest& request,
-                                        Array<foundation::fonts::GlyphPosition>& out) override
-        {
-            return ShapeText(*request.fonts[0], request.text, request.startX, request.startY, out);
-        }
         void CollectReachableGlyphs(const foundation::fonts::IFont&, Span<const i32>, Array<i32>& out) override
         {
             out.Clear();
+        }
+
+    protected:
+        Result<f32> ShapeRun(const foundation::fonts::ShapeRequest& request, const Array<u32>&, const Array<usize>&, usize,
+                             usize, RunDirection, f32 x, f32 y, Array<foundation::fonts::GlyphPosition>& out) override
+        {
+            return ShapeText(*request.fonts[0], request.text, x, y, out);
         }
     };
 

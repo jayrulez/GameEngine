@@ -632,8 +632,16 @@ export namespace experimental::gui
             if (!action)
                 return;
             action->SetTarget(this);
+            // Held weakly too: a node destroyed mid-animation takes its actions with it.
+            if (const ElementRef ref = TakeElementRef(); ref.table != nullptr)
+                action->SetWeakTarget(Action::WeakTarget{ref.table, ref.slot, ref.generation, &ResolveActionTarget});
             if (ActionManager* manager = GetActionManager())
                 manager->AddAction(core::Move(action));
+        }
+
+        [[nodiscard]] static Node* ResolveActionTarget(const Action::WeakTarget& weak)
+        {
+            return static_cast<const ElementTable*>(weak.table)->Resolve(weak.slot, weak.generation);
         }
 
         // === Weak references and the script surface (G1 of Specs/vg-and-gui-lab.md) ===

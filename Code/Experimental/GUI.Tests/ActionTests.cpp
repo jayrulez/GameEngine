@@ -112,3 +112,21 @@ TEST_CASE("action: run on unattached node is a no-op")
     CHECK(node->GetActionManager() == nullptr);
     CHECK(node->GetPosition().x == doctest::Approx(0.0f)); // unchanged
 }
+
+TEST_CASE("action: one whose target is destroyed is dropped, not run on freed memory")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator());
+    int ticks = 0;
+    {
+        auto node = core::MakeRef<Node>(core::DefaultAllocator());
+        root->AddChild(node.Get());
+        auto delay = core::MakeRef<DelayAction>(core::DefaultAllocator(), core::Duration::FromSeconds(10.0));
+        delay->SetOnDone([&](Action&) { ++ticks; });
+        node->RunAction(delay);
+        CHECK(root->GetActionManager()->Count() == 1u);
+        root->RemoveChild(node.Get()); // the last reference goes with the scope
+    }
+    root->Update(core::Duration::FromSeconds(0.1));
+    CHECK(root->GetActionManager()->Count() == 0u);
+    CHECK(ticks == 0);
+}

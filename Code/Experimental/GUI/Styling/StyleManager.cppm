@@ -120,14 +120,20 @@ export namespace experimental::gui
             // entry covers, from what shows now.
             if (const ResolvedStyle* previous = m_cache.Find(&widget))
             {
-                const Array<TransitionSpec> transitions = ParseTransitionList(resolved.Get(core::StringView(u8"transition")));
+                const Array<TransitionSpec> transitions =
+                    ComposeTransitions(resolved.Get(u8"transition-property"), resolved.Get(u8"transition-duration"),
+                                       resolved.Get(u8"transition-timing-function"), resolved.Get(u8"transition-delay"));
                 if (!transitions.IsEmpty())
                     StartTransitions(transitions, *previous, resolved, animation, ensure);
             }
 
             // Keyframe animations: start those newly named (once: one that has ended stays ended
             // while it is named), stop those no longer named.
-            const Array<AnimationSpec> animations = ParseAnimationList(resolved.Get(core::StringView(u8"animation")));
+            const Array<AnimationSpec> animations = ComposeAnimations(
+                resolved.Get(u8"animation-name"), resolved.Get(u8"animation-duration"),
+                resolved.Get(u8"animation-timing-function"), resolved.Get(u8"animation-delay"),
+                resolved.Get(u8"animation-iteration-count"), resolved.Get(u8"animation-direction"),
+                resolved.Get(u8"animation-fill-mode"), resolved.Get(u8"animation-play-state"));
             Array<core::String>* startedSlot = m_startedAnimations.Find(&widget);
             Array<core::String>& started =
                 startedSlot != nullptr ? *startedSlot : m_startedAnimations.InsertOrAssign(&widget, Array<core::String>{});
@@ -150,6 +156,8 @@ export namespace experimental::gui
                 bool already = false;
                 for (const core::String& name : started)
                     already = already || name.AsView() == spec.Name.AsView();
+                if (already && animation)
+                    animation->SetPaused(spec.Name.AsView(), spec.Paused);
                 const Keyframes* keyframes = m_sheet.FindKeyframes(spec.Name.AsView());
                 if (already || keyframes == nullptr)
                     continue;

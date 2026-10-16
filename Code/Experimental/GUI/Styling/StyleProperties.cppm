@@ -19,6 +19,7 @@ export module experimental.gui:style_properties;
 import foundation.core;
 import :css_values;
 import :style_value;
+import :motion; // the transition and animation shorthands' expansion
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -124,8 +125,18 @@ export namespace experimental::gui
             {u8"box-shadow", StyleGrammar::Shadows},
             {u8"transform", StyleGrammar::Transforms},
             {u8"transform-origin", StyleGrammar::Origin},
-            {u8"transition", StyleGrammar::Text},
-            {u8"animation", StyleGrammar::Text},
+            {u8"transition-property", StyleGrammar::Text},
+            {u8"transition-duration", StyleGrammar::Text},
+            {u8"transition-timing-function", StyleGrammar::Text},
+            {u8"transition-delay", StyleGrammar::Text},
+            {u8"animation-name", StyleGrammar::Text},
+            {u8"animation-duration", StyleGrammar::Text},
+            {u8"animation-timing-function", StyleGrammar::Text},
+            {u8"animation-delay", StyleGrammar::Text},
+            {u8"animation-iteration-count", StyleGrammar::Text},
+            {u8"animation-direction", StyleGrammar::Text},
+            {u8"animation-fill-mode", StyleGrammar::Text},
+            {u8"animation-play-state", StyleGrammar::Text},
         };
         for (const StylePropertySpec& spec : kProperties)
             if (core::StringView(spec.Name) == name)
@@ -276,7 +287,7 @@ export namespace experimental::gui
 
     /// The longhands `name: text` sets: itself when it is one, its longhands when it is a
     /// shorthand (border, border-<side>, border-width, border-color, border-style, border-radius,
-    /// padding, margin, background). False when a shorthand's value does not parse.
+    /// padding, margin, background, transition, animation). False when a shorthand's value does not parse.
     [[nodiscard]] inline bool ExpandStyleShorthand(core::StringView name, core::StringView text,
                                                    Array<StyleLonghand>& out)
     {
@@ -337,6 +348,17 @@ export namespace experimental::gui
                 return false;
             for (usize k = 0; k < 4; ++k)
                 detail::Push(out, Joined(u8"border-", detail::kCorners[k], u8"-radius").AsView(), parts.Value()[k]);
+            return true;
+        }
+        if (name == core::StringView(u8"transition") || name == core::StringView(u8"animation"))
+        {
+            Array<core::String> names, values;
+            if (name == core::StringView(u8"transition"))
+                ExpandTransition(value, names, values);
+            else
+                ExpandAnimation(value, names, values);
+            for (usize i = 0; i < names.Size(); ++i)
+                detail::Push(out, names[i].AsView(), values[i].AsView());
             return true;
         }
         if (name == core::StringView(u8"background"))

@@ -18,6 +18,7 @@ import foundation.core;
 import foundation.vg; // CornerRadii
 import :css_values;   // LengthValue, ParseLengthValue, ParseColor
 import :parse_util;   // IsIdentChar
+import :transform2d;  // ComposeTransforms
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -388,6 +389,41 @@ export namespace experimental::gui
         LengthValue X{50.0f, LengthUnit::Percent};
         LengthValue Y{50.0f, LengthUnit::Percent};
     };
+
+    /// A translation's or an origin's length in the box's units: a percentage of `size`, anything
+    /// else as written (pixels).
+    [[nodiscard]] inline f32 ResolveAgainst(LengthValue v, f32 size) noexcept
+    {
+        return v.Unit == LengthUnit::Percent ? v.Value * size / 100.0f : v.Value;
+    }
+
+    /// The matrix a transform list makes for a box of `size`: its functions applied left to right.
+    [[nodiscard]] inline Transform2D ComposeTransforms(const Array<TransformFunction>& functions, core::Float2 size)
+    {
+        Transform2D m;
+        for (const TransformFunction& f : functions)
+        {
+            switch (f.Kind)
+            {
+            case TransformKind::Translate:
+                m.Translate(ResolveAgainst(f.A, size.x), ResolveAgainst(f.B, size.y));
+                break;
+            case TransformKind::Rotate:
+                m.Rotate(f.Angle);
+                break;
+            case TransformKind::Scale:
+                m.Scale(f.ScaleX, f.ScaleY);
+                break;
+            case TransformKind::Skew:
+                m.Combine(Transform2D{1.0f, Tan(f.AngleY), Tan(f.Angle), 1.0f, 0.0f, 0.0f});
+                break;
+            case TransformKind::Matrix:
+                m.Combine(Transform2D{f.M[0], f.M[1], f.M[2], f.M[3], f.M[4], f.M[5]});
+                break;
+            }
+        }
+        return m;
+    }
 
     /// `transform-origin`: one or two of a length, a percentage, or left / center / right
     /// (horizontal) and top / center / bottom (vertical); 50% 50% where unsaid.

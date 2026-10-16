@@ -109,6 +109,7 @@ export import :style_value;
 export import :style_properties;
 export import :style_applier;
 export import :easing;
+export import :motion;
 export import :style_interpolation;
 export import :style_animation;
 export import :style_manager;

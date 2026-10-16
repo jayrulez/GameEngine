@@ -311,6 +311,17 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   what it is changes nothing. `SceneRoot::NeedsFrame` says whether anything is waiting (a redraw,
   a running action, a layout), and GUISandbox skips a frame that needs none (drawing while a
   screenshot waits; `--always-redraw`, `--frame-stats`) (9f26b72b0, 7855ce02d).
+  Then the effects: `filter: blur()` (blurs in a list add as variances) and `backdrop-filter:
+  blur()`, which animate, `mix-blend-mode` (normal, multiply, screen, plus-lighter: the blends VG
+  composites), and `overflow`, all written to the node's box by the sheet. A node with a filter or
+  a blend, or a faded node with children, draws through one VG layer, so a group fades as one; a
+  faded leaf multiplies its opacity into its draws. A backdrop blur goes under the box's
+  background, in its shape. Clipped children clip to the box's rounded corners through a clip path
+  (the bounds' scissor without stencil fills). VGPassTargets (VG.Renderer) holds the quality pass's
+  multisampled colour and stencil targets for any host; the UI runtime moved onto it, and
+  GUISandbox now draws with everything VG has (analytic boxes, layers and blurs, stencil fills), in
+  a row of effect cards over stripes. A screenshot of it found repeating gradients repeating the
+  whole line rather than their stops' span; fixed (ed07570fe, 51067f95b, e85933062, db627fee0).
 - **G5 Data binding.** Properties that update what depends on them (AUI's model: dependency
   tracking, no manual subscriptions), bound from markup and script. Tests: a bound label follows
   its source.
@@ -376,6 +387,11 @@ list when it is done or the user rules it out.
   and classes its non-subject selectors use, and a change to any other restyle the widget alone.
   An animation keeps frames coming while its widget is scrolled out of view or clipped, and a
   frame redraws the whole tree, not only the regions that changed.
+- **G4, when a screen asks for them:** filters other than blur (brightness, contrast, grayscale,
+  drop-shadow, ...) need a colour pass in VG's layer composite; blend modes beyond VG's four; a
+  faded leaf is not grouped (its background shows through its own text); gradient stops take
+  percentages only (CSS also takes lengths); a repeating radial gradient whose first stop is past
+  0 repeats from the centre, and a repeating conic gradient does not repeat its span.
 - **F3, after the lab (foundation.ui text):** a label measures with its font's unshaped
   MeasureString, so a ligated label lays out a little wide; the basic shaper's wrapping knows no
   bidi; editing right-to-left text (caret movement by arrow keys, selection across a direction

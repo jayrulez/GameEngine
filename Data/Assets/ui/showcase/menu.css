@@ -72,6 +72,11 @@
 .primary { background: linear-gradient(180deg, var(--accent), var(--accent-deep)); }
 .danger { background: linear-gradient(180deg, #e0607a, #9c2f4a); }
 .small { width: 160px; height: 44px; font-size: 22px; }
+/* A small button sits in a row or alone under a panel: it grows a little in place on hover and
+   focus, without the main menu's lean to the right, which in a row pushes into its neighbour. */
+.small:hover { transform: scale(1.04); }
+.small:focus-visible { transform: scale(1.04); }
+.small:active { transform: scale(0.97); }
 
 /* Settings rows. */
 .row { width: 400px; height: 36px; }

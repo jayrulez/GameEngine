@@ -133,6 +133,12 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   shaper fills them degenerately; hit testing, cursor movement and the 21 files that use
   `GlyphPosition` move to clusters. Tests: every text test green with no visual change; cluster
   behaviour pinned for a one-to-one script before any shaper can vary it.
+  As built on `vg` (d1d63d14e): `GlyphPosition` is {cluster, glyphId, x, y, advance, glyphInfo,
+  clusterLength, xOffset, yOffset}. Clusters count codepoints, not bytes (the older spec said
+  byte offset but also that stb fills `cluster = stringIndex`, which counted codepoints; editing
+  works in characters, and a shaper fed UTF-32 reports clusters in that unit). Hit tests answer
+  the cluster and its end, so EditText no longer translates glyphs to characters; every
+  `GlyphPosition` user moved, and the whole clang battery is green.
 - **F2 Inline runs and rich text.** A `TextDocument` of runs (text, family, size, colour,
   weight, italic, underline) and inline objects (an icon on the baseline), laid out into lines by
   an inline formatter, behind a rich text control beside `Label`. A small markup for it, the same

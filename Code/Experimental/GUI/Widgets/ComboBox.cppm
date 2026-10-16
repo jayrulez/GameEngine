@@ -76,6 +76,17 @@ export namespace experimental::gui
                 m_dropdown->AddItem(text);
         }
         [[nodiscard]] usize ItemCount() const noexcept { return m_items.Size(); }
+        /// The items as one text, '|' between them (markup's and a sheet's `items`).
+        void SetItemsText(const core::String& text)
+        {
+            m_items.Clear();
+            m_selected = -1;
+            if (m_dropdown)
+                m_dropdown->Clear();
+            for (const core::StringView item : SplitItems(text.AsView()))
+                AddItem(item);
+        }
+        [[nodiscard]] core::String GetItemsText() const { return JoinItems(m_items); }
 
         [[nodiscard]] i32 GetSelectedIndex() const noexcept { return m_selected; }
         [[nodiscard]] core::StringView GetSelectedText() const
@@ -196,5 +207,4 @@ export namespace experimental::gui
         core::Function<void(i32)> m_onChanged;
     };
 
-    RTTI_DEFINE_OBJECT(ComboBox, "rtti::gui")
 }

@@ -31,6 +31,7 @@ import :style_properties;
 import :style_value;
 import :css_values;
 import :resource_provider;
+import :data_model; // ConvertVariant (a reflected property of any convertible type)
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -267,6 +268,11 @@ export namespace experimental::gui
                     else if (property.type == &TypeOf<core::String>())
                     {
                         value = Variant::From<core::String>(core::String(text));
+                    }
+                    else
+                    {
+                        // Any other type a value converts to (a column count, a maximum length).
+                        value = ConvertVariant(Variant::From<core::String>(core::String(text)), *property.type);
                     }
                     if (!value.IsEmpty())
                         (void)SetProperty(property, instance, value);

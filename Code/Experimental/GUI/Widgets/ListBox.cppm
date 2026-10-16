@@ -32,6 +32,34 @@ namespace fonts = foundation::fonts;
 
 export namespace experimental::gui
 {
+    /// A list's items written as one text, '|' between them (markup's `items="Apple|Banana"`),
+    /// each trimmed; empty text, no items.
+    [[nodiscard]] inline Array<core::StringView> SplitItems(core::StringView text)
+    {
+        Array<core::StringView> items;
+        usize start = 0;
+        for (usize i = 0; i <= text.Size(); ++i)
+            if (i == text.Size() || text[i] == u8'|')
+            {
+                const core::StringView item = core::Trim(text.SubStr(start, i - start));
+                if (item.Size() != 0 || i < text.Size())
+                    items.PushBack(item);
+                start = i + 1;
+            }
+        return items;
+    }
+    [[nodiscard]] inline core::String JoinItems(const Array<core::String>& items)
+    {
+        core::String text;
+        for (usize i = 0; i < items.Size(); ++i)
+        {
+            if (i > 0)
+                text.Append(core::StringView(u8"|"));
+            text.Append(items[i].AsView());
+        }
+        return text;
+    }
+
     // One selectable row. Internal to the ListBox, exposed as a Label for styling.
     class ListBoxItem : public Label
     {
@@ -128,6 +156,24 @@ export namespace experimental::gui
         }
 
         [[nodiscard]] usize ItemCount() const noexcept { return m_items.Size(); }
+        /// The items as one text, '|' between them (markup's and a sheet's `items`).
+        void SetItemsText(const core::String& text)
+        {
+            Clear();
+            for (const core::StringView item : SplitItems(text.AsView()))
+                AddItem(item);
+        }
+        [[nodiscard]] core::String GetItemsText() const
+        {
+            core::String text;
+            for (usize i = 0; i < m_items.Size(); ++i)
+            {
+                if (i > 0)
+                    text.Append(core::StringView(u8"|"));
+                text.Append(m_items[i]->GetText());
+            }
+            return text;
+        }
         [[nodiscard]] core::StringView GetItem(usize index) const
         {
             return index < m_items.Size() ? m_items[index]->GetText() : core::StringView{};

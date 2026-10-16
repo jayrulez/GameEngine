@@ -47,6 +47,8 @@ export namespace experimental::gui
         }
         [[nodiscard]] f32 GetHorizontalSpacing() const noexcept { return m_hSpacing; }
         [[nodiscard]] f32 GetVerticalSpacing() const noexcept { return m_vSpacing; }
+        /// One spacing both ways (markup's and a sheet's `spacing`).
+        void SetUniformSpacing(f32 spacing) { SetSpacing(spacing, spacing); }
 
         // The width of a single column cell (content width shared across the columns).
         [[nodiscard]] f32 CellWidth() const

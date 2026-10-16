@@ -361,6 +361,11 @@ export namespace experimental::gui
             HandleEnabledChange();
         }
         [[nodiscard]] bool IsEnabled() const noexcept { return m_enabled; }
+        /// Enabled itself and under enabled ancestors: a disabled panel disables what it holds.
+        [[nodiscard]] bool IsTreeEnabled() const
+        {
+            return m_enabled && (m_parent == nullptr || m_parent->IsTreeEnabled());
+        }
         void SetAlpha(f32 alpha)
         {
             m_alpha = alpha;

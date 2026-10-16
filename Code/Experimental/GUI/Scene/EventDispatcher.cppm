@@ -109,7 +109,7 @@ export namespace experimental::gui
             // Pointer capture: while a button is held, the pressed node keeps receiving moves
             // (so a drag continues even when the cursor leaves it). Otherwise the hovered node.
             Node* target = (m_downNode != nullptr) ? m_downNode : hit;
-            if (target)
+            if (target && target->IsTreeEnabled())
             {
                 const core::RefPtr<Node> pin{target};
                 target->HandleMouseMove(MouseEvent(EventType::MouseMove, target, position));
@@ -137,10 +137,11 @@ export namespace experimental::gui
             // (a click on a backdrop or a label) clears focus, as browsers do, so navigation
             // starts again from the GUI's entry rather than from the backdrop.
             Node* focusable = hit;
-            while (focusable != nullptr && !(focusable->IsTabFocusable() && focusable->IsEnabled()))
+            while (focusable != nullptr && !(focusable->IsTabFocusable() && focusable->IsTreeEnabled()))
                 focusable = focusable->GetParent();
             SetFocusNode(focusable);
-            if (hit)
+            // A disabled widget still takes the press (nothing behind it does) but is not told.
+            if (hit && hit->IsTreeEnabled())
             {
                 const core::RefPtr<Node> pin{hit};
                 hit->HandleMouseDown(
@@ -170,13 +171,13 @@ export namespace experimental::gui
             const core::RefPtr<Node> hitPin{hit};
             Node* target = (m_downNode != nullptr) ? m_downNode : hit;
             const core::RefPtr<Node> targetPin{target};
-            if (target)
+            if (target && target->IsTreeEnabled())
                 target->HandleMouseUp(
                     MouseEvent(EventType::MouseUp, target, position, button, modifiers));
             // A click (widget activation) only for the primary/left button, and only when the
             // release lands on the node that was pressed. Right/middle presses still deliver
             // Down/Up (e.g. for context menus) but never activate a control.
-            if (hit != nullptr && hit == m_downNode && button == MouseButton::Left)
+            if (hit != nullptr && hit == m_downNode && button == MouseButton::Left && hit->IsTreeEnabled())
                 hit->HandleMouseClick(
                     MouseEvent(EventType::MouseClick, hit, position, button, modifiers));
             m_downNode = nullptr;
@@ -189,7 +190,7 @@ export namespace experimental::gui
             // scrolling works while hovering the scrolled content.
             for (Node* n = hit; n != nullptr; n = n->GetParent())
             {
-                if (n->WantsWheel())
+                if (n->WantsWheel() && n->IsTreeEnabled())
                 {
                     const core::RefPtr<Node> pin{n};
                     n->HandleMouseWheel(WheelEvent(n, position, delta));
@@ -282,7 +283,7 @@ export namespace experimental::gui
         void SetKeystrokeRouter(core::Function<bool(const Keystroke&)> router) { m_keystrokes = core::Move(router); }
 
         /// Activates the focused widget (Return, Space, a gamepad's South): what a click does.
-        bool Activate() { return m_focusNode != nullptr && m_focusNode->IsEnabled() && m_focusNode->HandleActivate(); }
+        bool Activate() { return m_focusNode != nullptr && m_focusNode->IsTreeEnabled() && m_focusNode->HandleActivate(); }
         void InjectKeyUp(u32 keyCode, u32 modifiers = 0)
         {
             if (m_focusNode)
@@ -525,7 +526,7 @@ export namespace experimental::gui
         {
             if (node == nullptr || !node->IsVisible())
                 return;
-            if (node->IsTabFocusable() && node->IsEnabled())
+            if (node->IsTabFocusable() && node->IsTreeEnabled())
                 out.PushBack(node);
             for (usize i = 0; i < node->ChildCount(); ++i)
                 CollectTabStops(node->GetChildAt(i), out);

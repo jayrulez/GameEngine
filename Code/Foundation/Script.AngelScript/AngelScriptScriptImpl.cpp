@@ -515,6 +515,7 @@ namespace foundation::script::angelscript
     void AddRefDispatch(asIScriptGeneric* gen);
     void ReleaseDispatch(asIScriptGeneric* gen);
     void PropertyGetDispatch(asIScriptGeneric* gen);
+    void IsValidDispatch(asIScriptGeneric* gen);
     void PropertySetDispatch(asIScriptGeneric* gen);
     void MethodDispatch(asIScriptGeneric* gen);
     void OperatorDispatch(asIScriptGeneric* gen); // a reflected operator (Binding::Kind::Operator*)
@@ -2493,6 +2494,16 @@ namespace foundation::script::angelscript
                 }
                 RegisterOperator(name, type, method, used);
             }
+            // Every handle answers isValid(), unless the type reflects its own.
+            {
+                core::String decl;
+                AppendAscii(decl, "bool isValid()");
+                if (!IsUsed(used, decl) &&
+                    m_engine->RegisterObjectMethod(name, CStr(decl), asFUNCTION(IsValidDispatch), asCALL_GENERIC) >= 0)
+                {
+                    used.PushBack(core::Move(decl));
+                }
+            }
         }
 
         // A method marked as an operator (MethodInfo::op, a static whose first parameter is this
@@ -2734,9 +2745,9 @@ namespace foundation::script::angelscript
         ReleaseBox(static_cast<BoxedVariant*>(gen->GetObject()));
     }
 
-    // A handle whose object is gone (a component removed from its entity after the script took the
-    // handle) resolves to nothing: the access is the script's error, said where it happens, never a
-    // write through null. (Luau answers the same access with nil and ignores the write.)
+    // A handle whose object is gone (an element destroyed, a component removed from its entity
+    // after the script took the handle) resolves to nothing: the access is the script's error, said
+    // where it happens, never a write through null. Luau says the same.
     [[nodiscard]] bool RefuseGone(const core::Instance& instance)
     {
         if (instance.Pointer() != nullptr)
@@ -2745,9 +2756,17 @@ namespace foundation::script::angelscript
         }
         if (asIScriptContext* active = asGetActiveContext())
         {
-            active->SetException("the object is gone (a component no longer on its entity?)");
+            active->SetException(foundation::script::kObjectGoneMessage);
         }
         return true;
+    }
+
+    // `isValid()` on every object handle: whether its object is still there (a value is always).
+    // The one use of a gone handle that is not an error.
+    void IsValidDispatch(asIScriptGeneric* gen)
+    {
+        BoxedVariant* self = static_cast<BoxedVariant*>(gen->GetObject());
+        gen->SetReturnByte(core::ToInstance(self->value).Pointer() != nullptr ? 1 : 0);
     }
 
     void PropertyGetDispatch(asIScriptGeneric* gen)

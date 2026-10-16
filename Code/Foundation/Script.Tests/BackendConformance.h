@@ -128,6 +128,61 @@ namespace foundation::script::conformance
         builder.Nested<&Crate::items>("items");
     }
 
+    // Gone-handle contract fixtures: a script holds a Lamp by a RESOLVE-mode handle (a slot and a
+    // generation into a native table, as an element or a component is held), so the native side
+    // can take the lamp away while the script still holds it. Registered on demand.
+    class Lamp : public Object
+    {
+        RTTI_OBJECT(Lamp, Object)
+    public:
+        f64 level = 2.0;
+        void Bump() { level += 1.0; }
+
+        struct Slot
+        {
+            Lamp* lamp = nullptr;
+            u32 generation = 1;
+        };
+        struct HandleCtx
+        {
+            i32 slot = 0;
+            u32 generation = 0;
+        };
+        static Slot* Slots()
+        {
+            static Slot slots[2];
+            return slots;
+        }
+        static void* Resolve(const Variant& value)
+        {
+            const auto* ctx = static_cast<const HandleCtx*>(value.ResolveContext());
+            const Slot& slot = Slots()[ctx->slot];
+            return slot.generation == ctx->generation ? slot.lamp : nullptr;
+        }
+        // The script's way in: a handle to the lamp in `slot` (empty when there is none).
+        static Variant Take(i32 slot)
+        {
+            if (slot < 0 || slot > 1 || Slots()[slot].lamp == nullptr)
+            {
+                return Variant{};
+            }
+            return Variant::Resolving(&StaticType(), &Resolve, HandleCtx{slot, Slots()[slot].generation});
+        }
+        // The native side takes the lamp away: every handle to the slot is gone.
+        static void TakeAway(i32 slot)
+        {
+            Slots()[slot].lamp = nullptr;
+            ++Slots()[slot].generation;
+        }
+    };
+    REFLECT_MEMBERS(Lamp, "rtti::script::conformance")
+    {
+        builder.Constructor();
+        builder.Property<&Lamp::level>("level");
+        builder.Method<&Lamp::Bump>("bump");
+        builder.Method<&Lamp::Take, Lamp>("take");
+    }
+
     /// The language-specific sources. Every snippet implements a FIXED contract:
     ///  - functionsModule: function `add(a, b)` returning a + b, function `greeting()`
     ///    returning the string "hi", a module global `answer` readable as 42.
@@ -166,6 +221,12 @@ namespace foundation::script::conformance
         // KR = items_count() (-> 1), KL = items_at(0).size (-> 5). KZ/KM/KL only pass when
         // mutations through returned handles WROTE THROUGH into the container.
         StringView containerModule;
+        // Optional gone-handle module: a global `lamp` from `Lamp.take(0)` (the backend's static
+        // call syntax) and four zero-arg functions: `valid()` returning 1 when `lamp:isValid()`
+        // and 0 when not, `readLevel()` returning `lamp.level`, `writeLevel()` setting it to 7, and
+        // `bump()` calling `lamp:bump()`. Once the lamp is taken away, every one but `valid()` is
+        // the script's error, in every backend.
+        StringView goneModule;
         // Optional (certified only when the backend declares the Debugger capability): a module
         // with a zero-arg entry function `debugFunction`. Execution reaching `debugBreakLine`
         // (1-based, in the section named `debugSection`) must have a local named `debugLocalName`
@@ -500,6 +561,46 @@ namespace foundation::script::conformance
             CHECK(cctx->GetGlobal(u8"KM").Get<f64>() == doctest::Approx(9.0)); // move(1, 0)
             CHECK(cctx->GetGlobal(u8"KR").Get<f64>() == doctest::Approx(1.0)); // removeAt(0)
             CHECK(cctx->GetGlobal(u8"KL").Get<f64>() == doctest::Approx(5.0)); // survivor intact
+        }
+
+        // --- Gone handles (one rule for every handle): isValid() answers, any other use errors. ---
+        if (!dialect.goneModule.IsEmpty())
+        {
+            Lamp lamp;
+            Lamp::Slots()[0].lamp = &lamp;
+            manager->RegisterType(Lamp::StaticType()); // late registration, like DelegateSignal
+            RefPtr<IScriptContext> gctx = manager->CreateContext();
+            REQUIRE(gctx.Get() != nullptr);
+            CapturedErrors goneErrors;
+            gctx->SetErrorHandler(&goneErrors);
+            REQUIRE(gctx->Load(dialect.goneModule, u8"main").IsOk());
+            Span<Variant> none{};
+            const auto number = [&](const char8_t* function)
+            {
+                Result<Variant> result = gctx->Call(function, none);
+                REQUIRE(result.HasValue());
+                const f64* value = result.Value().TryGet<f64>();
+                return value != nullptr ? *value : -1.0;
+            };
+            CHECK(number(u8"valid") == doctest::Approx(1.0));
+            CHECK(number(u8"readLevel") == doctest::Approx(2.0));
+            CHECK(gctx->Call(u8"writeLevel", none).HasValue());
+            CHECK(gctx->Call(u8"bump", none).HasValue());
+            CHECK(lamp.level == doctest::Approx(8.0)); // wrote through, then bumped
+
+            Lamp::TakeAway(0);
+            CHECK(number(u8"valid") == doctest::Approx(0.0));
+            const char8_t* const uses[] = {u8"readLevel", u8"writeLevel", u8"bump"};
+            for (const char8_t* use : uses)
+            {
+                INFO(reinterpret_cast<const char*>(use));
+                const int before = goneErrors.count;
+                CHECK_FALSE(gctx->Call(use, none).HasValue());
+                CHECK(goneErrors.count > before);
+                CHECK(goneErrors.lastMessage.AsView().ContainsIgnoreCase(StringView(u8"the object is gone")));
+            }
+            CHECK(lamp.level == doctest::Approx(8.0)); // nothing wrote into the gone lamp
+            gctx->SetErrorHandler(nullptr);
         }
 
         // --- Committed seams (skipped when the capability is absent - the default). Turning

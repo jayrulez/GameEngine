@@ -1192,6 +1192,11 @@ TEST_CASE("script.luau: backend conformance battery")
     dialect.coroutineClass = kCoroutine;
     dialect.delegateModule = kDelegate;
     dialect.overloadModule = kOverload;
+    dialect.goneModule = u8"lamp = Lamp.take(0)\n"
+                         u8"function valid() return lamp:isValid() and 1 or 0 end\n"
+                         u8"function readLevel() return lamp.level end\n"
+                         u8"function writeLevel() lamp.level = 7 end\n"
+                         u8"function bump() lamp:bump() end\n";
     dialect.containerModule = u8"crate = Crate.new()\n"
                               u8"local a = crate:items_add()\n"
                               u8"a.size = 5\n"

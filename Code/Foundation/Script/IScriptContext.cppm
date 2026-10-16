@@ -20,6 +20,12 @@ namespace core = foundation::core;
 
 export namespace foundation::script
 {
+    /// What every backend says when a script uses a handle whose object is gone (an element
+    /// destroyed, a component removed from its entity): any use but `isValid()`, which every object
+    /// handle answers, is this error, raised where it happens.
+    inline constexpr const char* kObjectGoneMessage =
+        "the object is gone (destroyed, or a component no longer on its entity)";
+
     enum class ScriptErrorKind
     {
         Compile, // failed to compile source

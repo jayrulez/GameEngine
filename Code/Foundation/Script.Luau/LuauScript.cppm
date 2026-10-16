@@ -1320,9 +1320,9 @@ namespace foundation::script
 
             if (!method.isStatic && ToInstance(*boxedSelf).Pointer() == nullptr)
             {
-                // A handle whose object is gone (a component no longer on its entity): the
-                // script's error, said here, never a call through null.
-                lua_pushstring(state, "the object is gone (a component no longer on its entity?)");
+                // A handle whose object is gone (destroyed, or a component no longer on its
+                // entity): the script's error, said here, never a call through null.
+                lua_pushstring(state, kObjectGoneMessage);
                 lua_error(state);
             }
             ScriptCallScope scope(context);
@@ -1656,6 +1656,13 @@ namespace foundation::script
             return 1;
         }
 
+        int IsValidThunk(lua_State* state)
+        {
+            Variant* boxed = VariantAt(state, 1);
+            lua_pushboolean(state, boxed != nullptr && ToInstance(*boxed).Pointer() != nullptr ? 1 : 0);
+            return 1;
+        }
+
         int IndexThunk(lua_State* state)
         {
             // (userdata, key) -> method (from the methods table) or property value.
@@ -1697,8 +1704,8 @@ namespace foundation::script
                 Instance instance = ToInstance(*boxed);
                 if (instance.Pointer() == nullptr)
                 {
-                    lua_pushnil(state);
-                    return 1;
+                    lua_pushstring(state, kObjectGoneMessage); // a gone handle's read is an error, as in AngelScript
+                    lua_error(state);
                 }
                 context->PushVariant(state, GetProperty(*property, instance));
                 return 1;
@@ -1725,17 +1732,19 @@ namespace foundation::script
             }
             ScriptCallScope scope(context);
             Instance instance = ToInstance(*boxed);
-            if (instance.Pointer() != nullptr)
+            if (instance.Pointer() == nullptr)
             {
-                // Honour the property type (enum -> number carried as i64).
-                Variant value = context->ToVariantForParam(state, 3, property->type);
-                if (!SetProperty(*property, instance, value).IsOk())
-                {
-                    // A read-only property refuses in Core; a script learns it the same
-                    // way it learns a misspelled one - at the assignment, not silently.
-                    lua_pushstring(state, "property is read-only");
-                    lua_error(state);
-                }
+                lua_pushstring(state, kObjectGoneMessage); // never a write into nothing
+                lua_error(state);
+            }
+            // Honour the property type (enum -> number carried as i64).
+            Variant value = context->ToVariantForParam(state, 3, property->type);
+            if (!SetProperty(*property, instance, value).IsOk())
+            {
+                // A read-only property refuses in Core; a script learns it the same
+                // way it learns a misspelled one - at the assignment, not silently.
+                lua_pushstring(state, "property is read-only");
+                lua_error(state);
             }
             return 0;
         }
@@ -1824,6 +1833,18 @@ namespace foundation::script
                 }
                 lua_rawset(state, -3);
             }
+        }
+        // Every handle answers isValid(), unless the type reflects its own: whether its object is
+        // still there (a value always is). The one use of a gone handle that is not an error.
+        lua_pushstring(state, "isValid");
+        lua_rawget(state, -2);
+        const bool hasIsValid = !lua_isnil(state, -1);
+        lua_pop(state, 1);
+        if (!hasIsValid)
+        {
+            lua_pushstring(state, "isValid");
+            lua_pushcclosure(state, IsValidThunk, "is_valid", 0);
+            lua_rawset(state, -3);
         }
         // Container members bind as owner ops in the SAME methods table (the AngelScript
         // RegisterContainerMethods twin: `<name>_count/_at/_add/_removeAt/_move`), so

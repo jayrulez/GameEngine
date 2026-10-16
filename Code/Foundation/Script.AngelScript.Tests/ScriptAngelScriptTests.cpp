@@ -1400,6 +1400,12 @@ TEST_CASE("angelscript: CERTIFIED - the backend conformance battery")
                              u8"  OC = over.combine(2, 3);\n"
                              u8"  OCT = over.combineText(\"x\", 7);\n"
                              u8"}\n";
+    // Gone-handle contract: valid() answers, any other use of the lamp errors once it is gone.
+    dialect.goneModule = u8"Lamp@ lamp = Lamp::take(0);\n"
+                         u8"double valid() { return lamp.isValid() ? 1 : 0; }\n"
+                         u8"double readLevel() { return lamp.level; }\n"
+                         u8"void writeLevel() { lamp.level = 7; }\n"
+                         u8"void bump() { lamp.bump(); }\n";
     // Container contract: two adds through returned handles, zero-based at, move, removeAt.
     dialect.containerModule =
         u8"Crate@ crate = Crate();\n"

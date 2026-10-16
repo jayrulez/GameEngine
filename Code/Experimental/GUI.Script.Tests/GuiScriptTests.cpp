@@ -178,6 +178,8 @@ namespace
         CHECK(slider->GetValue() == doctest::Approx(0.5f));
         CHECK(volume->GetText() == StringView(u8"0.5"));
         CHECK(bed.Number(u8"bound") == doctest::Approx(1.0)); // every bind call answered true
+        // A handle held in a variable narrowed, and reached a Variant sink as the same element.
+        CHECK(gui::Node::FromHandle(bed.root->GetData().Get(StringView(u8"picked"))) == slider);
 
         // The game changes the data: the script's binding follows on the GUI's frame.
         bed.root->GetData().Set(StringView(u8"score"), Variant::From<i32>(4));
@@ -228,6 +230,9 @@ TEST_CASE("gui-script: AngelScript binds widgets to data and to each other")
         u8"  bool b = slider.bindData(\"value\", \"volume\");\n"
         u8"  bool c = volume.bind(\"text\", NumberExpression(sliderValue));\n"
         u8"  allBound = (a && b && c) ? 1 : 0;\n"
+        u8"  Node@ held = root.childAt(1);\n"
+        u8"  Slider@ narrowed = Slider::of(held);\n" // a handle in a variable narrows as it is
+        u8"  gui::set(\"picked\", @narrowed);\n"      // and an explicit handle reaches a Variant sink
         u8"}\n"
         u8"double bound() { return allBound; }\n"
         u8"void setNine() { gui::set(\"score\", 9); }\n",
@@ -252,6 +257,8 @@ TEST_CASE("gui-script: Luau binds widgets to data and to each other")
         u8"local b = slider:bindData(\"value\", \"volume\")\n"
         u8"local c = volume:bind(\"text\", function() return slider.value end)\n"
         u8"local allBound = (a and b and c) and 1 or 0\n"
+        u8"local held = root:childAt(1)\n"
+        u8"gui.set(\"picked\", Slider.of(held))\n"
         u8"function bound() return allBound end\n"
         u8"function setNine() gui.set(\"score\", 9) end\n",
         u8"main");

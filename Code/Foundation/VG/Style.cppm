@@ -87,6 +87,40 @@ export namespace foundation::vg
         [[nodiscard]] constexpr bool operator==(const BorderWidths&) const noexcept = default;
     };
 
+    /// A box's border colour on each side (VGContext::DrawBox); where two sides meet, the corner
+    /// splits along the line from the outer corner to the inner one, as CSS draws it.
+    struct BorderColors
+    {
+        Color top = Color{0.0f, 0.0f, 0.0f, 0.0f};
+        Color right = Color{0.0f, 0.0f, 0.0f, 0.0f};
+        Color bottom = Color{0.0f, 0.0f, 0.0f, 0.0f};
+        Color left = Color{0.0f, 0.0f, 0.0f, 0.0f};
+
+        constexpr BorderColors() noexcept = default;
+
+        /// Every side the same colour.
+        explicit constexpr BorderColors(Color uniform) noexcept
+            : top(uniform), right(uniform), bottom(uniform), left(uniform)
+        {
+        }
+
+        constexpr BorderColors(Color inTop, Color inRight, Color inBottom, Color inLeft) noexcept
+            : top(inTop), right(inRight), bottom(inBottom), left(inLeft)
+        {
+        }
+
+        [[nodiscard]] constexpr bool IsUniform() const noexcept
+        {
+            return top == right && top == bottom && top == left;
+        }
+        [[nodiscard]] constexpr bool IsTransparent() const noexcept
+        {
+            return top.a <= 0.0f && right.a <= 0.0f && bottom.a <= 0.0f && left.a <= 0.0f;
+        }
+
+        [[nodiscard]] constexpr bool operator==(const BorderColors&) const noexcept = default;
+    };
+
     /// Style parameters for path stroking.
     struct StrokeStyle
     {

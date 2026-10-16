@@ -85,12 +85,16 @@ export namespace foundation::vg
         Float4 radii;        ///< Corner radii: top left, top right, bottom right, bottom left.
         Float4 borders;      ///< Border widths: top, right, bottom, left.
         Color fill;          ///< The fill (authored sRGB, opacity applied).
-        Color borderColor;   ///< The border's colour, drawn over the fill.
+        // The border's colour on each side, drawn over the fill.
+        Color borderTop;
+        Color borderRight;
+        Color borderBottom;
+        Color borderLeft;
 
-        static constexpr i32 SizeInBytes = 88; // 8 + 8 + 8 + 16 + 16 + 16 + 16
+        static constexpr i32 SizeInBytes = 136; // 8 + 8 + 8 + 16 + 16 + 16 + 4 * 16
     };
 
-    static_assert(sizeof(VGBoxVertex) == VGBoxVertex::SizeInBytes, "VGBoxVertex must stay 88 bytes");
+    static_assert(sizeof(VGBoxVertex) == VGBoxVertex::SizeInBytes, "VGBoxVertex must match the box pipeline's layout");
 
     static_assert(sizeof(VGVertex) == VGVertex::SizeInBytes,
                   "VGVertex must match the renderer layout (VGRenderVertex)");

@@ -1399,19 +1399,22 @@ export namespace foundation::vg::renderer
                 {rhi::VertexFormat::Float32x2, 36, 4}, // effect (distance-field text effects)
             };
             // An analytic box's vertex (foundation::vg::VGBoxVertex).
-            const rhi::VertexAttribute boxAttributes[7] = {
-                {rhi::VertexFormat::Float32x2, 0, 0},  // position
-                {rhi::VertexFormat::Float32x2, 8, 1},  // local
-                {rhi::VertexFormat::Float32x2, 16, 2}, // halfSize
-                {rhi::VertexFormat::Float32x4, 24, 3}, // radii
-                {rhi::VertexFormat::Float32x4, 40, 4}, // borders
-                {rhi::VertexFormat::Float32x4, 56, 5}, // fill
-                {rhi::VertexFormat::Float32x4, 72, 6}, // borderColor
+            const rhi::VertexAttribute boxAttributes[10] = {
+                {rhi::VertexFormat::Float32x2, 0, 0},   // position
+                {rhi::VertexFormat::Float32x2, 8, 1},   // local
+                {rhi::VertexFormat::Float32x2, 16, 2},  // halfSize
+                {rhi::VertexFormat::Float32x4, 24, 3},  // radii
+                {rhi::VertexFormat::Float32x4, 40, 4},  // borders
+                {rhi::VertexFormat::Float32x4, 56, 5},  // fill
+                {rhi::VertexFormat::Float32x4, 72, 6},  // borderTop
+                {rhi::VertexFormat::Float32x4, 88, 7},  // borderRight
+                {rhi::VertexFormat::Float32x4, 104, 8}, // borderBottom
+                {rhi::VertexFormat::Float32x4, 120, 9}, // borderLeft
             };
             rhi::VertexBufferLayout vbLayout{};
             vbLayout.stride = box ? static_cast<u32>(sizeof(foundation::vg::VGBoxVertex))
                                   : static_cast<u32>(sizeof(VGRenderVertex));
-            vbLayout.attributes = box ? Span<const rhi::VertexAttribute>(boxAttributes, 7)
+            vbLayout.attributes = box ? Span<const rhi::VertexAttribute>(boxAttributes, 10)
                                       : Span<const rhi::VertexAttribute>(attributes, 5);
             const rhi::VertexBufferLayout vertexBuffers[1] = {vbLayout};
 

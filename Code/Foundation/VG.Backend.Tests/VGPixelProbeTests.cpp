@@ -474,6 +474,11 @@ namespace
                 ctx.DrawBox(Rectangle{180, 152, 40, 16}, vg::CornerRadii(), Color{0.0f, 0.0f, 0.0f, 0.0f},
                             vg::BorderWidths(2.0f), ByteColor(40, 200, 40));
                 ctx.PopState();
+                // A colour per side, four pixels wide: red above, green right, blue below, white left.
+                ctx.DrawBox(Rectangle{80, 64, 40, 40}, vg::CornerRadii(), Color{0.0f, 0.0f, 0.0f, 0.0f},
+                            vg::BorderWidths(4.0f),
+                            vg::BorderColors(ByteColor(220, 40, 40), ByteColor(40, 200, 40), ByteColor(60, 60, 240),
+                                             ByteColor(255, 255, 255)));
             });
         REQUIRE(px.valid);
         const auto red = [&](u32 x, u32 y) { return px.At(x, y)[0] > 200 && px.At(x, y)[1] < 80; };
@@ -509,6 +514,16 @@ namespace
         CHECK(green(96, 73));
         CHECK(dark(96, 72));
         CHECK(dark(96, 75));
+        // Per-side colours: each side's middle is its own; the top-left corner splits along its
+        // diagonal (nearer the left edge: white; nearer the top: red); the inside stays clear.
+        const auto white = [&](u32 x, u32 y) { return px.At(x, y)[0] > 230 && px.At(x, y)[1] > 230 && px.At(x, y)[2] > 230; };
+        CHECK(red(100, 65));
+        CHECK(green(118, 84));
+        CHECK(blue(100, 102));
+        CHECK(white(81, 84));
+        CHECK(white(81, 67));
+        CHECK(red(83, 65));
+        CHECK(dark(100, 84));
     }
 }
 

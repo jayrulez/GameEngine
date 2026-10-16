@@ -766,13 +766,20 @@ export namespace foundation::vg
         void DrawBox(Rectangle rect, CornerRadii radii, Color fill, BorderWidths borders = {},
                      Color borderColor = Color{0.0f, 0.0f, 0.0f, 0.0f})
         {
+            DrawBox(rect, radii, fill, borders, BorderColors(borderColor));
+        }
+
+        /// DrawBox with a colour per side (CSS's border-top-color and the rest): where two sides
+        /// meet, the corner splits along the line from its outer corner to its inner one.
+        void DrawBox(Rectangle rect, CornerRadii radii, Color fill, BorderWidths borders, BorderColors borderColors)
+        {
             if (rect.width <= 0.0f || rect.height <= 0.0f)
             {
                 return;
             }
             if (!m_analyticBoxes)
             {
-                TessellateBox(rect, radii, fill, borders, borderColor);
+                TessellateBox(rect, radii, fill, borders, borderColors);
                 return;
             }
             // Radii no larger than the box allows, as BuildRoundedRect clamps them.
@@ -782,7 +789,10 @@ export namespace foundation::vg
 
             VGBoxVertex box{};
             box.fill = ApplyOpacity(fill);
-            box.borderColor = ApplyOpacity(borderColor);
+            box.borderTop = ApplyOpacity(borderColors.top);
+            box.borderRight = ApplyOpacity(borderColors.right);
+            box.borderBottom = ApplyOpacity(borderColors.bottom);
+            box.borderLeft = ApplyOpacity(borderColors.left);
             Float2 corner[4];
             if (m_pixelSnap && TransformIsAxisAligned())
             {
@@ -2049,13 +2059,13 @@ export namespace foundation::vg
         // DrawBox without the box shader: the fill as FillRoundedRect, the border as the ring
         // between the box and its inset (even-odd), each inner corner rounded by what is left of
         // its radius past the wider neighbouring border.
-        void TessellateBox(Rectangle rect, CornerRadii radii, Color fill, BorderWidths borders, Color borderColor)
+        void TessellateBox(Rectangle rect, CornerRadii radii, Color fill, BorderWidths borders, BorderColors colors)
         {
             if (fill.a > 0.0f)
             {
                 FillRoundedRect(rect, radii, fill);
             }
-            if (borders.IsZero() || borderColor.a <= 0.0f)
+            if (borders.IsZero() || colors.IsTransparent())
             {
                 return;
             }
@@ -2072,7 +2082,43 @@ export namespace foundation::vg
                                              Max(0.0f, radii.bottomLeft - Max(borders.bottom, borders.left)));
                 ShapeBuilder::BuildRoundedRect(inner, innerRadii, ring);
             }
-            FillPath(ring.ToPath(), borderColor, FillRule::EvenOdd);
+            const Path ringPath = ring.ToPath();
+            if (colors.IsUniform())
+            {
+                FillPath(ringPath, colors.top, FillRule::EvenOdd);
+                return;
+            }
+            // A colour per side: the ring clipped to each side's wedge, the region between the
+            // box's edge and the inner box's on that side, its corners split along the line from
+            // the outer corner to the inner one.
+            const Float2 o0{rect.x, rect.y};
+            const Float2 o1{rect.x + rect.width, rect.y};
+            const Float2 o2{rect.x + rect.width, rect.y + rect.height};
+            const Float2 o3{rect.x, rect.y + rect.height};
+            const Float2 i0{rect.x + borders.left, rect.y + borders.top};
+            const Float2 i1{rect.x + rect.width - borders.right, rect.y + borders.top};
+            const Float2 i2{rect.x + rect.width - borders.right, rect.y + rect.height - borders.bottom};
+            const Float2 i3{rect.x + borders.left, rect.y + rect.height - borders.bottom};
+            const auto side = [&](Float2 a, Float2 b, Float2 c, Float2 d, Color color)
+            {
+                if (color.a <= 0.0f)
+                {
+                    return;
+                }
+                PathBuilder wedge;
+                wedge.MoveTo(a);
+                wedge.LineTo(b);
+                wedge.LineTo(c);
+                wedge.LineTo(d);
+                wedge.Close();
+                PushClipPath(wedge.ToPath());
+                FillPath(ringPath, color, FillRule::EvenOdd);
+                PopClipPath();
+            };
+            side(o0, o1, i1, i0, colors.top);
+            side(o1, o2, i2, i1, colors.right);
+            side(o2, o3, i3, i2, colors.bottom);
+            side(o3, o0, i0, i3, colors.left);
         }
 
         // The device bounds of what a layer drew (its commands from `firstCommand` on that draw into

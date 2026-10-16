@@ -564,7 +564,8 @@ TEST_CASE("vg.context: an analytic box is six box vertices in a Box command, bat
     CHECK(v.radii.x == doctest::Approx(6.0f));
     CHECK(v.borders.w == doctest::Approx(2.0f));
     CHECK(v.fill.r == doctest::Approx(1.0f));
-    CHECK(v.borderColor.b == doctest::Approx(1.0f));
+    CHECK(v.borderTop.b == doctest::Approx(1.0f)); // one colour: every side's
+    CHECK(v.borderLeft.b == doctest::Approx(1.0f));
     Float2 mn{1e9f, 1e9f}, mx{-1e9f, -1e9f};
     for (usize i = 0; i < 6; ++i)
     {
@@ -1543,4 +1544,43 @@ TEST_CASE("vg.context: text drawn in a font with a shaper is shaped (once), so l
     ctx.Clear();
     ctx.DrawText(u8"fi", &font, Float2{0.0f, 20.0f}, Color::White);
     CHECK(calls == 1); // across frames too
+}
+
+TEST_CASE("vg.context: a box takes a border colour per side, analytic or tessellated")
+{
+    const Color top{1.0f, 0.0f, 0.0f, 1.0f};
+    const Color right{0.0f, 1.0f, 0.0f, 1.0f};
+    const Color bottom{0.0f, 0.0f, 1.0f, 1.0f};
+    const Color left{1.0f, 1.0f, 0.0f, 1.0f};
+    {
+        VGContext ctx;
+        ctx.SetAnalyticBoxes(true);
+        ctx.DrawBox(Rectangle{0, 0, 40, 40}, CornerRadii(), Color{0, 0, 0, 0}, BorderWidths(4.0f),
+                    BorderColors(top, right, bottom, left));
+        REQUIRE(ctx.GetBatch().boxVertices.Size() == 6u);
+        const VGBoxVertex& v = ctx.GetBatch().boxVertices[0];
+        CHECK(v.borderTop.r == doctest::Approx(1.0f));
+        CHECK(v.borderRight.g == doctest::Approx(1.0f));
+        CHECK(v.borderBottom.b == doctest::Approx(1.0f));
+        CHECK(v.borderLeft.g == doctest::Approx(1.0f));
+    }
+    {
+        // Tessellated: the ring is filled once per side, clipped to that side's wedge.
+        VGContext ctx;
+        ctx.SetStencilFills(true);
+        ctx.DrawBox(Rectangle{0, 0, 40, 40}, CornerRadii(), Color{0, 0, 0, 0}, BorderWidths(4.0f),
+                    BorderColors(top, right, bottom, left));
+        bool seen[4] = {};
+        for (const VGVertex& vertex : ctx.GetBatch().vertices)
+        {
+            seen[0] = seen[0] || vertex.color == top;
+            seen[1] = seen[1] || vertex.color == right;
+            seen[2] = seen[2] || vertex.color == bottom;
+            seen[3] = seen[3] || vertex.color == left;
+        }
+        CHECK(seen[0]);
+        CHECK(seen[1]);
+        CHECK(seen[2]);
+        CHECK(seen[3]);
+    }
 }

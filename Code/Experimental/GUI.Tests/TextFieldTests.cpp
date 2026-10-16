@@ -513,3 +513,19 @@ TEST_CASE("textfield: shift+click extends the selection from the caret")
     CHECK(fx.field->HasSelection());
     CHECK(fx.field->SelectedText() == core::StringView(u8"ell"));
 }
+
+TEST_CASE("textfield: a right press keeps the caret and the selection")
+{
+    Fixture fx(u8"hello");
+    fx.field->SetCaret(1);
+    const core::u32 shift = static_cast<core::u32>(KeyModShift);
+    fx.d()->InjectMouseDown(core::Float2{4.0f * 6.0f, 12.0f}, MouseButton::Left, shift);
+    fx.d()->InjectMouseUp(core::Float2{4.0f * 6.0f, 12.0f}, MouseButton::Left);
+    REQUIRE(fx.field->SelectedText() == core::StringView(u8"ell"));
+    fx.d()->InjectMouseDown(core::Float2{0.0f, 12.0f}, MouseButton::Right); // where a context menu opens
+    fx.d()->InjectMouseUp(core::Float2{0.0f, 12.0f}, MouseButton::Right);
+    CHECK(fx.field->SelectedText() == core::StringView(u8"ell"));
+    CHECK(fx.field->GetCaret() == 4u);
+    fx.d()->InjectMouseMove(core::Float2{2.0f * 6.0f, 12.0f}); // and no drag-select began
+    CHECK(fx.field->SelectedText() == core::StringView(u8"ell"));
+}

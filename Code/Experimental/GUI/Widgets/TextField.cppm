@@ -315,6 +315,10 @@ export namespace experimental::gui
         {
             UINode::OnMouseDown(event);
             RequestFocus();
+            // Only the primary button places the caret: a right press keeps the selection a context
+            // menu would act on.
+            if (event.Button != MouseButton::Left)
+                return;
             const bool shift = (event.Modifiers & static_cast<u32>(KeyModShift)) != 0;
             const f32 localX = ConvertToNodeSpace(event.Position).x;
             const usize pos = CaretFromX(localX);

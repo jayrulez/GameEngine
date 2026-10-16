@@ -33,6 +33,9 @@ export namespace foundation::fonts
         [[nodiscard]] virtual u32 BackendTypeId() const { return 0; }
 
         [[nodiscard]] virtual StringView FamilyName() const = 0;
+        /// The font file's bytes (TTF/OTF), for a shaper that reads its tables; empty when the
+        /// font has none (a hand-built table).
+        [[nodiscard]] virtual Span<const u8> SourceData() const = 0;
         [[nodiscard]] virtual FontMetrics Metrics() const = 0;
         [[nodiscard]] virtual f32 PixelHeight() const = 0;
 

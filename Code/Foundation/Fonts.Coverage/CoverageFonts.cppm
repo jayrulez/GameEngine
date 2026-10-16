@@ -39,6 +39,8 @@ export namespace foundation::fonts
         }
 
         void SetFamilyName(StringView name) { m_familyName = String(name); }
+        /// The font file's bytes, borrowed: whoever sets them keeps them alive as long as this font.
+        void SetSourceData(Span<const u8> bytes) { m_sourceData = bytes; }
         void SetMetrics(FontMetrics m) { m_metrics = m; }
         void SetPixelHeight(f32 h) { m_pixelHeight = h; }
 
@@ -51,6 +53,7 @@ export namespace foundation::fonts
 
         // --- IFont ---------------------------------------------------------
         [[nodiscard]] StringView FamilyName() const override { return m_familyName; }
+        [[nodiscard]] Span<const u8> SourceData() const override { return m_sourceData; }
         [[nodiscard]] FontMetrics Metrics() const override { return m_metrics; }
         [[nodiscard]] f32 PixelHeight() const override { return m_pixelHeight; }
 
@@ -125,6 +128,7 @@ export namespace foundation::fonts
             return (static_cast<i64>(first) << 32) | static_cast<i64>(static_cast<u32>(second));
         }
 
+        Span<const u8> m_sourceData; // borrowed (the product's bytes)
         String m_familyName;
         f32 m_pixelHeight = 0;
         FontMetrics m_metrics;

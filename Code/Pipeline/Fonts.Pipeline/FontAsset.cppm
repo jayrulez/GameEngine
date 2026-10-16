@@ -117,7 +117,9 @@ export namespace pipeline{
         // is a maximum), and a glyph that does not fit fails the bake instead of vanishing.
         // 6 (2026-10-15): FontResource 3 - atlases key by glyph index, so a shaper's glyphs can
         // draw; every codepoint the range maps to keeps its glyph row (a space's too).
-        [[nodiscard]] u32 Version() const override { return 6; }
+        // 7 (2026-10-15): the font file is kept as the product's "font" stream, for a shaper that
+        // reads its tables in a shipped game.
+        [[nodiscard]] u32 Version() const override { return 7; }
 
         [[nodiscard]] Status Build(const pipeline::Asset& asset,
                                    pipeline::AssetBuildContext& ctx) override
@@ -173,9 +175,14 @@ export namespace pipeline{
             {
                 return wrote;
             }
-            return ctx.output->WriteData(
+            const Status wroteData = ctx.output->WriteData(
                 u8"data",
                 Span<const byte>(reinterpret_cast<const byte*>(pixels.Data()), pixels.Size()));
+            if (!wroteData.IsOk())
+            {
+                return wroteData;
+            }
+            return ctx.output->WriteData(u8"font", Span<const byte>(bytes.Value().Data(), bytes.Value().Size()));
         }
 
     private:

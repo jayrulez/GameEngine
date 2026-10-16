@@ -70,6 +70,10 @@ export namespace foundation::fonts
         // --- IFont ---------------------------------------------------------
         [[nodiscard]] u32 BackendTypeId() const override { return kTrueTypeFontTypeId; }
         [[nodiscard]] StringView FamilyName() const override { return m_familyName; }
+        [[nodiscard]] Span<const u8> SourceData() const override
+        {
+            return Span<const u8>(m_fontData.Data(), m_fontData.Size());
+        }
         [[nodiscard]] FontMetrics Metrics() const override { return m_metrics; }
         [[nodiscard]] f32 PixelHeight() const override { return m_pixelHeight; }
 

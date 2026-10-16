@@ -23,6 +23,7 @@ namespace
     {
     public:
         core::StringView FamilyName() const override { return core::StringView(u8"mock"); }
+        core::Span<const core::u8> SourceData() const override { return {}; }
         fonts::FontMetrics Metrics() const override
         {
             fonts::FontMetrics m;

@@ -38,6 +38,7 @@ export namespace foundation::fonts
         }
 
         [[nodiscard]] StringView FamilyName() const override { return m_base->FamilyName(); }
+        [[nodiscard]] Span<const u8> SourceData() const override { return m_base->SourceData(); }
         [[nodiscard]] f32 PixelHeight() const override { return m_pixelHeight; }
         [[nodiscard]] f32 Scale() const { return m_scale; }
 

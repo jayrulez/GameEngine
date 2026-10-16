@@ -98,6 +98,11 @@ TEST_CASE("font.pipeline: FontAsset raster ramp -> cook -> rasterizer-free Font"
     REQUIRE(font);
     CHECK(font->Family() == u8"TestMono");
     REQUIRE(font->EntryCount() == 2u);
+    // The font file came along (a shaper reads its tables), and every entry's font exposes it.
+    REQUIRE_FALSE(font->SourceData().IsEmpty());
+    CHECK(font->SourceData().Size() > 1000u);
+    CHECK(font->EntryAt(0).font->SourceData().Data() == font->SourceData().Data());
+    CHECK(font->EntryAt(1).font->SourceData().Size() == font->SourceData().Size());
 
     const Font::Entry* entry = font->ClosestEntry(12.0f);
     REQUIRE(entry != nullptr);

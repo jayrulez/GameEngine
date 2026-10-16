@@ -184,7 +184,8 @@ export namespace foundation::fonts
         ar.EndObject();
     }
 
-    // Cooked font record (output DB). Atlas pixels are the "data" stream.
+    // Cooked font record (output DB). Atlas pixels are the "data" stream; the font file itself is the
+    // "font" stream, for a shaper that reads its tables (absent in fonts cooked before it was kept).
     class FontResource final : public ISerializable
     {
         RTTI_OBJECT(FontResource, ISerializable)
@@ -222,6 +223,12 @@ export namespace foundation::fonts
 
         void SetFamily(StringView family) { m_family = String(family); }
         void AddEntry(Entry&& entry) { m_entries.PushBack(Move(entry)); }
+        /// The font file's bytes, set before the entries (their fonts borrow them).
+        void SetSourceData(Array<u8>&& bytes) { m_sourceData = Move(bytes); }
+        [[nodiscard]] Span<const u8> SourceData() const noexcept
+        {
+            return Span<const u8>(m_sourceData.Data(), m_sourceData.Size());
+        }
 
         [[nodiscard]] StringView Family() const noexcept { return m_family.AsView(); }
         [[nodiscard]] usize EntryCount() const noexcept { return m_entries.Size(); }
@@ -249,6 +256,7 @@ export namespace foundation::fonts
 
     private:
         String m_family;
+        Array<u8> m_sourceData; // the font file (empty when the cook did not keep it)
         Array<Entry> m_entries;
     };
 
@@ -319,6 +327,20 @@ export namespace foundation::fonts
 
             RefPtr<Font> product = MakeRef<Font>(*m_allocator);
             product->SetFamily(res->family.AsView());
+            if (UniquePtr<IStream> stream = instance.ReadData(u8"font"))
+            {
+                const i64 size = stream->Size();
+                Array<u8> bytes;
+                if (size > 0)
+                {
+                    bytes.Resize(static_cast<usize>(size));
+                    if (stream->Read(bytes.Data(), static_cast<u64>(size)) != static_cast<u64>(size))
+                    {
+                        bytes.Clear();
+                    }
+                }
+                product->SetSourceData(Move(bytes));
+            }
 
             for (const FontResourceEntry& e : res->entries)
             {
@@ -328,6 +350,7 @@ export namespace foundation::fonts
                 // The rasterizer-free IFont.
                 entry.font = MakeUnique<BakedFont>(*m_allocator);
                 entry.font->SetFamilyName(res->family.AsView());
+                entry.font->SetSourceData(product->SourceData());
                 entry.font->SetPixelHeight(e.pixelHeight);
                 entry.font->SetMetrics(
                     FontMetrics(e.ascent, e.descent, e.lineGap, e.pixelHeight, e.scale));

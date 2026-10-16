@@ -188,6 +188,7 @@ namespace
     {
     public:
         [[nodiscard]] StringView FamilyName() const override { return u8"Stub"; }
+        [[nodiscard]] Span<const u8> SourceData() const override { return {}; }
         [[nodiscard]] f32 PixelHeight() const override { return 32.0f; }
         [[nodiscard]] FontMetrics Metrics() const override
         {

@@ -72,6 +72,9 @@ export namespace experimental::gui
                 SetFillColor(color);
         }
 
+        /// A bar's length and thickness when nothing sizes it (E2).
+        [[nodiscard]] core::Float2 MeasureContent(core::Float2) override { return core::Float2{160.0f, 10.0f}; }
+
     protected:
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
         {

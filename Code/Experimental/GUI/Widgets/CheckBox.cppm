@@ -88,6 +88,9 @@ export namespace experimental::gui
                 SetCheckColor(color);
         }
 
+        /// Its box's size when nothing sizes it (E2).
+        [[nodiscard]] core::Float2 MeasureContent(core::Float2) override { return core::Float2{20.0f, 20.0f}; }
+
     protected:
         bool OnActivate() override { return ActivateAsClick(); } // Return, Space: a click
         void OnMouseClick(const MouseEvent& event) override

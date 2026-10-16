@@ -96,6 +96,9 @@ export namespace experimental::gui
                 SetHandleColor(color);
         }
 
+        /// A track's length and a thumb's height when nothing sizes it (E2).
+        [[nodiscard]] core::Float2 MeasureContent(core::Float2) override { return core::Float2{160.0f, 24.0f}; }
+
     protected:
         // Drag state is the slider's own m_dragging: pointer capture brings the moves and the
         // release here even after the cursor leaves it.

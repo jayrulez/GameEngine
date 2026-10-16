@@ -69,6 +69,9 @@ namespace
                 host.GetVariant(u8"vg_box", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
             rhi::ShaderModule* layerFs =
                 host.GetVariant(u8"vg_layer", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
+            rhi::ShaderModule* shadowFs =
+                host.GetVariant(u8"vg_shadow", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
+            REQUIRE(shadowFs != nullptr); // else box shadows would not draw, and the shadow probe prove nothing
             REQUIRE(vs != nullptr);
             rhi::ShaderModule* blurVs =
                 host.GetVariant(u8"vg_blur", shaders::ShaderStage::Vertex, shaders::ShaderFlags::None);
@@ -89,7 +92,7 @@ namespace
             vg::renderer::VGRenderer renderer{DefaultAllocator()};
             REQUIRE(renderer
                         .Initialize(device, *vs, *fs, drawFormat, 2, distanceFieldFragmentShader,
-                                    gradR, gradC, config, nullptr, boxVs, boxFs, layerFs, blurVs, blurFs)
+                                    gradR, gradC, config, shadowFs, boxVs, boxFs, layerFs, blurVs, blurFs)
                         .IsOk());
 
             rhi::TextureDesc cd = rhi::TextureDesc::RenderTarget(
@@ -525,6 +528,51 @@ namespace
         CHECK(red(83, 65));
         CHECK(dark(100, 84));
     }
+}
+
+namespace
+{
+    // An inset shadow on a rounded box: strong just inside the edge, gone at the middle, and
+    // nothing in the corners outside the arc (inside the box's quads, outside the box itself).
+    void ProbeInsetShadow(rhi::Device& device, const char* name)
+    {
+        INFO(doctest::String(name));
+        const Pixels px = RenderScene(device,
+                                      [](vg::VGContext& ctx)
+                                      {
+                                          ctx.FillBoxShadow(Rectangle{20, 20, 80, 80}, vg::CornerRadii(24.0f), 8.0f,
+                                                            ByteColor(255, 0, 0), true);
+                                      });
+        REQUIRE(px.valid);
+        INFO("corner ", static_cast<int>(px.At(21, 21)[0]), ", edge ", static_cast<int>(px.At(21, 60)[0]),
+             ", middle ", static_cast<int>(px.At(60, 60)[0]));
+        CHECK(px.At(21, 21)[0] <= 2);   // outside the arc: no shadow
+        CHECK(px.At(23, 23)[0] <= 2);
+        CHECK(px.At(21, 60)[0] >= 120); // just inside the straight edge: strong
+        CHECK(px.At(60, 60)[0] <= 4);   // the middle, 40 px in at sigma 4: gone
+    }
+}
+
+TEST_CASE("vg.pixels: an inset box shadow stays inside its rounded box")
+{
+    rhi::Backend* vulkan = nullptr;
+    (void)rhi::vk::CreateBackend(rhi::vk::VkBackendDesc{}, vulkan);
+    rhi::Backend* webgpu = nullptr;
+    (void)rhi::webgpu::CreateBackend(rhi::webgpu::WebGpuBackendDesc{}, webgpu, DefaultAllocator());
+    if (rhi::Device* device = MakeDevice(vulkan))
+    {
+        ProbeInsetShadow(*device, "vulkan");
+        device->Destroy();
+    }
+    if (rhi::Device* device = MakeDevice(webgpu))
+    {
+        ProbeInsetShadow(*device, "webgpu");
+        device->Destroy();
+    }
+    if (vulkan != nullptr)
+        vulkan->Destroy();
+    if (webgpu != nullptr)
+        webgpu->Destroy();
 }
 
 TEST_CASE("vg.pixels: analytic boxes fill, border without a halo, and take a width per side")

@@ -1193,3 +1193,65 @@ TEST_CASE("layout: Flex, Flow, Grid and Absolute inset their children by the she
         CHECK(children[i]->Bounds.y == doctest::Approx(7.0f)); // 5 + 2
     }
 }
+
+// === Flex shrink, sheet padding in every layout, transformed coordinates ===
+
+namespace
+{
+    LayoutStyle Shrink(f32 shrink)
+    {
+        LayoutStyle lp;
+        lp.FlexShrink = shrink;
+        return lp;
+    }
+    // A 200 x 50 row holding two 150-wide children: 100 too many.
+    struct OverfullRow
+    {
+        UIContext ctx{DefaultAllocator()};
+        core::RefPtr<RootView> root = MakeRoot();
+        core::RefPtr<FlexLayout> flex = New<FlexLayout>();
+        core::RefPtr<TestView> a = TV(150, 30);
+        core::RefPtr<TestView> b = TV(150, 30);
+        OverfullRow(const LayoutStyle& la, const LayoutStyle& lb)
+        {
+            Init(ctx, root.Get(), 400, 300);
+            flex->Direction = Orientation::Horizontal;
+            flex->AddView(a.Get(), la);
+            flex->AddView(b.Get(), lb);
+            LayoutStyle box;
+            box.Width = SizeSpec::Fixed(Unit::Px(200));
+            box.Height = SizeSpec::Fixed(Unit::Px(50));
+            root->AddView(flex.Get(), box);
+            LayoutPass(ctx, root.Get());
+        }
+    };
+}
+
+TEST_CASE("flex: Shrink_OverflowSharedByShrinkTimesBase")
+{
+    OverfullRow even(Shrink(1), Shrink(1));
+    CHECK(even.a->Width() == doctest::Approx(100.0f));
+    CHECK(even.b->Width() == doctest::Approx(100.0f));
+    CHECK(even.b->Bounds.x == doctest::Approx(100.0f));
+
+    OverfullRow weighted(Shrink(3), Shrink(1)); // a gives three parts of four
+    CHECK(weighted.a->Width() == doctest::Approx(75.0f));
+    CHECK(weighted.b->Width() == doctest::Approx(125.0f));
+
+    OverfullRow one(Shrink(1), LayoutStyle{}); // undeclared: does not shrink
+    CHECK(one.a->Width() == doctest::Approx(50.0f));
+    CHECK(one.b->Width() == doctest::Approx(150.0f));
+
+    OverfullRow none(LayoutStyle{}, LayoutStyle{}); // nothing shrinks: the row overflows as before
+    CHECK(none.a->Width() == doctest::Approx(150.0f));
+    CHECK(none.b->Width() == doctest::Approx(150.0f));
+}
+
+TEST_CASE("flex: Shrink_StopsAtMinimumAndTheRestGiveMore")
+{
+    LayoutStyle floor = Shrink(1);
+    floor.MinWidth = Unit::Px(120);
+    OverfullRow row(floor, Shrink(1));
+    CHECK(row.a->Width() == doctest::Approx(120.0f)); // its share would take it to 100
+    CHECK(row.b->Width() == doctest::Approx(80.0f));
+}

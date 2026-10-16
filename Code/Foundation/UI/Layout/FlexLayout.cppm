@@ -3,8 +3,8 @@
 
 // UI - :flex_layout partition
 //
-// CSS Flexbox-inspired container: grow distribution, justify-content, cross-axis alignment, and
-// (P4) line wrapping with align-content, gaps on both axes and flex-basis. Ported from
+// CSS Flexbox-inspired container: grow and shrink distribution, justify-content, cross-axis
+// alignment, and (P4) line wrapping with align-content, gaps on both axes and flex-basis. Ported from
 // Sedulous.UI/src/Layout/FlexLayout.bf, then restructured around a LINE model: both passes
 // collect the in-flow children into items, break them into lines (one line when not wrapping),
 // and work per line. Per-child FlexGrow/FlexBasis/AlignSelf come from the child's LayoutStyle.
@@ -106,6 +106,10 @@ export namespace foundation::ui
         {
             View* child = nullptr;
             f32 grow = 0.0f;
+            f32 shrink = 0.0f;
+            /// The size shrinking starts from (the main size before any shrink).
+            f32 base = 0.0f;
+            bool frozen = false; ///< shrinking stopped at its minimum
             /// Main-axis size at line-breaking time: the basis (a growing child's, before its
             /// share) or the measured margin box.
             f32 main = 0.0f;
@@ -216,6 +220,7 @@ export namespace foundation::ui
                 FlexItem item;
                 item.child = child;
                 item.grow = Grow(child);
+                item.shrink = Max(0.0f, child->Layout().FlexShrink.Value());
                 item.matchCross = (horizontal ? ChildHeight(child) : ChildWidth(child)).kind == SizeSpec::Kind::Match;
                 const f32 basis = DeclaredBasis(child, availMain);
                 if (basis >= 0.0f && item.grow <= 0.0f)
@@ -241,10 +246,15 @@ export namespace foundation::ui
             // 2. Lines.
             BreakLines(Wrap && mainDefinite ? availMain : kFloatMax, gap);
 
-            // 3. Per line: growing children take their share of the line's free space and get
-            //    measured; the line's cross size is its tallest item.
+            // 3. Per line: an overflowing line shrinks its shrinkable children; growing children
+            //    take their share of the line's free space and get measured; the line's cross
+            //    size is its tallest item.
             for (FlexLine& line : m_lines)
             {
+                if (mainDefinite)
+                {
+                    ShrinkLine(line, availMain, availCross, gap, horizontal);
+                }
                 f32 totalGrow = 0.0f;
                 f32 used = gap * static_cast<f32>(line.count > 0 ? line.count - 1 : 0);
                 for (usize i = line.start; i < line.start + line.count; ++i)
@@ -311,6 +321,68 @@ export namespace foundation::ui
             const f32 height = horizontal ? totalCross : totalMain;
             MeasuredSize = Float2{outer.ConstrainWidth(width + chrome.TotalHorizontal()),
                                   outer.ConstrainHeight(height + chrome.TotalVertical())};
+        }
+
+        /// CSS flex-shrink: when a line's items overflow the main size, each shrinkable item
+        /// gives up a part of the overflow in proportion to its shrink factor times its base
+        /// size. An item measured larger than its target (its minimum held) freezes there, and
+        /// the rest share what it could not give, until none freezes or nothing shrinks.
+        /// Unlike CSS, an undeclared flex-shrink is 0, so a container's children keep their
+        /// sizes unless the sheet or markup asks.
+        void ShrinkLine(const FlexLine& line, f32 availMain, f32 availCross, f32 gap, bool horizontal)
+        {
+            for (usize i = line.start; i < line.start + line.count; ++i)
+            {
+                m_items[i].base = m_items[i].main;
+                m_items[i].frozen = m_items[i].shrink <= 0.0f;
+            }
+            const f32 gaps = gap * static_cast<f32>(line.count > 0 ? line.count - 1 : 0);
+            for (usize round = 0; round < line.count; ++round)
+            {
+                f32 fixed = gaps;
+                f32 unfrozenBase = 0.0f;
+                f32 scaledTotal = 0.0f;
+                for (usize i = line.start; i < line.start + line.count; ++i)
+                {
+                    const FlexItem& item = m_items[i];
+                    if (item.frozen)
+                    {
+                        fixed += item.main;
+                    }
+                    else
+                    {
+                        unfrozenBase += item.base;
+                        scaledTotal += item.shrink * item.base;
+                    }
+                }
+                const f32 overflow = fixed + unfrozenBase - availMain;
+                if (overflow <= 0.0f || scaledTotal <= 0.0f)
+                {
+                    return;
+                }
+                bool froze = false;
+                for (usize i = line.start; i < line.start + line.count; ++i)
+                {
+                    FlexItem& item = m_items[i];
+                    if (item.frozen)
+                    {
+                        continue;
+                    }
+                    const f32 target = Max(0.0f, item.base - overflow * item.shrink * item.base / scaledTotal);
+                    item.child->Measure(MainCross(target, target, 0.0f, Max(0.0f, availCross), horizontal));
+                    item.main = MainOf(item.child->MarginBoxSize(), horizontal);
+                    item.cross = CrossOf(item.child->MarginBoxSize(), horizontal);
+                    if (item.main > target + 0.5f)
+                    {
+                        item.frozen = true;
+                        froze = true;
+                    }
+                }
+                if (!froze)
+                {
+                    return;
+                }
+            }
         }
 
         void LayoutLines(f32 width, f32 height, bool horizontal)

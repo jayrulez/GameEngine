@@ -829,6 +829,54 @@ export namespace experimental::gui
         }
         void RememberFocus(Node& focused) { m_rememberedFocus = focused.TakeElementRef(); }
 
+        // Overrides where the geometry is wrong (`nav-up`, `nav-down`, `nav-left`, `nav-right`,
+        // `nav-next`, `nav-prev`): a widget's id to go to, `none` to stop, or `auto` (or empty) for
+        // the picker or the tab order. Reflected with their CSS names, so sheets, markup and
+        // scripts set them alike; a scope's kind (`nav-scope`: pass, wrap, contain, none) and default
+        // focus (`nav-default`) likewise.
+        enum NavOverride : u8
+        {
+            NavOverrideUp,
+            NavOverrideDown,
+            NavOverrideLeft,
+            NavOverrideRight,
+            NavOverrideNext,
+            NavOverridePrevious,
+            NavOverrideCount,
+        };
+        [[nodiscard]] core::StringView GetNavOverride(NavOverride which) const noexcept { return m_navOverrides[which].AsView(); }
+        void SetNavOverride(NavOverride which, core::StringView target) { m_navOverrides[which] = core::String(target); }
+        [[nodiscard]] core::StringView GetNavUp() const noexcept { return GetNavOverride(NavOverrideUp); }
+        void SetNavUp(core::StringView v) { SetNavOverride(NavOverrideUp, v); }
+        [[nodiscard]] core::StringView GetNavDown() const noexcept { return GetNavOverride(NavOverrideDown); }
+        void SetNavDown(core::StringView v) { SetNavOverride(NavOverrideDown, v); }
+        [[nodiscard]] core::StringView GetNavLeft() const noexcept { return GetNavOverride(NavOverrideLeft); }
+        void SetNavLeft(core::StringView v) { SetNavOverride(NavOverrideLeft, v); }
+        [[nodiscard]] core::StringView GetNavRight() const noexcept { return GetNavOverride(NavOverrideRight); }
+        void SetNavRight(core::StringView v) { SetNavOverride(NavOverrideRight, v); }
+        [[nodiscard]] core::StringView GetNavNext() const noexcept { return GetNavOverride(NavOverrideNext); }
+        void SetNavNext(core::StringView v) { SetNavOverride(NavOverrideNext, v); }
+        [[nodiscard]] core::StringView GetNavPrevious() const noexcept { return GetNavOverride(NavOverridePrevious); }
+        void SetNavPrevious(core::StringView v) { SetNavOverride(NavOverridePrevious, v); }
+        [[nodiscard]] core::StringView GetNavScopeName() const noexcept
+        {
+            switch (m_navScope)
+            {
+            case NavScope::Pass: return core::StringView(u8"pass");
+            case NavScope::Wrap: return core::StringView(u8"wrap");
+            case NavScope::Contain: return core::StringView(u8"contain");
+            case NavScope::None: break;
+            }
+            return core::StringView(u8"none");
+        }
+        void SetNavScopeName(core::StringView name)
+        {
+            m_navScope = name == core::StringView(u8"pass")      ? NavScope::Pass
+                         : name == core::StringView(u8"wrap")    ? NavScope::Wrap
+                         : name == core::StringView(u8"contain") ? NavScope::Contain
+                                                                 : NavScope::None;
+        }
+
         // === Invalidation === (marks self + ancestors until an already-dirty one)
         void Invalidate()
         {
@@ -1044,6 +1092,7 @@ export namespace experimental::gui
         NavScope m_navScope = NavScope::None;
         core::String m_defaultFocusId;
         ElementRef m_rememberedFocus{}; // weak: resolved through the GUI's element table
+        core::String m_navOverrides[NavOverrideCount]; // nav-up and the rest: an id, none, or auto
         bool m_focused = false;
         bool m_tabFocusable = false;
         bool m_hitTestVisible = true;

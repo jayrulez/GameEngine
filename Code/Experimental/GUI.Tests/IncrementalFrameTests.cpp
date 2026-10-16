@@ -223,3 +223,30 @@ TEST_CASE("incremental: setting geometry to what it is changes nothing")
     a->SetPosition(core::Float2{7.0f, 6.0f});
     CHECK(root->NeedsFrame());
 }
+
+TEST_CASE("incremental: a child resized after a layout lays its container out again, once")
+{
+    auto root = Make<SceneRoot>();
+    auto column = Make<FlexLayout>();
+    column->SetDirection(FlexDirection::Column);
+    column->SetSize(core::Float2{200.0f, 400.0f});
+    root->AddChild(column.Get());
+    auto a = Make<UIWidget>(); // unsized when the layout first meets them
+    auto b = Make<UIWidget>();
+    a->SetTag(SV(u8"item"));
+    b->SetTag(SV(u8"item"));
+    column->AddChild(a.Get());
+    column->AddChild(b.Get());
+    root->UpdateLayout();
+    CHECK(b->GetPosition().y == doctest::Approx(0.0f)); // both empty, stacked at the top
+
+    // The sheet sizes them afterwards (a frame's restyle): the flex takes the new basis.
+    StyleManager styles(CSSParser::Parse(SV(u8"item { width: 100px; height: 40px; }")));
+    styles.ApplyTree(*root.Get());
+    root->UpdateLayout();
+    CHECK(b->GetPosition().y == doctest::Approx(40.0f));
+    CHECK(b->GetSize().y == doctest::Approx(40.0f));
+
+    root->UpdateLayout(); // its own writes asked for nothing more
+    CHECK(root->LastLayoutCount() == 0u);
+}

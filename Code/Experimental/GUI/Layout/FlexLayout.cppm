@@ -202,6 +202,12 @@ export namespace experimental::gui
 
     protected:
         void OnLayout() override { PerformLayout(); } // the SceneRoot's pass, or at once when detached
+        // A child resized by anything but this layout (a sheet's width, code) has a new basis.
+        void OnChildSizeChange(Node& child) override
+        {
+            m_basis.Remove(&child);
+            RequestLayout();
+        }
         void OnSizeChange() override { RequestLayout(); }
         void OnChildrenChanged() override { RequestLayout(); }
 
@@ -211,8 +217,9 @@ export namespace experimental::gui
             return row ? child->GetSize().y : child->GetSize().x;
         }
 
-        // The child's flex-basis (main-axis size), captured once from its initial size so that
-        // growing it does not corrupt the basis on the next layout. Cleared on direction change.
+        // The child's flex-basis (main-axis size), captured from its size when this layout first
+        // meets it, so growing it does not corrupt the basis on the next layout; taken again when
+        // anything else resizes the child, and cleared on direction change.
         [[nodiscard]] f32 BasisMainOf(Node* child, bool row)
         {
             if (const f32* stored = m_basis.Find(child))

@@ -483,7 +483,8 @@ export namespace experimental::gui
         {
             if (GetElementTable() == nullptr) // in no GUI: no pass to wait for
             {
-                OnLayout();
+                if (!m_layingOut) // a layout resizing its own children asks for nothing more
+                    LayOut();
                 return;
             }
             m_layoutDirty = true;
@@ -492,6 +493,13 @@ export namespace experimental::gui
             Invalidate();
         }
         [[nodiscard]] bool IsLayoutDirty() const noexcept { return m_layoutDirty; }
+        // Runs OnLayout, marking the sizes it sets on children as its own.
+        void LayOut()
+        {
+            m_layingOut = true;
+            OnLayout();
+            m_layingOut = false;
+        }
         [[nodiscard]] bool HasLayoutDirtyDescendant() const noexcept { return m_childLayoutDirty; }
 
         /// Lays out the dirty containers of this subtree, parents before children (the pass a
@@ -502,7 +510,7 @@ export namespace experimental::gui
             if (m_layoutDirty)
             {
                 m_layoutDirty = false;
-                OnLayout();
+                LayOut();
                 ++count;
             }
             if (m_childLayoutDirty)
@@ -544,6 +552,9 @@ export namespace experimental::gui
 
         /// A container places its children here (RequestLayout schedules it).
         virtual void OnLayout() {}
+        /// A child's size changed, by anything but this node's own layout (a sheet, code, the
+        /// child's own layout): a container lays out again.
+        virtual void OnChildSizeChange(Node& child) { (void)child; }
 
         // Subclass-drawn content, between background and children.
         virtual void OnDraw(DrawContext& ctx, const Rect& localBounds)
@@ -916,6 +927,8 @@ export namespace experimental::gui
             OnSizeChange();
             Invalidate();
             SendEvent(Event(EventType::SizeChanged, this));
+            if (m_parent != nullptr && !m_parent->m_layingOut)
+                m_parent->OnChildSizeChange(*this);
         }
 
         // Clamp a size to [m_minSize, m_maxSize] per axis (a negative max = unbounded).
@@ -979,6 +992,7 @@ export namespace experimental::gui
         bool m_childStyleDirty = false;    // some descendant waits for a restyle
         bool m_layoutDirty = false;        // this container's layout must run
         bool m_childLayoutDirty = false;   // some descendant's must
+        bool m_layingOut = false;          // inside OnLayout: the sizes it sets are its own
         bool m_clipChildren = false;
         bool m_focused = false;
         bool m_tabFocusable = false;

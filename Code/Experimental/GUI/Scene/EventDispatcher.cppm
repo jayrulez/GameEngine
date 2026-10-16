@@ -132,7 +132,13 @@ export namespace experimental::gui
                 !IsInSubtree(hit, m_popupOwner) && !(m_popupContains && m_popupContains(hit)))
                 ClosePopup();
             m_downNode = hit;
-            SetFocusNode(hit); // click-to-focus
+            // Click-to-focus: the nearest widget that takes focus, at or above what was hit; none
+            // (a click on a backdrop or a label) clears focus, as browsers do, so navigation
+            // starts again from the GUI's entry rather than from the backdrop.
+            Node* focusable = hit;
+            while (focusable != nullptr && !(focusable->IsTabFocusable() && focusable->IsEnabled()))
+                focusable = focusable->GetParent();
+            SetFocusNode(focusable);
             if (hit)
             {
                 const core::RefPtr<Node> pin{hit};
@@ -570,7 +576,9 @@ export namespace experimental::gui
         core::Float2 m_mousePos{0.0f, 0.0f};
         Observable m_focusChanged;   // told when focus moves
         core::Function<bool(const Keystroke&)> m_keystrokes; // the keymap (SceneRoot)
-        bool m_keyboardMode = false; // the last input was a key or a d-pad move, not the pointer
+        // The last input was a key or a d-pad move, not the pointer; true until the pointer is
+        // used, so a menu opening with focus on its first button shows it (as games do).
+        bool m_keyboardMode = true;
         bool m_holding = false;      // a direction held (PressDirection)
         NavDirection m_heldDirection = NavDirection::Down;
         f32 m_heldFor = 0.0f;

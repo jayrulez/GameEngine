@@ -92,6 +92,7 @@ TEST_CASE("bridge: left press+release becomes a click; button mapping is explici
 {
     auto root = MakeScene(core::Float2{200.0f, 200.0f});
     auto child = MakePanel(core::Float2{0.0f, 0.0f}, core::Float2{100.0f, 100.0f});
+    child->SetTabFocusable(true); // a click focuses what takes focus
     root->AddChild(child.Get());
     GuiInputBridge bridge{root->GetEventDispatcher()};
 

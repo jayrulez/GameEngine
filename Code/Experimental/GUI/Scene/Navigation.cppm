@@ -207,7 +207,8 @@ export namespace experimental::gui
     /// focus, else the first navigable widget).
     [[nodiscard]] inline Node* NavigateFrom(Node& root, Node* focused, NavDirection direction)
     {
-        if (focused == nullptr || !detail::IsInside(focused, root))
+        // Nothing focused, focus outside `root`, or on something that does not take focus: the entry.
+        if (focused == nullptr || !detail::IsInside(focused, root) || !detail::IsNavigable(*focused))
         {
             Array<Node*> all;
             detail::CollectNavigable(root, all);

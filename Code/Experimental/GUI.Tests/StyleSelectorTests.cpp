@@ -84,6 +84,7 @@ TEST_CASE("selector: pseudo-classes track control state")
     root->SetSize(core::Float2{200.0f, 200.0f});
     auto w = Widget(u8"button");
     w->SetSize(core::Float2{100.0f, 100.0f});
+    w->SetTabFocusable(true); // a click focuses what takes focus
     root->AddChild(w.Get());
     EventDispatcher* d = root->GetEventDispatcher();
 

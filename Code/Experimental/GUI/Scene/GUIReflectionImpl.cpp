@@ -204,7 +204,7 @@ namespace experimental::gui
         RefPtr<Node> element = elements != nullptr ? elements->Create(tag, MemoryAllocator()) : RefPtr<Node>{};
         if (!element)
             return core::Variant{};
-        AddChild(element.Get());
+        GetChildHost()->AddChild(element.Get());
         return element->HandleAs(Node::StaticType());
     }
 
@@ -525,6 +525,7 @@ namespace experimental::gui
     REFLECT_MEMBERS(CheckBox, "rtti::gui")
     {
         builder.AccessorProperty<&CheckBox::IsChecked, &CheckBox::SetChecked>("checked")
+            .PropAttribute("css", core::String(u8"checked"))
             .PropAttribute("twoWay", true); // the user changes it: a binding may write it back
         builder.Method<&ElementOf<CheckBox>, CheckBox, Node>("of");
         builder.Creator();
@@ -539,6 +540,7 @@ namespace experimental::gui
     REFLECT_MEMBERS(Slider, "rtti::gui")
     {
         builder.AccessorProperty<&Slider::GetValue, &Slider::SetValue>("value")
+            .PropAttribute("css", core::String(u8"value"))
             .PropAttribute("twoWay", true); // the user changes it: a binding may write it back
         builder.Method<&ElementOf<Slider>, Slider, Node>("of");
         builder.Creator();
@@ -546,7 +548,8 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(ProgressBar, "rtti::gui")
     {
-        builder.AccessorProperty<&ProgressBar::GetProgress, &ProgressBar::SetProgress>("progress");
+        builder.AccessorProperty<&ProgressBar::GetProgress, &ProgressBar::SetProgress>("progress")
+            .PropAttribute("css", core::String(u8"progress"));
         builder.Method<&ElementOf<ProgressBar>, ProgressBar, Node>("of");
         builder.Creator();
     }
@@ -556,6 +559,7 @@ namespace experimental::gui
         builder.AccessorProperty<&TextField::GetPlaceholder, &TextField::SetPlaceholder>("placeholder").PropAttribute("css", core::String(u8"placeholder"));
         builder.AccessorProperty<&TextField::GetMaxLength, &TextField::SetMaxLength>("maxLength").PropAttribute("css", core::String(u8"max-length"));
         builder.AccessorProperty<&TextField::GetText, &TextField::SetText>("text")
+            .PropAttribute("css", core::String(u8"text"))
             .PropAttribute("twoWay", true); // the user changes it: a binding may write it back
         builder.Method<&ElementOf<TextField>, TextField, Node>("of");
         builder.Creator();

@@ -164,3 +164,20 @@ TEST_CASE("markup: widget properties reflected with CSS names are markup attribu
     CHECK(core::Cast<ListBox>(tree->GetChildAt(4))->GetItem(1) == SV(u8"Two"));
     CHECK(core::Cast<Window>(tree->GetChildAt(5))->GetTitle() == SV(u8"Tools"));
 }
+
+TEST_CASE("markup: a scroller's and a window's children are their content")
+{
+    auto tree = Load(u8R"(
+        <LinearLayout>
+            <ScrollView><Label text="scrolled"/></ScrollView>
+            <Window><Label text="inside"/></Window>
+        </LinearLayout>
+    )");
+    REQUIRE(tree.Get() != nullptr);
+    auto* scroll = core::Cast<ScrollView>(tree->GetChildAt(0));
+    auto* window = core::Cast<Window>(tree->GetChildAt(1));
+    REQUIRE((scroll != nullptr && window != nullptr));
+    REQUIRE(scroll->GetContent()->ChildCount() == 1u);
+    CHECK(core::Cast<Label>(scroll->GetContent()->GetChildAt(0))->GetText() == SV(u8"scrolled"));
+    REQUIRE(window->GetContent()->ChildCount() == 1u);
+}

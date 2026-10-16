@@ -603,6 +603,10 @@ export namespace experimental::gui
         // The SceneRoot's ActionManager / MutationQueue, found by walking to the root.
         // Base returns the parent's; SceneRoot overrides to return its own. Null if the
         // node is not yet attached under a SceneRoot.
+        /// Where children given to this node by markup or a script go: the node itself, or, for a
+        /// widget built of parts (a scroller, a window), the part that holds its content.
+        [[nodiscard]] virtual Node* GetChildHost() { return this; }
+
         /// The GUI this node is in (its root's context), or null outside one.
         [[nodiscard]] virtual GUIContext* GetGUIContext() { return m_parent ? m_parent->GetGUIContext() : nullptr; }
         /// Where this node's bindings wait for the frame: its SceneRoot's scheduler, or none

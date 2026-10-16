@@ -116,6 +116,7 @@ export namespace experimental::gui
 
         // The area for window content (add your widgets here).
         [[nodiscard]] Node* GetContent() const noexcept { return m_contentHost.Get(); }
+        [[nodiscard]] Node* GetChildHost() override { return m_contentHost.Get(); } // markup's children are its content
 
         void SetTitle(core::StringView text) { m_title->SetText(text); }
         [[nodiscard]] core::StringView GetTitle() const { return m_title->GetText(); }

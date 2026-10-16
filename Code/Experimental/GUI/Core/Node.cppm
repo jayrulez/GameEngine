@@ -756,6 +756,22 @@ export namespace experimental::gui
         }
 
         [[nodiscard]] bool IsFocused() const noexcept { return m_focused; }
+        /// Focused, and by the keyboard or a gamepad (CSS's :focus-visible): the focus ring shows
+        /// in that use only, not after a click.
+        [[nodiscard]] bool IsFocusVisible() const noexcept { return m_focused && m_focusVisible; }
+        void SetFocusVisible(bool visible)
+        {
+            if (visible == m_focusVisible)
+                return;
+            m_focusVisible = visible;
+            if (m_focused)
+                MarkStyleDirty(true); // :focus-visible
+        }
+        /// A widget under this node took focus (G7): a scroller brings it into view.
+        virtual void OnDescendantFocused(Node& focused) { (void)focused; }
+        /// Whether this node brings a focused descendant into view, so a widget its clip hides is
+        /// still one navigation reaches (a scroller).
+        [[nodiscard]] virtual bool ScrollsDescendantsIntoView() const { return false; }
 
         // === Drag-and-drop target ===
         // Set a predicate deciding which payloads this node accepts; when it returns true the
@@ -1096,6 +1112,7 @@ export namespace experimental::gui
         ElementRef m_rememberedFocus{}; // weak: resolved through the GUI's element table
         core::String m_navOverrides[NavOverrideCount]; // nav-up and the rest: an id, none, or auto
         bool m_focused = false;
+        bool m_focusVisible = false; // focused by the keyboard or a gamepad
         bool m_tabFocusable = false;
         bool m_hitTestVisible = true;
         u32 m_nextListenerId = 0;

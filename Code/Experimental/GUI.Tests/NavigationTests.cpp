@@ -259,3 +259,89 @@ TEST_CASE("navigation: overrides from a sheet, markup and native code come first
     CHECK(panel->GetNavScope() == NavScope::Contain);
     CHECK(panel->GetDefaultFocusId() == SV(u8"c"));
 }
+
+TEST_CASE("navigation: a held direction repeats after a delay, faster the longer it is held")
+{
+    Bed bed;
+    core::RefPtr<Button> cells[40];
+    for (int i = 0; i < 40; ++i)
+    {
+        char8_t id[8] = {u8'c', static_cast<char8_t>(u8'0' + i / 10), static_cast<char8_t>(u8'0' + i % 10), 0};
+        cells[i] = Cell(*bed.root.Get(), id, 10.0f, 10.0f + 25.0f * i, 40.0f, 20.0f);
+    }
+    bed.d.SetFocusNode(cells[0].Get());
+    const auto index = [&]() {
+        for (int i = 0; i < 40; ++i)
+            if (bed.d.GetFocusNode() == cells[i].Get())
+                return i;
+        return -1;
+    };
+    bed.d.PressDirection(NavDirection::Down); // at once
+    CHECK(index() == 1);
+    CHECK(bed.root->NeedsFrame()); // held: frames keep coming
+    bed.root->Update(core::Duration::FromSeconds(0.39)); // not yet the delay
+    CHECK(index() == 1);
+    bed.root->Update(core::Duration::FromSeconds(0.02)); // past it: the first repeat
+    CHECK(index() == 2);
+    // Over the first half second of repeats, slower; over a later half second, faster.
+    bed.root->Update(core::Duration::FromSeconds(0.5));
+    const int early = index() - 2;
+    for (int i = 0; i < 20; ++i)
+        bed.root->Update(core::Duration::FromSeconds(0.05)); // a second more
+    const int before = index();
+    bed.root->Update(core::Duration::FromSeconds(0.5));
+    const int late = index() - before;
+    CHECK(late > early);
+    bed.d.ReleaseDirection(NavDirection::Down);
+    const int released = index();
+    bed.root->Update(core::Duration::FromSeconds(1.0));
+    CHECK(index() == released);
+}
+
+TEST_CASE("navigation: the focus ring shows for the keyboard and a gamepad, not after a click")
+{
+    Bed bed;
+    auto a = Cell(*bed.root.Get(), u8"a", 10.0f, 10.0f);
+    auto b = Cell(*bed.root.Get(), u8"b", 10.0f, 40.0f);
+    StyleManager styles(CSSParser::Parse(SV(u8"button:focus-visible { opacity: 0.5; }")));
+
+    bed.d.InjectMouseDown(core::Float2{20.0f, 15.0f}, MouseButton::Left); // click-to-focus
+    bed.d.InjectMouseUp(core::Float2{20.0f, 15.0f}, MouseButton::Left);
+    CHECK(a->IsFocused());
+    CHECK_FALSE(a->IsFocusVisible());
+    styles.ApplyTree(*bed.root.Get());
+    CHECK(a->GetAlpha() == doctest::Approx(1.0f));
+
+    bed.Key(KeyCode::Down);
+    CHECK(b->IsFocusVisible());
+    styles.ApplyTree(*bed.root.Get());
+    CHECK(b->GetAlpha() == doctest::Approx(0.5f));
+
+    bed.d.InjectMouseDown(core::Float2{300.0f, 300.0f}, MouseButton::Left); // the pointer again
+    CHECK_FALSE(b->IsFocusVisible());
+}
+
+TEST_CASE("navigation: focus moved into a scroller's hidden part scrolls it into view")
+{
+    Bed bed;
+    auto scroll = Make<ScrollView>();
+    scroll->SetSize(core::Float2{200.0f, 100.0f});
+    bed.root->AddChild(scroll.Get());
+    auto top = Make<Button>();
+    top->SetId(SV(u8"top"));
+    top->SetPosition(core::Float2{0.0f, 0.0f});
+    top->SetSize(core::Float2{60.0f, 30.0f});
+    auto far = Make<Button>();
+    far->SetId(SV(u8"far"));
+    far->SetPosition(core::Float2{0.0f, 300.0f});
+    far->SetSize(core::Float2{60.0f, 30.0f});
+    scroll->GetContent()->AddChild(top.Get());
+    scroll->GetContent()->AddChild(far.Get());
+    scroll->SetContentSize(core::Float2{200.0f, 400.0f});
+    bed.d.SetFocusNode(top.Get());
+    bed.Key(KeyCode::Down);
+    CHECK(bed.d.GetFocusNode() == far.Get());
+    const Rect shown = far->GetScreenBounds();
+    CHECK(shown.y >= 0.0f);
+    CHECK(shown.y + shown.height <= 100.0f + 0.5f); // inside the 100-high viewport
+}

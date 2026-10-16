@@ -110,6 +110,10 @@ export namespace experimental::gui
 
         void InjectMouseDown(core::Float2 position, MouseButton button, u32 modifiers = 0)
         {
+            // A pointer in use: the focus ring hides (shown again by the next key or d-pad move).
+            m_keyboardMode = false;
+            if (m_focusNode != nullptr)
+                m_focusNode->SetFocusVisible(false);
             m_mousePos = position;
             Node* hit = HitTest(position);
             // A press outside the active popup (and its owner) dismisses it - the click still
@@ -228,6 +232,7 @@ export namespace experimental::gui
         /// gamepad's d-pad and stick arrive here as the arrows do.
         bool MoveFocus(NavDirection direction)
         {
+            UseKeyboard();
             Node* root = m_modalRoot != nullptr ? m_modalRoot : m_root;
             if (root == nullptr)
                 return false;
@@ -264,7 +269,11 @@ export namespace experimental::gui
             if (m_focusNode)
             {
                 RememberInScopes(*m_focusNode); // coming back to a scope returns here
+                m_focusNode->SetFocusVisible(m_keyboardMode);
                 m_focusNode->HandleFocusGained();
+                // Scrollers around it bring it into view.
+                for (Node* p = m_focusNode->GetParent(); p != nullptr; p = p->GetParent())
+                    p->OnDescendantFocused(*m_focusNode);
             }
         }
 
@@ -327,8 +336,53 @@ export namespace experimental::gui
         // Move focus to the next / previous tab-focusable node in tree pre-order (visible +
         // enabled), wrapping around. Returns true if focus moved. With nothing focused, Next
         // targets the first stop and Previous the last.
-        bool FocusNext() { return MoveTabFocus(+1); }
-        bool FocusPrevious() { return MoveTabFocus(-1); }
+        bool FocusNext()
+        {
+            UseKeyboard();
+            return MoveTabFocus(+1);
+        }
+        bool FocusPrevious()
+        {
+            UseKeyboard();
+            return MoveTabFocus(-1);
+        }
+
+        // === A held direction (G7) ===
+        // A gamepad's d-pad or stick held in a direction: focus moves at once, then, after a delay,
+        // again and again, faster the longer it is held. (A keyboard's held arrow repeats by the
+        // system's own key repeat.) The SceneRoot's update ticks it.
+        void PressDirection(NavDirection direction)
+        {
+            m_holding = true;
+            m_heldDirection = direction;
+            m_heldFor = 0.0f;
+            m_nextRepeatAt = kRepeatDelay;
+            (void)MoveFocus(direction);
+        }
+        void ReleaseDirection(NavDirection direction)
+        {
+            if (m_holding && m_heldDirection == direction)
+                m_holding = false;
+        }
+        [[nodiscard]] bool IsHoldingDirection() const noexcept { return m_holding; }
+        void Tick(f32 seconds)
+        {
+            if (!m_holding)
+                return;
+            m_heldFor += seconds;
+            for (i32 guard = 0; guard < 8 && m_heldFor >= m_nextRepeatAt; ++guard)
+            {
+                (void)MoveFocus(m_heldDirection);
+                // From the first interval down to the fastest, over the time held past the delay.
+                const f32 ramp = core::Min(1.0f, (m_heldFor - kRepeatDelay) / kRepeatRampTime);
+                m_nextRepeatAt += kRepeatSlowest + (kRepeatFastest - kRepeatSlowest) * ramp;
+            }
+        }
+        static constexpr f32 kRepeatDelay = 0.4f;    // before the first repeat
+        static constexpr f32 kRepeatSlowest = 0.16f; // the first repeats' interval
+        static constexpr f32 kRepeatFastest = 0.05f; // once held long
+        static constexpr f32 kRepeatRampTime = 1.2f; // from slowest to fastest
+
 
         // Clear any interaction refs pointing at `node` (call before removing/destroying it).
         void NotifyNodeRemoved(Node* node)
@@ -466,5 +520,18 @@ export namespace experimental::gui
         Node* m_dropTarget = nullptr;                // non-owning current target
         DragPayload m_dragPayload;
         core::Float2 m_mousePos{0.0f, 0.0f};
+        bool m_keyboardMode = false; // the last input was a key or a d-pad move, not the pointer
+        bool m_holding = false;      // a direction held (PressDirection)
+        NavDirection m_heldDirection = NavDirection::Down;
+        f32 m_heldFor = 0.0f;
+        f32 m_nextRepeatAt = 0.0f;
+
+        // A key or d-pad move: the focus ring shows.
+        void UseKeyboard()
+        {
+            m_keyboardMode = true;
+            if (m_focusNode != nullptr)
+                m_focusNode->SetFocusVisible(true);
+        }
     };
 }

@@ -55,11 +55,13 @@ export namespace experimental::gui
             return true;
         }
 
-        // Whether `node` is visible through every ancestor that clips its children.
+        // Whether a clipping ancestor hides `node` (a scroller's clip does not count: it scrolls a
+        // focused widget into view).
         [[nodiscard]] inline bool IsClippedAway(const Node& node, const Rect& bounds)
         {
             for (const Node* n = node.GetParent(); n != nullptr; n = n->GetParent())
-                if (n->ClipsChildren())
+                if (n->ClipsChildren() && !n->ScrollsDescendantsIntoView() &&
+                    (n->GetParent() == nullptr || !n->GetParent()->ScrollsDescendantsIntoView()))
                 {
                     const Rect clip = n->GetScreenBounds();
                     if (bounds.x + bounds.width <= clip.x || bounds.x >= clip.x + clip.width ||
@@ -152,8 +154,8 @@ export namespace experimental::gui
         f32 bestScore = 0.0f;
         for (Node* candidate : candidates)
         {
-            if (candidate == from)
-                continue;
+            if (candidate == from || (from != nullptr && detail::IsInside(from, *candidate)))
+                continue; // not itself, nor what holds it (a focusable scroller around it)
             const Rect bounds = candidate->GetScreenBounds();
             if (detail::IsClippedAway(*candidate, bounds))
                 continue;

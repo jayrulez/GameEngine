@@ -415,6 +415,7 @@ add_subdirectory(Code/Foundation/Fonts)     # font types/interfaces over Core + 
 add_subdirectory(Code/Foundation/Fonts.Coverage)
 add_subdirectory(Code/Foundation/Fonts.TrueType)
 add_subdirectory(Code/Foundation/Fonts.HarfBuzz) # HarfBuzz behind ITextShaper (ligatures, joining, marks)
+add_subdirectory(Code/Foundation/Fonts.Bidi) # the bidi algorithm (SheenBidi) behind IBidiResolver
 add_subdirectory(Code/Foundation/Fonts.Coverage.Baker)
 add_subdirectory(Code/Foundation/Fonts.DistanceField)
 add_subdirectory(Code/Foundation/Fonts.Resource)

@@ -13,6 +13,7 @@ import foundation.vfs;
 import foundation.fonts;
 import foundation.fonts.truetype;
 import foundation.fonts.harfbuzz;
+import foundation.fonts.bidi;
 import foundation.fonts.distancefield.baker;
 
 using namespace foundation::core;
@@ -383,4 +384,111 @@ TEST_CASE("harfbuzz: the basic shaper takes the same request: fallback by font, 
     CHECK(mirrored[2].x + mirrored[2].advance == doctest::Approx(glyphs[2].x + glyphs[2].advance));
     DefaultAllocator().Delete(dejavu);
     DefaultAllocator().Delete(roboto);
+}
+
+// ============================================================================================
+// Bidi: a right-to-left paragraph with Latin inside lays out, hit tests and wraps in visual order.
+// ============================================================================================
+
+TEST_CASE("bidi: the resolver gives Arabic odd levels and finds a paragraph's direction")
+{
+    IBidiResolver& resolver = BidiAlgorithm::Resolver();
+    const u32 ltr[7] = {'a', 'b', ' ', 0x0633, 0x0644, ' ', 'c'};
+    BidiLevels levels;
+    resolver.Resolve(Span<const u32>(ltr, 7), TextDirection::Auto, levels);
+    REQUIRE(levels.levels.Size() == 7u);
+    CHECK(levels.paragraphLevel == 0);
+    CHECK(levels.levels[0] == 0);
+    CHECK(levels.levels[3] == 1);
+    CHECK(levels.levels[4] == 1);
+    CHECK(levels.levels[6] == 0);
+    const u32 rtl[5] = {0x0633, ' ', 'a', 'b', 0x0644};
+    resolver.Resolve(Span<const u32>(rtl, 5), TextDirection::Auto, levels);
+    CHECK(levels.paragraphLevel == 1); // its first strong character is Arabic
+    CHECK(levels.levels[2] == 2);       // the Latin inside, one level up
+}
+
+TEST_CASE("bidi: a right-to-left paragraph with Latin inside reads right to left and hit tests")
+{
+    IFont* font = Load("/dejavu/DejaVuSansMono.ttf");
+    REQUIRE(font != nullptr);
+    BidiAlgorithm::Install();
+    Shaper s;
+    Array<GlyphPosition> glyphs;
+    // salaam, a space, then "world": an Arabic paragraph.
+    REQUIRE(s.shaper->ShapeText(*font, u8"\u0633\u0644\u0627\u0645 world", glyphs).HasValue());
+    f32 arabicLeft = 1e9f, latinRight = -1e9f, right = 0.0f;
+    const GlyphPosition* seen = nullptr;
+    for (const GlyphPosition& g : glyphs)
+    {
+        if (g.cluster <= 3)
+            arabicLeft = Min(arabicLeft, g.x);
+        if (g.cluster >= 5)
+            latinRight = Max(latinRight, g.x + g.advance);
+        if (g.cluster == 0)
+            seen = &g;
+        right = Max(right, g.x + g.advance);
+        if (g.cluster <= 3)
+            CHECK(g.rightToLeft);
+    }
+    CHECK(latinRight <= arabicLeft + 0.01f); // the Latin on the left, the Arabic on the right
+    REQUIRE(seen != nullptr);
+    CHECK(seen->x + seen->advance == doctest::Approx(right)); // the first character rightmost
+    // "world" reads left to right inside: w before d.
+    f32 wx = 0.0f, dx = 0.0f;
+    for (const GlyphPosition& g : glyphs)
+    {
+        if (g.cluster == 5)
+            wx = g.x;
+        if (g.cluster == 9)
+            dx = g.x;
+    }
+    CHECK(wx < dx);
+    // The caret before the paragraph is at its right edge; a hit on the right half of its first
+    // character puts the caret before it, on the left half after it.
+    CHECK(s.shaper->GetCursorPosition(*font, AsSpan(glyphs), 0) == doctest::Approx(right));
+    CHECK(s.shaper->HitTest(*font, AsSpan(glyphs), seen->x + seen->advance * 0.9f, 0.0f).InsertionIndex() == 0);
+    CHECK(s.shaper->HitTest(*font, AsSpan(glyphs), seen->x + seen->advance * 0.1f, 0.0f).InsertionIndex() == 1);
+    BidiAlgorithm::Uninstall();
+    DefaultAllocator().Delete(font);
+}
+
+TEST_CASE("bidi: a wrapped right-to-left paragraph reorders each line, its first words on the right of the first")
+{
+    IFont* font = Load("/dejavu/DejaVuSansMono.ttf", 20.0f);
+    REQUIRE(font != nullptr);
+    BidiAlgorithm::Install();
+    Shaper s;
+    // Three Arabic words; a width that holds two.
+    const char8_t* text = u8"\u0633\u0644\u0627\u0645 \u0633\u0644\u0627\u0645 \u0633\u0644\u0627\u0645";
+    Array<GlyphPosition> one;
+    REQUIRE(s.shaper->ShapeText(*font, u8"\u0633\u0644\u0627\u0645 ", one).HasValue());
+    f32 word = 0.0f;
+    for (const GlyphPosition& g : one)
+        word += g.advance;
+    Array<GlyphPosition> glyphs;
+    f32 height = 0.0f;
+    REQUIRE(s.shaper->ShapeTextWrapped(*font, text, word * 2.2f, glyphs, height).IsOk());
+    const f32 lineH = font->Metrics().lineHeight;
+    CHECK(height == doctest::Approx(lineH * 2.0f));
+    // The first word (clusters 0..4) is on the first line, to the right of the second word.
+    f32 firstLeft = 1e9f, secondRight = -1e9f;
+    for (const GlyphPosition& g : glyphs)
+    {
+        if (g.cluster <= 3)
+        {
+            CHECK(g.y == doctest::Approx(0.0f));
+            firstLeft = Min(firstLeft, g.x);
+        }
+        if (g.cluster >= 5 && g.cluster <= 8)
+        {
+            CHECK(g.y == doctest::Approx(0.0f));
+            secondRight = Max(secondRight, g.x + g.advance);
+        }
+        if (g.cluster >= 10)
+            CHECK(g.y == doctest::Approx(lineH));
+    }
+    CHECK(secondRight <= firstLeft + 0.01f);
+    BidiAlgorithm::Uninstall();
+    DefaultAllocator().Delete(font);
 }

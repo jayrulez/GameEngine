@@ -15,6 +15,7 @@
 
 #include <new>
 #include <cstdio> // printf, fprintf
+#include <cstdlib> // atof
 
 import foundation.core;
 import foundation.rhi;
@@ -102,6 +103,7 @@ public:
     void SetAlwaysRedraw(bool always) { m_alwaysRedraw = always; }
     void SetFrameStats(bool stats) { m_frameStats = stats; }
     void SetSweep(bool sweep) { m_sweep = sweep; }
+    void SetScroll(f32 pixels) { m_scroll = pixels; }
 
     GUISandbox()
     {
@@ -151,6 +153,7 @@ private:
     bool m_openMenuAtStart = false;
     String m_menuCall; // a game-menu script function to call once it is up (a screenshot of a panel)
     String m_keys;     // keystrokes to type into the root on show, one every 15 frames
+    f32 m_scroll = 0.0f; // the page scrolled down this far once it is up (a screenshot further down)
     bool m_alwaysRedraw = false;
     bool m_frameStats = false;
     // --sweep: every page, then the game menu, each widget hovered, clicked and right-clicked, one
@@ -1000,6 +1003,9 @@ void GUISandbox::OnRender()
     RouteInput();
     gui::SceneRoot& shown = Shown();
     TypeKeys(shown);
+    // --scroll: once the GUI is up (held a few frames while the page settles).
+    if (m_scroll > 0.0f && m_frames >= 10 && m_frames <= 20 && m_content != nullptr)
+        m_content->SetScrollOffset(Float2{0.0f, m_scroll});
     if (m_sweep)
         Sweep();
 
@@ -1157,7 +1163,8 @@ int main(int argc, char** argv)
     // ("down down return", "pad-east"). --always-redraw: draw every frame. --frame-stats: print,
     // each second, how many frames drew. --sweep: hover, click and right-click every widget of every
     // page, then open the game menu, printing each step, and exit (a smoke test; a crash's last line
-    // names its widget). With the framework's --screenshot flags, a picture of any of it.
+    // names its widget). --scroll <px>: scroll the page down that far once it is up. With the
+    // framework's --screenshot flags, a picture of any of it.
     for (int i = 1; i < argc; ++i)
     {
         const StringView arg(reinterpret_cast<const utf8char*>(argv[i]));
@@ -1176,6 +1183,8 @@ int main(int argc, char** argv)
             app.SetFrameStats(true);
         else if (arg == StringView(u8"--sweep"))
             app.SetSweep(true);
+        else if (arg == StringView(u8"--scroll") && i + 1 < argc)
+            app.SetScroll(static_cast<f32>(std::atof(reinterpret_cast<const char*>(argv[++i]))));
     }
     return app.Run(argc, argv);
 }

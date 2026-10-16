@@ -136,6 +136,7 @@ export namespace experimental::gui
             (void)event;
             m_dragging = false;
         }
+        void OnPointerCancel(const MouseEvent&) override { m_dragging = false; }
 
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
         {

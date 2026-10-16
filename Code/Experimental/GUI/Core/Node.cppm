@@ -1170,6 +1170,8 @@ export namespace experimental::gui
         }
         /// The pointer this node captured was taken away or released.
         virtual void OnPointerCaptureLost() {}
+        /// The press on this node (or inside it) was cancelled: no release or click follows.
+        virtual void OnPointerCancel(const MouseEvent&) {}
         virtual void OnDragEnter(const DragPayload&) {}
         virtual void OnDragOver(const DragPayload&) {}
         virtual void OnDragLeave(const DragPayload&) {}
@@ -1268,6 +1270,7 @@ export namespace experimental::gui
             case EventType::KeyUp: OnKeyUp(static_cast<const KeyEvent&>(event)); break;
             case EventType::TextInput: OnTextInput(static_cast<const TextInputEvent&>(event)); break;
             case EventType::PointerCaptureLost: OnPointerCaptureLost(); break;
+            case EventType::PointerCancel: OnPointerCancel(static_cast<const MouseEvent&>(event)); break;
             default: break;
             }
         }

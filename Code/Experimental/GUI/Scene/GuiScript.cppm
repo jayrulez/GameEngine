@@ -76,6 +76,7 @@ export namespace experimental::gui
     {
         core::String type;  ///< the name it was listened for: "click", "mousedown", "keydown", ...
         core::String phase; ///< "capture", "target" or "bubble"
+        core::String pointer; ///< "mouse" or "touch", for pointer events
         f32 x = 0.0f;
         f32 y = 0.0f;
         f32 localX = 0.0f;

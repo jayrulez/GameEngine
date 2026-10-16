@@ -1,0 +1,22 @@
+<LinearLayout id="page-effects" class="page" orientation="vertical" spacing="18" wrap-content="true">
+    <Label class="page-title" text="Effects"/>
+    <Label class="page-lead" wrap="true"
+           text="What VG's layers and clip paths draw: frosted glass blurring what is behind it, a group that fades as one picture, a blur filter on hover, a blend, and children clipped to rounded corners."/>
+
+    <LinearLayout class="section" orientation="vertical" spacing="12" wrap-content="true">
+        <Label class="section-title" text="Over stripes"/>
+        <LinearLayout class="fx-stage" orientation="horizontal" spacing="14">
+            <Label class="fx-card fx-glass" text="glass"/>
+            <RelativeLayout class="fx-group">
+                <Label class="fx-red"/>
+                <Label class="fx-card fx-blue" text="group"/>
+            </RelativeLayout>
+            <Label class="fx-card fx-soft" text="hover me"/>
+            <Label class="fx-card fx-multiply" text="multiply"/>
+            <RelativeLayout class="fx-clip">
+                <Label class="fx-card fx-clip-inner" text="clipped"/>
+            </RelativeLayout>
+        </LinearLayout>
+        <Label class="caption" text="backdrop-filter, opacity on a group, filter: blur() with a transition, mix-blend-mode, overflow: hidden."/>
+    </LinearLayout>
+</LinearLayout>

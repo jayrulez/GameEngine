@@ -1,0 +1,6 @@
+.flex { width: 590px; height: 40px; background-color: var(--surface-2); border-radius: 8; padding-left: 8px; padding-right: 8px; }
+.grid-scroll { width: 420px; height: 170px; background-color: var(--surface-2); border-radius: 8; padding: 8px; }
+.grid { width: 392px; height: 280px; }
+.cell { width: 92px; height: 40px; font-family: Roboto; font-size: 15px; color: #ffffff; text-align: center; vertical-align: middle;
+        background: linear-gradient(135deg, #3a6ea5, #6a4fb3); border-radius: 6; }
+.relative { width: 420px; height: 110px; background-color: var(--surface-2); border-radius: 8; }

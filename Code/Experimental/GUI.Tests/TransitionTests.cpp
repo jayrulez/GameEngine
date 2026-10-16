@@ -22,7 +22,7 @@ namespace
     // A widget in a GUI, styled by a sheet; `cls` toggles a class to change its style.
     struct Bed
     {
-        core::RefPtr<SceneRoot> root = core::MakeRef<SceneRoot>(core::DefaultAllocator());
+        core::RefPtr<SceneRoot> root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
         core::RefPtr<UIWidget> widget = core::MakeRef<UIWidget>(core::DefaultAllocator());
         StyleManager styles;
 
@@ -39,7 +39,7 @@ namespace
             widget->ToggleClass(SV(cls));
             styles.ApplyTree(*root);
         }
-        void Advance(double seconds) { root->Update(Sec(seconds)); }
+        void Advance(double seconds) { root->GetContext().Update(Sec(seconds)); }
     };
 }
 

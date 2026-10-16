@@ -23,7 +23,7 @@ namespace
 
 TEST_CASE("window: dragging the title bar moves the window")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{600.0f, 400.0f});
     auto win = Make<Window>();
     win->SetSize(core::Float2{200.0f, 150.0f});
@@ -48,7 +48,7 @@ TEST_CASE("window: dragging the title bar moves the window")
 
 TEST_CASE("window: title clicks fall through the caption to the draggable bar")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{600.0f, 400.0f});
     auto win = Make<Window>();
     win->SetSize(core::Float2{200.0f, 150.0f});
@@ -66,7 +66,7 @@ TEST_CASE("window: title clicks fall through the caption to the draggable bar")
 
 TEST_CASE("window: dragging the grip resizes, clamped to the minimum")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{600.0f, 400.0f});
     auto win = Make<Window>();
     win->SetSize(core::Float2{200.0f, 150.0f});
@@ -106,7 +106,7 @@ TEST_CASE("window: content host is placed below the title bar and add-able")
 
 TEST_CASE("window: pressing the title raises the window to the front")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{600.0f, 400.0f});
     auto a = Make<Window>();
     auto b = Make<Window>();
@@ -126,7 +126,7 @@ TEST_CASE("window: pressing the title raises the window to the front")
 
 TEST_CASE("window: the right button does not drag the window")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{600.0f, 400.0f});
     auto win = Make<Window>();
     win->SetSize(core::Float2{200.0f, 150.0f});

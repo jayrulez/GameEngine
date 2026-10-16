@@ -15,7 +15,7 @@ namespace
 {
     core::RefPtr<SceneRoot> MakeScene()
     {
-        return core::MakeRef<SceneRoot>(core::DefaultAllocator());
+        return core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     }
     core::RefPtr<Node> MakeNode() { return core::MakeRef<Node>(core::DefaultAllocator()); }
     core::Duration Sec(double s) { return core::Duration::FromSeconds(s); }
@@ -31,10 +31,10 @@ TEST_CASE("action: move interpolates position and completes")
                                               core::Float2{100.0f, 0.0f}, Sec(1.0)));
     CHECK(root->GetActionManager()->Count() == 1);
 
-    root->Update(Sec(0.5));
+    root->GetContext().Update(Sec(0.5));
     CHECK(node->GetPosition().x == doctest::Approx(50.0f));
 
-    root->Update(Sec(0.5));
+    root->GetContext().Update(Sec(0.5));
     CHECK(node->GetPosition().x == doctest::Approx(100.0f));
     CHECK(root->GetActionManager()->IsEmpty()); // finished action dropped
 }
@@ -46,9 +46,9 @@ TEST_CASE("action: fade interpolates alpha")
     root->AddChild(node.Get());
 
     node->RunAction(core::MakeRef<FadeAction>(core::DefaultAllocator(), 1.0f, 0.0f, Sec(1.0)));
-    root->Update(Sec(0.25));
+    root->GetContext().Update(Sec(0.25));
     CHECK(node->GetAlpha() == doctest::Approx(0.75f));
-    root->Update(Sec(0.75));
+    root->GetContext().Update(Sec(0.75));
     CHECK(node->GetAlpha() == doctest::Approx(0.0f));
 }
 
@@ -60,7 +60,7 @@ TEST_CASE("action: scale interpolates")
 
     node->RunAction(core::MakeRef<ScaleAction>(core::DefaultAllocator(), core::Float2{1.0f, 1.0f},
                                                core::Float2{3.0f, 3.0f}, Sec(1.0)));
-    root->Update(Sec(0.5));
+    root->GetContext().Update(Sec(0.5));
     CHECK(node->GetScale().x == doctest::Approx(2.0f));
 }
 
@@ -74,11 +74,11 @@ TEST_CASE("action: runnable fires once after delay")
     node->RunAction(
         core::MakeRef<RunnableAction>(core::DefaultAllocator(), [&calls]() { ++calls; }, Sec(0.5)));
 
-    root->Update(Sec(0.25));
+    root->GetContext().Update(Sec(0.25));
     CHECK(calls == 0); // not yet
-    root->Update(Sec(0.25));
+    root->GetContext().Update(Sec(0.25));
     CHECK(calls == 1); // fired at completion
-    root->Update(Sec(0.5));
+    root->GetContext().Update(Sec(0.5));
     CHECK(calls == 1); // and only once (action was dropped)
 }
 
@@ -95,11 +95,11 @@ TEST_CASE("action: sequence runs children in order")
                                        core::Float2{100.0f, 50.0f}, Sec(1.0)));
     node->RunAction(seq);
 
-    root->Update(Sec(1.0)); // first move completes
+    root->GetContext().Update(Sec(1.0)); // first move completes
     CHECK(node->GetPosition().x == doctest::Approx(100.0f));
     CHECK(node->GetPosition().y == doctest::Approx(0.0f));
 
-    root->Update(Sec(1.0)); // second move completes
+    root->GetContext().Update(Sec(1.0)); // second move completes
     CHECK(node->GetPosition().y == doctest::Approx(50.0f));
     CHECK(root->GetActionManager()->IsEmpty());
 }
@@ -115,7 +115,7 @@ TEST_CASE("action: run on unattached node is a no-op")
 
 TEST_CASE("action: one whose target is destroyed is dropped, not run on freed memory")
 {
-    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator());
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     int ticks = 0;
     {
         auto node = core::MakeRef<Node>(core::DefaultAllocator());
@@ -126,7 +126,7 @@ TEST_CASE("action: one whose target is destroyed is dropped, not run on freed me
         CHECK(root->GetActionManager()->Count() == 1u);
         root->RemoveChild(node.Get()); // the last reference goes with the scope
     }
-    root->Update(core::Duration::FromSeconds(0.1));
+    root->GetContext().Update(core::Duration::FromSeconds(0.1));
     CHECK(root->GetActionManager()->Count() == 0u);
     CHECK(ticks == 0);
 }

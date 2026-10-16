@@ -56,7 +56,7 @@ TEST_CASE("keyframes: a comma offset list shares the block")
 
 TEST_CASE("keyframes: the animation property drives opacity across the stops")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto w = Make<UIWidget>();
     w->AddClass(core::StringView(u8"anim"));
     root->AddChild(w.Get());
@@ -69,22 +69,22 @@ TEST_CASE("keyframes: the animation property drives opacity across the stops")
 
     CHECK(w->GetAlpha() == doctest::Approx(1.0f)); // stop 0% -> 1
 
-    root->Update(Secs(0.5)); // t=0.25 -> between 1 and 0, halfway -> 0.5
+    root->GetContext().Update(Secs(0.5)); // t=0.25 -> between 1 and 0, halfway -> 0.5
     CHECK(w->GetAlpha() == doctest::Approx(0.5f));
 
-    root->Update(Secs(0.5)); // t=0.5 -> 0
+    root->GetContext().Update(Secs(0.5)); // t=0.5 -> 0
     CHECK(w->GetAlpha() == doctest::Approx(0.0f));
 
-    root->Update(Secs(0.5)); // t=0.75 -> halfway back -> 0.5
+    root->GetContext().Update(Secs(0.5)); // t=0.75 -> halfway back -> 0.5
     CHECK(w->GetAlpha() == doctest::Approx(0.5f));
 
-    root->Update(Secs(0.5)); // t=1.0 -> 1 (non-looping: ends here)
+    root->GetContext().Update(Secs(0.5)); // t=1.0 -> 1 (non-looping: ends here)
     CHECK(w->GetAlpha() == doctest::Approx(1.0f));
 }
 
 TEST_CASE("keyframes: infinite animations loop")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto w = Make<UIWidget>();
     w->AddClass(core::StringView(u8"loop"));
     root->AddChild(w.Get());
@@ -95,17 +95,17 @@ TEST_CASE("keyframes: infinite animations loop")
         u8".loop { animation: fade 2s linear infinite; }")));
     mgr.ApplyTree(*root.Get());
 
-    root->Update(Secs(1.0)); // t=0.5 -> 0
+    root->GetContext().Update(Secs(1.0)); // t=0.5 -> 0
     CHECK(w->GetAlpha() == doctest::Approx(0.0f));
-    root->Update(Secs(1.0)); // elapsed 2.0 -> wraps to t=0 -> 1 (still running)
+    root->GetContext().Update(Secs(1.0)); // elapsed 2.0 -> wraps to t=0 -> 1 (still running)
     CHECK(w->GetAlpha() == doctest::Approx(1.0f));
-    root->Update(Secs(1.0)); // elapsed 3.0 -> t=0.5 -> 0 again (looped)
+    root->GetContext().Update(Secs(1.0)); // elapsed 3.0 -> t=0.5 -> 0 again (looped)
     CHECK(w->GetAlpha() == doctest::Approx(0.0f));
 }
 
 TEST_CASE("keyframes: the animation is spawned once, not re-spawned each ApplyTree")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto w = Make<UIWidget>();
     w->AddClass(core::StringView(u8"anim"));
     root->AddChild(w.Get());
@@ -116,14 +116,14 @@ TEST_CASE("keyframes: the animation is spawned once, not re-spawned each ApplyTr
         u8".anim { animation: fade 2s linear; }")));
 
     mgr.ApplyTree(*root.Get());
-    root->Update(Secs(1.0));                       // t=0.5 -> 0
+    root->GetContext().Update(Secs(1.0));                       // t=0.5 -> 0
     mgr.ApplyTree(*root.Get());                    // re-apply must NOT restart the animation
     CHECK(w->GetAlpha() == doctest::Approx(0.0f)); // still mid-animation, not reset to t=0
 }
 
 TEST_CASE("keyframes: animates background-color across the stops")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto w = Make<UIWidget>();
     w->AddClass(core::StringView(u8"cycle"));
     root->AddChild(w.Get());
@@ -140,9 +140,9 @@ TEST_CASE("keyframes: animates background-color across the stops")
         CHECK(w->GetBox().BackgroundColor.r == doctest::Approx(expect));
     };
     grey(0.0f);
-    root->Update(Secs(1.0)); // t=0.5 -> mid grey
+    root->GetContext().Update(Secs(1.0)); // t=0.5 -> mid grey
     grey(0.5f);
-    root->Update(Secs(1.0)); // t=1.0 -> white
+    root->GetContext().Update(Secs(1.0)); // t=1.0 -> white
     grey(1.0f);
 }
 
@@ -150,7 +150,7 @@ namespace
 {
     struct AnimBed
     {
-        core::RefPtr<SceneRoot> root = Make<SceneRoot>();
+        core::RefPtr<SceneRoot> root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
         core::RefPtr<UIWidget> w = Make<UIWidget>();
         StyleManager mgr;
 
@@ -170,7 +170,7 @@ TEST_CASE("keyframes: any property animates: a transform, a box shadow, a length
     AnimBed bed(u8"@keyframes spin { from { transform: rotate(0deg); box-shadow: 0 0 0 #000000; width: 100; } "
                 u8"to { transform: rotate(180deg); box-shadow: 0 0 10px #000000; width: 200; } } "
                 u8".a { animation: spin 2s linear; }");
-    bed.root->Update(Secs(1.0));
+    bed.root->GetContext().Update(Secs(1.0));
     REQUIRE(bed.w->GetStyleTransforms().Size() == 1u);
     CHECK(bed.w->GetStyleTransforms()[0].Angle == doctest::Approx(1.5707963f)); // 90deg
     REQUIRE(bed.w->GetBox().Shadows.Size() == 1u);
@@ -183,11 +183,11 @@ TEST_CASE("keyframes: delay, iteration count, alternate direction and fill forwa
     AnimBed bed(u8"@keyframes grow { from { width: 100; } to { width: 200; } } "
                 u8".a { width: 50; animation: grow 1s linear 0.5s 2 alternate forwards; }");
     CHECK(bed.w->GetSize().x == doctest::Approx(50.0f)); // the delay, no backwards fill: the target
-    bed.root->Update(Secs(0.75));                         // 0.25 into the first, forwards
+    bed.root->GetContext().Update(Secs(0.75));                         // 0.25 into the first, forwards
     CHECK(bed.w->GetSize().x == doctest::Approx(125.0f));
-    bed.root->Update(Secs(1.0));                          // 0.25 into the second, backwards
+    bed.root->GetContext().Update(Secs(1.0));                          // 0.25 into the second, backwards
     CHECK(bed.w->GetSize().x == doctest::Approx(175.0f));
-    bed.root->Update(Secs(2.0));                          // ended: the last iteration's end (100)
+    bed.root->GetContext().Update(Secs(2.0));                          // ended: the last iteration's end (100)
     CHECK(bed.w->GetSize().x == doctest::Approx(100.0f));
     CHECK_FALSE(bed.root->GetActionManager()->IsEmpty()); // forwards keeps showing it
 }
@@ -196,11 +196,11 @@ TEST_CASE("keyframes: a stop's timing function eases its segment; a missing end 
 {
     AnimBed bed(u8"@keyframes half { 0% { opacity: 0; animation-timing-function: steps(2); } 50% { opacity: 1; } } "
                 u8".a { opacity: 0.2; animation: half 2s linear; }");
-    bed.root->Update(Secs(0.4)); // 0.2 of the animation, 0.4 of the first segment: steps(2) holds 0
+    bed.root->GetContext().Update(Secs(0.4)); // 0.2 of the animation, 0.4 of the first segment: steps(2) holds 0
     CHECK(bed.w->GetAlpha() == doctest::Approx(0.0f));
-    bed.root->Update(Secs(0.2)); // 0.3, 0.6 of the segment: the second step, 0.5
+    bed.root->GetContext().Update(Secs(0.2)); // 0.3, 0.6 of the segment: the second step, 0.5
     CHECK(bed.w->GetAlpha() == doctest::Approx(0.5f));
-    bed.root->Update(Secs(1.0)); // 0.8: between 50% (1) and the implicit 100% (the target 0.2), linear
+    bed.root->GetContext().Update(Secs(1.0)); // 0.8: between 50% (1) and the implicit 100% (the target 0.2), linear
     CHECK(bed.w->GetAlpha() == doctest::Approx(1.0f + (0.2f - 1.0f) * 0.6f));
 }
 
@@ -208,11 +208,11 @@ TEST_CASE("keyframes: removing the animation stops it and the target shows")
 {
     AnimBed bed(u8"@keyframes pulse { from { opacity: 0; } to { opacity: 1; } } "
                 u8".a { animation: pulse 2s linear infinite; }");
-    bed.root->Update(Secs(0.5));
+    bed.root->GetContext().Update(Secs(0.5));
     CHECK(bed.w->GetAlpha() == doctest::Approx(0.25f));
     bed.w->RemoveClass(core::StringView(u8"a"));
     bed.mgr.ApplyTree(*bed.root.Get());
     CHECK(bed.w->GetAlpha() == doctest::Approx(1.0f)); // no animation: the node's own 1
-    bed.root->Update(Secs(0.5));
+    bed.root->GetContext().Update(Secs(0.5));
     CHECK(bed.w->GetAlpha() == doctest::Approx(1.0f));
 }

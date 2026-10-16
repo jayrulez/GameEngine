@@ -46,10 +46,10 @@ TEST_CASE("binding: values convert to the property's type, and compare across nu
 
 TEST_CASE("binding: a bound label follows its source on the GUI's frame")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto label = Make<Label>();
     root->AddChild(label.Get());
-    DataModel& data = root->GetData();
+    DataModel& data = root->GetContext().GetData();
     data.Set(SV(u8"score"), core::Variant::From<i32>(3));
 
     REQUIRE(label->BindProperty(SV(u8"text"), [&data] { return data.Get(SV(u8"score")); }));
@@ -59,20 +59,20 @@ TEST_CASE("binding: a bound label follows its source on the GUI's frame")
     data.Set(SV(u8"score"), core::Variant::From<i32>(5));
     CHECK(label->GetText() == SV(u8"3")); // waits for the frame
     CHECK(root->NeedsFrame());
-    root->Update(Frame());
+    root->GetContext().Update(Frame());
     CHECK(label->GetText() == SV(u8"5"));
-    CHECK(root->LastBindingCount() == 1u); // two changes, one run
+    CHECK(root->GetContext().LastBindingCount() == 1u); // two changes, one run
 
-    root->Update(Frame());
-    CHECK(root->LastBindingCount() == 0u);
+    root->GetContext().Update(Frame());
+    CHECK(root->GetContext().LastBindingCount() == 0u);
     data.Set(SV(u8"score"), core::Variant::From<f64>(5.0)); // the same number: no change
-    root->Update(Frame());
-    CHECK(root->LastBindingCount() == 0u);
+    root->GetContext().Update(Frame());
+    CHECK(root->GetContext().LastBindingCount() == 0u);
 }
 
 TEST_CASE("binding: one widget's state drives another's, with no subscription")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto slider = Make<Slider>();
     auto label = Make<Label>();
     auto bar = Make<ProgressBar>();
@@ -84,31 +84,31 @@ TEST_CASE("binding: one widget's state drives another's, with no subscription")
     REQUIRE(bar->BindProperty(SV(u8"progress"), [s] { return core::Variant::From<f32>(s->GetValue()); }));
 
     slider->SetValue(0.25f);
-    root->Update(Frame());
+    root->GetContext().Update(Frame());
     CHECK(label->GetText() == SV(u8"0.25"));
     CHECK(bar->GetProgress() == doctest::Approx(0.25f));
 }
 
 TEST_CASE("binding: a widget the user changes writes back, both ways without a loop")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto slider = Make<Slider>();
     root->AddChild(slider.Get());
-    DataModel& data = root->GetData();
+    DataModel& data = root->GetContext().GetData();
     data.Set(SV(u8"volume"), core::Variant::From<f64>(0.5));
     REQUIRE(slider->BindProperty(SV(u8"value"), [&data] { return data.Get(SV(u8"volume")); }));
     REQUIRE(slider->BindPropertyBack(SV(u8"value"), [&data](const core::Variant& v) { data.Set(SV(u8"volume"), v); }));
     CHECK(slider->GetValue() == doctest::Approx(0.5f));
 
     slider->SetValue(0.75f); // the user drags it
-    root->Update(Frame());
+    root->GetContext().Update(Frame());
     REQUIRE(data.Get(SV(u8"volume")).TryGet<f32>() != nullptr);
     CHECK(*data.Get(SV(u8"volume")).TryGet<f32>() == doctest::Approx(0.75f));
-    root->Update(Frame());
-    CHECK(root->LastBindingCount() == 0u); // settled
+    root->GetContext().Update(Frame());
+    CHECK(root->GetContext().LastBindingCount() == 0u); // settled
 
     data.Set(SV(u8"volume"), core::Variant::From<f64>(0.1)); // the game sets it
-    root->Update(Frame());
+    root->GetContext().Update(Frame());
     CHECK(slider->GetValue() == doctest::Approx(0.1f));
 }
 
@@ -123,8 +123,8 @@ TEST_CASE("binding: a text field written back keeps its caret")
 
 TEST_CASE("binding: outside a scene a binding runs at once; it ends with its node")
 {
-    auto root = Make<SceneRoot>();
-    DataModel& data = root->GetData();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    DataModel& data = root->GetContext().GetData();
     auto label = Make<Label>(); // not in the scene
     REQUIRE(label->BindProperty(SV(u8"text"), [&data] { return data.Get(SV(u8"name")); }));
     data.Set(SV(u8"name"), core::Variant::From<core::String>(core::String(u8"Ada")));
@@ -141,8 +141,8 @@ TEST_CASE("binding: outside a scene a binding runs at once; it ends with its nod
         data.Set(SV(u8"name"), core::Variant::From<core::String>(core::String(u8"Cy"))); // queued
         root->RemoveChild(gone.Get());
     }
-    root->Update(Frame()); // the queued binding went with its node
-    CHECK(root->LastBindingCount() == 0u);
+    root->GetContext().Update(Frame()); // the queued binding went with its node
+    CHECK(root->GetContext().LastBindingCount() == 0u);
 }
 
 TEST_CASE("binding: an unknown or read-only property does not bind")
@@ -155,13 +155,13 @@ TEST_CASE("binding: an unknown or read-only property does not bind")
 
 TEST_CASE("binding: a name read before it is set is followed, and takes its first value")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto label = Make<Label>();
     root->AddChild(label.Get());
-    DataModel& data = root->GetData();
+    DataModel& data = root->GetContext().GetData();
     REQUIRE(label->BindProperty(SV(u8"text"), [&data] { return data.Get(SV(u8"later")); }));
     CHECK_FALSE(data.Has(SV(u8"later")));
     data.Set(SV(u8"later"), core::Variant::From<i32>(9));
-    root->Update(Frame());
+    root->GetContext().Update(Frame());
     CHECK(label->GetText() == SV(u8"9"));
 }

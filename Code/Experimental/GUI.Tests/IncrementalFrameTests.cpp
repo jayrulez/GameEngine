@@ -36,7 +36,7 @@ namespace
     void Frame(SceneRoot& root, StyleManager& styles)
     {
         styles.ApplyTree(root);
-        root.Update(Sec(0.016));
+        root.GetContext().Update(Sec(0.016));
         vg::VGContext canvas;
         DrawContext dc{canvas};
         root.Draw(dc);
@@ -45,7 +45,7 @@ namespace
 
 TEST_CASE("incremental: an unchanged frame restyles nothing and needs no frame")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{200.0f, 200.0f});
     auto a = Widget(u8"panel");
     auto b = Widget(u8"button");
@@ -65,7 +65,7 @@ TEST_CASE("incremental: an unchanged frame restyles nothing and needs no frame")
 
 TEST_CASE("incremental: a class change restyles only that widget's subtree")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto left = Widget(u8"panel");
     auto leftChild = Widget(u8"button");
     auto right = Widget(u8"panel");
@@ -86,7 +86,7 @@ TEST_CASE("incremental: a class change restyles only that widget's subtree")
 
 TEST_CASE("incremental: hover restyles the hovered widget alone")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{200.0f, 200.0f});
     auto a = Widget(u8"button");
     auto b = Widget(u8"button");
@@ -109,7 +109,7 @@ TEST_CASE("incremental: hover restyles the hovered widget alone")
 
 TEST_CASE("incremental: a changed custom property restyles the children that read it")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{400.0f, 400.0f});
     auto panel = Widget(u8"panel");
     panel->SetSize(core::Float2{200.0f, 200.0f});
@@ -135,7 +135,7 @@ TEST_CASE("incremental: a changed custom property restyles the children that rea
 
 TEST_CASE("incremental: a sheet change restyles everything once")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto a = Widget(u8"button");
     root->AddChild(a.Get());
     StyleManager styles(CSSParser::Parse(SV(u8"button { opacity: 1; }")));
@@ -151,7 +151,7 @@ TEST_CASE("incremental: a sheet change restyles everything once")
 
 TEST_CASE("incremental: many adds to a layout in a scene lay it out once, at the frame")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto column = Make<LinearLayout>();
     column->SetSize(core::Float2{100.0f, 400.0f});
     root->AddChild(column.Get());
@@ -187,7 +187,7 @@ TEST_CASE("incremental: a layout outside a scene still lays out at once")
 
 TEST_CASE("incremental: a running animation keeps frames coming until it ends")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto a = Widget(u8"button");
     root->AddChild(a.Get());
     StyleManager styles(CSSParser::Parse(
@@ -206,7 +206,7 @@ TEST_CASE("incremental: a running animation keeps frames coming until it ends")
 
 TEST_CASE("incremental: setting geometry to what it is changes nothing")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto a = Widget(u8"button");
     a->SetPosition(core::Float2{5.0f, 6.0f});
     root->AddChild(a.Get());
@@ -226,7 +226,7 @@ TEST_CASE("incremental: setting geometry to what it is changes nothing")
 
 TEST_CASE("incremental: a child resized after a layout lays its container out again, once")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto column = Make<FlexLayout>();
     column->SetDirection(FlexDirection::Column);
     column->SetSize(core::Float2{200.0f, 400.0f});
@@ -255,7 +255,7 @@ TEST_CASE("incremental: a child shown or hidden lays its container out again")
 {
     // The showcase's panels: one shown in place of another after the first layout lands in the
     // slot the other had, not wherever it was left.
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto column = Make<FlexLayout>();
     column->SetDirection(FlexDirection::Column);
     column->SetSize(core::Float2{200.0f, 400.0f});

@@ -389,7 +389,7 @@ export namespace experimental::gui
         // again and again, faster the longer it is held. Each step reaches the focused widget as an
         // arrow key does, so a slider moves its value and a list its selection, and only what it
         // leaves moves focus. (A keyboard's held arrow repeats by the
-        // system's own key repeat.) The SceneRoot's update ticks it.
+        // system's own key repeat.) The GUI's update (GUIContext::Update) ticks it.
         void PressDirection(NavDirection direction)
         {
             NoteInput();

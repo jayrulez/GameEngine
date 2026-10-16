@@ -36,7 +36,7 @@ namespace experimental::gui
                      return;
                  // Availability on the active root's focus path (the window the user is in).
                  const bool available = root->GetContext().IsCommandAvailable(commandId.AsView());
-                 const Command* command = root->GetCommands().Find(commandId.AsView());
+                 const Command* command = root->GetContext().GetCommands().Find(commandId.AsView());
                  const bool checked = command != nullptr && command->IsChecked();
                  Untracked([&] { OnBoundCommandState(available, checked); });
              });
@@ -51,7 +51,7 @@ namespace experimental::gui
     void Node::NotifyCommandsChanged()
     {
         if (SceneRoot* root = GetSceneRoot())
-            root->GetCommands().NotifyChanged();
+            root->GetContext().GetCommands().NotifyChanged();
     }
 
     void Node::RequestFocus()

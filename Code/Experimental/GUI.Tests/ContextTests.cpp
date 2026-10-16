@@ -4,7 +4,7 @@
 // GUI - GUIContext: one GUI of several roots (windows, render targets). Its roots share the clock
 // (each may pause or slow its own time), the deferred edits, one bindings flush a frame, the data,
 // the commands and keymap, and the element table; the active root (the one last given input) takes
-// keystrokes and decides command availability; a root made alone gets a context of its own.
+// keystrokes and decides command availability; every root is made in one.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -36,23 +36,26 @@ namespace
     };
 }
 
-TEST_CASE("context: a root made alone has a context of its own")
+TEST_CASE("context: a GUI of one root is a context with one")
 {
-    auto root = Make<SceneRoot>();
-    CHECK(root->GetContext().RootCount() == 1u);
-    CHECK(root->GetContext().GetActiveRoot() == root.Get());
-    CHECK(&root->GetData() == &root->GetContext().GetData());
+    auto gui = Make<GUIContext>();
+    CHECK(gui->RootCount() == 0u);
+    CHECK(gui->GetActiveRoot() == nullptr);
+    auto root = Make<SceneRoot>(gui);
+    CHECK(gui->RootCount() == 1u);
+    CHECK(gui->GetActiveRoot() == root.Get()); // the first, until input picks another
+    CHECK(&root->GetContext() == gui.Get());
 }
 
 TEST_CASE("context: two roots share data, one flush a frame runs a binding in either")
 {
     TwoRoots t;
     CHECK(t.gui->RootCount() == 2u);
-    CHECK(&t.hud->GetData() == &t.menu->GetData());
+    CHECK(&t.hud->GetContext() == &t.menu->GetContext());
     auto score = Make<Label>();
     t.hud->AddChild(score.Get());
     REQUIRE(score->BindProperty(SV(u8"text"), [&t] { return t.gui->GetData().Get(SV(u8"score")); }));
-    t.menu->GetData().Set(SV(u8"score"), core::Variant::From<core::i32>(7)); // written from the other root
+    t.menu->GetContext().GetData().Set(SV(u8"score"), core::Variant::From<core::i32>(7)); // written from the other root
     t.gui->Update(Frame());
     CHECK(score->GetText() == SV(u8"7"));
     CHECK(t.gui->LastBindingCount() == 1u);
@@ -72,7 +75,7 @@ TEST_CASE("context: one update advances every root, and drains their deferred ed
     auto doomed = Make<Node>();
     b->AddChild(doomed.Get());
     doomed->Close();
-    a->Update(Frame()); // a root's Update is its GUI's
+    gui->Update(Frame()); // the GUI's one update
     CHECK(a->ticks == 1);
     CHECK(b->ticks == 1);
     CHECK(b->ChildCount() == 0u);

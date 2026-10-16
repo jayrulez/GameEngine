@@ -44,7 +44,7 @@ namespace
 
 TEST_CASE("dnd: drag delivers enter/over then drop on an accepting target")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{300.0f, 300.0f});
     auto target =
         Zone(root.Get(), core::Float2{100.0f, 0.0f}, core::Float2{100.0f, 100.0f}, u8"item");
@@ -84,7 +84,7 @@ TEST_CASE("dnd: drag delivers enter/over then drop on an accepting target")
 
 TEST_CASE("dnd: moving off the target fires leave; a non-matching target is not entered")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{300.0f, 300.0f});
     auto good = Zone(root.Get(), core::Float2{0.0f, 0.0f}, core::Float2{100.0f, 100.0f}, u8"item");
     auto bad =
@@ -115,7 +115,7 @@ TEST_CASE("dnd: moving off the target fires leave; a non-matching target is not 
 
 TEST_CASE("dnd: drop bubbles to the nearest accepting ancestor")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{300.0f, 300.0f});
     auto container =
         Zone(root.Get(), core::Float2{0.0f, 0.0f}, core::Float2{200.0f, 200.0f}, u8"item");
@@ -139,7 +139,7 @@ TEST_CASE("dnd: drop bubbles to the nearest accepting ancestor")
 
 TEST_CASE("dnd: CancelDrag ends the drag and leaves the current target")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{300.0f, 300.0f});
     auto target =
         Zone(root.Get(), core::Float2{0.0f, 0.0f}, core::Float2{100.0f, 100.0f}, u8"item");

@@ -23,7 +23,7 @@ namespace
 
     struct Bed
     {
-        core::RefPtr<SceneRoot> root = Make<SceneRoot>();
+        core::RefPtr<SceneRoot> root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
         core::RefPtr<UIWidget> screen = Make<UIWidget>(); // key context "menu"
         core::RefPtr<Button> item = Make<Button>();
         core::Array<core::String> ran;
@@ -74,7 +74,7 @@ TEST_CASE("keymap: the deepest matching context wins, then the later binding")
     bed.Handle(u8"quit");
     bed.Handle(u8"back");
     bed.Handle(u8"close");
-    Keymap& keys = bed.root->GetKeymap();
+    Keymap& keys = bed.root->GetContext().GetKeymap();
     REQUIRE(keys.Bind(SV(u8"escape"), SV(u8"quit")));                   // everywhere
     REQUIRE(keys.Bind(SV(u8"escape"), SV(u8"back"), SV(u8"menu")));     // in the menu: deeper
     bed.Key(KeyCode::Escape);
@@ -98,7 +98,7 @@ TEST_CASE("keymap: a binding to nothing unbinds a key there")
 {
     Bed bed;
     bed.Handle(u8"quit");
-    Keymap& keys = bed.root->GetKeymap();
+    Keymap& keys = bed.root->GetContext().GetKeymap();
     REQUIRE(keys.Bind(SV(u8"escape"), SV(u8"quit")));
     REQUIRE(keys.Bind(SV(u8"escape"), SV(u8""), SV(u8"menu"))); // not in the menu
     bed.Key(KeyCode::Escape);
@@ -110,7 +110,7 @@ TEST_CASE("keymap: a chord waits for its next keystroke, and lapses")
     Bed bed;
     bed.Handle(u8"comment");
     bed.Handle(u8"select-all");
-    Keymap& keys = bed.root->GetKeymap();
+    Keymap& keys = bed.root->GetContext().GetKeymap();
     REQUIRE(keys.Bind(SV(u8"ctrl-x ctrl-c"), SV(u8"comment")));
     REQUIRE(keys.Bind(SV(u8"ctrl-a"), SV(u8"select-all")));
     bed.Key(KeyCode::X, KeyModCtrl); // waits
@@ -120,7 +120,7 @@ TEST_CASE("keymap: a chord waits for its next keystroke, and lapses")
     CHECK(bed.ran[0] == core::String(u8"comment"));
 
     bed.Key(KeyCode::X, KeyModCtrl);
-    bed.root->Update(core::Duration::FromSeconds(1.5)); // too slow: dropped
+    bed.root->GetContext().Update(core::Duration::FromSeconds(1.5)); // too slow: dropped
     bed.Key(KeyCode::C, KeyModCtrl);
     CHECK(bed.ran.Size() == 1u);
 
@@ -134,7 +134,7 @@ TEST_CASE("keymap: a gamepad's buttons bind too; South activates when unbound")
 {
     Bed bed;
     bed.Handle(u8"back");
-    REQUIRE(bed.root->GetKeymap().Bind(SV(u8"pad-east"), SV(u8"back")));
+    REQUIRE(bed.root->GetContext().GetKeymap().Bind(SV(u8"pad-east"), SV(u8"back")));
     int clicks = 0;
     (void)bed.item->AddEventListener(EventType::MouseClick, [&](const Event&) { ++clicks; });
     EventDispatcher& d = *bed.root->GetEventDispatcher();
@@ -148,8 +148,8 @@ TEST_CASE("keymap: a text field keeps its keys, and leaves a shortcut to the bin
 {
     Bed bed;
     bed.Handle(u8"save");
-    REQUIRE(bed.root->GetKeymap().Bind(SV(u8"ctrl-s"), SV(u8"save")));
-    REQUIRE(bed.root->GetKeymap().Bind(SV(u8"ctrl-a"), SV(u8"save"))); // the field's own: it keeps it
+    REQUIRE(bed.root->GetContext().GetKeymap().Bind(SV(u8"ctrl-s"), SV(u8"save")));
+    REQUIRE(bed.root->GetContext().GetKeymap().Bind(SV(u8"ctrl-a"), SV(u8"save"))); // the field's own: it keeps it
     auto field = Make<TextField>();
     bed.screen->AddChild(field.Get());
     bed.root->GetEventDispatcher()->SetFocusNode(field.Get());

@@ -34,7 +34,7 @@ namespace
 
 TEST_CASE("style-manager: applies a sheet across the tree")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{200.0f, 200.0f});
     auto btn = Widget(u8"button", core::Float2{0.0f, 0.0f}, core::Float2{100.0f, 100.0f});
     root->AddChild(btn.Get());
@@ -48,7 +48,7 @@ TEST_CASE("style-manager: applies a sheet across the tree")
 
 TEST_CASE("style-manager: hover re-resolve drives a live transition")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{200.0f, 200.0f});
     auto btn = Widget(u8"button", core::Float2{0.0f, 0.0f}, core::Float2{100.0f, 100.0f});
     root->AddChild(btn.Get());
@@ -68,15 +68,15 @@ TEST_CASE("style-manager: hover re-resolve drives a live transition")
     CHECK(root->GetActionManager()->Count() == 1);
     CHECK(btn->GetAlpha() == doctest::Approx(1.0f)); // starts where it was
 
-    root->Update(Sec(0.25));
+    root->GetContext().Update(Sec(0.25));
     CHECK(btn->GetAlpha() == doctest::Approx(0.7f)); // 1 + (0.4-1)*0.5
-    root->Update(Sec(0.25));
+    root->GetContext().Update(Sec(0.25));
     CHECK(btn->GetAlpha() == doctest::Approx(0.4f)); // arrived at :hover value
 }
 
 TEST_CASE("style-manager: media context gates what applies")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{200.0f, 200.0f});
     auto btn = Widget(u8"button", core::Float2{0.0f, 0.0f}, core::Float2{100.0f, 100.0f});
     root->AddChild(btn.Get());
@@ -96,7 +96,7 @@ TEST_CASE("style-manager: media context gates what applies")
 
 TEST_CASE("style-manager: SetStyleSheet swaps styles (hot-reload)")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{200.0f, 200.0f});
     auto btn = Widget(u8"button", core::Float2{0.0f, 0.0f}, core::Float2{100.0f, 100.0f});
     root->AddChild(btn.Get());

@@ -41,7 +41,7 @@ TEST_CASE("uinode: over-large padding clamps to zero, not negative")
 
 TEST_CASE("uinode: control state follows pointer, focus, and enabled")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{200.0f, 200.0f});
     auto w = Make<UINode>();
     w->SetSize(core::Float2{100.0f, 100.0f});
@@ -80,7 +80,7 @@ TEST_CASE("uinode: control state follows pointer, focus, and enabled")
 
 TEST_CASE("uinode: skin background draws with the current control state")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{200.0f, 200.0f});
     auto w = Make<UINode>();
     w->SetSize(core::Float2{100.0f, 100.0f});

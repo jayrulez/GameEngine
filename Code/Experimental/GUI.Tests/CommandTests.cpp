@@ -21,12 +21,12 @@ namespace
         return core::MakeRef<T>(core::DefaultAllocator());
     }
     core::StringView SV(const char8_t* s) { return core::StringView(s); }
-    void Frame(SceneRoot& root) { root.Update(core::Duration::FromSeconds(0.016)); }
+    void Frame(SceneRoot& root) { root.GetContext().Update(core::Duration::FromSeconds(0.016)); }
 }
 
 TEST_CASE("command: running walks the focus path, capture down then bubble up")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto panel = Make<UIWidget>();
     auto field = Make<Button>();
     field->SetTabFocusable(true);
@@ -55,7 +55,7 @@ TEST_CASE("command: running walks the focus path, capture down then bubble up")
     CHECK(reachedRoot);
 
     // Disabled, it does not run; unhandled, it reports so.
-    root->DefineCommand(SV(u8"save")).SetEnabled(false);
+    root->GetContext().DefineCommand(SV(u8"save")).SetEnabled(false);
     order.Clear();
     CHECK_FALSE(root->RunCommand(SV(u8"save")));
     CHECK(order.IsEmpty());
@@ -64,7 +64,7 @@ TEST_CASE("command: running walks the focus path, capture down then bubble up")
 
 TEST_CASE("command: availability follows focus, and a bound button greys and lights with it")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto editor = Make<UIWidget>(); // handles "cut" while focus is inside it
     auto inside = Make<Button>();
     auto outside = Make<Button>();
@@ -92,15 +92,15 @@ TEST_CASE("command: availability follows focus, and a bound button greys and lig
     CHECK(cut->HandleActivate()); // a click (Return) on it runs the command along the focus path
     CHECK(cuts == 1);
 
-    root->DefineCommand(SV(u8"cut")).SetEnabled(false); // one switch greys every control bound to it
+    root->GetContext().DefineCommand(SV(u8"cut")).SetEnabled(false); // one switch greys every control bound to it
     Frame(*root.Get());
     CHECK_FALSE(cut->IsEnabled());
 }
 
 TEST_CASE("command: a checkbox and a menu item show the command's checked state, and run it")
 {
-    auto root = Make<SceneRoot>();
-    Command& music = root->DefineCommand(SV(u8"music"));
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    Command& music = root->GetContext().DefineCommand(SV(u8"music"));
     (void)root->OnCommand(SV(u8"music"), [&music](CommandEvent&) { music.SetChecked(!music.IsChecked()); });
     auto box = Make<CheckBox>();
     box->SetSize(core::Float2{20.0f, 20.0f});
@@ -124,9 +124,9 @@ TEST_CASE("command: a checkbox and a menu item show the command's checked state,
 TEST_CASE("command: markup binds a control to a command by id, before it is attached")
 {
     RegisterGuiElements();
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     (void)root->OnCommand(SV(u8"play"), [](CommandEvent&) {});
-    root->DefineCommand(SV(u8"play")).SetEnabled(false);
+    root->GetContext().DefineCommand(SV(u8"play")).SetEnabled(false);
     static const ElementSet elements = ElementSet::All();
     MarkupLoader loader(elements, core::DefaultAllocator());
     auto tree = loader.LoadFromString(SV(u8R"(<Button command="play" text="Play"/>)"));
@@ -137,7 +137,7 @@ TEST_CASE("command: markup binds a control to a command by id, before it is atta
     root->AddChild(tree.Get()); // joining the GUI reaches its binding
     Frame(*root.Get());
     CHECK_FALSE(play->IsEnabled());
-    root->DefineCommand(SV(u8"play")).SetEnabled(true);
+    root->GetContext().DefineCommand(SV(u8"play")).SetEnabled(true);
     Frame(*root.Get());
     CHECK(play->IsEnabled());
 }

@@ -16,7 +16,7 @@ namespace
 {
     core::RefPtr<SceneRoot> MakeScene()
     {
-        return core::MakeRef<SceneRoot>(core::DefaultAllocator());
+        return core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     }
     core::RefPtr<Node> MakeNode() { return core::MakeRef<Node>(core::DefaultAllocator()); }
 }
@@ -44,7 +44,7 @@ TEST_CASE("scene: Close defers removal until update drains the queue")
     CHECK(root->ChildCount() == 1); // not yet - deferred
     CHECK_FALSE(root->GetMutationQueue()->IsEmpty());
 
-    root->Update(core::Duration::FromSeconds(0.016));
+    root->GetContext().Update(core::Duration::FromSeconds(0.016));
     CHECK(root->ChildCount() == 0); // drained
     CHECK(root->GetMutationQueue()->IsEmpty());
 }
@@ -62,7 +62,7 @@ TEST_CASE("scene: Close without a coordinator removes immediately")
 TEST_CASE("scene: update with nothing queued is harmless")
 {
     auto root = MakeScene();
-    root->Update(core::Duration::FromSeconds(0.016));
+    root->GetContext().Update(core::Duration::FromSeconds(0.016));
     CHECK(root->GetActionManager()->IsEmpty());
     CHECK(root->GetMutationQueue()->IsEmpty());
 }
@@ -71,12 +71,14 @@ TEST_CASE("scene: OnUpdate hook fires each update")
 {
     struct CountingScene : SceneRoot
     {
+        explicit CountingScene(core::RefPtr<GUIContext> gui) : SceneRoot(core::Move(gui)) {}
         int ticks = 0;
         void OnUpdate(core::Duration) override { ++ticks; }
     };
-    auto scene = core::MakeRef<CountingScene>(core::DefaultAllocator());
-    scene->Update(core::Duration::FromSeconds(0.016));
-    scene->Update(core::Duration::FromSeconds(0.016));
+    auto gui = core::MakeRef<GUIContext>(core::DefaultAllocator());
+    auto scene = core::MakeRef<CountingScene>(core::DefaultAllocator(), gui);
+    gui->Update(core::Duration::FromSeconds(0.016));
+    gui->Update(core::Duration::FromSeconds(0.016));
     CHECK(scene->ticks == 2);
 }
 

@@ -298,7 +298,7 @@ namespace experimental::gui
     bool Node::BindSceneData(StringView property, StringView key)
     {
         SceneRoot* root = GetSceneRoot();
-        return root != nullptr && BindData(property, root->GetDataRef(), key);
+        return root != nullptr && BindData(property, root->GetContext().GetDataRef(), key);
     }
 
     // === The facade and registration ===
@@ -310,7 +310,7 @@ namespace experimental::gui
             foundation::script::IScriptContext* context = foundation::script::CurrentScriptContext();
             const auto* binding =
                 context != nullptr ? static_cast<const GuiScriptBinding*>(context->GetService(kGuiScriptService)) : nullptr;
-            return binding != nullptr && binding->root != nullptr ? &binding->root->GetData() : nullptr;
+            return binding != nullptr && binding->root != nullptr ? &binding->root->GetContext().GetData() : nullptr;
         }
     }
 
@@ -348,22 +348,22 @@ namespace experimental::gui
     void Gui::DefineCommand(StringView id, StringView label)
     {
         if (SceneRoot* root = ScriptRoot())
-            root->DefineCommand(id).SetLabel(label.Size() != 0 ? label : id);
+            root->GetContext().DefineCommand(id).SetLabel(label.Size() != 0 ? label : id);
     }
     void Gui::SetCommandEnabled(StringView id, bool enabled)
     {
         if (SceneRoot* root = ScriptRoot())
-            root->DefineCommand(id).SetEnabled(enabled);
+            root->GetContext().DefineCommand(id).SetEnabled(enabled);
     }
     void Gui::SetCommandChecked(StringView id, bool checked)
     {
         if (SceneRoot* root = ScriptRoot())
-            root->DefineCommand(id).SetChecked(checked);
+            root->GetContext().DefineCommand(id).SetChecked(checked);
     }
     bool Gui::IsCommandChecked(StringView id)
     {
         SceneRoot* root = ScriptRoot();
-        const Command* command = root != nullptr ? root->GetCommands().Find(id) : nullptr;
+        const Command* command = root != nullptr ? root->GetContext().GetCommands().Find(id) : nullptr;
         return command != nullptr && command->IsChecked();
     }
     bool Gui::RunCommand(StringView id)
@@ -385,7 +385,7 @@ namespace experimental::gui
     bool Gui::BindKey(StringView keys, StringView command, StringView context)
     {
         SceneRoot* root = ScriptRoot();
-        return root != nullptr && root->GetKeymap().Bind(keys, command, context);
+        return root != nullptr && root->GetContext().GetKeymap().Bind(keys, command, context);
     }
 
     void Node::OnCommandScript(StringView id, RefPtr<foundation::script::IScriptDelegate> handler)

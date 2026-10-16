@@ -18,7 +18,7 @@ namespace
     core::RefPtr<SceneRoot> MakeGui()
     {
         RegisterGuiElements();
-        return core::MakeRef<SceneRoot>(core::DefaultAllocator());
+        return core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     }
 
     // A widget from outside the lab's core (as a toolkit or a game kit adds one): reflected with
@@ -174,7 +174,7 @@ TEST_CASE("elements: a node adds children by tag through its GUI's set, from its
     core::RefPtr<SceneRoot> gui = MakeGui();
     ElementSet buttonsOnly = ElementSet::None();
     buttonsOnly.Allow(u8"Button");
-    gui->SetElementSet(core::Move(buttonsOnly));
+    gui->GetContext().SetElementSet(core::Move(buttonsOnly));
 
     CHECK_FALSE(gui->AddElement(u8"Label").IsResolving()); // not in this GUI's set
     const core::Variant handle = gui->AddElement(u8"Button");

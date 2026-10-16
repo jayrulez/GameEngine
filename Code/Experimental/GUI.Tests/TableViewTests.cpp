@@ -38,7 +38,7 @@ namespace
 
     core::RefPtr<TableView> MountTable(core::RefPtr<SceneRoot>& root, IModel* model)
     {
-        root = Make<SceneRoot>();
+        root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
         root->SetSize(core::Float2{400.0f, 400.0f});
         auto table = Make<TableView>();
         table->SetSize(core::Float2{300.0f, 200.0f});

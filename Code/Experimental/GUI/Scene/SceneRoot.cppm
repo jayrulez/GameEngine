@@ -9,8 +9,9 @@
 // root, so a binding in one root reading a value another wrote runs once, in order), the named
 // data, the commands and the keymap, the element table weak handles resolve through (so a handle
 // survives its node moving between roots) and the element set. It tracks the active root, the one
-// last given input: keystrokes, the gamepad and command availability follow its focus path. A root
-// made on its own makes a context of its own, so a GUI of one root needs nothing more.
+// last given input: keystrokes, the gamepad and command availability follow its focus path. Every
+// root is made in a context (a GUI of one root is a context with one); the host advances the GUI
+// once a frame through GUIContext::Update.
 //
 // SceneRoot: the root of one GUI's widget tree AND its coordinator (eepp's Scene::SceneNode, by
 // role). A Node subclass that sits at the top; it owns the ActionManager, the MutationQueue, the
@@ -144,20 +145,18 @@ export namespace experimental::gui
     {
         RTTI_OBJECT(SceneRoot, Node)
     public:
-        /// A root of a GUI of its own (a context made for it, from this root's allocator: a member
-        /// initialiser, which runs after the base records it, unlike a delegating constructor's
-        /// argument).
-        SceneRoot() : m_context(core::MakeRef<GUIContext>(MemoryAllocator())) { Join(); }
-        /// A root of `context`'s GUI, beside its other roots.
-        explicit SceneRoot(RefPtr<GUIContext> context) : m_context(core::Move(context)) { Join(); }
+        /// A root of `context`'s GUI, beside its other roots (a GUI of one root is a context with one).
+        explicit SceneRoot(RefPtr<GUIContext> context) : m_context(core::Move(context))
+        {
+            m_context->AddRoot(*this);
+            m_eventDispatcher.SetKeystrokeRouter([this](const Keystroke& stroke) { return RouteKeystroke(stroke); });
+            m_eventDispatcher.SetOnInput([this]() { m_context->SetActiveRoot(this); });
+        }
         ~SceneRoot() override { m_context->RemoveRoot(*this); }
 
         [[nodiscard]] GUIContext& GetContext() noexcept { return *m_context; }
         [[nodiscard]] const RefPtr<GUIContext>& GetContextRef() const noexcept { return m_context; }
         [[nodiscard]] GUIContext* GetGUIContext() override { return m_context.Get(); }
-
-        /// Advances the whole GUI (GUIContext::Update: every root of its context), once a frame.
-        void Update(core::Duration elapsed) { m_context->Update(elapsed); }
 
         /// Runs this root's layout pass: every container that requested a layout, parents first,
         /// again while a layout requests more (a child's new size can move its parent), at most a
@@ -189,15 +188,6 @@ export namespace experimental::gui
         [[nodiscard]] bool IsPaused() const noexcept { return m_paused; }
         [[nodiscard]] f32 EffectiveTimeScale() const noexcept { return m_paused ? 0.0f : m_timeScale; }
 
-        // === What the GUI holds, reached from its root ===
-        [[nodiscard]] u32 LastBindingCount() const noexcept { return m_context->LastBindingCount(); }
-        [[nodiscard]] DataModel& GetData() noexcept { return m_context->GetData(); }
-        [[nodiscard]] const RefPtr<DataModel>& GetDataRef() const noexcept { return m_context->GetDataRef(); }
-        [[nodiscard]] CommandSet& GetCommands() noexcept { return m_context->GetCommands(); }
-        Command& DefineCommand(core::StringView id) { return m_context->DefineCommand(id); }
-        [[nodiscard]] Keymap& GetKeymap() noexcept { return m_context->GetKeymap(); }
-        void SetElementSet(ElementSet set) { m_context->SetElementSet(core::Move(set)); }
-
         [[nodiscard]] EffectScheduler* GetEffectScheduler() override { return &m_context->m_effects; }
         [[nodiscard]] ActionManager* GetActionManager() override { return &m_context->m_actionManager; }
         [[nodiscard]] MutationQueue* GetMutationQueue() override { return &m_context->m_mutationQueue; }
@@ -212,7 +202,7 @@ export namespace experimental::gui
         /// disabled or nothing handled it.
         bool RunCommand(core::StringView id)
         {
-            if (const Command* command = GetCommands().Find(id); command != nullptr && !Untracked([&] { return command->IsEnabled(); }))
+            if (const Command* command = m_context->GetCommands().Find(id); command != nullptr && !Untracked([&] { return command->IsEnabled(); }))
                 return false;
             Array<Node*> path; // focused first, this root last
             for (Node* n = FocusInThisTree(); n != nullptr; n = n->GetParent())
@@ -239,9 +229,9 @@ export namespace experimental::gui
         /// a binding follows (focus, the command's state, the handlers).
         [[nodiscard]] bool IsCommandAvailable(core::StringView id)
         {
-            GetCommands().TrackChanges();
+            m_context->GetCommands().TrackChanges();
             (void)m_eventDispatcher.ObserveFocus();
-            if (const Command* command = GetCommands().Find(id); command != nullptr && !command->IsEnabled())
+            if (const Command* command = m_context->GetCommands().Find(id); command != nullptr && !command->IsEnabled())
                 return false;
             for (Node* n = FocusInThisTree(); n != nullptr; n = n->GetParent())
                 if (n->HandlesCommand(id))
@@ -271,12 +261,12 @@ export namespace experimental::gui
             chord.PushBack(stroke);
             m_context->m_chordAge = 0.0f;
             core::String command;
-            KeymapMatch match = GetKeymap().Match(chord.AsSpan(), stack.AsSpan(), command);
+            KeymapMatch match = m_context->GetKeymap().Match(chord.AsSpan(), stack.AsSpan(), command);
             if (match == KeymapMatch::None && chord.Size() > 1)
             {
                 chord.Clear(); // a chord broken off: the keystroke alone
                 chord.PushBack(stroke);
-                match = GetKeymap().Match(chord.AsSpan(), stack.AsSpan(), command);
+                match = m_context->GetKeymap().Match(chord.AsSpan(), stack.AsSpan(), command);
             }
             if (match == KeymapMatch::Pending)
                 return true;
@@ -327,13 +317,6 @@ export namespace experimental::gui
         bool m_paused = false;
         u32 m_lastLayoutCount = 0;
         core::Float2 m_viewport{0.0f, 0.0f};
-
-        void Join()
-        {
-            m_context->AddRoot(*this);
-            m_eventDispatcher.SetKeystrokeRouter([this](const Keystroke& stroke) { return RouteKeystroke(stroke); });
-            m_eventDispatcher.SetOnInput([this]() { m_context->SetActiveRoot(this); });
-        }
 
         // The focused node when it is in this tree, else this root.
         [[nodiscard]] Node* FocusInThisTree()

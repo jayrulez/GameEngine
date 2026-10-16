@@ -112,7 +112,7 @@ TEST_CASE("effects: a faded node with children draws through one layer, a faded 
 
 TEST_CASE("effects: a filter blurs the node's layer in device pixels, and a blend composites it")
 {
-    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator());
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetDisplayScale(2.0f);
     auto card = Box(u8"card");
     root->AddChild(card.Get());
@@ -127,7 +127,7 @@ TEST_CASE("effects: a filter blurs the node's layer in device pixels, and a blen
 
 TEST_CASE("effects: a backdrop filter blurs what is behind the box")
 {
-    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator());
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto behind = Box(u8"wall");
     auto glass = Box(u8"glass");
     root->AddChild(behind.Get());
@@ -171,7 +171,7 @@ TEST_CASE("effects: overflow clips the children, to the rounded corners through 
 
 TEST_CASE("effects: a transition moves a filter's blur")
 {
-    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator());
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto card = Box(u8"card");
     root->AddChild(card.Get());
     StyleManager styles(CSSParser::Parse(
@@ -179,7 +179,7 @@ TEST_CASE("effects: a transition moves a filter's blur")
     styles.ApplyTree(*root.Get());
     card->AddClass(SV(u8"soft"));
     styles.ApplyTree(*root.Get());
-    root->Update(core::Duration::FromSeconds(0.5));
+    root->GetContext().Update(core::Duration::FromSeconds(0.5));
     styles.ApplyTree(*root.Get());
     CHECK(card->GetBox().FilterBlur == doctest::Approx(5.0f).epsilon(0.05));
 }

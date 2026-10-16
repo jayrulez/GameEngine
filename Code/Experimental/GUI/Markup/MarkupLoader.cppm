@@ -169,11 +169,7 @@ export namespace experimental::gui
             RefPtr<DataModel> model = m_data;
             if (parts.Size() == 1 && parts[0].IsName)
             {
-                const core::String key = parts[0].Text;
-                if (!node.BindProperty(property, [model, key] { return model->Get(key.AsView()); }))
-                    return false;
-                (void)node.BindPropertyBack(property, [model, key](const Variant& v) { model->Set(key.AsView(), v); });
-                return true;
+                return node.BindData(property, model, parts[0].Text.AsView());
             }
             return node.BindProperty(property,
                                      [model, parts = core::Move(parts)]

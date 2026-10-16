@@ -7,7 +7,9 @@
 // sheet styles, listen to a click the dispatcher delivers; then the weak-handle rule: a destroyed
 // element's handle answers isValid() false and any other use is the script's error, a destroy
 // inside a click handler completes after it, a reused slot does not answer to the old handle, and
-// a handle outliving its GUI reads as gone.
+// a handle outliving its GUI reads as gone. Then bindings (G5): a script binds a label to a function
+// of the GUI's data, a slider both ways to a data value, and a label to the slider, and each
+// follows its source with no subscription.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -157,6 +159,106 @@ namespace
         bed.Refused(u8"readGo");
     }
 }
+
+namespace
+{
+    // The binding story (G5) both languages tell. Before the script loads, the GUI's data holds
+    // score 3 and volume 0.5. The script builds, under the root: a Label bound to "Score: " and the
+    // score text (bind, a function reading gui.getText), a Slider bound both ways to volume
+    // (bindData), and a Label bound to the slider's value (a function reading slider.value), and
+    // offers setScore(n), which writes the data through gui.set.
+    void CheckBindings(GuiBed& bed)
+    {
+        REQUIRE(bed.errors.count == 0);
+        gui::Label* score = Cast<gui::Label>(bed.root->GetChildAt(0));
+        gui::Slider* slider = Cast<gui::Slider>(bed.root->GetChildAt(1));
+        gui::Label* volume = Cast<gui::Label>(bed.root->GetChildAt(2));
+        REQUIRE((score != nullptr && slider != nullptr && volume != nullptr));
+        CHECK(score->GetText() == StringView(u8"Score: 3"));
+        CHECK(slider->GetValue() == doctest::Approx(0.5f));
+        CHECK(volume->GetText() == StringView(u8"0.5"));
+        CHECK(bed.Number(u8"bound") == doctest::Approx(1.0)); // every bind call answered true
+
+        // The game changes the data: the script's binding follows on the GUI's frame.
+        bed.root->GetData().Set(StringView(u8"score"), Variant::From<i32>(4));
+        bed.Update();
+        CHECK(score->GetText() == StringView(u8"Score: 4"));
+
+        // The user drags the slider: the data and the label reading the slider follow.
+        slider->SetValue(0.75f);
+        bed.Update();
+        CHECK(volume->GetText() == StringView(u8"0.75"));
+        const Variant written = bed.root->GetData().Get(StringView(u8"volume"));
+        REQUIRE(written.TryGet<f32>() != nullptr);
+        CHECK(*written.TryGet<f32>() == doctest::Approx(0.75f));
+
+        // The script writes the data.
+        bed.Run(u8"setNine");
+        bed.Update();
+        CHECK(score->GetText() == StringView(u8"Score: 9"));
+        CHECK(bed.errors.count == 0);
+    }
+
+    void SeedBindingData(GuiBed& bed)
+    {
+        bed.root->GetData().Set(StringView(u8"score"), Variant::From<i32>(3));
+        bed.root->GetData().Set(StringView(u8"volume"), Variant::From<f64>(0.5));
+    }
+}
+
+#ifdef OPTION_HAS_ANGELSCRIPT
+TEST_CASE("gui-script: AngelScript binds widgets to data and to each other")
+{
+    RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    SeedBindingData(bed);
+    const Status loaded = bed.context->Load(
+        u8"funcdef string TextExpression();\n"
+        u8"funcdef double NumberExpression();\n"
+        u8"Slider@ slider;\n"
+        u8"double allBound = 0;\n"
+        u8"string scoreText() { return \"Score: \" + gui::getText(\"score\"); }\n"
+        u8"double sliderValue() { return slider.value; }\n"
+        u8"void main() {\n"
+        u8"  Node@ root = gui::root();\n"
+        u8"  Label@ score = Label::of(root.add(\"Label\"));\n"
+        u8"  @slider = Slider::of(root.add(\"Slider\"));\n"
+        u8"  Label@ volume = Label::of(root.add(\"Label\"));\n"
+        u8"  bool a = score.bind(\"text\", TextExpression(scoreText));\n"
+        u8"  bool b = slider.bindData(\"value\", \"volume\");\n"
+        u8"  bool c = volume.bind(\"text\", NumberExpression(sliderValue));\n"
+        u8"  allBound = (a && b && c) ? 1 : 0;\n"
+        u8"}\n"
+        u8"double bound() { return allBound; }\n"
+        u8"void setNine() { gui::set(\"score\", 9); }\n",
+        u8"main");
+    REQUIRE(loaded.IsOk());
+    CheckBindings(bed);
+}
+#endif // OPTION_HAS_ANGELSCRIPT
+
+#ifdef OPTION_HAS_LUAU
+TEST_CASE("gui-script: Luau binds widgets to data and to each other")
+{
+    RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    SeedBindingData(bed);
+    const Status loaded = bed.context->Load(
+        u8"local root = gui.root()\n"
+        u8"local score = Label.of(root:add(\"Label\"))\n"
+        u8"local slider = Slider.of(root:add(\"Slider\"))\n"
+        u8"local volume = Label.of(root:add(\"Label\"))\n"
+        u8"local a = score:bind(\"text\", function() return \"Score: \" .. gui.getText(\"score\") end)\n"
+        u8"local b = slider:bindData(\"value\", \"volume\")\n"
+        u8"local c = volume:bind(\"text\", function() return slider.value end)\n"
+        u8"local allBound = (a and b and c) and 1 or 0\n"
+        u8"function bound() return allBound end\n"
+        u8"function setNine() gui.set(\"score\", 9) end\n",
+        u8"main");
+    REQUIRE(loaded.IsOk());
+    CheckBindings(bed);
+}
+#endif // OPTION_HAS_LUAU
 
 #ifdef OPTION_HAS_ANGELSCRIPT
 TEST_CASE("gui-script: AngelScript builds, styles and clicks the lab's widgets, and holds them weakly")

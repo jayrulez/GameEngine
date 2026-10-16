@@ -30,6 +30,7 @@ import :action_manager;
 import :mutation_queue;
 import :node_box;
 import :reactive; // Effect, EffectScheduler (bindings)
+import :data_model; // DataModel (BindData)
 import :css_values;  // LengthValue
 import :style_value; // TransformFunction
 
@@ -623,6 +624,12 @@ export namespace experimental::gui
         /// Calls `handler` on each event named `eventName` (click, mousedown, mouseup,
         /// mouseenter, mouseleave, mousemove, wheel, keydown, keyup, textinput, focus, blur).
         void On(core::StringView eventName, RefPtr<foundation::script::IScriptDelegate> handler);
+        /// Binds `property` to what `expression` returns, run again whenever what it read changed
+        /// (gui.getNumber and the rest, widget properties). False when no such property.
+        bool BindScript(core::StringView property, RefPtr<foundation::script::IScriptDelegate> expression);
+        /// Binds `property` to this GUI's data value `key` (BindData with its scene's model); false
+        /// outside a scene or with no such property.
+        bool BindSceneData(core::StringView property, core::StringView key);
         /// Removes this node from its tree at the end of the UI's update (Close): never under a
         /// running handler.
         void Destroy() { Close(); }
@@ -831,6 +838,17 @@ export namespace experimental::gui
         /// moved a slider, typed). Only for the properties a widget's user changes (the `twoWay`
         /// property attribute); false for any other.
         bool BindPropertyBack(core::StringView name, core::Function<void(const Variant&)> write);
+        /// Binds `property` to `model`'s value `key`, as markup's `{{key}}` does: it follows the
+        /// value, and writes it back when the property is one the user changes. False when the node
+        /// has no such writable property.
+        bool BindData(core::StringView property, RefPtr<DataModel> model, core::StringView key)
+        {
+            const core::String name(key);
+            if (!BindProperty(property, [model, name] { return model->Get(name.AsView()); }))
+                return false;
+            (void)BindPropertyBack(property, [model, name](const Variant& v) { model->Set(name.AsView(), v); });
+            return true;
+        }
         void ClearBindings() { m_bindings.Clear(); }
         [[nodiscard]] usize BindingCount() const noexcept { return m_bindings.Size(); }
 

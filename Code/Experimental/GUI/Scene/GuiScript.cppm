@@ -50,6 +50,13 @@ export namespace experimental::gui
     public:
         /// The calling script's root (a Node handle), or null when its host installed none.
         [[nodiscard]] static Variant Root();
+        /// The GUI's data value `name` as a number, text or boolean (converted; 0, empty or false
+        /// when unset or unconvertible). A read a binding follows.
+        [[nodiscard]] static f64 GetNumber(core::StringView name);
+        [[nodiscard]] static core::String GetText(core::StringView name);
+        [[nodiscard]] static bool GetBool(core::StringView name);
+        /// Sets the GUI's data value `name` (whatever is bound to it follows).
+        static void Set(core::StringView name, const Variant& value);
     };
 
     /// Registers the lab's own element types (ElementTypes::Register: Label, Button, the layouts,

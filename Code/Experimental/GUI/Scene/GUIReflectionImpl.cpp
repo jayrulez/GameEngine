@@ -282,7 +282,63 @@ namespace experimental::gui
         return true;
     }
 
+    bool Node::BindScript(StringView property, RefPtr<foundation::script::IScriptDelegate> expression)
+    {
+        if (!expression)
+            return false;
+        // The node holds the function (as it holds an event handler); a failed call binds nothing.
+        return BindProperty(property,
+                            [expression]
+                            {
+                                Result<core::Variant> result = expression->Invoke(Span<core::Variant>{});
+                                return result.HasValue() ? result.Value() : core::Variant{};
+                            });
+    }
+
+    bool Node::BindSceneData(StringView property, StringView key)
+    {
+        SceneRoot* root = GetSceneRoot();
+        return root != nullptr && BindData(property, root->GetDataRef(), key);
+    }
+
     // === The facade and registration ===
+
+    namespace
+    {
+        DataModel* ScriptDataModel()
+        {
+            foundation::script::IScriptContext* context = foundation::script::CurrentScriptContext();
+            const auto* binding =
+                context != nullptr ? static_cast<const GuiScriptBinding*>(context->GetService(kGuiScriptService)) : nullptr;
+            return binding != nullptr && binding->root != nullptr ? &binding->root->GetData() : nullptr;
+        }
+    }
+
+    f64 Gui::GetNumber(StringView name)
+    {
+        DataModel* data = ScriptDataModel();
+        const core::Variant value = data != nullptr ? ConvertVariant(data->Get(name), TypeOf<f64>()) : core::Variant{};
+        return value.IsEmpty() ? 0.0 : value.Get<f64>();
+    }
+
+    core::String Gui::GetText(StringView name)
+    {
+        DataModel* data = ScriptDataModel();
+        return data != nullptr ? FormatVariant(data->Get(name)) : core::String{};
+    }
+
+    bool Gui::GetBool(StringView name)
+    {
+        DataModel* data = ScriptDataModel();
+        const core::Variant value = data != nullptr ? ConvertVariant(data->Get(name), TypeOf<bool>()) : core::Variant{};
+        return !value.IsEmpty() && value.Get<bool>();
+    }
+
+    void Gui::Set(StringView name, const core::Variant& value)
+    {
+        if (DataModel* data = ScriptDataModel())
+            data->Set(name, value);
+    }
 
     core::Variant Gui::Root()
     {
@@ -344,6 +400,8 @@ namespace experimental::gui
         builder.Method<&Node::ChildElement, Node>("childAt");
         builder.Method<&Node::ElementChildCount>("childCount");
         builder.Method<&Node::On>("on");
+        builder.Method<&Node::BindScript>("bind");
+        builder.Method<&Node::BindSceneData>("bindData");
         builder.Method<&Node::Destroy>("destroy");
         builder.Method<&ElementOf<Node>, Node>("of");
     }
@@ -471,5 +529,9 @@ namespace experimental::gui
     {
         builder.Attribute("scriptName", "gui");
         builder.Method<&Gui::Root, Node>("root");
+        builder.Method<&Gui::GetNumber>("getNumber");
+        builder.Method<&Gui::GetText>("getText");
+        builder.Method<&Gui::GetBool>("getBool");
+        builder.Method<&Gui::Set>("set");
     }
 }

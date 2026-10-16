@@ -17,6 +17,7 @@ export module experimental.gui:check_box;
 
 import foundation.core; // Color, Function, Move, Max
 import foundation.vg;   // CornerRadii
+import :reactive; // Observable (what bindings follow)
 import :rect;
 import :event;
 import :draw_context;
@@ -38,13 +39,19 @@ export namespace experimental::gui
             SetTabFocusable(true);
         }
 
-        [[nodiscard]] bool IsChecked() const noexcept { return m_checked; }
+        /// Whether it is checked (a read a binding records).
+        [[nodiscard]] bool IsChecked() const
+        {
+            m_checkedChanged.Track();
+            return m_checked;
+        }
         void SetChecked(bool checked)
         {
             if (checked == m_checked)
                 return;
             m_checked = checked;
             Invalidate();
+            m_checkedChanged.Notify();
             if (m_onChanged)
                 m_onChanged(m_checked);
             SendEvent(Event(EventType::Changed, this));
@@ -104,6 +111,7 @@ export namespace experimental::gui
         }
 
         bool m_checked = false;
+        Observable m_checkedChanged; // what bindings reading the state follow
         Color m_boxColor{0.60f, 0.65f, 0.72f, 1.0f};
         Color m_checkColor{0.31f, 0.63f, 0.85f, 1.0f};
         core::Function<void(bool)> m_onChanged;

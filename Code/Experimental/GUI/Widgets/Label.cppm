@@ -16,6 +16,7 @@ export module experimental.gui:label;
 
 import foundation.core;  // StringView, Color, Float2
 import foundation.fonts; // CachedFont
+import :reactive; // Observable (what bindings follow)
 import :rect;
 import :draw_context;
 import :text;
@@ -39,10 +40,18 @@ export namespace experimental::gui
 
         void SetText(core::StringView text)
         {
+            if (text == m_text.GetString())
+                return;
             m_text.SetString(text);
             Invalidate();
+            m_textChanged.Notify();
         }
-        [[nodiscard]] core::StringView GetText() const { return m_text.GetString(); }
+        /// The text (a read a binding records).
+        [[nodiscard]] core::StringView GetText() const
+        {
+            m_textChanged.Track();
+            return m_text.GetString();
+        }
 
         void SetFont(fonts::CachedFont* font)
         {
@@ -118,5 +127,6 @@ export namespace experimental::gui
         }
 
         Text m_text;
+        Observable m_textChanged; // what bindings reading the text follow
     };
 }

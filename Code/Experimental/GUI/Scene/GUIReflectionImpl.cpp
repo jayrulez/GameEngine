@@ -235,6 +235,53 @@ namespace experimental::gui
         (void)AddEventListener(type, [handler](const Event&) { (void)handler->Invoke(Span<core::Variant>{}); });
     }
 
+    // === Bindings ===
+
+    namespace
+    {
+        // The reflected property named `name` on `type` or a base, or null.
+        const PropertyInfo* FindReflectedProperty(const TypeInfo* type, StringView name)
+        {
+            for (; type != nullptr; type = type->base)
+                for (usize i = 0; i < PropertyCount(*type); ++i)
+                {
+                    const PropertyInfo& property = PropertyAt(*type, i);
+                    if (StringView(reinterpret_cast<const utf8char*>(property.name)) == name)
+                        return &property;
+                }
+            return nullptr;
+        }
+    }
+
+    bool Node::BindProperty(StringView name, core::Function<core::Variant()> expression)
+    {
+        const PropertyInfo* property = FindReflectedProperty(GetType(), name);
+        if (property == nullptr || property->type == nullptr ||
+            (static_cast<u32>(property->flags) & static_cast<u32>(PropertyFlags::ReadOnly)) != 0)
+            return false;
+        Bind([this, property, expression = core::Move(expression)]() mutable
+             {
+                 const core::Variant value = ConvertVariant(expression(), *property->type);
+                 // The write is not a read: setting a property must not make this binding follow it.
+                 if (!value.IsEmpty())
+                     Untracked([&] { (void)SetProperty(*property, Instance::From(this), value); });
+             });
+        return true;
+    }
+
+    bool Node::BindPropertyBack(StringView name, core::Function<void(const core::Variant&)> write)
+    {
+        const PropertyInfo* property = FindReflectedProperty(GetType(), name);
+        if (property == nullptr)
+            return false;
+        Bind([this, property, write = core::Move(write)]() mutable
+             {
+                 const core::Variant value = GetProperty(*property, Instance::From(this)); // followed
+                 Untracked([&] { write(value); });
+             });
+        return true;
+    }
+
     // === The facade and registration ===
 
     core::Variant Gui::Root()
@@ -337,7 +384,8 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(CheckBox, "rtti::gui")
     {
-        builder.AccessorProperty<&CheckBox::IsChecked, &CheckBox::SetChecked>("checked");
+        builder.AccessorProperty<&CheckBox::IsChecked, &CheckBox::SetChecked>("checked")
+            .PropAttribute("twoWay", true); // the user changes it: a binding may write it back
         builder.Method<&ElementOf<CheckBox>, CheckBox>("of");
         builder.Creator();
     }
@@ -350,7 +398,8 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(Slider, "rtti::gui")
     {
-        builder.AccessorProperty<&Slider::GetValue, &Slider::SetValue>("value");
+        builder.AccessorProperty<&Slider::GetValue, &Slider::SetValue>("value")
+            .PropAttribute("twoWay", true); // the user changes it: a binding may write it back
         builder.Method<&ElementOf<Slider>, Slider>("of");
         builder.Creator();
     }
@@ -364,7 +413,8 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(TextField, "rtti::gui")
     {
-        builder.AccessorProperty<&TextField::GetText, &TextField::SetText>("text");
+        builder.AccessorProperty<&TextField::GetText, &TextField::SetText>("text")
+            .PropAttribute("twoWay", true); // the user changes it: a binding may write it back
         builder.Method<&ElementOf<TextField>, TextField>("of");
         builder.Creator();
     }

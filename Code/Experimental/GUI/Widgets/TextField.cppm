@@ -25,6 +25,7 @@ export module experimental.gui:text_field;
 import foundation.core; // String, StringView, Color, Function, Move, Min, Max, Utf8*Boundary, IsWhiteSpace
 import foundation.fonts; // CachedFont
 import foundation.vg;    // CornerRadii
+import :reactive; // Observable (what bindings follow)
 import :rect;
 import :draw_context;
 import :text;
@@ -55,13 +56,20 @@ export namespace experimental::gui
         // === Value ===
         void SetText(core::StringView text)
         {
+            if (text == m_value.AsView())
+                return; // a binding writing back what was typed keeps the caret where it is
             m_value = core::String(text);
             m_caret = m_value.Size(); // caret to end
             m_selAnchor = m_caret;    // no selection
             SyncText();
             NotifyChanged();
         }
-        [[nodiscard]] core::StringView GetText() const { return m_value.AsView(); }
+        /// The text (a read a binding records).
+        [[nodiscard]] core::StringView GetText() const
+        {
+            m_textChanged.Track();
+            return m_value.AsView();
+        }
 
         // Byte offset of the caret (always on a codepoint boundary).
         [[nodiscard]] usize GetCaret() const noexcept { return m_caret; }
@@ -400,6 +408,7 @@ export namespace experimental::gui
         }
         void NotifyChanged()
         {
+            m_textChanged.Notify();
             if (m_onChanged)
                 m_onChanged(m_value.AsView());
             SendEvent(Event(EventType::Changed, this));
@@ -602,6 +611,7 @@ export namespace experimental::gui
         usize m_caret = 0;     // byte offset, codepoint boundary
         usize m_selAnchor = 0; // selection anchor; selection = [min,max) with caret
         Text m_text;
+        Observable m_textChanged; // what bindings reading the text follow
 
         core::String m_placeholder;
         Text m_hintText; // placeholder renderer (shares the field's font)

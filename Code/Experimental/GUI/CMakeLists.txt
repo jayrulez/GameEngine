@@ -23,6 +23,7 @@ target_sources(GUI
             Scene/Actions.cppm
             Scene/EventDispatcher.cppm
             Scene/ElementTypes.cppm
+            Scene/DataModel.cppm
             Scene/SceneRoot.cppm
             Scene/GuiScript.cppm
             Drawing/ControlState.cppm

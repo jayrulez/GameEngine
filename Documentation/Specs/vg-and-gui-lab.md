@@ -342,6 +342,21 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
 - **G6 A showcase.** The sandbox becomes a small scripted demo (a game menu with transforms,
   shadows, gradients, blur and animated states, written in AngelScript), the proof that it looks
   the part.
+  As built on `vg`: `GUISandbox --showcase` (2ea5e9e11) shows a main menu from
+  `Data/Assets/ui/showcase`: markup for the widgets, a sheet for every look (a radial background,
+  drifting orbs under blur filters, a distance-field title with a breathing glow, gradient buttons
+  that lean in on hover and give on a press, frosted settings, loading and confirm panels that rise
+  in), and an AngelScript that switches the panels, binds two labels to functions of the GUI's
+  data and fills a loading bar through `update(dt)`, which the host calls only while it asks.
+  Native code sizes the layers, seeds the data and closes the window once Leave has faded;
+  `--showcase-call <function>` opens another panel for a screenshot. The sheet's text effects came
+  first (75cee63f6: text-shadow, text-outline and text-glow, inherited through the VG's state and
+  animatable). Building it found four defects, each fixed with a test: a container never heard a
+  child resize, so a flex layout kept the zero basis it met a child with before the sheet sized it
+  (2a43072ba); the lab's `X.of(variable)` did not compile in AngelScript, its Variant parameter a
+  `?&in` sink there (1fd2077bd lets a method declare a Variant parameter's type, 3fa253776 uses it);
+  and an explicit handle passed to a Variant sink was read one level short, which crashed
+  (70e0f05a7).
 
 - **G7 Navigation and commands (must-haves, user 2026-10-14; every other phase designs for them).**
   `foundation.ui` has a spatial picker with code-only directional overrides (`View::NextFocusUp`
@@ -411,6 +426,9 @@ list when it is done or the user rules it out.
   (position, size, visibility, a list's selection) are not observable yet, so a binding reading
   them does not follow them; lists bound to a data collection (a repeated template per item) wait
   for the model/view layer's turn.
+- **G6, with G7:** the menu takes keyboard and gamepad navigation when G7 brings it; the host
+  sizes the showcase's layers to the window by hand (a fill-the-parent size, or anchors in markup,
+  would let the sheet say it).
 - **F3, after the lab (foundation.ui text):** a label measures with its font's unshaped
   MeasureString, so a ligated label lays out a little wide; the basic shaper's wrapping knows no
   bidi; editing right-to-left text (caret movement by arrow keys, selection across a direction

@@ -94,3 +94,41 @@ TEST_CASE("markup: a parse error yields null")
 {
     CHECK(Load(u8R"(<LinearLayout><Label text="x")").Get() == nullptr); // unterminated
 }
+
+TEST_CASE("markup: {{name}} binds to the GUI's data model, two-way where the user changes it")
+{
+    RegisterGuiElements();
+    auto scene = core::MakeRef<SceneRoot>(core::DefaultAllocator());
+    DataModel& data = scene->GetData();
+    data.Set(SV(u8"score"), core::Variant::From<core::i32>(7));
+    data.Set(SV(u8"volume"), core::Variant::From<core::f64>(0.5));
+    static const ElementSet elements = ElementSet::All();
+    MarkupLoader loader(elements, core::DefaultAllocator());
+    loader.SetDataModel(scene->GetDataRef());
+    auto tree = loader.LoadFromString(SV(u8R"(
+        <LinearLayout orientation="vertical">
+            <Label text="Score: {{ score }} of {{max}}"/>
+            <Slider value="{{volume}}"/>
+            <Label text="{{volume}}"/>
+            <Label text="{{unclosed"/>
+        </LinearLayout>
+    )"));
+    REQUIRE(tree.Get() != nullptr);
+    scene->AddChild(tree.Get());
+    auto* score = core::Cast<Label>(tree->GetChildAt(0));
+    auto* slider = core::Cast<Slider>(tree->GetChildAt(1));
+    auto* volume = core::Cast<Label>(tree->GetChildAt(2));
+    auto* literal = core::Cast<Label>(tree->GetChildAt(3));
+    REQUIRE((score != nullptr && slider != nullptr && volume != nullptr && literal != nullptr));
+    CHECK(score->GetText() == SV(u8"Score: 7 of ")); // max unset: empty, and followed
+    CHECK(slider->GetValue() == doctest::Approx(0.5f));
+    CHECK(volume->GetText() == SV(u8"0.5"));
+    CHECK(literal->GetText() == SV(u8"{{unclosed")); // malformed: as written
+    CHECK(volume->BindingCount() == 1u); // a label's text does not write back
+
+    data.Set(SV(u8"max"), core::Variant::From<core::i32>(10));
+    slider->SetValue(0.25f); // the user drags it
+    scene->Update(core::Duration::FromSeconds(0.016)); // the write-back's followers run in the same flush
+    CHECK(score->GetText() == SV(u8"Score: 7 of 10"));
+    CHECK(volume->GetText() == SV(u8"0.25"));
+}

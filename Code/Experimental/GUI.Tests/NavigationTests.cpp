@@ -224,3 +224,38 @@ TEST_CASE("navigation: Return activates the focused button as a click does")
     bed.Key(KeyCode::Space);
     CHECK(check->IsChecked());
 }
+
+TEST_CASE("navigation: overrides from a sheet, markup and native code come first")
+{
+    Bed bed;
+    auto a = Cell(*bed.root.Get(), u8"a", 10.0f, 10.0f);
+    auto b = Cell(*bed.root.Get(), u8"b", 10.0f, 40.0f);
+    auto c = Cell(*bed.root.Get(), u8"c", 300.0f, 300.0f);
+    // A sheet: down from a goes to c (geometry would say b); right from b stops.
+    StyleManager styles(CSSParser::Parse(SV(u8"#a { nav-down: c; } #b { nav-right: none; nav-next: a; }")));
+    styles.ApplyTree(*bed.root.Get());
+    CHECK(a->GetNavDown() == SV(u8"c"));
+    bed.d.SetFocusNode(a.Get());
+    bed.Key(KeyCode::Down);
+    CHECK(bed.Focused() == SV(u8"c"));
+    bed.d.SetFocusNode(b.Get());
+    bed.Key(KeyCode::Right);
+    CHECK(bed.Focused() == SV(u8"b"));
+    bed.Key(KeyCode::Tab); // nav-next
+    CHECK(bed.Focused() == SV(u8"a"));
+
+    // An id that is not there, or auto: the picker as usual.
+    a->SetNavDown(SV(u8"nowhere"));
+    bed.d.SetFocusNode(a.Get());
+    bed.Key(KeyCode::Down);
+    CHECK(bed.Focused() == SV(u8"b"));
+
+    // A scope's kind and default focus from a sheet.
+    auto panel = Make<UIWidget>();
+    panel->SetId(SV(u8"panel"));
+    bed.root->AddChild(panel.Get());
+    StyleManager scopes(CSSParser::Parse(SV(u8"#panel { nav-scope: contain; nav-default: c; }")));
+    scopes.ApplyTree(*bed.root.Get());
+    CHECK(panel->GetNavScope() == NavScope::Contain);
+    CHECK(panel->GetDefaultFocusId() == SV(u8"c"));
+}

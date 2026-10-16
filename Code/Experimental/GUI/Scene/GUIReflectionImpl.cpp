@@ -394,6 +394,15 @@ namespace experimental::gui
         builder.AccessorProperty<&Node::IsVisible, &Node::SetVisible>("visible");
         builder.AccessorProperty<&Node::IsEnabled, &Node::SetEnabled>("enabled");
         builder.AccessorProperty<&Node::GetAlpha, &Node::SetAlpha>("opacity");
+        // Navigation (G7): reflected with their CSS names, so a sheet, markup and a script set them.
+        builder.AccessorProperty<&Node::GetNavUp, &Node::SetNavUp>("navUp").PropAttribute("css", core::String(u8"nav-up"));
+        builder.AccessorProperty<&Node::GetNavDown, &Node::SetNavDown>("navDown").PropAttribute("css", core::String(u8"nav-down"));
+        builder.AccessorProperty<&Node::GetNavLeft, &Node::SetNavLeft>("navLeft").PropAttribute("css", core::String(u8"nav-left"));
+        builder.AccessorProperty<&Node::GetNavRight, &Node::SetNavRight>("navRight").PropAttribute("css", core::String(u8"nav-right"));
+        builder.AccessorProperty<&Node::GetNavNext, &Node::SetNavNext>("navNext").PropAttribute("css", core::String(u8"nav-next"));
+        builder.AccessorProperty<&Node::GetNavPrevious, &Node::SetNavPrevious>("navPrev").PropAttribute("css", core::String(u8"nav-prev"));
+        builder.AccessorProperty<&Node::GetNavScopeName, &Node::SetNavScopeName>("navScope").PropAttribute("css", core::String(u8"nav-scope"));
+        builder.AccessorProperty<&Node::GetDefaultFocusId, &Node::SetDefaultFocusId>("navDefault").PropAttribute("css", core::String(u8"nav-default"));
         builder.Method<&Node::AddElement, Node>("add");
         builder.Method<&Node::FindElement, Node>("find");
         builder.Method<&Node::ParentElement, Node>("parent");

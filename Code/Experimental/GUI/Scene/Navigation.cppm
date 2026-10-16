@@ -10,6 +10,9 @@
 // nearest along the axis, then the nearest across it. Hidden, disabled and clipped-away widgets
 // are skipped.
 //
+// Where the geometry is wrong, a widget says where a direction goes (nav-up and the rest: an id,
+// or none to stop), which is followed first.
+//
 // Focus scopes (Node::SetNavScope) bound the search: navigation stays inside the focused widget's
 // scope, and at its edge passes to the scope around it, wraps to the scope's other side, or stays
 // (contain, for a dialog). Entering a scope from outside lands on what was last focused in it, else
@@ -180,6 +183,23 @@ export namespace experimental::gui
         return picked;
     }
 
+    /// What `focused`'s override `which` says (nav-up and the rest): `stop` set for `none`, the
+    /// widget for an id found navigable under `root`, else null (auto, empty, or an id not there).
+    [[nodiscard]] inline Node* FollowOverride(Node& root, const Node& focused, Node::NavOverride which, bool& stop)
+    {
+        stop = false;
+        const core::StringView target = focused.GetNavOverride(which);
+        if (target.Size() == 0 || target == core::StringView(u8"auto"))
+            return nullptr;
+        if (target == core::StringView(u8"none"))
+        {
+            stop = true;
+            return nullptr;
+        }
+        Node* found = detail::FindWidgetById(root, target);
+        return found != nullptr && detail::IsNavigable(*found) ? found : nullptr;
+    }
+
     /// The widget directional navigation moves focus to from `focused` (under `root`, the GUI or a
     /// modal), or null to stay. With nothing focused, the root's entry (its remembered or default
     /// focus, else the first navigable widget).
@@ -191,6 +211,16 @@ export namespace experimental::gui
             detail::CollectNavigable(root, all);
             return EntryInto(root, all.IsEmpty() ? nullptr : all[0]);
         }
+        // An override where the geometry is wrong comes first.
+        const Node::NavOverride which = direction == NavDirection::Up     ? Node::NavOverrideUp
+                                        : direction == NavDirection::Down ? Node::NavOverrideDown
+                                        : direction == NavDirection::Left ? Node::NavOverrideLeft
+                                                                          : Node::NavOverrideRight;
+        bool stop = false;
+        if (Node* overridden = FollowOverride(root, *focused, which, stop))
+            return overridden;
+        if (stop)
+            return nullptr;
         const Rect from = focused->GetScreenBounds();
         // Search the focused widget's scope, then outward while a scope passes its edge on.
         for (Node* scope = detail::ScopeOf(focused);; scope = detail::ScopeOf(scope))

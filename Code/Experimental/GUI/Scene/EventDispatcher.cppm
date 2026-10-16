@@ -408,6 +408,23 @@ export namespace experimental::gui
 
         bool MoveTabFocus(i32 direction)
         {
+            // nav-next / nav-prev first (G7).
+            if (m_focusNode != nullptr)
+            {
+                Node* root = m_modalRoot != nullptr ? m_modalRoot : m_root;
+                bool stop = false;
+                Node* overridden = root != nullptr ? FollowOverride(*root, *m_focusNode,
+                                                                    direction > 0 ? Node::NavOverrideNext : Node::NavOverridePrevious,
+                                                                    stop)
+                                                   : nullptr;
+                if (overridden != nullptr)
+                {
+                    SetFocusNode(overridden);
+                    return true;
+                }
+                if (stop)
+                    return false;
+            }
             core::Array<Node*> stops;
             CollectTabStops(m_modalRoot != nullptr ? m_modalRoot : m_root,
                             stops); // confine to a modal

@@ -3,7 +3,7 @@
 # depends on the platform input layer, keeping experimental.gui itself platform-agnostic.
 util_add_engine_library(GUI.Shell ALIAS Experimental::GUI.Shell)
 target_link_libraries(GUI.Shell
-    PUBLIC Experimental::GUI Foundation::Shell Foundation::Core Foundation::Policy)
+    PUBLIC Experimental::GUI Foundation::Shell Foundation::Input Foundation::Core Foundation::Policy)
 
 target_sources(GUI.Shell
     PUBLIC

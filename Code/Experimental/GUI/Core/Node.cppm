@@ -896,6 +896,11 @@ export namespace experimental::gui
             }
             return core::StringView(u8"none");
         }
+        /// The key context this node declares for bindings (G7: "menu", "editor mode=insert"):
+        /// a binding's context predicate is matched against these along the focus path. Reflected
+        /// with its CSS name (`key-context`).
+        [[nodiscard]] core::StringView GetKeyContext() const noexcept { return m_keyContext.AsView(); }
+        void SetKeyContext(core::StringView context) { m_keyContext = core::String(context); }
         void SetNavScopeName(core::StringView name)
         {
             m_navScope = name == core::StringView(u8"pass")      ? NavScope::Pass
@@ -1203,6 +1208,7 @@ export namespace experimental::gui
         core::String m_defaultFocusId;
         ElementRef m_rememberedFocus{}; // weak: resolved through the GUI's element table
         core::String m_navOverrides[NavOverrideCount]; // nav-up and the rest: an id, none, or auto
+        core::String m_keyContext;                     // for bindings (key-context)
         bool m_focused = false;
         bool m_focusVisible = false; // focused by the keyboard or a gamepad
         bool m_tabFocusable = false;

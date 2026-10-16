@@ -237,7 +237,8 @@ export namespace experimental::gui
                     Paste();
                     return;
                 default:
-                    return; // other Ctrl combos ignored
+                    event.Handled = false; // other Ctrl combos: a binding's (ctrl-s)
+                    return;
                 }
             }
 

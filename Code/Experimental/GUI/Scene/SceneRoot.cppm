@@ -32,6 +32,7 @@ import :media_query; // MediaContext
 import :reactive;    // EffectScheduler
 import :data_model;
 import :commands;
+import :keymap;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -46,6 +47,7 @@ export namespace experimental::gui
         SceneRoot()
             : m_data(core::MakeRef<DataModel>(MemoryAllocator())), m_elements(core::MakeRef<ElementTable>(MemoryAllocator()))
         {
+            m_eventDispatcher.SetKeystrokeRouter([this](const Keystroke& stroke) { return RouteKeystroke(stroke); });
         }
         ~SceneRoot() override { m_elements->Close(); }
 
@@ -55,6 +57,8 @@ export namespace experimental::gui
         {
             m_actionManager.Update(elapsed);
             m_eventDispatcher.Tick(static_cast<f32>(elapsed.AsSecondsF()));
+            if (!m_chord.IsEmpty() && (m_chordAge += static_cast<f32>(elapsed.AsSecondsF())) > kChordTimeout)
+                m_chord.Clear(); // a chord not finished in time is dropped
             OnUpdate(elapsed);
             m_lastBindingCount = m_effects.Flush();
             m_mutationQueue.Drain();
@@ -124,6 +128,48 @@ export namespace experimental::gui
             return ran;
         }
 
+        /// This GUI's bindings from keys and gamepad buttons to commands.
+        [[nodiscard]] Keymap& GetKeymap() noexcept { return m_keymap; }
+
+        /// A keystroke no widget used: matched against the keymap in the focus path's contexts (a
+        /// chord waits for its next keystroke); a match runs its command. True when it was taken
+        /// (a match, an unbinding, or the start of a chord).
+        bool RouteKeystroke(const Keystroke& stroke)
+        {
+            Array<KeyContextLayer> stack; // root first, one layer per node declaring a context
+            {
+                Array<Node*> path;
+                for (Node* n = FocusInThisTree(); n != nullptr; n = n->GetParent())
+                    path.PushBack(n);
+                KeyContextLayer layer;
+                for (usize i = path.Size(); i-- > 0;)
+                    if (path[i]->GetKeyContext().Size() != 0)
+                    {
+                        layer.Declare(path[i]->GetKeyContext());
+                        stack.PushBack(layer);
+                    }
+            }
+            m_chord.PushBack(stroke);
+            m_chordAge = 0.0f;
+            core::String command;
+            KeymapMatch match = m_keymap.Match(m_chord.AsSpan(), stack.AsSpan(), command);
+            if (match == KeymapMatch::None && m_chord.Size() > 1)
+            {
+                m_chord.Clear(); // a chord broken off: the keystroke alone
+                m_chord.PushBack(stroke);
+                match = m_keymap.Match(m_chord.AsSpan(), stack.AsSpan(), command);
+            }
+            if (match == KeymapMatch::Pending)
+                return true;
+            m_chord.Clear();
+            if (match == KeymapMatch::None)
+                return false;
+            if (command.Size() == 0)
+                return false; // unbound here: as if no binding
+            (void)RunCommand(command.AsView());
+            return true;
+        }
+
         /// Whether command `id` is enabled and a handler for it is on the focus path: a read a
         /// binding follows (focus, the command's state, the handlers), so a control bound to the
         /// command greys and lights as focus moves.
@@ -181,6 +227,10 @@ export namespace experimental::gui
         ActionManager m_actionManager;
         EffectScheduler m_effects;  // the bindings waiting for this frame
         CommandSet m_commands;      // this GUI's commands
+        Keymap m_keymap;            // keys and gamepad buttons to commands
+        Array<Keystroke> m_chord;   // a chord typed so far
+        f32 m_chordAge = 0.0f;
+        static constexpr f32 kChordTimeout = 1.0f;
         RefPtr<DataModel> m_data;   // shared with the bindings to it
         u32 m_lastBindingCount = 0;
         MutationQueue m_mutationQueue;

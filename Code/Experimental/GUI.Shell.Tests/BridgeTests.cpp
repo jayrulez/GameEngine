@@ -10,6 +10,7 @@ import foundation.shell;
 import foundation.shell.null;
 import experimental.gui;
 import experimental.gui.shell;
+import foundation.input; // InputMap (a keymap filled from it)
 
 using namespace experimental::gui;
 namespace core = foundation::core;
@@ -161,14 +162,21 @@ TEST_CASE("bridge: navigation keys map platform KeyCode to the GUI KeyCode")
     bridge.Dispatch(Key(shell::InputEventKind::KeyDown, shell::KeyCode::Home));
     CHECK(seenKey == static_cast<core::u32>(KeyCode::Home));
 
-    // The editing-shortcut letters (A/C/V/X) map through so Ctrl+A/C/V/X reach widgets.
+    // The editing-shortcut letters map through so Ctrl+A/C/V/X reach widgets.
     bridge.Dispatch(Key(shell::InputEventKind::KeyDown, shell::KeyCode::A));
     CHECK(seenKey == static_cast<core::u32>(KeyCode::A));
     bridge.Dispatch(Key(shell::InputEventKind::KeyDown, shell::KeyCode::V));
     CHECK(seenKey == static_cast<core::u32>(KeyCode::V));
 
-    // A printable key with no shortcut meaning maps to Unknown (its glyph arrives as text).
+    // Every letter, digit and F1 to F12 maps through, for bindings (G7: ctrl-s, f5); what a key
+    // types still arrives as text, not from its code.
     bridge.Dispatch(Key(shell::InputEventKind::KeyDown, shell::KeyCode::B));
+    CHECK(seenKey == static_cast<core::u32>(KeyCode::B));
+    bridge.Dispatch(Key(shell::InputEventKind::KeyDown, shell::KeyCode::Num7));
+    CHECK(seenKey == static_cast<core::u32>(KeyCode::Num7));
+    bridge.Dispatch(Key(shell::InputEventKind::KeyDown, shell::KeyCode::F5));
+    CHECK(seenKey == static_cast<core::u32>(KeyCode::F5));
+    bridge.Dispatch(Key(shell::InputEventKind::KeyDown, shell::KeyCode::F13)); // past what bindings name
     CHECK(seenKey == static_cast<core::u32>(KeyCode::Unknown));
 }
 
@@ -221,9 +229,13 @@ TEST_CASE("bridge: unroutable events return false")
     auto root = MakeScene(core::Float2{200.0f, 200.0f});
     GuiInputBridge bridge{root->GetEventDispatcher()};
 
-    shell::InputEvent gamepad;
-    gamepad.kind = shell::InputEventKind::GamepadButtonDown;
-    CHECK_FALSE(bridge.Dispatch(gamepad));
+    shell::InputEvent touch; // touch is not routed to the GUI yet (gamepads are, since G7)
+    touch.kind = shell::InputEventKind::TouchDown;
+    CHECK_FALSE(bridge.Dispatch(touch));
+    shell::InputEvent paddle; // a gamepad button the GUI does not take
+    paddle.kind = shell::InputEventKind::GamepadButtonDown;
+    paddle.padButton = shell::GamepadButton::LeftPaddle1;
+    CHECK_FALSE(bridge.Dispatch(paddle));
 }
 
 TEST_CASE("ShellClipboard: adapts the shell clipboard to gui::IClipboard and round-trips text")
@@ -321,4 +333,92 @@ TEST_CASE("bridge: PumpFromSurface carries keyboard modifiers into a click (Shif
 
     bridge.PumpFromSurface(surface);
     CHECK((seenMods & KeyModShift) != 0u); // Shift reached the widget via the poll path
+}
+
+namespace
+{
+    shell::InputEvent Pad(shell::InputEventKind kind, shell::GamepadButton button)
+    {
+        shell::InputEvent e;
+        e.kind = kind;
+        e.padButton = button;
+        return e;
+    }
+    shell::InputEvent Stick(shell::GamepadAxis axis, float value)
+    {
+        shell::InputEvent e;
+        e.kind = shell::InputEventKind::GamepadAxis;
+        e.padAxis = axis;
+        e.value = value;
+        return e;
+    }
+}
+
+TEST_CASE("bridge: the d-pad and the left stick move focus; a button runs its binding")
+{
+    auto root = MakeScene(core::Float2{200.0f, 200.0f});
+    auto top = core::MakeRef<Button>(core::DefaultAllocator());
+    auto bottom = core::MakeRef<Button>(core::DefaultAllocator());
+    top->SetSize(core::Float2{60.0f, 20.0f});
+    bottom->SetPosition(core::Float2{0.0f, 50.0f});
+    bottom->SetSize(core::Float2{60.0f, 20.0f});
+    root->AddChild(top.Get());
+    root->AddChild(bottom.Get());
+    EventDispatcher& d = *root->GetEventDispatcher();
+    GuiInputBridge bridge{&d};
+    d.SetFocusNode(top.Get());
+
+    CHECK(bridge.Dispatch(Pad(shell::InputEventKind::GamepadButtonDown, shell::GamepadButton::DPadDown)));
+    CHECK(d.GetFocusNode() == bottom.Get());
+    CHECK(d.IsHoldingDirection());
+    CHECK(bridge.Dispatch(Pad(shell::InputEventKind::GamepadButtonUp, shell::GamepadButton::DPadDown)));
+    CHECK_FALSE(d.IsHoldingDirection());
+
+    // The stick: past half way holds Up, a resting wobble near the threshold does not chatter.
+    CHECK(bridge.Dispatch(Stick(shell::GamepadAxis::LeftY, -0.8f)));
+    CHECK(d.GetFocusNode() == top.Get());
+    (void)bridge.Dispatch(Stick(shell::GamepadAxis::LeftY, -0.45f)); // still held (above release)
+    CHECK(d.IsHoldingDirection());
+    (void)bridge.Dispatch(Stick(shell::GamepadAxis::LeftY, -0.1f));
+    CHECK_FALSE(d.IsHoldingDirection());
+
+    // East through a binding.
+    bool back = false;
+    (void)root->OnCommand(core::StringView(u8"back"), [&](CommandEvent&) { back = true; });
+    REQUIRE(root->GetKeymap().Bind(core::StringView(u8"pad-east"), core::StringView(u8"back")));
+    CHECK(bridge.Dispatch(Pad(shell::InputEventKind::GamepadButtonDown, shell::GamepadButton::East)));
+    CHECK(back);
+}
+
+TEST_CASE("bridge: a keymap filled from the game's input map follows its bindings")
+{
+    namespace input = foundation::input;
+    input::InputMap map;
+    input::ActionSet menu;
+    menu.name = core::String(u8"Menu");
+    input::Action backAction;
+    backAction.name = core::String(u8"Back");
+    input::Binding escape;
+    escape.source = input::BindingSource::Key;
+    escape.code = static_cast<core::u32>(shell::KeyCode::Escape);
+    input::Binding east;
+    east.source = input::BindingSource::GamepadButton;
+    east.code = static_cast<core::u32>(shell::GamepadButton::East);
+    input::Binding stick; // an axis: not a keystroke, skipped
+    stick.source = input::BindingSource::GamepadAxis;
+    backAction.bindings.PushBack(escape);
+    backAction.bindings.PushBack(east);
+    backAction.bindings.PushBack(stick);
+    menu.actions.PushBack(backAction);
+    map.sets.PushBack(menu);
+
+    auto root = MakeScene(core::Float2{200.0f, 200.0f});
+    const InputMapCommand wanted[] = {{core::StringView(u8"Back"), core::StringView(u8"back")}};
+    CHECK(BindFromInputMap(root->GetKeymap(), map, core::Span<const InputMapCommand>(wanted, 1)) == 2u);
+    int backs = 0;
+    (void)root->OnCommand(core::StringView(u8"back"), [&](CommandEvent&) { ++backs; });
+    EventDispatcher& d = *root->GetEventDispatcher();
+    d.InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
+    d.InjectPadButton(PadButton::East);
+    CHECK(backs == 2);
 }

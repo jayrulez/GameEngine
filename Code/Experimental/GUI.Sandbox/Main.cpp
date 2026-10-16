@@ -442,8 +442,8 @@ void GUISandbox::LoadPages()
             std::fprintf(stderr, "GUISandbox: page %s did not load\n", reinterpret_cast<const char*>(xml.CStr()));
             continue;
         }
-        node->SetVisible(false);
-        m_content->GetContent()->AddChild(node.Get());
+        node->SetDisplayed(false); // out of the layout until shown
+        m_content->AddChild(node.Get());
         page.node = node.Get();
         String css = base;
         css += StringView(u8".css");
@@ -472,9 +472,12 @@ void GUISandbox::FillNativeHosts()
     // Controls: a radio group and a generated image.
     if (gui::Node* host = FindById(*m_shellNode, u8"controls-radios"))
     {
-        auto row = MakeRef<gui::LinearLayout>(AppRoot());
-        row->SetOrientation(gui::Orientation::Horizontal);
-        row->SetSpacing(10.0f);
+        auto row = MakeRef<gui::Panel>(AppRoot());
+        gui::LayoutStyle rowStyle = row->GetLayoutStyle();
+        rowStyle.Direction = gui::FlexDirection::Row;
+        rowStyle.ColumnGap = 10.0f;
+        rowStyle.AlignItems = gui::Align::Center;
+        row->SetLayoutStyle(rowStyle);
         row->SetSize(Float2{590.0f, 26.0f});
         const char8_t* choices[3] = {u8"Low", u8"Medium", u8"High"};
         for (const char8_t* choice : choices)
@@ -514,27 +517,31 @@ void GUISandbox::FillNativeHosts()
         host->AddChild(view.Get());
     }
 
-    // Layout: labels anchored to a box's corners and centre.
-    if (auto* relative = Cast<gui::RelativeLayout>(FindById(*m_shellNode, u8"layout-relative")))
+    // Layout: labels placed in a stack's corners and centre, each by its own alignment.
+    if (gui::Node* stack = FindById(*m_shellNode, u8"layout-relative"))
     {
         struct Pin
         {
             const char8_t* text;
-            u32 anchor;
+            gui::Align x;
+            gui::Align y;
         };
-        const Pin pins[5] = {{u8"top left", gui::AnchorLeft | gui::AnchorTop},
-                             {u8"top right", gui::AnchorRight | gui::AnchorTop},
-                             {u8"bottom left", gui::AnchorLeft | gui::AnchorBottom},
-                             {u8"bottom right", gui::AnchorRight | gui::AnchorBottom},
-                             {u8"centre", gui::AnchorCenter}};
+        const Pin pins[5] = {{u8"top left", gui::Align::Start, gui::Align::Start},
+                             {u8"top right", gui::Align::End, gui::Align::Start},
+                             {u8"bottom left", gui::Align::Start, gui::Align::End},
+                             {u8"bottom right", gui::Align::End, gui::Align::End},
+                             {u8"centre", gui::Align::Center, gui::Align::Center}};
         for (const Pin& pin : pins)
         {
             auto tag = MakeRef<gui::Label>(AppRoot());
             tag->SetSize(Float2{110.0f, 28.0f});
             tag->SetText(StringView(pin.text));
             tag->AddClass(u8"chip");
-            relative->AddChild(tag.Get());
-            relative->SetAnchor(tag.Get(), pin.anchor);
+            gui::LayoutStyle placed = tag->GetLayoutStyle();
+            placed.JustifySelf = pin.x;
+            placed.AlignSelf = pin.y;
+            tag->SetLayoutStyle(placed);
+            stack->AddChild(tag.Get());
         }
     }
 
@@ -708,7 +715,7 @@ void GUISandbox::ShowPage(StringView id)
     for (Page& page : m_pages)
     {
         const bool shown = page.id.AsView() == id;
-        page.node->SetVisible(shown);
+        page.node->SetDisplayed(shown);
         if (auto* button = Cast<gui::UIWidget>(page.navButton))
         {
             if (shown)
@@ -720,7 +727,6 @@ void GUISandbox::ShowPage(StringView id)
     m_current = String(id);
     if (m_content != nullptr)
     {
-        m_content->MeasureContent();
         m_content->SetScrollOffset(Float2{0.0f, 0.0f});
     }
 }

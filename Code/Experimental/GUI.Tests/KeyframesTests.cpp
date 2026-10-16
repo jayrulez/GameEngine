@@ -161,6 +161,7 @@ namespace
             root->AddChild(w.Get());
             mgr.SetStyleSheet(CSSParser::Parse(core::StringView(css)));
             mgr.ApplyTree(*root.Get());
+            root->UpdateLayout(); // sizes are the layout's, from the style
         }
     };
 }

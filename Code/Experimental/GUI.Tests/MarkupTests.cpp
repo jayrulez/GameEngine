@@ -28,18 +28,18 @@ namespace
 TEST_CASE("markup: inflates a nested tree with identity + structural attributes")
 {
     auto root = Load(u8R"(
-        <LinearLayout orientation="vertical" spacing="6" id="root">
+        <Panel flex-direction="row" gap="6" id="root">
             <Label text="Title" text-align="center"/>
             <Button text="OK" class="accent primary"/>
-        </LinearLayout>
+        </Panel>
     )");
     REQUIRE(root.Get() != nullptr);
 
-    auto* layout = core::Cast<LinearLayout>(root.Get());
+    auto* layout = core::Cast<Panel>(root.Get());
     REQUIRE(layout != nullptr);
     CHECK(layout->GetId() == SV(u8"root"));
-    CHECK(layout->GetOrientation() == Orientation::Vertical);
-    CHECK(layout->GetSpacing() == doctest::Approx(6.0f));
+    CHECK(layout->GetLayoutStyle().Direction == FlexDirection::Row);
+    CHECK(layout->GetLayoutStyle().ColumnGap == doctest::Approx(6.0f));
     REQUIRE(layout->ChildCount() == 2);
 
     auto* title = core::Cast<Label>(layout->GetChildAt(0));
@@ -61,6 +61,7 @@ TEST_CASE("markup: unclaimed attributes are applied as inline CSS")
     REQUIRE(root.Get() != nullptr);
     auto* label = core::Cast<Label>(root.Get());
     REQUIRE(label != nullptr);
+    (void)label->UpdateLayout();
 
     CHECK(label->GetSize().x == doctest::Approx(120.0f));
     CHECK(label->GetSize().y == doctest::Approx(30.0f));
@@ -77,6 +78,7 @@ TEST_CASE("markup: CSS length units work in markup (via the applier)")
     MarkupLoader loader(elements, foundation::core::DefaultAllocator(), nullptr, nullptr, ctx);
     auto root = loader.LoadFromString(SV(u8R"(<Button width="2rem"/>)"));
     REQUIRE(root.Get() != nullptr);
+    (void)root->UpdateLayout();
     CHECK(core::Cast<Button>(root.Get())->GetSize().x == doctest::Approx(20.0f));
 }
 
@@ -85,14 +87,14 @@ TEST_CASE("markup: an unknown root element yields null; unknown children are ski
     CHECK(Load(u8R"(<NotAWidget/>)").Get() == nullptr);
 
     auto root =
-        Load(u8R"(<LinearLayout><Label text="a"/><Bogus/><Label text="b"/></LinearLayout>)");
+        Load(u8R"(<Panel><Label text="a"/><Bogus/><Label text="b"/></Panel>)");
     REQUIRE(root.Get() != nullptr);
     CHECK(root->ChildCount() == 2); // the <Bogus/> child was skipped
 }
 
 TEST_CASE("markup: a parse error yields null")
 {
-    CHECK(Load(u8R"(<LinearLayout><Label text="x")").Get() == nullptr); // unterminated
+    CHECK(Load(u8R"(<Panel><Label text="x")").Get() == nullptr); // unterminated
 }
 
 TEST_CASE("markup: {{name}} binds to the GUI's data model, two-way where the user changes it")
@@ -106,12 +108,12 @@ TEST_CASE("markup: {{name}} binds to the GUI's data model, two-way where the use
     MarkupLoader loader(elements, core::DefaultAllocator());
     loader.SetDataModel(scene->GetContext().GetDataRef());
     auto tree = loader.LoadFromString(SV(u8R"(
-        <LinearLayout orientation="vertical">
+        <Panel>
             <Label text="Score: {{ score }} of {{max}}"/>
             <Slider value="{{volume}}"/>
             <Label text="{{volume}}"/>
             <Label text="{{unclosed"/>
-        </LinearLayout>
+        </Panel>
     )"));
     REQUIRE(tree.Get() != nullptr);
     scene->AddChild(tree.Get());
@@ -136,14 +138,14 @@ TEST_CASE("markup: {{name}} binds to the GUI's data model, two-way where the use
 TEST_CASE("markup: widget properties reflected with CSS names are markup attributes")
 {
     auto tree = Load(u8R"(
-        <LinearLayout orientation="vertical">
+        <Panel>
             <TextField placeholder="Your name" max-length="12" tooltip="Who are you?"/>
-            <GridLayout columns="3" spacing="6"/>
-            <ScrollView auto-measure="true"/>
+            <Panel display="grid" grid-template-columns="1fr 1fr 1fr" gap="6"/>
+            <ScrollView/>
             <ComboBox items="Apple | Banana|Cherry"/>
             <ListBox items="One|Two"/>
             <Window title="Tools"/>
-        </LinearLayout>
+        </Panel>
     )");
     REQUIRE(tree.Get() != nullptr);
     REQUIRE(tree->ChildCount() == 6u);
@@ -152,11 +154,12 @@ TEST_CASE("markup: widget properties reflected with CSS names are markup attribu
     CHECK(field->GetPlaceholder() == SV(u8"Your name"));
     CHECK(field->GetMaxLength() == 12u); // a whole number, converted from the attribute's text
     CHECK(field->GetTooltipText() == SV(u8"Who are you?"));
-    auto* grid = core::Cast<GridLayout>(tree->GetChildAt(1));
+    auto* grid = core::Cast<Panel>(tree->GetChildAt(1)); // layout attributes are inline CSS
     REQUIRE(grid != nullptr);
-    CHECK(grid->GetColumns() == 3u);
-    CHECK(grid->GetVerticalSpacing() == doctest::Approx(6.0f));
-    CHECK(core::Cast<ScrollView>(tree->GetChildAt(2))->IsAutoMeasureContent());
+    CHECK(grid->GetLayoutStyle().Kind == Display::Grid);
+    CHECK(grid->GetLayoutStyle().Columns.Size() == 3u);
+    CHECK(grid->GetLayoutStyle().RowGap == doctest::Approx(6.0f));
+    CHECK(core::Cast<ScrollView>(tree->GetChildAt(2))->IsScrollContainer());
     auto* combo = core::Cast<ComboBox>(tree->GetChildAt(3)); // creatable by tag now
     REQUIRE(combo != nullptr);
     REQUIRE(combo->ItemCount() == 3u);
@@ -168,16 +171,16 @@ TEST_CASE("markup: widget properties reflected with CSS names are markup attribu
 TEST_CASE("markup: a scroller's and a window's children are their content")
 {
     auto tree = Load(u8R"(
-        <LinearLayout>
+        <Panel>
             <ScrollView><Label text="scrolled"/></ScrollView>
             <Window><Label text="inside"/></Window>
-        </LinearLayout>
+        </Panel>
     )");
     REQUIRE(tree.Get() != nullptr);
     auto* scroll = core::Cast<ScrollView>(tree->GetChildAt(0));
     auto* window = core::Cast<Window>(tree->GetChildAt(1));
     REQUIRE((scroll != nullptr && window != nullptr));
-    REQUIRE(scroll->GetContent()->ChildCount() == 1u);
-    CHECK(core::Cast<Label>(scroll->GetContent()->GetChildAt(0))->GetText() == SV(u8"scrolled"));
+    REQUIRE(scroll->ChildCount() == 1u);
+    CHECK(core::Cast<Label>(scroll->GetChildAt(0))->GetText() == SV(u8"scrolled"));
     REQUIRE(window->GetContent()->ChildCount() == 1u);
 }

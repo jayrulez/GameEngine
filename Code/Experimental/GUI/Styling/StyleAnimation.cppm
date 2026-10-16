@@ -52,6 +52,7 @@ export namespace experimental::gui
         {
         case StyleGrammar::Number:
         case StyleGrammar::Length:
+        case StyleGrammar::Size: // lengths move; auto and the content sizes switch
         case StyleGrammar::Color:
         case StyleGrammar::Shadows:
         case StyleGrammar::Transforms:

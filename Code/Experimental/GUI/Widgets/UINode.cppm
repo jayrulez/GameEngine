@@ -37,22 +37,6 @@ export namespace experimental::gui
         UINode() = default;
 
         // Content padding (inset for content/children).
-        void SetPadding(Thickness padding)
-        {
-            m_padding = padding;
-            Invalidate();
-        }
-        [[nodiscard]] Thickness GetPadding() const noexcept { return m_padding; }
-
-        // The local bounds inset by padding - where content/text goes.
-        [[nodiscard]] Rect GetContentBounds() const
-        {
-            const Rect b = GetLocalBounds();
-            return Rect{b.x + m_padding.Left, b.y + m_padding.Top,
-                        core::Max(0.0f, b.width - m_padding.TotalHorizontal()),
-                        core::Max(0.0f, b.height - m_padding.TotalVertical())};
-        }
-
         // Skin = a state-aware background (typically a StateListDrawable). Node::Draw draws
         // the background with GetControlState(), so the skin reacts to hover/press/focus.
         void SetSkin(RefPtr<Drawable> skin) { SetBackground(core::Move(skin)); }
@@ -97,7 +81,5 @@ export namespace experimental::gui
             return ControlState::Normal;
         }
 
-    protected:
-        Thickness m_padding{};
     };
 }

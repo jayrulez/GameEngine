@@ -1,53 +1,53 @@
-<LinearLayout id="page-layout" class="page" orientation="vertical" spacing="18" wrap-content="true">
+<Panel id="page-layout" class="page" gap="18">
     <Label class="page-title" text="Layout"/>
     <Label class="page-lead" wrap="true"
            text="Containers lay out their children once a frame, only when something asked: a row or a column, a flex line, a grid inside a scroller, and anchors."/>
 
-    <LinearLayout class="section" orientation="vertical" spacing="12" wrap-content="true">
+    <Panel class="section" gap="12">
         <Label class="section-title" text="LinearLayout"/>
-        <LinearLayout class="row" orientation="horizontal" spacing="10">
+        <Panel class="row" flex-direction="row" align-items="start" gap="10">
             <Label class="chip" text="one"/><Label class="chip" text="two"/><Label class="chip" text="three"/>
-        </LinearLayout>
+        </Panel>
         <Label class="caption" text="Horizontal, spacing 10; the page itself is a vertical one that wraps its height."/>
-    </LinearLayout>
+    </Panel>
 
-    <LinearLayout class="section" orientation="vertical" spacing="10" wrap-content="true">
+    <Panel class="section" gap="10">
         <Label class="section-title" text="FlexLayout: justify-content"/>
         <Label class="caption" text="start"/>
-        <FlexLayout class="flex" direction="row" justify-content="start" align-items="center" gap="8">
+        <Panel class="flex" flex-direction="row" justify-content="start" align-items="center" gap="8">
             <Label class="chip" text="A"/><Label class="chip" text="B"/><Label class="chip" text="C"/>
-        </FlexLayout>
+        </Panel>
         <Label class="caption" text="center"/>
-        <FlexLayout class="flex" direction="row" justify-content="center" align-items="center" gap="8">
+        <Panel class="flex" flex-direction="row" justify-content="center" align-items="center" gap="8">
             <Label class="chip" text="A"/><Label class="chip" text="B"/><Label class="chip" text="C"/>
-        </FlexLayout>
+        </Panel>
         <Label class="caption" text="end"/>
-        <FlexLayout class="flex" direction="row" justify-content="end" align-items="center" gap="8">
+        <Panel class="flex" flex-direction="row" justify-content="end" align-items="center" gap="8">
             <Label class="chip" text="A"/><Label class="chip" text="B"/><Label class="chip" text="C"/>
-        </FlexLayout>
+        </Panel>
         <Label class="caption" text="space-between"/>
-        <FlexLayout class="flex" direction="row" justify-content="space-between" align-items="center">
+        <Panel class="flex" flex-direction="row" justify-content="space-between" align-items="center">
             <Label class="chip" text="A"/><Label class="chip" text="B"/><Label class="chip" text="C"/>
-        </FlexLayout>
-    </LinearLayout>
+        </Panel>
+    </Panel>
 
-    <LinearLayout class="section" orientation="vertical" spacing="12" wrap-content="true">
+    <Panel class="section" gap="12">
         <Label class="section-title" text="GridLayout in a ScrollView"/>
-        <ScrollView class="grid-scroll" auto-measure="true">
-            <GridLayout class="grid" columns="4" spacing="8">
+        <ScrollView class="grid-scroll">
+            <Panel class="grid" display="grid" grid-template-columns="repeat(4, 1fr)" justify-items="start" align-items="start" gap="8">
                 <Label class="cell" text="1"/><Label class="cell" text="2"/><Label class="cell" text="3"/><Label class="cell" text="4"/>
                 <Label class="cell" text="5"/><Label class="cell" text="6"/><Label class="cell" text="7"/><Label class="cell" text="8"/>
                 <Label class="cell" text="9"/><Label class="cell" text="10"/><Label class="cell" text="11"/><Label class="cell" text="12"/>
                 <Label class="cell" text="13"/><Label class="cell" text="14"/><Label class="cell" text="15"/><Label class="cell" text="16"/>
                 <Label class="cell" text="17"/><Label class="cell" text="18"/><Label class="cell" text="19"/><Label class="cell" text="20"/>
                 <Label class="cell" text="21"/><Label class="cell" text="22"/><Label class="cell" text="23"/><Label class="cell" text="24"/>
-            </GridLayout>
+            </Panel>
         </ScrollView>
         <Label class="caption" text="Scroll with the wheel, the bar, or focus it and use the arrow keys."/>
-    </LinearLayout>
+    </Panel>
 
-    <LinearLayout class="section" orientation="vertical" spacing="12" wrap-content="true">
+    <Panel class="section" gap="12">
         <Label class="section-title" text="RelativeLayout: anchors"/>
-        <RelativeLayout id="layout-relative" class="relative"/>
-    </LinearLayout>
-</LinearLayout>
+        <Panel id="layout-relative" class="relative" display="stack" justify-items="start" align-items="start"/>
+    </Panel>
+</Panel>

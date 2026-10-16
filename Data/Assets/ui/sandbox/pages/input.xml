@@ -1,44 +1,44 @@
-<LinearLayout id="page-input" class="page" orientation="vertical" spacing="18" wrap-content="true">
+<Panel id="page-input" class="page" gap="18">
     <Label class="page-title" text="Input"/>
     <Label class="page-lead" wrap="true"
            text="An event goes down from the root and back up to it: a container hears what its children leave, :hover and :active hold for every node under the pointer, and a script handler is given the event."/>
 
-    <LinearLayout class="section" orientation="vertical" spacing="12" wrap-content="true">
+    <Panel class="section" gap="12">
         <Label class="section-title" text="Hover and press reach the containers"/>
-        <LinearLayout class="input-card" orientation="horizontal" spacing="12">
+        <Panel class="input-card" flex-direction="row" align-items="start" gap="12">
             <Button class="btn" text="Inside"/>
             <Button class="btn" text="Also inside"/>
-        </LinearLayout>
+        </Panel>
         <Label class="caption" text="The card lights while a button in it is under the pointer, and dips while one is pressed."/>
-    </LinearLayout>
+    </Panel>
 
-    <LinearLayout class="section" orientation="vertical" spacing="12" wrap-content="true">
+    <Panel class="section" gap="12">
         <Label class="section-title" text="A clickable card with a button in it"/>
-        <LinearLayout id="input-click-card" class="input-card clickable" orientation="horizontal" spacing="12">
+        <Panel id="input-click-card" class="input-card clickable" flex-direction="row" align-items="start" gap="12">
             <Button id="input-card-button" class="btn" text="The button"/>
             <Label class="caption" width="300" height="36" text="the card (click anywhere else on it)"/>
-        </LinearLayout>
+        </Panel>
         <Label class="caption" text="Card clicks: {{cardClicks}}.   Button clicks: {{buttonClicks}} (a click the button takes stops there)."/>
-    </LinearLayout>
+    </Panel>
 
-    <LinearLayout class="section" orientation="vertical" spacing="12" wrap-content="true">
+    <Panel class="section" gap="12">
         <Label class="section-title" text="Events reach scripts"/>
-        <LinearLayout id="input-pad" class="input-pad"/>
+        <Panel id="input-pad" class="input-pad"/>
         <Label class="caption" text="Pressed at {{padX}}, {{padY}} in the pad, press {{padClicks}} of a run (double, triple)."/>
-    </LinearLayout>
+    </Panel>
 
-    <LinearLayout class="section" orientation="vertical" spacing="12" wrap-content="true">
+    <Panel class="section" gap="12">
         <Label class="section-title" text="pointer-events and cursor"/>
-        <LinearLayout class="row" orientation="horizontal" spacing="12">
-            <RelativeLayout class="glass-stage">
+        <Panel class="row" flex-direction="row" align-items="start" gap="12">
+            <Panel class="glass-stage" display="stack" justify-items="start" align-items="start">
                 <Button id="input-under-glass" class="btn" text="Under glass"/>
                 <Label class="input-glass" text=""/>
-            </RelativeLayout>
+            </Panel>
             <Label class="chip cursor-pointer" text="pointer"/>
             <Label class="chip cursor-move" text="move"/>
             <Label class="chip cursor-not-allowed" text="not-allowed"/>
             <Label class="chip cursor-crosshair" text="crosshair"/>
-        </LinearLayout>
+        </Panel>
         <Label class="caption" text="Glass clicks reached the button: {{glassClicks}}.   Hover the chips for their cursors."/>
-    </LinearLayout>
-</LinearLayout>
+    </Panel>
+</Panel>

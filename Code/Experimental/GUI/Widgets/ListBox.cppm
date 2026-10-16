@@ -24,7 +24,7 @@ import :drawable;
 import :rectangle_drawable;
 import :label;
 import :ui_widget;
-import :scroll_view;
+import :layout_style;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -115,8 +115,8 @@ export namespace experimental::gui
             // Opaque panel background so the list (and any dropdown built on it) paints over
             // whatever is behind it. Override with SetBackground for a themed look.
             SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_panelColor));
-            m_scroll = core::MakeRef<ScrollView>(MemoryAllocator());
-            AddChild(m_scroll.Get());
+            // Its rows stacked in a column, as wide as the list, scrolling when they overflow it.
+            EditLayoutStyle([](LayoutStyle& s) { s.OverflowY = Overflow::Auto; });
         }
 
         void SetFont(fonts::CachedFont* font)
@@ -130,7 +130,8 @@ export namespace experimental::gui
         void SetItemHeight(f32 height)
         {
             m_itemHeight = core::Max(1.0f, height);
-            Relayout();
+            for (ListBoxItem* item : m_items)
+                item->EditLayoutStyle([this](LayoutStyle& s) { s.Height = LayoutLength::Px(m_itemHeight); });
         }
         [[nodiscard]] f32 GetItemHeight() const noexcept { return m_itemHeight; }
 
@@ -145,17 +146,16 @@ export namespace experimental::gui
             item->SetIndex(static_cast<i32>(m_items.Size()));
             ListBox* self = this;
             item->SetOnPicked([self](i32 index) { self->SetSelectedIndex(index); });
-            m_scroll->GetContent()->AddChild(item.Get());
+            item->EditLayoutStyle([this](LayoutStyle& s) { s.Height = LayoutLength::Px(m_itemHeight); });
+            AddChild(item.Get());
             m_items.PushBack(item.Get());
-            Relayout();
         }
 
         void Clear()
         {
-            m_scroll->GetContent()->RemoveAllChildren();
+            RemoveAllChildren();
             m_items.Clear();
             m_selected = -1;
-            Relayout();
         }
 
         [[nodiscard]] usize ItemCount() const noexcept { return m_items.Size(); }
@@ -195,7 +195,7 @@ export namespace experimental::gui
             if (m_selected >= 0)
             {
                 m_items[static_cast<usize>(m_selected)]->SetSelectedRow(true);
-                ScrollIntoView(m_selected);
+                ScrollToItem(m_selected);
             }
             if (m_onChanged)
                 m_onChanged(m_selected);
@@ -227,10 +227,8 @@ export namespace experimental::gui
                 it->SetHighlightColor(color);
         }
 
-        [[nodiscard]] ScrollView* GetScrollView() const noexcept { return m_scroll.Get(); }
 
     protected:
-        void OnSizeChange() override { Relayout(); }
 
         void OnKeyDown(const KeyEvent& event) override
         {
@@ -269,36 +267,20 @@ export namespace experimental::gui
         }
 
     private:
-        void Relayout()
-        {
-            const Rect box = GetContentBounds();
-            m_scroll->SetPosition(core::Float2{box.x, box.y});
-            m_scroll->SetSize(core::Float2{box.width, box.height});
-
-            const f32 rowW = m_scroll->Viewport().width;
-            for (usize i = 0; i < m_items.Size(); ++i)
-            {
-                m_items[i]->SetPosition(core::Float2{0.0f, static_cast<f32>(i) * m_itemHeight});
-                m_items[i]->SetSize(core::Float2{rowW, m_itemHeight});
-            }
-            m_scroll->SetContentSize(
-                core::Float2{rowW, static_cast<f32>(m_items.Size()) * m_itemHeight});
-        }
-
-        void ScrollIntoView(i32 index)
+        // Scrolls by the least that shows row `index` (from its index: the rows may not be laid out yet).
+        void ScrollToItem(i32 index)
         {
             const f32 top = static_cast<f32>(index) * m_itemHeight;
             const f32 bottom = top + m_itemHeight;
-            const f32 viewH = m_scroll->Viewport().height;
-            const core::Float2 off = m_scroll->GetScrollOffset();
+            const f32 viewH = GetContentBounds().height;
+            const core::Float2 off = GetScrollOffset();
             if (top < off.y)
-                m_scroll->SetScrollOffset(core::Float2{off.x, top});
+                SetScrollOffset(core::Float2{off.x, top});
             else if (bottom > off.y + viewH)
-                m_scroll->SetScrollOffset(core::Float2{off.x, bottom - viewH});
+                SetScrollOffset(core::Float2{off.x, bottom - viewH});
         }
 
-        RefPtr<ScrollView> m_scroll;
-        Array<ListBoxItem*> m_items; // non-owning (owned by the scroll content)
+        Array<ListBoxItem*> m_items; // non-owning (its children)
         fonts::CachedFont* m_font = nullptr;
         f32 m_itemHeight = 24.0f;
         i32 m_selected = -1;

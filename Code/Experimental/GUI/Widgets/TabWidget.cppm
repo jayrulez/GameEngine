@@ -4,7 +4,7 @@
 // GUI - :tab_widget partition
 //
 // TabWidget: a row of tab buttons over a content area that shows the selected tab's panel.
-// Modeled on eepp's UITabWidget (role only), built by composition: a horizontal LinearLayout
+// Modeled on eepp's UITabWidget (role only), built by composition: a flex row Panel
 // of Buttons (the tab bar) plus a clipped content host that shows exactly one panel at a time.
 // Clicking a tab (or SelectTab) swaps the visible panel and highlights the active tab.
 
@@ -19,7 +19,8 @@ import foundation.fonts; // CachedFont
 import :rect;
 import :node;
 import :button;
-import :linear_layout;
+import :layout_style;
+import :panel;
 import :ui_widget;
 
 using namespace foundation::core;
@@ -35,9 +36,14 @@ export namespace experimental::gui
         TabWidget()
         {
             SetTag(core::StringView(u8"tabwidget"));
-            m_tabBar = core::MakeRef<LinearLayout>(MemoryAllocator());
-            m_tabBar->SetOrientation(Orientation::Horizontal);
-            m_tabBar->SetSpacing(2.0f);
+            m_tabBar = core::MakeRef<Panel>(MemoryAllocator());
+            m_tabBar->EditLayoutStyle(
+                [](LayoutStyle& s)
+                {
+                    s.Direction = FlexDirection::Row;
+                    s.ColumnGap = 2.0f;
+                    s.AlignItems = Align::Start;
+                });
             AddChild(m_tabBar.Get());
 
             m_contentHost = core::MakeRef<UIWidget>(MemoryAllocator());
@@ -156,7 +162,7 @@ export namespace experimental::gui
             Node* Content;
         };
 
-        RefPtr<LinearLayout> m_tabBar;
+        RefPtr<Panel> m_tabBar;
         RefPtr<UIWidget> m_contentHost;
         Array<Tab> m_tabs; // buttons owned by the bar, content by the host
         fonts::CachedFont* m_font = nullptr;

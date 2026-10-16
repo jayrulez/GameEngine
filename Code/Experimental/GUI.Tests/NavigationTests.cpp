@@ -336,9 +336,9 @@ TEST_CASE("navigation: focus moved into a scroller's hidden part scrolls it into
     far->SetId(SV(u8"far"));
     far->SetPosition(core::Float2{0.0f, 300.0f});
     far->SetSize(core::Float2{60.0f, 30.0f});
-    scroll->GetContent()->AddChild(top.Get());
-    scroll->GetContent()->AddChild(far.Get());
-    scroll->SetContentSize(core::Float2{200.0f, 400.0f});
+    scroll->AddChild(top.Get());
+    scroll->AddChild(far.Get());
+    bed.root->UpdateLayout();
     bed.d.SetFocusNode(top.Get());
     bed.Key(KeyCode::Down);
     CHECK(bed.d.GetFocusNode() == far.Get());

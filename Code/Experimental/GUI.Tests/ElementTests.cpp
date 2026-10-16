@@ -119,7 +119,7 @@ TEST_CASE("elements: the registry takes a library's widgets and refuses what is 
 {
     RegisterGuiElements();
     CHECK(ElementTypes::Find(u8"Button") == &Button::StaticType());
-    CHECK(ElementTypes::Find(u8"FlexLayout") == &FlexLayout::StaticType());
+    CHECK(ElementTypes::Find(u8"Panel") == &Panel::StaticType());
 
     // A library's widget under its namespaced tag.
     REQUIRE(ElementTypes::Register(HealthBar::StaticType()));
@@ -142,7 +142,7 @@ TEST_CASE("elements: a GUI's element set decides what its markup may create")
 {
     RegisterGuiElements();
     REQUIRE(ElementTypes::Register(HealthBar::StaticType()));
-    const char8_t* markup = u8R"(<LinearLayout><Label text="hp"/><game:HealthBar/><Hp/></LinearLayout>)";
+    const char8_t* markup = u8R"(<Panel><Label text="hp"/><game:HealthBar/><Hp/></Panel>)";
 
     // Everything registered, a library's widget included; an unknown tag is left out.
     {
@@ -156,7 +156,7 @@ TEST_CASE("elements: a GUI's element set decides what its markup may create")
     // Only what the set allows, under its own aliases.
     {
         ElementSet limited = ElementSet::None();
-        limited.Allow(u8"LinearLayout");
+        limited.Allow(u8"Panel");
         limited.Allow(u8"game:HealthBar");
         limited.Alias(u8"Hp", u8"game:HealthBar");
         MarkupLoader loader(limited, core::DefaultAllocator());

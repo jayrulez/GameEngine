@@ -71,6 +71,7 @@ export namespace experimental::gui
         TextOutline, ///< `<width> [color]`, a Shadows value (the width as the spread)
         TextGlow,    ///< `<radius> [color]`, a Shadows value (the radius as the blur)
         Text, ///< kept as written (font-family, transition, animation)
+        Size, ///< a length or percentage, or auto, fit-content, min-content, max-content, none (a Keyword)
     };
 
     struct StylePropertySpec
@@ -88,12 +89,12 @@ export namespace experimental::gui
     {
         static constexpr StylePropertySpec kProperties[] = {
             {u8"opacity", StyleGrammar::Number, u8"1"},
-            {u8"width", StyleGrammar::Length},
-            {u8"height", StyleGrammar::Length},
-            {u8"min-width", StyleGrammar::Length},
-            {u8"min-height", StyleGrammar::Length},
-            {u8"max-width", StyleGrammar::Length},
-            {u8"max-height", StyleGrammar::Length},
+            {u8"width", StyleGrammar::Size},
+            {u8"height", StyleGrammar::Size},
+            {u8"min-width", StyleGrammar::Size},
+            {u8"min-height", StyleGrammar::Size},
+            {u8"max-width", StyleGrammar::Size},
+            {u8"max-height", StyleGrammar::Size},
             {u8"padding-top", StyleGrammar::Length, u8"0"},
             {u8"padding-right", StyleGrammar::Length, u8"0"},
             {u8"padding-bottom", StyleGrammar::Length, u8"0"},
@@ -136,7 +137,40 @@ export namespace experimental::gui
             {u8"text-glow", StyleGrammar::TextGlow},
             {u8"backdrop-filter", StyleGrammar::Filters, u8"none"},
             {u8"mix-blend-mode", StyleGrammar::Keyword, u8"normal"},
-            {u8"overflow", StyleGrammar::Keyword},
+            // Layout (E2 of Specs/gui-lab-evolution.md): the node's box, out of flow, how it lays out
+            // its children, and how its container places it.
+            {u8"overflow-x", StyleGrammar::Keyword, u8"visible"},
+            {u8"overflow-y", StyleGrammar::Keyword, u8"visible"},
+            {u8"box-sizing", StyleGrammar::Keyword},
+            {u8"display", StyleGrammar::Keyword},
+            {u8"position", StyleGrammar::Keyword},
+            {u8"top", StyleGrammar::Size},
+            {u8"right", StyleGrammar::Size},
+            {u8"bottom", StyleGrammar::Size},
+            {u8"left", StyleGrammar::Size},
+            {u8"z-index", StyleGrammar::Number},
+            {u8"flex-direction", StyleGrammar::Keyword},
+            {u8"flex-wrap", StyleGrammar::Keyword},
+            {u8"justify-content", StyleGrammar::Keyword},
+            {u8"align-items", StyleGrammar::Keyword},
+            {u8"align-content", StyleGrammar::Keyword},
+            {u8"justify-items", StyleGrammar::Keyword},
+            {u8"row-gap", StyleGrammar::Length},
+            {u8"column-gap", StyleGrammar::Length},
+            {u8"flex-grow", StyleGrammar::Number},
+            {u8"flex-shrink", StyleGrammar::Number},
+            {u8"flex-basis", StyleGrammar::Size},
+            {u8"align-self", StyleGrammar::Keyword},
+            {u8"justify-self", StyleGrammar::Keyword},
+            {u8"order", StyleGrammar::Number},
+            {u8"grid-template-columns", StyleGrammar::Text},
+            {u8"grid-template-rows", StyleGrammar::Text},
+            {u8"grid-auto-columns", StyleGrammar::Text},
+            {u8"grid-auto-rows", StyleGrammar::Text},
+            {u8"grid-auto-flow", StyleGrammar::Keyword},
+            {u8"grid-column", StyleGrammar::Text},
+            {u8"grid-row", StyleGrammar::Text},
+            {u8"dock", StyleGrammar::Keyword},
             {u8"transition-property", StyleGrammar::Text},
             {u8"transition-duration", StyleGrammar::Text},
             {u8"transition-timing-function", StyleGrammar::Text},
@@ -183,6 +217,21 @@ export namespace experimental::gui
             {
                 out.Kind = StyleValueKind::ColorValue;
                 out.ColorValue = c.Value();
+                return true;
+            }
+            return false;
+        case StyleGrammar::Size:
+            if (Optional<LengthValue> l = ParseLengthValue(v); l.HasValue())
+            {
+                out.Kind = StyleValueKind::Length;
+                out.Length = l.Value();
+                return true;
+            }
+            if (v == core::StringView(u8"auto") || v == core::StringView(u8"fit-content") || v == core::StringView(u8"min-content") ||
+                v == core::StringView(u8"max-content") || v == core::StringView(u8"none"))
+            {
+                out.Kind = StyleValueKind::Keyword;
+                out.Keyword = core::String(v);
                 return true;
             }
             return false;
@@ -367,6 +416,82 @@ export namespace experimental::gui
             return sides(u8"border-", u8"-style");
         if (name == core::StringView(u8"padding"))
             return sides(u8"padding-", u8"");
+        if (name == core::StringView(u8"inset"))
+        {
+            const Optional<Array<core::StringView>> parts =
+                ParseSides<core::StringView>(value, [](core::StringView t) { return Optional<core::StringView>(t); });
+            if (!parts.HasValue())
+                return false;
+            const char8_t* const kInsets[4] = {u8"top", u8"right", u8"bottom", u8"left"};
+            for (usize k = 0; k < 4; ++k)
+                detail::Push(out, core::StringView(kInsets[k]), parts.Value()[k]);
+            return true;
+        }
+        if (name == core::StringView(u8"overflow") || name == core::StringView(u8"gap"))
+        {
+            // One value for both axes, or two: overflow's x then y, gap's row then column.
+            const Array<core::StringView> parts = SplitTopLevel(value, u8' ');
+            if (parts.IsEmpty() || parts.Size() > 2)
+                return false;
+            const bool overflow = name == core::StringView(u8"overflow");
+            detail::Push(out, core::StringView(overflow ? u8"overflow-x" : u8"row-gap"), parts[0]);
+            detail::Push(out, core::StringView(overflow ? u8"overflow-y" : u8"column-gap"), parts[parts.Size() - 1]);
+            return true;
+        }
+        if (name == core::StringView(u8"flex"))
+        {
+            // none, auto, <grow>, <grow> <shrink>, <grow> <shrink> <basis>, <grow> <basis>, <basis>.
+            const Array<core::StringView> parts = SplitTopLevel(value, u8' ');
+            core::StringView grow = core::StringView(u8"0"), shrink = core::StringView(u8"1"), basis = core::StringView(u8"auto");
+            if (parts.Size() == 1 && parts[0] == core::StringView(u8"none"))
+                shrink = core::StringView(u8"0");
+            else if (parts.Size() == 1 && parts[0] == core::StringView(u8"auto"))
+                grow = core::StringView(u8"1");
+            else
+            {
+                // A unitless number is grow, then shrink; anything else is the basis.
+                const auto plainNumber = [](core::StringView t)
+                {
+                    if (t.Size() == 0)
+                        return false;
+                    for (usize i = 0; i < t.Size(); ++i)
+                        if (!((t[i] >= u8'0' && t[i] <= u8'9') || t[i] == u8'.' || t[i] == u8'-' || t[i] == u8'+'))
+                            return false;
+                    return true;
+                };
+                usize numbers = 0;
+                for (const core::StringView part : parts)
+                {
+                    if (plainNumber(part) && numbers == 0)
+                    {
+                        grow = part;
+                        basis = core::StringView(u8"0px"); // `flex: 1` grows from nothing
+                        ++numbers;
+                    }
+                    else if (plainNumber(part) && numbers == 1)
+                    {
+                        shrink = part;
+                        ++numbers;
+                    }
+                    else
+                        basis = part;
+                }
+            }
+            detail::Push(out, core::StringView(u8"flex-grow"), grow);
+            detail::Push(out, core::StringView(u8"flex-shrink"), shrink);
+            detail::Push(out, core::StringView(u8"flex-basis"), basis);
+            return true;
+        }
+        if (name == core::StringView(u8"flex-flow"))
+        {
+            for (const core::StringView part : SplitTopLevel(value, u8' '))
+            {
+                const bool wrap = part == core::StringView(u8"wrap") || part == core::StringView(u8"nowrap") ||
+                                  part == core::StringView(u8"wrap-reverse");
+                detail::Push(out, core::StringView(wrap ? u8"flex-wrap" : u8"flex-direction"), part);
+            }
+            return true;
+        }
         if (name == core::StringView(u8"margin"))
             return sides(u8"margin-", u8"");
         if (name == core::StringView(u8"border-radius"))

@@ -1,36 +1,36 @@
-<LinearLayout id="page-styling" class="page" orientation="vertical" spacing="18" wrap-content="true">
+<Panel id="page-styling" class="page" gap="18">
     <Label class="page-title" text="Styling"/>
     <Label class="page-lead" wrap="true"
            text="Box properties from the sheet: gradients, several shadows, a border per side, radii, transforms about an origin, and var() inside any of them. Each card is styled by its classes alone."/>
 
-    <LinearLayout class="section" orientation="vertical" spacing="12" wrap-content="true">
+    <Panel class="section" gap="12">
         <Label class="section-title" text="Backgrounds"/>
-        <LinearLayout class="card-row" orientation="horizontal" spacing="16">
+        <Panel class="card-row" flex-direction="row" align-items="start" gap="16">
             <Label class="card bg-linear" text="linear"/>
             <Label class="card bg-radial" text="radial"/>
             <Label class="card bg-conic" text="conic"/>
             <Label class="card bg-stripes" text="repeating"/>
-        </LinearLayout>
-    </LinearLayout>
+        </Panel>
+    </Panel>
 
-    <LinearLayout class="section" orientation="vertical" spacing="12" wrap-content="true">
+    <Panel class="section" gap="12">
         <Label class="section-title" text="Borders, radii and shadows"/>
-        <LinearLayout class="card-row" orientation="horizontal" spacing="16">
+        <Panel class="card-row" flex-direction="row" align-items="start" gap="16">
             <Label class="card sides" text="per side"/>
             <Label class="card rounded" text="radii"/>
             <Label class="card shadows" text="shadows"/>
             <Label class="card inset" text="inset"/>
-        </LinearLayout>
-    </LinearLayout>
+        </Panel>
+    </Panel>
 
-    <LinearLayout class="section" orientation="vertical" spacing="12" wrap-content="true">
+    <Panel class="section" gap="12">
         <Label class="section-title" text="Transforms"/>
-        <LinearLayout class="card-row" orientation="horizontal" spacing="16">
+        <Panel class="card-row" flex-direction="row" align-items="start" gap="16">
             <Label class="card bg-linear tf-rotate" text="rotate"/>
             <Label class="card bg-radial tf-scale" text="scale"/>
             <Label class="card bg-conic tf-skew" text="skew"/>
             <Label class="card bg-linear tf-origin" text="origin"/>
-        </LinearLayout>
+        </Panel>
         <Label class="caption" text="The header's theme button swaps the built-in theme and these variables."/>
-    </LinearLayout>
-</LinearLayout>
+    </Panel>
+</Panel>

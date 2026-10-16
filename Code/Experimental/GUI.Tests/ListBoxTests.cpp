@@ -121,11 +121,11 @@ TEST_CASE("listbox: selecting an off-screen row scrolls it into view")
     for (int i = 0; i < 10; ++i)
         lb->AddItem(core::StringView(u8"row")); // content 240 tall, range 140
 
-    CHECK(lb->GetScrollView()->GetScrollOffset().y == doctest::Approx(0.0f));
+    CHECK(lb->GetScrollOffset().y == doctest::Approx(0.0f));
     lb->SetSelectedIndex(
         9); // row 9 -> [216, 240]; scroll so bottom hits viewport bottom: 240-100 = 140
-    CHECK(lb->GetScrollView()->GetScrollOffset().y == doctest::Approx(140.0f));
+    CHECK(lb->GetScrollOffset().y == doctest::Approx(140.0f));
 
     lb->SetSelectedIndex(0); // back to top
-    CHECK(lb->GetScrollView()->GetScrollOffset().y == doctest::Approx(0.0f));
+    CHECK(lb->GetScrollOffset().y == doctest::Approx(0.0f));
 }

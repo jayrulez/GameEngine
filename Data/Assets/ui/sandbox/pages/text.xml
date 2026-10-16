@@ -1,36 +1,36 @@
-<LinearLayout id="page-text" class="page" orientation="vertical" spacing="18" wrap-content="true">
+<Panel id="page-text" class="page" gap="18">
     <Label class="page-title" text="Text"/>
     <Label class="page-lead" wrap="true"
            text="Faces, sizes, alignment and wrapping, and the effects a distance-field face draws: a shadow, an outline and a glow, all from the sheet."/>
 
-    <LinearLayout class="section" orientation="vertical" spacing="8" wrap-content="true">
+    <Panel class="section" gap="8">
         <Label class="section-title" text="Faces and sizes"/>
         <Label class="text t14" text="Roboto at 14: the quick brown fox jumps over the lazy dog"/>
         <Label class="text t18" text="Roboto at 18: the quick brown fox jumps over the lazy dog"/>
         <Label class="text t24" text="Roboto at 24: the quick brown fox"/>
         <Label class="display" text="Lilita One, a distance-field face at 40"/>
-    </LinearLayout>
+    </Panel>
 
-    <LinearLayout class="section" orientation="vertical" spacing="10" wrap-content="true">
+    <Panel class="section" gap="10">
         <Label class="section-title" text="Alignment"/>
         <Label class="text aligned" text="left, top" text-align="left" vertical-align="top"/>
         <Label class="text aligned" text="centre, middle" text-align="center" vertical-align="middle"/>
         <Label class="text aligned" text="right, bottom" text-align="right" vertical-align="bottom"/>
-    </LinearLayout>
+    </Panel>
 
-    <LinearLayout class="section" orientation="vertical" spacing="10" wrap-content="true">
+    <Panel class="section" gap="10">
         <Label class="section-title" text="Wrapping"/>
         <Label class="text paragraph" wrap="true"
                text="A single label with wrap on breaks its text at whitespace to fit its width, greedily, line by line. Narrow the box and the words flow onto more lines; an explicit newline breaks too."/>
-    </LinearLayout>
+    </Panel>
 
-    <LinearLayout class="section" orientation="vertical" spacing="10" wrap-content="true">
+    <Panel class="section" gap="10">
         <Label class="section-title" text="Effects (text-shadow, text-outline, text-glow)"/>
-        <LinearLayout class="effects-row" orientation="horizontal" spacing="24">
+        <Panel class="effects-row" flex-direction="row" align-items="start" gap="24">
             <Label class="fx-text fx-shadow" text="Shadow"/>
             <Label class="fx-text fx-outline" text="Outline"/>
             <Label class="fx-text fx-glow" text="Glow"/>
-        </LinearLayout>
+        </Panel>
         <Label class="caption" text="The glow breathes: text-glow is animatable, as the game menu's title shows."/>
-    </LinearLayout>
-</LinearLayout>
+    </Panel>
+</Panel>

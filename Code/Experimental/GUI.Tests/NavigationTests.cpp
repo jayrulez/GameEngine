@@ -422,3 +422,22 @@ TEST_CASE("navigation: after a click on the backdrop, an arrow starts from the G
     bed.Key(KeyCode::Down);
     CHECK(bed.Focused() == SV(u8"play"));
 }
+
+TEST_CASE("navigation: a wide widget across the row above is not to the right")
+{
+    // The showcase's settings: a text field (120..380) above a centred Back (200..300). Right from
+    // Back has nothing to its right, so focus stays.
+    Bed bed;
+    auto field = Cell(*bed.root.Get(), u8"field", 120.0f, 100.0f, 260.0f, 30.0f);
+    auto back = Cell(*bed.root.Get(), u8"back", 200.0f, 160.0f, 100.0f, 40.0f);
+    bed.d.SetFocusNode(back.Get());
+    bed.Key(KeyCode::Right);
+    CHECK(bed.Focused() == SV(u8"back"));
+    bed.Key(KeyCode::Up); // up is where the field is
+    CHECK(bed.Focused() == SV(u8"field"));
+    // Neighbours overlapping a little still count.
+    auto beside = Cell(*bed.root.Get(), u8"beside", 290.0f, 160.0f, 60.0f, 40.0f); // overlaps back by 10
+    bed.d.SetFocusNode(back.Get());
+    bed.Key(KeyCode::Right);
+    CHECK(bed.Focused() == SV(u8"beside"));
+}

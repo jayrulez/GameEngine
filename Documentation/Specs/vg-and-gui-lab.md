@@ -181,10 +181,17 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   cooked fonts keep it (3f65b0d16); a TextShaperFactory and a shared ClusterTextShaper (3276b36b0);
   Fonts.HarfBuzz, HarfBuzz behind ITextShaper only (57d622573); bakers bake what a shaper's
   substitutions reach, through ITextShaper::CollectReachableGlyphs (23d4e26a7; font builder 8);
-  the engine's UI, the editor and the UI sandbox install it (a40662a37). Left: ITextShaper widened
-  to a script, a language, a direction and a font list with fallback; the bidi algorithm; and
-  unshaped VG DrawText (single-line labels) still draws each codepoint's own glyph, so a
-  single-line label does not ligate where wrapped and rich text do.
+  the engine's UI, the editor and the UI sandbox install it (a40662a37). Then: ITextShaper::Shape
+  takes a ShapeRequest (a font list with fallback, a direction, an ISO 15924 script, a BCP 47
+  language; a6c260383); VG shapes single-line text through the font's shaper, cached across
+  frames (63e94cfa2); the distance-field cook keeps every baked glyph (795d7f4b0, a bug the game's
+  title showed); SheenBidi 3.0.0 is vendored (be3970ad4, Apache-2.0; the project enables C for
+  it); the bidi seam (IBidiResolver, ReorderLine for L1/L2) and shapers that lay lines out in
+  visual order, with right-to-left carets and hit tests (c98a1618d); Fonts.Bidi, SheenBidi behind
+  IBidiResolver only (a18c658fd); the hosts install it (ae6c58ece). Left: a label measures with
+  its font's own MeasureString (unshaped), so a ligated label is laid out a little wide; the basic
+  shaper's wrapping knows no bidi; editing right-to-left text (caret movement by arrow keys,
+  selection across a direction change) is untested.
 - **F4 Text effects.** Outline, shadow and glow per run, from the distance-field fonts the engine
   already bakes (`Fonts.DistanceField.Baker`), so a HUD's text reads over any scene without a
   panel behind it. Tests: an outline's width and a shadow's offset probed in pixels; effects on one

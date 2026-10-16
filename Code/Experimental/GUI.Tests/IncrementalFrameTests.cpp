@@ -250,3 +250,31 @@ TEST_CASE("incremental: a child resized after a layout lays its container out ag
     root->UpdateLayout(); // its own writes asked for nothing more
     CHECK(root->LastLayoutCount() == 0u);
 }
+
+TEST_CASE("incremental: a child shown or hidden lays its container out again")
+{
+    // The showcase's panels: one shown in place of another after the first layout lands in the
+    // slot the other had, not wherever it was left.
+    auto root = Make<SceneRoot>();
+    auto column = Make<FlexLayout>();
+    column->SetDirection(FlexDirection::Column);
+    column->SetSize(core::Float2{200.0f, 400.0f});
+    root->AddChild(column.Get());
+    auto title = Widget(u8"title");
+    auto menu = Widget(u8"menu");
+    auto settings = Widget(u8"settings");
+    column->AddChild(title.Get());
+    column->AddChild(menu.Get());
+    column->AddChild(settings.Get());
+    settings->SetVisible(false);
+    root->UpdateLayout();
+    CHECK(menu->GetPosition().y == doctest::Approx(20.0f));
+
+    menu->SetVisible(false);
+    settings->SetVisible(true);
+    root->UpdateLayout();
+    CHECK(root->LastLayoutCount() >= 1u);
+    CHECK(settings->GetPosition().y == doctest::Approx(20.0f)); // under the title, where the menu was
+    root->UpdateLayout();
+    CHECK(root->LastLayoutCount() == 0u);
+}

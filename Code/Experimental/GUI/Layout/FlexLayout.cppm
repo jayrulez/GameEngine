@@ -202,10 +202,12 @@ export namespace experimental::gui
 
     protected:
         void OnLayout() override { PerformLayout(); } // the SceneRoot's pass, or at once when detached
-        // A child resized by anything but this layout (a sheet's width, code) has a new basis.
-        void OnChildSizeChange(Node& child) override
+        // A child resized by anything but this layout (a sheet's width, code) has a new basis; one
+        // shown or hidden moves the others.
+        void OnChildLayoutChange(Node& child, bool resized) override
         {
-            m_basis.Remove(&child);
+            if (resized)
+                m_basis.Remove(&child);
             RequestLayout();
         }
         void OnSizeChange() override { RequestLayout(); }

@@ -552,9 +552,14 @@ export namespace experimental::gui
 
         /// A container places its children here (RequestLayout schedules it).
         virtual void OnLayout() {}
-        /// A child's size changed, by anything but this node's own layout (a sheet, code, the
-        /// child's own layout): a container lays out again.
-        virtual void OnChildSizeChange(Node& child) { (void)child; }
+        /// A child's size (`resized`) or visibility changed, by anything but this node's own layout
+        /// (a sheet, code, a script showing a panel, the child's own layout): a container lays out
+        /// again.
+        virtual void OnChildLayoutChange(Node& child, bool resized)
+        {
+            (void)child;
+            (void)resized;
+        }
 
         // Subclass-drawn content, between background and children.
         virtual void OnDraw(DrawContext& ctx, const Rect& localBounds)
@@ -930,7 +935,7 @@ export namespace experimental::gui
             Invalidate();
             SendEvent(Event(EventType::SizeChanged, this));
             if (m_parent != nullptr && !m_parent->m_layingOut)
-                m_parent->OnChildSizeChange(*this);
+                m_parent->OnChildLayoutChange(*this, true);
         }
 
         // Clamp a size to [m_minSize, m_maxSize] per axis (a negative max = unbounded).
@@ -952,6 +957,8 @@ export namespace experimental::gui
             OnVisibilityChange();
             Invalidate();
             SendEvent(Event(EventType::VisibilityChanged, this));
+            if (m_parent != nullptr && !m_parent->m_layingOut)
+                m_parent->OnChildLayoutChange(*this, false); // shown or hidden: the others move
         }
         void HandleEnabledChange()
         {

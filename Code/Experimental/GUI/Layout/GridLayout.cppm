@@ -85,7 +85,7 @@ export namespace experimental::gui
 
     protected:
         void OnLayout() override { PerformLayout(); } // the SceneRoot's pass, or at once when detached
-        void OnChildSizeChange(Node&) override { RequestLayout(); }
+        void OnChildLayoutChange(Node&, bool) override { RequestLayout(); }
         void OnSizeChange() override { RequestLayout(); }
         void OnChildrenChanged() override { RequestLayout(); }
 

@@ -325,6 +325,20 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
 - **G5 Data binding.** Properties that update what depends on them (AUI's model: dependency
   tracking, no manual subscriptions), bound from markup and script. Tests: a bound label follows
   its source.
+  As built on `vg`: the reactive core (b0cc350ce), a Property recording its readers, a Computed
+  recomputing lazily, an Effect rerunning when what it read changed, its sources found again on
+  every run; effects wait on their SceneRoot's scheduler and run once per frame however many
+  changes reach them (outside a scene, at once). The evaluating observer is per thread, not per
+  GUI. A node owns its bindings (37c1f5e18): any reflected property binds by name, the value
+  converted to its type, so a library's widget binds with no code of its own; a property the user
+  changes (`twoWay`: slider value, checkbox, text field text) writes back; the user-set widget
+  state is observable. Each SceneRoot holds a DataModel of named values. Markup binds `{{name}}`
+  (6aefb794d): a name alone follows and writes back, text around names follows the text built from
+  them. Scripts bind through reflection (6f65e7ebf): `node.bind(property, function)`,
+  `node.bindData(property, name)`, `gui.getNumber`/`getText`/`getBool` (reads a binding follows;
+  typed because AngelScript cannot return an untyped value) and `gui.set`, the same story tested in
+  AngelScript and Luau. An f32 bound to text reads as its own shortest form (4d487f5dc). GUISandbox
+  shows a bound row with no handler wired (1a04d0426).
 - **G6 A showcase.** The sandbox becomes a small scripted demo (a game menu with transforms,
   shadows, gradients, blur and animated states, written in AngelScript), the proof that it looks
   the part.
@@ -392,6 +406,11 @@ list when it is done or the user rules it out.
   faded leaf is not grouped (its background shows through its own text); gradient stops take
   percentages only (CSS also takes lengths); a repeating radial gradient whose first stop is past
   0 repeats from the centre, and a repeating conic gradient does not repeat its span.
+- **G5, when a screen asks for them:** a template formats a value as it is (no `{{volume:0%}}`
+  format, no expressions: a native or script binding computes those); a widget's other properties
+  (position, size, visibility, a list's selection) are not observable yet, so a binding reading
+  them does not follow them; lists bound to a data collection (a repeated template per item) wait
+  for the model/view layer's turn.
 - **F3, after the lab (foundation.ui text):** a label measures with its font's unshaped
   MeasureString, so a ligated label lays out a little wide; the basic shaper's wrapping knows no
   bidi; editing right-to-left text (caret movement by arrow keys, selection across a direction

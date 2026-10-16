@@ -463,10 +463,10 @@ list when it is done or the user rules it out.
   faded leaf is not grouped (its background shows through its own text); gradient stops take
   percentages only (CSS also takes lengths); a repeating radial gradient whose first stop is past
   0 repeats from the centre, and a repeating conic gradient does not repeat its span.
-- **G4, when a screen asks for it:** a node fading in draws through a layer of its own, where a
-  backdrop blur sees nothing behind it, so a modal faded by opacity shows no blur until the fade
-  ends; animate the blur (and a dim colour) instead, as the showcase does. A layer could take the
-  canvas behind it as its backdrop to lift this.
+- **G4, as CSS has it:** a node drawing through a layer draws its own backdrop blur first, onto
+  what lies behind it at its opacity (frosted glass fading in blurs as it fades); a backdrop blur
+  inside an ancestor's layer (a faded ancestor, a filter) sees only what that ancestor drew, as
+  CSS's backdrop root makes it.
 - **G5, when a screen asks for them:** a template formats a value as it is (no `{{volume:0%}}`
   format, no expressions: a native or script binding computes those); a widget's other properties
   (position, size, visibility, a list's selection) are not observable yet, so a binding reading

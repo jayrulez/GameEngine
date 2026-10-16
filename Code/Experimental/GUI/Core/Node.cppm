@@ -433,6 +433,17 @@ export namespace experimental::gui
             // what it draws (no offscreen target for a label).
             const bool layered = m_box.NeedsLayer() || (m_alpha < 1.0f && !m_children.IsEmpty());
             const bool pushedOpacity = !layered && m_alpha < 1.0f;
+            // A backdrop blur is of what lies behind the node, so a node drawing through a layer
+            // (where nothing lies behind) draws it first, onto the canvas behind, at its opacity, as
+            // CSS composites it: frosted glass fading in blurs as it fades, rather than showing the
+            // backdrop sharp until the fade ends and then the blur all at once.
+            const bool backdropFirst = layered && m_box.BackdropBlur > 0.0f;
+            if (backdropFirst)
+            {
+                ctx.PushOpacity(m_alpha);
+                m_box.DrawBackdrop(ctx, GetLocalBounds());
+                ctx.PopOpacity();
+            }
             if (layered)
                 ctx.VG().PushLayer(m_alpha, m_box.BlendMode, m_box.FilterBlur * ctx.DeviceScale());
             else if (pushedOpacity)
@@ -441,7 +452,7 @@ export namespace experimental::gui
             const Rect local = GetLocalBounds();
             const ControlState state = GetControlState();
 
-            m_box.DrawUnder(ctx, local);
+            m_box.DrawUnder(ctx, local, !backdropFirst);
             if (m_background)
                 m_background->Draw(ctx, local, state);
             OnDraw(ctx, local);

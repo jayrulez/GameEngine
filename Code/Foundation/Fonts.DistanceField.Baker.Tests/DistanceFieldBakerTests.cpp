@@ -223,6 +223,59 @@ TEST_CASE("df.baker: blank glyphs (space) get an advance-only region")
     DefaultAllocator().Delete(font);
 }
 
+TEST_CASE("df.baker: alpha holds the true distance, round where the multi-channel field is square")
+{
+    // Text effects read alpha: an outline or a glow past the edge needs the true distance, whose
+    // contours round a corner, where the median of the three channels keeps it square.
+    IFont* font = LoadRoboto();
+    REQUIRE(font != nullptr);
+    FontLoadOptions df = FontLoadOptions::DistanceField();
+    df.pixelHeight = 48.0f;
+    df.atlasWidth = df.atlasHeight = 1024;
+    DistanceFieldFontAtlasBaker distanceFieldBaker;
+    Result<IFontAtlas*, FontLoadResult> dfR = distanceFieldBaker.Bake(*font, df, DefaultAllocator());
+    REQUIRE(dfR.HasValue());
+    IFontAtlas* atlas = dfR.Value();
+
+    // 'I' is one rectangle: four outer corners and nothing else.
+    AtlasRegion reg;
+    REQUIRE(atlas->TryGetRegion(atlas->GlyphFor('I'), reg));
+    const Span<const u8> px = atlas->PixelData();
+    const u32 width = atlas->Width();
+    i32 medianInside = 0, alphaInside = 0, agree = 0;
+    i32 medianGrown = 0, alphaGrown = 0;
+    // 0.5 is the edge; 0.15 is 1.4 texels out with the baker's 4-texel range.
+    const u8 grownAt = static_cast<u8>(0.15f * 255.0f);
+    for (i32 row = 0; row < reg.height; ++row)
+    {
+        for (i32 col = 0; col < reg.width; ++col)
+        {
+            const u8* p = px.Data() + (static_cast<usize>(reg.y + row) * width + (reg.x + col)) * 4;
+            const u8 median = Max(Min(p[0], p[1]), Min(Max(p[0], p[1]), p[2]));
+            const bool inMedian = median > 127;
+            const bool inAlpha = p[3] > 127;
+            medianInside += inMedian ? 1 : 0;
+            alphaInside += inAlpha ? 1 : 0;
+            agree += inMedian == inAlpha ? 1 : 0;
+            medianGrown += median > grownAt ? 1 : 0;
+            alphaGrown += p[3] > grownAt ? 1 : 0;
+        }
+    }
+    std::printf("'I' inside: median %d alpha %d agree %d of %d; grown: median %d alpha %d\n", medianInside,
+                alphaInside, agree, reg.width * reg.height, medianGrown, alphaGrown);
+    REQUIRE(medianInside > 0);
+    // The same glyph: the two edges agree but for antialiasing rounding along the outline.
+    CHECK(agree >= reg.width * reg.height * 98 / 100);
+    // Alpha is a field, not the old constant 255: the cell's margin reads outside.
+    CHECK(alphaInside < reg.width * reg.height / 2);
+    // Grown past the edge, both cover more than the glyph; the round corners cover less.
+    CHECK(alphaGrown > alphaInside);
+    CHECK(alphaGrown < medianGrown);
+
+    DefaultAllocator().Delete(atlas);
+    DefaultAllocator().Delete(font);
+}
+
 TEST_CASE("df.baker: the atlas is sized to its glyphs, every glyph inside it and none overlapping")
 {
     // The asset's atlas size is a maximum. A Latin set at 48 px fills a fraction of 1024 x 1024,

@@ -68,9 +68,9 @@ namespace foundation::fonts::df
         return shape.contours.size() > 0;
     }
 
-    bool GenerateGlyphMSDF(const u8* fontData, i32 fontDataSize, i32 glyphIndex, i32 width,
-                           i32 height, f64 pxRange, f64 scaleX, f64 scaleY, f64 translateX,
-                           f64 translateY, u8* rgbaOut)
+    bool GenerateGlyphMTSDF(const u8* fontData, i32 fontDataSize, i32 glyphIndex, i32 width,
+                            i32 height, f64 pxRange, f64 scaleX, f64 scaleY, f64 translateX,
+                            f64 translateY, u8* rgbaOut)
     {
         (void)fontDataSize;
 
@@ -89,7 +89,7 @@ namespace foundation::fonts::df
         shape.normalize();
         msdfgen::edgeColoringByDistance(shape, 3.0);
 
-        msdfgen::Bitmap<float, 3> msdf(width, height);
+        msdfgen::Bitmap<float, 4> msdf(width, height);
 
         // SDFTransformation: Projection maps shape coords (font units) to pixel coords.
         // DistanceMapping (Range) converts shape-unit distances to [0,1].
@@ -99,9 +99,9 @@ namespace foundation::fonts::df
             msdfgen::Projection(msdfgen::Vector2(scaleX, scaleY),
                                 msdfgen::Vector2(translateX, translateY)),
             msdfgen::Range(shapeRange));
-        msdfgen::generateMSDF(msdf, shape, transform);
+        msdfgen::generateMTSDF(msdf, shape, transform);
 
-        // Convert float RGB -> RGBA8 (A = 255). msdfgen's bitmap is Y-up (row 0 = bottom); flip
+        // Convert float RGBA -> RGBA8 (A = the true distance). msdfgen's bitmap is Y-up (row 0 = bottom); flip
         // vertically to the top-down atlas convention (row 0 = glyph top) the coverage atlas +
         // draw path expect. This also lands descenders (low font Y -> low msdfgen row) near the
         // cell's BOTTOM after the flip, instead of clipping them.
@@ -116,7 +116,7 @@ namespace foundation::fonts::df
                 rgbaOut[idx + 0] = clampByte(pixel[0] * 255.0f);
                 rgbaOut[idx + 1] = clampByte(pixel[1] * 255.0f);
                 rgbaOut[idx + 2] = clampByte(pixel[2] * 255.0f);
-                rgbaOut[idx + 3] = 255;
+                rgbaOut[idx + 3] = clampByte(pixel[3] * 255.0f);
             }
         }
 

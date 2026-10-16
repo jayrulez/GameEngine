@@ -26,8 +26,9 @@ namespace
 {
     // Bump on any layout change - old cache files then miss and rebake. 2: distance-field atlases
     // are sized to their glyphs, so a cached full-size atlas is stale. 3: regions key by glyph
-    // index, followed by the codepoint -> glyph map.
-    constexpr u32 kCacheFormatVersion = 3;
+    // index, followed by the codepoint -> glyph map. 4: a distance-field atlas carries the true
+    // distance in alpha (MTSDF).
+    constexpr u32 kCacheFormatVersion = 4;
     constexpr u32 kCacheMagic = 0x43414644u; // 'DFAC'
 
     struct CacheHeader

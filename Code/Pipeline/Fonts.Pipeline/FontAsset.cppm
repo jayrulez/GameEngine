@@ -125,7 +125,9 @@ export namespace pipeline{
         // the same glyphs whichever host runs it.
         // 9 (2026-10-15): a distance-field cook writes the region of every glyph the atlas holds,
         // not only those the range's codepoints map to (8 baked the ligatures but dropped them).
-        [[nodiscard]] u32 Version() const override { return 9; }
+        // 10 (2026-10-16): a distance-field atlas carries the true signed distance in alpha
+        // (MTSDF), what outlines, glows and soft shadows read.
+        [[nodiscard]] u32 Version() const override { return 10; }
 
         [[nodiscard]] Status Build(const pipeline::Asset& asset,
                                    pipeline::AssetBuildContext& ctx) override

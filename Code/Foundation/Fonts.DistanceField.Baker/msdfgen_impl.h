@@ -14,11 +14,13 @@ namespace foundation::fonts::df
     using i32 = int32_t;
     using f64 = double;
 
-    // Generate an MSDF bitmap for a single glyph and write RGBA8 pixels to rgbaOut.
-    // Returns false on failure (e.g. glyph not found).
+    // Generate an MTSDF bitmap for a single glyph and write RGBA8 pixels to rgbaOut: the
+    // multi-channel field in RGB (sharp corners for the glyph itself) and the true signed distance
+    // in alpha (round off the edge, what outlines, glows and soft shadows read). Returns false on
+    // failure (e.g. glyph not found).
     // `glyphIndex` is the font's glyph index (what atlases key by).
-    bool GenerateGlyphMSDF(const u8* fontData, i32 fontDataSize, i32 glyphIndex, i32 width,
-                           i32 height, f64 pxRange, f64 scaleX, f64 scaleY, f64 translateX,
-                           f64 translateY, u8* rgbaOut);
+    bool GenerateGlyphMTSDF(const u8* fontData, i32 fontDataSize, i32 glyphIndex, i32 width,
+                            i32 height, f64 pxRange, f64 scaleX, f64 scaleY, f64 translateX,
+                            f64 translateY, u8* rgbaOut);
 
 } // namespace foundation::fonts::df

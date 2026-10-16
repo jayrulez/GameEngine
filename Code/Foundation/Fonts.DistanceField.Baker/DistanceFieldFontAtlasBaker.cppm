@@ -3,9 +3,10 @@
 
 // Foundation::Fonts.DistanceField.Baker - foundation.fonts.distancefield.baker:baker partition
 //
-// IFontAtlasBaker that generates MSDF atlases via msdfgen (core-only).
+// IFontAtlasBaker that generates MTSDF atlases via msdfgen (core-only).
 // Extracts glyph outlines from TrueTypeFont raw data via stb_truetype,
-// generates per-glyph MSDF bitmaps, and packs them into a DistanceFieldFontAtlas.
+// generates per-glyph MTSDF bitmaps (the multi-channel field in RGB, the true
+// distance in alpha for text effects), and packs them into a DistanceFieldFontAtlas.
 
 module;
 #include "Core/Prelude.h"
@@ -336,8 +337,8 @@ export namespace foundation::fonts
             Array<u8> pixels(static_cast<usize>(atlasW) * atlasH * 4);
             MemSet(pixels.Data(), 0, pixels.Size());
 
-            // Phase 2 (parallel): generate each glyph's MSDF and blit it into its own
-            // disjoint atlas rect. GenerateGlyphMSDF is stateless (per-call font parse),
+            // Phase 2 (parallel): generate each glyph's MTSDF and blit it into its own
+            // disjoint atlas rect. GenerateGlyphMTSDF is stateless (per-call font parse),
             // and cells never overlap (the packer leaves a gutter), so concurrent blits
             // touch disjoint bytes.
             if (!work.IsEmpty())
@@ -347,10 +348,10 @@ export namespace foundation::fonts
                     GlyphWork& item = work[static_cast<usize>(index)];
                     Array<u8> cellPixels(static_cast<usize>(item.cellW) * item.cellH * 4);
                     MemSet(cellPixels.Data(), 0, cellPixels.Size());
-                    if (!df::GenerateGlyphMSDF(rawData, rawDataSize, item.glyph, item.cellW,
-                                               item.cellH, pxRange, static_cast<f64>(scale),
-                                               static_cast<f64>(scale), item.translateX,
-                                               item.translateY, cellPixels.Data()))
+                    if (!df::GenerateGlyphMTSDF(rawData, rawDataSize, item.glyph, item.cellW,
+                                                item.cellH, pxRange, static_cast<f64>(scale),
+                                                static_cast<f64>(scale), item.translateX,
+                                                item.translateY, cellPixels.Data()))
                     {
                         return;
                     }

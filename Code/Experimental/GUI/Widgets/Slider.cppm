@@ -17,6 +17,7 @@ export module experimental.gui:slider;
 
 import foundation.core; // Color, Function, Move, Max, Min, Float2, Rectangle
 import foundation.vg;   // CornerRadii
+import :reactive; // Observable (what bindings follow)
 import :rect;
 import :event;
 import :draw_context;
@@ -38,7 +39,12 @@ export namespace experimental::gui
             SetTabFocusable(true);
         }
 
-        [[nodiscard]] f32 GetValue() const noexcept { return m_value; }
+        /// The value (a read a binding records).
+        [[nodiscard]] f32 GetValue() const
+        {
+            m_valueChanged.Track();
+            return m_value;
+        }
         void SetValue(f32 value)
         {
             value = core::Max(0.0f, core::Min(1.0f, value));
@@ -46,6 +52,7 @@ export namespace experimental::gui
                 return;
             m_value = value;
             Invalidate();
+            m_valueChanged.Notify();
             if (m_onChanged)
                 m_onChanged(m_value);
             SendEvent(Event(EventType::Changed, this));
@@ -145,6 +152,7 @@ export namespace experimental::gui
         }
 
         f32 m_value = 0.0f;
+        Observable m_valueChanged; // what bindings reading the value follow
         bool m_dragging = false;
         Color m_trackColor{0.28f, 0.30f, 0.35f, 1.0f};
         Color m_fillColor{0.31f, 0.63f, 0.85f, 1.0f};

@@ -14,6 +14,7 @@ export module experimental.gui:progress_bar;
 
 import foundation.core; // Color, Max, Min
 import foundation.vg;   // CornerRadii
+import :reactive; // Observable (what bindings follow)
 import :rect;
 import :draw_context;
 import :ui_widget;
@@ -30,7 +31,12 @@ export namespace experimental::gui
     public:
         ProgressBar() { SetTag(core::StringView(u8"progressbar")); }
 
-        [[nodiscard]] f32 GetProgress() const noexcept { return m_progress; }
+        /// The progress (a read a binding records).
+        [[nodiscard]] f32 GetProgress() const
+        {
+            m_progressChanged.Track();
+            return m_progress;
+        }
         void SetProgress(f32 progress)
         {
             progress = core::Max(0.0f, core::Min(1.0f, progress));
@@ -38,6 +44,7 @@ export namespace experimental::gui
                 return;
             m_progress = progress;
             Invalidate();
+            m_progressChanged.Notify();
         }
 
         void SetTrackColor(Color color)
@@ -80,6 +87,7 @@ export namespace experimental::gui
         }
 
         f32 m_progress = 0.0f;
+        Observable m_progressChanged; // what bindings reading the progress follow
         Color m_trackColor{0.24f, 0.26f, 0.30f, 1.0f};
         Color m_fillColor{0.31f, 0.63f, 0.85f, 1.0f};
     };

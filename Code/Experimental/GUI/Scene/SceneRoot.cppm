@@ -29,6 +29,8 @@ import :action_manager;
 import :mutation_queue;
 import :event_dispatcher;
 import :media_query; // MediaContext
+import :reactive;    // EffectScheduler
+import :data_model;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -40,15 +42,19 @@ export namespace experimental::gui
         RTTI_OBJECT(SceneRoot, Node)
     public:
         // The element table is this GUI's own (MemoryAllocator is valid in a constructor).
-        SceneRoot() : m_elements(core::MakeRef<ElementTable>(MemoryAllocator())) {}
+        SceneRoot()
+            : m_data(core::MakeRef<DataModel>(MemoryAllocator())), m_elements(core::MakeRef<ElementTable>(MemoryAllocator()))
+        {
+        }
         ~SceneRoot() override { m_elements->Close(); }
 
-        // Advance the tree by `elapsed`: tick actions, run the per-frame hook, then drain
-        // deferred tree edits (e.g. queued Node::Close removals).
+        // Advance the tree by `elapsed`: tick actions, run the per-frame hook, run the bindings
+        // whose values changed, then drain deferred tree edits (e.g. queued Node::Close removals).
         void Update(core::Duration elapsed)
         {
             m_actionManager.Update(elapsed);
             OnUpdate(elapsed);
+            m_lastBindingCount = m_effects.Flush();
             m_mutationQueue.Drain();
             UpdateLayout();
         }
@@ -70,9 +76,17 @@ export namespace experimental::gui
         /// needs none: an idle GUI costs nothing.
         [[nodiscard]] bool NeedsFrame() const noexcept
         {
-            return NeedsRedraw() || !m_actionManager.IsEmpty() || IsLayoutDirty() || HasLayoutDirtyDescendant();
+            return NeedsRedraw() || !m_actionManager.IsEmpty() || IsLayoutDirty() || HasLayoutDirtyDescendant() ||
+                   m_effects.HasPending();
         }
 
+        /// How many bindings the last Update ran (none in a frame where no bound value changed).
+        [[nodiscard]] u32 LastBindingCount() const noexcept { return m_lastBindingCount; }
+        /// This GUI's named values, which markup and scripts bind to.
+        [[nodiscard]] DataModel& GetData() noexcept { return *m_data; }
+        [[nodiscard]] const RefPtr<DataModel>& GetDataRef() const noexcept { return m_data; }
+
+        [[nodiscard]] EffectScheduler* GetEffectScheduler() override { return &m_effects; }
         [[nodiscard]] ActionManager* GetActionManager() override { return &m_actionManager; }
         [[nodiscard]] MutationQueue* GetMutationQueue() override { return &m_mutationQueue; }
         [[nodiscard]] EventDispatcher* GetEventDispatcher() override { return &m_eventDispatcher; }
@@ -114,6 +128,9 @@ export namespace experimental::gui
 
     private:
         ActionManager m_actionManager;
+        EffectScheduler m_effects;  // the bindings waiting for this frame
+        RefPtr<DataModel> m_data;   // shared with the bindings to it
+        u32 m_lastBindingCount = 0;
         MutationQueue m_mutationQueue;
         EventDispatcher m_eventDispatcher{this}; // root = this SceneRoot
         RefPtr<ElementTable> m_elements;          // what weak references to this GUI's nodes resolve through

@@ -29,6 +29,7 @@ import :action;
 import :action_manager;
 import :mutation_queue;
 import :node_box;
+import :reactive; // Effect, EffectScheduler (bindings)
 import :css_values;  // LengthValue
 import :style_value; // TransformFunction
 
@@ -552,6 +553,12 @@ export namespace experimental::gui
         // The SceneRoot's ActionManager / MutationQueue, found by walking to the root.
         // Base returns the parent's; SceneRoot overrides to return its own. Null if the
         // node is not yet attached under a SceneRoot.
+        /// Where this node's bindings wait for the frame: its SceneRoot's scheduler, or none
+        /// outside a scene (a binding then runs at once).
+        [[nodiscard]] virtual EffectScheduler* GetEffectScheduler()
+        {
+            return m_parent ? m_parent->GetEffectScheduler() : nullptr;
+        }
         [[nodiscard]] virtual ActionManager* GetActionManager()
         {
             return m_parent ? m_parent->GetActionManager() : nullptr;
@@ -805,6 +812,28 @@ export namespace experimental::gui
             Invalidate();
         }
 
+        // === Bindings (G5 of Specs/vg-and-gui-lab.md) ===
+
+        /// Runs `body` now, and again on this GUI's frame whenever something it read changed (at
+        /// once outside a scene). The node owns it: it ends with the node, or at ClearBindings.
+        Effect& Bind(core::Function<void()> body)
+        {
+            m_bindings.PushBack(
+                MakeUnique<Effect>(MemoryAllocator(), core::Move(body), [this]() { return GetEffectScheduler(); }));
+            return *m_bindings[m_bindings.Size() - 1];
+        }
+        /// Binds the reflected property named `name` (this node's type's or a base's) to
+        /// `expression`'s value, converted to the property's type: native code, markup and scripts
+        /// bind any widget's properties this way, a library's included. False when the node has no
+        /// such writable property.
+        bool BindProperty(core::StringView name, core::Function<Variant()> expression);
+        /// The reverse: `write` takes the property's value now and whenever it changes (the user
+        /// moved a slider, typed). For the properties a widget's user changes (the `twoWay` property
+        /// attribute); false when the node has no such property.
+        bool BindPropertyBack(core::StringView name, core::Function<void(const Variant&)> write);
+        void ClearBindings() { m_bindings.Clear(); }
+        [[nodiscard]] usize BindingCount() const noexcept { return m_bindings.Size(); }
+
         // === Event listeners ===
         u32 AddEventListener(EventType type, EventCallback callback)
         {
@@ -915,6 +944,7 @@ export namespace experimental::gui
         Node* m_parent = nullptr;       // non-owning back-pointer
         Array<RefPtr<Node>> m_children; // owning
         Array<Listener> m_listeners;
+        Array<UniquePtr<Effect>> m_bindings; // this node's bindings (Bind, BindProperty)
         Function<bool(const DragPayload&)>
             m_dropAcceptor; // drop-target predicate (empty = rejects)
         RefPtr<Drawable> m_background;

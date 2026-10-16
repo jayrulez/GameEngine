@@ -80,6 +80,7 @@ export namespace experimental::gui
         {
             if (m_onPicked)
                 m_onPicked(m_item, event.Modifiers);
+            event.Handled = true;
         }
         void OnDraw(DrawContext& ctx, const Rect&) override
         {
@@ -207,7 +208,6 @@ export namespace experimental::gui
         [[nodiscard]] usize VisibleRowCount() const noexcept { return m_visibleCount; }
         [[nodiscard]] f32 ScrollOffset() const noexcept { return m_offset; }
 
-        [[nodiscard]] bool WantsWheel() const override { return true; }
 
     protected:
         // === Subclass hooks ===
@@ -253,11 +253,15 @@ export namespace experimental::gui
 
         void OnMouseWheel(const WheelEvent& event) override
         {
+            const f32 before = m_offset;
             ScrollBy(-event.Delta.y * m_rowHeight);
+            event.Handled = m_offset != before; // at its end, the scroller around it scrolls
         }
 
         void OnKeyDown(const KeyEvent& event) override
         {
+            if (event.Target != this)
+                return;
             const KeyCode key = static_cast<KeyCode>(event.KeyCode);
             if (OnExtraKey(key))
             {

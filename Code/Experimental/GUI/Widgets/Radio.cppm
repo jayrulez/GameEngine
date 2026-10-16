@@ -85,7 +85,7 @@ export namespace experimental::gui
         bool OnActivate() override { return ActivateAsClick(); } // Return, Space: a click
         void OnMouseClick(const MouseEvent& event) override
         {
-            (void)event;
+            event.Handled = true;
             Select();
         }
 

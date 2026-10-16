@@ -97,6 +97,8 @@ TEST_CASE("incremental: hover restyles the hovered widget alone")
     Frame(*root.Get(), styles);
 
     EventDispatcher* d = root->GetEventDispatcher();
+    d->InjectMouseMove(core::Float2{10.0f, 190.0f}); // into the GUI, over nothing in it
+    Frame(*root.Get(), styles);
     d->InjectMouseMove(core::Float2{10.0f, 10.0f});
     CHECK(root->NeedsFrame());
     Frame(*root.Get(), styles);

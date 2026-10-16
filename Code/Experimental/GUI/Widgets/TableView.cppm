@@ -51,8 +51,9 @@ export namespace experimental::gui
         }
 
     protected:
-        void OnMouseClick(const MouseEvent&) override
+        void OnMouseClick(const MouseEvent& event) override
         {
+            event.Handled = true;
             if (m_onClicked)
                 m_onClicked(m_column);
         }

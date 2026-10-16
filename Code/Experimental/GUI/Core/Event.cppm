@@ -3,10 +3,11 @@
 
 // GUI - :event partition
 //
-// Event + EventType + EventCallback: the high-level typed-event foundation nodes register
-// listeners on. Derived from eepp's Scene::Event / Event::EventType. The enum starts with
-// the geometry/tree events Node fires now; input events are placeholders wired when the
-// EventDispatcher lands (Phase 3). MouseEvent/KeyEvent subclasses grow with that phase.
+// Event + EventType + EventCallback: the typed events nodes listen for. Derived from eepp's
+// Scene::Event / Event::EventType. Input events (pointer, wheel, keys, text) travel a route: from
+// the root down to the target (the capture phase), at the target, and back up (the bubble phase);
+// a handler marking one Handled ends its route. The rest (geometry, focus, change) go to the one
+// node they are about.
 
 module;
 #include "Core/Prelude.h"
@@ -40,7 +41,7 @@ export namespace experimental::gui
         EnabledChanged,
         ParentChanged,
         Close,
-        // Input (placeholders - dispatched from Phase 3)
+        // Input
         MouseDown,
         MouseUp,
         MouseMove,
@@ -59,6 +60,17 @@ export namespace experimental::gui
         Drop,
         // A widget's value changed (a check box, a slider, a text field), by the user or by code.
         Changed,
+        // A node lost the pointer it had captured (released, taken by another, or the node left).
+        PointerCaptureLost,
+    };
+
+    /// Where on its route an input event is: going down from the root (Capture), at the node it
+    /// is for (Target), or coming back up (Bubble).
+    enum class EventPhase : u8
+    {
+        Capture,
+        Target,
+        Bubble,
     };
 
     enum class MouseButton : u32
@@ -127,9 +139,17 @@ export namespace experimental::gui
     struct Event
     {
         EventType Type;
+        /// The node the event is for (the hovered or pressed node, the focus).
         Node* Target = nullptr;
+        /// The node whose handlers are running now, on the event's route.
+        Node* CurrentTarget = nullptr;
+        EventPhase Phase = EventPhase::Target;
+        /// Set by a handler that used the event: its route ends there. A key a widget leaves
+        /// unhandled goes on to the keymap and navigation (G7).
+        mutable bool Handled = false;
 
-        explicit Event(EventType type, Node* target = nullptr) noexcept : Type(type), Target(target)
+        explicit Event(EventType type, Node* target = nullptr) noexcept
+            : Type(type), Target(target), CurrentTarget(target)
         {
         }
         virtual ~Event() = default;
@@ -140,6 +160,9 @@ export namespace experimental::gui
         core::Float2 Position;
         MouseButton Button;
         u32 Modifiers;
+        /// 1 for a press, 2 for the second of a double press, 3 for a triple (near in time and
+        /// place, the same button): a press, its release and its click carry the same count.
+        u32 ClickCount = 1;
 
         MouseEvent(EventType type, Node* target, core::Float2 position,
                    MouseButton button = MouseButton::Left, u32 modifiers = 0) noexcept
@@ -163,9 +186,6 @@ export namespace experimental::gui
     {
         u32 KeyCode;
         u32 Modifiers;
-        /// Set by a widget that used the key (G7): an arrow a widget leaves unhandled moves focus,
-        /// a Return or Space activates; a list or a slider gives an arrow back at its ends.
-        mutable bool Handled = false;
 
         KeyEvent(EventType type, Node* target, u32 keyCode, u32 modifiers = 0) noexcept
             : Event(type, target), KeyCode(keyCode), Modifiers(modifiers)

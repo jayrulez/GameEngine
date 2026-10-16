@@ -57,9 +57,6 @@ export namespace experimental::gui
         // the background with GetControlState(), so the skin reacts to hover/press/focus.
         void SetSkin(RefPtr<Drawable> skin) { SetBackground(core::Move(skin)); }
 
-        [[nodiscard]] bool IsHovered() const noexcept { return m_hovered; }
-        [[nodiscard]] bool IsPressed() const noexcept { return m_pressed; }
-
         // Theming hooks: text-bearing widgets override these so the CSS `color` and
         // `font-family` properties reach their text (Label/TextField/ComboBox/...). Default
         // no-ops, so a plain node ignores them.
@@ -91,9 +88,9 @@ export namespace experimental::gui
         {
             if (!IsEnabled())
                 return ControlState::Disabled;
-            if (m_pressed)
+            if (IsPressed())
                 return ControlState::Pressed;
-            if (m_hovered)
+            if (IsHovered())
                 return ControlState::Hover;
             if (IsFocused())
                 return ControlState::Focused;
@@ -101,24 +98,6 @@ export namespace experimental::gui
         }
 
     protected:
-        // A state change restyles the node and its subtree (:hover, :active, and selectors through
-        // them), and redraws it.
-        void OnMouseEnter(const MouseEvent&) override { SetPointerState(true, m_pressed); }
-        void OnMouseLeave(const MouseEvent&) override { SetPointerState(false, false); }
-        void OnMouseDown(const MouseEvent&) override { SetPointerState(m_hovered, true); }
-        void OnMouseUp(const MouseEvent&) override { SetPointerState(m_hovered, false); }
-        void SetPointerState(bool hovered, bool pressed)
-        {
-            if (hovered == m_hovered && pressed == m_pressed)
-                return;
-            m_hovered = hovered;
-            m_pressed = pressed;
-            MarkStyleDirty(true);
-            Invalidate();
-        }
-
         Thickness m_padding{};
-        bool m_hovered = false;
-        bool m_pressed = false;
     };
 }

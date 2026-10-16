@@ -46,7 +46,7 @@ export namespace experimental::gui
     protected:
         void OnMouseDown(const MouseEvent& event) override
         {
-            UINode::OnMouseDown(event);
+            event.Handled = true;
             if (OnPressed)
                 OnPressed(); // raise on any button
             if (event.Button != MouseButton::Left)
@@ -65,8 +65,8 @@ export namespace experimental::gui
         }
         void OnMouseUp(const MouseEvent& event) override
         {
+            (void)event;
             m_dragging = false;
-            UINode::OnMouseUp(event);
         }
 
     private:

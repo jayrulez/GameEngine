@@ -166,7 +166,8 @@ TEST_CASE("dispatch: a subtree leaving the tree takes the hover, press and focus
     REQUIRE(d->GetFocusNode() == child.Get());
 
     root->RemoveChild(panel.Get()); // the child goes with its parent
-    CHECK(d->GetOverNode() == nullptr);
+    CHECK(d->GetOverNode() == root.Get()); // what is still under the pointer
+    CHECK_FALSE(child->IsHovered());
     CHECK(d->GetFocusNode() == nullptr);
     CHECK_FALSE(child->IsFocused()); // told it lost focus while it still lived
     d->InjectMouseUp(core::Float2{10.0f, 10.0f}, MouseButton::Left); // no press to finish

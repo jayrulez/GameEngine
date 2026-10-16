@@ -749,59 +749,50 @@ export namespace experimental::gui
             }
         }
 
-        // === Input dispatch === (called by the EventDispatcher; each runs the virtual
-        // On* hook then fires the typed event to listeners)
-        void HandleMouseEnter(const MouseEvent& e)
+        // === Input routing === (the EventDispatcher starts a route; RouteEvent walks it)
+        /// Sends an input event (pointer, wheel, key, text) along its route to this node: down
+        /// from the root through the capture listeners, at this node, and back up through each
+        /// node's own handler (OnMouseDown and the rest) and its bubble listeners; a handler
+        /// marking it Handled ends the route once that node is done. The path is held for the
+        /// walk, so a handler may remove nodes on it (one that left the tree is skipped). True
+        /// when it was handled.
+        bool RouteEvent(Event& event);
+        /// One step of a route, at this node, in `event.Phase`: the capture listeners in the
+        /// capture and target phases; this node's handler and its bubble listeners in the target
+        /// and bubble phases. Everything at a node runs; marking the event Handled ends the
+        /// route after it (as the DOM's stopPropagation does). A node given an event outside a
+        /// route (an enter or a leave) is given it at the target.
+        void DeliverRouted(Event& event)
         {
-            OnMouseEnter(e);
-            SendEvent(e);
+            event.CurrentTarget = this;
+            if (event.Phase != EventPhase::Bubble)
+                RunListeners(event, true);
+            if (event.Phase != EventPhase::Capture)
+            {
+                InvokeInputHandler(event);
+                RunListeners(event, false);
+            }
         }
-        void HandleMouseLeave(const MouseEvent& e)
+        /// Under the pointer: this node or one inside it (the dispatcher's hover path); `:hover`.
+        [[nodiscard]] bool IsHovered() const noexcept { return m_hovered; }
+        /// Pressed: a press on this node or one inside it, not yet released; `:active`.
+        [[nodiscard]] bool IsPressed() const noexcept { return m_pressed; }
+        /// Set by the dispatcher as the hover and press paths change.
+        void SetHovered(bool hovered)
         {
-            OnMouseLeave(e);
-            SendEvent(e);
+            if (hovered == m_hovered)
+                return;
+            m_hovered = hovered;
+            OnPointerStateChange();
         }
-        void HandleMouseMove(const MouseEvent& e)
+        void SetPressed(bool pressed)
         {
-            OnMouseMove(e);
-            SendEvent(e);
-        }
-        void HandleMouseDown(const MouseEvent& e)
-        {
-            OnMouseDown(e);
-            SendEvent(e);
-        }
-        void HandleMouseUp(const MouseEvent& e)
-        {
-            OnMouseUp(e);
-            SendEvent(e);
-        }
-        void HandleMouseClick(const MouseEvent& e)
-        {
-            OnMouseClick(e);
-            SendEvent(e);
-        }
-        void HandleMouseWheel(const WheelEvent& e)
-        {
-            OnMouseWheel(e);
-            SendEvent(e);
-        }
-        void HandleKeyDown(const KeyEvent& e)
-        {
-            OnKeyDown(e);
-            SendEvent(e);
-        }
-        void HandleKeyUp(const KeyEvent& e)
-        {
-            OnKeyUp(e);
-            SendEvent(e);
+            if (pressed == m_pressed)
+                return;
+            m_pressed = pressed;
+            OnPointerStateChange();
         }
         bool HandleActivate() { return OnActivate(); }
-        void HandleTextInput(const TextInputEvent& e)
-        {
-            OnTextInput(e);
-            SendEvent(e);
-        }
         void HandleFocusGained()
         {
             m_focused = true;
@@ -873,15 +864,28 @@ export namespace experimental::gui
         // drives the window's StartTextInput/StopTextInput accordingly. Default: false.
         [[nodiscard]] virtual bool WantsTextInput() const { return false; }
 
+        /// Whether the pointer over this node is the GUI's, so a game host leaves a click there
+        /// alone: a node that paints a background, takes focus, or listens for the pointer.
+        /// A plain layout container lets the pointer through to the game.
+        [[nodiscard]] virtual bool TakesPointer() const
+        {
+            if (m_background || m_box.BackgroundColor.a > 0.0f || !m_box.Layers.IsEmpty() || IsTabFocusable())
+                return true;
+            for (usize i = 0; i < m_listeners.Size(); ++i)
+                switch (m_listeners[i].Type)
+                {
+                case EventType::MouseDown:
+                case EventType::MouseUp:
+                case EventType::MouseClick:
+                case EventType::MouseWheel: return true;
+                default: break;
+                }
+            return false;
+        }
+
         // Optional hover-tooltip text. A TooltipManager reads the hovered node's answer and
         // shows a tooltip after a delay. Empty (the default) means no tooltip.
         [[nodiscard]] virtual core::StringView GetTooltipText() const { return {}; }
-
-        // True if this node consumes the mouse wheel (e.g. a ScrollView). The dispatcher
-        // bubbles a wheel event from the hit node up the ancestor chain to the nearest node
-        // that answers true, so scrolling works while hovering the scrolled content. Default:
-        // false.
-        [[nodiscard]] virtual bool WantsWheel() const { return false; }
 
         // Tab-navigation: whether Tab / Shift+Tab focus traversal can land on this node
         // (distinct from click focus, which targets whatever is hit). Interactive widgets
@@ -1090,10 +1094,12 @@ export namespace experimental::gui
         }
 
         // === Event listeners ===
-        u32 AddEventListener(EventType type, EventCallback callback)
+        /// Listens for `type`. An input event reaches a `capture` listener on its way down from
+        /// the root (before the target's own handling), any other on its way back up.
+        u32 AddEventListener(EventType type, EventCallback callback, bool capture = false)
         {
             const u32 id = ++m_nextListenerId;
-            m_listeners.PushBack(Listener{id, type, core::Move(callback)});
+            m_listeners.PushBack(Listener{id, type, core::Move(callback), capture});
             return id;
         }
         void RemoveEventListener(u32 id)
@@ -1105,11 +1111,12 @@ export namespace experimental::gui
                     return;
                 }
         }
+        /// Tells this node's listeners of an event about it (not routed: geometry, focus, change).
         void SendEvent(const Event& event)
         {
-            for (Listener& l : m_listeners)
-                if (l.Type == event.Type)
-                    l.Callback(event);
+            for (usize i = 0; i < m_listeners.Size(); ++i)
+                if (m_listeners[i].Type == event.Type)
+                    m_listeners[i].Callback(event);
         }
 
         // === Change hooks (subclass overrides; the Handle* wrappers fire the event too) ===
@@ -1138,14 +1145,23 @@ export namespace experimental::gui
         // A click at the centre, as activation delivers it (listeners see a click, as with a mouse).
         bool ActivateAsClick()
         {
-            HandleMouseClick(MouseEvent(EventType::MouseClick, this,
-                                        ConvertToWorldSpace(core::Float2{m_size.x * 0.5f, m_size.y * 0.5f})));
+            MouseEvent click(EventType::MouseClick, this, ConvertToWorldSpace(core::Float2{m_size.x * 0.5f, m_size.y * 0.5f}));
+            (void)RouteEvent(click);
             return true;
         }
         virtual void OnKeyUp(const KeyEvent&) {}
         virtual void OnTextInput(const TextInputEvent&) {}
         virtual void OnFocusGained() {}
         virtual void OnFocusLost() {}
+        /// Hovered or pressed changed: restyles the node and what is inside it (`:hover`, `:active`
+        /// and selectors through them) and redraws it.
+        virtual void OnPointerStateChange()
+        {
+            MarkStyleDirty(true);
+            Invalidate();
+        }
+        /// The pointer this node captured was taken away or released.
+        virtual void OnPointerCaptureLost() {}
         virtual void OnDragEnter(const DragPayload&) {}
         virtual void OnDragOver(const DragPayload&) {}
         virtual void OnDragLeave(const DragPayload&) {}
@@ -1218,12 +1234,42 @@ export namespace experimental::gui
             u32 Id;
             EventType Type;
             EventCallback Callback;
+            bool Capture = false;
         };
+        // The listeners of one kind (capture or bubble) for an input event. By index: a listener
+        // may add another.
+        void RunListeners(const Event& event, bool capture)
+        {
+            for (usize i = 0; i < m_listeners.Size(); ++i)
+                if (m_listeners[i].Type == event.Type && m_listeners[i].Capture == capture)
+                    m_listeners[i].Callback(event);
+        }
+        // The widget's own handler for an input event.
+        void InvokeInputHandler(const Event& event)
+        {
+            switch (event.Type)
+            {
+            case EventType::MouseDown: OnMouseDown(static_cast<const MouseEvent&>(event)); break;
+            case EventType::MouseUp: OnMouseUp(static_cast<const MouseEvent&>(event)); break;
+            case EventType::MouseMove: OnMouseMove(static_cast<const MouseEvent&>(event)); break;
+            case EventType::MouseClick: OnMouseClick(static_cast<const MouseEvent&>(event)); break;
+            case EventType::MouseEnter: OnMouseEnter(static_cast<const MouseEvent&>(event)); break;
+            case EventType::MouseLeave: OnMouseLeave(static_cast<const MouseEvent&>(event)); break;
+            case EventType::MouseWheel: OnMouseWheel(static_cast<const WheelEvent&>(event)); break;
+            case EventType::KeyDown: OnKeyDown(static_cast<const KeyEvent&>(event)); break;
+            case EventType::KeyUp: OnKeyUp(static_cast<const KeyEvent&>(event)); break;
+            case EventType::TextInput: OnTextInput(static_cast<const TextInputEvent&>(event)); break;
+            case EventType::PointerCaptureLost: OnPointerCaptureLost(); break;
+            default: break;
+            }
+        }
 
         // Tells this GUI's dispatcher a child's subtree is leaving (GUIClusterImpl.cpp, which
         // sees :event_dispatcher).
         void NotifyRemovingChild(Node& child);
 
+        bool m_hovered = false; // on the dispatcher's hover path
+        bool m_pressed = false; // on its press path
         Node* m_parent = nullptr;       // non-owning back-pointer
         Array<RefPtr<Node>> m_children; // owning
         Array<Listener> m_listeners;

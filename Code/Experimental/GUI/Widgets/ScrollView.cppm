@@ -9,8 +9,8 @@
 //
 // It owns an internal content container (GetContent() - add your widgets there) plus two
 // overlay ScrollBars it positions, sizes, shows/hides (per-axis policy Auto/On/Off), and keeps
-// in TWO-WAY SYNC with the scroll offset. Scrolling is driven by the wheel (bubbled from the
-// hovered content via Node::WantsWheel), by the keyboard when focused (arrows / PageUp-Down /
+// in TWO-WAY SYNC with the scroll offset. Scrolling is driven by the wheel (bubbling up from the
+// hovered content; at its end it leaves the wheel to a scroller around it), by the keyboard when focused (arrows / PageUp-Down /
 // Home-End), by dragging a bar, and programmatically. Content extent is set explicitly
 // (SetContentSize) or measured from the children (SetAutoMeasureContent / MeasureContent).
 
@@ -212,17 +212,20 @@ export namespace experimental::gui
             m_onScroll = core::Move(callback);
         }
 
-        [[nodiscard]] bool WantsWheel() const override { return true; }
-
     protected:
         void OnMouseWheel(const WheelEvent& event) override
         {
-            // Wheel up (positive y) reveals content above -> decreases the offset.
+            // Wheel up (positive y) reveals content above -> decreases the offset. A scroller at its
+            // end leaves the wheel to the one around it.
+            const core::Float2 before = m_offset;
             ScrollBy(core::Float2{-event.Delta.x * m_wheelSpeed, -event.Delta.y * m_wheelSpeed});
+            event.Handled = m_offset.x != before.x || m_offset.y != before.y;
         }
 
         void OnKeyDown(const KeyEvent& event) override
         {
+            if (event.Target != this)
+                return; // keys a focused widget inside left go on to navigation, not to scrolling
             const Rect vp = Viewport();
             const core::Float2 before = m_offset;
             switch (static_cast<KeyCode>(event.KeyCode))

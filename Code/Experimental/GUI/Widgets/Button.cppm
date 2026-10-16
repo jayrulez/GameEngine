@@ -46,7 +46,7 @@ export namespace experimental::gui
         bool OnActivate() override { return ActivateAsClick(); } // Return, Space: a click
         void OnMouseClick(const MouseEvent& event) override
         {
-            (void)event;
+            event.Handled = true; // a click inside a clickable card is the button's, not the card's
             (void)RunBoundCommand(); // a command it is bound to (G7)
             if (m_onClick)
                 m_onClick();

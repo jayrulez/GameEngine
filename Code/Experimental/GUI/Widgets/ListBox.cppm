@@ -90,8 +90,9 @@ export namespace experimental::gui
         }
 
     protected:
-        void OnMouseClick(const MouseEvent&) override
+        void OnMouseClick(const MouseEvent& event) override
         {
+            event.Handled = true;
             if (m_onPicked)
                 m_onPicked(m_index);
         }
@@ -233,6 +234,8 @@ export namespace experimental::gui
 
         void OnKeyDown(const KeyEvent& event) override
         {
+            if (event.Target != this)
+                return;
             switch (static_cast<KeyCode>(event.KeyCode))
             {
             // An arrow at the list's end is given back (focus moves on).

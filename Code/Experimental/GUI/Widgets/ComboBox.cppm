@@ -116,8 +116,9 @@ export namespace experimental::gui
         void SetItemHeight(f32 height) { m_itemHeight = height; }
 
     protected:
-        void OnMouseClick(const MouseEvent&) override
+        void OnMouseClick(const MouseEvent& event) override
         {
+            event.Handled = true;
             if (m_open)
                 CloseDropdown();
             else

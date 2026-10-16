@@ -63,14 +63,16 @@ export namespace foundation::ui
     private:
         void MeasureHorizontal(BoxConstraints constraints)
         {
+            // Padding and border, from the sheet as well as the Padding field.
+            const Thickness chrome = ResolveBoxMetrics().Chrome();
             const f32 maxWidth = (constraints.MaxWidth < kFloatMax)
-                                     ? constraints.MaxWidth - Padding.TotalHorizontal()
+                                     ? constraints.MaxWidth - chrome.TotalHorizontal()
                                      : kFloatMax;
             // Children get BOUNDED loose constraints (an unbounded fill-style leaf measured
             // to kFloatMax would explode the flow); margins are base-handled, rows use margin
             // boxes.
             const f32 crossMax = (constraints.MaxHeight < kFloatMax)
-                                     ? Max(0.0f, constraints.MaxHeight - Padding.TotalVertical())
+                                     ? Max(0.0f, constraints.MaxHeight - chrome.TotalVertical())
                                      : kFloatMax;
             f32 lineW = 0, lineH = 0, totalW = 0, totalH = 0;
             bool firstInLine = true;
@@ -106,17 +108,19 @@ export namespace foundation::ui
             totalW = Max(totalW, lineW);
             totalH += lineH;
 
-            MeasuredSize = Float2{constraints.ConstrainWidth(totalW + Padding.TotalHorizontal()),
-                                  constraints.ConstrainHeight(totalH + Padding.TotalVertical())};
+            MeasuredSize = Float2{constraints.ConstrainWidth(totalW + chrome.TotalHorizontal()),
+                                  constraints.ConstrainHeight(totalH + chrome.TotalVertical())};
         }
 
         void MeasureVertical(BoxConstraints constraints)
         {
+            // Padding and border, from the sheet as well as the Padding field.
+            const Thickness chrome = ResolveBoxMetrics().Chrome();
             const f32 maxHeight = (constraints.MaxHeight < kFloatMax)
-                                      ? constraints.MaxHeight - Padding.TotalVertical()
+                                      ? constraints.MaxHeight - chrome.TotalVertical()
                                       : kFloatMax;
             const f32 crossMax = (constraints.MaxWidth < kFloatMax)
-                                     ? Max(0.0f, constraints.MaxWidth - Padding.TotalHorizontal())
+                                     ? Max(0.0f, constraints.MaxWidth - chrome.TotalHorizontal())
                                      : kFloatMax;
             f32 colW = 0, colH = 0, totalW = 0, totalH = 0;
             bool firstInCol = true;
@@ -152,16 +156,18 @@ export namespace foundation::ui
             totalH = Max(totalH, colH);
             totalW += colW;
 
-            MeasuredSize = Float2{constraints.ConstrainWidth(totalW + Padding.TotalHorizontal()),
-                                  constraints.ConstrainHeight(totalH + Padding.TotalVertical())};
+            MeasuredSize = Float2{constraints.ConstrainWidth(totalW + chrome.TotalHorizontal()),
+                                  constraints.ConstrainHeight(totalH + chrome.TotalVertical())};
         }
 
         void LayoutHorizontal(f32 width, f32 height)
         {
+            // Padding and border, from the sheet as well as the Padding field.
+            const Thickness chrome = ResolveBoxMetrics().Chrome();
             (void)height;
-            const f32 maxWidth = width - Padding.TotalHorizontal();
-            f32 xPos = Padding.Left;
-            f32 yPos = Padding.Top;
+            const f32 maxWidth = width - chrome.TotalHorizontal();
+            f32 xPos = chrome.Left;
+            f32 yPos = chrome.Top;
             f32 lineH = 0;
             bool firstInLine = true;
 
@@ -176,10 +182,10 @@ export namespace foundation::ui
                 const f32 cw = mb.x;
                 const f32 ch = mb.y;
 
-                if (!firstInLine && xPos - Padding.Left + HSpacing + cw > maxWidth)
+                if (!firstInLine && xPos - chrome.Left + HSpacing + cw > maxWidth)
                 {
                     yPos += lineH + VSpacing;
-                    xPos = Padding.Left;
+                    xPos = chrome.Left;
                     lineH = 0;
                     firstInLine = true;
                 }
@@ -196,10 +202,12 @@ export namespace foundation::ui
 
         void LayoutVertical(f32 width, f32 height)
         {
+            // Padding and border, from the sheet as well as the Padding field.
+            const Thickness chrome = ResolveBoxMetrics().Chrome();
             (void)width;
-            const f32 maxHeight = height - Padding.TotalVertical();
-            f32 xPos = Padding.Left;
-            f32 yPos = Padding.Top;
+            const f32 maxHeight = height - chrome.TotalVertical();
+            f32 xPos = chrome.Left;
+            f32 yPos = chrome.Top;
             f32 colW = 0;
             bool firstInCol = true;
 
@@ -214,10 +222,10 @@ export namespace foundation::ui
                 const f32 cw = mb.x;
                 const f32 ch = mb.y;
 
-                if (!firstInCol && yPos - Padding.Top + VSpacing + ch > maxHeight)
+                if (!firstInCol && yPos - chrome.Top + VSpacing + ch > maxHeight)
                 {
                     xPos += colW + HSpacing;
-                    yPos = Padding.Top;
+                    yPos = chrome.Top;
                     colW = 0;
                     firstInCol = true;
                 }

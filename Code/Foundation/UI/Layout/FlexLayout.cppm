@@ -89,7 +89,9 @@ export namespace foundation::ui
     protected:
         void OnMeasure(BoxConstraints constraints) override
         {
-            MeasureLines(constraints.Deflate(Padding), constraints, Direction == Orientation::Horizontal);
+            // Padding and border, from the sheet as well as the Padding field.
+            const Thickness chrome = ResolveBoxMetrics().Chrome();
+            MeasureLines(constraints.Deflate(chrome), constraints, Direction == Orientation::Horizontal);
         }
 
         void OnLayout(f32 left, f32 top, f32 width, f32 height) override
@@ -191,6 +193,8 @@ export namespace foundation::ui
 
         void MeasureLines(BoxConstraints inner, BoxConstraints outer, bool horizontal)
         {
+            // Padding and border, from the sheet as well as the Padding field.
+            const Thickness chrome = ResolveBoxMetrics().Chrome();
             const f32 availMain = horizontal ? inner.MaxWidth : inner.MaxHeight;
             const f32 availCross = horizontal ? inner.MaxHeight : inner.MaxWidth;
             const bool mainDefinite = BoxConstraints::IsBounded(availMain);
@@ -305,14 +309,16 @@ export namespace foundation::ui
             }
             const f32 width = horizontal ? totalMain : totalCross;
             const f32 height = horizontal ? totalCross : totalMain;
-            MeasuredSize = Float2{outer.ConstrainWidth(width + Padding.TotalHorizontal()),
-                                  outer.ConstrainHeight(height + Padding.TotalVertical())};
+            MeasuredSize = Float2{outer.ConstrainWidth(width + chrome.TotalHorizontal()),
+                                  outer.ConstrainHeight(height + chrome.TotalVertical())};
         }
 
         void LayoutLines(f32 width, f32 height, bool horizontal)
         {
-            const f32 contentW = width - Padding.TotalHorizontal();
-            const f32 contentH = height - Padding.TotalVertical();
+            // Padding and border, from the sheet as well as the Padding field.
+            const Thickness chrome = ResolveBoxMetrics().Chrome();
+            const f32 contentW = width - chrome.TotalHorizontal();
+            const f32 contentH = height - chrome.TotalVertical();
             const f32 contentMain = horizontal ? contentW : contentH;
             const f32 contentCross = horizontal ? contentH : contentW;
             const f32 gap = MainGap();
@@ -389,8 +395,8 @@ export namespace foundation::ui
                 }
             }
 
-            const f32 padMain = horizontal ? Padding.Left : Padding.Top;
-            const f32 padCross = horizontal ? Padding.Top : Padding.Left;
+            const f32 padMain = horizontal ? chrome.Left : chrome.Top;
+            const f32 padCross = horizontal ? chrome.Top : chrome.Left;
             f32 crossPos = padCross + crossStart;
             for (const FlexLine& line : m_lines)
             {

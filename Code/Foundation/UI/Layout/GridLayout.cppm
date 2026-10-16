@@ -68,6 +68,8 @@ export namespace foundation::ui
     protected:
         void OnMeasure(BoxConstraints constraints) override
         {
+            // Padding and border, from the sheet as well as the Padding field.
+            const Thickness chrome = ResolveBoxMetrics().Chrome();
             const i32 cols = ColCount();
             const i32 rows = RowCount();
             ResolvePlacements(cols, rows);
@@ -93,8 +95,8 @@ export namespace foundation::ui
                 // kFloatMax would explode auto tracks); tracks aggregate MARGIN boxes so cell
                 // placement + the base margin inset compose.
                 child->Measure(BoxConstraints{
-                    0, Max(0.0f, constraints.MaxWidth - Padding.TotalHorizontal()), 0,
-                    Max(0.0f, constraints.MaxHeight - Padding.TotalVertical())});
+                    0, Max(0.0f, constraints.MaxWidth - chrome.TotalHorizontal()), 0,
+                    Max(0.0f, constraints.MaxHeight - chrome.TotalVertical())});
                 const Float2 mb = child->MarginBoxSize();
 
                 const TrackSize colDef = static_cast<usize>(col) < Columns.Size()
@@ -115,16 +117,16 @@ export namespace foundation::ui
                 }
             }
 
-            const f32 totalAvailW = constraints.MaxWidth - Padding.TotalHorizontal() -
+            const f32 totalAvailW = constraints.MaxWidth - chrome.TotalHorizontal() -
                                     ColumnSpacing * static_cast<f32>(Max(0, cols - 1));
-            const f32 totalAvailH = constraints.MaxHeight - Padding.TotalVertical() -
+            const f32 totalAvailH = constraints.MaxHeight - chrome.TotalVertical() -
                                     RowSpacing * static_cast<f32>(Max(0, rows - 1));
             DistributeFlex(Columns, colWidths, cols, totalAvailW);
             DistributeFlex(Rows, rowHeights, rows, totalAvailH);
 
             f32 totalW =
-                Padding.TotalHorizontal() + ColumnSpacing * static_cast<f32>(Max(0, cols - 1));
-            f32 totalH = Padding.TotalVertical() + RowSpacing * static_cast<f32>(Max(0, rows - 1));
+                chrome.TotalHorizontal() + ColumnSpacing * static_cast<f32>(Max(0, cols - 1));
+            f32 totalH = chrome.TotalVertical() + RowSpacing * static_cast<f32>(Max(0, rows - 1));
             for (f32 w : colWidths)
             {
                 totalW += w;
@@ -140,6 +142,8 @@ export namespace foundation::ui
 
         void OnLayout(f32 left, f32 top, f32 width, f32 height) override
         {
+            // Padding and border, from the sheet as well as the Padding field.
+            const Thickness chrome = ResolveBoxMetrics().Chrome();
             (void)left;
             (void)top;
             const i32 cols = ColCount();
@@ -185,10 +189,10 @@ export namespace foundation::ui
                 }
             }
 
-            const f32 contentW = width - Padding.TotalHorizontal() -
+            const f32 contentW = width - chrome.TotalHorizontal() -
                                  ColumnSpacing * static_cast<f32>(Max(0, cols - 1));
             const f32 contentH =
-                height - Padding.TotalVertical() - RowSpacing * static_cast<f32>(Max(0, rows - 1));
+                height - chrome.TotalVertical() - RowSpacing * static_cast<f32>(Max(0, rows - 1));
             DistributeFlex(Columns, colWidths, cols, contentW);
             DistributeFlex(Rows, rowHeights, rows, contentH);
 
@@ -196,13 +200,13 @@ export namespace foundation::ui
             colX.Resize(static_cast<usize>(cols), 0.0f);
             Array<f32> rowY;
             rowY.Resize(static_cast<usize>(rows), 0.0f);
-            colX[0] = Padding.Left;
+            colX[0] = chrome.Left;
             for (i32 c = 1; c < cols; ++c)
             {
                 colX[static_cast<usize>(c)] = colX[static_cast<usize>(c - 1)] +
                                               colWidths[static_cast<usize>(c - 1)] + ColumnSpacing;
             }
-            rowY[0] = Padding.Top;
+            rowY[0] = chrome.Top;
             for (i32 r = 1; r < rows; ++r)
             {
                 rowY[static_cast<usize>(r)] = rowY[static_cast<usize>(r - 1)] +

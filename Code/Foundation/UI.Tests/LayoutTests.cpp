@@ -1162,3 +1162,34 @@ TEST_CASE("dock: a styled border is part of the measured size (chrome, not just 
     CHECK(top->Bounds.y == doctest::Approx(7)); // border + padding
     CHECK(top->Bounds.x == doctest::Approx(7));
 }
+
+TEST_CASE("layout: Flex, Flow, Grid and Absolute inset their children by the sheet's padding and border")
+{
+    UIContext ctx{DefaultAllocator()};
+    auto root = MakeRoot();
+    Init(ctx, root.Get(), 400, 300);
+    auto flex = New<FlexLayout>();
+    auto flow = New<FlowLayout>();
+    auto grid = New<GridLayout>();
+    auto absolute = New<AbsoluteLayout>();
+    ViewGroup* groups[] = {flex.Get(), flow.Get(), grid.Get(), absolute.Get()};
+    core::RefPtr<TestView> children[4];
+    auto column = New<FlexLayout>();
+    column->Direction = Orientation::Vertical;
+    for (usize i = 0; i < 4; ++i)
+    {
+        children[i] = TV(20, 10);
+        groups[i]->AddView(children[i].Get());
+        groups[i]->SetStyle(StyleProperty::Padding, Thickness{7, 5, 7, 5});
+        groups[i]->SetStyle(StyleProperty::BorderWidth, 2.0f);
+        column->AddView(groups[i]);
+    }
+    root->AddView(column.Get());
+    LayoutPass(ctx, root.Get());
+    for (usize i = 0; i < 4; ++i)
+    {
+        CAPTURE(i);
+        CHECK(children[i]->Bounds.x == doctest::Approx(9.0f)); // 7 padding + 2 border
+        CHECK(children[i]->Bounds.y == doctest::Approx(7.0f)); // 5 + 2
+    }
+}

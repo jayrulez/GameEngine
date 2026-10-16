@@ -345,3 +345,28 @@ TEST_CASE("navigation: focus moved into a scroller's hidden part scrolls it into
     CHECK(shown.y >= 0.0f);
     CHECK(shown.y + shown.height <= 100.0f + 0.5f); // inside the 100-high viewport
 }
+
+TEST_CASE("navigation: focusing a page lands on its entry, and Tab stays in a dialog")
+{
+    Bed bed;
+    auto page = Make<UIWidget>();
+    page->SetNavScope(NavScope::Pass);
+    page->SetDefaultFocusId(SV(u8"second"));
+    bed.root->AddChild(page.Get());
+    auto first = Cell(*page.Get(), u8"first", 10.0f, 10.0f);
+    auto second = Cell(*page.Get(), u8"second", 10.0f, 40.0f);
+    CHECK(page->FocusElement());
+    CHECK(bed.Focused() == SV(u8"second")); // its default
+    bed.d.SetFocusNode(first.Get());
+    auto elsewhere = Cell(*bed.root.Get(), u8"elsewhere", 200.0f, 10.0f);
+    bed.d.SetFocusNode(elsewhere.Get());
+    CHECK(page->FocusElement());
+    CHECK(bed.Focused() == SV(u8"first")); // what was last focused there
+
+    page->SetNavScope(NavScope::Contain);
+    bed.d.SetFocusNode(second.Get());
+    bed.Key(KeyCode::Tab); // wraps inside the dialog, never reaching `elsewhere`
+    CHECK(bed.Focused() == SV(u8"first"));
+    bed.Key(KeyCode::Tab);
+    CHECK(bed.Focused() == SV(u8"second"));
+}

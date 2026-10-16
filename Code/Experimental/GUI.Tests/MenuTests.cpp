@@ -36,7 +36,7 @@ TEST_CASE("menu: sizes to its items")
 
 TEST_CASE("menu: Open shows it as the dispatcher popup at the given position")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{400.0f, 400.0f});
     auto anchor = Make<UIWidget>();
     anchor->SetSize(core::Float2{10.0f, 10.0f});
@@ -58,7 +58,7 @@ TEST_CASE("menu: Open shows it as the dispatcher popup at the given position")
 
 TEST_CASE("menu: activating an item runs its action and closes")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{400.0f, 400.0f});
     auto anchor = Make<UIWidget>();
     root->AddChild(anchor.Get());
@@ -83,7 +83,7 @@ TEST_CASE("menu: activating an item runs its action and closes")
 
 TEST_CASE("menu: outside click and Escape dismiss it")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{400.0f, 400.0f});
     auto anchor = Make<UIWidget>();
     root->AddChild(anchor.Get());
@@ -109,7 +109,7 @@ TEST_CASE("menu: an outside click dismisses even when the opener covers the clic
     // Regression: the context menu was opened with the full-window panel as its popup owner,
     // so clicks anywhere on the panel counted as "on the owner" and never dismissed. A menu
     // has no persistent owner - any press outside the menu itself must close it.
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{400.0f, 400.0f});
     auto panel = Make<UIWidget>();
     panel->SetSize(core::Float2{400.0f, 400.0f}); // covers the whole area (like the sandbox panel)
@@ -130,7 +130,7 @@ TEST_CASE("menu: an outside click dismisses even when the opener covers the clic
 
 TEST_CASE("menu: can be reopened after being dismissed")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{400.0f, 400.0f});
     auto panel = Make<UIWidget>();
     panel->SetSize(core::Float2{400.0f, 400.0f});
@@ -171,7 +171,7 @@ TEST_CASE("menu: separators are non-selectable rows that add height")
 
 TEST_CASE("menu: a checkable item toggles, fires its callback, and closes the menu")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{400.0f, 400.0f});
     auto anchor = Make<UIWidget>();
     root->AddChild(anchor.Get());
@@ -201,7 +201,7 @@ TEST_CASE("menu: a checkable item toggles, fires its callback, and closes the me
 
 TEST_CASE("menu: a submenu opens to the right as a sibling on hover")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{600.0f, 600.0f});
     auto anchor = Make<UIWidget>();
     root->AddChild(anchor.Get());
@@ -227,7 +227,7 @@ TEST_CASE("menu: a submenu opens to the right as a sibling on hover")
 
 TEST_CASE("menu: hovering a different row closes the open submenu")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{600.0f, 600.0f});
     auto anchor = Make<UIWidget>();
     root->AddChild(anchor.Get());
@@ -251,7 +251,7 @@ TEST_CASE("menu: hovering a different row closes the open submenu")
 TEST_CASE(
     "menu: clicking inside an open submenu does not dismiss; activating closes the whole chain")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{600.0f, 600.0f});
     auto anchor = Make<UIWidget>();
     root->AddChild(anchor.Get());
@@ -283,7 +283,7 @@ TEST_CASE(
 
 TEST_CASE("menu: an outside click dismisses the whole open submenu chain")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{600.0f, 600.0f});
     auto anchor = Make<UIWidget>();
     root->AddChild(anchor.Get());

@@ -20,7 +20,7 @@ namespace
 {
     core::RefPtr<SceneRoot> MakeScene(core::Float2 size)
     {
-        auto s = core::MakeRef<SceneRoot>(core::DefaultAllocator());
+        auto s = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
         s->SetSize(size);
         return s;
     }
@@ -386,7 +386,7 @@ TEST_CASE("bridge: the d-pad and the left stick move focus; a button runs its bi
     // East through a binding.
     bool back = false;
     (void)root->OnCommand(core::StringView(u8"back"), [&](CommandEvent&) { back = true; });
-    REQUIRE(root->GetKeymap().Bind(core::StringView(u8"pad-east"), core::StringView(u8"back")));
+    REQUIRE(root->GetContext().GetKeymap().Bind(core::StringView(u8"pad-east"), core::StringView(u8"back")));
     CHECK(bridge.Dispatch(Pad(shell::InputEventKind::GamepadButtonDown, shell::GamepadButton::East)));
     CHECK(back);
 }
@@ -415,7 +415,7 @@ TEST_CASE("bridge: a keymap filled from the game's input map follows its binding
 
     auto root = MakeScene(core::Float2{200.0f, 200.0f});
     const InputMapCommand wanted[] = {{core::StringView(u8"Back"), core::StringView(u8"back")}};
-    CHECK(BindFromInputMap(root->GetKeymap(), map, core::Span<const InputMapCommand>(wanted, 1)) == 2u);
+    CHECK(BindFromInputMap(root->GetContext().GetKeymap(), map, core::Span<const InputMapCommand>(wanted, 1)) == 2u);
     int backs = 0;
     (void)root->OnCommand(core::StringView(u8"back"), [&](CommandEvent&) { ++backs; });
     EventDispatcher& d = *root->GetEventDispatcher();

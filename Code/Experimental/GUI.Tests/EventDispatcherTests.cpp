@@ -16,7 +16,7 @@ namespace
 {
     core::RefPtr<SceneRoot> MakeScene(core::Float2 size)
     {
-        auto s = core::MakeRef<SceneRoot>(core::DefaultAllocator());
+        auto s = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
         s->SetSize(size);
         return s;
     }

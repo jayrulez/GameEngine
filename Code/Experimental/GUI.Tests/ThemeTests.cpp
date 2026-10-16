@@ -173,7 +173,7 @@ TEST_CASE("theme: ParseUrl strips the url() wrapper and quotes")
 
 TEST_CASE("theme: the built-in default theme restyles the standard widgets")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto button = Make<Button>();
     auto textfield = Make<TextField>();
     root->AddChild(button.Get());

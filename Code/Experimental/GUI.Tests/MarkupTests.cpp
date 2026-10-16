@@ -98,13 +98,13 @@ TEST_CASE("markup: a parse error yields null")
 TEST_CASE("markup: {{name}} binds to the GUI's data model, two-way where the user changes it")
 {
     RegisterGuiElements();
-    auto scene = core::MakeRef<SceneRoot>(core::DefaultAllocator());
-    DataModel& data = scene->GetData();
+    auto scene = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    DataModel& data = scene->GetContext().GetData();
     data.Set(SV(u8"score"), core::Variant::From<core::i32>(7));
     data.Set(SV(u8"volume"), core::Variant::From<core::f64>(0.5));
     static const ElementSet elements = ElementSet::All();
     MarkupLoader loader(elements, core::DefaultAllocator());
-    loader.SetDataModel(scene->GetDataRef());
+    loader.SetDataModel(scene->GetContext().GetDataRef());
     auto tree = loader.LoadFromString(SV(u8R"(
         <LinearLayout orientation="vertical">
             <Label text="Score: {{ score }} of {{max}}"/>
@@ -128,7 +128,7 @@ TEST_CASE("markup: {{name}} binds to the GUI's data model, two-way where the use
 
     data.Set(SV(u8"max"), core::Variant::From<core::i32>(10));
     slider->SetValue(0.25f); // the user drags it
-    scene->Update(core::Duration::FromSeconds(0.016)); // the write-back's followers run in the same flush
+    scene->GetContext().Update(core::Duration::FromSeconds(0.016)); // the write-back's followers run in the same flush
     CHECK(score->GetText() == SV(u8"Score: 7 of 10"));
     CHECK(volume->GetText() == SV(u8"0.25"));
 }

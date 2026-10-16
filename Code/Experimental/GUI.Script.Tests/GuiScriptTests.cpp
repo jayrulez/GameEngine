@@ -43,7 +43,7 @@ namespace
     // A GUI for one script: its root, 400 x 300, installed as the script's `gui.root()`.
     struct GuiBed
     {
-        RefPtr<gui::SceneRoot> root = MakeRef<gui::SceneRoot>(DefaultAllocator());
+        RefPtr<gui::SceneRoot> root = MakeRef<gui::SceneRoot>(DefaultAllocator(), MakeRef<gui::GUIContext>(DefaultAllocator()));
         gui::GuiScriptBinding binding;
         Errors errors;
         RefPtr<IScriptContext> context;
@@ -86,7 +86,7 @@ namespace
             dispatcher->InjectMouseDown(at, gui::MouseButton::Left);
             dispatcher->InjectMouseUp(at, gui::MouseButton::Left);
         }
-        void Update() { root->Update(Duration{}); }
+        void Update() { root->GetContext().Update(Duration{}); }
     };
 
     [[nodiscard]] RefPtr<IScriptManager> Bound(RefPtr<IScriptManager> manager)
@@ -179,10 +179,10 @@ namespace
         CHECK(volume->GetText() == StringView(u8"0.5"));
         CHECK(bed.Number(u8"bound") == doctest::Approx(1.0)); // every bind call answered true
         // A handle held in a variable narrowed, and reached a Variant sink as the same element.
-        CHECK(gui::Node::FromHandle(bed.root->GetData().Get(StringView(u8"picked"))) == slider);
+        CHECK(gui::Node::FromHandle(bed.root->GetContext().GetData().Get(StringView(u8"picked"))) == slider);
 
         // The game changes the data: the script's binding follows on the GUI's frame.
-        bed.root->GetData().Set(StringView(u8"score"), Variant::From<i32>(4));
+        bed.root->GetContext().GetData().Set(StringView(u8"score"), Variant::From<i32>(4));
         bed.Update();
         CHECK(score->GetText() == StringView(u8"Score: 4"));
 
@@ -190,7 +190,7 @@ namespace
         slider->SetValue(0.75f);
         bed.Update();
         CHECK(volume->GetText() == StringView(u8"0.75"));
-        const Variant written = bed.root->GetData().Get(StringView(u8"volume"));
+        const Variant written = bed.root->GetContext().GetData().Get(StringView(u8"volume"));
         REQUIRE(written.TryGet<f32>() != nullptr);
         CHECK(*written.TryGet<f32>() == doctest::Approx(0.75f));
 
@@ -203,8 +203,8 @@ namespace
 
     void SeedBindingData(GuiBed& bed)
     {
-        bed.root->GetData().Set(StringView(u8"score"), Variant::From<i32>(3));
-        bed.root->GetData().Set(StringView(u8"volume"), Variant::From<f64>(0.5));
+        bed.root->GetContext().GetData().Set(StringView(u8"score"), Variant::From<i32>(3));
+        bed.root->GetContext().GetData().Set(StringView(u8"volume"), Variant::From<f64>(0.5));
     }
 }
 
@@ -218,7 +218,7 @@ namespace
         REQUIRE(bed.errors.count == 0);
         gui::CheckBox* box = Cast<gui::CheckBox>(bed.root->GetChildAt(0));
         REQUIRE(box != nullptr);
-        const gui::Command* music = bed.root->GetCommands().Find(StringView(u8"music"));
+        const gui::Command* music = bed.root->GetContext().GetCommands().Find(StringView(u8"music"));
         REQUIRE(music != nullptr);
         CHECK(music->GetLabel() == StringView(u8"Music"));
         bed.Update();

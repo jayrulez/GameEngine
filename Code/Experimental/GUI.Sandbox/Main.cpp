@@ -247,7 +247,8 @@ private:
     fonts::CachedFont* m_fontLarge = nullptr;
 
     // GUI.
-    RefPtr<gui::SceneRoot> m_root;
+    RefPtr<gui::GUIContext> m_gui; // the GUI: its clock, data, bindings, commands
+    RefPtr<gui::SceneRoot> m_root; // its one root, this window
     RefPtr<gui::LinearLayout> m_panel;
     RefPtr<gui::Label> m_counter;
     RefPtr<gui::TextField> m_textField;
@@ -360,7 +361,8 @@ void GUISandbox::LoadFontSize(StringView path, f32 pixelHeight)
 
 void GUISandbox::BuildUI()
 {
-    m_root = MakeRef<gui::SceneRoot>(AppRoot());
+    m_gui = MakeRef<gui::GUIContext>(AppRoot());
+    m_root = MakeRef<gui::SceneRoot>(AppRoot(), m_gui);
     // The window's device pixels at its monitor's scale: the tree lays out in logical units.
     m_root->SetDisplayScale(m_window != nullptr ? m_window->ContentScale() : 1.0f);
     m_root->SetViewportSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)});
@@ -860,7 +862,7 @@ void GUISandbox::BuildUI()
     // checkbox and the text field write their values back, and everything reading them follows;
     // the percentage is a native binding reading the same value. No handler is wired.
     {
-        gui::DataModel& data = m_root->GetData();
+        gui::DataModel& data = m_gui->GetData();
         data.Set(StringView(u8"volume"), Variant::From<f32>(0.4f));
         data.Set(StringView(u8"muted"), Variant::From<bool>(false));
         data.Set(StringView(u8"name"), Variant::From<String>(String(u8"Ada")));
@@ -883,7 +885,7 @@ void GUISandbox::BuildUI()
         )";
         const gui::ElementSet elements = gui::ElementSet::All();
         gui::MarkupLoader loader(elements, AppRoot(), nullptr, m_fontService.Get());
-        loader.SetDataModel(m_root->GetDataRef());
+        loader.SetDataModel(m_gui->GetDataRef());
         if (RefPtr<gui::Node> bound = loader.LoadFromString(StringView(kBound)))
         {
             // A native binding beside the markup's: the volume as a percentage.
@@ -891,7 +893,7 @@ void GUISandbox::BuildUI()
             percent->SetFont(m_font);
             percent->SetTextColor(Col(0.78f, 0.82f, 0.88f));
             percent->SetSize(Float2{60.0f, 26.0f});
-            RefPtr<gui::DataModel> model = m_root->GetDataRef();
+            RefPtr<gui::DataModel> model = m_gui->GetDataRef();
             gui::Label* label = percent.Get();
             percent->Bind([label, model]()
                           {
@@ -1335,7 +1337,7 @@ void GUISandbox::OnRender()
     m_root->SetViewportSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)});
     m_pageScroll->SetSize(m_root->GetSize());
     m_panel->SetSize(Float2{m_root->GetSize().x, m_panel->GetSize().y});
-    m_root->Update(Duration::FromSeconds(static_cast<f64>(m_deltaTime)));
+    m_gui->Update(Duration::FromSeconds(static_cast<f64>(m_deltaTime)));
     // --scroll: held for the first frames, while layout settles the page's height.
     if (m_initialScroll > 0.0f && m_initialScrollFrames < 10)
     {
@@ -1465,7 +1467,7 @@ void GUISandbox::BuildShowcase()
             std::fprintf(stderr, "GUISandbox: the showcase's title font did not load\n");
     }
 
-    gui::DataModel& data = m_root->GetData();
+    gui::DataModel& data = m_gui->GetData();
     data.Set(StringView(u8"volume"), Variant::From<f32>(0.7f));
     data.Set(StringView(u8"music"), Variant::From<bool>(true));
     data.Set(StringView(u8"name"), Variant::From<String>(String(u8"Ada")));
@@ -1476,7 +1478,7 @@ void GUISandbox::BuildShowcase()
     const String markup = readText(u8"Assets/ui/showcase/menu.xml");
     const gui::ElementSet elements = gui::ElementSet::All();
     gui::MarkupLoader loader(elements, AppRoot(), nullptr, m_fontService.Get());
-    loader.SetDataModel(m_root->GetDataRef());
+    loader.SetDataModel(m_gui->GetDataRef());
     m_showcase = loader.LoadFromString(markup.AsView());
     if (!m_showcase)
     {
@@ -1488,7 +1490,7 @@ void GUISandbox::BuildShowcase()
     m_styles.SetStyleSheet(gui::CSSParser::Parse(readText(u8"Assets/ui/showcase/menu.css").AsView()));
 
     // Leave: the menu fades, then the window closes.
-    RefPtr<gui::DataModel> model = m_root->GetDataRef();
+    RefPtr<gui::DataModel> model = m_gui->GetDataRef();
     m_showcase->Bind([this, model]()
                      {
                          const Variant quit = gui::ConvertVariant(model->Get(StringView(u8"quit")), TypeOf<bool>());
@@ -1576,6 +1578,7 @@ void GUISandbox::OnShutdown()
     m_inputSurface.Reset();
     m_bridge.Reset();
     m_root.Reset();
+    m_gui.Reset();
     m_counter.Reset();
     m_textField.Reset();
     m_echo.Reset();

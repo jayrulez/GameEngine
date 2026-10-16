@@ -34,7 +34,7 @@ namespace
 
     struct Bed
     {
-        core::RefPtr<SceneRoot> root = Make<SceneRoot>();
+        core::RefPtr<SceneRoot> root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
         EventDispatcher& d = *root->GetEventDispatcher();
         Bed() { root->SetSize(core::Float2{400.0f, 400.0f}); }
         [[nodiscard]] core::StringView Focused() const
@@ -280,22 +280,22 @@ TEST_CASE("navigation: a held direction repeats after a delay, faster the longer
     bed.d.PressDirection(NavDirection::Down); // at once
     CHECK(index() == 1);
     CHECK(bed.root->NeedsFrame()); // held: frames keep coming
-    bed.root->Update(core::Duration::FromSeconds(0.39)); // not yet the delay
+    bed.root->GetContext().Update(core::Duration::FromSeconds(0.39)); // not yet the delay
     CHECK(index() == 1);
-    bed.root->Update(core::Duration::FromSeconds(0.02)); // past it: the first repeat
+    bed.root->GetContext().Update(core::Duration::FromSeconds(0.02)); // past it: the first repeat
     CHECK(index() == 2);
     // Over the first half second of repeats, slower; over a later half second, faster.
-    bed.root->Update(core::Duration::FromSeconds(0.5));
+    bed.root->GetContext().Update(core::Duration::FromSeconds(0.5));
     const int early = index() - 2;
     for (int i = 0; i < 20; ++i)
-        bed.root->Update(core::Duration::FromSeconds(0.05)); // a second more
+        bed.root->GetContext().Update(core::Duration::FromSeconds(0.05)); // a second more
     const int before = index();
-    bed.root->Update(core::Duration::FromSeconds(0.5));
+    bed.root->GetContext().Update(core::Duration::FromSeconds(0.5));
     const int late = index() - before;
     CHECK(late > early);
     bed.d.ReleaseDirection(NavDirection::Down);
     const int released = index();
-    bed.root->Update(core::Duration::FromSeconds(1.0));
+    bed.root->GetContext().Update(core::Duration::FromSeconds(1.0));
     CHECK(index() == released);
 }
 
@@ -386,7 +386,7 @@ TEST_CASE("navigation: a held d-pad direction reaches the focused widget before 
     bed.d.PressDirection(NavDirection::Right);
     CHECK(slider->GetValue() == doctest::Approx(0.55f));
     CHECK(bed.d.GetFocusNode() == slider.Get());
-    bed.root->Update(core::Duration::FromSeconds(0.45)); // a repeat steps it again
+    bed.root->GetContext().Update(core::Duration::FromSeconds(0.45)); // a repeat steps it again
     CHECK(slider->GetValue() == doctest::Approx(0.6f));
     bed.d.ReleaseDirection(NavDirection::Right);
     // Down is not the slider's: focus moves.

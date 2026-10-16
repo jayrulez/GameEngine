@@ -76,7 +76,7 @@ TEST_CASE("radio: group callback fires with the selected index, only on change")
 
 TEST_CASE("radio: click selects and fires OnSelected")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{200.0f, 200.0f});
     auto a = Make<RadioButton>();
     auto b = Make<RadioButton>();

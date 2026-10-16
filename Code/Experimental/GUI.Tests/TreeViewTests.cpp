@@ -38,7 +38,7 @@ namespace
 
     core::RefPtr<TreeView> MountTree(core::RefPtr<SceneRoot>& root, IModel* model)
     {
-        root = Make<SceneRoot>();
+        root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
         root->SetSize(core::Float2{400.0f, 400.0f});
         auto tree = Make<TreeView>();
         tree->SetSize(core::Float2{260.0f, 300.0f}); // tall enough to realize all visible rows

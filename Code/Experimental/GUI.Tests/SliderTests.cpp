@@ -50,7 +50,7 @@ TEST_CASE("slider: value clamps and notifies on change")
 
 TEST_CASE("slider: press sets value from the cursor x")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{200.0f, 200.0f});
     auto s = Make<Slider>();
     s->SetSize(core::Float2{100.0f, 20.0f}); // handleR = 10 -> usable x in [10, 90]
@@ -63,7 +63,7 @@ TEST_CASE("slider: press sets value from the cursor x")
 
 TEST_CASE("slider: drag keeps tracking after the cursor leaves it (pointer capture)")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{300.0f, 200.0f});
     auto s = Make<Slider>();
     s->SetSize(core::Float2{100.0f, 20.0f});
@@ -92,7 +92,7 @@ TEST_CASE("slider: hover then press then drag off still tracks (leave clears m_p
     // Regression: hovering the slider first (so a MouseLeave fires when the cursor drags off)
     // used to cancel the drag - UINode::OnMouseLeave clears m_pressed and OnMouseMove gated on
     // IsPressed(). The slider's own m_dragging flag survives the leave.
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{300.0f, 200.0f});
     auto s = Make<Slider>();
     s->SetSize(core::Float2{100.0f, 20.0f}); // usable x in [10, 90]
@@ -130,7 +130,7 @@ TEST_CASE("slider: draws track + fill + handle")
 
 TEST_CASE("slider: right button does not drag the value")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{200.0f, 200.0f});
     auto s = Make<Slider>();
     s->SetSize(core::Float2{100.0f, 20.0f});

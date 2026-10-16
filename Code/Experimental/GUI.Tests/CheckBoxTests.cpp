@@ -58,7 +58,7 @@ TEST_CASE("checkbox: toggle and set fire the change callback")
 
 TEST_CASE("checkbox: click through the dispatcher toggles it")
 {
-    auto root = Make<SceneRoot>();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{100.0f, 100.0f});
     auto cb = Make<CheckBox>();
     cb->SetSize(core::Float2{24.0f, 24.0f});

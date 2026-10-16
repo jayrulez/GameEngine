@@ -184,11 +184,9 @@ export namespace experimental::gui
         }
 
         // The caret blink is advanced by the owner (the host's frame) if wired; a static
-        // caret (always shown while focused) is the default when not ticked. The same clock
-        // drives double-click detection (see OnMouseDown).
+        // caret (always shown while focused) is the default when not ticked.
         void Update(f64 deltaSeconds)
         {
-            m_clock += deltaSeconds;
             if (!IsFocused())
                 return;
             m_blinkAccum += deltaSeconds;
@@ -313,8 +311,8 @@ export namespace experimental::gui
 
         void OnMouseDown(const MouseEvent& event) override
         {
-            UINode::OnMouseDown(event);
             RequestFocus();
+            event.Handled = true;
             // Only the primary button places the caret: a right press keeps the selection a context
             // menu would act on.
             if (event.Button != MouseButton::Left)
@@ -323,17 +321,13 @@ export namespace experimental::gui
             const f32 localX = ConvertToNodeSpace(event.Position).x;
             const usize pos = CaretFromX(localX);
 
-            // Double-click (a second press close in time AND position) selects the word. The
-            // position gate both matches real double-click behaviour and keeps a run of
-            // single clicks at different spots from ever being read as one.
-            const bool nearInTime = (m_clock - m_lastClickTime) <= kDoubleClickTime;
-            const f32 dx = localX - m_lastClickX;
-            const bool nearInSpace = (dx < 0.0f ? -dx : dx) <= kDoubleClickSlop;
-            m_lastClickTime = m_clock;
-            m_lastClickX = localX;
-            if (nearInTime && nearInSpace && !shift)
+            // A double press selects the word, a triple the whole line (the dispatcher counts them).
+            if (event.ClickCount >= 2 && !shift)
             {
-                SelectWordAt(pos);
+                if (event.ClickCount == 2)
+                    SelectWordAt(pos);
+                else
+                    SelectAll();
                 m_selecting = false;
                 ResetBlink();
                 return;
@@ -357,7 +351,7 @@ export namespace experimental::gui
 
         void OnMouseUp(const MouseEvent& event) override
         {
-            UINode::OnMouseUp(event);
+            (void)event;
             m_selecting = false;
         }
 
@@ -632,17 +626,11 @@ export namespace experimental::gui
 
         bool m_selecting = false; // drag-select in progress (pointer captured)
 
-        // Blink state + a monotonically increasing clock (advances via Update()); the clock
-        // also times double-clicks.
+        // Blink state (advances via Update()).
         bool m_caretVisible = true;
         f64 m_blinkAccum = 0.0;
-        f64 m_clock = 0.0;
-        f64 m_lastClickTime = -1000.0; // far in the past: the first press is never a double
-        f32 m_lastClickX = 0.0f;       // node-local x of the last press (double-click gate)
 
         static constexpr f64 kBlinkPeriod = 0.5;      // seconds per on/off half-cycle
-        static constexpr f64 kDoubleClickTime = 0.4;  // max gap for a double-click
-        static constexpr f32 kDoubleClickSlop = 4.0f; // max px between the two presses
         static constexpr f32 kCaretWidth = 1.5f;
     };
 }

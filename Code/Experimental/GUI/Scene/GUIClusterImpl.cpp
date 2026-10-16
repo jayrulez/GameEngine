@@ -72,4 +72,34 @@ namespace experimental::gui
         if (EventDispatcher* dispatcher = GetEventDispatcher())
             dispatcher->NotifySubtreeRemoved(child);
     }
+
+    bool Node::RouteEvent(Event& event)
+    {
+        // The path, target first, held for the walk: a handler may remove nodes from it.
+        Array<RefPtr<Node>> path(MemoryAllocator());
+        for (Node* n = this; n != nullptr; n = n->m_parent)
+            path.PushBack(RefPtr<Node>(n));
+        Node* const root = path[path.Size() - 1].Get();
+        // A node removed from the tree during the walk takes no further part in it.
+        const auto inTree = [root](Node& n) { return n.GetRootNode() == root; };
+        event.Target = this;
+        event.Handled = false;
+        event.Phase = EventPhase::Capture;
+        for (usize i = path.Size(); i-- > 1;)
+        {
+            if (!inTree(*path[i]))
+                continue;
+            path[i]->DeliverRouted(event);
+            if (event.Handled)
+                return true;
+        }
+        event.Phase = EventPhase::Target;
+        if (inTree(*this))
+            DeliverRouted(event);
+        event.Phase = EventPhase::Bubble;
+        for (usize i = 1; i < path.Size() && !event.Handled; ++i)
+            if (inTree(*path[i]))
+                path[i]->DeliverRouted(event);
+        return event.Handled;
+    }
 }

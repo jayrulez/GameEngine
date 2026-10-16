@@ -92,7 +92,7 @@ export namespace experimental::gui
         bool OnActivate() override { return ActivateAsClick(); } // Return, Space: a click
         void OnMouseClick(const MouseEvent& event) override
         {
-            (void)event;
+            event.Handled = true;
             // Bound to a command, the command decides (its handler toggles its checked state, which
             // comes back here); else the box toggles itself.
             if (HasCommand())

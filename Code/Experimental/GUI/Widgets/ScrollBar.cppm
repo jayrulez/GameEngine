@@ -104,9 +104,9 @@ export namespace experimental::gui
         // by one visible proportion (eepp-style), no drag.
         void OnMouseDown(const MouseEvent& event) override
         {
-            UINode::OnMouseDown(event);
             if (event.Button != MouseButton::Left)
                 return; // only the left button drags/pages
+            event.Handled = true;
             const Rect b = GetContentBounds();
             const f32 track = TrackLength(b);
             const f32 thumbLen = ThumbLength(track);
@@ -142,8 +142,8 @@ export namespace experimental::gui
         }
         void OnMouseUp(const MouseEvent& event) override
         {
+            (void)event;
             m_dragging = false;
-            UINode::OnMouseUp(event);
         }
 
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override

@@ -163,9 +163,10 @@ TEST_CASE("table-view: sorting from a header click survives the header it rebuil
         d->InjectMouseDown(core::Float2{200.0f, 13.0f}, MouseButton::Left);
         d->InjectMouseUp(core::Float2{200.0f, 13.0f}, MouseButton::Left);
         root->GetContext().Update(core::Duration::FromSeconds(0.016));
-        // The rebuild freed the hovered header cell: the dispatcher let go of it, so moving on
-        // leaves nothing freed.
-        CHECK(d->GetOverNode() == nullptr);
+        // The rebuild freed the hovered header cell: the dispatcher let go of it (what it still
+        // holds is in the tree), so moving on leaves nothing freed.
+        REQUIRE(d->GetOverNode() != nullptr);
+        CHECK(d->GetOverNode()->GetRootNode() == root.Get());
     }
     d->InjectMouseMove(core::Float2{200.0f, 60.0f});
     CHECK(d->GetOverNode() != nullptr);

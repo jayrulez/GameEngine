@@ -62,7 +62,7 @@ export namespace experimental::gui
     protected:
         void OnMouseEnter(const MouseEvent& event) override
         {
-            UINode::OnMouseEnter(event);
+            (void)event;
             if (m_onHovered)
                 m_onHovered();
         }
@@ -224,7 +224,11 @@ export namespace experimental::gui
         void SetThemeFont(fonts::CachedFont* font) override { SetFont(font); }
 
     protected:
-        void OnMouseClick(const MouseEvent&) override { Activate(); }
+        void OnMouseClick(const MouseEvent& event) override
+        {
+            event.Handled = true;
+            Activate();
+        }
 
         // Run the item: toggle (if checkable), fire the user's action, then close the chain.
         virtual void Activate()

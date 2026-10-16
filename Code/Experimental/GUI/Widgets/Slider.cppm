@@ -97,11 +97,8 @@ export namespace experimental::gui
         }
 
     protected:
-        // Drag state is tracked with our own m_dragging flag rather than IsPressed(): a
-        // captured drag that leaves the slider fires OnMouseLeave (which clears m_pressed)
-        // BEFORE the routed OnMouseMove, so gating the move on IsPressed() would stop the
-        // drag the instant the cursor left. Pointer capture guarantees the release reaches
-        // us, so OnMouseUp reliably clears m_dragging.
+        // Drag state is the slider's own m_dragging: pointer capture brings the moves and the
+        // release here even after the cursor leaves it.
         // Left and right step the value, and stay the slider's at its ends: holding the d-pad to
         // reach 0 or 100 must not throw focus off it (user ruling); up and down navigate. Home and
         // End jump.
@@ -123,11 +120,11 @@ export namespace experimental::gui
 
         void OnMouseDown(const MouseEvent& event) override
         {
-            UINode::OnMouseDown(event);
             if (event.Button != MouseButton::Left)
                 return;
             m_dragging = true;
             UpdateFromEvent(event);
+            event.Handled = true;
         }
         void OnMouseMove(const MouseEvent& event) override
         {
@@ -136,8 +133,8 @@ export namespace experimental::gui
         }
         void OnMouseUp(const MouseEvent& event) override
         {
+            (void)event;
             m_dragging = false;
-            UINode::OnMouseUp(event);
         }
 
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override

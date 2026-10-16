@@ -57,8 +57,9 @@ export namespace experimental::gui
         void SetOnClicked(core::Function<void()> callback) { m_onClicked = core::Move(callback); }
 
     protected:
-        void OnMouseClick(const MouseEvent&) override
+        void OnMouseClick(const MouseEvent& event) override
         {
+            event.Handled = true;
             if (m_onClicked)
                 m_onClicked();
         }

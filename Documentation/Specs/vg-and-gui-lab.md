@@ -175,6 +175,16 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   tables the shaper reads, the stb shaper writes glyph ids too, and the font data version bumps
   with a migration, so shipped games shape as the editor does. HarfBuzz 14.5.1 is vendored
   (ac3396dab).
+  As built on `vg` so far: atlases answer GlyphFor(codepoint) and look up by glyph id (730e3cf3d);
+  every atlas, baker and cooked font keys by glyph index, the TrueType atlas packing glyph indices
+  itself, and every shaper writes them (c80aec10e; FontResource 3); fonts expose their file and
+  cooked fonts keep it (3f65b0d16); a TextShaperFactory and a shared ClusterTextShaper (3276b36b0);
+  Fonts.HarfBuzz, HarfBuzz behind ITextShaper only (57d622573); bakers bake what a shaper's
+  substitutions reach, through ITextShaper::CollectReachableGlyphs (23d4e26a7; font builder 8);
+  the engine's UI, the editor and the UI sandbox install it (a40662a37). Left: ITextShaper widened
+  to a script, a language, a direction and a font list with fallback; the bidi algorithm; and
+  unshaped VG DrawText (single-line labels) still draws each codepoint's own glyph, so a
+  single-line label does not ligate where wrapped and rich text do.
 - **F4 Text effects.** Outline, shadow and glow per run, from the distance-field fonts the engine
   already bakes (`Fonts.DistanceField.Baker`), so a HUD's text reads over any scene without a
   panel behind it. Tests: an outline's width and a shadow's offset probed in pixels; effects on one

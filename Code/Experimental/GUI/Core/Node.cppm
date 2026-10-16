@@ -830,31 +830,9 @@ export namespace experimental::gui
         // The style transform's matrix and origin in local units, from the functions and the size.
         void UpdateStyleTransform()
         {
-            const auto resolve = [](LengthValue v, f32 size)
-            { return v.Unit == LengthUnit::Percent ? v.Value * size / 100.0f : v.Value; };
-            Transform2D m;
-            for (const TransformFunction& f : m_styleTransforms)
-            {
-                switch (f.Kind)
-                {
-                case TransformKind::Translate:
-                    m.Translate(resolve(f.A, m_size.x), resolve(f.B, m_size.y));
-                    break;
-                case TransformKind::Rotate:
-                    m.Rotate(f.Angle);
-                    break;
-                case TransformKind::Scale:
-                    m.Scale(f.ScaleX, f.ScaleY);
-                    break;
-                case TransformKind::Skew:
-                    m.Combine(Transform2D{1.0f, core::Tan(f.AngleY), core::Tan(f.Angle), 1.0f, 0.0f, 0.0f});
-                    break;
-                case TransformKind::Matrix:
-                    m.Combine(Transform2D{f.M[0], f.M[1], f.M[2], f.M[3], f.M[4], f.M[5]});
-                    break;
-                }
-            }
-            SetExtraTransform(m, core::Float2{resolve(m_transformOriginX, m_size.x), resolve(m_transformOriginY, m_size.y)});
+            SetExtraTransform(ComposeTransforms(m_styleTransforms, m_size),
+                              core::Float2{ResolveAgainst(m_transformOriginX, m_size.x),
+                                           ResolveAgainst(m_transformOriginY, m_size.y)});
             Invalidate();
         }
 

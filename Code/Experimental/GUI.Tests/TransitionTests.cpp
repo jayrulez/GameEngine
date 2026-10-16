@@ -163,3 +163,93 @@ TEST_CASE("transition: a widget destroyed mid-move ends its animation, which nev
     bed.Advance(0.25);
     CHECK(bed.root->GetActionManager()->IsEmpty());
 }
+
+TEST_CASE("transition: transform lists of different functions move through their matrices")
+{
+    core::Array<TransformFunction> translate = ParseTransforms(SV(u8"translate(100px, 0)")).Value();
+    core::Array<TransformFunction> rotate = ParseTransforms(SV(u8"rotate(90deg)")).Value();
+    StyleValue a, b;
+    a.Kind = b.Kind = StyleValueKind::Transforms;
+    a.Transforms = translate;
+    b.Transforms = rotate;
+    StyleInterpolationContext ctx;
+    ctx.BoxSize = core::Float2{100.0f, 50.0f};
+    // Halfway: half the translation, half the turn, as one matrix.
+    const StyleValue half = InterpolateStyleValue(a, b, 0.5f, &ctx);
+    REQUIRE(half.Transforms.Size() == 1u);
+    CHECK(half.Transforms[0].Kind == TransformKind::Matrix);
+    const Transform2D m = ComposeTransforms(half.Transforms, ctx.BoxSize);
+    CHECK(m.tx == doctest::Approx(50.0f));
+    CHECK(core::Atan2(m.b, m.a) == doctest::Approx(0.7853982f));
+    // The ends are the lists themselves.
+    const Transform2D atEnd = ComposeTransforms(InterpolateStyleValue(a, b, 1.0f, &ctx).Transforms, ctx.BoxSize);
+    CHECK(atEnd.a == doctest::Approx(0.0f).epsilon(1e-5));
+    CHECK(atEnd.b == doctest::Approx(1.0f));
+    CHECK(atEnd.tx == doctest::Approx(0.0f).epsilon(1e-4));
+
+    // Through matrices the rotation goes the short way round: 170deg to -170deg passes 180, not 0.
+    a.Transforms = ParseTransforms(SV(u8"rotate(170deg) scale(1)")).Value();
+    b.Transforms = ParseTransforms(SV(u8"rotate(-170deg)")).Value();
+    const Transform2D turned = ComposeTransforms(InterpolateStyleValue(a, b, 0.5f, &ctx).Transforms, ctx.BoxSize);
+    CHECK(turned.a == doctest::Approx(-1.0f)); // 180deg
+    CHECK(turned.b == doctest::Approx(0.0f).epsilon(1e-4));
+
+    // A skew and a scale survive the decomposition (a matrix's own ends are reproduced).
+    a.Transforms = ParseTransforms(SV(u8"skewX(30deg) scale(2, 3)")).Value();
+    b.Transforms = ParseTransforms(SV(u8"rotate(10deg)")).Value();
+    const Transform2D start = ComposeTransforms(InterpolateStyleValue(a, b, 0.0f, &ctx).Transforms, ctx.BoxSize);
+    const Transform2D original = ComposeTransforms(a.Transforms, ctx.BoxSize);
+    CHECK(start.a == doctest::Approx(original.a));
+    CHECK(start.b == doctest::Approx(original.b).epsilon(1e-4));
+    CHECK(start.c == doctest::Approx(original.c));
+    CHECK(start.d == doctest::Approx(original.d));
+}
+
+TEST_CASE("transition: lengths in different units move in pixels; a percentage against another unit switches")
+{
+    Bed bed(u8"box { width: 100px; transition: width 1s linear; } box.on { width: 10rem; }");
+    bed.Toggle(u8"on");
+    bed.Advance(0.5);
+    CHECK(bed.widget->GetSize().x == doctest::Approx(130.0f)); // (100 + 160) / 2, rem at 16
+
+    StyleValue px, pct;
+    px.Kind = pct.Kind = StyleValueKind::Length;
+    px.Length = LengthValue{100.0f, LengthUnit::Px};
+    pct.Length = LengthValue{50.0f, LengthUnit::Percent};
+    StyleInterpolationContext ctx;
+    CHECK(InterpolateStyleValue(px, pct, 0.4f, &ctx).Length.Unit == LengthUnit::Px);
+    CHECK(InterpolateStyleValue(px, pct, 0.6f, &ctx).Length.Unit == LengthUnit::Percent);
+}
+
+TEST_CASE("transition: the longhands cascade on their own, shorter lists repeating")
+{
+    // The shorthand sets all four; a later longhand overrides one; a one-item list repeats.
+    Bed bed(u8"box { opacity: 1; width: 100; transition: opacity 4s ease; } "
+            u8"box.fast { transition-property: opacity, width; transition-duration: 1s; transition-timing-function: linear; } "
+            u8"box.fast.on { opacity: 0; width: 200; }");
+    bed.Toggle(u8"fast");
+    bed.Toggle(u8"on");
+    bed.Advance(0.5);
+    CHECK(bed.widget->GetAlpha() == doctest::Approx(0.5f));
+    CHECK(bed.widget->GetSize().x == doctest::Approx(150.0f));
+
+    const core::Array<TransitionSpec> composed =
+        ComposeTransitions(SV(u8"a, b, c"), SV(u8"1s, 2s"), SV(u8"linear"), SV(u8"0s"));
+    REQUIRE(composed.Size() == 3u);
+    CHECK(composed[2].Duration == doctest::Approx(1.0f)); // 1s, 2s, 1s
+    CHECK(composed[1].Timing.Kind == EasingKind::Linear);
+}
+
+TEST_CASE("transition: animation-play-state pauses an animation's clock, and running resumes it")
+{
+    Bed bed(u8"@keyframes grow { from { width: 100; } to { width: 200; } } "
+            u8"box { animation: grow 1s linear infinite; } box.held { animation-play-state: paused; }");
+    bed.Advance(0.25);
+    CHECK(bed.widget->GetSize().x == doctest::Approx(125.0f));
+    bed.Toggle(u8"held");
+    bed.Advance(0.5);
+    CHECK(bed.widget->GetSize().x == doctest::Approx(125.0f)); // paused
+    bed.Toggle(u8"held");
+    bed.Advance(0.25);
+    CHECK(bed.widget->GetSize().x == doctest::Approx(150.0f)); // resumed where it stood
+}

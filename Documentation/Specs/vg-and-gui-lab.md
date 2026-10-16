@@ -293,10 +293,12 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   track per property (transitions retargeting from a running track; keyframes with per-stop
   timing, implicit end keys, delay, iteration count, direction, fill mode), ended tracks returning
   to the target or the property's initial value, the widget held weakly. The sandbox's cards lift
-  on hover and the tilted one sways (ebf0fcd29). Left (see Open limits): transform lists of different functions
-  switch halfway instead of interpolating their matrices; lengths in different units likewise;
-  transition-property and the other longhands of transition and animation are not parsed (the
-  shorthands are); play state is not.
+  on hover and the tilted one sways (ebf0fcd29). Then the follow-up the first pass left: transform
+  lists of different functions move through their decomposed matrices (translation, rotation the
+  short way round, skew, scale), lengths in different units in pixels (a percentage against
+  another unit still switches), the transition and animation shorthands expand into their
+  longhands, which cascade on their own (shorter lists repeating), and animation-play-state
+  pauses an animation's clock.
 - **G4 Effects through VG.** Group opacity and filters through V3's layers, rounded clipping
   through V2, boxes through V4.
 - **G5 Data binding.** Properties that update what depends on them (AUI's model: dependency
@@ -347,11 +349,6 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
 What the phases left, gathered so each has a home (from each phase's "Left"); an item leaves this
 list when it is done or the user rules it out.
 
-- **G3, before the showcase (G6 will use them):** transform lists of different functions
-  interpolate through their matrices (decomposed: translate, rotate, scale, skew) instead of
-  switching halfway; lengths in different units interpolate once both resolve to pixels; the
-  longhands `transition-property`, `-duration`, `-timing-function`, `-delay` and the
-  `animation-*` ones parse; `animation-play-state` pauses.
 - **G1, before dynamic extensions ship widgets:** unloading a library while elements of its types
   live is refused, not only documented.
 - **G1, when the lab's script surface and foundation.ui's are bound in one manager (the move into

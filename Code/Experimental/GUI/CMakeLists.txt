@@ -84,6 +84,7 @@ target_sources(GUI
             Styling/StyleProperties.cppm
             Styling/StyleApplier.cppm
             Styling/Easing.cppm
+            Styling/Motion.cppm
             Styling/StyleInterpolation.cppm
             Styling/StyleAnimation.cppm
             Styling/StyleManager.cppm

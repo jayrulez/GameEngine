@@ -7,9 +7,11 @@
 // sets can transition and be keyframed, not only opacity and colour: numbers, lengths of one
 // unit, colours (straight RGBA), shadow lists (the shorter padded with transparent shadows, as
 // CSS does), transform lists of the same functions (function by function), transform origins, and
-// gradient layers of the same shape (angle, stop colours and positions). What cannot interpolate
-// (keywords, lengths in different units, lists of different functions) switches at the halfway
-// point: CSS's discrete animation.
+// gradient layers of the same shape (angle, stop colours and positions). With a context (the
+// length context and the box's size), lengths in different units move in pixels, and transform
+// lists of different functions move through their matrices, decomposed into translation, rotation,
+// skew and scale (the rotation the short way round). What cannot interpolate (keywords, a
+// percentage against another unit) switches at the halfway point: CSS's discrete animation.
 
 module;
 #include "Core/Prelude.h"
@@ -20,12 +22,21 @@ import foundation.core;
 import :css_values;
 import :style_value;
 import :style_properties;
+import :transform2d;
 
 using namespace foundation::core;
 namespace core = foundation::core;
 
 export namespace experimental::gui
 {
+    /// What interpolating lengths of different units and different transform lists needs: the
+    /// length context (em, rem, vw, vh) and the size of the box the value is for.
+    struct StyleInterpolationContext
+    {
+        LengthContext Lengths{};
+        core::Float2 BoxSize{};
+    };
+
     namespace detail
     {
         [[nodiscard]] inline f32 Mix(f32 a, f32 b, f32 t) noexcept { return a + (b - a) * t; }
@@ -35,7 +46,8 @@ export namespace experimental::gui
             return Color{Mix(a.r, b.r, t), Mix(a.g, b.g, t), Mix(a.b, b.b, t), Mix(a.a, b.a, t)};
         }
 
-        [[nodiscard]] inline bool MixLength(LengthValue a, LengthValue b, f32 t, LengthValue& out) noexcept
+        [[nodiscard]] inline bool MixLength(LengthValue a, LengthValue b, f32 t, LengthValue& out,
+                                            const StyleInterpolationContext* ctx = nullptr) noexcept
         {
             // A zero converts to any unit (CSS writes 0 unitless).
             if (a.Value == 0.0f)
@@ -43,13 +55,21 @@ export namespace experimental::gui
             if (b.Value == 0.0f)
                 b.Unit = a.Unit;
             if (a.Unit != b.Unit)
-                return false;
+            {
+                // Different units meet in pixels, when neither is a percentage (whose base the
+                // property decides).
+                if (ctx == nullptr || a.Unit == LengthUnit::Percent || b.Unit == LengthUnit::Percent)
+                    return false;
+                out = LengthValue{Mix(ResolveLengthValue(a, ctx->Lengths), ResolveLengthValue(b, ctx->Lengths), t),
+                                  LengthUnit::Px};
+                return true;
+            }
             out = LengthValue{Mix(a.Value, b.Value, t), a.Unit};
             return true;
         }
 
         [[nodiscard]] inline bool MixShadows(const Array<ShadowValue>& a, const Array<ShadowValue>& b, f32 t,
-                                             Array<ShadowValue>& out)
+                                             Array<ShadowValue>& out, const StyleInterpolationContext* ctx)
         {
             const usize n = Max(a.Size(), b.Size());
             out.Clear();
@@ -72,9 +92,10 @@ export namespace experimental::gui
                     return false;
                 ShadowValue mixed;
                 mixed.Inset = from.Inset;
-                if (!MixLength(from.OffsetX, to.OffsetX, t, mixed.OffsetX) ||
-                    !MixLength(from.OffsetY, to.OffsetY, t, mixed.OffsetY) ||
-                    !MixLength(from.Blur, to.Blur, t, mixed.Blur) || !MixLength(from.Spread, to.Spread, t, mixed.Spread))
+                if (!MixLength(from.OffsetX, to.OffsetX, t, mixed.OffsetX, ctx) ||
+                    !MixLength(from.OffsetY, to.OffsetY, t, mixed.OffsetY, ctx) ||
+                    !MixLength(from.Blur, to.Blur, t, mixed.Blur, ctx) ||
+                    !MixLength(from.Spread, to.Spread, t, mixed.Spread, ctx))
                     return false;
                 mixed.ShadowColor = MixColor(from.ShadowColor, to.ShadowColor, t);
                 out.PushBack(mixed);
@@ -82,8 +103,74 @@ export namespace experimental::gui
             return true;
         }
 
+        // A 2D matrix as translation, rotation, skew and scale: M = T * R(angle) * K(skew) * S, K the
+        // x-shear (x' = x + skew y); the scale's y takes a reflection's sign.
+        struct Decomposed
+        {
+            f32 Tx = 0.0f, Ty = 0.0f, Angle = 0.0f, Skew = 0.0f, Sx = 1.0f, Sy = 1.0f;
+        };
+
+        [[nodiscard]] inline Decomposed Decompose(const Transform2D& m) noexcept
+        {
+            Decomposed d;
+            d.Tx = m.tx;
+            d.Ty = m.ty;
+            d.Sx = Sqrt(m.a * m.a + m.b * m.b);
+            if (d.Sx <= 1e-12f)
+            {
+                d.Sx = 0.0f;
+                d.Sy = Sqrt(m.c * m.c + m.d * m.d);
+                return d;
+            }
+            d.Angle = Atan2(m.b, m.a);
+            const f32 cs = Cos(d.Angle), sn = Sin(d.Angle);
+            const f32 skewed = m.c * cs + m.d * sn;  // the second column along the rotated x axis
+            d.Sy = -m.c * sn + m.d * cs;              // ... and along the rotated y axis
+            d.Skew = d.Sy != 0.0f ? skewed / d.Sy : 0.0f;
+            return d;
+        }
+
+        [[nodiscard]] inline Transform2D Recompose(const Decomposed& d) noexcept
+        {
+            Transform2D m;
+            m.Translate(d.Tx, d.Ty);
+            m.Rotate(d.Angle);
+            m.Combine(Transform2D{1.0f, 0.0f, d.Skew, 1.0f, 0.0f, 0.0f});
+            m.Scale(d.Sx, d.Sy);
+            return m;
+        }
+
+        // Two transform lists of different functions, through their matrices.
+        [[nodiscard]] inline TransformFunction MixMatrices(const Array<TransformFunction>& a,
+                                                           const Array<TransformFunction>& b, f32 t, core::Float2 size)
+        {
+            const Decomposed x = Decompose(ComposeTransforms(a, size));
+            const Decomposed y = Decompose(ComposeTransforms(b, size));
+            constexpr f32 kPi = 3.14159265358979f;
+            f32 turn = y.Angle - x.Angle; // the short way round
+            while (turn > kPi)
+                turn -= 2.0f * kPi;
+            while (turn < -kPi)
+                turn += 2.0f * kPi;
+            Decomposed mixed;
+            mixed.Tx = Mix(x.Tx, y.Tx, t);
+            mixed.Ty = Mix(x.Ty, y.Ty, t);
+            mixed.Angle = x.Angle + turn * t;
+            mixed.Skew = Mix(x.Skew, y.Skew, t);
+            mixed.Sx = Mix(x.Sx, y.Sx, t);
+            mixed.Sy = Mix(x.Sy, y.Sy, t);
+            const Transform2D m = Recompose(mixed);
+            TransformFunction f;
+            f.Kind = TransformKind::Matrix;
+            const f32 values[6] = {m.a, m.b, m.c, m.d, m.tx, m.ty};
+            for (usize k = 0; k < 6; ++k)
+                f.M[k] = values[k];
+            return f;
+        }
+
         [[nodiscard]] inline bool MixTransforms(const Array<TransformFunction>& a, const Array<TransformFunction>& b,
-                                                f32 t, Array<TransformFunction>& out)
+                                                f32 t, Array<TransformFunction>& out,
+                                                const StyleInterpolationContext* ctx)
         {
             // none against a list: the list's identity functions (CSS), so `none -> rotate(90deg)`
             // turns from 0.
@@ -110,18 +197,26 @@ export namespace experimental::gui
                     padded.PushBack(identity(f));
                 to = &padded;
             }
-            if (from->Size() != to->Size())
-                return false;
+            // Lists of different functions (or lengths that cannot meet) go through their matrices.
+            const auto throughMatrices = [&]()
+            {
+                out.Clear();
+                out.PushBack(MixMatrices(a, b, t, ctx != nullptr ? ctx->BoxSize : core::Float2{}));
+                return true;
+            };
+            bool same = from->Size() == to->Size();
+            for (usize i = 0; same && i < from->Size(); ++i)
+                same = (*from)[i].Kind == (*to)[i].Kind;
+            if (!same)
+                return throughMatrices();
             out.Clear();
             for (usize i = 0; i < from->Size(); ++i)
             {
                 const TransformFunction& x = (*from)[i];
                 const TransformFunction& y = (*to)[i];
-                if (x.Kind != y.Kind)
-                    return false;
                 TransformFunction m = x;
-                if (!MixLength(x.A, y.A, t, m.A) || !MixLength(x.B, y.B, t, m.B))
-                    return false;
+                if (!MixLength(x.A, y.A, t, m.A, ctx) || !MixLength(x.B, y.B, t, m.B, ctx))
+                    return throughMatrices();
                 m.Angle = Mix(x.Angle, y.Angle, t);
                 m.AngleY = Mix(x.AngleY, y.AngleY, t);
                 m.ScaleX = Mix(x.ScaleX, y.ScaleX, t);
@@ -175,7 +270,8 @@ export namespace experimental::gui
 
     /// `a` toward `b` at `t` (0: a, 1: b; t may leave [0, 1] for an overshooting easing). Values
     /// that cannot interpolate switch at t = 0.5.
-    [[nodiscard]] inline StyleValue InterpolateStyleValue(const StyleValue& a, const StyleValue& b, f32 t)
+    [[nodiscard]] inline StyleValue InterpolateStyleValue(const StyleValue& a, const StyleValue& b, f32 t,
+                                                          const StyleInterpolationContext* ctx = nullptr)
     {
         const auto discrete = [&]() { return t < 0.5f ? a : b; };
         if (a.Kind != b.Kind)
@@ -187,17 +283,17 @@ export namespace experimental::gui
             out.Number = detail::Mix(a.Number, b.Number, t);
             return out;
         case StyleValueKind::Length:
-            return detail::MixLength(a.Length, b.Length, t, out.Length) ? out : discrete();
+            return detail::MixLength(a.Length, b.Length, t, out.Length, ctx) ? out : discrete();
         case StyleValueKind::ColorValue:
             out.ColorValue = detail::MixColor(a.ColorValue, b.ColorValue, t);
             return out;
         case StyleValueKind::Shadows:
-            return detail::MixShadows(a.Shadows, b.Shadows, t, out.Shadows) ? out : discrete();
+            return detail::MixShadows(a.Shadows, b.Shadows, t, out.Shadows, ctx) ? out : discrete();
         case StyleValueKind::Transforms:
-            return detail::MixTransforms(a.Transforms, b.Transforms, t, out.Transforms) ? out : discrete();
+            return detail::MixTransforms(a.Transforms, b.Transforms, t, out.Transforms, ctx) ? out : discrete();
         case StyleValueKind::Origin:
-            if (detail::MixLength(a.OriginX, b.OriginX, t, out.OriginX) &&
-                detail::MixLength(a.OriginY, b.OriginY, t, out.OriginY))
+            if (detail::MixLength(a.OriginX, b.OriginX, t, out.OriginX, ctx) &&
+                detail::MixLength(a.OriginY, b.OriginY, t, out.OriginY, ctx))
                 return out;
             return discrete();
         case StyleValueKind::Layers:

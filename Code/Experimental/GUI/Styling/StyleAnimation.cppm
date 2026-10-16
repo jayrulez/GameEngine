@@ -32,6 +32,7 @@ import :style_sheet;
 import :style_interpolation;
 import :style_applier;
 import :easing;
+import :motion; // TransitionSpec, AnimationSpec and their lists
 import :resource_provider;
 
 using namespace foundation::core;
@@ -40,134 +41,6 @@ namespace fonts = foundation::fonts;
 
 export namespace experimental::gui
 {
-    // === Declarations ===
-
-    /// One entry of `transition`: a property (or `all`), a duration, an easing, a delay.
-    struct TransitionSpec
-    {
-        core::String Property;
-        f32 Duration = 0.0f;
-        f32 Delay = 0.0f;
-        Easing Timing = Easing::Ease();
-    };
-
-    /// `transition`: a comma list of `<property> <duration> [<easing>] [<delay>]` in any order
-    /// past the property (the first time is the duration, the second the delay); `none` is empty.
-    [[nodiscard]] inline Array<TransitionSpec> ParseTransitionList(core::StringView value)
-    {
-        Array<TransitionSpec> out;
-        if (Trim(value) == core::StringView(u8"none"))
-            return out;
-        for (const core::StringView entry : SplitTopLevel(value, u8','))
-        {
-            TransitionSpec spec;
-            spec.Property = core::String(u8"all");
-            bool haveDuration = false, haveProperty = false;
-            for (const core::StringView token : SplitTopLevel(entry, u8' '))
-            {
-                if (Optional<f32> time = ParseTime(token); time.HasValue())
-                {
-                    if (!haveDuration)
-                    {
-                        spec.Duration = time.Value();
-                        haveDuration = true;
-                    }
-                    else
-                    {
-                        spec.Delay = time.Value();
-                    }
-                }
-                else if (Optional<Easing> easing = ParseEasing(token); easing.HasValue())
-                {
-                    spec.Timing = easing.Value();
-                }
-                else if (!haveProperty)
-                {
-                    spec.Property = core::String(token);
-                    haveProperty = true;
-                }
-            }
-            out.PushBack(Move(spec));
-        }
-        return out;
-    }
-
-    enum class AnimationDirection : u8
-    {
-        Normal,
-        Reverse,
-        Alternate,
-        AlternateReverse,
-    };
-
-    enum class AnimationFill : u8
-    {
-        None,
-        Forwards,
-        Backwards,
-        Both,
-    };
-
-    /// One entry of `animation`.
-    struct AnimationSpec
-    {
-        core::String Name;
-        f32 Duration = 0.0f;
-        f32 Delay = 0.0f;
-        Easing Timing = Easing::Ease();
-        f32 Iterations = 1.0f; ///< negative: infinite
-        AnimationDirection Direction = AnimationDirection::Normal;
-        AnimationFill Fill = AnimationFill::None;
-    };
-
-    /// `animation`: a comma list of `<name> <duration> [<easing>] [<delay>] [<iteration-count> |
-    /// infinite] [<direction>] [<fill-mode>]`, keywords in any order; `none` is empty.
-    [[nodiscard]] inline Array<AnimationSpec> ParseAnimationList(core::StringView value)
-    {
-        Array<AnimationSpec> out;
-        if (Trim(value) == core::StringView(u8"none"))
-            return out;
-        for (const core::StringView entry : SplitTopLevel(value, u8','))
-        {
-            AnimationSpec spec;
-            bool haveDuration = false;
-            for (const core::StringView token : SplitTopLevel(entry, u8' '))
-            {
-                if (Optional<f32> time = ParseTime(token); time.HasValue())
-                {
-                    (haveDuration ? spec.Delay : spec.Duration) = time.Value();
-                    haveDuration = true;
-                }
-                else if (token == core::StringView(u8"infinite"))
-                    spec.Iterations = -1.0f;
-                else if (Optional<f32> count = ParseLength(token); count.HasValue() && token.Size() > 0 &&
-                                                                    (IsDigit(token[0]) || token[0] == u8'.'))
-                    spec.Iterations = Max(0.0f, count.Value());
-                else if (token == core::StringView(u8"normal"))
-                    spec.Direction = AnimationDirection::Normal;
-                else if (token == core::StringView(u8"reverse"))
-                    spec.Direction = AnimationDirection::Reverse;
-                else if (token == core::StringView(u8"alternate"))
-                    spec.Direction = AnimationDirection::Alternate;
-                else if (token == core::StringView(u8"alternate-reverse"))
-                    spec.Direction = AnimationDirection::AlternateReverse;
-                else if (token == core::StringView(u8"forwards"))
-                    spec.Fill = AnimationFill::Forwards;
-                else if (token == core::StringView(u8"backwards"))
-                    spec.Fill = AnimationFill::Backwards;
-                else if (token == core::StringView(u8"both"))
-                    spec.Fill = AnimationFill::Both;
-                else if (Optional<Easing> easing = ParseEasing(token); easing.HasValue())
-                    spec.Timing = easing.Value();
-                else if (spec.Name.IsEmpty())
-                    spec.Name = core::String(token);
-            }
-            if (!spec.Name.IsEmpty())
-                out.PushBack(Move(spec));
-        }
-        return out;
-    }
-
     /// Whether a property's values move smoothly in a transition (`all` covers these): those the
     /// property table parses into numbers, lengths, colours, shadows, transforms, origins or layers.
     [[nodiscard]] inline bool IsTransitionable(core::StringView property)
@@ -212,6 +85,7 @@ export namespace experimental::gui
         f32 Iterations = 1.0f; ///< negative: infinite
         AnimationDirection Direction = AnimationDirection::Normal;
         AnimationFill Fill = AnimationFill::None;
+        bool Paused = false; ///< animation-play-state: its clock stands still
         f32 Elapsed = 0.0f;
 
         [[nodiscard]] bool Ended() const noexcept
@@ -221,7 +95,7 @@ export namespace experimental::gui
 
         /// The value now, or false when the track shows nothing (before its delay without a
         /// backwards fill, after its end without a forwards one).
-        [[nodiscard]] bool ValueNow(StyleValue& out) const
+        [[nodiscard]] bool ValueNow(StyleValue& out, const StyleInterpolationContext* ctx = nullptr) const
         {
             if (Keys.IsEmpty())
                 return false;
@@ -273,7 +147,7 @@ export namespace experimental::gui
                 {
                     const f32 span = b.Offset - a.Offset;
                     const f32 local = span > 0.0f ? (p - a.Offset) / span : 1.0f;
-                    out = InterpolateStyleValue(a.Value, b.Value, a.Timing.Evaluate(local));
+                    out = InterpolateStyleValue(a.Value, b.Value, a.Timing.Evaluate(local), ctx);
                     return true;
                 }
             }
@@ -310,8 +184,9 @@ export namespace experimental::gui
         /// retargets from here; the target style is already the new one).
         [[nodiscard]] bool TrackValue(core::StringView property, StyleValue& out) const
         {
+            const StyleInterpolationContext ctx = InterpolationContext();
             for (usize i = m_tracks.Size(); i-- > 0;)
-                if (m_tracks[i].Property.AsView() == property && m_tracks[i].ValueNow(out))
+                if (m_tracks[i].Property.AsView() == property && m_tracks[i].ValueNow(out, &ctx))
                     return true;
             return false;
         }
@@ -352,6 +227,7 @@ export namespace experimental::gui
                 t.Iterations = spec.Iterations;
                 t.Direction = spec.Direction;
                 t.Fill = spec.Fill;
+                t.Paused = spec.Paused;
                 tracks.PushBack(Move(t));
                 return tracks[tracks.Size() - 1];
             };
@@ -404,6 +280,14 @@ export namespace experimental::gui
                 }
             }
         }
+        /// Pauses or resumes a keyframe animation (animation-play-state).
+        void SetPaused(core::StringView name, bool paused)
+        {
+            for (AnimationTrack& t : m_tracks)
+                if (t.Animation.AsView() == name)
+                    t.Paused = paused;
+        }
+
         [[nodiscard]] bool RunsKeyframes(core::StringView name) const
         {
             for (const core::String& n : m_animations)
@@ -424,10 +308,11 @@ export namespace experimental::gui
                 return;
             }
             ResolvedStyle effective = m_targetStyle;
+            const StyleInterpolationContext ctx = InterpolationContext();
             for (const AnimationTrack& track : m_tracks)
             {
                 StyleValue value;
-                if (track.ValueNow(value))
+                if (track.ValueNow(value, &ctx))
                     effective.Override(track.Property.AsView(), value);
                 else
                     ResetToInitial(effective, track.Property.AsView()); // its delay or after its end
@@ -447,7 +332,8 @@ export namespace experimental::gui
                 return;
             const f32 seconds = elapsed.AsSecondsF();
             for (AnimationTrack& track : m_tracks)
-                track.Elapsed += seconds;
+                if (!track.Paused)
+                    track.Elapsed += seconds;
             ApplyNow();
             // Ended tracks that hold nothing go (a forwards fill keeps its track, showing its end).
             for (usize i = 0; i < m_tracks.Size();)
@@ -472,6 +358,15 @@ export namespace experimental::gui
         [[nodiscard]] core::Duration GetTotalTime() override { return core::Duration{}; }
 
     private:
+        [[nodiscard]] StyleInterpolationContext InterpolationContext() const
+        {
+            StyleInterpolationContext ctx;
+            ctx.Lengths = m_context.Lengths;
+            if (UINode* node = m_node.Get())
+                ctx.BoxSize = node->GetSize();
+            return ctx;
+        }
+
         // A property the target does not set takes its initial value (when the table gives one).
         void ResetToInitial(ResolvedStyle& effective, core::StringView property) const
         {

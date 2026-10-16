@@ -101,6 +101,12 @@ export namespace foundation::fonts
         virtual void GetSelectionRects(IFont& font, Span<const GlyphPosition> positions,
                                        SelectionRange selection, f32 lineHeight,
                                        Array<Rectangle>& outRects) = 0;
+
+        /// The glyphs shaping text of `codepoints` can produce beyond those the codepoints map to
+        /// (ligatures, joined and contextual forms), as glyph indices: what a baker adds to an
+        /// atlas so the shaped text draws. None for a shaper that maps one character to one glyph.
+        virtual void CollectReachableGlyphs(const IFont& font, Span<const i32> codepoints,
+                                            Array<i32>& outGlyphs) = 0;
     };
 
     // Owning aggregate of a loaded font + its atlas (+ optional shaper).

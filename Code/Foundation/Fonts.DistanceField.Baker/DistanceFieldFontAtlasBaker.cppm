@@ -229,6 +229,15 @@ export namespace foundation::fonts
                 if (!seen)
                     glyphs.PushBack(glyphIdx);
             }
+            // Then what the registered shaper's substitutions reach from them.
+            for (const i32 reachable : ReachableGlyphs(font, options, allocator))
+            {
+                bool seen = false;
+                for (const i32 g : glyphs)
+                    seen = seen || g == reachable;
+                if (!seen && reachable > 0 && reachable < stbFont.numGlyphs)
+                    glyphs.PushBack(reachable);
+            }
             for (const i32 glyphIdx : glyphs)
             {
 

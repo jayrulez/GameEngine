@@ -32,6 +32,7 @@ import foundation.fonts.coverage;
 import foundation.fonts.coverage.baker;
 import foundation.fonts.distancefield;
 import foundation.fonts.distancefield.baker;
+import foundation.fonts.harfbuzz; // the cook bakes what its substitutions reach
 import foundation.fonts.resource;
 import foundation.content;
 
@@ -119,12 +120,16 @@ export namespace pipeline{
         // draw; every codepoint the range maps to keeps its glyph row (a space's too).
         // 7 (2026-10-15): the font file is kept as the product's "font" stream, for a shaper that
         // reads its tables in a shipped game.
-        [[nodiscard]] u32 Version() const override { return 7; }
+        // 8 (2026-10-15): the atlas also holds the glyphs HarfBuzz's substitutions reach from the
+        // range (ligatures, joined forms); the cook installs HarfBuzz itself, so every cook bakes
+        // the same glyphs whichever host runs it.
+        [[nodiscard]] u32 Version() const override { return 8; }
 
         [[nodiscard]] Status Build(const pipeline::Asset& asset,
                                    pipeline::AssetBuildContext& ctx) override
         {
             const FontAsset& fa = static_cast<const FontAsset&>(asset); // guarded by AssetType()
+            HarfBuzzShaping::Install(); // the bakers bake what HarfBuzz's substitutions reach
             if (ctx.output == nullptr || fa.fileName.IsEmpty())
             {
                 return Status{ErrorCode::InvalidArgument};

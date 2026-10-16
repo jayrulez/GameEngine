@@ -13,6 +13,7 @@ import foundation.vfs;
 import foundation.fonts;
 import foundation.fonts.truetype;
 import foundation.fonts.harfbuzz;
+import foundation.fonts.distancefield.baker;
 
 using namespace foundation::core;
 using namespace foundation::fonts;
@@ -200,4 +201,76 @@ TEST_CASE("harfbuzz: installed, it is the shaper a font service hands out")
         REQUIRE(font->shaper->ShapeText(*font->font, u8"fi", glyphs).HasValue());
         CHECK(glyphs.Size() == 2u); // the basic shaper again
     }
+}
+
+TEST_CASE("harfbuzz: the glyphs substitutions reach are named, and bakers bake them")
+{
+    IFont* font = Load("/roboto/Roboto-Regular.ttf");
+    REQUIRE(font != nullptr);
+    Shaper s;
+    Array<GlyphPosition> shaped;
+    REQUIRE(s.shaper->ShapeText(*font, u8"fi", shaped).HasValue());
+    REQUIRE(shaped.Size() == 1u);
+    const i32 ligature = shaped[0].glyphId;
+
+    // Reachable from f and i: the ligature, which no codepoint maps to.
+    const i32 range[] = {'f', 'i'};
+    Array<i32> reachable;
+    s.shaper->CollectReachableGlyphs(*font, Span<const i32>(range, 2), reachable);
+    bool found = false;
+    for (const i32 g : reachable)
+    {
+        found = found || g == ligature;
+        CHECK(g != font->GetGlyphInfo('f').glyphIndex); // the codepoints' own glyphs are not repeated
+    }
+    CHECK(found);
+
+    // With HarfBuzz installed, a coverage atlas and a distance-field atlas both hold it.
+    HarfBuzzShaping::Install();
+    FontLoadOptions options = FontLoadOptions::Default();
+    options.pixelHeight = 32.0f;
+    Result<IFontAtlas*, FontLoadResult> coverage = FontAtlasBakerFactory::Bake(*font, options, DefaultAllocator());
+    REQUIRE(coverage.HasValue());
+    CHECK(coverage.Value()->Contains(ligature));
+    CHECK(coverage.Value()->GlyphFor('f') != ligature);
+    DefaultAllocator().Delete(coverage.Value());
+
+    DistanceFieldFonts::Initialize();
+    FontLoadOptions df = FontLoadOptions::DistanceField();
+    df.firstCodepoint = 'a';
+    df.lastCodepoint = 'z';
+    Result<IFontAtlas*, FontLoadResult> field = FontAtlasBakerFactory::Bake(*font, df, DefaultAllocator());
+    REQUIRE(field.HasValue());
+    CHECK(field.Value()->Contains(ligature));
+    DefaultAllocator().Delete(field.Value());
+    HarfBuzzShaping::Uninstall();
+
+    // Without it, the basic shaper reaches nothing more, and the atlas holds only the range.
+    Result<IFontAtlas*, FontLoadResult> plain = FontAtlasBakerFactory::Bake(*font, options, DefaultAllocator());
+    REQUIRE(plain.HasValue());
+    CHECK_FALSE(plain.Value()->Contains(ligature));
+    DefaultAllocator().Delete(plain.Value());
+    DefaultAllocator().Delete(font);
+}
+
+TEST_CASE("harfbuzz: through a font service, every glyph of shaped text has its place in the atlas")
+{
+    HarfBuzzShaping::Install();
+    {
+        TrueTypeFontService service(DefaultAllocator());
+        REQUIRE(service.LoadFont(u8"Roboto", FontPath("/roboto/Roboto-Regular.ttf").AsView()) ==
+                FontLoadResult::Success);
+        CachedFont* font = service.GetFont(u8"Roboto", 24.0f);
+        REQUIRE(font != nullptr);
+        Array<GlyphPosition> glyphs;
+        REQUIRE(font->shaper->ShapeText(*font->font, u8"office fluff", glyphs).HasValue());
+        for (const GlyphPosition& g : glyphs)
+        {
+            f32 cursor = 0.0f;
+            GlyphQuad quad;
+            CHECK(font->atlas->GetGlyphQuad(g.glyphId, cursor, 0.0f, quad)); // drawable: the ligatures too
+            CHECK(cursor > 0.0f);                                              // and it advances (a space too)
+        }
+    }
+    HarfBuzzShaping::Uninstall();
 }

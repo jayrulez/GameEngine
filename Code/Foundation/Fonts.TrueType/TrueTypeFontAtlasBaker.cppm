@@ -58,8 +58,11 @@ export namespace foundation::fonts
                 return Err(FontLoadResult::UnsupportedFormat);
             const TrueTypeFont& ttf = static_cast<const TrueTypeFont&>(font);
 
+            // The range's glyphs, and what the registered shaper's substitutions reach from them.
+            const Array<i32> reachable = ReachableGlyphs(font, options, allocator);
             TrueTypeFontAtlas* atlas = allocator.New<TrueTypeFontAtlas>();
-            const FontLoadResult result = atlas->Create(ttf, options);
+            const FontLoadResult result =
+                atlas->Create(ttf, options, Span<const i32>(reachable.Data(), reachable.Size()));
             if (result != FontLoadResult::Success)
             {
                 allocator.Delete(atlas);

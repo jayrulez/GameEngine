@@ -229,7 +229,7 @@ export namespace editor
     private:
         // Key = font bytes + every option that shapes the bake + the format version.
         // Only TTF distance-field bakes are cacheable (RawData is the byte identity).
-        [[nodiscard]] static bool KeyFor(const foundation::fonts::IFont& font,
+        [[nodiscard]] bool KeyFor(const foundation::fonts::IFont& font,
                                          const foundation::fonts::FontLoadOptions& options,
                                          u64& outKey)
         {
@@ -250,6 +250,10 @@ export namespace editor
             mix(options.atlasWidth);
             mix(options.atlasHeight);
             mix(options.padding);
+            // The glyphs the shaper's substitutions reach are baked too: a different shaper (or
+            // none) bakes a different atlas.
+            for (const i32 glyph : foundation::fonts::ReachableGlyphs(font, options, *m_allocator))
+                mix(static_cast<u64>(static_cast<u32>(glyph)));
             mix(kCacheFormatVersion);
             outKey = key;
             return true;

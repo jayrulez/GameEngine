@@ -24,6 +24,12 @@ export namespace foundation::fonts
     class TrueTypeTextShaper final : public ClusterTextShaper
     {
     public:
+        // One glyph per character: nothing beyond what the codepoints map to.
+        void CollectReachableGlyphs(const IFont&, Span<const i32>, Array<i32>& outGlyphs) override
+        {
+            outGlyphs.Clear();
+        }
+
         [[nodiscard]] Result<f32> ShapeText(IFont& font, StringView text,
                                             Array<GlyphPosition>& outPositions) override
         {

@@ -96,8 +96,11 @@ export namespace foundation::fonts
                 return Err(initResult);
             }
 
+            // The range's glyphs, and what the registered shaper's substitutions reach from them.
+            const Array<i32> reachable = ReachableGlyphs(*ttFont, options, allocator);
             TrueTypeFontAtlas* ttAtlas = allocator.New<TrueTypeFontAtlas>();
-            const FontLoadResult atlasResult = ttAtlas->Create(*ttFont, options);
+            const FontLoadResult atlasResult =
+                ttAtlas->Create(*ttFont, options, Span<const i32>(reachable.Data(), reachable.Size()));
             if (atlasResult != FontLoadResult::Success)
             {
                 allocator.Delete(ttAtlas);

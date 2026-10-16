@@ -210,4 +210,22 @@ export namespace foundation::fonts
         // (a function-local static here would be duplicated per shared library).
         static Array<Creator>& Store();
     };
+
+    /// The glyphs shaping `options`' codepoint range can reach beyond the range's own, asked of the
+    /// registered shaper (none registered, or a one-to-one shaper: none). What bakers add, so a
+    /// ligature or a joined form the shaper produces has its place in the atlas.
+    [[nodiscard]] inline Array<i32> ReachableGlyphs(const IFont& font, const FontLoadOptions& options,
+                                                    IAllocator& allocator)
+    {
+        Array<i32> glyphs;
+        ITextShaper* shaper = TextShaperFactory::Create(allocator);
+        if (shaper == nullptr)
+            return glyphs;
+        Array<i32> codepoints;
+        for (i32 cp = options.firstCodepoint; cp <= options.lastCodepoint; ++cp)
+            codepoints.PushBack(cp);
+        shaper->CollectReachableGlyphs(font, Span<const i32>(codepoints.Data(), codepoints.Size()), glyphs);
+        allocator.Delete(shaper);
+        return glyphs;
+    }
 }

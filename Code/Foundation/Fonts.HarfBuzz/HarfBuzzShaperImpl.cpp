@@ -13,6 +13,7 @@
 module;
 #include "Core/Prelude.h"
 #include <hb.h>
+#include <hb-ot.h>
 
 module foundation.fonts.harfbuzz;
 
@@ -95,6 +96,50 @@ namespace foundation::fonts
                 }
                 outTotalHeight = y + lineHeight;
                 return Status();
+            }
+
+            // The GSUB closure of the codepoints' glyphs under the features shaping turns on by
+            // default (ligatures, contextual and positional forms, the Indic and Arabic ones), less
+            // the glyphs the codepoints map to themselves.
+            void CollectReachableGlyphs(const IFont& font, Span<const i32> codepoints, Array<i32>& outGlyphs) override
+            {
+                outGlyphs.Clear();
+                hb_font_t* hbFont = FontFor(font);
+                if (hbFont == nullptr)
+                    return;
+                hb_face_t* face = hb_font_get_face(hbFont);
+                hb_set_t* nominal = hb_set_create();
+                for (const i32 cp : codepoints)
+                {
+                    hb_codepoint_t glyph = 0;
+                    if (cp > 0 && hb_font_get_nominal_glyph(hbFont, static_cast<hb_codepoint_t>(cp), &glyph))
+                        hb_set_add(nominal, glyph);
+                }
+                static const hb_tag_t kFeatures[] = {
+                    HB_TAG('c', 'c', 'm', 'p'), HB_TAG('l', 'o', 'c', 'l'), HB_TAG('r', 'l', 'i', 'g'),
+                    HB_TAG('l', 'i', 'g', 'a'), HB_TAG('c', 'l', 'i', 'g'), HB_TAG('c', 'a', 'l', 't'),
+                    HB_TAG('r', 'c', 'l', 't'), HB_TAG('i', 's', 'o', 'l'), HB_TAG('i', 'n', 'i', 't'),
+                    HB_TAG('m', 'e', 'd', 'i'), HB_TAG('m', 'e', 'd', '2'), HB_TAG('f', 'i', 'n', 'a'),
+                    HB_TAG('f', 'i', 'n', '2'), HB_TAG('f', 'i', 'n', '3'), HB_TAG('n', 'u', 'k', 't'),
+                    HB_TAG('a', 'k', 'h', 'n'), HB_TAG('r', 'p', 'h', 'f'), HB_TAG('r', 'k', 'r', 'f'),
+                    HB_TAG('p', 'r', 'e', 'f'), HB_TAG('b', 'l', 'w', 'f'), HB_TAG('a', 'b', 'v', 'f'),
+                    HB_TAG('h', 'a', 'l', 'f'), HB_TAG('p', 's', 't', 'f'), HB_TAG('v', 'a', 't', 'u'),
+                    HB_TAG('c', 'j', 'c', 't'), HB_TAG('p', 'r', 'e', 's'), HB_TAG('a', 'b', 'v', 's'),
+                    HB_TAG('b', 'l', 'w', 's'), HB_TAG('p', 's', 't', 's'), HB_TAG('h', 'a', 'l', 'n'),
+                    HB_TAG('l', 'j', 'm', 'o'), HB_TAG('v', 'j', 'm', 'o'), HB_TAG('t', 'j', 'm', 'o'),
+                    HB_TAG_NONE};
+                hb_set_t* lookups = hb_set_create();
+                hb_ot_layout_collect_lookups(face, HB_OT_TAG_GSUB, nullptr, nullptr, kFeatures, lookups);
+                hb_set_t* glyphs = hb_set_create();
+                hb_set_union(glyphs, nominal);
+                hb_ot_layout_lookups_substitute_closure(face, lookups, glyphs);
+                hb_set_subtract(glyphs, nominal);
+                hb_codepoint_t glyph = HB_SET_VALUE_INVALID;
+                while (hb_set_next(glyphs, &glyph))
+                    outGlyphs.PushBack(static_cast<i32>(glyph));
+                hb_set_destroy(glyphs);
+                hb_set_destroy(lookups);
+                hb_set_destroy(nominal);
             }
 
         private:

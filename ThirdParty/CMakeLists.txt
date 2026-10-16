@@ -274,6 +274,22 @@ target_include_directories(harfbuzz SYSTEM PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/ha
 set_target_properties(harfbuzz PROPERTIES POSITION_INDEPENDENT_CODE ON
                                           OUTPUT_NAME thirdparty_harfbuzz)
 
+# SheenBidi - vendored Unicode bidirectional algorithm (github.com/Tehreer/SheenBidi v3.0.0,
+# Apache-2.0; manifest in sheenbidi/README.md). Built as C from its own unity source. Linked only by
+# Fonts.Bidi, behind the engine's own bidi interface (never used directly). Optimized in Debug, as
+# HarfBuzz is: a paragraph is resolved whenever its text changes. SYSTEM include suppresses its
+# header warnings.
+add_library(sheenbidi STATIC sheenbidi/Source/SheenBidi.c)
+add_library(ThirdParty::SheenBidi ALIAS sheenbidi)
+target_compile_definitions(sheenbidi PRIVATE SB_CONFIG_UNITY)
+target_include_directories(sheenbidi SYSTEM PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/sheenbidi/Headers)
+target_include_directories(sheenbidi PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/sheenbidi/Source)
+if(NOT MSVC)
+    target_compile_options(sheenbidi PRIVATE $<$<CONFIG:Debug>:-O2>)
+endif()
+set_target_properties(sheenbidi PROPERTIES POSITION_INDEPENDENT_CODE ON
+                                           OUTPUT_NAME thirdparty_sheenbidi)
+
 # astcenc - vendored ASTC encoder/decoder (github.com/ARM-software/astc-encoder; Apache-2.0). The
 # mobile-web compressed family (asset-variants Decision 4). Only the astcenc_*.cpp core is vendored -
 # no astcenccli_* front end, no test/bench harness (see astcenc/README.draconic.md). Forced onto the

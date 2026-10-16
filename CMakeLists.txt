@@ -8,7 +8,7 @@ cmake_minimum_required(VERSION 3.28)
 project(GameEngine
     VERSION 0.1.0
     DESCRIPTION "Game engine"
-    LANGUAGES CXX ASM)
+    LANGUAGES CXX C ASM) # C: SheenBidi (the bidi algorithm) builds as C
 
 # MSVC assembles with ml64, not cl, so the plain ASM language above does not apply to it
 # (hence "CMP194: MSVC is not an assembler for language ASM" at configure). AngelScript's x64

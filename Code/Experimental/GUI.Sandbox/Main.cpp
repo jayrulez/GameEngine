@@ -188,7 +188,7 @@ private:
     u32 m_initialScrollFrames = 0;
     bool m_alwaysRedraw = false;
     bool m_showcaseMode = false;
-    String m_showcaseCall; // a script function to call once loaded (a screenshot of another panel)
+    String m_showcaseCall; // a script function to call once the menu is up (a screenshot of another panel)
     bool m_frameStats = false;
     f32 m_nextStatsTime = 1.0f;
     u64 m_frames = 0;      // frames the loop ran
@@ -1502,10 +1502,6 @@ void GUISandbox::BuildShowcase()
     gui::InstallGuiScriptService(*m_script, m_scriptBinding);
     if (!m_script->Load(readText(u8"Assets/ui/showcase/menu.as").AsView(), u8"main").IsOk())
         std::fprintf(stderr, "GUISandbox: the showcase script did not load\n");
-    else if (m_showcaseCall.Size() != 0 && !m_script->Call(m_showcaseCall.AsView(), Span<Variant>{}).HasValue())
-        std::fprintf(stderr, "GUISandbox: the showcase script has no %s()\n", reinterpret_cast<const char*>(m_showcaseCall.CStr()));
-    else if (m_showcaseCall.Size() != 0)
-        m_scriptWantsUpdate = true; // what it started may want ticks
 #else
     std::fprintf(stderr, "GUISandbox: built without AngelScript; the showcase's menu does nothing\n");
 #endif
@@ -1517,6 +1513,15 @@ void GUISandbox::UpdateShowcase()
     m_showcase->SetSize(m_root->GetSize());
     for (usize i = 0; i < m_showcase->ChildCount(); ++i)
         m_showcase->GetChildAt(i)->SetSize(m_root->GetSize());
+
+    // --showcase-call: once the menu has been up a few frames, as a click would come.
+    if (m_script && m_showcaseCall.Size() != 0 && m_frames == 10)
+    {
+        if (!m_script->Call(m_showcaseCall.AsView(), Span<Variant>{}).HasValue())
+            std::fprintf(stderr, "GUISandbox: the showcase script has no %s()\n",
+                         reinterpret_cast<const char*>(m_showcaseCall.CStr()));
+        m_scriptWantsUpdate = true; // what it started may want ticks
+    }
 
     // The script's update runs while it asks for more, and on a frame with input (a click may
     // have started something); an idle menu calls no script.
@@ -1591,8 +1596,9 @@ int main(int argc, char** argv)
     // section: --scroll 900 --screenshot shot.png --screenshot-exit).
     // --always-redraw: draw every frame, even an idle one (to compare the cost). --frame-stats:
     // print, each second, how many of the frames drew. --showcase: the game menu (G6) in place of
-    // the widget gallery; --showcase-call <function>: call one of its script's functions once
-    // loaded (onSettings, onPlay, onQuit: a screenshot of another panel).
+    // the widget gallery; --showcase-call <function>: call one of its script's functions once the
+    // menu has been up a few frames, as a click would (onSettings, onPlay, onQuit: a screenshot of
+    // another panel).
     for (int i = 1; i < argc; ++i)
     {
         const StringView arg(reinterpret_cast<const utf8char*>(argv[i]));

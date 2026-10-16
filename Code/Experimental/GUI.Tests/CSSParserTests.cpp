@@ -50,10 +50,11 @@ TEST_CASE("css-parser: end-to-end resolve on a widget")
     ResolvedStyle rs = sheet.Resolve(*w.Get());
 
     CHECK(rs.Get(SV(u8"color")) == SV(u8"white")); // .primary beats button
-    CHECK(rs.Get(SV(u8"padding")) == SV(u8"4"));
+    CHECK(rs.Get(SV(u8"padding-top")) == SV(u8"4")); // the shorthand, as its longhands
+    CHECK(rs.Get(SV(u8"padding-left")) == SV(u8"4"));
 }
 
-TEST_CASE("css-parser: values keep internal spaces; trailing semicolon optional")
+TEST_CASE("css-parser: a shorthand's values reach its sides; trailing semicolon optional")
 {
     const char8_t* css = u8"box { margin: 1 2 3 4; color: red }";
     StyleSheet sheet = CSSParser::Parse(SV(css));
@@ -61,7 +62,11 @@ TEST_CASE("css-parser: values keep internal spaces; trailing semicolon optional"
 
     auto w = Widget(u8"box");
     ResolvedStyle rs = sheet.Resolve(*w.Get());
-    CHECK(rs.Get(SV(u8"margin")) == SV(u8"1 2 3 4")); // internal spaces preserved
+    // The shorthand's four values reach their four sides.
+    CHECK(rs.Get(SV(u8"margin-top")) == SV(u8"1"));
+    CHECK(rs.Get(SV(u8"margin-right")) == SV(u8"2"));
+    CHECK(rs.Get(SV(u8"margin-bottom")) == SV(u8"3"));
+    CHECK(rs.Get(SV(u8"margin-left")) == SV(u8"4"));
     CHECK(rs.Get(SV(u8"color")) == SV(u8"red"));      // last decl, no semicolon
 }
 

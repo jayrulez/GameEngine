@@ -96,7 +96,5 @@ TEST_CASE("css-vars: end-to-end through the applier")
         CSSParser::Parse(SV(u8"button { --bg: #0000ff; background-color: var(--bg); }"));
     ApplyStyle(*w.Get(), sheet.Resolve(*w.Get()));
 
-    auto* bg = core::Cast<RectangleDrawable>(w->GetBackground());
-    REQUIRE(bg != nullptr);
-    CHECK(bg->GetColor().b == doctest::Approx(1.0f)); // var(--bg) -> #0000ff -> blue
+    CHECK(w->GetBox().BackgroundColor.b == doctest::Approx(1.0f)); // var(--bg) -> #0000ff -> blue
 }

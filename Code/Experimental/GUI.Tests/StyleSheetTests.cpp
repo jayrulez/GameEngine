@@ -68,7 +68,7 @@ TEST_CASE("stylesheet: higher specificity wins")
 
     ResolvedStyle rs = sheet.Resolve(*w.Get());
     CHECK(rs.Get(SV(u8"color")) == SV(u8"white")); // from .primary
-    CHECK(rs.Get(SV(u8"padding")) == SV(u8"4"));   // only in the tag rule
+    CHECK(rs.Get(SV(u8"padding-top")) == SV(u8"4"));   // only in the tag rule
     CHECK_FALSE(rs.Has(SV(u8"margin")));
 }
 

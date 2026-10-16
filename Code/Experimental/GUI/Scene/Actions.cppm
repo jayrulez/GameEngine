@@ -17,7 +17,7 @@ export module experimental.gui:actions;
 import foundation.core; // Float2, Duration, Lerp, Function, RefPtr, Array, Move, Color, MakeRef
 import :action;
 import :node;
-import :rectangle_drawable;
+import :node_box;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -203,8 +203,11 @@ export namespace experimental::gui
             if (m_opacity.Size() != 0)
                 m_target->SetAlpha(OpacityAt(t));
             if (m_color.Size() != 0)
-                m_target->SetBackground(
-                    core::MakeRef<RectangleDrawable>(MemoryAllocator(), ColorAt(t)));
+            {
+                NodeBox box = m_target->GetBox();
+                box.BackgroundColor = ColorAt(t);
+                m_target->SetBox(core::Move(box), m_target->IsBoxFromStyle());
+            }
         }
 
         [[nodiscard]] f32 OpacityAt(f32 t) const

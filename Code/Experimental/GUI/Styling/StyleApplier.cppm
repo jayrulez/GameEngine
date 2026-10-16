@@ -3,11 +3,12 @@
 
 // GUI - :style_applier partition
 //
-// ApplyStyle: writes a ResolvedStyle's known declarations onto a node's properties - the
-// bridge from CSS strings to the widget setters built in earlier phases. This is the small,
-// explicit stand-in for eepp's PropertySpecification/PropertyDefinition registry; it grows a
-// case per supported property. background-image/font-family (which resolve to Drawable*/
-// Font* via a resource provider) arrive with the resource-wiring increment.
+// ApplyStyle: writes a resolved style's typed values onto a node (G2 of Specs/vg-and-gui-lab.md).
+// Node and text properties go to their setters; the box properties (background colour and layers,
+// a border per side, radii, box shadows) become the node's NodeBox and `transform` its style
+// transform, both owned by the sheet; a property the table (StyleProperties) does not name goes to
+// the widget's reflected property declaring it as its CSS name, so a library's widget is styled
+// with no applier code of its own.
 
 module;
 #include "Core/Prelude.h"
@@ -24,10 +25,10 @@ import :node;
 import :ui_node;
 import :ui_widget;
 import :drawable;
-import :rectangle_drawable;
-import :border_drawable;
-import :image_drawable;
+import :node_box;
 import :style_sheet; // ResolvedStyle
+import :style_properties;
+import :style_value;
 import :css_values;
 import :resource_provider;
 
@@ -57,136 +58,260 @@ export namespace experimental::gui
         return v;
     }
 
+    namespace detail
+    {
+        [[nodiscard]] inline f32 PixelsOf(const StyleValue* v, const LengthContext& lengths, f32 percentBase, f32 fallback)
+        {
+            return v != nullptr && v->Kind == StyleValueKind::Length ? ResolveLengthValue(v->Length, lengths, percentBase)
+                                                                    : fallback;
+        }
+
+        [[nodiscard]] inline BoxGradient ToBoxGradient(const GradientValue& g)
+        {
+            BoxGradient out;
+            out.Kind = g.Kind == GradientKind::Linear   ? BoxGradientKind::Linear
+                       : g.Kind == GradientKind::Radial ? BoxGradientKind::Radial
+                                                        : BoxGradientKind::Conic;
+            out.Angle = g.Angle;
+            out.Repeating = g.Repeating;
+            for (const GradientStopValue& stop : SettleStops(g.Stops))
+                out.Stops.PushBack(vg::GradientStop{stop.Position, stop.StopColor});
+            return out;
+        }
+
+        [[nodiscard]] inline bool AnyBoxProperty(const ResolvedStyle& style)
+        {
+            for (const ResolvedProperty& p : style.Properties())
+            {
+                const core::StringView n = p.Name.AsView();
+                if (n == core::StringView(u8"background-color") || n == core::StringView(u8"background-image") ||
+                    n == core::StringView(u8"box-shadow") ||
+                    (n.Size() > 7 && n.SubStr(0, 7) == core::StringView(u8"border-")))
+                    return true;
+            }
+            return false;
+        }
+
+        // The node's box from the sheet's box properties, in pixels.
+        [[nodiscard]] inline NodeBox BuildBox(const UINode& node, const ResolvedStyle& style, IResourceProvider* resources,
+                                              const LengthContext& lengths)
+        {
+            NodeBox box;
+            if (const StyleValue* c = style.Value(u8"background-color"))
+                box.BackgroundColor = c->ColorValue;
+            if (const StyleValue* layers = style.Value(u8"background-image"))
+            {
+                for (const BackgroundLayer& layer : layers->Layers)
+                {
+                    BoxLayer out;
+                    if (layer.Kind == BackgroundKind::Image)
+                    {
+                        out.IsImage = true;
+                        out.Image = resources != nullptr ? resources->LoadImage(layer.Image.AsView()) : nullptr;
+                        if (out.Image == nullptr)
+                            continue; // not loaded (no provider, or no such image)
+                    }
+                    else if (layer.Kind == BackgroundKind::Gradient)
+                    {
+                        out.Gradient = ToBoxGradient(layer.Gradient);
+                    }
+                    else
+                    {
+                        continue; // a colour layer above the bottom is not CSS
+                    }
+                    box.Layers.PushBack(Move(out));
+                }
+            }
+            // A border per side: its style none or hidden draws nothing, whatever its width.
+            const auto side = [&](const char8_t* name, f32& width, Color& color)
+            {
+                core::String w(u8"border-");
+                w.Append(core::StringView(name));
+                core::String styleName = w;
+                core::String colorName = w;
+                w.Append(core::StringView(u8"-width"));
+                styleName.Append(core::StringView(u8"-style"));
+                colorName.Append(core::StringView(u8"-color"));
+                const StyleValue* styleValue = style.Value(styleName.AsView());
+                const core::StringView lineStyle = styleValue != nullptr ? styleValue->Keyword.AsView() : core::StringView(u8"none");
+                const bool drawn = lineStyle != core::StringView(u8"none") && lineStyle != core::StringView(u8"hidden");
+                width = drawn ? Max(0.0f, PixelsOf(style.Value(w.AsView()), lengths, 0.0f, 3.0f)) : 0.0f;
+                if (const StyleValue* c = style.Value(colorName.AsView()))
+                    color = c->ColorValue;
+                else
+                    color = Color{0.0f, 0.0f, 0.0f, 1.0f};
+            };
+            side(u8"top", box.BorderWidths.top, box.BorderColors.top);
+            side(u8"right", box.BorderWidths.right, box.BorderColors.right);
+            side(u8"bottom", box.BorderWidths.bottom, box.BorderColors.bottom);
+            side(u8"left", box.BorderWidths.left, box.BorderColors.left);
+            // Radii: a percentage of the box's smaller side.
+            const core::Float2 size = node.GetSize();
+            const f32 percentBase = Min(size.x, size.y);
+            box.Radii = vg::CornerRadii(PixelsOf(style.Value(u8"border-top-left-radius"), lengths, percentBase, 0.0f),
+                                        PixelsOf(style.Value(u8"border-top-right-radius"), lengths, percentBase, 0.0f),
+                                        PixelsOf(style.Value(u8"border-bottom-right-radius"), lengths, percentBase, 0.0f),
+                                        PixelsOf(style.Value(u8"border-bottom-left-radius"), lengths, percentBase, 0.0f));
+            if (const StyleValue* shadows = style.Value(u8"box-shadow"))
+            {
+                for (const ShadowValue& s : shadows->Shadows)
+                {
+                    BoxShadow shadow;
+                    shadow.Offset = core::Float2{ResolveLengthValue(s.OffsetX, lengths), ResolveLengthValue(s.OffsetY, lengths)};
+                    shadow.Blur = ResolveLengthValue(s.Blur, lengths);
+                    shadow.Spread = ResolveLengthValue(s.Spread, lengths);
+                    shadow.ShadowColor = s.ShadowColor;
+                    shadow.Inset = s.Inset;
+                    box.Shadows.PushBack(shadow);
+                }
+            }
+            return box;
+        }
+
+        // A property the table does not name, given to the reflected property of the node's type
+        // (or a base's) that declares it as its CSS name (the `css` property attribute), parsed by
+        // that property's type.
+        inline void ApplyReflected(UINode& node, const ResolvedProperty& p, const LengthContext& lengths)
+        {
+            for (const TypeInfo* type = node.GetType(); type != nullptr; type = type->base)
+            {
+                for (usize i = 0; i < PropertyCount(*type); ++i)
+                {
+                    const PropertyInfo& property = PropertyAt(*type, i);
+                    const Attribute* css = FindAttribute(property, u8"css");
+                    const core::String* cssName = css != nullptr ? css->value.TryGet<core::String>() : nullptr;
+                    if (cssName == nullptr || cssName->AsView() != p.Name.AsView())
+                        continue;
+                    Instance instance = Instance::From(&node);
+                    const core::StringView text = Trim(p.Value.AsView());
+                    Variant value;
+                    if (property.type == &TypeOf<f32>())
+                    {
+                        if (Optional<f32> px = ResolveLength(text, lengths); px.HasValue())
+                            value = Variant::From<f32>(px.Value());
+                    }
+                    else if (property.type == &TypeOf<Color>())
+                    {
+                        if (Optional<Color> c = ParseColor(text); c.HasValue())
+                            value = Variant::From<Color>(c.Value());
+                    }
+                    else if (property.type == &TypeOf<bool>())
+                    {
+                        if (Optional<bool> b = ParseBool(text); b.HasValue())
+                            value = Variant::From<bool>(b.Value());
+                    }
+                    else if (property.type == &TypeOf<core::String>())
+                    {
+                        value = Variant::From<core::String>(core::String(text));
+                    }
+                    if (!value.IsEmpty())
+                        (void)SetProperty(property, instance, value);
+                    return;
+                }
+            }
+        }
+    }
+
     // Apply the supported declarations of `style` to `node`. `resources` (optional) loads
     // background-image; `fontService` (optional) resolves font-family/size. Missing either
-    // just skips that property.
-    inline void ApplyStyle(UINode& node, const ResolvedStyle& style,
+    // just skips that property. The box properties (background, border, radius, box-shadow)
+    // become the node's box, owned by the sheet: a restyle without any replaces it with none.
+    inline void ApplyStyle(UINode& node, const ResolvedStyle& input,
                            IResourceProvider* resources = nullptr,
                            fonts::IFontService* fontService = nullptr,
                            const LengthContext& lengths = {})
     {
         using core::StringView;
+        ResolvedStyle settledCopy;
+        const ResolvedStyle* settled = &input;
+        if (!input.IsFinalized())
+        {
+            settledCopy = input;
+            settledCopy.Finalize();
+            settled = &settledCopy;
+        }
+        const ResolvedStyle& style = *settled;
 
         // The containing dimensions percentages resolve against (the parent's size).
         core::Float2 percentBase{0.0f, 0.0f};
         if (Node* parent = node.GetParent())
             percentBase = parent->GetSize();
+        const auto length = [&](const char8_t* name, f32 base) -> Optional<f32>
+        {
+            const StyleValue* v = style.Value(name);
+            if (v == nullptr || v->Kind != StyleValueKind::Length)
+                return {};
+            return ResolveLengthValue(v->Length, lengths, base);
+        };
+        const auto keyword = [&](const char8_t* name) -> StringView
+        {
+            const StyleValue* v = style.Value(name);
+            return v != nullptr ? v->Keyword.AsView() : StringView{};
+        };
 
-        if (style.Has(StringView(u8"background-color")))
-            if (Optional<Color> c = ParseColor(style.Get(StringView(u8"background-color")));
-                c.HasValue())
-                node.SetBackground(
-                    core::MakeRef<RectangleDrawable>(foundation::core::DefaultAllocator(), c.Value()));
+        if (const StyleValue* o = style.Value(u8"opacity"))
+            node.SetAlpha(o->Number);
 
-        if (style.Has(StringView(u8"padding")))
-            if (Optional<Thickness> t =
-                    ResolveThickness(style.Get(StringView(u8"padding")), lengths);
-                t.HasValue())
-                node.SetPadding(t.Value());
-
-        if (style.Has(StringView(u8"opacity")))
-            if (Optional<f32> o = ParseLength(style.Get(StringView(u8"opacity"))); o.HasValue())
-                node.SetAlpha(o.Value());
+        // Padding (and margin, a widget's) per side; the sides not declared keep their value.
+        {
+            Thickness padding = node.GetPadding();
+            bool changed = false;
+            if (Optional<f32> v = length(u8"padding-top", 0.0f); v.HasValue()) { padding.Top = v.Value(); changed = true; }
+            if (Optional<f32> v = length(u8"padding-right", 0.0f); v.HasValue()) { padding.Right = v.Value(); changed = true; }
+            if (Optional<f32> v = length(u8"padding-bottom", 0.0f); v.HasValue()) { padding.Bottom = v.Value(); changed = true; }
+            if (Optional<f32> v = length(u8"padding-left", 0.0f); v.HasValue()) { padding.Left = v.Value(); changed = true; }
+            if (changed)
+                node.SetPadding(padding);
+        }
+        if (UIWidget* widget = core::Cast<UIWidget>(&node))
+        {
+            Thickness margin = widget->GetMargin();
+            bool changed = false;
+            if (Optional<f32> v = length(u8"margin-top", 0.0f); v.HasValue()) { margin.Top = v.Value(); changed = true; }
+            if (Optional<f32> v = length(u8"margin-right", 0.0f); v.HasValue()) { margin.Right = v.Value(); changed = true; }
+            if (Optional<f32> v = length(u8"margin-bottom", 0.0f); v.HasValue()) { margin.Bottom = v.Value(); changed = true; }
+            if (Optional<f32> v = length(u8"margin-left", 0.0f); v.HasValue()) { margin.Left = v.Value(); changed = true; }
+            if (changed)
+                widget->SetMargin(margin);
+        }
 
         // min/max-width/height: set the size constraints before width/height so the applied
         // size is clamped to them.
         {
             core::Float2 mn = node.GetMinSize();
-            bool changedMin = false;
-            if (style.Has(StringView(u8"min-width")))
-                if (Optional<f32> v =
-                        ResolveLength(style.Get(StringView(u8"min-width")), lengths, percentBase.x);
-                    v.HasValue())
-                {
-                    mn.x = v.Value();
-                    changedMin = true;
-                }
-            if (style.Has(StringView(u8"min-height")))
-                if (Optional<f32> v = ResolveLength(style.Get(StringView(u8"min-height")), lengths,
-                                                    percentBase.y);
-                    v.HasValue())
-                {
-                    mn.y = v.Value();
-                    changedMin = true;
-                }
+            core::Float2 mx = node.GetMaxSize();
+            bool changedMin = false, changedMax = false;
+            if (Optional<f32> v = length(u8"min-width", percentBase.x); v.HasValue()) { mn.x = v.Value(); changedMin = true; }
+            if (Optional<f32> v = length(u8"min-height", percentBase.y); v.HasValue()) { mn.y = v.Value(); changedMin = true; }
+            if (Optional<f32> v = length(u8"max-width", percentBase.x); v.HasValue()) { mx.x = v.Value(); changedMax = true; }
+            if (Optional<f32> v = length(u8"max-height", percentBase.y); v.HasValue()) { mx.y = v.Value(); changedMax = true; }
             if (changedMin)
                 node.SetMinSize(mn);
-
-            core::Float2 mx = node.GetMaxSize();
-            bool changedMax = false;
-            if (style.Has(StringView(u8"max-width")))
-                if (Optional<f32> v =
-                        ResolveLength(style.Get(StringView(u8"max-width")), lengths, percentBase.x);
-                    v.HasValue())
-                {
-                    mx.x = v.Value();
-                    changedMax = true;
-                }
-            if (style.Has(StringView(u8"max-height")))
-                if (Optional<f32> v = ResolveLength(style.Get(StringView(u8"max-height")), lengths,
-                                                    percentBase.y);
-                    v.HasValue())
-                {
-                    mx.y = v.Value();
-                    changedMax = true;
-                }
             if (changedMax)
                 node.SetMaxSize(mx);
         }
-
-        // width / height (combined into one SetSize; clamped by any min/max above).
         {
             core::Float2 size = node.GetSize();
             bool changed = false;
-            if (style.Has(StringView(u8"width")))
-                if (Optional<f32> w =
-                        ResolveLength(style.Get(StringView(u8"width")), lengths, percentBase.x);
-                    w.HasValue())
-                {
-                    size.x = w.Value();
-                    changed = true;
-                }
-            if (style.Has(StringView(u8"height")))
-                if (Optional<f32> h =
-                        ResolveLength(style.Get(StringView(u8"height")), lengths, percentBase.y);
-                    h.HasValue())
-                {
-                    size.y = h.Value();
-                    changed = true;
-                }
+            if (Optional<f32> w = length(u8"width", percentBase.x); w.HasValue()) { size.x = w.Value(); changed = true; }
+            if (Optional<f32> h = length(u8"height", percentBase.y); h.HasValue()) { size.y = h.Value(); changed = true; }
             if (changed)
                 node.SetSize(size);
         }
 
-        if (style.Has(StringView(u8"enabled")))
-            if (Optional<bool> e = ParseBool(style.Get(StringView(u8"enabled"))); e.HasValue())
-                node.SetEnabled(e.Value());
+        if (const StringView e = keyword(u8"enabled"); e.Size() != 0)
+            if (Optional<bool> b = ParseBool(e); b.HasValue())
+                node.SetEnabled(b.Value());
+        if (const StringView v = keyword(u8"visibility"); v == StringView(u8"hidden"))
+            node.SetVisible(false);
+        else if (v == StringView(u8"visible"))
+            node.SetVisible(true);
 
-        if (style.Has(StringView(u8"visibility")))
+        // Text: colour, alignment, face.
+        if (const StyleValue* c = style.Value(u8"color"))
+            node.SetThemeTextColor(c->ColorValue);
+        if (const StringView v = keyword(u8"text-align"); v.Size() != 0)
         {
-            const StringView v = style.Get(StringView(u8"visibility"));
-            if (v == StringView(u8"hidden"))
-                node.SetVisible(false);
-            else if (v == StringView(u8"visible"))
-                node.SetVisible(true);
-        }
-
-        if (style.Has(StringView(u8"margin")))
-            if (UIWidget* widget = core::Cast<UIWidget>(&node))
-                if (Optional<Thickness> t =
-                        ResolveThickness(style.Get(StringView(u8"margin")), lengths);
-                    t.HasValue())
-                    widget->SetMargin(t.Value());
-
-        // Text color for text-bearing widgets (Label/TextField/ComboBox/... via the virtual).
-        if (style.Has(StringView(u8"color")))
-            if (Optional<Color> c = ParseColor(style.Get(StringView(u8"color"))); c.HasValue())
-                node.SetThemeTextColor(c.Value());
-
-        // text-align (horizontal). justify falls back to left.
-        if (style.Has(StringView(u8"text-align")))
-        {
-            const StringView v = style.Get(StringView(u8"text-align"));
             if (v == StringView(u8"left") || v == StringView(u8"justify"))
                 node.SetThemeTextAlign(TextHAlign::Left);
             else if (v == StringView(u8"center") || v == StringView(u8"centre"))
@@ -194,11 +319,8 @@ export namespace experimental::gui
             else if (v == StringView(u8"right"))
                 node.SetThemeTextAlign(TextHAlign::Right);
         }
-
-        // vertical-align (top / middle / bottom).
-        if (style.Has(StringView(u8"vertical-align")))
+        if (const StringView v = keyword(u8"vertical-align"); v.Size() != 0)
         {
-            const StringView v = style.Get(StringView(u8"vertical-align"));
             if (v == StringView(u8"top"))
                 node.SetThemeTextAlignV(TextVAlign::Top);
             else if (v == StringView(u8"middle") || v == StringView(u8"center"))
@@ -206,76 +328,42 @@ export namespace experimental::gui
             else if (v == StringView(u8"bottom"))
                 node.SetThemeTextAlignV(TextVAlign::Bottom);
         }
-
-        // background-image: url(path) -> load the image via the resource provider and wrap it
-        // in an ImageDrawable (the provider returns the raw asset, the GUI wraps it).
-        if (resources != nullptr && style.Has(StringView(u8"background-image")))
+        if (fontService != nullptr)
         {
-            const StringView path = ParseUrl(style.Get(StringView(u8"background-image")));
-            if (path.Size() != 0)
-                if (const image::ImageData* img = resources->LoadImage(path))
-                    node.SetBackground(core::MakeRef<ImageDrawable>(foundation::core::DefaultAllocator(), img));
-        }
-
-        // border-radius: round the background rectangle; the border (below) reuses the radii.
-        vg::CornerRadii radii{};
-        const bool hasRadius = style.Has(StringView(u8"border-radius"));
-        if (hasRadius)
-            if (Optional<vg::CornerRadii> r =
-                    ParseCornerRadii(style.Get(StringView(u8"border-radius")));
-                r.HasValue())
+            if (const StringView family = ParseUrl(keyword(u8"font-family")); family.Size() != 0) // strips quotes
             {
-                radii = r.Value();
-                if (RectangleDrawable* bg = core::Cast<RectangleDrawable>(node.GetBackground()))
-                    bg->SetCornerRadii(radii);
-            }
-
-        // border: shorthand plus border-width / border-color overrides -> a BorderDrawable set
-        // as the node's foreground (drawn over the content, rounded to match border-radius).
-        {
-            Optional<f32> borderWidth;
-            Optional<Color> borderColor;
-            if (style.Has(StringView(u8"border")))
-                if (Optional<BorderShorthand> b = ParseBorder(style.Get(StringView(u8"border")));
-                    b.HasValue())
-                {
-                    borderWidth = b.Value().Width;
-                    borderColor = b.Value().LineColor;
-                }
-            if (style.Has(StringView(u8"border-width")))
-                if (Optional<f32> w =
-                        ResolveLength(style.Get(StringView(u8"border-width")), lengths);
-                    w.HasValue())
-                    borderWidth = w.Value();
-            if (style.Has(StringView(u8"border-color")))
-                if (Optional<Color> c = ParseColor(style.Get(StringView(u8"border-color")));
-                    c.HasValue())
-                    borderColor = c.Value();
-
-            if (borderWidth.HasValue() || borderColor.HasValue())
-            {
-                auto border = core::MakeRef<BorderDrawable>(
-                    foundation::core::DefaultAllocator(), borderColor.ValueOr(Color{0.0f, 0.0f, 0.0f, 1.0f}),
-                    borderWidth.ValueOr(1.0f));
-                if (hasRadius)
-                    border->SetCornerRadii(radii);
-                node.SetForeground(core::Move(border));
+                const f32 size = length(u8"font-size", 0.0f).ValueOr(16.0f);
+                if (size > 0.0f)
+                    if (fonts::CachedFont* font = fontService->GetFont(family, size))
+                        node.SetThemeFont(font);
             }
         }
 
-        // font-family/-size -> resolve through the font service (whatever backs it - VFS, the
-        // TrueType service, ...; the GUI stays agnostic).
-        if (fontService != nullptr && style.Has(StringView(u8"font-family")))
+        // The box: the sheet's, or none when a restyle drops every box property it had set.
+        if (detail::AnyBoxProperty(style))
+            node.SetBox(detail::BuildBox(node, style, resources, lengths), true);
+        else if (node.IsBoxFromStyle())
+            node.SetBox(NodeBox{}, true);
+
+        // The transform about its origin; likewise owned by the sheet once it sets one.
+        const StyleValue* transform = style.Value(u8"transform");
+        const StyleValue* origin = style.Value(u8"transform-origin");
+        if (transform != nullptr || origin != nullptr)
         {
-            const StringView family =
-                ParseUrl(style.Get(StringView(u8"font-family"))); // strips quotes
-            const f32 size =
-                ResolveLength(style.Get(StringView(u8"font-size"), StringView(u8"16")), lengths)
-                    .ValueOr(16.0f);
-            if (family.Size() != 0 && size > 0.0f)
-                if (fonts::CachedFont* font = fontService->GetFont(family, size))
-                    node.SetThemeFont(font);
+            node.SetStyleTransform(transform != nullptr ? transform->Transforms : Array<TransformFunction>{},
+                                   origin != nullptr ? origin->OriginX : LengthValue{50.0f, LengthUnit::Percent},
+                                   origin != nullptr ? origin->OriginY : LengthValue{50.0f, LengthUnit::Percent});
         }
+        else if (node.IsTransformFromStyle())
+        {
+            node.SetStyleTransform(Array<TransformFunction>{}, LengthValue{50.0f, LengthUnit::Percent},
+                                   LengthValue{50.0f, LengthUnit::Percent});
+        }
+
+        // What the table does not name: a reflected property that takes it by its CSS name.
+        for (const ResolvedProperty& p : style.Properties())
+            if (!ResolvedStyle::IsCustomProperty(p.Name.AsView()) && FindStyleProperty(p.Name.AsView()) == nullptr)
+                detail::ApplyReflected(node, p, lengths);
     }
 
     // Apply a resolved pseudo-element style to a widget part: its background-color becomes the

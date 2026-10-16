@@ -35,6 +35,7 @@ target_sources(GUI
             Drawing/ImageDrawable.cppm
             Drawing/NineSliceDrawable.cppm
             Drawing/LayerDrawable.cppm
+            Drawing/NodeBox.cppm
             Text/Text.cppm
             Model/Variant.cppm
             Model/ModelIndex.cppm
@@ -79,6 +80,8 @@ target_sources(GUI
             Styling/StyleSheet.cppm
             Styling/CSSParser.cppm
             Styling/CSSValues.cppm
+            Styling/StyleValue.cppm
+            Styling/StyleProperties.cppm
             Styling/StyleApplier.cppm
             Styling/Transition.cppm
             Styling/StyleManager.cppm

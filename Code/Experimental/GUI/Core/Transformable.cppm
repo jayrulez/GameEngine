@@ -60,6 +60,16 @@ export namespace experimental::gui
         [[nodiscard]] core::Float2 GetScaleOrigin() const noexcept { return m_scaleOrigin; }
         [[nodiscard]] core::Float2 GetRotationOrigin() const noexcept { return m_rotationOrigin; }
 
+        /// A further transform about `origin` (local units), after the position, scale and rotation:
+        /// CSS's `transform` with its `transform-origin`.
+        void SetExtraTransform(const Transform2D& transform, core::Float2 origin)
+        {
+            m_extra = transform;
+            m_extraOrigin = origin;
+            MarkDirty();
+        }
+        [[nodiscard]] const Transform2D& GetExtraTransform() const noexcept { return m_extra; }
+
         // Relative moves.
         void Move(core::Float2 offset) { SetPosition(m_position + offset); }
         void Rotate(f32 radians) { SetRotation(m_rotation + radians); }
@@ -83,6 +93,12 @@ export namespace experimental::gui
                     t.Translate(m_rotationOrigin);
                     t.Rotate(m_rotation);
                     t.Translate(-m_rotationOrigin);
+                }
+                if (!m_extra.IsIdentity())
+                {
+                    t.Translate(m_extraOrigin);
+                    t.Combine(m_extra);
+                    t.Translate(-m_extraOrigin);
                 }
                 m_transform = t;
                 m_transformDirty = false;
@@ -118,5 +134,7 @@ export namespace experimental::gui
         mutable Transform2D m_inverse{};
         mutable bool m_transformDirty = true;
         mutable bool m_inverseDirty = true;
+        Transform2D m_extra{};
+        core::Float2 m_extraOrigin{};
     };
 }

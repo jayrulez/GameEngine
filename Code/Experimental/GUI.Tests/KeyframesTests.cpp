@@ -137,10 +137,7 @@ TEST_CASE("keyframes: animates background-color across the stops")
     // At t=0 the background is black; halfway it's mid-grey; at the end white.
     auto grey = [&](float expect)
     {
-        Drawable* bg = w->GetBackground();
-        RectangleDrawable* r = core::Cast<RectangleDrawable>(bg);
-        REQUIRE(r != nullptr);
-        CHECK(r->GetColor().r == doctest::Approx(expect));
+        CHECK(w->GetBox().BackgroundColor.r == doctest::Approx(expect));
     };
     grey(0.0f);
     root->Update(Secs(1.0)); // t=0.5 -> mid grey

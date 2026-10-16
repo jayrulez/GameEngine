@@ -127,6 +127,37 @@ dispatcher's special case (E5); the first hover restyles the hovered top-level n
 (E3's restyle cost); the click thresholds are device pixels, not scaled; the sandbox has no plain
 container element, so its page uses layouts for boxes (E2).
 
+### E1b Touch
+
+Facts (2026-10-16): the shell turns fingers into `TouchDown`, `TouchMove` and `TouchUp` events
+with an id, a position normalized over the window and a pressure (`SDL3ShellImpl.cpp`), and its
+InputSurface maps them into the content it fits. Neither foundation.ui's bridge nor the lab's
+forwards them (`UiInputBridge.cppm`: "gamepad / touch not routed to the UI"); a tap reaches both
+only as the mouse events SDL makes from it by default.
+
+Design (user, 2026-10-16: the shell forwards touch through the input bridge):
+
+- **The first finger is a pointer.** The bridge forwards touch to the dispatcher, which drives
+  the same route as the mouse: a press, moves, a release and a click, the events marked as touch
+  (a pointer type and a finger id on the event and in a script's `GuiEvent`), so every widget
+  works without knowing. Other fingers are ignored by the core; gestures of several fingers wait
+  for a screen that asks (a gamekit concern).
+- **No hover without a finger.** A finger hovers only while it is down: the hover path follows it
+  and empties when it lifts, so `:hover` does not stick after a tap and no tooltip appears.
+- **Tap tolerance.** Click counting takes a wider distance for touch than for the mouse.
+- **Cancel.** `CancelPointer()` ends the press in progress: the pressed node hears
+  `PointerCancel` (a widget drops its drag), no click follows, the press path and capture clear.
+  A scroller that starts panning under a finger calls it (E6).
+- **SDL's mouse copies are dropped.** While the bridge forwards touch, mouse events that arrive
+  with a finger down, or after it at the finger's last place, are taken for SDL's copies of the
+  touch and ignored; a mouse that moves elsewhere is the mouse again.
+- **The on-screen keyboard** follows text-field focus through the bridge's text input, as now.
+
+Tests: a tap is a press, a release and a click marked as touch, with no hover left behind;
+moves follow the finger; a second finger is ignored; double taps within the wider distance;
+`CancelPointer` mid-press; the bridge forwarding touch from events and from a surface, and dropping
+the mouse copies.
+
 ### E2 Measure and arrange
 
 Facts: no node measures itself; layouts place children at the sizes they have; `LinearLayout`,
@@ -306,6 +337,8 @@ Design:
   positioner). ComboBox, Menu and submenus, Tooltip and context menus all use it.
 - **Tooltips**: the text found up the parent chain from the hovered node, placed by the helper,
   any node as content, shown and hidden on the context clock (they read the frame time today).
+- **Long press** (touch): holding a finger still opens a widget's context menu, or shows its
+  tooltip when it has no menu.
 - **Keyboard and pad**: Menu (arrows, Return, Escape, Left and Right through submenus, a disabled
   item skipped, shortcut text from the keymap's binding for the item's command); MenuBar (Left and
   Right between menus, a key to enter the bar); ComboBox (open on activate or Down, arrows while
@@ -339,7 +372,9 @@ lab's do not; this phase closes that list, with the systems above under it. In o
   hook, horizontal scroll; models report inserted, removed, moved and changed ranges instead of a
   whole reset (Zero's model with stable ids); drag reordering after E7.
 - **ScrollView feel**: momentum, Shift and wheel for the other axis, drag to pan for touch and pad
-  sticks, scrollbar policies (auto, always, never, overlay), stick-to-end.
+  sticks (a finger moving past a threshold pans and cancels the press under it, E1b's
+  `CancelPointer`, so a row is not clicked at the end of a scroll), scrollbar policies (auto,
+  always, never, overlay), stick-to-end.
 - **TabWidget**: closable tabs, reordering, overflow scrolling.
 - **Image**: `src` from markup, fit (`object-fit`: contain, cover, fill, none, scale-down), tint.
 - **Every control is a markup element** (9 of the 25 widget types are not today).

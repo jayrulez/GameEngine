@@ -147,6 +147,15 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   gown]" in its colour is one label. Tests: a paragraph mixing two sizes and three colours measures
   and wraps; an icon sits on the baseline; a malformed tag is shown as text and logged, never
   dropped; both script backends set runs.
+  As built on `vg`: runs and the markup (07f54ef0d): [b] [i] [u] [color=] [size=] [font=] [link=]
+  closed by [/name] or [/], [icon=path], "[[" for a bracket; malformed text kept and reported with
+  its offset. The inline formatter (861930e0a) breaks after spaces, shares a baseline across sizes,
+  sits icons on it; bold and italic take a "<family> Bold" / "Italic" face when the font service
+  has one (`IFontService::HasFamily`, 99ee0925b) and are synthesized when not (bold drawn twice,
+  italic slanted). `RichText` (a19fb788d) beside Label, in SML as `<RichText markup="...">`, with
+  OnLink and a hand pointer over links; scripts get `ui.findRichText` with setMarkup, plainText,
+  addRun, and onLink reading `clickedLink` (cdbb1bd57). The UI sandbox has a Rich Text tab
+  (f50d7d4f0). Kerning across a run boundary and breaking inside an over-long word are left out.
 - **F3 Real shaping.** `Fonts.HarfBuzz` behind the factory, `ITextShaper` widened to a script, a
   language, a direction and a font list, with itemization and fallback inside the shaper; then the
   bidi algorithm for mixed-direction paragraphs. HarfBuzz is not hard-coded anywhere (user

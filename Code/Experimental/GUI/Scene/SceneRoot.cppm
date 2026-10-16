@@ -53,6 +53,7 @@ export namespace experimental::gui
         void Update(core::Duration elapsed)
         {
             m_actionManager.Update(elapsed);
+            m_eventDispatcher.Tick(static_cast<f32>(elapsed.AsSecondsF()));
             OnUpdate(elapsed);
             m_lastBindingCount = m_effects.Flush();
             m_mutationQueue.Drain();
@@ -77,7 +78,7 @@ export namespace experimental::gui
         [[nodiscard]] bool NeedsFrame() const noexcept
         {
             return NeedsRedraw() || !m_actionManager.IsEmpty() || IsLayoutDirty() || HasLayoutDirtyDescendant() ||
-                   m_effects.HasPending();
+                   m_effects.HasPending() || m_eventDispatcher.IsHoldingDirection();
         }
 
         /// How many bindings the last Update ran (none in a frame where no bound value changed).

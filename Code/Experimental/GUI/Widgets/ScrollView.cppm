@@ -252,6 +252,26 @@ export namespace experimental::gui
 
         void OnSizeChange() override { Relayout(); }
 
+        [[nodiscard]] bool ScrollsDescendantsIntoView() const override { return true; }
+        // A focused widget inside comes into view (G7): scrolled by the least that shows it.
+        void OnDescendantFocused(Node& focused) override
+        {
+            const Rect world = focused.GetScreenBounds();
+            const core::Float2 lo = ConvertToNodeSpace(core::Float2{world.x, world.y});
+            const core::Float2 hi = ConvertToNodeSpace(core::Float2{world.x + world.width, world.y + world.height});
+            const Rect vp = Viewport();
+            core::Float2 offset = m_offset;
+            if (lo.y < vp.y)
+                offset.y -= vp.y - lo.y;
+            else if (hi.y > vp.y + vp.height)
+                offset.y += hi.y - (vp.y + vp.height);
+            if (lo.x < vp.x)
+                offset.x -= vp.x - lo.x;
+            else if (hi.x > vp.x + vp.width)
+                offset.x += hi.x - (vp.x + vp.width);
+            SetScrollOffset(offset);
+        }
+
     private:
         [[nodiscard]] core::Float2 Clamp(core::Float2 offset) const
         {

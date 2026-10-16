@@ -7,7 +7,8 @@
 // is a chain of compound StyleSelectorRules joined by combinators (descendant / child);
 // each rule constrains tag / #id / .class / :pseudo. Matching keys off the UIWidget identity
 // (tag/id/classes) from Phase 5, and pseudo-classes map onto the input-driven control state
-// (:hover/:active/:focus/:disabled -> IsHovered/IsPressed/IsFocused/!IsEnabled).
+// (:hover/:active/:focus/:focus-visible/:disabled -> IsHovered/IsPressed/IsFocused/IsFocusVisible/
+// !IsEnabled).
 //
 // Supported subset (the common case): tag, #id, .class, :hover/:focus/:active/:disabled,
 // universal '*', and descendant (space) / child ('>') combinators. Deferred: sibling
@@ -49,6 +50,7 @@ export namespace experimental::gui
         PseudoFocus = 1u << 1,
         PseudoActive = 1u << 2,
         PseudoDisabled = 1u << 3,
+        PseudoFocusVisible = 1u << 4,
     };
 
     // A single compound selector (e.g. "button#ok.primary:hover") plus the combinator that
@@ -86,6 +88,8 @@ export namespace experimental::gui
                 if ((m_pseudo & PseudoHover) && !element.IsHovered())
                     return false;
                 if ((m_pseudo & PseudoActive) && !element.IsPressed())
+                    return false;
+                if ((m_pseudo & PseudoFocusVisible) && !element.IsFocusVisible())
                     return false;
                 if ((m_pseudo & PseudoFocus) && !element.IsFocused())
                     return false;
@@ -148,6 +152,8 @@ export namespace experimental::gui
                 m_pseudo |= PseudoHover;
             else if (name == core::StringView(u8"focus"))
                 m_pseudo |= PseudoFocus;
+            else if (name == core::StringView(u8"focus-visible"))
+                m_pseudo |= PseudoFocusVisible;
             else if (name == core::StringView(u8"active"))
                 m_pseudo |= PseudoActive;
             else if (name == core::StringView(u8"disabled"))

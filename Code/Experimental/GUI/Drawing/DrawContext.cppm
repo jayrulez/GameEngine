@@ -48,6 +48,14 @@ export namespace experimental::gui
         void Save() { m_vg->PushState(); }
         void Restore() { m_vg->PopState(); }
 
+        /// Device pixels per local unit under the current transform (its area scale's root), for
+        /// sizes VG takes in device pixels: a blur's sigma.
+        [[nodiscard]] f32 DeviceScale() const noexcept
+        {
+            const Float4x4 m = m_vg->GetTransform();
+            return Sqrt(Abs(m(0, 0) * m(1, 1) - m(0, 1) * m(1, 0)));
+        }
+
         // Concatenate a local transform onto the current one (child-local applied first).
         void ConcatTransform(const Transform2D& transform)
         {

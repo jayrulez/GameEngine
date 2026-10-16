@@ -5,7 +5,7 @@
 //
 // ApplyStyle: writes a resolved style's typed values onto a node (G2 of Specs/vg-and-gui-lab.md).
 // Node and text properties go to their setters; the box properties (background colour and layers,
-// a border per side, radii, box shadows) become the node's NodeBox and `transform` its style
+// a border per side, radii, box shadows, filters, the backdrop filter, the blend mode) become the node's NodeBox and `transform` its style
 // transform, both owned by the sheet; a property the table (StyleProperties) does not name goes to
 // the widget's reflected property declaring it as its CSS name, so a library's widget is styled
 // with no applier code of its own.
@@ -79,13 +79,26 @@ export namespace experimental::gui
             return out;
         }
 
+        // mix-blend-mode: the blends VG composites (plus-lighter is additive); another is normal.
+        [[nodiscard]] inline vg::VGBlendMode BlendModeOf(core::StringView keyword)
+        {
+            if (keyword == core::StringView(u8"multiply"))
+                return vg::VGBlendMode::Multiply;
+            if (keyword == core::StringView(u8"screen"))
+                return vg::VGBlendMode::Screen;
+            if (keyword == core::StringView(u8"plus-lighter"))
+                return vg::VGBlendMode::Additive;
+            return vg::VGBlendMode::Normal;
+        }
+
         [[nodiscard]] inline bool AnyBoxProperty(const ResolvedStyle& style)
         {
             for (const ResolvedProperty& p : style.Properties())
             {
                 const core::StringView n = p.Name.AsView();
                 if (n == core::StringView(u8"background-color") || n == core::StringView(u8"background-image") ||
-                    n == core::StringView(u8"box-shadow") ||
+                    n == core::StringView(u8"box-shadow") || n == core::StringView(u8"filter") ||
+                    n == core::StringView(u8"backdrop-filter") || n == core::StringView(u8"mix-blend-mode") ||
                     (n.Size() > 7 && n.SubStr(0, 7) == core::StringView(u8"border-")))
                     return true;
             }
@@ -165,6 +178,24 @@ export namespace experimental::gui
                     box.Shadows.PushBack(shadow);
                 }
             }
+            // Effects: blurs in sequence add as variances (a blur of a blur is one of the root of the
+            // squares' sum).
+            const auto blurOf = [&](const char8_t* name)
+            {
+                f32 variance = 0.0f;
+                if (const StyleValue* filters = style.Value(name))
+                    for (const FilterFunction& f : filters->Filters)
+                        if (f.Kind == FilterKind::Blur)
+                        {
+                            const f32 sigma = ResolveLengthValue(f.Amount, lengths);
+                            variance += sigma * sigma;
+                        }
+                return Sqrt(variance);
+            };
+            box.FilterBlur = blurOf(u8"filter");
+            box.BackdropBlur = blurOf(u8"backdrop-filter");
+            if (const StyleValue* blend = style.Value(u8"mix-blend-mode"))
+                box.BlendMode = BlendModeOf(blend->Keyword.AsView());
             return box;
         }
 
@@ -298,6 +329,11 @@ export namespace experimental::gui
             if (changed)
                 node.SetSize(size);
         }
+
+        // overflow: any value but visible clips the children to the box (the lab does not scroll
+        // a box by it; ScrollView does).
+        if (const StringView v = keyword(u8"overflow"); v.Size() != 0)
+            node.SetClipChildren(v != StringView(u8"visible"));
 
         if (const StringView e = keyword(u8"enabled"); e.Size() != 0)
             if (Optional<bool> b = ParseBool(e); b.HasValue())

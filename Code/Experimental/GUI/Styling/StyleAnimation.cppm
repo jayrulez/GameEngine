@@ -42,7 +42,7 @@ namespace fonts = foundation::fonts;
 export namespace experimental::gui
 {
     /// Whether a property's values move smoothly in a transition (`all` covers these): those the
-    /// property table parses into numbers, lengths, colours, shadows, transforms, origins or layers.
+    /// property table parses into numbers, lengths, colours, shadows, transforms, origins, layers or filters.
     [[nodiscard]] inline bool IsTransitionable(core::StringView property)
     {
         const StylePropertySpec* spec = FindStyleProperty(property);
@@ -57,6 +57,7 @@ export namespace experimental::gui
         case StyleGrammar::Transforms:
         case StyleGrammar::Origin:
         case StyleGrammar::Layers:
+        case StyleGrammar::Filters:
             return true;
         case StyleGrammar::Keyword:
         case StyleGrammar::Text:

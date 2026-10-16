@@ -249,6 +249,63 @@ export namespace experimental::gui
         return shadows;
     }
 
+    // === Filters ===
+
+    /// The filter functions the lab draws (through VG's layers): a Gaussian blur so far. Others
+    /// (brightness, drop-shadow, ...) need a colour pass VG does not have yet, so a list naming
+    /// one does not parse.
+    enum class FilterKind : u8
+    {
+        Blur, // Amount: the Gaussian's standard deviation, a length
+    };
+
+    struct FilterFunction
+    {
+        FilterKind Kind = FilterKind::Blur;
+        LengthValue Amount{};
+
+        [[nodiscard]] bool operator==(const FilterFunction& o) const noexcept
+        {
+            return Kind == o.Kind && Amount.Value == o.Amount.Value && Amount.Unit == o.Amount.Unit;
+        }
+    };
+
+    /// `filter` and `backdrop-filter`: `none` (an empty list), or functions separated by spaces:
+    /// `blur(<length>)` (no length: 0; negative: invalid).
+    [[nodiscard]] inline Optional<Array<FilterFunction>> ParseFilters(core::StringView value)
+    {
+        Array<FilterFunction> filters;
+        if (Trim(value) == core::StringView(u8"none"))
+            return filters;
+        const Array<core::StringView> tokens = SplitTopLevel(value, u8' ');
+        if (tokens.IsEmpty())
+            return {};
+        for (const core::StringView token : tokens)
+        {
+            core::StringView name, arguments;
+            if (!SplitFunction(token, name, arguments))
+                return {};
+            FilterFunction f;
+            if (name == core::StringView(u8"blur"))
+            {
+                f.Kind = FilterKind::Blur;
+                if (Trim(arguments).Size() != 0)
+                {
+                    const Optional<LengthValue> amount = ParseLengthValue(arguments);
+                    if (!amount.HasValue() || amount.Value().Value < 0.0f || amount.Value().Unit == LengthUnit::Percent)
+                        return {};
+                    f.Amount = amount.Value();
+                }
+            }
+            else
+            {
+                return {};
+            }
+            filters.PushBack(f);
+        }
+        return filters;
+    }
+
     // === Transforms ===
 
     enum class TransformKind : u8

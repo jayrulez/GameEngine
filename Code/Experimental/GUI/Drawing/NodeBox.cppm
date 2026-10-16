@@ -5,7 +5,8 @@
 //
 // NodeBox: a node's box as values, resolved to pixels (G2 of Specs/vg-and-gui-lab.md): background
 // colour and layers (gradients, images), a border width and colour per side, corner radii, and box
-// shadows. A sheet's box properties write it and native code may set it directly; the node draws it
+// shadows, and the effects drawn with them (G4): a blur of the node with its subtree, a blur of
+// what lies behind the box, and how the node blends into what is under it. A sheet's box properties write it and native code may set it directly; the node draws it
 // through VG (analytic boxes, box shadows, gradient fills) with nothing allocated per draw or per
 // restyle, and G3's transitions interpolate its fields.
 
@@ -71,14 +72,24 @@ export namespace experimental::gui
         vg::BorderColors BorderColors{};
         vg::CornerRadii Radii{};
         Array<BoxShadow> Shadows;
+        f32 FilterBlur = 0.0f;   ///< filter: blur(): the node and its subtree blur as one (a sigma, logical units)
+        f32 BackdropBlur = 0.0f; ///< backdrop-filter: blur(): what this canvas drew behind the box blurs
+        vg::VGBlendMode BlendMode = vg::VGBlendMode::Normal; ///< mix-blend-mode: the node's composite
 
         [[nodiscard]] bool IsEmpty() const noexcept
         {
-            return BackgroundColor.a <= 0.0f && Layers.IsEmpty() && BorderWidths.IsZero() && Shadows.IsEmpty();
+            return BackgroundColor.a <= 0.0f && Layers.IsEmpty() && BorderWidths.IsZero() && Shadows.IsEmpty() &&
+                   BackdropBlur <= 0.0f;
+        }
+        /// Whether the node must draw through a layer of its own: a filter or a blend applies to
+        /// the node and its subtree as one picture.
+        [[nodiscard]] bool NeedsLayer() const noexcept
+        {
+            return FilterBlur > 0.0f || BlendMode != vg::VGBlendMode::Normal;
         }
 
-        /// What goes under the content: outer shadows, the background colour, the layers (the last
-        /// first), inset shadows, then the border.
+        /// What goes under the content: outer shadows, the backdrop blur, the background colour, the
+        /// layers (the last first), inset shadows, then the border.
         void DrawUnder(DrawContext& ctx, const Rect& box) const
         {
             if (IsEmpty() || box.width <= 0.0f || box.height <= 0.0f)
@@ -93,6 +104,9 @@ export namespace experimental::gui
                                       rect.width + 2.0f * shadow.Spread, rect.height + 2.0f * shadow.Spread};
                 canvas.FillBoxShadow(grown, Grown(Radii, shadow.Spread), shadow.Blur, shadow.ShadowColor, false);
             }
+            // The backdrop blurs inside the box's shape, under its (translucent) background.
+            if (BackdropBlur > 0.0f)
+                canvas.DrawBackdropBlur(rect, Radii, BackdropBlur * ctx.DeviceScale());
             if (BackgroundColor.a > 0.0f)
                 canvas.DrawBox(rect, Radii, BackgroundColor);
             for (usize i = Layers.Size(); i-- > 0;)

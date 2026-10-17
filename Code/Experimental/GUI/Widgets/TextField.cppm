@@ -13,8 +13,8 @@
 // max-length caps the value (in codepoints). The caret blinks only when focused.
 //
 // Clipboard access is through the dispatcher's abstract IClipboard (null-safe: cut/copy/paste
-// no-op without one). Multi-line editing and horizontal scroll of an over-long value are
-// follow-ups; this is a full-featured single-line editor.
+// no-op without one). An over-long value or placeholder is cut at the padding; multi-line editing
+// and horizontal scroll of an over-long value are follow-ups (E4).
 
 module;
 #include "Core/Prelude.h"
@@ -388,6 +388,9 @@ export namespace experimental::gui
         {
             (void)localBounds;
             const Rect content = GetContentBounds();
+            // What it shows stays inside its padding: a value or a placeholder longer than the
+            // field is cut at its edges (the caret's width past the end, so a caret there shows).
+            ctx.PushClip(Rect{content.x, 0.0f, content.width + kCaretWidth, GetSize().y});
 
             // Placeholder while empty (and only when we won't draw a caret over it awkwardly:
             // shown whether focused or not, which matches common single-line fields).
@@ -417,6 +420,7 @@ export namespace experimental::gui
                 const f32 top = cy - h * 0.5f;
                 ctx.VG().FillRect(core::Rectangle{caretX, top, kCaretWidth, h}, m_caretColor);
             }
+            ctx.PopClip();
         }
 
     private:

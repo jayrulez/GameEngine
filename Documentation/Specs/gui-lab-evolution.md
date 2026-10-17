@@ -507,6 +507,31 @@ including a node that went away or was disabled; placement flips, shrinks and cl
 and at display scales, and follows a scrolled anchor; tooltips found from a child; keyboard and
 pad walks through a menu bar, a submenu, a combo box and a message box.
 
+As built on `vg` (2026-10-17): the design above was rewritten after a survey of how the others
+design popups (4074b78f2). A popup opens as a child of its owner and is promoted into its root's
+top layer: drawn after the tree, hit-tested first, laid out where the layer places it (on the
+device grid, every layout pass, so it follows its anchor), styled and routed where it is, its
+events reaching the owner's listeners and not the owner's own handlers. The dispatcher's stack
+replaces the single popup and the modal root; ComboBox, Menu, MenuBar, the modal Window and the
+tooltip moved onto it; the menu's chain bookkeeping and the window's scrim went (196466558). A
+press is consumed only when it closes popups and lands in none (a press in a parent menu
+closing its submenu goes on to it). Menus, the menu bar (F10 to enter, `menu.enter-bar`), the
+combo box and the message box take the keyboard and the pad; a list tells an item chosen from
+one selected; a pad's East, unbound, is Escape (62f970c48). Tooltips are the dispatcher's, on the
+GUI's clock, from the nearest text up the parent chain, any node as content; a right release,
+Shift+F10 (`menu.context`) or a long press is a `contextmenu` event; the text fields have their
+context menu (bbb573f6e). The keymap takes `>` and gives shortcut text; controls bound to a
+command follow its label, icon and keys (d5f28bee4). Godot's safe area keeps a submenu open while
+the pointer heads for it (774cf699b), and a submenu's item stays lit while it is open
+(2fe5ae7e9). The Menus page shows the keys and the popups (e6f51183c).
+Left: a popup never leaves its root (no OS popup windows) and modality is per root; a closed
+combo box steps its selection with Up and Down and opens with Alt+Down or activation (the
+Windows convention, where the draft said Down opens); type-ahead jumps by first letter only, with
+no typed prefix; a menu shrunk to the room it has clips its rows rather than scrolling them;
+tooltips show for the pointer only (none for keyboard focus) and are not interactive; F10 enters
+the first menu bar in the tree, with no Alt mnemonics; scripts hear `contextmenu` and `toggle`
+but cannot build a menu yet.
+
 ### E6 The controls, to foundation.ui's depth
 
 The foundation.ui controls assessment lists, control by control, what foundation.ui's do that the

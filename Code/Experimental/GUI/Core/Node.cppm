@@ -1311,6 +1311,7 @@ export namespace experimental::gui
             }
             SendEvent(event);
         }
+        bool HandleDragHoverOpen(core::Float2 local) { return OnDragHoverOpen(local); }
         void HandleDragEnd(const DragResult& result, const DragEvent& event)
         {
             OnDragEnd(result);
@@ -1716,6 +1717,13 @@ export namespace experimental::gui
         virtual void OnDrop(const DragEvent&) {}
         /// A source hears how its drag ended (a move removes what was moved).
         virtual void OnDragEnd(const DragResult&) {}
+        /// A drag rested on it a moment (at `local`): a closed tree node opens, an expander opens,
+        /// a tab is selected. True when it did something (and the drag is asked again).
+        virtual bool OnDragHoverOpen(core::Float2 local)
+        {
+            (void)local;
+            return false;
+        }
 
         void HandlePositionChange()
         {

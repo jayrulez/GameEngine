@@ -53,6 +53,18 @@
             <Panel id="dnd-hand" class="dnd-bin"><Label class="dnd-bin-title" text="Hand: takes cards (Ctrl copies)"/></Panel>
             <Panel id="dnd-discard" class="dnd-bin"><Label class="dnd-bin-title" text="Discard: no aces"/></Panel>
         </Panel>
+        <Panel class="dnd-row" flex-direction="row" align-items="start" gap="12">
+            <ScrollView id="dnd-long" class="dnd-long">
+                <Label class="dnd-line" text="A long hand: rest a card near"/>
+                <Label class="dnd-line" text="an edge and it scrolls."/>
+                <Label class="dnd-line" text="Slot 3"/><Label class="dnd-line" text="Slot 4"/><Label class="dnd-line" text="Slot 5"/>
+                <Label class="dnd-line" text="Slot 6"/><Label class="dnd-line" text="Slot 7"/><Label class="dnd-line" text="Slot 8"/>
+                <Label class="dnd-line" text="Slot 9"/><Label class="dnd-line" text="Slot 10"/><Label class="dnd-line" text="The bottom"/>
+            </ScrollView>
+            <Expander class="dnd-more" title="More piles (rest a card here)">
+                <Panel id="dnd-hidden" class="dnd-bin"><Label class="dnd-bin-title" text="A pile behind an expander"/></Panel>
+            </Expander>
+        </Panel>
         <Label id="dnd-said" class="caption" text="Drag a card past a few pixels; Escape or a right click cancels."/>
     </Panel>
 </Panel>

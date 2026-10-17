@@ -544,6 +544,15 @@ export namespace experimental::gui
             if (m_dragActive)
                 FinishDrag(DropEffect::None, nullptr, true);
         }
+        /// How deep the band at a scroller's edge is that scrolls it while a drag is near it, and
+        /// how fast it scrolls at its edge (it ramps up with depth).
+        void SetDragScrollBand(f32 band, f32 speed = 900.0f) noexcept
+        {
+            m_dragScrollBand = core::Max(1.0f, band);
+            m_dragScrollSpeed = core::Max(0.0f, speed);
+        }
+        /// How long a drag rests on a node before it opens (a tree node, an expander, a tab).
+        void SetDragHoverOpenDelay(f32 seconds) noexcept { m_dragHoverOpenDelay = core::Max(0.0f, seconds); }
         /// Asks the target again where the pointer is (the content moved under a still pointer).
         void RequeryDrag()
         {
@@ -781,6 +790,8 @@ export namespace experimental::gui
         void Tick(f32 seconds)
         {
             m_time += seconds; // the clock click counting, tooltips and long presses read
+            if (m_dragActive)
+                TickDrag(seconds);
             UpdateTooltip(seconds);
             ScrollByStick(seconds);
             if (m_longPressArmed && m_touchActive)
@@ -1365,6 +1376,7 @@ export namespace experimental::gui
         {
             m_mousePos = at;
             Node* hit = HitTest(at);
+            NoteDragRest(hit);
             DropQuery query{m_dragPayload, core::Float2{0.0f, 0.0f}, 0, DropEffect::Move, false, DropEffect::None, core::String{}, false, 0};
             query.Modifiers = m_dragModifiers;
             query.Preferred = PreferredEffect();
@@ -1502,6 +1514,7 @@ export namespace experimental::gui
             m_dropReason = core::String{};
             m_dropRefused = false;
             m_dragFromKeyboard = false;
+            m_dragRestNode = nullptr;
             if (source)
             {
                 source->SetDragSourceState(false);
@@ -1511,6 +1524,66 @@ export namespace experimental::gui
                 ended.Position = RootPoint(m_mousePos);
                 source->HandleDragEnd(result, ended);
             }
+        }
+
+        // A drag's tick: the scroller under the pointer near its edge scrolls (the innermost that
+        // can move that way), and a drag resting on a node a moment opens it.
+        void TickDrag(f32 seconds)
+        {
+            Node* hit = HitTest(m_mousePos);
+            bool moved = false;
+            for (Node* n = hit; n != nullptr && !moved; n = n->GetParent())
+            {
+                if (!n->IsScrollContainer())
+                    continue;
+                const core::Float2 p = n->ConvertToNodeSpace(m_mousePos);
+                const core::Float2 size = n->GetSize();
+                const core::Float2 range = n->GetScrollRange();
+                const core::Float2 offset = n->GetScrollOffset();
+                const auto speed = [&](f32 at, f32 length, f32 now, f32 max) -> f32
+                {
+                    if (at < m_dragScrollBand && now > 0.0f)
+                        return -m_dragScrollSpeed * (1.0f - core::Max(0.0f, at) / m_dragScrollBand);
+                    if (at > length - m_dragScrollBand && now < max)
+                        return m_dragScrollSpeed * (1.0f - core::Max(0.0f, length - at) / m_dragScrollBand);
+                    return 0.0f;
+                };
+                const core::Float2 v{range.x > 0.0f ? speed(p.x, size.x, offset.x, range.x) : 0.0f,
+                                     range.y > 0.0f ? speed(p.y, size.y, offset.y, range.y) : 0.0f};
+                if (v.x != 0.0f || v.y != 0.0f)
+                {
+                    n->ScrollBy(core::Float2{v.x * seconds, v.y * seconds});
+                    moved = true;
+                }
+            }
+            // Resting: the same node under the pointer since it arrived there.
+            NoteDragRest(hit);
+            if (!moved && !m_dragRestOpened)
+            {
+                m_dragRest += seconds;
+                if (m_dragRest >= m_dragHoverOpenDelay)
+                {
+                    m_dragRestOpened = true;
+                    for (Node* n = hit; n != nullptr; n = n->GetParent())
+                        if (n->HandleDragHoverOpen(n->ConvertToNodeSpace(m_mousePos)))
+                        {
+                            moved = true;
+                            break;
+                        }
+                }
+            }
+            if (moved)
+                QueryDrop(m_mousePos); // the content moved under the pointer
+        }
+
+        // The node a drag rests on: another one starts the clock again.
+        void NoteDragRest(Node* hit)
+        {
+            if (hit == m_dragRestNode)
+                return;
+            m_dragRestNode = hit;
+            m_dragRest = 0.0f;
+            m_dragRestOpened = false;
         }
 
         // A point in the root's space (what hit-tests and places the preview), from the device
@@ -1859,6 +1932,12 @@ export namespace experimental::gui
         core::RefPtr<DragLayer> m_dragLayer;
         core::RefPtr<Node> m_dragPreview;
         core::RefPtr<Node> m_dropHint;
+        f32 m_dragScrollBand = 24.0f;
+        f32 m_dragScrollSpeed = 900.0f;
+        f32 m_dragHoverOpenDelay = 0.6f;
+        Node* m_dragRestNode = nullptr; // non-owning: compared, never followed
+        f32 m_dragRest = 0.0f;
+        bool m_dragRestOpened = false;
         Node* m_dragSource = nullptr;                // non-owning
         Node* m_dropTarget = nullptr;                // non-owning current target
         DragPayload m_dragPayload;

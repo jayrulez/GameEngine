@@ -565,6 +565,10 @@ void GUISandbox::FillNativeHosts()
                 q.Accept();
                 q.Reason = Format(u8"{} it to the hand", q.Effect == gui::DropEffect::Copy ? u8"Copy" : u8"Move");
             });
+        const char8_t* piles[2] = {u8"dnd-long", u8"dnd-hidden"};
+        for (const char8_t* id : piles)
+            if (gui::Node* pile = FindById(*m_shellNode, id))
+                pile->SetDropTypes(String(u8"card"));
         if (gui::Node* discard = FindById(*m_shellNode, u8"dnd-discard"))
             discard->SetOnDragQuery([](gui::DropQuery& q)
             {

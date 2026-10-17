@@ -114,6 +114,8 @@ export namespace experimental::gui
         [[nodiscard]] u32 GetWidgetStates() const override { return m_selected ? WidgetStateChecked : WidgetStateNone; }
         // In a reorderable strip its press reorders it (E7): a drag from what holds it is not offered.
         [[nodiscard]] bool OwnsPressDrag(core::Float2) const override;
+        // A drag resting on it selects it (E7, Godot's switch on drag hover).
+        bool OnDragHoverOpen(core::Float2) override;
 
     protected:
         bool OnActivate() override;
@@ -559,6 +561,15 @@ export namespace experimental::gui
     {
         const TabBar* bar = GetBar();
         return bar != nullptr && bar->IsReorderable();
+    }
+
+    inline bool Tab::OnDragHoverOpen(core::Float2)
+    {
+        TabBar* bar = GetBar();
+        if (bar == nullptr || m_selected)
+            return false;
+        bar->SelectByUser(bar->IndexOf(this));
+        return true;
     }
 
     inline bool Tab::OnActivate()

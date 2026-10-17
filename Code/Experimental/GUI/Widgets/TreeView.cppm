@@ -220,6 +220,15 @@ export namespace experimental::gui
             return item != nullptr ? *item : -1;
         }
         [[nodiscard]] bool IsFlat() const override { return false; }
+        // A drag resting on a closed node opens it (E7).
+        bool OnDragHoverOpen(core::Float2 local) override
+        {
+            const i32 item = ItemAt(ConvertToWorldSpace(local));
+            if (item < 0 || !m_flat[static_cast<usize>(item)].HasChildren || IsItemExpanded(item))
+                return false;
+            ExpandItem(item);
+            return true;
+        }
         void OnModelChanged() override { Reflatten(); }
         [[nodiscard]] core::StringView RowTag() const override { return core::StringView(u8"treerow"); }
 

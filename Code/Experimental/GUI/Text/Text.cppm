@@ -178,6 +178,32 @@ export namespace experimental::gui
             return core::Float2{x, y};
         }
 
+        // Where Draw(ctx, bounds) puts the first line's baseline: the line's top plus the ascent,
+        // or for bottom alignment of one line, the descent (negative) above the bottom.
+        [[nodiscard]] f32 FirstBaseline(const Rect& bounds) const
+        {
+            if (!HasFont())
+                return bounds.Top() + bounds.height;
+            const fonts::FontMetrics fm = m_font->font->Metrics();
+            if (!m_wordWrap || IsEmpty())
+            {
+                if (m_vAlign == TextVAlign::Middle)
+                    return bounds.Top() + (bounds.height - fm.lineHeight) * 0.5f + fm.ascent;
+                if (m_vAlign == TextVAlign::Bottom)
+                    return bounds.Top() + bounds.height + fm.descent;
+                return bounds.Top() + fm.ascent;
+            }
+            core::Array<core::StringView> lines;
+            ComputeLines(bounds.width, lines);
+            const f32 blockH = static_cast<f32>(lines.Size()) * GetLineHeight();
+            f32 top = bounds.Top();
+            if (m_vAlign == TextVAlign::Middle)
+                top += (bounds.height - blockH) * 0.5f;
+            else if (m_vAlign == TextVAlign::Bottom)
+                top += bounds.height - blockH;
+            return top + fm.ascent;
+        }
+
         // === Drawing ===
         // VG's point DrawText anchors at the text baseline; `position` here is the top-left,
         // so we offset down by the font ascent.

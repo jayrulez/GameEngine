@@ -465,3 +465,72 @@ TEST_CASE("layout: a wrapping label wraps to the width it is given, and shrinks 
     CHECK(squeezed->GetSize().y == doctest::Approx(24.0f));
 }
 
+
+TEST_CASE("layout: a row aligned by baseline lines up its items' text, and grows to hold them")
+{
+    // SixFont's ascent is 10 on a 12 line. A label's baseline is its padding plus the ascent
+    // (its line fills its content box); a button's the same; a plain box's the bottom of its
+    // content box.
+    fonts::CachedFont font(core::DefaultAllocator(), core::DefaultAllocator().New<SixFont>(), nullptr, nullptr);
+    Bed bed;
+    auto row = Box(*bed.root.Get(), [](LayoutStyle& s) { s.Direction = FlexDirection::Row; s.AlignItems = Align::Baseline; });
+    auto label = core::MakeRef<Label>(core::DefaultAllocator());
+    label->SetFont(&font);
+    label->SetText(SV(u8"Name"));
+    label->SetPadding(Thickness{4.0f}); // 20 tall, baseline 14
+    row->AddChild(label.Get());
+    auto button = core::MakeRef<Button>(core::DefaultAllocator());
+    button->SetFont(&font);
+    button->SetText(SV(u8"Go"));
+    button->SetPadding(Thickness{10.0f, 6.0f}); // 24 tall, baseline 16
+    row->AddChild(button.Get());
+    auto box = Fixed(*row.Get(), 40.0f, 30.0f); // baseline 30
+    auto pushed = core::MakeRef<Label>(core::DefaultAllocator());
+    pushed->SetFont(&font);
+    pushed->SetText(SV(u8"x"));
+    pushed->SetPadding(Thickness{4.0f});
+    pushed->SetMargin(Thickness{0.0f, 6.0f, 0.0f, 0.0f}); // its margin box's baseline at 20
+    row->AddChild(pushed.Get());
+    bed.Layout();
+
+    // The baselines meet at 30, the deepest above it; each item sits so its baseline is there.
+    CHECK(label->GetPosition().y == doctest::Approx(16.0f));
+    CHECK(button->GetPosition().y == doctest::Approx(14.0f));
+    CHECK(box->GetPosition().y == doctest::Approx(0.0f));
+    CHECK(pushed->GetPosition().y == doctest::Approx(16.0f)); // 10 down, then its margin
+    CHECK(label->GetPosition().y + label->GetBaseline() == doctest::Approx(30.0f));
+    CHECK(button->GetPosition().y + button->GetBaseline() == doctest::Approx(30.0f));
+    // The row holds what reaches furthest below the baseline too: the button's 8.
+    CHECK(row->GetSize().y == doctest::Approx(38.0f));
+
+    // In a column, baseline places as start.
+    row->EditLayoutStyle([](LayoutStyle& s) { s.Direction = FlexDirection::Column; });
+    bed.Layout();
+    CHECK(label->GetPosition().x == doctest::Approx(0.0f));
+    CHECK(box->GetPosition().x == doctest::Approx(0.0f));
+}
+
+TEST_CASE("layout: a label's baseline follows its vertical alignment and its wrapping")
+{
+    fonts::CachedFont font(core::DefaultAllocator(), core::DefaultAllocator().New<SixFont>(), nullptr, nullptr);
+    auto label = core::MakeRef<Label>(core::DefaultAllocator());
+    label->SetFont(&font);
+    label->SetText(SV(u8"aaaa bbbb"));
+    label->SetPadding(Thickness{2.0f});
+    const core::Float2 size{100.0f, 40.0f}; // a 36 tall content box from 2
+    label->SetTextAlignment(TextHAlign::Left, TextVAlign::Top);
+    CHECK(label->BaselineAt(size) == doctest::Approx(2.0f + 10.0f));
+    label->SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
+    CHECK(label->BaselineAt(size) == doctest::Approx(2.0f + 12.0f + 10.0f));
+    label->SetTextAlignment(TextHAlign::Left, TextVAlign::Bottom);
+    CHECK(label->BaselineAt(size) == doctest::Approx(38.0f - 2.0f)); // the descent above the bottom
+    // Wrapped to two lines in 30 wide, centred: the block of 24 starts 6 down, its first line's
+    // baseline 10 below that.
+    label->SetWordWrap(true);
+    label->SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
+    CHECK(label->BaselineAt(core::Float2{34.0f, 40.0f}) == doctest::Approx(2.0f + 6.0f + 10.0f));
+    // Any other node: the bottom of its content box.
+    auto panel = core::MakeRef<Panel>(core::DefaultAllocator());
+    panel->SetPadding(Thickness{0.0f, 0.0f, 0.0f, 5.0f});
+    CHECK(panel->BaselineAt(core::Float2{50.0f, 30.0f}) == doctest::Approx(25.0f));
+}

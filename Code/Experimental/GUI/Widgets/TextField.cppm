@@ -206,6 +206,13 @@ export namespace experimental::gui
         {
             return core::Float2{160.0f, (m_text.GetFont() != nullptr) ? m_text.GetLineHeight() : 20.0f};
         }
+        /// Its line's baseline, where it draws its value (and its placeholder, in the same font).
+        [[nodiscard]] f32 BaselineAt(core::Float2 size) const override
+        {
+            const Thickness c = GetChrome();
+            return m_text.FirstBaseline(Rect{c.Left, c.Top, core::Max(0.0f, size.x - c.TotalHorizontal()),
+                                             core::Max(0.0f, size.y - c.TotalVertical())});
+        }
 
     protected:
         void OnTextInput(const TextInputEvent& event) override

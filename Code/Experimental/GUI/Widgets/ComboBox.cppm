@@ -126,6 +126,13 @@ export namespace experimental::gui
                     widest = core::Max(widest, m_font->font->MeasureString(item.AsView()));
             return core::Float2{widest + 24.0f, m_font != nullptr ? m_font->font->Metrics().lineHeight : 20.0f};
         }
+        /// The selection's baseline, where it draws it.
+        [[nodiscard]] f32 BaselineAt(core::Float2 size) const override
+        {
+            const Thickness c = GetChrome();
+            return m_text.FirstBaseline(Rect{c.Left, c.Top, core::Max(0.0f, size.x - c.TotalHorizontal() - 16.0f),
+                                             core::Max(0.0f, size.y - c.TotalVertical())});
+        }
 
     protected:
         void OnMouseClick(const MouseEvent& event) override

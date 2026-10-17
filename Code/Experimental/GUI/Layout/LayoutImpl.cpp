@@ -137,6 +137,7 @@ namespace experimental::gui
             f32 base = 0.0f;  // the flex base size (border box)
             f32 main = 0.0f;  // resolved
             f32 cross = 0.0f; // border box
+            f32 baseline = 0.0f; // down from its margin box's top, when it aligns by baseline
             f32 minMain = 0.0f;
             f32 maxMain = kUnbounded;
             bool minMainKnown = false;
@@ -149,6 +150,7 @@ namespace experimental::gui
             usize start = 0;
             usize count = 0;
             f32 cross = 0.0f;
+            f32 baseline = 0.0f; // where its baseline-aligned items' baselines meet, down from its top
         };
 
         [[nodiscard]] core::Float2 Flex(Flow& f)
@@ -305,6 +307,8 @@ namespace experimental::gui
                 }
                 f32 lineMain = mainGap * static_cast<f32>(line.count > 0 ? line.count - 1 : 0);
                 line.cross = 0.0f;
+                f32 aboveBaseline = 0.0f; // the baseline-aligned items' reach above and below it
+                f32 belowBaseline = 0.0f;
                 for (usize i = line.start; i < line.start + line.count; ++i)
                 {
                     FlexItem& item = items[i];
@@ -320,7 +324,16 @@ namespace experimental::gui
                     item.cross = crossOf(b);
                     line.cross = core::Max(line.cross, item.cross + item.marginCross);
                     lineMain += item.main + item.marginMain;
+                    // Baselines line up across a row; in a column, baseline is start (as in CSS).
+                    if (row && item.align == Align::Baseline)
+                    {
+                        item.baseline = item.margin.Top + item.node->BaselineAt(core::Float2{item.main, item.cross});
+                        aboveBaseline = core::Max(aboveBaseline, item.baseline);
+                        belowBaseline = core::Max(belowBaseline, item.cross + item.marginCross - item.baseline);
+                    }
                 }
+                line.baseline = aboveBaseline;
+                line.cross = core::Max(line.cross, aboveBaseline + belowBaseline);
                 contentMain = core::Max(contentMain, lineMain);
             }
             if (lines.Size() == 1 && crossDefinite)
@@ -374,7 +387,11 @@ namespace experimental::gui
                                 cross = mx.HasValue() ? core::Min(room, mx.Value()) : room;
                             }
                             break;
-                        default: break; // start; baseline lines up as start until views report a baseline
+                        case Align::Baseline:
+                            if (row)
+                                crossOffset = line.baseline - item.baseline;
+                            break;
+                        default: break;
                         }
                         const f32 mainEdge = reverse ? mainExtent - mainPos - item.main - item.marginMain : mainPos;
                         const f32 mainAt = mainEdge + (row ? item.margin.Left : item.margin.Top);

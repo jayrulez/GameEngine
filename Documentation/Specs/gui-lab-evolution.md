@@ -611,6 +611,51 @@ each a layer with its tests and a sandbox section.
 
 Tests: a feature matrix per control, the same rows as the assessment's, each a test.
 
+As built on `vg` (2026-10-17): ranges are a RangeValue held by a RangeWidget base that the slider,
+the scroll bar and the progress bar derive from, the page protected (a progress bar has none);
+the slider is horizontal or vertical with ticks and the wheel, the progress bar indeterminate
+(b6be7fe2e). One button core, ButtonBase: toggle, action on press, repeat on the GUI's clock,
+groups by a ButtonGroup or a `name` scoped to the GUI, the arrows round a group; its text, icon
+and indicator are child parts, a check box's indicator sized by a sheet as `checkbox > indicator`;
+RadioGroup went (b314cf1e9); a checked box draws a tick, the mixed state a bar (91b8bdba5); the
+text part follows the button's alignment (9d75c5100). Scrolling is Node's: a handle API, the
+`scroll` event, Shift and the wheel, `overscroll-behavior: contain`, smooth wheel scrolling by
+`scroll-behavior: smooth` (5d676e81d); `::scrollbar` and `::scrollbar-thumb` are parts with
+states of their own (a pseudo-class after a part is the part's state), `scrollbar-width` and an
+overlay that fades (9a8061d62); a tap-or-pan machine with a closed-form fling and a catch
+(2b1117668); the pad's right stick (e8a0bc281); stick-to-end that re-latches (58fa7edda). The
+smaller controls: Image by object-fit and object-position, `src` through the resource provider,
+`image-color` (27ee72685); Separator and Spacer (9280f3e0f); NumberField as expressions,
+scrubbing (moves carry modifiers, 95b3447f9) and repeating arrows (9f084391d); EditableLabel
+(62b8eb73e); Expander, its chevron the tree's (73b49e6f2). Tabs: a TabBar of Tab elements with a
+close part, close a request (`tabclose`) under a display policy, reorder by a neighbour's
+midpoint, an overflowing strip that scrolls and lists every tab, Ctrl+Tab; a TabView of TabPages
+kept alive or built on first show; TabWidget went (ad19f6b28). Models report row ranges and give
+rows ids; editing and sorting are capabilities (dfb22d647). ItemView replaces AbstractItemView:
+a Node scroll container (Node gained SetScrollExtent and OnScrollChange) realising the rows in
+view from pools per row type, heights fixed or measured in a Fenwick sum tree, scrolling anchored
+to an item, selection a set of ids, `:selected`, `activate`, type-ahead, editing with hooks
+(0ff50cd71); rows from a markup `<template>` with `{{item}}`, `{{item.Column}}` and `{{index}}`,
+picked by `row-type-column` (e69c1666a, 3b6b299d6); table columns in px, % or auto, resizable,
+scrolling across, sorted with an indicator (dacc4c6d0); a grid layout mode (f31347354). Menus are
+markup (`<Menu>`, `<MenuItem>`, `<MenuSeparator>`, nested menus, `<MenuBar>`), with
+`context-menu="id"` and a bubbling `activate` whose event carries the target's id (3ce0ab836);
+TreeView, TableView, ScrollBar and MessageBox are elements, the views taking their data from
+markup and a message box shown from its page and coming back answered (dbd104bcf). The Controls
+and Data views pages and the Menus page show it all.
+Left: the range is a base class, not a member each control holds as the design said, so a
+progress bar carries a page it hides; every radio in a group is a tab stop, and so is every tab
+(press focus and tab focus are one setting, so a single stop on the checked one waits for them
+to part); markup attributes are trimmed as inline CSS is (a number field's `prefix` and `suffix`
+are taken as written by the widget itself); type-ahead reads letter and digit keys, not text
+input, which the shell starts for fields alone; the tree resets on every model range (selection
+and expansion survive by id) and only flat lists follow ranges; the scroll anchor holds in a
+list, not in a grid; a template's attributes are written once a row is bound (no live binding
+inside a row) and a row whose style is pending is measured again when styled; list scrollbars
+overlay the rows' right edge; tabs reorder within one strip (between strips is E7's), and
+closing a tab from the keyboard has no key; a markup table's cells are text parsed as numbers
+where they read as numbers; a tooltip is an attribute, not an element.
+
 ### E7 Drag and drop
 
 Facts: the lab drags a payload with enter, over, leave and drop; no effects, no preview, no

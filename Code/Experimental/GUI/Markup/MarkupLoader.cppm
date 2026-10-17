@@ -13,17 +13,17 @@
 //     data model (G5): `value="{{volume}}"` follows `volume`, and writes it back when the property
 //     is one the user changes (a slider's value, a checkbox, a text field's text);
 //     `text="Score: {{score}}"` follows the text built from it,
-//   - an attribute a widget claims (via UINode::SetMarkupAttribute - e.g. Label "text",
-//     LinearLayout "orientation") is consumed structurally,
+//   - an attribute a widget claims (via UINode::SetMarkupAttribute - e.g. Label "text"
+//     and "wrap") is consumed structurally,
 //   - everything else is treated as an inline CSS property and run through the StyleApplier,
 // so the whole CSS property vocabulary (width/height/padding/margin/background-color/border/
 // text-align/units/...) works in markup for free.
 //
 // Example:
-//   <LinearLayout orientation="vertical" spacing="8" padding="12" class="panel">
+//   <Panel flex-direction="row" gap="8" padding="12" class="panel">
 //     <Label text="Hello" text-align="center"/>
 //     <Button text="OK" width="120" class="accent"/>
-//   </LinearLayout>
+//   </Panel>
 
 module;
 #include "Core/Prelude.h"

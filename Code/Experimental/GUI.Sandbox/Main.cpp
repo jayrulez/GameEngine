@@ -632,12 +632,13 @@ void GUISandbox::FillNativeHosts()
         more->SetWidth(140.0f);
         more->AddItem(u8"Rename", said(u8"context > More > Rename"));
         gui::Menu* menu = m_contextMenu.Get();
-        area->AddEventListener(gui::EventType::MouseDown,
+        // A right release, a long press or Shift+F10 asks for it (E5).
+        area->AddEventListener(gui::EventType::ContextMenu,
                                [menu, area](const gui::Event& e)
                                {
                                    const auto& mouse = static_cast<const gui::MouseEvent&>(e);
-                                   if (mouse.Button == gui::MouseButton::Right)
-                                       menu->Open(*area, area->GetRootNode()->ConvertToNodeSpace(mouse.Position));
+                                   e.Handled = true;
+                                   menu->Open(*area, area->GetRootNode()->ConvertToNodeSpace(mouse.Position));
                                });
     }
 }

@@ -585,3 +585,24 @@ TEST_CASE("bridge: an IME's composition reaches the focused field, and the windo
     bridge.Dispatch(committed);
     CHECK(field->GetText() == core::StringView(u8"\u65e5\u672c"));
 }
+
+TEST_CASE("bridge: OS file drops for its window, grouped by where they landed, go to the dispatcher as drops")
+{
+    auto root = MakeScene(core::Float2{200.0f, 200.0f});
+    auto target = MakePanel(core::Float2{0.0f, 0.0f}, core::Float2{200.0f, 200.0f});
+    target->SetDropTypes(core::String(u8"files"));
+    root->AddChild(target.Get());
+    GuiInputBridge bridge{root->GetEventDispatcher()};
+    core::Array<core::usize> sizes;
+    target->AddEventListener(EventType::Drop, [&](const Event& e) { sizes.PushBack(DroppedPaths(static_cast<const DragEvent&>(e).Payload).Size()); });
+
+    core::Array<shell::DroppedFile> drops;
+    drops.PushBack(shell::DroppedFile{7, 20.0f, 20.0f, core::String(u8"/a")});
+    drops.PushBack(shell::DroppedFile{7, 20.0f, 20.0f, core::String(u8"/b")}); // the same drop
+    drops.PushBack(shell::DroppedFile{9, 20.0f, 20.0f, core::String(u8"/other window")});
+    drops.PushBack(shell::DroppedFile{7, 60.0f, 60.0f, core::String(u8"/c")}); // another drop
+    CHECK(bridge.DispatchFileDrops(drops, 7));
+    REQUIRE(sizes.Size() == 2);
+    CHECK(sizes[0] == 2);
+    CHECK(sizes[1] == 1);
+}

@@ -553,6 +553,41 @@ export namespace experimental::gui
         }
         /// How long a drag rests on a node before it opens (a tree node, an expander, a tab).
         void SetDragHoverOpenDelay(f32 seconds) noexcept { m_dragHoverOpenDelay = core::Max(0.0f, seconds); }
+        /// Files the OS dropped at `position` (E7, the same path as a drag): a `files` payload
+        /// (its value the paths, copied) asked of the node there and up, and dropped on the one
+        /// that takes it; none taking it, the GUI's own handler has them. True when something
+        /// took them. (The OS gives no hover: nothing shows while a file is dragged over.)
+        bool InjectFileDrop(core::Float2 position, const core::Array<core::String>& paths)
+        {
+            if (paths.IsEmpty())
+                return false;
+            if (m_dragActive)
+                CancelDrag();
+            NoteInput();
+            core::Array<core::Variant> list;
+            for (const core::String& path : paths)
+                list.PushBack(core::Variant::From<core::String>(path));
+            m_dragPayload = DragPayload{};
+            m_dragPayload.Type = core::String(u8"files");
+            m_dragPayload.Value = core::Variant::From<core::Array<core::Variant>>(core::Move(list));
+            m_dragPayload.Label = paths.Size() == 1 ? paths[0] : core::Format(u8"{} files", paths.Size());
+            m_dragPayload.Allowed = DropEffectsCopy;
+            m_dragActive = true;
+            m_dragSource = nullptr;
+            m_dragModifiers = 0;
+            QueryDrop(position);
+            const bool taken = m_dropTarget != nullptr && m_dropEffect != DropEffect::None;
+            Drop();
+            if (!taken && m_onFileDrop)
+                return m_onFileDrop(paths, RootPoint(position));
+            return taken;
+        }
+        /// What has the files no node takes (the GUI's own handler: an import, an open).
+        void SetOnFileDrop(core::Function<bool(const core::Array<core::String>&, core::Float2)> handler)
+        {
+            m_onFileDrop = core::Move(handler);
+        }
+
         /// Asks the target again where the pointer is (the content moved under a still pointer).
         void RequeryDrag()
         {
@@ -1932,6 +1967,7 @@ export namespace experimental::gui
         core::RefPtr<DragLayer> m_dragLayer;
         core::RefPtr<Node> m_dragPreview;
         core::RefPtr<Node> m_dropHint;
+        core::Function<bool(const core::Array<core::String>&, core::Float2)> m_onFileDrop;
         f32 m_dragScrollBand = 24.0f;
         f32 m_dragScrollSpeed = 900.0f;
         f32 m_dragHoverOpenDelay = 0.6f;

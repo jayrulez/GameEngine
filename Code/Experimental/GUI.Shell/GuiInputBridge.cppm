@@ -72,6 +72,30 @@ export namespace experimental::gui
             m_cursorTarget->SetCursor(cursor);
         }
 
+        // Files the OS dropped (IShell::DrainDroppedFiles): the ones for `windowId` (0: any),
+        // grouped by where they landed (a drop of several arrives a file at a time), each group
+        // placed in content space and handed to the dispatcher as one drop (E7). True when
+        // something took one.
+        bool DispatchFileDrops(const core::Array<shell::DroppedFile>& drops, core::u32 windowId = 0)
+        {
+            if (m_dispatcher == nullptr)
+                return false;
+            bool taken = false;
+            usize i = 0;
+            while (i < drops.Size())
+            {
+                const shell::DroppedFile& first = drops[i];
+                core::Array<core::String> paths;
+                usize j = i;
+                for (; j < drops.Size() && drops[j].window == first.window && drops[j].x == first.x && drops[j].y == first.y; ++j)
+                    paths.PushBack(drops[j].path);
+                if (windowId == 0 || first.window == windowId)
+                    taken = m_dispatcher->InjectFileDrop(ToContent(core::Float2{first.x, first.y}), paths) || taken;
+                i = j;
+            }
+            return taken;
+        }
+
         // Reconcile the target window's text-input state with the focused node's wish. Called
         // automatically from Dispatch()/PumpFromSurface(); exposed for apps that drive focus
         // by other means.

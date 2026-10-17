@@ -52,6 +52,18 @@ panel shows that player's frames as it shows the editor's, as Traktor's target c
 ezInspector do. The capture store is UI-free already; this is a transport (the engine's reliable
 UDP), a player-side server armed by a flag, and the panel choosing its source.
 
+## The GUI lab's inspector as MCP tools: a phase of its own (user 2026-10-17)
+
+The lab's inspector (`Specs/gui-lab-evolution.md`, E8e) answers its questions through a C++ API
+over the core (`experimental.gui.inspector`: the tree, a node described with its states, box,
+reflected properties, commands and listeners, a selector query, a property set as markup sets
+it, and `StyleManager::ExplainStyle` for where each style came from). Serve the same answers as
+MCP tools, as eepp's server and LunarSong's tools do, so an agent can read and drive a running
+GUI. Not before the lab has a place in the foundation or the engine (the user, 2026-10-17: until
+then nothing hosts a GUI an agent would ask about); then a standalone phase: the tools, their
+place in `McpGuide.md` and the engine's tool count, and a session that finds a node, explains its
+styles and edits it.
+
 ## The shader page: the cooked code, and project include files (2026-10-12; after 0.1)
 
 What custom shaders left after 0.1 (`Specs/custom-shaders.md`, phase 8): a toggle on the shader

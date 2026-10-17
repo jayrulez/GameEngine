@@ -79,12 +79,20 @@ export namespace experimental::gui
             Invalidate();
         }
 
-        // Theming parts: slider::track / ::fill / ::thumb.
+        /// The ring and halo around the thumb while it has keyboard or pad focus.
+        void SetFocusColor(Color color)
+        {
+            m_focusColor = color;
+            Invalidate();
+        }
+
+        // Theming parts: slider::track / ::fill / ::thumb / ::focus (the thumb's focus ring).
         void CollectStyleParts(core::Array<core::StringView>& out) const override
         {
             out.PushBack(core::StringView(u8"track"));
             out.PushBack(core::StringView(u8"fill"));
             out.PushBack(core::StringView(u8"thumb"));
+            out.PushBack(core::StringView(u8"focus"));
         }
         void SetThemePartColor(core::StringView part, Color color) override
         {
@@ -94,6 +102,8 @@ export namespace experimental::gui
                 SetFillColor(color);
             else if (part == core::StringView(u8"thumb"))
                 SetHandleColor(color);
+            else if (part == core::StringView(u8"focus"))
+                SetFocusColor(color);
         }
 
         /// A track's length and a thumb's height when nothing sizes it (E2).
@@ -157,7 +167,15 @@ export namespace experimental::gui
                                      vg::CornerRadii(trackH * 0.5f), m_trackColor);
             ctx.VG().FillRoundedRect(core::Rectangle{b.x, trackTop, handleX - b.x, trackH},
                                      vg::CornerRadii(trackH * 0.5f), m_fillColor);
+            // Focused by the keyboard or a pad, the thumb (the part that moves) is marked: a halo
+            // under it and a ring around it, not a ring around the whole track.
+            const bool focused = IsFocusVisible();
+            if (focused)
+                ctx.VG().FillCircle(core::Float2{handleX, cy}, handleR + 6.0f,
+                                    Color{m_focusColor.r, m_focusColor.g, m_focusColor.b, m_focusColor.a * 0.3f});
             ctx.VG().FillCircle(core::Float2{handleX, cy}, handleR, m_handleColor);
+            if (focused)
+                ctx.VG().StrokeCircle(core::Float2{handleX, cy}, handleR + 2.0f, m_focusColor, 2.0f);
         }
 
     private:
@@ -178,6 +196,7 @@ export namespace experimental::gui
         Color m_trackColor{0.28f, 0.30f, 0.35f, 1.0f};
         Color m_fillColor{0.31f, 0.63f, 0.85f, 1.0f};
         Color m_handleColor{0.86f, 0.89f, 0.93f, 1.0f};
+        Color m_focusColor{0.31f, 0.61f, 1.0f, 1.0f};
         core::Function<void(f32)> m_onChanged;
     };
 }

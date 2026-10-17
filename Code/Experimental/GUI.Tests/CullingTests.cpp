@@ -40,7 +40,8 @@ namespace
     // What can show of a batch: a hash per triangle that lands inside its command's scissor (or in
     // an unscissored command), in order, with what it is drawn with. A layer's commands show only
     // when its composite does; layers count by their order among those that show (a culled node's
-    // layer shifts the others' indices), textures by identity.
+    // layer shifts the others' indices), and textures by their first use among what shows (each
+    // draw has a canvas of its own, so a texture's address is no identity across draws).
     core::Array<u64> VisibleGeometry(const vg::VGBatch& batch)
     {
         const auto triangleShows = [&](const vg::VGCommand& cmd, usize first) -> bool
@@ -84,11 +85,21 @@ namespace
             ordinal[l] = layerShows[l] ? next++ : -1;
 
         core::Array<u64> out;
+        core::Array<const void*> textures; // by first use
         for (const vg::VGCommand& cmd : batch.commands)
         {
             if (!colours(cmd) || (cmd.layer >= 0 && !layerShows[static_cast<usize>(cmd.layer)]))
                 continue;
-            const void* texture = cmd.textureIndex >= 0 ? batch.textures[static_cast<usize>(cmd.textureIndex)] : nullptr;
+            const void* address = cmd.textureIndex >= 0 ? batch.textures[static_cast<usize>(cmd.textureIndex)] : nullptr;
+            core::i32 texture = -1;
+            for (usize t = 0; t < textures.Size() && address != nullptr; ++t)
+                if (textures[t] == address)
+                    texture = static_cast<core::i32>(t);
+            if (texture < 0 && address != nullptr)
+            {
+                texture = static_cast<core::i32>(textures.Size());
+                textures.PushBack(address);
+            }
             const core::i32 state[6] = {static_cast<core::i32>(cmd.drawMode), static_cast<core::i32>(cmd.blendMode),
                                         static_cast<core::i32>(cmd.fillPhase), cmd.layer >= 0 ? ordinal[static_cast<usize>(cmd.layer)] : -1,
                                         cmd.compositeLayer >= 0 ? ordinal[static_cast<usize>(cmd.compositeLayer)] : -1,

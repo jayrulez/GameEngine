@@ -32,6 +32,7 @@ import foundation.vg;
 import foundation.vg.renderer;
 import experimental.gui;
 import experimental.gui.shell;
+import gui.sandbox.stress; // the Stress page (E8a)
 import foundation.script; // the pages' and the game menu's scripts
 #ifdef OPTION_HAS_ANGELSCRIPT
 import foundation.script.angelscript;
@@ -126,6 +127,12 @@ class GUISandbox : public samples::framework::SampleApp
 {
 public:
     void SetStartPage(StringView id) { m_startPage = String(id); }
+    /// --stress <n>: start on the Stress page, built at load n.
+    void SetStress(i32 load)
+    {
+        m_startPage = String(u8"stress");
+        m_stressLoad = load;
+    }
     void SetOpenMenu(bool open) { m_openMenuAtStart = open; }
     void SetMenuCall(StringView function) { m_menuCall = String(function); }
     void SetKeys(StringView keys) { m_keys = String(keys); }
@@ -190,6 +197,8 @@ private:
     f32 m_scroll = 0.0f; // the page scrolled down this far once it is up (a screenshot further down)
     bool m_alwaysRedraw = false;
     bool m_frameStats = false;
+    i32 m_stressLoad = 1;
+    f32 m_nextStressStatsTime = 0.0f;
     // --sweep: every page, then the game menu, each widget hovered, clicked and right-clicked, one
     // step a frame, each printed first (a crash's last line names its widget); then exit.
     bool m_sweep = false;
@@ -228,6 +237,9 @@ private:
     UniquePtr<vg::VGContext> m_vg;
     vg::renderer::VGRenderer m_renderer{AppRoot()};
     fonts::CachedFont* m_font = nullptr; // Roboto 16, for what native code builds
+
+    // The Stress page's builder and its views' models: before the GUI, so it outlives the views.
+    UniquePtr<sandbox::StressPage> m_stress;
 
     // === The GUI: one context, two roots ===
     RefPtr<gui::GUIContext> m_gui;
@@ -430,6 +442,13 @@ void GUISandbox::BuildSandbox()
 
     LoadPages();
     FillNativeHosts();
+    for (const Page& page : m_pages)
+        if (page.id.AsView() == StringView(u8"stress"))
+        {
+            m_stress = MakeUnique<sandbox::StressPage>(AppRoot(), AppRoot(), m_font);
+            m_stress->SetLoad(m_stressLoad);
+            m_stress->Attach(*page.node);
+        }
 
     // The shell's commands; the sidebar's buttons are bound to page.<id>, the header's to the theme.
     GUISandbox* self = this;
@@ -488,6 +507,8 @@ void GUISandbox::LoadPages()
         String css = base;
         css += StringView(u8".css");
         page.sheet = ReadText(css.AsView());
+        if (page.id.AsView() == StringView(u8"stress"))
+            page.sheet += sandbox::StressPage::Rules(1000).AsView(); // a large sheet's many rules
         const String id = page.id;
         String command(kPageCommand);
         command += id.AsView();
@@ -829,6 +850,8 @@ void GUISandbox::ShowPage(StringView id)
         }
     }
     m_current = String(id);
+    if (m_stress && id == StringView(u8"stress") && !m_stress->IsBuilt())
+        m_stress->Build(m_stressLoad); // built when first shown: the other pages start fast
     if (m_content != nullptr)
     {
         m_content->SetScrollOffset(Float2{0.0f, 0.0f});
@@ -1074,6 +1097,8 @@ void GUISandbox::Sweep()
         // Plan it: each page shown in turn, its widgets' centres as they lie once shown.
         for (const Page& page : m_pages)
         {
+            if (page.id.AsView() == StringView(u8"stress"))
+                continue; // thousands of widgets: a smoke test of every one would take minutes
             ShowPage(page.id.AsView());
             m_root->UpdateLayout();
             Array<gui::Node*> nodes;
@@ -1186,6 +1211,12 @@ void GUISandbox::OnRender()
         std::printf("GUISandbox: last frame: %s\n", reinterpret_cast<const char*>(drawn.GetLastFrameStats().Describe().CStr()));
         std::fflush(stdout);
         m_nextStatsTime = m_totalTime + 1.0f;
+    }
+    // The Stress page shows the last frame's costs, each second.
+    if (m_stress && m_current.AsView() == StringView(u8"stress") && m_totalTime >= m_nextStressStatsTime)
+    {
+        m_stress->ShowStats(drawn.GetLastFrameStats());
+        m_nextStressStatsTime = m_totalTime + 1.0f;
     }
     if (!m_alwaysRedraw && !drawn.NeedsFrame() && !ScreenshotPending())
     {
@@ -1307,7 +1338,8 @@ int main(int argc, char** argv)
     // each second, how many frames drew. --sweep: hover, click and right-click every widget of every
     // page, then open the game menu, printing each step, and exit (a smoke test; a crash's last line
     // names its widget). --scroll <px>: scroll the page down that far once it is up.
-    // --layout-overlay: start with the layout overlay on (F9 toggles it). With the
+    // --layout-overlay: start with the layout overlay on (F9 toggles it). --stress <n>: start on
+    // the Stress page, built at load n (1 to 20; measure in RelWithDebInfo). With the
     // framework's --screenshot flags, a picture of any of it.
     for (int i = 1; i < argc; ++i)
     {
@@ -1329,6 +1361,8 @@ int main(int argc, char** argv)
             app.SetSweep(true);
         else if (arg == StringView(u8"--layout-overlay"))
             app.SetLayoutOverlay(true);
+        else if (arg == StringView(u8"--stress") && i + 1 < argc)
+            app.SetStress(std::atoi(reinterpret_cast<const char*>(argv[++i])));
         else if (arg == StringView(u8"--scroll") && i + 1 < argc)
             app.SetScroll(static_cast<f32>(std::atof(reinterpret_cast<const char*>(argv[++i]))));
     }

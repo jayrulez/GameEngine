@@ -478,9 +478,18 @@ export namespace experimental::gui
         }
 
         // The left stick as a d-pad: past half way it holds a direction, back under a third it lets
-        // go (the gap keeps a stick resting near the threshold from chattering).
+        // go (the gap keeps a stick resting near the threshold from chattering). The right stick
+        // scrolls.
         bool DispatchStick(shell::GamepadAxis axis, f32 value)
         {
+            // The right stick scrolls the nearest scroller around the focus (the dispatcher's).
+            if (axis == shell::GamepadAxis::RightX || axis == shell::GamepadAxis::RightY)
+            {
+                core::Float2 stick = m_dispatcher->GetScrollStick();
+                (axis == shell::GamepadAxis::RightX ? stick.x : stick.y) = value;
+                m_dispatcher->SetScrollStick(stick);
+                return true;
+            }
             if (axis != shell::GamepadAxis::LeftX && axis != shell::GamepadAxis::LeftY)
                 return false;
             const bool horizontal = axis == shell::GamepadAxis::LeftX;

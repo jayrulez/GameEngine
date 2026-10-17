@@ -588,3 +588,34 @@ TEST_CASE("scroll: only a finger pans; a sideways finger over a scroller that ca
     CHECK(cancels == 0);
     d.InjectTouchUp(1, core::Float2{60.0f, 72.0f});
 }
+
+TEST_CASE("scroll: a pad's right stick scrolls the nearest scroller around the focus")
+{
+    Scroller s(40);
+    GUIContext& gui = s.root->GetContext();
+    EventDispatcher& d = s.D();
+    d.SetFocusNode(s.rows[0].Get());
+
+    d.SetScrollStick(core::Float2{0.0f, 0.15f}); // within the dead zone
+    gui.Update(core::Duration::FromSeconds(0.1));
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(0.0f));
+
+    d.SetScrollStick(core::Float2{0.0f, 1.0f}); // all the way: 1400 px a second
+    gui.Update(core::Duration::FromSeconds(0.1));
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(140.0f));
+
+    d.SetScrollStick(core::Float2{0.0f, -0.6f}); // half way past the dead zone, squared: a quarter
+    gui.Update(core::Duration::FromSeconds(0.1));
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(140.0f - 35.0f));
+
+    d.SetScrollStick(core::Float2{0.0f, 0.0f}); // let go
+    gui.Update(core::Duration::FromSeconds(0.1));
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(105.0f));
+
+    // With no focus, the scroller under the pointer.
+    d.SetFocusNode(nullptr);
+    d.InjectMouseMove(core::Float2{40.0f, 40.0f});
+    d.SetScrollStick(core::Float2{0.0f, 1.0f});
+    gui.Update(core::Duration::FromSeconds(0.05));
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(175.0f));
+}

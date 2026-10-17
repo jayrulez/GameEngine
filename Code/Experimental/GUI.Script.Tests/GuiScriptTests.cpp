@@ -192,8 +192,8 @@ namespace
         bed.Update();
         CHECK(volume->GetText() == StringView(u8"0.75"));
         const Variant written = bed.root->GetContext().GetData().Get(StringView(u8"volume"));
-        REQUIRE(written.TryGet<f32>() != nullptr);
-        CHECK(*written.TryGet<f32>() == doctest::Approx(0.75f));
+        REQUIRE(written.TryGet<f64>() != nullptr); // a range's value is an f64
+        CHECK(*written.TryGet<f64>() == doctest::Approx(0.75));
 
         // The script writes the data.
         bed.Run(u8"setNine");

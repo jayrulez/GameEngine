@@ -75,6 +75,8 @@ export import :label;
 export import :button;
 export import :check_box;
 export import :radio;
+export import :range_value;
+export import :range_widget;
 export import :slider;
 export import :progress_bar;
 export import :panel;

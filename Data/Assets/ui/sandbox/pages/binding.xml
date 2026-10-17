@@ -8,7 +8,7 @@
         <Panel class="row" flex-direction="row" align-items="center" gap="12">
             <Label class="text label-col" text="Volume" vertical-align="middle"/>
             <Slider class="bind-slider" value="{{volume}}"/>
-            <ProgressBar class="bind-bar" progress="{{volume}}"/>
+            <ProgressBar class="bind-bar" value="{{volume}}"/>
             <Label id="binding-percent" class="text value-col" vertical-align="middle"/>
         </Panel>
         <Panel class="row" flex-direction="row" align-items="center" gap="12">

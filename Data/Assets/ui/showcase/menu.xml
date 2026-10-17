@@ -49,7 +49,7 @@
     <!-- Loading: a screen of its own, the status and bar low and centred. -->
     <Panel id="loading" class="loading-screen" flex-direction="column" justify-content="end" align-items="center" gap="16" nav-scope="contain">
         <Label class="loading-status" text="{{status}}"/>
-        <ProgressBar progress="{{progress}}" class="loading-bar"/>
+        <ProgressBar value="{{progress}}" class="loading-bar"/>
         <Button id="loading-back" class="menu-btn small" text="Back"/>
     </Panel>
 

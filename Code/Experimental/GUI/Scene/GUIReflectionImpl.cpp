@@ -666,19 +666,37 @@ namespace experimental::gui
         builder.Creator();
     }
 
-    REFLECT_MEMBERS(Slider, "rtti::gui")
+    REFLECT_MEMBERS(RangeWidget, "rtti::gui")
     {
-        builder.AccessorProperty<&Slider::GetValue, &Slider::SetValue>("value")
+        builder.AccessorProperty<&RangeWidget::GetValue, &RangeWidget::SetValue>("value")
             .PropAttribute("css", core::String(u8"value"))
             .PropAttribute("twoWay", true); // the user changes it: a binding may write it back
+        builder.AccessorProperty<&RangeWidget::GetMin, &RangeWidget::SetMin>("min").PropAttribute("css", core::String(u8"min"));
+        builder.AccessorProperty<&RangeWidget::GetMax, &RangeWidget::SetMax>("max").PropAttribute("css", core::String(u8"max"));
+        builder.AccessorProperty<&RangeWidget::GetStep, &RangeWidget::SetStep>("step").PropAttribute("css", core::String(u8"step"));
+        builder.AccessorProperty<&RangeWidget::IsExponential, &RangeWidget::SetExponential>("exponential")
+            .PropAttribute("css", core::String(u8"exponential"));
+        builder.AccessorProperty<&RangeWidget::AllowsGreater, &RangeWidget::SetAllowGreater>("allowGreater")
+            .PropAttribute("css", core::String(u8"allow-greater"));
+        builder.AccessorProperty<&RangeWidget::AllowsLesser, &RangeWidget::SetAllowLesser>("allowLesser")
+            .PropAttribute("css", core::String(u8"allow-lesser"));
+        builder.Method<&ElementOf<RangeWidget>, RangeWidget, Node>("of");
+    }
+
+    REFLECT_MEMBERS(Slider, "rtti::gui")
+    {
+        builder.AccessorProperty<&Slider::GetPage, &Slider::SetPage>("page").PropAttribute("css", core::String(u8"page"));
+        builder.AccessorProperty<&Slider::GetOrientationName, &Slider::SetOrientationName>("orientation")
+            .PropAttribute("css", core::String(u8"orientation"));
+        builder.AccessorProperty<&Slider::GetTicks, &Slider::SetTicks>("ticks").PropAttribute("css", core::String(u8"ticks"));
         builder.Method<&ElementOf<Slider>, Slider, Node>("of");
         builder.Creator();
     }
 
     REFLECT_MEMBERS(ProgressBar, "rtti::gui")
     {
-        builder.AccessorProperty<&ProgressBar::GetProgress, &ProgressBar::SetProgress>("progress")
-            .PropAttribute("css", core::String(u8"progress"));
+        builder.AccessorProperty<&ProgressBar::IsIndeterminate, &ProgressBar::SetIndeterminate>("indeterminate")
+            .PropAttribute("css", core::String(u8"indeterminate"));
         builder.Method<&ElementOf<ProgressBar>, ProgressBar, Node>("of");
         builder.Creator();
     }

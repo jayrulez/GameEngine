@@ -43,6 +43,7 @@ import :reactive;    // EffectScheduler
 import :data_model;
 import :commands;
 import :keymap;
+import :text_editing_keys; // the editing keys every GUI starts with (E4)
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -58,6 +59,7 @@ export namespace experimental::gui
         GUIContext()
             : m_elements(core::MakeRef<ElementTable>(MemoryAllocator())), m_data(core::MakeRef<DataModel>(MemoryAllocator()))
         {
+            BindTextEditingKeys(m_keymap); // a GUI's own bindings come later, so they win a tie
         }
         GUIContext(const GUIContext&) = delete;
         GUIContext& operator=(const GUIContext&) = delete;

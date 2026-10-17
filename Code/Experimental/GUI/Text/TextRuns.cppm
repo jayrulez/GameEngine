@@ -132,7 +132,7 @@ export namespace experimental::gui
             for (const TextRun& run : Runs)
             {
                 if (run.IsIcon())
-                    out.Append(core::StringView(u8"￼"));
+                    out.Append(core::StringView(u8"\uFFFC"));
                 else
                     out.Append(run.Text.AsView());
             }

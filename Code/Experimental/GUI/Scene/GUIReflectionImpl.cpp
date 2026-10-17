@@ -623,6 +623,8 @@ namespace experimental::gui
         builder.AccessorProperty<&CheckBox::IsChecked, &CheckBox::SetChecked>("checked")
             .PropAttribute("css", core::String(u8"checked"))
             .PropAttribute("twoWay", true); // the user changes it: a binding may write it back
+        builder.AccessorProperty<&CheckBox::IsIndeterminate, &CheckBox::SetIndeterminate>("indeterminate")
+            .PropAttribute("css", core::String(u8"indeterminate"));
         builder.Method<&ElementOf<CheckBox>, CheckBox, Node>("of");
         builder.Creator();
     }
@@ -654,6 +656,7 @@ namespace experimental::gui
     {
         builder.AccessorProperty<&TextField::GetPlaceholder, &TextField::SetPlaceholder>("placeholder").PropAttribute("css", core::String(u8"placeholder"));
         builder.AccessorProperty<&TextField::GetMaxLength, &TextField::SetMaxLength>("maxLength").PropAttribute("css", core::String(u8"max-length"));
+        builder.AccessorProperty<&TextField::IsReadOnly, &TextField::SetReadOnly>("readOnly").PropAttribute("css", core::String(u8"read-only"));
         builder.AccessorProperty<&TextField::GetText, &TextField::SetText>("text")
             .PropAttribute("css", core::String(u8"text"))
             .PropAttribute("twoWay", true); // the user changes it: a binding may write it back

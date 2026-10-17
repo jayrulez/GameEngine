@@ -119,6 +119,7 @@ export namespace experimental::gui
         {
             m_placeholder = core::String(text);
             m_hintText.SetString(m_placeholder.AsView());
+            SyncPlaceholderShown();
             Invalidate();
         }
         [[nodiscard]] core::StringView GetPlaceholder() const { return m_placeholder.AsView(); }
@@ -127,6 +128,22 @@ export namespace experimental::gui
             m_placeholderColor = color;
             m_hintText.SetColor(color);
             Invalidate();
+        }
+
+        /// A read-only field shows, selects and copies its value but takes no edits (CSS's
+        /// :read-only; an editable one is :read-write).
+        void SetReadOnly(bool readOnly)
+        {
+            if (readOnly == m_readOnly)
+                return;
+            m_readOnly = readOnly;
+            MarkStyleDirty(true);
+            Invalidate();
+        }
+        [[nodiscard]] bool IsReadOnly() const noexcept { return m_readOnly; }
+        [[nodiscard]] u32 GetWidgetStates() const override
+        {
+            return (m_readOnly ? WidgetStateNone : WidgetStateEditable) | (m_placeholderShown ? WidgetStatePlaceholderShown : WidgetStateNone);
         }
 
         // Maximum length in codepoints (0 = unlimited). Inserts past the limit are truncated.
@@ -220,7 +237,7 @@ export namespace experimental::gui
     protected:
         void OnTextInput(const TextInputEvent& event) override
         {
-            if (!IsTreeEnabled() || event.Text.Size() == 0)
+            if (!IsTreeEnabled() || m_readOnly || event.Text.Size() == 0)
                 return;
             InsertText(event.Text);
         }
@@ -248,10 +265,14 @@ export namespace experimental::gui
                     CopySelection();
                     return;
                 case KeyCode::X:
-                    CutSelection();
+                    if (m_readOnly)
+                        CopySelection(); // what cut would take, left in place
+                    else
+                        CutSelection();
                     return;
                 case KeyCode::V:
-                    Paste();
+                    if (!m_readOnly)
+                        Paste();
                     return;
                 default:
                     event.Handled = false; // other Ctrl combos: a binding's (ctrl-s)
@@ -259,6 +280,8 @@ export namespace experimental::gui
                 }
             }
 
+            if (m_readOnly && (key == KeyCode::Backspace || key == KeyCode::Delete))
+                return;
             switch (key)
             {
             case KeyCode::Backspace:
@@ -446,7 +469,17 @@ export namespace experimental::gui
         void SyncText()
         {
             m_text.SetString(m_value.AsView());
+            SyncPlaceholderShown();
             Invalidate();
+        }
+        // :placeholder-shown follows whether the value is empty under a placeholder.
+        void SyncPlaceholderShown()
+        {
+            const bool shown = m_value.Size() == 0 && m_placeholder.Size() != 0;
+            if (shown == m_placeholderShown)
+                return;
+            m_placeholderShown = shown;
+            MarkStyleDirty(true);
         }
         void NotifyChanged()
         {
@@ -671,6 +704,8 @@ export namespace experimental::gui
         f64 m_blinkAccum = 0.0;
 
         bool m_blinking = false; // a blink tick is running
+        bool m_readOnly = false;
+        bool m_placeholderShown = false;
         static constexpr f64 kBlinkPeriod = 0.5;      // seconds per on/off half-cycle
         static constexpr f32 kCaretWidth = 1.5f;
     };

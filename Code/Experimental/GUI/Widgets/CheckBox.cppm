@@ -50,6 +50,8 @@ export namespace experimental::gui
             if (checked == m_checked)
                 return;
             m_checked = checked;
+            m_indeterminate = false; // a choice settles the mixed state
+            MarkStyleDirty(true); // :checked
             Invalidate();
             m_checkedChanged.Notify();
             if (m_onChanged)
@@ -57,6 +59,22 @@ export namespace experimental::gui
             SendEvent(Event(EventType::Changed, this));
         }
         void Toggle() { SetChecked(!m_checked); }
+
+        /// Neither checked nor unchecked (CSS's :indeterminate; a parent of mixed children): drawn
+        /// as a dash until the box is set or toggled.
+        void SetIndeterminate(bool indeterminate)
+        {
+            if (indeterminate == m_indeterminate)
+                return;
+            m_indeterminate = indeterminate;
+            MarkStyleDirty(true);
+            Invalidate();
+        }
+        [[nodiscard]] bool IsIndeterminate() const noexcept { return m_indeterminate; }
+        [[nodiscard]] u32 GetWidgetStates() const override
+        {
+            return (m_checked ? WidgetStateChecked : WidgetStateNone) | (m_indeterminate ? WidgetStateIndeterminate : WidgetStateNone);
+        }
 
         void SetOnCheckedChanged(core::Function<void(bool)> callback)
         {
@@ -114,7 +132,13 @@ export namespace experimental::gui
             (void)localBounds;
             const Rect box = GetContentBounds();
             ctx.VG().StrokeRoundedRect(box.ToRectangle(), vg::CornerRadii(3.0f), m_boxColor, 2.0f);
-            if (m_checked)
+            if (m_indeterminate)
+            {
+                const f32 h = core::Max(2.0f, box.height * 0.18f);
+                const Rect dash{box.x + 4.0f, box.y + (box.height - h) * 0.5f, core::Max(0.0f, box.width - 8.0f), h};
+                ctx.VG().FillRoundedRect(dash.ToRectangle(), vg::CornerRadii(1.0f), m_checkColor);
+            }
+            else if (m_checked)
             {
                 const f32 inset = 4.0f;
                 const Rect inner{box.x + inset, box.y + inset,
@@ -125,6 +149,7 @@ export namespace experimental::gui
         }
 
         bool m_checked = false;
+        bool m_indeterminate = false;
         Observable m_checkedChanged; // what bindings reading the state follow
         Color m_boxColor{0.60f, 0.65f, 0.72f, 1.0f};
         Color m_checkColor{0.31f, 0.63f, 0.85f, 1.0f};

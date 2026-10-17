@@ -24,13 +24,38 @@ export namespace experimental::gui
 {
     class Node;
 
-    // Payload carried by a drag-and-drop operation: a type tag (what kind of thing is being
-    // dragged, so targets can decide whether to accept) plus a string value (the data - an id,
-    // a path, text). Richer payloads (a RefPtr<Object>) can be layered on later.
+    /// What a drop does with what is dragged (E7).
+    enum class DropEffect : u8
+    {
+        None,
+        Copy,
+        Move,
+        Link,
+    };
+    /// The effects a drag's source allows, as flags.
+    enum DropEffects : u8
+    {
+        DropEffectsNone = 0,
+        DropEffectsCopy = 1u << 0,
+        DropEffectsMove = 1u << 1,
+        DropEffectsLink = 1u << 2,
+        DropEffectsAll = DropEffectsCopy | DropEffectsMove | DropEffectsLink,
+    };
+    [[nodiscard]] inline constexpr u8 DropEffectFlag(DropEffect effect) noexcept
+    {
+        return effect == DropEffect::Copy ? DropEffectsCopy : effect == DropEffect::Move ? DropEffectsMove
+                                          : effect == DropEffect::Link ? DropEffectsLink : DropEffectsNone;
+    }
+
+    /// What a drag carries (E7): a type that targets choose by (`text`, `files`, `lab/tab`), a value
+    /// (a string, a number, a list, a weak node handle), a label for the preview and for
+    /// accessibility, and the effects its source allows.
     struct DragPayload
     {
         core::String Type;
-        core::String Value;
+        core::Variant Value;
+        core::String Label;
+        u8 Allowed = DropEffectsAll;
     };
 
     enum class EventType : u32
@@ -55,10 +80,14 @@ export namespace experimental::gui
         TextInput,
         FocusGained,
         FocusLost,
+        // Drag and drop (E7, DragEvents): a drag starting and ending at its source, entering, over,
+        // leaving and dropped on its target.
         DragEnter,
         DragOver,
         DragLeave,
         Drop,
+        DragStart,
+        DragEnd,
         // A widget's value changed (a check box, a slider; a text field's committed value).
         Changed,
         // A text field's text changed with an edit (each one; Changed waits for the commit).
@@ -113,11 +142,14 @@ export namespace experimental::gui
         NsResize,
         NwseResize,
         NeswResize,
+        Copy,   ///< a drop would copy
+        Alias,  ///< a drop would link
+        NoDrop, ///< nothing here takes the drag
     };
     inline constexpr const char8_t* kCursorNames[] = {
         u8"auto", u8"default", u8"pointer", u8"text", u8"move", u8"grab", u8"grabbing", u8"not-allowed",
         u8"wait", u8"progress", u8"crosshair", u8"help", u8"ew-resize", u8"ns-resize", u8"nwse-resize",
-        u8"nesw-resize",
+        u8"nesw-resize", u8"copy", u8"alias", u8"no-drop",
     };
     /// The cursor CSS names `name`; Auto for an unknown name.
     [[nodiscard]] inline Cursor CursorNamed(core::StringView name) noexcept
@@ -345,14 +377,75 @@ export namespace experimental::gui
         LinkEvent(Node* target, core::StringView link) noexcept : Event(EventType::Link, target), Link(link) {}
     };
 
+    /// A drag's events: its payload, the effect a drop would have (or had: none when a drag
+    /// ended cancelled), where the pointer is (in the root's space) and the modifiers held.
     struct DragEvent : Event
     {
         const DragPayload& Payload;
+        DropEffect Effect = DropEffect::None;
+        core::Float2 Position{0.0f, 0.0f};
+        u32 Modifiers = 0;
+        i32 Place = 0; ///< where in the target, as the target said (an index, a side)
 
         DragEvent(EventType type, Node* target, const DragPayload& payload) noexcept
             : Event(type, target), Payload(payload)
         {
         }
+    };
+
+    /// A source asked for a drag (E7): the press, in its space; it fills the payload, and may give
+    /// a preview and where in the preview the pointer holds it (else it holds it where the press
+    /// was on the source, or beside a default preview).
+    struct DragRequest
+    {
+        core::Float2 Press{0.0f, 0.0f};
+        u32 Modifiers = 0;
+        PointerType Pointer = PointerType::Mouse;
+        bool FromKeyboard = false; ///< `drag.pick` at the focus, not a press
+        DragPayload Payload;
+        core::RefPtr<Node> Preview;
+        core::Float2 GrabOffset{0.0f, 0.0f};
+        bool HasGrabOffset = false;
+    };
+
+    /// What a drop here would do, asked of the node under the pointer and up its ancestors every
+    /// move, modifier change and scroll (Godot's walk, Zero's test drop). The node sets the
+    /// effect (from those the source allows; Preferred is the modifiers' choice), a reason (what
+    /// it would do, or why not), and a place it draws; one that refuses with a reason ends the walk.
+    struct DropQuery
+    {
+        const DragPayload& Payload;
+        core::Float2 Local{0.0f, 0.0f}; ///< the pointer in the asked node's space
+        u32 Modifiers = 0;
+        DropEffect Preferred = DropEffect::Move;
+        bool FromKeyboard = false; ///< a keyboard drag: the asked node is the focus, Local its centre
+        DropEffect Effect = DropEffect::None;
+        core::String Reason;
+        bool Refused = false;
+        i32 Place = 0;
+
+        /// Takes the drop with the preferred effect, or `effect` where the source allows it.
+        void Accept(DropEffect effect = DropEffect::None)
+        {
+            const DropEffect want = effect == DropEffect::None ? Preferred : effect;
+            Effect = (Payload.Allowed & DropEffectFlag(want)) != 0 ? want : Preferred;
+        }
+        /// Refuses, saying why (the walk ends here and the reason shows).
+        void Refuse(core::StringView reason)
+        {
+            Effect = DropEffect::None;
+            Refused = true;
+            Reason = core::String(reason);
+        }
+    };
+
+    /// How a drag ended, told to its source: the effect (none when cancelled or dropped nowhere)
+    /// and the node that took it.
+    struct DragResult
+    {
+        DropEffect Effect = DropEffect::None;
+        Node* Target = nullptr;
+        bool Cancelled = false;
     };
 
     using EventCallback = core::Function<void(const Event&)>;

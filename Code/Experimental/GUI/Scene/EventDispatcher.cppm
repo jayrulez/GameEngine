@@ -13,6 +13,7 @@
 
 module;
 #include "Core/Prelude.h"
+#include "Core/Reflection/Reflect.h"
 
 export module experimental.gui:event_dispatcher;
 
@@ -59,8 +60,57 @@ export namespace experimental::gui
         /// Sized by what it holds, measured again every layout pass (a tooltip, whose font a sheet
         /// gives it after it opens); else its own size when it opened.
         bool FitContent = false;
+        /// The pointer passes through it to what is below (a drag's preview).
+        bool PassesPointer = false;
         /// Told when it closes, and why (after the `toggle` event).
         core::Function<void(PopupCloseReason)> OnClosed;
+    };
+
+    // A drag's layer in the top layer (E7): the root's size, passing the pointer through, its
+    // children (the preview, the hint) each at the point the dispatcher gives it, at its own size.
+    class DragLayer : public Node
+    {
+        RTTI_OBJECT(DragLayer, Node)
+    public:
+        void Place(Node& child, core::Float2 at)
+        {
+            for (Placed& p : m_placed)
+                if (p.Child == &child)
+                {
+                    p.At = at;
+                    RequestLayout();
+                    return;
+                }
+            m_placed.PushBack(Placed{&child, at});
+            RequestLayout();
+        }
+
+        // A child gone (a hint replaced) is forgotten, matched by identity, never followed.
+        void OnChildrenChanged() override
+        {
+            for (usize i = m_placed.Size(); i-- > 0;)
+                if (GetChildIndex(m_placed[i].Child) == kInvalidIndex)
+                    m_placed.RemoveAt(i);
+        }
+
+    protected:
+        void OnLayout() override
+        {
+            for (const Placed& p : m_placed)
+                if (GetChildIndex(p.Child) != kInvalidIndex)
+                {
+                    const core::Float2 size = p.Child->Measure(LayoutConstraints{});
+                    p.Child->Arrange(Rect{p.At.x, p.At.y, size.x, size.y});
+                }
+        }
+
+    private:
+        struct Placed
+        {
+            Node* Child; // its child
+            core::Float2 At;
+        };
+        core::Array<Placed> m_placed;
     };
 
     class EventDispatcher
@@ -173,7 +223,7 @@ export namespace experimental::gui
             if (!m_touchActive || finger != m_touchFinger)
                 return false;
             AddPanSample(position);
-            if (!m_panning && !m_dragActive)
+            if (!m_panning && !m_dragActive && !m_touchDragArmed)
             {
                 const core::Float2 moved{position.x - m_pressAt.x, position.y - m_pressAt.y};
                 if (core::Abs(moved.x) > kPanSlop || core::Abs(moved.y) > kPanSlop)
@@ -212,6 +262,9 @@ export namespace experimental::gui
                 UpdateHoverPath(nullptr, position);
                 return true;
             }
+            if (m_touchDragArmed && !m_dragActive)
+                CancelPointer(); // held to drag and let go still: neither a drag nor a tap
+            m_touchDragArmed = false;
             const bool used = PointerUp(position, MouseButton::Left, 0, PointerType::Touch, finger);
             UpdateHoverPath(nullptr, position); // the finger lifted: nothing is under it
             return used;
@@ -258,6 +311,18 @@ export namespace experimental::gui
         bool InjectKeyDown(u32 keyCode, u32 modifiers = 0)
         {
             NoteInput();
+            // A pointer drag takes the keys: Escape (a pad's East) cancels it, a modifier asks again.
+            if (m_dragActive && !m_dragFromKeyboard)
+            {
+                if (keyCode == static_cast<u32>(KeyCode::Escape))
+                    CancelDrag();
+                else if (modifiers != m_dragModifiers)
+                {
+                    m_dragModifiers = modifiers;
+                    QueryDrop(m_mousePos);
+                }
+                return true;
+            }
             ClosePopupsOfKind(PopupKind::Hint, PopupCloseReason::Code); // a key hides a tooltip
             // The focused widget, and its ancestors (capture, then bubble from the focus), first.
             if (RouteKey(EventType::KeyDown, keyCode, modifiers))
@@ -335,7 +400,19 @@ export namespace experimental::gui
         /// a repeating one): its release makes no click.
         void SuppressClick() noexcept { m_clickSuppressed = true; }
         bool Activate() { return m_focusNode != nullptr && m_focusNode->IsTreeEnabled() && m_focusNode->HandleActivate(); }
-        bool InjectKeyUp(u32 keyCode, u32 modifiers = 0) { return RouteKey(EventType::KeyUp, keyCode, modifiers); }
+        bool InjectKeyUp(u32 keyCode, u32 modifiers = 0)
+        {
+            if (m_dragActive && !m_dragFromKeyboard)
+            {
+                if (modifiers != m_dragModifiers)
+                {
+                    m_dragModifiers = modifiers;
+                    QueryDrop(m_mousePos);
+                }
+                return true;
+            }
+            return RouteKey(EventType::KeyUp, keyCode, modifiers);
+        }
         bool InjectText(core::StringView text)
         {
             Node* target = KeyTarget();
@@ -402,6 +479,9 @@ export namespace experimental::gui
         /// Default. The host shows it (the shell bridge does).
         [[nodiscard]] Cursor GetCursor() const
         {
+            if (m_dragActive) // a drag shows what a drop would do
+                return m_dropEffect == DropEffect::Copy ? Cursor::Copy : m_dropEffect == DropEffect::Link ? Cursor::Alias
+                       : m_dropEffect == DropEffect::Move ? Cursor::Move : Cursor::NoDrop;
             Node* from = m_captureNode != nullptr ? m_captureNode : m_downNode != nullptr ? m_downNode : m_overNode;
             for (Node* n = from; n != nullptr; n = n->GetParent())
                 if (n->GetCursor() != Cursor::Auto)
@@ -435,30 +515,40 @@ export namespace experimental::gui
             }
         }
 
-        // === Drag-and-drop ===
-        // A source widget starts a drag (typically from its OnMouseMove once a press has moved
-        // past a threshold). The dispatcher then delivers drag-enter/over/leave to the nearest
-        // accepting target under the cursor, and Drop on release.
-        void BeginDrag(Node* source, DragPayload payload)
-        {
-            m_dragActive = true;
-            m_dragSource = source;
-            m_dragPayload = core::Move(payload);
-            m_dropTarget = FindDropTarget(HitTest(m_mousePos));
-            if (m_dropTarget)
-                m_dropTarget->HandleDragEnter(m_dragPayload);
-        }
+        // === Drag and drop (E7) ===
+        // A left press (a finger's after a long press) that moves past the threshold offers a drag
+        // up from the pressed node (DragRequest); the first source that fills it starts it, a node
+        // owning its press ends the walk. While it goes, each move, modifier change and scroll asks
+        // the node under the pointer and up its ancestors what a drop would do (DropQuery): the
+        // first that takes it is the target, the cursor and the preview show the effect, and a
+        // reason shows by the pointer. A release over the target drops; Escape, a right press, the
+        // pad's East or the source leaving the tree cancels; the source is told how it ended.
+
+        /// How far a press moves before it drags (logical units; Godot's is 10, Zero's 6).
+        void SetDragThreshold(f32 distance) noexcept { m_dragThreshold = core::Max(0.0f, distance); }
+        [[nodiscard]] f32 GetDragThreshold() const noexcept { return m_dragThreshold; }
+        /// Starts a drag from code (Godot's force_drag): `source` gives no request itself.
+        void StartDrag(Node& source, DragRequest request) { BeginDrag(source, core::Move(request), m_mousePos); }
         [[nodiscard]] bool IsDragging() const noexcept { return m_dragActive; }
         [[nodiscard]] const DragPayload& GetDragPayload() const noexcept { return m_dragPayload; }
         [[nodiscard]] Node* GetDragSource() const noexcept { return m_dragSource; }
         [[nodiscard]] Node* GetDropTarget() const noexcept { return m_dropTarget; }
+        /// The effect a drop would have now, and the target's reason (or a refusal's).
+        [[nodiscard]] DropEffect GetDropEffect() const noexcept { return m_dropEffect; }
+        [[nodiscard]] core::StringView GetDropReason() const noexcept { return m_dropReason.AsView(); }
+        /// The preview following the pointer, and the hint beside it (null while none shows).
+        [[nodiscard]] Node* GetDragPreview() const noexcept { return m_dragPreview.Get(); }
+        [[nodiscard]] Node* GetDropHint() const noexcept { return m_dropHint.Get(); }
         void CancelDrag()
         {
-            if (!m_dragActive)
-                return;
-            if (m_dropTarget)
-                m_dropTarget->HandleDragLeave(m_dragPayload);
-            EndDrag();
+            if (m_dragActive)
+                FinishDrag(DropEffect::None, nullptr, true);
+        }
+        /// Asks the target again where the pointer is (the content moved under a still pointer).
+        void RequeryDrag()
+        {
+            if (m_dragActive)
+                QueryDrop(m_mousePos);
         }
 
         // === Popups: the top layer (E5) ===
@@ -641,7 +731,7 @@ export namespace experimental::gui
         [[nodiscard]] Node* FindInPopups(core::Float2 worldPoint) const
         {
             for (usize i = m_popups.Size(); i-- > 0;)
-                if (m_popups[i].Options.Kind != PopupKind::Hint)
+                if (m_popups[i].Options.Kind != PopupKind::Hint && !m_popups[i].Options.PassesPointer)
                     if (Node* hit = m_popups[i].Popup->OverFind(worldPoint))
                         return hit;
             return nullptr;
@@ -762,9 +852,8 @@ export namespace experimental::gui
                 m_dropTarget = nullptr;
             if (IsInSubtree(m_dragSource, &removed))
             {
-                m_dragSource = nullptr;
-                if (m_dragActive)
-                    EndDrag();
+                m_dragSource = nullptr; // gone: it is told nothing
+                CancelDrag();
             }
         }
 
@@ -791,23 +880,18 @@ export namespace experimental::gui
             m_mousePos = position;
             if (m_longPressArmed && core::Abs(position.x - m_pressAt.x) + core::Abs(position.y - m_pressAt.y) > kTapSlop)
                 m_longPressArmed = false; // the finger moved: a drag or a scroll, not a long press
-            // While a drag-and-drop is in progress, route to the drop target (enter/leave/over)
-            // instead of the normal hover/capture path.
+            // A drag in progress: the pointer only asks where a drop would land.
             if (m_dragActive)
             {
-                Node* target = FindDropTarget(HitTest(position));
-                if (target != m_dropTarget)
-                {
-                    if (m_dropTarget)
-                        m_dropTarget->HandleDragLeave(m_dragPayload);
-                    m_dropTarget = target;
-                    if (m_dropTarget)
-                        m_dropTarget->HandleDragEnter(m_dragPayload);
-                }
-                if (m_dropTarget)
-                    m_dropTarget->HandleDragOver(m_dragPayload);
+                m_dragModifiers = modifiers;
+                QueryDrop(position);
                 return true;
             }
+            // A press moved past the threshold: a drag, if a source up from the pressed node gives one.
+            if (m_downNode != nullptr && !m_dragTried && (pointer == PointerType::Mouse || m_touchDragArmed) &&
+                core::Abs(position.x - m_pressAt.x) + core::Abs(position.y - m_pressAt.y) > m_dragThreshold)
+                if (TryDrag(position, modifiers, pointer))
+                    return true;
             Node* hit = HitTest(position);
             UpdateHoverPath(hit, position);
             // The captured node (explicitly, or the pressed one while a button is held) keeps the
@@ -832,6 +916,15 @@ export namespace experimental::gui
             if (m_focusNode != nullptr)
                 m_focusNode->SetFocusVisible(false);
             m_mousePos = position;
+            if (m_dragActive)
+            {
+                // A second press while dragging (a right one, as Godot): cancelled, the press eaten.
+                CancelDrag();
+                m_swallowing = true;
+                return true;
+            }
+            m_dragTried = button != MouseButton::Left; // only a left press (a finger's) drags
+            m_touchDragArmed = false;
             Node* hit = HitTest(position);
             UpdateHoverPath(hit, position);
             // Any press hides a tooltip. A press closes the auto popups above the one it is in; one in
@@ -880,16 +973,14 @@ export namespace experimental::gui
                 m_swallowing = false; // the end of a press that closed a popup: nothing more of it
                 return true;
             }
-            // A release while dragging completes the drop on the target under the cursor, then
-            // ends the drag. The normal up (below) still fires so the source resets its state.
+            // A release while dragging drops on the target, if one takes it (asked once more
+            // where it is), and ends the drag; the press was cancelled when it began.
             if (m_dragActive)
             {
-                Node* target = FindDropTarget(HitTest(position));
-                if (target != nullptr)
-                    target->HandleDrop(m_dragPayload);
-                else if (m_dropTarget)
-                    m_dropTarget->HandleDragLeave(m_dragPayload);
-                EndDrag();
+                m_dragModifiers = modifiers;
+                QueryDrop(position);
+                Drop();
+                return true;
             }
             Node* hit = HitTest(position);
             // Both nodes are pinned for the rest of this call: a handler may mutate the tree
@@ -1161,21 +1252,272 @@ export namespace experimental::gui
             return false;
         }
 
-        // Nearest node (self or ancestor) that accepts the current drag payload; null if none.
-        [[nodiscard]] Node* FindDropTarget(Node* hit) const
+        // === Drag and drop's own ===
+        // The modifiers' choice among the effects the source allows (Ctrl copy, Shift move, both
+        // link), else move, copy or link, whichever it allows first.
+        [[nodiscard]] DropEffect PreferredEffect() const
         {
-            for (Node* n = hit; n != nullptr; n = n->GetParent())
-                if (n->AcceptsDrop(m_dragPayload))
-                    return n;
-            return nullptr;
+            const bool ctrl = (m_dragModifiers & KeyModCtrl) != 0;
+            const bool shift = (m_dragModifiers & KeyModShift) != 0;
+            const DropEffect asked = ctrl && shift ? DropEffect::Link : ctrl ? DropEffect::Copy : shift ? DropEffect::Move : DropEffect::None;
+            if (asked != DropEffect::None && (m_dragPayload.Allowed & DropEffectFlag(asked)) != 0)
+                return asked;
+            const DropEffect order[] = {DropEffect::Move, DropEffect::Copy, DropEffect::Link};
+            for (DropEffect e : order)
+                if ((m_dragPayload.Allowed & DropEffectFlag(e)) != 0)
+                    return e;
+            return DropEffect::None;
         }
 
-        void EndDrag()
+        // Whether a press on `node` would offer a drag that something takes (asked without
+        // starting it: a source's answer must not change anything).
+        [[nodiscard]] bool HasDragSource(Node* node) const
         {
+            for (Node* n = node; n != nullptr; n = n->GetParent())
+            {
+                const core::Float2 local = n->ConvertToNodeSpace(m_pressAt);
+                if (n->OwnsPressDrag(local))
+                    return false;
+                DragRequest request;
+                request.Press = local;
+                request.Pointer = PointerType::Touch;
+                if (n->HandleDragRequested(request))
+                    return true;
+            }
+            return false;
+        }
+
+        // A press past the threshold: the drag offered up from the pressed node.
+        bool TryDrag(core::Float2 position, u32 modifiers, PointerType pointer)
+        {
+            m_dragTried = true;
+            for (Node* n = m_downNode; n != nullptr; n = n->GetParent())
+            {
+                if (!n->IsTreeEnabled())
+                    return false;
+                const core::Float2 local = n->ConvertToNodeSpace(m_pressAt);
+                if (n->OwnsPressDrag(local))
+                    return false; // its press is its own (a slider, a scroll bar, a field)
+                DragRequest request;
+                request.Press = local;
+                request.Modifiers = modifiers;
+                request.Pointer = pointer;
+                if (n->HandleDragRequested(request))
+                {
+                    m_dragModifiers = modifiers;
+                    BeginDrag(*n, core::Move(request), position);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        void BeginDrag(Node& source, DragRequest request, core::Float2 at)
+        {
+            if (m_dragActive)
+                CancelDrag();
+            const core::RefPtr<Node> pin{&source};
+            CancelPointer(); // the press is the drag's now: no release or click follows
+            HideTooltip();
+            m_dragActive = true;
+            m_dragSource = &source;
+            m_dragFromKeyboard = request.FromKeyboard;
+            m_dragPayload = core::Move(request.Payload);
+            if (m_dragPayload.Label.IsEmpty())
+                m_dragPayload.Label = m_dragPayload.Type;
+            source.SetDragSourceState(true);
+
+            // The preview, held where the press was on the source (GPUI), or beside the pointer.
+            m_dragPreview = request.Preview;
+            if (request.HasGrabOffset)
+                m_grabOffset = request.GrabOffset;
+            else if (m_dragPreview)
+                m_grabOffset = request.Press;
+            else
+                m_grabOffset = core::Float2{-14.0f, -12.0f};
+            if (!m_dragPreview)
+                m_dragPreview = source.CreateDragPreview(m_dragPayload);
+            if (m_root != nullptr)
+            {
+                m_dragLayer = core::MakeRef<DragLayer>(m_root->MemoryAllocator());
+                m_dragLayer->SetPosition(core::Float2{0.0f, 0.0f});
+                m_dragLayer->SetSize(m_root->GetSize());
+                if (m_dragPreview)
+                {
+                    m_dragPreview->SetHitTestVisible(false);
+                    m_dragLayer->AddChild(m_dragPreview.Get());
+                }
+                PopupOptions options;
+                options.Kind = PopupKind::Manual;
+                options.PassesPointer = true;
+                OpenPopup(*m_root, *m_dragLayer, core::Move(options));
+            }
+
+            DragEvent started(EventType::DragStart, &source, m_dragPayload);
+            started.Position = RootPoint(at);
+            started.Modifiers = m_dragModifiers;
+            source.SendEvent(started);
+            QueryDrop(at);
+        }
+
+        // What a drop at `at` would do: asked of the node there and up its ancestors.
+        void QueryDrop(core::Float2 at)
+        {
+            m_mousePos = at;
+            Node* hit = HitTest(at);
+            DropQuery query{m_dragPayload, core::Float2{0.0f, 0.0f}, 0, DropEffect::Move, false, DropEffect::None, core::String{}, false, 0};
+            query.Modifiers = m_dragModifiers;
+            query.Preferred = PreferredEffect();
+            Node* target = nullptr;
+            for (Node* n = hit; n != nullptr; n = n->GetParent())
+            {
+                if (!n->IsTreeEnabled())
+                    break;
+                query.Local = n->ConvertToNodeSpace(at);
+                query.Effect = DropEffect::None;
+                n->HandleDragQuery(query);
+                if (query.Effect != DropEffect::None)
+                {
+                    target = n;
+                    break;
+                }
+                if (query.Refused)
+                    break; // refused with a reason: the walk ends, the reason shows
+            }
+            SetDropTarget(target, query, at);
+        }
+
+        void SetDropTarget(Node* target, const DropQuery& query, core::Float2 at)
+        {
+            const core::Float2 rootAt = RootPoint(at);
+            const auto event = [&](EventType type, Node* node)
+            {
+                DragEvent e(type, node, m_dragPayload);
+                e.Effect = query.Effect;
+                e.Position = rootAt;
+                e.Modifiers = m_dragModifiers;
+                e.Place = query.Place;
+                return e;
+            };
+            if (target != m_dropTarget)
+            {
+                if (Node* left = m_dropTarget)
+                {
+                    m_dropTarget = nullptr;
+                    left->SetDropTargetState(false);
+                    left->HandleDragEvent(event(EventType::DragLeave, left));
+                }
+                m_dropTarget = target;
+                if (target != nullptr)
+                {
+                    target->SetDropTargetState(true);
+                    target->HandleDragEvent(event(EventType::DragEnter, target));
+                }
+            }
+            if (m_dropTarget != nullptr)
+                m_dropTarget->HandleDragEvent(event(EventType::DragOver, m_dropTarget));
+            m_dropEffect = target != nullptr ? query.Effect : DropEffect::None;
+            m_dropPlace = query.Place;
+            ShowDropState(query.Reason.AsView(), query.Refused, rootAt);
+        }
+
+        // The preview at the pointer with the effect shown, and the reason's hint beside it.
+        void ShowDropState(core::StringView reason, bool refused, core::Float2 rootAt)
+        {
+            if (!m_dragLayer)
+                return;
+            if (m_dragPreview)
+            {
+                m_dragPreview->OnDragPreviewEffect(m_dropEffect);
+                m_dragLayer->Place(*m_dragPreview, core::Float2{rootAt.x - m_grabOffset.x, rootAt.y - m_grabOffset.y});
+            }
+            const bool showHint = reason.Size() != 0;
+            if (showHint && (m_dropReason.AsView() != reason || m_dropRefused != refused || !m_dropHint))
+            {
+                if (m_dropHint)
+                    m_dropHint->RemoveFromParent();
+                m_dropHint = m_dragSource != nullptr ? m_dragSource->CreateDropHint(reason, refused) : core::RefPtr<Node>{};
+                if (m_dropHint)
+                {
+                    m_dropHint->SetHitTestVisible(false);
+                    m_dragLayer->AddChild(m_dropHint.Get());
+                }
+            }
+            else if (!showHint && m_dropHint)
+            {
+                m_dropHint->RemoveFromParent();
+                m_dropHint = core::RefPtr<Node>{};
+            }
+            m_dropReason = core::String(reason);
+            m_dropRefused = refused;
+            if (m_dropHint)
+                m_dragLayer->Place(*m_dropHint, core::Float2{rootAt.x + 16.0f, rootAt.y + 22.0f}); // below and right of the pointer
+        }
+
+        void Drop()
+        {
+            Node* target = m_dropTarget;
+            const DropEffect effect = m_dropEffect;
+            if (target == nullptr || effect == DropEffect::None)
+            {
+                FinishDrag(DropEffect::None, nullptr, false);
+                return;
+            }
+            const core::RefPtr<Node> pin{target};
+            DragEvent dropped(EventType::Drop, target, m_dragPayload);
+            dropped.Effect = effect;
+            dropped.Position = RootPoint(m_mousePos);
+            dropped.Modifiers = m_dragModifiers;
+            dropped.Place = m_dropPlace;
+            target->HandleDragEvent(dropped);
+            FinishDrag(effect, target, false);
+        }
+
+        // The drag ends: the layer goes, the states clear, the source is told.
+        void FinishDrag(DropEffect effect, Node* target, bool cancelled)
+        {
+            if (!m_dragActive)
+                return;
             m_dragActive = false;
+            const core::RefPtr<Node> source{m_dragSource};
+            const DragPayload payload = core::Move(m_dragPayload);
+            if (Node* left = m_dropTarget)
+            {
+                m_dropTarget = nullptr;
+                left->SetDropTargetState(false);
+                if (target == nullptr)
+                {
+                    DragEvent leave(EventType::DragLeave, left, payload);
+                    leave.Position = RootPoint(m_mousePos);
+                    left->HandleDragEvent(leave);
+                }
+            }
+            if (m_dragLayer && IsPopupOpen(*m_dragLayer))
+                (void)ClosePopup(*m_dragLayer, PopupCloseReason::Code);
+            m_dragLayer = core::RefPtr<DragLayer>{};
+            m_dragPreview = core::RefPtr<Node>{};
+            m_dropHint = core::RefPtr<Node>{};
             m_dragSource = nullptr;
-            m_dropTarget = nullptr;
-            m_dragPayload = {};
+            m_dropEffect = DropEffect::None;
+            m_dropReason = core::String{};
+            m_dropRefused = false;
+            m_dragFromKeyboard = false;
+            if (source)
+            {
+                source->SetDragSourceState(false);
+                DragResult result{effect, target, cancelled};
+                DragEvent ended(EventType::DragEnd, source.Get(), payload);
+                ended.Effect = effect;
+                ended.Position = RootPoint(m_mousePos);
+                source->HandleDragEnd(result, ended);
+            }
+        }
+
+        // A point in the root's space (what hit-tests and places the preview), from the device
+        // pixels input arrives in.
+        [[nodiscard]] core::Float2 RootPoint(core::Float2 at) const
+        {
+            return m_root != nullptr ? m_root->ConvertToNodeSpace(at) : at;
         }
 
         struct PopupEntry
@@ -1211,6 +1553,8 @@ export namespace experimental::gui
         }
         void UpdateTooltip(f32 seconds)
         {
+            if (m_dragActive)
+                return; // no tooltips while dragging (the hint says what a drop would do)
             Node* provider = m_touchActive ? m_tipProvider : TooltipProvider(m_overNode);
             if (provider != m_tipProvider)
             {
@@ -1263,6 +1607,13 @@ export namespace experimental::gui
             const core::RefPtr<Node> target{m_downNode};
             if (!target || !target->IsTreeEnabled())
                 return;
+            // Over a drag source, a finger held still arms its drag (a finger's move pans a
+            // scroller first): the next move past the threshold drags, and no context menu opens.
+            if (HasDragSource(target.Get()))
+            {
+                m_touchDragArmed = true;
+                return;
+            }
             MouseEvent event(EventType::ContextMenu, target.Get(), m_pressAt);
             event.Pointer = PointerType::Touch;
             event.PointerId = m_touchFinger;
@@ -1495,6 +1846,19 @@ export namespace experimental::gui
         bool m_clickSuppressed = false;    // the press activated already (SuppressClick)
         Node* m_focusNode = nullptr;       // non-owning
         bool m_dragActive = false;                   // drag-and-drop in progress
+        bool m_dragTried = true;                     // this press offered its drag already
+        bool m_touchDragArmed = false;               // a finger held long enough over a source
+        bool m_dragFromKeyboard = false;
+        f32 m_dragThreshold = 6.0f;
+        u32 m_dragModifiers = 0;
+        DropEffect m_dropEffect = DropEffect::None;
+        i32 m_dropPlace = 0;
+        core::String m_dropReason;
+        bool m_dropRefused = false;
+        core::Float2 m_grabOffset{0.0f, 0.0f};
+        core::RefPtr<DragLayer> m_dragLayer;
+        core::RefPtr<Node> m_dragPreview;
+        core::RefPtr<Node> m_dropHint;
         Node* m_dragSource = nullptr;                // non-owning
         Node* m_dropTarget = nullptr;                // non-owning current target
         DragPayload m_dragPayload;

@@ -535,6 +535,30 @@ namespace experimental::gui
         return tip;
     }
 
+    // A drag's default preview: the payload's label (E7).
+    core::RefPtr<Node> Node::CreateDragPreview(const DragPayload& payload)
+    {
+        auto preview = core::MakeRef<DragPreview>(MemoryAllocator());
+        preview->SetText(payload.Label.AsView());
+        if (const UINode* source = Cast<UINode>(this))
+            source->ShareTextStyle(*preview, false); // in the source's font until a sheet says otherwise
+        return preview;
+    }
+
+    // The hint beside a drag's pointer: a target's reason, a tooltip marked `drophint` (and
+    // `refused` when nothing takes the drop).
+    core::RefPtr<Node> Node::CreateDropHint(core::StringView reason, bool refused)
+    {
+        auto hint = core::MakeRef<Tooltip>(MemoryAllocator());
+        hint->SetText(reason);
+        hint->AddClass(core::StringView(u8"drophint"));
+        if (refused)
+            hint->AddClass(core::StringView(u8"refused"));
+        if (const UINode* source = Cast<UINode>(this))
+            source->ShareTextStyle(*hint, false);
+        return hint;
+    }
+
     void RegisterGuiElements()
     {
         static const bool once = []()
@@ -941,6 +965,14 @@ namespace experimental::gui
         builder.AccessorProperty<&Image::GetImageColor, &Image::SetImageColor>("imageColor").PropAttribute("css", core::String(u8"image-color"));
         builder.Method<&ElementOf<Image>, Image, Node>("of");
         builder.Creator();
+    }
+
+    REFLECT_MEMBERS(DragLayer, "rtti::gui")
+    {
+    }
+
+    REFLECT_MEMBERS(DragPreview, "rtti::gui")
+    {
     }
 
     REFLECT_MEMBERS(MarkupChildHost, "rtti::gui")

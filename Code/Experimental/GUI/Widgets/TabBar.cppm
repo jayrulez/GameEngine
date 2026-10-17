@@ -112,6 +112,8 @@ export namespace experimental::gui
         [[nodiscard]] Node* GetPage() const noexcept { return m_page; }
 
         [[nodiscard]] u32 GetWidgetStates() const override { return m_selected ? WidgetStateChecked : WidgetStateNone; }
+        // In a reorderable strip its press reorders it (E7): a drag from what holds it is not offered.
+        [[nodiscard]] bool OwnsPressDrag(core::Float2) const override;
 
     protected:
         bool OnActivate() override;
@@ -551,6 +553,12 @@ export namespace experimental::gui
         const bool shown = display == TabCloseDisplay::Always || (display == TabCloseDisplay::Selected && m_selected) ||
                            (display == TabCloseDisplay::Hover && (m_selected || IsHovered()));
         m_close->SetVisible(shown);
+    }
+
+    inline bool Tab::OwnsPressDrag(core::Float2) const
+    {
+        const TabBar* bar = GetBar();
+        return bar != nullptr && bar->IsReorderable();
     }
 
     inline bool Tab::OnActivate()

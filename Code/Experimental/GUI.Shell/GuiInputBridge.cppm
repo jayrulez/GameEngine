@@ -330,8 +330,8 @@ export namespace experimental::gui
             return false;
         }
 
-        // The GUI's cursor as the shell has it; the shell has no grab cursors or help, so those take
-        // the nearest it has.
+        // The GUI's cursor as the shell has it; the shell has no grab, help, copy or alias cursors,
+        // so those take the nearest it has.
         [[nodiscard]] static shell::CursorType MapCursor(Cursor cursor) noexcept
         {
             switch (cursor)
@@ -341,7 +341,10 @@ export namespace experimental::gui
             case Cursor::Move:
             case Cursor::Grab:
             case Cursor::Grabbing: return shell::CursorType::Move;
-            case Cursor::NotAllowed: return shell::CursorType::NotAllowed;
+            case Cursor::NotAllowed:
+            case Cursor::NoDrop: return shell::CursorType::NotAllowed;
+            case Cursor::Copy:
+            case Cursor::Alias: return shell::CursorType::Pointer; // no copy or alias cursor: the preview's badge says
             case Cursor::Wait: return shell::CursorType::Wait;
             case Cursor::Progress: return shell::CursorType::Progress;
             case Cursor::Crosshair: return shell::CursorType::Crosshair;

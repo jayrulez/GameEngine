@@ -447,6 +447,8 @@ export namespace experimental::gui
             m_contextMenu->Open(*this, root != nullptr ? root->ConvertToNodeSpace(event.Position) : event.Position);
         }
 
+        // A press selects text (E7): a drag from what holds it is not offered.
+        [[nodiscard]] bool OwnsPressDrag(core::Float2) const override { return true; }
         void OnMouseDown(const MouseEvent& event) override
         {
             RequestFocus();

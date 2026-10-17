@@ -41,4 +41,18 @@
         </Panel>
         <Label class="caption" text="Glass clicks reached the button: {{glassClicks}}.   Hover the chips for their cursors."/>
     </Panel>
+
+    <Panel class="section" gap="12">
+        <Label class="section-title" text="Drag and drop"/>
+        <Panel class="dnd-row" flex-direction="row" align-items="start" gap="12">
+            <Panel class="dnd-cards" gap="6">
+                <Label id="dnd-ace" class="dnd-card" text="Ace of spades"/>
+                <Label id="dnd-king" class="dnd-card" text="King of hearts"/>
+                <Label id="dnd-chip" class="dnd-card chip-card" text="A poker chip"/>
+            </Panel>
+            <Panel id="dnd-hand" class="dnd-bin"><Label class="dnd-bin-title" text="Hand: takes cards (Ctrl copies)"/></Panel>
+            <Panel id="dnd-discard" class="dnd-bin"><Label class="dnd-bin-title" text="Discard: no aces"/></Panel>
+        </Panel>
+        <Label id="dnd-said" class="caption" text="Drag a card past a few pixels; Escape or a right click cancels."/>
+    </Panel>
 </Panel>

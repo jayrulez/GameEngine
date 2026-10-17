@@ -65,6 +65,9 @@ export namespace experimental::gui
         [[nodiscard]] usize GetColumn() const noexcept { return m_column; }
         [[nodiscard]] bool IsResizing() const noexcept { return m_resizing; }
 
+        // A press on its edge resizes its column (E7): a drag from what holds it is not offered.
+        [[nodiscard]] bool OwnsPressDrag(core::Float2 local) const override { return local.x >= GetSize().x - kGrip; }
+
     protected:
         void OnMouseDown(const MouseEvent& event) override;
         void OnMouseMove(const MouseEvent& event) override;

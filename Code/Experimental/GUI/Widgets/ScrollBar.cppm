@@ -98,6 +98,8 @@ export namespace experimental::gui
         // Press on the thumb starts a grab-drag (the thumb keeps its offset under the cursor,
         // so it doesn't jump); press on the track above/below the thumb pages toward the click
         // by one visible proportion (eepp-style), no drag.
+        // Its press is its own (E7): a drag from what holds it is not offered.
+        [[nodiscard]] bool OwnsPressDrag(core::Float2) const override { return true; }
         void OnMouseDown(const MouseEvent& event) override
         {
             if (event.Button != MouseButton::Left)

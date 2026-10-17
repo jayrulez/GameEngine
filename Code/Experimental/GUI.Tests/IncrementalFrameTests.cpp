@@ -416,3 +416,43 @@ TEST_CASE("incremental: a node marked during the frame's drawing does not stop l
     (void)root->UpdateLayout(); // as a host does before it asks
     CHECK(root->NeedsFrame());
 }
+
+TEST_CASE("incremental: an animation on a page out of view asks for no frames; one in view does; hiding asks for one")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{300.0f, 300.0f});
+    auto page = Widget(u8"panel");
+    root->AddChild(page.Get());
+    auto bar = Make<ProgressBar>();
+    bar->SetSize(core::Float2{100.0f, 10.0f});
+    page->AddChild(bar.Get());
+    bar->SetIndeterminate(true); // sweeps on the GUI's clock
+    StyleManager styles(CSSParser::Parse(SV(u8"panel { opacity: 1; }")));
+    Frame(*root.Get(), styles);
+    Frame(*root.Get(), styles);
+    (void)root->UpdateLayout();
+    CHECK(root->NeedsFrame()); // shown: its sweep moves
+
+    page->SetDisplayed(false);
+    (void)root->UpdateLayout();
+    Frame(*root.Get(), styles);
+    Frame(*root.Get(), styles);
+    (void)root->UpdateLayout();
+    CHECK_FALSE(root->NeedsFrame()); // out of view: nothing on screen moves
+
+    page->SetDisplayed(true);
+    (void)root->UpdateLayout();
+    Frame(*root.Get(), styles);
+    (void)root->UpdateLayout();
+    CHECK(root->NeedsFrame()); // back in view, sweeping again
+
+    auto still = Widget(u8"panel");
+    root->AddChild(still.Get());
+    bar->SetIndeterminate(false);
+    Frame(*root.Get(), styles);
+    Frame(*root.Get(), styles);
+    (void)root->UpdateLayout();
+    REQUIRE_FALSE(root->NeedsFrame());
+    still->SetVisible(false); // what drew it must draw again
+    CHECK(root->NeedsFrame());
+}

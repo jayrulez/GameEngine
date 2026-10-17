@@ -48,6 +48,15 @@ export namespace experimental::gui
                                Tint);
         }
 
+        void DrawTinted(DrawContext& ctx, const Rect& dest, Color tint) override
+        {
+            if (Image == nullptr)
+                return;
+            const Color t{Tint.r * tint.r, Tint.g * tint.g, Tint.b * tint.b, Tint.a * tint.a};
+            ctx.VG().DrawImage(Image, dest.ToRectangle(),
+                               core::Rectangle{0.0f, 0.0f, static_cast<f32>(Image->Width()), static_cast<f32>(Image->Height())}, t);
+        }
+
         [[nodiscard]] Optional<Float2> IntrinsicSize() const override
         {
             if (Image == nullptr)

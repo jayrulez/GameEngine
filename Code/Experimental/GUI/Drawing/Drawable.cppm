@@ -40,6 +40,12 @@ export namespace experimental::gui
 
         // True if drawing varies with ControlState (StateListDrawable, skins).
         [[nodiscard]] virtual bool IsStateful() const { return false; }
+        /// Draws it multiplied by `tint` (an Image's image-color); one that cannot tint draws as it is.
+        virtual void DrawTinted(DrawContext& ctx, const Rect& dest, Color tint)
+        {
+            (void)tint;
+            Draw(ctx, dest);
+        }
 
         // Natural size (icons/images); empty = no intrinsic size.
         [[nodiscard]] virtual Optional<Float2> IntrinsicSize() const { return {}; }

@@ -89,10 +89,11 @@
     </Panel>
 
     <Panel class="section" gap="12">
-        <Label class="section-title" text="A list and an image"/>
+        <Label class="section-title" text="A list and images"/>
         <Panel width="590" height="170" flex-direction="row" align-items="start" gap="16">
             <ListBox id="controls-list" class="list" items="Item 1|Item 2|Item 3|Item 4|Item 5|Item 6|Item 7|Item 8|Item 9|Item 10|Item 11|Item 12"/>
             <Panel id="controls-image" class="image-host" display="stack" justify-items="start" align-items="start"/>
+            <Image class="logo" src="Assets/images/logo.png" object-fit="contain" tooltip="An Image from markup: src, object-fit: contain"/>
         </Panel>
     </Panel>
 </Panel>

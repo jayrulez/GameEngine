@@ -17,6 +17,9 @@
 // menu of the chain closes only the menus deeper than it; opening another item's submenu closes
 // the open one; closing a menu closes what it holds). It is placed right of its item, flipped
 // left at the root's edge. Activating a leaf item closes the whole chain from its root menu.
+// While the pointer heads for an open submenu across other rows (inside the triangle from where
+// it was to the submenu's near edge, Godot's safe area), the submenu stays open; if the pointer
+// rests there a moment, the row under it takes over.
 
 module;
 #include "Core/Prelude.h"
@@ -36,6 +39,7 @@ import :text;
 import :node;
 import :ui_widget;
 import :event_dispatcher; // the popup stack (E5)
+import :actions;          // TickAction (the safe area's grace)
 import :image_drawable;   // a command's icon
 import :resource_provider;
 import foundation.image;  // ImageData
@@ -682,16 +686,88 @@ export namespace experimental::gui
                 sub->FocusFirstItem();
         }
 
-        // A row was hovered: an open submenu of another row closes; a submenu row opens its own;
-        // an item takes focus, so the keys go on from where the pointer is.
+        // The pointer over it, in the root's space: where it was is the safe area's apex.
+        void OnMouseMove(const MouseEvent& event) override
+        {
+            Node* root = GetRootNode();
+            m_pointerAt = root != nullptr ? root->ConvertToNodeSpace(event.Position) : event.Position;
+            m_pointerKnown = true;
+        }
+
+        // A row was hovered: an open submenu of another row closes (unless the pointer is heading
+        // for it: then a moment later, if it rests on this row); a submenu row opens its own; an
+        // item takes focus, so the keys go on from where the pointer is.
         void OnRowHovered(MenuRow* row)
         {
-            if (Menu* open = CurrentSubMenu(); open != nullptr && open->GetParent() != row)
+            Menu* open = CurrentSubMenu();
+            if (open != nullptr && open->GetParent() != row && HeadingFor(*open))
+            {
+                DeferHover(row);
+                return;
+            }
+            m_deferredRow = nullptr;
+            if (open != nullptr && open->GetParent() != row)
                 open->Close();
             if (row->IsSelectable() && row->IsTreeEnabled())
                 row->RequestFocus();
             if (MenuSubItem* sub = core::Cast<MenuSubItem>(row))
                 OpenSubMenuFor(sub, false);
+        }
+
+        // Whether the pointer, from where this menu last saw it to where it is now (the hover comes
+        // before the move reaches the menu), is inside the triangle from there to the open
+        // submenu's near edge.
+        [[nodiscard]] bool HeadingFor(const Menu& sub) const
+        {
+            const EventDispatcher* d = GetEventDispatcher();
+            const Node* root = this;
+            while (root->GetParent() != nullptr)
+                root = root->GetParent();
+            if (!m_pointerKnown || d == nullptr)
+                return false;
+            const core::Float2 apex = m_pointerAt;
+            const core::Float2 p = root->ConvertToNodeSpace(d->GetMousePosition());
+            const core::Float2 sp = sub.GetPosition();
+            const core::Float2 ss = sub.GetSize();
+            const f32 edgeX = sp.x >= GetPosition().x + GetSize().x * 0.5f ? sp.x : sp.x + ss.x; // the side facing this menu
+            const core::Float2 b{edgeX, sp.y};
+            const core::Float2 c{edgeX, sp.y + ss.y};
+            const auto side = [](core::Float2 a, core::Float2 b, core::Float2 q) { return (b.x - a.x) * (q.y - a.y) - (b.y - a.y) * (q.x - a.x); };
+            const f32 d1 = side(apex, b, p), d2 = side(b, c, p), d3 = side(c, apex, p);
+            const bool negative = d1 < 0.0f || d2 < 0.0f || d3 < 0.0f;
+            const bool positive = d1 > 0.0f || d2 > 0.0f || d3 > 0.0f;
+            return !(negative && positive) && (p.x != apex.x || p.y != apex.y);
+        }
+        // The hover on `row` counts after a moment, if the pointer is still on it and has not
+        // reached the submenu.
+        void DeferHover(MenuRow* row)
+        {
+            m_deferredRow = row;
+            m_deferredFor = 0.0;
+            if (m_deferring || GetActionManager() == nullptr)
+                return;
+            m_deferring = true;
+            Menu* self = this;
+            RunAction(core::MakeRef<TickAction>(MemoryAllocator(), [self](core::Duration elapsed)
+            {
+                if (self->m_deferredRow == nullptr)
+                {
+                    self->m_deferring = false;
+                    return false;
+                }
+                self->m_deferredFor += elapsed.AsSecondsF();
+                if (self->m_deferredFor < kSafeAreaGrace)
+                    return true;
+                MenuRow* row = self->m_deferredRow;
+                self->m_deferredRow = nullptr;
+                self->m_deferring = false;
+                if (row->IsHovered())
+                {
+                    self->m_pointerKnown = false; // resting: no heading
+                    self->OnRowHovered(row);
+                }
+                return false;
+            }));
         }
 
         // The outermost menu holding this one (a submenu's parents up the tree).
@@ -707,6 +783,13 @@ export namespace experimental::gui
         Array<MenuRow*> m_rows;                    // rows, owned as children
         Array<core::RefPtr<Menu>> m_ownedSubMenus; // keep submenus alive (their items' children only while open)
         bool m_autoWidth = false;
+        // The safe area toward an open submenu: the pointer's last two places, a hover deferred.
+        core::Float2 m_pointerAt{0.0f, 0.0f};
+        bool m_pointerKnown = false;
+        MenuRow* m_deferredRow = nullptr; // non-owning: one of its rows
+        f64 m_deferredFor = 0.0;
+        bool m_deferring = false;
+        static constexpr f64 kSafeAreaGrace = 0.3; // seconds a resting pointer waits before switching
         f32 m_width = 160.0f;
         f32 m_itemHeight = 26.0f;
         Color m_panelColor{0.16f, 0.17f, 0.21f, 1.0f};

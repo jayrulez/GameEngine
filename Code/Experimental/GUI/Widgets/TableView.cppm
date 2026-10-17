@@ -405,6 +405,7 @@ export namespace experimental::gui
         void ComputeColumnWidths(f32 bodyWidth) const
         {
             const usize columns = GetColumnCount();
+            const Array<f32> before = m_widths;
             m_widths.Clear();
             f32 given = 0.0f;
             usize autoCount = 0;
@@ -423,6 +424,15 @@ export namespace experimental::gui
                 const LayoutLength w = c < m_columnWidths.Size() ? m_columnWidths[c] : LayoutLength{};
                 m_widths.PushBack(core::Max(m_minColumnWidth, w.Resolve(bodyWidth).ValueOr(share)));
             }
+            // Widths changed with the row's own width the same (one column narrower, an auto one
+            // wider): the rows' cells are placed again, as the header's are.
+            bool changed = before.Size() != m_widths.Size();
+            for (usize c = 0; c < m_widths.Size() && !changed; ++c)
+                changed = before[c] != m_widths[c];
+            if (changed)
+                for (const core::RefPtr<ItemRow>& row : LiveRows())
+                    if (Node* content = row->GetContent())
+                        content->RequestLayout();
         }
         void EnsureOwnModel()
         {

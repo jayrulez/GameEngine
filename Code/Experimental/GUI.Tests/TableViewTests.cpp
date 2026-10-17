@@ -265,3 +265,32 @@ TEST_CASE("table-view: a header click sorts where the model can, and the cell sh
     root2->GetEventDispatcher()->InjectMouseUp(core::Float2{200.0f, 13.0f}, MouseButton::Left);
     CHECK(table2->GetSortColumn() == -1);
 }
+
+TEST_CASE("table-view: a resized column resizes its cells in every row, not only its header cell")
+{
+    TableModel model;
+    FillPeople(model, 3);
+    core::RefPtr<SceneRoot> root;
+    auto table = MountTable(root, &model);
+    EventDispatcher* d = root->GetEventDispatcher();
+    d->InjectMouseDown(core::Float2{148.0f, 13.0f}, MouseButton::Left);
+    for (float x = 140.0f; x >= 60.0f; x -= 20.0f)
+    {
+        d->InjectMouseMove(core::Float2{x, 13.0f});
+        (void)root->UpdateLayout();
+    }
+    d->InjectMouseUp(core::Float2{60.0f, 13.0f}, MouseButton::Left);
+    (void)root->UpdateLayout();
+    const float column = table->GetColumnWidth(0);
+    CHECK(column == doctest::Approx(62.0f)); // pressed 2 in from its edge, released at 60
+    // Each row's first cell is as wide as the column, and its second starts where the column ends.
+    for (core::i32 item = 0; item < 3; ++item)
+    {
+        ItemRow* row = table->RowForItem(item);
+        REQUIRE(row != nullptr);
+        auto* content = core::Cast<TableRowContent>(row->GetContent());
+        REQUIRE(content != nullptr);
+        CHECK(content->CellAt(0)->GetSize().x == doctest::Approx(column));
+        CHECK(content->CellAt(1)->GetPosition().x == doctest::Approx(column));
+    }
+}

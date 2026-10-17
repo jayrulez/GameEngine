@@ -197,13 +197,15 @@ export namespace experimental::gui
         [[nodiscard]] u32 LastLayoutCount() const noexcept { return m_lastLayoutCount; }
 
         /// Whether this root has anything to show that it has not drawn: something invalidated, an
-        /// animation running on it, a layout or a binding waiting, a direction held. A host skips a
+        /// animation running on a node it shows, a layout or a binding waiting, a direction held.
+        /// An action on a node out of view still runs (the GUI's Update ticks it either way); it
+        /// asks for no frame until what it does shows. A host skips a
         /// frame that needs none: an idle GUI costs nothing.
         [[nodiscard]] bool NeedsFrame()
         {
             return NeedsRedraw() || IsLayoutDirty() || HasLayoutDirtyDescendant() || m_context->m_effects.HasPending() ||
                    m_eventDispatcher.IsHoldingDirection() ||
-                   (!IsPaused() && m_context->m_actionManager.AnyTarget([this](Node& target) { return target.GetSceneRoot() == this; }));
+                   (!IsPaused() && m_context->m_actionManager.AnyTarget([this](Node& target) { return target.GetSceneRoot() == this && target.IsTreeVisible(); }));
         }
 
         // === This root's time on the GUI's clock ===

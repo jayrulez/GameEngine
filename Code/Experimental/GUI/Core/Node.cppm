@@ -1485,9 +1485,14 @@ export namespace experimental::gui
         // is cleared, and a change under it would never reach the root; a skipped frame then hid
         // it (a list's rows, a field's committed value, a selection showed only once something
         // else redrew).
+        // A node not shown (hidden, or under a node not displayed) marks itself alone: nothing on
+        // screen changes (an animation running on a page out of view asks for no frames), and it
+        // reaches the root again once shown (showing it invalidates, or lays out).
         void Invalidate()
         {
             m_needsRedraw = true;
+            if (!IsTreeVisible())
+                return;
             for (Node* p = m_parent; p != nullptr; p = p->m_parent)
                 p->m_needsRedraw = true;
         }
@@ -1765,6 +1770,8 @@ export namespace experimental::gui
         {
             OnVisibilityChange();
             Invalidate();
+            if (m_parent != nullptr)
+                m_parent->Invalidate(); // hidden, it marks itself alone: what drew it must draw again
             SendEvent(Event(EventType::VisibilityChanged, this)); // hidden keeps its place: no layout
         }
         void HandleEnabledChange()

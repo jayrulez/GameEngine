@@ -20,6 +20,15 @@ namespace experimental::gui
 {
     SceneRoot* Node::GetSceneRoot() { return core::Cast<SceneRoot>(GetRootNode()); }
 
+    const PartStyle& UINode::GetPartStyle(core::StringView part) const
+    {
+        for (const NamedPartStyle& p : m_partStyles)
+            if (p.Name.AsView() == part)
+                return p.Style;
+        static const PartStyle kNone{}; // here, not in the interface: one per process in a shared build
+        return kNone;
+    }
+
     void Node::SetCommand(StringView id)
     {
         m_command.Set(core::String(id));

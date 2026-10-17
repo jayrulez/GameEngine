@@ -194,14 +194,7 @@ export namespace experimental::gui
             Invalidate();
         }
         /// The sheet's style for `part` (an empty one when the sheet styles it not).
-        [[nodiscard]] const PartStyle& GetPartStyle(core::StringView part) const
-        {
-            for (const NamedPartStyle& p : m_partStyles)
-                if (p.Name.AsView() == part)
-                    return p.Style;
-            static const PartStyle kNone{};
-            return kNone;
-        }
+        [[nodiscard]] const PartStyle& GetPartStyle(core::StringView part) const; // GUIClusterImpl.cpp
 
         // Visual state, driven by pointer/focus/enabled (priority: disabled > pressed >
         // hover > focused > normal).

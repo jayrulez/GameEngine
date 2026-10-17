@@ -201,7 +201,7 @@ private:
     // The inspector's pane width in device pixels (0 while it is closed).
     [[nodiscard]] f32 InspectorPixels() const
     {
-        return m_inspectorOpen ? kInspectorWidth * (m_window != nullptr ? m_window->ContentScale() : 1.0f) : 0.0f;
+        return m_inspectorOpen ? m_inspectorWidth * (m_window != nullptr ? m_window->ContentScale() : 1.0f) : 0.0f;
     }
     void OpenWindow();
     void ShowMessage();
@@ -307,7 +307,13 @@ private:
     void RunImageTests();
     bool RenderImage(gui::SceneRoot& root, StringView path, image::Image& out);
     String m_inspectSelector;     // --inspect <selector>: selected once the GUI is up
-    static constexpr f32 kInspectorWidth = 460.0f; // logical units
+    f32 m_inspectorWidth = 460.0f;  // logical units; the boundary drags it
+    bool m_resizingInspector = false; // the boundary is held
+    bool m_overInspectorEdge = false; // the pointer is on the boundary (or holds it)
+    // The boundary between the root on show and the pane: on it the cursor shows the resize
+    // arrows, pressed it drags the pane's width (neither root sees the pointer meanwhile).
+    // True while it has the pointer.
+    bool ResizeInspector(shell::IInputManager& input);
     bool m_showingMenu = false;
     f32 m_menuLeaveAt = -1.0f; // when the game menu's Leave has faded: back to the sandbox
 
@@ -866,6 +872,49 @@ void GUISandbox::ApplyDebugOverlay()
         m_menuRoot->SetDebugOverlay(overlay);
 }
 
+bool GUISandbox::ResizeInspector(shell::IInputManager& input)
+{
+    if (!m_inspectorOpen || input.Mouse() == nullptr)
+    {
+        m_resizingInspector = m_overInspectorEdge = false;
+        return false;
+    }
+    shell::IMouse& mouse = *input.Mouse(); // the window's, in its pixels
+    const f32 scale = m_window != nullptr ? m_window->ContentScale() : 1.0f;
+    const f32 edge = static_cast<f32>(m_width) - InspectorPixels();
+    const bool near = Abs(mouse.X() - edge) <= 4.0f * scale && mouse.Y() >= 0.0f && mouse.Y() < static_cast<f32>(m_height);
+    if (!m_resizingInspector && near && mouse.IsButtonPressed(shell::MouseButton::Left))
+        m_resizingInspector = true;
+    if (m_resizingInspector)
+    {
+        if (!mouse.IsButtonDown(shell::MouseButton::Left))
+            m_resizingInspector = false;
+        else
+        {
+            // The pane's width follows the pointer, leaving the root on show some room.
+            const f32 widest = Max(260.0f, static_cast<f32>(m_width) / scale - 240.0f);
+            m_inspectorWidth = Clamp((static_cast<f32>(m_width) - mouse.X()) / scale, 260.0f, widest);
+        }
+    }
+    const bool over = m_resizingInspector || near;
+    if (over != m_overInspectorEdge)
+    {
+        m_overInspectorEdge = over;
+        Shown().Invalidate(); // the boundary's highlight
+        if (!over)
+        {
+            // The GUI's cursors take the pointer back.
+            m_bridge->SetCursorTarget(&mouse);
+            if (m_menuBridge)
+                m_menuBridge->SetCursorTarget(&mouse);
+            m_inspectorBridge->SetCursorTarget(&mouse);
+        }
+    }
+    if (over)
+        mouse.SetCursor(shell::CursorType::ResizeEW);
+    return m_resizingInspector;
+}
+
 void GUISandbox::ToggleInspector()
 {
     if (!m_inspector)
@@ -1101,8 +1150,10 @@ void GUISandbox::RouteInput()
         m_inspectorSurface->SetContentSize(Float2{Max(pane, 1.0f), static_cast<f32>(m_height)});
     }
     m_router->Update();
+    const bool resizing = ResizeInspector(input);
     const bool picking = m_inspectorOpen && m_inspector->IsPicking();
-    if (picking)
+    // While the boundary has the pointer, neither root sees it.
+    if (picking && !resizing)
     {
         // Picking: the pointer over the root on show goes to the inspector, not to it.
         shell::IMouse& mouse = *m_inputSurface->Mouse();
@@ -1115,9 +1166,9 @@ void GUISandbox::RouteInput()
                 m_inspector->PickClick();
         }
     }
-    else if (m_keys.Size() == 0) // a --keys script owns the pointer: the desk's mouse would move it back
+    else if (!resizing && m_keys.Size() == 0) // a --keys script owns the pointer: the desk's mouse would move it back
         bridge.PumpFromSurface(*m_inputSurface);
-    if (m_inspectorOpen && m_inspectorSurface)
+    if (m_inspectorOpen && m_inspectorSurface && !resizing)
         m_inspectorBridge->PumpFromSurface(*m_inspectorSurface);
     // Files the OS dropped on the window go through the GUI's drag path (E7).
     Array<shell::DroppedFile> drops(AppRoot());
@@ -1407,6 +1458,10 @@ void GUISandbox::DrawAndPresent(gui::SceneRoot& root)
             m_vg->Translate(static_cast<f32>(m_width) - InspectorPixels(), 0.0f);
             m_inspector->GetRoot().DrawFrame(paneContext);
             m_vg->PopState();
+            // The boundary, lit while the pointer is on it or drags it.
+            if (m_overInspectorEdge)
+                m_vg->FillRect(Rectangle{static_cast<f32>(m_width) - InspectorPixels() - 1.0f, 0.0f, 2.0f, static_cast<f32>(m_height)},
+                               Color{0.31f, 0.61f, 1.0f, 1.0f});
         }
     }
     vg::VGBatch& batch = m_vg->GetBatch();

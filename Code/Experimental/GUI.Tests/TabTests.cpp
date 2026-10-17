@@ -555,3 +555,53 @@ TEST_CASE("tabs: a tab torn out of one tab view and dropped on another of its gr
     CHECK(right->GetSelectedPage() == two);
     CHECK(right->GetBar()->GetTab(1)->GetText() == core::StringView(u8"Two"));
 }
+
+TEST_CASE("tabs: a torn-out tab dropped on another view's page area (not its strip) goes last there")
+{
+    auto root = MakeRoot();
+    auto left = Make<TabView>();
+    auto right = Make<TabView>();
+    const auto place = [](TabView& v, float y)
+    {
+        v.EditLayoutStyle([y](LayoutStyle& s)
+        {
+            s.Placement = Position::Absolute;
+            s.Left = LayoutLength::Px(10.0f);
+            s.Top = LayoutLength::Px(y);
+            s.Width = LayoutLength::Px(380.0f);
+            s.Height = LayoutLength::Px(120.0f);
+        });
+    };
+    place(*left, 10.0f);
+    place(*right, 160.0f);
+    root->AddChild(left.Get());
+    root->AddChild(right.Get());
+    TabView* const views[] = {left.Get(), right.Get()};
+    for (TabView* v : views)
+    {
+        v->SetReorderable(true);
+        v->SetGroup(core::String(u8"docs"));
+    }
+    left->AddPage(core::StringView(u8"One"));
+    TabPage* two = left->AddPage(core::StringView(u8"Two"));
+    right->AddPage(core::StringView(u8"Three"));
+    for (TabView* v : views)
+        for (core::i32 i = 0; i < v->GetPageCount(); ++i)
+            v->GetBar()->GetTab(i)->EditLayoutStyle([](LayoutStyle& s)
+            {
+                s.Width = LayoutLength::Px(80.0f);
+                s.Height = LayoutLength::Px(24.0f);
+            });
+    (void)root->UpdateLayout();
+    EventDispatcher& d = *root->GetEventDispatcher();
+    const core::Float2 start = CentreOf(*left->GetBar()->GetTab(1));
+    d.InjectMouseDown(start, MouseButton::Left);
+    d.InjectMouseMove(core::Float2{start.x, start.y + 80.0f});
+    REQUIRE(d.IsDragging());
+    d.InjectMouseMove(core::Float2{200.0f, 240.0f}); // the middle of the right view's page
+    CHECK(d.GetDropTarget() == right.Get());
+    CHECK(right->GetBar()->GetDropIndex() == 1);
+    d.InjectMouseUp(core::Float2{200.0f, 240.0f}, MouseButton::Left);
+    REQUIRE(right->GetPageCount() == 2);
+    CHECK(right->GetPage(1) == two);
+}

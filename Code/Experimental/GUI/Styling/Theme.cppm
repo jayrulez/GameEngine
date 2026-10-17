@@ -33,6 +33,7 @@ export namespace experimental::gui
             tab           { background-color: #23262e; color: #c2c9d4; padding: 6 10; column-gap: 6; text-align: left; }
             tab:hover     { background-color: #2b2f39; }
             tab:checked   { background-color: #33507a; color: #f4f7fb; }
+            tab.dragging  { background-color: #4a6fa5; color: #ffffff; cursor: grabbing; }
             tab > close   { padding: 2; border-radius: 3; }
             tab > close:hover { background-color: rgba(255, 255, 255, 0.18); }
             tablist       { color: #c2c9d4; padding: 6 8; }
@@ -94,6 +95,7 @@ export namespace experimental::gui
             tab           { background-color: #cfd6e2; color: #3a4453; padding: 6 10; column-gap: 6; text-align: left; }
             tab:hover     { background-color: #c2cad8; }
             tab:checked   { background-color: #ffffff; color: #17202b; }
+            tab.dragging  { background-color: #9cc0ef; color: #17202b; cursor: grabbing; }
             tab > close   { padding: 2; border-radius: 3; }
             tab > close:hover { background-color: rgba(0, 0, 0, 0.12); }
             tablist       { color: #3a4453; padding: 6 8; }

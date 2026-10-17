@@ -107,3 +107,20 @@ TEST_CASE("inspector: frames recorded reach the frames tab")
     bed.inspect.RecordFrame(stats);
     CHECK(bed.inspect.GetRoot().ChildCount() == 1u); // its shell
 }
+
+TEST_CASE("inspector: a branch folds out of the tree and opens again, and selecting inside it opens it")
+{
+    Bed bed;
+    const usize all = bed.inspect.TreeRowCount();
+    bed.inspect.SetCollapsed(bed.page.Get(), true);
+    CHECK(bed.inspect.IsCollapsed(bed.page.Get()));
+    CHECK(bed.inspect.TreeRowCount() < all); // the button and its parts are gone from the list
+    const usize folded = bed.inspect.TreeRowCount();
+    bed.inspect.Select(bed.ok.Get()); // inside the fold: it opens
+    CHECK_FALSE(bed.inspect.IsCollapsed(bed.page.Get()));
+    CHECK(bed.inspect.TreeRowCount() == all);
+    bed.inspect.SetCollapsed(bed.page.Get(), true);
+    CHECK(bed.inspect.TreeRowCount() == folded);
+    bed.inspect.SetCollapsed(bed.page.Get(), false);
+    CHECK(bed.inspect.TreeRowCount() == all);
+}

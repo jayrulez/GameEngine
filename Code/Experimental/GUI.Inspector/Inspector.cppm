@@ -161,9 +161,47 @@ export namespace experimental::gui::inspector
                 RebuildDetails();
         }
 
+        // === The tree's branches ===
+        /// Folds `node`'s branch away in the tree (its descendants leave the list) or opens it.
+        void SetCollapsed(Node* node, bool collapsed)
+        {
+            if (node == nullptr || IsCollapsed(node) == collapsed)
+                return;
+            if (collapsed)
+                m_collapsed.PushBack(node);
+            else
+                for (usize i = 0; i < m_collapsed.Size(); ++i)
+                    if (m_collapsed[i] == node)
+                    {
+                        m_collapsed.RemoveAt(i);
+                        break;
+                    }
+            if (m_target != nullptr)
+                RebuildTree();
+        }
+        [[nodiscard]] bool IsCollapsed(const Node* node) const
+        {
+            for (const Node* n : m_collapsed)
+                if (n == node)
+                    return true;
+            return false;
+        }
+
         // === Selection ===
         void Select(Node* node)
         {
+            // What holds it opens, so its row shows.
+            bool opened = false;
+            for (Node* n = node != nullptr ? node->GetParent() : nullptr; n != nullptr; n = n->GetParent())
+                for (usize i = 0; i < m_collapsed.Size(); ++i)
+                    if (m_collapsed[i] == n)
+                    {
+                        m_collapsed.RemoveAt(i);
+                        opened = true;
+                        break;
+                    }
+            if (opened && m_target != nullptr)
+                RebuildTree();
             m_selected = node != nullptr ? node->TakeElementRef() : Node::ElementRef{};
             m_selectedRaw = node;
             if (node != nullptr && m_tree != nullptr)
@@ -391,6 +429,15 @@ export namespace experimental::gui::inspector
                 if (self->m_target != nullptr && Contains(*self->m_target, node)) // the tree may have changed since
                     self->Select(node);
             });
+            // A row activated (a double click, Enter) folds its branch or opens it.
+            tree->SetOnActivated([self](ModelIndex index)
+            {
+                if (!index.IsValid() || static_cast<usize>(index.Row) >= self->m_entries.Size())
+                    return;
+                Node* node = self->m_entries[static_cast<usize>(index.Row)].Target;
+                if (self->m_target != nullptr && Contains(*self->m_target, node) && node->ChildCount() != 0)
+                    self->SetCollapsed(node, !self->IsCollapsed(node));
+            });
             m_tree = tree.Get();
             RefPtr<ScrollView> details = Add<ScrollView>(*elements, core::StringView(u8"idetails"));
             m_details = Add<Panel>(*details, core::StringView(u8"idetailbody")).Get();
@@ -439,13 +486,34 @@ export namespace experimental::gui::inspector
 
         void RebuildTree()
         {
-            m_entries = Tree(*m_target);
+            // The whole tree, less what folded branches hold; a fold of a node gone is forgotten.
+            const Array<TreeEntry> all = Tree(*m_target);
+            for (usize i = m_collapsed.Size(); i-- > 0;)
+            {
+                bool present = false;
+                for (const TreeEntry& e : all)
+                    present = present || e.Target == m_collapsed[i];
+                if (!present)
+                    m_collapsed.RemoveAt(i);
+            }
+            m_entries.Clear();
+            u32 foldedBelow = ~0u; // the depth of the fold being skipped, none when ~0
+            for (const TreeEntry& e : all)
+            {
+                if (foldedBelow != ~0u && e.Depth > foldedBelow)
+                    continue;
+                foldedBelow = IsCollapsed(e.Target) ? e.Depth : ~0u;
+                m_entries.PushBack(e);
+            }
             Array<core::String> rows;
             for (const TreeEntry& e : m_entries)
             {
                 core::String row;
+                // Indented by no-break spaces: a row's white space collapses, theirs does not.
                 for (u32 d = 0; d < e.Depth; ++d)
-                    row += core::StringView(u8"  ");
+                    row += core::StringView(u8"\u00A0\u00A0\u00A0");
+                // A branch says whether it is open (-) or folded (+); a leaf leaves the room.
+                row += core::StringView(e.Target->ChildCount() == 0 ? u8"\u00A0\u00A0" : IsCollapsed(e.Target) ? u8"+\u00A0" : u8"-\u00A0");
                 row += e.Label.AsView();
                 if (!e.Shown)
                     row += core::StringView(u8"  (hidden)");
@@ -645,7 +713,8 @@ export namespace experimental::gui::inspector
         ListView* m_tree = nullptr;
         Panel* m_details = nullptr;
         FramesGraph* m_frames = nullptr;
-        Array<TreeEntry> m_entries;
+        Array<TreeEntry> m_entries;   // the rows: the tree less its folded branches
+        Array<const Node*> m_collapsed; // the folded branches (by identity; forgotten once gone)
         u64 m_signature = 0;
         u64 m_refreshes = 0;
         Node::ElementRef m_selected{};

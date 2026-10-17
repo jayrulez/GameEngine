@@ -55,21 +55,23 @@ export namespace experimental::gui
     };
 
     /// The pseudo-classes a compound can require, as flags.
+    /// The pseudo-classes a compound can require, as flags; those that follow a node's state are
+    /// its Node::StyleState bits.
     enum PseudoClass : u32
     {
         PseudoNone = 0,
-        PseudoHover = 1u << 0,
-        PseudoFocus = 1u << 1,
-        PseudoActive = 1u << 2,
-        PseudoDisabled = 1u << 3,
-        PseudoFocusVisible = 1u << 4,
-        PseudoEnabled = 1u << 5,
-        PseudoFocusWithin = 1u << 6,
-        PseudoChecked = 1u << 7,
-        PseudoIndeterminate = 1u << 8,
-        PseudoReadOnly = 1u << 9,
-        PseudoReadWrite = 1u << 10,
-        PseudoPlaceholderShown = 1u << 11,
+        PseudoHover = Node::StateHover,
+        PseudoFocus = Node::StateFocus,
+        PseudoActive = Node::StateActive,
+        PseudoDisabled = Node::StateDisabled,
+        PseudoFocusVisible = Node::StateFocusVisible,
+        PseudoEnabled = Node::StateEnabled,
+        PseudoFocusWithin = Node::StateFocusWithin,
+        PseudoChecked = Node::StateChecked,
+        PseudoIndeterminate = Node::StateIndeterminate,
+        PseudoReadOnly = Node::StateReadOnly,
+        PseudoReadWrite = Node::StateReadWrite,
+        PseudoPlaceholderShown = Node::StatePlaceholderShown,
         PseudoEmpty = 1u << 12,
         PseudoFirstChild = 1u << 13,
         PseudoLastChild = 1u << 14,
@@ -135,6 +137,9 @@ export namespace experimental::gui
         [[nodiscard]] core::StringView GetPseudoElement() const { return m_pseudoElement.AsView(); }
         /// Whether it names a pseudo-class the lab does not know (it then matches nothing).
         [[nodiscard]] bool IsNever() const noexcept { return m_never; }
+        /// Calls `f(selector)` for each selector in its :not(), :is() and :where().
+        template <typename F>
+        void ForEachNested(F&& f) const;
 
         [[nodiscard]] bool Matches(const UIWidget& element, bool applyPseudo = true) const;
 
@@ -180,6 +185,33 @@ export namespace experimental::gui
         [[nodiscard]] bool Select(const UIWidget& element, bool applyPseudo = true) const
         {
             return m_rules.Size() != 0 && MatchAt(m_rules.Size() - 1, element, applyPseudo);
+        }
+
+        /// The states this selector reads through an ancestor (`:hover x`, `:focus-within > x`) and
+        /// through an earlier sibling (`:checked + x`): a change of one restyles the node's subtree,
+        /// or its later siblings. `outer` is where the whole selector sits (inside a compound that
+        /// is itself an ancestor's or a sibling's, every state it reads counts there).
+        void CollectRelationStates(u32& ancestor, u32& sibling, u32 outer = 0, bool outerIsSibling = false) const
+        {
+            for (usize i = 0; i < m_rules.Size(); ++i)
+            {
+                const StyleSelectorRule& rule = m_rules[i];
+                const bool subject = i + 1 == m_rules.Size();
+                const u32 states = rule.GetPseudoClasses() & kDynamicPseudoClasses;
+                u32 nestedAncestor = 0, nestedSibling = 0;
+                if (subject)
+                {
+                    if (outer != 0)
+                        (outerIsSibling ? sibling : ancestor) |= states;
+                    rule.ForEachNested([&](const StyleSelector& s) { s.CollectRelationStates(ancestor, sibling, outer, outerIsSibling); });
+                    continue;
+                }
+                const Combinator next = m_rules[i + 1].GetCombinator();
+                const bool viaSibling = next == Combinator::Adjacent || next == Combinator::Sibling;
+                (viaSibling ? sibling : ancestor) |= states;
+                rule.ForEachNested([&](const StyleSelector& s) { s.CollectRelationStates(nestedAncestor, nestedSibling, 1, viaSibling); });
+                (viaSibling ? sibling : ancestor) |= nestedAncestor | nestedSibling | AllDynamic(rule);
+            }
         }
 
         /// A comma-separated list split at its top level (commas inside parentheses, brackets or
@@ -234,6 +266,18 @@ export namespace experimental::gui
         }
 
     private:
+        // Every dynamic state a compound's nested selectors read, all positions.
+        [[nodiscard]] static u32 AllDynamic(const StyleSelectorRule& rule)
+        {
+            u32 all = 0;
+            rule.ForEachNested([&](const StyleSelector& s)
+            {
+                for (const StyleSelectorRule& r : s.m_rules)
+                    all |= (r.GetPseudoClasses() & kDynamicPseudoClasses) | AllDynamic(r);
+            });
+            return all;
+        }
+
         [[nodiscard]] bool MatchAt(usize i, const UIWidget& element, bool applyPseudo) const
         {
             if (!m_rules[i].Matches(element, applyPseudo))
@@ -505,6 +549,17 @@ export namespace experimental::gui
             }
             return position;
         }
+    }
+
+    template <typename F>
+    inline void StyleSelectorRule::ForEachNested(F&& f) const
+    {
+        for (const StyleSelector& s : m_not)
+            f(s);
+        for (const StyleSelector& s : m_is)
+            f(s);
+        for (const StyleSelector& s : m_where)
+            f(s);
     }
 
     inline StyleSelectorRule::StyleSelectorRule(core::StringView fragment, Combinator combinator)

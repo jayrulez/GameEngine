@@ -50,6 +50,7 @@ export namespace experimental::gui
             m_sheet = core::Move(sheet);
             m_cache = {};
             m_allDirty = true; // hot-reload: every widget restyles
+            m_relationsKnown = false;
         }
         [[nodiscard]] const StyleSheet& GetStyleSheet() const noexcept { return m_sheet; }
 
@@ -60,6 +61,7 @@ export namespace experimental::gui
             m_userAgent = core::Move(sheet);
             m_cache = {};
             m_allDirty = true;
+            m_relationsKnown = false;
         }
         [[nodiscard]] const StyleSheet& GetUserAgentSheet() const noexcept { return m_userAgent; }
 
@@ -74,6 +76,7 @@ export namespace experimental::gui
             RemoveSubtreeSheet(root);
             m_subtrees.PushBack(SubtreeSheet{ref, core::Move(sheet)});
             root.MarkStyleDirty(true);
+            m_relationsKnown = false;
             return true;
         }
         void RemoveSubtreeSheet(Node& root)
@@ -83,6 +86,7 @@ export namespace experimental::gui
                 {
                     m_subtrees.RemoveAt(i);
                     root.MarkStyleDirty(true);
+                    m_relationsKnown = false;
                     return;
                 }
         }
@@ -136,6 +140,8 @@ export namespace experimental::gui
         void ApplyTree(Node& root)
         {
             m_lastRestyleCount = 0;
+            if (!m_relationsKnown)
+                LearnRelations();
             const bool all = m_allDirty;
             m_allDirty = false;
             Visit(root, all, false);
@@ -147,8 +153,15 @@ export namespace experimental::gui
     private:
         void Visit(Node& node, bool forceSubtree, bool forceSelf)
         {
+            // A state a rule reads through this node (as an ancestor's, or an earlier sibling's)
+            // restyles what it reaches; any other state change restyles the node alone.
+            const u32 states = node.GetChangedStyleStates();
+            if ((states & m_siblingStates) != 0)
+                if (Node* parent = node.GetParent())
+                    for (usize i = parent->GetChildIndex(&node) + 1; i < parent->ChildCount(); ++i)
+                        parent->GetChildAt(i)->MarkStyleDirty(true);
             const bool self = forceSubtree || forceSelf || node.IsStyleDirty();
-            const bool subtree = forceSubtree || node.IsStyleSubtreeDirty();
+            const bool subtree = forceSubtree || node.IsStyleSubtreeDirty() || (states & m_ancestorStates) != 0;
             const bool descend = subtree || node.HasStyleDirtyDescendant();
             node.ClearStyleDirty();
             bool customsChanged = false;
@@ -421,6 +434,23 @@ export namespace experimental::gui
             }
         }
 
+        // The states the sheets read through an ancestor and through a sibling (LearnRelations).
+        void LearnRelations()
+        {
+            m_ancestorStates = 0;
+            m_siblingStates = 0;
+            const auto learn = [&](const StyleSheet& sheet)
+            {
+                for (const StyleRule& rule : sheet.Rules())
+                    rule.Selector().CollectRelationStates(m_ancestorStates, m_siblingStates);
+            };
+            learn(m_userAgent);
+            learn(m_sheet);
+            for (const SubtreeSheet& s : m_subtrees)
+                learn(s.Sheet);
+            m_relationsKnown = true;
+        }
+
         StyleSheet m_userAgent;
         StyleSheet m_sheet;
         Array<SubtreeSheet> m_subtrees;
@@ -432,6 +462,9 @@ export namespace experimental::gui
         HashMap<Node*, RefPtr<StyleAnimation>> m_animations; // widget -> its running transitions and animations
         HashMap<Node*, Array<core::String>> m_startedAnimations; // widget -> the @keyframes it has started
         bool m_allDirty = true; // the next ApplyTree restyles everything (a new sheet, media, fonts)
+        bool m_relationsKnown = false;
+        u32 m_ancestorStates = 0; // states a rule reads through an ancestor: a change restyles the subtree
+        u32 m_siblingStates = 0;  // states a rule reads through an earlier sibling: a change restyles the later siblings
         u32 m_lastRestyleCount = 0;
     };
 }

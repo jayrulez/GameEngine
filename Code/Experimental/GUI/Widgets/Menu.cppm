@@ -151,7 +151,7 @@ export namespace experimental::gui
             if (m_checked == checked)
                 return;
             m_checked = checked;
-            MarkStyleDirty(true); // :checked
+            MarkStyleStateDirty(StateChecked);
             Invalidate();
             if (m_onToggled)
                 m_onToggled(m_checked);
@@ -161,7 +161,7 @@ export namespace experimental::gui
         void SetCheckedSilently(bool checked)
         {
             if (checked != m_checked)
-                MarkStyleDirty(true);
+                MarkStyleStateDirty(StateChecked);
             m_checked = checked;
             Invalidate();
         } // no callback (init)

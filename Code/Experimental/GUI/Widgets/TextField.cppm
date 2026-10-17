@@ -137,7 +137,7 @@ export namespace experimental::gui
             if (readOnly == m_readOnly)
                 return;
             m_readOnly = readOnly;
-            MarkStyleDirty(true);
+            MarkStyleStateDirty(StateReadOnly | StateReadWrite);
             Invalidate();
         }
         [[nodiscard]] bool IsReadOnly() const noexcept { return m_readOnly; }
@@ -457,7 +457,7 @@ export namespace experimental::gui
             if (shown == m_placeholderShown)
                 return;
             m_placeholderShown = shown;
-            MarkStyleDirty(true);
+            MarkStyleStateDirty(StatePlaceholderShown);
         }
         void NotifyChanged()
         {

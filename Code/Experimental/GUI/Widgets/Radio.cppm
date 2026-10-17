@@ -109,7 +109,7 @@ export namespace experimental::gui
             if (selected == m_selected)
                 return;
             m_selected = selected;
-            MarkStyleDirty(true); // :checked
+            MarkStyleStateDirty(StateChecked);
             Invalidate();
             if (m_selected && m_onSelected)
                 m_onSelected();

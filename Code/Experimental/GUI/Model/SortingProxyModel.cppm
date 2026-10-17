@@ -27,13 +27,6 @@ namespace core = foundation::core;
 
 export namespace experimental::gui
 {
-    enum class SortOrder
-    {
-        None,
-        Ascending,
-        Descending
-    };
-
     class SortingProxyModel : public IModel, public IModelClient
     {
     public:
@@ -53,17 +46,19 @@ export namespace experimental::gui
             if (m_source != nullptr)
                 m_source->AddClient(this);
             Rebuild();
-            DidUpdate();
+            NotifyReset();
         }
         [[nodiscard]] IModel* GetSource() const noexcept { return m_source; }
 
-        // Sort by a column in a given order (None restores source order).
-        void SortBy(usize column, SortOrder order)
+        // Sort by a column in a given order (None restores source order): the sort capability a
+        // view's header asks for.
+        bool Sort(usize column, SortOrder order) override
         {
             m_sortColumn = static_cast<i32>(column);
             m_order = order;
             Rebuild();
-            DidUpdate();
+            NotifyReset();
+            return true;
         }
 
         // Header-click behavior: a new column sorts ascending; the same column toggles
@@ -79,7 +74,7 @@ export namespace experimental::gui
                 m_order = SortOrder::Ascending;
             }
             Rebuild();
-            DidUpdate();
+            NotifyReset();
         }
 
         [[nodiscard]] i32 GetSortColumn() const noexcept { return m_sortColumn; }
@@ -93,11 +88,12 @@ export namespace experimental::gui
                        : -1;
         }
 
-        // The source changed: re-sort and notify our own views.
-        void OnModelUpdated() override
+        // The source changed, in any way: re-sort and reset our own views (a range in the source
+        // lands anywhere in the sorted order).
+        void OnModelReset() override
         {
             Rebuild();
-            DidUpdate();
+            NotifyReset();
         }
 
         [[nodiscard]] usize RowCount(const ModelIndex& parent = {}) const override
@@ -119,6 +115,23 @@ export namespace experimental::gui
             if (m_source == nullptr || sourceRow < 0)
                 return Variant{};
             return m_source->Data(MakeModelIndex(sourceRow, index.Column), role);
+        }
+
+        // A row keeps its source row's id, so a view's selection survives a sort.
+        [[nodiscard]] ItemId IdOf(const ModelIndex& index) const override
+        {
+            const i32 sourceRow = SourceRow(index.Row);
+            return m_source != nullptr && sourceRow >= 0 ? m_source->IdOf(m_source->Index(sourceRow, index.Column)) : kNoItem;
+        }
+        [[nodiscard]] bool IsEditable(const ModelIndex& index) const override
+        {
+            const i32 sourceRow = SourceRow(index.Row);
+            return m_source != nullptr && sourceRow >= 0 && m_source->IsEditable(MakeModelIndex(sourceRow, index.Column));
+        }
+        bool SetData(const ModelIndex& index, const Variant& value) override
+        {
+            const i32 sourceRow = SourceRow(index.Row);
+            return m_source != nullptr && sourceRow >= 0 && m_source->SetData(MakeModelIndex(sourceRow, index.Column), value);
         }
 
     private:

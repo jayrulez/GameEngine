@@ -148,7 +148,7 @@ export namespace experimental::gui
         }
         [[nodiscard]] IModel* GetModel() const noexcept { return m_model; }
 
-        void OnModelUpdated() override
+        void OnModelReset() override
         {
             OnModelChanged();
             ClampSelection();

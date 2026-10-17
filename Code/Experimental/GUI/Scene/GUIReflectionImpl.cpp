@@ -76,6 +76,7 @@ namespace experimental::gui
                 {u8"submit", EventType::Submit},         {u8"composition", EventType::Composition},
                 {u8"toggle", EventType::Toggle},
                 {u8"contextmenu", EventType::ContextMenu},
+                {u8"scroll", EventType::Scroll},
             };
             for (const Named& entry : kNames)
             {

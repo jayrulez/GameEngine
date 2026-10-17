@@ -138,6 +138,30 @@ export namespace experimental::gui
         Scroll,
         Auto,
     };
+    /// How a scroll moves (CSS's scroll-behavior): at once, or easing to where it is going. A call
+    /// may ask for either, or for Auto, the node's own (`scroll-behavior: smooth` opts in).
+    enum class ScrollBehavior : u8
+    {
+        Auto,
+        Instant,
+        Smooth,
+    };
+    /// What a scroller at its end does with the wheel (CSS's overscroll-behavior): passes it to the
+    /// scroller around it, or keeps it (`contain`, a popup's list that must not scroll the page).
+    enum class OverscrollBehavior : u8
+    {
+        Auto,
+        Contain,
+    };
+    /// Where a scroll into view puts what it shows: the least move that shows it, or its start,
+    /// centre or end at the box's.
+    enum class ScrollAlign : u8
+    {
+        Nearest,
+        Start,
+        Center,
+        End,
+    };
     /// Whether width and height include the padding and border (the lab's default, what a UI
     /// author means by a 120 pixel button) or are the content's alone, CSS's initial value.
     enum class BoxSizing : u8
@@ -186,6 +210,8 @@ export namespace experimental::gui
         BoxSizing Sizing = BoxSizing::BorderBox;
         Overflow OverflowX = Overflow::Visible;
         Overflow OverflowY = Overflow::Visible;
+        ScrollBehavior Scrolling = ScrollBehavior::Auto;
+        OverscrollBehavior Overscroll = OverscrollBehavior::Auto;
 
         // --- Out of flow ---
         Position Placement = Position::Static;
@@ -238,6 +264,7 @@ export namespace experimental::gui
         SlotJustifyItems, SlotAlignSelf, SlotJustifySelf, SlotGridAutoFlow, SlotDock,
         SlotGridTemplateColumns, SlotGridTemplateRows, SlotGridAutoRows, SlotGridAutoColumns,
         SlotGridColumn, SlotGridRow,
+        SlotScrollBehavior, SlotOverscrollBehavior,
         SlotEnabled, SlotVisibility,
         SlotColor, SlotFontFamily, SlotFontSize, SlotTextAlign, SlotVerticalAlign,
         SlotWhiteSpace, SlotLineHeight, SlotLetterSpacing,
@@ -289,6 +316,8 @@ export namespace experimental::gui
         f(SlotGridAutoColumns, &LayoutStyle::AutoColumns);
         f(SlotGridColumn, &LayoutStyle::Column);
         f(SlotGridRow, &LayoutStyle::Row);
+        f(SlotScrollBehavior, &LayoutStyle::Scrolling);
+        f(SlotOverscrollBehavior, &LayoutStyle::Overscroll);
     }
     namespace detail
     {

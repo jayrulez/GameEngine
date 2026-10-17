@@ -77,6 +77,8 @@ export namespace experimental::gui
         Toggle,
         // A context menu asked for (a MouseEvent): a right release, a long press, Shift+F10.
         ContextMenu,
+        // A scroll container's offset moved (its own listeners hear it; it does not bubble).
+        Scroll,
     };
 
     /// What drives the pointer: the mouse, or a finger (the first one down).
@@ -238,9 +240,10 @@ export namespace experimental::gui
     {
         core::Float2 Position;
         core::Float2 Delta;
+        u32 Modifiers = 0; ///< Shift turns a vertical wheel to the other axis
 
-        WheelEvent(Node* target, core::Float2 position, core::Float2 delta) noexcept
-            : Event(EventType::MouseWheel, target), Position(position), Delta(delta)
+        WheelEvent(Node* target, core::Float2 position, core::Float2 delta, u32 modifiers = 0) noexcept
+            : Event(EventType::MouseWheel, target), Position(position), Delta(delta), Modifiers(modifiers)
         {
         }
     };

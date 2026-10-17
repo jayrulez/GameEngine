@@ -107,6 +107,18 @@ export namespace experimental::gui
             static constexpr Overflow values[] = {Overflow::Visible, Overflow::Hidden, Overflow::Hidden, Overflow::Scroll, Overflow::Auto};
             return Named(k, names, values);
         }
+        [[nodiscard]] inline Optional<ScrollBehavior> ScrollBehaviorNamed(core::StringView k)
+        {
+            static constexpr core::StringView names[] = {u8"auto", u8"smooth"};
+            static constexpr ScrollBehavior values[] = {ScrollBehavior::Auto, ScrollBehavior::Smooth};
+            return Named(k, names, values);
+        }
+        [[nodiscard]] inline Optional<OverscrollBehavior> OverscrollBehaviorNamed(core::StringView k)
+        {
+            static constexpr core::StringView names[] = {u8"auto", u8"contain", u8"none"};
+            static constexpr OverscrollBehavior values[] = {OverscrollBehavior::Auto, OverscrollBehavior::Contain, OverscrollBehavior::Contain};
+            return Named(k, names, values);
+        }
         [[nodiscard]] inline Optional<FlexDirection> DirectionNamed(core::StringView k)
         {
             static constexpr core::StringView names[] = {u8"row", u8"column", u8"row-reverse", u8"column-reverse"};
@@ -679,6 +691,8 @@ export namespace experimental::gui
             choose(u8"box-sizing", ls.Sizing, detail::BoxSizingNamed);
             choose(u8"overflow-x", ls.OverflowX, detail::OverflowNamed);
             choose(u8"overflow-y", ls.OverflowY, detail::OverflowNamed);
+            choose(u8"scroll-behavior", ls.Scrolling, detail::ScrollBehaviorNamed);
+            choose(u8"overscroll-behavior", ls.Overscroll, detail::OverscrollBehaviorNamed);
             choose(u8"flex-direction", ls.Direction, detail::DirectionNamed);
             choose(u8"flex-wrap", ls.Wrap, detail::WrapNamed);
             choose(u8"justify-content", ls.JustifyContent, detail::JustifyNamed);

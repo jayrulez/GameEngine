@@ -863,19 +863,27 @@ export namespace experimental::gui
         }
         /// How far the content is scrolled (its children move by minus this).
         [[nodiscard]] core::Float2 GetScrollOffset() const noexcept { return m_scrollOffset; }
-        /// Scrolls to `offset`, kept within the range on the axes that scroll (with a layout pending,
-        /// kept as asked until the layout knows the content's extent and clamps it).
+        /// Scrolls to `offset` at once (ending a smooth scroll), kept within the range on the axes
+        /// that scroll (with a layout pending, kept as asked until the layout knows the content's
+        /// extent and clamps it).
         void SetScrollOffset(core::Float2 offset)
         {
-            const bool pending = m_layoutDirty || m_childLayoutDirty;
-            const core::Float2 range = pending ? core::Float2{kUnbounded, kUnbounded} : GetScrollRange();
-            const core::Float2 clamped{core::Clamp(offset.x, 0.0f, range.x), core::Clamp(offset.y, 0.0f, range.y)};
-            if (clamped == m_scrollOffset)
-                return;
-            m_scrollOffset = clamped;
-            Invalidate();
+            m_smoothScrolling = false;
+            ApplyScrollOffset(offset);
         }
-        void ScrollBy(core::Float2 delta) { SetScrollOffset(core::Float2{m_scrollOffset.x + delta.x, m_scrollOffset.y + delta.y}); }
+        /// Scrolls to `offset`, at once or easing there (Auto: as the node's `scroll-behavior` says).
+        void ScrollTo(core::Float2 offset, ScrollBehavior behavior = ScrollBehavior::Auto);
+        /// Scrolls to the end of its content (the bottom; a horizontal-only scroller's right).
+        void ScrollToEnd(ScrollBehavior behavior = ScrollBehavior::Auto);
+        /// Where a smooth scroll is going (the offset itself when none runs).
+        [[nodiscard]] core::Float2 GetScrollTarget() const noexcept { return m_smoothScrolling ? m_scrollTarget : m_scrollOffset; }
+        [[nodiscard]] bool IsSmoothScrolling() const noexcept { return m_smoothScrolling; }
+        /// Scrolls by `delta` from where it is going, at once or easing (Auto: the node's own way).
+        void ScrollBy(core::Float2 delta, ScrollBehavior behavior = ScrollBehavior::Instant)
+        {
+            const core::Float2 from = GetScrollTarget();
+            ScrollTo(core::Float2{from.x + delta.x, from.y + delta.y}, behavior);
+        }
         /// The scroll offset as the children move by it: on the device grid, as their edges are.
         [[nodiscard]] core::Float2 ScrollShift() const noexcept
         {
@@ -1185,8 +1193,9 @@ export namespace experimental::gui
         /// Whether this node brings a focused descendant into view, so a widget its clip hides is
         /// still one navigation reaches (a scroller).
         [[nodiscard]] virtual bool ScrollsDescendantsIntoView() const { return IsScrollContainer(); }
-        /// Scrolls (a scroll container) by the least that shows `descendant` in the content box.
-        void ScrollIntoView(Node& descendant);
+        /// Scrolls (a scroll container) to show `descendant` in the content box: by the least that
+        /// shows it, or with its start, centre or end at the box's.
+        void ScrollIntoView(Node& descendant, ScrollAlign align = ScrollAlign::Nearest, ScrollBehavior behavior = ScrollBehavior::Auto);
 
         // === Drag-and-drop target ===
         // Set a predicate deciding which payloads this node accepts; when it returns true the
@@ -1662,6 +1671,21 @@ export namespace experimental::gui
         // A scroll container's own handling, after its widget's: the wheel (taken when it moved),
         // the keys while it is focused, and its bars (a press on one drags its thumb or pages).
         void ScrollDefaultAction(const Event& event);
+        /// Moves the offset (clamped as SetScrollOffset says) and reports the scroll; a smooth
+        /// scroll's steps come here without ending it.
+        void ApplyScrollOffset(core::Float2 offset)
+        {
+            const bool pending = m_layoutDirty || m_childLayoutDirty;
+            const core::Float2 range = pending ? core::Float2{kUnbounded, kUnbounded} : GetScrollRange();
+            const core::Float2 clamped{core::Clamp(offset.x, 0.0f, range.x), core::Clamp(offset.y, 0.0f, range.y)};
+            if (clamped == m_scrollOffset)
+                return;
+            m_scrollOffset = clamped;
+            Invalidate();
+            SendEvent(Event(EventType::Scroll, this));
+        }
+        /// Eases toward m_scrollTarget on the GUI's clock (LayoutImpl.cpp, which sees :actions).
+        void StartSmoothScroll();
 
         // Tells this GUI's dispatcher a child's subtree is leaving (GUIClusterImpl.cpp, which
         // sees :event_dispatcher).
@@ -1703,6 +1727,9 @@ export namespace experimental::gui
         bool m_measureValid = false;
         bool m_placing = false;                  // inside Arrange: the size and place set are the layout's
         f32 m_scrollStep = 40.0f;                // the wheel's notch and an arrow key's step
+        core::Float2 m_scrollTarget{0.0f, 0.0f}; // where a smooth scroll is going
+        bool m_smoothScrolling = false;          // a smooth scroll is easing toward m_scrollTarget
+        bool m_smoothTicking = false;            // its tick runs on the GUI's clock
         u32 m_scrollDragAxis = 2;                // a bar being dragged (0, 1), 2 for none
         f32 m_scrollDragGrab = 0.0f;             // where on the thumb it was taken
         f32 m_alpha = 1.0f;

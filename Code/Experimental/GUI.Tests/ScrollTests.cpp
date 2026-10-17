@@ -249,3 +249,146 @@ TEST_CASE("scroll: overflow from a sheet makes any node scroll; hidden clips wit
     CHECK_FALSE(panel->IsScrollContainer());
     CHECK(panel->ClipsChildren());
 }
+
+TEST_CASE("scroll: a scroll reports to the scroller's own listeners, once per move")
+{
+    Scroller s;
+    int scrolls = 0;
+    s.view->AddEventListener(EventType::Scroll, [&](const Event&) { ++scrolls; });
+    s.view->SetScrollOffset(core::Float2{0.0f, 40.0f});
+    CHECK(scrolls == 1);
+    s.view->SetScrollOffset(core::Float2{0.0f, 40.0f}); // no move
+    CHECK(scrolls == 1);
+    s.view->ScrollBy(core::Float2{0.0f, 1000.0f}); // to the end, clamped
+    CHECK(scrolls == 2);
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(200.0f));
+}
+
+TEST_CASE("scroll: the handle scrolls to an offset, to the end, and a descendant to an alignment")
+{
+    Scroller s(10); // 500 tall in a 100 view: a range of 400
+    s.view->ScrollToEnd();
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(400.0f));
+    s.view->ScrollTo(core::Float2{0.0f, 0.0f});
+    s.view->ScrollIntoView(*s.rows[4], ScrollAlign::Start); // row 4 at 200
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(200.0f));
+    s.root->UpdateLayout();
+    s.view->ScrollIntoView(*s.rows[4], ScrollAlign::End); // its bottom (250) at the view's
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(150.0f));
+    s.root->UpdateLayout();
+    s.view->ScrollIntoView(*s.rows[4], ScrollAlign::Center); // its middle (225) at the view's
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(175.0f));
+    s.root->UpdateLayout();
+    s.view->ScrollIntoView(*s.rows[4]); // already shown: no move
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(175.0f));
+}
+
+TEST_CASE("scroll: a smooth scroll eases there on the GUI's clock, and wheel notches add up")
+{
+    Scroller s(10);
+    GUIContext& gui = s.root->GetContext();
+    s.view->ScrollTo(core::Float2{0.0f, 200.0f}, ScrollBehavior::Smooth);
+    CHECK(s.view->IsSmoothScrolling());
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(0.0f));
+    CHECK(s.view->GetScrollTarget().y == doctest::Approx(200.0f));
+    gui.Update(core::Duration::FromSeconds(0.06)); // one time constant: about 63% of the way
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(200.0f * (1.0f - 0.3679f)).epsilon(0.01));
+    for (int i = 0; i < 20; ++i)
+        gui.Update(core::Duration::FromSeconds(0.05));
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(200.0f));
+    CHECK_FALSE(s.view->IsSmoothScrolling());
+
+    // `scroll-behavior: smooth` makes the wheel ease; two notches go twice as far.
+    s.view->SetScrollOffset(core::Float2{0.0f, 0.0f});
+    s.view->EditLayoutStyle([](LayoutStyle& st) { st.Scrolling = ScrollBehavior::Smooth; });
+    s.root->UpdateLayout();
+    s.D().InjectMouseWheel(core::Float2{50.0f, 50.0f}, core::Float2{0.0f, -1.0f});
+    s.D().InjectMouseWheel(core::Float2{50.0f, 50.0f}, core::Float2{0.0f, -1.0f});
+    CHECK(s.view->GetScrollTarget().y == doctest::Approx(80.0f));
+    CHECK(s.view->GetScrollOffset().y < 80.0f);
+    // An instant scroll ends the easing where it puts it.
+    s.view->SetScrollOffset(core::Float2{0.0f, 10.0f});
+    CHECK_FALSE(s.view->IsSmoothScrolling());
+    gui.Update(core::Duration::FromSeconds(0.5));
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(10.0f));
+}
+
+TEST_CASE("scroll: Shift turns the wheel across, and a scroller that only scrolls across takes it")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{300.0f, 300.0f});
+    auto strip = Make<Panel>();
+    strip->SetSize(core::Float2{100.0f, 60.0f});
+    strip->EditLayoutStyle([](LayoutStyle& st)
+    {
+        st.Direction = FlexDirection::Row;
+        st.OverflowX = Overflow::Auto;
+    });
+    root->AddChild(strip.Get());
+    core::RefPtr<Panel> cells[4];
+    for (auto& cell : cells)
+    {
+        cell = Make<Panel>();
+        cell->EditLayoutStyle([](LayoutStyle& st) { st.Width = LayoutLength::Px(80.0f); st.Shrink = 0.0f; });
+        strip->AddChild(cell.Get());
+    }
+    root->UpdateLayout();
+    EventDispatcher& d = *root->GetEventDispatcher();
+    d.InjectMouseWheel(core::Float2{50.0f, 20.0f}, core::Float2{0.0f, -1.0f}); // a vertical notch
+    CHECK(strip->GetScrollOffset().x == doctest::Approx(40.0f));
+
+    Scroller s; // both axes may scroll; Shift and a vertical notch go across, and there is no room
+    s.view->EditLayoutStyle([](LayoutStyle& st) { st.OverflowX = Overflow::Auto; });
+    auto wide = Make<Panel>();
+    wide->EditLayoutStyle([](LayoutStyle& st) { st.Width = LayoutLength::Px(300.0f); st.Height = LayoutLength::Px(10.0f); });
+    s.view->AddChild(wide.Get());
+    s.root->UpdateLayout();
+    s.D().InjectMouseWheel(core::Float2{50.0f, 50.0f}, core::Float2{0.0f, -1.0f}, KeyModShift);
+    CHECK(s.view->GetScrollOffset().x == doctest::Approx(40.0f));
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(0.0f));
+}
+
+TEST_CASE("scroll: at its end a scroller passes the wheel on, unless it contains its overscroll")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{300.0f, 300.0f});
+    auto outer = Make<ScrollView>();
+    outer->SetSize(core::Float2{200.0f, 200.0f});
+    root->AddChild(outer.Get());
+    auto inner = Make<ScrollView>();
+    inner->EditLayoutStyle([](LayoutStyle& st)
+    {
+        st.Width = LayoutLength::Px(150.0f); // a scroller on both axes leaves its children their own width
+        st.Height = LayoutLength::Px(100.0f);
+        st.Shrink = 0.0f;
+    });
+    outer->AddChild(inner.Get());
+    auto tall = Make<Panel>();
+    tall->EditLayoutStyle([](LayoutStyle& st) { st.Height = LayoutLength::Px(150.0f); });
+    inner->AddChild(tall.Get());
+    auto after = Make<Panel>();
+    after->EditLayoutStyle([](LayoutStyle& st) { st.Height = LayoutLength::Px(400.0f); st.Shrink = 0.0f; });
+    outer->AddChild(after.Get());
+    root->UpdateLayout();
+    EventDispatcher& d = *root->GetEventDispatcher();
+
+    inner->SetScrollOffset(core::Float2{0.0f, 50.0f}); // at its end
+    d.InjectMouseWheel(core::Float2{50.0f, 50.0f}, core::Float2{0.0f, -1.0f});
+    CHECK(outer->GetScrollOffset().y == doctest::Approx(40.0f)); // passed on
+
+    outer->SetScrollOffset(core::Float2{0.0f, 0.0f});
+    inner->EditLayoutStyle([](LayoutStyle& st) { st.Overscroll = OverscrollBehavior::Contain; });
+    root->UpdateLayout();
+    CHECK(d.InjectMouseWheel(core::Float2{50.0f, 50.0f}, core::Float2{0.0f, -1.0f}));
+    CHECK(outer->GetScrollOffset().y == doctest::Approx(0.0f)); // kept
+}
+
+TEST_CASE("scroll: a sheet sets scroll-behavior and overscroll-behavior")
+{
+    Scroller s;
+    s.view->AddClass(core::StringView(u8"soft"));
+    StyleManager styles(CSSParser::Parse(core::StringView(u8".soft { scroll-behavior: smooth; overscroll-behavior: contain; }")));
+    styles.ApplyTree(*s.root);
+    CHECK(s.view->GetLayoutStyle().Scrolling == ScrollBehavior::Smooth);
+    CHECK(s.view->GetLayoutStyle().Overscroll == OverscrollBehavior::Contain);
+}

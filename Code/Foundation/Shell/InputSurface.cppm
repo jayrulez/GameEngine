@@ -130,6 +130,9 @@ export namespace foundation::shell
     {
     public:
         explicit SurfaceTouch(InputSurface* s) noexcept : m_s(s) {}
+        // Declared, not implicit: clang 21 crashes emitting debug info for the implicit one in
+        // some importers (GUISandbox's Main.cpp).
+        ~SurfaceTouch() override {}
 
         [[nodiscard]] core::i32 TouchCount() const override;
         [[nodiscard]] bool GetTouchPoint(core::i32 index, TouchPoint& out) const override;

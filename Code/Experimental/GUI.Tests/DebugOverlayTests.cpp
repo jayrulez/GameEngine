@@ -122,3 +122,39 @@ TEST_CASE("debug-overlay: a widget under a node out of the layout is no tab stop
     bed.panel->SetDisplayed(false);
     CHECK(d.TabStops().IsEmpty());
 }
+
+TEST_CASE("debug-overlay: an arrow move keeps what it weighed: the one chosen, those beaten, those behind")
+{
+    Bed bed;
+    EventDispatcher& d = *bed.root->GetEventDispatcher();
+    CHECK_FALSE(d.GetLastNavigation().Any);
+    d.SetFocusNode(bed.stops[0].Get());
+    REQUIRE(d.MoveFocus(NavDirection::Right));
+    const NavTrace& trace = d.GetLastNavigation();
+    CHECK(trace.Any);
+    CHECK(trace.Direction == NavDirection::Right);
+    CHECK(trace.From.x == doctest::Approx(30.0f)); // the first stop, in the world
+    REQUIRE(trace.Candidates.Size() == 2u);        // the other two
+    int chosen = 0, beaten = 0;
+    for (const NavCandidate& c : trace.Candidates)
+    {
+        chosen += c.Verdict == NavVerdict::Chosen ? 1 : 0;
+        beaten += c.Verdict == NavVerdict::Beaten ? 1 : 0;
+        if (c.Verdict == NavVerdict::Chosen)
+            CHECK(c.Bounds.x == doctest::Approx(90.0f)); // the nearest, the second stop
+    }
+    CHECK(chosen == 1);
+    CHECK(beaten == 1);
+
+    // Back left from the second: the first chosen, the third behind.
+    REQUIRE(d.MoveFocus(NavDirection::Left));
+    int behind = 0;
+    for (const NavCandidate& c : d.GetLastNavigation().Candidates)
+        behind += c.Verdict == NavVerdict::Behind ? 1 : 0;
+    CHECK(behind == 1);
+
+    const usize none = bed.Draw(DebugOverlay{});
+    DebugOverlay nav;
+    nav.Navigation = true;
+    CHECK(bed.Draw(nav) > none);
+}

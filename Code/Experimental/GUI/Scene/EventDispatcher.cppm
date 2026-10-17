@@ -154,6 +154,8 @@ export namespace experimental::gui
             return target->RouteEvent(event);
         }
         [[nodiscard]] Node* GetFocusNode() const noexcept { return m_focusNode; }
+        /// What the last arrow, d-pad or stick move weighed (E8c).
+        [[nodiscard]] const NavTrace& GetLastNavigation() const noexcept { return m_lastNavigation; }
         /// The focused node, read as a binding's dependency (a command's availability follows it).
         [[nodiscard]] Node* ObserveFocus() const
         {
@@ -404,7 +406,7 @@ export namespace experimental::gui
             if (root == nullptr)
                 return false;
             (void)HitTest(core::Float2{}); // the layout as it is now (a pending pass runs first)
-            Node* target = NavigateFrom(*root, m_focusNode, direction);
+            Node* target = NavigateFrom(*root, m_focusNode, direction, &m_lastNavigation);
             if (target == nullptr || target == m_focusNode)
                 return false;
             SetFocusNode(target);
@@ -2049,6 +2051,7 @@ export namespace experimental::gui
         Node* m_root;                      // non-owning (the SceneRoot owns this dispatcher)
         IClipboard* m_clipboard = nullptr; // non-owning system-clipboard adapter (optional)
         Node* m_overNode = nullptr;        // non-owning: the deepest node of the hover path
+        NavTrace m_lastNavigation;         // what the last directional move weighed
         Array<Node*> m_hoverPath;          // non-owning, root first: every node under the pointer
         Array<Node*> m_pressPath;          // non-owning: the pressed node and the nodes holding it
         Node* m_captureNode = nullptr;     // non-owning: explicit pointer capture (CapturePointer)

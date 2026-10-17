@@ -41,6 +41,38 @@ export namespace experimental::gui
         Right,
     };
 
+    /// What became of one candidate of a directional move.
+    enum class NavVerdict : u8
+    {
+        Chosen,  ///< the best: focus went there (or into the scope holding it)
+        Beaten,  ///< beyond the focused widget that way, with a worse score
+        Behind,  ///< not beyond it that way
+        Clipped, ///< hidden by a clipping ancestor
+    };
+    /// One candidate a directional move weighed: where it was (in the GUI's world), its name, its
+    /// score (lower is better; at 1e6 and over, one not overlapping the focused widget across the
+    /// move) and what became of it.
+    struct NavCandidate
+    {
+        Rect Bounds;
+        core::String Name;
+        f32 Score = -1.0f;
+        NavVerdict Verdict = NavVerdict::Behind;
+    };
+    /// What the last directional move weighed (E8c: the debug overlay draws it, the inspector
+    /// lists it): from where, which way, every candidate of the last search, and whether an
+    /// override decided it or the search wrapped round its scope.
+    struct NavTrace
+    {
+        NavDirection Direction = NavDirection::Down;
+        Rect From;
+        Array<NavCandidate> Candidates;
+        bool Overridden = false; ///< a nav-up (and the rest) said where it went
+        bool Wrapped = false;    ///< it measured again from the scope's other side
+        bool Any = false;        ///< a move happened since the GUI began
+        static constexpr f32 kNoOverlapTier = 1.0e6f;
+    };
+
     namespace detail
     {
         // Whether `node` can take focus from navigation: tab-focusable, enabled, and shown with all
@@ -126,7 +158,7 @@ export namespace experimental::gui
             const f32 crossToHi = vertical ? to.x + to.width : to.y + to.height;
             const f32 overlap = Min(crossFromHi, crossToHi) - Max(crossFromLo, crossToLo);
             const f32 crossCenterGap = Abs((crossFromLo + crossFromHi) * 0.5f - (crossToLo + crossToHi) * 0.5f);
-            constexpr f32 kNoOverlapTier = 1.0e6f; // every overlapping candidate beats every other
+            constexpr f32 kNoOverlapTier = NavTrace::kNoOverlapTier; // every overlapping candidate beats every other
             if (overlap > 0.0f)
                 return along + crossCenterGap * 0.01f;
             const f32 crossGap = -overlap;
@@ -145,29 +177,38 @@ export namespace experimental::gui
 
     /// The best focusable widget from `from` in `direction` among the navigable widgets under
     /// `within`, or null. Wrapping (true) measures from just outside `within`'s opposite edge, so
-    /// the first widget on that side is picked.
-    [[nodiscard]] inline Node* PickInDirection(Node& within, const Node* from, const Rect& fromBounds, NavDirection direction)
+    /// the first widget on that side is picked. `trace`, when given, gets every candidate weighed.
+    [[nodiscard]] inline Node* PickInDirection(Node& within, const Node* from, const Rect& fromBounds, NavDirection direction,
+                                               NavTrace* trace = nullptr)
     {
         Array<Node*> candidates;
         detail::CollectNavigable(within, candidates);
+        if (trace != nullptr)
+            trace->Candidates.Clear(); // the last search is the one that decided
         Node* best = nullptr;
         f32 bestScore = 0.0f;
+        usize bestEntry = 0;
         for (Node* candidate : candidates)
         {
             if (candidate == from || (from != nullptr && detail::IsInside(from, *candidate)))
                 continue; // not itself, nor what holds it (a focusable scroller around it)
             const Rect bounds = candidate->GetScreenBounds();
-            if (detail::IsClippedAway(*candidate, bounds))
-                continue;
-            const f32 score = detail::Score(fromBounds, bounds, direction);
+            const bool clipped = detail::IsClippedAway(*candidate, bounds);
+            const f32 score = clipped ? -1.0f : detail::Score(fromBounds, bounds, direction);
+            if (trace != nullptr)
+                trace->Candidates.PushBack(NavCandidate{bounds, candidate->DebugName(), score,
+                                                        clipped ? NavVerdict::Clipped : score < 0.0f ? NavVerdict::Behind : NavVerdict::Beaten});
             if (score < 0.0f)
                 continue;
             if (best == nullptr || score < bestScore)
             {
                 best = candidate;
                 bestScore = score;
+                bestEntry = trace != nullptr ? trace->Candidates.Size() - 1 : 0;
             }
         }
+        if (trace != nullptr && best != nullptr)
+            trace->Candidates[bestEntry].Verdict = NavVerdict::Chosen;
         return best;
     }
 
@@ -205,8 +246,16 @@ export namespace experimental::gui
     /// The widget directional navigation moves focus to from `focused` (under `root`, the GUI or a
     /// modal), or null to stay. With nothing focused, the root's entry (its remembered or default
     /// focus, else the first navigable widget).
-    [[nodiscard]] inline Node* NavigateFrom(Node& root, Node* focused, NavDirection direction)
+    [[nodiscard]] inline Node* NavigateFrom(Node& root, Node* focused, NavDirection direction, NavTrace* trace = nullptr)
     {
+        if (trace != nullptr)
+        {
+            *trace = NavTrace{};
+            trace->Direction = direction;
+            trace->Any = true;
+            if (focused != nullptr)
+                trace->From = focused->GetScreenBounds();
+        }
         // Nothing focused, focus outside `root`, or on something that does not take focus: the entry.
         if (focused == nullptr || !detail::IsInside(focused, root) || !detail::IsNavigable(*focused))
         {
@@ -221,7 +270,11 @@ export namespace experimental::gui
                                                                           : Node::NavOverrideRight;
         bool stop = false;
         if (Node* overridden = FollowOverride(root, *focused, which, stop))
+        {
+            if (trace != nullptr)
+                trace->Overridden = true;
             return overridden;
+        }
         if (stop)
             return nullptr;
         const Rect from = focused->GetScreenBounds();
@@ -229,7 +282,7 @@ export namespace experimental::gui
         for (Node* scope = detail::ScopeOf(focused);; scope = detail::ScopeOf(scope))
         {
             Node& within = (scope != nullptr && detail::IsInside(scope, root)) ? *scope : root;
-            if (Node* picked = PickInDirection(within, focused, from, direction))
+            if (Node* picked = PickInDirection(within, focused, from, direction, trace))
             {
                 // Crossing into a scope (one holding the pick but not the focused widget): its entry.
                 Node* entered = nullptr;
@@ -250,7 +303,9 @@ export namespace experimental::gui
                 case NavDirection::Right: outside.x = edge.x - from.width - 1.0f; break;
                 case NavDirection::Left: outside.x = edge.x + edge.width + 1.0f; break;
                 }
-                return PickInDirection(within, nullptr, outside, direction);
+                if (trace != nullptr)
+                    trace->Wrapped = true;
+                return PickInDirection(within, nullptr, outside, direction, trace);
             }
             if (within.GetNavScope() == NavScope::Contain || &within == &root)
                 return nullptr; // a dialog's edge, or the GUI's

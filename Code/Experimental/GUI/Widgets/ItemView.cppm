@@ -500,9 +500,7 @@ export namespace experimental::gui
         }
 
         // === Drag and drop (E7) ===
-        /// Rows drag the selection as this payload type (empty: they do not drag).
-        void SetDragType(const core::String& type) { m_dragType = type; }
-        [[nodiscard]] core::String GetDragType() const { return m_dragType; }
+        // (Rows drag the selection as the view's `drag-type`; empty, they do not drag.)
         /// The ids of the rows of the drag going from here (in their order).
         [[nodiscard]] const core::Array<ItemId>& GetDraggedIds() const noexcept { return m_dragIds; }
         /// Where a drop would land now (the item, -1 for the end; the place), while one is over it.
@@ -789,7 +787,7 @@ export namespace experimental::gui
         // --- Drag and drop (E7) ---
         bool OnDragRequested(DragRequest& request) override
         {
-            if (m_dragType.IsEmpty() || m_model == nullptr)
+            if (GetDragType().IsEmpty() || m_model == nullptr)
                 return false;
             const i32 item = request.FromKeyboard ? GetCurrentItem() : ItemAt(ConvertToWorldSpace(request.Press));
             if (item < 0)
@@ -808,7 +806,7 @@ export namespace experimental::gui
                 for (i32 i = 0; i < static_cast<i32>(ItemCount()); ++i)
                     if (IsItemSelected(i))
                         m_dragIds.PushBack(ItemIdAt(i));
-            request.Payload.Type = m_dragType;
+            request.Payload.Type = GetDragType();
             request.Payload.Value = HandleAs(Node::StaticType()); // the view, weakly: a target reads its ids
             request.Payload.Label = m_dragIds.Size() == 1 ? TypeAheadText(item) : core::Format(u8"{} items", m_dragIds.Size());
             request.Payload.Allowed = DropEffectsCopy | DropEffectsMove;
@@ -1127,7 +1125,6 @@ export namespace experimental::gui
         Array<RowTemplate> m_templates;
         core::String m_rowTypeColumn;
         mutable Observable m_selectionChanged; // what bindings reading the selection follow
-        core::String m_dragType;              // rows drag as this (empty: they do not)
         core::Array<ItemId> m_dragIds;        // the rows of the drag going from here
         i32 m_deferredItem = -1;              // a pressed row of a multi-selection, selected alone on click
         bool m_dropOver = false;              // a drop would land here now

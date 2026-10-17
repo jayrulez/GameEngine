@@ -89,6 +89,8 @@ export namespace experimental::gui
         core::String text; ///< typed text
         f32 deltaX = 0.0f; ///< the wheel
         f32 deltaY = 0.0f;
+        core::String dragType; ///< a drag's payload type (its value as `text`, its place as `index`)
+        core::String effect;   ///< a drag's effect: "none", "copy", "move" or "link"
         i32 index = -1; ///< the tab for `tabclose`; the row for `activate`, and for a pointer event over a row
     };
 

@@ -99,6 +99,8 @@ export namespace experimental::gui
         Drop,
         DragStart,
         DragEnd,
+        // Asked what a drop here would do (a DragEvent): a listener that takes it takes the drop.
+        DragQuery,
         // A widget's value changed (a check box, a slider; a text field's committed value).
         Changed,
         // A text field's text changed with an edit (each one; Changed waits for the commit).

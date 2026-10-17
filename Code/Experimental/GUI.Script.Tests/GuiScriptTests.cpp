@@ -510,3 +510,55 @@ TEST_CASE("gui-script: a Luau handler reads the event and takes it")
     CheckEvents(bed);
 }
 #endif // OPTION_HAS_LUAU
+
+#ifdef OPTION_HAS_ANGELSCRIPT
+TEST_CASE("gui-script: an AngelScript source and targets drag and drop, a dragquery handler taking a drop")
+{
+    RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    const Status loaded = bed.context->Load(
+        u8"funcdef bool EventHandler(GuiEvent e);\n"
+        u8"double dropped = 0; double right = 0; double asked = 0; double ended = 0;\n"
+        u8"bool onDrop(GuiEvent e) { dropped += 1; if (e.dragType == \"color\" && e.text == \"red\" && e.effect == \"move\") right += 1; return true; }\n"
+        u8"bool onQuery(GuiEvent e) { asked += 1; return e.dragType == \"color\"; }\n"
+        u8"bool onEnd(GuiEvent e) { if (e.effect == \"move\") ended += 1; return false; }\n"
+        u8"void main() {\n"
+        u8"  Node@ root = gui::root();\n"
+        u8"  UIWidget@ swatch = UIWidget::of(root.add(\"Panel\"));\n"
+        u8"  swatch.x = 10; swatch.y = 10; swatch.width = 60; swatch.height = 30;\n"
+        u8"  swatch.dragType = \"color\"; swatch.dragValue = \"red\";\n"
+        u8"  swatch.on(\"dragend\", EventHandler(onEnd));\n"
+        u8"  Node@ canvas = root.add(\"Panel\");\n"
+        u8"  canvas.x = 200; canvas.y = 10; canvas.width = 100; canvas.height = 100;\n"
+        u8"  canvas.dropTypes = \"color\";\n"
+        u8"  canvas.on(\"drop\", EventHandler(onDrop));\n"
+        u8"  Node@ easel = root.add(\"Panel\");\n"
+        u8"  easel.x = 200; easel.y = 150; easel.width = 100; easel.height = 100;\n"
+        u8"  easel.on(\"dragquery\", EventHandler(onQuery));\n"
+        u8"  easel.on(\"drop\", EventHandler(onDrop));\n"
+        u8"}\n"
+        u8"double droppedCount() { return dropped; }\n"
+        u8"double rightCount() { return right; }\n"
+        u8"double askedCount() { return asked; }\n"
+        u8"double endedCount() { return ended; }\n",
+        u8"main");
+    INFO(doctest::String(reinterpret_cast<const char*>(bed.errors.last.CStr())));
+    REQUIRE(loaded.IsOk());
+    (void)bed.root->UpdateLayout();
+    gui::EventDispatcher* d = bed.root->GetEventDispatcher();
+    const auto dragTo = [&](Float2 to)
+    {
+        d->InjectMouseDown(Float2{20.0f, 20.0f}, gui::MouseButton::Left);
+        d->InjectMouseMove(Float2{40.0f, 20.0f});
+        d->InjectMouseMove(to);
+        d->InjectMouseUp(to, gui::MouseButton::Left);
+    };
+    dragTo(Float2{250.0f, 50.0f}); // onto the canvas (drop-types)
+    CHECK(bed.Number(u8"droppedCount") == doctest::Approx(1.0));
+    CHECK(bed.Number(u8"rightCount") == doctest::Approx(1.0));
+    CHECK(bed.Number(u8"endedCount") == doctest::Approx(1.0));
+    dragTo(Float2{250.0f, 200.0f}); // onto the easel, which a dragquery handler takes
+    CHECK(bed.Number(u8"askedCount") >= 1.0);
+    CHECK(bed.Number(u8"droppedCount") == doctest::Approx(2.0));
+}
+#endif // OPTION_HAS_ANGELSCRIPT

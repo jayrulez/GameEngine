@@ -1294,6 +1294,16 @@ export namespace experimental::gui
         void HandleDragQuery(DropQuery& query)
         {
             OnDragQuery(query);
+            // A listener (a script's `dragquery`) that takes the event takes the drop.
+            if (query.Effect == DropEffect::None && !query.Refused && HasListener(EventType::DragQuery))
+            {
+                DragEvent asked(EventType::DragQuery, this, query.Payload);
+                asked.Effect = query.Preferred;
+                asked.Modifiers = query.Modifiers;
+                SendEvent(asked);
+                if (asked.Handled)
+                    query.Accept();
+            }
             if (query.Effect == DropEffect::None && !query.Refused && m_dropQuery)
                 m_dropQuery(query);
             if (query.Effect == DropEffect::None && !query.Refused && TakesDropType(query.Payload.Type.AsView()))
@@ -1630,6 +1640,13 @@ export namespace experimental::gui
             const u32 id = ++m_nextListenerId;
             m_listeners.PushBack(Listener{id, type, core::Move(callback), capture});
             return id;
+        }
+        [[nodiscard]] bool HasListener(EventType type) const
+        {
+            for (const Listener& l : m_listeners)
+                if (l.Type == type)
+                    return true;
+            return false;
         }
         void RemoveEventListener(u32 id)
         {

@@ -746,3 +746,74 @@ TEST_CASE("dnd: from the keys a list's rows move: the arrows move the keyboard's
     l.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Return));
     CHECK(Lists::Items(l.left) == core::StringView(u8"BCADE"));
 }
+
+TEST_CASE("dnd: in markup, drag-type, drag-value and drag-label make a source; drop-types and drop-reason a target")
+{
+    RegisterGuiElements();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{400.0f, 300.0f});
+    MarkupLoader loader(*root->GetElementSet(), core::DefaultAllocator());
+    auto page = loader.LoadFromString(core::StringView(u8R"(<Panel width="400" height="300" flex-direction="row" align-items="start">
+        <Panel id="swatch" width="80" height="40" drag-type="color" drag-value="red" drag-label="Red">
+            <Label id="grip" text="grip" width="30" height="20" drag="block"/>
+            <Label id="quiet" text="quiet" width="30" height="20" drag="none" drag-type="other"/>
+        </Panel>
+        <Panel id="canvas" width="200" height="200" drop-types="color" drop-reason="Paint it"/>
+    </Panel>)"));
+    REQUIRE(page.Get() != nullptr);
+    root->AddChild(page.Get());
+    (void)root->UpdateLayout();
+    Node* swatch = page->GetChildAt(0);
+    Node* canvas = page->GetChildAt(1);
+    Node* grip = swatch->GetChildAt(0);
+    Node* quiet = swatch->GetChildAt(1);
+    core::String painted;
+    (void)canvas->AddEventListener(EventType::Drop, [&](const Event& e)
+    {
+        const core::String* v = static_cast<const DragEvent&>(e).Payload.Value.TryGet<core::String>();
+        painted = v != nullptr ? *v : core::String{};
+    });
+    EventDispatcher& d = *root->GetEventDispatcher();
+    const auto drag = [&](Node& from, core::Float2 to)
+    {
+        const Rect r = from.GetScreenBounds();
+        const core::Float2 at{r.x + 5.0f, r.y + 5.0f};
+        d.InjectMouseDown(at, MouseButton::Left);
+        d.InjectMouseMove(core::Float2{at.x + 10.0f, at.y});
+        d.InjectMouseMove(to);
+    };
+    const Rect c = canvas->GetScreenBounds();
+    const core::Float2 onCanvas{c.x + 50.0f, c.y + 50.0f};
+
+    // A press on the block child: the walk ends there, nothing drags.
+    drag(*grip, onCanvas);
+    CHECK_FALSE(d.IsDragging());
+    d.InjectMouseUp(onCanvas, MouseButton::Left);
+    // A press on the none child (with a type of its own): it passes the press up to the swatch.
+    drag(*quiet, onCanvas);
+    REQUIRE(d.IsDragging());
+    CHECK(d.GetDragPayload().Type == core::StringView(u8"color"));
+    CHECK(d.GetDragPayload().Label == core::StringView(u8"Red"));
+    CHECK(d.GetDropTarget() == canvas);
+    CHECK(d.GetDropReason() == core::StringView(u8"Paint it"));
+    d.InjectMouseUp(onCanvas, MouseButton::Left);
+    CHECK(painted == core::StringView(u8"red"));
+}
+
+TEST_CASE("dnd: a dragquery listener that takes the event takes the drop")
+{
+    Scene s;
+    int asked = 0;
+    (void)s.target->AddEventListener(EventType::DragQuery, [&](const Event& e)
+    {
+        ++asked;
+        const auto& drag = static_cast<const DragEvent&>(e);
+        if (drag.Payload.Type == core::StringView(u8"card"))
+            e.Handled = true;
+    });
+    s.DragTo(core::Float2{250.0f, 50.0f});
+    CHECK(asked >= 1);
+    CHECK(s.D().GetDropTarget() == s.target.Get());
+    s.D().InjectMouseUp(core::Float2{250.0f, 50.0f}, MouseButton::Left);
+    CHECK(s.ended.Effect == DropEffect::Move);
+}

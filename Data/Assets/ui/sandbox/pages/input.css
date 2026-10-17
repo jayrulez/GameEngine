@@ -31,3 +31,8 @@ tooltip.drophint.refused { color: #ff8a80; }
 .dnd-files { width: 590px; height: 50px; }
 .dnd-files > .dnd-bin-title { width: 570px; }
 .dnd-card:focus-visible, .dnd-bin:focus-visible { border: 2px solid var(--accent); }
+.swatch { width: 120px; height: 28px; padding-left: 10px; border-radius: 6; color: #ffffff; font-family: Roboto; font-size: 14px; vertical-align: middle; cursor: grab; }
+.swatch-red { background-color: #c0392b; }
+.swatch-green { background-color: #27ae60; }
+.swatch-blue { background-color: #2f7de1; }
+.canvas { width: 300px; }

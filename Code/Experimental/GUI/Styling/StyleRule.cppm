@@ -81,6 +81,15 @@ export namespace experimental::gui
         }
         [[nodiscard]] usize PropertyCount() const noexcept { return m_properties.Size(); }
 
+        /// Where it was written: its selector as written and its line in its sheet (0: not from a sheet).
+        void SetSource(core::StringView selectorText, u32 line)
+        {
+            m_selectorText = core::String(selectorText);
+            m_line = line;
+        }
+        [[nodiscard]] core::StringView SelectorText() const noexcept { return m_selectorText.AsView(); }
+        [[nodiscard]] u32 Line() const noexcept { return m_line; }
+
         // The @media condition this rule is nested in (empty = always active).
         void SetMedia(MediaQuery media) { m_media = core::Move(media); }
         [[nodiscard]] const MediaQuery& Media() const noexcept { return m_media; }
@@ -89,5 +98,7 @@ export namespace experimental::gui
         StyleSelector m_selector;
         Array<StyleProperty> m_properties;
         MediaQuery m_media;
+        core::String m_selectorText;
+        u32 m_line = 0;
     };
 }

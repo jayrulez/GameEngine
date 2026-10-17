@@ -782,13 +782,13 @@ void GUISandbox::ApplySandboxSheet()
 {
     // The built-in theme for the widgets (the user agent's), the sandbox's look over it, and each
     // page's own sheet over that, styling its page alone.
-    m_styles.SetUserAgentSheet(gui::CSSParser::Parse(m_light ? gui::DefaultLightThemeCSS() : gui::DefaultDarkThemeCSS()));
+    m_styles.SetUserAgentSheet(gui::CSSParser::Parse(m_light ? gui::DefaultLightThemeCSS() : gui::DefaultDarkThemeCSS(), StringView(m_light ? u8"theme (light)" : u8"theme (dark)")));
     String path(kSandboxDir);
     path += StringView(u8"sandbox.css");
-    m_styles.SetStyleSheet(gui::CSSParser::Parse(ReadText(path.AsView()).AsView()));
+    m_styles.SetStyleSheet(gui::CSSParser::Parse(ReadText(path.AsView()).AsView(), path.AsView()));
     for (const Page& page : m_pages)
         if (page.node != nullptr)
-            (void)m_styles.SetSubtreeSheet(*page.node, gui::CSSParser::Parse(page.sheet.AsView()));
+            (void)m_styles.SetSubtreeSheet(*page.node, gui::CSSParser::Parse(page.sheet.AsView(), Format(u8"pages/{}.css", page.id).AsView()));
 }
 
 void GUISandbox::ApplyDebugOverlay()
@@ -834,7 +834,7 @@ void GUISandbox::BuildMenu()
     String css(kMenuDir);
     css += StringView(u8"menu.css");
     m_menuStyles.SetFontService(m_fontService.Get());
-    m_menuStyles.SetStyleSheet(gui::CSSParser::Parse(ReadText(css.AsView()).AsView()));
+    m_menuStyles.SetStyleSheet(gui::CSSParser::Parse(ReadText(css.AsView()).AsView(), css.AsView()));
     // Leave: the menu fades out, then the sandbox comes back.
     RefPtr<gui::DataModel> model = m_gui->GetDataRef();
     menu->Bind([this, model]()

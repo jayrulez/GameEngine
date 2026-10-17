@@ -24,7 +24,8 @@ namespace core = foundation::core;
 
 namespace experimental::gui
 {
-    // Remove /* ... */ comments (run-copied so indices in the result are contiguous).
+    // Blank out /* ... */ comments, keeping their line breaks, so a rule's place in the result is
+    // its place in the source (its line, for the inspector).
     [[nodiscard]] inline core::String StripComments(core::StringView s)
     {
         core::String out;
@@ -35,10 +36,13 @@ namespace experimental::gui
             if (i + 1 < n && s[i] == u8'/' && s[i + 1] == u8'*')
             {
                 out.Append(s.SubStr(runStart, i - runStart));
+                const usize start = i;
                 i += 2;
                 while (i + 1 < n && !(s[i] == u8'*' && s[i + 1] == u8'/'))
                     ++i;
                 i = (i + 1 < n) ? i + 2 : n; // skip closing */ (or to end)
+                for (usize k = start; k < i; ++k)
+                    out.Append(core::StringView(s[k] == u8'\n' ? u8"\n" : u8" "));
                 runStart = i;
             }
             else
@@ -56,18 +60,46 @@ export namespace experimental::gui
     class CSSParser
     {
     public:
-        // Parse CSS source into a StyleSheet.
-        [[nodiscard]] static StyleSheet Parse(core::StringView css)
+        /// Parses CSS source into a StyleSheet named `name` (a path, "theme": where its rules came
+        /// from, which each rule keeps with its line and selector, for the inspector).
+        [[nodiscard]] static StyleSheet Parse(core::StringView css, core::StringView name = {})
         {
             const core::String cleaned = StripComments(css);
             StyleSheet sheet;
-            ParseBlock(sheet, cleaned.AsView(), MediaQuery{});
+            sheet.SetName(name);
+            Source source{cleaned.AsView(), {}};
+            source.LineStarts.PushBack(0);
+            for (usize i = 0; i < cleaned.Size(); ++i)
+                if (cleaned[i] == u8'\n')
+                    source.LineStarts.PushBack(i + 1);
+            ParseBlock(sheet, source, cleaned.AsView(), MediaQuery{});
             return sheet;
         }
 
     private:
+        // The whole source (every block a part of it) and where its lines start.
+        struct Source
+        {
+            core::StringView Whole;
+            Array<usize> LineStarts;
+            // The 1-based line of `part`'s first character other than white space.
+            [[nodiscard]] u32 LineOf(core::StringView part) const
+            {
+                usize at = static_cast<usize>(part.Data() - Whole.Data());
+                for (usize k = 0; k < part.Size() && IsWhiteSpace(part[k]); ++k)
+                    ++at;
+                usize lo = 0, hi = LineStarts.Size();
+                while (hi - lo > 1)
+                {
+                    const usize mid = (lo + hi) / 2;
+                    (LineStarts[mid] <= at ? lo : hi) = mid;
+                }
+                return static_cast<u32>(lo + 1);
+            }
+        };
+
         // Parse a run of rules (and nested @media blocks), attaching `media` to each rule.
-        static void ParseBlock(StyleSheet& sheet, core::StringView src, const MediaQuery& media)
+        static void ParseBlock(StyleSheet& sheet, const Source& source, core::StringView src, const MediaQuery& media)
         {
             const usize n = src.Size();
             usize i = 0;
@@ -117,7 +149,7 @@ export namespace experimental::gui
                     {
                         const core::StringView condition =
                             Trim(prelude.SubStr(6, prelude.Size() - 6));
-                        ParseBlock(sheet, inner,
+                        ParseBlock(sheet, source, inner,
                                    MediaQuery{condition}); // v1: inner media replaces outer
                     }
                     else if (IsKeyframes(prelude))
@@ -145,7 +177,7 @@ export namespace experimental::gui
                 if (i < n)
                     ++i; // consume '}'
 
-                EmitRules(sheet, selectorList, block, media);
+                EmitRules(sheet, source.LineOf(selectorList), selectorList, block, media);
             }
         }
 
@@ -258,13 +290,14 @@ export namespace experimental::gui
         }
 
         // One rule per comma-separated selector, each carrying the block's declarations + media.
-        static void EmitRules(StyleSheet& sheet, core::StringView selectorList,
+        static void EmitRules(StyleSheet& sheet, u32 line, core::StringView selectorList,
                               core::StringView block, const MediaQuery& media)
         {
             // Commas inside :is(), :not() or [a="b,c"] do not split.
             for (const core::StringView selector : StyleSelector::SplitList(selectorList))
             {
                 StyleRule rule{selector};
+                rule.SetSource(Trim(selector), line);
                 ApplyDeclarations(rule, block);
                 if (!media.IsEmpty())
                     rule.SetMedia(media);

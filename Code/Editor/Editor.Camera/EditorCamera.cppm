@@ -31,6 +31,7 @@ export namespace editor
         f32 yaw = 0.54f; // 0 => looking down -Z; defaults aim at the origin (see LookAt)
         f32 pitch = -0.41f;
         bool mouseCaptured = false;
+        bool mouseInteractionCaptured = false;
         f32 moveSpeed = 8.0f, fastSpeed = 30.0f, lookSensitivity = 0.003f;
         f32 zoomFraction = 0.12f;  // fraction of the pivot distance per wheel notch
         f32 focusDistance = 12.0f; // pivot distance ahead (Alt+LMB turntable orbit)
@@ -228,6 +229,18 @@ export namespace editor
 
         [[nodiscard]] bool IsGliding() const noexcept { return m_gliding; }
 
+        void UpdateMouseCapture(foundation::shell::IMouse* mouse)
+        {
+            if (mouse == nullptr)
+            {
+                return;
+            }
+
+            const bool capture = mouseCaptured || mouseInteractionCaptured;
+            mouse->SetRelativeMode(capture);
+            mouse->SetCursorVisible(!capture);
+        }
+
         /// Force-exit Tab-capture, restoring the OS cursor. The I2 stuck-mouse bug: Update()
         /// (the only place Tab toggles capture OFF) runs only while the viewport is
         /// hovered/focused - but relative mode makes LOSING that state easy, wedging the OS
@@ -235,16 +248,9 @@ export namespace editor
         /// capture structurally cannot outlive the ability to release it.
         void ReleaseCapture(foundation::shell::IMouse* mouse)
         {
-            if (!mouseCaptured)
-            {
-                return;
-            }
             mouseCaptured = false;
-            if (mouse != nullptr)
-            {
-                mouse->SetRelativeMode(false);
-                mouse->SetCursorVisible(true);
-            }
+            mouseInteractionCaptured = false;
+            UpdateMouseCapture(mouse);
         }
 
         // Apply this frame's input from explicit (gated) devices.
@@ -265,8 +271,7 @@ export namespace editor
                 if (kb->IsKeyPressed(shell::KeyCode::Tab))
                 {
                     mouseCaptured = !mouseCaptured;
-                    mouse->SetRelativeMode(mouseCaptured);
-                    mouse->SetCursorVisible(!mouseCaptured);
+                    UpdateMouseCapture(mouse);
                 }
                 if (mouseCaptured && kb->IsKeyPressed(shell::KeyCode::Escape))
                 {
@@ -275,7 +280,13 @@ export namespace editor
                 const bool alt = kb->IsKeyDown(shell::KeyCode::LeftAlt) ||
                                  kb->IsKeyDown(shell::KeyCode::RightAlt);
 
-                if (alt && mouse->IsButtonDown(shell::MouseButton::Left))
+                const bool orbiting = alt && mouse->IsButtonDown(shell::MouseButton::Left);
+                const bool looking = mouse->IsButtonDown(shell::MouseButton::Right);
+
+                mouseInteractionCaptured = orbiting || looking;
+                UpdateMouseCapture(mouse);
+
+                if (orbiting)
                 {
                     m_gliding = false; // the user takes the camera
                     // Turntable orbit: rotate about the focus point ahead, keeping it fixed.
@@ -286,7 +297,7 @@ export namespace editor
                     position = focus - Forward() * focusDistance;
                     LeaveSnapView(mouse);
                 }
-                else if (mouseCaptured || mouse->IsButtonDown(shell::MouseButton::Right))
+                else if (mouseCaptured || looking)
                 {
                     m_gliding = false;
                     yaw -= mouse->DeltaX() * lookSensitivity;

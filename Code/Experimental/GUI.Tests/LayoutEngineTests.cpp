@@ -726,3 +726,100 @@ TEST_CASE("layout: deep nesting measures each node a bounded number of times, no
     CHECK(leaf->GetSize().x == doctest::Approx(400.0f - 2.0f * 30.0f)); // stretched across each level
     CHECK(leaf->GetSize().y == doctest::Approx(20.0f));
 }
+
+TEST_CASE("layout: a wrapping row in a column is as tall as its lines at the width it gets")
+{
+    // Six items of 80 in a row 300 wide wrap to two lines (three on each): the row is two lines
+    // tall, and what follows it in the column comes after both.
+    Bed bed(300.0f, 400.0f);
+    auto column = Box(*bed.root.Get(), [](LayoutStyle& s)
+    {
+        s.Direction = FlexDirection::Column;
+        s.Width = LayoutLength::Px(300.0f);
+    });
+    auto row = Box(*column.Get(), [](LayoutStyle& s)
+    {
+        s.Direction = FlexDirection::Row;
+        s.Wrap = FlexWrap::Wrap;
+    });
+    for (int i = 0; i < 6; ++i)
+        (void)Fixed(*row.Get(), 80.0f, 20.0f);
+    auto after = Fixed(*column.Get(), 50.0f, 10.0f);
+    bed.Layout();
+    CHECK(row->GetSize().y == doctest::Approx(40.0f));
+    CHECK(after->GetPosition().y == doctest::Approx(40.0f));
+}
+
+TEST_CASE("layout: a wrapping row whose items grow after a layout wraps and grows with them")
+{
+    // The inspector's toggles get their font after they are first laid out: narrow first (one
+    // line), then 447 in all in 440 (two lines). The row must grow to both lines.
+    Bed bed(600.0f, 600.0f);
+    auto scroller = Box(*bed.root.Get(), [](LayoutStyle& s)
+    {
+        s.Width = LayoutLength::Px(448.0f);
+        s.Height = LayoutLength::Px(300.0f);
+        s.OverflowX = Overflow::Hidden;
+        s.OverflowY = Overflow::Auto;
+    });
+    auto column = Box(*scroller.Get(), [](LayoutStyle& s) { s.Direction = FlexDirection::Column; });
+    column->SetPadding(Thickness{4.0f});
+    auto row = Box(*column.Get(), [](LayoutStyle& s)
+    {
+        s.Direction = FlexDirection::Row;
+        s.Wrap = FlexWrap::Wrap;
+        s.ColumnGap = 8.0f;
+        s.RowGap = 8.0f;
+    });
+    core::Array<core::RefPtr<Panel>> items;
+    for (int i = 0; i < 6; ++i)
+        items.PushBack(Fixed(*row.Get(), 30.0f, 48.0f));
+    auto after = Fixed(*column.Get(), 50.0f, 10.0f);
+    bed.Layout();
+    CHECK(row->GetSize().y == doctest::Approx(48.0f));
+    const f32 widths[6] = {57.0f, 58.0f, 57.0f, 93.0f, 71.0f, 71.0f};
+    for (core::usize i = 0; i < 6; ++i)
+        items[i]->SetSize(core::Float2{widths[i], 48.0f});
+    bed.Layout();
+    CHECK(row->GetSize().y == doctest::Approx(48.0f + 8.0f + 48.0f));
+    CHECK(after->GetPosition().y == doctest::Approx(4.0f + 104.0f));
+}
+
+TEST_CASE("layout: each line of a wrapping row is as tall as its own items, not as the whole row")
+{
+    // Two lines of items 20 tall with a gap of 8: the row is 48 tall; the second line starts at 28
+    // and stretched items are 20 tall (CSS gives a line the container's whole cross size only
+    // when the container is single-line).
+    Bed bed(600.0f, 600.0f);
+    auto row = Box(*bed.root.Get(), [](LayoutStyle& s)
+    {
+        s.Direction = FlexDirection::Row;
+        s.Wrap = FlexWrap::Wrap;
+        s.ColumnGap = 8.0f;
+        s.RowGap = 8.0f;
+        s.Width = LayoutLength::Px(100.0f);
+    });
+    core::Array<core::RefPtr<Panel>> items;
+    for (int i = 0; i < 4; ++i)
+        items.PushBack(Box(*row.Get(), [](LayoutStyle& s) { s.Width = LayoutLength::Px(40.0f); s.MinHeight = LayoutLength::Px(20.0f); }));
+    bed.Layout();
+    CHECK(row->GetSize().y == doctest::Approx(48.0f));
+    CHECK(items[0]->GetSize().y == doctest::Approx(20.0f));
+    CHECK(items[2]->GetPosition().y == doctest::Approx(28.0f));
+    CHECK(items[2]->GetSize().y == doctest::Approx(20.0f));
+}
+
+TEST_CASE("layout: a single-line row measured under a height limit is as tall as its content, not the limit")
+{
+    // A checkbox is such a row (its box and its label): asked its height with room for 48 it
+    // said 48, so a wrapping row of them made each line 48 tall and the second line fell out.
+    Bed bed(600.0f, 600.0f);
+    auto row = Box(*bed.root.Get(), [](LayoutStyle& s) { s.Direction = FlexDirection::Row; });
+    (void)Fixed(*row.Get(), 20.0f, 20.0f);
+    (void)Fixed(*row.Get(), 30.0f, 13.0f);
+    LayoutConstraints limit;
+    limit.Max = core::Float2{100.0f, 48.0f};
+    CHECK(row->Measure(limit).y == doctest::Approx(20.0f));
+    // Told its height exactly, it takes it.
+    CHECK(row->Measure(LayoutConstraints::Tight(core::Float2{100.0f, 48.0f}, core::Float2{-1.0f, -1.0f})).y == doctest::Approx(48.0f));
+}

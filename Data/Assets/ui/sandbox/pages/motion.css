@@ -25,6 +25,8 @@
 .ball { width: 24px; height: 24px; margin-top: 2px; border-radius: 12; background-color: var(--accent); }
 .e-linear { animation: slide 2s linear infinite alternate; }
 .e-inout { animation: slide 2s ease-in-out infinite alternate; }
-.e-back { animation: slide 2s cubic-bezier(0.68, -0.4, 0.32, 1.4) infinite alternate; }
+.e-back { animation: slide-back 2s cubic-bezier(0.68, -0.4, 0.32, 1.4) infinite alternate; }
 .e-steps { animation: slide 2s steps(6) infinite alternate; }
 @keyframes slide { from { transform: translate(2px, 2px); } to { transform: translate(374px, 2px); } }
+/* This curve overshoots by 5.8% of the travel at both ends: travel 332px, inset by its 19px. */
+@keyframes slide-back { from { transform: translate(22px, 2px); } to { transform: translate(354px, 2px); } }

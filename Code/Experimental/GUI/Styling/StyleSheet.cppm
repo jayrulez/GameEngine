@@ -290,6 +290,10 @@ export namespace experimental::gui
     class StyleSheet
     {
     public:
+        /// What it is called where it came from (a path, "theme"); empty when it was not named.
+        void SetName(core::StringView name) { m_name = core::String(name); }
+        [[nodiscard]] core::StringView Name() const noexcept { return m_name.AsView(); }
+
         void AddRule(StyleRule rule)
         {
             m_rules.PushBack(core::Move(rule));
@@ -511,5 +515,6 @@ export namespace experimental::gui
         Array<StyleRule> m_rules;
         Array<Keyframes> m_keyframes;
         mutable RuleIndex m_index;
+        core::String m_name;
     };
 }

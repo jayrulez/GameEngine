@@ -102,3 +102,29 @@ TEST_CASE("css-parser: empty and malformed input is tolerated")
     CHECK(CSSParser::Parse(SV(u8"button { color")).RuleCount() ==
           1); // unterminated block: best-effort
 }
+
+TEST_CASE("css-parser: each rule keeps its sheet's name, its selector as written and its line, past comments over lines")
+{
+    const StyleSheet sheet = CSSParser::Parse(SV(
+        u8"/* a comment\n"
+        u8"   over two lines */\n"
+        u8"button { color: red; }\n"       // line 3
+        u8"\n"
+        u8".a, .b > label\n"               // line 5: both rules of the list
+        u8"{ color: blue; }\n"
+        u8"@media (min-width: 10px) {\n"
+        u8"  /* inside */ panel:hover { opacity: 0.5; }\n" // line 8
+        u8"}\n"),
+        SV(u8"pages/demo.css"));
+    CHECK(sheet.Name() == SV(u8"pages/demo.css"));
+    REQUIRE(sheet.RuleCount() == 4u);
+    CHECK(sheet.Rules()[0].SelectorText() == SV(u8"button"));
+    CHECK(sheet.Rules()[0].Line() == 3u);
+    CHECK(sheet.Rules()[1].SelectorText() == SV(u8".a"));
+    CHECK(sheet.Rules()[1].Line() == 5u);
+    CHECK(sheet.Rules()[2].SelectorText() == SV(u8".b > label"));
+    CHECK(sheet.Rules()[2].Line() == 5u);
+    CHECK(sheet.Rules()[3].SelectorText() == SV(u8"panel:hover"));
+    CHECK(sheet.Rules()[3].Line() == 8u);
+    CHECK(CSSParser::Parse(SV(u8"a { color: red; }")).Name().Size() == 0u);
+}

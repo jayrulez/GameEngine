@@ -140,6 +140,10 @@ export namespace experimental::gui
         /// over it opens, at the pointer (markup's `context-menu`).
         void SetContextMenuId(const core::String& id)
         {
+            // The style pass writes it again at every restyle: the same id keeps the menu found
+            // (closed, it is out of the tree, where it could not be found again).
+            if (id == m_contextMenuId)
+                return;
             m_contextMenuId = id;
             m_contextMenu = core::RefPtr<Node>{};
         }

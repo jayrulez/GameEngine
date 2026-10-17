@@ -805,20 +805,144 @@ reset of its rows; a copy of a tree's own nodes is not taken.
 
 ### E8 Tooling and performance
 
-- **An inspector** built from the lab's own widgets in a second root of the same context: the
-  tree, a node's computed style with the rules that set each property and their sheet and line,
-  the box model, pick by hover, toggling pseudo-classes, and the bindings and commands on a node.
-  It reads the reflected table (G1). (RmlUi's debugger as documents in a second context; eepp's
-  inspector server, whose protocol would also map onto the engine's MCP tools.)
-- **The debug overlay** grows: focus path, navigation candidates and the chosen target, tab order,
-  redraw regions.
-- **Redraw only what changed**: damage rectangles from the nodes that changed, merged per frame,
-  drawn with a clip; a node can cache its drawing in an offscreen layer (VG has layers since V3).
-  Animations scrolled out of view or clipped stop asking for frames. (The spec's G4 open limit.)
-- **Test helpers**: find by id, text or tag, click, type, press keys, hold a direction, over the
-  injection API (AUI's `By::` and LunarSong's semantic replay; GUISandbox's `--keys` and `--sweep`
-  are the start), and image tests of sandbox pages at fixed frames: the user approves each
-  reference image, and a changed image fails until approved again.
+Facts (read and measured 2026-10-17):
+- The host skips a frame when `SceneRoot::NeedsFrame()` says nothing changed, so an idle GUI draws
+  nothing. A drawn frame rebuilds all of its VG geometry: the child loop in `Node::Draw` draws every
+  child, with no culling against the clip, so a long scrolled page tessellates what is off screen.
+- Timed in GUISandbox with `--always-redraw` in RelWithDebInfo (`build/clang-reldbg`; Debug runs
+  far slower on Vulkan, user 2026-10-17, so its numbers say nothing), with a temporary patch: the
+  Controls page, the heaviest, costs 0.15 ms styling, 0.03 ms layout, 0.28 ms building VG
+  geometry (9.9k vertices, 166 commands) and 0.13 ms in the renderer's Prepare. The sandbox's
+  pages are small: none of them is a worst case.
+- The same run found the idle GUI was not idle: every page drew every frame, and 13 nodes
+  restyled on every frame. An indeterminate progress bar on a hidden page kept asking for
+  frames (fixed in 299423922: a node not shown marks itself alone, and NeedsFrame counts actions
+  on shown nodes only), and the style pass wrote markup's `items` to a list box at every restyle,
+  which rebuilt its rows and so restyled it again (fixed in 5815404cc: a reflected property is
+  not written the value it holds). Now a still page draws 2 frames of 840 and restyles nothing.
+- Tooling: the F9 layout overlay (bounds, padding, margin, baselines), and GUISandbox's `--keys`
+  (keys, pad buttons, and pointer steps at coordinates), `--sweep` (hover, click and right-click
+  every widget, a smoke test), `--frame-stats` and the framework's `--screenshot`. A matched rule
+  knows its sheet's origin and order but not its file or line. No inspector, no counters,
+  nothing reaches `foundation.profiler`.
+
+Survey (2026-10-17):
+- **Inspectors** are built from the framework's own widgets and run in process: RmlUi as documents
+  in a host context over the inspected one, eepp as a floating window in the same scene, gpui as a
+  side pane in the same window, aui as a second native window. Godot alone inspects a separate
+  game process from the editor, and eepp and LunarSong add loopback servers (newline-delimited
+  JSON, opaque handles, selector queries, input, screenshots) that agents drive. All show a tree
+  and a selected node's properties, read through reflection or the style registry, never a list.
+  RmlUi alone shows the rule and `file:line` that set each property, with inherited values from
+  the ancestors, and toggles `:hover`, `:active`, `:focus` and `:checked`. aui prints the
+  applicable rules by selector and shows `measure()` under several constraints. gpui shows the
+  source line that built an element, picks deeper in the hit stack with the wheel, and edits a
+  style live. Box models are drawn as translucent content, padding, border and margin fills
+  (RmlUi, aui, foundation.ui).
+- **Overlays**: outline every node (RmlUi; eepp colours each by its pointer), the hovered and
+  focused nodes (eepp), redraw flashes (Godot's canvas items, aui's redraw requests, eepp's dirty
+  windows), and foundation.ui's focus path and numbered tab order with lines to the next stop,
+  which no other framework has. Timing: aui's per-frame flame chart, LunarSong's per-phase
+  breakdown (cascade, layout, hit test, geometry), Godot's monitors in the editor.
+- **Redraw**: no framework presents only a damaged region. Each redraws its whole surface when
+  anything is dirty and skips the frame otherwise (eepp, gpui, foundation.ui, Godot's low
+  processor mode); what they save is CPU work, by keeping each node's geometry or commands and
+  replaying the clean ones (Godot's canvas item commands, RmlUi's compiled geometry, gpui's
+  `cached()` views replaying the last frame's paint range, LunarSong's persistent slots).
+  Persistent offscreen subtrees are rare and explicit (eepp's framebuffer windows, aui's
+  render-to-texture scroll contents with partial updates). Culling is per node against the clip;
+  RmlUi and LunarSong grow the box by its ink (shadows, blur at 3 sigma, outlines), foundation.ui
+  and probably gpui do not and can drop a visible shadow. Animations mostly keep asking for frames
+  while clipped or scrolled away; only frameworks that animate from the draw (aui,
+  foundation.ui's `RequestNextFrame`) stop, because a culled node never asks.
+- **Tests**: a test owns the loop and steps it (aui's `frame()` after every action, Godot's
+  `process(0)`, gpui's seeded executor and virtual clock). Finders are semantic: aui's composable
+  `By::text`, `By::name`, `By::type` with `.perform(click()).check(text(...))`, visibility-aware;
+  eepp's `querySelector`; LunarSong's `labelTextUnderId`; Zero's recorded path of name, type and
+  sibling index with an offset inside the widget. None dumps the tree on a failure; aui saves a
+  screenshot with the matched views outlined. Image tests: RmlUi exact, zed per channel within 2 on
+  99% of pixels, eepp CIEDE2000 within 2.3 with a bad-pixel budget, each writing the actual and a
+  diff image; approval by a flag (zed's `UPDATE_BASELINE=1`) or by repointing a capture folder
+  (RmlUi); eepp writes a missing reference silently, which approves anything. LunarSong compares
+  hashes between its cached and correctness modes instead of against stored images. The engine's
+  VG probe tests read pixels back on real devices and skip without one.
+
+Design (approved 2026-10-17, with the rulings below), in layers:
+
+- **E8a Counters and a stress page.** `SceneRoot::GetFrameStats()`: per phase the time and the
+  count (nodes restyled, containers laid out, nodes drawn and culled, vertices and commands), and
+  why the frame was needed (invalidation, layout, an animation and on which node, a binding, a
+  held direction), so the two bugs above show at once instead of through a patch. The phases open
+  `PROFILE_SCOPE`s, so the engine's profiler shows them. A Stress page in GUISandbox (user,
+  2026-10-17) is the worst case every later layer is measured on, its load chosen by a control on
+  the page and by `--stress <n>`: thousands of nodes in a long scrolled column; rows of text in
+  several faces and sizes, wrapped and rich; every box effect at once (rounded borders, outer and
+  inset shadows, gradients, backdrop and filter blur, blend modes, group opacity); hundreds of
+  transitions and keyframe animations running together; a list and a table of 100k rows; deep
+  nesting (a few hundred levels); a sheet of many rules with descendant and sibling selectors,
+  and a toggle that changes a class at the top so the whole tree restyles. The page prints E8a's
+  counters each second (`--frame-stats`), and its numbers, taken in RelWithDebInfo, go in this
+  section before E8b starts.
+- **E8b Culling and quiet animations.** A node whose ink box misses the current clip skips its
+  subtree. The ink box is its bounds grown by its outer shadows (offset, spread and 3 sigma of
+  blur), its filter blur and its focus ring, mapped through its transform, the way RmlUi and
+  LunarSong do it. An animation on a node that was culled or hidden in the last drawn frame stops
+  asking for frames unless it animates where the node is (transform, position, size, margin,
+  inset), which could bring it into view; it is caught up when the node shows. A differential test
+  (LunarSong's) draws pages with culling on and off and requires the same pixels.
+- **E8c The debug overlay grows**, one set of flags (the layout overlay's struct becomes
+  `DebugOverlay`): the focus path, the tab order with numbered stops and lines (foundation.ui's),
+  the navigation candidates of the last directional move with the one chosen and why (the lab's
+  own; nobody else has navigation to show), the node under the pointer, and a redraw flash on the
+  nodes invalidated since the last frame (Godot's and aui's), which would have shown the desk
+  session's repaint bugs at a glance.
+- **E8d What the inspector needs from the core.** The CSS parser records each rule's sheet name
+  and line, and a node can say for each property where its value came from: a rule (sheet, line,
+  selector), inheritance (from which ancestor), markup's inline style, code (a pinned setter), or
+  its own value. A node can force pseudo-classes (`:hover`, `:active`, `:focus`,
+  `:focus-visible`, `:checked`, `:disabled`) for the inspector, which the style pass reads as
+  set.
+- **E8e The inspector.** A library over the core's public API (`experimental.gui.inspector`),
+  built from the lab's widgets in a root of its own on the same context, shown by the host as a
+  pane beside the inspected root (Ctrl+Shift+I in GUISandbox). The tree, live as children change;
+  pick by hover and click, the wheel walking deeper through what is under the pointer (gpui's).
+  For the selected node: its type, tag, id, classes and states, with the pseudo-class toggles;
+  the box model drawn; each property with its value and its origin from E8d, grouped by rule
+  with sheet and line (RmlUi's), inherited ones under their ancestor; its reflected properties
+  (G1's table), edited live through the path markup uses; its bindings, commands and event
+  listeners; `Measure` under a few constraints (aui's). A frames tab draws E8a's counters over
+  the last few seconds. Its queries (the tree, describe a node, a selector query) are a C++ API
+  the panes use, so an MCP tool can serve the same answers when the lab is hosted (eepp's
+  server and LunarSong's tools show agents want them; hosting is not a concern yet, ruling 5).
+- **E8f Test helpers.** `experimental.gui.testing`, for tests: a tester over a root owns a fixed
+  clock and steps a frame (update, style, layout) after every action. Finders by CSS selector
+  (the lab's own selector engine, eepp's `querySelector`) and by text, composable with `within`;
+  hidden nodes are not found unless asked; a finder that expects one node and finds none or
+  several fails, listing what it found and dumping the tree around it. Actions: click, right
+  click, double click, hover, drag to a node or point, type, press a key chord, hold a direction
+  for a time, a pad button, an OS file drop. GUISandbox's `--keys` takes selector targets
+  (`click:#ok`, `click:text=Show`) besides coordinates, so a script survives a layout change
+  (Zero's and LunarSong's point).
+- **E8g Image tests.** Sandbox pages at a fixed size, scale 1, a fixed clock and a chosen frame,
+  rendered and read back through the RHI (the screenshot path), so on every backend the machine
+  offers and not Vulkan's alone (user, 2026-10-17); skipped without a device. A picture matches
+  its reference when every channel is within 8 on all but 0.1% of pixels (eepp's budget, zed's
+  ratio); a failure writes the picture and a diff image into the build tree. References live in
+  the repository under `Data/Tests/GUI/Images/`, one per picture shared by the backends; a
+  backend that cannot match it within the tolerance gets its own, named for it, only when it
+  must. A missing reference fails. They are approved only by
+  hand: `GUISandbox --approve-images` writes the current pictures as references after the user
+  has looked at them, so a changed picture fails until approved again (the user's rule). The
+  E8b differential test runs in the same harness without references.
+
+Not taken for now: a remote protocol for the inspector before hosting.
+
+Rulings (user, 2026-10-17): the inspector is a pane in the inspected window; image tests run
+through the RHI on every backend, with references in the repository; damage rectangles and a
+cache of each node's geometry are decided on the Stress page's numbers (E8a), not before. Both
+would need more than the lab: partial presentation needs the host to keep the last frame (swap
+chains do not), and geometry replay needs VG to record and replay a range of its batch under a
+new transform and clip. No framework surveyed presents part of a window.
 
 ### E9 Translation, right to left, and accessibility groundwork
 

@@ -189,3 +189,31 @@ TEST_CASE("node: setting same size does not notify")
     node->SetSize(core::Float2{10.0f, 10.0f}); // unchanged
     CHECK(fired == 0);
 }
+
+TEST_CASE("node: a child's index follows adds, moves, removes and a move to another parent")
+{
+    auto root = MakeNode();
+    core::Array<core::RefPtr<Node>> kids;
+    for (int i = 0; i < 5; ++i)
+    {
+        kids.PushBack(MakeNode());
+        root->AddChild(kids[static_cast<core::usize>(i)].Get());
+    }
+    for (core::usize i = 0; i < 5; ++i)
+        CHECK(root->GetChildIndex(kids[i].Get()) == i);
+    root->SetChildIndex(kids[4].Get(), 1);
+    CHECK(root->GetChildIndex(kids[4].Get()) == 1);
+    CHECK(root->GetChildIndex(kids[1].Get()) == 2);
+    root->RemoveChild(kids[0].Get());
+    CHECK(root->GetChildIndex(kids[0].Get()) == Node::kInvalidIndex);
+    CHECK(root->GetChildIndex(kids[4].Get()) == 0);
+    CHECK(kids[1]->GetPrevSibling() == kids[4].Get());
+
+    auto other = MakeNode();
+    other->AddChild(MakeNode().Get());
+    other->AddChild(kids[3].Get());
+    CHECK(other->GetChildIndex(kids[3].Get()) == 1);
+    CHECK(root->GetChildIndex(kids[3].Get()) == Node::kInvalidIndex);
+    CHECK(root->GetChildIndex(kids[2].Get()) == 2);
+    CHECK(root->GetChildIndex(nullptr) == Node::kInvalidIndex);
+}

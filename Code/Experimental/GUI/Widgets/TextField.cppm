@@ -33,6 +33,7 @@ import :event;
 import :clipboard;
 import :event_dispatcher;
 import :ui_widget;
+import :actions; // TickAction (the caret's blink)
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -186,8 +187,10 @@ export namespace experimental::gui
             Invalidate();
         }
 
-        // The caret blink is advanced by the owner (the host's frame) if wired; a static
-        // caret (always shown while focused) is the default when not ticked.
+        /// Whether the caret shows now (focused, and in the visible half of its blink).
+        [[nodiscard]] bool IsCaretShown() const noexcept { return IsFocused() && m_caretVisible; }
+        // Advances the caret's blink. A focused field in a GUI drives it itself, on its root's
+        // clock; a field in no GUI shows a steady caret unless its owner calls this.
         void Update(f64 deltaSeconds)
         {
             if (!IsFocused())
@@ -376,6 +379,22 @@ export namespace experimental::gui
         {
             ResetBlink();
             Invalidate();
+            if (!m_blinking && GetActionManager() != nullptr)
+            {
+                // Blinks while focused: the tick ends itself when focus goes (and goes with the
+                // field if the field does).
+                m_blinking = true;
+                RunAction(core::MakeRef<TickAction>(MemoryAllocator(), [this](core::Duration elapsed)
+                {
+                    if (!IsFocused())
+                    {
+                        m_blinking = false;
+                        return false;
+                    }
+                    Update(elapsed.AsSecondsF());
+                    return true;
+                }));
+            }
         }
         void OnFocusLost() override
         {
@@ -651,6 +670,7 @@ export namespace experimental::gui
         bool m_caretVisible = true;
         f64 m_blinkAccum = 0.0;
 
+        bool m_blinking = false; // a blink tick is running
         static constexpr f64 kBlinkPeriod = 0.5;      // seconds per on/off half-cycle
         static constexpr f32 kCaretWidth = 1.5f;
     };

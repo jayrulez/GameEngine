@@ -288,16 +288,37 @@ TEST_CASE("textfield: blink toggles the caret over time while focused")
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto f = Make<TextField>();
     root->AddChild(f.Get());
-    f->RequestFocus(); // ResetBlink -> visible
+    root->SetSize(core::Float2{200.0f, 100.0f});
+    root->UpdateLayout();
+    f->RequestFocus(); // shown at once
+    CHECK(f->IsCaretShown());
 
-    // Half a period flips it off, another half flips it back on.
-    f->Update(0.5);
-    f->Update(0.5);
-    // (No direct getter for visibility; exercised for coverage/no-crash and the focused guard.)
+    // The field drives its own blink on the GUI's clock: off after half a period, on after
+    // another, and the GUI asks for frames meanwhile.
+    const auto frames = [&](int n)
+    {
+        for (int i = 0; i < n; ++i)
+            root->GetContext().Update(core::Duration::FromSeconds(0.1));
+    };
+    frames(3);
+    CHECK(f->IsCaretShown());
+    CHECK(root->NeedsFrame());
+    frames(3); // 0.6 s
+    CHECK_FALSE(f->IsCaretShown());
+    frames(5); // 1.1 s
+    CHECK(f->IsCaretShown());
 
+    // Unfocused: no caret, and the blink stops asking for frames.
     f->ReleaseFocus();
-    f->Update(1.0); // ignored while unfocused (no crash, no toggle)
-    CHECK_FALSE(f->IsFocused());
+    frames(2);
+    CHECK_FALSE(f->IsCaretShown());
+    frames(1);
+    CHECK_FALSE(root->GetContext().GetActionManager().AnyTarget([&](Node& n) { return &n == f.Get(); }));
+    // Focus again: it blinks again (a new tick), starting shown.
+    f->RequestFocus();
+    CHECK(f->IsCaretShown());
+    frames(6);
+    CHECK_FALSE(f->IsCaretShown());
 }
 
 // ===================== Selection =====================

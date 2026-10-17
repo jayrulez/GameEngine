@@ -903,6 +903,27 @@ export namespace experimental::gui
         /// How far the wheel scrolls per notch, and the arrow keys per press.
         void SetScrollStep(f32 step) noexcept { m_scrollStep = step; }
         [[nodiscard]] f32 GetScrollStep() const noexcept { return m_scrollStep; }
+        /// A part's own states (`::scrollbar-thumb:hover` matches through them): a scroller's bar
+        /// hovered, its thumb hovered or dragged. A widget with parts of its own adds theirs.
+        [[nodiscard]] virtual u32 GetPartStates(core::StringView part) const
+        {
+            if (part == core::StringView(u8"scrollbar-thumb"))
+                return (m_scrollHover == 2 ? StateHover : 0u) | (m_scrollDragAxis <= 1 ? StateActive : 0u);
+            if (part == core::StringView(u8"scrollbar"))
+                return m_scrollHover != 0 || m_scrollDragAxis <= 1 ? StateHover : 0u;
+            return 0u;
+        }
+        /// A part's style as the sheet set it (a UINode's; null for a bare node).
+        [[nodiscard]] virtual const PartStyle* FindPartStyle(core::StringView part) const
+        {
+            (void)part;
+            return nullptr;
+        }
+        /// How visible an overlay scroller's bars are now, 0 to 1 (1 for bars that stay).
+        [[nodiscard]] f32 GetScrollbarOpacity() const noexcept
+        {
+            return m_layoutStyle.BarVisibility == ScrollbarVisibility::Overlay ? m_scrollbarAlpha : 1.0f;
+        }
         /// Where a scroll container's bar and thumb are on an axis (0 horizontal, 1 vertical), in
         /// local space; empty rects when it shows none.
         [[nodiscard]] Rect ScrollBarTrack(u32 axis) const;
@@ -1682,10 +1703,17 @@ export namespace experimental::gui
                 return;
             m_scrollOffset = clamped;
             Invalidate();
+            if (m_layoutStyle.BarVisibility == ScrollbarVisibility::Overlay)
+                ShowOverlayScrollbars();
             SendEvent(Event(EventType::Scroll, this));
         }
         /// Eases toward m_scrollTarget on the GUI's clock (LayoutImpl.cpp, which sees :actions).
         void StartSmoothScroll();
+        /// An overlay scroller's bars are wanted (it scrolled, or the pointer is over it): shown,
+        /// then fading once let be.
+        void ShowOverlayScrollbars();
+        /// Which bar part is under `p` (local): 0 none, 1 a track, 2 a thumb; the part states follow.
+        void SetScrollHover(u8 part);
 
         // Tells this GUI's dispatcher a child's subtree is leaving (GUIClusterImpl.cpp, which
         // sees :event_dispatcher).
@@ -1730,6 +1758,10 @@ export namespace experimental::gui
         core::Float2 m_scrollTarget{0.0f, 0.0f}; // where a smooth scroll is going
         bool m_smoothScrolling = false;          // a smooth scroll is easing toward m_scrollTarget
         bool m_smoothTicking = false;            // its tick runs on the GUI's clock
+        u8 m_scrollHover = 0;                    // the pointer over a bar: 0 none, 1 its track, 2 its thumb
+        f32 m_scrollbarAlpha = 0.0f;             // an overlay's bars: shown while scrolling or hovered, then fading
+        f32 m_scrollbarIdle = 0.0f;              // seconds since an overlay's bars were last wanted
+        bool m_scrollbarFading = false;          // the overlay's tick runs
         u32 m_scrollDragAxis = 2;                // a bar being dragged (0, 1), 2 for none
         f32 m_scrollDragGrab = 0.0f;             // where on the thumb it was taken
         f32 m_alpha = 1.0f;

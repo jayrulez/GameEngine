@@ -153,6 +153,21 @@ export namespace experimental::gui
         Auto,
         Contain,
     };
+    /// How thick a scroller's bars are (CSS's scrollbar-width); `none` hides them, the node still
+    /// scrolling by the wheel, the keys and touch.
+    enum class ScrollbarWidth : u8
+    {
+        Auto,
+        Thin,
+        None,
+    };
+    /// Whether a scroller's bars stay shown (while it overflows, or always for `overflow:
+    /// scroll`) or are an overlay that shows while it scrolls or is hovered and then fades.
+    enum class ScrollbarVisibility : u8
+    {
+        Auto,
+        Overlay,
+    };
     /// Where a scroll into view puts what it shows: the least move that shows it, or its start,
     /// centre or end at the box's.
     enum class ScrollAlign : u8
@@ -212,6 +227,8 @@ export namespace experimental::gui
         Overflow OverflowY = Overflow::Visible;
         ScrollBehavior Scrolling = ScrollBehavior::Auto;
         OverscrollBehavior Overscroll = OverscrollBehavior::Auto;
+        ScrollbarWidth BarWidth = ScrollbarWidth::Auto;
+        ScrollbarVisibility BarVisibility = ScrollbarVisibility::Auto;
 
         // --- Out of flow ---
         Position Placement = Position::Static;
@@ -264,7 +281,7 @@ export namespace experimental::gui
         SlotJustifyItems, SlotAlignSelf, SlotJustifySelf, SlotGridAutoFlow, SlotDock,
         SlotGridTemplateColumns, SlotGridTemplateRows, SlotGridAutoRows, SlotGridAutoColumns,
         SlotGridColumn, SlotGridRow,
-        SlotScrollBehavior, SlotOverscrollBehavior,
+        SlotScrollBehavior, SlotOverscrollBehavior, SlotScrollbarWidth, SlotScrollbarVisibility,
         SlotEnabled, SlotVisibility,
         SlotColor, SlotFontFamily, SlotFontSize, SlotTextAlign, SlotVerticalAlign,
         SlotWhiteSpace, SlotLineHeight, SlotLetterSpacing,
@@ -318,6 +335,8 @@ export namespace experimental::gui
         f(SlotGridRow, &LayoutStyle::Row);
         f(SlotScrollBehavior, &LayoutStyle::Scrolling);
         f(SlotOverscrollBehavior, &LayoutStyle::Overscroll);
+        f(SlotScrollbarWidth, &LayoutStyle::BarWidth);
+        f(SlotScrollbarVisibility, &LayoutStyle::BarVisibility);
     }
     namespace detail
     {

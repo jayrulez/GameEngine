@@ -307,13 +307,16 @@ export namespace experimental::gui
         /// The rules of this sheet that match `element` (its own style with `pseudoElement` empty,
         /// else that part's, from rules written `tag::part`) under `context`, added to `out` at
         /// `origin` (a later origin wins over an earlier one at any specificity).
+        /// A part's rules that ask for its states (`::thumb:hover`) match when `partStates` has them.
         void CollectMatches(const UIWidget& element, const MediaContext& context, bool applyPseudo,
-                            core::StringView pseudoElement, u32 origin, Array<StyleRuleMatch>& out) const
+                            core::StringView pseudoElement, u32 origin, Array<StyleRuleMatch>& out, u32 partStates = 0) const
         {
             for (usize i = 0; i < m_rules.Size(); ++i)
             {
                 const StyleRule& rule = m_rules[i];
                 if (rule.Selector().PseudoElement() != pseudoElement)
+                    continue;
+                if (applyPseudo && (rule.Selector().PartPseudoClasses() & ~partStates) != 0)
                     continue;
                 const bool mediaActive = rule.Media().IsEmpty() || rule.Media().Evaluate(context);
                 if (mediaActive && rule.Selector().Select(element, applyPseudo))

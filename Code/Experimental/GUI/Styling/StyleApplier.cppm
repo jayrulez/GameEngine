@@ -119,6 +119,18 @@ export namespace experimental::gui
             static constexpr OverscrollBehavior values[] = {OverscrollBehavior::Auto, OverscrollBehavior::Contain, OverscrollBehavior::Contain};
             return Named(k, names, values);
         }
+        [[nodiscard]] inline Optional<ScrollbarWidth> ScrollbarWidthNamed(core::StringView k)
+        {
+            static constexpr core::StringView names[] = {u8"auto", u8"thin", u8"none"};
+            static constexpr ScrollbarWidth values[] = {ScrollbarWidth::Auto, ScrollbarWidth::Thin, ScrollbarWidth::None};
+            return Named(k, names, values);
+        }
+        [[nodiscard]] inline Optional<ScrollbarVisibility> ScrollbarVisibilityNamed(core::StringView k)
+        {
+            static constexpr core::StringView names[] = {u8"auto", u8"overlay"};
+            static constexpr ScrollbarVisibility values[] = {ScrollbarVisibility::Auto, ScrollbarVisibility::Overlay};
+            return Named(k, names, values);
+        }
         [[nodiscard]] inline Optional<FlexDirection> DirectionNamed(core::StringView k)
         {
             static constexpr core::StringView names[] = {u8"row", u8"column", u8"row-reverse", u8"column-reverse"};
@@ -693,6 +705,8 @@ export namespace experimental::gui
             choose(u8"overflow-y", ls.OverflowY, detail::OverflowNamed);
             choose(u8"scroll-behavior", ls.Scrolling, detail::ScrollBehaviorNamed);
             choose(u8"overscroll-behavior", ls.Overscroll, detail::OverscrollBehaviorNamed);
+            choose(u8"scrollbar-width", ls.BarWidth, detail::ScrollbarWidthNamed);
+            choose(u8"scrollbar-visibility", ls.BarVisibility, detail::ScrollbarVisibilityNamed);
             choose(u8"flex-direction", ls.Direction, detail::DirectionNamed);
             choose(u8"flex-wrap", ls.Wrap, detail::WrapNamed);
             choose(u8"justify-content", ls.JustifyContent, detail::JustifyNamed);

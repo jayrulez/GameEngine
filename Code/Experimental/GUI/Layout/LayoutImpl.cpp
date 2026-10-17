@@ -1023,14 +1023,21 @@ namespace experimental::gui
 
     namespace
     {
-        constexpr f32 kBarWidth = 8.0f;      // logical units
         constexpr f32 kMinThumb = 20.0f;
         [[nodiscard]] bool ShowsBar(Overflow o, f32 range) noexcept { return o == Overflow::Scroll || (o == Overflow::Auto && range > 0.0f); }
+        // A bar's thickness in logical units (scrollbar-width); none shows no bars.
+        [[nodiscard]] f32 BarThickness(ScrollbarWidth width) noexcept
+        {
+            return width == ScrollbarWidth::None ? 0.0f : width == ScrollbarWidth::Thin ? 5.0f : 8.0f;
+        }
+        constexpr f32 kOverlayLinger = 0.8f; // seconds an overlay's bars stay once let be
+        constexpr f32 kOverlayFade = 0.3f;   // and then take to fade
     }
 
     Rect Node::ScrollBarTrack(u32 axis) const
     {
-        if (!IsScrollContainer())
+        const f32 barWidth = BarThickness(m_layoutStyle.BarWidth);
+        if (!IsScrollContainer() || barWidth <= 0.0f)
             return Rect{};
         const core::Float2 range = GetScrollRange();
         const bool showX = ShowsBar(m_layoutStyle.OverflowX, range.x);
@@ -1039,9 +1046,9 @@ namespace experimental::gui
         const f32 w = core::Max(0.0f, m_size.x - b.TotalHorizontal());
         const f32 h = core::Max(0.0f, m_size.y - b.TotalVertical());
         if (axis == 1 && showY)
-            return Rect{m_size.x - b.Right - kBarWidth, b.Top, kBarWidth, showX ? core::Max(0.0f, h - kBarWidth) : h};
+            return Rect{m_size.x - b.Right - barWidth, b.Top, barWidth, showX ? core::Max(0.0f, h - barWidth) : h};
         if (axis == 0 && showX)
-            return Rect{b.Left, m_size.y - b.Bottom - kBarWidth, showY ? core::Max(0.0f, w - kBarWidth) : w, kBarWidth};
+            return Rect{b.Left, m_size.y - b.Bottom - barWidth, showY ? core::Max(0.0f, w - barWidth) : w, barWidth};
         return Rect{};
     }
 
@@ -1063,16 +1070,69 @@ namespace experimental::gui
 
     void Node::DrawScrollBars(DrawContext& ctx) const
     {
+        const f32 alpha = GetScrollbarOpacity();
+        if (alpha <= 0.0f)
+            return;
+        // Each bar is two parts: ::scrollbar (the track, clear by default) and ::scrollbar-thumb,
+        // each its own look with the sheet's over it, the thumb's lighter while hovered or held.
+        const PartStyle* trackStyle = FindPartStyle(u8"scrollbar");
+        const PartStyle* thumbStyle = FindPartStyle(u8"scrollbar-thumb");
+        const PartStyle none{};
+        if (alpha < 1.0f)
+            ctx.PushOpacity(alpha);
         for (u32 axis = 0; axis < 2; ++axis)
         {
-            const Rect thumb = ScrollBarThumb(axis);
-            if (thumb.width <= 0.0f || thumb.height <= 0.0f)
+            const Rect track = ScrollBarTrack(axis);
+            if (track.width <= 0.0f || track.height <= 0.0f)
                 continue;
-            const bool active = m_scrollDragAxis == axis;
+            if (trackStyle != nullptr)
+                trackStyle->Draw(ctx, track, NodeBox{});
+            const Rect thumb = ScrollBarThumb(axis);
+            const bool held = m_scrollDragAxis == axis;
+            const f32 a = held ? 0.85f : m_scrollHover == 2 ? 0.72f : 0.55f;
             const Rect inset{thumb.x + 1.5f, thumb.y + 1.5f, core::Max(0.0f, thumb.width - 3.0f), core::Max(0.0f, thumb.height - 3.0f)};
-            ctx.VG().FillRoundedRect(inset.ToRectangle(), core::Min(inset.width, inset.height) * 0.5f,
-                                     Color{0.62f, 0.66f, 0.72f, active ? 0.85f : 0.55f});
+            const NodeBox own = FilledBox(Color{0.62f, 0.66f, 0.72f, a}, foundation::vg::CornerRadii(core::Min(inset.width, inset.height) * 0.5f));
+            (thumbStyle != nullptr ? *thumbStyle : none).Draw(ctx, inset, own);
         }
+        if (alpha < 1.0f)
+            ctx.PopOpacity();
+    }
+
+    void Node::SetScrollHover(u8 part)
+    {
+        if (part == m_scrollHover)
+            return;
+        m_scrollHover = part;
+        MarkStyleStateDirty(StateHover | StateActive); // its parts' states changed
+        Invalidate();
+    }
+
+    void Node::ShowOverlayScrollbars()
+    {
+        m_scrollbarAlpha = 1.0f;
+        m_scrollbarIdle = 0.0f;
+        Invalidate();
+        if (m_scrollbarFading || GetActionManager() == nullptr)
+            return;
+        m_scrollbarFading = true;
+        Node* self = this;
+        RunAction(core::MakeRef<TickAction>(MemoryAllocator(), [self](core::Duration elapsed)
+        {
+            const f32 dt = static_cast<f32>(elapsed.AsSecondsF());
+            // Held by the pointer over it or a drag; once let be, it lingers, then fades.
+            if (self->IsHovered() || self->m_scrollDragAxis <= 1)
+                self->m_scrollbarIdle = 0.0f;
+            else
+                self->m_scrollbarIdle += dt;
+            if (self->m_scrollbarIdle <= kOverlayLinger)
+                return true;
+            self->m_scrollbarAlpha = core::Max(0.0f, self->m_scrollbarAlpha - dt / kOverlayFade);
+            self->Invalidate();
+            if (self->m_scrollbarAlpha > 0.0f)
+                return true;
+            self->m_scrollbarFading = false;
+            return false;
+        }));
     }
 
     void Node::ScrollTo(core::Float2 offset, ScrollBehavior behavior)
@@ -1237,6 +1297,7 @@ namespace experimental::gui
                 if (thumb.Contains(p)) // grab the thumb where it was taken
                 {
                     m_scrollDragAxis = axis;
+                    MarkStyleStateDirty(StateHover | StateActive); // ::scrollbar-thumb:active
                     m_scrollDragGrab = axis == 1 ? p.y - thumb.y : p.x - thumb.x;
                     if (EventDispatcher* dispatcher = GetEventDispatcher())
                         dispatcher->CapturePointer(*this);
@@ -1254,12 +1315,27 @@ namespace experimental::gui
             }
             return;
         }
+        case EventType::MouseEnter:
+        case EventType::MouseLeave:
         case EventType::MouseMove:
         {
-            if (m_scrollDragAxis > 1)
-                return;
             const MouseEvent& mouse = static_cast<const MouseEvent&>(event);
             const core::Float2 p = ConvertToNodeSpace(mouse.Position);
+            if (m_layoutStyle.BarVisibility == ScrollbarVisibility::Overlay && event.Type != EventType::MouseLeave)
+                ShowOverlayScrollbars(); // the pointer over it shows its bars
+            if (m_scrollDragAxis > 1)
+            {
+                // Which bar part the pointer is over (`::scrollbar-thumb:hover`).
+                u8 part = 0;
+                if (event.Type != EventType::MouseLeave)
+                    for (u32 a = 0; a < 2 && part == 0; ++a)
+                        if (ScrollBarTrack(a).Contains(p))
+                            part = ScrollBarThumb(a).Contains(p) ? 2 : 1;
+                SetScrollHover(part);
+                return;
+            }
+            if (event.Type != EventType::MouseMove)
+                return;
             const u32 axis = m_scrollDragAxis;
             const Rect track = ScrollBarTrack(axis);
             const Rect thumb = ScrollBarThumb(axis);
@@ -1277,6 +1353,7 @@ namespace experimental::gui
             if (m_scrollDragAxis <= 1)
             {
                 m_scrollDragAxis = 2;
+                MarkStyleStateDirty(StateHover | StateActive);
                 Invalidate();
             }
             return;

@@ -330,9 +330,14 @@ export namespace experimental::gui
             // Pseudo-element parts (tag::part): resolve + apply each part the widget declares.
             Array<core::StringView> parts;
             widget.CollectStyleParts(parts);
+            if (widget.IsScrollContainer()) // any node that scrolls has its bars' parts
+            {
+                parts.PushBack(core::StringView(u8"scrollbar"));
+                parts.PushBack(core::StringView(u8"scrollbar-thumb"));
+            }
             for (const core::StringView part : parts)
             {
-                const ResolvedStyle partStyle = ResolveFor(widget, subtrees, part, nullptr);
+                const ResolvedStyle partStyle = ResolveFor(widget, subtrees, part, nullptr, widget.GetPartStates(part));
                 ApplyPartStyle(widget, part, partStyle, context.Resources, context.Lengths);
             }
             return customsChanged;
@@ -382,14 +387,14 @@ export namespace experimental::gui
         // The cascade for `widget` (or its `part`) over every origin: the user agent's sheet, the
         // GUI's, the subtrees' (outermost first), then the widget's inline style.
         [[nodiscard]] ResolvedStyle ResolveFor(const UIWidget& widget, const Array<const StyleSheet*>& subtrees,
-                                               core::StringView part, const ResolvedStyle* inherited) const
+                                               core::StringView part, const ResolvedStyle* inherited, u32 partStates = 0) const
         {
             Array<StyleRuleMatch> matches;
-            m_userAgent.CollectMatches(widget, m_context, true, part, 0, matches);
-            m_sheet.CollectMatches(widget, m_context, true, part, 1, matches);
+            m_userAgent.CollectMatches(widget, m_context, true, part, 0, matches, partStates);
+            m_sheet.CollectMatches(widget, m_context, true, part, 1, matches, partStates);
             u32 origin = 2;
             for (const StyleSheet* sheet : subtrees)
-                sheet->CollectMatches(widget, m_context, true, part, origin++, matches);
+                sheet->CollectMatches(widget, m_context, true, part, origin++, matches, partStates);
             return StyleSheet::Cascade(matches, inherited,
                                        part.Size() == 0 ? widget.GetInlineStyle() : core::Span<const InlineStyleDeclaration>{});
         }

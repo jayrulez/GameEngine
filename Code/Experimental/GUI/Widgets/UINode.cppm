@@ -233,6 +233,7 @@ export namespace experimental::gui
         }
         /// The sheet's style for `part` (an empty one when the sheet styles it not).
         [[nodiscard]] const PartStyle& GetPartStyle(core::StringView part) const; // GUIClusterImpl.cpp
+        [[nodiscard]] const PartStyle* FindPartStyle(core::StringView part) const override { return &GetPartStyle(part); }
 
         // Visual state, driven by pointer/focus/enabled (priority: disabled > pressed >
         // hover > focused > normal).

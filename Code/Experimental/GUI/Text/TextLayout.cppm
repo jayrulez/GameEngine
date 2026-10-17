@@ -75,6 +75,29 @@ export namespace experimental::gui
         return w == TextWhiteSpace::Normal || w == TextWhiteSpace::PreWrap;
     }
 
+    /// Whether `font` draws every character of `text`: its atlas holds a glyph for each (a font with
+    /// no atlas is taken at its word). Atlases are baked over a range of codepoints, so a widget's
+    /// own marks (an ellipsis, a password's bullet) fall back to ones it has.
+    [[nodiscard]] inline bool FontDraws(const fonts::CachedFont* font, core::StringView text)
+    {
+        if (font == nullptr || font->font == nullptr)
+            return false;
+        if (font->atlas == nullptr)
+            return true;
+        for (usize i = 0; i < text.Size();)
+        {
+            const i32 glyph = font->atlas->GlyphFor(static_cast<i32>(core::DecodeUtf8(text, i)));
+            if (glyph <= 0 || !font->atlas->Contains(glyph))
+                return false;
+        }
+        return true;
+    }
+    /// The ellipsis `font` draws: U+2026, or three full stops.
+    [[nodiscard]] inline core::StringView EllipsisFor(const fonts::CachedFont* font)
+    {
+        return FontDraws(font, core::StringView(u8"\u2026")) ? core::StringView(u8"\u2026") : core::StringView(u8"...");
+    }
+
     /// What a run takes when its markup leaves a style unset, and how the lines go.
     struct TextLayoutStyle
     {
@@ -172,11 +195,13 @@ export namespace experimental::gui
             return Lines.IsEmpty() ? 0 : Lines.Size() - 1;
         }
         /// Where a caret at `offset` stands across its line.
-        [[nodiscard]] f32 CaretX(usize offset) const
+        [[nodiscard]] f32 CaretX(usize offset) const { return Lines.IsEmpty() ? 0.0f : CaretXOnLine(offset, LineOf(offset)); }
+        /// Where a caret at `offset` stands across line `line` (a wrapped line's end: its own, not
+        /// the next line's start).
+        [[nodiscard]] f32 CaretXOnLine(usize offset, usize line) const
         {
-            if (Lines.IsEmpty())
+            if (line >= Lines.Size())
                 return 0.0f;
-            const usize line = LineOf(offset);
             f32 x = Lines[line].Left;
             bool found = false;
             for (const LaidOutGlyphs& run : GlyphRuns)
@@ -402,10 +427,12 @@ export namespace experimental::gui
         }
 
         // Keeps only what of `line` lies in [from, to) across; what straddles an edge is cut
-        // (a glyph goes whole, a box is narrowed). Returns the right edge of what stayed.
-        inline f32 KeepSpan(TextLayout& layout, usize line, f32 from, f32 to)
+        // (a glyph goes whole, a box is narrowed). Returns the right edge of what stayed, and sets
+        // `left` to its left edge.
+        inline f32 KeepSpan(TextLayout& layout, usize line, f32 from, f32 to, f32* left = nullptr)
         {
             f32 right = from;
+            f32 leftmost = to;
             for (LaidOutGlyphs& run : layout.GlyphRuns)
             {
                 if (run.Line != line || run.Unshaped)
@@ -421,6 +448,7 @@ export namespace experimental::gui
                     starts.PushBack(run.GlyphStart[g]);
                     ends.PushBack(run.GlyphEnd[g]);
                     right = Max(right, glyph.x + glyph.advance);
+                    leftmost = Min(leftmost, glyph.x);
                 }
                 if (!glyphs.IsEmpty())
                 {
@@ -454,9 +482,14 @@ export namespace experimental::gui
                     box.Rect.x = left;
                     box.Rect.width = boxRight - left;
                     if (whole)
+                    {
                         right = Max(right, boxRight);
+                        leftmost = Min(leftmost, left);
+                    }
                 }
             }
+            if (left != nullptr)
+                *left = leftmost;
             return right;
         }
 
@@ -475,7 +508,7 @@ export namespace experimental::gui
             ellipsis.Run = -1;
             ellipsis.TextStart = ellipsis.TextEnd = offset;
             if (like.Font != nullptr && like.Font->shaper != nullptr && like.Font->font != nullptr &&
-                like.Font->shaper->ShapeText(*like.Font->font, core::StringView(u8"…"), x, ellipsis.Baseline, ellipsis.Glyphs)
+                like.Font->shaper->ShapeText(*like.Font->font, EllipsisFor(like.Font), x, ellipsis.Baseline, ellipsis.Glyphs)
                     .HasValue())
             {
                 for (const fonts::GlyphPosition& g : ellipsis.Glyphs)
@@ -489,7 +522,7 @@ export namespace experimental::gui
         }
         [[nodiscard]] inline f32 EllipsisWidth(const LaidOutGlyphs& like)
         {
-            return like.Font != nullptr && like.Font->font != nullptr ? like.Font->font->MeasureString(core::StringView(u8"…")) : 0.0f;
+            return like.Font != nullptr && like.Font->font != nullptr ? like.Font->font->MeasureString(EllipsisFor(like.Font)) : 0.0f;
         }
 
         // Ends `line` in an ellipsis where it passes `maxWidth` (always, when `forced`: the clamp cut
@@ -524,11 +557,13 @@ export namespace experimental::gui
             }
             else if (mode == TextOverflow::EllipsisStart)
             {
+                // The tail from where its first whole glyph starts, moved up to the ellipsis.
                 const f32 cut = width - room;
-                (void)KeepSpan(layout, line, cut, width + 1.0f);
-                ShiftLine(layout, line, e - cut);
+                f32 kept = cut;
+                (void)KeepSpan(layout, line, cut, width + 1.0f, &kept);
+                ShiftLine(layout, line, e - kept);
                 AddEllipsis(layout, line, 0.0f, firstStyle, at.Start);
-                at.Width = Min(maxWidth, width - cut + e);
+                at.Width = width - kept + e;
             }
             else
             {
@@ -538,8 +573,9 @@ export namespace experimental::gui
                 // The tail moves next to the head: kept apart, then shifted.
                 TextLayout tail = layout;
                 const f32 headRight = KeepSpan(layout, line, 0.0f, half);
-                (void)KeepSpan(tail, line, tailFrom, width + 1.0f);
-                const f32 shift = headRight + e - tailFrom;
+                f32 tailLeft = tailFrom;
+                (void)KeepSpan(tail, line, tailFrom, width + 1.0f, &tailLeft);
+                const f32 shift = headRight + e - tailLeft;
                 for (LaidOutGlyphs& run : tail.GlyphRuns)
                     if (run.Line == line && !run.Unshaped)
                     {
@@ -567,7 +603,7 @@ export namespace experimental::gui
                         layout.Links.PushBack(box);
                     }
                 AddEllipsis(layout, line, headRight, lastStyle, at.Start);
-                at.Width = headRight + e + (width - tailFrom);
+                at.Width = headRight + e + (width - tailLeft);
             }
             at.Ellipsized = true;
         }

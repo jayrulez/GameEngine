@@ -179,7 +179,13 @@ export namespace experimental::gui
         {
             (void)localBounds;
             SyncServices();
+            // Overflow other than visible clips its own text too, as CSS's does an element's content.
+            const bool clip = ClipsChildren();
+            if (clip)
+                ctx.PushClip(GetLocalBounds());
             m_text.Draw(ctx, GetContentBounds()); // aligned within the padding-inset bounds
+            if (clip)
+                ctx.PopClip();
         }
 
         // A click on a rich text's link reports it.

@@ -388,3 +388,22 @@ TEST_CASE("label: measures shaped text, and a rich label reports a clicked link"
     d->InjectMouseUp(Float2{origin.x + 1.0f, onLink.y}, MouseButton::Left);
     CHECK(heard.IsEmpty());
 }
+
+TEST_CASE("text layout: an ellipsis the font's atlas lacks falls back to full stops")
+{
+    RobotoService fonts; // baked over printable ASCII: no U+2026
+    fonts::CachedFont* roboto = fonts.service.GetFont(u8"Roboto", 16.0f);
+    CHECK_FALSE(FontDraws(roboto, StringView(u8"…")));
+    CHECK(FontDraws(roboto, StringView(u8"abc")));
+    CHECK(EllipsisFor(roboto) == StringView(u8"..."));
+    TextLayoutStyle style = Style(fonts, 60.0f);
+    style.Wrap = false;
+    style.Overflow = TextOverflow::Ellipsis;
+    const TextLayout layout = LayOutText(TextDocument::Plain(u8"a long line of text"), style);
+    usize ellipsisGlyphs = 0;
+    for (const LaidOutGlyphs& run : layout.GlyphRuns)
+        if (run.Run < 0)
+            ellipsisGlyphs += run.Glyphs.Size();
+    CHECK(ellipsisGlyphs == 3u);
+    CHECK(layout.Width <= 60.0f + 0.01f);
+}

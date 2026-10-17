@@ -1,7 +1,8 @@
 # Experimental::GUI.Inspector tests (doctest).
 add_executable(GUI.Inspector.Tests
     TestsMain.cpp
-    QueriesTests.cpp)
+    QueriesTests.cpp
+    InspectorTests.cpp)
 
 target_link_libraries(GUI.Inspector.Tests PRIVATE
     Experimental::GUI.Inspector doctest::doctest)

@@ -32,6 +32,7 @@ import foundation.vg;
 import foundation.vg.renderer;
 import experimental.gui;
 import experimental.gui.shell;
+import experimental.gui.inspector; // Ctrl+Shift+I (E8e)
 import gui.sandbox.stress; // the Stress page (E8a)
 import foundation.script; // the pages' and the game menu's scripts
 #ifdef OPTION_HAS_ANGELSCRIPT
@@ -142,6 +143,8 @@ public:
     void SetScroll(f32 pixels) { m_scroll = pixels; }
     void SetLayoutOverlay(bool on) { m_layoutOverlay = on; }
     void SetInputOverlay(bool on) { m_inputOverlay = on; }
+    void SetOpenInspector(bool on) { m_openInspector = on; }
+    void SetInspectSelector(StringView selector) { m_openInspector = true; m_inspectSelector = String(selector); }
 
     GUISandbox()
     {
@@ -177,6 +180,12 @@ private:
     void ToggleTheme();
     // The layout overlay (F9) on both roots: bounds, padding, margins and text baselines.
     void ApplyDebugOverlay();
+    void ToggleInspector();
+    // The inspector's pane width in device pixels (0 while it is closed).
+    [[nodiscard]] f32 InspectorPixels() const
+    {
+        return m_inspectorOpen ? kInspectorWidth * (m_window != nullptr ? m_window->ContentScale() : 1.0f) : 0.0f;
+    }
     void OpenWindow();
     void ShowMessage();
     void OpenMenu();
@@ -255,6 +264,14 @@ private:
     UniquePtr<gui::ShellClipboard> m_clipboard;
     UniquePtr<shell::InputSurface> m_inputSurface;
     UniquePtr<shell::InputRouter> m_router;
+    // The inspector (E8e): a pane of its own root on the right, Ctrl+Shift+I.
+    UniquePtr<gui::inspector::Inspector> m_inspector;
+    UniquePtr<gui::GuiInputBridge> m_inspectorBridge;
+    UniquePtr<shell::InputSurface> m_inspectorSurface;
+    bool m_inspectorOpen = false;
+    bool m_openInspector = false; // --inspector
+    String m_inspectSelector;     // --inspect <selector>: selected once the GUI is up
+    static constexpr f32 kInspectorWidth = 460.0f; // logical units
     bool m_showingMenu = false;
     f32 m_menuLeaveAt = -1.0f; // when the game menu's Leave has faded: back to the sandbox
 
@@ -462,6 +479,8 @@ void GUISandbox::BuildSandbox()
     (void)m_root->OnCommand(u8"debug.input", [self](gui::CommandEvent&) { self->m_inputOverlay = !self->m_inputOverlay; self->ApplyDebugOverlay(); });
     (void)m_gui->GetKeymap().Bind(u8"f9", u8"debug.layout");
     (void)m_gui->GetKeymap().Bind(u8"f8", u8"debug.input");
+    (void)m_root->OnCommand(u8"inspector.toggle", [self](gui::CommandEvent&) { self->ToggleInspector(); });
+    (void)m_gui->GetKeymap().Bind(u8"ctrl-shift-i", u8"inspector.toggle");
     m_root->SetDebugFont(m_font);
     ApplyDebugOverlay();
 
@@ -475,6 +494,8 @@ void GUISandbox::BuildSandbox()
     ShowPage(m_startPage.AsView());
 
     m_bridge = MakeUnique<gui::GuiInputBridge>(AppRoot(), m_root->GetEventDispatcher());
+    if (m_openInspector)
+        ToggleInspector();
     if (m_shell != nullptr)
     {
         m_clipboard = MakeUnique<gui::ShellClipboard>(AppRoot(), m_shell);
@@ -809,6 +830,23 @@ void GUISandbox::ApplyDebugOverlay()
         m_menuRoot->SetDebugOverlay(overlay);
 }
 
+void GUISandbox::ToggleInspector()
+{
+    if (!m_inspector)
+    {
+        m_inspector = MakeUnique<gui::inspector::Inspector>(AppRoot(), AppRoot(), m_gui, m_fontService.Get());
+        m_inspectorBridge = MakeUnique<gui::GuiInputBridge>(AppRoot(), m_inspector->GetRoot().GetEventDispatcher());
+        if (m_window != nullptr)
+            m_inspectorBridge->SetTextInputTarget(m_window);
+    }
+    m_inspectorOpen = !m_inspectorOpen;
+    if (m_inspectorOpen)
+        m_inspector->Inspect(&Shown(), m_showingMenu ? &m_menuStyles : &m_styles);
+    else
+        m_inspector->SetPicking(false);
+    Shown().Invalidate();
+}
+
 void GUISandbox::BuildMenu()
 {
     m_menuRoot = MakeRef<gui::SceneRoot>(AppRoot(), m_gui);
@@ -819,6 +857,7 @@ void GUISandbox::BuildMenu()
         GUISandbox* self = this;
         (void)m_menuRoot->OnCommand(u8"debug.layout", [self](gui::CommandEvent&) { self->m_layoutOverlay = !self->m_layoutOverlay; self->ApplyDebugOverlay(); });
         (void)m_menuRoot->OnCommand(u8"debug.input", [self](gui::CommandEvent&) { self->m_inputOverlay = !self->m_inputOverlay; self->ApplyDebugOverlay(); });
+        (void)m_menuRoot->OnCommand(u8"inspector.toggle", [self](gui::CommandEvent&) { self->ToggleInspector(); });
     }
     m_menuRoot->SetDebugFont(m_font);
     ApplyDebugOverlay();
@@ -991,7 +1030,9 @@ void GUISandbox::RouteInput()
         return;
     shell::IInputManager& input = *m_shell->Input();
     gui::GuiInputBridge& bridge = m_showingMenu ? *m_menuBridge : *m_bridge;
-    const Rectangle region{0.0f, 0.0f, static_cast<f32>(m_width), static_cast<f32>(m_height)};
+    // The inspector's pane takes the window's right side; the root on show the rest.
+    const f32 pane = InspectorPixels();
+    const Rectangle region{0.0f, 0.0f, static_cast<f32>(m_width) - pane, static_cast<f32>(m_height)};
     if (!m_inputSurface)
     {
         const ContentFit fit{region, Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)}, FitMode::Stretch};
@@ -1008,10 +1049,40 @@ void GUISandbox::RouteInput()
     }
     m_inputSurface->SetRegion(region);
     m_inputSurface->SetWindowSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)}); // places fingers
-    m_inputSurface->SetContentSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)});
+    m_inputSurface->SetContentSize(Float2{region.width, region.height});
+    if (m_inspector && !m_inspectorSurface)
+    {
+        const ContentFit none{Rectangle{}, Float2{1.0f, 1.0f}, FitMode::Stretch};
+        m_inspectorSurface = MakeUnique<shell::InputSurface>(AppRoot(), &input, m_window->Id(), none);
+        m_router->AddSurface(m_inspectorSurface.Get());
+        m_inspectorBridge->SetCursorTarget(input.Mouse());
+    }
+    if (m_inspectorSurface)
+    {
+        // Its own root sits at its origin (drawn moved over): the pane maps to it from 0.
+        m_inspectorSurface->SetRegion(Rectangle{region.width, 0.0f, pane, static_cast<f32>(m_height)});
+        m_inspectorSurface->SetWindowSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)});
+        m_inspectorSurface->SetContentSize(Float2{Max(pane, 1.0f), static_cast<f32>(m_height)});
+    }
     m_router->Update();
-    if (m_keys.Size() == 0) // a --keys script owns the pointer: the desk's mouse would move it back
+    const bool picking = m_inspectorOpen && m_inspector->IsPicking();
+    if (picking)
+    {
+        // Picking: the pointer over the root on show goes to the inspector, not to it.
+        shell::IMouse& mouse = *m_inputSurface->Mouse();
+        if (m_inputSurface->MouseActive())
+        {
+            m_inspector->PickHover(Float2{mouse.X(), mouse.Y()});
+            if (mouse.ScrollY() != 0.0f)
+                m_inspector->PickWheel(mouse.ScrollY());
+            if (mouse.IsButtonPressed(shell::MouseButton::Left))
+                m_inspector->PickClick();
+        }
+    }
+    else if (m_keys.Size() == 0) // a --keys script owns the pointer: the desk's mouse would move it back
         bridge.PumpFromSurface(*m_inputSurface);
+    if (m_inspectorOpen && m_inspectorSurface)
+        m_inspectorBridge->PumpFromSurface(*m_inspectorSurface);
     // Files the OS dropped on the window go through the GUI's drag path (E7).
     Array<shell::DroppedFile> drops(AppRoot());
     m_shell->DrainDroppedFiles(drops);
@@ -1030,7 +1101,11 @@ void GUISandbox::RouteInput()
         case shell::InputEventKind::GamepadButtonDown:
         case shell::InputEventKind::GamepadButtonUp:
         case shell::InputEventKind::GamepadAxis:
-            bridge.Dispatch(event);
+            // Keys go to the pane while it has the focus (it was clicked last).
+            if (m_inspectorOpen && m_inspectorSurface && m_inspectorSurface->Focused())
+                m_inspectorBridge->Dispatch(event);
+            else
+                bridge.Dispatch(event);
             break;
         default:
             break;
@@ -1194,7 +1269,7 @@ void GUISandbox::OnRender()
         Sweep();
 
     // A window moved to a monitor of another density takes its scale.
-    const Float2 viewport{static_cast<f32>(m_width), static_cast<f32>(m_height)};
+    const Float2 viewport{static_cast<f32>(m_width) - InspectorPixels(), static_cast<f32>(m_height)};
     gui::SceneRoot* roots[2] = {m_root.Get(), m_menuRoot.Get()};
     for (gui::SceneRoot* root : roots)
     {
@@ -1215,6 +1290,23 @@ void GUISandbox::OnRender()
     styles.SetMediaContext(drawn.GetMediaContext());
     styles.ApplyTree(drawn);
     drawn.UpdateLayout();
+    bool paneNeeds = false;
+    if (m_inspectorOpen)
+    {
+        gui::SceneRoot& pane = m_inspector->GetRoot();
+        if (m_inspector->GetTarget() != &drawn) // the game menu opened or closed
+            m_inspector->Inspect(&drawn, m_showingMenu ? &m_menuStyles : &m_styles);
+        if (m_window != nullptr && m_window->ContentScale() != pane.GetDisplayScale())
+            pane.SetDisplayScale(m_window->ContentScale());
+        pane.SetViewportSize(Float2{InspectorPixels(), static_cast<f32>(m_height)});
+        if (m_inspectSelector.Size() != 0 && m_frames == 10)
+            (void)m_inspector->SelectQuery(m_inspectSelector.AsView());
+        m_inspector->Refresh();
+        m_inspector->GetStyles().SetMediaContext(pane.GetMediaContext());
+        m_inspector->GetStyles().ApplyTree(pane);
+        pane.UpdateLayout();
+        paneNeeds = pane.NeedsFrame();
+    }
 
     // Nothing changed, nothing animating: skip the frame (the last one stays on screen) and wait a
     // little instead of spinning. --always-redraw draws every frame.
@@ -1234,7 +1326,8 @@ void GUISandbox::OnRender()
         m_stress->ShowStats(drawn.GetLastFrameStats());
         m_nextStressStatsTime = m_totalTime + 1.0f;
     }
-    if (!m_alwaysRedraw && !drawn.NeedsFrame() && !ScreenshotPending())
+    const bool drawnNeeds = drawn.NeedsFrame();
+    if (!m_alwaysRedraw && !drawnNeeds && !paneNeeds && !ScreenshotPending())
     {
         SleepMilliseconds(8);
         return;
@@ -1249,6 +1342,17 @@ void GUISandbox::DrawAndPresent(gui::SceneRoot& root)
     {
         gui::DrawContext dc{*m_vg};
         root.DrawFrame(dc); // timed and counted: --frame-stats prints it
+        if (m_inspectorOpen)
+        {
+            m_inspector->RecordFrame(root.GetLastFrameStats());
+            m_inspector->DrawOverTarget(dc);
+            // The pane, its root moved to the window's right side.
+            gui::DrawContext paneContext{*m_vg};
+            m_vg->PushState();
+            m_vg->Translate(static_cast<f32>(m_width) - InspectorPixels(), 0.0f);
+            m_inspector->GetRoot().DrawFrame(paneContext);
+            m_vg->PopState();
+        }
     }
     vg::VGBatch& batch = m_vg->GetBatch();
 
@@ -1315,6 +1419,9 @@ void GUISandbox::OnShutdown()
     closeScript(m_menuScript);
     m_scripts.Reset();
     m_router.Reset();
+    m_inspectorSurface.Reset();
+    m_inspectorBridge.Reset();
+    m_inspector.Reset(); // its root on the GUI's context, before the context
     m_inputSurface.Reset();
     m_bridge.Reset();
     m_menuBridge.Reset();
@@ -1355,7 +1462,9 @@ int main(int argc, char** argv)
     // page, then open the game menu, printing each step, and exit (a smoke test; a crash's last line
     // names its widget). --scroll <px>: scroll the page down that far once it is up.
     // --layout-overlay: start with the layout overlay on (F9 toggles it). --input-overlay: start with
-    // the input overlay on (F8 toggles it: focus path, tab order, navigation, pointer, redraws). --stress <n>: start on
+    // the input overlay on (F8 toggles it: focus path, tab order, navigation, pointer, redraws).
+    // --inspector: start with the inspector's pane open (Ctrl+Shift+I toggles it). --inspect <selector>:
+    // open it with the first widget the selector matches selected. --stress <n>: start on
     // the Stress page, built at load n (1 to 20; measure in RelWithDebInfo). With the
     // framework's --screenshot flags, a picture of any of it.
     for (int i = 1; i < argc; ++i)
@@ -1380,6 +1489,10 @@ int main(int argc, char** argv)
             app.SetLayoutOverlay(true);
         else if (arg == StringView(u8"--input-overlay"))
             app.SetInputOverlay(true);
+        else if (arg == StringView(u8"--inspector"))
+            app.SetOpenInspector(true);
+        else if (arg == StringView(u8"--inspect") && i + 1 < argc)
+            app.SetInspectSelector(next());
         else if (arg == StringView(u8"--stress") && i + 1 < argc)
             app.SetStress(std::atoi(reinterpret_cast<const char*>(argv[++i])));
         else if (arg == StringView(u8"--scroll") && i + 1 < argc)

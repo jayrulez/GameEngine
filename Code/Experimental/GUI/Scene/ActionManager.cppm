@@ -39,34 +39,16 @@ export namespace experimental::gui
 
         // Ticks all actions, each by `elapsed` times its target's time scale (1 without one);
         // drops finished ones and those whose target is gone.
-        void Update(core::Duration elapsed, const TimeScale& scaleOf = {})
-        {
-            for (usize i = 0; i < m_actions.Size();)
-            {
-                Node* target = m_actions[i]->ResolveTarget();
-                if (target == nullptr && m_actions[i]->GetTarget() != nullptr)
-                {
-                    m_actions.RemoveAt(i); // its target was destroyed
-                    continue;
-                }
-                const f32 scale = (scaleOf && target != nullptr) ? scaleOf(*target) : 1.0f;
-                if (scale == 1.0f)
-                    m_actions[i]->Update(elapsed);
-                else if (scale > 0.0f)
-                    m_actions[i]->Update(core::Duration::FromSeconds(static_cast<f64>(elapsed.AsSecondsF()) * static_cast<f64>(scale)));
-                if (m_actions[i]->IsDone())
-                    m_actions.RemoveAt(i);
-                else
-                    ++i;
-            }
-        }
+        /// An action that cannot bring its target into view, on a target out of view at the last
+        /// frame, writes quietly (E8b): its target's invalidations mark it alone, asking for no frame.
+        void Update(core::Duration elapsed, const TimeScale& scaleOf = {});
 
-        /// Whether an action is running on a target `matches` takes (a root's own, for its frames).
+        /// Whether an action is running that `matches(action, target)` takes (a root asks for its frames).
         template <typename Predicate>
-        [[nodiscard]] bool AnyTarget(Predicate&& matches) const
+        [[nodiscard]] bool AnyAction(Predicate&& matches) const
         {
             for (const RefPtr<Action>& a : m_actions)
-                if (Node* target = a->ResolveTarget(); target != nullptr && matches(*target))
+                if (Node* target = a->ResolveTarget(); target != nullptr && matches(*a, *target))
                     return true;
             return false;
         }

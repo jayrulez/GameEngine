@@ -56,6 +56,8 @@ export namespace experimental::gui
         {
         }
 
+        [[nodiscard]] bool CanMoveTarget() const override { return false; }
+
     protected:
         void OnStep(f32 t) override
         {
@@ -96,6 +98,7 @@ export namespace experimental::gui
         RTTI_OBJECT(DelayAction, ActionInterpolation)
     public:
         explicit DelayAction(core::Duration duration) noexcept : ActionInterpolation(duration) {}
+        [[nodiscard]] bool CanMoveTarget() const override { return false; }
 
     protected:
         void OnStep(f32) override {}
@@ -150,6 +153,8 @@ export namespace experimental::gui
               m_duration(duration), m_loop(loop)
         {
         }
+
+        [[nodiscard]] bool CanMoveTarget() const override { return false; } // opacity and colour
 
         void Start() override
         {
@@ -258,6 +263,13 @@ export namespace experimental::gui
         RTTI_OBJECT(SequenceAction, Action)
     public:
         void Add(RefPtr<Action> action) { m_children.PushBack(core::Move(action)); }
+        [[nodiscard]] bool CanMoveTarget() const override
+        {
+            for (const RefPtr<Action>& c : m_children)
+                if (c->CanMoveTarget())
+                    return true;
+            return false;
+        }
 
         void Start() override
         {

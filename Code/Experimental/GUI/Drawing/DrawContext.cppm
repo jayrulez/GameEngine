@@ -63,6 +63,24 @@ export namespace experimental::gui
         }
 
         // What a draw did (E8a): the nodes it drew and the ones it culled.
+        /// Whether a rect in the current space can put anything under the clip, with a margin for
+        /// what no ink box measures (text effects an ancestor sets, glyphs past their advance,
+        /// anti-aliasing). True with culling off.
+        [[nodiscard]] bool IsVisible(const Rect& local) const
+        {
+            if (!m_culling)
+                return true;
+            constexpr f32 kMargin = 32.0f;
+            return m_vg->IsRectVisible(Rectangle{local.x - kMargin, local.y - kMargin, local.width + 2.0f * kMargin,
+                                                 local.height + 2.0f * kMargin});
+        }
+        /// Off, every node draws, whatever the clip (the culling test's reference).
+        void SetCulling(bool culling) noexcept { m_culling = culling; }
+        [[nodiscard]] bool IsCulling() const noexcept { return m_culling; }
+        /// The host's frame being drawn (SceneRoot::DrawFrame numbers them; 0 for a draw outside one):
+        /// each node drawn notes it, so an animation knows whether its node showed.
+        void SetFrame(u32 frame) noexcept { m_frame = frame; }
+        [[nodiscard]] u32 Frame() const noexcept { return m_frame; }
         void CountDrawn() noexcept { ++m_nodesDrawn; }
         void CountCulled() noexcept { ++m_nodesCulled; }
         [[nodiscard]] u32 NodesDrawn() const noexcept { return m_nodesDrawn; }
@@ -73,5 +91,7 @@ export namespace experimental::gui
         f32 m_dpiScale;
         u32 m_nodesDrawn = 0;
         u32 m_nodesCulled = 0;
+        bool m_culling = true;
+        u32 m_frame = 0;
     };
 }

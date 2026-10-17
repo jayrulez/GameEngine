@@ -121,6 +121,7 @@ target_sources(GUI
         # (kept out of :node to avoid a :node <-> :event_dispatcher partition cycle).
         Scene/GUIClusterImpl.cpp
         Layout/LayoutImpl.cpp
+        Scene/ActionManagerImpl.cpp
         Scene/GUIReflectionImpl.cpp
         Core/ReactiveImpl.cpp)
 

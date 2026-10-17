@@ -333,7 +333,7 @@ TEST_CASE("textfield: blink toggles the caret over time while focused")
     frames(2);
     CHECK_FALSE(f->IsCaretShown());
     frames(1);
-    CHECK_FALSE(root->GetContext().GetActionManager().AnyTarget([&](Node& n) { return &n == f.Get(); }));
+    CHECK_FALSE(root->GetContext().GetActionManager().AnyAction([&](const Action&, Node& n) { return &n == f.Get(); }));
     // Focus again: it blinks again (a new tick), starting shown.
     f->RequestFocus();
     CHECK(f->IsCaretShown());

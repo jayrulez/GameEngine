@@ -175,6 +175,18 @@ export namespace experimental::gui
             m_text.SetLetterSpacing(style.LetterSpacing);
         }
 
+        /// Its box and, unless it clips it, its text where it is laid out (a line past the box).
+        [[nodiscard]] Rect GetInkBounds() const override
+        {
+            const Rect ink = UIWidget::GetInkBounds();
+            if (ClipsChildren() || !m_text.HasFont() || m_text.IsEmpty())
+                return ink;
+            const Rect bounds = GetContentBounds();
+            const TextLayout& layout = m_text.LayoutFor(bounds);
+            const core::Float2 origin = m_text.Origin(bounds);
+            return Rect::Union(ink, Rect{origin.x, origin.y, core::Max(layout.Width, bounds.width), layout.Height});
+        }
+
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
         {
             (void)localBounds;

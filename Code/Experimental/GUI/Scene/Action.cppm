@@ -46,6 +46,11 @@ export namespace experimental::gui
         [[nodiscard]] virtual bool IsDone() = 0;
         [[nodiscard]] virtual f32 GetCurrentProgress() = 0;
         [[nodiscard]] virtual core::Duration GetTotalTime() = 0;
+        /// Whether it can change where its target is, how big, or how far its drawing reaches (an
+        /// animation that could bring a node out of view into view). One that cannot asks for no
+        /// frames while its target is out of view (E8b); it still runs, so it is caught up when the
+        /// target shows. True unless an action knows better.
+        [[nodiscard]] virtual bool CanMoveTarget() const { return true; }
 
         void SetTarget(Node* target)
         {

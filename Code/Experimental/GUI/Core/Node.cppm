@@ -558,10 +558,18 @@ export namespace experimental::gui
         {
             if (!m_visible || m_alpha <= 0.0f || !IsDisplayed())
                 return;
-            ctx.CountDrawn();
 
             ctx.Save();
             ctx.ConcatTransform(GetTransform());
+            // Nothing it or its subtree draws reaches the clip: none of it is drawn (E8b).
+            if (!ctx.IsVisible(GetSubtreeInk()))
+            {
+                ctx.CountCulled();
+                ctx.Restore();
+                return;
+            }
+            ctx.CountDrawn();
+            m_drawnFrame = ctx.Frame();
             if (m_box.TextEffectsSet != 0)
                 ctx.VG().SetTextEffects(m_box.MergeTextEffects(ctx.VG().GetTextEffects()));
             // A node with children fades as one picture (CSS's opacity), as does one with a filter
@@ -635,6 +643,64 @@ export namespace experimental::gui
             ctx.Restore();
             m_needsRedraw = false; // drawn: clean until something invalidates it again
         }
+
+        /// What it draws itself, in its own space: its box grown by its outer shadows (three sigma
+        /// of their blur past their spread and offset). A widget drawing past its box adds that (a
+        /// label's overflowing text); a filter's blur is added over the whole subtree.
+        [[nodiscard]] virtual Rect GetInkBounds() const
+        {
+            Rect ink = GetLocalBounds();
+            for (const BoxShadow& shadow : m_box.Shadows)
+            {
+                if (shadow.Inset)
+                    continue;
+                const f32 reach = shadow.Spread + 1.5f * shadow.Blur; // the blur is CSS's: sigma is half
+                ink = Rect::Union(ink, Rect{shadow.Offset.x - reach, shadow.Offset.y - reach,
+                                            m_size.x + 2.0f * reach, m_size.y + 2.0f * reach});
+            }
+            return ink;
+        }
+        /// What it and its subtree draw, in its own space: its ink and its shown children's (within
+        /// its box when it clips them), grown by its filter's blur. Kept until it or something in
+        /// it invalidates, which reaches every ancestor of what changed.
+        [[nodiscard]] const Rect& GetSubtreeInk() const
+        {
+            if (m_subtreeInkValid)
+                return m_subtreeInk;
+            Rect ink = GetInkBounds();
+            if (!ClipsChildren())
+                for (const RefPtr<Node>& child : m_children)
+                {
+                    const Node& c = *child;
+                    if (c.m_topLayer || !c.m_visible || c.m_alpha <= 0.0f || !c.IsDisplayed())
+                        continue;
+                    ink = Rect::Union(ink, c.GetTransform().TransformRect(c.GetSubtreeInk()));
+                }
+            if (m_box.FilterBlur > 0.0f)
+            {
+                const f32 reach = 3.0f * m_box.FilterBlur; // a sigma
+                ink = Rect{ink.x - reach, ink.y - reach, ink.width + 2.0f * reach, ink.height + 2.0f * reach};
+            }
+            m_subtreeInk = ink;
+            m_subtreeInkValid = true;
+            return m_subtreeInk;
+        }
+
+        /// The host's frame it was last drawn in (0: none yet); one hidden or culled keeps an older one.
+        [[nodiscard]] u32 GetDrawnFrame() const noexcept { return m_drawnFrame; }
+        /// The host's last drawn frame, as its root counts them (0 outside a GUI or before one).
+        [[nodiscard]] virtual u32 GetLastDrawnFrame() const { return m_parent != nullptr ? m_parent->GetLastDrawnFrame() : 0u; }
+        /// Not drawn in the host's last frame: hidden, culled, or under something culled.
+        [[nodiscard]] bool WasOutOfView() const
+        {
+            const u32 last = GetLastDrawnFrame();
+            return last != 0 && m_drawnFrame != last;
+        }
+        /// Between these, its invalidations mark it alone, as a hidden node's do: a change that only
+        /// paints it differently, made while it is out of view, asks for no frame (it shows when
+        /// something brings it into view, which redraws on its own).
+        void BeginQuietInvalidation() noexcept { ++m_quietInvalidations; }
+        void EndQuietInvalidation() noexcept { --m_quietInvalidations; }
 
         // === What a frame must redo (only what changed: a clean subtree costs nothing) ===
 
@@ -1525,10 +1591,14 @@ export namespace experimental::gui
         void Invalidate()
         {
             m_needsRedraw = true;
-            if (!IsTreeVisible())
+            m_subtreeInkValid = false;
+            if (!IsTreeVisible() || m_quietInvalidations != 0)
                 return;
             for (Node* p = m_parent; p != nullptr; p = p->m_parent)
+            {
                 p->m_needsRedraw = true;
+                p->m_subtreeInkValid = false; // what it holds may reach elsewhere now
+            }
         }
         [[nodiscard]] bool NeedsRedraw() const noexcept { return m_needsRedraw; }
         void ClearNeedsRedraw() noexcept { m_needsRedraw = false; }
@@ -1976,6 +2046,10 @@ export namespace experimental::gui
         bool m_visible = true;
         bool m_enabled = true;
         bool m_needsRedraw = true;
+        mutable bool m_subtreeInkValid = false; // m_subtreeInk holds what it and its subtree draw
+        u32 m_drawnFrame = 0;                   // the host's frame it was last drawn in
+        u8 m_quietInvalidations = 0;            // inside BeginQuietInvalidation's
+        mutable Rect m_subtreeInk{};
         bool m_styleDirty = true;          // restyle this node
         bool m_styleSubtreeDirty = true;   // ... and every descendant
         bool m_childStyleDirty = false;    // some descendant waits for a restyle

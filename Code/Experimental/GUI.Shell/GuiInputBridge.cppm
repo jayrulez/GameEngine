@@ -85,6 +85,36 @@ export namespace experimental::gui
                 m_textInputTarget->StartTextInput(kind); // a move between a field and a password switches kind
             else if (!want && m_textInputTarget->IsTextInputActive())
                 m_textInputTarget->StopTextInput();
+            SyncTextInputArea();
+        }
+        // Tells the window where the focused field types (its line, the caret across it), in
+        // window coordinates, when that moved: the IME shows its candidates beside it.
+        void SyncTextInputArea()
+        {
+            Rect area{};
+            f32 caretX = 0.0f;
+            if (!m_dispatcher->GetTextInputArea(area, caretX))
+                return;
+            core::Float2 a{area.x, area.y};
+            core::Float2 b{area.x + area.width, area.y + area.height};
+            core::Float2 caret{area.x + caretX, area.y};
+            if (m_hasFit)
+            {
+                a = m_fit.FromContent(a);
+                b = m_fit.FromContent(b);
+                caret = m_fit.FromContent(caret);
+            }
+            const i32 shown[5] = {static_cast<i32>(core::Min(a.x, b.x)), static_cast<i32>(core::Min(a.y, b.y)),
+                                  static_cast<i32>(core::Abs(b.x - a.x) + 0.5f), static_cast<i32>(core::Abs(b.y - a.y) + 0.5f),
+                                  static_cast<i32>(caret.x - core::Min(a.x, b.x))};
+            bool same = true;
+            for (usize i = 0; i < 5; ++i)
+                same = same && shown[i] == m_textInputArea[i];
+            if (same)
+                return;
+            for (usize i = 0; i < 5; ++i)
+                m_textInputArea[i] = shown[i];
+            m_textInputTarget->SetTextInputArea(shown[0], shown[1], shown[2], shown[3], shown[4]);
         }
 
         // Translate one platform input event into a dispatcher injection. Returns true if the GUI
@@ -145,6 +175,9 @@ export namespace experimental::gui
                 break;
             case shell::InputEventKind::TextInput:
                 routed = m_dispatcher->InjectText(core::StringView(event.text));
+                break;
+            case shell::InputEventKind::TextEditing:
+                routed = m_dispatcher->InjectComposition(core::StringView(event.text), event.editCursor);
                 break;
             case shell::InputEventKind::GamepadButtonDown:
             case shell::InputEventKind::GamepadButtonUp:
@@ -508,6 +541,7 @@ export namespace experimental::gui
         shell::IMouse* m_cursorTarget = nullptr; // mouse whose cursor follows the GUI's (optional)
         shell::CursorType m_shownCursor = shell::CursorType::Count; // last applied (Count: none yet)
         core::ContentFit m_fit{};
+        i32 m_textInputArea[5] = {-1, -1, -1, -1, -1}; // what the window was last told (SyncTextInputArea)
         bool m_hasFit = false;
         core::Float2 m_windowSize{0.0f, 0.0f}; // for placing touch events (SetWindowSize)
         bool m_touchSeen = false;              // a finger was used: the mouse may be SDL's copy of it

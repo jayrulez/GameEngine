@@ -32,7 +32,7 @@ export namespace experimental::gui
             button:active { opacity: 0.78; }
             .tab          { background-color: #23262e; color: #c2c9d4; }
             .tab.selected { background-color: #33507a; color: #f4f7fb; }
-            textfield { background-color: #20242b; color: #f0f4f8; padding: 6; cursor: text; }
+            textfield, textarea { background-color: #20242b; color: #f0f4f8; padding: 6; cursor: text; }
             listbox   { background-color: #14161a; }
             listbox::selection { background-color: #2f5f9e; }
             listview  { background-color: #14161a; color: #d2d8e0; } /* color propagates to rows */
@@ -86,7 +86,7 @@ export namespace experimental::gui
             button:active { opacity: 0.78; }
             .tab          { background-color: #cfd6e2; color: #3a4453; }
             .tab.selected { background-color: #ffffff; color: #17202b; }
-            textfield { background-color: #ffffff; color: #10161d; padding: 6; cursor: text; }
+            textfield, textarea { background-color: #ffffff; color: #10161d; padding: 6; cursor: text; }
             listbox   { background-color: #f2f4f8; }
             listbox::selection { background-color: #bcd6f4; }
             listview  { background-color: #f2f4f8; color: #1c2530; } /* color propagates to rows */

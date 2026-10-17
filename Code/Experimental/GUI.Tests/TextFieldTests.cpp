@@ -701,3 +701,32 @@ TEST_CASE("textfield: a password shows a mask, keeps carets on its characters, a
     CHECK_FALSE(clip.HasText());
     CHECK(fx.field->GetText() == core::StringView(u8"s\u00e9cret"));
 }
+
+TEST_CASE("textfield: an IME's composition shows in place of the selection until it commits as text")
+{
+    Fixture fx(u8"ab cd");
+    fx.field->SetCaret(3); // after "ab "
+    int inputs = 0;
+    fx.field->SetOnTextChanging([&](core::StringView) { ++inputs; });
+    CHECK(fx.d()->InjectComposition(core::StringView(u8"xyz"), 2));
+    CHECK(fx.field->GetText() == core::StringView(u8"ab cd")); // not the value yet
+    CHECK(inputs == 0);
+    // It types where the composition is, the caret two characters into it (6px a byte).
+    Rect area{};
+    core::f32 caretX = 0.0f;
+    REQUIRE(fx.d()->GetTextInputArea(area, caretX));
+    CHECK(area.x == doctest::Approx(18.0f));
+    CHECK(area.width == doctest::Approx(18.0f));
+    CHECK(caretX == doctest::Approx(12.0f));
+
+    fx.d()->InjectComposition(core::StringView(), 0); // ended
+    fx.d()->InjectText(core::StringView(u8"XY"));     // committed
+    CHECK(fx.field->GetText() == core::StringView(u8"ab XYcd"));
+    CHECK(inputs == 1);
+
+    // Over a selection, the committed text replaces it; leaving drops an unfinished one.
+    fx.field->SelectAll();
+    fx.d()->InjectComposition(core::StringView(u8"q"), 1);
+    fx.field->ReleaseFocus();
+    CHECK(fx.field->GetText() == core::StringView(u8"ab XYcd"));
+}

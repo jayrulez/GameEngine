@@ -47,6 +47,7 @@ add_executable(GUI.Tests
     SliderTests.cpp
     ProgressBarTests.cpp
     TextFieldTests.cpp
+    TextAreaTests.cpp
     ScrollTests.cpp
     RadioTests.cpp
     ImageWidgetTests.cpp

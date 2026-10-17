@@ -541,3 +541,34 @@ TEST_CASE("bridge: PumpFromSurface forwards the polled finger: down when it appe
     CHECK_FALSE(root->GetEventDispatcher()->IsTouchActive());
     CHECK(clicks == 1);
 }
+
+TEST_CASE("bridge: an IME's composition reaches the focused field, and the window learns where it types")
+{
+    auto root = MakeScene(core::Float2{200.0f, 200.0f});
+    auto field = core::MakeRef<TextField>(core::DefaultAllocator());
+    field->SetPosition(core::Float2{20.0f, 40.0f});
+    field->SetSize(core::Float2{100.0f, 24.0f});
+    root->AddChild(field.Get());
+    shell::NullWindow window(1u, shell::WindowSettings{});
+    GuiInputBridge bridge{root->GetEventDispatcher()};
+    bridge.SetTextInputTarget(&window);
+    bridge.Dispatch(MakeButtonEvent(shell::InputEventKind::MouseButtonDown, 30.0f, 50.0f, shell::MouseButton::Left));
+    REQUIRE(field->IsFocused());
+    // Where the field types: its line, in window coordinates.
+    CHECK(window.LastTextInputArea().x == 20);
+    CHECK(window.LastTextInputArea().y >= 40);
+    CHECK(window.LastTextInputArea().y < 64);
+
+    shell::InputEvent editing{};
+    editing.kind = shell::InputEventKind::TextEditing;
+    shell::CopyEventText(editing.text, "nihon");
+    editing.editCursor = 5;
+    CHECK(bridge.Dispatch(editing));
+    CHECK(field->GetText().Size() == 0); // shown, not yet the value
+
+    shell::InputEvent committed{};
+    committed.kind = shell::InputEventKind::TextInput;
+    shell::CopyEventText(committed.text, "\xe6\x97\xa5\xe6\x9c\xac"); // the committed text
+    bridge.Dispatch(committed);
+    CHECK(field->GetText() == core::StringView(u8"\u65e5\u672c"));
+}

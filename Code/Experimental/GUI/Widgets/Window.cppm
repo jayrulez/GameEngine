@@ -3,10 +3,12 @@
 
 // GUI - :window partition
 //
-// Window: a movable, resizable panel with a title bar and a content area. Modeled on eepp's
-// UIWindow (role only). Dragging the title bar moves the window; dragging the bottom-right
-// grip resizes it (clamped to a minimum). Pressing anywhere on the title raises the window to
-// the front. Movement uses incremental world-space cursor deltas via an internal DragHandle
+// Window: a movable panel with a title bar and a content area. Modeled on eepp's UIWindow (role
+// only). Dragging the title bar moves the window; with `resizable`, dragging the bottom-right
+// grip resizes it (clamped to a minimum); with `closable`, a close button in the title bar
+// closes it. Pressing anywhere on the title raises the window to the front. It arranges its
+// parts itself (title bar, content, grip), its look the theme's (window::title, ::grip,
+// `window titlebar > close`). Movement uses incremental world-space cursor deltas via an internal DragHandle
 // that follows the Slider/ScrollBar capture discipline (own m_dragging flag, so a drag that
 // leaves the handle keeps tracking). Nested parent transforms are not accounted for (deltas
 // are treated as parent-local) - fine for top-level windows under an untransformed root.
@@ -27,10 +29,15 @@ import :node;
 import :label;
 import :ui_widget;
 import :event_dispatcher;
+import :button_base;
+import :draw_context;
+import :layout_style;
+import foundation.vg; // PathBuilder, StrokeStyle (the close cross, the grip's lines)
 
 using namespace foundation::core;
 namespace core = foundation::core;
 namespace fonts = foundation::fonts;
+namespace vg = foundation::vg;
 
 export namespace experimental::gui
 {
@@ -77,6 +84,71 @@ export namespace experimental::gui
         core::Float2 m_last{0.0f, 0.0f};
     };
 
+    // A window's close button (`window titlebar > close`): a cross in its text colour.
+    class WindowCloseButton : public ButtonBase
+    {
+        RTTI_OBJECT(WindowCloseButton, ButtonBase)
+    public:
+        WindowCloseButton()
+        {
+            SetTag(core::StringView(u8"close"));
+            SetTabFocusable(false); // Escape closes from the keys
+        }
+        [[nodiscard]] core::Float2 MeasureContent(core::Float2) override { return core::Float2{10.0f, 10.0f}; }
+
+    protected:
+        void OnDraw(DrawContext& ctx, const Rect& localBounds) override
+        {
+            ButtonBase::OnDraw(ctx, localBounds);
+            const Rect box = GetContentBounds();
+            const f32 r = core::Min(box.width, box.height) * 0.5f;
+            const f32 cx = box.x + box.width * 0.5f;
+            const f32 cy = box.y + box.height * 0.5f;
+            vg::PathBuilder cross;
+            cross.MoveTo(cx - r, cy - r);
+            cross.LineTo(cx + r, cy + r);
+            cross.MoveTo(cx + r, cy - r);
+            cross.LineTo(cx - r, cy + r);
+            ctx.VG().StrokePath(cross.ToPath(), GetTextColor(), vg::StrokeStyle(1.5f, vg::VGLineCap::Round, vg::VGLineJoin::Round));
+        }
+        // Its press is its own: the title bar under it does not start a move.
+        void OnMouseDown(const MouseEvent& event) override
+        {
+            if (event.Button == MouseButton::Left)
+                event.Handled = true;
+        }
+    };
+
+    // A window's resize grip: diagonal lines in the corner, in window::grip's colour.
+    class WindowGrip : public DragHandle
+    {
+        RTTI_OBJECT(WindowGrip, DragHandle)
+    public:
+        WindowGrip() { SetTag(core::StringView(u8"grip")); }
+        void SetLineColor(Color color)
+        {
+            m_color = color;
+            Invalidate();
+        }
+
+    protected:
+        void OnDraw(DrawContext& ctx, const Rect& localBounds) override
+        {
+            DragHandle::OnDraw(ctx, localBounds);
+            const Rect b = GetLocalBounds();
+            vg::PathBuilder lines;
+            for (f32 k = 4.0f; k <= 12.0f; k += 4.0f)
+            {
+                lines.MoveTo(b.x + b.width - 3.0f, b.y + b.height - 3.0f - k);
+                lines.LineTo(b.x + b.width - 3.0f - k, b.y + b.height - 3.0f);
+            }
+            ctx.VG().StrokePath(lines.ToPath(), m_color, vg::StrokeStyle(1.2f, vg::VGLineCap::Round, vg::VGLineJoin::Round));
+        }
+
+    private:
+        Color m_color{0.55f, 0.59f, 0.66f, 1.0f};
+    };
+
     class Window : public UIWidget
     {
         RTTI_OBJECT(Window, UIWidget)
@@ -85,9 +157,20 @@ export namespace experimental::gui
         {
             SetTag(core::StringView(u8"window"));
             SetClipChildren(true);
-            SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_bodyColor));
+            SetBox(FilledBox(m_bodyColor)); // its own box, which a sheet's (rounded, bordered, shadowed) replaces
 
             m_titleBar = core::MakeRef<DragHandle>(MemoryAllocator());
+            m_titleBar->SetTag(core::StringView(u8"titlebar"));
+            {
+                StyleWriteScope barDefaults(*m_titleBar);
+                m_titleBar->EditLayoutStyle([](LayoutStyle& st)
+                {
+                    st.Direction = FlexDirection::Row;
+                    st.AlignItems = Align::Center;
+                    st.ColumnGap = 6.0f;
+                });
+                m_titleBar->SetPadding(Thickness{0.0f, 0.0f, 8.0f, 0.0f});
+            }
             Window* self = this;
             m_titleBar->OnDrag = [self](core::Float2 d)
             {
@@ -102,13 +185,17 @@ export namespace experimental::gui
             m_title->SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
             m_title->SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
             m_title->SetHitTestVisible(false); // clicks fall through to the draggable title bar
+            m_title->EditLayoutStyle([](LayoutStyle& st) { st.Grow = 1.0f; });
             m_titleBar->AddChild(m_title.Get());
+            m_closeButton = core::MakeRef<WindowCloseButton>(MemoryAllocator());
+            m_closeButton->SetOnClick([self]() { self->RequestClose(); });
+            m_titleBar->AddChild(m_closeButton.Get());
 
             m_contentHost = core::MakeRef<UIWidget>(MemoryAllocator());
             m_contentHost->SetClipChildren(true);
             AddChild(m_contentHost.Get());
 
-            m_resizeGrip = core::MakeRef<DragHandle>(MemoryAllocator());
+            m_resizeGrip = core::MakeRef<WindowGrip>(MemoryAllocator());
             m_resizeGrip->OnDrag = [self](core::Float2 d) { self->ResizeBy(d); };
             m_resizeGrip->OnPressed = [self]() { self->ToFront(); };
             m_resizeGrip->SetCursor(Cursor::NwseResize);
@@ -123,6 +210,23 @@ export namespace experimental::gui
         void SetTitle(core::StringView text) { m_title->SetText(text); }
         [[nodiscard]] core::StringView GetTitle() const { return m_title->GetText(); }
         void SetMinSize(core::Float2 size) { m_minSize = size; }
+        /// Its close button shows (a click on it, like Escape on a dialog, closes it).
+        void SetClosable(bool closable)
+        {
+            m_closable = closable;
+            m_closeButton->SetDisplayed(closable);
+        }
+        [[nodiscard]] bool IsClosable() const noexcept { return m_closable; }
+        /// Its grip shows and resizes it.
+        void SetResizable(bool resizable)
+        {
+            m_resizable = resizable;
+            m_resizeGrip->SetDisplayed(resizable);
+        }
+        [[nodiscard]] bool IsResizable() const noexcept { return m_resizable; }
+        /// Asked to close (its close button): a window closes; a dialog answers as Escape does.
+        virtual void RequestClose() { Close(); }
+        [[nodiscard]] f32 GetTitleBarHeight() const noexcept { return m_titleBarHeight; }
         void SetTitleBarHeight(f32 height)
         {
             m_titleBarHeight = core::Max(1.0f, height);
@@ -132,7 +236,8 @@ export namespace experimental::gui
         void SetBodyColor(Color color)
         {
             m_bodyColor = color;
-            SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), color));
+            if (!IsBoxFromStyle())
+                SetBox(FilledBox(color));
         }
         void SetTitleColor(Color color)
         {
@@ -189,6 +294,9 @@ export namespace experimental::gui
         /// It closed (a dialog written in a page goes back there).
         virtual void OnWindowClosed() {}
         void OnSizeChange() override { Relayout(); }
+        // Its parts at their places: the title bar across the top, the content under it, the
+        // grip in the corner.
+        void OnLayout() override { Relayout(); }
         // Its title takes its font (a sheet's inheritance gives the same).
         void OnTextStyleChange() override { ShareTextStyle(*m_title, false); }
 
@@ -199,7 +307,7 @@ export namespace experimental::gui
             const PartStyle& title = GetPartStyle(u8"title");
             const PartStyle& grip = GetPartStyle(u8"grip");
             m_titleBar->SetBox(title.Over(FilledBox(m_titleColor)), false);
-            m_resizeGrip->SetBox(grip.Over(FilledBox(m_gripColor)), false);
+            m_resizeGrip->SetLineColor(grip.HasBackground ? grip.Box.BackgroundColor : m_gripColor); // drawn as lines
             StyleWriteScope titleWrite(*m_titleBar);
             m_titleBar->SetAlpha(title.Opacity);
             StyleWriteScope gripWrite(*m_resizeGrip);
@@ -256,21 +364,20 @@ export namespace experimental::gui
         void Relayout()
         {
             const core::Float2 s = GetSize();
-            m_titleBar->SetPosition(core::Float2{0.0f, 0.0f});
-            m_titleBar->SetSize(core::Float2{s.x, m_titleBarHeight});
-            m_title->SetSize(core::Float2{s.x, m_titleBarHeight});
-
-            m_contentHost->SetPosition(core::Float2{0.0f, m_titleBarHeight});
-            m_contentHost->SetSize(core::Float2{s.x, core::Max(0.0f, s.y - m_titleBarHeight)});
-
-            m_resizeGrip->SetSize(core::Float2{m_gripSize, m_gripSize});
-            m_resizeGrip->SetPosition(core::Float2{s.x - m_gripSize, s.y - m_gripSize});
+            m_titleBar->Arrange(Rect{0.0f, 0.0f, s.x, m_titleBarHeight});
+            m_contentHost->Arrange(Rect{0.0f, m_titleBarHeight, s.x, core::Max(0.0f, s.y - m_titleBarHeight)});
+            m_resizeGrip->Arrange(Rect{s.x - m_gripSize, s.y - m_gripSize, m_gripSize, m_gripSize});
+            if (GetChildIndex(m_resizeGrip.Get()) + 1 != ChildCount())
+                m_resizeGrip->ToFront(); // over the content
         }
 
         RefPtr<DragHandle> m_titleBar;
         RefPtr<Label> m_title;
+        RefPtr<WindowCloseButton> m_closeButton;
+        bool m_closable = true;
+        bool m_resizable = true;
         RefPtr<UIWidget> m_contentHost;
-        RefPtr<DragHandle> m_resizeGrip;
+        RefPtr<WindowGrip> m_resizeGrip;
         core::Function<void()> m_onClose;
         bool m_open = false;
         bool m_modal = false;
@@ -283,4 +390,6 @@ export namespace experimental::gui
     };
 
     RTTI_DEFINE_OBJECT(DragHandle, "rtti::gui")
+    RTTI_DEFINE_OBJECT(WindowCloseButton, "rtti::gui")
+    RTTI_DEFINE_OBJECT(WindowGrip, "rtti::gui")
 }

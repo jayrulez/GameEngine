@@ -54,12 +54,15 @@ export namespace experimental::gui
             scrollview { background-color: #14161a; }
             scrollbar  { background-color: #1e2128; }
             scrollbar::thumb { background-color: #4a505c; }
-            window     { background-color: #1a1d24; }
-            window::title { background-color: #2b3444; }
-            window::grip  { background-color: #3a4353; }
-            messagebox { background-color: #1a1d24; }
-            messagebox::title { background-color: #2b3444; }
-            .dialogbutton { background-color: #33507a; color: #f4f7fb; border-radius: 4; transition: opacity 0.15s; }
+            window, messagebox { background-color: #1d2129; color: #d2d8e0; border: 1px solid #343b49; border-radius: 10;
+                                 box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5); }
+            window::title, messagebox::title { background-color: #252a35; }
+            window::grip  { background-color: #5a6274; }
+            titlebar > label { color: #e6ebf2; }
+            titlebar > close { color: #aab3c2; padding: 4; border-radius: 4; }
+            titlebar > close:hover { background-color: #c0392b; color: #ffffff; }
+            .dialogmessage { white-space: normal; }
+            .dialogbutton { background-color: #33507a; color: #f4f7fb; border-radius: 6; padding: 6 14; transition: opacity 0.15s; }
             .dialogbutton:hover { opacity: 0.9; }
             menu       { background-color: #1a1d24; }
             menuitem::highlight, menusubmenu::highlight { background-color: #2f5f9e; }
@@ -126,12 +129,15 @@ export namespace experimental::gui
             scrollview { background-color: #f2f4f8; }
             scrollbar  { background-color: #d5dbe4; }
             scrollbar::thumb { background-color: #a3abb8; }
-            window     { background-color: #e6eaf1; }
-            window::title { background-color: #c4cdda; }
-            window::grip  { background-color: #b0b9c8; }
-            messagebox { background-color: #e6eaf1; }
-            messagebox::title { background-color: #c4cdda; }
-            .dialogbutton { background-color: #cdd8ea; color: #17202b; border-radius: 4; transition: opacity 0.15s; }
+            window, messagebox { background-color: #f6f8fb; color: #1c2530; border: 1px solid #c9d1dd; border-radius: 10;
+                                 box-shadow: 0 14px 36px rgba(20, 30, 50, 0.25); }
+            window::title, messagebox::title { background-color: #e7ebf2; }
+            window::grip  { background-color: #9aa4b4; }
+            titlebar > label { color: #17202b; }
+            titlebar > close { color: #5a6474; padding: 4; border-radius: 4; }
+            titlebar > close:hover { background-color: #c0392b; color: #ffffff; }
+            .dialogmessage { white-space: normal; }
+            .dialogbutton { background-color: #cdd8ea; color: #17202b; border-radius: 6; padding: 6 14; transition: opacity 0.15s; }
             .dialogbutton:hover { opacity: 0.9; }
             menu       { background-color: #f2f4f8; }
             menuitem::highlight, menusubmenu::highlight { background-color: #9cc0ef; }

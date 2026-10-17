@@ -16,6 +16,9 @@
 //   - an attribute a widget claims (via UINode::SetMarkupAttribute - e.g. Label "text"
 //     and "wrap") is consumed structurally,
 //   - everything else is treated as an inline CSS property and run through the StyleApplier,
+//   - a `<template type="...">` child is markup kept by its parent (UINode::SetMarkupTemplate)
+//     to make nodes from later (an item view's rows); loaded with item bindings, a value with
+//     `{{item}}`, `{{item.Column}}` or `{{index}}` in it is recorded for the row to fill,
 // so the whole CSS property vocabulary (width/height/padding/margin/background-color/border/
 // text-align/units/...) works in markup for free.
 //
@@ -50,6 +53,21 @@ namespace xml = foundation::xml;
 
 export namespace experimental::gui
 {
+    /// A run of a `{{...}}` template: literal text, or a name.
+    struct MarkupTemplatePart
+    {
+        core::String Text;
+        bool IsName = false;
+    };
+
+    /// An attribute an item view's row fills from its item (`text="{{item.Name}}"`).
+    struct ItemBinding
+    {
+        Node* Target = nullptr; // in the row's content, which owns it
+        core::String Attribute;
+        Array<MarkupTemplatePart> Parts;
+    };
+
     class MarkupLoader
     {
     public:
@@ -63,6 +81,21 @@ export namespace experimental::gui
         /// The data model `{{name}}` values bind to (a SceneRoot's, GetDataRef); without one they
         /// stay as written.
         void SetDataModel(RefPtr<DataModel> model) { m_data = core::Move(model); }
+        /// Records `{{item...}}` and `{{index}}` attributes here, for a row to fill (an item
+        /// view's template), instead of applying them.
+        void SetItemBindings(Array<ItemBinding>* bindings) noexcept { m_itemBindings = bindings; }
+
+        /// Applies one attribute as markup does (a widget's own, else inline CSS, which the
+        /// style pass applies): what a row's item binding writes.
+        static void ApplyAttribute(Node& node, core::StringView name, core::StringView value)
+        {
+            UINode* uinode = core::Cast<UINode>(&node);
+            if (uinode == nullptr)
+                return;
+            if (!uinode->SetMarkupAttribute(name, value))
+                uinode->SetInlineStyle(name, value);
+        }
+
 
         // Inflate the root element of `markup` into a widget tree; null on a parse error or an
         // unknown root element.
@@ -101,6 +134,15 @@ export namespace experimental::gui
                     AddClasses(uiwidget, value);
                     continue;
                 }
+                if (m_itemBindings != nullptr && IsItemTemplate(value))
+                {
+                    ItemBinding binding{widget.Get(), core::String(name), {}};
+                    if (SplitTemplate(value, binding.Parts))
+                    {
+                        m_itemBindings->PushBack(core::Move(binding));
+                        continue;
+                    }
+                }
                 if (m_data && FindFrom(value, core::StringView(u8"{{"), 0) < value.Size() && Bind(*widget, name, value))
                     continue;
                 if (uinode != nullptr && uinode->SetMarkupAttribute(name, value))
@@ -114,20 +156,28 @@ export namespace experimental::gui
 
             for (xml::XmlElement* child = element.FirstChildElement(); child != nullptr;
                  child = child->NextSiblingElement())
+            {
+                if (child->TagName() == core::StringView(u8"template"))
+                {
+                    // Kept as markup by its parent, to make nodes from later.
+                    xml::XmlElement* body = child->FirstChildElement();
+                    if (uinode != nullptr && body != nullptr)
+                    {
+                        xml::XmlWriter writer;
+                        writer.WriteNode(*body);
+                        (void)uinode->SetMarkupTemplate(child->GetAttribute(core::StringView(u8"type")), writer.Output());
+                    }
+                    continue;
+                }
                 if (RefPtr<Node> childWidget = Inflate(*child))
                     widget->GetChildHost()->AddChild(childWidget.Get()); // a scroller's content, a window's
+            }
 
             return widget;
         }
 
-        // `text` split into its literal runs and `{{name}}`s (names trimmed); false when a `{{`
-        // is not closed or a name is empty.
-        struct TemplatePart
-        {
-            core::String Text;
-            bool IsName = false;
-        };
-        // Where `needle` starts in `text` at or after `from`; text.Size() when it does not.
+    public:
+        /// Where `needle` starts in `text` at or after `from`; text.Size() when it does not.
         [[nodiscard]] static usize FindFrom(core::StringView text, core::StringView needle, usize from)
         {
             for (usize i = from; i + needle.Size() <= text.Size(); ++i)
@@ -135,15 +185,16 @@ export namespace experimental::gui
                     return i;
             return text.Size();
         }
-
-        [[nodiscard]] static bool SplitTemplate(core::StringView text, Array<TemplatePart>& parts)
+        /// Splits `text` into its literal runs and `{{name}}`s (names trimmed); false when a `{{`
+        /// is not closed or a name is empty.
+        [[nodiscard]] static bool SplitTemplate(core::StringView text, Array<MarkupTemplatePart>& parts)
         {
             usize at = 0;
             while (at < text.Size())
             {
                 const usize open = FindFrom(text, core::StringView(u8"{{"), at);
                 if (open > at)
-                    parts.PushBack(TemplatePart{core::String(text.SubStr(at, open - at)), false});
+                    parts.PushBack(MarkupTemplatePart{core::String(text.SubStr(at, open - at)), false});
                 if (open == text.Size())
                     break;
                 const usize start = open + 2;
@@ -153,7 +204,7 @@ export namespace experimental::gui
                 const core::StringView name = core::Trim(text.SubStr(start, close - start));
                 if (name.Size() == 0)
                     return false;
-                parts.PushBack(TemplatePart{core::String(name), true});
+                parts.PushBack(MarkupTemplatePart{core::String(name), true});
                 at = close + 2;
             }
             return true;
@@ -165,7 +216,7 @@ export namespace experimental::gui
         // malformed template), so the attribute is handled as written.
         bool Bind(Node& node, core::StringView property, core::StringView value)
         {
-            Array<TemplatePart> parts;
+            Array<MarkupTemplatePart> parts;
             if (!SplitTemplate(value, parts) || parts.IsEmpty())
                 return false;
             RefPtr<DataModel> model = m_data;
@@ -177,7 +228,7 @@ export namespace experimental::gui
                                      [model, parts = core::Move(parts)]
                                      {
                                          core::String text;
-                                         for (const TemplatePart& part : parts)
+                                         for (const MarkupTemplatePart& part : parts)
                                              text.Append(part.IsName ? FormatVariant(model->Get(part.Text.AsView())).AsView()
                                                                      : part.Text.AsView());
                                          return Variant::From<core::String>(core::Move(text));
@@ -209,11 +260,22 @@ export namespace experimental::gui
             return nullptr;
         }
 
+        // Whether a value names the item a row shows ({{item}}, {{item.X}}, {{index}}).
+        [[nodiscard]] static bool IsItemTemplate(core::StringView value)
+        {
+            return FindFrom(value, core::StringView(u8"{{item"), 0) < value.Size() ||
+                   FindFrom(value, core::StringView(u8"{{index"), 0) < value.Size() ||
+                   FindFrom(value, core::StringView(u8"{{ item"), 0) < value.Size() ||
+                   FindFrom(value, core::StringView(u8"{{ index"), 0) < value.Size();
+        }
+
         const ElementSet* m_elements;
         IAllocator* m_allocator;
         IResourceProvider* m_resources;
         fonts::IFontService* m_fontService;
         LengthContext m_lengths;
         RefPtr<DataModel> m_data;
+        Array<ItemBinding>* m_itemBindings = nullptr;
     };
+
 }

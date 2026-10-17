@@ -383,3 +383,77 @@ TEST_CASE("itemview: the view is a Node scroll container, scrolled from code lik
     CHECK(m.list->RowForItem(0) == nullptr);
     CHECK(m.list->ItemAt(core::Float2{50.0f, 5.0f}) == 20);
 }
+
+TEST_CASE("itemview: markup's <template> is made into each row, its {{item}} and {{index}} filled")
+{
+    RegisterGuiElements();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{300.0f, 300.0f});
+    MarkupLoader loader(*root->GetElementSet(), core::DefaultAllocator());
+    auto tree = loader.LoadFromString(SV(u8R"(<ListView width="200" height="100" row-height="20" items="Ada|Bo|Cara" selection-mode="multi">
+        <template><Panel flex-direction="row"><Label class="name" text="{{item}}"/><Label class="nth" text="#{{index}}"/></Panel></template>
+    </ListView>)"));
+    REQUIRE(tree.Get() != nullptr);
+    auto* list = core::Cast<ListView>(tree.Get());
+    REQUIRE(list != nullptr);
+    root->AddChild(list);
+    (void)root->UpdateLayout();
+    CHECK(list->GetModel()->RowCount() == 3);
+    CHECK(list->GetSelectionMode() == SelectionMode::Multi);
+    CHECK(list->GetItemsText() == SV(u8"Ada|Bo|Cara"));
+    ItemRow* row = list->RowForItem(1);
+    REQUIRE(row != nullptr);
+    auto* content = core::Cast<TemplateRowContent>(row->GetContent());
+    REQUIRE(content != nullptr);
+    REQUIRE(content->ChildCount() == 1);
+    Node* panel = content->GetChildAt(0);
+    REQUIRE(panel->ChildCount() == 2);
+    CHECK(core::Cast<Label>(panel->GetChildAt(0))->GetText() == SV(u8"Bo"));
+    CHECK(core::Cast<Label>(panel->GetChildAt(1))->GetText() == SV(u8"#1"));
+    CHECK(core::Cast<Label>(panel->GetChildAt(0))->HasClass(SV(u8"name")));
+
+    // A changed row is filled again; selecting is bindable.
+    list->SetItemsText(core::String(SV(u8"Ada|Bea|Cara")));
+    (void)root->UpdateLayout();
+    row = list->RowForItem(1);
+    CHECK(core::Cast<Label>(row->GetContent()->GetChildAt(0)->GetChildAt(0))->GetText() == SV(u8"Bea"));
+}
+
+TEST_CASE("itemview: templates of a type are picked by the row-type-column's text, each type its own pool")
+{
+    RegisterGuiElements();
+    TableModel model;
+    core::Array<core::String> columns;
+    columns.PushBack(core::String(SV(u8"Kind")));
+    columns.PushBack(core::String(SV(u8"Title")));
+    model.SetColumns(core::Move(columns));
+    const char8_t* kinds[4] = {u8"header", u8"entry", u8"entry", u8"header"};
+    const char8_t* titles[4] = {u8"Fruit", u8"Apple", u8"Pear", u8"Nuts"};
+    for (int i = 0; i < 4; ++i)
+    {
+        core::Array<Variant> row;
+        row.PushBack(Variant(SV(kinds[i])));
+        row.PushBack(Variant(SV(titles[i])));
+        model.AddRow(core::Move(row));
+    }
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{300.0f, 300.0f});
+    MarkupLoader loader(*root->GetElementSet(), core::DefaultAllocator());
+    auto tree = loader.LoadFromString(SV(u8R"(<ListView width="200" height="200" row-height="0" row-type-column="Kind">
+        <template><Label class="entry" text="{{item.Title}}" height="20"/></template>
+        <template type="header"><Label class="header" text="== {{item.Title}} ==" height="30"/></template>
+    </ListView>)"));
+    auto* list = core::Cast<ListView>(tree.Get());
+    REQUIRE(list != nullptr);
+    root->AddChild(list);
+    list->SetModel(&model);
+    (void)root->UpdateLayout();
+    (void)root->UpdateLayout();
+    const auto label = [&](core::i32 item) { return core::Cast<Label>(list->RowForItem(item)->GetContent()->GetChildAt(0)); };
+    CHECK(label(0)->HasClass(SV(u8"header")));
+    CHECK(label(0)->GetText() == SV(u8"== Fruit =="));
+    CHECK(label(1)->HasClass(SV(u8"entry")));
+    CHECK(label(1)->GetText() == SV(u8"Apple"));
+    CHECK(label(3)->HasClass(SV(u8"header")));
+    CHECK(list->RowForItem(0)->GetRowType() != list->RowForItem(1)->GetRowType());
+}

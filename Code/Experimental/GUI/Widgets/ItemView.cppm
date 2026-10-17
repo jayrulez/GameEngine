@@ -18,6 +18,10 @@
 //   - The model reports row ranges (E6); the view follows inserts, removals, moves and changes of
 //     a flat model and resets for the rest. Selection is a set of row ids, so it survives inserts,
 //     moves and sorting.
+//   - Rows from markup: a `<template>` child is made into each row, its `{{item}}`,
+//     `{{item.Column}}` and `{{index}}` attributes filled for the item it shows; templates of a
+//     `type` are picked by the text in the view's `row-type-column`. `items="a|b|c"` gives a
+//     markup list a model of its own.
 //   - A double-click, Return or the pad's South reports `activate`; typing letters and digits
 //     jumps to the next row that starts with them (read from the keys, not text input, which the
 //     shell turns on for fields alone); F2 (or BeginEdit) edits a row in place, a hook able to
@@ -44,6 +48,11 @@ import :model_index;
 import :model;
 import :text_field;
 import :event_dispatcher; // GetTime (type-ahead)
+import :reactive;         // Observable (what bindings follow)
+import :element_types;    // ElementSet (a template's elements)
+import :markup;           // MarkupLoader, ItemBinding (template rows)
+import :string_list_model;
+import :list_box;         // SplitItems, JoinItems
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -242,6 +251,19 @@ export namespace experimental::gui
         bool m_taken = false; // claimed in this realisation
     };
 
+    // A row made from a markup template: the template's tree, and the attributes it fills from
+    // the item it shows.
+    class TemplateRowContent : public UIWidget
+    {
+        RTTI_OBJECT(TemplateRowContent, UIWidget)
+    public:
+        TemplateRowContent() { SetTag(core::StringView(u8"templaterow")); }
+        [[nodiscard]] Array<ItemBinding>& Bindings() noexcept { return m_bindings; }
+
+    private:
+        Array<ItemBinding> m_bindings;
+    };
+
     class ItemView : public UIWidget, public IModelClient
     {
         RTTI_OBJECT(ItemView, UIWidget)
@@ -287,6 +309,52 @@ export namespace experimental::gui
             DropRows();
             RequestLayout();
         }
+        /// A markup template for rows (`type` names one of several, picked by the
+        /// row-type-column's text; empty: the default).
+        bool SetMarkupTemplate(core::StringView type, core::StringView markup) override
+        {
+            m_templates.PushBack(RowTemplate{core::String(type), core::String(markup)});
+            UseTemplates();
+            return true;
+        }
+        /// The column whose text picks a row's template (by its `type`).
+        void SetRowTypeColumn(const core::String& column)
+        {
+            m_rowTypeColumn = column;
+            if (!m_templates.IsEmpty())
+                UseTemplates();
+        }
+        [[nodiscard]] core::String GetRowTypeColumn() const { return m_rowTypeColumn; }
+        /// A model of its own from text, '|' between the items (markup's `items`).
+        void SetItemsText(const core::String& text)
+        {
+            if (!m_ownModel)
+                m_ownModel = core::MakeUnique<StringListModel>(MemoryAllocator());
+            Array<core::String> items;
+            for (core::StringView item : SplitItems(text.AsView()))
+                items.PushBack(core::String(item));
+            m_ownModel->SetItems(core::Move(items));
+            if (m_model != m_ownModel.Get())
+                SetModel(m_ownModel.Get());
+        }
+        [[nodiscard]] core::String GetItemsText() const
+        {
+            Array<core::String> items;
+            if (m_ownModel)
+                for (usize i = 0; i < m_ownModel->RowCount(); ++i)
+                    items.PushBack(core::String(m_ownModel->ItemAt(i)));
+            return JoinItems(items);
+        }
+        /// "single" or "multi" (markup's `selection-mode`).
+        void SetSelectionModeName(const core::String& name)
+        {
+            m_selectionMode = core::Trim(name.AsView()) == core::StringView(u8"multi") ? SelectionMode::Multi : SelectionMode::Single;
+        }
+        [[nodiscard]] core::String GetSelectionModeName() const
+        {
+            return core::String(m_selectionMode == SelectionMode::Multi ? core::StringView(u8"multi") : core::StringView(u8"single"));
+        }
+
         /// Every row this tall (0: each measured, estimated until it is).
         void SetRowHeight(f32 height)
         {
@@ -394,6 +462,7 @@ export namespace experimental::gui
         /// The current item (where the keyboard is) when it is selected, else -1.
         [[nodiscard]] i32 GetSelectedItem() const
         {
+            m_selectionChanged.Track(); // a read a binding records
             const i32 item = ItemOfId(m_current);
             return item >= 0 && IsIdSelected(m_current) ? item : -1;
         }
@@ -644,6 +713,93 @@ export namespace experimental::gui
             core::Array<core::RefPtr<ItemRow>> Rows;
         };
 
+        struct RowTemplate
+        {
+            core::String Type;
+            core::String Markup;
+        };
+        // Rows from the markup templates: each type made by loading its markup with item
+        // bindings, and filled by them.
+        void UseTemplates()
+        {
+            ItemView* self = this;
+            RowFactory factory;
+            factory.TypeOf = [self](const ModelIndex& index) { return self->TemplateFor(index); };
+            factory.Create = [self](u32 type) -> core::RefPtr<Node>
+            {
+                auto content = core::MakeRef<TemplateRowContent>(self->MemoryAllocator());
+                const ElementSet* elements = self->GetElementSet();
+                if (elements == nullptr || type >= self->m_templates.Size())
+                    return content;
+                MarkupLoader loader(*elements, self->MemoryAllocator());
+                loader.SetItemBindings(&content->Bindings());
+                if (core::RefPtr<Node> tree = loader.LoadFromString(self->m_templates[type].Markup.AsView()))
+                    content->AddChild(tree.Get());
+                return content;
+            };
+            factory.Bind = [self](Node& content, const ModelIndex& index)
+            {
+                for (const ItemBinding& binding : static_cast<TemplateRowContent&>(content).Bindings())
+                {
+                    core::String text;
+                    for (const MarkupTemplatePart& part : binding.Parts)
+                        text.Append(part.IsName ? self->ItemField(index, part.Text.AsView()).AsView() : part.Text.AsView());
+                    MarkupLoader::ApplyAttribute(*binding.Target, binding.Attribute.AsView(), text.AsView());
+                }
+            };
+            m_factory = core::Move(factory);
+            DropRows();
+            RequestLayout();
+        }
+        // The template an item takes: the one whose type is its row-type-column's text, else the
+        // default (the one with no type, else the first).
+        [[nodiscard]] u32 TemplateFor(const ModelIndex& index) const
+        {
+            u32 fallback = 0;
+            for (usize t = 0; t < m_templates.Size(); ++t)
+                if (m_templates[t].Type.IsEmpty())
+                {
+                    fallback = static_cast<u32>(t);
+                    break;
+                }
+            if (m_rowTypeColumn.IsEmpty())
+                return fallback;
+            const core::String field = core::Format(u8"item.{}", m_rowTypeColumn);
+            const core::String kind = ItemField(index, field.AsView());
+            for (usize t = 0; t < m_templates.Size(); ++t)
+                if (!m_templates[t].Type.IsEmpty() && m_templates[t].Type.AsView() == kind.AsView())
+                    return static_cast<u32>(t);
+            return fallback;
+        }
+        // A template name's text for an item: `item` (its first column), `item.Column` (a column
+        // by name), `index` (its row).
+        [[nodiscard]] core::String ItemField(const ModelIndex& index, core::StringView name) const
+        {
+            if (m_model == nullptr)
+                return core::String{};
+            if (name == core::StringView(u8"index"))
+                return core::Format(u8"{}", index.Row);
+            if (name == core::StringView(u8"item"))
+                return m_model->Data(index).ToString();
+            const core::StringView prefix(u8"item.");
+            if (name.Size() <= prefix.Size() || name.SubStr(0, prefix.Size()) != prefix)
+                return core::String{};
+            const core::StringView column = name.SubStr(prefix.Size(), name.Size() - prefix.Size());
+            for (usize c = 0; c < m_model->ColumnCount(); ++c)
+                if (m_model->ColumnName(c).AsView() == column)
+                    return m_model->Data(m_model->Index(index.Row, static_cast<i32>(c), m_model->ParentIndex(index))).ToString();
+            return core::String{};
+        }
+
+        [[nodiscard]] static bool StylePending(const Node& node)
+        {
+            if (node.IsStyleDirty())
+                return true;
+            for (usize i = 0; i < node.ChildCount(); ++i)
+                if (StylePending(*node.GetChildAt(i)))
+                    return true;
+            return false;
+        }
         [[nodiscard]] f32 RowEstimate() const noexcept { return m_rowHeight > 0.0f ? m_rowHeight : m_estimate; }
         [[nodiscard]] u32 RowTypeOf(i32 item) const
         {
@@ -743,6 +899,7 @@ export namespace experimental::gui
         }
         void RefreshSelectionStates()
         {
+            m_selectionChanged.Notify();
             for (const core::RefPtr<ItemRow>& row : m_live)
                 row->SetSelectedState(IsIdSelected(row->m_id));
         }
@@ -779,8 +936,12 @@ export namespace experimental::gui
             }
         }
 
-        IModel* m_model = nullptr; // non-owning
+        IModel* m_model = nullptr; // non-owning (unless it is m_ownModel)
+        core::UniquePtr<StringListModel> m_ownModel; // markup's `items`
         RowFactory m_factory;
+        Array<RowTemplate> m_templates;
+        core::String m_rowTypeColumn;
+        mutable Observable m_selectionChanged; // what bindings reading the selection follow
         RowHeights m_heights;
         core::Array<core::RefPtr<ItemRow>> m_live; // realised, in item order
         core::Array<Pool> m_pools;                 // released rows, by type
@@ -949,8 +1110,10 @@ export namespace experimental::gui
                 {
                     pastEnd = m_heights.Top(i) >= bottom; // one below the view
                     ItemRow* row = TakeRow(static_cast<i32>(i), next);
+                    // A row not yet styled (just made, or its template's attributes just
+                    // written) is measured again once it is.
                     if (measured && !m_heights.IsMeasured(i))
-                        (void)m_heights.Set(i, row->Measure(across).y);
+                        (void)m_heights.Set(i, row->Measure(across).y, !StylePending(*row));
                 }
             }
             for (const core::RefPtr<ItemRow>& row : m_live)
@@ -1199,6 +1362,6 @@ export namespace experimental::gui
         return true;
     }
 
+    RTTI_DEFINE_OBJECT(TemplateRowContent, "rtti::gui")
     RTTI_DEFINE_OBJECT(ItemRow, "rtti::gui")
-    RTTI_DEFINE_OBJECT(ItemView, "rtti::gui")
 }

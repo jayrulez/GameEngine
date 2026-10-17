@@ -211,6 +211,10 @@ export namespace experimental::gui
         {
             return false;
         }
+        /// Markup hook: a `<template type="...">` child's markup (its first element, as text),
+        /// which a widget that makes nodes from it (an item view's rows) keeps; false when it
+        /// takes none, and the loader drops it.
+        virtual bool SetMarkupTemplate(core::StringView /*type*/, core::StringView /*markup*/) { return false; }
 
         // Pseudo-element parts: a widget names the parts it paints (slider "track"/"fill"/
         // "thumb", checkbox "box"/"mark", window "title"/"grip", ...) so CSS `tag::part` can

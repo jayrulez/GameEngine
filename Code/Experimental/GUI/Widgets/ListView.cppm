@@ -54,6 +54,4 @@ export namespace experimental::gui
             static_cast<Label&>(content).SetText(GetModel()->Data(index).ToString().AsView());
         }
     };
-
-    RTTI_DEFINE_OBJECT(ListView, "rtti::gui")
 }

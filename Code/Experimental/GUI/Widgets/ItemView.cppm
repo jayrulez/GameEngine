@@ -791,7 +791,7 @@ export namespace experimental::gui
         {
             if (m_dragType.IsEmpty() || m_model == nullptr)
                 return false;
-            const i32 item = ItemAt(ConvertToWorldSpace(request.Press));
+            const i32 item = request.FromKeyboard ? GetCurrentItem() : ItemAt(ConvertToWorldSpace(request.Press));
             if (item < 0)
                 return false;
             m_deferredItem = -1;
@@ -1483,7 +1483,13 @@ export namespace experimental::gui
         if (arrow && target == current && IsItemSelected(current))
             return;
         event.Handled = true;
-        if (ctrl && m_selectionMode == SelectionMode::Multi)
+        const EventDispatcher* dispatcher = GetEventDispatcher();
+        if (dispatcher != nullptr && dispatcher->IsKeyboardDrag())
+        {
+            m_current = ItemIdAt(target); // dragging from the keys: the keyboard moves, the selection stays
+            Invalidate();
+        }
+        else if (ctrl && m_selectionMode == SelectionMode::Multi)
             m_current = ItemIdAt(target); // Ctrl moves the keyboard alone (Ctrl+Space picks)
         else if (shift && m_selectionMode == SelectionMode::Multi)
         {
@@ -1632,6 +1638,20 @@ export namespace experimental::gui
         {
             drop.Ids = source->m_dragIds;
             drop.Source = source->m_model;
+        }
+        // From the keys: the current row (onto it where the model takes that, else after it).
+        if (query.FromKeyboard)
+        {
+            const i32 current = GetCurrentItem();
+            drop.Index = current >= 0 ? ItemToModelIndex(current) : ModelIndex{};
+            drop.Place = current >= 0 ? DropPlace::On : DropPlace::After;
+            effect = m_model->CanDrop(drop, reason);
+            if (effect == DropEffect::None && reason.IsEmpty() && current >= 0)
+            {
+                drop.Place = DropPlace::After;
+                effect = m_model->CanDrop(drop, reason);
+            }
+            return drop;
         }
         const i32 item = ItemAt(ConvertToWorldSpace(query.Local));
         if (item < 0)

@@ -30,3 +30,4 @@ tooltip.drophint.refused { color: #ff8a80; }
 .dnd-more > expanderheader { height: 28px; font-family: Roboto; font-size: 14px; color: var(--ink); }
 .dnd-files { width: 590px; height: 50px; }
 .dnd-files > .dnd-bin-title { width: 570px; }
+.dnd-card:focus-visible, .dnd-bin:focus-visible { border: 2px solid var(--accent); }

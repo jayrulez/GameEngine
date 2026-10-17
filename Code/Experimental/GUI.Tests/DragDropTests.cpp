@@ -692,3 +692,57 @@ TEST_CASE("dnd: files the OS drops go through the same path, as a copy of their 
     CHECK(leftover.Size() == 2);
     CHECK_FALSE(s.target->IsDropTarget());
 }
+
+TEST_CASE("dnd: from the keys, drag.pick picks up at the focus, the focus moving is asked, Return drops, Escape cancels")
+{
+    Scene s;
+    s.source->SetTabFocusable(true);
+    s.target->SetTabFocusable(true);
+    s.target->SetDropTypes(core::String(u8"card"));
+    s.source->RequestFocus();
+    CHECK(s.D().PickDrag());
+    CHECK(s.D().IsKeyboardDrag());
+    CHECK(s.D().GetDropTarget() == nullptr); // the source itself takes no cards
+    s.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Tab)); // the focus moves on
+    CHECK(s.target->IsFocused());
+    CHECK(s.D().GetDropTarget() == s.target.Get());
+    REQUIRE(s.D().GetDragPreview() != nullptr);
+    s.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Return));
+    CHECK_FALSE(s.D().IsDragging());
+    CHECK(s.ended.Effect == DropEffect::Move);
+    CHECK(s.ended.Target == s.target.Get());
+
+    // Ctrl+Shift+D (drag.pick in every GUI), then Escape.
+    s.source->RequestFocus();
+    s.D().InjectKeyDown(static_cast<core::u32>(KeyCode::D), KeyModCtrl | KeyModShift);
+    CHECK(s.D().IsKeyboardDrag());
+    s.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
+    CHECK_FALSE(s.D().IsDragging());
+    CHECK(s.ended.Cancelled);
+
+    // The pad: North picks up, South drops.
+    s.source->RequestFocus();
+    s.D().InjectPadButton(PadButton::North);
+    CHECK(s.D().IsKeyboardDrag());
+    s.target->RequestFocus();
+    s.D().InjectPadButton(PadButton::South);
+    CHECK_FALSE(s.D().IsDragging());
+    CHECK(s.ended.Effect == DropEffect::Move);
+}
+
+TEST_CASE("dnd: from the keys a list's rows move: the arrows move the keyboard's row, not the selection")
+{
+    Lists l;
+    l.a->RequestFocus();
+    l.a->SetSelectedItem(0); // A
+    CHECK(l.D().PickDrag());
+    CHECK(l.D().GetDragPayload().Label == core::StringView(u8"A"));
+    l.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Down));
+    l.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Down)); // the keyboard on C
+    CHECK(l.a->GetSelectedItem() == -1); // the keyboard moved; A stays selected, not current
+    CHECK(l.a->IsItemSelected(0));
+    CHECK(l.a->GetDropItem() == 2);
+    CHECK(l.a->GetDropPlace() == DropPlace::After); // a list takes nothing onto a row
+    l.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Return));
+    CHECK(Lists::Items(l.left) == core::StringView(u8"BCADE"));
+}

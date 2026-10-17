@@ -541,6 +541,7 @@ void GUISandbox::FillNativeHosts()
             if (gui::Node* card = FindById(*m_shellNode, id))
             {
                 const bool chip = StringView(id) == StringView(u8"dnd-chip");
+                card->SetTabFocusable(true); // Ctrl+Shift+D or the pad's North picks it up
                 gui::Label* label = Cast<gui::Label>(card);
                 card->SetDragSource([label, chip](gui::DragRequest& r)
                 {
@@ -557,6 +558,10 @@ void GUISandbox::FillNativeHosts()
                     said->SetText(Format(u8"{}: {}", label->GetText(), how).AsView());
                 });
             }
+        const char8_t* targets[3] = {u8"dnd-hand", u8"dnd-discard", u8"dnd-files"};
+        for (const char8_t* id : targets)
+            if (gui::Node* target = FindById(*m_shellNode, id))
+                target->SetTabFocusable(true); // a keyboard drag goes where the focus goes
         if (gui::Node* hand = FindById(*m_shellNode, u8"dnd-hand"))
             hand->SetOnDragQuery([](gui::DropQuery& q)
             {

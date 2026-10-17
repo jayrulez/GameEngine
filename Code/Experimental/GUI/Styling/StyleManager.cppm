@@ -134,7 +134,13 @@ export namespace experimental::gui
         // Resolve + apply one widget. A property that changed and has a `transition` moves from
         // the value showing toward its new one, an `animation` runs its @keyframes, both through
         // the widget's StyleAnimation on its GUI's clock; otherwise the style applies at once.
-        void ApplyTo(UIWidget& widget) { (void)ApplyOne(widget); }
+        void ApplyTo(UIWidget& widget)
+        {
+            const bool filtering = m_filtering; // the walk's filter is not this widget's ancestors
+            m_filtering = false;
+            (void)ApplyOne(widget);
+            m_filtering = filtering;
+        }
 
         /// Restyles what changed in the subtree (only what changed: a widget whose class, id, tag
         /// or state changed, or that joined the tree, with its descendants; the children of one
@@ -149,7 +155,14 @@ export namespace experimental::gui
                 LearnRelations();
             const bool all = m_allDirty;
             m_allDirty = false;
+            // The names above what is styled, from the walk's start up (E8): pushed on the way down.
+            m_ancestors.Clear();
+            for (const Node* n = root.GetParent(); n != nullptr; n = n->GetParent())
+                if (const UIWidget* w = core::Cast<UIWidget>(n))
+                    m_ancestors.Push(*w);
+            m_filtering = true;
             Visit(root, all, false);
+            m_filtering = false;
             if (FrameStats* stats = root.GetFrameStats()) // the GUI's frame stats (E8a)
             {
                 stats->StyleMs += watch.Elapsed().AsMilliseconds();
@@ -185,9 +198,14 @@ export namespace experimental::gui
             }
             if (!descend && !customsChanged)
                 return;
+            const UIWidget* above = core::Cast<UIWidget>(&node);
+            if (above != nullptr)
+                m_ancestors.Push(*above);
             for (usize i = 0; i < node.ChildCount(); ++i)
                 if (Node* child = node.GetChildAt(i))
                     Visit(*child, subtree, customsChanged);
+            if (above != nullptr)
+                m_ancestors.Pop();
         }
 
         [[nodiscard]] static bool SameCustomProperties(const ResolvedStyle& a, const ResolvedStyle& b)
@@ -400,11 +418,12 @@ export namespace experimental::gui
                                                core::StringView part, const ResolvedStyle* inherited, u32 partStates = 0) const
         {
             Array<StyleRuleMatch> matches;
-            m_userAgent.CollectMatches(widget, m_context, true, part, 0, matches, partStates);
-            m_sheet.CollectMatches(widget, m_context, true, part, 1, matches, partStates);
+            const AncestorFilter* ancestors = m_filtering ? &m_ancestors : nullptr; // only inside ApplyTree's walk
+            m_userAgent.CollectMatches(widget, m_context, true, part, 0, matches, partStates, ancestors);
+            m_sheet.CollectMatches(widget, m_context, true, part, 1, matches, partStates, ancestors);
             u32 origin = 2;
             for (const StyleSheet* sheet : subtrees)
-                sheet->CollectMatches(widget, m_context, true, part, origin++, matches, partStates);
+                sheet->CollectMatches(widget, m_context, true, part, origin++, matches, partStates, ancestors);
             return StyleSheet::Cascade(matches, inherited,
                                        part.Size() == 0 ? widget.GetInlineStyle() : core::Span<const InlineStyleDeclaration>{});
         }
@@ -481,5 +500,7 @@ export namespace experimental::gui
         u32 m_ancestorStates = 0; // states a rule reads through an ancestor: a change restyles the subtree
         u32 m_siblingStates = 0;  // states a rule reads through an earlier sibling: a change restyles the later siblings
         u32 m_lastRestyleCount = 0;
+        AncestorFilter m_ancestors; // the names above the widget ApplyTree's walk is at
+        bool m_filtering = false;   // inside that walk (a widget styled any other way has no filter)
     };
 }

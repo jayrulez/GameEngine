@@ -299,3 +299,53 @@ TEST_CASE("selector: what changes a structural or state match restyles the widge
     styles.ApplyTree(*root.Get());
     CHECK(box->GetAlpha() == doctest::Approx(0.25f));
 }
+
+TEST_CASE("selector: the ancestor keys come from compounds a child or descendant combinator reaches")
+{
+    const auto has = [](const StyleSelector& s, const char8_t* name)
+    {
+        for (const core::u64 key : s.AncestorKeys())
+            if (key == core::HashText(core::StringView(name)))
+                return true;
+        return false;
+    };
+    const StyleSelector parentOfSibling(core::StringView(u8"panel > label + .note"));
+    CHECK(has(parentOfSibling, u8"panel")); // label's parent is .note's parent too
+    CHECK_FALSE(has(parentOfSibling, u8"label"));
+    CHECK_FALSE(has(parentOfSibling, u8"note")); // the subject's own names are not an ancestor's
+
+    const StyleSelector siblingOfParent(core::StringView(u8"panel + #box .cell"));
+    CHECK(has(siblingOfParent, u8"box"));
+    CHECK_FALSE(has(siblingOfParent, u8"panel")); // only a sibling of an ancestor
+
+    CHECK(StyleSelector(core::StringView(u8".a.b .c.d .e .f")).AncestorKeys().Size() == StyleSelector::kAncestorKeys);
+    CHECK(StyleSelector(core::StringView(u8"button:hover")).AncestorKeys().Size() == 0);
+}
+
+TEST_CASE("selector: the ancestor filter turns away a rule whose ancestor is missing, and never one that could match")
+{
+    auto top = Widget(u8"panel", u8"top");
+    top->AddClass(core::StringView(u8"page"));
+    auto deep = Widget(u8"panel");
+    deep->AddClass(core::StringView(u8"deep"));
+    const StyleSelector needsPage(core::StringView(u8".page .cell"));
+    const StyleSelector needsTop(core::StringView(u8"#top > .cell"));
+    const StyleSelector needsDeep(core::StringView(u8".deep .cell"));
+
+    AncestorFilter filter;
+    CHECK_FALSE(filter.MayMatch(needsPage));
+    filter.Push(*top.Get());
+    CHECK(filter.MayMatch(needsPage));
+    CHECK(filter.MayMatch(needsTop));
+    CHECK_FALSE(filter.MayMatch(needsDeep));
+
+    // More of one name than a counter holds: popping all but one still says maybe.
+    for (int i = 0; i < 300; ++i)
+        filter.Push(*deep.Get());
+    for (int i = 0; i < 299; ++i)
+        filter.Pop();
+    CHECK(filter.MayMatch(needsDeep));
+    filter.Pop();
+    filter.Pop();
+    CHECK_FALSE(filter.MayMatch(needsPage));
+}

@@ -14,7 +14,7 @@
 
     <Panel class="section" gap="12">
         <Label class="section-title" text="Keyframes"/>
-        <Panel class="row" flex-direction="row" align-items="start" gap="12">
+        <Panel class="row" flex-direction="row" align-items="center" gap="12">
             <Label class="dot pulse-fast"/><Label class="dot pulse"/><Label class="dot pulse-slow"/><Label class="dot blink"/>
             <Label class="swatch colorcycle"/>
             <Label class="sway" text="sway"/>

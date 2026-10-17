@@ -101,15 +101,20 @@ TEST_CASE("checkbox: the mixed state shows until set, and a click on it checks i
     CHECK_FALSE(cb->IsIndeterminate());
 }
 
-TEST_CASE("checkbox: its indicator draws the box, plus the check when checked")
+TEST_CASE("checkbox: its indicator draws the box, a tick when checked, a bar when mixed")
 {
     auto root = MakeRoot();
     auto cb = Make<CheckBox>();
     root->AddChild(cb.Get());
     const core::usize unchecked = Vertices(*root);
     CHECK(unchecked > 0); // the outline
+    cb->SetIndeterminate(true);
+    const core::usize mixed = Vertices(*root);
+    CHECK(mixed > unchecked); // the outline and the bar
     cb->SetChecked(true);
-    CHECK(Vertices(*root) > unchecked); // the outline and the check
+    const core::usize checked = Vertices(*root);
+    CHECK(checked > unchecked); // the outline and the tick
+    CHECK(checked != mixed);    // a stroked tick, not the bar's rectangle
 }
 
 TEST_CASE("switch: toggles like a check box, its knob moving along the track")

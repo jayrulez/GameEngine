@@ -571,6 +571,9 @@ export namespace experimental::gui
             }
             ctx.CountDrawn();
             m_drawnFrame = ctx.Frame();
+            if (m_invalidatedSelf && ctx.RecordsRedraws() && m_parent != nullptr) // the root would flash all
+                ctx.RecordRedraw(GetScreenBounds());
+            m_invalidatedSelf = false;
             if (m_box.TextEffectsSet != 0)
                 ctx.VG().SetTextEffects(m_box.MergeTextEffects(ctx.VG().GetTextEffects()));
             // A node with children fades as one picture (CSS's opacity), as does one with a filter
@@ -1592,6 +1595,7 @@ export namespace experimental::gui
         void Invalidate()
         {
             m_needsRedraw = true;
+            m_invalidatedSelf = true;
             m_subtreeInkValid = false;
             if (!IsTreeVisible() || m_quietInvalidations != 0)
                 return;
@@ -2049,6 +2053,7 @@ export namespace experimental::gui
         bool m_needsRedraw = true;
         mutable bool m_subtreeInkValid = false; // m_subtreeInk holds what it and its subtree draw
         u32 m_drawnFrame = 0;                   // the host's frame it was last drawn in
+        bool m_invalidatedSelf = true;          // invalidated itself (not through a descendant) since drawn
         u8 m_quietInvalidations = 0;            // inside BeginQuietInvalidation's
         mutable Rect m_subtreeInk{};
         bool m_styleDirty = true;          // restyle this node

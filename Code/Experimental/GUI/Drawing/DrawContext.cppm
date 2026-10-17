@@ -81,6 +81,15 @@ export namespace experimental::gui
         /// each node drawn notes it, so an animation knows whether its node showed.
         void SetFrame(u32 frame) noexcept { m_frame = frame; }
         [[nodiscard]] u32 Frame() const noexcept { return m_frame; }
+        /// Where a node drawn that invalidated itself since its last draw notes its bounds in the
+        /// world (the debug overlay's redraw flash); none by default.
+        void SetRedrawRecorder(Array<Rect>* recorder) noexcept { m_redraws = recorder; }
+        [[nodiscard]] bool RecordsRedraws() const noexcept { return m_redraws != nullptr; }
+        void RecordRedraw(const Rect& world)
+        {
+            if (m_redraws != nullptr)
+                m_redraws->PushBack(world);
+        }
         void CountDrawn() noexcept { ++m_nodesDrawn; }
         void CountCulled() noexcept { ++m_nodesCulled; }
         [[nodiscard]] u32 NodesDrawn() const noexcept { return m_nodesDrawn; }
@@ -93,5 +102,6 @@ export namespace experimental::gui
         u32 m_nodesCulled = 0;
         bool m_culling = true;
         u32 m_frame = 0;
+        Array<Rect>* m_redraws = nullptr;
     };
 }

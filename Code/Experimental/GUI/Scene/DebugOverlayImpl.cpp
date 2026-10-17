@@ -41,6 +41,28 @@ namespace experimental::gui
         }
     }
 
+    void SceneRoot::DrawRedrawFlashes(DrawContext& ctx)
+    {
+        constexpr f64 kFade = 0.5; // seconds
+        const Transform2D toRoot = GetTransform().GetInverse();
+        for (const Rect& world : m_frameRedraws)
+            m_flashes.PushBack(RedrawFlash{toRoot.TransformRect(world), core::Stopwatch::StartNew()});
+        m_frameRedraws.Clear();
+        vg::VGContext& g = ctx.VG();
+        for (usize i = 0; i < m_flashes.Size();)
+        {
+            const f64 age = m_flashes[i].Age.Elapsed().AsSecondsF();
+            if (age >= kFade)
+            {
+                m_flashes.RemoveAt(i);
+                continue;
+            }
+            const f32 strength = static_cast<f32>(1.0 - age / kFade);
+            g.FillRect(m_flashes[i].Box.ToRectangle(), core::Color{1.0f, 0.2f, 0.2f, 0.35f * strength});
+            ++i;
+        }
+    }
+
     void SceneRoot::DrawInputOverlay(DrawContext& ctx) const
     {
         vg::VGContext& g = ctx.VG();

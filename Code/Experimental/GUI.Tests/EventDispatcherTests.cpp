@@ -357,3 +357,16 @@ TEST_CASE("dispatch: only the left button synthesizes a click (right/middle do n
     d->InjectMouseUp(core::Float2{10.0f, 10.0f}, MouseButton::Left);
     CHECK(clicks == 1);
 }
+
+TEST_CASE("dispatcher: a move carries the modifiers held during it")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{100.0f, 100.0f});
+    core::u32 seen = 0;
+    (void)root->AddEventListener(EventType::MouseMove, [&](const Event& e) { seen = static_cast<const MouseEvent&>(e).Modifiers; });
+    EventDispatcher* d = root->GetEventDispatcher();
+    d->InjectMouseMove(core::Float2{10.0f, 10.0f}, KeyModShift);
+    CHECK(seen == static_cast<core::u32>(KeyModShift));
+    d->InjectMouseMove(core::Float2{12.0f, 10.0f});
+    CHECK(seen == 0u);
+}

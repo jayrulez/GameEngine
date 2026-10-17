@@ -97,6 +97,8 @@ namespace experimental::gui
         {
             GuiEvent out;
             out.type = core::String(name);
+            if (const UIWidget* target = Cast<UIWidget>(event.Target))
+                out.id = core::String(target->GetId());
             out.phase = core::String(event.Phase == EventPhase::Capture ? u8"capture" : event.Phase == EventPhase::Target ? u8"target" : u8"bubble");
             const auto place = [&](core::Float2 world)
             {
@@ -290,6 +292,21 @@ namespace experimental::gui
             return core::Variant{};
         GetChildHost()->AddChild(element.Get());
         return element->HandleAs(Node::StaticType());
+    }
+
+    bool UIWidget::OpenContextMenu(const MouseEvent& event)
+    {
+        Menu* menu = Cast<Menu>(m_contextMenu.Get());
+        Node* root = GetRootNode();
+        if (menu == nullptr)
+        {
+            menu = Cast<Menu>(FindById(*root, m_contextMenuId.AsView()));
+            if (menu == nullptr)
+                return false;
+            m_contextMenu = RefPtr<Node>(menu); // open, it leaves the page; kept here
+        }
+        menu->Open(*this, root->ConvertToNodeSpace(event.Position));
+        return true;
     }
 
     core::Variant Node::FindElement(StringView id)
@@ -531,7 +548,8 @@ namespace experimental::gui
                 &ToggleSwitch::StaticType(),   &Separator::StaticType(),    &Spacer::StaticType(),
                 &NumberField::StaticType(),    &EditableLabel::StaticType(), &Expander::StaticType(),
                 &Tab::StaticType(),            &TabBar::StaticType(),        &TabPage::StaticType(),
-                &TabView::StaticType(),        &ListView::StaticType(),
+                &TabView::StaticType(),        &ListView::StaticType(),      &Menu::StaticType(),
+                &MenuItem::StaticType(),       &MenuSeparator::StaticType(), &MenuBar::StaticType(),
             };
             for (const TypeInfo* type : kLabElements)
                 (void)ElementTypes::Register(*type);
@@ -579,6 +597,7 @@ namespace experimental::gui
             .Property<&GuiEvent::deltaX>("deltaX")
             .Property<&GuiEvent::deltaY>("deltaY")
             .Property<&GuiEvent::index>("index")
+            .Property<&GuiEvent::id>("id")
             // Constructible, so both languages take it by value and Luau binds it (a type a script
             // can make is one it can be handed).
             .Constructor<>();
@@ -636,6 +655,8 @@ namespace experimental::gui
     {
         builder.AccessorProperty<&UIWidget::GetId, &UIWidget::SetId>("id");
         builder.AccessorProperty<&UIWidget::GetTooltipText, &UIWidget::SetTooltip>("tooltip").PropAttribute("css", core::String(u8"tooltip"));
+        builder.AccessorProperty<&UIWidget::GetContextMenuId, &UIWidget::SetContextMenuId>("contextMenu")
+            .PropAttribute("css", core::String(u8"context-menu"));
         builder.Method<&UIWidget::AddClass>("addClass");
         builder.Method<&UIWidget::RemoveClass>("removeClass");
         builder.Method<&UIWidget::HasClass>("hasClass");
@@ -917,6 +938,33 @@ namespace experimental::gui
             .PropAttribute("css", core::String(u8"object-position"));
         builder.AccessorProperty<&Image::GetImageColor, &Image::SetImageColor>("imageColor").PropAttribute("css", core::String(u8"image-color"));
         builder.Method<&ElementOf<Image>, Image, Node>("of");
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(MenuSeparator, "rtti::gui")
+    {
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(MenuItem, "rtti::gui")
+    {
+        builder.AccessorProperty<&MenuItem::GetTextString, &MenuItem::SetTextString>("text");
+        builder.AccessorProperty<&MenuItem::IsCheckable, &MenuItem::SetCheckable>("checkable").PropAttribute("css", core::String(u8"checkable"));
+        builder.AccessorProperty<&MenuItem::IsChecked, &MenuItem::SetChecked>("checked").PropAttribute("css", core::String(u8"checked"));
+        builder.Method<&ElementOf<MenuItem>, MenuItem, Node>("of");
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(Menu, "rtti::gui")
+    {
+        builder.Method<&Menu::Close>("close");
+        builder.Method<&ElementOf<Menu>, Menu, Node>("of");
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(MenuBar, "rtti::gui")
+    {
+        builder.Method<&ElementOf<MenuBar>, MenuBar, Node>("of");
         builder.Creator();
     }
 

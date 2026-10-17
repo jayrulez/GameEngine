@@ -20,8 +20,6 @@
 .dnd-bin { width: 190px; height: 110px; padding: 8px; gap: 4px; border: 1px dashed var(--line); border-radius: 8; }
 .dnd-bin:drop-target { border-color: var(--accent); background-color: rgba(47, 125, 225, 0.12); }
 .dnd-bin-title { width: 170px; height: 20px; color: var(--muted); font-family: Roboto; font-size: 13px; }
-dragpreview { background-color: var(--surface-2); color: var(--ink); border-radius: 6; font-family: Roboto; font-size: 14px; }
-tooltip.drophint.refused { color: #ff8a80; }
 .dnd-row { width: 590px; }
 .dnd-long { width: 260px; height: 110px; padding: 6px; border: 1px dashed var(--line); border-radius: 8; }
 .dnd-long:drop-target { border-color: var(--accent); }

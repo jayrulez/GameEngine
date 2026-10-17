@@ -552,7 +552,19 @@ void GUISandbox::FillNativeHosts()
                 });
                 card->SetOnDragEnd([said, label](const gui::DragResult& r)
                 {
-                    if (said == nullptr || label == nullptr)
+                    if (label == nullptr)
+                        return;
+                    // The card goes where it was dropped (a move), or a copy of it does.
+                    if (r.Target != nullptr && r.Effect == gui::DropEffect::Move)
+                        r.Target->GetChildHost()->AddChild(label);
+                    else if (r.Target != nullptr && r.Effect == gui::DropEffect::Copy)
+                    {
+                        auto copy = MakeRef<gui::Label>(AppRoot());
+                        copy->SetText(label->GetText());
+                        copy->AddClass(u8"dnd-card");
+                        r.Target->GetChildHost()->AddChild(copy.Get());
+                    }
+                    if (said == nullptr)
                         return;
                     const char8_t* how = r.Cancelled ? u8"cancelled" : r.Effect == gui::DropEffect::Copy ? u8"copied" : r.Effect == gui::DropEffect::Move ? u8"moved" : r.Effect == gui::DropEffect::Link ? u8"linked" : u8"dropped nowhere";
                     said->SetText(Format(u8"{}: {}", label->GetText(), how).AsView());
@@ -959,10 +971,14 @@ void GUISandbox::RouteInput()
     m_inputSurface->SetWindowSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)}); // places fingers
     m_inputSurface->SetContentSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)});
     m_router->Update();
-    bridge.PumpFromSurface(*m_inputSurface);
+    if (m_keys.Size() == 0) // a --keys script owns the pointer: the desk's mouse would move it back
+        bridge.PumpFromSurface(*m_inputSurface);
     // Files the OS dropped on the window go through the GUI's drag path (E7).
     Array<shell::DroppedFile> drops(AppRoot());
     m_shell->DrainDroppedFiles(drops);
+    for (const shell::DroppedFile& drop : drops) // said, for a desk test of a desktop's drops
+        std::printf("GUISandbox: OS drop on window %u (this %u) at %.0f, %.0f: %s\n", drop.window, m_window->Id(), drop.x, drop.y,
+                    reinterpret_cast<const char*>(drop.path.CStr()));
     if (!drops.IsEmpty())
         (void)bridge.DispatchFileDrops(drops, m_window->Id());
     for (const shell::InputEvent& event : input.Events())

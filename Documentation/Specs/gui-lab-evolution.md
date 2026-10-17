@@ -966,6 +966,36 @@ the page at load 10):
 - Damage rectangles would help only frames where little changes, and the culled draw is not yet
   measured; geometry caching is measured again after E8b.
 
+Rulings on the numbers (user, 2026-10-17): no damage rectangles for now; a rule index joins E8
+beside culling, since styling was the largest cost.
+
+As built after the numbers (2026-10-17):
+
+- **Style matching.** A sheet keys its rules by their subject compound (id, else first class,
+  else tag, else one list for every element), and the cascade breaks a tie by source order. A
+  selector carries hashes of the names its subject's ancestors must have, and the restyle walk
+  keeps a counting Bloom filter of the names above it (WebKit's SelectorFilter), seeded with the
+  ancestors of where it starts. A child keeps its index and a widget its position among its
+  widget siblings until its parent's children change, so `+`, `~` and `:nth-child` cost one pass
+  over a column, not one each. The full restyle at load 10 with 1,000 rules: 3.0 s, then 0.62 s.
+  What is left of a restyle is mostly applying the cascade (about 14 µs a node).
+- **E8b.** `Node::GetInkBounds` (virtual: outer shadows at three sigma; a label adds its laid out
+  text) and `GetSubtreeInk` (kept until an invalidation reaches the node, which every change below
+  it does); a subtree whose ink misses VG's scissor, with a 32 unit margin for text effects an
+  ancestor sets and overhang, is not drawn. `SceneRoot::DrawFrame` clips the drawing (only the
+  drawing: navigation still reaches past) to the window. An animated frame at load 10: 30.2 ms
+  and 975k vertices, then 0.74 ms and 7.7k. `Action::CanMoveTarget` (a fade, a colour or opacity
+  style animation cannot); such an action on a target not drawn in the last frame asks for no
+  frames and its writes mark the target alone. The differential test compares the triangles that
+  land inside their scissor (layers by those that show) with culling off and on.
+- **VG fix found by it.** `TransformRect` took two corners, so a rotated or flipped rect could get
+  a negative size: culling dropped turning boxes, and a rect clip inside a flip clipped all.
+- **Removed.** `KeyframeAction` (opacity and a background colour, linear, writing past the
+  cascade, unused): CSS keyframes cover it.
+- **Left.** Building rows grows faster than their count (each new child marks its siblings for a
+  restyle); the stress page keeps drawing while its turning boxes are out of view (a transform
+  animation could bring a node into view; a rotation about the centre could be bounded).
+
 ### E9 Translation, right to left, and accessibility groundwork
 
 Before 0.1 (user, 2026-10-16), all three.

@@ -3,7 +3,7 @@ add_executable(GUISandbox Main.cpp)
 target_link_libraries(GUISandbox PRIVATE
     Foundation::Core Foundation::RHI Foundation::Shaders Foundation::Shaders.System
     Samples::Framework
-    Foundation::Shell Foundation::Image Foundation::Fonts Foundation::Fonts.TrueType Foundation::Fonts.DistanceField.Baker
+    Foundation::Shell Foundation::Image Foundation::Image.IO Foundation::Fonts Foundation::Fonts.TrueType Foundation::Fonts.DistanceField.Baker
     Foundation::VG Foundation::VG.Renderer Experimental::GUI Experimental::GUI.Shell
     Foundation::Script ${SCRIPTLIB_ANGELSCRIPT}) # the showcase (G6) runs AngelScript
 util_copy_sdl3_dll(GUISandbox)

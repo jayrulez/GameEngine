@@ -24,6 +24,7 @@ import foundation.shaders.system; // ShaderSystemHost
 import samples.framework;
 import foundation.shell;
 import foundation.image;
+import foundation.image.io; // the resource provider's pictures
 import foundation.fonts;
 import foundation.fonts.truetype;
 import foundation.fonts.distancefield.baker; // the Lilita distance-field face
@@ -80,6 +81,34 @@ namespace
         for (usize i = 0; i < node.ChildCount(); ++i)
             CollectCommands(*node.GetChildAt(i), prefix, out);
     }
+
+    // The GUI's pictures (an Image's src, a sheet's background-image: url()), loaded from the data
+    // folder once each and kept for the sandbox's life.
+    class SandboxResources final : public gui::IResourceProvider
+    {
+    public:
+        explicit SandboxResources(Function<String(StringView)> resolve) : m_resolve(Move(resolve)) {}
+        const image::ImageData* LoadImage(StringView path) override
+        {
+            for (const Entry& e : m_images)
+                if (e.Path.AsView() == path)
+                    return e.Picture.Get();
+            UniquePtr<image::Image> picture = MakeUnique<image::Image>(AppRoot());
+            if (!image::io::LoadImage(m_resolve(path).AsView(), *picture).IsOk())
+                picture = UniquePtr<image::Image>{}; // missing: remembered as such
+            m_images.PushBack(Entry{String(path), Move(picture)});
+            return m_images[m_images.Size() - 1].Picture.Get();
+        }
+
+    private:
+        struct Entry
+        {
+            String Path;
+            UniquePtr<image::Image> Picture;
+        };
+        Function<String(StringView)> m_resolve;
+        Array<Entry> m_images;
+    };
 
     struct ScriptErrors final : script::IScriptErrorHandler
     {
@@ -204,6 +233,7 @@ private:
     RefPtr<gui::GUIContext> m_gui;
     RefPtr<gui::SceneRoot> m_root;     // the sandbox
     RefPtr<gui::SceneRoot> m_menuRoot; // the game menu
+    UniquePtr<SandboxResources> m_resources; // pictures by path, from the data folder
     gui::StyleManager m_styles;        // the sandbox's sheet
     gui::StyleManager m_menuStyles;    // the game menu's
     UniquePtr<gui::GuiInputBridge> m_bridge;
@@ -412,7 +442,10 @@ void GUISandbox::BuildSandbox()
 
     m_styles.SetFontService(m_fontService.Get());
     m_gui->SetFontService(m_fontService.Get()); // a rich text's own faces
-    m_gui->SetResourceProvider(m_styles.GetResourceProvider());
+    GUISandbox* app = this;
+    m_resources = MakeUnique<SandboxResources>(AppRoot(), [app](StringView path) { return app->DataPath(path); });
+    m_styles.SetResourceProvider(m_resources.Get());
+    m_gui->SetResourceProvider(m_resources.Get());
     ApplySandboxSheet();
     ShowPage(m_startPage.AsView());
 
@@ -490,10 +523,10 @@ void GUISandbox::FillNativeHosts()
             }
         m_checker = MakeUnique<image::OwnedImageData>(AppRoot(), 16, 16, image::PixelFormat::RGBA8, Span<const u8>(pixels, sizeof(pixels)));
         auto view = MakeRef<gui::Image>(AppRoot());
-        view->SetSize(host->GetSize().x > 0.0f ? host->GetSize() : Float2{220.0f, 160.0f});
+        view->SetSize(host->GetSize().x > 0.0f ? host->GetSize() : Float2{160.0f, 160.0f});
         view->SetDrawable(MakeRef<gui::ImageDrawable>(AppRoot(), m_checker.Get()));
-        view->SetScaleMode(gui::ImageScaleMode::Fit);
-        view->SetTooltip(u8"An Image widget, Fit mode");
+        view->SetFit(gui::ObjectFit::Contain);
+        view->SetTooltip(u8"An Image from code: a generated picture, object-fit: contain");
         host->AddChild(view.Get());
     }
 

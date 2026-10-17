@@ -231,7 +231,7 @@ export namespace experimental::gui
                 m_iconPart = core::MakeRef<Image>(MemoryAllocator());
                 m_iconPart->SetTag(core::StringView(u8"icon"));
                 m_iconPart->SetHitTestVisible(false); // a press on it is the button's
-                m_iconPart->SetScaleMode(ImageScaleMode::Fit);
+                m_iconPart->SetFit(ObjectFit::Contain);
                 AddChildAt(m_iconPart.Get(), PartIndex());
             }
             m_iconPart->SetDrawable(core::Move(icon));

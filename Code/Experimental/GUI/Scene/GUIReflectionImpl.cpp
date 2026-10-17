@@ -770,6 +770,11 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(Image, "rtti::gui")
     {
+        builder.AccessorProperty<&Image::GetSource, &Image::SetSource>("src").PropAttribute("css", core::String(u8"src"));
+        builder.AccessorProperty<&Image::GetFitName, &Image::SetFitName>("objectFit").PropAttribute("css", core::String(u8"object-fit"));
+        builder.AccessorProperty<&Image::GetObjectPositionName, &Image::SetObjectPositionName>("objectPosition")
+            .PropAttribute("css", core::String(u8"object-position"));
+        builder.AccessorProperty<&Image::GetImageColor, &Image::SetImageColor>("imageColor").PropAttribute("css", core::String(u8"image-color"));
         builder.Method<&ElementOf<Image>, Image, Node>("of");
         builder.Creator();
     }

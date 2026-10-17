@@ -38,6 +38,7 @@ import :style_value; // TransformFunction
 import :thickness;
 import :layout_style; // LayoutStyle, LayoutConstraints (E2)
 import :resource_provider; // IResourceProvider (a rich text's icons, E4)
+import :frame_stats;       // FrameStats (E8a)
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -544,6 +545,7 @@ export namespace experimental::gui
         {
             if (!m_visible || m_alpha <= 0.0f || !IsDisplayed())
                 return;
+            ctx.CountDrawn();
 
             ctx.Save();
             ctx.ConcatTransform(GetTransform());
@@ -1046,6 +1048,18 @@ export namespace experimental::gui
         [[nodiscard]] virtual EventDispatcher* GetEventDispatcher()
         {
             return m_parent ? m_parent->GetEventDispatcher() : nullptr;
+        }
+        /// What the last frame of the GUI this node is in cost (its SceneRoot's), or null when
+        /// detached (E8a): the phases write it as they run.
+        [[nodiscard]] virtual FrameStats* GetFrameStats()
+        {
+            return m_parent ? m_parent->GetFrameStats() : nullptr;
+        }
+        /// A short name for diagnostics: its type (a widget adds its id).
+        [[nodiscard]] virtual core::String DebugName() const
+        {
+            const core::TypeInfo* type = GetType();
+            return core::String(type != nullptr ? core::StringView(reinterpret_cast<const char8_t*>(type->name)) : core::StringView(u8"Node"));
         }
         [[nodiscard]] const EventDispatcher* GetEventDispatcher() const
         {

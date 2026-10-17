@@ -38,6 +38,7 @@ add_executable(GUI.Tests
     MediaQueryTests.cpp
     TransitionTests.cpp
     IncrementalFrameTests.cpp
+    FrameStatsTests.cpp
     EffectsTests.cpp
     ReactiveTests.cpp
     BindingTests.cpp

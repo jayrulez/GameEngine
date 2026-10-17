@@ -16,12 +16,15 @@
 
 module;
 #include "Core/Prelude.h"
+#include "Profiler/Profiler.h" // PROFILE_SCOPE
 
 export module experimental.gui:style_manager;
 
 import foundation.core;  // HashMap, Cast, Move, Array, StringView, Float2, Duration, MakeRef
 import foundation.fonts; // IFontService
+import foundation.profiler;
 import :node;
+import :frame_stats;
 import :ui_node;
 import :ui_widget;
 import :style_rule; // StyleProperty
@@ -139,12 +142,19 @@ export namespace experimental::gui
         /// the resources changed). A clean subtree is not visited.
         void ApplyTree(Node& root)
         {
+            PROFILE_SCOPE("GUI.Style");
+            const core::Stopwatch watch = core::Stopwatch::StartNew();
             m_lastRestyleCount = 0;
             if (!m_relationsKnown)
                 LearnRelations();
             const bool all = m_allDirty;
             m_allDirty = false;
             Visit(root, all, false);
+            if (FrameStats* stats = root.GetFrameStats()) // the GUI's frame stats (E8a)
+            {
+                stats->StyleMs += watch.Elapsed().AsMilliseconds();
+                stats->Restyled += m_lastRestyleCount;
+            }
         }
 
         /// How many widgets the last ApplyTree restyled (none in a frame where nothing changed).

@@ -29,11 +29,16 @@
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
+#include "Profiler/Profiler.h" // PROFILE_SCOPE
 
 export module experimental.gui:scene_root;
 
-import foundation.core; // Duration
+import foundation.core; // Duration, Stopwatch
+import foundation.profiler;
+import foundation.vg; // VGBatch (what a frame drew)
 import :node;
+import :frame_stats;
+import :draw_context;
 import :element_types;
 import :action_manager;
 import :mutation_queue;
@@ -190,8 +195,12 @@ export namespace experimental::gui
         /// few rounds. A host runs it after styling and before drawing; Update runs it too.
         void UpdateLayout()
         {
+            PROFILE_SCOPE("GUI.Layout");
+            const core::Stopwatch watch = core::Stopwatch::StartNew();
             m_lastLayoutCount = Node::UpdateLayout();
             m_eventDispatcher.PlacePopups(); // the top layer follows what moved
+            m_frameStats.LayoutMs += watch.Elapsed().AsMilliseconds(); // the GUI's Update lays out too
+            m_frameStats.LaidOut += m_lastLayoutCount;
         }
         /// How many containers the last layout pass laid out (none in a frame where nothing moved).
         [[nodiscard]] u32 LastLayoutCount() const noexcept { return m_lastLayoutCount; }
@@ -201,12 +210,60 @@ export namespace experimental::gui
         /// An action on a node out of view still runs (the GUI's Update ticks it either way); it
         /// asks for no frame until what it does shows. A host skips a
         /// frame that needs none: an idle GUI costs nothing.
+        /// The reasons it found go to the frame stats (E8a), and the frame's style and layout are
+        /// done: they become the last frame's, which a draw then completes (a host asks once a
+        /// frame, after styling and laying out).
         [[nodiscard]] bool NeedsFrame()
         {
-            return NeedsRedraw() || IsLayoutDirty() || HasLayoutDirtyDescendant() || m_context->m_effects.HasPending() ||
-                   m_eventDispatcher.IsHoldingDirection() ||
-                   (!IsPaused() && m_context->m_actionManager.AnyTarget([this](Node& target) { return target.GetSceneRoot() == this && target.IsTreeVisible(); }));
+            FrameReasons& why = m_frameStats.Reasons;
+            why.Redraw = NeedsRedraw();
+            why.Layout = IsLayoutDirty() || HasLayoutDirtyDescendant();
+            why.Pending = m_context->m_effects.HasPending();
+            why.HeldDirection = m_eventDispatcher.IsHoldingDirection();
+            const Node* animated = nullptr;
+            if (!IsPaused())
+                (void)m_context->m_actionManager.AnyTarget([this, &animated](Node& target)
+                {
+                    if (target.GetSceneRoot() != this || !target.IsTreeVisible())
+                        return false;
+                    animated = &target;
+                    return true;
+                });
+            why.Animation = animated != nullptr;
+            m_frameStats.AnimatedNode = animated != nullptr ? animated->DebugName() : core::String{};
+            const bool needed = why.Any();
+            PublishFrame();
+            return needed;
         }
+
+        /// Draws the tree as Draw does, timing it and counting what it made (E8a): the host's
+        /// frame. A frame drawn through Draw alone goes uncounted.
+        void DrawFrame(DrawContext& ctx)
+        {
+            PROFILE_SCOPE("GUI.Draw");
+            if (!m_framePublished)
+                PublishFrame(); // a host that draws every frame without asking
+            const core::Stopwatch watch = core::Stopwatch::StartNew();
+            const vg::VGBatch& before = ctx.VG().GetBatch();
+            const usize vertices = before.vertices.Size() + before.boxVertices.Size();
+            const usize commands = before.commands.Size();
+            const u32 drawn = ctx.NodesDrawn();
+            const u32 culled = ctx.NodesCulled();
+            Draw(ctx);
+            const vg::VGBatch& batch = ctx.VG().GetBatch(); // flushed: its last command counts
+            m_lastFrame.DrawMs = watch.Elapsed().AsMilliseconds();
+            m_lastFrame.NodesDrawn = ctx.NodesDrawn() - drawn;
+            m_lastFrame.NodesCulled = ctx.NodesCulled() - culled;
+            m_lastFrame.Vertices = static_cast<u32>(batch.vertices.Size() + batch.boxVertices.Size() - vertices);
+            m_lastFrame.Commands = static_cast<u32>(batch.commands.Size() - commands);
+            m_lastFrame.FramesDrawn = ++m_framesDrawn;
+            m_framePublished = false;
+        }
+        /// The frame in progress, which the phases add to.
+        [[nodiscard]] FrameStats* GetFrameStats() override { return &m_frameStats; }
+        /// The last frame: its style, layout and reasons (as NeedsFrame closed it), and its draw
+        /// (none when it was skipped).
+        [[nodiscard]] const FrameStats& GetLastFrameStats() const noexcept { return m_lastFrame; }
 
         // === This root's time on the GUI's clock ===
         /// Its animations' time scale (1: real time; 0.5: half speed). A paused root's stand still.
@@ -380,6 +437,19 @@ export namespace experimental::gui
         EventDispatcher m_eventDispatcher{this}; // pointer, hover and focus: this root's own
         f32 m_displayScale = 1.0f;
         LayoutOverlay m_layoutOverlay;
+        FrameStats m_frameStats; // in progress
+        FrameStats m_lastFrame;
+        u64 m_framesDrawn = 0;
+        bool m_framePublished = false;
+
+        // The frame's style and layout are done: the last frame starts from them, undrawn.
+        void PublishFrame()
+        {
+            m_lastFrame = core::Move(m_frameStats);
+            m_lastFrame.FramesDrawn = m_framesDrawn;
+            m_frameStats = FrameStats{};
+            m_framePublished = true;
+        }
         f32 m_timeScale = 1.0f;
         bool m_paused = false;
         u32 m_lastLayoutCount = 0;

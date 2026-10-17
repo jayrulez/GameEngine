@@ -569,6 +569,7 @@ export namespace experimental::gui
                 ctx.VG().PopLayer();
             else if (pushedOpacity)
                 ctx.PopOpacity();
+            OnDrawAbove(ctx);
             ctx.Restore();
             m_needsRedraw = false; // drawn: clean until something invalidates it again
         }
@@ -779,6 +780,9 @@ export namespace experimental::gui
         [[nodiscard]] const Array<TransformFunction>& GetStyleTransforms() const noexcept { return m_styleTransforms; }
 
         void DrawScrollBars(DrawContext& ctx) const;
+        /// Draws `what` of the layout overlay for this node and its displayed subtree, in this
+        /// node's space (clipped where its children are).
+        void DrawLayoutOverlay(DrawContext& ctx, const LayoutOverlay& what) const;
         /// Places the children in the content box (Arrange calls it when needed). The default lays
         /// them out by the display kind (LayoutChildren); a composite widget arranges its own.
         virtual void OnLayout() { LayoutChildren(); }
@@ -1322,6 +1326,9 @@ export namespace experimental::gui
         /// The device pixels per logical unit the top of a tree lays out on (its children take
         /// theirs from it): 1, or a GUI root's display scale.
         [[nodiscard]] virtual f32 TopPixelScale() const { return 1.0f; }
+        /// Draws over this node and everything under it, after them, in its space and at full
+        /// opacity: what a GUI root puts over its tree (the layout overlay).
+        virtual void OnDrawAbove(DrawContext&) {}
 
         // Input handler hooks (override in subclasses; the Handle* wrappers call these).
         virtual void OnMouseEnter(const MouseEvent&) {}

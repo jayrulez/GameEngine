@@ -288,8 +288,23 @@ export namespace experimental::gui
         }
         [[nodiscard]] f32 GetDisplayScale() const noexcept { return m_displayScale; }
 
+        /// What the layout overlay shows over this GUI's tree (nothing by default).
+        void SetLayoutOverlay(const LayoutOverlay& overlay)
+        {
+            if (overlay == m_layoutOverlay)
+                return;
+            m_layoutOverlay = overlay;
+            Invalidate();
+        }
+        [[nodiscard]] const LayoutOverlay& GetLayoutOverlay() const noexcept { return m_layoutOverlay; }
+
     protected:
         [[nodiscard]] f32 TopPixelScale() const override { return m_displayScale; }
+        void OnDrawAbove(DrawContext& ctx) override
+        {
+            if (m_layoutOverlay.Any())
+                DrawLayoutOverlay(ctx, m_layoutOverlay);
+        }
 
     public:
 
@@ -316,6 +331,7 @@ export namespace experimental::gui
         RefPtr<GUIContext> m_context;            // the GUI this root is part of (declared first: outlives the rest)
         EventDispatcher m_eventDispatcher{this}; // pointer, hover and focus: this root's own
         f32 m_displayScale = 1.0f;
+        LayoutOverlay m_layoutOverlay;
         f32 m_timeScale = 1.0f;
         bool m_paused = false;
         u32 m_lastLayoutCount = 0;

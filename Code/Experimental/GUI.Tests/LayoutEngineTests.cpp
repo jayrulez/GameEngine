@@ -9,6 +9,7 @@
 #include "Core/Prelude.h"
 import foundation.core;
 import foundation.fonts;
+import foundation.vg;
 import experimental.gui;
 
 using namespace experimental::gui;
@@ -582,4 +583,85 @@ TEST_CASE("layout: a new display scale lays the whole tree out again on its grid
     bed.Layout();
     CHECK(leaf->GetPixelScale() == doctest::Approx(2.0f));
     CHECK(leaf->GetSize().x == doctest::Approx(10.5f)); // 20.6 device pixels round to 21
+}
+
+namespace
+{
+    // The box the vertices of one colour cover (by its red, green and blue), and how many.
+    struct Extent
+    {
+        core::usize count = 0;
+        core::Float2 min{1.0e9f, 1.0e9f};
+        core::Float2 max{-1.0e9f, -1.0e9f};
+    };
+    Extent ExtentOf(foundation::vg::VGContext& vg, core::Color color)
+    {
+        Extent e;
+        for (const foundation::vg::VGVertex& v : vg.GetBatch().vertices)
+            if (core::Abs(v.color.r - color.r) < 0.01f && core::Abs(v.color.g - color.g) < 0.01f &&
+                core::Abs(v.color.b - color.b) < 0.01f)
+            {
+                ++e.count;
+                e.min = core::Float2{core::Min(e.min.x, v.position.x), core::Min(e.min.y, v.position.y)};
+                e.max = core::Float2{core::Max(e.max.x, v.position.x), core::Max(e.max.y, v.position.y)};
+            }
+        return e;
+    }
+}
+
+TEST_CASE("layout: the overlay draws margins, padding, bounds and text baselines where layout put them")
+{
+    fonts::CachedFont font(core::DefaultAllocator(), core::DefaultAllocator().New<SixFont>(), nullptr, nullptr);
+    Bed bed(200.0f, 200.0f);
+    auto column = Box(*bed.root.Get(), [](LayoutStyle& s) { s.AlignItems = Align::Start; });
+    auto box = Fixed(*column.Get(), 100.0f, 40.0f);
+    box->SetMargin(Thickness{10.0f});
+    box->SetPadding(Thickness{5.0f});
+    auto label = core::MakeRef<Label>(core::DefaultAllocator());
+    label->SetFont(&font);
+    label->SetText(SV(u8"Hi"));
+    column->AddChild(label.Get()); // at y 60, 12 tall, baseline 10 down
+    bed.Layout();
+
+    const core::Color margin{1.0f, 0.6f, 0.2f, 1.0f};
+    const core::Color padding{0.3f, 0.85f, 0.4f, 1.0f};
+    const core::Color baseline{1.0f, 0.2f, 0.9f, 1.0f};
+    const auto draw = [&](const LayoutOverlay& overlay)
+    {
+        bed.root->SetLayoutOverlay(overlay);
+        auto vg = core::MakeUnique<foundation::vg::VGContext>(core::DefaultAllocator());
+        DrawContext dc{*vg};
+        bed.root->Draw(dc);
+        return vg;
+    };
+    {
+        auto vg = draw(LayoutOverlay{});
+        CHECK(ExtentOf(*vg, margin).count == 0u);
+        CHECK(ExtentOf(*vg, baseline).count == 0u);
+    }
+    {
+        auto vg = draw(LayoutOverlay{false, false, true, false});
+        const Extent m = ExtentOf(*vg, margin); // the box's margin box: 0,0 to 120,60
+        REQUIRE(m.count > 0u);
+        CHECK(m.min.x == doctest::Approx(0.0f));
+        CHECK(m.min.y == doctest::Approx(0.0f));
+        CHECK(m.max.x == doctest::Approx(120.0f));
+        CHECK(m.max.y == doctest::Approx(60.0f));
+        CHECK(ExtentOf(*vg, padding).count == 0u);
+    }
+    {
+        auto vg = draw(LayoutOverlay{false, true, false, false});
+        const Extent p = ExtentOf(*vg, padding); // within its border box: 10,10 to 110,50
+        REQUIRE(p.count > 0u);
+        CHECK(p.min.x == doctest::Approx(10.0f));
+        CHECK(p.max.y == doctest::Approx(50.0f));
+    }
+    {
+        auto vg = draw(LayoutOverlay{false, false, false, true});
+        const Extent b = ExtentOf(*vg, baseline); // the label's alone, about y 70
+        REQUIRE(b.count > 0u);
+        CHECK(b.min.y > 68.5f); // a hairline, with its edge fringe
+        CHECK(b.max.y < 71.5f);
+        CHECK(b.min.x == doctest::Approx(0.0f).epsilon(0.02));
+    }
 }

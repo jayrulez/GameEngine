@@ -1178,4 +1178,71 @@ namespace experimental::gui
         default: return;
         }
     }
+
+    // === The layout overlay ===
+
+    void Node::DrawLayoutOverlay(DrawContext& ctx, const LayoutOverlay& what) const
+    {
+        if (!m_visible || !IsDisplayed())
+            return;
+        foundation::vg::VGContext& vg = ctx.VG();
+        const f32 hair = 1.0f / core::Max(ctx.DeviceScale(), 0.01f); // one device pixel
+        const auto ring = [&vg](const Rect& outer, const Rect& inner, core::Color color)
+        {
+            // The band between two boxes, as four strips (top and bottom full width).
+            const f32 top = inner.y - outer.y;
+            const f32 bottom = outer.y + outer.height - (inner.y + inner.height);
+            const f32 left = inner.x - outer.x;
+            const f32 right = outer.x + outer.width - (inner.x + inner.width);
+            if (top > 0.0f)
+                vg.FillRect(core::Rectangle{outer.x, outer.y, outer.width, top}, color);
+            if (bottom > 0.0f)
+                vg.FillRect(core::Rectangle{outer.x, inner.y + inner.height, outer.width, bottom}, color);
+            if (left > 0.0f)
+                vg.FillRect(core::Rectangle{outer.x, inner.y, left, inner.height}, color);
+            if (right > 0.0f)
+                vg.FillRect(core::Rectangle{inner.x + inner.width, inner.y, right, inner.height}, color);
+        };
+        const Rect border{0.0f, 0.0f, m_size.x, m_size.y};
+        if (what.Margin)
+        {
+            const Thickness m = GetMargin();
+            ring(Rect{-m.Left, -m.Top, m_size.x + m.TotalHorizontal(), m_size.y + m.TotalVertical()}, border,
+                 core::Color{1.0f, 0.6f, 0.2f, 0.35f});
+        }
+        if (what.Padding)
+        {
+            const Rect content = GetContentBounds();
+            const Thickness p = m_padding;
+            ring(Rect{content.x - p.Left, content.y - p.Top, content.width + p.TotalHorizontal(), content.height + p.TotalVertical()},
+                 content, core::Color{0.3f, 0.85f, 0.4f, 0.35f});
+        }
+        if (what.Bounds)
+            vg.StrokeRect(border.ToRectangle(), core::Color{1.0f, 0.25f, 0.25f, 0.8f}, hair);
+        if (what.Baselines)
+        {
+            // Only a baseline of its own (text): every other node's is its content's bottom.
+            const f32 baseline = GetBaseline();
+            if (core::Abs(baseline - (m_size.y - GetChrome().Bottom)) > 0.01f)
+                vg.DrawLine(core::Float2{0.0f, baseline}, core::Float2{m_size.x, baseline},
+                            core::Color{1.0f, 0.2f, 0.9f, 0.9f}, hair);
+        }
+
+        if (m_children.IsEmpty())
+            return;
+        const bool clips = ClipsChildren();
+        if (clips)
+            ctx.PushClip(border);
+        const core::Float2 shift = ScrollShift();
+        for (const core::RefPtr<Node>& child : m_children)
+        {
+            ctx.Save();
+            ctx.ConcatTransform(Transform2D{}.Translate(-shift.x, -shift.y));
+            ctx.ConcatTransform(child->GetTransform());
+            child->DrawLayoutOverlay(ctx, what);
+            ctx.Restore();
+        }
+        if (clips)
+            ctx.PopClip();
+    }
 }

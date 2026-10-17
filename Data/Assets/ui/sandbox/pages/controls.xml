@@ -56,7 +56,7 @@
 
     <Panel class="section" gap="12">
         <Label class="section-title" text="Tabs"/>
-        <TabView id="controls-tabs" class="tabs" close-display="hover" reorderable="true">
+        <TabView id="controls-tabs" class="tabs" close-display="hover" reorderable="true" group="docs">
             <TabPage title="Overview" closable="false">
                 <Label class="caption" white-space="normal" height="60" text="A tab view pairs a bar of tabs with their pages. Drag a tab across its neighbour to reorder; hover one to close it, or middle-click it. This first tab is not closable."/>
             </TabPage>
@@ -65,6 +65,11 @@
             </TabPage>
             <TabPage title="Notes">
                 <TextField class="field" placeholder="Type, switch tabs, come back"/>
+            </TabPage>
+        </TabView>
+        <TabView class="tabs tabs-small" close-display="hover" reorderable="true" group="docs">
+            <TabPage title="A second view">
+                <Label class="caption" white-space="normal" height="40" text="Drag a tab out of either strip, down past its edge, and drop it on the other: its page comes with it."/>
             </TabPage>
         </TabView>
         <Panel flex-direction="row" gap="12" align-items="center">

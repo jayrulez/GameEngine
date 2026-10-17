@@ -755,36 +755,75 @@ export namespace experimental::gui
                 node.SetVisible(visible);
         }
 
-        // Text: colour, alignment, face.
-        if (const StyleValue* c = style.Value(u8"color"))
-            node.SetThemeTextColor(c->ColorValue);
-        if (const StringView v = keyword(u8"text-align"); v.Size() != 0)
+        // Text (E3): colour, the font and text-align inherit (the sheet's value, else the parent's,
+        // else the node's own; `initial` is the node's own); vertical-align does not.
         {
-            if (v == StringView(u8"left") || v == StringView(u8"justify"))
-                node.SetThemeTextAlign(TextHAlign::Left);
-            else if (v == StringView(u8"center") || v == StringView(u8"centre"))
-                node.SetThemeTextAlign(TextHAlign::Center);
-            else if (v == StringView(u8"right"))
-                node.SetThemeTextAlign(TextHAlign::Right);
-        }
-        if (const StringView v = keyword(u8"vertical-align"); v.Size() != 0)
-        {
-            if (v == StringView(u8"top"))
-                node.SetThemeTextAlignV(TextVAlign::Top);
-            else if (v == StringView(u8"middle") || v == StringView(u8"center"))
-                node.SetThemeTextAlignV(TextVAlign::Middle);
-            else if (v == StringView(u8"bottom"))
-                node.SetThemeTextAlignV(TextVAlign::Bottom);
-        }
-        if (fontService != nullptr)
-        {
-            if (const StringView family = ParseUrl(keyword(u8"font-family")); family.Size() != 0) // strips quotes
+            const UINode::TextStyle& ownText = node.CaptureUnstyledText();
+            const UINode* parent = core::Cast<UINode>(node.GetParent());
+            const auto initial = [&](const char8_t* name) { return style.Get(name) == StringView(u8"initial"); };
+            const auto inherits = [&](const char8_t* name) { return parent != nullptr && !initial(name); };
+            UINode::TextStyle text = node.GetTextStyle();
+            if (free(SlotColor))
             {
-                const f32 size = length(u8"font-size", 0.0f).ValueOr(16.0f);
-                if (size > 0.0f)
-                    if (fonts::CachedFont* font = fontService->GetFont(family, size))
-                        node.SetThemeFont(font);
+                if (const StyleValue* c = style.Value(u8"color"))
+                    text.TextColor = c->ColorValue;
+                else
+                    text.TextColor = inherits(u8"color") ? parent->GetTextColor() : ownText.TextColor;
             }
+            if (free(SlotTextAlign))
+            {
+                const StringView v = keyword(u8"text-align");
+                if (v == StringView(u8"left") || v == StringView(u8"justify") || v == StringView(u8"start"))
+                    text.HAlign = TextHAlign::Left;
+                else if (v == StringView(u8"center") || v == StringView(u8"centre"))
+                    text.HAlign = TextHAlign::Center;
+                else if (v == StringView(u8"right") || v == StringView(u8"end"))
+                    text.HAlign = TextHAlign::Right;
+                else
+                    text.HAlign = inherits(u8"text-align") ? parent->GetTextAlignH() : ownText.HAlign;
+            }
+            if (free(SlotVerticalAlign))
+            {
+                const StringView v = keyword(u8"vertical-align");
+                if (v == StringView(u8"top"))
+                    text.VAlign = TextVAlign::Top;
+                else if (v == StringView(u8"middle") || v == StringView(u8"center"))
+                    text.VAlign = TextVAlign::Middle;
+                else if (v == StringView(u8"bottom"))
+                    text.VAlign = TextVAlign::Bottom;
+                else
+                    text.VAlign = ownText.VAlign;
+            }
+            if (free(SlotFontFamily) || free(SlotFontSize))
+            {
+                // The family and the size each from the sheet, the parent or the node itself; the
+                // font is the parent's or the node's own when both come from there, else the
+                // font service's for the pair.
+                const StringView declaredFamily = initial(u8"font-family") ? StringView{} : ParseUrl(keyword(u8"font-family")); // strips quotes
+                const Optional<f32> declaredSize = length(u8"font-size", 0.0f);
+                const UINode::TextStyle& from = inherits(u8"font-family") || inherits(u8"font-size") ? parent->GetTextStyle() : ownText;
+                const bool familyDeclared = free(SlotFontFamily) && declaredFamily.Size() != 0;
+                const bool sizeDeclared = free(SlotFontSize) && declaredSize.HasValue() && declaredSize.Value() > 0.0f;
+                if (!familyDeclared && !sizeDeclared)
+                {
+                    text.Font = from.Font;
+                    text.FontFamily = from.FontFamily;
+                    text.FontSize = from.FontSize;
+                }
+                else
+                {
+                    const core::String family = familyDeclared ? core::String(declaredFamily) : from.FontFamily;
+                    const f32 size = sizeDeclared ? declaredSize.Value() : (from.FontSize > 0.0f ? from.FontSize : 16.0f);
+                    if (fontService != nullptr && family.Size() != 0)
+                        if (fonts::CachedFont* font = fontService->GetFont(family.AsView(), size))
+                        {
+                            text.Font = font;
+                            text.FontFamily = family;
+                            text.FontSize = size;
+                        }
+                }
+            }
+            node.ApplyTextStyle(text);
         }
 
         // The box: the sheet's, or none when a restyle drops every box property it had set.

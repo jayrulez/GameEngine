@@ -80,16 +80,6 @@ export namespace experimental::gui
             m_onResult = core::Move(callback);
         }
 
-        // Font reaches the title (base), the message, and the buttons.
-        void SetFont(fonts::CachedFont* font)
-        {
-            Window::SetFont(font);
-            m_font = font;
-            m_message->SetFont(font);
-            for (const RefPtr<Button>& b : m_buttons)
-                b->SetFont(font);
-        }
-        void SetThemeFont(fonts::CachedFont* font) override { SetFont(font); } // CSS font-family and font-size
         void SetMessageColor(Color color) { m_message->SetTextColor(color); }
 
         [[nodiscard]] core::StringView GetMessage() const { return m_message->GetText(); }
@@ -104,6 +94,16 @@ export namespace experimental::gui
         {
             Window::OnSizeChange(); // relayout title bar / content host / grip
             LayoutContent();
+        }
+
+    protected:
+        // Its title (the window's), message and buttons take its font.
+        void OnTextStyleChange() override
+        {
+            Window::OnTextStyleChange();
+            ShareTextStyle(*m_message, false);
+            for (const RefPtr<Button>& b : m_buttons)
+                ShareTextStyle(*b, false);
         }
 
     private:
@@ -133,7 +133,7 @@ export namespace experimental::gui
         {
             auto button = core::MakeRef<Button>(MemoryAllocator());
             button->SetText(text);
-            button->SetFont(m_font);
+            ShareTextStyle(*button, false);
             button->AddClass(core::StringView(u8"dialogbutton"));
             MessageBox* self = this;
             button->SetOnClick([self, result]() { self->Finish(result); });
@@ -177,7 +177,6 @@ export namespace experimental::gui
 
         RefPtr<Label> m_message;
         Array<RefPtr<Button>> m_buttons;
-        fonts::CachedFont* m_font = nullptr;
         core::Function<void(Result)> m_onResult;
 
         static constexpr f32 kPad = 16.0f;

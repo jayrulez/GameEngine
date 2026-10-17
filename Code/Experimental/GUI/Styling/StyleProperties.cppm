@@ -78,10 +78,11 @@ export namespace experimental::gui
     {
         const char8_t* Name;
         StyleGrammar Grammar;
-        /// CSS's initial value, for a property applied through a setter that an ended animation
-        /// returns to when the sheet sets none (null: the node keeps its own value). The box
-        /// properties need none: the box is rebuilt from the style on every apply.
+        /// CSS's initial value, what `initial` sets (null: the node's own value). A property no
+        /// rule sets returns to the node's own value, not to this.
         const char8_t* Initial = nullptr;
+        /// Inherited, as CSS's is: a node the sheet sets none for takes its parent's.
+        bool Inherited = false;
     };
 
     /// The longhands the lab knows, by name.
@@ -89,12 +90,12 @@ export namespace experimental::gui
     {
         static constexpr StylePropertySpec kProperties[] = {
             {u8"opacity", StyleGrammar::Number, u8"1"},
-            {u8"width", StyleGrammar::Size},
-            {u8"height", StyleGrammar::Size},
-            {u8"min-width", StyleGrammar::Size},
-            {u8"min-height", StyleGrammar::Size},
-            {u8"max-width", StyleGrammar::Size},
-            {u8"max-height", StyleGrammar::Size},
+            {u8"width", StyleGrammar::Size, u8"auto"},
+            {u8"height", StyleGrammar::Size, u8"auto"},
+            {u8"min-width", StyleGrammar::Size, u8"auto"},
+            {u8"min-height", StyleGrammar::Size, u8"auto"},
+            {u8"max-width", StyleGrammar::Size, u8"none"},
+            {u8"max-height", StyleGrammar::Size, u8"none"},
             {u8"padding-top", StyleGrammar::Length, u8"0"},
             {u8"padding-right", StyleGrammar::Length, u8"0"},
             {u8"padding-bottom", StyleGrammar::Length, u8"0"},
@@ -104,12 +105,12 @@ export namespace experimental::gui
             {u8"margin-bottom", StyleGrammar::Length, u8"0"},
             {u8"margin-left", StyleGrammar::Length, u8"0"},
             {u8"enabled", StyleGrammar::Keyword},
-            {u8"visibility", StyleGrammar::Keyword, u8"visible"},
-            {u8"color", StyleGrammar::Color},
-            {u8"text-align", StyleGrammar::Keyword},
+            {u8"visibility", StyleGrammar::Keyword, u8"visible", true},
+            {u8"color", StyleGrammar::Color, nullptr, true},
+            {u8"text-align", StyleGrammar::Keyword, nullptr, true},
             {u8"vertical-align", StyleGrammar::Keyword},
-            {u8"font-family", StyleGrammar::Text},
-            {u8"font-size", StyleGrammar::Length},
+            {u8"font-family", StyleGrammar::Text, nullptr, true},
+            {u8"font-size", StyleGrammar::Length, nullptr, true},
             {u8"background-color", StyleGrammar::Color},
             {u8"background-image", StyleGrammar::Layers},
             {u8"border-top-width", StyleGrammar::Length},

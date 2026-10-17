@@ -51,18 +51,6 @@ export namespace experimental::gui
             m_text.SetString(text);
             Invalidate();
         }
-        void SetFont(fonts::CachedFont* font)
-        {
-            m_text.SetFont(font);
-            Invalidate();
-        }
-        void SetThemeFont(fonts::CachedFont* font) override { SetFont(font); } // CSS font-family and font-size
-        [[nodiscard]] fonts::CachedFont* GetFont() const { return m_text.GetFont(); }
-        void SetTextColor(Color color)
-        {
-            m_text.SetColor(color);
-            Invalidate();
-        }
 
         // Natural size for the text plus padding.
         [[nodiscard]] core::Float2 MeasureText() const
@@ -73,6 +61,12 @@ export namespace experimental::gui
         }
 
     protected:
+        // Its text draws in its text style.
+        void OnTextStyleChange() override
+        {
+            m_text.SetFont(GetFont());
+            m_text.SetColor(GetTextColor());
+        }
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
         {
             (void)localBounds;

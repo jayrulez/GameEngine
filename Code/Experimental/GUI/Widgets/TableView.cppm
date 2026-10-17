@@ -76,7 +76,8 @@ export namespace experimental::gui
         {
             return i < m_cells.Size() ? m_cells[i].Get() : nullptr;
         }
-        void EnsureCells(usize count, fonts::CachedFont* font, Color textColor)
+        /// As many cells as `count`, new ones in `view`'s font and colour.
+        void EnsureCells(usize count, const UINode& view)
         {
             while (m_cells.Size() < count)
             {
@@ -86,8 +87,7 @@ export namespace experimental::gui
                 StyleWriteScope defaults(*cell); // its own values, which a sheet returns to
                 cell->SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
                 cell->SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
-                cell->SetFont(font);
-                cell->SetTextColor(textColor);
+                view.ShareTextStyle(*cell);
                 cell->SetHitTestVisible(false); // clicks fall through to the row
                 AddChild(cell.Get());
                 m_cells.PushBack(core::Move(cell));
@@ -110,21 +110,10 @@ export namespace experimental::gui
             m_header->SetBackground(
                 core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_headerColor));
             AddChild(m_header.Get());
+            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
+            SetTextColor(Color{0.86f, 0.89f, 0.94f, 1.0f});
         }
 
-        void SetFont(fonts::CachedFont* font)
-        {
-            m_font = font;
-            for (const RefPtr<TableHeaderCell>& h : m_headerCells)
-                h->SetFont(font);
-            for (const RefPtr<ItemRow>& r : RowPool())
-            {
-                TableRow* row = static_cast<TableRow*>(r.Get());
-                for (usize c = 0; c < row->CellCount(); ++c)
-                    row->CellAt(c)->SetFont(font);
-            }
-            RequestRelayout();
-        }
         void SetHeaderHeight(f32 height)
         {
             m_headerHeight = core::Max(0.0f, height);
@@ -137,18 +126,6 @@ export namespace experimental::gui
             m_columnWidths[column] = width;
             RequestRelayout();
         }
-        // `tableview { color }` propagates to the body cells (container-owned).
-        void SetThemeTextColor(Color color) override
-        {
-            m_textColor = color;
-            for (const RefPtr<ItemRow>& r : RowPool())
-            {
-                TableRow* row = static_cast<TableRow*>(r.Get());
-                for (usize c = 0; c < row->CellCount(); ++c)
-                    row->CellAt(c)->SetTextColor(color);
-            }
-        }
-        void SetThemeFont(fonts::CachedFont* font) override { SetFont(font); }
 
         // Header clicks (a column index) - a SortingProxyModel wires this to sort.
         void SetOnColumnHeaderClicked(core::Function<void(usize)> callback)
@@ -161,6 +138,21 @@ export namespace experimental::gui
         void SetSelectedRow(i32 row) { SetSelectedItem(row); }
 
     protected:
+        // Its body cells show its font and colour, the header cells its font (a sheet's
+        // inheritance gives them the same).
+        void OnTextStyleChange() override
+        {
+            for (const RefPtr<TableHeaderCell>& h : m_headerCells)
+                ShareTextStyle(*h, false);
+            for (const RefPtr<ItemRow>& r : RowPool())
+            {
+                TableRow* row = static_cast<TableRow*>(r.Get());
+                for (usize c = 0; c < row->CellCount(); ++c)
+                    ShareTextStyle(*row->CellAt(c));
+            }
+            RequestRelayout();
+        }
+
         [[nodiscard]] f32 ContentTopInset() const override { return m_headerHeight; }
         void OnModelChanged() override { RebuildHeader(); }
 
@@ -178,7 +170,7 @@ export namespace experimental::gui
         {
             TableRow& tableRow = static_cast<TableRow&>(row);
             const usize columns = ColumnCountOf();
-            tableRow.EnsureCells(columns, m_font, m_textColor);
+            tableRow.EnsureCells(columns, *this);
             f32 x = 0.0f;
             for (usize c = 0; c < columns; ++c)
             {
@@ -229,8 +221,11 @@ export namespace experimental::gui
             {
                 auto cell = core::MakeRef<TableHeaderCell>(MemoryAllocator());
                 cell->SetColumn(c);
-                cell->SetFont(m_font);
-                cell->SetTextColor(m_headerTextColor);
+                ShareTextStyle(*cell, false); // the header's colour is its own (tableheadercell { color })
+                {
+                    StyleWriteScope defaults(*cell);
+                    cell->SetTextColor(m_headerTextColor);
+                }
                 cell->SetText(GetModel()->ColumnName(c).AsView());
                 cell->SetOnClicked(
                     [self](usize col)
@@ -273,12 +268,10 @@ export namespace experimental::gui
         Array<RefPtr<TableHeaderCell>> m_headerCells;
         Array<f32> m_columnWidths; // 0 = auto
         Array<f32> m_widths;       // resolved widths for the current layout pass
-        fonts::CachedFont* m_font = nullptr;
         core::Function<void(usize)> m_onHeaderClicked;
         f32 m_headerHeight = 26.0f;
         Color m_headerColor{0.20f, 0.22f, 0.27f, 1.0f};
         Color m_headerTextColor{0.86f, 0.89f, 0.94f, 1.0f};
-        Color m_textColor{0.86f, 0.89f, 0.94f, 1.0f};
     };
 
     RTTI_DEFINE_OBJECT(TableHeaderCell, "rtti::gui")

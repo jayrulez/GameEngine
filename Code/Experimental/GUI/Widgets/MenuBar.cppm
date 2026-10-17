@@ -43,15 +43,6 @@ export namespace experimental::gui
             SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_barColor));
         }
 
-        void SetFont(fonts::CachedFont* font)
-        {
-            m_font = font;
-            for (BarEntry& e : m_entries)
-                e.button->SetFont(font);
-            Relayout();
-        }
-        void SetThemeFont(fonts::CachedFont* font) override { SetFont(font); } // CSS font-family and font-size
-        [[nodiscard]] fonts::CachedFont* GetFont() const { return m_font; }
         void SetBarHeight(f32 height)
         {
             m_barHeight = core::Max(1.0f, height);
@@ -68,12 +59,12 @@ export namespace experimental::gui
         {
             auto button = core::MakeRef<Button>(MemoryAllocator());
             button->SetText(text);
-            button->SetFont(m_font);
+            ShareTextStyle(*button, false);
             button->AddClass(
                 core::StringView(u8"menubutton")); // flat bar styling (class beats the button tag)
 
             auto menu = core::MakeRef<Menu>(MemoryAllocator());
-            menu->SetFont(m_font);
+            ShareTextStyle(*menu, false);
 
             Button* rawButton = button.Get();
             Menu* rawMenu = menu.Get();
@@ -102,6 +93,18 @@ export namespace experimental::gui
         }
 
     protected:
+        // Its buttons and their menus take its font.
+        void OnTextStyleChange() override
+        {
+            for (BarEntry& e : m_entries)
+            {
+                ShareTextStyle(*e.button, false);
+                if (e.menu)
+                    ShareTextStyle(*e.menu, false);
+            }
+            Relayout();
+        }
+
         void OnSizeChange() override { Relayout(); }
 
     private:
@@ -162,7 +165,6 @@ export namespace experimental::gui
         Array<BarEntry> m_entries;
         Menu* m_current = nullptr;         // the open menu (non-owning)
         Button* m_currentButton = nullptr; // its button (non-owning)
-        fonts::CachedFont* m_font = nullptr;
         f32 m_barHeight = 28.0f;
         f32 m_hpad = 12.0f;
         Color m_barColor{0.13f, 0.15f, 0.18f, 1.0f};

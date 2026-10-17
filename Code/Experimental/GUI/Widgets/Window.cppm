@@ -123,9 +123,6 @@ export namespace experimental::gui
 
         void SetTitle(core::StringView text) { m_title->SetText(text); }
         [[nodiscard]] core::StringView GetTitle() const { return m_title->GetText(); }
-        void SetFont(fonts::CachedFont* font) { m_title->SetFont(font); }
-        void SetThemeFont(fonts::CachedFont* font) override { SetFont(font); } // CSS font-family and font-size
-        [[nodiscard]] fonts::CachedFont* GetFont() const { return m_title->GetFont(); }
         void SetMinSize(core::Float2 size) { m_minSize = size; }
         void SetTitleBarHeight(f32 height)
         {
@@ -199,6 +196,8 @@ export namespace experimental::gui
 
     protected:
         void OnSizeChange() override { Relayout(); }
+        // Its title takes its font (a sheet's inheritance gives the same).
+        void OnTextStyleChange() override { ShareTextStyle(*m_title, false); }
 
     private:
         void OpenInternal(Node& root, bool modal)

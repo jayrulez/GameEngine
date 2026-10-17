@@ -54,35 +54,29 @@ export namespace experimental::gui
     {
         RTTI_OBJECT(ListView, AbstractItemView)
     public:
-        ListView() { SetTag(core::StringView(u8"listview")); }
-
-        void SetFont(fonts::CachedFont* font)
+        ListView()
         {
-            m_font = font;
-            for (const RefPtr<ItemRow>& r : RowPool())
-                static_cast<ListRow*>(r.Get())->GetLabel()->SetFont(font);
-            RequestRelayout();
+            SetTag(core::StringView(u8"listview"));
+            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
+            SetTextColor(Color{0.88f, 0.90f, 0.94f, 1.0f});
         }
-        void SetRowTextColor(Color color)
-        {
-            m_textColor = color;
-            for (const RefPtr<ItemRow>& r : RowPool())
-                static_cast<ListRow*>(r.Get())->GetLabel()->SetTextColor(color);
-        }
-        // `listview { color }` propagates to the rows (container-owned styling).
-        void SetThemeTextColor(Color color) override { SetRowTextColor(color); }
-        void SetThemeFont(fonts::CachedFont* font) override { SetFont(font); }
 
         // Back-compat row-oriented aliases over the base's item-index selection.
         [[nodiscard]] i32 GetSelectedRow() const noexcept { return GetSelectedItem(); }
         void SetSelectedRow(i32 row) { SetSelectedItem(row); }
 
     protected:
+        // Its rows show its font and colour (a sheet's inheritance gives them the same).
+        void OnTextStyleChange() override
+        {
+            for (const RefPtr<ItemRow>& r : RowPool())
+                ShareTextStyle(*static_cast<ListRow*>(r.Get())->GetLabel());
+            RequestRelayout();
+        }
         [[nodiscard]] RefPtr<ItemRow> CreateItemRow() override
         {
             auto row = core::MakeRef<ListRow>(MemoryAllocator());
-            row->GetLabel()->SetFont(m_font);
-            row->GetLabel()->SetTextColor(m_textColor);
+            ShareTextStyle(*row->GetLabel());
             return row;
         }
         void BindItemRow(ItemRow& row, i32 item, f32 rowWidth) override
@@ -93,9 +87,6 @@ export namespace experimental::gui
             label->SetSize(core::Float2{rowWidth, GetRowHeight()});
         }
 
-    private:
-        fonts::CachedFont* m_font = nullptr;
-        Color m_textColor{0.88f, 0.90f, 0.94f, 1.0f};
     };
 
     RTTI_DEFINE_OBJECT(ListRow, "rtti::gui")

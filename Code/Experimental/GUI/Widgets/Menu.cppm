@@ -142,18 +142,6 @@ export namespace experimental::gui
             Invalidate();
         }
 
-        void SetFont(fonts::CachedFont* font)
-        {
-            m_text.SetFont(font);
-            m_shortcut.SetFont(font);
-            Invalidate();
-        }
-        void SetTextColor(Color color)
-        {
-            m_text.SetColor(color);
-            m_shortcut.SetColor(color);
-            Invalidate();
-        }
         void SetHighlightColor(Color color) { m_highlight = color; }
         void SetRowHeight(f32 height) { m_rowHeight = core::Max(1.0f, height); }
 
@@ -224,10 +212,17 @@ export namespace experimental::gui
             if (part == core::StringView(u8"highlight"))
                 m_highlight = color;
         }
-        void SetThemeTextColor(Color color) override { SetTextColor(color); }
-        void SetThemeFont(fonts::CachedFont* font) override { SetFont(font); }
 
     protected:
+        // Its label and shortcut draw in its text style.
+        void OnTextStyleChange() override
+        {
+            m_text.SetFont(GetFont());
+            m_shortcut.SetFont(GetFont());
+            m_text.SetColor(GetTextColor());
+            m_shortcut.SetColor(GetTextColor());
+        }
+
         void OnMouseClick(const MouseEvent& event) override
         {
             event.Handled = true;
@@ -360,15 +355,10 @@ export namespace experimental::gui
         {
             SetTag(core::StringView(u8"menu"));
             SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_panelColor));
+            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
+            SetTextColor(Color{0.88f, 0.90f, 0.94f, 1.0f});
         }
 
-        void SetFont(fonts::CachedFont* font)
-        {
-            m_font = font;
-            for (MenuRow* row : m_rows)
-                if (MenuItem* it = core::Cast<MenuItem>(row))
-                    it->SetFont(font);
-        }
         void SetWidth(f32 width)
         {
             m_width = core::Max(1.0f, width);
@@ -439,7 +429,7 @@ export namespace experimental::gui
             auto item = core::MakeRef<MenuSubItem>(MemoryAllocator());
             item->SetText(text);
             auto sub = core::MakeRef<Menu>(MemoryAllocator());
-            sub->SetFont(m_font);
+            ShareTextStyle(*sub, false);
             sub->SetItemHeight(m_itemHeight);
             item->SetSubMenu(sub.Get());
 
@@ -502,6 +492,14 @@ export namespace experimental::gui
         }
 
     protected:
+        // Its items take its font and colour.
+        void OnTextStyleChange() override
+        {
+            for (MenuRow* row : m_rows)
+                if (MenuItem* it = core::Cast<MenuItem>(row))
+                    ShareTextStyle(*it);
+        }
+
         void OnSizeChange() override { Relayout(); }
 
     private:
@@ -509,8 +507,7 @@ export namespace experimental::gui
         {
             if (MenuItem* it = core::Cast<MenuItem>(row))
             {
-                it->SetFont(m_font);
-                it->SetTextColor(m_textColor);
+                ShareTextStyle(*it);
                 it->SetRowHeight(m_itemHeight);
                 Menu* self = this;
                 it->SetOnActivated([self]() { self->RootMenu()->CloseSelf(); });
@@ -658,13 +655,11 @@ export namespace experimental::gui
         Array<core::RefPtr<Menu>> m_ownedSubMenus; // keep submenus alive (they live under the root)
         MenuSubItem* m_ownerItem = nullptr;        // set when shown AS a submenu
         Menu* m_currentSubMenu = nullptr;          // the open child submenu (non-owning; a sibling)
-        fonts::CachedFont* m_font = nullptr;
         bool m_open = false;
         bool m_autoWidth = false;
         f32 m_width = 160.0f;
         f32 m_itemHeight = 26.0f;
         Color m_panelColor{0.16f, 0.17f, 0.21f, 1.0f};
-        Color m_textColor{0.88f, 0.90f, 0.94f, 1.0f};
         core::Function<void()> m_onClosed;
     };
 

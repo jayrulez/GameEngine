@@ -36,7 +36,8 @@ export namespace experimental::gui
         Label()
         {
             SetTag(core::StringView(u8"label"));
-            m_text.SetAlignment(TextHAlign::Left, TextVAlign::Middle);
+            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
+            SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
         }
 
         void SetText(core::StringView text)
@@ -55,34 +56,6 @@ export namespace experimental::gui
             return m_text.GetString();
         }
 
-        void SetFont(fonts::CachedFont* font)
-        {
-            if (font == m_text.GetFont())
-                return;
-            m_text.SetFont(font);
-            RequestLayout();
-            Invalidate();
-        }
-        [[nodiscard]] fonts::CachedFont* GetFont() const { return m_text.GetFont(); }
-
-        void SetTextColor(Color color)
-        {
-            m_text.SetColor(color);
-            Invalidate();
-        }
-        [[nodiscard]] Color GetTextColor() const { return m_text.GetColor(); }
-
-        // Theming hooks (CSS color / font-family / text-align reach the text).
-        void SetThemeTextColor(Color color) override { SetTextColor(color); }
-        void SetThemeFont(fonts::CachedFont* font) override { SetFont(font); }
-        void SetThemeTextAlign(TextHAlign horizontal) override
-        {
-            SetTextAlignment(horizontal, m_text.GetVAlign());
-        }
-        void SetThemeTextAlignV(TextVAlign vertical) override
-        {
-            SetTextAlignment(m_text.GetHAlign(), vertical);
-        }
 
         // Markup: <Label text="Hello" wrap="true">.
         bool SetMarkupAttribute(core::StringView name, core::StringView value) override
@@ -100,13 +73,6 @@ export namespace experimental::gui
             return UIWidget::SetMarkupAttribute(name, value);
         }
 
-        void SetTextAlignment(TextHAlign horizontal, TextVAlign vertical)
-        {
-            m_text.SetAlignment(horizontal, vertical);
-            Invalidate();
-        }
-        [[nodiscard]] TextHAlign GetTextAlignH() const noexcept { return m_text.GetHAlign(); }
-        [[nodiscard]] TextVAlign GetTextAlignV() const noexcept { return m_text.GetVAlign(); }
 
         // Word wrap: when on, the label draws multiple lines within its content width.
         void SetWordWrap(bool enabled)
@@ -141,6 +107,14 @@ export namespace experimental::gui
         }
 
     protected:
+        // Its text draws in its text style (its own, a sheet's, or what it inherits).
+        void OnTextStyleChange() override
+        {
+            m_text.SetFont(GetFont());
+            m_text.SetColor(GetTextColor());
+            m_text.SetAlignment(GetTextAlignH(), GetTextAlignV());
+        }
+
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
         {
             (void)localBounds;

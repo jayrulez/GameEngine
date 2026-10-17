@@ -133,28 +133,17 @@ export namespace experimental::gui
     {
         RTTI_OBJECT(TreeView, AbstractItemView)
     public:
-        TreeView() { SetTag(core::StringView(u8"treeview")); }
-
-        void SetFont(fonts::CachedFont* font)
+        TreeView()
         {
-            m_font = font;
-            for (const RefPtr<ItemRow>& r : RowPool())
-                static_cast<TreeRow*>(r.Get())->GetLabel()->SetFont(font);
-            RequestRelayout();
-        }
-        void SetRowTextColor(Color color)
-        {
-            m_textColor = color;
-            for (const RefPtr<ItemRow>& r : RowPool())
-                static_cast<TreeRow*>(r.Get())->GetLabel()->SetTextColor(color);
+            SetTag(core::StringView(u8"treeview"));
+            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
+            SetTextColor(Color{0.88f, 0.90f, 0.94f, 1.0f});
         }
         void SetIndentWidth(f32 width)
         {
             m_indentWidth = core::Max(0.0f, width);
             RequestRelayout();
         }
-        void SetThemeTextColor(Color color) override { SetRowTextColor(color); }
-        void SetThemeFont(fonts::CachedFont* font) override { SetFont(font); }
 
         // Expansion by the flat item index (a visible row).
         void ExpandItem(i32 item) { SetExpanded(item, true); }
@@ -186,11 +175,18 @@ export namespace experimental::gui
         }
         void OnModelChanged() override { Reflatten(); }
 
+        // Its rows show its font and colour (a sheet's inheritance gives them the same).
+        void OnTextStyleChange() override
+        {
+            for (const RefPtr<ItemRow>& r : RowPool())
+                ShareTextStyle(*static_cast<TreeRow*>(r.Get())->GetLabel());
+            RequestRelayout();
+        }
+
         [[nodiscard]] RefPtr<ItemRow> CreateItemRow() override
         {
             auto row = core::MakeRef<TreeRow>(MemoryAllocator());
-            row->GetLabel()->SetFont(m_font);
-            row->GetLabel()->SetTextColor(m_textColor);
+            ShareTextStyle(*row->GetLabel());
             TreeView* self = this;
             TreeRow* raw = row.Get();
             row->GetArrow()->SetOnClicked([self, raw]() { self->ToggleItem(raw->GetItemIndex()); });
@@ -301,10 +297,8 @@ export namespace experimental::gui
 
         Array<FlatEntry> m_flat;       // currently-visible nodes, in display order
         HashMap<i64, bool> m_expanded; // node id -> expanded (presence = expanded)
-        fonts::CachedFont* m_font = nullptr;
         f32 m_indentWidth = 16.0f;
         f32 m_arrowSize = 16.0f;
-        Color m_textColor{0.88f, 0.90f, 0.94f, 1.0f};
     };
 
     RTTI_DEFINE_OBJECT(TreeArrow, "rtti::gui")

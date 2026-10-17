@@ -48,27 +48,6 @@ export namespace experimental::gui
             m_text.SetAlignment(TextHAlign::Left, TextVAlign::Middle);
         }
 
-        void SetFont(fonts::CachedFont* font)
-        {
-            m_font = font;
-            m_text.SetFont(font);
-            if (m_dropdown)
-                m_dropdown->SetFont(font);
-            RequestLayout();
-        }
-        void SetTextColor(Color color)
-        {
-            m_text.SetColor(color);
-            Invalidate();
-        }
-
-        // Theming hooks (CSS color / font-family reach the text + the dropdown arrow).
-        void SetThemeTextColor(Color color) override
-        {
-            SetTextColor(color);
-            m_arrowColor = color;
-        }
-        void SetThemeFont(fonts::CachedFont* font) override { SetFont(font); }
 
         void AddItem(core::StringView text)
         {
@@ -121,10 +100,10 @@ export namespace experimental::gui
         [[nodiscard]] core::Float2 MeasureContent(core::Float2) override
         {
             f32 widest = 0.0f;
-            if (m_font != nullptr)
+            if (GetFont() != nullptr)
                 for (const core::String& item : m_items)
-                    widest = core::Max(widest, m_font->font->MeasureString(item.AsView()));
-            return core::Float2{widest + 24.0f, m_font != nullptr ? m_font->font->Metrics().lineHeight : 20.0f};
+                    widest = core::Max(widest, GetFont()->font->MeasureString(item.AsView()));
+            return core::Float2{widest + 24.0f, GetFont() != nullptr ? GetFont()->font->Metrics().lineHeight : 20.0f};
         }
         /// The selection's baseline, where it draws it.
         [[nodiscard]] f32 BaselineAt(core::Float2 size) const override
@@ -135,6 +114,17 @@ export namespace experimental::gui
         }
 
     protected:
+        // Its selection draws in its text style; the arrow is the text's colour; the dropdown
+        // takes its font.
+        void OnTextStyleChange() override
+        {
+            m_text.SetFont(GetFont());
+            m_text.SetColor(GetTextColor());
+            m_arrowColor = GetTextColor();
+            if (m_dropdown)
+                ShareTextStyle(*m_dropdown, false);
+        }
+
         void OnMouseClick(const MouseEvent& event) override
         {
             event.Handled = true;
@@ -168,7 +158,7 @@ export namespace experimental::gui
             if (m_dropdown)
                 return;
             m_dropdown = core::MakeRef<ListBox>(MemoryAllocator());
-            m_dropdown->SetFont(m_font);
+            ShareTextStyle(*m_dropdown, false);
             m_dropdown->SetItemHeight(m_itemHeight);
             for (const core::String& item : m_items)
                 m_dropdown->AddItem(item.AsView());
@@ -217,7 +207,6 @@ export namespace experimental::gui
         Array<core::String> m_items;
         Text m_text;
         RefPtr<ListBox> m_dropdown;
-        fonts::CachedFont* m_font = nullptr;
         i32 m_selected = -1;
         bool m_open = false;
         f32 m_itemHeight = 24.0f;

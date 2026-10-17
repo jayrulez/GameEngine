@@ -139,7 +139,7 @@ TEST_CASE("style-applier: text-align / vertical-align reach a label")
     StyleSheet right = CSSParser::Parse(SV(u8"label { text-align: right; }"));
     ApplyStyle(*l.Get(), right.Resolve(*l.Get(), MediaContext{}, false));
     CHECK(l->GetTextAlignH() == TextHAlign::Right);
-    CHECK(l->GetTextAlignV() == TextVAlign::Bottom); // unchanged (only H specified)
+    CHECK(l->GetTextAlignV() == TextVAlign::Middle); // no longer set: the label's own again
 }
 
 TEST_CASE("style-applier: sizes, min and max, percentages and auto reach the layout style")

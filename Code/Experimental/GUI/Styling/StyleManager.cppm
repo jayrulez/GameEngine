@@ -192,6 +192,8 @@ export namespace experimental::gui
                 inherited = m_cache.Find(ancestor);
             const Array<const StyleSheet*> subtrees = SubtreeSheetsOver(widget);
             ResolvedStyle resolved = ResolveFor(widget, subtrees, {}, inherited);
+            resolved.SettleKeywords(inherited);
+            const UINode::TextStyle textBefore = widget.GetTextStyle();
 
             // Build the length-resolution context: viewport from the media context, root font
             // size configurable, element font size from this widget's resolved font-size (for em).
@@ -307,7 +309,9 @@ export namespace experimental::gui
                 }
             }
             const ResolvedStyle* before = m_cache.Find(&widget);
-            const bool customsChanged = before == nullptr || !SameCustomProperties(*before, resolved);
+            // Its children restyle when what they inherit changed: a custom property, or its text style.
+            const bool customsChanged = before == nullptr || !SameCustomProperties(*before, resolved) ||
+                                        !(textBefore == widget.GetTextStyle());
             m_cache.InsertOrAssign(&widget, core::Move(resolved));
 
             // Pseudo-element parts (tag::part): resolve + apply each part the widget declares.

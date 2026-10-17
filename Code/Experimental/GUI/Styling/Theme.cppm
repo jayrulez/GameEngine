@@ -27,7 +27,7 @@ export namespace experimental::gui
         return core::StringView(u8R"(
             .panel    { background-color: #14161c; }
             label, menuitem, menusubmenu { color: #d2d8e0; }
-            button    { background-color: #33507a; color: #f4f7fb; padding: 9; transition: opacity 0.15s; }
+            button    { background-color: #33507a; color: #f4f7fb; padding: 9; text-align: center; transition: opacity 0.15s; }
             button:hover  { opacity: 0.9; }
             button:active { opacity: 0.78; }
             .tab          { background-color: #23262e; color: #c2c9d4; }
@@ -81,7 +81,7 @@ export namespace experimental::gui
         return core::StringView(u8R"(
             .panel    { background-color: #dde3ec; }
             label, menuitem, menusubmenu { color: #1c2530; }
-            button    { background-color: #cdd8ea; color: #17202b; padding: 9; transition: opacity 0.15s; }
+            button    { background-color: #cdd8ea; color: #17202b; padding: 9; text-align: center; transition: opacity 0.15s; }
             button:hover  { opacity: 0.9; }
             button:active { opacity: 0.78; }
             .tab          { background-color: #cfd6e2; color: #3a4453; }

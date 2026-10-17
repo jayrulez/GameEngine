@@ -69,6 +69,70 @@ export namespace experimental::gui
         }
 
         [[nodiscard]] bool Has(core::StringView name) const { return Find(name) != nullptr; }
+        void Remove(core::StringView name)
+        {
+            for (usize i = 0; i < m_props.Size(); ++i)
+                if (m_props[i].Name.AsView() == name)
+                {
+                    m_props.RemoveAt(i);
+                    return;
+                }
+        }
+        /// Settles the CSS-wide keywords (E3). `inherit` takes `parent`'s value (an inherited
+        /// property: what it inherits anyway); `initial` the table's initial value, or the node's
+        /// own when the table gives none (kept as `initial` for an inherited property, which then
+        /// stops inheriting); `unset` is `inherit` for an inherited property, `initial` otherwise.
+        void SettleKeywords(const ResolvedStyle* parent)
+        {
+            for (usize i = 0; i < m_props.Size();)
+            {
+                ResolvedProperty& p = m_props[i];
+                const core::StringView v = Trim(p.Value.AsView());
+                const bool inherit = v == core::StringView(u8"inherit");
+                const bool initial = v == core::StringView(u8"initial");
+                const bool unset = v == core::StringView(u8"unset");
+                if (!inherit && !initial && !unset)
+                {
+                    ++i;
+                    continue;
+                }
+                const StylePropertySpec* spec = FindStyleProperty(p.Name.AsView());
+                const bool inherited = spec != nullptr && spec->Inherited;
+                if ((inherit || unset) && inherited)
+                {
+                    m_props.RemoveAt(i); // as if unset: it inherits
+                    continue;
+                }
+                if (inherit)
+                {
+                    const ResolvedProperty* from = parent != nullptr ? parent->Find(p.Name.AsView()) : nullptr;
+                    if (from == nullptr)
+                    {
+                        m_props.RemoveAt(i);
+                        continue;
+                    }
+                    p.Value = from->Value;
+                    p.Typed = from->Typed;
+                    ++i;
+                    continue;
+                }
+                // initial, or unset on a property that does not inherit.
+                if (spec != nullptr && spec->Initial != nullptr)
+                {
+                    p.Value = core::String(spec->Initial);
+                    p.Typed = ParseLonghand(p.Name.AsView(), p.Value.AsView());
+                    ++i;
+                }
+                else if (inherited)
+                {
+                    p.Value = core::String(u8"initial");
+                    p.Typed = StyleValue{};
+                    ++i;
+                }
+                else
+                    m_props.RemoveAt(i); // the node's own
+            }
+        }
 
         /// The text of `name`, or `fallback`.
         [[nodiscard]] core::StringView Get(core::StringView name, core::StringView fallback = core::StringView{}) const

@@ -664,6 +664,8 @@ export namespace experimental::gui
         }
         [[nodiscard]] bool IsStylePinned(StyleSlot slot) const noexcept { return (m_stylePins & SlotBit(slot)) != 0; }
         [[nodiscard]] u64 GetStylePins() const noexcept { return m_stylePins; }
+        /// A StyleWriteScope lives (a sheet or a widget's defaults are writing).
+        [[nodiscard]] bool IsStyleWriting() const noexcept { return m_styleWriting; }
         /// Its own values, captured now unless they were already.
         const UnstyledValues& CaptureUnstyledValues()
         {

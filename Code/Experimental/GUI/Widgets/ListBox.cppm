@@ -122,16 +122,9 @@ export namespace experimental::gui
             // Its rows stacked in a column, as wide as the list, scrolling when they overflow it.
             StyleWriteScope defaults(*this); // its own values, which a sheet returns to
             EditLayoutStyle([](LayoutStyle& s) { s.OverflowY = Overflow::Auto; });
+            SetTextColor(Color{0.88f, 0.90f, 0.94f, 1.0f});
         }
 
-        void SetFont(fonts::CachedFont* font)
-        {
-            m_font = font;
-            for (ListBoxItem* it : m_items)
-                it->SetFont(font);
-        }
-        void SetThemeFont(fonts::CachedFont* font) override { SetFont(font); } // CSS font-family and font-size
-        [[nodiscard]] fonts::CachedFont* GetFont() const { return m_font; }
         void SetItemHeight(f32 height)
         {
             m_itemHeight = core::Max(1.0f, height);
@@ -144,8 +137,7 @@ export namespace experimental::gui
         {
             auto item = core::MakeRef<ListBoxItem>(MemoryAllocator());
             item->SetText(text);
-            item->SetFont(m_font);
-            item->SetTextColor(m_textColor);
+            ShareTextStyle(*item);
             item->SetHighlightColor(m_highlightColor);
             StyleWriteScope defaults(*item); // its own values, which a sheet returns to
             item->SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
@@ -211,15 +203,7 @@ export namespace experimental::gui
             m_onChanged = core::Move(callback);
         }
 
-        void SetTextColor(Color color)
-        {
-            m_textColor = color;
-            for (ListBoxItem* it : m_items)
-                it->SetTextColor(color);
-        }
-
-        // Theming: text color for all rows; listbox::selection = the row-selection highlight.
-        void SetThemeTextColor(Color color) override { SetTextColor(color); }
+        // Theming: listbox::selection = the row-selection highlight (its text style reaches the rows).
         void CollectStyleParts(core::Array<core::StringView>& out) const override
         {
             out.PushBack(core::StringView(u8"selection"));
@@ -235,6 +219,13 @@ export namespace experimental::gui
 
 
     protected:
+        // Its items show its font and colour (a sheet's inheritance gives them the same).
+        void OnTextStyleChange() override
+        {
+            for (ListBoxItem* item : m_items)
+                ShareTextStyle(*item);
+        }
+
 
         void OnKeyDown(const KeyEvent& event) override
         {
@@ -287,11 +278,9 @@ export namespace experimental::gui
         }
 
         Array<ListBoxItem*> m_items; // non-owning (its children)
-        fonts::CachedFont* m_font = nullptr;
         f32 m_itemHeight = 24.0f;
         i32 m_selected = -1;
         Color m_panelColor{0.13f, 0.14f, 0.17f, 1.0f};
-        Color m_textColor{0.88f, 0.90f, 0.94f, 1.0f};
         Color m_highlightColor{0.24f, 0.40f, 0.62f, 1.0f};
         core::Function<void(i32)> m_onChanged;
     };

@@ -155,32 +155,8 @@ export namespace experimental::gui
         [[nodiscard]] bool WantsTextInput() const override { return IsTreeEnabled(); }
 
         // === Appearance ===
-        void SetFont(fonts::CachedFont* font)
-        {
-            if (font == m_text.GetFont())
-                return;
-            m_text.SetFont(font);
-            m_hintText.SetFont(font);
-            RequestLayout(); // one line of the font tall
-            Invalidate();
-        }
-        [[nodiscard]] fonts::CachedFont* GetFont() const { return m_text.GetFont(); }
-        void SetTextColor(Color color)
-        {
-            m_text.SetColor(color);
-            Invalidate();
-        }
-
-        // Theming hooks (CSS color / font-family reach the text).
-        // Theming: text color drives the caret too by default (so it stays visible on any
-        // background); a `textfield::caret` / `::selection` part can override either explicitly.
-        void SetThemeTextColor(Color color) override
-        {
-            SetTextColor(color);
-            m_caretColor = color;
-            Invalidate();
-        }
-        void SetThemeFont(fonts::CachedFont* font) override { SetFont(font); }
+        // Theming: the text colour drives the caret too (so it shows on any background); a
+        // `textfield::caret` / `::selection` part can override either.
         void CollectStyleParts(core::Array<core::StringView>& out) const override
         {
             out.PushBack(core::StringView(u8"caret"));
@@ -235,6 +211,15 @@ export namespace experimental::gui
         }
 
     protected:
+        // Its value and placeholder draw in its font (one line of it tall), its value and caret in
+        // its colour.
+        void OnTextStyleChange() override
+        {
+            m_text.SetFont(GetFont());
+            m_hintText.SetFont(GetFont());
+            m_text.SetColor(GetTextColor());
+            m_caretColor = GetTextColor();
+        }
         void OnTextInput(const TextInputEvent& event) override
         {
             if (!IsTreeEnabled() || m_readOnly || event.Text.Size() == 0)

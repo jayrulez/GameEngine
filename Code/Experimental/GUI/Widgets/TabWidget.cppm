@@ -60,7 +60,7 @@ export namespace experimental::gui
 
             auto button = core::MakeRef<Button>(MemoryAllocator());
             button->SetText(title);
-            button->SetFont(m_font);
+            ShareTextStyle(*button, false);
             button->AddClass(
                 core::StringView(u8"tab")); // styled as a tab; `.tab.selected` = active
             button->SetSize(core::Float2{m_tabWidth, m_tabBarHeight});
@@ -114,14 +114,6 @@ export namespace experimental::gui
             return index < m_tabs.Size() ? m_tabs[index].Content : nullptr;
         }
 
-        void SetFont(fonts::CachedFont* font)
-        {
-            m_font = font;
-            for (const Tab& t : m_tabs)
-                t.TabButton->SetFont(font);
-        }
-        void SetThemeFont(fonts::CachedFont* font) override { SetFont(font); } // CSS font-family and font-size
-        [[nodiscard]] fonts::CachedFont* GetFont() const { return m_font; }
         void SetTabBarHeight(f32 height)
         {
             m_tabBarHeight = core::Max(1.0f, height);
@@ -136,6 +128,13 @@ export namespace experimental::gui
         }
 
     protected:
+        // Its tab buttons take its font.
+        void OnTextStyleChange() override
+        {
+            for (const Tab& t : m_tabs)
+                ShareTextStyle(*t.TabButton, false);
+        }
+
         void OnSizeChange() override { Relayout(); }
 
     private:
@@ -166,7 +165,6 @@ export namespace experimental::gui
         RefPtr<Panel> m_tabBar;
         RefPtr<UIWidget> m_contentHost;
         Array<Tab> m_tabs; // buttons owned by the bar, content by the host
-        fonts::CachedFont* m_font = nullptr;
         i32 m_selected = -1;
         f32 m_tabBarHeight = 32.0f;
         f32 m_tabWidth = 100.0f;

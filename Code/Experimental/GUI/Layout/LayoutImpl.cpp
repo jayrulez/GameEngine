@@ -339,8 +339,11 @@ namespace experimental::gui
                 line.cross = core::Max(line.cross, aboveBaseline + belowBaseline);
                 contentMain = core::Max(contentMain, lineMain);
             }
-            if (lines.Size() == 1 && crossDefinite)
-                lines[0].cross = crossAvail; // one line is as deep as the container
+            // One line is as deep as the container, once it is laid out at its size. Measuring, the
+            // space across is a limit, not a size: the content is as deep as its line (a size the
+            // container is told exactly, Measure gives it).
+            if (lines.Size() == 1 && crossDefinite && f.arrange)
+                lines[0].cross = crossAvail;
             f32 contentCross = crossGap * static_cast<f32>(lines.Size() > 0 ? lines.Size() - 1 : 0);
             for (const FlexLine& line : lines)
                 contentCross += line.cross;

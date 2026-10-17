@@ -64,6 +64,7 @@ export namespace experimental::gui
         {
             BindTextEditingKeys(m_keymap); // a GUI's own bindings come later, so they win a tie
             (void)m_keymap.Bind(core::StringView(u8"f10"), core::StringView(u8"menu.enter-bar"));
+            (void)m_keymap.Bind(core::StringView(u8"shift-f10"), core::StringView(u8"menu.context"));
         }
         GUIContext(const GUIContext&) = delete;
         GUIContext& operator=(const GUIContext&) = delete;
@@ -169,6 +170,8 @@ export namespace experimental::gui
             m_eventDispatcher.SetOnInput([this]() { m_context->TookInput(*this); });
             // F10 (bound in every GUI): the first node in this tree that takes it, a menu bar.
             (void)OnCommand(core::StringView(u8"menu.enter-bar"), [this](CommandEvent&) { (void)EnterFromKeyboardIn(*this); });
+            // Shift+F10 (bound in every GUI): the focused node's context menu.
+            (void)OnCommand(core::StringView(u8"menu.context"), [this](CommandEvent&) { (void)m_eventDispatcher.InjectContextMenu(); });
         }
         ~SceneRoot() override { m_context->RemoveRoot(*this); }
 

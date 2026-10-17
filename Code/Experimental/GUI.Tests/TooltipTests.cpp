@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - Tooltip + TooltipManager tests: a tooltip appears after the hover delay on a
-// widget with tooltip text, positions near the cursor, and hides when the hover changes.
+// GUI - tooltips, context menus and long presses (E5 of Specs/gui-lab-evolution.md): the GUI shows
+// the nearest tooltip text up the parent chain from the hovered node after a delay on its own
+// clock, by the pointer, as a hint popup; just after one hid the next shows at once; a press hides
+// it until the pointer moves on. A right release, Shift+F10 or a long press asks for a context menu
+// (a `contextmenu` event); a long press nobody takes shows the tooltip. A text field's context menu
+// offers cut, copy, paste and select all.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -13,98 +17,181 @@ namespace core = foundation::core;
 
 namespace
 {
-    template <typename T>
-    core::RefPtr<T> Make()
+    template <typename T, typename... A>
+    core::RefPtr<T> Make(A&&... args)
     {
-        return core::MakeRef<T>(core::DefaultAllocator());
+        return core::MakeRef<T>(core::DefaultAllocator(), static_cast<A&&>(args)...);
     }
+    core::StringView SV(const char8_t* s) { return core::StringView(s); }
+
+    struct Bed
+    {
+        core::RefPtr<SceneRoot> root = Make<SceneRoot>(Make<GUIContext>());
+        core::RefPtr<UIWidget> panel = Make<UIWidget>();
+        core::RefPtr<UIWidget> child = Make<UIWidget>();
+        core::RefPtr<UIWidget> other = Make<UIWidget>();
+        Bed()
+        {
+            root->SetSize(core::Float2{300.0f, 300.0f});
+            panel->SetSize(core::Float2{100.0f, 100.0f});
+            panel->SetTooltip(SV(u8"The panel"));
+            root->AddChild(panel.Get());
+            child->SetSize(core::Float2{40.0f, 40.0f});
+            panel->AddChild(child.Get()); // no text of its own: the panel's shows
+            other->SetPosition(core::Float2{150.0f, 0.0f});
+            other->SetSize(core::Float2{100.0f, 100.0f});
+            other->SetTooltip(SV(u8"Another"));
+            root->AddChild(other.Get());
+        }
+        EventDispatcher& d() { return *root->GetEventDispatcher(); }
+        void Frames(int n, core::f64 seconds = 0.1)
+        {
+            for (int i = 0; i < n; ++i)
+                root->GetContext().Update(core::Duration::FromSeconds(seconds));
+        }
+        [[nodiscard]] core::StringView Shown()
+        {
+            const Tooltip* tip = core::Cast<Tooltip>(d().GetShownTooltip());
+            return tip != nullptr ? tip->GetText() : core::StringView{};
+        }
+    };
 }
 
-TEST_CASE("tooltip: appears after the delay while hovering a widget with tooltip text")
+TEST_CASE("tooltip: the nearest text up the parent chain shows after the delay, by the pointer")
 {
-    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
-    root->SetSize(core::Float2{300.0f, 300.0f});
-    auto w = Make<UIWidget>();
-    w->SetSize(core::Float2{80.0f, 30.0f});
-    w->SetTooltip(core::StringView(u8"Click me"));
-    root->AddChild(w.Get());
-    EventDispatcher* d = root->GetEventDispatcher();
-
-    TooltipManager tips;
-    tips.SetDelay(0.5);
-
-    d->InjectMouseMove(core::Float2{40.0f, 15.0f}); // hover the widget
-    CHECK(d->GetOverNode() == w.Get());
-
-    tips.Update(*d, *root.Get(), 0.3); // below the delay
-    CHECK_FALSE(tips.IsShown());
-    tips.Update(*d, *root.Get(), 0.3); // cumulative 0.6 >= 0.5 -> shown
-    CHECK(tips.IsShown());
-    CHECK(tips.GetTooltip()->GetParent() == root.Get());
-    // Positioned near the cursor (offset +12,+18).
-    CHECK(tips.GetTooltip()->GetPosition().x == doctest::Approx(52.0f));
-    CHECK(tips.GetTooltip()->GetPosition().y == doctest::Approx(33.0f));
+    Bed bed;
+    bed.d().InjectMouseMove(core::Float2{20.0f, 20.0f}); // over the child
+    bed.Frames(4); // 0.4 s
+    CHECK(bed.d().GetShownTooltip() == nullptr);
+    bed.Frames(2);
+    REQUIRE(bed.d().GetShownTooltip() != nullptr);
+    CHECK(bed.Shown() == SV(u8"The panel"));
+    const Node* tip = bed.d().GetShownTooltip();
+    CHECK(tip->GetPosition().x == doctest::Approx(32.0f)); // 12 right of the pointer
+    CHECK(tip->GetPosition().y == doctest::Approx(38.0f)); // 18 below it
 }
 
-TEST_CASE("tooltip: hidden until the delay, and no tooltip for widgets without text")
+TEST_CASE("tooltip: moving to another hides it, and the next shows at once while warm")
 {
-    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
-    root->SetSize(core::Float2{300.0f, 300.0f});
-    auto plain = Make<UIWidget>(); // no tooltip text
-    plain->SetSize(core::Float2{80.0f, 30.0f});
-    root->AddChild(plain.Get());
-    EventDispatcher* d = root->GetEventDispatcher();
-
-    TooltipManager tips;
-    tips.SetDelay(0.2);
-    d->InjectMouseMove(core::Float2{40.0f, 15.0f});
-    tips.Update(*d, *root.Get(), 1.0); // long past any delay
-    CHECK_FALSE(tips.IsShown());       // no text -> never shows
+    Bed bed;
+    bed.d().InjectMouseMove(core::Float2{20.0f, 20.0f});
+    bed.Frames(6);
+    REQUIRE(bed.d().GetShownTooltip() != nullptr);
+    bed.d().InjectMouseMove(core::Float2{160.0f, 20.0f}); // onto the other
+    bed.Frames(1);
+    CHECK(bed.Shown() == SV(u8"Another")); // no second wait
+    bed.d().InjectMouseMove(core::Float2{280.0f, 280.0f}); // nothing with a tooltip
+    bed.Frames(1);
+    CHECK(bed.d().GetShownTooltip() == nullptr);
+    bed.Frames(10); // cold again
+    bed.d().InjectMouseMove(core::Float2{20.0f, 20.0f});
+    bed.Frames(1);
+    CHECK(bed.d().GetShownTooltip() == nullptr); // the full delay again
 }
 
-TEST_CASE("tooltip: changing the hovered node hides and resets the timer")
+TEST_CASE("tooltip: a press hides it until the pointer moves to another node")
 {
-    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
-    root->SetSize(core::Float2{300.0f, 300.0f});
-    auto a = Make<UIWidget>();
-    a->SetSize(core::Float2{80.0f, 30.0f});
-    a->SetTooltip(core::StringView(u8"A"));
-    auto b = Make<UIWidget>();
-    b->SetSize(core::Float2{80.0f, 30.0f});
-    b->SetPosition(core::Float2{0.0f, 100.0f}); // no tooltip
-    root->AddChild(a.Get());
-    root->AddChild(b.Get());
-    EventDispatcher* d = root->GetEventDispatcher();
-
-    TooltipManager tips;
-    tips.SetDelay(0.3);
-
-    d->InjectMouseMove(core::Float2{40.0f, 15.0f}); // hover a
-    tips.Update(*d, *root.Get(), 0.4);
-    CHECK(tips.IsShown());
-
-    d->InjectMouseMove(core::Float2{40.0f, 115.0f}); // move to b (no tooltip)
-    tips.Update(*d, *root.Get(), 0.01);
-    CHECK_FALSE(tips.IsShown());
-    CHECK(tips.GetTooltip()->GetParent() == nullptr);
+    Bed bed;
+    bed.d().InjectMouseMove(core::Float2{20.0f, 20.0f});
+    bed.Frames(6);
+    REQUIRE(bed.d().GetShownTooltip() != nullptr);
+    bed.d().InjectMouseDown(core::Float2{20.0f, 20.0f}, MouseButton::Left);
+    bed.d().InjectMouseUp(core::Float2{20.0f, 20.0f}, MouseButton::Left);
+    CHECK(bed.d().GetShownTooltip() == nullptr);
+    bed.Frames(10);
+    CHECK(bed.d().GetShownTooltip() == nullptr); // not again under the same pointer
 }
 
-TEST_CASE("tooltip: sits by the cursor at a display scale")
+TEST_CASE("tooltip: sits by the pointer at a display scale")
 {
-    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
-    root->SetDisplayScale(2.0f);
-    root->SetSize(core::Float2{300.0f, 300.0f});
-    auto w = Make<UIWidget>();
-    w->SetSize(core::Float2{80.0f, 30.0f});
-    w->SetTooltip(core::StringView(u8"Click me"));
-    root->AddChild(w.Get());
-    EventDispatcher* d = root->GetEventDispatcher();
-    TooltipManager tips;
-    tips.SetDelay(0.1);
-    d->InjectMouseMove(core::Float2{80.0f, 30.0f}); // device pixels: (40, 15) in the root's units
-    REQUIRE(d->GetOverNode() == w.Get());
-    tips.Update(*d, *root.Get(), 0.2);
-    REQUIRE(tips.IsShown());
-    CHECK(tips.GetTooltip()->GetPosition().x == doctest::Approx(52.0f));
-    CHECK(tips.GetTooltip()->GetPosition().y == doctest::Approx(33.0f));
+    Bed bed;
+    bed.root->SetDisplayScale(2.0f);
+    bed.root->SetSize(core::Float2{300.0f, 300.0f});
+    bed.d().InjectMouseMove(core::Float2{40.0f, 40.0f}); // device pixels: (20, 20) in the root's units
+    bed.Frames(6);
+    REQUIRE(bed.d().GetShownTooltip() != nullptr);
+    CHECK(bed.d().GetShownTooltip()->GetPosition().x == doctest::Approx(32.0f));
+    CHECK(bed.d().GetShownTooltip()->GetPosition().y == doctest::Approx(38.0f));
+}
+
+TEST_CASE("context menu: a right release asks the node there and up; Shift+F10 asks the focused one")
+{
+    Bed bed;
+    auto button = Make<Button>();
+    button->SetSize(core::Float2{30.0f, 20.0f});
+    bed.child->AddChild(button.Get());
+    int asked = 0;
+    core::Float2 at{};
+    (void)bed.panel->AddEventListener(EventType::ContextMenu, [&](const Event& e)
+                                      {
+                                          ++asked;
+                                          at = static_cast<const MouseEvent&>(e).Position;
+                                          e.Handled = true;
+                                      });
+    bed.d().InjectMouseDown(core::Float2{10.0f, 10.0f}, MouseButton::Right);
+    CHECK(asked == 0);
+    bed.d().InjectMouseUp(core::Float2{10.0f, 10.0f}, MouseButton::Right);
+    CHECK(asked == 1);
+    CHECK(at.x == doctest::Approx(10.0f));
+    button->RequestFocus();
+    bed.d().InjectKeyDown(static_cast<core::u32>(KeyCode::F10), KeyModShift);
+    CHECK(asked == 2);
+    CHECK(at.y == doctest::Approx(20.0f)); // the focused node's bottom-left
+}
+
+TEST_CASE("context menu: a long press asks for one; untaken, it shows the tooltip; and no click follows")
+{
+    Bed bed;
+    auto button = Make<Button>();
+    button->SetSize(core::Float2{30.0f, 20.0f});
+    bed.child->AddChild(button.Get());
+    int clicks = 0;
+    button->SetOnClick([&] { ++clicks; });
+    bed.d().InjectTouchDown(1, core::Float2{10.0f, 10.0f});
+    bed.Frames(3); // 0.3 s
+    CHECK(bed.d().GetShownTooltip() == nullptr);
+    bed.Frames(3);
+    REQUIRE(bed.d().GetShownTooltip() != nullptr); // nobody opened a menu: the tooltip
+    CHECK(bed.Shown() == SV(u8"The panel"));
+    bed.d().InjectTouchUp(1, core::Float2{10.0f, 10.0f});
+    CHECK(clicks == 0);
+
+    // A finger that moves is a drag, not a long press.
+    bed.d().InjectTouchDown(1, core::Float2{10.0f, 10.0f});
+    bed.d().InjectTouchMove(1, core::Float2{60.0f, 60.0f});
+    bed.Frames(8);
+    CHECK(bed.d().GetShownTooltip() == nullptr);
+    bed.d().InjectTouchUp(1, core::Float2{60.0f, 60.0f});
+}
+
+TEST_CASE("context menu: a text field offers cut, copy, paste and select all, lit where they do something")
+{
+    Bed bed;
+    auto field = Make<TextField>();
+    field->SetPosition(core::Float2{0.0f, 150.0f});
+    field->SetSize(core::Float2{200.0f, 24.0f});
+    bed.root->AddChild(field.Get());
+    field->SetText(SV(u8"hello"));
+    bed.d().InjectMouseDown(core::Float2{20.0f, 160.0f}, MouseButton::Right);
+    bed.d().InjectMouseUp(core::Float2{20.0f, 160.0f}, MouseButton::Right);
+    Menu* menu = field->GetContextMenu();
+    REQUIRE(menu != nullptr);
+    CHECK(menu->IsOpen());
+    CHECK(menu->GetParent() == field.Get());
+    REQUIRE(menu->ItemCount() == 4u);
+    // Nothing selected, no clipboard: only select all is lit.
+    menu->Close();
+    field->SelectAll();
+    bed.d().InjectMouseDown(core::Float2{20.0f, 160.0f}, MouseButton::Right);
+    bed.d().InjectMouseUp(core::Float2{20.0f, 160.0f}, MouseButton::Right);
+    REQUIRE(menu->IsOpen());
+    // Its Cut runs the field's command, and the menu closes, focus back on the field.
+    MenuItem* cut = core::Cast<MenuItem>(menu->GetChildAt(0));
+    REQUIRE(cut != nullptr);
+    CHECK(cut->GetText() == SV(u8"Cut"));
+    CHECK(cut->IsEnabled());
+    (void)cut->HandleActivate();
+    CHECK(field->GetText().Size() == 0u);
+    CHECK_FALSE(menu->IsOpen());
+    CHECK(field->IsFocused());
 }

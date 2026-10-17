@@ -389,3 +389,36 @@ TEST_CASE("style-manager: a restyle that starts below the tree's top still sees 
     mgr.ApplyTree(*section.Get()); // .page is above where the walk starts
     CHECK(cell->GetAlpha() == doctest::Approx(0.5f));
 }
+
+TEST_CASE("style-manager: a forced state reads as set, restyling the node, and its subtree when a rule reads it through an ancestor")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{200.0f, 200.0f});
+    auto btn = Widget(u8"button", core::Float2{0.0f, 0.0f}, core::Float2{100.0f, 100.0f});
+    root->AddChild(btn.Get());
+    auto label = Widget(u8"label", core::Float2{0.0f, 0.0f}, core::Float2{50.0f, 20.0f});
+    btn->AddChild(label.Get());
+    StyleManager mgr(CSSParser::Parse(SV(
+        u8"button { opacity: 1; } button:hover { opacity: 0.5; } button:disabled { opacity: 0.25; }"
+        u8"button:enabled label { opacity: 0.9; } button:hover label { opacity: 0.75; }")));
+    mgr.ApplyTree(*root.Get());
+    CHECK(btn->GetAlpha() == doctest::Approx(1.0f));
+    CHECK(label->GetAlpha() == doctest::Approx(0.9f));
+
+    btn->SetForcedStyleStates(Node::StateHover);
+    mgr.ApplyTree(*root.Get());
+    CHECK(btn->GetAlpha() == doctest::Approx(0.5f));
+    CHECK(label->GetAlpha() == doctest::Approx(0.75f)); // read through its ancestor
+    CHECK_FALSE(btn->IsHovered());                      // only the style pass sees it
+
+    btn->SetForcedStyleStates(Node::StateDisabled); // forced disabled is not enabled
+    mgr.ApplyTree(*root.Get());
+    CHECK(btn->GetAlpha() == doctest::Approx(0.25f));
+    CHECK(label->GetAlpha() == doctest::Approx(1.0f)); // neither label rule matches now
+    CHECK(btn->IsEnabled());
+
+    btn->SetForcedStyleStates(0);
+    mgr.ApplyTree(*root.Get());
+    CHECK(btn->GetAlpha() == doctest::Approx(1.0f));
+    CHECK(label->GetAlpha() == doctest::Approx(0.9f));
+}

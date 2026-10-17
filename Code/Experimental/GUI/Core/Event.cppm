@@ -71,6 +71,8 @@ export namespace experimental::gui
         PointerCancel,
         // A rich text's link was clicked (a LinkEvent, its id).
         Link,
+        // An IME's composition so far, at the focused node (a CompositionEvent; empty text: it ended).
+        Composition,
     };
 
     /// What drives the pointer: the mouse, or a finger (the first one down).
@@ -256,6 +258,19 @@ export namespace experimental::gui
 
         TextInputEvent(Node* target, core::StringView text) noexcept
             : Event(EventType::TextInput, target), Text(text)
+        {
+        }
+    };
+
+    /// An IME's composition so far: its text (empty when the composition ended or was committed,
+    /// the committed text then arriving as TextInput) and the caret within it, in characters.
+    struct CompositionEvent : Event
+    {
+        core::StringView Text;
+        i32 Cursor = 0;
+
+        CompositionEvent(Node* target, core::StringView text, i32 cursor) noexcept
+            : Event(EventType::Composition, target), Text(text), Cursor(cursor)
         {
         }
     };

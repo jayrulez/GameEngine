@@ -184,3 +184,28 @@ TEST_CASE("markup: a scroller's and a window's children are their content")
     CHECK(core::Cast<Label>(scroll->GetChildAt(0))->GetText() == SV(u8"scrolled"));
     REQUIRE(window->GetContent()->ChildCount() == 1u);
 }
+
+TEST_CASE("markup: the text widgets' password, filter, length and rows are attributes, and rich text an element")
+{
+    auto tree = Load(u8R"(
+        <Panel>
+            <TextField password="true" input-filter="digits" max-length="4"/>
+            <TextArea rows="6" read-only="true"/>
+            <RichText text="[b]bold[/b]"/>
+        </Panel>
+    )");
+    REQUIRE(tree.Get() != nullptr);
+    auto* field = core::Cast<TextField>(tree->GetChildAt(0));
+    REQUIRE(field != nullptr);
+    CHECK(field->IsPassword());
+    CHECK(field->GetInputFilterName() == SV(u8"digits"));
+    CHECK(field->GetMaxLength() == 4u);
+    auto* area = core::Cast<TextArea>(tree->GetChildAt(1));
+    REQUIRE(area != nullptr);
+    CHECK(area->GetRows() == 6);
+    CHECK(area->IsReadOnly());
+    auto* rich = core::Cast<RichText>(tree->GetChildAt(2));
+    REQUIRE(rich != nullptr);
+    CHECK(rich->IsRich());
+    CHECK(rich->GetTextLayout().Document().Runs[0].Bold);
+}

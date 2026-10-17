@@ -1182,6 +1182,14 @@ export namespace experimental::gui
         // while it holds focus. The gui.shell bridge reads the focused node's answer and
         // drives the window's StartTextInput/StopTextInput accordingly. Default: false.
         [[nodiscard]] virtual bool WantsTextInput() const { return false; }
+        /// Where text is typed in this node, in its own space, and the caret's x there: the IME
+        /// places its candidate list beside it. False when it types no text.
+        [[nodiscard]] virtual bool GetTextInputArea(Rect& area, f32& caretX) const
+        {
+            (void)area;
+            (void)caretX;
+            return false;
+        }
 
         /// Whether the pointer over this node is the GUI's, so a game host leaves a click there
         /// alone: a node that paints a background, takes focus, or listens for the pointer.
@@ -1492,6 +1500,7 @@ export namespace experimental::gui
         }
         virtual void OnKeyUp(const KeyEvent&) {}
         virtual void OnTextInput(const TextInputEvent&) {}
+        virtual void OnComposition(const CompositionEvent&) {}
         virtual void OnFocusGained() {}
         virtual void OnFocusLost() {}
         /// Hovered or pressed changed: restyles the node (`:hover`, `:active`; its subtree when a
@@ -1583,6 +1592,7 @@ export namespace experimental::gui
             case EventType::KeyDown: OnKeyDown(static_cast<const KeyEvent&>(event)); break;
             case EventType::KeyUp: OnKeyUp(static_cast<const KeyEvent&>(event)); break;
             case EventType::TextInput: OnTextInput(static_cast<const TextInputEvent&>(event)); break;
+            case EventType::Composition: OnComposition(static_cast<const CompositionEvent&>(event)); break;
             case EventType::PointerCaptureLost: OnPointerCaptureLost(); break;
             case EventType::PointerCancel: OnPointerCancel(static_cast<const MouseEvent&>(event)); break;
             default: break;

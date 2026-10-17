@@ -73,7 +73,7 @@ namespace experimental::gui
                 {u8"focus", EventType::FocusGained},     {u8"blur", EventType::FocusLost},
                 {u8"change", EventType::Changed},        {u8"pointercancel", EventType::PointerCancel},
                 {u8"link", EventType::Link},             {u8"input", EventType::Input},
-                {u8"submit", EventType::Submit},
+                {u8"submit", EventType::Submit},         {u8"composition", EventType::Composition},
             };
             for (const Named& entry : kNames)
             {
@@ -141,6 +141,7 @@ namespace experimental::gui
             }
             case EventType::TextInput: out.text = core::String(static_cast<const TextInputEvent&>(event).Text); break;
             case EventType::Link: out.text = core::String(static_cast<const LinkEvent&>(event).Link); break; // the link's id
+            case EventType::Composition: out.text = core::String(static_cast<const CompositionEvent&>(event).Text); break;
             default: break;
             }
             return out;
@@ -497,7 +498,7 @@ namespace experimental::gui
                 &RadioButton::StaticType(),  &Slider::StaticType(),       &ProgressBar::StaticType(),
                 &TextField::StaticType(),    &Panel::StaticType(),        &ScrollView::StaticType(),
                 &Image::StaticType(),        &ListBox::StaticType(),      &Window::StaticType(),
-                &ComboBox::StaticType(),     &RichText::StaticType(),
+                &ComboBox::StaticType(),     &RichText::StaticType(),     &TextArea::StaticType(),
             };
             for (const TypeInfo* type : kLabElements)
                 (void)ElementTypes::Register(*type);
@@ -665,16 +666,30 @@ namespace experimental::gui
         builder.Creator();
     }
 
-    REFLECT_MEMBERS(TextField, "rtti::gui")
+    REFLECT_MEMBERS(TextEditBase, "rtti::gui")
     {
-        builder.AccessorProperty<&TextField::GetPlaceholder, &TextField::SetPlaceholder>("placeholder").PropAttribute("css", core::String(u8"placeholder"));
-        builder.AccessorProperty<&TextField::GetMaxLength, &TextField::SetMaxLength>("maxLength").PropAttribute("css", core::String(u8"max-length"));
-        builder.AccessorProperty<&TextField::IsReadOnly, &TextField::SetReadOnly>("readOnly").PropAttribute("css", core::String(u8"read-only"));
-        builder.AccessorProperty<&TextField::IsPassword, &TextField::SetPassword>("password").PropAttribute("css", core::String(u8"password"));
-        builder.AccessorProperty<&TextField::GetText, &TextField::SetText>("text")
+        builder.AccessorProperty<&TextEditBase::GetPlaceholder, &TextEditBase::SetPlaceholder>("placeholder").PropAttribute("css", core::String(u8"placeholder"));
+        builder.AccessorProperty<&TextEditBase::GetMaxLength, &TextEditBase::SetMaxLength>("maxLength").PropAttribute("css", core::String(u8"max-length"));
+        builder.AccessorProperty<&TextEditBase::IsReadOnly, &TextEditBase::SetReadOnly>("readOnly").PropAttribute("css", core::String(u8"read-only"));
+        builder.AccessorProperty<&TextEditBase::GetInputFilterName, &TextEditBase::SetInputFilterName>("inputFilter")
+            .PropAttribute("css", core::String(u8"input-filter"));
+        builder.AccessorProperty<&TextEditBase::GetText, &TextEditBase::SetText>("text")
             .PropAttribute("css", core::String(u8"text"))
             .PropAttribute("twoWay", true); // the user changes it: a binding may write it back
+        builder.Method<&ElementOf<TextEditBase>, TextEditBase, Node>("of");
+    }
+
+    REFLECT_MEMBERS(TextField, "rtti::gui")
+    {
+        builder.AccessorProperty<&TextField::IsPassword, &TextField::SetPassword>("password").PropAttribute("css", core::String(u8"password"));
         builder.Method<&ElementOf<TextField>, TextField, Node>("of");
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(TextArea, "rtti::gui")
+    {
+        builder.AccessorProperty<&TextArea::GetRows, &TextArea::SetRows>("rows").PropAttribute("css", core::String(u8"rows"));
+        builder.Method<&ElementOf<TextArea>, TextArea, Node>("of");
         builder.Creator();
     }
 

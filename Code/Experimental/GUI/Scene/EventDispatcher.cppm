@@ -18,6 +18,7 @@ export module experimental.gui:event_dispatcher;
 
 import foundation.core; // Float2, StringView
 import :node;
+import :rect;
 import :event;
 import :clipboard;
 import :navigation; // directional focus (G7)
@@ -218,6 +219,33 @@ export namespace experimental::gui
                 return false;
             TextInputEvent event(target, text);
             return target->RouteEvent(event);
+        }
+        /// An IME's composition so far (empty: it ended), to the focused node, which shows it in
+        /// place; the committed text follows as InjectText. `cursor` is in characters.
+        bool InjectComposition(core::StringView text, i32 cursor = 0)
+        {
+            Node* target = KeyTarget();
+            if (target == nullptr)
+                return false;
+            CompositionEvent event(target, text, cursor);
+            return target->RouteEvent(event);
+        }
+        /// Where the focused node has text typed, in input space (as positions are injected), and
+        /// the caret's x there: where a host's IME shows its candidates. False when it types none.
+        [[nodiscard]] bool GetTextInputArea(Rect& area, f32& caretX) const
+        {
+            if (m_focusNode == nullptr || !m_focusNode->WantsTextInput())
+                return false;
+            Rect local{};
+            f32 localCaret = 0.0f;
+            if (!m_focusNode->GetTextInputArea(local, localCaret))
+                return false;
+            const core::Float2 a = m_focusNode->ConvertToWorldSpace(core::Float2{local.x, local.y});
+            const core::Float2 b = m_focusNode->ConvertToWorldSpace(core::Float2{local.x + local.width, local.y + local.height});
+            const core::Float2 c = m_focusNode->ConvertToWorldSpace(core::Float2{localCaret, local.y});
+            area = Rect{core::Min(a.x, b.x), core::Min(a.y, b.y), core::Abs(b.x - a.x), core::Abs(b.y - a.y)};
+            caretX = c.x - area.x;
+            return true;
         }
 
         // === Pointer capture ===

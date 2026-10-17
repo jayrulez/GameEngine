@@ -165,7 +165,7 @@ export namespace experimental::gui
             case shell::InputEventKind::MouseWheel:
                 // For wheel, x/y is the scroll delta; position is the last known cursor spot.
                 routed = m_dispatcher->InjectMouseWheel(m_dispatcher->GetMousePosition(),
-                                                        core::Float2{event.x, event.y});
+                                                        core::Float2{event.x, event.y}, MapModifiers(event.modifiers));
                 break;
             case shell::InputEventKind::KeyDown:
                 routed = m_dispatcher->InjectKeyDown(MapKey(event.key), MapModifiers(event.modifiers));
@@ -240,7 +240,7 @@ export namespace experimental::gui
             const f32 scrollX = mouse->ScrollX();
             const f32 scrollY = mouse->ScrollY();
             if (scrollX != 0.0f || scrollY != 0.0f)
-                m_dispatcher->InjectMouseWheel(position, core::Float2{scrollX, scrollY});
+                m_dispatcher->InjectMouseWheel(position, core::Float2{scrollX, scrollY}, modifiers);
 
             SyncTextInput(); // a click this frame may have focused (or blurred) an editable widget
             SyncCursor();

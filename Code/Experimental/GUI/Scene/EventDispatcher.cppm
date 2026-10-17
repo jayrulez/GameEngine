@@ -183,7 +183,7 @@ export namespace experimental::gui
                 ReleasePointer(*m_captureNode);
         }
 
-        bool InjectMouseWheel(core::Float2 position, core::Float2 delta)
+        bool InjectMouseWheel(core::Float2 position, core::Float2 delta, u32 modifiers = 0)
         {
             Node* hit = HitTest(position);
             // Up from the node under the pointer: a scroller takes it, one at its end leaves it to
@@ -191,7 +191,7 @@ export namespace experimental::gui
             bool used = false;
             if (hit != nullptr && hit->IsTreeEnabled())
             {
-                WheelEvent event(hit, position, delta);
+                WheelEvent event(hit, position, delta, modifiers);
                 used = hit->RouteEvent(event);
             }
             return used || IsPointerTaken(hit);

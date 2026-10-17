@@ -964,7 +964,12 @@ namespace experimental::gui
             extent.y = core::Max(extent.y, child.GetPosition().y + child.GetSize().y + m.Bottom - box.y);
         }
         m_contentExtent = extent;
-        SetScrollOffset(m_scrollOffset); // kept within the new range
+        ApplyScrollOffset(m_scrollOffset); // kept within the new range, a smooth scroll going on
+        if (m_smoothScrolling)
+        {
+            const core::Float2 range = GetScrollRange();
+            m_scrollTarget = core::Float2{core::Clamp(m_scrollTarget.x, 0.0f, range.x), core::Clamp(m_scrollTarget.y, 0.0f, range.y)};
+        }
     }
 
     void Node::RequestLayout()
@@ -1070,7 +1075,76 @@ namespace experimental::gui
         }
     }
 
-    void Node::ScrollIntoView(Node& descendant)
+    void Node::ScrollTo(core::Float2 offset, ScrollBehavior behavior)
+    {
+        if (behavior == ScrollBehavior::Auto)
+            behavior = m_layoutStyle.Scrolling == ScrollBehavior::Smooth ? ScrollBehavior::Smooth : ScrollBehavior::Instant;
+        if (behavior != ScrollBehavior::Smooth)
+        {
+            SetScrollOffset(offset);
+            return;
+        }
+        // A smooth scroll eases toward its target; another scroll while it runs moves the target
+        // on, so wheel notches accumulate rather than restart.
+        const bool pending = m_layoutDirty || m_childLayoutDirty;
+        const core::Float2 range = pending ? core::Float2{kUnbounded, kUnbounded} : GetScrollRange();
+        m_scrollTarget = core::Float2{core::Clamp(offset.x, 0.0f, range.x), core::Clamp(offset.y, 0.0f, range.y)};
+        if (m_scrollTarget == m_scrollOffset)
+        {
+            m_smoothScrolling = false;
+            return;
+        }
+        m_smoothScrolling = true;
+        StartSmoothScroll();
+    }
+
+    void Node::ScrollToEnd(ScrollBehavior behavior)
+    {
+        const core::Float2 range = GetScrollRange();
+        const core::Float2 from = GetScrollTarget();
+        // The bottom; a scroller that only scrolls across, its right.
+        ScrollTo(range.y > 0.0f || range.x <= 0.0f ? core::Float2{from.x, range.y} : core::Float2{range.x, from.y}, behavior);
+    }
+
+    void Node::StartSmoothScroll()
+    {
+        if (m_smoothTicking)
+            return;
+        if (GetActionManager() == nullptr)
+        {
+            SetScrollOffset(m_scrollTarget); // no clock to ease on: there at once
+            return;
+        }
+        m_smoothTicking = true;
+        Node* self = this;
+        RunAction(core::MakeRef<TickAction>(MemoryAllocator(), [self](core::Duration elapsed)
+        {
+            if (!self->m_smoothScrolling)
+            {
+                self->m_smoothTicking = false;
+                return false;
+            }
+            // The rest of the way shrinks by e^(-t/tau) whatever the frame rate; within half a
+            // pixel it arrives.
+            constexpr f32 kTau = 0.06f;
+            const f32 keep = core::Exp(-static_cast<f32>(elapsed.AsSecondsF()) / kTau);
+            const core::Float2 at = self->m_scrollOffset;
+            const core::Float2 to = self->m_scrollTarget;
+            core::Float2 next{to.x - (to.x - at.x) * keep, to.y - (to.y - at.y) * keep};
+            if (core::Abs(to.x - next.x) < 0.5f && core::Abs(to.y - next.y) < 0.5f)
+                next = to;
+            self->ApplyScrollOffset(next);
+            if (self->m_scrollOffset == to || self->m_scrollOffset == at) // arrived, or held at the range's end
+            {
+                self->m_smoothScrolling = false;
+                self->m_smoothTicking = false;
+                return false;
+            }
+            return true;
+        }));
+    }
+
+    void Node::ScrollIntoView(Node& descendant, ScrollAlign align, ScrollBehavior behavior)
     {
         if (!IsScrollContainer() || &descendant == this)
             return;
@@ -1078,30 +1152,49 @@ namespace experimental::gui
         const core::Float2 lo = ConvertToNodeSpace(core::Float2{world.x, world.y});
         const core::Float2 hi = ConvertToNodeSpace(core::Float2{world.x + world.width, world.y + world.height});
         const Rect box = GetContentBounds();
-        core::Float2 offset = m_scrollOffset;
-        if (lo.y < box.y)
-            offset.y -= box.y - lo.y;
-        else if (hi.y > box.y + box.height)
-            offset.y += hi.y - (box.y + box.height);
-        if (lo.x < box.x)
-            offset.x -= box.x - lo.x;
-        else if (hi.x > box.x + box.width)
-            offset.x += hi.x - (box.x + box.width);
-        SetScrollOffset(offset);
+        // Positions here are as scrolled now; a smooth scroll in progress starts from its target.
+        const core::Float2 from = GetScrollTarget();
+        const core::Float2 shift{from.x - m_scrollOffset.x, from.y - m_scrollOffset.y};
+        const auto axis = [align](f32 offset, f32 start, f32 end, f32 boxStart, f32 boxLength)
+        {
+            switch (align)
+            {
+            case ScrollAlign::Start: return offset + (start - boxStart);
+            case ScrollAlign::End: return offset + (end - (boxStart + boxLength));
+            case ScrollAlign::Center: return offset + ((start + end) * 0.5f - (boxStart + boxLength * 0.5f));
+            case ScrollAlign::Nearest:
+            default:
+                if (start < boxStart)
+                    return offset - (boxStart - start);
+                if (end > boxStart + boxLength)
+                    return offset + core::Min(end - (boxStart + boxLength), start - boxStart); // never past its start
+                return offset;
+            }
+        };
+        const core::Float2 offset{axis(from.x, lo.x - shift.x, hi.x - shift.x, box.x, box.width),
+                                  axis(from.y, lo.y - shift.y, hi.y - shift.y, box.y, box.height)};
+        ScrollTo(offset, behavior);
     }
 
     void Node::ScrollDefaultAction(const Event& event)
     {
-        const core::Float2 before = m_scrollOffset;
         switch (event.Type)
         {
         case EventType::MouseWheel:
         {
-            // Wheel up (positive y) shows what is above. A scroller at its end leaves the wheel to
-            // the one around it.
+            // Wheel up (positive y) shows what is above. Shift turns it to the other axis, and a
+            // scroller that only scrolls across takes a vertical wheel across. A scroller at its
+            // end leaves the wheel to the one around it, unless it contains its overscroll.
             const WheelEvent& wheel = static_cast<const WheelEvent&>(event);
-            ScrollBy(core::Float2{-wheel.Delta.x * m_scrollStep, -wheel.Delta.y * m_scrollStep});
-            event.Handled = m_scrollOffset != before;
+            core::Float2 delta = wheel.Delta;
+            if ((wheel.Modifiers & KeyModShift) != 0 && delta.x == 0.0f)
+                delta = core::Float2{delta.y, 0.0f};
+            const core::Float2 range = GetScrollRange();
+            if (delta.x == 0.0f && range.y <= 0.0f && range.x > 0.0f)
+                delta = core::Float2{delta.y, 0.0f};
+            const core::Float2 target = GetScrollTarget();
+            ScrollBy(core::Float2{-delta.x * m_scrollStep, -delta.y * m_scrollStep}, ScrollBehavior::Auto);
+            event.Handled = GetScrollTarget() != target || m_layoutStyle.Overscroll == OverscrollBehavior::Contain;
             return;
         }
         case EventType::KeyDown:
@@ -1110,21 +1203,23 @@ namespace experimental::gui
                 return; // keys a focused widget inside left go on to navigation, not to scrolling
             const Rect box = GetContentBounds();
             const KeyEvent& key = static_cast<const KeyEvent&>(event);
+            const core::Float2 target = GetScrollTarget();
+            constexpr ScrollBehavior kOwn = ScrollBehavior::Auto; // smooth where the node asks
             bool arrow = false;
             switch (static_cast<KeyCode>(key.KeyCode))
             {
-            case KeyCode::Down: ScrollBy(core::Float2{0.0f, m_scrollStep}); arrow = true; break;
-            case KeyCode::Up: ScrollBy(core::Float2{0.0f, -m_scrollStep}); arrow = true; break;
-            case KeyCode::Right: ScrollBy(core::Float2{m_scrollStep, 0.0f}); arrow = true; break;
-            case KeyCode::Left: ScrollBy(core::Float2{-m_scrollStep, 0.0f}); arrow = true; break;
-            case KeyCode::PageDown: ScrollBy(core::Float2{0.0f, box.height}); break;
-            case KeyCode::PageUp: ScrollBy(core::Float2{0.0f, -box.height}); break;
-            case KeyCode::Home: SetScrollOffset(core::Float2{m_scrollOffset.x, 0.0f}); break;
-            case KeyCode::End: SetScrollOffset(core::Float2{m_scrollOffset.x, GetScrollRange().y}); break;
+            case KeyCode::Down: ScrollBy(core::Float2{0.0f, m_scrollStep}, kOwn); arrow = true; break;
+            case KeyCode::Up: ScrollBy(core::Float2{0.0f, -m_scrollStep}, kOwn); arrow = true; break;
+            case KeyCode::Right: ScrollBy(core::Float2{m_scrollStep, 0.0f}, kOwn); arrow = true; break;
+            case KeyCode::Left: ScrollBy(core::Float2{-m_scrollStep, 0.0f}, kOwn); arrow = true; break;
+            case KeyCode::PageDown: ScrollBy(core::Float2{0.0f, box.height}, kOwn); break;
+            case KeyCode::PageUp: ScrollBy(core::Float2{0.0f, -box.height}, kOwn); break;
+            case KeyCode::Home: ScrollTo(core::Float2{target.x, 0.0f}, kOwn); break;
+            case KeyCode::End: ScrollTo(core::Float2{target.x, GetScrollRange().y}, kOwn); break;
             default: return;
             }
             // An arrow that could not scroll further is given back (focus moves on).
-            event.Handled = !arrow || m_scrollOffset != before;
+            event.Handled = !arrow || GetScrollTarget() != target;
             return;
         }
         case EventType::MouseDown:

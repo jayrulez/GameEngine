@@ -44,6 +44,7 @@ import :input_filter;
 import :text_edit_model;
 import :text_editing_keys; // kTextSubmitCommand
 import :menu; // the context menu (E5)
+import :scene_root; // GUIContext: its keymap, for the menu's shortcut text
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -433,6 +434,12 @@ export namespace experimental::gui
             m_contextItems[1]->SetEnabled(selected);
             m_contextItems[2]->SetEnabled(!IsReadOnly() && clipboard != nullptr && clipboard->HasText());
             m_contextItems[3]->SetEnabled(m_model.GetText().Size() != 0);
+            // Each shows the keys the GUI binds to its command ("Ctrl+X").
+            static constexpr TextEditCommand kCommands[] = {TextEditCommand::Cut, TextEditCommand::Copy, TextEditCommand::Paste,
+                                                            TextEditCommand::SelectAll};
+            if (GUIContext* gui = GetGUIContext())
+                for (usize i = 0; i < m_contextItems.Size(); ++i)
+                    m_contextItems[i]->SetShortcut(gui->GetKeymap().ShortcutText(TextEditCommandName(kCommands[i])).AsView());
             Node* root = GetRootNode();
             m_contextMenu->Open(*this, root != nullptr ? root->ConvertToNodeSpace(event.Position) : event.Position);
         }

@@ -43,6 +43,15 @@ export namespace experimental::gui
         void SetOnClick(core::Function<void()> callback) { m_onClick = core::Move(callback); }
         [[nodiscard]] bool HasOnClick() const noexcept { return static_cast<bool>(m_onClick); }
 
+        // A button with no text of its own shows its command's label.
+        void OnBoundCommandText(core::StringView label, core::StringView, core::StringView) override
+        {
+            if (GetText().Size() != 0 && !m_textFromCommand)
+                return;
+            SetText(label);
+            m_textFromCommand = true;
+        }
+
     protected:
         bool OnActivate() override { return ActivateAsClick(); } // Return, Space: a click
         void OnMouseClick(const MouseEvent& event) override
@@ -54,5 +63,6 @@ export namespace experimental::gui
         }
 
         core::Function<void()> m_onClick;
+        bool m_textFromCommand = false; // its text is its command's label (OnBoundCommandText)
     };
 }

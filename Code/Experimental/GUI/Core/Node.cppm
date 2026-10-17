@@ -1465,6 +1465,15 @@ export namespace experimental::gui
             (void)checked;
             SetEnabled(available);
         }
+        /// What the bound command shows reached the control (E5): its label, its icon (an image
+        /// path) and its keys as text ("Ctrl+S"), each followed as it changes. A button or a menu
+        /// item with no text of its own takes the label; a menu item, the keys and the icon.
+        virtual void OnBoundCommandText(core::StringView label, core::StringView icon, core::StringView shortcut)
+        {
+            (void)label;
+            (void)icon;
+            (void)shortcut;
+        }
 
         /// Runs this node's handlers for `event` in its phase; whether any ran.
         bool RunCommandHandlers(CommandEvent& event)

@@ -21,6 +21,7 @@ export module experimental.gui:keymap;
 import foundation.core; // String, Array, Optional, Span
 import :event;          // KeyCode, KeyModifier
 import :style_value;    // SplitTopLevel
+import :reactive;       // Observable (who shows a shortcut follows its bindings)
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -148,6 +149,64 @@ export namespace experimental::gui
         return {};
     }
 
+    /// A keystroke as a menu shows it: "Ctrl+Shift+S", "F10", "Enter", "Pad East".
+    [[nodiscard]] inline core::String KeystrokeText(const Keystroke& stroke)
+    {
+        core::String out;
+        if (stroke.Pad)
+        {
+            out.Append(core::StringView(u8"Pad "));
+            static constexpr const char8_t* kPad[] = {u8"South", u8"East", u8"West", u8"North", u8"Start", u8"Back", u8"LB", u8"RB"};
+            if (stroke.Code < sizeof(kPad) / sizeof(kPad[0]))
+                out.Append(core::StringView(kPad[stroke.Code]));
+            return out;
+        }
+        if ((stroke.Modifiers & KeyModCtrl) != 0)
+            out.Append(core::StringView(u8"Ctrl+"));
+        if ((stroke.Modifiers & KeyModAlt) != 0)
+            out.Append(core::StringView(u8"Alt+"));
+        if ((stroke.Modifiers & KeyModShift) != 0)
+            out.Append(core::StringView(u8"Shift+"));
+        if ((stroke.Modifiers & KeyModSuper) != 0)
+            out.Append(core::StringView(u8"Super+"));
+        struct Named
+        {
+            KeyCode Code;
+            const char8_t* Text;
+        };
+        static constexpr Named kNamed[] = {
+            {KeyCode::Return, u8"Enter"},   {KeyCode::Escape, u8"Esc"},    {KeyCode::Backspace, u8"Backspace"},
+            {KeyCode::Tab, u8"Tab"},        {KeyCode::Space, u8"Space"},   {KeyCode::Delete, u8"Del"},
+            {KeyCode::Insert, u8"Ins"},     {KeyCode::Home, u8"Home"},     {KeyCode::End, u8"End"},
+            {KeyCode::PageUp, u8"PgUp"},    {KeyCode::PageDown, u8"PgDn"}, {KeyCode::Left, u8"Left"},
+            {KeyCode::Right, u8"Right"},    {KeyCode::Up, u8"Up"},         {KeyCode::Down, u8"Down"},
+        };
+        const KeyCode key = static_cast<KeyCode>(stroke.Code);
+        for (const Named& n : kNamed)
+            if (n.Code == key)
+            {
+                out.Append(core::StringView(n.Text));
+                return out;
+            }
+        for (usize i = 0; i < 26; ++i)
+            if (kLetterKeys[i] == key)
+            {
+                out.PushBack(static_cast<char8_t>(u8'A' + i));
+                return out;
+            }
+        if (key >= KeyCode::Num0 && key <= KeyCode::Num9)
+            out.PushBack(static_cast<char8_t>(u8'0' + (stroke.Code - static_cast<u32>(KeyCode::Num0))));
+        else if (key >= KeyCode::F1 && key <= KeyCode::F12)
+        {
+            const u32 n = stroke.Code - static_cast<u32>(KeyCode::F1) + 1;
+            out.PushBack(u8'F');
+            if (n >= 10)
+                out.PushBack(u8'1');
+            out.PushBack(static_cast<char8_t>(u8'0' + n % 10));
+        }
+        return out;
+    }
+
     /// What one node's key context declares: identifiers ("menu") and key=value pairs
     /// ("mode=insert"), separated by spaces. A layer of the stack the focus path builds holds the
     /// declarations of every node from the root to there, a deeper value replacing an outer one.
@@ -191,7 +250,9 @@ export namespace experimental::gui
         }
     };
 
-    /// A context predicate: identifiers, `a == b`, `a != b`, `!p`, `p && q`, `p || q`, parentheses.
+    /// A context predicate: identifiers, `a == b`, `a != b`, `!p`, `p && q`, `p || q`, parentheses,
+    /// and `p > q` (lowest precedence, after GPUI's): q holds here, inside a context where p held
+    /// that q did not (a text input inside a menu: "menu > textinput").
     class ContextPredicate
     {
     public:
@@ -207,7 +268,7 @@ export namespace experimental::gui
             if (!Tokenize(text))
                 return false;
             usize at = 0;
-            m_root = ParseOr(at);
+            m_root = ParseInside(at);
             if (m_root < 0 || at != m_tokens.Size())
             {
                 m_root = -2; // malformed: matches nothing
@@ -216,12 +277,15 @@ export namespace experimental::gui
             return true;
         }
         [[nodiscard]] bool IsEmpty() const noexcept { return m_root == -1; }
-        [[nodiscard]] bool Eval(const KeyContextLayer& layer) const
+        /// Whether it holds at layer `depth` of `stack` (root first).
+        [[nodiscard]] bool Eval(Span<const KeyContextLayer> stack, usize depth) const
         {
             if (m_root == -1)
                 return true;
-            return m_root >= 0 && EvalNode(m_root, layer);
+            return m_root >= 0 && depth < stack.Size() && EvalNode(m_root, stack, depth);
         }
+        /// Whether it holds in one layer alone (nothing around it).
+        [[nodiscard]] bool Eval(const KeyContextLayer& layer) const { return Eval(Span<const KeyContextLayer>(&layer, 1), 0); }
 
     private:
         enum class Op : u8
@@ -232,6 +296,7 @@ export namespace experimental::gui
             Not,
             And,
             Or,
+            Inside, // Left > Right
         };
         struct PNode
         {
@@ -260,7 +325,7 @@ export namespace experimental::gui
                     i += 2;
                     continue;
                 }
-                if (c == u8'!' || c == u8'(' || c == u8')')
+                if (c == u8'!' || c == u8'(' || c == u8')' || c == u8'>')
                 {
                     m_tokens.PushBack(core::String(text.SubStr(i, 1)));
                     ++i;
@@ -285,6 +350,19 @@ export namespace experimental::gui
         {
             m_nodes.PushBack(Move(node));
             return static_cast<i32>(m_nodes.Size() - 1);
+        }
+        i32 ParseInside(usize& at)
+        {
+            i32 left = ParseOr(at);
+            while (left >= 0 && Is(at, u8">"))
+            {
+                ++at;
+                const i32 right = ParseOr(at);
+                if (right < 0)
+                    return -1;
+                left = Add(PNode{Op::Inside, {}, {}, left, right});
+            }
+            return left;
         }
         i32 ParseOr(usize& at)
         {
@@ -323,13 +401,14 @@ export namespace experimental::gui
             if (Is(at, u8"("))
             {
                 ++at;
-                const i32 inner = ParseOr(at);
+                const i32 inner = ParseInside(at);
                 if (inner < 0 || !Is(at, u8")"))
                     return -1;
                 ++at;
                 return inner;
             }
-            if (at >= m_tokens.Size() || Is(at, u8")") || Is(at, u8"&&") || Is(at, u8"||") || Is(at, u8"==") || Is(at, u8"!="))
+            if (at >= m_tokens.Size() || Is(at, u8")") || Is(at, u8"&&") || Is(at, u8"||") || Is(at, u8"==") || Is(at, u8"!=") ||
+                Is(at, u8">"))
                 return -1;
             core::String name = m_tokens[at++];
             if (Is(at, u8"==") || Is(at, u8"!="))
@@ -342,9 +421,10 @@ export namespace experimental::gui
             }
             return Add(PNode{Op::Identifier, Move(name), {}, -1, -1});
         }
-        [[nodiscard]] bool EvalNode(i32 index, const KeyContextLayer& layer) const
+        [[nodiscard]] bool EvalNode(i32 index, Span<const KeyContextLayer> stack, usize depth) const
         {
             const PNode& n = m_nodes[static_cast<usize>(index)];
+            const KeyContextLayer& layer = stack[depth];
             switch (n.Kind)
             {
             case Op::Identifier: return layer.Find(n.A.AsView()) != nullptr;
@@ -358,9 +438,17 @@ export namespace experimental::gui
                 const core::String* v = layer.Find(n.A.AsView());
                 return v == nullptr || v->AsView() != n.B.AsView();
             }
-            case Op::Not: return !EvalNode(n.Left, layer);
-            case Op::And: return EvalNode(n.Left, layer) && EvalNode(n.Right, layer);
-            case Op::Or: return EvalNode(n.Left, layer) || EvalNode(n.Right, layer);
+            case Op::Not: return !EvalNode(n.Left, stack, depth);
+            case Op::And: return EvalNode(n.Left, stack, depth) && EvalNode(n.Right, stack, depth);
+            case Op::Or: return EvalNode(n.Left, stack, depth) || EvalNode(n.Right, stack, depth);
+            case Op::Inside:
+                // The inner holds here, and an outer layer has the outer context without the inner.
+                if (!EvalNode(n.Right, stack, depth))
+                    return false;
+                for (usize outer = depth; outer-- > 0;)
+                    if (EvalNode(n.Left, stack, outer) && !EvalNode(n.Right, stack, outer))
+                        return true;
+                return false;
             }
             return false;
         }
@@ -393,6 +481,7 @@ export namespace experimental::gui
                 return false;
             binding.Command = core::String(command);
             m_bindings.PushBack(Move(binding));
+            m_changed.Notify();
             return true;
         }
         /// Binds one keystroke (made, not parsed: from an input map) to `command` where `context`
@@ -405,9 +494,33 @@ export namespace experimental::gui
                 return false;
             binding.Command = core::String(command);
             m_bindings.PushBack(Move(binding));
+            m_changed.Notify();
             return true;
         }
         [[nodiscard]] usize BindingCount() const noexcept { return m_bindings.Size(); }
+
+        /// The keys bound to `command` as a menu shows them ("Ctrl+S", a chord's strokes spaced),
+        /// from the latest binding to it (the one that wins a tie); empty when none. A read a
+        /// binding follows: a rebinding changes it.
+        [[nodiscard]] core::String ShortcutText(core::StringView command) const
+        {
+            m_changed.Track();
+            for (usize i = m_bindings.Size(); i-- > 0;)
+            {
+                const KeyBinding& b = m_bindings[i];
+                if (b.Command.AsView() != command)
+                    continue;
+                core::String text;
+                for (usize k = 0; k < b.Sequence.Size(); ++k)
+                {
+                    if (k > 0)
+                        text.PushBack(u8' ');
+                    text.Append(KeystrokeText(b.Sequence[k]).AsView());
+                }
+                return text;
+            }
+            return {};
+        }
 
         /// Matches what was typed (a chord so far) against the bindings in the context `stack`
         /// (root first). On Matched, `command` is the winner's (empty for an unbinding).
@@ -460,6 +573,7 @@ export namespace experimental::gui
             ContextPredicate Context;
         };
         Array<KeyBinding> m_bindings;
+        Observable m_changed; // a binding added: shortcut text follows
 
         // How deep the binding's context sits: it must hold at the focus (the deepest layer, which
         // carries every context declared above it), and its depth is the shallowest layer from
@@ -471,10 +585,10 @@ export namespace experimental::gui
         {
             if (binding.Context.IsEmpty())
                 return -1;
-            if (stack.Size() == 0 || !binding.Context.Eval(stack[stack.Size() - 1]))
+            if (stack.Size() == 0 || !binding.Context.Eval(stack, stack.Size() - 1))
                 return -2;
             usize depth = stack.Size() - 1;
-            while (depth > 0 && binding.Context.Eval(stack[depth - 1]))
+            while (depth > 0 && binding.Context.Eval(stack, depth - 1))
                 --depth;
             return static_cast<i32>(depth);
         }

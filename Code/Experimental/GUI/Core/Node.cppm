@@ -657,6 +657,12 @@ export namespace experimental::gui
         /// an axis with no limit). A widget with content of its own (text, an image) answers it;
         /// the default measures the children by the display kind.
         [[nodiscard]] virtual core::Float2 MeasureContent(core::Float2 available);
+        /// Where this node's baseline sits, down from its top, when its border box is `size`: what
+        /// a flex row with `align-items: baseline` lines up. A widget showing text answers its
+        /// first line's; any other node the bottom of its content box.
+        [[nodiscard]] virtual f32 BaselineAt(core::Float2 size) const { return size.y - GetChrome().Bottom; }
+        /// Its baseline at the size it has.
+        [[nodiscard]] f32 GetBaseline() const { return BaselineAt(m_size); }
         /// Places this node at `rect` (its border box, in its parent's space) and lays out its
         /// children when its size changed or they need it.
         void Arrange(const Rect& rect);

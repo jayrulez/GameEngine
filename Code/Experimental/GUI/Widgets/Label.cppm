@@ -127,6 +127,13 @@ export namespace experimental::gui
                 return core::Float2{0.0f, (m_text.GetFont() != nullptr) ? m_text.GetLineHeight() : 0.0f};
             return m_text.MeasureWrapped(m_text.IsWordWrap() && !IsUnbounded(available.x) ? available.x : kUnbounded);
         }
+        /// Its text's first baseline, where it draws it in the content box.
+        [[nodiscard]] f32 BaselineAt(core::Float2 size) const override
+        {
+            const Thickness c = GetChrome();
+            return m_text.FirstBaseline(Rect{c.Left, c.Top, core::Max(0.0f, size.x - c.TotalHorizontal()),
+                                             core::Max(0.0f, size.y - c.TotalVertical())});
+        }
         // The size wrapped text occupies at `maxWidth` (widest line x total height).
         [[nodiscard]] core::Float2 MeasureWrapped(f32 maxWidth) const
         {

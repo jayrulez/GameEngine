@@ -484,3 +484,179 @@ TEST_CASE("dnd: a drag resting on a closed expander's header opens it")
     s.D().CancelDrag();
     s.D().InjectMouseUp(core::Float2{header.x + 40.0f, header.y + 5.0f}, MouseButton::Left);
 }
+
+namespace
+{
+
+    struct Lists
+    {
+        core::RefPtr<SceneRoot> root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+        StringListModel left;
+        StringListModel right;
+        core::RefPtr<ListView> a;
+        core::RefPtr<ListView> b;
+
+        Lists()
+        {
+            root->SetSize(core::Float2{500.0f, 300.0f});
+            const char8_t* letters[5] = {u8"A", u8"B", u8"C", u8"D", u8"E"};
+            for (const char8_t* l : letters)
+                left.AddItem(core::StringView(l));
+            right.AddItem(core::StringView(u8"X"));
+            a = View(10.0f, left);
+            b = View(250.0f, right);
+            (void)root->UpdateLayout();
+        }
+        core::RefPtr<ListView> View(float x, StringListModel& model)
+        {
+            auto view = core::MakeRef<ListView>(core::DefaultAllocator());
+            view->EditLayoutStyle([x](LayoutStyle& st)
+            {
+                st.Placement = Position::Absolute;
+                st.Left = LayoutLength::Px(x);
+                st.Top = LayoutLength::Px(10.0f);
+                st.Width = LayoutLength::Px(200.0f);
+                st.Height = LayoutLength::Px(200.0f);
+            });
+            view->SetRowHeight(20.0f);
+            view->SetDragType(core::String(u8"row"));
+            root->AddChild(view.Get());
+            view->SetModel(&model);
+            return view;
+        }
+        EventDispatcher& D() { return *root->GetEventDispatcher(); }
+        // A row's centre (y of row `item` in view `v`), and a point `frac` down it.
+        static core::Float2 Row(ListView& v, int item, float frac = 0.5f)
+        {
+            const Rect r = v.GetScreenBounds();
+            return core::Float2{r.x + 50.0f, r.y + 20.0f * (static_cast<float>(item) + frac)};
+        }
+        void Drag(ListView& from, int item, core::Float2 to, core::u32 modifiers = 0)
+        {
+            const core::Float2 at = Row(from, item);
+            D().InjectMouseDown(at, MouseButton::Left, modifiers);
+            D().InjectMouseMove(core::Float2{at.x + 10.0f, at.y}, modifiers);
+            D().InjectMouseMove(to, modifiers);
+        }
+        static core::String Items(const StringListModel& m)
+        {
+            core::String text;
+            for (core::usize i = 0; i < m.RowCount(); ++i)
+                text.Append(m.ItemAt(i));
+            return text;
+        }
+    };
+}
+
+TEST_CASE("dnd: a list's rows drag; a drop between rows reorders them, the line showing where")
+{
+    Lists l;
+    l.Drag(*l.a, 0, Lists::Row(*l.a, 2, 0.9f)); // A, past C's middle: after C
+    CHECK(l.D().GetDropTarget() == l.a.Get());
+    CHECK(l.a->IsDropOver());
+    CHECK(l.a->GetDropItem() == 2);
+    CHECK(l.a->GetDropPlace() == DropPlace::After);
+    CHECK(l.D().GetDragPayload().Label == core::StringView(u8"A"));
+    // The middle of a row: a list takes nothing onto a row, so the halves decide.
+    l.D().InjectMouseMove(Lists::Row(*l.a, 3, 0.4f));
+    CHECK(l.a->GetDropItem() == 3);
+    CHECK(l.a->GetDropPlace() == DropPlace::Before);
+    l.D().InjectMouseUp(Lists::Row(*l.a, 3, 0.4f), MouseButton::Left);
+    CHECK(Lists::Items(l.left) == core::StringView(u8"BCADE"));
+    CHECK_FALSE(l.a->IsDropOver());
+    CHECK(l.a->GetSelectedItem() == 2); // the moved row keeps its id, and its selection
+}
+
+TEST_CASE("dnd: a multi-selection drags as one, in order; a plain press on it alone selects it on the click")
+{
+    Lists l;
+    l.a->SetSelectionMode(SelectionMode::Multi);
+    l.D().InjectMouseDown(Lists::Row(*l.a, 0), MouseButton::Left);
+    l.D().InjectMouseUp(Lists::Row(*l.a, 0), MouseButton::Left);
+    l.D().InjectMouseDown(Lists::Row(*l.a, 2), MouseButton::Left, KeyModCtrl);
+    l.D().InjectMouseUp(Lists::Row(*l.a, 2), MouseButton::Left, KeyModCtrl);
+    CHECK(l.a->GetSelectionCount() == 2);
+    l.Drag(*l.a, 2, Lists::Row(*l.a, 4, 0.9f)); // A and C, after E
+    CHECK(l.a->GetSelectionCount() == 2); // the press kept them
+    CHECK(l.D().GetDragPayload().Label == core::StringView(u8"2 items"));
+    l.D().InjectMouseUp(Lists::Row(*l.a, 4, 0.9f), MouseButton::Left);
+    CHECK(Lists::Items(l.left) == core::StringView(u8"BDEAC"));
+
+    // A plain click on one of a multi-selection: that row alone.
+    l.D().InjectMouseDown(Lists::Row(*l.a, 3), MouseButton::Left);
+    l.D().InjectMouseUp(Lists::Row(*l.a, 3), MouseButton::Left);
+    CHECK(l.a->GetSelectionCount() == 1);
+    CHECK(l.a->GetSelectedItem() == 3);
+}
+
+TEST_CASE("dnd: rows moved to another list leave the source; copied (Ctrl) they stay")
+{
+    Lists l;
+    l.Drag(*l.a, 1, Lists::Row(*l.b, 0, 0.9f)); // B after X
+    CHECK(l.D().GetDropTarget() == l.b.Get());
+    CHECK(l.D().GetDropEffect() == DropEffect::Move);
+    l.D().InjectMouseUp(Lists::Row(*l.b, 0, 0.9f), MouseButton::Left);
+    CHECK(Lists::Items(l.right) == core::StringView(u8"XB"));
+    CHECK(Lists::Items(l.left) == core::StringView(u8"ACDE"));
+
+    l.Drag(*l.a, 0, Lists::Row(*l.b, 0, 0.1f), KeyModCtrl); // A before X, copied
+    CHECK(l.D().GetDropEffect() == DropEffect::Copy);
+    l.D().InjectMouseUp(Lists::Row(*l.b, 0, 0.1f), MouseButton::Left, KeyModCtrl); // released with Ctrl held
+    CHECK(Lists::Items(l.right) == core::StringView(u8"AXB"));
+    CHECK(Lists::Items(l.left) == core::StringView(u8"ACDE"));
+
+    // Below the last row: the end.
+    l.Drag(*l.a, 3, core::Float2{300.0f, 180.0f});
+    CHECK(l.b->GetDropItem() == -1);
+    l.D().InjectMouseUp(core::Float2{300.0f, 180.0f}, MouseButton::Left);
+    CHECK(Lists::Items(l.right) == core::StringView(u8"AXBE"));
+}
+
+TEST_CASE("dnd: a tree takes a node onto another (its child) or beside it, and refuses one inside itself")
+{
+    TreeModel model;
+    const core::i32 a = model.AddNode(TreeModel::kRoot, core::StringView(u8"A"));
+    const core::i32 a1 = model.AddNode(a, core::StringView(u8"A1"));
+    const core::i32 b = model.AddNode(TreeModel::kRoot, core::StringView(u8"B"));
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{400.0f, 300.0f});
+    auto tree = core::MakeRef<TreeView>(core::DefaultAllocator());
+    tree->SetSize(core::Float2{300.0f, 200.0f});
+    tree->SetRowHeight(20.0f);
+    tree->SetDragType(core::String(u8"node"));
+    root->AddChild(tree.Get());
+    tree->SetModel(&model);
+    tree->ExpandItem(0); // A, A1, B
+    (void)root->UpdateLayout();
+    EventDispatcher& d = *root->GetEventDispatcher();
+    const auto row = [](int item, float frac) { return core::Float2{100.0f, 20.0f * (static_cast<float>(item) + frac)}; };
+
+    // A onto A1 (its own child): refused, with the reason.
+    d.InjectMouseDown(row(0, 0.5f), MouseButton::Left);
+    d.InjectMouseMove(row(0, 0.8f));
+    d.InjectMouseMove(row(1, 0.5f));
+    CHECK(d.GetDropTarget() == nullptr);
+    CHECK(d.GetDropReason() == core::StringView(u8"A node cannot go inside itself"));
+    d.CancelDrag();
+    d.InjectMouseUp(row(1, 0.5f), MouseButton::Left);
+
+    // B onto A: B becomes A's last child.
+    d.InjectMouseDown(row(2, 0.5f), MouseButton::Left);
+    d.InjectMouseMove(row(2, 0.2f));
+    d.InjectMouseMove(row(0, 0.5f));
+    CHECK(tree->GetDropPlace() == DropPlace::On);
+    d.InjectMouseUp(row(0, 0.5f), MouseButton::Left);
+    CHECK(model.RowCount() == 1); // A alone at the top
+    CHECK(model.RowCount(model.IndexOfNode(a)) == 2);
+    CHECK(model.IdOf(model.Index(1, 0, model.IndexOfNode(a))) == static_cast<ItemId>(b));
+
+    // A1 before A: back to the top level, first.
+    (void)root->UpdateLayout();
+    d.InjectMouseDown(row(1, 0.5f), MouseButton::Left);
+    d.InjectMouseMove(row(1, 0.8f));
+    d.InjectMouseMove(row(0, 0.1f));
+    CHECK(tree->GetDropPlace() == DropPlace::Before);
+    d.InjectMouseUp(row(0, 0.1f), MouseButton::Left);
+    CHECK(model.RowCount() == 2);
+    CHECK(model.IdOf(model.Index(0)) == static_cast<ItemId>(a1));
+}

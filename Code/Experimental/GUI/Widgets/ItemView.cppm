@@ -24,6 +24,11 @@
 //     `{{item.Column}}` and `{{index}}` attributes filled for the item it shows; templates of a
 //     `type` are picked by the text in the view's `row-type-column`. `items="a|b|c"` gives a
 //     markup list a model of its own.
+//   - Drag and drop (E7): with a `drag-type`, rows drag the selection (their ids, the view a weak
+//     handle in the payload's value); as a target the view finds where a drop lands in a row
+//     (before, on or after it, by quarter bands, by halves when the model takes nothing onto a
+//     row), asks its model (ModelDrop: CanDrop, Drop), and draws an insertion line or an outline
+//     (`::drop-indicator`); a row moved to another model is removed from this one.
 //   - A double-click, Return or the pad's South reports `activate`; typing letters and digits
 //     jumps to the next row that starts with them (read from the keys, not text input, which the
 //     shell turns on for fields alone); F2 (or BeginEdit) edits a row in place, a hook able to
@@ -55,6 +60,7 @@ import :element_types;    // ElementSet (a template's elements)
 import :markup;           // MarkupLoader, ItemBinding (template rows)
 import :string_list_model;
 import :list_box;         // SplitItems, JoinItems
+import foundation.vg;     // StrokeStyle (the drop indicator)
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -231,6 +237,7 @@ export namespace experimental::gui
 
     protected:
         void OnMouseDown(const MouseEvent& event) override;
+        void OnMouseClick(const MouseEvent& event) override;
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override;
         void OnLayout() override;
         void OnTextStyleChange() override
@@ -492,10 +499,22 @@ export namespace experimental::gui
                 Realize();
         }
 
+        // === Drag and drop (E7) ===
+        /// Rows drag the selection as this payload type (empty: they do not drag).
+        void SetDragType(const core::String& type) { m_dragType = type; }
+        [[nodiscard]] core::String GetDragType() const { return m_dragType; }
+        /// The ids of the rows of the drag going from here (in their order).
+        [[nodiscard]] const core::Array<ItemId>& GetDraggedIds() const noexcept { return m_dragIds; }
+        /// Where a drop would land now (the item, -1 for the end; the place), while one is over it.
+        [[nodiscard]] i32 GetDropItem() const noexcept { return m_dropOver ? m_dropItem : -1; }
+        [[nodiscard]] DropPlace GetDropPlace() const noexcept { return m_dropPlace; }
+        [[nodiscard]] bool IsDropOver() const noexcept { return m_dropOver; }
+
         // === Appearance ===
         void CollectStyleParts(core::Array<core::StringView>& out) const override
         {
             out.PushBack(core::StringView(u8"selection"));
+            out.PushBack(core::StringView(u8"drop-indicator"));
         }
         // Its rows draw the selection in ::selection's style.
         void OnPartStyleChange(core::StringView part) override
@@ -767,8 +786,74 @@ export namespace experimental::gui
                 SelectByUser(item, 0);
         }
 
+        // --- Drag and drop (E7) ---
+        bool OnDragRequested(DragRequest& request) override
+        {
+            if (m_dragType.IsEmpty() || m_model == nullptr)
+                return false;
+            const i32 item = ItemAt(ConvertToWorldSpace(request.Press));
+            if (item < 0)
+                return false;
+            m_deferredItem = -1;
+            if (!IsItemSelected(item))
+            {
+                SelectOnly(item);
+                NotifySelectionByUser();
+            }
+            // The selection in item order (one row: no scan).
+            m_dragIds.Clear();
+            if (m_selected.Size() == 1)
+                m_dragIds.PushBack(ItemIdAt(item));
+            else
+                for (i32 i = 0; i < static_cast<i32>(ItemCount()); ++i)
+                    if (IsItemSelected(i))
+                        m_dragIds.PushBack(ItemIdAt(i));
+            request.Payload.Type = m_dragType;
+            request.Payload.Value = HandleAs(Node::StaticType()); // the view, weakly: a target reads its ids
+            request.Payload.Label = m_dragIds.Size() == 1 ? TypeAheadText(item) : core::Format(u8"{} items", m_dragIds.Size());
+            request.Payload.Allowed = DropEffectsCopy | DropEffectsMove;
+            return true;
+        }
+        void OnDragQuery(DropQuery& query) override;
+        void OnDragLeave(const DragEvent&) override { SetDropIndicator(false, -1, DropPlace::After); }
+        void OnDrop(const DragEvent& event) override;
+        void OnDragEnd(const DragResult& result) override
+        {
+            // Moved to another model: the rows leave this one (one moved within it moved already).
+            if (result.Effect == DropEffect::Move && m_model != nullptr && !m_dragIds.IsEmpty())
+            {
+                const ItemView* target = core::Cast<ItemView>(result.Target);
+                if (target == nullptr || target->GetModel() != m_model)
+                    (void)m_model->RemoveIds(m_dragIds);
+            }
+            m_dragIds.Clear();
+        }
+        void OnDrawAbove(DrawContext& ctx) override;
+
     private:
         friend class ItemRow;
+
+        // Where a drop at `local` lands, as the model hears it (its answer in `effect`/`reason`).
+        ModelDrop DropAt(const DropQuery& query, DropEffect& effect, core::String& reason);
+        void SetDropIndicator(bool over, i32 item, DropPlace place)
+        {
+            if (over == m_dropOver && item == m_dropItem && place == m_dropPlace)
+                return;
+            m_dropOver = over;
+            m_dropItem = item;
+            m_dropPlace = place;
+            Invalidate();
+        }
+        // A click on a row whose press left a multi-selection alone (to drag it): selected alone now.
+        void RowClicked(ItemRow& row, const MouseEvent&)
+        {
+            if (m_deferredItem >= 0 && m_deferredItem == row.m_item)
+            {
+                SelectOnly(m_deferredItem);
+                NotifySelectionByUser();
+            }
+            m_deferredItem = -1;
+        }
 
         struct Pool
         {
@@ -1024,6 +1109,14 @@ export namespace experimental::gui
                     ActivateItem(row.m_item);
                     return;
                 }
+                // A plain press on a row of a multi-selection leaves it (a drag takes it all); the
+                // click, if no drag starts, selects the row alone.
+                if (m_selectionMode == SelectionMode::Multi && event.Modifiers == 0 && m_selected.Size() > 1 && IsItemSelected(row.m_item))
+                {
+                    m_deferredItem = row.m_item;
+                    m_current = ItemIdAt(row.m_item);
+                    return;
+                }
                 SelectByUser(row.m_item, event.Modifiers);
             }
         }
@@ -1034,6 +1127,13 @@ export namespace experimental::gui
         Array<RowTemplate> m_templates;
         core::String m_rowTypeColumn;
         mutable Observable m_selectionChanged; // what bindings reading the selection follow
+        core::String m_dragType;              // rows drag as this (empty: they do not)
+        core::Array<ItemId> m_dragIds;        // the rows of the drag going from here
+        i32 m_deferredItem = -1;              // a pressed row of a multi-selection, selected alone on click
+        bool m_dropOver = false;              // a drop would land here now
+        i32 m_dropItem = -1;
+        DropPlace m_dropPlace = DropPlace::After;
+        ModelDrop m_lastDrop;                 // the drop the last query found
         RowHeights m_heights;
         core::Array<core::RefPtr<ItemRow>> m_live; // realised, in item order
         core::Array<Pool> m_pools;                 // released rows, by type
@@ -1071,6 +1171,7 @@ export namespace experimental::gui
     }
 
     inline void ItemRow::OnMouseDown(const MouseEvent& event) { m_view.RowPressed(*this, event); }
+    inline void ItemRow::OnMouseClick(const MouseEvent& event) { m_view.RowClicked(*this, event); }
 
     inline void ItemRow::OnDraw(DrawContext& ctx, const Rect& localBounds)
     {
@@ -1519,6 +1620,117 @@ export namespace experimental::gui
         if (hadFocus)
             RequestFocus(); // the view keeps the focus the editor had
         return true;
+    }
+
+    inline ModelDrop ItemView::DropAt(const DropQuery& query, DropEffect& effect, core::String& reason)
+    {
+        ModelDrop drop;
+        drop.Payload = &query.Payload;
+        drop.Effect = query.Preferred;
+        // From an item view: its dragged rows and its model.
+        if (const ItemView* source = core::Cast<ItemView>(Node::FromHandle(query.Payload.Value)))
+        {
+            drop.Ids = source->m_dragIds;
+            drop.Source = source->m_model;
+        }
+        const i32 item = ItemAt(ConvertToWorldSpace(query.Local));
+        if (item < 0)
+        {
+            drop.Index = ModelIndex{}; // past the rows: the end
+            drop.Place = DropPlace::After;
+            effect = m_model->CanDrop(drop, reason);
+            return drop;
+        }
+        drop.Index = ItemToModelIndex(item);
+        // Where in the row: quarters at the edges are before and after, the middle onto it (a grid
+        // reads across); a place the model does not take falls back to the halves.
+        const Rect b = ItemBounds(item);
+        const core::Float2 content{query.Local.x + GetScrollOffset().x, query.Local.y + GetScrollOffset().y};
+        const bool across = m_layout == ItemLayout::Grid;
+        const f32 at = across ? (content.x - b.x) / core::Max(1.0f, b.width) : (content.y - b.y) / core::Max(1.0f, b.height);
+        drop.Place = at < 0.25f ? DropPlace::Before : at > 0.75f ? DropPlace::After : DropPlace::On;
+        effect = m_model->CanDrop(drop, reason);
+        if (effect == DropEffect::None && reason.IsEmpty())
+        {
+            drop.Place = drop.Place == DropPlace::On ? (at < 0.5f ? DropPlace::Before : DropPlace::After) : DropPlace::On;
+            effect = m_model->CanDrop(drop, reason);
+        }
+        return drop;
+    }
+
+    inline void ItemView::OnDragQuery(DropQuery& query)
+    {
+        if (m_model == nullptr)
+            return;
+        DropEffect effect = DropEffect::None;
+        core::String reason;
+        const ModelDrop drop = DropAt(query, effect, reason);
+        if (effect == DropEffect::None)
+        {
+            SetDropIndicator(false, -1, DropPlace::After);
+            if (!reason.IsEmpty())
+                query.Refuse(reason.AsView());
+            return;
+        }
+        query.Accept(effect);
+        query.Effect = effect; // the model's (a list takes text as a copy)
+        query.Reason = reason;
+        const i32 item = drop.Index.IsValid() ? ItemOfId(m_model->IdOf(drop.Index)) : -1;
+        query.Place = static_cast<i32>(drop.Place);
+        SetDropIndicator(true, item, drop.Place);
+        m_lastDrop = drop; // what a drop now does (the release asks once more, here)
+    }
+
+    // The drop as the last query found it (the release asked again where it landed).
+    inline void ItemView::OnDrop(const DragEvent& event)
+    {
+        if (m_model == nullptr || !m_dropOver)
+            return;
+        ModelDrop drop = m_lastDrop;
+        drop.Effect = event.Effect;
+        SetDropIndicator(false, -1, DropPlace::After);
+        (void)m_model->Drop(drop);
+    }
+
+    // The insertion line before or after a row (across a grid's cell edge), or an outline round
+    // the row a drop goes onto.
+    inline void ItemView::OnDrawAbove(DrawContext& ctx)
+    {
+        if (!m_dropOver)
+            return;
+        const PartStyle& part = GetPartStyle(u8"drop-indicator");
+        const Color color = part.HasBackground ? part.Box.BackgroundColor : Color{0.31f, 0.61f, 1.0f, 1.0f};
+        const Rect box = GetContentBounds();
+        Rect row;
+        if (m_dropItem < 0)
+        {
+            const usize count = ItemCount();
+            row = count > 0 ? ItemBounds(static_cast<i32>(count) - 1) : Rect{box.x, box.y + ContentTopInset(), box.width, 0.0f};
+        }
+        else
+            row = ItemBounds(m_dropItem);
+        row.x -= GetScrollOffset().x;
+        row.y -= GetScrollOffset().y;
+        ctx.PushClip(box);
+        const bool across = m_layout == ItemLayout::Grid;
+        if (m_dropPlace == DropPlace::On && m_dropItem >= 0)
+        {
+            vg::PathBuilder pb;
+            pb.MoveTo(row.x + 1.0f, row.y + 1.0f);
+            pb.LineTo(row.x + row.width - 1.0f, row.y + 1.0f);
+            pb.LineTo(row.x + row.width - 1.0f, row.y + row.height - 1.0f);
+            pb.LineTo(row.x + 1.0f, row.y + row.height - 1.0f);
+            pb.Close();
+            ctx.VG().StrokePath(pb.ToPath(), color, vg::StrokeStyle(2.0f));
+        }
+        else
+        {
+            const bool before = m_dropPlace == DropPlace::Before && m_dropItem >= 0;
+            const Rect line = across ? Rect{before ? row.x - 1.0f : row.x + row.width - 1.0f, row.y, 2.0f, row.height}
+                                     : Rect{row.x, (before ? row.y : row.y + row.height) - 1.0f, row.width, 2.0f};
+            ctx.VG().FillRect(core::Rectangle{line.x, line.y, line.width, line.height}, color);
+        }
+        ctx.PopClip();
     }
 
     RTTI_DEFINE_OBJECT(TemplateRowContent, "rtti::gui")

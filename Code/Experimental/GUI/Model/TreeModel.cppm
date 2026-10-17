@@ -62,6 +62,71 @@ export namespace experimental::gui
             m_nodes[static_cast<usize>(nodeId)].Text = core::String(text);
             NotifyRowsChanged(IndexOfNode(m_nodes[static_cast<usize>(nodeId)].Parent), RowOf(nodeId), 1);
         }
+        /// Moves a node (with what is under it) under `parentId` at `row` (past the end: last).
+        /// False when that would put it inside itself.
+        bool MoveNode(i32 nodeId, i32 parentId, usize row)
+        {
+            if (!IsLive(nodeId) || (parentId != kRoot && !IsLive(parentId)) || IsWithin(parentId, nodeId))
+                return false;
+            Detach(nodeId, false);
+            Array<i32>& siblings = parentId == kRoot ? m_roots : m_nodes[static_cast<usize>(parentId)].Children;
+            siblings.Insert(core::Min(row, siblings.Size()), nodeId);
+            m_nodes[static_cast<usize>(nodeId)].Parent = parentId;
+            NotifyReset();
+            return true;
+        }
+
+        // === Drops (E7) ===
+        // Its own nodes move: onto a node (its last child) or beside one; never inside themselves.
+        // `text` comes in as a new node.
+        [[nodiscard]] DropEffect CanDrop(const ModelDrop& drop, core::String& reason) const override
+        {
+            const i32 parent = DropParent(drop);
+            if (drop.Source == this && !drop.Ids.IsEmpty())
+            {
+                for (ItemId id : drop.Ids)
+                    if (IsWithin(parent, static_cast<i32>(id)))
+                    {
+                        reason = core::String(u8"A node cannot go inside itself");
+                        return DropEffect::None;
+                    }
+                return DropEffect::Move; // a tree moves its nodes (copying a subtree is not taken)
+            }
+            if (drop.Payload != nullptr && drop.Payload->Type.AsView() == core::StringView(u8"text"))
+                return DropEffect::Copy;
+            return DropEffect::None;
+        }
+        bool Drop(const ModelDrop& drop) override
+        {
+            core::String ignored;
+            if (CanDrop(drop, ignored) == DropEffect::None)
+                return false;
+            const i32 parent = DropParent(drop);
+            usize row = DropRow(drop, parent);
+            if (drop.Source != this || drop.Ids.IsEmpty())
+            {
+                const core::String* value = drop.Payload->Value.TryGet<core::String>();
+                const i32 id = AddNode(parent, value != nullptr ? value->AsView() : drop.Payload->Label.AsView());
+                (void)MoveNode(id, parent, row);
+                return true;
+            }
+            for (ItemId id : drop.Ids)
+            {
+                const i32 node = static_cast<i32>(id);
+                // A node moving down within its own parent: the row past it shifts back by one.
+                const Array<i32>& siblings = parent == kRoot ? m_roots : m_nodes[static_cast<usize>(parent)].Children;
+                for (usize i = 0; i < siblings.Size() && i < row; ++i)
+                    if (siblings[i] == node)
+                    {
+                        --row;
+                        break;
+                    }
+                if (MoveNode(node, parent, row))
+                    ++row;
+            }
+            return true;
+        }
+
         void Clear()
         {
             m_nodes.Clear();
@@ -178,6 +243,45 @@ export namespace experimental::gui
             for (i32 child : node.Children)
                 Detach(child);
             node.Children.Clear();
+        }
+        // Takes a live node out of its parent's children (to be put back elsewhere).
+        void Detach(i32 nodeId, bool)
+        {
+            const i32 parentId = m_nodes[static_cast<usize>(nodeId)].Parent;
+            Array<i32>& siblings = parentId == kRoot ? m_roots : m_nodes[static_cast<usize>(parentId)].Children;
+            for (usize i = 0; i < siblings.Size(); ++i)
+                if (siblings[i] == nodeId)
+                {
+                    siblings.RemoveAt(i);
+                    break;
+                }
+        }
+        // Whether `nodeId` is `ancestorId` or lies under it.
+        [[nodiscard]] bool IsWithin(i32 nodeId, i32 ancestorId) const
+        {
+            for (i32 n = nodeId; n != kRoot && IsLive(n); n = m_nodes[static_cast<usize>(n)].Parent)
+                if (n == ancestorId)
+                    return true;
+            return false;
+        }
+        // The node a drop goes under: onto a node, that node; beside one, its parent.
+        [[nodiscard]] i32 DropParent(const ModelDrop& drop) const
+        {
+            if (!drop.Index.IsValid())
+                return kRoot;
+            const i32 at = static_cast<i32>(drop.Index.InternalId);
+            if (drop.Place == DropPlace::On)
+                return at;
+            return IsLive(at) ? m_nodes[static_cast<usize>(at)].Parent : kRoot;
+        }
+        // The row under that parent a drop goes to.
+        [[nodiscard]] usize DropRow(const ModelDrop& drop, i32 parent) const
+        {
+            const Array<i32>& siblings = parent == kRoot ? m_roots : m_nodes[static_cast<usize>(parent)].Children;
+            if (!drop.Index.IsValid() || drop.Place == DropPlace::On)
+                return siblings.Size();
+            const i32 row = RowOf(static_cast<i32>(drop.Index.InternalId));
+            return static_cast<usize>(drop.Place == DropPlace::Before ? row : row + 1);
         }
 
         Array<Node> m_nodes;

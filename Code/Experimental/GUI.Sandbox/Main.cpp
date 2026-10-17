@@ -597,6 +597,7 @@ void GUISandbox::FillNativeHosts()
         list->SetRowHeight(24.0f);
         list->SetModel(m_listModel.Get());
         m_listModel->SetEditable(true); // F2 renames a row
+        list->SetDragType(String(u8"row")); // rows drag to reorder (E7)
         auto* picked = Cast<gui::Label>(FindById(*m_shellNode, u8"views-picked"));
         gui::StringListModel* model = m_listModel.Get();
         list->SetOnSelectionChanged(
@@ -661,6 +662,7 @@ void GUISandbox::FillNativeHosts()
         tree->SetFont(m_font);
         tree->SetRowHeight(24.0f);
         tree->SetModel(m_treeModel.Get());
+        tree->SetDragType(String(u8"node")); // nodes drag onto and beside others (E7)
         tree->ExpandItem(0);
         host->AddChild(tree.Get());
     }

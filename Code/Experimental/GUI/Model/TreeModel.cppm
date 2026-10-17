@@ -6,8 +6,9 @@
 // TreeModel: a concrete hierarchical Model - nodes with a text label and children. Modeled on
 // eepp's tree models (role only). Nodes are stored in a flat array; a ModelIndex's InternalId
 // is the node's array index, which the tree methods (Index / ParentIndex / RowCount(parent) /
-// HasChildren) use to navigate. Node ids are stable (nodes are not removed in this v1), so a
-// view can track selection/expansion by id across expand/collapse.
+// HasChildren) use to navigate. A removed node keeps its slot (it is detached, not erased), so
+// node ids stay stable and a view keeps selection and expansion by id. Each edit tells the
+// views the rows it touched under their parent.
 
 module;
 #include "Core/Prelude.h"
@@ -35,20 +36,43 @@ export namespace experimental::gui
         i32 AddNode(i32 parentId, core::StringView text)
         {
             const i32 id = static_cast<i32>(m_nodes.Size());
-            m_nodes.PushBack(Node{core::String(text), parentId, {}});
-            if (parentId == kRoot)
-                m_roots.PushBack(id);
-            else
-                m_nodes[static_cast<usize>(parentId)].Children.PushBack(id);
+            m_nodes.PushBack(Node{core::String(text), parentId, {}, false});
+            Array<i32>& siblings = parentId == kRoot ? m_roots : m_nodes[static_cast<usize>(parentId)].Children;
+            siblings.PushBack(id);
+            NotifyRowsInserted(IndexOfNode(parentId), static_cast<i32>(siblings.Size()) - 1, 1);
             return id;
+        }
+        /// Removes a node and what is under it (their ids are not reused).
+        void RemoveNode(i32 nodeId)
+        {
+            if (!IsLive(nodeId))
+                return;
+            const i32 parentId = m_nodes[static_cast<usize>(nodeId)].Parent;
+            const ModelIndex parent = IndexOfNode(parentId);
+            const i32 row = RowOf(nodeId);
+            Array<i32>& siblings = parentId == kRoot ? m_roots : m_nodes[static_cast<usize>(parentId)].Children;
+            siblings.RemoveAt(static_cast<usize>(row));
+            Detach(nodeId);
+            NotifyRowsRemoved(parent, row, 1);
+        }
+        void SetText(i32 nodeId, core::StringView text)
+        {
+            if (!IsLive(nodeId))
+                return;
+            m_nodes[static_cast<usize>(nodeId)].Text = core::String(text);
+            NotifyRowsChanged(IndexOfNode(m_nodes[static_cast<usize>(nodeId)].Parent), RowOf(nodeId), 1);
         }
         void Clear()
         {
             m_nodes.Clear();
             m_roots.Clear();
-            DidUpdate();
+            NotifyReset();
         }
-        void Refresh() { DidUpdate(); } // call after a batch of AddNode
+        /// The index of a node (invalid for kRoot or a removed node).
+        [[nodiscard]] ModelIndex IndexOfNode(i32 nodeId) const
+        {
+            return IsLive(nodeId) ? MakeModelIndex(RowOf(nodeId), 0, nodeId) : ModelIndex{};
+        }
 
         [[nodiscard]] core::StringView TextOf(i32 nodeId) const
         {
@@ -111,6 +135,7 @@ export namespace experimental::gui
             core::String Text;
             i32 Parent = kRoot;
             Array<i32> Children;
+            bool Removed = false; // detached: its slot kept so ids stay stable
         };
 
         [[nodiscard]] i32 ChildIdAt(const ModelIndex& parent, i32 row) const
@@ -140,6 +165,19 @@ export namespace experimental::gui
                 if (siblings[i] == nodeId)
                     return static_cast<i32>(i);
             return -1;
+        }
+
+        [[nodiscard]] bool IsLive(i32 nodeId) const
+        {
+            return nodeId >= 0 && static_cast<usize>(nodeId) < m_nodes.Size() && !m_nodes[static_cast<usize>(nodeId)].Removed;
+        }
+        void Detach(i32 nodeId)
+        {
+            Node& node = m_nodes[static_cast<usize>(nodeId)];
+            node.Removed = true;
+            for (i32 child : node.Children)
+                Detach(child);
+            node.Children.Clear();
         }
 
         Array<Node> m_nodes;

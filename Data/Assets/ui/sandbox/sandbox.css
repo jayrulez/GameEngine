@@ -51,3 +51,4 @@ tooltip { font-family: Roboto; font-size: 13px; color: var(--ink); }
 .content::scrollbar-thumb { background-color: rgba(151, 162, 180, 0.35); border-radius: 4; }
 .content::scrollbar-thumb:hover { background-color: rgba(151, 162, 180, 0.6); }
 .content::scrollbar-thumb:active { background-color: var(--accent); }
+dragpreview { font-family: Roboto; font-size: 14px; } /* the top layer: the shell's sheet reaches it, a page's does not */

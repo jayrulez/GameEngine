@@ -33,7 +33,8 @@ import foundation.vg.renderer;
 import experimental.gui;
 import experimental.gui.shell;
 import experimental.gui.inspector; // Ctrl+Shift+I (E8e)
-import experimental.gui.testing;   // --keys targets by selector or text (E8f)
+import experimental.gui.testing;   // --keys targets by selector or text (E8f), the image tests' match (E8g)
+import foundation.rhi.capture;     // the image tests' readback (E8g)
 import gui.sandbox.stress; // the Stress page (E8a)
 import foundation.script; // the pages' and the game menu's scripts
 #ifdef OPTION_HAS_ANGELSCRIPT
@@ -145,6 +146,21 @@ public:
     void SetLayoutOverlay(bool on) { m_layoutOverlay = on; }
     void SetInputOverlay(bool on) { m_inputOverlay = on; }
     void SetOpenInspector(bool on) { m_openInspector = on; }
+    // --image-tests (E8g): each page drawn offscreen at a fixed size on a fixed clock, compared
+    // with its reference; --approve-images writes the pictures as the references instead.
+    void SetImageTests(bool on) { m_imageTests = on; }
+    void SetApproveImages(StringView how) { m_imageTests = true; m_approve = String(how); }
+    void SetImageOut(StringView dir) { m_imageOut = String(dir); }
+    void SetBackendName(StringView name) { m_backendName = String(name); }
+    // What main returns: the image tests' verdict (77, skipped, when no device came up).
+    [[nodiscard]] int ImageExitCode(int runCode) const
+    {
+        if (!m_imageTests)
+            return runCode;
+        if (m_imagesDone == 0)
+            return 77;
+        return m_imageFailures == 0 ? 0 : 1;
+    }
     void SetInspectSelector(StringView selector) { m_openInspector = true; m_inspectSelector = String(selector); }
 
     GUISandbox()
@@ -271,6 +287,25 @@ private:
     UniquePtr<shell::InputSurface> m_inspectorSurface;
     bool m_inspectorOpen = false;
     bool m_openInspector = false; // --inspector
+    // The image tests (E8g).
+    static constexpr u32 kImageWidth = 960;
+    static constexpr u32 kImageHeight = 720;
+    static constexpr i32 kImageFrames = 40; // frames on the fixed clock before a page's picture
+    bool m_imageTests = false;
+    String m_approve;                       // "" compares; "shared" or "backend" writes references
+    String m_imageOut = String(u8"build/gui-images");
+    String m_backendName = String(u8"vulkan");
+    Array<String> m_imagePages;
+    usize m_imagePage = 0;
+    i32 m_imageFrame = 0;
+    u32 m_imagesDone = 0;
+    u32 m_imageFailures = 0;
+    rhi::Texture* m_imageTarget = nullptr;
+    rhi::TextureView* m_imageView = nullptr;
+    vg::renderer::VGPassTargets m_imageTargets;
+    rhi::ScreenshotCapture m_imageCapture;
+    void RunImageTests();
+    bool RenderImage(gui::SceneRoot& root, StringView path, image::Image& out);
     String m_inspectSelector;     // --inspect <selector>: selected once the GUI is up
     static constexpr f32 kInspectorWidth = 460.0f; // logical units
     bool m_showingMenu = false;
@@ -1274,6 +1309,11 @@ void GUISandbox::UpdateMenu()
 
 void GUISandbox::OnRender()
 {
+    if (m_imageTests)
+    {
+        RunImageTests();
+        return;
+    }
     RouteInput();
     gui::SceneRoot& shown = Shown();
     TypeKeys(shown);
@@ -1414,6 +1454,153 @@ void GUISandbox::DrawAndPresent(gui::SceneRoot& root)
     m_frameIndex = (m_frameIndex + 1) % kFrames;
 }
 
+// The image tests (E8g): each page shown, run on a fixed clock at a fixed size and scale 1, drawn
+// offscreen and read back through the RHI, so the backend in use is the one tested; the picture
+// goes to --image-out, and is compared with its reference under Data/Tests/GUI/Images: its own
+// backend's when there is one, else the one the backends share. A miss writes a diff beside the
+// picture. --approve-images writes the shared reference (or, with "backend", this backend's own),
+// which is for after the user has looked at the pictures.
+void GUISandbox::RunImageTests()
+{
+    if (m_imagePages.IsEmpty() && m_imagePage == 0)
+    {
+        for (const Page& page : m_pages)
+            if (page.id.AsView() != StringView(u8"stress")) // its numbers are the machine's
+                m_imagePages.PushBack(page.id);
+        rhi::TextureDesc desc = rhi::TextureDesc::RenderTarget(m_swapChain->Format(), kImageWidth, kImageHeight);
+        desc.usage = desc.usage | rhi::TextureUsage::CopySrc;
+        if (m_device->CreateTexture(desc, m_imageTarget) != ErrorCode::Ok ||
+            m_device->CreateTextureView(m_imageTarget, rhi::TextureViewDesc{}, m_imageView) != ErrorCode::Ok)
+        {
+            std::printf("GUISandbox: image tests: no offscreen target\n");
+            Exit();
+            return;
+        }
+        m_imageTargets.Configure(*m_device);
+        (void)m_imageTargets.Create(m_swapChain->Format(), kImageWidth, kImageHeight);
+        (void)CreateDirectories(m_imageOut.AsView());
+    }
+    if (m_imagePage >= m_imagePages.Size())
+    {
+        std::printf("GUISandbox: image tests on %s: %u pictures, %u failed\n", reinterpret_cast<const char*>(m_backendName.CStr()),
+                    m_imagesDone, m_imageFailures);
+        std::fflush(stdout);
+        Exit();
+        return;
+    }
+    const String& id = m_imagePages[m_imagePage];
+    if (m_imageFrame == 0)
+        ShowPage(id.AsView());
+    // A fixed size and scale and a fixed clock: the same frames on every machine.
+    m_root->SetDisplayScale(1.0f);
+    m_root->SetViewportSize(Float2{static_cast<f32>(kImageWidth), static_cast<f32>(kImageHeight)});
+    LayOutShell();
+    m_gui->Update(Duration::FromSeconds(1.0 / 60.0));
+    m_styles.SetMediaContext(m_root->GetMediaContext());
+    m_styles.ApplyTree(*m_root);
+    m_root->UpdateLayout();
+    if (++m_imageFrame < kImageFrames)
+        return;
+    m_imageFrame = 0;
+    ++m_imagePage;
+
+    const String name = Format(u8"{}.{}", id, m_backendName);
+    const String picturePath = PathJoin(m_imageOut.AsView(), Format(u8"{}.png", name).AsView());
+    image::Image picture;
+    if (!RenderImage(*m_root, picturePath.AsView(), picture))
+    {
+        std::printf("GUISandbox: image %s: could not be drawn\n", reinterpret_cast<const char*>(name.CStr()));
+        ++m_imageFailures;
+        return;
+    }
+    ++m_imagesDone;
+    const String shared = DataPath(Format(u8"Tests/GUI/Images/{}.png", id).AsView());
+    const String own = DataPath(Format(u8"Tests/GUI/Images/{}.png", name).AsView());
+    if (m_approve.Size() != 0)
+    {
+        const String& to = m_approve.AsView() == StringView(u8"backend") ? own : shared;
+        (void)CreateDirectories(DataPath(u8"Tests/GUI/Images").AsView());
+        const bool saved = image::io::SaveImage(picture, to.AsView(), image::io::ImageFileFormat::PNG).IsOk();
+        std::printf("GUISandbox: image %s: %s %s\n", reinterpret_cast<const char*>(name.CStr()), saved ? "approved as" : "could not write",
+                    reinterpret_cast<const char*>(to.CStr()));
+        m_imageFailures += saved ? 0u : 1u;
+        return;
+    }
+    const String& referencePath = FileExists(own.AsView()) ? own : shared;
+    image::Image reference;
+    if (!FileExists(referencePath.AsView()) || !image::io::LoadImage(referencePath.AsView(), reference).IsOk())
+    {
+        std::printf("GUISandbox: image %s: FAIL, no reference (look at %s, then --approve-images)\n",
+                    reinterpret_cast<const char*>(name.CStr()), reinterpret_cast<const char*>(picturePath.CStr()));
+        ++m_imageFailures;
+        return;
+    }
+    reference = reference.ConvertFormat(image::PixelFormat::RGBA8);
+    image::Image diff;
+    const gui::testing::ImageComparison result = gui::testing::CompareImages(picture, reference, 8, 0.001, &diff);
+    if (result.Matches)
+    {
+        std::printf("GUISandbox: image %s: ok (%llu pixels past 8, largest difference %u)\n", reinterpret_cast<const char*>(name.CStr()),
+                    static_cast<unsigned long long>(result.Differing), result.LargestDelta);
+        return;
+    }
+    ++m_imageFailures;
+    const String diffPath = PathJoin(m_imageOut.AsView(), Format(u8"{}.diff.png", name).AsView());
+    if (result.SameSize)
+        (void)image::io::SaveImage(diff, diffPath.AsView(), image::io::ImageFileFormat::PNG);
+    std::printf("GUISandbox: image %s: FAIL against %s: %s%llu of %llu pixels past 8 (largest %u); see %s\n",
+                reinterpret_cast<const char*>(name.CStr()), reinterpret_cast<const char*>(referencePath.CStr()),
+                result.SameSize ? "" : "not the same size; ", static_cast<unsigned long long>(result.Differing),
+                static_cast<unsigned long long>(result.Pixels), result.LargestDelta, reinterpret_cast<const char*>(diffPath.CStr()));
+}
+
+// One picture of `root`, drawn into the offscreen target, read back and written to `path`.
+bool GUISandbox::RenderImage(gui::SceneRoot& root, StringView path, image::Image& out)
+{
+    m_vg->Clear();
+    {
+        gui::DrawContext dc{*m_vg};
+        root.DrawFrame(dc);
+    }
+    vg::VGBatch& batch = m_vg->GetBatch();
+    if (m_fenceVal > 0)
+        m_fence->Wait(m_fenceVal, ~0ull);
+    m_renderer.BeginFrame(static_cast<i32>(m_frameIndex));
+    const vg::renderer::VGRenderSlice slice = m_renderer.Prepare(batch, static_cast<i32>(m_frameIndex), kImageWidth, kImageHeight);
+    m_pool->Reset();
+    rhi::CommandEncoder* enc = nullptr;
+    if (m_pool->CreateEncoder(enc) != ErrorCode::Ok || enc == nullptr)
+        return false;
+    enc->TransitionTexture(m_imageTarget, rhi::ResourceState::Undefined, rhi::ResourceState::RenderTarget);
+    m_renderer.RenderLayers(*enc, static_cast<i32>(m_frameIndex), slice);
+    const rhi::ClearColor clear = rhi::ClearColor(0.07f, 0.07f, 0.09f, 1.0f);
+    rhi::RenderPassDesc rpd{};
+    if (m_imageTargets.Matches(kImageWidth, kImageHeight))
+        rpd = m_imageTargets.BeginPass(*enc, m_imageView, clear);
+    else
+    {
+        rhi::ColorAttachment ca{};
+        ca.view = m_imageView;
+        ca.loadOp = rhi::LoadOp::Clear;
+        ca.storeOp = rhi::StoreOp::Store;
+        ca.clearValue = clear;
+        rpd.colorAttachments.Add(ca);
+    }
+    rhi::RenderPassEncoder* rp = enc->BeginRenderPass(rpd);
+    m_renderer.Render(*rp, kImageWidth, kImageHeight, static_cast<i32>(m_frameIndex), slice);
+    rp->End();
+    m_imageCapture.Request(path);
+    const bool recorded = m_imageCapture.Record(*m_device, *enc, m_imageTarget, m_swapChain->Format(), kImageWidth, kImageHeight);
+    rhi::CommandBuffer* cb = enc->Finish();
+    ++m_fenceVal;
+    rhi::CommandBuffer* cbs[1] = {cb};
+    m_graphicsQueue->Submit(Span<rhi::CommandBuffer* const>(cbs, 1), m_fence, m_fenceVal);
+    m_device->WaitIdle();
+    m_pool->DestroyEncoder(enc);
+    m_frameIndex = (m_frameIndex + 1) % kFrames;
+    return recorded && m_imageCapture.Complete(*m_device, AppRoot(), out).IsOk();
+}
+
 void GUISandbox::OnShutdown()
 {
     std::printf("GUISandbox: drew %llu of %llu frames\n", static_cast<unsigned long long>(m_drawnFrames),
@@ -1434,6 +1621,16 @@ void GUISandbox::OnShutdown()
     closeScript(m_menuScript);
     m_scripts.Reset();
     m_router.Reset();
+    if (m_device != nullptr)
+    {
+        m_device->WaitIdle();
+        if (m_imageView != nullptr)
+            m_device->DestroyTextureView(m_imageView);
+        if (m_imageTarget != nullptr)
+            m_device->DestroyTexture(m_imageTarget);
+        m_imageCapture.Release(*m_device); // its readback buffer
+    }
+    m_imageTargets.Destroy();
     m_inspectorSurface.Reset();
     m_inspectorBridge.Reset();
     m_inspector.Reset(); // its root on the GUI's context, before the context
@@ -1480,7 +1677,11 @@ int main(int argc, char** argv)
     // --layout-overlay: start with the layout overlay on (F9 toggles it). --input-overlay: start with
     // the input overlay on (F8 toggles it: focus path, tab order, navigation, pointer, redraws).
     // --inspector: start with the inspector's pane open (Ctrl+Shift+I toggles it). --inspect <selector>:
-    // open it with the first widget the selector matches selected. --stress <n>: start on
+    // open it with the first widget the selector matches selected. --image-tests: draw each page
+    // offscreen at 960x720 on a fixed clock and compare it with its reference (Data/Tests/GUI/
+    // Images; the pictures go to --image-out <dir>, build/gui-images by default; exit 1 on a miss,
+    // 77 with no device); --approve-images [backend]: write them as the references instead, after
+    // looking at them. --stress <n>: start on
     // the Stress page, built at load n (1 to 20; measure in RelWithDebInfo). With the
     // framework's --screenshot flags, a picture of any of it.
     for (int i = 1; i < argc; ++i)
@@ -1507,6 +1708,16 @@ int main(int argc, char** argv)
             app.SetInputOverlay(true);
         else if (arg == StringView(u8"--inspector"))
             app.SetOpenInspector(true);
+        else if (arg == StringView(u8"--image-tests"))
+            app.SetImageTests(true);
+        else if (arg == StringView(u8"--approve-images"))
+            app.SetApproveImages(i + 1 < argc && StringView(reinterpret_cast<const char8_t*>(argv[i + 1])) == StringView(u8"backend") ? next() : StringView(u8"shared"));
+        else if (arg == StringView(u8"--image-out") && i + 1 < argc)
+            app.SetImageOut(next());
+        else if (arg == StringView(u8"--webgpu") || arg == StringView(u8"--wgpu"))
+            app.SetBackendName(u8"webgpu");
+        else if (arg == StringView(u8"--dx12") || arg == StringView(u8"--d3d12"))
+            app.SetBackendName(u8"dx12");
         else if (arg == StringView(u8"--inspect") && i + 1 < argc)
             app.SetInspectSelector(next());
         else if (arg == StringView(u8"--stress") && i + 1 < argc)
@@ -1514,5 +1725,5 @@ int main(int argc, char** argv)
         else if (arg == StringView(u8"--scroll") && i + 1 < argc)
             app.SetScroll(static_cast<f32>(std::atof(reinterpret_cast<const char*>(argv[++i]))));
     }
-    return app.Run(argc, argv);
+    return app.ImageExitCode(app.Run(argc, argv));
 }

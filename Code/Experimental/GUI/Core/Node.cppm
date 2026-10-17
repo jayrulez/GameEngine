@@ -333,7 +333,10 @@ export namespace experimental::gui
         {
             Transform2D t = GetWorldTransform();
             if (m_scrollOffset.x != 0.0f || m_scrollOffset.y != 0.0f)
-                t.Translate(-m_scrollOffset.x, -m_scrollOffset.y);
+            {
+                const core::Float2 shift = ScrollShift();
+                t.Translate(-shift.x, -shift.y);
+            }
             return t;
         }
         [[nodiscard]] core::Float2 ConvertToWorldSpace(core::Float2 nodePoint) const
@@ -545,7 +548,8 @@ export namespace experimental::gui
             if (scrolled)
             {
                 ctx.Save();
-                ctx.ConcatTransform(Transform2D{}.Translate(-m_scrollOffset.x, -m_scrollOffset.y));
+                const core::Float2 shift = ScrollShift();
+                ctx.ConcatTransform(Transform2D{}.Translate(-shift.x, -shift.y));
             }
             for (const RefPtr<Node>& child : m_children)
                 child->Draw(ctx);
@@ -674,6 +678,13 @@ export namespace experimental::gui
         /// containers above it whose size follows it, at the next layout pass (a GUI runs one each
         /// frame, so a burst of changes costs one layout).
         void RequestLayout();
+        /// This node and everything under it measure and lay out again: for a change every node's
+        /// layout reads (the display scale its edges round to).
+        void RequestLayoutTree();
+        /// Device pixels per logical unit where this node was last laid out (its GUI's display
+        /// scale; 1 in a tree with no GUI). Layout rounds every arranged edge to that grid, so
+        /// borders and backgrounds land on whole device pixels at any scale.
+        [[nodiscard]] f32 GetPixelScale() const noexcept { return m_pixelScale; }
         /// The layout pass for the tree this node tops: lays out what asked, a few rounds while
         /// layouts resize what they hold. A GUI runs it each frame; a tree in no GUI when its
         /// owner wants its geometry. How many containers laid out.
@@ -713,6 +724,12 @@ export namespace experimental::gui
             Invalidate();
         }
         void ScrollBy(core::Float2 delta) { SetScrollOffset(core::Float2{m_scrollOffset.x + delta.x, m_scrollOffset.y + delta.y}); }
+        /// The scroll offset as the children move by it: on the device grid, as their edges are.
+        [[nodiscard]] core::Float2 ScrollShift() const noexcept
+        {
+            return core::Float2{core::Round(m_scrollOffset.x * m_pixelScale) / m_pixelScale,
+                                core::Round(m_scrollOffset.y * m_pixelScale) / m_pixelScale};
+        }
         /// How far the content can scroll on each axis that scrolls (0 on one that does not).
         [[nodiscard]] core::Float2 GetScrollRange() const
         {
@@ -1302,6 +1319,10 @@ export namespace experimental::gui
         virtual void OnChildrenChanged() {}
 
     protected:
+        /// The device pixels per logical unit the top of a tree lays out on (its children take
+        /// theirs from it): 1, or a GUI root's display scale.
+        [[nodiscard]] virtual f32 TopPixelScale() const { return 1.0f; }
+
         // Input handler hooks (override in subclasses; the Handle* wrappers call these).
         virtual void OnMouseEnter(const MouseEvent&) {}
         virtual void OnMouseLeave(const MouseEvent&) {}
@@ -1459,6 +1480,7 @@ export namespace experimental::gui
         Display m_displayBeforeNone = Display::Flex; // what SetDisplayed(true) gives back
         Thickness m_padding{};
         core::Float2 m_scrollOffset{0.0f, 0.0f}; // a scroll container's (its children move by minus it)
+        f32 m_pixelScale = 1.0f; // device pixels per unit at its last arrange (its edges round to them)
         core::Float2 m_contentExtent{0.0f, 0.0f}; // the children's extent as last laid out
         LayoutConstraints m_measureKey{};        // what the cached measure was for
         core::Float2 m_measured{0.0f, 0.0f};

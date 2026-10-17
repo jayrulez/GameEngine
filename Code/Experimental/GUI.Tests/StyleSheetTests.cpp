@@ -121,3 +121,55 @@ TEST_CASE("stylesheet: non-matching rules contribute nothing")
     ResolvedStyle rs = sheet.Resolve(*w.Get());
     CHECK(rs.Count() == 0);
 }
+
+TEST_CASE("stylesheet: rules found through different keys still tie by source order")
+{
+    // The index keys .a and .b apart; the element lists b first, so .b's rule is found first, yet
+    // .a came first in the sheet and the later .b wins.
+    auto w = Widget(u8"button");
+    w->AddClass(SV(u8"b"));
+    w->AddClass(SV(u8"a"));
+    StyleSheet sheet;
+    StyleRule a = Rule(u8".a");
+    a.SetProperty(SV(u8"color"), SV(u8"red"));
+    StyleRule b = Rule(u8".b");
+    b.SetProperty(SV(u8"color"), SV(u8"blue"));
+    sheet.AddRule(core::Move(a));
+    sheet.AddRule(core::Move(b));
+    CHECK(sheet.Resolve(*w.Get()).Get(SV(u8"color")) == SV(u8"blue"));
+}
+
+TEST_CASE("stylesheet: each key kind finds its rules, and a rule added after a resolve is seen")
+{
+    auto w = Widget(u8"button");
+    w->SetId(SV(u8"ok"));
+    w->AddClass(SV(u8"primary"));
+    StyleSheet sheet;
+    const auto add = [&sheet](const char8_t* selector, const char8_t* name)
+    {
+        StyleRule rule = Rule(selector);
+        rule.SetProperty(SV(name), SV(u8"1px"));
+        sheet.AddRule(core::Move(rule));
+    };
+    add(u8"#ok", u8"padding-left");
+    add(u8"panel .primary", u8"padding-top");   // keyed by its subject's class, not the ancestor's
+    add(u8"button:hover", u8"padding-right");   // keyed by tag; the state turns it away
+    add(u8"*", u8"padding-bottom");
+    add(u8"[id=ok]", u8"margin-left");          // no id, class or tag: tried everywhere
+    add(u8"#other", u8"margin-top");
+    add(u8"label", u8"margin-right");
+    add(u8"button:no-such-state", u8"margin-bottom"); // never matches: in no list
+
+    const ResolvedStyle first = sheet.Resolve(*w.Get());
+    CHECK(first.Has(SV(u8"padding-left")));
+    CHECK_FALSE(first.Has(SV(u8"padding-top"))); // no panel above it
+    CHECK_FALSE(first.Has(SV(u8"padding-right")));
+    CHECK(first.Has(SV(u8"padding-bottom")));
+    CHECK(first.Has(SV(u8"margin-left")));
+    CHECK_FALSE(first.Has(SV(u8"margin-top")));
+    CHECK_FALSE(first.Has(SV(u8"margin-right")));
+    CHECK_FALSE(first.Has(SV(u8"margin-bottom")));
+
+    add(u8"button.primary", u8"border-left-width");
+    CHECK(sheet.Resolve(*w.Get()).Has(SV(u8"border-left-width")));
+}

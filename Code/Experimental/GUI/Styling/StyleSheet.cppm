@@ -290,7 +290,11 @@ export namespace experimental::gui
     class StyleSheet
     {
     public:
-        void AddRule(StyleRule rule) { m_rules.PushBack(core::Move(rule)); }
+        void AddRule(StyleRule rule)
+        {
+            m_rules.PushBack(core::Move(rule));
+            m_index.Built = false;
+        }
         [[nodiscard]] usize RuleCount() const noexcept { return m_rules.Size(); }
         [[nodiscard]] const Array<StyleRule>& Rules() const noexcept { return m_rules; }
 
@@ -311,17 +315,34 @@ export namespace experimental::gui
         void CollectMatches(const UIWidget& element, const MediaContext& context, bool applyPseudo,
                             core::StringView pseudoElement, u32 origin, Array<StyleRuleMatch>& out, u32 partStates = 0) const
         {
-            for (usize i = 0; i < m_rules.Size(); ++i)
+            // Only the rules whose subject could match: those keyed by the element's id, one of
+            // its classes or its tag, and those with no key (the order is the cascade's to set).
+            const RuleIndex& index = Index();
+            const auto tryRules = [&](const Array<u32>& candidates)
             {
-                const StyleRule& rule = m_rules[i];
-                if (rule.Selector().PseudoElement() != pseudoElement)
-                    continue;
-                if (applyPseudo && (rule.Selector().PartPseudoClasses() & ~partStates) != 0)
-                    continue;
-                const bool mediaActive = rule.Media().IsEmpty() || rule.Media().Evaluate(context);
-                if (mediaActive && rule.Selector().Select(element, applyPseudo))
-                    out.PushBack(StyleRuleMatch{&rule, origin, rule.Specificity(), static_cast<u32>(i)});
-            }
+                for (const u32 i : candidates)
+                {
+                    const StyleRule& rule = m_rules[i];
+                    if (rule.Selector().PseudoElement() != pseudoElement)
+                        continue;
+                    if (applyPseudo && (rule.Selector().PartPseudoClasses() & ~partStates) != 0)
+                        continue;
+                    const bool mediaActive = rule.Media().IsEmpty() || rule.Media().Evaluate(context);
+                    if (mediaActive && rule.Selector().Select(element, applyPseudo))
+                        out.PushBack(StyleRuleMatch{&rule, origin, rule.Specificity(), i});
+                }
+            };
+            const auto tryKey = [&](const HashMap<u64, Array<u32>>& map, core::StringView key)
+            {
+                if (key.Size() != 0)
+                    if (const Array<u32>* candidates = map.Find(HashText(key)))
+                        tryRules(*candidates);
+            };
+            tryKey(index.ById, element.GetId());
+            for (const core::String& cls : element.Classes())
+                tryKey(index.ByClass, cls.AsView());
+            tryKey(index.ByTag, element.GetTag());
+            tryRules(index.Universal);
         }
 
         // Resolve the cascade for `element` against this sheet alone. With `pseudoElement` empty
@@ -408,7 +429,9 @@ export namespace experimental::gui
         {
             if (a.Origin != b.Origin)
                 return a.Origin < b.Origin;
-            return a.Specificity < b.Specificity;
+            if (a.Specificity != b.Specificity)
+                return a.Specificity < b.Specificity;
+            return a.Order < b.Order;
         }
 
         // A declaration without var() expands and parses once: its longhands cached on it.
@@ -430,7 +453,59 @@ export namespace experimental::gui
             p.CacheValid = true;
         }
 
+        // The rules by their subject compound's key (E8 of Specs/gui-lab-evolution.md), as
+        // browsers and RmlUi keep them: its id, else its first class, else its tag; a subject with
+        // none is tried on every element. An element tries only the lists its id, classes and tag
+        // name, so a sheet of many rules costs what could match. Keys are hashes of the names: a
+        // collision only adds candidates, which the full match then turns away.
+        struct RuleIndex
+        {
+            HashMap<u64, Array<u32>> ById;
+            HashMap<u64, Array<u32>> ByClass;
+            HashMap<u64, Array<u32>> ByTag;
+            Array<u32> Universal;
+            bool Built = false;
+        };
+        [[nodiscard]] const RuleIndex& Index() const
+        {
+            if (m_index.Built)
+                return m_index;
+            m_index = RuleIndex{};
+            for (usize i = 0; i < m_rules.Size(); ++i)
+            {
+                const StyleSelector& selector = m_rules[i].Selector();
+                if (selector.IsEmpty())
+                    continue;
+                const StyleSelectorRule& subject = selector.RuleAt(selector.RuleCount() - 1);
+                if (subject.IsNever())
+                    continue; // matches nothing
+                const u32 at = static_cast<u32>(i);
+                const auto add = [at](HashMap<u64, Array<u32>>& map, core::StringView key)
+                {
+                    if (Array<u32>* list = map.Find(HashText(key)))
+                        list->PushBack(at);
+                    else
+                    {
+                        Array<u32> list1;
+                        list1.PushBack(at);
+                        map.InsertOrAssign(HashText(key), core::Move(list1));
+                    }
+                };
+                if (subject.GetId().Size() != 0)
+                    add(m_index.ById, subject.GetId());
+                else if (!subject.GetClasses().IsEmpty())
+                    add(m_index.ByClass, subject.GetClasses()[0].AsView());
+                else if (subject.GetTag().Size() != 0)
+                    add(m_index.ByTag, subject.GetTag());
+                else
+                    m_index.Universal.PushBack(at);
+            }
+            m_index.Built = true;
+            return m_index;
+        }
+
         Array<StyleRule> m_rules;
         Array<Keyframes> m_keyframes;
+        mutable RuleIndex m_index;
     };
 }

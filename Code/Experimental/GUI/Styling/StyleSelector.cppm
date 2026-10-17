@@ -136,6 +136,7 @@ export namespace experimental::gui
         [[nodiscard]] i64 Specificity() const noexcept { return m_specificity; }
         [[nodiscard]] core::StringView GetTag() const { return m_tag.AsView(); }
         [[nodiscard]] core::StringView GetId() const { return m_id.AsView(); }
+        [[nodiscard]] const Array<core::String>& GetClasses() const noexcept { return m_classes; }
         [[nodiscard]] u32 GetPseudoClasses() const noexcept { return m_pseudo; }
         // The `::part` pseudo-element (empty = none) - its declarations style a widget part.
         [[nodiscard]] core::StringView GetPseudoElement() const { return m_pseudoElement.AsView(); }

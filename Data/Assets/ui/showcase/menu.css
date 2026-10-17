@@ -65,17 +65,17 @@
 .panel-title { width: 380px; height: 40px; font-family: Lilita; font-size: 32px; color: var(--ink);
                text-align: center; vertical-align: middle; text-shadow: 0 2px 3px rgba(0, 0, 0, 0.5); }
 
-/* The menu's buttons: a gradient card that leans forward on hover and gives on a press. */
+/* The menu's buttons: a gradient card that grows in place on hover and gives on a press. */
 .menu-btn { width: 280px; height: 52px; font-family: Lilita; font-size: 26px; color: var(--ink);
             text-align: center; vertical-align: middle;
             background: linear-gradient(180deg, #3d2f63, #251b40); border: 1px solid rgba(255, 255, 255, 0.16);
             border-radius: 14; box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45); text-shadow: 0 2px 2px rgba(0, 0, 0, 0.6);
             transition: transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.24s ease-out; }
-.menu-btn:hover { transform: translate(8px, 0) scale(1.05);
+.menu-btn:hover { transform: scale(1.05);
                   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5), 0 0 24px 3px var(--glow); }
-.menu-btn:active { transform: translate(8px, 0) scale(0.97); }
+.menu-btn:active { transform: scale(0.97); }
 /* The focus ring: shown for the keyboard and a gamepad, not after a click (:focus-visible). */
-.menu-btn:focus-visible { transform: translate(8px, 0) scale(1.05);
+.menu-btn:focus-visible { transform: scale(1.05);
                           box-shadow: 0 0 0 2px #fff4e2, 0 10px 20px rgba(0, 0, 0, 0.5), 0 0 26px 4px var(--glow); }
 .row-check:focus-visible, .row-field:focus-visible { box-shadow: 0 0 0 2px #fff4e2, 0 0 16px 2px var(--glow); }
 .row-slider, .row-check { border-radius: 8; }
@@ -83,8 +83,8 @@
 .primary { background: linear-gradient(180deg, var(--accent), var(--accent-deep)); }
 .danger { background: linear-gradient(180deg, #e0607a, #9c2f4a); }
 .small { width: 160px; height: 44px; font-size: 22px; }
-/* A small button sits in a row or alone under a panel: it grows a little in place on hover and
-   focus, without the main menu's lean to the right, which in a row pushes into its neighbour. */
+/* A small button sits in a row or alone under a panel: it grows a little less on hover and focus,
+   so in a row it does not push into its neighbour. */
 .small:hover { transform: scale(1.04); }
 .small:focus-visible { transform: scale(1.04); }
 .small:active { transform: scale(0.97); }

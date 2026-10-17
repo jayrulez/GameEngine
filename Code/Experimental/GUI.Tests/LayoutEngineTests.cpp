@@ -665,3 +665,28 @@ TEST_CASE("layout: the overlay draws margins, padding, bounds and text baselines
         CHECK(b.min.x == doctest::Approx(0.0f).epsilon(0.02));
     }
 }
+
+TEST_CASE("layout: a row's item that does not stretch is as tall as its content, overflowing a short row")
+{
+    Bed bed;
+    auto row = Box(*bed.root.Get(), [](LayoutStyle& s) {
+        s.Direction = FlexDirection::Row;
+        s.Height = LayoutLength::Px(50.0f);
+        s.AlignItems = Align::Start;
+    });
+    auto column = Box(*row.Get(), [](LayoutStyle&) {});
+    auto a = Fixed(*column.Get(), 40.0f, 30.0f);
+    auto b = Fixed(*column.Get(), 40.0f, 30.0f);
+    auto c = Fixed(*column.Get(), 40.0f, 30.0f);
+    bed.Layout();
+    CHECK(column->GetSize().y == doctest::Approx(90.0f)); // not squeezed into the row's 50
+    CHECK(c->GetPosition().y == doctest::Approx(60.0f));
+    CHECK(c->GetSize().y == doctest::Approx(30.0f));
+    (void)a;
+    (void)b;
+
+    // Stretched, it is the row's height.
+    row->EditLayoutStyle([](LayoutStyle& s) { s.AlignItems = Align::Stretch; });
+    bed.Layout();
+    CHECK(column->GetSize().y == doctest::Approx(50.0f));
+}

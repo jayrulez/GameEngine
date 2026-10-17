@@ -317,8 +317,11 @@ namespace experimental::gui
                         item.main = core::Max(item.main, item.node->GetLayoutStyle().MinWidth.Value);
                     if (item.node->GetLayoutStyle().MinHeight.Kind == LayoutLengthKind::Px && !row)
                         item.main = core::Max(item.main, item.node->GetLayoutStyle().MinHeight.Value);
-                    // Its cross size at that main size (text wraps to the width it was given).
-                    const f32 crossLimit = Less(crossAvail, item.marginCross);
+                    // Its cross size at that main size (text wraps to the width it was given). A
+                    // row's item that does not stretch is as tall as its content, as a box's height
+                    // follows its content whatever the space (it overflows a short row); a
+                    // column's is kept within the width, where text wraps.
+                    const f32 crossLimit = row && !item.stretch ? kUnbounded : Less(crossAvail, item.marginCross);
                     const core::Float2 b = row ? MeasureBorder(*item.node, item.main, {}, item.main, crossLimit, percentBase)
                                                : MeasureBorder(*item.node, {}, item.main, crossLimit, item.main, percentBase);
                     item.cross = crossOf(b);

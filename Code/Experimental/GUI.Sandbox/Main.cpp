@@ -565,6 +565,24 @@ void GUISandbox::FillNativeHosts()
                 q.Accept();
                 q.Reason = Format(u8"{} it to the hand", q.Effect == gui::DropEffect::Copy ? u8"Copy" : u8"Move");
             });
+        // Files from the OS: the files pile takes them; dropped anywhere else, the GUI's own
+        // handler says so.
+        if (gui::Node* files = FindById(*m_shellNode, u8"dnd-files"))
+        {
+            files->SetDropTypes(String(u8"files"));
+            (void)files->AddEventListener(gui::EventType::Drop, [said](const gui::Event& e)
+            {
+                const Array<String> paths = gui::DroppedPaths(static_cast<const gui::DragEvent&>(e).Payload);
+                if (said != nullptr && !paths.IsEmpty())
+                    said->SetText(Format(u8"Dropped {} file(s), the first {}", paths.Size(), paths[0]).AsView());
+            });
+        }
+        m_root->GetEventDispatcher()->SetOnFileDrop([said](const Array<String>& paths, Float2)
+        {
+            if (said != nullptr)
+                said->SetText(Format(u8"{} file(s) dropped where nothing takes them", paths.Size()).AsView());
+            return true;
+        });
         const char8_t* piles[2] = {u8"dnd-long", u8"dnd-hidden"};
         for (const char8_t* id : piles)
             if (gui::Node* pile = FindById(*m_shellNode, id))
@@ -937,6 +955,11 @@ void GUISandbox::RouteInput()
     m_inputSurface->SetContentSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)});
     m_router->Update();
     bridge.PumpFromSurface(*m_inputSurface);
+    // Files the OS dropped on the window go through the GUI's drag path (E7).
+    Array<shell::DroppedFile> drops(AppRoot());
+    m_shell->DrainDroppedFiles(drops);
+    if (!drops.IsEmpty())
+        (void)bridge.DispatchFileDrops(drops, m_window->Id());
     for (const shell::InputEvent& event : input.Events())
     {
         switch (event.kind)

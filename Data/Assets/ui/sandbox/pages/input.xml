@@ -54,6 +54,9 @@
             <Panel id="dnd-discard" class="dnd-bin"><Label class="dnd-bin-title" text="Discard: no aces"/></Panel>
         </Panel>
         <Panel class="dnd-row" flex-direction="row" align-items="start" gap="12">
+            <Panel id="dnd-files" class="dnd-bin dnd-files"><Label class="dnd-bin-title" text="Drop files from your desktop here"/></Panel>
+        </Panel>
+        <Panel class="dnd-row" flex-direction="row" align-items="start" gap="12">
             <ScrollView id="dnd-long" class="dnd-long">
                 <Label class="dnd-line" text="A long hand: rest a card near"/>
                 <Label class="dnd-line" text="an edge and it scrolls."/>

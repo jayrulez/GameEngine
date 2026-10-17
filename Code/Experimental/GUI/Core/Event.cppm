@@ -58,6 +58,17 @@ export namespace experimental::gui
         u8 Allowed = DropEffectsAll;
     };
 
+    /// A `files` payload's paths (an OS drop: its value a list of strings).
+    [[nodiscard]] inline core::Array<core::String> DroppedPaths(const DragPayload& payload)
+    {
+        core::Array<core::String> paths;
+        if (const core::Array<core::Variant>* list = payload.Value.TryGet<core::Array<core::Variant>>())
+            for (const core::Variant& item : *list)
+                if (const core::String* path = item.TryGet<core::String>())
+                    paths.PushBack(*path);
+        return paths;
+    }
+
     enum class EventType : u32
     {
         // Geometry / tree (fired now)

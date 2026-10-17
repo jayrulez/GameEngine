@@ -660,3 +660,35 @@ TEST_CASE("dnd: a tree takes a node onto another (its child) or beside it, and r
     CHECK(model.RowCount() == 2);
     CHECK(model.IdOf(model.Index(0)) == static_cast<ItemId>(a1));
 }
+
+TEST_CASE("dnd: files the OS drops go through the same path, as a copy of their paths; none taking them, the GUI's handler has them")
+{
+    Scene s;
+    s.target->SetDropTypes(core::String(u8"files"));
+    core::Array<core::String> got;
+    DropEffect effect = DropEffect::None;
+    (void)s.target->AddEventListener(EventType::Drop, [&](const Event& e)
+    {
+        got = DroppedPaths(static_cast<const DragEvent&>(e).Payload);
+        effect = static_cast<const DragEvent&>(e).Effect;
+    });
+    core::Array<core::String> leftover;
+    s.D().SetOnFileDrop([&](const core::Array<core::String>& paths, core::Float2)
+    {
+        leftover = paths;
+        return true;
+    });
+    core::Array<core::String> paths;
+    paths.PushBack(core::String(u8"/tmp/a.png"));
+    paths.PushBack(core::String(u8"/tmp/b.png"));
+    CHECK(s.D().InjectFileDrop(core::Float2{250.0f, 50.0f}, paths));
+    REQUIRE(got.Size() == 2);
+    CHECK(got[1] == core::StringView(u8"/tmp/b.png"));
+    CHECK(effect == DropEffect::Copy);
+    CHECK_FALSE(s.D().IsDragging());
+    CHECK(leftover.IsEmpty());
+
+    CHECK(s.D().InjectFileDrop(core::Float2{100.0f, 250.0f}, paths)); // over nothing that takes files
+    CHECK(leftover.Size() == 2);
+    CHECK_FALSE(s.target->IsDropTarget());
+}

@@ -28,3 +28,5 @@ tooltip.drophint.refused { color: #ff8a80; }
 .dnd-line { width: 240px; height: 24px; color: var(--muted); font-family: Roboto; font-size: 13px; }
 .dnd-more { width: 300px; }
 .dnd-more > expanderheader { height: 28px; font-family: Roboto; font-size: 14px; color: var(--ink); }
+.dnd-files { width: 590px; height: 50px; }
+.dnd-files > .dnd-bin-title { width: 570px; }

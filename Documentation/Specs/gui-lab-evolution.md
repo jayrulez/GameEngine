@@ -423,23 +423,61 @@ through yet.
 
 Facts: the dispatcher holds one popup and one modal root; ComboBox, Menu and Tooltip place
 themselves with no edge awareness; Menu has no keyboard at all; ComboBox cannot be opened from the
-keyboard or a pad; MessageBox has no Escape or default button.
+keyboard or a pad; MessageBox has no Escape or default button. Popups are moved to the root, so
+they lose their owner's styles (the widgets copy fonts across by hand), a dropdown opened inside a
+modal cannot be clicked, a root child added later draws over an open popup, and nested modals
+break confinement.
 
-Design:
+Evidence (surveyed 2026-10-17, read-only; the reports are kept locally). Where a popup lives: a
+window of its own (Godot, AUI, traktor) makes behaviour depend on the platform; a node moved to
+the root (eepp, Zero, foundation.ui, the lab) loses inheritance and event ancestry and leaves
+owner pointers to dangle (foundation.ui closes nothing when an owner goes); a node left with its
+owner and drawn in a later pass (GPUI's `deferred`, LunarSong's overlay layers, the web's top
+layer) keeps both. Nesting is re-invented per widget elsewhere (`ChainContains`, eepp's related
+widgets, LunarSong's popup groups); the web derives it from the tree. Dismissal inferred from
+focus (Godot, eepp, RmlUi, Zero) brings event-ordering hazards and timing guards; a manager that
+owns the policy (LunarSong, foundation.ui) does not. Only Godot reports why a popup closed. Focus
+is saved per popup only by foundation.ui and LunarSong; GPUI restores it only while focus is still
+inside, and falls back to the nearest surviving ancestor. No retained system re-places a popup
+when its anchor moves (RmlUi closes on scroll instead); the web's anchor positioning and gpui-ce's
+anchor, gravity and slide, flip and resize flags are the model. Tooltips: text found up the
+ancestors (Godot, LunarSong), a warm-up and reset window (LunarSong), hidden on any press.
 
-- **A popup layer per root** (as foundation.ui's `RootView` holds one): a stack of entries, each with its popup, its owner, whether it is
-  modal, whether it takes focus (and the focus it saved, restored on close unless that node has
-  gone or been disabled meanwhile), and how it is dismissed (a press outside, Escape, the owner
-  pressed again); closing an entry closes the entries above it (submenus). The topmost
-  focus-taking entry is a navigation scope (G7), so a modal traps Tab, arrows and the pad.
-- **One placement helper**: place a size against an anchor rectangle with a preferred side, an
-  alignment and an offset, flipping to the other side and then clamping into the root's bounds,
-  all in the root's units (Godot's popup clamping, GPUI's `anchored`, foundation.ui's
-  positioner). ComboBox, Menu and submenus, Tooltip and context menus all use it.
-- **Tooltips**: the text found up the parent chain from the hovered node, placed by the helper,
-  any node as content, shown and hidden on the context clock (they read the frame time today).
-- **Long press** (touch): holding a finger still opens a widget's context menu, or shows its
-  tooltip when it has no menu.
+Design (approved 2026-10-17), the web's top layer on the retained tree:
+
+- **A popup stays in its owner's subtree.** Opening promotes the node into its root's top layer:
+  drawn after the whole tree in opening order, unclipped by its ancestors, positioned in the
+  root's space, hit-tested first. It keeps inheriting its owner's text style, sheets match it
+  where it is (`combobox > listbox`), its events bubble to its owner, and removing the owner
+  removes it. The hand-copied fonts go.
+- **Nesting from the tree.** An entry's popup ancestors are the open popups holding it. Opening an
+  auto popup closes the auto popups that are not its ancestors; closing one closes its
+  descendants first.
+- **Kinds, and a policy the layer owns.** `auto` closes on a press outside it and on Escape;
+  `manual` closes only from code; `hint` (a tooltip) never closes the others, never takes focus
+  and passes the pointer through. A press outside an auto popup is consumed, with the rest of its
+  gesture, so closing a menu never acts on what lies under it, and a press on the opener closes
+  without reopening (user ruling 2026-10-17). Escape reaches the focused widget first; only when
+  nothing takes it does the topmost auto entry close. Every close reports its reason (escape,
+  outside press, code, owner removed) in a `toggle` event, open or closed.
+- **Modal entries.** Everything below the topmost modal entry is inert: no pointer, no keys, no
+  bindings. Popups opened from inside it stack above it and work. Its backdrop is a styleable
+  `::backdrop` part drawn just under it.
+- **Focus.** A focus-taking entry saves the focus it took, as a weak reference, and on closing
+  gives it back only while focus is still inside the popup; a saved node that has gone or been
+  disabled hands focus to its nearest surviving ancestor. The topmost focus-taking entry is a
+  containing navigation scope (G7), so Tab, the arrows and the pad stay inside it. Focus moves at
+  once.
+- **Placement, declarative and kept.** An entry carries an anchor (a node, a rectangle or a
+  point), a side, an alignment, a gap and the fallbacks: flip to the other side, shrink into the
+  larger side (scrolling within its maximum size), clamp into the root. It is placed again every
+  layout pass, so it follows its anchor through scrolling and resizing.
+- **Menus.** A submenu is a child popup of its item. Godot's safe triangle keeps a submenu open
+  while the pointer moves toward it. Context menus come from a `contextmenu` event that bubbles
+  from a right press, a long press or the Menu key, the first handler to open a menu taking it.
+- **Tooltips.** Hint entries: the text found up the parent chain, any node as content, placed by
+  the helper, shown on the context clock after a warm-up that a recent tooltip shortens, hidden on
+  any press.
 - **Keyboard and pad**: Menu (arrows, Return, Escape, Left and Right through submenus, a disabled
   item skipped, shortcut text from the keymap's binding for the item's command); MenuBar (Left and
   Right between menus, a key to enter the bar); ComboBox (open on activate or Down, arrows while
@@ -449,9 +487,17 @@ Design:
   predicates, the bindings for a command (for shortcut text), and a command's label and icon
   reaching the controls bound to it.
 
-Tests: stacking, nested dismissal, modal trapping, focus restore including a node that went away;
-placement flips and clamps at every edge and at display scales; tooltips found from a child;
-keyboard and pad walks through a menu bar, a submenu, a combo box and a message box.
+Not taken: a window per popup (platform-dependent behaviour; Godot's embedded and native popups
+differ on whether the dismissing press passes through); dismissal from focus loss; layers fixed by
+kind (LunarSong's enum) rather than opening order; the dismissing press passing through.
+
+Tests: drawing and hit order of the top layer over later siblings and clipping ancestors;
+inheritance into an open popup; nesting from the tree and closing descendants; the consumed
+dismissing press and the opener's toggle; Escape reaching the focused widget first; close
+reasons; modal inertness including bindings, with a popup opened inside it working; focus restore
+including a node that went away or was disabled; placement flips, shrinks and clamps at every edge
+and at display scales, and follows a scrolled anchor; tooltips found from a child; keyboard and
+pad walks through a menu bar, a submenu, a combo box and a message box.
 
 ### E6 The controls, to foundation.ui's depth
 

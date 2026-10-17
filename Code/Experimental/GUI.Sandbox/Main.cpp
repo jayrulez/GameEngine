@@ -524,34 +524,6 @@ void GUISandbox::FillNativeHosts()
         host->AddChild(view.Get());
     }
 
-    // Layout: labels placed in a stack's corners and centre, each by its own alignment.
-    if (gui::Node* stack = FindById(*m_shellNode, u8"layout-relative"))
-    {
-        struct Pin
-        {
-            const char8_t* text;
-            gui::Align x;
-            gui::Align y;
-        };
-        const Pin pins[5] = {{u8"top left", gui::Align::Start, gui::Align::Start},
-                             {u8"top right", gui::Align::End, gui::Align::Start},
-                             {u8"bottom left", gui::Align::Start, gui::Align::End},
-                             {u8"bottom right", gui::Align::End, gui::Align::End},
-                             {u8"centre", gui::Align::Center, gui::Align::Center}};
-        for (const Pin& pin : pins)
-        {
-            auto tag = MakeRef<gui::Label>(AppRoot());
-            tag->SetSize(Float2{110.0f, 28.0f});
-            tag->SetText(StringView(pin.text));
-            tag->AddClass(u8"chip");
-            gui::LayoutStyle placed = tag->GetLayoutStyle();
-            placed.JustifySelf = pin.x;
-            placed.AlignSelf = pin.y;
-            tag->SetLayoutStyle(placed);
-            stack->AddChild(tag.Get());
-        }
-    }
-
     // Data views over native models.
     if (gui::Node* host = FindById(*m_shellNode, u8"views-list"))
     {

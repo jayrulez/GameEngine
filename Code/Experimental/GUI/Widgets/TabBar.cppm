@@ -11,7 +11,9 @@
 // reports `tabclose` (a TabEvent), and the tab goes unless a listener takes the event; which tabs
 // show their close part is the bar's policy (never, the selected one, the hovered and selected
 // ones, all). With `reorderable`, a tab dragged across a neighbour's midpoint changes places with
-// it. Tabs past the strip's end scroll it (the wheel turns it, a selected tab is scrolled to), and
+// it; dragged out of the strip past a tear distance it becomes a drag (E7, type `lab/tab`) that
+// the strips of its `group` take, a mark showing where it would land; between tab views its page
+// goes with it. Tabs past the strip's end scroll it (the wheel turns it, a selected tab is scrolled to), and
 // a button at its end lists them all.
 //
 // A change the user makes reports `change`; code's report only to bindings, as a button's do.
@@ -35,6 +37,8 @@ import :text; // TextHAlign
 import :button_base;
 import :disclosure;
 import :menu;
+import :event_dispatcher; // StartDrag (a tab torn out of its strip)
+import :draw_context;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -342,6 +346,19 @@ export namespace experimental::gui
         void SetReorderable(bool reorderable) noexcept { m_reorderable = reorderable; }
         [[nodiscard]] bool IsReorderable() const noexcept { return m_reorderable; }
 
+        // === Between strips (E7) ===
+        /// Strips of one group take each other's tabs (torn out and dropped); empty: none.
+        void SetGroup(const core::String& group) { m_group = group; }
+        [[nodiscard]] core::String GetGroup() const { return m_group; }
+        /// How far out of the strip a tab is dragged before it tears out as a drag.
+        void SetTearDistance(f32 distance) noexcept { m_tearDistance = core::Max(1.0f, distance); }
+        [[nodiscard]] f32 GetTearDistance() const noexcept { return m_tearDistance; }
+        /// Where a tab dropped here would go, while a drag of one is over the strip (-1: none).
+        [[nodiscard]] i32 GetDropIndex() const noexcept { return m_dropIndex; }
+        /// Takes the page of a tab dropped here from another view (a TabView's): the page goes
+        /// to it at an index, and its tab comes with it.
+        void SetPageAdopter(core::Function<void(Node& page, i32 index)> adopter) { m_pageAdopter = core::Move(adopter); }
+
         // === Callbacks ===
         /// The user selected a tab (the `change` event's).
         void SetOnSelected(core::Function<void(i32)> callback) { m_onSelected = core::Move(callback); }
@@ -401,9 +418,36 @@ export namespace experimental::gui
             CycleSelection(step);
             event.Handled = true;
         }
+        // A torn-out tab of its group: taken, the mark where it would land.
+        void OnDragQuery(DropQuery& query) override;
+        void OnDragLeave(const DragEvent&) override { SetDropIndex(-1); }
+        void OnDrop(const DragEvent& event) override;
+        void OnDrawAbove(DrawContext& ctx) override;
+        void CollectStyleParts(core::Array<core::StringView>& out) const override { out.PushBack(core::StringView(u8"drop-indicator")); }
 
     private:
         friend class Tab;
+        void SetDropIndex(i32 index)
+        {
+            if (index == m_dropIndex)
+                return;
+            m_dropIndex = index;
+            Invalidate();
+        }
+        // Where a tab dropped at `local` (the bar's space) would go: before the first tab whose
+        // middle lies past it.
+        [[nodiscard]] i32 InsertionIndex(core::Float2 local) const
+        {
+            const core::Float2 world = ConvertToWorldSpace(local);
+            for (i32 i = 0; i < GetTabCount(); ++i)
+            {
+                const Rect r = GetTab(i)->GetScreenBounds();
+                if (world.x < r.x + r.width * 0.5f)
+                    return i;
+            }
+            return GetTabCount();
+        }
+        [[nodiscard]] static Tab* DraggedTab(const DragPayload& payload);
         friend class TabStrip;
         friend class TabView;
 
@@ -521,6 +565,10 @@ export namespace experimental::gui
         core::Function<void(i32, i32)> m_onMoved;
         core::Function<void(Tab&)> m_onRemoved;
         core::Function<void(i32)> m_closeHandler;
+        core::String m_group;
+        f32 m_tearDistance = 32.0f;
+        i32 m_dropIndex = -1;
+        core::Function<void(Node&, i32)> m_pageAdopter;
     };
 
     // === Tab ===
@@ -608,6 +656,21 @@ export namespace experimental::gui
         if (!m_pressing || bar == nullptr || !bar->IsReorderable())
             return;
         constexpr f32 kDragThreshold = 4.0f;
+        // Out of the strip past the tear distance, in a group: a drag other strips may take.
+        const Rect strip = bar->GetScreenBounds();
+        const f32 out = core::Max(strip.y - event.Position.y, event.Position.y - (strip.y + strip.height));
+        if (!bar->GetGroup().IsEmpty() && out > bar->GetTearDistance())
+            if (EventDispatcher* d = GetEventDispatcher())
+            {
+                EndDrag();
+                DragRequest request;
+                request.Payload.Type = core::String(u8"lab/tab");
+                request.Payload.Value = HandleAs(Node::StaticType());
+                request.Payload.Label = core::String(GetText());
+                request.Payload.Allowed = DropEffectsMove;
+                d->StartDrag(*this, core::Move(request));
+                return;
+            }
         if (!m_dragging && core::Abs(event.Position.x - m_pressX) < kDragThreshold)
             return;
         if (!m_dragging)
@@ -640,6 +703,73 @@ export namespace experimental::gui
         bar->SelectByUser(to);
         target->RequestFocus();
         event.Handled = true;
+    }
+
+    // === Between strips (E7) ===
+
+    inline Tab* TabBar::DraggedTab(const DragPayload& payload)
+    {
+        return payload.Type.AsView() == core::StringView(u8"lab/tab") ? core::Cast<Tab>(Node::FromHandle(payload.Value)) : nullptr;
+    }
+
+    inline void TabBar::OnDragQuery(DropQuery& query)
+    {
+        const Tab* tab = DraggedTab(query.Payload);
+        const TabBar* from = tab != nullptr ? tab->GetBar() : nullptr;
+        if (from == nullptr || m_group.IsEmpty() || from->m_group != m_group)
+            return; // not a tab of its group
+        query.Accept(DropEffect::Move);
+        query.Place = InsertionIndex(query.Local);
+        SetDropIndex(query.Place);
+    }
+
+    inline void TabBar::OnDrop(const DragEvent& event)
+    {
+        Tab* tab = DraggedTab(event.Payload);
+        TabBar* from = tab != nullptr ? tab->GetBar() : nullptr;
+        const i32 index = m_dropIndex;
+        SetDropIndex(-1);
+        if (from == nullptr || index < 0)
+            return;
+        const core::RefPtr<Tab> keep(tab);
+        if (from == this)
+        {
+            // Within the strip: before the tab at `index` (its own place counted out).
+            const i32 at = IndexOf(tab);
+            MoveTab(at, index > at ? index - 1 : index);
+            SelectByUser(IndexOf(tab));
+            return;
+        }
+        if (Node* page = tab->GetPage(); page != nullptr && m_pageAdopter)
+        {
+            // Between tab views: the page moves, and its view makes its tab here.
+            const core::RefPtr<Node> keepPage(page);
+            page->RemoveFromParent(); // its old view lets the tab go with it
+            m_pageAdopter(*page, index);
+            SelectByUser(core::Min(index, GetTabCount() - 1));
+            return;
+        }
+        // Between bars: the tab itself moves.
+        m_strip->AddChildAt(tab, static_cast<usize>(core::Min(index, GetTabCount())));
+        SelectByUser(IndexOf(tab));
+    }
+
+    // The mark between the tabs where a dropped tab would land.
+    inline void TabBar::OnDrawAbove(DrawContext& ctx)
+    {
+        if (m_dropIndex < 0)
+            return;
+        const PartStyle& part = GetPartStyle(u8"drop-indicator");
+        const Color color = part.HasBackground ? part.Box.BackgroundColor : Color{0.31f, 0.61f, 1.0f, 1.0f};
+        f32 x = 0.0f;
+        if (const Tab* at = GetTab(m_dropIndex))
+            x = ConvertToNodeSpace(core::Float2{at->GetScreenBounds().x, 0.0f}).x;
+        else if (const Tab* last = GetTab(GetTabCount() - 1))
+        {
+            const Rect r = last->GetScreenBounds();
+            x = ConvertToNodeSpace(core::Float2{r.x + r.width, 0.0f}).x;
+        }
+        ctx.VG().FillRect(core::Rectangle{x - 1.0f, 0.0f, 2.0f, GetSize().y}, color);
     }
 
     // === TabStrip ===

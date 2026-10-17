@@ -27,3 +27,4 @@
 .tabs tabpage { padding: 10px; gap: 8px; }
 .tabs tab > icon { width: 16px; height: 16px; }
 .tabstrip-demo { width: 590px; }
+.tabs-small { height: 110px; }

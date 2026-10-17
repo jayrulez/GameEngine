@@ -883,6 +883,7 @@ namespace experimental::gui
             .PropAttribute("css", core::String(u8"close-display"));
         builder.AccessorProperty<&TabBar::IsReorderable, &TabBar::SetReorderable>("reorderable")
             .PropAttribute("css", core::String(u8"reorderable"));
+        builder.AccessorProperty<&TabBar::GetGroup, &TabBar::SetGroup>("group").PropAttribute("css", core::String(u8"group"));
         builder.Method<&TabBar::GetTabCount>("tabCount");
         builder.Method<&TabBar::RemoveTab>("removeTab");
         builder.Method<&TabBar::MoveTab>("moveTab");
@@ -912,6 +913,7 @@ namespace experimental::gui
             .PropAttribute("css", core::String(u8"close-display"));
         builder.AccessorProperty<&TabView::IsReorderable, &TabView::SetReorderable>("reorderable")
             .PropAttribute("css", core::String(u8"reorderable"));
+        builder.AccessorProperty<&TabView::GetGroup, &TabView::SetGroup>("group").PropAttribute("css", core::String(u8"group"));
         builder.Method<&TabView::GetPageCount>("pageCount");
         builder.Method<&TabView::RemovePage>("removePage");
         builder.Method<&ElementOf<TabView>, TabView, Node>("of");

@@ -440,3 +440,118 @@ TEST_CASE("tabview: markup's pages are its children, with title, icon and closab
     CHECK(bar->GetSelectedIndex() == 0);
     CHECK(bar->GetTab(1)->GetIconSource() == core::StringView(u8"a.png"));
 }
+
+namespace
+{
+    core::RefPtr<TabBar> BarAt(SceneRoot& root, float y, const char8_t* group)
+    {
+        auto bar = Make<TabBar>();
+        bar->EditLayoutStyle([y](LayoutStyle& s)
+        {
+            s.Placement = Position::Absolute;
+            s.Left = LayoutLength::Px(10.0f);
+            s.Top = LayoutLength::Px(y);
+            s.Width = LayoutLength::Px(380.0f);
+        });
+        bar->SetReorderable(true);
+        bar->SetGroup(core::String(group));
+        root.AddChild(bar.Get());
+        return bar;
+    }
+}
+
+TEST_CASE("tabs: a tab dragged out of its strip tears out as a drag that a strip of its group takes, where the mark is")
+{
+    auto root = MakeRoot();
+    auto top = BarAt(*root, 10.0f, u8"docs");
+    auto bottom = BarAt(*root, 150.0f, u8"docs");
+    auto other = BarAt(*root, 250.0f, u8"tools");
+    AddSizedTab(*top, u8"A");
+    Tab* b = AddSizedTab(*top, u8"B");
+    AddSizedTab(*bottom, u8"X");
+    AddSizedTab(*bottom, u8"Y");
+    AddSizedTab(*other, u8"T");
+    (void)root->UpdateLayout();
+    EventDispatcher& d = *root->GetEventDispatcher();
+
+    const core::Float2 start = CentreOf(*b);
+    d.InjectMouseDown(start, MouseButton::Left);
+    d.InjectMouseMove(core::Float2{start.x, start.y + 20.0f}); // not past the tear (32)
+    CHECK_FALSE(d.IsDragging());
+    d.InjectMouseMove(core::Float2{start.x, start.y + 60.0f});
+    REQUIRE(d.IsDragging());
+    CHECK(d.GetDragPayload().Type == core::StringView(u8"lab/tab"));
+    CHECK(d.GetDragPayload().Label == core::StringView(u8"B"));
+
+    // Over the other group's strip: nothing takes it.
+    d.InjectMouseMove(CentreOf(*other->GetTab(0)));
+    CHECK(d.GetDropTarget() == nullptr);
+    // Over the bottom strip, left of Y's middle: between X and Y.
+    const Rect y = bottom->GetTab(1)->GetScreenBounds();
+    d.InjectMouseMove(core::Float2{y.x + 10.0f, y.y + 10.0f});
+    CHECK(d.GetDropTarget() == bottom.Get());
+    CHECK(bottom->GetDropIndex() == 1);
+    d.InjectMouseUp(core::Float2{y.x + 10.0f, y.y + 10.0f}, MouseButton::Left);
+    CHECK(top->GetTabCount() == 1);
+    REQUIRE(bottom->GetTabCount() == 3);
+    CHECK(bottom->GetTab(1) == b); // the tab itself moved
+    CHECK(bottom->GetSelectedTab() == b);
+    CHECK(bottom->GetDropIndex() == -1);
+}
+
+TEST_CASE("tabs: a tab torn out of one tab view and dropped on another of its group brings its page")
+{
+    auto root = MakeRoot();
+    const auto place = [](TabView& v, float y)
+    {
+        v.EditLayoutStyle([y](LayoutStyle& s)
+        {
+            s.Placement = Position::Absolute;
+            s.Left = LayoutLength::Px(10.0f);
+            s.Top = LayoutLength::Px(y);
+            s.Width = LayoutLength::Px(380.0f);
+            s.Height = LayoutLength::Px(100.0f);
+        });
+    };
+    auto left = Make<TabView>();
+    auto right = Make<TabView>();
+    place(*left, 10.0f);
+    place(*right, 160.0f);
+    root->AddChild(left.Get());
+    root->AddChild(right.Get());
+    TabView* const views[] = {left.Get(), right.Get()};
+    for (TabView* v : views)
+    {
+        v->SetReorderable(true);
+        v->SetGroup(core::String(u8"docs"));
+    }
+    left->AddPage(core::StringView(u8"One"));
+    TabPage* two = left->AddPage(core::StringView(u8"Two"));
+    auto label = Make<Label>();
+    two->AddChild(label.Get());
+    right->AddPage(core::StringView(u8"Three"));
+    for (TabView* v : views)
+        for (core::i32 i = 0; i < v->GetPageCount(); ++i)
+            v->GetBar()->GetTab(i)->EditLayoutStyle([](LayoutStyle& s)
+            {
+                s.Width = LayoutLength::Px(80.0f);
+                s.Height = LayoutLength::Px(24.0f);
+            });
+    (void)root->UpdateLayout();
+    EventDispatcher& d = *root->GetEventDispatcher();
+
+    const core::Float2 start = CentreOf(*left->GetBar()->GetTab(1));
+    d.InjectMouseDown(start, MouseButton::Left);
+    d.InjectMouseMove(core::Float2{start.x, start.y + 80.0f});
+    REQUIRE(d.IsDragging());
+    const Rect three = right->GetBar()->GetTab(0)->GetScreenBounds();
+    d.InjectMouseMove(core::Float2{three.x + three.width - 5.0f, three.y + 10.0f}); // after Three
+    CHECK(right->GetBar()->GetDropIndex() == 1);
+    d.InjectMouseUp(core::Float2{three.x + three.width - 5.0f, three.y + 10.0f}, MouseButton::Left);
+    CHECK(left->GetPageCount() == 1);
+    REQUIRE(right->GetPageCount() == 2);
+    CHECK(right->GetPage(1) == two); // the page itself, what it holds with it
+    CHECK(two->ChildCount() == 1);
+    CHECK(right->GetSelectedPage() == two);
+    CHECK(right->GetBar()->GetTab(1)->GetText() == core::StringView(u8"Two"));
+}

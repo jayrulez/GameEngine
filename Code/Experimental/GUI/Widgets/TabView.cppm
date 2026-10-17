@@ -168,6 +168,11 @@ export namespace experimental::gui
                     self->m_host->RemoveChild(page);
             });
             m_bar->SetCloseHandler([self](i32 index) { self->RequestClose(index); });
+            // A tab dropped here from another view brings its page (E7).
+            m_bar->SetPageAdopter([self](Node& page, i32 index)
+            {
+                self->m_host->AddChildAt(&page, static_cast<usize>(core::Max(0, index)));
+            });
         }
 
         // === Pages ===
@@ -206,6 +211,8 @@ export namespace experimental::gui
         [[nodiscard]] core::String GetCloseDisplayName() const { return m_bar->GetCloseDisplayName(); }
         void SetReorderable(bool reorderable) noexcept { m_bar->SetReorderable(reorderable); }
         [[nodiscard]] bool IsReorderable() const noexcept { return m_bar->IsReorderable(); }
+        void SetGroup(const core::String& group) { m_bar->SetGroup(group); }
+        [[nodiscard]] core::String GetGroup() const { return m_bar->GetGroup(); }
 
         /// Asks to close a page, as its tab's close part does: `tabclose` is reported here, and
         /// unless a listener takes it, the page goes.

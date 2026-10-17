@@ -269,6 +269,20 @@ export namespace experimental::gui
         TemplateRowContent() { SetTag(core::StringView(u8"templaterow")); }
         [[nodiscard]] Array<ItemBinding>& Bindings() noexcept { return m_bindings; }
 
+    protected:
+        // The template's root fills the row (or a grid's cell), inside its margin.
+        void OnLayout() override
+        {
+            const Rect box = GetContentBounds();
+            for (usize i = 0; i < ChildCount(); ++i)
+            {
+                Node& child = *GetChildAt(i);
+                const Thickness m = child.GetMargin();
+                child.Arrange(Rect{box.x + m.Left, box.y + m.Top, core::Max(0.0f, box.width - m.TotalHorizontal()),
+                                   core::Max(0.0f, box.height - m.TotalVertical())});
+            }
+        }
+
     private:
         Array<ItemBinding> m_bindings;
     };

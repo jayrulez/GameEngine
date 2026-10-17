@@ -499,3 +499,22 @@ TEST_CASE("itemview: a grid lays cells across then down, stretched to fill; the 
     CHECK(m.list->GetColumnsAcross() == 2);
     CHECK(m.list->GetLayoutModeName() == SV(u8"grid"));
 }
+
+TEST_CASE("itemview: a template's root fills its row or a grid's cell, inside its margin")
+{
+    RegisterGuiElements();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{300.0f, 300.0f});
+    MarkupLoader loader(*root->GetElementSet(), core::DefaultAllocator());
+    auto tree = loader.LoadFromString(SV(u8R"(<ListView width="200" height="100" layout="grid" cell-width="100" cell-height="50" items="a|b|c">
+        <template><Panel margin="4"><Label text="{{item}}"/></Panel></template>
+    </ListView>)"));
+    auto* list = core::Cast<ListView>(tree.Get());
+    REQUIRE(list != nullptr);
+    root->AddChild(list);
+    (void)root->UpdateLayout();
+    Node* tile = list->RowForItem(1)->GetContent()->GetChildAt(0);
+    CHECK(tile->GetSize().x == doctest::Approx(92.0f));
+    CHECK(tile->GetSize().y == doctest::Approx(42.0f));
+    CHECK(tile->GetPosition().x == doctest::Approx(4.0f));
+}

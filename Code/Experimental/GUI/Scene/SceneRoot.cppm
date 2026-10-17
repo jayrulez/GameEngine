@@ -235,6 +235,7 @@ export namespace experimental::gui
                 });
             why.Animation = animated != nullptr;
             m_frameStats.AnimatedNode = animated != nullptr ? animated->DebugName() : core::String{};
+            why.Overlay = m_debugOverlay.RedrawFlash && !m_flashes.IsEmpty();
             const bool needed = why.Any();
             PublishFrame();
             return needed;
@@ -254,6 +255,9 @@ export namespace experimental::gui
             const u32 drawn = ctx.NodesDrawn();
             const u32 culled = ctx.NodesCulled();
             ctx.SetFrame(m_framesDrawn + 1); // the nodes drawn note it (FramesDrawn is set after)
+            m_frameRedraws.Clear();
+            if (m_debugOverlay.RedrawFlash)
+                ctx.SetRedrawRecorder(&m_frameRedraws);
             // The window bounds the drawing, so what lies outside it is culled (E8b); only the
             // drawing: navigation and hit testing still reach a node past it.
             const bool sized = GetSize().x > 0.0f && GetSize().y > 0.0f;
@@ -262,6 +266,7 @@ export namespace experimental::gui
             Draw(ctx);
             if (sized)
                 ctx.PopClip();
+            ctx.SetRedrawRecorder(nullptr);
             const vg::VGBatch& batch = ctx.VG().GetBatch(); // flushed: its last command counts
             m_lastFrame.DrawMs = watch.Elapsed().AsMilliseconds();
             m_lastFrame.NodesDrawn = ctx.NodesDrawn() - drawn;
@@ -424,6 +429,8 @@ export namespace experimental::gui
             m_eventDispatcher.DrawPopups(ctx); // the top layer, after the tree (E5)
             if (m_debugOverlay.AnyLayout())
                 DrawLayoutOverlay(ctx, m_debugOverlay);
+            if (m_debugOverlay.RedrawFlash)
+                DrawRedrawFlashes(ctx);
             if (m_debugOverlay.AnyInput())
                 DrawInputOverlay(ctx);
         }
@@ -431,6 +438,19 @@ export namespace experimental::gui
     private:
         // The debug overlay's input half, in this root's space (DebugOverlayImpl.cpp).
         void DrawInputOverlay(DrawContext& ctx) const;
+        // This frame's redraws join the flashes, which fade over half a second (DebugOverlayImpl.cpp).
+        void DrawRedrawFlashes(DrawContext& ctx);
+
+    public:
+        /// The redraw flashes still fading (the debug overlay's), in this root's space.
+        [[nodiscard]] usize RedrawFlashCount() const noexcept { return m_flashes.Size(); }
+
+    private:
+        struct RedrawFlash
+        {
+            Rect Box; // in this root's space
+            core::Stopwatch Age;
+        };
         // `node`'s border box in this root's space.
         [[nodiscard]] Rect InRootSpace(const Node& node) const
         {
@@ -463,6 +483,8 @@ export namespace experimental::gui
         EventDispatcher m_eventDispatcher{this}; // pointer, hover and focus: this root's own
         f32 m_displayScale = 1.0f;
         DebugOverlay m_debugOverlay;
+        core::Array<Rect> m_frameRedraws;     // the nodes this frame drew that invalidated themselves (world)
+        core::Array<RedrawFlash> m_flashes;   // fading
         fonts::CachedFont* m_debugFont = nullptr; // the overlay's text (the host's)
         FrameStats m_frameStats; // in progress
         FrameStats m_lastFrame;

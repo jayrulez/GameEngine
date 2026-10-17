@@ -30,8 +30,9 @@ export namespace experimental::gui
         bool Pending = false;       ///< a binding or a queued mutation waits
         bool HeldDirection = false; ///< a held direction repeats
         bool Animation = false;     ///< an action runs on a node it shows (AnimatedNode names the first)
+        bool Overlay = false;       ///< the debug overlay's redraw flashes are fading
 
-        [[nodiscard]] bool Any() const noexcept { return Redraw || Layout || Pending || HeldDirection || Animation; }
+        [[nodiscard]] bool Any() const noexcept { return Redraw || Layout || Pending || HeldDirection || Animation || Overlay; }
     };
 
     struct FrameStats
@@ -73,6 +74,8 @@ export namespace experimental::gui
                 text += AnimatedNode.AsView();
                 text += core::StringView(u8")");
             }
+            if (Reasons.Overlay)
+                text += core::StringView(u8" overlay");
             return text;
         }
     };

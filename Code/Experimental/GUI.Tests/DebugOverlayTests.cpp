@@ -158,3 +158,26 @@ TEST_CASE("debug-overlay: an arrow move keeps what it weighed: the one chosen, t
     nav.Navigation = true;
     CHECK(bed.Draw(nav) > none);
 }
+
+TEST_CASE("debug-overlay: a node that invalidated itself flashes once, and the flashes keep frames coming while they fade")
+{
+    Bed bed;
+    DebugOverlay flash;
+    flash.RedrawFlash = true;
+    (void)bed.Draw(DebugOverlay{}); // drawn once: nothing new since
+    CHECK(bed.root->RedrawFlashCount() == 0u);
+
+    (void)bed.Draw(flash); // turning it on invalidates the root, which never flashes
+    CHECK(bed.root->RedrawFlashCount() == 0u);
+    bed.stops[1]->SetAlpha(0.5f); // it alone, not the panel holding it
+    (void)bed.Draw(flash);
+    CHECK(bed.root->RedrawFlashCount() == 1u);
+    CHECK(bed.root->NeedsFrame());
+    CHECK(bed.root->GetLastFrameStats().Reasons.Overlay);
+    (void)bed.Draw(flash); // nothing changed: no new flash (the old one still fades)
+    CHECK(bed.root->RedrawFlashCount() == 1u);
+
+    bed.stops[0]->SetAlpha(0.5f);
+    (void)bed.Draw(DebugOverlay{}); // off: nothing recorded
+    CHECK(bed.root->RedrawFlashCount() == 1u);
+}

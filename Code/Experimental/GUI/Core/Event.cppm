@@ -462,4 +462,53 @@ export namespace experimental::gui
     };
 
     using EventCallback = core::Function<void(const Event&)>;
+
+    namespace detail
+    {
+        struct NamedEventType
+        {
+            const char8_t* name;
+            EventType type;
+        };
+        // The names markup's on-<event> attributes and scripts use.
+        inline constexpr NamedEventType kEventTypeNames[] = {
+            {u8"click", EventType::MouseClick},      {u8"mousedown", EventType::MouseDown},
+            {u8"mouseup", EventType::MouseUp},       {u8"mouseenter", EventType::MouseEnter},
+            {u8"mouseleave", EventType::MouseLeave}, {u8"mousemove", EventType::MouseMove},
+            {u8"wheel", EventType::MouseWheel},      {u8"keydown", EventType::KeyDown},
+            {u8"keyup", EventType::KeyUp},           {u8"textinput", EventType::TextInput},
+            {u8"focus", EventType::FocusGained},     {u8"blur", EventType::FocusLost},
+            {u8"change", EventType::Changed},        {u8"pointercancel", EventType::PointerCancel},
+            {u8"link", EventType::Link},             {u8"input", EventType::Input},
+            {u8"submit", EventType::Submit},         {u8"composition", EventType::Composition},
+            {u8"toggle", EventType::Toggle},
+            {u8"contextmenu", EventType::ContextMenu},
+            {u8"scroll", EventType::Scroll},
+            {u8"tabclose", EventType::TabClose},
+            {u8"activate", EventType::ItemActivate},
+            {u8"dragstart", EventType::DragStart},  {u8"dragend", EventType::DragEnd},
+            {u8"dragenter", EventType::DragEnter},  {u8"dragover", EventType::DragOver},
+            {u8"dragleave", EventType::DragLeave},  {u8"drop", EventType::Drop},
+            {u8"dragquery", EventType::DragQuery},
+        };
+    }
+    /// The event type markup and scripts call `name` ("click", "keydown"); false for one they do not.
+    [[nodiscard]] inline bool EventTypeNamed(core::StringView name, EventType& out) noexcept
+    {
+        for (const detail::NamedEventType& entry : detail::kEventTypeNames)
+            if (core::StringView(entry.name) == name)
+            {
+                out = entry.type;
+                return true;
+            }
+        return false;
+    }
+    /// The name markup and scripts give `type` (empty for one they have no name for).
+    [[nodiscard]] inline core::StringView EventTypeName(EventType type) noexcept
+    {
+        for (const detail::NamedEventType& entry : detail::kEventTypeNames)
+            if (entry.type == type)
+                return core::StringView(entry.name);
+        return {};
+    }
 }

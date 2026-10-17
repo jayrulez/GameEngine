@@ -1,6 +1,6 @@
 <Panel id="page-text" class="page" gap="18">
     <Label class="page-title" text="Text"/>
-    <Label class="page-lead" wrap="true"
+    <Label class="page-lead" white-space="normal"
            text="Faces, sizes, alignment and wrapping, and the effects a distance-field face draws: a shadow, an outline and a glow, all from the sheet."/>
 
     <Panel class="section" gap="8">
@@ -20,7 +20,7 @@
 
     <Panel class="section" gap="10">
         <Label class="section-title" text="Wrapping"/>
-        <Label class="text paragraph" wrap="true"
+        <Label class="text paragraph" white-space="normal"
                text="A single label with wrap on breaks its text at whitespace to fit its width, greedily, line by line. Narrow the box and the words flow onto more lines; an explicit newline breaks too."/>
     </Panel>
 

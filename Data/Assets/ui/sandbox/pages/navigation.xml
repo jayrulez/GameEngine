@@ -1,6 +1,6 @@
 <Panel id="page-navigation" class="page" gap="18">
     <Label class="page-title" text="Navigation and commands"/>
-    <Label class="page-lead" wrap="true"
+    <Label class="page-lead" white-space="normal"
            text="The arrows, Tab, a gamepad's d-pad move focus by geometry; Return or South activates. Scopes keep focus in a grid or a dialog; commands light the controls bound to them only while a handler is on the focus path."/>
 
     <Panel class="section" gap="12">

@@ -1,6 +1,6 @@
 <Panel id="page-motion" class="page" gap="18">
     <Label class="page-title" text="Motion"/>
-    <Label class="page-lead" wrap="true"
+    <Label class="page-lead" white-space="normal"
            text="Every property transitions and animates, with real easings: transitions on hover, keyframes of opacity, colour and transforms, and the easing functions side by side."/>
 
     <Panel class="section" gap="12">

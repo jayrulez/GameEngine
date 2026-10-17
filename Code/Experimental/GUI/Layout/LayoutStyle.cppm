@@ -240,6 +240,7 @@ export namespace experimental::gui
         SlotGridColumn, SlotGridRow,
         SlotEnabled, SlotVisibility,
         SlotColor, SlotFontFamily, SlotFontSize, SlotTextAlign, SlotVerticalAlign,
+        SlotWhiteSpace, SlotLineHeight, SlotLetterSpacing,
         SlotCount,
     };
     static_assert(SlotCount <= 64, "the pins are one u64");

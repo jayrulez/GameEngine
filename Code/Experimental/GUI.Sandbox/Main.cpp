@@ -412,6 +412,8 @@ void GUISandbox::BuildSandbox()
     ApplyLayoutOverlay();
 
     m_styles.SetFontService(m_fontService.Get());
+    m_gui->SetFontService(m_fontService.Get()); // a rich text's own faces
+    m_gui->SetResourceProvider(m_styles.GetResourceProvider());
     ApplySandboxSheet();
     ShowPage(m_startPage.AsView());
 
@@ -766,7 +768,7 @@ void GUISandbox::OpenWindow()
             body->SetSize(Float2{300.0f, 120.0f});
             body->SetPadding(gui::Thickness{12.0f});
             body->SetFont(m_font);
-            body->SetWordWrap(true);
+            body->SetWhiteSpace(gui::TextWhiteSpace::Normal);
             body->SetText(StringView(bodies[i]));
             body->AddClass(u8"text");
             tabs->AddTab(StringView(names[i]), body.Get());

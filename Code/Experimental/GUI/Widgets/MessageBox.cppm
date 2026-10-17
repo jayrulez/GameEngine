@@ -56,8 +56,8 @@ export namespace experimental::gui
             // Create the message before SetSize, since SetSize -> OnSizeChange -> LayoutContent
             // reads m_message.
             m_message = core::MakeRef<Label>(MemoryAllocator());
-            m_message->SetWordWrap(true);
             StyleWriteScope messageDefaults(*m_message); // its own values, which a sheet returns to
+            m_message->SetWhiteSpace(TextWhiteSpace::Normal); // a message wraps
             m_message->SetTextAlignment(TextHAlign::Left, TextVAlign::Top);
             GetContent()->AddChild(m_message.Get());
 

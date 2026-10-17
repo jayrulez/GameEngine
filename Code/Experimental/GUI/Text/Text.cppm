@@ -3,41 +3,36 @@
 
 // GUI - :text partition
 //
-// Text: a measurable, drawable run of text on a font, rendered through the DrawContext/VG
-// seam. Derived from eepp's Graphics::Text (the object UITextView/labels cache), adapted to
-// our needs: it holds a non-owning foundation.fonts CachedFont (owned by the font service),
-// measures via IFont metrics, and draws via VG's DrawText. Rich styling (per-range colors,
-// outline/shadow, wrap, bidi) is not implemented.
+// Text: what a widget measures and draws its text with (E4 of Specs/gui-lab-evolution.md). It holds
+// a string, or a rich text's runs from markup, and lays them out through :text_layout: shaped, wrapped
+// as CSS's white-space says, its lines as tall as line-height says, letter-spaced, clamped to a line
+// count and ended by an ellipsis where they overflow. The layout is cached for the last widths asked
+// (a widget measures unbounded and draws at its width), and laid out again only when something it
+// reads changes. It holds a non-owning CachedFont (the font service owns it), and a service for runs
+// that set a font of their own, and draws through the DrawContext's VG.
 
 module;
 #include "Core/Prelude.h"
 
 export module experimental.gui:text;
 
-import foundation.core;  // String, StringView, Float2, Color, Array, IsWhiteSpace
-import foundation.fonts; // CachedFont, IFont, FontMetrics
+import foundation.core;  // String, StringView, Float2, Color, Array, Max
+import foundation.fonts; // CachedFont, IFontService
+import foundation.vg;    // TextEffects
+import foundation.image; // ImageData
+export import :text_layout; // TextHAlign, TextVAlign, TextWhiteSpace, TextOverflow, TextLayout
+import :text_runs;
 import :rect;
 import :draw_context;
+import :resource_provider;
 
 using namespace foundation::core;
 namespace core = foundation::core;
 namespace fonts = foundation::fonts;
+namespace vg = foundation::vg;
 
 export namespace experimental::gui
 {
-    enum class TextHAlign
-    {
-        Left,
-        Center,
-        Right
-    };
-    enum class TextVAlign
-    {
-        Top,
-        Middle,
-        Bottom
-    };
-
     class Text
     {
     public:
@@ -47,251 +42,392 @@ export namespace experimental::gui
         {
         }
 
-        void SetString(core::StringView string) { m_string = string; }
+        // === What it shows ===
+        /// Plain text.
+        void SetString(core::StringView string)
+        {
+            if (!m_rich && string == m_string.AsView())
+                return;
+            m_string = core::String(string);
+            m_rich = false;
+            Dirty();
+        }
+        /// A rich text's markup ([b], [color=], [link=] and the rest, :text_runs).
+        void SetMarkup(core::StringView markup)
+        {
+            if (m_rich && markup == m_string.AsView())
+                return;
+            m_string = core::String(markup);
+            m_rich = true;
+            Dirty();
+        }
+        /// What was set: the plain text, or the markup.
         [[nodiscard]] core::StringView GetString() const { return m_string.AsView(); }
-        [[nodiscard]] bool IsEmpty() const { return m_string.AsView().Size() == 0; }
+        [[nodiscard]] bool IsRich() const noexcept { return m_rich; }
+        [[nodiscard]] bool IsEmpty() const { return m_string.Size() == 0; }
+        /// The runs it lays out (spaces collapsed where its white-space says).
+        [[nodiscard]] const TextDocument& Document() const
+        {
+            Sync();
+            return m_document;
+        }
+        /// The text it lays out, markup taken out and spaces collapsed: what the layout's offsets count.
+        [[nodiscard]] core::StringView PlainText() const
+        {
+            Sync();
+            return m_plain.AsView();
+        }
 
-        void SetFont(fonts::CachedFont* font) { m_font = font; }
+        // === How it looks ===
+        void SetFont(fonts::CachedFont* font)
+        {
+            if (font == m_font)
+                return;
+            m_font = font;
+            Dirty();
+        }
         [[nodiscard]] fonts::CachedFont* GetFont() const noexcept { return m_font; }
+        /// Resolves runs that set a family, a size, bold or italic of their own (null: they take its font).
+        void SetFontService(fonts::IFontService* service)
+        {
+            if (service == m_fontService)
+                return;
+            m_fontService = service;
+            Dirty();
+        }
+        /// Loads a rich text's inline icons (null: they keep their space, undrawn).
+        void SetResourceProvider(IResourceProvider* resources) noexcept { m_resources = resources; }
 
-        void SetColor(Color color) noexcept { m_color = color; }
+        void SetColor(Color color)
+        {
+            if (color == m_color)
+                return;
+            m_color = color;
+            Dirty();
+        }
         [[nodiscard]] Color GetColor() const noexcept { return m_color; }
 
-        void SetAlignment(TextHAlign horizontal, TextVAlign vertical) noexcept
+        void SetAlignment(TextHAlign horizontal, TextVAlign vertical)
         {
+            if (horizontal == m_hAlign && vertical == m_vAlign)
+                return;
             m_hAlign = horizontal;
             m_vAlign = vertical;
+            Dirty();
         }
         [[nodiscard]] TextHAlign GetHAlign() const noexcept { return m_hAlign; }
         [[nodiscard]] TextVAlign GetVAlign() const noexcept { return m_vAlign; }
 
-        // Word wrap: when on, Draw(bounds) breaks the text into lines that fit the bounds
-        // width (greedy at whitespace; explicit '\n' always breaks). Off = single line.
-        void SetWordWrap(bool enabled) noexcept { m_wordWrap = enabled; }
-        [[nodiscard]] bool IsWordWrap() const noexcept { return m_wordWrap; }
-
-        // === Measurement (0 if no font) ===
-        [[nodiscard]] f32 GetWidth() const
+        /// CSS's white-space: whether spaces collapse and lines wrap. A Text starts as NoWrap (one line,
+        /// spaces collapsed), a widget's usual text; a sheet's `white-space: normal` wraps it.
+        void SetWhiteSpace(TextWhiteSpace whiteSpace)
         {
-            return HasFont() ? m_font->font->MeasureString(m_string.AsView()) : 0.0f;
+            if (whiteSpace == m_whiteSpace)
+                return;
+            m_whiteSpace = whiteSpace;
+            Dirty();
         }
+        [[nodiscard]] TextWhiteSpace GetWhiteSpace() const noexcept { return m_whiteSpace; }
+        [[nodiscard]] bool IsWrapping() const noexcept { return Wraps(m_whiteSpace); }
+        /// Each line's height in pixels (0: the font's own).
+        void SetLineHeight(f32 pixels)
+        {
+            if (pixels == m_lineHeight)
+                return;
+            m_lineHeight = core::Max(0.0f, pixels);
+            Dirty();
+        }
+        [[nodiscard]] f32 GetLineHeightSetting() const noexcept { return m_lineHeight; }
+        void SetLetterSpacing(f32 pixels)
+        {
+            if (pixels == m_letterSpacing)
+                return;
+            m_letterSpacing = pixels;
+            Dirty();
+        }
+        [[nodiscard]] f32 GetLetterSpacing() const noexcept { return m_letterSpacing; }
+        void SetOverflow(TextOverflow overflow)
+        {
+            if (overflow == m_overflow)
+                return;
+            m_overflow = overflow;
+            Dirty();
+        }
+        [[nodiscard]] TextOverflow GetOverflow() const noexcept { return m_overflow; }
+        /// The most lines it shows (line-clamp); 0: all.
+        void SetMaxLines(u32 lines)
+        {
+            if (lines == m_maxLines)
+                return;
+            m_maxLines = lines;
+            Dirty();
+        }
+        [[nodiscard]] u32 GetMaxLines() const noexcept { return m_maxLines; }
+
+        // === Measurement (0 with no font) ===
+        /// Its width on one line, unbroken but where the text breaks.
+        [[nodiscard]] f32 GetWidth() const { return HasFont() ? LayoutAt(0.0f).Width : 0.0f; }
+        /// One line's height: the line height set, or the font's.
         [[nodiscard]] f32 GetLineHeight() const
         {
-            return HasFont() ? m_font->font->Metrics().lineHeight : 0.0f;
+            if (!HasFont())
+                return 0.0f;
+            return m_lineHeight > 0.0f ? m_lineHeight : m_font->font->Metrics().lineHeight;
         }
+        /// Its size unbounded (one line unless the text breaks it).
         [[nodiscard]] core::Float2 Measure() const
         {
-            return core::Float2{GetWidth(), GetLineHeight()};
+            if (!HasFont())
+                return core::Float2{0.0f, 0.0f};
+            const TextLayout& layout = LayoutAt(0.0f);
+            return core::Float2{layout.Width, layout.Height};
         }
-
-        // Break the string into lines that fit `maxWidth` (greedy at whitespace; '\n' always
-        // breaks). A word longer than maxWidth takes its own line and overflows (no in-word
-        // breaking yet). Returned views point into the current string - valid until it changes.
-        void ComputeLines(f32 maxWidth, core::Array<core::StringView>& out) const
-        {
-            out.Clear();
-            const core::StringView v = m_string.AsView();
-            const usize n = v.Size();
-            if (!HasFont() || n == 0)
-            {
-                if (n != 0)
-                    out.PushBack(v);
-                return;
-            }
-
-            usize lineStart = 0;
-            usize lastFitEnd = 0; // end of content that fits on the current line
-            usize i = 0;
-            while (i < n)
-            {
-                if (v[i] == u8'\n')
-                {
-                    out.PushBack(v.SubStr(lineStart, i - lineStart));
-                    lineStart = i + 1;
-                    lastFitEnd = lineStart;
-                    i = lineStart;
-                    continue;
-                }
-                usize j = i;
-                while (j < n && core::IsWhiteSpace(v[j]) && v[j] != u8'\n')
-                    ++j; // leading spaces
-                while (j < n && !core::IsWhiteSpace(v[j]))
-                    ++j; // the word
-                const f32 w = m_font->font->MeasureString(v.SubStr(lineStart, j - lineStart));
-                if (w <= maxWidth || lastFitEnd == lineStart)
-                {
-                    lastFitEnd = j; // fits (or the line is empty -> force one word)
-                    i = j;
-                }
-                else
-                {
-                    usize end = lastFitEnd; // break before this word; trim trailing spaces
-                    while (end > lineStart && core::IsWhiteSpace(v[end - 1]))
-                        --end;
-                    out.PushBack(v.SubStr(lineStart, end - lineStart));
-                    usize ns = lastFitEnd; // skip leading spaces on the next line
-                    while (ns < n && core::IsWhiteSpace(v[ns]) && v[ns] != u8'\n')
-                        ++ns;
-                    lineStart = ns;
-                    lastFitEnd = ns;
-                    i = ns;
-                }
-            }
-            usize end = n; // flush the remainder
-            while (end > lineStart && core::IsWhiteSpace(v[end - 1]))
-                --end;
-            out.PushBack(v.SubStr(lineStart, end - lineStart));
-        }
-
-        // Size the wrapped text occupies at `maxWidth`: widest line x (line count * lineHeight).
+        /// Its size laid out in `maxWidth` (wrapped where its white-space wraps: at no width, a line a
+        /// word, its min-content; at kUnbounded, unbroken); an empty text measures zero.
         [[nodiscard]] core::Float2 MeasureWrapped(f32 maxWidth) const
         {
             if (!HasFont() || IsEmpty())
                 return core::Float2{0.0f, 0.0f};
-            core::Array<core::StringView> lines;
-            ComputeLines(maxWidth, lines);
-            f32 widest = 0.0f;
-            for (const core::StringView& line : lines)
-            {
-                const f32 w = m_font->font->MeasureString(line);
-                if (w > widest)
-                    widest = w;
-            }
-            return core::Float2{widest, static_cast<f32>(lines.Size()) * GetLineHeight()};
+            const bool bounded = IsWrapping() && maxWidth < 1.0e8f;
+            const TextLayout& layout = LayoutAt(bounded ? core::Max(maxWidth, 0.01f) : 0.0f);
+            return core::Float2{layout.Width, layout.Height};
         }
-
-        // The top-left draw position for the current alignment within `bounds`.
-        [[nodiscard]] core::Float2 AlignedPosition(const Rect& bounds) const
+        /// The layout it draws in `bounds` (laid out at their width).
+        [[nodiscard]] const TextLayout& LayoutFor(const Rect& bounds) const { return LayoutAt(BoundedWidth(bounds.width)); }
+        /// Where the layout's origin goes in `bounds` (its block aligned up and down).
+        [[nodiscard]] core::Float2 Origin(const Rect& bounds) const
         {
-            const f32 w = GetWidth();
-            const f32 h = GetLineHeight();
-            f32 x = bounds.Left();
-            f32 y = bounds.Top();
-            if (m_hAlign == TextHAlign::Center)
-                x += (bounds.width - w) * 0.5f;
-            else if (m_hAlign == TextHAlign::Right)
-                x += (bounds.width - w);
+            const TextLayout& layout = LayoutFor(bounds);
+            f32 top = bounds.Top();
             if (m_vAlign == TextVAlign::Middle)
-                y += (bounds.height - h) * 0.5f;
+                top += (bounds.height - layout.Height) * 0.5f;
             else if (m_vAlign == TextVAlign::Bottom)
-                y += (bounds.height - h);
-            return core::Float2{x, y};
+                top += bounds.height - layout.Height;
+            return core::Float2{bounds.Left(), top};
         }
-
-        // Where Draw(ctx, bounds) puts the first line's baseline: the line's top plus the ascent,
-        // or for bottom alignment of one line, the descent (negative) above the bottom.
+        /// Where Draw(ctx, bounds) puts the first line's baseline.
         [[nodiscard]] f32 FirstBaseline(const Rect& bounds) const
         {
             if (!HasFont())
                 return bounds.Top() + bounds.height;
-            const fonts::FontMetrics fm = m_font->font->Metrics();
-            if (!m_wordWrap || IsEmpty())
-            {
-                if (m_vAlign == TextVAlign::Middle)
-                    return bounds.Top() + (bounds.height - fm.lineHeight) * 0.5f + fm.ascent;
-                if (m_vAlign == TextVAlign::Bottom)
-                    return bounds.Top() + bounds.height + fm.descent;
-                return bounds.Top() + fm.ascent;
-            }
-            core::Array<core::StringView> lines;
-            ComputeLines(bounds.width, lines);
-            const f32 blockH = static_cast<f32>(lines.Size()) * GetLineHeight();
-            f32 top = bounds.Top();
-            if (m_vAlign == TextVAlign::Middle)
-                top += (bounds.height - blockH) * 0.5f;
-            else if (m_vAlign == TextVAlign::Bottom)
-                top += bounds.height - blockH;
-            return top + fm.ascent;
+            const TextLayout& layout = LayoutFor(bounds);
+            const f32 first = layout.Lines.IsEmpty() ? m_font->font->Metrics().ascent : layout.Lines[0].Baseline;
+            return Origin(bounds).y + first;
+        }
+        /// The link id under `point` when drawn in `bounds` (empty: none).
+        [[nodiscard]] core::StringView LinkAt(const Rect& bounds, core::Float2 point) const
+        {
+            if (!m_rich || !HasFont())
+                return {};
+            const core::Float2 origin = Origin(bounds);
+            const i32 run = LayoutFor(bounds).LinkAt(core::Float2{point.x - origin.x, point.y - origin.y});
+            return run >= 0 ? m_document.Runs[static_cast<usize>(run)].Link.AsView() : core::StringView{};
         }
 
         // === Drawing ===
-        // VG's point DrawText anchors at the text baseline; `position` here is the top-left,
-        // so we offset down by the font ascent.
+        /// Draws at `position` (the top-left), unbounded.
         void Draw(DrawContext& ctx, core::Float2 position) const
         {
-            if (m_font == nullptr || IsEmpty())
+            if (!HasFont() || IsEmpty())
                 return;
-            const f32 ascent = HasFont() ? m_font->font->Metrics().ascent : 0.0f;
-            ctx.VG().DrawText(m_string.AsView(), m_font,
-                              core::Float2{position.x, position.y + ascent}, m_color);
+            DrawLayout(ctx, LayoutAt(0.0f), position);
         }
-        // Draw aligned within bounds. Single line delegates to VG's alignment-aware overload;
-        // word-wrap lays out multiple lines (each H-aligned, the block V-aligned).
+        /// Draws aligned within `bounds`.
         void Draw(DrawContext& ctx, const Rect& bounds) const
         {
-            if (m_font == nullptr || IsEmpty())
+            if (!HasFont() || IsEmpty())
                 return;
-            if (!m_wordWrap)
+            DrawLayout(ctx, LayoutFor(bounds), Origin(bounds));
+        }
+        /// Draws a layout at `origin` (a field draws its own, scrolled).
+        void DrawLayout(DrawContext& ctx, const TextLayout& layout, core::Float2 origin) const
+        {
+            Sync();
+            vg::VGContext& g = ctx.VG();
+            bool anyEffects = false;
+            for (const TextRun& run : m_document.Runs)
+                anyEffects = anyEffects || run.EffectParts != 0;
+            if (anyEffects)
             {
-                ctx.VG().DrawText(m_string.AsView(), m_font, bounds.ToRectangle(),
-                                  ToFontsHAlign(m_hAlign), ToFontsVAlign(m_vAlign), m_color);
-                return;
+                // Every run's effects (its own over the node's) under every run's glyphs, so one
+                // run's outline or shadow never covers its neighbour.
+                const vg::TextEffects inherited = g.GetTextEffects();
+                g.PushState();
+                g.SetTextEffectsOnly(true);
+                for (const LaidOutGlyphs& run : layout.GlyphRuns)
+                {
+                    const vg::TextEffects effects =
+                        run.Run >= 0 ? m_document.Runs[static_cast<usize>(run.Run)].EffectsOver(inherited) : inherited;
+                    if (!effects.Any())
+                        continue;
+                    g.SetTextEffects(effects);
+                    DrawRun(ctx, run, origin);
+                }
+                g.PopState();
+                g.PushState();
+                g.ClearTextEffects();
             }
-
-            core::Array<core::StringView> lines;
-            ComputeLines(bounds.width, lines);
-            const f32 lineHeight = GetLineHeight();
-            const f32 ascent = m_font->font->Metrics().ascent;
-            const f32 blockH = static_cast<f32>(lines.Size()) * lineHeight;
-
-            f32 top = bounds.Top();
-            if (m_vAlign == TextVAlign::Middle)
-                top += (bounds.height - blockH) * 0.5f;
-            else if (m_vAlign == TextVAlign::Bottom)
-                top += (bounds.height - blockH);
-
-            for (usize k = 0; k < lines.Size(); ++k)
+            for (const LaidOutGlyphs& run : layout.GlyphRuns)
+                DrawRun(ctx, run, origin);
+            if (anyEffects)
+                g.PopState();
+            for (const LaidOutBox& underline : layout.Underlines)
             {
-                const core::StringView line = lines[k];
-                if (line.Size() == 0)
+                const Rectangle r = underline.Rect;
+                g.FillRect(Rectangle{r.x + origin.x, r.y + origin.y, r.width, r.height}, underline.TextColor);
+            }
+            for (const LaidOutBox& icon : layout.Icons)
+            {
+                const TextRun& run = m_document.Runs[static_cast<usize>(icon.Run)];
+                const foundation::image::ImageData* image = m_resources != nullptr ? m_resources->LoadImage(run.Icon.AsView()) : nullptr;
+                if (image == nullptr)
                     continue;
-                const f32 lineW = m_font->font->MeasureString(line);
-                f32 x = bounds.Left();
-                if (m_hAlign == TextHAlign::Center)
-                    x += (bounds.width - lineW) * 0.5f;
-                else if (m_hAlign == TextHAlign::Right)
-                    x += (bounds.width - lineW);
-                const f32 y = top + static_cast<f32>(k) * lineHeight + ascent;
-                ctx.VG().DrawText(line, m_font, core::Float2{x, y}, m_color);
+                const Rectangle r = icon.Rect;
+                g.DrawImage(image, Rectangle{r.x + origin.x, r.y + origin.y, r.width, r.height});
             }
         }
 
     private:
-        [[nodiscard]] bool HasFont() const noexcept
+        [[nodiscard]] bool HasFont() const noexcept { return m_font != nullptr && m_font->font != nullptr; }
+        [[nodiscard]] static f32 BoundedWidth(f32 width) noexcept { return width > 0.0f && width < 1.0e8f ? width : 0.0f; }
+
+        void Dirty() noexcept
         {
-            return m_font != nullptr && m_font->font != nullptr;
+            m_synced = false;
+            m_cache[0].Valid = m_cache[1].Valid = false;
         }
 
-        [[nodiscard]] static fonts::TextAlignment ToFontsHAlign(TextHAlign h) noexcept
+        // The runs from the string (parsed when rich), spaces collapsed where white-space says.
+        void Sync() const
         {
-            switch (h)
+            if (m_synced)
+                return;
+            m_synced = true;
+            TextDocument document = m_rich ? ParseTextMarkup(m_string.AsView()) : TextDocument::Plain(m_string.AsView());
+            if (CollapsesSpaces(m_whiteSpace))
             {
-            case TextHAlign::Center:
-                return fonts::TextAlignment::Center;
-            case TextHAlign::Right:
-                return fonts::TextAlignment::Right;
-            default:
-                return fonts::TextAlignment::Left;
+                // Spaces, tabs and line breaks become one space; none at the start or the end.
+                bool lastSpace = true;
+                for (TextRun& run : document.Runs)
+                {
+                    if (run.IsIcon())
+                    {
+                        lastSpace = false;
+                        continue;
+                    }
+                    core::String collapsed;
+                    for (usize i = 0; i < run.Text.Size(); ++i)
+                    {
+                        const char8_t c = run.Text[i];
+                        const bool space = c == u8' ' || c == u8'\t' || c == u8'\n' || c == u8'\r';
+                        if (space && lastSpace)
+                            continue;
+                        collapsed.PushBack(space ? u8' ' : c);
+                        lastSpace = space;
+                    }
+                    run.Text = core::Move(collapsed);
+                }
+                for (usize r = document.Runs.Size(); r-- > 0;)
+                {
+                    TextRun& run = document.Runs[r];
+                    if (run.IsIcon())
+                        break;
+                    while (run.Text.Size() != 0 && run.Text[run.Text.Size() - 1] == u8' ')
+                        run.Text.Remove(run.Text.Size() - 1, 1);
+                    if (run.Text.Size() != 0)
+                        break;
+                }
+                for (usize r = document.Runs.Size(); r-- > 0;)
+                    if (!document.Runs[r].IsIcon() && document.Runs[r].Text.Size() == 0)
+                        document.Runs.RemoveAt(r);
             }
+            m_document = core::Move(document);
+            m_plain = m_document.PlainText();
         }
-        [[nodiscard]] static fonts::VerticalAlignment ToFontsVAlign(TextVAlign v) noexcept
+
+        [[nodiscard]] const TextLayout& LayoutAt(f32 maxWidth) const
         {
-            switch (v)
+            Sync();
+            for (LayoutCache& cache : m_cache)
+                if (cache.Valid && cache.Width == maxWidth)
+                    return cache.Layout;
+            LayoutCache& slot = m_cache[m_nextSlot];
+            m_nextSlot = (m_nextSlot + 1) % 2;
+            TextLayoutStyle style;
+            style.Font = m_font;
+            style.Fonts = m_fontService;
+            if (HasFont())
             {
-            case TextVAlign::Middle:
-                return fonts::VerticalAlignment::Middle;
-            case TextVAlign::Bottom:
-                return fonts::VerticalAlignment::Bottom;
-            default:
-                return fonts::VerticalAlignment::Top;
+                style.Family = core::String(m_font->font->FamilyName());
+                style.Size = m_font->font->PixelHeight();
             }
+            style.TextColor = m_color;
+            style.Align = m_hAlign;
+            style.Wrap = IsWrapping();
+            style.MaxWidth = maxWidth;
+            style.LineHeight = m_lineHeight;
+            style.LetterSpacing = m_letterSpacing;
+            style.MaxLines = m_maxLines;
+            style.Overflow = m_overflow;
+            slot.Layout = LayOutText(m_document, style);
+            slot.Width = maxWidth;
+            slot.Valid = true;
+            return slot.Layout;
         }
+
+        // One run's glyphs, slanted when its italic is synthesized and twice when its bold is; a run
+        // its font could not shape, as text.
+        void DrawRun(DrawContext& ctx, const LaidOutGlyphs& run, core::Float2 origin) const
+        {
+            vg::VGContext& g = ctx.VG();
+            if (run.Unshaped)
+            {
+                const core::StringView text = m_plain.AsView().SubStr(run.TextStart, run.TextEnd - run.TextStart);
+                g.DrawText(text, run.Font, core::Float2{origin.x + run.X, origin.y + run.Baseline}, run.TextColor);
+                return;
+            }
+            if (run.SyntheticItalic)
+            {
+                // Lean the glyphs about their baseline: x moves right by a fifth of the height above it.
+                g.PushState();
+                Float4x4 lean = Float4x4::Identity();
+                const f32 baseline = origin.y + run.Baseline;
+                lean.m[1][0] = -0.2f;
+                lean.m[3][0] = 0.2f * baseline;
+                g.SetTransform(lean * g.GetTransform());
+            }
+            g.DrawPositionedGlyphs(run.Glyphs, run.Font, origin.x, origin.y, run.TextColor);
+            if (run.SyntheticBold && !g.TextEffectsOnly()) // effects once, under both strokes
+                g.DrawPositionedGlyphs(run.Glyphs, run.Font, origin.x + core::Max(0.5f, run.Size / 24.0f), origin.y, run.TextColor);
+            if (run.SyntheticItalic)
+                g.PopState();
+        }
+
+        struct LayoutCache
+        {
+            TextLayout Layout;
+            f32 Width = 0.0f;
+            bool Valid = false;
+        };
 
         core::String m_string;
+        bool m_rich = false;
         fonts::CachedFont* m_font = nullptr; // non-owning (owned by the font service)
+        fonts::IFontService* m_fontService = nullptr;
+        IResourceProvider* m_resources = nullptr;
         Color m_color = Color::White;
         TextHAlign m_hAlign = TextHAlign::Left;
         TextVAlign m_vAlign = TextVAlign::Top;
-        bool m_wordWrap = false;
+        TextWhiteSpace m_whiteSpace = TextWhiteSpace::NoWrap;
+        f32 m_lineHeight = 0.0f;
+        f32 m_letterSpacing = 0.0f;
+        u32 m_maxLines = 0;
+        TextOverflow m_overflow = TextOverflow::Clip;
+
+        mutable bool m_synced = false;
+        mutable TextDocument m_document;
+        mutable core::String m_plain;
+        mutable LayoutCache m_cache[2];
+        mutable usize m_nextSlot = 0;
     };
 }

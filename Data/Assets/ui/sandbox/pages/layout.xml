@@ -1,6 +1,6 @@
 <Panel id="page-layout" class="page" gap="18">
     <Label class="page-title" text="Layout"/>
-    <Label class="page-lead" wrap="true"
+    <Label class="page-lead" white-space="normal"
            text="One measure-and-arrange protocol and a few layout kinds, chosen by display: flex, grid, stack and dock, with absolute placement on any of them. F9 shows every box, its padding, margins and text baselines."/>
 
     <Panel class="section" gap="10">

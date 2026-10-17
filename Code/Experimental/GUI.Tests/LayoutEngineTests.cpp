@@ -447,7 +447,7 @@ TEST_CASE("layout: a wrapping label wraps to the width it is given, and shrinks 
     auto column = Box(*bed.root.Get(), [](LayoutStyle& s) { s.Width = LayoutLength::Px(100.0f); });
     auto text = core::MakeRef<Label>(core::DefaultAllocator());
     text->SetFont(&font);
-    text->SetWordWrap(true);
+    text->SetWhiteSpace(TextWhiteSpace::Normal);
     text->SetText(SV(u8"aaaa bbbb cccc dddd")); // words of 24, a space 6: four words take 114
     column->AddChild(text.Get());
     bed.Layout();
@@ -457,7 +457,7 @@ TEST_CASE("layout: a wrapping label wraps to the width it is given, and shrinks 
     auto row = Box(*bed.root.Get(), [](LayoutStyle& s) { s.Direction = FlexDirection::Row; s.Width = LayoutLength::Px(60.0f); s.AlignItems = Align::Start; });
     auto squeezed = core::MakeRef<Label>(core::DefaultAllocator());
     squeezed->SetFont(&font);
-    squeezed->SetWordWrap(true);
+    squeezed->SetWhiteSpace(TextWhiteSpace::Normal);
     squeezed->SetText(SV(u8"aaaaaaaa bb"));
     row->AddChild(squeezed.Get());
     (void)Fixed(*row.Get(), 50.0f, 10.0f);
@@ -527,7 +527,7 @@ TEST_CASE("layout: a label's baseline follows its vertical alignment and its wra
     CHECK(label->BaselineAt(size) == doctest::Approx(38.0f - 2.0f)); // the descent above the bottom
     // Wrapped to two lines in 30 wide, centred: the block of 24 starts 6 down, its first line's
     // baseline 10 below that.
-    label->SetWordWrap(true);
+    label->SetWhiteSpace(TextWhiteSpace::Normal);
     label->SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
     CHECK(label->BaselineAt(core::Float2{34.0f, 40.0f}) == doctest::Approx(2.0f + 6.0f + 10.0f));
     // Any other node: the bottom of its content box.

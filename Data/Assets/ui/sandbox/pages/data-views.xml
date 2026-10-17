@@ -1,6 +1,6 @@
 <Panel id="page-data-views" class="page" gap="18">
     <Label class="page-title" text="Data views"/>
-    <Label class="page-lead" wrap="true"
+    <Label class="page-lead" white-space="normal"
            text="Views over models: they realise only the rows on screen, and follow the model when it changes. The models are native (a list, a table behind a sorting proxy, a tree)."/>
 
     <Panel class="section" gap="12">

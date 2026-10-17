@@ -65,6 +65,8 @@ export namespace experimental::gui
         // The press in progress was cancelled (a scroller began panning under a finger): no
         // release and no click follow; a widget drops what the press started.
         PointerCancel,
+        // A rich text's link was clicked (a LinkEvent, its id).
+        Link,
     };
 
     /// What drives the pointer: the mouse, or a finger (the first one down).
@@ -252,6 +254,14 @@ export namespace experimental::gui
             : Event(EventType::TextInput, target), Text(text)
         {
         }
+    };
+
+    /// A rich text's link, clicked: the id its markup gave it ([link=door]).
+    struct LinkEvent : Event
+    {
+        core::StringView Link;
+
+        LinkEvent(Node* target, core::StringView link) noexcept : Event(EventType::Link, target), Link(link) {}
     };
 
     struct DragEvent : Event

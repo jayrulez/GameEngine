@@ -311,6 +311,36 @@ Tests: a rule that stops matching restores every property it set, setters includ
 and the three keywords; each selector form; an unknown pseudo-class; parts with box and text
 properties; restyle counts for a hover with and without an ancestor-state rule.
 
+As built on `vg` (2026-10-17): selectors take `+` and `~`, the structural pseudo-classes with
+`:nth-child()` and `:nth-of-type()` (an+b), `:empty`, `:not()`, `:is()` and `:where()`, attribute
+tests against the id, the classes and reflected properties by CSS name, `:focus-within`,
+`:enabled`, and the widgets' own `:checked`, `:indeterminate`, `:read-only`, `:read-write` and
+`:placeholder-shown` (UIWidget::GetWidgetStates; CheckBox gains an indeterminate state, TextField
+a read-only one); matching backtracks; an unknown pseudo-class matches nothing; a change of
+children restyles the siblings (242d76f5c). The cascade orders by origin: the user agent's sheet,
+the GUI's, a subtree's (held weakly by its root, an inner over an outer), then the node's inline
+style, which markup's unclaimed attributes fill; the sandbox loads its theme as the user agent's
+and each page's sheet for its page (9ef0a66c2). A setter called from code pins its property as
+code's (UnpinStyle gives it back); the applier writes in a Node::StyleWriteScope; what no rule
+sets returns to the node's own value, its default (widgets write theirs in a scope) or what code
+set before a sheet first styled it (7729bbf84). Every node carries a text style (colour, font
+with family and size, alignment) that inherits, read by widgets through OnTextStyleChange; the
+SetTheme hooks are gone; the table marks the inherited properties; inherit, initial and unset
+work (1c0acc07b). A part's style is a box and an opacity, each aspect over the widget's own look
+(c86ac3372). A state change restyles the node alone unless a rule reads that state through an
+ancestor (its subtree) or a sibling (its later siblings) (ffa899849). Found on the way: a flex
+row clamped a non-stretched item's height to the row's (6e8bdd980). The Styling page shows the
+selectors, inheritance and parts (e0cb7daee).
+Left: parts take no motion (a transition or keyframes on `slider::thumb`) and no text
+properties; `inherit` on a property that does not inherit takes the parent's cascaded value, not
+its live one; a parent's animated colour reaches its children at their next restyle, not each
+frame; line-height, letter-spacing and white-space wait for E4's text, and visibility, though
+marked inherited, hides the subtree as before; a reflected property code set before a sheet first
+styled the node loses to the sheet (code is seen only by a value other than the sheet's last);
+attribute selectors read reflected properties, not arbitrary markup attributes; a class, id or
+tag change still restyles the subtree; when the pointer enters the window the root's hover flips,
+so a rule reading `:hover` through an ancestor restyles the whole tree once.
+
 ### E4 Text and editing
 
 Facts: the lab's `Text` is one font and one colour per string, measured unshaped, with word wrap

@@ -17,3 +17,8 @@
 .number { width: 130px; height: 30px; font-family: Roboto; font-size: 15px; padding-left: 8px; border-radius: 6; }
 .editable { width: 360px; height: 28px; padding-left: 6px; border-radius: 6; }
 .editable:hover { background-color: rgba(255, 255, 255, 0.05); }
+.exp { width: 590px; }
+.exp > expanderheader { height: 30px; padding-left: 4px; font-family: Roboto; font-size: 15px; border-radius: 6; }
+.exp > expanderheader:hover { background-color: rgba(255, 255, 255, 0.05); }
+.exp expandercontent { padding: 4px 0 8px 22px; gap: 4px; }
+.exp expandercontent > label { width: 560px; }

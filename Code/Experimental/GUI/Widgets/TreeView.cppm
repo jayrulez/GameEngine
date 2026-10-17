@@ -18,10 +18,10 @@ export module experimental.gui:tree_view;
 
 import foundation.core;  // RefPtr, MakeRef, Array, HashMap, Function, Move, Max, Float2
 import foundation.fonts; // CachedFont
-import foundation.vg;    // PathBuilder
 import :rect;
 import :event;
 import :draw_context;
+import :disclosure; // the chevron an expander draws too
 import :label;
 import :ui_widget;
 import :model_index;
@@ -31,7 +31,6 @@ import :abstract_item_view;
 using namespace foundation::core;
 namespace core = foundation::core;
 namespace fonts = foundation::fonts;
-namespace vg = foundation::vg;
 
 export namespace experimental::gui
 {
@@ -63,28 +62,7 @@ export namespace experimental::gui
             if (m_onClicked)
                 m_onClicked();
         }
-        void OnDraw(DrawContext& ctx, const Rect&) override
-        {
-            const Rect b = GetLocalBounds();
-            const f32 s = 4.0f; // half-size
-            const f32 cx = b.x + b.width * 0.5f;
-            const f32 cy = b.y + b.height * 0.5f;
-            vg::PathBuilder pb;
-            if (m_expanded)
-            {
-                pb.MoveTo(cx - s, cy - s * 0.5f);
-                pb.LineTo(cx + s, cy - s * 0.5f);
-                pb.LineTo(cx, cy + s * 0.75f);
-            }
-            else
-            {
-                pb.MoveTo(cx - s * 0.5f, cy - s);
-                pb.LineTo(cx + s * 0.75f, cy);
-                pb.LineTo(cx - s * 0.5f, cy + s);
-            }
-            pb.Close();
-            ctx.VG().FillPath(pb.ToPath(), m_color);
-        }
+        void OnDraw(DrawContext& ctx, const Rect&) override { DrawDisclosure(ctx, GetLocalBounds(), m_expanded, m_color); }
 
     private:
         bool m_expanded = false;

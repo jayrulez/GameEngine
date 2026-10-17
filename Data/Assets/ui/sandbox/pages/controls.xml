@@ -40,6 +40,20 @@
         </Panel>
     </Panel>
 
+    <Panel class="section" gap="6">
+        <Label class="section-title" text="Expanders"/>
+        <Expander class="exp" title="Open from markup" open="true">
+            <Label class="caption" white-space="normal" height="40" text="An expander is a header that shows or hides what is inside it, as HTML's details does; its header is a button, so the keyboard and the pad open it too."/>
+        </Expander>
+        <Expander class="exp" title="One of a group (animated)" name="faq" animate="true">
+            <Label class="caption" text="Expanders of one name open one at a time."/>
+            <Label class="caption" text="This one eases its height open and closed."/>
+        </Expander>
+        <Expander class="exp" title="The other of the group" name="faq" animate="true">
+            <Label class="caption" text="Opening this one closed the one above."/>
+        </Expander>
+    </Panel>
+
     <Panel class="section" gap="12">
         <Label class="section-title" text="Values"/>
         <Panel class="row" flex-direction="row" align-items="start" gap="12">

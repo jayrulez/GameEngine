@@ -157,7 +157,10 @@ namespace
         explicit AnimBed(const char8_t* css)
         {
             w->AddClass(core::StringView(u8"a"));
-            w->SetSize(core::Float2{100.0f, 50.0f});
+            {
+                Node::StyleWriteScope defaults(*w); // the widget's own size, which the sheet animates
+                w->SetSize(core::Float2{100.0f, 50.0f});
+            }
             root->AddChild(w.Get());
             mgr.SetStyleSheet(CSSParser::Parse(core::StringView(css)));
             mgr.ApplyTree(*root.Get());

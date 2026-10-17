@@ -38,6 +38,7 @@ export namespace experimental::gui
             SetTag(core::StringView(u8"listviewrow"));
             m_label = core::MakeRef<Label>(MemoryAllocator());
             m_label->SetTag(core::StringView(u8"listcell")); // container-owned, not a generic label
+            StyleWriteScope defaults(*m_label); // its own values, which a sheet returns to
             m_label->SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
             m_label->SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
             m_label->SetHitTestVisible(false);

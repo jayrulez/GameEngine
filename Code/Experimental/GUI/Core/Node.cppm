@@ -303,6 +303,7 @@ export namespace experimental::gui
             bool styleChanged = false;
             if (!IsBeingPlaced())
             {
+                PinStyle(SlotBit(SlotWidth) | SlotBit(SlotHeight));
                 const LayoutLength w = LayoutLength::Px(size.x);
                 const LayoutLength h = LayoutLength::Px(size.y);
                 styleChanged = !(m_layoutStyle.Width == w) || !(m_layoutStyle.Height == h);
@@ -372,6 +373,7 @@ export namespace experimental::gui
         // === Visibility / enabled / alpha ===
         void SetVisible(bool visible)
         {
+            PinStyle(SlotBit(SlotVisibility));
             if (visible == m_visible)
                 return;
             m_visible = visible;
@@ -388,6 +390,7 @@ export namespace experimental::gui
         /// a panel collapsed. Shown again, it takes back the display kind it had.
         void SetDisplayed(bool displayed)
         {
+            PinStyle(SlotBit(SlotDisplay));
             if (displayed == IsDisplayed())
                 return;
             if (displayed)
@@ -403,6 +406,7 @@ export namespace experimental::gui
         [[nodiscard]] bool IsDisplayed() const noexcept { return m_layoutStyle.Kind != Display::None; }
         void SetEnabled(bool enabled)
         {
+            PinStyle(SlotBit(SlotEnabled));
             if (enabled == m_enabled)
                 return;
             m_enabled = enabled;
@@ -416,6 +420,7 @@ export namespace experimental::gui
         }
         void SetAlpha(f32 alpha)
         {
+            PinStyle(SlotBit(SlotOpacity));
             m_alpha = alpha;
             Invalidate();
         }
@@ -614,10 +619,72 @@ export namespace experimental::gui
         // own children when its size changed or they did (OnLayout: by its display kind, or a
         // composite widget's own arrangement).
 
+        // === Code over the sheet (E3) ===
+        // A property a sheet sets through a setter (opacity, padding, the layout properties,
+        // enabled, visibility, the text properties) is code's once code sets it, as CSS's inline
+        // style: the setter pins it and the sheet leaves it be. What no rule sets returns to the
+        // node's own value: its default, or what code set before a sheet first styled it.
+
+        /// The node's own values, captured when a sheet first styles it.
+        struct UnstyledValues
+        {
+            bool Captured = false;
+            f32 Alpha = 1.0f;
+            Thickness Padding{};
+            LayoutStyle Layout{};
+            bool Visible = true;
+            bool Enabled = true;
+            bool ClipChildren = false;
+        };
+        /// While one lives, the node's setters write without pinning: what a sheet applies, and a
+        /// widget's defaults (set in its constructor, the values a sheet returns to).
+        class StyleWriteScope
+        {
+        public:
+            explicit StyleWriteScope(Node& node) noexcept : m_node(node), m_was(node.m_styleWriting) { node.m_styleWriting = true; }
+            ~StyleWriteScope() { m_node.m_styleWriting = m_was; }
+            StyleWriteScope(const StyleWriteScope&) = delete;
+            StyleWriteScope& operator=(const StyleWriteScope&) = delete;
+
+        private:
+            Node& m_node;
+            bool m_was;
+        };
+        /// Pins `slots` as code's (no-op while a StyleWriteScope lives).
+        void PinStyle(u64 slots) noexcept
+        {
+            if (!m_styleWriting)
+                m_stylePins |= slots;
+        }
+        /// Gives `slots` back to the sheet: the next restyle sets them, or returns them to the node's own value.
+        void UnpinStyle(u64 slots) noexcept
+        {
+            m_stylePins &= ~slots;
+            MarkStyleDirty(false);
+        }
+        [[nodiscard]] bool IsStylePinned(StyleSlot slot) const noexcept { return (m_stylePins & SlotBit(slot)) != 0; }
+        [[nodiscard]] u64 GetStylePins() const noexcept { return m_stylePins; }
+        /// Its own values, captured now unless they were already.
+        const UnstyledValues& CaptureUnstyledValues()
+        {
+            if (!m_unstyled.Captured)
+            {
+                m_unstyled.Captured = true;
+                m_unstyled.Alpha = m_alpha;
+                m_unstyled.Padding = m_padding;
+                m_unstyled.Layout = m_layoutStyle;
+                m_unstyled.Visible = m_visible;
+                m_unstyled.Enabled = m_enabled;
+                m_unstyled.ClipChildren = m_clipChildren;
+            }
+            return m_unstyled;
+        }
+
         [[nodiscard]] const LayoutStyle& GetLayoutStyle() const noexcept { return m_layoutStyle; }
         /// The layout style as a whole (a sheet's, or code's); lays out again.
         void SetLayoutStyle(const LayoutStyle& style)
         {
+            PinStyle(ChangedLayoutSlots(m_layoutStyle, style)); // from code: what it changed is its own
             m_layoutStyle = style;
             RequestBoxLayout();
         }
@@ -625,13 +692,15 @@ export namespace experimental::gui
         template <typename F>
         void EditLayoutStyle(F&& edit)
         {
-            edit(m_layoutStyle);
-            RequestBoxLayout();
+            LayoutStyle edited = m_layoutStyle;
+            edit(edited);
+            SetLayoutStyle(edited);
         }
 
         /// The space inside the border the content starts from.
         void SetPadding(Thickness padding)
         {
+            PinStyle(SlotBit(SlotPaddingTop) | SlotBit(SlotPaddingRight) | SlotBit(SlotPaddingBottom) | SlotBit(SlotPaddingLeft));
             m_padding = padding;
             RequestLayout();
             Invalidate();
@@ -640,6 +709,7 @@ export namespace experimental::gui
         /// The space outside the border its container keeps clear.
         void SetMargin(Thickness margin)
         {
+            PinStyle(SlotBit(SlotMarginTop) | SlotBit(SlotMarginRight) | SlotBit(SlotMarginBottom) | SlotBit(SlotMarginLeft));
             m_layoutStyle.Margin = margin;
             RequestBoxLayout();
         }
@@ -1191,6 +1261,7 @@ export namespace experimental::gui
         {
             if (!IsBeingPlaced())
             {
+                PinStyle(SlotBit(SlotPosition) | SlotBit(SlotLeft) | SlotBit(SlotTop) | SlotBit(SlotRight) | SlotBit(SlotBottom));
                 const bool wasInFlow = m_layoutStyle.Placement != Position::Absolute;
                 m_layoutStyle.Placement = Position::Absolute;
                 m_layoutStyle.Left = LayoutLength::Px(position.x);
@@ -1540,6 +1611,9 @@ export namespace experimental::gui
         core::String m_navOverrides[NavOverrideCount]; // nav-up and the rest: an id, none, or auto
         core::String m_keyContext;                     // for bindings (key-context)
         bool m_focused = false;
+        bool m_styleWriting = false; // a StyleWriteScope lives: setters do not pin
+        u64 m_stylePins = 0;         // the StyleSlots code set (they are its, over the sheet's)
+        UnstyledValues m_unstyled;
         u32 m_focusWithin = 0; // focused descendants (one at most; a count survives odd orders)
         bool m_focusVisible = false; // focused by the keyboard or a gamepad
         bool m_tabFocusable = false;

@@ -40,6 +40,7 @@ export namespace experimental::gui
         {
             SetTag(core::StringView(u8"tooltip"));
             SetHitTestVisible(false); // never steals pointer events
+            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
             SetPadding(Thickness{6.0f, 3.0f, 6.0f, 3.0f});
             SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_bgColor));
             m_text.SetAlignment(TextHAlign::Left, TextVAlign::Middle);

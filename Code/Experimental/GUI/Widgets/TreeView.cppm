@@ -104,6 +104,7 @@ export namespace experimental::gui
             AddChild(m_arrow.Get());
             m_label = core::MakeRef<Label>(MemoryAllocator());
             m_label->SetTag(core::StringView(u8"treecell"));
+            StyleWriteScope defaults(*m_label); // its own values, which a sheet returns to
             m_label->SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
             m_label->SetHitTestVisible(false);
             AddChild(m_label.Get());

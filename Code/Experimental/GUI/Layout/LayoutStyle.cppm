@@ -223,6 +223,106 @@ export namespace experimental::gui
         experimental::gui::Dock DockSide = experimental::gui::Dock::Fill;
     };
 
+    /// The properties a sheet may set through a node's setters, one bit each (E3): code that sets
+    /// one makes it its own, as CSS's inline style, and the sheet leaves it be (Node pins it).
+    enum StyleSlot : u32
+    {
+        SlotOpacity,
+        SlotPaddingTop, SlotPaddingRight, SlotPaddingBottom, SlotPaddingLeft,
+        SlotMarginTop, SlotMarginRight, SlotMarginBottom, SlotMarginLeft,
+        SlotWidth, SlotHeight, SlotMinWidth, SlotMinHeight, SlotMaxWidth, SlotMaxHeight,
+        SlotTop, SlotRight, SlotBottom, SlotLeft,
+        SlotFlexBasis, SlotFlexGrow, SlotFlexShrink, SlotOrder, SlotZIndex, SlotRowGap, SlotColumnGap,
+        SlotDisplay, SlotPosition, SlotBoxSizing, SlotOverflowX, SlotOverflowY,
+        SlotFlexDirection, SlotFlexWrap, SlotJustifyContent, SlotAlignContent, SlotAlignItems,
+        SlotJustifyItems, SlotAlignSelf, SlotJustifySelf, SlotGridAutoFlow, SlotDock,
+        SlotGridTemplateColumns, SlotGridTemplateRows, SlotGridAutoRows, SlotGridAutoColumns,
+        SlotGridColumn, SlotGridRow,
+        SlotEnabled, SlotVisibility,
+        SlotColor, SlotFontFamily, SlotFontSize, SlotTextAlign, SlotVerticalAlign,
+        SlotCount,
+    };
+    static_assert(SlotCount <= 64, "the pins are one u64");
+    [[nodiscard]] constexpr u64 SlotBit(StyleSlot slot) noexcept { return u64{1} << slot; }
+
+    /// Calls `f(slot, member)` for each LayoutStyle field a sheet sets as one property (the margin,
+    /// four properties in one field, is apart).
+    template <typename F>
+    constexpr void ForEachLayoutField(F&& f)
+    {
+        f(SlotWidth, &LayoutStyle::Width);
+        f(SlotHeight, &LayoutStyle::Height);
+        f(SlotMinWidth, &LayoutStyle::MinWidth);
+        f(SlotMinHeight, &LayoutStyle::MinHeight);
+        f(SlotMaxWidth, &LayoutStyle::MaxWidth);
+        f(SlotMaxHeight, &LayoutStyle::MaxHeight);
+        f(SlotTop, &LayoutStyle::Top);
+        f(SlotRight, &LayoutStyle::Right);
+        f(SlotBottom, &LayoutStyle::Bottom);
+        f(SlotLeft, &LayoutStyle::Left);
+        f(SlotFlexBasis, &LayoutStyle::Basis);
+        f(SlotFlexGrow, &LayoutStyle::Grow);
+        f(SlotFlexShrink, &LayoutStyle::Shrink);
+        f(SlotOrder, &LayoutStyle::Order);
+        f(SlotZIndex, &LayoutStyle::ZIndex);
+        f(SlotRowGap, &LayoutStyle::RowGap);
+        f(SlotColumnGap, &LayoutStyle::ColumnGap);
+        f(SlotDisplay, &LayoutStyle::Kind);
+        f(SlotPosition, &LayoutStyle::Placement);
+        f(SlotBoxSizing, &LayoutStyle::Sizing);
+        f(SlotOverflowX, &LayoutStyle::OverflowX);
+        f(SlotOverflowY, &LayoutStyle::OverflowY);
+        f(SlotFlexDirection, &LayoutStyle::Direction);
+        f(SlotFlexWrap, &LayoutStyle::Wrap);
+        f(SlotJustifyContent, &LayoutStyle::JustifyContent);
+        f(SlotAlignContent, &LayoutStyle::AlignContent);
+        f(SlotAlignItems, &LayoutStyle::AlignItems);
+        f(SlotJustifyItems, &LayoutStyle::JustifyItems);
+        f(SlotAlignSelf, &LayoutStyle::AlignSelf);
+        f(SlotJustifySelf, &LayoutStyle::JustifySelf);
+        f(SlotGridAutoFlow, &LayoutStyle::AutoFlow);
+        f(SlotDock, &LayoutStyle::DockSide);
+        f(SlotGridTemplateColumns, &LayoutStyle::Columns);
+        f(SlotGridTemplateRows, &LayoutStyle::Rows);
+        f(SlotGridAutoRows, &LayoutStyle::AutoRows);
+        f(SlotGridAutoColumns, &LayoutStyle::AutoColumns);
+        f(SlotGridColumn, &LayoutStyle::Column);
+        f(SlotGridRow, &LayoutStyle::Row);
+    }
+    namespace detail
+    {
+        template <typename T>
+        [[nodiscard]] constexpr bool SameField(const T& a, const T& b)
+        {
+            if constexpr (requires { a.Size(); a[0]; })
+            {
+                if (a.Size() != b.Size())
+                    return false;
+                for (usize i = 0; i < a.Size(); ++i)
+                    if (!(a[i] == b[i]))
+                        return false;
+                return true;
+            }
+            else
+                return a == b;
+        }
+    }
+    /// The slots whose values differ between two layout styles.
+    [[nodiscard]] inline u64 ChangedLayoutSlots(const LayoutStyle& a, const LayoutStyle& b)
+    {
+        u64 bits = 0;
+        ForEachLayoutField([&](StyleSlot slot, auto member)
+        {
+            if (!detail::SameField(a.*member, b.*member))
+                bits |= SlotBit(slot);
+        });
+        if (a.Margin.Top != b.Margin.Top) bits |= SlotBit(SlotMarginTop);
+        if (a.Margin.Right != b.Margin.Right) bits |= SlotBit(SlotMarginRight);
+        if (a.Margin.Bottom != b.Margin.Bottom) bits |= SlotBit(SlotMarginBottom);
+        if (a.Margin.Left != b.Margin.Left) bits |= SlotBit(SlotMarginLeft);
+        return bits;
+    }
+
     /// What a GUI's layout overlay shows over its tree, for working on a layout: each node's border
     /// box (red outline), its padding (green) and margin (orange), and where it reports a baseline
     /// of its own, the baseline (magenta).

@@ -313,16 +313,14 @@ export namespace experimental::gui
             }
             ResolvedStyle effective = m_targetStyle;
             const StyleInterpolationContext ctx = InterpolationContext();
+            // A track in its delay or past its end shows the target: the sheet's value, or the node's
+            // own when the sheet sets none (the applier returns it there).
             for (const AnimationTrack& track : m_tracks)
             {
                 StyleValue value;
                 if (track.ValueNow(value, &ctx))
                     effective.Override(track.Property.AsView(), value);
-                else
-                    ResetToInitial(effective, track.Property.AsView()); // its delay or after its end
             }
-            for (const core::String& property : m_resets)
-                ResetToInitial(effective, property.AsView());
             m_resets.Clear();
             ApplyStyle(*node, effective, m_context.Resources, m_context.FontService, m_context.Lengths);
         }
@@ -369,19 +367,6 @@ export namespace experimental::gui
             if (UINode* node = m_node.Get())
                 ctx.BoxSize = node->GetSize();
             return ctx;
-        }
-
-        // A property the target does not set takes its initial value (when the table gives one).
-        void ResetToInitial(ResolvedStyle& effective, core::StringView property) const
-        {
-            if (m_targetStyle.Value(property) != nullptr)
-                return;
-            const StylePropertySpec* spec = FindStyleProperty(property);
-            if (spec == nullptr || spec->Initial == nullptr)
-                return;
-            StyleValue initial;
-            if (ParseStyleValue(spec->Grammar, core::StringView(spec->Initial), initial))
-                effective.Override(property, initial);
         }
 
         static void SortKeys(Array<AnimationKey>& keys)

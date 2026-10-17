@@ -34,6 +34,7 @@ export namespace experimental::gui
         Button()
         {
             SetTag(core::StringView(u8"button")); // CSS `button { ... }` targets it by default
+            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
             SetTextAlignment(TextHAlign::Center, TextVAlign::Middle);
             SetTabFocusable(true);
         }

@@ -29,7 +29,10 @@ namespace
         explicit Bed(const char8_t* css)
         {
             widget->SetTag(SV(u8"box"));
-            widget->SetSize(core::Float2{100.0f, 50.0f});
+            {
+                Node::StyleWriteScope defaults(*widget); // the widget's own size, which the sheet animates
+                widget->SetSize(core::Float2{100.0f, 50.0f});
+            }
             root->AddChild(widget.Get());
             styles.SetStyleSheet(CSSParser::Parse(SV(css)));
             styles.ApplyTree(*root);

@@ -37,6 +37,7 @@ export namespace experimental::gui
         {
             SetTag(core::StringView(u8"tabwidget"));
             m_tabBar = core::MakeRef<Panel>(MemoryAllocator());
+            StyleWriteScope defaults(*m_tabBar); // its own values, which a sheet returns to
             m_tabBar->EditLayoutStyle(
                 [](LayoutStyle& s)
                 {

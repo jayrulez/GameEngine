@@ -65,7 +65,11 @@ export namespace experimental::gui
     {
         RTTI_OBJECT(ListBoxItem, Label)
     public:
-        ListBoxItem() { SetTextAlignment(TextHAlign::Left, TextVAlign::Middle); }
+        ListBoxItem()
+        {
+            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
+            SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
+        }
 
         void SetIndex(i32 index) noexcept { m_index = index; }
         [[nodiscard]] i32 GetIndex() const noexcept { return m_index; }
@@ -116,6 +120,7 @@ export namespace experimental::gui
             // whatever is behind it. Override with SetBackground for a themed look.
             SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_panelColor));
             // Its rows stacked in a column, as wide as the list, scrolling when they overflow it.
+            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
             EditLayoutStyle([](LayoutStyle& s) { s.OverflowY = Overflow::Auto; });
         }
 
@@ -142,6 +147,7 @@ export namespace experimental::gui
             item->SetFont(m_font);
             item->SetTextColor(m_textColor);
             item->SetHighlightColor(m_highlightColor);
+            StyleWriteScope defaults(*item); // its own values, which a sheet returns to
             item->SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
             item->SetIndex(static_cast<i32>(m_items.Size()));
             ListBox* self = this;

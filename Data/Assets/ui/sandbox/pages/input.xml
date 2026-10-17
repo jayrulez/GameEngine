@@ -68,6 +68,21 @@
                 <Panel id="dnd-hidden" class="dnd-bin"><Label class="dnd-bin-title" text="A pile behind an expander"/></Panel>
             </Expander>
         </Panel>
-        <Label id="dnd-said" class="caption" text="Drag a card past a few pixels; Escape or a right click cancels. From the keys: focus a card, Ctrl+Shift+D (the pad's North), Tab to a pile, Return (South)."/>
+        <Label id="dnd-said" class="caption" white-space="normal" height="40" text="Drag a card past a few pixels; Escape or a right click cancels. From the keys: focus a card, Ctrl+Shift+D (the pad's North), Tab to a pile, Return (South)."/>
+    </Panel>
+
+    <Panel class="section" gap="12">
+        <Label class="section-title" text="Drag and drop in markup and script"/>
+        <Panel class="dnd-row" flex-direction="row" align-items="start" gap="12">
+            <Panel gap="6">
+                <Label class="swatch swatch-red" text="Red" drag-type="color" drag-value="red"/>
+                <Label class="swatch swatch-green" text="Green" drag-type="color" drag-value="green"/>
+                <Label class="swatch swatch-blue" text="Blue" drag-type="color" drag-value="blue"/>
+            </Panel>
+            <Panel id="input-canvas" class="dnd-bin canvas" drop-types="color" drop-reason="Paint the canvas">
+                <Label class="dnd-bin-title" text="Painted: {{paint}}"/>
+            </Panel>
+        </Panel>
+        <Label class="caption" white-space="normal" height="40" text="The swatches are sources in markup (drag-type, drag-value), the canvas a target (drop-types, drop-reason); its script hears the drop."/>
     </Panel>
 </Panel>

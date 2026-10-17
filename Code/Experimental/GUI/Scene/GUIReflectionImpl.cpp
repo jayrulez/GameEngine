@@ -79,6 +79,10 @@ namespace experimental::gui
                 {u8"scroll", EventType::Scroll},
                 {u8"tabclose", EventType::TabClose},
                 {u8"activate", EventType::ItemActivate},
+                {u8"dragstart", EventType::DragStart},  {u8"dragend", EventType::DragEnd},
+                {u8"dragenter", EventType::DragEnter},  {u8"dragover", EventType::DragOver},
+                {u8"dragleave", EventType::DragLeave},  {u8"drop", EventType::Drop},
+                {u8"dragquery", EventType::DragQuery},
             };
             for (const Named& entry : kNames)
             {
@@ -164,6 +168,25 @@ namespace experimental::gui
                 break;
             }
             case EventType::TabClose: out.index = static_cast<const TabEvent&>(event).Index; break;
+            case EventType::DragStart:
+            case EventType::DragEnd:
+            case EventType::DragEnter:
+            case EventType::DragOver:
+            case EventType::DragLeave:
+            case EventType::Drop:
+            case EventType::DragQuery:
+            {
+                const DragEvent& drag = static_cast<const DragEvent&>(event);
+                place(drag.Position); // the root's space: as a pointer's
+                static constexpr const char8_t* kEffects[] = {u8"none", u8"copy", u8"move", u8"link"};
+                out.dragType = drag.Payload.Type;
+                out.effect = core::String(kEffects[static_cast<usize>(drag.Effect)]);
+                const core::String* value = drag.Payload.Value.TryGet<core::String>();
+                out.text = value != nullptr ? *value : drag.Payload.Label;
+                out.index = drag.Place;
+                out.modifiers = static_cast<i32>(drag.Modifiers);
+                break;
+            }
             case EventType::ItemActivate: out.index = static_cast<const ItemEvent&>(event).Item; break;
             default: break;
             }
@@ -624,6 +647,8 @@ namespace experimental::gui
             .Property<&GuiEvent::deltaY>("deltaY")
             .Property<&GuiEvent::index>("index")
             .Property<&GuiEvent::id>("id")
+            .Property<&GuiEvent::dragType>("dragType")
+            .Property<&GuiEvent::effect>("effect")
             // Constructible, so both languages take it by value and Luau binds it (a type a script
             // can make is one it can be handed).
             .Constructor<>();
@@ -636,6 +661,7 @@ namespace experimental::gui
         builder.AccessorProperty<&Node::GetWidth, &Node::SetWidth>("width");
         builder.AccessorProperty<&Node::GetHeight, &Node::SetHeight>("height");
         builder.AccessorProperty<&Node::IsVisible, &Node::SetVisible>("visible"); // hidden keeps its place
+        builder.AccessorProperty<&Node::GetDropTypes, &Node::SetDropTypes>("dropTypes").PropAttribute("css", core::String(u8"drop-types"));
         builder.AccessorProperty<&Node::IsDisplayed, &Node::SetDisplayed>("displayed"); // out of the layout when false
         builder.AccessorProperty<&Node::IsEnabled, &Node::SetEnabled>("enabled");
         builder.AccessorProperty<&Node::GetAlpha, &Node::SetAlpha>("opacity");
@@ -683,6 +709,11 @@ namespace experimental::gui
         builder.AccessorProperty<&UIWidget::GetTooltipText, &UIWidget::SetTooltip>("tooltip").PropAttribute("css", core::String(u8"tooltip"));
         builder.AccessorProperty<&UIWidget::GetContextMenuId, &UIWidget::SetContextMenuId>("contextMenu")
             .PropAttribute("css", core::String(u8"context-menu"));
+        builder.AccessorProperty<&UIWidget::GetDragType, &UIWidget::SetDragType>("dragType").PropAttribute("css", core::String(u8"drag-type"));
+        builder.AccessorProperty<&UIWidget::GetDragValue, &UIWidget::SetDragValue>("dragValue").PropAttribute("css", core::String(u8"drag-value"));
+        builder.AccessorProperty<&UIWidget::GetDragLabel, &UIWidget::SetDragLabel>("dragLabel").PropAttribute("css", core::String(u8"drag-label"));
+        builder.AccessorProperty<&UIWidget::GetDragModeName, &UIWidget::SetDragModeName>("drag").PropAttribute("css", core::String(u8"drag"));
+        builder.AccessorProperty<&UIWidget::GetDropReason, &UIWidget::SetDropReason>("dropReason").PropAttribute("css", core::String(u8"drop-reason"));
         builder.Method<&UIWidget::AddClass>("addClass");
         builder.Method<&UIWidget::RemoveClass>("removeClass");
         builder.Method<&UIWidget::HasClass>("hasClass");
@@ -1072,7 +1103,6 @@ namespace experimental::gui
         builder.AccessorProperty<&ItemView::GetLayoutModeName, &ItemView::SetLayoutModeName>("layout").PropAttribute("css", core::String(u8"layout"));
         builder.AccessorProperty<&ItemView::GetCellWidth, &ItemView::SetCellWidth>("cellWidth").PropAttribute("css", core::String(u8"cell-width"));
         builder.AccessorProperty<&ItemView::GetCellHeight, &ItemView::SetCellHeight>("cellHeight").PropAttribute("css", core::String(u8"cell-height"));
-        builder.AccessorProperty<&ItemView::GetDragType, &ItemView::SetDragType>("dragType").PropAttribute("css", core::String(u8"drag-type"));
         builder.Method<&ItemView::BeginEdit>("beginEdit");
         builder.Method<&ItemView::SelectAll>("selectAll");
         builder.Method<&ItemView::ClearSelection>("clearSelection");

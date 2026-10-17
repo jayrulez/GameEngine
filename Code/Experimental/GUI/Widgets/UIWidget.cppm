@@ -107,6 +107,34 @@ export namespace experimental::gui
             return m_tooltip.AsView();
         }
 
+        // === Drag and drop in markup (E7) ===
+        /// Drags as this payload type (markup's `drag-type`; empty: it does not drag).
+        void SetDragType(const core::String& type) { m_dragType = type; }
+        [[nodiscard]] core::String GetDragType() const { return m_dragType; }
+        /// The payload's value and label (`drag-value`, which may be a `{{name}}`; `drag-label`,
+        /// else the value).
+        void SetDragValue(const core::String& value) { m_dragValue = value; }
+        [[nodiscard]] core::String GetDragValue() const { return m_dragValue; }
+        void SetDragLabel(const core::String& label) { m_dragLabel = label; }
+        [[nodiscard]] core::String GetDragLabel() const { return m_dragLabel; }
+        /// `drag`: "auto" (it drags when it has a type, else passes the press up), "none" (it never
+        /// drags; the press passes up), "block" (the walk ends here: nothing above drags from a
+        /// press on it; RmlUi's property).
+        void SetDragModeName(const core::String& mode)
+        {
+            const core::StringView m = core::Trim(mode.AsView());
+            m_dragMode = m == core::StringView(u8"none") ? 1 : m == core::StringView(u8"block") ? 2 : 0;
+        }
+        [[nodiscard]] core::String GetDragModeName() const
+        {
+            return core::String(m_dragMode == 1 ? core::StringView(u8"none") : m_dragMode == 2 ? core::StringView(u8"block") : core::StringView(u8"auto"));
+        }
+        /// What a drop here says it would do (`drop-reason`), shown by the pointer while it would
+        /// take one.
+        void SetDropReason(const core::String& reason) { m_dropReason = reason; }
+        [[nodiscard]] core::String GetDropReason() const { return m_dropReason; }
+        [[nodiscard]] bool OwnsPressDrag(core::Float2 local) const override { return m_dragMode == 2 || UINode::OwnsPressDrag(local); }
+
         // === Context menu ===
         /// The id of a Menu in its GUI (markup's `<Menu id="...">`) that a context menu asked for
         /// over it opens, at the pointer (markup's `context-menu`).
@@ -118,6 +146,24 @@ export namespace experimental::gui
         [[nodiscard]] core::String GetContextMenuId() const { return m_contextMenuId; }
 
     protected:
+        bool OnDragRequested(DragRequest& request) override
+        {
+            if (m_dragMode != 0 || m_dragType.IsEmpty())
+                return false;
+            request.Payload.Type = m_dragType;
+            request.Payload.Value = core::Variant::From<core::String>(m_dragValue);
+            request.Payload.Label = m_dragLabel.IsEmpty() ? m_dragValue : m_dragLabel;
+            return true;
+        }
+        void OnDragQuery(DropQuery& query) override
+        {
+            UINode::OnDragQuery(query);
+            if (query.Effect == DropEffect::None && !query.Refused && TakesDropType(query.Payload.Type.AsView()) && !m_dropReason.IsEmpty())
+            {
+                query.Accept();
+                query.Reason = m_dropReason;
+            }
+        }
         void OnContextMenu(const MouseEvent& event) override
         {
             if (!m_contextMenuId.IsEmpty() && OpenContextMenu(event))
@@ -135,6 +181,11 @@ export namespace experimental::gui
         Array<core::String> m_classes;
         core::String m_tooltip;
         core::String m_contextMenuId;
+        core::String m_dragType;
+        core::String m_dragValue;
+        core::String m_dragLabel;
+        core::String m_dropReason;
+        u8 m_dragMode = 0; // auto, none, block
         core::RefPtr<Node> m_contextMenu; // the menu it opens, once found
     };
 

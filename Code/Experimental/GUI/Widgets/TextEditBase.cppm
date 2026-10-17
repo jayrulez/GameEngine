@@ -254,6 +254,9 @@ export namespace experimental::gui
         [[nodiscard]] virtual Rect PlaceholderBounds(const Rect& content) const { return content; }
         /// Whether it masks its text (a password: a bullet for each character).
         [[nodiscard]] virtual bool IsMasked() const { return false; }
+        /// The text is about to commit (Return, focus leaving): a field that reads it as something
+        /// (a number field's expression) settles it here, SetText making its own the committed value.
+        virtual void OnCommitting() {}
 
         // === For a widget built on it ===
         [[nodiscard]] const Text& ShownText() const noexcept { return m_text; }
@@ -613,6 +616,7 @@ export namespace experimental::gui
         // The value commits: reported once for each new value.
         void Commit()
         {
+            OnCommitting();
             if (m_model.GetText() == m_committed.AsView())
                 return;
             m_committed = core::String(m_model.GetText());

@@ -19,6 +19,7 @@ add_executable(GUI.Tests
     TextRunsTests.cpp
     TextLayoutTests.cpp
     EditingTests.cpp
+    TextEditModelTests.cpp
     ModelTests.cpp
     WidgetTests.cpp
     StyleSelectorTests.cpp

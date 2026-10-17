@@ -59,8 +59,11 @@ export import :node_box;
 export import :text;
 export import :text_runs;
 export import :text_layout;
+export import :text_segmentation;
 export import :undo_stack;
 export import :input_filter;
+export import :text_edit_model;
+export import :text_editing_keys;
 
 // Widget base (Phase 5)
 export import :ui_node;

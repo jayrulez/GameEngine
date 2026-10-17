@@ -23,6 +23,11 @@ target_sources(GUI
             Scene/ActionManager.cppm
             Scene/Actions.cppm
             Scene/Keymap.cppm
+            Text/TextSegmentation.cppm
+            Editing/UndoStack.cppm
+            Editing/InputFilter.cppm
+            Editing/TextEditModel.cppm
+            Editing/TextEditingKeys.cppm
             Scene/Navigation.cppm
             Scene/EventDispatcher.cppm
             Scene/ElementTypes.cppm
@@ -45,8 +50,6 @@ target_sources(GUI
             Text/Text.cppm
             Text/TextRuns.cppm
             Text/TextLayout.cppm
-            Editing/UndoStack.cppm
-            Editing/InputFilter.cppm
             Model/Variant.cppm
             Model/ModelIndex.cppm
             Model/Model.cppm

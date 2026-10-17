@@ -57,6 +57,32 @@
     </Panel>
 
     <Panel class="section" gap="12">
+        <Label class="section-title" text="Scrolling"/>
+        <Panel class="scroll-row" flex-direction="row" align-items="start" gap="16">
+            <ScrollView id="controls-smooth" class="scroll-demo smooth">
+            <Label class="scroll-line" text="Line 1 of a smooth list"/>
+            <Label class="scroll-line" text="Line 2 of a smooth list"/>
+            <Label class="scroll-line" text="Line 3 of a smooth list"/>
+            <Label class="scroll-line" text="Line 4 of a smooth list"/>
+            <Label class="scroll-line" text="Line 5 of a smooth list"/>
+            <Label class="scroll-line" text="Line 6 of a smooth list"/>
+            <Label class="scroll-line" text="Line 7 of a smooth list"/>
+            <Label class="scroll-line" text="Line 8 of a smooth list"/>
+            <Label class="scroll-line" text="Line 9 of a smooth list"/>
+            <Label class="scroll-line" text="Line 10 of a smooth list"/>
+            <Label class="scroll-line" text="Line 11 of a smooth list"/>
+            <Label class="scroll-line" text="Line 12 of a smooth list"/>
+            </ScrollView>
+            <ScrollView id="controls-log" class="scroll-demo" stick-to-end="true">
+                <Label class="scroll-line" text="The log keeps to its newest line"/>
+            </ScrollView>
+            <Button id="controls-log-add" class="btn" text="Add a line" repeat="true"/>
+        </Panel>
+        <Label class="caption" white-space="normal" height="40"
+               text="Left: the wheel eases (scroll-behavior: smooth) and thin bars show while it scrolls or is hovered. Right: a log that follows its end until you scroll up, and again once you are back."/>
+    </Panel>
+
+    <Panel class="section" gap="12">
         <Label class="section-title" text="Text input"/>
         <TextField id="controls-field" class="field" placeholder="Type here: select, Ctrl+C/V..." max-length="32"/>
         <Label id="controls-echo" class="caption"/>

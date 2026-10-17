@@ -9,3 +9,7 @@
 .vslider { width: 26px; height: 130px; }
 .ranges { width: 200px; height: 80px; }
 .ranges-row { width: 590px; }
+.scroll-row { width: 590px; }
+.scroll-demo { width: 220px; height: 120px; padding: 6px; border-radius: 6; }
+.smooth { scroll-behavior: smooth; scrollbar-width: thin; scrollbar-visibility: overlay; }
+.scroll-line { width: 200px; height: 22px; font-family: Roboto; font-size: 14px; color: var(--ink); }

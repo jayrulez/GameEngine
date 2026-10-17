@@ -137,4 +137,22 @@ export namespace experimental::gui
         core::String m_contextMenuId;
         core::RefPtr<Node> m_contextMenu; // the menu it opens, once found
     };
+
+    /// Where markup's children land for a widget that takes them in its own way (a menu's items,
+    /// a tree's items): unseen and out of the tree, each handed to `adopt` as it arrives, which
+    /// takes it out.
+    class MarkupChildHost : public UIWidget
+    {
+        RTTI_OBJECT(MarkupChildHost, UIWidget)
+    public:
+        explicit MarkupChildHost(core::Function<void(Node&)> adopt) : m_adopt(core::Move(adopt)) { SetDisplayed(false); }
+        void OnChildrenChanged() override
+        {
+            if (m_adopt && ChildCount() != 0)
+                m_adopt(*this);
+        }
+
+    private:
+        core::Function<void(Node&)> m_adopt;
+    };
 }

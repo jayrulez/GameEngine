@@ -74,6 +74,7 @@ add_executable(GUI.Tests
     DragDropTests.cpp
     ThemeTests.cpp
     KeyframesTests.cpp
+    MarkupCoverageTests.cpp
     MarkupTests.cpp)
 
 target_link_libraries(GUI.Tests PRIVATE

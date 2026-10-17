@@ -91,6 +91,46 @@ export namespace experimental::gui
 
         void SetMessageColor(Color color) { m_message->SetTextColor(color); }
 
+        // === Markup ===
+        // `<MessageBox id="confirm" title="Delete?" text="..." buttons="ok-cancel"/>` waits in its
+        // page, unseen, until shown (Show, a script's show()); answered, it goes back there, its
+        // `result` the answer, reported as `change`.
+        bool SetMarkupAttribute(core::StringView name, core::StringView value) override
+        {
+            if (name == core::StringView(u8"text"))
+            {
+                m_message->SetText(value);
+                LayoutContent();
+                return true;
+            }
+            if (name == core::StringView(u8"buttons"))
+            {
+                const core::StringView v = core::Trim(value);
+                BuildButtons(v == core::StringView(u8"ok-cancel") ? Buttons::OkCancel : v == core::StringView(u8"yes-no") ? Buttons::YesNo : Buttons::Ok);
+                LayoutContent();
+                if (!IsOpen())
+                    SetDisplayed(false); // written in a page: unseen until shown
+                return true;
+            }
+            return Window::SetMarkupAttribute(name, value);
+        }
+        /// Shows it as a modal dialog over the GUI it is in (it comes back to where it was).
+        void Show()
+        {
+            if (IsOpen())
+                return;
+            Node* root = GetRootNode();
+            if (Node* home = GetParent())
+            {
+                m_home = core::RefPtr<Node>(home);
+                m_homeIndex = home->GetChildIndex(this);
+            }
+            SetDisplayed(true);
+            OpenModal(*root);
+        }
+        /// The last answer: "ok", "cancel", "yes" or "no" (empty: none yet).
+        [[nodiscard]] core::String GetResultName() const { return m_resultName; }
+
         [[nodiscard]] core::StringView GetMessage() const { return m_message->GetText(); }
         [[nodiscard]] usize ButtonCount() const noexcept { return m_buttons.Size(); }
         [[nodiscard]] Button* ButtonAt(usize index) const
@@ -163,9 +203,23 @@ export namespace experimental::gui
 
         void Finish(Result result)
         {
+            static constexpr core::StringView kNames[] = {u8"ok", u8"cancel", u8"yes", u8"no"};
+            m_resultName = core::String(kNames[static_cast<usize>(result)]);
             if (m_onResult)
                 m_onResult(result);
             Close();
+            SendEvent(Event(EventType::Changed, this));
+        }
+        // Shown from a page: back there, unseen.
+        void OnWindowClosed() override
+        {
+            if (!m_home)
+                return;
+            core::RefPtr<Node> home = core::Move(m_home);
+            core::RefPtr<Node> keep(this);
+            SetDisplayed(false);
+            if (GetParent() != home.Get())
+                home->AddChildAt(this, core::Min(m_homeIndex, home->ChildCount()));
         }
 
         void LayoutContent()
@@ -199,6 +253,9 @@ export namespace experimental::gui
         Array<RefPtr<Button>> m_buttons;
         Array<Result> m_results; // each button's, in order
         core::Function<void(Result)> m_onResult;
+        core::String m_resultName;
+        core::RefPtr<Node> m_home; // the page it was shown from, while it is open
+        usize m_homeIndex = 0;
 
         static constexpr f32 kPad = 16.0f;
         static constexpr f32 kButtonWidth = 84.0f;
@@ -206,5 +263,4 @@ export namespace experimental::gui
         static constexpr f32 kButtonGap = 10.0f;
     };
 
-    RTTI_DEFINE_OBJECT(MessageBox, "rtti::gui")
 }

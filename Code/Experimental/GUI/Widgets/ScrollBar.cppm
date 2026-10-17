@@ -51,6 +51,15 @@ export namespace experimental::gui
             Invalidate();
         }
         [[nodiscard]] Orientation GetOrientation() const noexcept { return m_orientation; }
+        /// "horizontal" or "vertical" (markup's `orientation`).
+        void SetOrientationName(const core::String& name)
+        {
+            SetOrientation(core::Trim(name.AsView()) == core::StringView(u8"vertical") ? Orientation::Vertical : Orientation::Horizontal);
+        }
+        [[nodiscard]] core::String GetOrientationName() const
+        {
+            return core::String(m_orientation == Orientation::Vertical ? core::StringView(u8"vertical") : core::StringView(u8"horizontal"));
+        }
 
         /// The visible part: the thumb's share of the range, and a track press's step.
         [[nodiscard]] f64 GetPage() const noexcept { return GetPageSize(); }
@@ -184,5 +193,4 @@ export namespace experimental::gui
         static constexpr f32 kMinThumb = 16.0f;
     };
 
-    RTTI_DEFINE_OBJECT(ScrollBar, "rtti::gui")
 }

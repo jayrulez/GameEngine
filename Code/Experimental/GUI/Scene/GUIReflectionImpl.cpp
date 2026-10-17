@@ -550,6 +550,8 @@ namespace experimental::gui
                 &Tab::StaticType(),            &TabBar::StaticType(),        &TabPage::StaticType(),
                 &TabView::StaticType(),        &ListView::StaticType(),      &Menu::StaticType(),
                 &MenuItem::StaticType(),       &MenuSeparator::StaticType(), &MenuBar::StaticType(),
+                &TreeView::StaticType(),       &TreeItem::StaticType(),      &TableView::StaticType(),
+                &TableItem::StaticType(),      &ScrollBar::StaticType(),     &MessageBox::StaticType(),
             };
             for (const TypeInfo* type : kLabElements)
                 (void)ElementTypes::Register(*type);
@@ -938,6 +940,58 @@ namespace experimental::gui
             .PropAttribute("css", core::String(u8"object-position"));
         builder.AccessorProperty<&Image::GetImageColor, &Image::SetImageColor>("imageColor").PropAttribute("css", core::String(u8"image-color"));
         builder.Method<&ElementOf<Image>, Image, Node>("of");
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(MarkupChildHost, "rtti::gui")
+    {
+    }
+
+    REFLECT_MEMBERS(TreeItem, "rtti::gui")
+    {
+        builder.AccessorProperty<&TreeItem::GetText, &TreeItem::SetText>("text");
+        builder.AccessorProperty<&TreeItem::IsExpanded, &TreeItem::SetExpanded>("expanded").PropAttribute("css", core::String(u8"expanded"));
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(TreeView, "rtti::gui")
+    {
+        builder.Method<&TreeView::ExpandItem>("expandItem");
+        builder.Method<&TreeView::CollapseItem>("collapseItem");
+        builder.Method<&ElementOf<TreeView>, TreeView, Node>("of");
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(TableItem, "rtti::gui")
+    {
+        builder.AccessorProperty<&TableItem::GetCells, &TableItem::SetCells>("cells");
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(TableView, "rtti::gui")
+    {
+        builder.AccessorProperty<&TableView::GetColumnsText, &TableView::SetColumnsText>("columns").PropAttribute("css", core::String(u8"columns"));
+        builder.AccessorProperty<&TableView::GetColumnWidthsText, &TableView::SetColumnWidthsText>("columnWidths")
+            .PropAttribute("css", core::String(u8"column-widths"));
+        builder.AccessorProperty<&TableView::IsEditable, &TableView::SetEditable>("editable").PropAttribute("css", core::String(u8"editable"));
+        builder.Method<&ElementOf<TableView>, TableView, Node>("of");
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(ScrollBar, "rtti::gui")
+    {
+        builder.AccessorProperty<&ScrollBar::GetPage, &ScrollBar::SetPage>("page").PropAttribute("css", core::String(u8"page"));
+        builder.AccessorProperty<&ScrollBar::GetOrientationName, &ScrollBar::SetOrientationName>("orientation")
+            .PropAttribute("css", core::String(u8"orientation"));
+        builder.Method<&ElementOf<ScrollBar>, ScrollBar, Node>("of");
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(MessageBox, "rtti::gui")
+    {
+        builder.ComputedProperty<&MessageBox::GetResultName>("result");
+        builder.Method<&MessageBox::Show>("show");
+        builder.Method<&ElementOf<MessageBox>, MessageBox, Node>("of");
         builder.Creator();
     }
 

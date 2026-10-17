@@ -184,6 +184,8 @@ export namespace experimental::gui
         }
 
     protected:
+        /// It closed (a dialog written in a page goes back there).
+        virtual void OnWindowClosed() {}
         void OnSizeChange() override { Relayout(); }
         // Its title takes its font (a sheet's inheritance gives the same).
         void OnTextStyleChange() override { ShareTextStyle(*m_title, false); }
@@ -230,6 +232,7 @@ export namespace experimental::gui
         {
             m_open = false;
             m_modal = false;
+            OnWindowClosed();
             if (m_onClose)
                 m_onClose();
         }

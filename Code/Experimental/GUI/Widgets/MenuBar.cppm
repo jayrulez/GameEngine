@@ -106,7 +106,7 @@ export namespace experimental::gui
             if (!m_markupHost)
             {
                 MenuBar* self = this;
-                m_markupHost = core::MakeRef<MenuChildHost>(MemoryAllocator(), [self](Node& host)
+                m_markupHost = core::MakeRef<MarkupChildHost>(MemoryAllocator(), [self](Node& host)
                 {
                     while (host.ChildCount() != 0)
                     {

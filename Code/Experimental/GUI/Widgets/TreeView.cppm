@@ -8,7 +8,8 @@
 // its indent, a disclosure chevron (the expander's) that opens and closes it, and its text.
 // Expansion is a set of node ids, as the selection is, so both survive the flattening; closing a
 // node that holds the selection selects the node. Right opens a node (or goes to its first
-// child), Left closes it (or goes to its parent).
+// child), Left closes it (or goes to its parent). In markup its children are nested
+// `<TreeItem text="..." expanded="true">`s, which become a model of its own.
 
 module;
 #include "Core/Prelude.h"
@@ -29,6 +30,7 @@ import :layout_style;
 import :model_index;
 import :model;
 import :item_view;
+import :tree_model;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -121,6 +123,33 @@ export namespace experimental::gui
         f32 m_arrowSize = 16.0f;
     };
 
+    /// A node of a tree written in markup: its text, whether it starts open, and its children.
+    class TreeItem : public UIWidget
+    {
+        RTTI_OBJECT(TreeItem, UIWidget)
+    public:
+        TreeItem()
+        {
+            SetTag(core::StringView(u8"treeitem"));
+            SetDisplayed(false); // data, not drawn
+        }
+        bool SetMarkupAttribute(core::StringView name, core::StringView value) override
+        {
+            if (name != core::StringView(u8"text"))
+                return UIWidget::SetMarkupAttribute(name, value);
+            m_text = core::String(value);
+            return true;
+        }
+        [[nodiscard]] core::String GetText() const { return m_text; }
+        void SetText(const core::String& text) { m_text = text; }
+        void SetExpanded(bool expanded) noexcept { m_expanded = expanded; }
+        [[nodiscard]] bool IsExpanded() const noexcept { return m_expanded; }
+
+    private:
+        core::String m_text;
+        bool m_expanded = false;
+    };
+
     class TreeView : public ItemView
     {
         RTTI_OBJECT(TreeView, ItemView)
@@ -131,6 +160,9 @@ export namespace experimental::gui
             StyleWriteScope defaults(*this); // its own values, which a sheet returns to
             SetTextColor(Color{0.88f, 0.90f, 0.94f, 1.0f});
         }
+        // Its own model goes before the view's base would let go of it: let go first.
+        ~TreeView() override { SetModel(nullptr); }
+
         void SetIndentWidth(f32 width)
         {
             m_indentWidth = core::Max(0.0f, width);
@@ -151,6 +183,26 @@ export namespace experimental::gui
         }
         /// Expansion by node id (open or not, shown or not).
         [[nodiscard]] bool IsIdExpanded(ItemId id) const { return m_expanded.Contains(id); }
+        void SetIdExpanded(ItemId id, bool expanded)
+        {
+            if (expanded)
+                (void)m_expanded.Insert(id);
+            else
+                (void)m_expanded.Remove(id);
+            Reflatten();
+            ItemsChanged();
+        }
+
+        /// Markup's children are its items (nested TreeItems), made into a model of its own.
+        [[nodiscard]] Node* GetChildHost() override
+        {
+            if (!m_markupHost)
+            {
+                TreeView* self = this;
+                m_markupHost = core::MakeRef<MarkupChildHost>(MemoryAllocator(), [self](Node& host) { self->AdoptItems(host); });
+            }
+            return m_markupHost.Get();
+        }
 
     protected:
         [[nodiscard]] usize ItemCount() const override { return m_flat.Size(); }
@@ -229,6 +281,32 @@ export namespace experimental::gui
         }
 
     private:
+        void AdoptItems(Node& host)
+        {
+            if (!m_ownModel)
+                m_ownModel = core::MakeUnique<TreeModel>(MemoryAllocator());
+            while (host.ChildCount() != 0)
+            {
+                core::RefPtr<Node> child(host.GetChildAt(0));
+                host.RemoveChild(child.Get());
+                if (const TreeItem* item = core::Cast<TreeItem>(child.Get()))
+                    AddItem(*item, TreeModel::kRoot);
+            }
+            if (GetModel() != m_ownModel.Get())
+                SetModel(m_ownModel.Get());
+            Reflatten();
+            ItemsChanged();
+        }
+        void AddItem(const TreeItem& item, i32 parent)
+        {
+            const i32 id = m_ownModel->AddNode(parent, item.GetText().AsView());
+            if (item.IsExpanded())
+                (void)m_expanded.Insert(static_cast<ItemId>(id));
+            for (usize i = 0; i < item.ChildCount(); ++i)
+                if (const TreeItem* child = core::Cast<TreeItem>(item.GetChildAt(i)))
+                    AddItem(*child, id);
+        }
+
         struct FlatEntry
         {
             ModelIndex Index;
@@ -308,9 +386,10 @@ export namespace experimental::gui
         HashMap<ItemId, i32> m_itemOfId;  // an id's flat item
         f32 m_indentWidth = 16.0f;
         f32 m_arrowSize = 16.0f;
+        core::UniquePtr<TreeModel> m_ownModel; // markup's items
+        core::RefPtr<Node> m_markupHost;       // where markup's items land, then taken in
     };
 
     RTTI_DEFINE_OBJECT(TreeArrow, "rtti::gui")
     RTTI_DEFINE_OBJECT(TreeRowContent, "rtti::gui")
-    RTTI_DEFINE_OBJECT(TreeView, "rtti::gui")
 }

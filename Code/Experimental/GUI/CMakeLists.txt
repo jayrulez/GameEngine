@@ -61,9 +61,11 @@ target_sources(GUI
             Widgets/UINode.cppm
             Widgets/UIWidget.cppm
             Widgets/Label.cppm
+            Widgets/ButtonBase.cppm
             Widgets/Button.cppm
             Widgets/CheckBox.cppm
             Widgets/Radio.cppm
+            Widgets/ToggleSwitch.cppm
             Widgets/RangeValue.cppm
             Widgets/RangeWidget.cppm
             Widgets/Slider.cppm

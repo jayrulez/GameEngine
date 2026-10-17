@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - CheckBox tests: toggle on click, programmatic set, change callback, and
-// tag for CSS.
+// GUI - CheckBox and ToggleSwitch tests: the button core as a toggle with an indicator part; a
+// click toggles and reports, code does not report; the mixed state settles on a click.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -19,75 +19,110 @@ namespace
     {
         return core::MakeRef<T>(core::DefaultAllocator());
     }
+
+    core::RefPtr<SceneRoot> MakeRoot()
+    {
+        auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+        root->SetSize(core::Float2{100.0f, 100.0f});
+        root->EditLayoutStyle([](LayoutStyle& s) { s.AlignItems = Align::Start; }); // each at its own size
+        return root;
+    }
+
+    void Click(EventDispatcher& d)
+    {
+        d.InjectMouseDown(core::Float2{10.0f, 10.0f}, MouseButton::Left);
+        d.InjectMouseUp(core::Float2{10.0f, 10.0f}, MouseButton::Left);
+    }
+
+    core::usize Vertices(SceneRoot& root)
+    {
+        (void)root.UpdateLayout();
+        foundation::vg::VGContext vg;
+        DrawContext dc{vg};
+        root.Draw(dc);
+        return vg.GetBatch().vertices.Size();
+    }
 }
 
 TEST_CASE("checkbox: defaults")
 {
     auto cb = Make<CheckBox>();
     CHECK_FALSE(cb->IsChecked());
+    CHECK(cb->IsToggle());
+    CHECK(cb->IsTabFocusable());
     CHECK(cb->GetTag() == core::StringView(u8"checkbox"));
+    CHECK(cb->GetIndicatorPart() != nullptr);
 }
 
-TEST_CASE("checkbox: toggle and set fire the change callback")
+TEST_CASE("checkbox: a click toggles it and reports; code's changes do not report")
 {
+    auto root = MakeRoot();
     auto cb = Make<CheckBox>();
-    int changes = 0;
-    bool last = false;
-    cb->SetOnCheckedChanged(
-        [&](bool checked)
-        {
-            ++changes;
-            last = checked;
-        });
-
-    cb->Toggle();
-    CHECK(cb->IsChecked());
-    CHECK(changes == 1);
-    CHECK(last == true);
-
-    cb->Toggle();
-    CHECK_FALSE(cb->IsChecked());
-    CHECK(changes == 2);
-    CHECK(last == false);
-
-    cb->SetChecked(true);
-    CHECK(changes == 3);
-    cb->SetChecked(true); // no change -> no callback
-    CHECK(changes == 3);
-}
-
-TEST_CASE("checkbox: click through the dispatcher toggles it")
-{
-    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
-    root->SetSize(core::Float2{100.0f, 100.0f});
-    auto cb = Make<CheckBox>();
-    cb->SetSize(core::Float2{24.0f, 24.0f});
     root->AddChild(cb.Get());
+    (void)root->UpdateLayout();
+    core::i32 changes = 0;
+    bool last = false;
+    cb->SetOnToggled([&](bool checked)
+    {
+        ++changes;
+        last = checked;
+    });
     EventDispatcher* d = root->GetEventDispatcher();
 
-    d->InjectMouseDown(core::Float2{12.0f, 12.0f}, MouseButton::Left);
-    d->InjectMouseUp(core::Float2{12.0f, 12.0f}, MouseButton::Left);
+    Click(*d);
     CHECK(cb->IsChecked());
-
-    d->InjectMouseDown(core::Float2{12.0f, 12.0f}, MouseButton::Left);
-    d->InjectMouseUp(core::Float2{12.0f, 12.0f}, MouseButton::Left);
+    CHECK(changes == 1);
+    CHECK(last);
+    Click(*d);
     CHECK_FALSE(cb->IsChecked());
+    CHECK(changes == 2);
+
+    cb->Toggle();
+    cb->SetChecked(false);
+    CHECK(changes == 2);
 }
 
-TEST_CASE("checkbox: draws box outline, plus a check when checked")
+TEST_CASE("checkbox: the mixed state shows until set, and a click on it checks it")
 {
+    auto root = MakeRoot();
     auto cb = Make<CheckBox>();
-    cb->SetSize(core::Float2{24.0f, 24.0f});
+    root->AddChild(cb.Get());
+    (void)root->UpdateLayout();
+    cb->SetIndeterminate(true);
+    CHECK(cb->IsIndeterminate());
+    CHECK((cb->GetWidgetStates() & WidgetStateIndeterminate) != 0);
 
-    foundation::vg::VGContext ctxUnchecked;
-    DrawContext dcU{ctxUnchecked};
-    cb->Draw(dcU);
-    const core::usize unchecked = ctxUnchecked.GetBatch().vertices.Size();
-    CHECK(unchecked > 0); // outline
+    Click(*root->GetEventDispatcher());
+    CHECK(cb->IsChecked());
+    CHECK_FALSE(cb->IsIndeterminate());
 
+    cb->SetIndeterminate(true);
+    cb->SetChecked(true); // a choice settles it, though the state was already checked
+    CHECK_FALSE(cb->IsIndeterminate());
+}
+
+TEST_CASE("checkbox: its indicator draws the box, plus the check when checked")
+{
+    auto root = MakeRoot();
+    auto cb = Make<CheckBox>();
+    root->AddChild(cb.Get());
+    const core::usize unchecked = Vertices(*root);
+    CHECK(unchecked > 0); // the outline
     cb->SetChecked(true);
-    foundation::vg::VGContext ctxChecked;
-    DrawContext dcC{ctxChecked};
-    cb->Draw(dcC);
-    CHECK(ctxChecked.GetBatch().vertices.Size() > unchecked); // outline + check fill
+    CHECK(Vertices(*root) > unchecked); // the outline and the check
+}
+
+TEST_CASE("switch: toggles like a check box, its knob moving along the track")
+{
+    auto root = MakeRoot();
+    auto sw = Make<ToggleSwitch>();
+    root->AddChild(sw.Get());
+    (void)root->UpdateLayout();
+    CHECK(sw->GetTag() == core::StringView(u8"switch"));
+    CHECK(sw->GetSize().x == doctest::Approx(36.0f));
+    const core::usize off = Vertices(*root);
+    CHECK(off > 0);
+    Click(*root->GetEventDispatcher());
+    CHECK(sw->IsChecked());
+    CHECK(Vertices(*root) == off); // the same track and knob, the knob at the other end
 }

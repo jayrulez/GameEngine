@@ -3,13 +3,10 @@
 
 // GUI - :button partition
 //
-// Button: a clickable Label. A lean native control modeled on eepp's UIPushButton
-// (role only, NOT a line-for-line port: eepp's is ~900 LOC composing a child UIImage icon +
-// UITextView with an internal layout). Everything visual is already in place from the base
-// layers - the background/skin reacts to the input-driven control state (UINode) and CSS can
-// target the default `button` tag - so Button just centers its text and fires a click
-// callback (and MouseClick event) when pressed and released on it. Icon + icon/text layout
-// are not built in (add via composition when needed).
+// Button: the button core (ButtonBase, E6 of Specs/gui-lab-evolution.md) with its content
+// centred: a text, an icon and the text, or whatever markup puts inside it. What were separate
+// kinds elsewhere are its attributes: an icon button has an icon, a toggle button `toggle`, a
+// repeat button `repeat`.
 
 module;
 #include "Core/Prelude.h"
@@ -17,52 +14,24 @@ module;
 
 export module experimental.gui:button;
 
-import foundation.core; // Function, Move
-import :event;        // MouseEvent
-import :text;         // TextHAlign / TextVAlign
-import :label;
+import foundation.core; // StringView
+import :layout_style;
+import :button_base;
 
 using namespace foundation::core;
 namespace core = foundation::core;
 
 export namespace experimental::gui
 {
-    class Button : public Label
+    class Button : public ButtonBase
     {
-        RTTI_OBJECT(Button, Label)
+        RTTI_OBJECT(Button, ButtonBase)
     public:
         Button()
         {
             SetTag(core::StringView(u8"button")); // CSS `button { ... }` targets it by default
-            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
-            SetTextAlignment(TextHAlign::Center, TextVAlign::Middle);
-            SetTabFocusable(true);
+            StyleWriteScope defaults(*this);
+            EditLayoutStyle([](LayoutStyle& s) { s.JustifyContent = Justify::Center; });
         }
-
-        // Invoked on a click (press + release on the button).
-        void SetOnClick(core::Function<void()> callback) { m_onClick = core::Move(callback); }
-        [[nodiscard]] bool HasOnClick() const noexcept { return static_cast<bool>(m_onClick); }
-
-        // A button with no text of its own shows its command's label.
-        void OnBoundCommandText(core::StringView label, core::StringView, core::StringView) override
-        {
-            if (GetText().Size() != 0 && !m_textFromCommand)
-                return;
-            SetText(label);
-            m_textFromCommand = true;
-        }
-
-    protected:
-        bool OnActivate() override { return ActivateAsClick(); } // Return, Space: a click
-        void OnMouseClick(const MouseEvent& event) override
-        {
-            event.Handled = true; // a click inside a clickable card is the button's, not the card's
-            (void)RunBoundCommand(); // a command it is bound to (G7)
-            if (m_onClick)
-                m_onClick();
-        }
-
-        core::Function<void()> m_onClick;
-        bool m_textFromCommand = false; // its text is its command's label (OnBoundCommandText)
     };
 }

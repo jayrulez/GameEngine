@@ -28,6 +28,8 @@ void main()
     root.find("controls-add").on("click", Action(add1));
     root.find("controls-add5").on("click", Action(add5));
     root.find("controls-reset").on("click", Action(reset));
+    root.find("controls-repeat").on("click", Action(add1));
+    root.find("controls-press").on("click", Action(add1));
     @slider = Slider::of(root.find("controls-slider"));
     @field = TextField::of(root.find("controls-field"));
     @vertical = Slider::of(root.find("controls-vertical"));

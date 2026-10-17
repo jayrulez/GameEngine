@@ -422,3 +422,63 @@ TEST_CASE("style-manager: a forced state reads as set, restyling the node, and i
     CHECK(btn->GetAlpha() == doctest::Approx(1.0f));
     CHECK(label->GetAlpha() == doctest::Approx(0.9f));
 }
+
+TEST_CASE("style-manager: a node says where each property's value came from: a rule, its inline style, code, an ancestor, or itself")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{200.0f, 200.0f});
+    auto panel = Widget(u8"panel", core::Float2{0.0f, 0.0f}, core::Float2{200.0f, 200.0f});
+    root->AddChild(panel.Get());
+    auto btn = Widget(u8"button", core::Float2{0.0f, 0.0f}, core::Float2{100.0f, 40.0f});
+    btn->SetId(SV(u8"ok"));
+    btn->AddClass(SV(u8"primary"));
+    panel->AddChild(btn.Get());
+    StyleManager mgr(CSSParser::Parse(SV(
+        u8"panel { color: #ff0000; }\n"                       // line 1
+        u8"button { opacity: 0.8; padding: 4px; }\n"          // line 2
+        u8".primary { opacity: 0.6 !important; }\n"           // line 3
+        u8"#ok { opacity: 0.3; margin: 2px; height: 30px; }\n"), // line 4
+        SV(u8"app.css")));
+    btn->SetInlineStyle(SV(u8"margin-left"), SV(u8"9px")); // markup's attribute
+    btn->SetPadding(Thickness{1.0f});                      // code: the padding is its own now
+    mgr.ApplyTree(*root.Get());
+
+    const StyleExplanation opacity = mgr.ExplainProperty(*btn.Get(), SV(u8"opacity"));
+    CHECK(opacity.Origin == StyleOrigin::Sheet);
+    CHECK(opacity.Value == SV(u8"0.6"));
+    REQUIRE(opacity.Declarations.Size() == 3u); // the winner first, then by precedence
+    CHECK(opacity.Declarations[0].Selector == SV(u8".primary"));
+    CHECK(opacity.Declarations[0].Line == 3u);
+    CHECK(opacity.Declarations[0].Important);
+    CHECK(opacity.Declarations[0].Sheet == SV(u8"app.css"));
+    CHECK(opacity.Declarations[1].Selector == SV(u8"#ok"));
+    CHECK(opacity.Declarations[2].Selector == SV(u8"button"));
+    CHECK(opacity.Declarations[2].Line == 2u);
+
+    const StyleExplanation marginLeft = mgr.ExplainProperty(*btn.Get(), SV(u8"margin-left"));
+    CHECK(marginLeft.Origin == StyleOrigin::Inline); // over the sheet's shorthand
+    REQUIRE(marginLeft.Declarations.Size() == 2u);
+    CHECK(marginLeft.Declarations[0].Inline);
+    CHECK(marginLeft.Declarations[1].Selector == SV(u8"#ok")); // its margin's longhand
+    CHECK(marginLeft.Declarations[1].Value == SV(u8"2px"));
+
+    const StyleExplanation paddingTop = mgr.ExplainProperty(*btn.Get(), SV(u8"padding-top"));
+    CHECK(paddingTop.Origin == StyleOrigin::Code); // the sheet's padding is overridden
+    REQUIRE(paddingTop.Declarations.Size() == 1u);
+    CHECK(paddingTop.Declarations[0].Selector == SV(u8"button"));
+
+    const StyleExplanation color = mgr.ExplainProperty(*btn.Get(), SV(u8"color"));
+    CHECK(color.Origin == StyleOrigin::Inherited);
+    CHECK(color.InheritedFrom == panel.Get());
+    CHECK(color.Declarations.IsEmpty());
+
+    CHECK(mgr.ExplainProperty(*btn.Get(), SV(u8"z-index")).Origin == StyleOrigin::Own);
+
+    // The whole list holds each of them once.
+    const core::Array<StyleExplanation> all = mgr.ExplainStyle(*btn.Get());
+    int found = 0;
+    for (const StyleExplanation& e : all)
+        found += (e.Property == SV(u8"opacity") || e.Property == SV(u8"color") || e.Property == SV(u8"padding-top") ||
+                  e.Property == SV(u8"height")) ? 1 : 0;
+    CHECK(found == 4);
+}

@@ -41,6 +41,37 @@ namespace fonts = foundation::fonts;
 
 export namespace experimental::gui
 {
+    /// Where a node's value of a property came from (E8d, for the inspector).
+    enum class StyleOrigin : u8
+    {
+        Sheet,     ///< a rule of a sheet
+        Inline,    ///< the node's inline style (markup's attributes, a script's style)
+        Inherited, ///< an ancestor's (an inherited property no rule here set)
+        Code,      ///< a setter called from code: the sheet leaves it be
+        Own,       ///< nothing set it: the node's own value
+    };
+    /// One declaration of a property: where it was written and what it said.
+    struct StyleDeclarationSource
+    {
+        core::String Sheet;    ///< its sheet's name ("inline" for the inline style)
+        u32 Line = 0;          ///< its rule's line in that sheet (0: unknown)
+        core::String Selector; ///< its rule's selector as written
+        core::String Value;    ///< as written
+        bool Important = false;
+        bool Inline = false;
+    };
+    /// A property of a node, its value and where the value came from.
+    struct StyleExplanation
+    {
+        core::String Property;
+        StyleOrigin Origin = StyleOrigin::Own;
+        core::String Value; ///< the cascade's (the ancestor's when inherited; empty for code's or its own)
+        /// This node's declarations of it, the winner first (all overridden when code set it).
+        Array<StyleDeclarationSource> Declarations;
+        const UIWidget* InheritedFrom = nullptr; ///< the ancestor whose value it is
+        bool Animated = false;                   ///< a transition or an animation moves it now
+    };
+
     class StyleManager
     {
     public:
@@ -372,6 +403,50 @@ export namespace experimental::gui
         }
 
     public:
+        /// Every property something sets on `widget`, each with its value and where it came from:
+        /// its cascade's longhands (each declaration, the winner first), what code pinned, and the
+        /// inherited properties an ancestor's rules set (E8d). For the inspector, not the frame.
+        [[nodiscard]] Array<StyleExplanation> ExplainStyle(const UIWidget& widget) const
+        {
+            const Array<const StyleSheet*> subtrees = SubtreeSheetsOver(widget);
+            Array<StyleRuleMatch> matches;
+            Collect(widget, subtrees, {}, 0, nullptr, matches);
+            const Array<LonghandTrace> traces = StyleSheet::Trace(matches, widget.GetInlineStyle());
+            Array<StyleExplanation> out;
+            const auto listed = [&out](core::StringView name)
+            {
+                for (const StyleExplanation& e : out)
+                    if (e.Property.AsView() == name)
+                        return true;
+                return false;
+            };
+            for (const LonghandTrace& trace : traces)
+                out.PushBack(Explain(widget, trace.Name.AsView(), &trace, subtrees));
+            for (u32 slot = 0; slot < SlotCount; ++slot)
+            {
+                const core::StringView name(StyleSlotProperty(static_cast<StyleSlot>(slot)));
+                if (widget.IsStylePinned(static_cast<StyleSlot>(slot)) && !listed(name))
+                    out.PushBack(Explain(widget, name, nullptr, subtrees));
+            }
+            for (const StylePropertySpec& spec : AllStyleProperties())
+            {
+                const core::StringView name(spec.Name);
+                if (spec.Inherited && !listed(name) && InheritedFrom(widget, name) != nullptr)
+                    out.PushBack(Explain(widget, name, nullptr, subtrees));
+            }
+            return out;
+        }
+        /// One property of `widget`, as ExplainStyle gives it (its own value when nothing sets it).
+        [[nodiscard]] StyleExplanation ExplainProperty(const UIWidget& widget, core::StringView property) const
+        {
+            for (StyleExplanation& e : ExplainStyle(widget))
+                if (e.Property.AsView() == property)
+                    return core::Move(e);
+            StyleExplanation own;
+            own.Property = core::String(property);
+            return own;
+        }
+
         // Drop a widget's cached style (call before it is destroyed).
         void Forget(Node* widget)
         {
@@ -412,18 +487,88 @@ export namespace experimental::gui
             return out;
         }
 
+        // The rules matching `widget` (or its `part`) over every origin: the user agent's sheet, the
+        // GUI's, the subtrees' (outermost first).
+        void Collect(const UIWidget& widget, const Array<const StyleSheet*>& subtrees, core::StringView part, u32 partStates,
+                     const AncestorFilter* ancestors, Array<StyleRuleMatch>& matches) const
+        {
+            m_userAgent.CollectMatches(widget, m_context, true, part, 0, matches, partStates, ancestors);
+            m_sheet.CollectMatches(widget, m_context, true, part, 1, matches, partStates, ancestors);
+            u32 origin = 2;
+            for (const StyleSheet* sheet : subtrees)
+                sheet->CollectMatches(widget, m_context, true, part, origin++, matches, partStates, ancestors);
+        }
+        // The sheet at a match's origin.
+        [[nodiscard]] const StyleSheet& SheetAt(u32 origin, const Array<const StyleSheet*>& subtrees) const
+        {
+            return origin == 0 ? m_userAgent : origin == 1 ? m_sheet : *subtrees[origin - 2];
+        }
+        // The nearest ancestor whose cascade set `property`.
+        [[nodiscard]] const UIWidget* InheritedFrom(const UIWidget& widget, core::StringView property) const
+        {
+            for (Node* n = widget.GetParent(); n != nullptr; n = n->GetParent())
+                if (const ResolvedStyle* style = m_cache.Find(n); style != nullptr && style->Has(property))
+                    return core::Cast<UIWidget>(n);
+            return nullptr;
+        }
+        [[nodiscard]] StyleExplanation Explain(const UIWidget& widget, core::StringView property, const LonghandTrace* trace,
+                                               const Array<const StyleSheet*>& subtrees) const
+        {
+            StyleExplanation e;
+            e.Property = core::String(property);
+            if (trace != nullptr)
+                for (const DeclarationTrace& d : trace->Declarations)
+                {
+                    StyleDeclarationSource source;
+                    source.Value = d.Value;
+                    source.Important = d.Important;
+                    if (d.Rule == nullptr)
+                    {
+                        source.Sheet = core::String(core::StringView(u8"inline"));
+                        source.Inline = true;
+                    }
+                    else
+                    {
+                        source.Sheet = core::String(SheetAt(d.Origin, subtrees).Name());
+                        source.Line = d.Rule->Line();
+                        source.Selector = core::String(d.Rule->SelectorText());
+                    }
+                    e.Declarations.PushBack(core::Move(source));
+                }
+            bool pinned = false;
+            for (u32 slot = 0; slot < SlotCount; ++slot)
+                if (core::StringView(StyleSlotProperty(static_cast<StyleSlot>(slot))) == property)
+                    pinned = widget.IsStylePinned(static_cast<StyleSlot>(slot));
+            if (pinned)
+                e.Origin = StyleOrigin::Code;
+            else if (!e.Declarations.IsEmpty())
+            {
+                e.Origin = e.Declarations[0].Inline ? StyleOrigin::Inline : StyleOrigin::Sheet;
+                const ResolvedStyle* style = m_cache.Find(const_cast<UIWidget*>(&widget));
+                e.Value = style != nullptr && style->Has(property) ? core::String(style->Get(property)) : e.Declarations[0].Value;
+            }
+            else if (const StylePropertySpec* spec = FindStyleProperty(property); spec != nullptr && spec->Inherited)
+                if (const UIWidget* from = InheritedFrom(widget, property))
+                {
+                    e.Origin = StyleOrigin::Inherited;
+                    e.InheritedFrom = from;
+                    e.Value = core::String(m_cache.Find(const_cast<UIWidget*>(from))->Get(property));
+                }
+            if (const RefPtr<StyleAnimation>* animation = m_animations.Find(const_cast<UIWidget*>(&widget)); animation != nullptr && *animation)
+            {
+                StyleValue now;
+                e.Animated = (*animation)->TrackValue(property, now);
+            }
+            return e;
+        }
+
         // The cascade for `widget` (or its `part`) over every origin: the user agent's sheet, the
         // GUI's, the subtrees' (outermost first), then the widget's inline style.
         [[nodiscard]] ResolvedStyle ResolveFor(const UIWidget& widget, const Array<const StyleSheet*>& subtrees,
                                                core::StringView part, const ResolvedStyle* inherited, u32 partStates = 0) const
         {
             Array<StyleRuleMatch> matches;
-            const AncestorFilter* ancestors = m_filtering ? &m_ancestors : nullptr; // only inside ApplyTree's walk
-            m_userAgent.CollectMatches(widget, m_context, true, part, 0, matches, partStates, ancestors);
-            m_sheet.CollectMatches(widget, m_context, true, part, 1, matches, partStates, ancestors);
-            u32 origin = 2;
-            for (const StyleSheet* sheet : subtrees)
-                sheet->CollectMatches(widget, m_context, true, part, origin++, matches, partStates, ancestors);
+            Collect(widget, subtrees, part, partStates, m_filtering ? &m_ancestors : nullptr, matches); // the filter only inside ApplyTree's walk
             return StyleSheet::Cascade(matches, inherited,
                                        part.Size() == 0 ? widget.GetInlineStyle() : core::Span<const InlineStyleDeclaration>{});
         }

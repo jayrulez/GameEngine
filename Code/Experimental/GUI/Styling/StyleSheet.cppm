@@ -287,6 +287,22 @@ export namespace experimental::gui
         u32 Order = 0;      ///< its place in its sheet
     };
 
+    /// One declaration that set a longhand (E8d): from a rule (with its origin), or the inline
+    /// style (Rule null).
+    struct DeclarationTrace
+    {
+        const StyleRule* Rule = nullptr;
+        u32 Origin = 0;
+        core::String Value; ///< as written (a var() not substituted)
+        bool Important = false;
+    };
+    /// A longhand an element's cascade set, with every declaration that set it, the winner first.
+    struct LonghandTrace
+    {
+        core::String Name;
+        Array<DeclarationTrace> Declarations;
+    };
+
     class StyleSheet
     {
     public:
@@ -379,19 +395,7 @@ export namespace experimental::gui
         [[nodiscard]] static ResolvedStyle Cascade(Array<StyleRuleMatch>& matches, const ResolvedStyle* inherited,
                                                    Span<const InlineStyleDeclaration> inlineStyle)
         {
-            // Stable insertion sort (ties keep their order: sheet, then source).
-            for (usize a = 1; a < matches.Size(); ++a)
-            {
-                const StyleRuleMatch key = matches[a];
-                usize b = a;
-                while (b > 0 && Before(key, matches[b - 1]))
-                {
-                    matches[b] = matches[b - 1];
-                    --b;
-                }
-                matches[b] = key;
-            }
-
+            SortMatches(matches);
             ResolvedStyle out;
             for (const StyleRuleMatch& m : matches)
                 for (const StyleProperty& p : m.Rule->Properties())
@@ -432,7 +436,74 @@ export namespace experimental::gui
             return out;
         }
 
+        /// Where each longhand of `matches` and `inlineStyle` came from, as Cascade applies them:
+        /// ordered by origin, specificity and source, then the inline style; for each longhand
+        /// every declaration that set it, the winner first (the last !important one, else the
+        /// last), the rest by precedence. For the inspector, not the frame.
+        [[nodiscard]] static Array<LonghandTrace> Trace(Array<StyleRuleMatch>& matches, Span<const InlineStyleDeclaration> inlineStyle)
+        {
+            SortMatches(matches);
+            struct Applied
+            {
+                usize Longhand;
+                DeclarationTrace Declaration;
+            };
+            Array<LonghandTrace> out;
+            Array<Applied> applied; // in the order the cascade applies them
+            const auto add = [&](core::StringView name, const DeclarationTrace& d)
+            {
+                usize at = out.Size();
+                for (usize i = 0; i < out.Size(); ++i)
+                    if (out[i].Name.AsView() == name)
+                        at = i;
+                if (at == out.Size())
+                    out.PushBack(LonghandTrace{core::String(name), {}});
+                applied.PushBack(Applied{at, d});
+            };
+            const auto declare = [&](core::StringView name, core::StringView value, const DeclarationTrace& d)
+            {
+                if (ResolvedStyle::IsCustomProperty(name))
+                {
+                    add(name, d);
+                    return;
+                }
+                Array<StyleLonghand> longhands;
+                if (ExpandStyleShorthand(name, value, longhands))
+                    for (const StyleLonghand& l : longhands)
+                        add(l.Name.AsView(), DeclarationTrace{d.Rule, d.Origin, l.Text, d.Important});
+            };
+            for (const StyleRuleMatch& m : matches)
+                for (const StyleProperty& p : m.Rule->Properties())
+                    declare(p.Name.AsView(), p.Value.AsView(), DeclarationTrace{m.Rule, m.Origin, p.Value, p.Important});
+            for (const InlineStyleDeclaration& d : inlineStyle)
+                declare(d.Name.AsView(), d.Value.AsView(), DeclarationTrace{nullptr, 0, d.Value, false});
+            // Precedence: an important one over every normal one, then the later over the earlier.
+            for (usize i = applied.Size(); i-- > 0;)
+                if (applied[i].Declaration.Important)
+                    out[applied[i].Longhand].Declarations.PushBack(applied[i].Declaration);
+            for (usize i = applied.Size(); i-- > 0;)
+                if (!applied[i].Declaration.Important)
+                    out[applied[i].Longhand].Declarations.PushBack(applied[i].Declaration);
+            return out;
+        }
+
     private:
+        // Stable insertion sort (ties keep their order: sheet, then source).
+        static void SortMatches(Array<StyleRuleMatch>& matches)
+        {
+            for (usize a = 1; a < matches.Size(); ++a)
+            {
+                const StyleRuleMatch key = matches[a];
+                usize b = a;
+                while (b > 0 && Before(key, matches[b - 1]))
+                {
+                    matches[b] = matches[b - 1];
+                    --b;
+                }
+                matches[b] = key;
+            }
+        }
+
         [[nodiscard]] static bool Before(const StyleRuleMatch& a, const StyleRuleMatch& b) noexcept
         {
             if (a.Origin != b.Origin)

@@ -269,7 +269,7 @@ export namespace experimental::gui
         {
             (void)localBounds;
             const Rect b = GetLocalBounds();
-            if (IsHovered() || IsFocused())
+            if (IsLit())
                 GetPartStyle(u8"highlight").Draw(ctx, b, FilledBox(m_highlight));
 
             // Left gutter: a check mark (if checked) else an icon (if set).
@@ -290,6 +290,9 @@ export namespace experimental::gui
             if (m_shortcut.GetString().Size() > 0)
                 m_shortcut.Draw(ctx, inner);
         }
+
+        /// Lit: under the pointer, focused, or (a submenu item) with its submenu open.
+        [[nodiscard]] virtual bool IsLit() const { return IsHovered() || IsFocused(); }
 
         // Draw a check mark stroked inside the left gutter.
         void DrawCheck(DrawContext& ctx, const Rect& b) const
@@ -341,6 +344,8 @@ export namespace experimental::gui
         void SetOnOpenSubMenu(core::Function<void(bool)> callback) { m_onOpen = core::Move(callback); }
 
         [[nodiscard]] Color ArrowColor() const noexcept { return m_arrowColor; }
+        /// Lit while its submenu is open too (focus has gone into it).
+        [[nodiscard]] bool IsLit() const override;
 
     protected:
         // A click opens it; Return, Space or Right open it and go in (its first item takes focus).
@@ -795,6 +800,8 @@ export namespace experimental::gui
         Color m_panelColor{0.16f, 0.17f, 0.21f, 1.0f};
         core::Function<void(PopupCloseReason)> m_onClosed;
     };
+
+    inline bool MenuSubItem::IsLit() const { return MenuItem::IsLit() || (m_subMenu != nullptr && m_subMenu->IsOpen()); }
 
     RTTI_DEFINE_OBJECT(MenuRow, "rtti::gui")
     RTTI_DEFINE_OBJECT(MenuSeparator, "rtti::gui")

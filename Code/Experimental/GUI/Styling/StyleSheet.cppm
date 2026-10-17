@@ -312,8 +312,10 @@ export namespace experimental::gui
         /// else that part's, from rules written `tag::part`) under `context`, added to `out` at
         /// `origin` (a later origin wins over an earlier one at any specificity).
         /// A part's rules that ask for its states (`::thumb:hover`) match when `partStates` has them.
+        /// `ancestors`, when given, holds the names of every widget above `element`.
         void CollectMatches(const UIWidget& element, const MediaContext& context, bool applyPseudo,
-                            core::StringView pseudoElement, u32 origin, Array<StyleRuleMatch>& out, u32 partStates = 0) const
+                            core::StringView pseudoElement, u32 origin, Array<StyleRuleMatch>& out, u32 partStates = 0,
+                            const AncestorFilter* ancestors = nullptr) const
         {
             // Only the rules whose subject could match: those keyed by the element's id, one of
             // its classes or its tag, and those with no key (the order is the cascade's to set).
@@ -326,6 +328,8 @@ export namespace experimental::gui
                     if (rule.Selector().PseudoElement() != pseudoElement)
                         continue;
                     if (applyPseudo && (rule.Selector().PartPseudoClasses() & ~partStates) != 0)
+                        continue;
+                    if (ancestors != nullptr && !ancestors->MayMatch(rule.Selector()))
                         continue;
                     const bool mediaActive = rule.Media().IsEmpty() || rule.Media().Evaluate(context);
                     if (mediaActive && rule.Selector().Select(element, applyPseudo))

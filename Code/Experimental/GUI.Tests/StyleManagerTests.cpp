@@ -372,3 +372,20 @@ TEST_CASE("style-manager: a part's border-color alone recolours its own outline"
     CHECK(drawn.BorderColors.top.g == doctest::Approx(0.0f)); // the sheet's colour
     CHECK(drawn.BackgroundColor.a == doctest::Approx(0.0f)); // no fill
 }
+
+TEST_CASE("style-manager: a restyle that starts below the tree's top still sees the ancestors above it")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{200.0f, 200.0f});
+    auto page = Widget(u8"panel", core::Float2{0.0f, 0.0f}, core::Float2{100.0f, 100.0f});
+    page->AddClass(SV(u8"page"));
+    root->AddChild(page.Get());
+    auto section = Widget(u8"panel", core::Float2{0.0f, 0.0f}, core::Float2{100.0f, 100.0f});
+    page->AddChild(section.Get());
+    auto cell = Widget(u8"cell", core::Float2{0.0f, 0.0f}, core::Float2{10.0f, 10.0f});
+    section->AddChild(cell.Get());
+
+    StyleManager mgr(CSSParser::Parse(SV(u8".page cell { opacity: 0.5; } .other cell { opacity: 0.25; }")));
+    mgr.ApplyTree(*section.Get()); // .page is above where the walk starts
+    CHECK(cell->GetAlpha() == doctest::Approx(0.5f));
+}

@@ -371,10 +371,112 @@ export namespace experimental::gui
             m_specificity = 0;
             for (const StyleSelectorRule& rule : m_rules)
                 m_specificity += rule.Specificity();
+
+            // What its subject's ancestors must have: the id, classes and tag of each compound a
+            // child or descendant combinator relates to the one on its right (`a > b + c`: a is
+            // c's parent too; `a + b > c`: a is only a sibling of c's parent).
+            m_ancestorKeyCount = 0;
+            const auto key = [this](core::StringView name)
+            {
+                if (name.Size() != 0 && m_ancestorKeyCount < kAncestorKeys)
+                    m_ancestorKeys[m_ancestorKeyCount++] = HashText(name);
+            };
+            for (usize r = m_rules.Size(); r-- > 1;)
+            {
+                const Combinator c = m_rules[r].GetCombinator();
+                if (c != Combinator::Child && c != Combinator::Descendant)
+                    continue;
+                const StyleSelectorRule& ancestor = m_rules[r - 1];
+                key(ancestor.GetId());
+                for (const core::String& cls : ancestor.GetClasses())
+                    key(cls.AsView());
+                key(ancestor.GetTag());
+            }
         }
 
+    public:
+        static constexpr u8 kAncestorKeys = 4;
+        /// Hashes of names its subject's ancestors must carry (at most four), for AncestorFilter.
+        [[nodiscard]] Span<const u64> AncestorKeys() const noexcept { return Span<const u64>(m_ancestorKeys, m_ancestorKeyCount); }
+
+    private:
         Array<StyleSelectorRule> m_rules;
         i64 m_specificity = 0;
+        u64 m_ancestorKeys[kAncestorKeys]{};
+        u8 m_ancestorKeyCount = 0;
+    };
+
+    /// The names (ids, classes and tags) of the widgets above the one being styled, kept while a
+    /// restyle walks the tree, so a rule that needs an ancestor none of them has is turned away
+    /// without walking up (WebKit's SelectorFilter). A counting Bloom filter: two counters per
+    /// name, so it can say "maybe" wrongly but never "no" wrongly; a counter that fills stays full.
+    class AncestorFilter
+    {
+    public:
+        /// `widget`'s names join (it is now above what is styled next).
+        void Push(const UIWidget& widget)
+        {
+            m_frames.PushBack(static_cast<u32>(m_keys.Size()));
+            Add(widget.GetId());
+            for (const core::String& cls : widget.Classes())
+                Add(cls.AsView());
+            Add(widget.GetTag());
+        }
+        /// The last pushed widget's names leave (those it had when pushed).
+        void Pop()
+        {
+            const usize from = m_frames[m_frames.Size() - 1];
+            m_frames.PopBack();
+            while (m_keys.Size() > from)
+            {
+                const u64 key = m_keys[m_keys.Size() - 1];
+                m_keys.PopBack();
+                Count(key, -1);
+            }
+        }
+        void Clear()
+        {
+            m_keys.Clear();
+            m_frames.Clear();
+            for (u8& c : m_counts)
+                c = 0;
+        }
+        /// False when some ancestor `selector` needs is certainly missing.
+        [[nodiscard]] bool MayMatch(const StyleSelector& selector) const noexcept
+        {
+            for (const u64 key : selector.AncestorKeys())
+                if (m_counts[Slot(key, 0)] == 0 || m_counts[Slot(key, 1)] == 0)
+                    return false;
+            return true;
+        }
+
+    private:
+        static constexpr u32 kBits = 12;
+        [[nodiscard]] static u32 Slot(u64 key, u32 which) noexcept
+        {
+            return static_cast<u32>(key >> (which * 32)) & ((1u << kBits) - 1u);
+        }
+        void Add(core::StringView name)
+        {
+            if (name.Size() == 0)
+                return;
+            const u64 key = HashText(name);
+            m_keys.PushBack(key);
+            Count(key, 1);
+        }
+        void Count(u64 key, i32 delta)
+        {
+            for (u32 which = 0; which < 2; ++which)
+            {
+                u8& c = m_counts[Slot(key, which)];
+                if (c != 255) // a full counter stays full: it can no longer tell when to empty
+                    c = static_cast<u8>(c + delta);
+            }
+        }
+
+        u8 m_counts[1u << kBits]{};
+        Array<u64> m_keys;   // what each push added, so a pop takes away exactly that
+        Array<u32> m_frames; // where each push's keys start
     };
 
     namespace detail

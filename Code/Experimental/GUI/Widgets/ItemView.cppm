@@ -18,6 +18,8 @@
 //   - The model reports row ranges (E6); the view follows inserts, removals, moves and changes of
 //     a flat model and resets for the rest. Selection is a set of row ids, so it survives inserts,
 //     moves and sorting.
+//   - A grid is a layout mode of the same view: cells of a size, as many across as fit (stretched
+//     to fill the row), lines of them down; the arrows move across and down.
 //   - Rows from markup: a `<template>` child is made into each row, its `{{item}}`,
 //     `{{item.Column}}` and `{{index}}` attributes filled for the item it shows; templates of a
 //     `type` are picked by the text in the view's `row-type-column`. `items="a|b|c"` gives a
@@ -63,6 +65,13 @@ export namespace experimental::gui
     {
         Single,
         Multi
+    };
+
+    /// How an item view lays its items out: rows down (List), or cells across then down (Grid).
+    enum class ItemLayout : u8
+    {
+        List,
+        Grid,
     };
 
     /// Row heights in a sum tree (a Fenwick tree): the offset of a row and the row at an offset
@@ -395,9 +404,49 @@ export namespace experimental::gui
         [[nodiscard]] Rect ItemBounds(i32 item) const
         {
             const Rect box = GetContentBounds();
-            const usize i = static_cast<usize>(core::Max(0, item));
-            return Rect{box.x, box.y + ContentTopInset() + m_heights.Top(i), RowWidth(box.width), m_heights.At(i)};
+            const i32 i = core::Max(0, item);
+            if (m_layout == ItemLayout::Grid)
+            {
+                const i32 across = GridColumns(box.width);
+                const f32 w = box.width / static_cast<f32>(across);
+                return Rect{box.x + static_cast<f32>(i % across) * w, box.y + ContentTopInset() + ItemTop(i), w, ItemHeight(i)};
+            }
+            return Rect{box.x, box.y + ContentTopInset() + ItemTop(i), RowWidth(box.width), ItemHeight(i)};
         }
+
+        // === Grid ===
+        /// Lists rows down, or lays cells out in a grid.
+        void SetLayoutMode(ItemLayout layout)
+        {
+            m_layout = layout;
+            ForEachRow([](ItemRow& row) { row.m_dirty = true; });
+            RequestLayout();
+        }
+        [[nodiscard]] ItemLayout GetLayoutMode() const noexcept { return m_layout; }
+        /// "list" or "grid" (markup's `layout`).
+        void SetLayoutModeName(const core::String& name)
+        {
+            SetLayoutMode(core::Trim(name.AsView()) == core::StringView(u8"grid") ? ItemLayout::Grid : ItemLayout::List);
+        }
+        [[nodiscard]] core::String GetLayoutModeName() const
+        {
+            return core::String(m_layout == ItemLayout::Grid ? core::StringView(u8"grid") : core::StringView(u8"list"));
+        }
+        /// A grid cell's least width (as many fit across as can, stretched to fill) and height.
+        void SetCellWidth(f32 width)
+        {
+            m_cellSize.x = core::Max(1.0f, width);
+            RequestLayout();
+        }
+        [[nodiscard]] f32 GetCellWidth() const noexcept { return m_cellSize.x; }
+        void SetCellHeight(f32 height)
+        {
+            m_cellSize.y = core::Max(1.0f, height);
+            RequestLayout();
+        }
+        [[nodiscard]] f32 GetCellHeight() const noexcept { return m_cellSize.y; }
+        /// How many cells a grid lays across (1 for a list).
+        [[nodiscard]] i32 GetColumnsAcross() const { return GridColumns(GetContentBounds().width); }
         /// Scrolls so `item` shows (Nearest: the least move).
         void ScrollToItem(i32 item, ScrollAlign align = ScrollAlign::Nearest)
         {
@@ -405,8 +454,8 @@ export namespace experimental::gui
                 return;
             const Rect box = GetContentBounds();
             const f32 view = core::Max(0.0f, box.height - ContentTopInset());
-            const f32 top = m_heights.Top(static_cast<usize>(item));
-            const f32 bottom = top + m_heights.At(static_cast<usize>(item));
+            const f32 top = ItemTop(item);
+            const f32 bottom = top + ItemHeight(item);
             const f32 now = GetScrollTarget().y;
             f32 to = now;
             switch (align)
@@ -423,7 +472,7 @@ export namespace experimental::gui
                 break;
             }
             // Its offset is known now, so the extent is brought up to date first (the range).
-            SetScrollExtent(core::Float2{GetContentExtent().x, ContentTopInset() + m_heights.Total()});
+            SetScrollExtent(core::Float2{GetContentExtent().x, ContentTopInset() + ContentHeight()});
             ScrollTo(core::Float2{GetScrollTarget().x, to});
             if (!m_realizing)
                 Realize();
@@ -791,6 +840,33 @@ export namespace experimental::gui
             return core::String{};
         }
 
+        // --- Geometry: a list's rows by the heights, a grid's lines by the cell height ---
+        [[nodiscard]] i32 GridColumns(f32 width) const
+        {
+            return m_layout == ItemLayout::Grid ? core::Max(1, static_cast<i32>(width / m_cellSize.x)) : 1;
+        }
+        [[nodiscard]] i32 Across() const { return GridColumns(GetContentBounds().width); }
+        [[nodiscard]] f32 ItemTop(i32 item) const
+        {
+            if (m_layout == ItemLayout::Grid)
+                return static_cast<f32>(item / Across()) * m_cellSize.y;
+            return m_heights.Top(static_cast<usize>(item));
+        }
+        [[nodiscard]] f32 ItemHeight(i32 item) const
+        {
+            return m_layout == ItemLayout::Grid ? m_cellSize.y : m_heights.At(static_cast<usize>(item));
+        }
+        [[nodiscard]] f32 ContentHeight() const
+        {
+            if (m_layout == ItemLayout::Grid)
+            {
+                const i32 across = Across();
+                return static_cast<f32>((static_cast<i32>(ItemCount()) + across - 1) / across) * m_cellSize.y;
+            }
+            return m_heights.Total();
+        }
+        void RealizeGrid();
+
         [[nodiscard]] static bool StylePending(const Node& node)
         {
             if (node.IsStyleDirty())
@@ -844,6 +920,8 @@ export namespace experimental::gui
         }
         void UpdateScrollAnchor()
         {
+            if (m_layout == ItemLayout::Grid)
+                return; // a grid's cells do not change height
             const f32 y = GetScrollOffset().y;
             m_scrollAnchor = static_cast<i32>(m_heights.Find(y));
             m_scrollAnchorDelta = y - m_heights.Top(static_cast<usize>(m_scrollAnchor));
@@ -953,6 +1031,8 @@ export namespace experimental::gui
         core::Function<void(ModelIndex)> m_onActivated;
         f32 m_rowHeight = 24.0f;
         f32 m_estimate = 24.0f;
+        ItemLayout m_layout = ItemLayout::List;
+        core::Float2 m_cellSize{96.0f, 96.0f};
         i32 m_scrollAnchor = 0;
         f32 m_scrollAnchorDelta = 0.0f;
         bool m_realizing = false;
@@ -1058,6 +1138,11 @@ export namespace experimental::gui
     {
         if (m_realizing)
             return;
+        if (m_layout == ItemLayout::Grid)
+        {
+            RealizeGrid();
+            return;
+        }
         m_realizing = true;
         const Rect box = GetContentBounds();
         const f32 inset = ContentTopInset();
@@ -1140,6 +1225,53 @@ export namespace experimental::gui
         m_realizing = false;
     }
 
+    // A grid's cells in view (and a line past each edge), at the cell size, stretched across.
+    inline void ItemView::RealizeGrid()
+    {
+        m_realizing = true;
+        const Rect box = GetContentBounds();
+        const f32 inset = ContentTopInset();
+        const i32 count = static_cast<i32>(ItemCount());
+        const i32 across = GridColumns(box.width);
+        const f32 cellW = box.width / static_cast<f32>(across);
+        const f32 top = GetScrollOffset().y;
+        const f32 bottom = top + core::Max(0.0f, box.height - inset);
+        const i32 firstLine = core::Max(0, static_cast<i32>(top / m_cellSize.y) - 1);
+        const i32 lastLine = static_cast<i32>(bottom / m_cellSize.y) + 1;
+        const i32 first = core::Min(count, firstLine * across);
+        const i32 last = core::Min(count, (lastLine + 1) * across);
+
+        core::Array<ItemId> inRange;
+        for (i32 i = first; i < last; ++i)
+            inRange.PushBack(ItemIdAt(i));
+        core::Array<core::RefPtr<ItemRow>> kept;
+        for (const core::RefPtr<ItemRow>& row : m_live)
+        {
+            bool stays = false;
+            for (ItemId id : inRange)
+                stays = stays || id == row->m_id;
+            if (stays)
+                kept.PushBack(row);
+            else
+                ReleaseRow(*row);
+        }
+        m_live = core::Move(kept);
+        for (const core::RefPtr<ItemRow>& row : m_live)
+            row->m_taken = false;
+        core::Array<core::RefPtr<ItemRow>> next;
+        for (i32 i = first; i < last; ++i)
+            (void)TakeRow(i, next);
+        m_live = core::Move(next);
+        for (const core::RefPtr<ItemRow>& row : m_live)
+        {
+            row->m_taken = false;
+            const i32 i = row->m_item;
+            row->Arrange(Rect{box.x + static_cast<f32>(i % across) * cellW, box.y + inset + static_cast<f32>(i / across) * m_cellSize.y, cellW, m_cellSize.y});
+        }
+        SetScrollExtent(core::Float2{box.width, inset + ContentHeight()});
+        m_realizing = false;
+    }
+
     inline void ItemView::SelectByUser(i32 item, u32 modifiers)
     {
         if (item < 0 || item >= static_cast<i32>(ItemCount()))
@@ -1205,22 +1337,35 @@ export namespace experimental::gui
             return;
         }
         const i32 current = GetCurrentItem();
-        // A page: the rows that fit, by the current row's height.
-        const f32 rowH = core::Max(1.0f, m_heights.At(static_cast<usize>(core::Max(0, current))));
-        const i32 page = core::Max(1, static_cast<i32>((GetContentBounds().height - ContentTopInset()) / rowH) - 1);
+        // A grid's line is a step of `across` items; a page the lines (rows) that fit.
+        const i32 across = Across();
+        const f32 rowH = core::Max(1.0f, ItemHeight(core::Max(0, current)));
+        const i32 page = core::Max(1, static_cast<i32>((GetContentBounds().height - ContentTopInset()) / rowH) - 1) * across;
+        const bool grid = m_layout == ItemLayout::Grid;
         i32 target = current;
         switch (key)
         {
-        case KeyCode::Up: target = current <= 0 ? 0 : current - 1; break;
-        case KeyCode::Down: target = current < 0 ? 0 : core::Min(items - 1, current + 1); break;
+        case KeyCode::Up: target = current < 0 ? 0 : current - across >= 0 ? current - across : current; break;
+        case KeyCode::Down: target = current < 0 ? 0 : current + across < items ? current + across : current; break;
+        case KeyCode::Left:
+            if (!grid)
+                return;
+            target = current <= 0 ? 0 : current - 1;
+            break;
+        case KeyCode::Right:
+            if (!grid)
+                return;
+            target = current < 0 ? 0 : core::Min(items - 1, current + 1);
+            break;
         case KeyCode::Home: target = 0; break;
         case KeyCode::End: target = items - 1; break;
         case KeyCode::PageUp: target = core::Max(0, core::Max(0, current) - page); break;
         case KeyCode::PageDown: target = core::Min(items - 1, core::Max(0, current) + page); break;
         default: return;
         }
-        // An arrow at the view's end is given back (focus moves on).
-        if ((key == KeyCode::Up || key == KeyCode::Down) && target == current && IsItemSelected(current))
+        // An arrow at the view's edge is given back (focus moves on).
+        const bool arrow = key == KeyCode::Up || key == KeyCode::Down || key == KeyCode::Left || key == KeyCode::Right;
+        if (arrow && target == current && IsItemSelected(current))
             return;
         event.Handled = true;
         if (ctrl && m_selectionMode == SelectionMode::Multi)

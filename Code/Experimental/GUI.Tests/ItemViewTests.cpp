@@ -457,3 +457,45 @@ TEST_CASE("itemview: templates of a type are picked by the row-type-column's tex
     CHECK(label(3)->HasClass(SV(u8"header")));
     CHECK(list->RowForItem(0)->GetRowType() != list->RowForItem(1)->GetRowType());
 }
+
+TEST_CASE("itemview: a grid lays cells across then down, stretched to fill; the arrows move across and down")
+{
+    StringListModel model(Numbered(50));
+    Mounted m = MountList(model, 20.0f, 100.0f);
+    m.list->SetLayoutMode(ItemLayout::Grid);
+    m.list->SetCellWidth(60.0f);
+    m.list->SetCellHeight(40.0f);
+    m.Layout();
+    // 200 wide: 3 cells of 66.7 across; 17 lines of 40.
+    CHECK(m.list->GetColumnsAcross() == 3);
+    CHECK(m.list->GetScrollRange().y == doctest::Approx(17.0f * 40.0f - 100.0f));
+    ItemRow* cell = m.list->RowForItem(4);
+    REQUIRE(cell != nullptr);
+    CHECK(cell->GetPosition().x == doctest::Approx(200.0f / 3.0f).epsilon(0.02));
+    CHECK(cell->GetPosition().y == doctest::Approx(40.0f));
+    CHECK(cell->GetSize().x == doctest::Approx(200.0f / 3.0f).epsilon(0.02));
+    // Lines 0 to 2 in view and one past: 12 cells, not 50.
+    CHECK(m.list->VisibleRowCount() == 12);
+    CHECK(m.list->ItemAt(core::Float2{150.0f, 50.0f}) == 5);
+
+    m.list->RequestFocus();
+    m.list->SetSelectedItem(4);
+    m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Right));
+    CHECK(m.list->GetSelectedItem() == 5);
+    m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Down));
+    CHECK(m.list->GetSelectedItem() == 8);
+    m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Up));
+    m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Up));
+    CHECK(m.list->GetSelectedItem() == 2);
+    m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::End));
+    m.Layout();
+    CHECK(m.list->GetSelectedItem() == 49);
+    CHECK(m.list->GetScrollOffset().y == doctest::Approx(m.list->GetScrollRange().y));
+    CHECK(m.list->RowForItem(49) != nullptr);
+
+    // Narrower: fewer across, more lines.
+    m.list->SetSize(core::Float2{130.0f, 100.0f});
+    m.Layout();
+    CHECK(m.list->GetColumnsAcross() == 2);
+    CHECK(m.list->GetLayoutModeName() == SV(u8"grid"));
+}

@@ -39,6 +39,7 @@ import :thickness;
 import :layout_style; // LayoutStyle, LayoutConstraints (E2)
 import :resource_provider; // IResourceProvider (a rich text's icons, E4)
 import :frame_stats;       // FrameStats (E8a)
+import :debug_overlay;     // DebugOverlay (E8c)
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -1081,7 +1082,7 @@ export namespace experimental::gui
         void DrawScrollBars(DrawContext& ctx) const;
         /// Draws `what` of the layout overlay for this node and its displayed subtree, in this
         /// node's space (clipped where its children are).
-        void DrawLayoutOverlay(DrawContext& ctx, const LayoutOverlay& what) const;
+        void DrawLayoutOverlay(DrawContext& ctx, const DebugOverlay& what) const;
         /// Places the children in the content box (Arrange calls it when needed). The default lays
         /// them out by the display kind (LayoutChildren); a composite widget arranges its own.
         virtual void OnLayout() { LayoutChildren(); }

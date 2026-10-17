@@ -405,23 +405,36 @@ export namespace experimental::gui
         }
         [[nodiscard]] f32 GetDisplayScale() const noexcept { return m_displayScale; }
 
-        /// What the layout overlay shows over this GUI's tree (nothing by default).
-        void SetLayoutOverlay(const LayoutOverlay& overlay)
+        /// What the debug overlay shows over this GUI's tree (nothing by default, E8c).
+        void SetDebugOverlay(const DebugOverlay& overlay)
         {
-            if (overlay == m_layoutOverlay)
+            if (overlay == m_debugOverlay)
                 return;
-            m_layoutOverlay = overlay;
+            m_debugOverlay = overlay;
             Invalidate();
         }
-        [[nodiscard]] const LayoutOverlay& GetLayoutOverlay() const noexcept { return m_layoutOverlay; }
+        [[nodiscard]] const DebugOverlay& GetDebugOverlay() const noexcept { return m_debugOverlay; }
+        /// The font the overlay names nodes and numbers tab stops in (none: it draws no text).
+        void SetDebugFont(fonts::CachedFont* font) noexcept { m_debugFont = font; }
 
     protected:
         [[nodiscard]] f32 TopPixelScale() const override { return m_displayScale; }
         void OnDrawAbove(DrawContext& ctx) override
         {
             m_eventDispatcher.DrawPopups(ctx); // the top layer, after the tree (E5)
-            if (m_layoutOverlay.Any())
-                DrawLayoutOverlay(ctx, m_layoutOverlay);
+            if (m_debugOverlay.AnyLayout())
+                DrawLayoutOverlay(ctx, m_debugOverlay);
+            if (m_debugOverlay.AnyInput())
+                DrawInputOverlay(ctx);
+        }
+
+    private:
+        // The debug overlay's input half, in this root's space (DebugOverlayImpl.cpp).
+        void DrawInputOverlay(DrawContext& ctx) const;
+        // `node`'s border box in this root's space.
+        [[nodiscard]] Rect InRootSpace(const Node& node) const
+        {
+            return (GetTransform().GetInverse() * node.GetWorldTransform()).TransformRect(node.GetLocalBounds());
         }
 
     public:
@@ -449,7 +462,8 @@ export namespace experimental::gui
         RefPtr<GUIContext> m_context;            // the GUI this root is part of (declared first: outlives the rest)
         EventDispatcher m_eventDispatcher{this}; // pointer, hover and focus: this root's own
         f32 m_displayScale = 1.0f;
-        LayoutOverlay m_layoutOverlay;
+        DebugOverlay m_debugOverlay;
+        fonts::CachedFont* m_debugFont = nullptr; // the overlay's text (the host's)
         FrameStats m_frameStats; // in progress
         FrameStats m_lastFrame;
         u64 m_framesDrawn = 0;

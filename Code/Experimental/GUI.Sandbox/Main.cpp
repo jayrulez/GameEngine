@@ -141,6 +141,7 @@ public:
     void SetSweep(bool sweep) { m_sweep = sweep; }
     void SetScroll(f32 pixels) { m_scroll = pixels; }
     void SetLayoutOverlay(bool on) { m_layoutOverlay = on; }
+    void SetInputOverlay(bool on) { m_inputOverlay = on; }
 
     GUISandbox()
     {
@@ -175,7 +176,7 @@ private:
     void ShowPage(StringView id);
     void ToggleTheme();
     // The layout overlay (F9) on both roots: bounds, padding, margins and text baselines.
-    void ApplyLayoutOverlay();
+    void ApplyDebugOverlay();
     void OpenWindow();
     void ShowMessage();
     void OpenMenu();
@@ -193,7 +194,8 @@ private:
     bool m_openMenuAtStart = false;
     String m_menuCall; // a game-menu script function to call once it is up (a screenshot of a panel)
     String m_keys;     // keystrokes to type into the root on show, one every 15 frames
-    bool m_layoutOverlay = false;
+    bool m_layoutOverlay = false; // F9: the debug overlay's layout half
+    bool m_inputOverlay = false;  // F8: its input half (focus path, tab order, navigation, pointer, redraws)
     f32 m_scroll = 0.0f; // the page scrolled down this far once it is up (a screenshot further down)
     bool m_alwaysRedraw = false;
     bool m_frameStats = false;
@@ -456,9 +458,12 @@ void GUISandbox::BuildSandbox()
     (void)m_root->OnCommand(u8"demo.window", [self](gui::CommandEvent&) { self->OpenWindow(); });
     (void)m_root->OnCommand(u8"demo.message", [self](gui::CommandEvent&) { self->ShowMessage(); });
     (void)m_root->OnCommand(u8"showcase.open", [self](gui::CommandEvent&) { self->OpenMenu(); });
-    (void)m_root->OnCommand(u8"debug.layout", [self](gui::CommandEvent&) { self->m_layoutOverlay = !self->m_layoutOverlay; self->ApplyLayoutOverlay(); });
+    (void)m_root->OnCommand(u8"debug.layout", [self](gui::CommandEvent&) { self->m_layoutOverlay = !self->m_layoutOverlay; self->ApplyDebugOverlay(); });
+    (void)m_root->OnCommand(u8"debug.input", [self](gui::CommandEvent&) { self->m_inputOverlay = !self->m_inputOverlay; self->ApplyDebugOverlay(); });
     (void)m_gui->GetKeymap().Bind(u8"f9", u8"debug.layout");
-    ApplyLayoutOverlay();
+    (void)m_gui->GetKeymap().Bind(u8"f8", u8"debug.input");
+    m_root->SetDebugFont(m_font);
+    ApplyDebugOverlay();
 
     m_styles.SetFontService(m_fontService.Get());
     m_gui->SetFontService(m_fontService.Get()); // a rich text's own faces
@@ -786,13 +791,22 @@ void GUISandbox::ApplySandboxSheet()
             (void)m_styles.SetSubtreeSheet(*page.node, gui::CSSParser::Parse(page.sheet.AsView()));
 }
 
-void GUISandbox::ApplyLayoutOverlay()
+void GUISandbox::ApplyDebugOverlay()
 {
-    const gui::LayoutOverlay overlay = m_layoutOverlay ? gui::LayoutOverlay::All() : gui::LayoutOverlay{};
+    gui::DebugOverlay overlay = m_layoutOverlay ? gui::DebugOverlay::Layout() : gui::DebugOverlay{};
+    if (m_inputOverlay)
+    {
+        const gui::DebugOverlay input = gui::DebugOverlay::Input();
+        overlay.FocusPath = input.FocusPath;
+        overlay.TabOrder = input.TabOrder;
+        overlay.Navigation = input.Navigation;
+        overlay.Pointer = input.Pointer;
+        overlay.RedrawFlash = input.RedrawFlash;
+    }
     if (m_root)
-        m_root->SetLayoutOverlay(overlay);
+        m_root->SetDebugOverlay(overlay);
     if (m_menuRoot)
-        m_menuRoot->SetLayoutOverlay(overlay);
+        m_menuRoot->SetDebugOverlay(overlay);
 }
 
 void GUISandbox::BuildMenu()
@@ -803,9 +817,11 @@ void GUISandbox::BuildMenu()
     m_menuBinding.root = m_menuRoot.Get();
     {
         GUISandbox* self = this;
-        (void)m_menuRoot->OnCommand(u8"debug.layout", [self](gui::CommandEvent&) { self->m_layoutOverlay = !self->m_layoutOverlay; self->ApplyLayoutOverlay(); });
+        (void)m_menuRoot->OnCommand(u8"debug.layout", [self](gui::CommandEvent&) { self->m_layoutOverlay = !self->m_layoutOverlay; self->ApplyDebugOverlay(); });
+        (void)m_menuRoot->OnCommand(u8"debug.input", [self](gui::CommandEvent&) { self->m_inputOverlay = !self->m_inputOverlay; self->ApplyDebugOverlay(); });
     }
-    ApplyLayoutOverlay();
+    m_menuRoot->SetDebugFont(m_font);
+    ApplyDebugOverlay();
     String path(kMenuDir);
     path += StringView(u8"menu.xml");
     RefPtr<gui::Node> menu = LoadMarkup(ReadText(path.AsView()).AsView());
@@ -1338,7 +1354,8 @@ int main(int argc, char** argv)
     // each second, how many frames drew. --sweep: hover, click and right-click every widget of every
     // page, then open the game menu, printing each step, and exit (a smoke test; a crash's last line
     // names its widget). --scroll <px>: scroll the page down that far once it is up.
-    // --layout-overlay: start with the layout overlay on (F9 toggles it). --stress <n>: start on
+    // --layout-overlay: start with the layout overlay on (F9 toggles it). --input-overlay: start with
+    // the input overlay on (F8 toggles it: focus path, tab order, navigation, pointer, redraws). --stress <n>: start on
     // the Stress page, built at load n (1 to 20; measure in RelWithDebInfo). With the
     // framework's --screenshot flags, a picture of any of it.
     for (int i = 1; i < argc; ++i)
@@ -1361,6 +1378,8 @@ int main(int argc, char** argv)
             app.SetSweep(true);
         else if (arg == StringView(u8"--layout-overlay"))
             app.SetLayoutOverlay(true);
+        else if (arg == StringView(u8"--input-overlay"))
+            app.SetInputOverlay(true);
         else if (arg == StringView(u8"--stress") && i + 1 < argc)
             app.SetStress(std::atoi(reinterpret_cast<const char*>(argv[++i])));
         else if (arg == StringView(u8"--scroll") && i + 1 < argc)

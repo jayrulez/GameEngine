@@ -372,21 +372,6 @@ export namespace experimental::gui
         return bits;
     }
 
-    /// What a GUI's layout overlay shows over its tree, for working on a layout: each node's border
-    /// box (red outline), its padding (green) and margin (orange), and where it reports a baseline
-    /// of its own, the baseline (magenta).
-    struct LayoutOverlay
-    {
-        bool Bounds = false;
-        bool Padding = false;
-        bool Margin = false;
-        bool Baselines = false;
-
-        [[nodiscard]] static constexpr LayoutOverlay All() noexcept { return {true, true, true, true}; }
-        [[nodiscard]] constexpr bool Any() const noexcept { return Bounds || Padding || Margin || Baselines; }
-        [[nodiscard]] constexpr bool operator==(const LayoutOverlay&) const noexcept = default;
-    };
-
     /// A length layout leaves unbounded (an available width with no limit).
     inline constexpr f32 kUnbounded = 1.0e30f;
     [[nodiscard]] constexpr bool IsUnbounded(f32 length) noexcept { return length >= 1.0e29f; }

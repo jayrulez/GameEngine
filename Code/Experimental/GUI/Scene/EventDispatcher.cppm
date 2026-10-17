@@ -380,6 +380,18 @@ export namespace experimental::gui
             }
         }
 
+        /// What Tab steps through now, in order: the tab-focusable widgets shown and enabled, inside
+        /// a modal while one is open, or inside the dialog focus is in (the debug overlay numbers them).
+        [[nodiscard]] core::Array<Node*> TabStops() const
+        {
+            core::Array<Node*> stops;
+            Node* within = FocusScopeRoot();
+            if (Node* contain = ContainingScopeOf(m_focusNode); contain != nullptr && IsInSubtree(contain, within))
+                within = contain;
+            CollectTabStops(within, stops);
+            return stops;
+        }
+
         /// Moves focus to the best widget in `direction` (inside a modal while one is open, within
         /// focus scopes); with nothing focused, to the GUI's entry. True when focus moved. The
         /// gamepad's d-pad and stick arrive here as the arrows do.
@@ -1977,11 +1989,11 @@ export namespace experimental::gui
             SetFocusNode(nullptr);
         }
 
-        // Gather tab-focusable nodes under `node` in pre-order (skipping invisible subtrees
-        // and disabled nodes).
+        // Gather tab-focusable nodes under `node` in pre-order (skipping hidden subtrees, those
+        // out of the layout too, and disabled nodes).
         static void CollectTabStops(Node* node, core::Array<Node*>& out)
         {
-            if (node == nullptr || !node->IsVisible())
+            if (node == nullptr || !node->IsVisible() || !node->IsDisplayed())
                 return;
             if (node->IsTabFocusable() && node->IsTreeEnabled())
                 out.PushBack(node);
@@ -2008,12 +2020,7 @@ export namespace experimental::gui
                 if (stop)
                     return false;
             }
-            core::Array<Node*> stops;
-            // Confined to a modal, or to the containing scope (a dialog) focus is in.
-            Node* within = FocusScopeRoot();
-            if (Node* contain = ContainingScopeOf(m_focusNode); contain != nullptr && IsInSubtree(contain, within))
-                within = contain;
-            CollectTabStops(within, stops);
+            const core::Array<Node*> stops = TabStops();
             const usize count = stops.Size();
             if (count == 0)
                 return false;

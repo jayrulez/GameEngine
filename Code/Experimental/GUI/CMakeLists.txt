@@ -19,6 +19,7 @@ target_sources(GUI
             Core/Reactive.cppm
             Layout/LayoutStyle.cppm
             Core/FrameStats.cppm
+            Core/DebugOverlay.cppm
             Core/Node.cppm
             Scene/Action.cppm
             Scene/ActionManager.cppm
@@ -122,6 +123,7 @@ target_sources(GUI
         Scene/GUIClusterImpl.cpp
         Layout/LayoutImpl.cpp
         Scene/ActionManagerImpl.cpp
+        Scene/DebugOverlayImpl.cpp
         Scene/GUIReflectionImpl.cpp
         Core/ReactiveImpl.cpp)
 

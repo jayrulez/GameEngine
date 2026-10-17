@@ -128,6 +128,31 @@ TEST_CASE("slider: draws track + fill + handle")
     CHECK(ctx.GetBatch().vertices.Size() > 0);
 }
 
+TEST_CASE("slider: visible focus marks the thumb, in the colour of its focus part")
+{
+    auto s = Make<Slider>();
+    s->SetSize(core::Float2{120.0f, 20.0f});
+    s->SetValue(0.5f);
+    const core::Color ring{1.0f, 0.0f, 1.0f, 1.0f};
+    s->SetFocusColor(ring);
+    const auto draw = [&]()
+    {
+        foundation::vg::VGContext ctx;
+        DrawContext dc{ctx};
+        s->Draw(dc);
+        core::usize ringVertices = 0;
+        for (const foundation::vg::VGVertex& v : ctx.GetBatch().vertices)
+            if (v.color.r == ring.r && v.color.g == ring.g && v.color.b == ring.b)
+                ++ringVertices;
+        return ringVertices;
+    };
+    CHECK(draw() == 0u);
+    s->HandleFocusGained();
+    CHECK(draw() == 0u); // focused after a click: no mark
+    s->SetFocusVisible(true);
+    CHECK(draw() > 0u); // the ring and halo round the thumb
+}
+
 TEST_CASE("slider: right button does not drag the value")
 {
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));

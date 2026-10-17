@@ -109,3 +109,82 @@ TEST_CASE("style-manager: SetStyleSheet swaps styles (hot-reload)")
     mgr.ApplyTree(*root.Get());
     CHECK(btn->GetAlpha() == doctest::Approx(0.3f));
 }
+
+// ===================== E3: origins =====================
+
+namespace
+{
+    core::RefPtr<SceneRoot> NewRoot()
+    {
+        auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+        root->SetSize(core::Float2{200.0f, 200.0f});
+        return root;
+    }
+    core::RefPtr<UIWidget> Tagged(Node& parent, const char8_t* tag, const char8_t* cls = u8"")
+    {
+        auto w = Make<UIWidget>();
+        w->SetTag(SV(tag));
+        if (cls[0] != 0)
+            w->AddClass(SV(cls));
+        parent.AddChild(w.Get());
+        return w;
+    }
+}
+
+TEST_CASE("style-manager: the GUI's sheet outranks the user agent's at any specificity")
+{
+    auto root = NewRoot();
+    auto button = Tagged(*root.Get(), u8"button");
+    button->SetId(SV(u8"ok"));
+    StyleManager styles;
+    styles.SetUserAgentSheet(CSSParser::Parse(SV(u8"#ok { opacity: 0.2; } button { padding: 9px; }")));
+    styles.SetStyleSheet(CSSParser::Parse(SV(u8"* { opacity: 0.7; }")));
+    styles.ApplyTree(*root.Get());
+    CHECK(button->GetAlpha() == doctest::Approx(0.7f)); // a universal rule over an id one
+    CHECK(button->GetPadding().Left == doctest::Approx(9.0f)); // what the GUI's sheet does not say
+}
+
+TEST_CASE("style-manager: a subtree's sheet applies inside it alone, over the GUI's; an inner one over an outer")
+{
+    auto root = NewRoot();
+    auto page = Tagged(*root.Get(), u8"panel", u8"page");
+    auto inside = Tagged(*page.Get(), u8"label", u8"note");
+    auto inner = Tagged(*page.Get(), u8"panel", u8"card");
+    auto deep = Tagged(*inner.Get(), u8"label", u8"note");
+    auto outside = Tagged(*root.Get(), u8"label", u8"note");
+    StyleManager styles;
+    styles.SetStyleSheet(CSSParser::Parse(SV(u8"label.note { opacity: 0.9; }")));
+    REQUIRE(styles.SetSubtreeSheet(*page.Get(), CSSParser::Parse(SV(u8".note { opacity: 0.5; } @keyframes fade { from { opacity: 0; } to { opacity: 1; } }"))));
+    REQUIRE(styles.SetSubtreeSheet(*inner.Get(), CSSParser::Parse(SV(u8"* { opacity: 0.3; }"))));
+    styles.ApplyTree(*root.Get());
+    CHECK(inside->GetAlpha() == doctest::Approx(0.5f));  // the page's, though less specific
+    CHECK(deep->GetAlpha() == doctest::Approx(0.3f));    // the inner card's
+    CHECK(outside->GetAlpha() == doctest::Approx(0.9f)); // outside the page: the GUI's alone
+
+    styles.RemoveSubtreeSheet(*inner.Get());
+    styles.ApplyTree(*root.Get());
+    CHECK(deep->GetAlpha() == doctest::Approx(0.5f));
+    // A node in no GUI cannot hold a subtree sheet.
+    auto loose = Make<UIWidget>();
+    CHECK_FALSE(styles.SetSubtreeSheet(*loose.Get(), StyleSheet{}));
+}
+
+TEST_CASE("style-manager: markup's inline properties outrank every sheet's normal ones, not !important")
+{
+    RegisterGuiElements();
+    MarkupLoader loader(ElementSet::All(), core::DefaultAllocator());
+    core::RefPtr<Node> markup = loader.LoadFromString(SV(u8R"(<Panel><Label class="chip" opacity="0.4"/><Label class="hard" opacity="0.4"/></Panel>)"));
+    REQUIRE(markup);
+    auto root = NewRoot();
+    root->AddChild(markup.Get());
+    auto* chip = core::Cast<UIWidget>(markup->GetChildAt(0));
+    auto* hard = core::Cast<UIWidget>(markup->GetChildAt(1));
+    StyleManager styles(CSSParser::Parse(SV(u8".chip { opacity: 0.9; } .hard { opacity: 0.8 !important; }")));
+    styles.ApplyTree(*root.Get());
+    CHECK(chip->GetAlpha() == doctest::Approx(0.4f));
+    CHECK(hard->GetAlpha() == doctest::Approx(0.8f));
+    // A script or code may set inline style too.
+    chip->SetInlineStyle(SV(u8"opacity"), SV(u8"0.6"));
+    styles.ApplyTree(*root.Get());
+    CHECK(chip->GetAlpha() == doctest::Approx(0.6f));
+}

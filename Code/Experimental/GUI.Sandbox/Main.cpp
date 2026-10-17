@@ -226,11 +226,11 @@ private:
         String id;
         gui::Node* node = nullptr;      // in the content scroller
         gui::Node* navButton = nullptr; // in the sidebar
+        String sheet;                   // its .css, which styles it alone
         RefPtr<script::IScriptContext> script;
     };
     Array<Page> m_pages;
     String m_current;
-    String m_pageSheets; // every page's .css, joined
     bool m_light = false;
 
     // Scripts: one manager, a context per page that has a script, one for the game menu.
@@ -454,8 +454,7 @@ void GUISandbox::LoadPages()
         page.node = node.Get();
         String css = base;
         css += StringView(u8".css");
-        m_pageSheets += ReadText(css.AsView()).AsView();
-        m_pageSheets += StringView(u8"\n");
+        page.sheet = ReadText(css.AsView());
         const String id = page.id;
         String command(kPageCommand);
         command += id.AsView();
@@ -645,13 +644,15 @@ void GUISandbox::FillNativeHosts()
 
 void GUISandbox::ApplySandboxSheet()
 {
-    // The built-in theme for the widgets, then the sandbox's look, then the pages'.
-    String sheet(m_light ? gui::DefaultLightThemeCSS() : gui::DefaultDarkThemeCSS());
+    // The built-in theme for the widgets (the user agent's), the sandbox's look over it, and each
+    // page's own sheet over that, styling its page alone.
+    m_styles.SetUserAgentSheet(gui::CSSParser::Parse(m_light ? gui::DefaultLightThemeCSS() : gui::DefaultDarkThemeCSS()));
     String path(kSandboxDir);
     path += StringView(u8"sandbox.css");
-    sheet += ReadText(path.AsView()).AsView();
-    sheet += m_pageSheets.AsView();
-    m_styles.SetStyleSheet(gui::CSSParser::Parse(sheet.AsView()));
+    m_styles.SetStyleSheet(gui::CSSParser::Parse(ReadText(path.AsView()).AsView()));
+    for (const Page& page : m_pages)
+        if (page.node != nullptr)
+            (void)m_styles.SetSubtreeSheet(*page.node, gui::CSSParser::Parse(page.sheet.AsView()));
 }
 
 void GUISandbox::ApplyLayoutOverlay()

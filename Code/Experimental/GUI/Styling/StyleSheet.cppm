@@ -212,6 +212,17 @@ export namespace experimental::gui
         Array<KeyframeStop> Stops;
     };
 
+    class StyleSheet;
+
+    /// A rule that matched an element, with what orders it in the cascade.
+    struct StyleRuleMatch
+    {
+        const StyleRule* Rule = nullptr;
+        u32 Origin = 0;     ///< the sheet's place among the origins (user agent, the GUI's, a subtree's)
+        i64 Specificity = 0;
+        u32 Order = 0;      ///< its place in its sheet
+    };
+
     class StyleSheet
     {
     public:
@@ -229,9 +240,26 @@ export namespace experimental::gui
             return nullptr;
         }
 
-        // Resolve the cascade for `element`. With `pseudoElement` empty this is the element's
-        // own style (rules with no ::part); pass a part name (e.g. "thumb") to resolve the
-        // cascade for that widget part (rules written as `tag::part { ... }`).
+        /// The rules of this sheet that match `element` (its own style with `pseudoElement` empty,
+        /// else that part's, from rules written `tag::part`) under `context`, added to `out` at
+        /// `origin` (a later origin wins over an earlier one at any specificity).
+        void CollectMatches(const UIWidget& element, const MediaContext& context, bool applyPseudo,
+                            core::StringView pseudoElement, u32 origin, Array<StyleRuleMatch>& out) const
+        {
+            for (usize i = 0; i < m_rules.Size(); ++i)
+            {
+                const StyleRule& rule = m_rules[i];
+                if (rule.Selector().PseudoElement() != pseudoElement)
+                    continue;
+                const bool mediaActive = rule.Media().IsEmpty() || rule.Media().Evaluate(context);
+                if (mediaActive && rule.Selector().Select(element, applyPseudo))
+                    out.PushBack(StyleRuleMatch{&rule, origin, rule.Specificity(), static_cast<u32>(i)});
+            }
+        }
+
+        // Resolve the cascade for `element` against this sheet alone. With `pseudoElement` empty
+        // this is the element's own style (rules with no ::part); pass a part name (e.g. "thumb")
+        // to resolve the cascade for that widget part (rules written as `tag::part { ... }`).
         /// `inherited` (the parent's resolved style) gives the custom properties this element
         /// does not set.
         [[nodiscard]] ResolvedStyle Resolve(const UIWidget& element,
@@ -240,25 +268,27 @@ export namespace experimental::gui
                                             core::StringView pseudoElement = {},
                                             const ResolvedStyle* inherited = nullptr) const
         {
-            // Collect indices of matching rules (selector + pseudo-element + media), in source order.
-            Array<usize> matches;
-            for (usize i = 0; i < m_rules.Size(); ++i)
-            {
-                const StyleRule& rule = m_rules[i];
-                if (rule.Selector().PseudoElement() != pseudoElement)
-                    continue;
-                const bool mediaActive = rule.Media().IsEmpty() || rule.Media().Evaluate(context);
-                if (mediaActive && rule.Selector().Select(element, applyPseudo))
-                    matches.PushBack(i);
-            }
+            Array<StyleRuleMatch> matches;
+            CollectMatches(element, context, applyPseudo, pseudoElement, 0, matches);
+            return Cascade(matches, inherited, {});
+        }
 
-            // Stable insertion sort by specificity (ties keep source order -> later wins on apply).
+        /// The cascade of `matches` (from any sheets): ordered by origin, then specificity, then
+        /// source order, applied low to high so the later wins (!important resists a later normal
+        /// value); then `inlineStyle` (markup's attributes, a script's style), the highest origin.
+        /// Custom properties first (this element's, then those it inherits from `inherited`), so a
+        /// var() anywhere resolves against the whole cascade; then each declaration as its
+        /// longhands, parsed: once per declaration when it has no var() (its value cannot change),
+        /// else each time.
+        [[nodiscard]] static ResolvedStyle Cascade(Array<StyleRuleMatch>& matches, const ResolvedStyle* inherited,
+                                                   Span<const InlineStyleDeclaration> inlineStyle)
+        {
+            // Stable insertion sort (ties keep their order: sheet, then source).
             for (usize a = 1; a < matches.Size(); ++a)
             {
-                const usize key = matches[a];
-                const i64 keySpec = m_rules[key].Specificity();
+                const StyleRuleMatch key = matches[a];
                 usize b = a;
-                while (b > 0 && m_rules[matches[b - 1]].Specificity() > keySpec)
+                while (b > 0 && Before(key, matches[b - 1]))
                 {
                     matches[b] = matches[b - 1];
                     --b;
@@ -266,20 +296,19 @@ export namespace experimental::gui
                 matches[b] = key;
             }
 
-            // Apply low-to-high; later declarations override earlier (!important resists). Custom
-            // properties first (this element's, then those it inherits), so a var() anywhere
-            // resolves against the whole cascade; then each declaration as its longhands, parsed:
-            // once per declaration when it has no var() (its value cannot change), else each time.
             ResolvedStyle out;
-            for (const usize idx : matches)
-                for (const StyleProperty& p : m_rules[idx].Properties())
+            for (const StyleRuleMatch& m : matches)
+                for (const StyleProperty& p : m.Rule->Properties())
                     if (ResolvedStyle::IsCustomProperty(p.Name.AsView()))
                         out.SetParsed(p.Name.AsView(), p.Value.AsView(), StyleValue{}, p.Important);
+            for (const InlineStyleDeclaration& d : inlineStyle)
+                if (ResolvedStyle::IsCustomProperty(d.Name.AsView()))
+                    out.SetParsed(d.Name.AsView(), d.Value.AsView(), StyleValue{}, false);
             if (inherited != nullptr)
                 out.InheritCustomProperties(*inherited);
-            for (const usize idx : matches)
+            for (const StyleRuleMatch& m : matches)
             {
-                for (const StyleProperty& p : m_rules[idx].Properties())
+                for (const StyleProperty& p : m.Rule->Properties())
                 {
                     if (ResolvedStyle::IsCustomProperty(p.Name.AsView()))
                         continue;
@@ -296,10 +325,25 @@ export namespace experimental::gui
                         out.SetDeclaration(p.Name.AsView(), text.AsView(), p.Important);
                 }
             }
+            for (const InlineStyleDeclaration& d : inlineStyle)
+            {
+                if (ResolvedStyle::IsCustomProperty(d.Name.AsView()))
+                    continue;
+                core::String text;
+                if (out.Substitute(d.Value.AsView(), nullptr, text))
+                    out.SetDeclaration(d.Name.AsView(), text.AsView(), false);
+            }
             return out;
         }
 
     private:
+        [[nodiscard]] static bool Before(const StyleRuleMatch& a, const StyleRuleMatch& b) noexcept
+        {
+            if (a.Origin != b.Origin)
+                return a.Origin < b.Origin;
+            return a.Specificity < b.Specificity;
+        }
+
         // A declaration without var() expands and parses once: its longhands cached on it.
         static void Cache(const StyleProperty& p)
         {

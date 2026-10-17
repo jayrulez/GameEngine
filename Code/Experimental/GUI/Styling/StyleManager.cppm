@@ -44,6 +44,7 @@ export namespace experimental::gui
         StyleManager() = default;
         explicit StyleManager(StyleSheet sheet) : m_sheet(core::Move(sheet)) {}
 
+        /// The GUI's sheet (the author origin): over the user agent's, under a subtree's and inline.
         void SetStyleSheet(StyleSheet sheet)
         {
             m_sheet = core::Move(sheet);
@@ -51,6 +52,40 @@ export namespace experimental::gui
             m_allDirty = true; // hot-reload: every widget restyles
         }
         [[nodiscard]] const StyleSheet& GetStyleSheet() const noexcept { return m_sheet; }
+
+        /// The user agent's sheet, the lowest origin: the built-in theme, what every rule of the
+        /// GUI's own sheets overrides.
+        void SetUserAgentSheet(StyleSheet sheet)
+        {
+            m_userAgent = core::Move(sheet);
+            m_cache = {};
+            m_allDirty = true;
+        }
+        [[nodiscard]] const StyleSheet& GetUserAgentSheet() const noexcept { return m_userAgent; }
+
+        /// A sheet for `root` and what is under it alone (a page's own .css): over the GUI's
+        /// sheet, under inline; a subtree inside another's outranks it. The root must be in a GUI
+        /// (it is held weakly, through its GUI's element table); false when it is in none.
+        bool SetSubtreeSheet(Node& root, StyleSheet sheet)
+        {
+            const Node::ElementRef ref = root.TakeElementRef();
+            if (ref.table == nullptr)
+                return false;
+            RemoveSubtreeSheet(root);
+            m_subtrees.PushBack(SubtreeSheet{ref, core::Move(sheet)});
+            root.MarkStyleDirty(true);
+            return true;
+        }
+        void RemoveSubtreeSheet(Node& root)
+        {
+            for (usize i = 0; i < m_subtrees.Size(); ++i)
+                if (RootOf(m_subtrees[i]) == &root)
+                {
+                    m_subtrees.RemoveAt(i);
+                    root.MarkStyleDirty(true);
+                    return;
+                }
+        }
 
         void SetMediaContext(const MediaContext& context)
         {
@@ -155,7 +190,8 @@ export namespace experimental::gui
             for (Node* ancestor = widget.GetParent(); ancestor != nullptr && inherited == nullptr;
                  ancestor = ancestor->GetParent())
                 inherited = m_cache.Find(ancestor);
-            ResolvedStyle resolved = m_sheet.Resolve(widget, m_context, true, {}, inherited);
+            const Array<const StyleSheet*> subtrees = SubtreeSheetsOver(widget);
+            ResolvedStyle resolved = ResolveFor(widget, subtrees, {}, inherited);
 
             // Build the length-resolution context: viewport from the media context, root font
             // size configurable, element font size from this widget's resolved font-size (for em).
@@ -230,7 +266,7 @@ export namespace experimental::gui
                     already = already || name.AsView() == spec.Name.AsView();
                 if (already && animation)
                     animation->SetPaused(spec.Name.AsView(), spec.Paused);
-                const Keyframes* keyframes = m_sheet.FindKeyframes(spec.Name.AsView());
+                const Keyframes* keyframes = FindKeyframes(subtrees, spec.Name.AsView());
                 if (already || keyframes == nullptr)
                     continue;
                 if (ensure())
@@ -279,7 +315,7 @@ export namespace experimental::gui
             widget.CollectStyleParts(parts);
             for (const core::StringView part : parts)
             {
-                const ResolvedStyle partStyle = m_sheet.Resolve(widget, m_context, true, part);
+                const ResolvedStyle partStyle = ResolveFor(widget, subtrees, part, nullptr);
                 ApplyPartStyle(widget, part, partStyle);
             }
             return customsChanged;
@@ -301,6 +337,57 @@ export namespace experimental::gui
         }
 
     private:
+        struct SubtreeSheet
+        {
+            Node::ElementRef Root;
+            StyleSheet Sheet;
+        };
+        [[nodiscard]] static Node* RootOf(const SubtreeSheet& s)
+        {
+            return s.Root.table != nullptr ? s.Root.table->Resolve(s.Root.slot, s.Root.generation) : nullptr;
+        }
+
+        // The subtree sheets whose root is `widget` or holds it, the outermost first.
+        [[nodiscard]] Array<const StyleSheet*> SubtreeSheetsOver(const Node& widget) const
+        {
+            Array<const StyleSheet*> out;
+            if (m_subtrees.IsEmpty())
+                return out;
+            for (const Node* n = &widget; n != nullptr; n = n->GetParent())
+                for (const SubtreeSheet& s : m_subtrees)
+                    if (RootOf(s) == n)
+                        out.PushBack(&s.Sheet);
+            for (usize a = 0, b = out.Size(); a + 1 < b; ++a, --b) // innermost first, so reverse
+                core::Swap(out[a], out[b - 1]);
+            return out;
+        }
+
+        // The cascade for `widget` (or its `part`) over every origin: the user agent's sheet, the
+        // GUI's, the subtrees' (outermost first), then the widget's inline style.
+        [[nodiscard]] ResolvedStyle ResolveFor(const UIWidget& widget, const Array<const StyleSheet*>& subtrees,
+                                               core::StringView part, const ResolvedStyle* inherited) const
+        {
+            Array<StyleRuleMatch> matches;
+            m_userAgent.CollectMatches(widget, m_context, true, part, 0, matches);
+            m_sheet.CollectMatches(widget, m_context, true, part, 1, matches);
+            u32 origin = 2;
+            for (const StyleSheet* sheet : subtrees)
+                sheet->CollectMatches(widget, m_context, true, part, origin++, matches);
+            return StyleSheet::Cascade(matches, inherited,
+                                       part.Size() == 0 ? widget.GetInlineStyle() : core::Span<const InlineStyleDeclaration>{});
+        }
+
+        // A @keyframes by name: the innermost subtree's, then the GUI's, then the user agent's.
+        [[nodiscard]] const Keyframes* FindKeyframes(const Array<const StyleSheet*>& subtrees, core::StringView name) const
+        {
+            for (usize i = subtrees.Size(); i > 0; --i)
+                if (const Keyframes* k = subtrees[i - 1]->FindKeyframes(name))
+                    return k;
+            if (const Keyframes* k = m_sheet.FindKeyframes(name))
+                return k;
+            return m_userAgent.FindKeyframes(name);
+        }
+
         // A transition for each property that changed between `previous` and `resolved` and an
         // entry covers (its own name, or `all` for the transitionable ones; the last entry naming
         // a property wins), from the value showing now toward the new one.
@@ -330,7 +417,9 @@ export namespace experimental::gui
             }
         }
 
+        StyleSheet m_userAgent;
         StyleSheet m_sheet;
+        Array<SubtreeSheet> m_subtrees;
         MediaContext m_context;
         IResourceProvider* m_resources = nullptr;     // non-owning; loads background-image assets
         fonts::IFontService* m_fontService = nullptr; // non-owning; resolves font-family

@@ -51,7 +51,7 @@ export namespace experimental::gui
                 return;
             m_checked = checked;
             m_indeterminate = false; // a choice settles the mixed state
-            MarkStyleDirty(true); // :checked
+            MarkStyleStateDirty(StateChecked | StateIndeterminate);
             Invalidate();
             m_checkedChanged.Notify();
             if (m_onChanged)
@@ -67,7 +67,7 @@ export namespace experimental::gui
             if (indeterminate == m_indeterminate)
                 return;
             m_indeterminate = indeterminate;
-            MarkStyleDirty(true);
+            MarkStyleStateDirty(StateIndeterminate);
             Invalidate();
         }
         [[nodiscard]] bool IsIndeterminate() const noexcept { return m_indeterminate; }

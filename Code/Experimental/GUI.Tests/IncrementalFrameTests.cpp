@@ -128,11 +128,43 @@ TEST_CASE("incremental: a changed custom property restyles the children that rea
     Frame(*root.Get(), styles);
     CHECK(button->GetAlpha() == doctest::Approx(0.3f));
 
-    // A state change restyles the subtree too (`panel:hover button` reads it), and only that.
+    // A state change no rule reads through the panel restyles the panel alone.
     root->GetEventDispatcher()->InjectMouseMove(core::Float2{10.0f, 10.0f}); // over the panel only
     Frame(*root.Get(), styles);
-    CHECK(styles.LastRestyleCount() == 2u);
+    CHECK(styles.LastRestyleCount() == 1u);
     CHECK(button->GetAlpha() == doctest::Approx(0.3f));
+}
+
+TEST_CASE("incremental: a state restyles the subtree, or the later siblings, only when a rule reads it there")
+{
+    const auto run = [](const char8_t* css)
+    {
+        auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+        root->SetSize(core::Float2{400.0f, 400.0f});
+        auto panel = Widget(u8"panel");
+        panel->SetSize(core::Float2{100.0f, 100.0f});
+        root->AddChild(panel.Get());
+        for (int i = 0; i < 4; ++i)
+        {
+            auto label = Widget(u8"label");
+            label->SetPosition(core::Float2{0.0f, 200.0f + static_cast<core::f32>(i) * 10.0f}); // away from the pointer
+            panel->AddChild(label.Get());
+        }
+        auto after = Widget(u8"note");
+        after->SetPosition(core::Float2{300.0f, 300.0f});
+        root->AddChild(after.Get());
+        StyleManager styles(CSSParser::Parse(SV(css)));
+        root->GetEventDispatcher()->InjectMouseMove(core::Float2{390.0f, 390.0f}); // in the window, over nothing
+        Frame(*root.Get(), styles);
+        root->GetEventDispatcher()->InjectMouseMove(core::Float2{10.0f, 10.0f}); // the panel's hover alone changes
+        Frame(*root.Get(), styles);
+        return styles.LastRestyleCount();
+    };
+    CHECK(run(u8"panel:hover { opacity: 0.5; }") == 1u);                   // the panel alone
+    CHECK(run(u8"panel:hover label { opacity: 0.5; }") == 5u);             // and its four labels
+    CHECK(run(u8"panel:hover + note { opacity: 0.5; }") == 2u);            // and the note after it
+    CHECK(run(u8":is(panel:hover) > label { opacity: 0.5; }") == 5u);      // read inside :is() too
+    CHECK(run(u8"label:not(:hover) { opacity: 0.5; }") == 1u);             // a subject's own state
 }
 
 TEST_CASE("incremental: a sheet change restyles everything once")

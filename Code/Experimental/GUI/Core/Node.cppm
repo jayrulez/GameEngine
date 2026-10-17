@@ -594,6 +594,33 @@ export namespace experimental::gui
             for (Node* p = m_parent; p != nullptr && !p->m_childStyleDirty; p = p->m_parent)
                 p->m_childStyleDirty = true;
         }
+        /// The states a selector reads (E3), one bit each: a node whose state changed restyles
+        /// alone, or with its subtree or its later siblings when a sheet reads that state through
+        /// an ancestor or a sibling (the style pass decides; StyleManager knows its sheets).
+        enum StyleState : u32
+        {
+            StateHover = 1u << 0,
+            StateFocus = 1u << 1,
+            StateActive = 1u << 2,
+            StateDisabled = 1u << 3,
+            StateFocusVisible = 1u << 4,
+            StateEnabled = 1u << 5,
+            StateFocusWithin = 1u << 6,
+            StateChecked = 1u << 7,
+            StateIndeterminate = 1u << 8,
+            StateReadOnly = 1u << 9,
+            StateReadWrite = 1u << 10,
+            StatePlaceholderShown = 1u << 11,
+        };
+        /// `states` changed on this node: it restyles (its subtree too when the sheets read them
+        /// through it).
+        void MarkStyleStateDirty(u32 states)
+        {
+            m_changedStyleStates |= states;
+            MarkStyleDirty(false);
+        }
+        [[nodiscard]] u32 GetChangedStyleStates() const noexcept { return m_changedStyleStates; }
+
         /// The children changed (one joined, left or moved): what matches by position or by
         /// sibling (:first-child, :nth-child(), `+`, `~`) may change for each, and :empty for this
         /// node.
@@ -611,6 +638,7 @@ export namespace experimental::gui
             m_styleDirty = false;
             m_styleSubtreeDirty = false;
             m_childStyleDirty = false;
+            m_changedStyleStates = 0;
         }
 
         // === Layout (E2 of Specs/gui-lab-evolution.md) ===
@@ -1057,11 +1085,11 @@ export namespace experimental::gui
         void HandleFocusGained()
         {
             m_focused = true;
-            MarkStyleDirty(true); // :focus
-            for (Node* p = m_parent; p != nullptr; p = p->m_parent) // :focus-within
+            MarkStyleStateDirty(StateFocus | StateFocusVisible | StateFocusWithin);
+            for (Node* p = m_parent; p != nullptr; p = p->m_parent)
             {
                 ++p->m_focusWithin;
-                p->MarkStyleDirty(false);
+                p->MarkStyleStateDirty(StateFocusWithin);
             }
             OnFocusGained();
             SendEvent(Event(EventType::FocusGained, this));
@@ -1069,12 +1097,12 @@ export namespace experimental::gui
         void HandleFocusLost()
         {
             m_focused = false;
-            MarkStyleDirty(true);
+            MarkStyleStateDirty(StateFocus | StateFocusVisible | StateFocusWithin);
             for (Node* p = m_parent; p != nullptr; p = p->m_parent)
             {
                 if (p->m_focusWithin > 0)
                     --p->m_focusWithin;
-                p->MarkStyleDirty(false);
+                p->MarkStyleStateDirty(StateFocusWithin);
             }
             OnFocusLost();
             SendEvent(Event(EventType::FocusLost, this));
@@ -1092,7 +1120,7 @@ export namespace experimental::gui
                 return;
             m_focusVisible = visible;
             if (m_focused)
-                MarkStyleDirty(true); // :focus-visible
+                MarkStyleStateDirty(StateFocusVisible);
         }
         /// A widget under this node took focus (G7): a scroller brings it into view.
         /// A scroll container scrolls by the least that shows it.
@@ -1454,11 +1482,11 @@ export namespace experimental::gui
         virtual void OnTextInput(const TextInputEvent&) {}
         virtual void OnFocusGained() {}
         virtual void OnFocusLost() {}
-        /// Hovered or pressed changed: restyles the node and what is inside it (`:hover`, `:active`
-        /// and selectors through them) and redraws it.
+        /// Hovered or pressed changed: restyles the node (`:hover`, `:active`; its subtree when a
+        /// sheet reads them through it) and redraws it.
         virtual void OnPointerStateChange()
         {
-            MarkStyleDirty(true);
+            MarkStyleStateDirty(StateHover | StateActive);
             Invalidate();
         }
         /// The pointer this node captured was taken away or released.
@@ -1493,7 +1521,7 @@ export namespace experimental::gui
         void HandleEnabledChange()
         {
             OnEnabledChange();
-            MarkStyleDirty(true); // :disabled
+            MarkStyleStateDirty(StateDisabled | StateEnabled);
             Invalidate();
             SendEvent(Event(EventType::EnabledChanged, this));
         }
@@ -1616,7 +1644,8 @@ export namespace experimental::gui
         bool m_styleWriting = false; // a StyleWriteScope lives: setters do not pin
         u64 m_stylePins = 0;         // the StyleSlots code set (they are its, over the sheet's)
         UnstyledValues m_unstyled;
-        u32 m_focusWithin = 0; // focused descendants (one at most; a count survives odd orders)
+        u32 m_focusWithin = 0;
+        u32 m_changedStyleStates = 0; // the StyleStates that changed since the last style pass // focused descendants (one at most; a count survives odd orders)
         bool m_focusVisible = false; // focused by the keyboard or a gamepad
         bool m_tabFocusable = false;
         bool m_hitTestVisible = true;

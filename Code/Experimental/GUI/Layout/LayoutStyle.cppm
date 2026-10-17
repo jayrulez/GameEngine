@@ -289,6 +289,29 @@ export namespace experimental::gui
     };
     static_assert(SlotCount <= 64, "the pins are one u64");
     [[nodiscard]] constexpr u64 SlotBit(StyleSlot slot) noexcept { return u64{1} << slot; }
+    /// The longhand a slot is, as a sheet names it (the inspector's "set by code").
+    [[nodiscard]] constexpr const char8_t* StyleSlotProperty(StyleSlot slot) noexcept
+    {
+        constexpr const char8_t* kNames[] = {
+            u8"opacity",
+            u8"padding-top", u8"padding-right", u8"padding-bottom", u8"padding-left",
+            u8"margin-top", u8"margin-right", u8"margin-bottom", u8"margin-left",
+            u8"width", u8"height", u8"min-width", u8"min-height", u8"max-width", u8"max-height",
+            u8"top", u8"right", u8"bottom", u8"left",
+            u8"flex-basis", u8"flex-grow", u8"flex-shrink", u8"order", u8"z-index", u8"row-gap", u8"column-gap",
+            u8"display", u8"position", u8"box-sizing", u8"overflow-x", u8"overflow-y",
+            u8"flex-direction", u8"flex-wrap", u8"justify-content", u8"align-content", u8"align-items",
+            u8"justify-items", u8"align-self", u8"justify-self", u8"grid-auto-flow", u8"dock",
+            u8"grid-template-columns", u8"grid-template-rows", u8"grid-auto-rows", u8"grid-auto-columns",
+            u8"grid-column", u8"grid-row",
+            u8"scroll-behavior", u8"overscroll-behavior", u8"scrollbar-width", u8"scrollbar-visibility",
+            u8"enabled", u8"visibility",
+            u8"color", u8"font-family", u8"font-size", u8"text-align", u8"vertical-align",
+            u8"white-space", u8"line-height", u8"letter-spacing",
+        };
+        static_assert(sizeof(kNames) / sizeof(kNames[0]) == SlotCount, "a name for every slot");
+        return kNames[slot];
+    }
 
     /// Calls `f(slot, member)` for each LayoutStyle field a sheet sets as one property (the margin,
     /// four properties in one field, is apart).

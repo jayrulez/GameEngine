@@ -98,8 +98,8 @@ export namespace experimental::gui
         return false;
     }
 
-    /// The longhands the lab knows, by name.
-    [[nodiscard]] inline const StylePropertySpec* FindStyleProperty(core::StringView name)
+    /// The longhands the lab knows.
+    [[nodiscard]] inline Span<const StylePropertySpec> AllStyleProperties()
     {
         static constexpr StylePropertySpec kProperties[] = {
             {u8"opacity", StyleGrammar::Number, u8"1"},
@@ -205,7 +205,12 @@ export namespace experimental::gui
             {u8"animation-fill-mode", StyleGrammar::Text},
             {u8"animation-play-state", StyleGrammar::Text},
         };
-        for (const StylePropertySpec& spec : kProperties)
+        return Span<const StylePropertySpec>(kProperties, sizeof(kProperties) / sizeof(kProperties[0]));
+    }
+    /// A longhand the lab knows, by name (null for one it does not).
+    [[nodiscard]] inline const StylePropertySpec* FindStyleProperty(core::StringView name)
+    {
+        for (const StylePropertySpec& spec : AllStyleProperties())
             if (core::StringView(spec.Name) == name)
                 return &spec;
         return nullptr;

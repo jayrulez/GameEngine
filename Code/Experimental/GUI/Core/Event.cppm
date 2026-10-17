@@ -58,8 +58,12 @@ export namespace experimental::gui
         DragOver,
         DragLeave,
         Drop,
-        // A widget's value changed (a check box, a slider, a text field), by the user or by code.
+        // A widget's value changed (a check box, a slider; a text field's committed value).
         Changed,
+        // A text field's text changed with an edit (each one; Changed waits for the commit).
+        Input,
+        // A text field's Return: its value submitted.
+        Submit,
         // A node lost the pointer it had captured (released, taken by another, or the node left).
         PointerCaptureLost,
         // The press in progress was cancelled (a scroller began panning under a finger): no

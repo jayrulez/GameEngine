@@ -171,35 +171,55 @@ TEST_CASE("textfield: caret navigation steps by codepoint and clamps")
     CHECK(f->GetCaret() == 5);
 }
 
-TEST_CASE("textfield: change callback fires on edits")
+TEST_CASE("textfield: each edit is an input; Return and leaving commit a change; Return submits")
 {
     auto f = Make<TextField>();
     f->SetSize(core::Float2{100.0f, 24.0f});
+    auto other = Make<TextField>();
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->AddChild(f.Get());
+    root->AddChild(other.Get());
     EventDispatcher* d = root->GetEventDispatcher();
     f->RequestFocus();
 
-    int changes = 0;
+    int inputs = 0, changes = 0, submits = 0, inputEvents = 0, changeEvents = 0, submitEvents = 0;
     core::String last;
-    f->SetOnTextChanged(
-        [&](core::StringView v)
-        {
-            ++changes;
-            last = core::String(v);
-        });
+    f->SetOnTextChanging([&](core::StringView v) { ++inputs; last = core::String(v); });
+    f->SetOnTextChanged([&](core::StringView) { ++changes; });
+    f->SetOnSubmit([&](core::StringView) { ++submits; });
+    (void)f->AddEventListener(EventType::Input, [&](const Event&) { ++inputEvents; });
+    (void)f->AddEventListener(EventType::Changed, [&](const Event&) { ++changeEvents; });
+    (void)f->AddEventListener(EventType::Submit, [&](const Event&) { ++submitEvents; });
 
     d->InjectText(core::StringView(u8"x"));
-    CHECK(changes == 1);
+    CHECK(inputs == 1);
     CHECK(last.AsView() == core::StringView(u8"x"));
     d->InjectKeyDown(Key(KeyCode::Backspace));
-    CHECK(changes == 2);
+    CHECK(inputs == 2);
     CHECK(last.Size() == 0);
+    d->InjectKeyDown(Key(KeyCode::Home)); // a move is no edit
+    CHECK(inputs == 2);
+    CHECK(inputEvents == 2);
+    CHECK(changes == 0); // nothing committed yet (and the value is back where it was)
 
-    // A navigation key does not fire the change callback.
-    const int before = changes;
-    d->InjectKeyDown(Key(KeyCode::Home));
-    CHECK(changes == before);
+    d->InjectText(core::StringView(u8"go"));
+    d->InjectKeyDown(Key(KeyCode::Return));
+    CHECK(changes == 1);
+    CHECK(submits == 1);
+    CHECK(changeEvents == 1);
+    CHECK(submitEvents == 1);
+    d->InjectKeyDown(Key(KeyCode::Return)); // the same value: submitted again, not changed again
+    CHECK(changes == 1);
+    CHECK(submits == 2);
+
+    d->InjectText(core::StringView(u8"!"));
+    other->RequestFocus(); // leaving commits the new value
+    CHECK(changes == 2);
+    CHECK(submits == 2);
+
+    f->SetText(core::StringView(u8"from code")); // code's value reports nothing
+    CHECK(inputs == 4);
+    CHECK(changes == 2);
 }
 
 TEST_CASE("textfield: mouse press focuses and places the caret at the nearest boundary")
@@ -448,7 +468,7 @@ TEST_CASE("textfield: paste with no clipboard configured is a safe no-op")
     CHECK(fx.field->GetText() == core::StringView(u8"hi"));
 }
 
-TEST_CASE("textfield: pasted newlines are stripped to keep the value single-line")
+TEST_CASE("textfield: pasted line breaks become spaces to keep the value on one line")
 {
     MemClipboard clip;
     clip.SetText(core::StringView(u8"a\nb\r\nc"));
@@ -456,7 +476,7 @@ TEST_CASE("textfield: pasted newlines are stripped to keep the value single-line
     fx.d()->SetClipboard(&clip);
     const core::u32 ctrl = static_cast<core::u32>(KeyModCtrl);
     fx.d()->InjectKeyDown(Key(KeyCode::V), ctrl);
-    CHECK(fx.field->GetText() == core::StringView(u8"abc"));
+    CHECK(fx.field->GetText() == core::StringView(u8"a b c"));
 }
 
 // ===================== Placeholder / max-length =====================
@@ -489,12 +509,16 @@ TEST_CASE("textfield: max-length caps typed input and truncates a paste")
     CHECK(fx.field->GetText() == core::StringView(u8"abc"));
 }
 
-TEST_CASE("textfield: max-length counts codepoints, not bytes (UTF-8)")
+TEST_CASE("textfield: max-length counts graphemes, not bytes or codepoints")
 {
     Fixture fx;
     fx.field->SetMaxLength(2);
     fx.d()->InjectText(core::StringView(u8"ééé")); // three 2-byte 'é'
     CHECK(fx.field->GetText() == core::StringView(u8"éé"));
+    Fixture combining;
+    combining.field->SetMaxLength(2);
+    combining.d()->InjectText(core::StringView(u8"e\u0301e\u0301e\u0301")); // e + a combining acute, three times
+    CHECK(combining.field->GetText() == core::StringView(u8"e\u0301e\u0301"));
 }
 
 // ===================== Mouse selection =====================
@@ -577,4 +601,103 @@ TEST_CASE("textfield: what it shows is cut at its padding, not drawn past its bo
         CHECK(cmd.clipRect.x >= 4.0f - 0.01f);
         CHECK(cmd.clipRect.x + cmd.clipRect.width <= 56.0f + 1.5f + 0.01f);
     }
+}
+
+// ===================== The editing model's keys and rules (E4) =====================
+
+TEST_CASE("textfield: the editing keys are commands: word moves, undo, and a binding that overrides one")
+{
+    Fixture fx(u8"one two three");
+    const core::u32 ctrl = static_cast<core::u32>(KeyModCtrl);
+    fx.d()->InjectKeyDown(Key(KeyCode::Left), ctrl);
+    CHECK(fx.field->GetCaret() == 8u); // before "three"
+    fx.d()->InjectKeyDown(Key(KeyCode::Backspace), ctrl);
+    CHECK(fx.field->GetText() == core::StringView(u8"one three"));
+    fx.d()->InjectKeyDown(Key(KeyCode::Z), ctrl);
+    CHECK(fx.field->GetText() == core::StringView(u8"one two three"));
+    fx.d()->InjectKeyDown(Key(KeyCode::Y), ctrl);
+    CHECK(fx.field->GetText() == core::StringView(u8"one three"));
+
+    // A screen unbinds Ctrl+A in fields: the keystroke does nothing there now.
+    fx.field->SetCaret(0);
+    REQUIRE(fx.root->GetContext().GetKeymap().Bind(core::StringView(u8"ctrl-a"), core::StringView(), core::StringView(u8"textinput")));
+    fx.d()->InjectKeyDown(Key(KeyCode::A), ctrl);
+    CHECK_FALSE(fx.field->HasSelection());
+    // A menu runs the command by its name along the focus path all the same.
+    CHECK(fx.root->RunCommand(core::StringView(u8"text.select-all")));
+    CHECK(fx.field->SelectedText() == core::StringView(u8"one three"));
+    CHECK(fx.root->IsCommandAvailable(core::StringView(u8"text.paste")));
+}
+
+TEST_CASE("textfield: typing keys are the field's; up and down still move focus")
+{
+    Fixture fx(u8"ab");
+    auto below = Make<Button>();
+    below->SetPosition(core::Float2{0.0f, 50.0f});
+    below->SetSize(core::Float2{100.0f, 24.0f});
+    fx.root->AddChild(below.Get());
+    fx.root->UpdateLayout();
+    CHECK(fx.d()->InjectKeyDown(Key(KeyCode::Space))); // taken: no activation, the text comes as text input
+    CHECK(fx.field->IsFocused());
+    fx.d()->InjectKeyDown(Key(KeyCode::Down));
+    CHECK(below->IsFocused());
+}
+
+TEST_CASE("textfield: a read-only field takes no edits from keys, typing or paste, and still copies")
+{
+    MemClipboard clip;
+    clip.SetText(core::StringView(u8"pasted"));
+    Fixture fx(u8"fixed");
+    fx.d()->SetClipboard(&clip);
+    fx.field->SetReadOnly(true);
+    const core::u32 ctrl = static_cast<core::u32>(KeyModCtrl);
+    fx.d()->InjectText(core::StringView(u8"x"));
+    fx.d()->InjectKeyDown(Key(KeyCode::Backspace));
+    fx.d()->InjectKeyDown(Key(KeyCode::V), ctrl);
+    CHECK(fx.field->GetText() == core::StringView(u8"fixed"));
+    fx.field->SelectAll();
+    fx.d()->InjectKeyDown(Key(KeyCode::X), ctrl);
+    CHECK(clip.GetText() == core::StringView(u8"fixed"));
+    CHECK(fx.field->GetText() == core::StringView(u8"fixed"));
+}
+
+TEST_CASE("textfield: an input filter lets in only what it accepts")
+{
+    Fixture fx;
+    fx.field->SetInputFilter(InputFilter::Digits());
+    fx.d()->InjectText(core::StringView(u8"a1b2"));
+    CHECK(fx.field->GetText() == core::StringView(u8"12"));
+}
+
+TEST_CASE("textfield: a long value scrolls to keep the caret in view")
+{
+    Fixture fx; // 200 wide, 6px a byte: 33 characters fit
+    fx.d()->InjectText(core::StringView(u8"0123456789012345678901234567890123456789")); // 40: 240px
+    CHECK(fx.field->GetScrollX() > 0.0f);
+    CHECK(fx.field->GetScrollX() == doctest::Approx(240.0f - (200.0f - 1.5f)));
+    fx.d()->InjectKeyDown(Key(KeyCode::Home));
+    CHECK(fx.field->GetScrollX() == doctest::Approx(0.0f));
+    // A click maps through the scroll: at the right edge after End, the caret is near the end.
+    fx.d()->InjectKeyDown(Key(KeyCode::End));
+    fx.d()->InjectMouseDown(core::Float2{199.0f, 12.0f}, MouseButton::Left);
+    CHECK(fx.field->GetCaret() >= 39u);
+}
+
+TEST_CASE("textfield: a password shows a mask, keeps carets on its characters, and lets nothing out")
+{
+    MemClipboard clip;
+    Fixture fx;
+    fx.d()->SetClipboard(&clip);
+    fx.field->SetPassword(true);
+    fx.d()->InjectText(core::StringView(u8"s\u00e9cret"));
+    CHECK(fx.field->GetText() == core::StringView(u8"s\u00e9cret"));
+    // A press after the third mask (each 6px a byte, three bytes a bullet: 18 a character).
+    fx.d()->InjectMouseDown(core::Float2{3.0f * 18.0f + 1.0f, 12.0f}, MouseButton::Left);
+    CHECK(fx.field->GetCaret() == 4u); // after "s\u00e9c": é is two bytes
+    fx.field->SelectAll();
+    const core::u32 ctrl = static_cast<core::u32>(KeyModCtrl);
+    fx.d()->InjectKeyDown(Key(KeyCode::C), ctrl);
+    fx.d()->InjectKeyDown(Key(KeyCode::X), ctrl);
+    CHECK_FALSE(clip.HasText());
+    CHECK(fx.field->GetText() == core::StringView(u8"s\u00e9cret"));
 }

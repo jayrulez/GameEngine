@@ -605,4 +605,10 @@ TEST_CASE("bridge: OS file drops for its window, grouped by where they landed, g
     REQUIRE(sizes.Size() == 2);
     CHECK(sizes[0] == 2);
     CHECK(sizes[1] == 1);
+
+    // A drop the OS names no window for is this window's.
+    core::Array<shell::DroppedFile> unnamed;
+    unnamed.PushBack(shell::DroppedFile{0, 30.0f, 30.0f, core::String(u8"/d")});
+    CHECK(bridge.DispatchFileDrops(unnamed, 7));
+    CHECK(sizes.Size() == 3);
 }

@@ -65,6 +65,10 @@ export namespace experimental::gui
             BindTextEditingKeys(m_keymap); // a GUI's own bindings come later, so they win a tie
             (void)m_keymap.Bind(core::StringView(u8"f10"), core::StringView(u8"menu.enter-bar"));
             (void)m_keymap.Bind(core::StringView(u8"shift-f10"), core::StringView(u8"menu.context"));
+            // A drag from the keys and the pad (E7): picked up at the focus, dropped with Return
+            // or South (the dispatcher's while it drags).
+            (void)m_keymap.Bind(core::StringView(u8"ctrl-shift-d"), core::StringView(u8"drag.pick"));
+            (void)m_keymap.Bind(core::StringView(u8"pad-north"), core::StringView(u8"drag.pick"));
         }
         GUIContext(const GUIContext&) = delete;
         GUIContext& operator=(const GUIContext&) = delete;
@@ -172,6 +176,8 @@ export namespace experimental::gui
             (void)OnCommand(core::StringView(u8"menu.enter-bar"), [this](CommandEvent&) { (void)EnterFromKeyboardIn(*this); });
             // Shift+F10 (bound in every GUI): the focused node's context menu.
             (void)OnCommand(core::StringView(u8"menu.context"), [this](CommandEvent&) { (void)m_eventDispatcher.InjectContextMenu(); });
+            // Ctrl+Shift+D or the pad's North (bound in every GUI): a drag picked up at the focus.
+            (void)OnCommand(core::StringView(u8"drag.pick"), [this](CommandEvent&) { (void)m_eventDispatcher.PickDrag(); });
         }
         ~SceneRoot() override { m_context->RemoveRoot(*this); }
 

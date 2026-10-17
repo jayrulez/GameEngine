@@ -313,6 +313,22 @@ export namespace experimental::gui
         bool InjectKeyDown(u32 keyCode, u32 modifiers = 0)
         {
             NoteInput();
+            // A keyboard drag: Escape (a pad's East) cancels, Return or Space drops at the focus,
+            // the rest move the focus as ever, and the focus is asked again.
+            if (m_dragActive && m_dragFromKeyboard)
+            {
+                if (keyCode == static_cast<u32>(KeyCode::Escape))
+                {
+                    CancelDrag();
+                    return true;
+                }
+                if ((keyCode == static_cast<u32>(KeyCode::Return) || keyCode == static_cast<u32>(KeyCode::Space)) && modifiers == 0)
+                {
+                    QueryAtFocus();
+                    Drop();
+                    return true;
+                }
+            }
             // A pointer drag takes the keys: Escape (a pad's East) cancels it, a modifier asks again.
             if (m_dragActive && !m_dragFromKeyboard)
             {
@@ -328,7 +344,11 @@ export namespace experimental::gui
             ClosePopupsOfKind(PopupKind::Hint, PopupCloseReason::Code); // a key hides a tooltip
             // The focused widget, and its ancestors (capture, then bubble from the focus), first.
             if (RouteKey(EventType::KeyDown, keyCode, modifiers))
+            {
+                if (m_dragActive && m_dragFromKeyboard)
+                    QueryAtFocus(); // the focus's own key (a list's arrows) moved where it would drop
                 return true;
+            }
             // Escape no widget took closes the topmost auto popup (E5).
             if (keyCode == static_cast<u32>(KeyCode::Escape) && modifiers == 0)
                 for (usize i = m_popups.Size(); i-- > 0;)
@@ -401,7 +421,17 @@ export namespace experimental::gui
         /// The press in progress already activated what it pressed (a button acting on the press,
         /// a repeating one): its release makes no click.
         void SuppressClick() noexcept { m_clickSuppressed = true; }
-        bool Activate() { return m_focusNode != nullptr && m_focusNode->IsTreeEnabled() && m_focusNode->HandleActivate(); }
+        bool Activate()
+        {
+            if (m_dragActive && m_dragFromKeyboard)
+            {
+                // The pad's South while dragging from the keys: dropped at the focus.
+                QueryAtFocus();
+                Drop();
+                return true;
+            }
+            return m_focusNode != nullptr && m_focusNode->IsTreeEnabled() && m_focusNode->HandleActivate();
+        }
         bool InjectKeyUp(u32 keyCode, u32 modifiers = 0)
         {
             if (m_dragActive && !m_dragFromKeyboard)
@@ -515,6 +545,8 @@ export namespace experimental::gui
                 for (Node* p = m_focusNode->GetParent(); p != nullptr; p = p->GetParent())
                     p->OnDescendantFocused(*m_focusNode);
             }
+            if (m_dragActive && m_dragFromKeyboard)
+                QueryAtFocus(); // a keyboard drag asks where the focus went
         }
 
         // === Drag and drop (E7) ===
@@ -590,10 +622,40 @@ export namespace experimental::gui
             m_onFileDrop = core::Move(handler);
         }
 
+        /// `drag.pick` (E7, Godot's accessibility drag): the focused node, or one above it, starts
+        /// a drag of what it would drag; the focus then moves as ever (the arrows, Tab, the pad),
+        /// each node it reaches asked as the pointer would ask it, and `drag.drop` (Return, Space,
+        /// the pad's South) drops at the focus; Escape (East) cancels.
+        bool PickDrag()
+        {
+            if (m_dragActive)
+                CancelDrag();
+            for (Node* n = m_focusNode; n != nullptr; n = n->GetParent())
+            {
+                if (!n->IsTreeEnabled())
+                    return false;
+                DragRequest request;
+                request.Press = core::Float2{n->GetSize().x * 0.5f, n->GetSize().y * 0.5f};
+                request.FromKeyboard = true;
+                if (n->HandleDragRequested(request))
+                {
+                    request.FromKeyboard = true;
+                    UseKeyboard();
+                    m_dragModifiers = 0;
+                    BeginDrag(*n, core::Move(request), FocusPoint());
+                    return true;
+                }
+            }
+            return false;
+        }
+        /// A drag from the keys or the pad is going (the focus is what is asked).
+        [[nodiscard]] bool IsKeyboardDrag() const noexcept { return m_dragActive && m_dragFromKeyboard; }
         /// Asks the target again where the pointer is (the content moved under a still pointer).
         void RequeryDrag()
         {
-            if (m_dragActive)
+            if (m_dragFromKeyboard)
+                QueryAtFocus();
+            else if (m_dragActive)
                 QueryDrop(m_mousePos);
         }
 
@@ -1611,6 +1673,40 @@ export namespace experimental::gui
             }
             if (moved)
                 QueryDrop(m_mousePos); // the content moved under the pointer
+        }
+
+        // A keyboard drag's point: the focus's centre (in device pixels, as input arrives).
+        [[nodiscard]] core::Float2 FocusPoint() const
+        {
+            if (m_focusNode == nullptr)
+                return m_mousePos;
+            return m_focusNode->ConvertToWorldSpace(core::Float2{m_focusNode->GetSize().x * 0.5f, m_focusNode->GetSize().y * 0.5f});
+        }
+        // A keyboard drag asks the focus and up its ancestors (not what lies under a point).
+        void QueryAtFocus()
+        {
+            if (!m_dragActive)
+                return;
+            const core::Float2 at = FocusPoint();
+            m_mousePos = at;
+            DropQuery query{m_dragPayload, core::Float2{0.0f, 0.0f}, 0, PreferredEffect(), true, DropEffect::None, core::String{}, false, 0};
+            Node* target = nullptr;
+            for (Node* n = m_focusNode; n != nullptr; n = n->GetParent())
+            {
+                if (!n->IsTreeEnabled())
+                    break;
+                query.Local = n->ConvertToNodeSpace(at);
+                query.Effect = DropEffect::None;
+                n->HandleDragQuery(query);
+                if (query.Effect != DropEffect::None)
+                {
+                    target = n;
+                    break;
+                }
+                if (query.Refused)
+                    break;
+            }
+            SetDropTarget(target, query, at);
         }
 
         // The node a drag rests on: another one starts the clock again.

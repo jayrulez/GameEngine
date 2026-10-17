@@ -11,7 +11,8 @@ started" pair both SHIPPED (web platform: WASM player + WebGPU + AS-on-web; shad
 files + bytecode cook + WGSL), and so did: terrain (complete, incl. brushes + top-K splat +
 nav-bake feed), navigation (Recast/Detour + editor bake), mesh LOD (complete), export/settings
 templates incl. the WEB target, asset thumbnails (13 types), physics CCD/mass + shape queries,
-splines (Bezier-native + editor tool + path-follow), i18n foundation, Luau replacing Wren as
+splines (Bezier-native + editor tool + path-follow), i18n foundation (correction 2026-10-17:
+not built; only its spec existed), Luau replacing Wren as
 the second backend, and the first game (PaperKid, playable in-editor). Weekly plan docs
 (week-*.md) are the fine-grained ledger; this doc is the cross-track summary.
 
@@ -317,6 +318,8 @@ shaders track's WGSL path)*
 - [~] Save-game / settings-config / localization — settings + export templates SHIPPED
       (uniform CLI+editor export incl. the WEB target); i18n foundation layer SHIPPED
       (v2 ruling: foundation-only, no subsystem). Save-game still open
+      (correction 2026-10-17: the i18n layer was never built; this sync counted its v2 spec as
+      shipped. The revised spec is Specs/i18n.md.)
 - [~] Gameplay sample — **PaperKid** (P1 playable in-editor) exercises input-actions +
       physics + audio + script-behaviors + prefabs + game-UI; networking is the one subsystem
       it does not touch (the net demo scripts remain that seed)

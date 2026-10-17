@@ -87,6 +87,8 @@ export namespace experimental::gui
             Dirty();
         }
         [[nodiscard]] fonts::CachedFont* GetFont() const noexcept { return m_font; }
+        /// A font that can draw (one is set and loaded).
+        [[nodiscard]] bool HasFont() const noexcept { return m_font != nullptr && m_font->font != nullptr; }
         /// Resolves runs that set a family, a size, bold or italic of their own (null: they take its font).
         void SetFontService(fonts::IFontService* service)
         {
@@ -288,7 +290,6 @@ export namespace experimental::gui
         }
 
     private:
-        [[nodiscard]] bool HasFont() const noexcept { return m_font != nullptr && m_font->font != nullptr; }
         [[nodiscard]] static f32 BoundedWidth(f32 width) noexcept { return width > 0.0f && width < 1.0e8f ? width : 0.0f; }
 
         void Dirty() noexcept

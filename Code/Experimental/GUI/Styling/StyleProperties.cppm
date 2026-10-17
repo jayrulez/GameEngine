@@ -85,6 +85,19 @@ export namespace experimental::gui
         bool Inherited = false;
     };
 
+    /// A longhand that changes only how a node is painted where it already is: never its place,
+    /// its size or how far its drawing reaches (E8b: animating one out of view asks for no frames).
+    [[nodiscard]] inline bool IsPaintOnlyStyleProperty(core::StringView name) noexcept
+    {
+        static constexpr const char8_t* kPaintOnly[] = {
+            u8"opacity", u8"color", u8"background-color", u8"background-image", u8"border-top-color",
+            u8"border-right-color", u8"border-bottom-color", u8"border-left-color", u8"caret-color", u8"accent-color"};
+        for (const char8_t* p : kPaintOnly)
+            if (name == core::StringView(p))
+                return true;
+        return false;
+    }
+
     /// The longhands the lab knows, by name.
     [[nodiscard]] inline const StylePropertySpec* FindStyleProperty(core::StringView name)
     {

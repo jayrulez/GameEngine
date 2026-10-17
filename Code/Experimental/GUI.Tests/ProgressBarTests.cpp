@@ -49,5 +49,5 @@ TEST_CASE("progressbar: an indeterminate one sweeps on the GUI's clock")
     p->SetIndeterminate(false);
     root->GetContext().Update(core::Duration::FromSeconds(0.1));
     root->GetContext().Update(core::Duration::FromSeconds(0.1));
-    CHECK_FALSE(root->GetContext().GetActionManager().AnyTarget([&](Node& n) { return &n == p.Get(); }));
+    CHECK_FALSE(root->GetContext().GetActionManager().AnyAction([&](const Action&, Node& n) { return &n == p.Get(); }));
 }

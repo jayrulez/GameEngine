@@ -100,6 +100,16 @@ export namespace experimental::gui
             return core::Rectangle{x, y, width, height};
         }
 
+        // The smallest rect holding both.
+        [[nodiscard]] static constexpr Rect Union(const Rect& a, const Rect& b) noexcept
+        {
+            const f32 x0 = a.x < b.x ? a.x : b.x;
+            const f32 y0 = a.y < b.y ? a.y : b.y;
+            const f32 x1 = a.Right() > b.Right() ? a.Right() : b.Right();
+            const f32 y1 = a.Bottom() > b.Bottom() ? a.Bottom() : b.Bottom();
+            return Rect{x0, y0, x1 - x0, y1 - y0};
+        }
+
         // The overlapping rectangle of two rects; empty (zero size) if disjoint.
         [[nodiscard]] static constexpr Rect Intersect(const Rect& a, const Rect& b) noexcept
         {

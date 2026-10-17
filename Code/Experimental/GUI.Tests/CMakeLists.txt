@@ -39,6 +39,7 @@ add_executable(GUI.Tests
     TransitionTests.cpp
     IncrementalFrameTests.cpp
     FrameStatsTests.cpp
+    CullingTests.cpp
     EffectsTests.cpp
     ReactiveTests.cpp
     BindingTests.cpp

@@ -222,9 +222,13 @@ export namespace experimental::gui
             why.HeldDirection = m_eventDispatcher.IsHoldingDirection();
             const Node* animated = nullptr;
             if (!IsPaused())
-                (void)m_context->m_actionManager.AnyTarget([this, &animated](Node& target)
+                (void)m_context->m_actionManager.AnyAction([this, &animated](const Action& action, Node& target)
                 {
                     if (target.GetSceneRoot() != this || !target.IsTreeVisible())
+                        return false;
+                    // Out of view at the last frame (culled, or under something culled), an
+                    // animation that cannot bring it into view changes nothing that shows (E8b).
+                    if (target.WasOutOfView() && !action.CanMoveTarget())
                         return false;
                     animated = &target;
                     return true;
@@ -249,7 +253,15 @@ export namespace experimental::gui
             const usize commands = before.commands.Size();
             const u32 drawn = ctx.NodesDrawn();
             const u32 culled = ctx.NodesCulled();
+            ctx.SetFrame(m_framesDrawn + 1); // the nodes drawn note it (FramesDrawn is set after)
+            // The window bounds the drawing, so what lies outside it is culled (E8b); only the
+            // drawing: navigation and hit testing still reach a node past it.
+            const bool sized = GetSize().x > 0.0f && GetSize().y > 0.0f;
+            if (sized)
+                ctx.PushClip(Rect{GetPosition().x, GetPosition().y, GetSize().x, GetSize().y});
             Draw(ctx);
+            if (sized)
+                ctx.PopClip();
             const vg::VGBatch& batch = ctx.VG().GetBatch(); // flushed: its last command counts
             m_lastFrame.DrawMs = watch.Elapsed().AsMilliseconds();
             m_lastFrame.NodesDrawn = ctx.NodesDrawn() - drawn;
@@ -264,6 +276,7 @@ export namespace experimental::gui
         /// The last frame: its style, layout and reasons (as NeedsFrame closed it), and its draw
         /// (none when it was skipped).
         [[nodiscard]] const FrameStats& GetLastFrameStats() const noexcept { return m_lastFrame; }
+        [[nodiscard]] u32 GetLastDrawnFrame() const override { return m_framesDrawn; }
 
         // === This root's time on the GUI's clock ===
         /// Its animations' time scale (1: real time; 0.5: half speed). A paused root's stand still.

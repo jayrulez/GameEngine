@@ -184,6 +184,17 @@ export namespace experimental::gui
         }
         [[nodiscard]] const ResolvedStyle& TargetStyle() const noexcept { return m_targetStyle; }
 
+        /// It moves its node only through a property that is not paint alone (a colour or an
+        /// opacity changes how the node looks where it is; a transform, a size or a shadow may
+        /// change where its drawing reaches).
+        [[nodiscard]] bool CanMoveTarget() const override
+        {
+            for (const AnimationTrack& track : m_tracks)
+                if (!IsPaintOnlyStyleProperty(track.Property.AsView()))
+                    return true;
+            return false;
+        }
+
         /// The value a track shows for `property` now, or false when none moves it (a transition
         /// retargets from here; the target style is already the new one).
         [[nodiscard]] bool TrackValue(core::StringView property, StyleValue& out) const

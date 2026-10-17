@@ -992,6 +992,38 @@ void GUISandbox::TypeKeys(gui::SceneRoot& root)
     const usize index = static_cast<usize>((m_frames - 10) / 15);
     if (index >= keys.Size())
         return;
+    // Pointer steps (logical units, as a screenshot is): click:x,y rclick:x,y move:x,y down:x,y up:x,y.
+    const StringView step = keys[index];
+    usize colon = 0;
+    while (colon < step.Size() && step[colon] != u8':')
+        ++colon;
+    if (colon < step.Size())
+    {
+        const StringView verb = step.SubStr(0, colon);
+        const StringView where = step.SubStr(colon + 1, step.Size() - colon - 1);
+        usize comma = 0;
+        while (comma < where.Size() && where[comma] != u8',')
+            ++comma;
+        const f32 scale = root.GetDisplayScale();
+        const Float2 at{static_cast<f32>(ParseFloat(where.SubStr(0, comma)).ValueOr(0.0)) * scale,
+                        comma < where.Size() ? static_cast<f32>(ParseFloat(where.SubStr(comma + 1, where.Size() - comma - 1)).ValueOr(0.0)) * scale : 0.0f};
+        gui::EventDispatcher& d = *root.GetEventDispatcher();
+        if (verb == StringView(u8"move"))
+            (void)d.InjectMouseMove(at);
+        else if (verb == StringView(u8"down"))
+            (void)d.InjectMouseDown(at, gui::MouseButton::Left);
+        else if (verb == StringView(u8"up"))
+            (void)d.InjectMouseUp(at, gui::MouseButton::Left);
+        else if (verb == StringView(u8"click") || verb == StringView(u8"rclick"))
+        {
+            const gui::MouseButton button = verb == StringView(u8"click") ? gui::MouseButton::Left : gui::MouseButton::Right;
+            (void)d.InjectMouseMove(at);
+            (void)d.InjectMouseDown(at, button);
+            (void)d.InjectMouseUp(at, button);
+        }
+        m_menuWantsUpdate = true;
+        return;
+    }
     if (const Optional<gui::Keystroke> stroke = gui::ParseKeystroke(keys[index]); stroke.HasValue())
     {
         if (stroke.Value().Pad)
@@ -1263,6 +1295,7 @@ int main(int argc, char** argv)
     // motion, binding, navigation, game-menu). --showcase: open the game menu at once.
     // --menu-call <function>: call one of the game menu's script functions once it is up (onSettings,
     // onPlay, onQuit). --keys "<keys>": type keystrokes into what is shown, one every 15 frames
+    // (pointer steps too, in logical units: click:x,y rclick:x,y move:x,y down:x,y up:x,y)
     // ("down down return", "pad-east"). --always-redraw: draw every frame. --frame-stats: print,
     // each second, how many frames drew. --sweep: hover, click and right-click every widget of every
     // page, then open the game menu, printing each step, and exit (a smoke test; a crash's last line

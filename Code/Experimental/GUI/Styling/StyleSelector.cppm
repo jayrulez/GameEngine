@@ -648,6 +648,12 @@ export namespace experimental::gui
         // `ofType`), from the start or the end.
         [[nodiscard]] inline i32 PositionAmongSiblings(const UIWidget& element, bool ofType, bool fromEnd)
         {
+            if (!ofType)
+            {
+                i32 at = 1, count = 1;
+                element.PositionAmongWidgets(at, count);
+                return fromEnd ? count - at + 1 : at;
+            }
             const Node* parent = element.GetParent();
             if (parent == nullptr)
                 return 1;

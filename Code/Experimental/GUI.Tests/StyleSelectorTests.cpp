@@ -349,3 +349,32 @@ TEST_CASE("selector: the ancestor filter turns away a rule whose ancestor is mis
     filter.Pop();
     CHECK_FALSE(filter.MayMatch(needsPage));
 }
+
+TEST_CASE("selector: positions and siblings follow the children as they are added, moved and removed")
+{
+    Row row(u8"bbbb");
+    CHECK(Sel(u8":nth-child(1)").Select(row[0]));
+    CHECK(Sel(u8":nth-last-child(1)").Select(row[3]));
+    row.parent->SetChildIndex(row.kids[3].Get(), 0); // the last goes first
+    CHECK(Sel(u8":nth-child(1)").Select(row[3]));
+    CHECK(Sel(u8":nth-child(2)").Select(row[0]));
+    CHECK(Sel(u8":nth-last-child(1)").Select(row[2]));
+
+    // A plain node among them is not counted, and a label added after changes the count.
+    auto plain = core::MakeRef<Node>(core::DefaultAllocator());
+    row.parent->AddChildAt(plain.Get(), 1);
+    auto label = Widget(u8"label");
+    row.parent->AddChild(label.Get());
+    CHECK(Sel(u8":nth-child(2)").Select(row[0]));
+    CHECK(Sel(u8":nth-last-child(1)").Select(*label.Get()));
+    CHECK(Sel(u8"button + label").Select(*label.Get()));
+
+    // Moved to another parent: numbered there, and gone from here.
+    Row other(u8"ll");
+    other.parent->AddChild(row.kids[3].Get());
+    CHECK(Sel(u8":nth-child(3)").Select(row[3]));
+    CHECK(Sel(u8":nth-child(1)").Select(row[0]));
+    CHECK(Sel(u8"label + button").Select(row[3]));
+    row.parent->RemoveChild(label.Get());
+    CHECK(Sel(u8":nth-last-child(1)").Select(row[2]));
+}

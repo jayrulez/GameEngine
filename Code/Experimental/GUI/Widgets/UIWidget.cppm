@@ -111,6 +111,36 @@ export namespace experimental::gui
         [[nodiscard]] virtual u32 GetWidgetStates() const { return WidgetStateNone; }
         [[nodiscard]] const Array<core::String>& Classes() const noexcept { return m_classes; }
 
+        /// Its 1-based place among its parent's widgets and how many there are (:nth-child and
+        /// its kin). The first ask after the children change numbers every widget there at once.
+        void PositionAmongWidgets(i32& position, i32& count) const
+        {
+            const Node* parent = GetParent();
+            if (parent == nullptr)
+            {
+                position = count = 1;
+                return;
+            }
+            if (m_positionParent != parent || m_positionGeneration != parent->ChildrenGeneration())
+            {
+                i32 total = 0;
+                for (usize i = 0; i < parent->ChildCount(); ++i)
+                    if (core::Cast<UIWidget>(parent->GetChildAt(i)) != nullptr)
+                        ++total;
+                i32 at = 0;
+                for (usize i = 0; i < parent->ChildCount(); ++i)
+                    if (const UIWidget* w = core::Cast<UIWidget>(parent->GetChildAt(i)))
+                    {
+                        w->m_position = ++at;
+                        w->m_positionCount = total;
+                        w->m_positionParent = parent;
+                        w->m_positionGeneration = parent->ChildrenGeneration();
+                    }
+            }
+            position = m_position;
+            count = m_positionCount;
+        }
+
         // === Hover tooltip ===
         void SetTooltip(core::StringView text) { m_tooltip = text; }
         [[nodiscard]] core::StringView GetTooltipText() const override
@@ -194,6 +224,10 @@ export namespace experimental::gui
         core::String m_tag;
         core::String m_id;
         Array<core::String> m_classes;
+        mutable const Node* m_positionParent = nullptr; // PositionAmongWidgets's, numbered under
+        mutable u32 m_positionGeneration = 0;           // this arrangement of that parent's children
+        mutable i32 m_position = 1;
+        mutable i32 m_positionCount = 1;
         core::String m_tooltip;
         core::String m_contextMenuId;
         core::String m_dragType;

@@ -163,13 +163,23 @@ export namespace experimental::gui
         {
             return m_children.Size() ? m_children[m_children.Size() - 1].Get() : nullptr;
         }
+        /// Its place among the children (kInvalidIndex when it is not one). Each child keeps its
+        /// index until the children change, when the next ask numbers them all at once, so asking
+        /// for each child in turn (siblings, :nth-child, `+` and `~`) costs one pass, not one each.
         [[nodiscard]] usize GetChildIndex(const Node* child) const
         {
-            for (usize i = 0; i < m_children.Size(); ++i)
-                if (m_children[i].Get() == child)
-                    return i;
-            return kInvalidIndex;
+            if (child == nullptr || child->m_parent != this)
+                return kInvalidIndex;
+            if (child->m_indexGeneration != m_childrenGeneration)
+                for (usize i = 0; i < m_children.Size(); ++i)
+                {
+                    m_children[i]->m_indexInParent = i;
+                    m_children[i]->m_indexGeneration = m_childrenGeneration;
+                }
+            return child->m_indexGeneration == m_childrenGeneration ? child->m_indexInParent : kInvalidIndex;
         }
+        /// Counts changes to the children (added, removed, moved), for what is kept per arrangement.
+        [[nodiscard]] u32 ChildrenGeneration() const noexcept { return m_childrenGeneration; }
         [[nodiscard]] bool HasChild(const Node* child) const
         {
             return GetChildIndex(child) != kInvalidIndex;
@@ -202,6 +212,7 @@ export namespace experimental::gui
                 child->m_parent->RemoveChild(child);
             child->m_parent = this;
             m_children.PushBack(core::Move(keepAlive));
+            ChildrenRearranged(*child);
             child->MarkStyleDirty(true); // its selectors may match differently here
             ChildrenStyleChanged();
             child->HandleParentChange();
@@ -232,6 +243,7 @@ export namespace experimental::gui
             RefPtr<Node> keepAlive = m_children[index]; // hold across detach + callback
             child->m_parent = nullptr;
             m_children.RemoveAt(index);
+            ChildrenRearranged(*child);
             ChildrenStyleChanged();
             child->HandleParentChange();
             OnChildrenChanged();
@@ -284,6 +296,7 @@ export namespace experimental::gui
             RefPtr<Node> ref = m_children[cur];
             m_children.RemoveAt(cur);
             m_children.Insert(newIndex, core::Move(ref));
+            ChildrenRearranged(*child);
             ChildrenStyleChanged();
             RequestLayout(); // the flow follows the child order
             Invalidate();
@@ -668,6 +681,13 @@ export namespace experimental::gui
         /// The children changed (one joined, left or moved): what matches by position or by
         /// sibling (:first-child, :nth-child(), `+`, `~`) may change for each, and :empty for this
         /// node.
+        // The children changed: every kept index is stale, and `moved`'s from another parent too.
+        void ChildrenRearranged(Node& moved) noexcept
+        {
+            if (++m_childrenGeneration == kNoGeneration) // never the mark of "none"
+                m_childrenGeneration = 0;
+            moved.m_indexGeneration = kNoGeneration;
+        }
         void ChildrenStyleChanged()
         {
             MarkStyleDirty(false);
@@ -1887,6 +1907,10 @@ export namespace experimental::gui
         bool m_hovered = false; // on the dispatcher's hover path
         bool m_pressed = false; // on its press path
         Node* m_parent = nullptr;       // non-owning back-pointer
+        static constexpr u32 kNoGeneration = ~0u;
+        u32 m_childrenGeneration = 0;                     // bumped when the children change
+        mutable usize m_indexInParent = 0;                // its index, while
+        mutable u32 m_indexGeneration = kNoGeneration;    // this is its parent's generation
         Array<RefPtr<Node>> m_children; // owning
         Array<Listener> m_listeners;
         Array<UniquePtr<Effect>> m_bindings; // this node's bindings (Bind, BindProperty)

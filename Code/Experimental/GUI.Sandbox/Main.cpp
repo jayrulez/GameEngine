@@ -112,6 +112,7 @@ public:
         m_height = 820;
     }
     StringView Title() const override { return u8"GUI Sandbox"; }
+    bool DrawsTextComposition() const override { return true; } // its fields show an IME's composition in place
     u32 BufferCount() const override { return kFrames; }
 
 protected:

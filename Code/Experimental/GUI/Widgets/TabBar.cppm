@@ -355,6 +355,23 @@ export namespace experimental::gui
         [[nodiscard]] f32 GetTearDistance() const noexcept { return m_tearDistance; }
         /// Where a tab dropped here would go, while a drag of one is over the strip (-1: none).
         [[nodiscard]] i32 GetDropIndex() const noexcept { return m_dropIndex; }
+        /// Whether it takes a dragged tab (a torn-out tab of its group), and puts the mark at
+        /// `index`; what a TabView asks for a drop anywhere over it.
+        bool OfferTab(DropQuery& query, i32 index)
+        {
+            const Tab* tab = DraggedTab(query.Payload);
+            const TabBar* from = tab != nullptr ? tab->GetBar() : nullptr;
+            if (from == nullptr || m_group.IsEmpty() || from->m_group != m_group)
+                return false;
+            query.Accept(DropEffect::Move);
+            query.Place = index;
+            SetDropIndex(index);
+            return true;
+        }
+        /// Clears the mark (the drag left).
+        void ClearTabMark() { SetDropIndex(-1); }
+        /// Takes the dragged tab at the marked place.
+        void DropTab(const DragPayload& payload);
         /// Takes the page of a tab dropped here from another view (a TabView's): the page goes
         /// to it at an index, and its tab comes with it.
         void SetPageAdopter(core::Function<void(Node& page, i32 index)> adopter) { m_pageAdopter = core::Move(adopter); }
@@ -712,20 +729,13 @@ export namespace experimental::gui
         return payload.Type.AsView() == core::StringView(u8"lab/tab") ? core::Cast<Tab>(Node::FromHandle(payload.Value)) : nullptr;
     }
 
-    inline void TabBar::OnDragQuery(DropQuery& query)
-    {
-        const Tab* tab = DraggedTab(query.Payload);
-        const TabBar* from = tab != nullptr ? tab->GetBar() : nullptr;
-        if (from == nullptr || m_group.IsEmpty() || from->m_group != m_group)
-            return; // not a tab of its group
-        query.Accept(DropEffect::Move);
-        query.Place = InsertionIndex(query.Local);
-        SetDropIndex(query.Place);
-    }
+    inline void TabBar::OnDragQuery(DropQuery& query) { (void)OfferTab(query, InsertionIndex(query.Local)); }
 
-    inline void TabBar::OnDrop(const DragEvent& event)
+    inline void TabBar::OnDrop(const DragEvent& event) { DropTab(event.Payload); }
+
+    inline void TabBar::DropTab(const DragPayload& payload)
     {
-        Tab* tab = DraggedTab(event.Payload);
+        Tab* tab = DraggedTab(payload);
         TabBar* from = tab != nullptr ? tab->GetBar() : nullptr;
         const i32 index = m_dropIndex;
         SetDropIndex(-1);

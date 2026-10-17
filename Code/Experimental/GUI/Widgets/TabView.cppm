@@ -232,6 +232,11 @@ export namespace experimental::gui
         [[nodiscard]] Node* GetChildHost() override { return m_host.Get(); }
 
     protected:
+        // A torn-out tab of its group dropped anywhere over the view (not only its strip) goes
+        // last; over the strip, the strip places it.
+        void OnDragQuery(DropQuery& query) override { (void)m_bar->OfferTab(query, m_bar->GetTabCount()); }
+        void OnDragLeave(const DragEvent&) override { m_bar->ClearTabMark(); }
+        void OnDrop(const DragEvent& event) override { m_bar->DropTab(event.Payload); }
         // Its bar writes in its font (and the bar's tabs).
         void OnTextStyleChange() override { ShareTextStyle(*m_bar, false); }
         void OnKeyDown(const KeyEvent& event) override

@@ -10,8 +10,11 @@
 // switches to it: opening that menu closes the other (it does not hold the new one's button), and
 // the closed menu's notice clears the bar's state.
 //
-// Keyboard left/right navigation between menus is a follow-up (eepp's showNext/showPrevMenu);
-// click + hover-switch is the core behavior.
+// The keyboard and the pad (E5): F10 (the `menu.enter-bar` command) focuses the bar's first
+// button; Down, Return, Space or a pad's South on a button opens its menu with its first item lit;
+// Left and Right move between the buttons, and between the menus while one is open (a submenu's
+// item takes Right first, and a submenu Left); Escape closes the menu, focus going back to its
+// button.
 
 module;
 #include "Core/Prelude.h"
@@ -27,6 +30,7 @@ import :rectangle_drawable;
 import :ui_widget;
 import :button;
 import :menu;
+import :event_dispatcher;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -42,6 +46,18 @@ export namespace experimental::gui
         {
             SetTag(core::StringView(u8"menubar"));
             SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_barColor));
+            // Left and Right that nothing took, from a button or an open menu (which bubbles here).
+            MenuBar* self = this;
+            (void)AddEventListener(EventType::KeyDown, [self](const Event& e) { self->OnBarKey(static_cast<const KeyEvent&>(e)); });
+        }
+
+        /// F10: its first button takes focus.
+        bool EnterFromKeyboard() override
+        {
+            if (m_entries.IsEmpty() || !IsTreeVisible() || !IsTreeEnabled())
+                return false;
+            m_entries[0].button->RequestFocus();
+            return true;
         }
 
         void SetBarHeight(f32 height)
@@ -124,13 +140,57 @@ export namespace experimental::gui
         }
         void OpenMenu(Button* button, Menu* menu)
         {
+            const EventDispatcher* d = GetEventDispatcher();
+            const bool fromKeys = d != nullptr && d->IsUsingKeyboard();
             menu->OpenBelow(*button, *button);
+            if (fromKeys)
+                menu->FocusFirstItem();
             // Opening closed any previous menu (its OnMenuClosed cleared m_current + deselected
             // its button); now record the new one.
             m_current = menu;
             m_currentButton = button;
             button->AddClass(core::StringView(u8"selected"));
         }
+        void OnBarKey(const KeyEvent& event)
+        {
+            if (event.Modifiers != 0 || m_entries.IsEmpty())
+                return;
+            const KeyCode key = static_cast<KeyCode>(event.KeyCode);
+            const i32 at = EntryHolding(event.Target);
+            if (at < 0)
+                return;
+            const i32 count = static_cast<i32>(m_entries.Size());
+            if (key == KeyCode::Left || key == KeyCode::Right)
+            {
+                const i32 next = (at + (key == KeyCode::Right ? 1 : -1) + count) % count;
+                BarEntry& e = m_entries[static_cast<usize>(next)];
+                event.Handled = true;
+                if (m_current != nullptr)
+                {
+                    OpenMenu(e.button, e.menu.Get()); // the open one closes: it does not hold this button
+                    e.menu->FocusFirstItem();
+                }
+                else
+                    e.button->RequestFocus();
+            }
+            else if (key == KeyCode::Down && m_current == nullptr && event.Target == m_entries[static_cast<usize>(at)].button)
+            {
+                event.Handled = true;
+                BarEntry& e = m_entries[static_cast<usize>(at)];
+                OpenMenu(e.button, e.menu.Get());
+                e.menu->FocusFirstItem();
+            }
+        }
+        // The entry whose button is `node` or holds it (its open menu too), or -1.
+        [[nodiscard]] i32 EntryHolding(const Node* node) const
+        {
+            for (usize i = 0; i < m_entries.Size(); ++i)
+                for (const Node* n = node; n != nullptr && n != this; n = n->GetParent())
+                    if (n == m_entries[i].button)
+                        return static_cast<i32>(i);
+            return -1;
+        }
+
         void OnMenuClosed(Menu* menu)
         {
             if (m_current != menu)

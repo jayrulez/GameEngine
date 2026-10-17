@@ -6,8 +6,10 @@
 // MessageBox: a modal dialog with a message and a row of standard buttons (OK / OK-Cancel /
 // Yes-No). Modeled on eepp's UIMessageBox (role only) - a Window subclass whose content is a
 // word-wrapped message plus bottom-right buttons. Pressing a button fires the result callback
-// and closes the dialog. Shown via Window::OpenModal, so the dispatcher confines input to it
-// and a dim scrim covers the background.
+// and closes the dialog. Shown via Window::OpenModal, a modal popup (E5): what is behind it is
+// inert and its backdrop dims it. Its default button (the rightmost, OK or Yes) has focus when it
+// opens, so Return or a pad's South picks it; Escape (or a pad's East) picks the cancel one
+// (Cancel, No, or OK when it is the only one).
 
 module;
 #include "Core/Prelude.h"
@@ -64,6 +66,13 @@ export namespace experimental::gui
             StyleWriteScope defaults(*this); // its own values, which a sheet returns to
             SetSize(core::Float2{360.0f, 180.0f});
             LayoutContent();
+            // Open, the default button takes focus.
+            MessageBox* self = this;
+            (void)AddEventListener(EventType::Toggle, [self](const Event& e)
+                                   {
+                                       if (e.Target == self && static_cast<const ToggleEvent&>(e).Open && !self->m_buttons.IsEmpty())
+                                           self->m_buttons.Back()->RequestFocus();
+                                   });
         }
 
         // Set the title, message, and which buttons to show.
@@ -90,6 +99,15 @@ export namespace experimental::gui
         }
 
     protected:
+        // Escape (a pad's East, unbound) picks the cancel button's result.
+        void OnKeyDown(const KeyEvent& event) override
+        {
+            if (event.KeyCode != static_cast<u32>(KeyCode::Escape) || event.Modifiers != 0 || m_results.IsEmpty())
+                return;
+            event.Handled = true;
+            Finish(m_results[0]); // the leftmost: Cancel or No, or the only one
+        }
+
         void OnSizeChange() override
         {
             Window::OnSizeChange(); // relayout title bar / content host / grip
@@ -112,6 +130,7 @@ export namespace experimental::gui
             for (const RefPtr<Button>& b : m_buttons)
                 b->RemoveFromParent();
             m_buttons.Clear();
+            m_results.Clear();
 
             switch (buttons)
             {
@@ -139,6 +158,7 @@ export namespace experimental::gui
             button->SetOnClick([self, result]() { self->Finish(result); });
             GetContent()->AddChild(button.Get());
             m_buttons.PushBack(core::Move(button));
+            m_results.PushBack(result);
         }
 
         void Finish(Result result)
@@ -177,6 +197,7 @@ export namespace experimental::gui
 
         RefPtr<Label> m_message;
         Array<RefPtr<Button>> m_buttons;
+        Array<Result> m_results; // each button's, in order
         core::Function<void(Result)> m_onResult;
 
         static constexpr f32 kPad = 16.0f;

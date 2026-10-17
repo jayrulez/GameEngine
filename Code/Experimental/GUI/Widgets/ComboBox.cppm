@@ -8,6 +8,11 @@
 // ListBox opened as an auto popup (E5): it stays the combo box's child while open, in the top
 // layer, placed below it (above when there is more room there, shrunk to the room), so a press
 // outside or Escape closes it. Picking an item sets the selection and closes the dropdown.
+//
+// The keyboard and the pad (E5): Return, Space, a pad's South or Alt+Down open it with the list
+// focused on the current item, where the arrows move and Return picks; closed, Up and Down step the
+// selection (given back past the first and the last, so focus moves on), and a letter or a digit
+// selects the next item starting with it.
 
 module;
 #include "Core/Prelude.h"
@@ -140,6 +145,52 @@ export namespace experimental::gui
             else
                 OpenDropdown();
         }
+        bool OnActivate() override
+        {
+            OpenDropdown();
+            return IsOpen();
+        }
+        void OnKeyDown(const KeyEvent& event) override
+        {
+            if (event.Target != this || m_items.IsEmpty())
+                return;
+            const KeyCode key = static_cast<KeyCode>(event.KeyCode);
+            if (key == KeyCode::Down && event.Modifiers == static_cast<u32>(KeyModAlt))
+            {
+                event.Handled = true;
+                OpenDropdown();
+                return;
+            }
+            if (event.Modifiers != 0)
+                return;
+            const i32 last = static_cast<i32>(m_items.Size()) - 1;
+            if (key == KeyCode::Down && m_selected < last)
+            {
+                SetSelectedIndex(m_selected + 1);
+                event.Handled = true;
+            }
+            else if (key == KeyCode::Up && m_selected > 0)
+            {
+                SetSelectedIndex(m_selected - 1);
+                event.Handled = true;
+            }
+            else if (const char8_t typed = TypedCharacter(key); typed != 0)
+            {
+                // Type-ahead: the next item after the selection starting with it, round the end.
+                const i32 count = static_cast<i32>(m_items.Size());
+                for (i32 n = 1; n <= count; ++n)
+                {
+                    const i32 i = (m_selected + n + count) % count;
+                    const core::StringView item = m_items[static_cast<usize>(i)].AsView();
+                    if (item.Size() != 0 && Lower(item[0]) == typed)
+                    {
+                        SetSelectedIndex(i);
+                        event.Handled = true;
+                        break;
+                    }
+                }
+            }
+        }
 
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
         {
@@ -170,7 +221,7 @@ export namespace experimental::gui
             for (const core::String& item : m_items)
                 m_dropdown->AddItem(item.AsView());
             ComboBox* self = this;
-            m_dropdown->SetOnSelectionChanged([self](i32 i) { self->OnPicked(i); });
+            m_dropdown->SetOnItemActivated([self](i32 i) { self->OnPicked(i); });
         }
 
         void OpenDropdown()
@@ -181,9 +232,12 @@ export namespace experimental::gui
             BuildDropdown();
             const f32 h = core::Min(static_cast<f32>(m_items.Size()) * m_itemHeight, m_dropdownMaxHeight);
             m_dropdown->SetSize(core::Float2{GetSize().x, h});
+            if (m_selected >= 0)
+                m_dropdown->SetSelectedIndex(m_selected); // the current item lit, in view
             PopupOptions options;
             options.Anchor = this;
             options.Placement = PopupPlacement{PopupSide::Below, PopupAlign::Start, 0.0f, true};
+            options.TakesFocus = true; // the list: the arrows move, Return picks; focus back on close
             dispatcher->OpenPopup(*this, *m_dropdown, core::Move(options));
         }
 
@@ -198,6 +252,18 @@ export namespace experimental::gui
             SetSelectedIndex(index);
             CloseDropdown();
         }
+
+        // The character a letter or digit key types (lower case), or 0.
+        [[nodiscard]] static char8_t TypedCharacter(KeyCode key) noexcept
+        {
+            for (usize i = 0; i < 26; ++i)
+                if (kLetterKeys[i] == key)
+                    return static_cast<char8_t>(u8'a' + i);
+            if (key >= KeyCode::Num0 && key <= KeyCode::Num9)
+                return static_cast<char8_t>(u8'0' + (static_cast<u32>(key) - static_cast<u32>(KeyCode::Num0)));
+            return 0;
+        }
+        [[nodiscard]] static char8_t Lower(char8_t c) noexcept { return c >= u8'A' && c <= u8'Z' ? static_cast<char8_t>(c - u8'A' + u8'a') : c; }
 
 
         Array<core::String> m_items;

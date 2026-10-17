@@ -113,6 +113,7 @@ export namespace experimental::gui
         MenuItem()
         {
             SetTag(core::StringView(u8"menuitem"));
+            SetTabFocusable(true); // the keyboard and the pad walk the items (a disabled one is skipped)
             m_text.SetAlignment(TextHAlign::Left, TextVAlign::Middle);
             m_shortcut.SetAlignment(TextHAlign::Right, TextVAlign::Middle);
         }
@@ -217,6 +218,12 @@ export namespace experimental::gui
             event.Handled = true;
             Activate();
         }
+        // Return, Space, a pad's South: as a click.
+        bool OnActivate() override
+        {
+            Activate();
+            return true;
+        }
 
         // Run the item: toggle (if checkable), fire the user's action, then close the chain.
         virtual void Activate()
@@ -235,7 +242,7 @@ export namespace experimental::gui
         {
             (void)localBounds;
             const Rect b = GetLocalBounds();
-            if (IsHovered())
+            if (IsHovered() || IsFocused())
                 GetPartStyle(u8"highlight").Draw(ctx, b, FilledBox(m_highlight));
 
             // Left gutter: a check mark (if checked) else an icon (if set).
@@ -301,17 +308,32 @@ export namespace experimental::gui
         void SetSubMenu(Menu* menu) noexcept { m_subMenu = menu; }
         [[nodiscard]] Menu* GetSubMenu() const noexcept { return m_subMenu; }
 
-        // The menu installs this to open the submenu (also used by hover).
-        void SetOnOpenSubMenu(core::Function<void()> callback) { m_onOpen = core::Move(callback); }
+        // The menu installs this to open the submenu; true from the keys (its first item then takes focus).
+        void SetOnOpenSubMenu(core::Function<void(bool)> callback) { m_onOpen = core::Move(callback); }
 
         [[nodiscard]] Color ArrowColor() const noexcept { return m_arrowColor; }
 
     protected:
+        // A click opens it; Return, Space or Right open it and go in (its first item takes focus).
         void Activate() override
         {
             if (m_onOpen)
-                m_onOpen();
+                m_onOpen(false);
         } // open, never close
+        bool OnActivate() override
+        {
+            if (m_onOpen)
+                m_onOpen(true);
+            return true;
+        }
+        void OnKeyDown(const KeyEvent& event) override
+        {
+            if (event.Target == this && event.KeyCode == static_cast<u32>(KeyCode::Right) && event.Modifiers == 0)
+            {
+                event.Handled = true;
+                (void)OnActivate();
+            }
+        }
 
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
         {
@@ -331,7 +353,7 @@ export namespace experimental::gui
 
     private:
         Menu* m_subMenu = nullptr; // non-owning; owned as a RefPtr by the Menu
-        core::Function<void()> m_onOpen;
+        core::Function<void(bool)> m_onOpen;
         Color m_arrowColor{0.80f, 0.84f, 0.90f, 1.0f};
     };
 
@@ -343,6 +365,10 @@ export namespace experimental::gui
         Menu()
         {
             SetTag(core::StringView(u8"menu"));
+            // Open, it takes focus (itself: no item lit until a key or the pointer picks one), and
+            // up and down go round its items.
+            SetTabFocusable(true);
+            SetNavScope(NavScope::Wrap);
             SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_panelColor));
             StyleWriteScope defaults(*this); // its own values, which a sheet returns to
             SetTextColor(Color{0.88f, 0.90f, 0.94f, 1.0f});
@@ -425,7 +451,7 @@ export namespace experimental::gui
             MenuSubItem* rawItem = item.Get();
             Menu* rawSub = sub.Get();
             Menu* self = this;
-            item->SetOnOpenSubMenu([self, rawItem]() { self->OpenSubMenuFor(rawItem); });
+            item->SetOnOpenSubMenu([self, rawItem](bool fromKeys) { self->OpenSubMenuFor(rawItem, fromKeys); });
 
             AddItemNode(item.Get(), rawItem);
             m_ownedSubMenus.PushBack(core::Move(sub)); // keep the submenu alive
@@ -474,14 +500,18 @@ export namespace experimental::gui
             PopupOptions options;
             options.AnchorRect = Rect{position.x, position.y, 0.0f, 0.0f};
             options.HasAnchorRect = true;
+            options.TakesFocus = true; // the keyboard and the pad work in it; focus comes back on close
             OpenAs(owner, core::Move(options));
         }
+        /// Focuses its first item that can take it (a menu opened from the keyboard or the pad).
+        void FocusFirstItem() { FocusItem(0, 1); }
         /// Shows the menu as a popup of `owner`, against `anchor` (a menu bar's button: below it).
         void OpenBelow(Node& owner, Node& anchor)
         {
             PopupOptions options;
             options.Anchor = &anchor;
             options.Placement = PopupPlacement{PopupSide::Below, PopupAlign::Start, 0.0f, true};
+            options.TakesFocus = true;
             OpenAs(owner, core::Move(options));
         }
 
@@ -496,7 +526,53 @@ export namespace experimental::gui
 
         void OnSizeChange() override { Relayout(); }
 
+        // Up and down go round the items (from the menu itself: the first or the last); Left in a
+        // submenu closes it, focus going back to its item.
+        void OnKeyDown(const KeyEvent& event) override
+        {
+            if (event.Modifiers != 0)
+                return;
+            const KeyCode key = static_cast<KeyCode>(event.KeyCode);
+            if (key == KeyCode::Down || key == KeyCode::Up)
+            {
+                const i32 step = key == KeyCode::Down ? 1 : -1;
+                const i32 at = IndexOfRow(event.Target);
+                event.Handled = FocusItem(at < 0 ? (step > 0 ? 0 : static_cast<i32>(m_rows.Size()) - 1) : at + step, step);
+            }
+            else if (key == KeyCode::Left && core::Cast<MenuSubItem>(GetParent()) != nullptr)
+            {
+                event.Handled = true;
+                Close();
+            }
+        }
+
     private:
+        // The row `node` is (or is in), or -1.
+        [[nodiscard]] i32 IndexOfRow(const Node* node) const
+        {
+            for (usize i = 0; i < m_rows.Size(); ++i)
+                for (const Node* n = node; n != nullptr && n != this; n = n->GetParent())
+                    if (n == m_rows[i])
+                        return static_cast<i32>(i);
+            return -1;
+        }
+        // Focuses the first item from `start` going `step` (round the end) that can take focus.
+        bool FocusItem(i32 start, i32 step)
+        {
+            const i32 count = static_cast<i32>(m_rows.Size());
+            for (i32 n = 0; n < count; ++n)
+            {
+                const i32 i = ((start + n * step) % count + count) % count;
+                MenuRow* row = m_rows[static_cast<usize>(i)];
+                if (row->IsSelectable() && row->IsTreeEnabled() && row->IsTabFocusable())
+                {
+                    row->RequestFocus();
+                    return true;
+                }
+            }
+            return false;
+        }
+
         void AddItemNode(Node* node, MenuRow* row)
         {
             if (MenuItem* it = core::Cast<MenuItem>(row))
@@ -559,25 +635,38 @@ export namespace experimental::gui
 
         // === Submenus ===
         // Opens `item`'s submenu as its popup, right of it (left at the root's edge); the stack
-        // closes another item's open submenu, which this one's owner is not inside.
-        void OpenSubMenuFor(MenuSubItem* item)
+        // closes another item's open submenu, which this one's owner is not inside. It takes focus
+        // (given back to the item when it closes); from the keys its first item is lit.
+        void OpenSubMenuFor(MenuSubItem* item, bool fromKeys)
         {
             Menu* sub = item->GetSubMenu();
-            if (sub == nullptr || sub->IsOpen())
+            if (sub == nullptr)
                 return;
+            if (sub->IsOpen())
+            {
+                if (fromKeys)
+                    sub->FocusFirstItem();
+                return;
+            }
             PopupOptions options;
             options.Anchor = item;
             options.Placement = PopupPlacement{PopupSide::Right, PopupAlign::Start, 0.0f, true};
+            options.TakesFocus = true;
             sub->OpenAs(*item, core::Move(options));
+            if (fromKeys)
+                sub->FocusFirstItem();
         }
 
-        // A row was hovered: an open submenu of another row closes; a submenu row opens its own.
+        // A row was hovered: an open submenu of another row closes; a submenu row opens its own;
+        // an item takes focus, so the keys go on from where the pointer is.
         void OnRowHovered(MenuRow* row)
         {
             if (Menu* open = CurrentSubMenu(); open != nullptr && open->GetParent() != row)
                 open->Close();
+            if (row->IsSelectable() && row->IsTreeEnabled())
+                row->RequestFocus();
             if (MenuSubItem* sub = core::Cast<MenuSubItem>(row))
-                OpenSubMenuFor(sub);
+                OpenSubMenuFor(sub, false);
         }
 
         // The outermost menu holding this one (a submenu's parents up the tree).

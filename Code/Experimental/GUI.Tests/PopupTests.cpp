@@ -445,3 +445,25 @@ TEST_CASE("popups: input in another root of the GUI closes this root's light pop
     CHECK(a->GetEventDispatcher()->IsPopupOpen(*dialog));
     CHECK(a->GetEventDispatcher()->IsPopupOpen(*menu)); // below the dialog: kept
 }
+
+TEST_CASE("popups: a popup whose old parent held the only reference to it survives the move to its owner")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{400.0f, 300.0f});
+    auto page = core::MakeRef<Panel>(core::DefaultAllocator());
+    root->AddChild(page.Get());
+    Node* popup = nullptr;
+    {
+        auto made = core::MakeRef<Panel>(core::DefaultAllocator());
+        made->SetSize(core::Float2{80.0f, 40.0f});
+        page->AddChild(made.Get());
+        popup = made.Get(); // the page holds the only reference now
+    }
+    auto owner = core::MakeRef<Panel>(core::DefaultAllocator());
+    root->AddChild(owner.Get());
+    EventDispatcher& d = *root->GetEventDispatcher();
+    d.OpenPopup(*owner, *popup, PopupOptions{});
+    CHECK(d.IsPopupOpen(*popup));
+    CHECK(popup->GetParent() == owner.Get());
+    CHECK(page->ChildCount() == 0);
+}

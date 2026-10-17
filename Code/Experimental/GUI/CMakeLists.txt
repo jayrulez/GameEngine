@@ -77,6 +77,8 @@ target_sources(GUI
             Widgets/TextArea.cppm
             Widgets/NumberField.cppm
             Widgets/EditableLabel.cppm
+            Widgets/Disclosure.cppm
+            Widgets/Expander.cppm
             Widgets/ScrollBar.cppm
             Widgets/ScrollView.cppm
             Widgets/Image.cppm

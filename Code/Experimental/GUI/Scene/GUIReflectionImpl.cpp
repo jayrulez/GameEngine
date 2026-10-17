@@ -518,7 +518,7 @@ namespace experimental::gui
                 &Image::StaticType(),        &ListBox::StaticType(),      &Window::StaticType(),
                 &ComboBox::StaticType(),     &RichText::StaticType(),     &TextArea::StaticType(),
                 &ToggleSwitch::StaticType(),   &Separator::StaticType(),    &Spacer::StaticType(),
-                &NumberField::StaticType(),    &EditableLabel::StaticType(),
+                &NumberField::StaticType(),    &EditableLabel::StaticType(), &Expander::StaticType(),
             };
             for (const TypeInfo* type : kLabElements)
                 (void)ElementTypes::Register(*type);
@@ -773,6 +773,23 @@ namespace experimental::gui
     {
         builder.Method<&EditableLabel::BeginEdit>("beginEdit");
         builder.Method<&ElementOf<EditableLabel>, EditableLabel, Node>("of");
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(ExpanderHeader, "rtti::gui")
+    {
+    }
+
+    REFLECT_MEMBERS(Expander, "rtti::gui")
+    {
+        builder.AccessorProperty<&Expander::GetTitleString, &Expander::SetTitleString>("title").PropAttribute("css", core::String(u8"title"));
+        builder.AccessorProperty<&Expander::IsOpen, &Expander::SetOpen>("open")
+            .PropAttribute("css", core::String(u8"open"))
+            .PropAttribute("twoWay", true); // the user opens it: a binding may write it back
+        builder.AccessorProperty<&Expander::GetName, &Expander::SetName>("name").PropAttribute("css", core::String(u8"name"));
+        builder.AccessorProperty<&Expander::IsAnimated, &Expander::SetAnimated>("animate").PropAttribute("css", core::String(u8"animate"));
+        builder.Method<&Expander::Toggle>("toggle");
+        builder.Method<&ElementOf<Expander>, Expander, Node>("of");
         builder.Creator();
     }
 

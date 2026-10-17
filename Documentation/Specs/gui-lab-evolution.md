@@ -384,6 +384,41 @@ Tests: the copied tests come with the copied code; the editing model per command
 combining text; undo coalescing; filters; ellipsis and clamp; label sizes from shaped text;
 password masking; preedit; `changing` against `changed`.
 
+As built on `vg` (2026-10-17): TextRuns, TextLayout, UndoStack and InputFilter are copied into
+the lab with their tests, under the lab's names, colours parsed as its sheets parse them, the
+undo stack in byte offsets, and the layout drawing plain runs in the label's own font, asking a
+font service only for a run that sets its own (83dae18d1). Neither fonts nor core segments text,
+so graphemes (combining marks, joined emoji, flags, CR LF) and words are the lab's own, over
+tables of the common ranges; the editing model runs named commands over them (move, select and
+delete by grapheme, word, line, page and document; undo, redo, cut, copy, paste), with a
+filter, a grapheme limit, read-only and copy-forbidding rules and undo that folds a run of
+typing or deleting; every GUI binds the editing keys in the "textinput" context, the vertical
+keys and Return in "textinput && multiline" (fd817554a). The Text every widget draws with lays
+out through the copied layout, which gains a line height with half-leading, letter spacing, a
+clamp, an ellipsis at a line's end, start or middle, and byte offsets for every glyph and line;
+white-space, line-height and letter-spacing inherit through the text style, text-overflow and
+line-clamp are a label's own; a label is rich with `rich="true"` or as a RichText element, its
+links `link` events; a GUI context carries the font service and resources rich text needs
+(5d2458385). TextField edits through the model and the keymap, scrolls across, filters, masks a
+password and reports `input`, `change` (a commit: Return or leaving with a new value) and
+`submit`; a font with no shaper places characters by measuring (f5aaa9f16). The shell reports
+an IME's composition when the application asks (WindowSettings::drawsTextComposition) and takes
+where text is typed, for the candidates (63e064258). An ellipsis or a password bullet the
+font's atlas lacks falls back to full stops or a middle dot, and overflow clips a label's own
+text (d59c99328). TextArea and TextField share TextEditBase; the text area wraps, keeps its
+column across shown lines, pages and scrolls; a composition shows underlined in place and the
+bridge tells the window where the field types (20976429c). The Text page shows it all
+(9fb8acfd7).
+Left: the context menu waits for E5's popups; the web shell reports no composition and ignores
+the input area; segmentation covers the common ranges, not all of UAX #29 (no Hangul jamo or
+Indic conjunct rules), and words are not the shaper's; carets assume left-to-right text (E9); a
+label's own white-space is nowrap, so a label stays one line until a sheet wraps it (CSS's
+initial is normal); the ellipsis passes over text a font could not shape, and a clamp ends in an
+ellipsis at its end whatever text-overflow says; a password takes no composition; a link shows
+no pointer cursor and is styled only by its markup; menus, combo boxes and tooltips take the
+font and colour but not white-space, line-height or letter-spacing; no real IME has been typed
+through yet.
+
 ### E5 Overlays and the keyboard in composite widgets
 
 Facts: the dispatcher holds one popup and one modal root; ComboBox, Menu and Tooltip place

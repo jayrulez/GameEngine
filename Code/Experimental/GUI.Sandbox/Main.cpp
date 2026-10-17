@@ -574,9 +574,7 @@ void GUISandbox::FillNativeHosts()
         table->SetSize(Float2{320.0f, 180.0f});
         table->SetFont(m_font);
         table->SetRowHeight(24.0f);
-        table->SetModel(m_tableProxy.Get());
-        gui::SortingProxyModel* proxy = m_tableProxy.Get();
-        table->SetOnColumnHeaderClicked([proxy](usize column) { proxy->ToggleSort(column); });
+        table->SetModel(m_tableProxy.Get()); // a header click sorts through the proxy (the model's sort capability)
         host->AddChild(table.Get());
     }
     if (gui::Node* host = FindById(*m_shellNode, u8"views-tree"))

@@ -3,11 +3,14 @@
 
 // GUI - :table_view partition
 //
-// TableView: a virtualised table over a model (eepp's UITableView in role). ItemView realises
-// its rows; a row's content is one cell (`tablecell`) per column. Its header (`tableheader`) shows
-// the column names and stays at the top while the rows scroll under it; a click on a header cell
-// reports its column, or with nothing listening sorts by it where the model can sort. Column
-// widths are explicit (SetColumnWidth) or an equal share of what is left.
+// TableView: a virtualised table over a model (eepp's UITableView in role, its column model the
+// fullest of the surveyed ones). ItemView realises its rows; a row's content is one cell
+// (`tablecell`) per column. Its header (`tableheader`) shows the column names and stays at the top
+// while the rows scroll under it, and across with them. Columns are pixels, a percentage of the
+// view's width, or auto (an equal share of what is left, no narrower than a minimum); columns
+// wider than the view scroll it across. Dragging a header cell's right edge resizes its column (to
+// pixels from then on). A click on a header cell reports its column, or with nothing listening
+// sorts by it where the model can; the sorted column's cell shows which way.
 
 module;
 #include "Core/Prelude.h"
@@ -16,6 +19,7 @@ module;
 export module experimental.gui:table_view;
 
 import foundation.core; // RefPtr, MakeRef, Array, Function, Move, Max
+import foundation.vg;   // PathBuilder (the sort indicator)
 import :rect;
 import :event;
 import :node;
@@ -26,20 +30,25 @@ import :rectangle_drawable;
 import :model_index;
 import :model;
 import :item_view;
+import :draw_context;
+import :layout_style;     // LayoutLength, Overflow
+import :event_dispatcher; // SuppressClick (a resize is no click)
 
 using namespace foundation::core;
 namespace core = foundation::core;
+namespace vg = foundation::vg;
 
 export namespace experimental::gui
 {
     class TableView;
 
-    // A clickable column header cell (reports its column on a click).
+    // A column's header cell: a click reports its column; a drag from its right edge resizes the
+    // column; the sorted column's cell shows which way (a triangle, up ascending).
     class TableHeaderCell : public Label
     {
         RTTI_OBJECT(TableHeaderCell, Label)
     public:
-        TableHeaderCell()
+        explicit TableHeaderCell(TableView& table) : m_table(table)
         {
             SetTag(core::StringView(u8"tableheadercell"));
             StyleWriteScope defaults(*this); // its own values, which a sheet returns to
@@ -47,19 +56,26 @@ export namespace experimental::gui
             SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
         }
         void SetColumn(usize column) noexcept { m_column = column; }
-        void SetOnClicked(core::Function<void(usize)> callback) { m_onClicked = core::Move(callback); }
+        [[nodiscard]] usize GetColumn() const noexcept { return m_column; }
+        [[nodiscard]] bool IsResizing() const noexcept { return m_resizing; }
 
     protected:
-        void OnMouseClick(const MouseEvent& event) override
-        {
-            event.Handled = true;
-            if (m_onClicked)
-                m_onClicked(m_column);
-        }
+        void OnMouseDown(const MouseEvent& event) override;
+        void OnMouseMove(const MouseEvent& event) override;
+        void OnMouseUp(const MouseEvent&) override { m_resizing = false; }
+        void OnPointerCancel(const MouseEvent&) override { m_resizing = false; }
+        void OnMouseClick(const MouseEvent& event) override;
+        void OnDraw(DrawContext& ctx, const Rect& localBounds) override;
 
     private:
+        static constexpr f32 kGrip = 5.0f; // how near its right edge a press resizes
+        [[nodiscard]] bool OnGrip(core::Float2 world) const { return ConvertToNodeSpace(world).x >= GetSize().x - kGrip; }
+
+        TableView& m_table; // the view whose header holds it
         usize m_column = 0;
-        core::Function<void(usize)> m_onClicked;
+        bool m_resizing = false;
+        f32 m_pressX = 0.0f;
+        f32 m_startWidth = 0.0f;
     };
 
     // A table row's content: one cell per column, placed by the table's widths.
@@ -117,6 +133,7 @@ export namespace experimental::gui
             AddChild(m_header.Get());
             StyleWriteScope defaults(*this); // its own values, which a sheet returns to
             SetTextColor(Color{0.86f, 0.89f, 0.94f, 1.0f});
+            EditLayoutStyle([](LayoutStyle& s) { s.OverflowX = Overflow::Auto; }); // columns past its width
         }
 
         void SetHeaderHeight(f32 height)
@@ -124,13 +141,78 @@ export namespace experimental::gui
             m_headerHeight = core::Max(0.0f, height);
             RequestLayout();
         }
-        void SetColumnWidth(usize column, f32 width)
+        /// A column's width: pixels, a percentage of the view's width, or auto.
+        void SetColumnWidth(usize column, LayoutLength width)
         {
             while (m_columnWidths.Size() <= column)
-                m_columnWidths.PushBack(0.0f);
+                m_columnWidths.PushBack(LayoutLength{});
             m_columnWidths[column] = width;
             RequestLayout();
         }
+        /// Every column's width as text, one per column (`120px 30% auto`; a bare number is
+        /// pixels): markup's `column-widths`.
+        void SetColumnWidthsText(const core::String& text)
+        {
+            m_columnWidths.Clear();
+            core::StringView rest = core::Trim(text.AsView());
+            while (rest.Size() != 0)
+            {
+                usize end = 0;
+                while (end < rest.Size() && rest[end] != u8' ')
+                    ++end;
+                const core::StringView word = rest.SubStr(0, end);
+                rest = core::Trim(rest.SubStr(end, rest.Size() - end));
+                LayoutLength width;
+                if (word.Size() > 1 && word[word.Size() - 1] == u8'%')
+                    width = LayoutLength::Percent(static_cast<f32>(core::ParseFloat(word.SubStr(0, word.Size() - 1)).ValueOr(0.0)));
+                else if (word != core::StringView(u8"auto"))
+                {
+                    const core::StringView digits = word.Size() > 2 && word.SubStr(word.Size() - 2, 2) == core::StringView(u8"px") ? word.SubStr(0, word.Size() - 2) : word;
+                    width = LayoutLength::Px(static_cast<f32>(core::ParseFloat(digits).ValueOr(0.0)));
+                }
+                m_columnWidths.PushBack(width);
+            }
+            RequestLayout();
+        }
+        [[nodiscard]] core::String GetColumnWidthsText() const
+        {
+            core::String text;
+            for (usize c = 0; c < m_columnWidths.Size(); ++c)
+            {
+                if (c > 0)
+                    text.Append(core::StringView(u8" "));
+                const LayoutLength& w = m_columnWidths[c];
+                text.Append(w.Kind == LayoutLengthKind::Px ? core::Format(u8"{}px", w.Value).AsView()
+                            : w.Kind == LayoutLengthKind::Percent ? core::Format(u8"{}%", w.Value).AsView()
+                                                                 : core::StringView(u8"auto"));
+            }
+            return text;
+        }
+        /// The narrowest a column gets (an auto one squeezed, one dragged).
+        void SetMinColumnWidth(f32 width)
+        {
+            m_minColumnWidth = core::Max(1.0f, width);
+            RequestLayout();
+        }
+        [[nodiscard]] f32 GetMinColumnWidth() const noexcept { return m_minColumnWidth; }
+        /// Its columns' total width in the last layout (past the view's: it scrolls across).
+        [[nodiscard]] f32 GetColumnsWidth() const
+        {
+            f32 total = 0.0f;
+            for (f32 w : m_widths)
+                total += w;
+            return total;
+        }
+        /// The sort indicator: which column shows which way (a header click that sorts sets it).
+        void SetSortIndicator(i32 column, SortOrder order)
+        {
+            m_sortColumn = column;
+            m_sortOrder = order;
+            for (const core::RefPtr<TableHeaderCell>& cell : m_headerCells)
+                cell->Invalidate();
+        }
+        [[nodiscard]] i32 GetSortColumn() const noexcept { return m_sortColumn; }
+        [[nodiscard]] SortOrder GetSortOrder() const noexcept { return m_sortOrder; }
         /// A column's width in the last layout.
         [[nodiscard]] f32 GetColumnWidth(usize column) const { return column < m_widths.Size() ? m_widths[column] : 0.0f; }
         [[nodiscard]] usize GetColumnCount() const { return GetModel() != nullptr ? GetModel()->ColumnCount() : 0; }
@@ -150,11 +232,12 @@ export namespace experimental::gui
         [[nodiscard]] core::StringView RowTag() const override { return core::StringView(u8"tablerow"); }
         [[nodiscard]] f32 ContentTopInset() const override { return m_headerHeight; }
         void OnModelChanged() override { SyncHeader(); }
-        // The columns' widths for this layout, from the content box's width.
+        // The columns' widths for this layout, from the content box's width: a row is as wide as
+        // the view, or as the columns when they are wider.
         [[nodiscard]] f32 RowWidth(f32 width) const override
         {
             ComputeColumnWidths(width);
-            return width;
+            return core::Max(width, GetColumnsWidth());
         }
 
         [[nodiscard]] core::RefPtr<Node> CreateContent(u32) override { return core::MakeRef<TableRowContent>(MemoryAllocator(), *this); }
@@ -180,7 +263,7 @@ export namespace experimental::gui
         {
             const Rect box = GetContentBounds();
             m_header->SetVisible(m_headerHeight > 0.0f);
-            m_header->Arrange(Rect{box.x, box.y + GetScrollOffset().y, box.width, m_headerHeight});
+            m_header->Arrange(Rect{box.x, box.y + GetScrollOffset().y, core::Max(box.width, GetColumnsWidth()), m_headerHeight});
             f32 x = 0.0f;
             for (usize c = 0; c < m_headerCells.Size(); ++c)
             {
@@ -194,6 +277,7 @@ export namespace experimental::gui
 
     private:
         friend class TableRowContent;
+        friend class TableHeaderCell;
 
         // The header's cells follow the columns (cells kept while the columns stay, so a press on
         // one that sorts does not free the cell under the pointer).
@@ -205,17 +289,15 @@ export namespace experimental::gui
                 m_headerCells[m_headerCells.Size() - 1]->RemoveFromParent();
                 m_headerCells.RemoveAt(m_headerCells.Size() - 1);
             }
-            TableView* self = this;
             while (m_headerCells.Size() < columns)
             {
-                auto cell = core::MakeRef<TableHeaderCell>(MemoryAllocator());
+                auto cell = core::MakeRef<TableHeaderCell>(MemoryAllocator(), *this);
                 cell->SetColumn(m_headerCells.Size());
                 ShareTextStyle(*cell, false);
                 {
                     StyleWriteScope defaults(*cell);
                     cell->SetTextColor(m_headerTextColor);
                 }
-                cell->SetOnClicked([self](usize column) { self->HeaderClicked(column); });
                 m_header->AddChild(cell.Get());
                 m_headerCells.PushBack(core::Move(cell));
             }
@@ -233,46 +315,96 @@ export namespace experimental::gui
             // same one turning over).
             const SortOrder order = m_sortColumn == static_cast<i32>(column) && m_sortOrder == SortOrder::Ascending ? SortOrder::Descending : SortOrder::Ascending;
             if (GetModel() != nullptr && GetModel()->Sort(column, order))
-            {
-                m_sortColumn = static_cast<i32>(column);
-                m_sortOrder = order;
-            }
+                SetSortIndicator(static_cast<i32>(column), order);
         }
 
-        // Explicit widths where set (>0), else an equal share of the rest among the autos.
+        // Pixels and percentages as they say, auto columns an equal share of what is left; none
+        // narrower than the minimum (so the columns may come out wider than the view).
         void ComputeColumnWidths(f32 bodyWidth) const
         {
             const usize columns = GetColumnCount();
             m_widths.Clear();
-            f32 explicitTotal = 0.0f;
+            f32 given = 0.0f;
             usize autoCount = 0;
             for (usize c = 0; c < columns; ++c)
             {
-                const f32 w = c < m_columnWidths.Size() ? m_columnWidths[c] : 0.0f;
-                if (w > 0.0f)
-                    explicitTotal += w;
+                const LayoutLength w = c < m_columnWidths.Size() ? m_columnWidths[c] : LayoutLength{};
+                const Optional<f32> px = w.Resolve(bodyWidth);
+                if (px.HasValue())
+                    given += core::Max(m_minColumnWidth, px.Value());
                 else
                     ++autoCount;
             }
-            const f32 autoWidth = autoCount > 0 ? core::Max(0.0f, (bodyWidth - explicitTotal) / static_cast<f32>(autoCount)) : 0.0f;
+            const f32 share = autoCount > 0 ? (bodyWidth - given) / static_cast<f32>(autoCount) : 0.0f;
             for (usize c = 0; c < columns; ++c)
             {
-                const f32 w = c < m_columnWidths.Size() ? m_columnWidths[c] : 0.0f;
-                m_widths.PushBack(w > 0.0f ? w : autoWidth);
+                const LayoutLength w = c < m_columnWidths.Size() ? m_columnWidths[c] : LayoutLength{};
+                m_widths.PushBack(core::Max(m_minColumnWidth, w.Resolve(bodyWidth).ValueOr(share)));
             }
         }
+        // A drag of a header cell's edge: the column takes that many pixels.
+        void ResizeColumn(usize column, f32 width) { SetColumnWidth(column, LayoutLength::Px(core::Max(m_minColumnWidth, width))); }
 
         core::RefPtr<UIWidget> m_header;
         Array<core::RefPtr<TableHeaderCell>> m_headerCells;
-        Array<f32> m_columnWidths;     // 0 = auto
+        Array<LayoutLength> m_columnWidths; // auto when unset
         mutable Array<f32> m_widths;   // resolved for the current layout (RowWidth works them out)
         core::Function<void(usize)> m_onHeaderClicked;
         i32 m_sortColumn = -1;
         SortOrder m_sortOrder = SortOrder::None;
         f32 m_headerHeight = 26.0f;
+        f32 m_minColumnWidth = 40.0f;
         Color m_headerColor{0.20f, 0.22f, 0.27f, 1.0f};
         Color m_headerTextColor{0.86f, 0.89f, 0.94f, 1.0f};
     };
+
+    inline void TableHeaderCell::OnMouseDown(const MouseEvent& event)
+    {
+        if (event.Button != MouseButton::Left || !OnGrip(event.Position))
+            return;
+        // On its edge: a resize, not a click (no sort follows).
+        event.Handled = true;
+        m_resizing = true;
+        m_pressX = event.Position.x;
+        m_startWidth = m_table.GetColumnWidth(m_column);
+        if (EventDispatcher* d = GetEventDispatcher())
+            d->SuppressClick();
+    }
+
+    inline void TableHeaderCell::OnMouseMove(const MouseEvent& event)
+    {
+        if (m_resizing)
+        {
+            m_table.ResizeColumn(m_column, m_startWidth + (event.Position.x - m_pressX));
+            return;
+        }
+        SetCursor(OnGrip(event.Position) ? Cursor::EwResize : Cursor::Auto); // the edge says it resizes
+    }
+
+    inline void TableHeaderCell::OnMouseClick(const MouseEvent& event)
+    {
+        event.Handled = true;
+        m_table.HeaderClicked(m_column);
+    }
+
+    inline void TableHeaderCell::OnDraw(DrawContext& ctx, const Rect& localBounds)
+    {
+        Label::OnDraw(ctx, localBounds);
+        if (m_table.GetSortColumn() != static_cast<i32>(m_column) || m_table.GetSortOrder() == SortOrder::None)
+            return;
+        // A small triangle at its right, up for ascending, down for descending.
+        const Rect box = GetContentBounds();
+        const f32 s = 4.0f;
+        const f32 cx = box.x + box.width - s;
+        const f32 cy = box.y + box.height * 0.5f;
+        const f32 dir = m_table.GetSortOrder() == SortOrder::Ascending ? -1.0f : 1.0f;
+        vg::PathBuilder pb;
+        pb.MoveTo(cx - s, cy - dir * s * 0.5f);
+        pb.LineTo(cx + s, cy - dir * s * 0.5f);
+        pb.LineTo(cx, cy + dir * s * 0.5f);
+        pb.Close();
+        ctx.VG().FillPath(pb.ToPath(), GetTextColor());
+    }
 
     inline core::Float2 TableRowContent::MeasureContent(core::Float2 available)
     {

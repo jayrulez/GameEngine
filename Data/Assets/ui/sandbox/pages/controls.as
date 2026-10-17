@@ -5,6 +5,9 @@ funcdef string TextExpression();
 funcdef double NumberExpression();
 
 Slider@ slider;
+Slider@ vertical;
+Slider@ stepped;
+Slider@ freq;
 TextField@ field;
 
 void add1() { gui::set("clicks", gui::getNumber("clicks") + 1); }
@@ -13,6 +16,10 @@ void reset() { gui::set("clicks", 0); }
 
 double sliderValue() { return slider.value; }
 string sliderText() { return "" + int(slider.value * 100 + 0.5) + "%"; }
+string rangesText()
+{
+    return "vertical " + int(vertical.value) + ", stepped " + int(stepped.value) + " of 10, exponential " + int(freq.value) + " Hz";
+}
 string echoText() { return field.text == "" ? "(the echo follows the field)" : "echo: " + field.text; }
 
 void main()
@@ -23,7 +30,11 @@ void main()
     root.find("controls-reset").on("click", Action(reset));
     @slider = Slider::of(root.find("controls-slider"));
     @field = TextField::of(root.find("controls-field"));
-    root.find("controls-progress").bind("progress", NumberExpression(sliderValue));
+    @vertical = Slider::of(root.find("controls-vertical"));
+    @stepped = Slider::of(root.find("controls-stepped"));
+    @freq = Slider::of(root.find("controls-freq"));
+    root.find("controls-ranges").bind("text", TextExpression(rangesText));
+    root.find("controls-progress").bind("value", NumberExpression(sliderValue));
     root.find("controls-slider-value").bind("text", TextExpression(sliderText));
     root.find("controls-echo").bind("text", TextExpression(echoText));
 }

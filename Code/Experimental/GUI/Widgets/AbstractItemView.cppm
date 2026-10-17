@@ -116,11 +116,12 @@ export namespace experimental::gui
             m_vBar = core::MakeRef<ScrollBar>(MemoryAllocator());
             m_vBar->SetOrientation(Orientation::Vertical);
             AbstractItemView* self = this;
-            m_vBar->SetOnValueChanged(
-                [self](f32 v)
+            // The bar's value is the offset in pixels, its page the visible body.
+            m_vBar->SetOnValueChanging(
+                [self](f64 offset)
                 {
                     if (!self->m_syncing)
-                        self->ScrollToFraction(v);
+                        self->ScrollToFraction(self->MaxScroll() > 0.0f ? static_cast<f32>(offset) / self->MaxScroll() : 0.0f);
                 });
             AddChild(m_vBar.Get());
         }
@@ -488,10 +489,10 @@ export namespace experimental::gui
                 m_vBar->SetVisible(true);
                 m_vBar->SetPosition(core::Float2{size.x - m_barThickness, inset});
                 m_vBar->SetSize(core::Float2{m_barThickness, BodyHeight()});
-                m_vBar->SetThumbProportion(ContentHeight() > 0.0f ? BodyHeight() / ContentHeight()
-                                                                  : 1.0f);
                 m_syncing = true;
-                m_vBar->SetValue(MaxScroll() > 0.0f ? m_offset / MaxScroll() : 0.0f);
+                m_vBar->SetMax(static_cast<f64>(ContentHeight()));
+                m_vBar->SetPage(static_cast<f64>(BodyHeight()));
+                m_vBar->SetValue(static_cast<f64>(m_offset));
                 m_syncing = false;
                 m_vBar->ToFront();
             }

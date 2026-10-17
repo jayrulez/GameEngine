@@ -6,3 +6,6 @@
 .field { width: 360px; height: 34px; font-family: Roboto; font-size: 15px; padding-left: 8px; border-radius: 6; }
 .list { width: 240px; height: 160px; font-family: Roboto; font-size: 15px; }
 .image-host { width: 220px; height: 160px; }
+.vslider { width: 26px; height: 130px; }
+.ranges { width: 200px; height: 80px; }
+.ranges-row { width: 590px; }

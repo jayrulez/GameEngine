@@ -3,12 +3,12 @@
 
 // GUI - :scroll_bar partition
 //
-// ScrollBar: a draggable indicator of a scroll position in [0,1], with a thumb whose length
-// reflects the visible proportion (viewport / content). Modeled on eepp's UIScrollBar (role,
-// not a line-for-line port). Horizontal or vertical. Reuses the Slider's drag discipline: an
-// own m_dragging flag (set in OnMouseDown, cleared in an OnMouseUp override, gated in
-// OnMouseMove) so a captured drag that leaves the widget - firing OnMouseLeave, which clears
-// m_pressed - keeps tracking. Clicking the track jumps the thumb to the cursor.
+// ScrollBar: a draggable scroll position over a range (E6 of Specs/gui-lab-evolution.md): a
+// RangeWidget whose value is the offset and whose page is the visible part, so the value goes no
+// further than the maximum less the page and the thumb's length is the page's share of the range.
+// Modeled on eepp's UIScrollBar (role, not a line-for-line port). Horizontal or vertical. A drag of
+// the thumb keeps its grab point under the pointer and reports `input` as it goes and `change` on
+// release; a press on the track pages toward it.
 
 module;
 #include "Core/Prelude.h"
@@ -24,6 +24,8 @@ import :draw_context;
 import :rectangle_drawable;
 import :ui_widget;
 import :layout_style; // Orientation
+import :range_value;
+import :range_widget;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -31,13 +33,14 @@ namespace vg = foundation::vg;
 
 export namespace experimental::gui
 {
-    class ScrollBar : public UIWidget
+    class ScrollBar : public RangeWidget
     {
-        RTTI_OBJECT(ScrollBar, UIWidget)
+        RTTI_OBJECT(ScrollBar, RangeWidget)
     public:
         ScrollBar()
         {
             SetTag(core::StringView(u8"scrollbar"));
+            SetPageShown(true); // its page is the visible part
             // The track is the node background so the theme's background-color styles it.
             SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_trackColor));
         }
@@ -49,32 +52,15 @@ export namespace experimental::gui
         }
         [[nodiscard]] Orientation GetOrientation() const noexcept { return m_orientation; }
 
-        [[nodiscard]] f32 GetValue() const noexcept { return m_value; }
-        void SetValue(f32 value)
+        /// The visible part: the thumb's share of the range, and a track press's step.
+        [[nodiscard]] f64 GetPage() const noexcept { return GetPageSize(); }
+        void SetPage(f64 page) { SetPageSize(page); }
+        /// The thumb's share of the track: the page over the range.
+        [[nodiscard]] f32 GetThumbProportion() const
         {
-            value = core::Max(0.0f, core::Min(1.0f, value));
-            if (value == m_value)
-                return;
-            m_value = value;
-            Invalidate();
-            if (m_onChanged)
-                m_onChanged(m_value);
+            const f64 span = GetRange().Max - GetRange().Min;
+            return span > 0.0 ? static_cast<f32>(core::Min(1.0, GetRange().Page / span)) : 1.0f;
         }
-        void SetOnValueChanged(core::Function<void(f32)> callback)
-        {
-            m_onChanged = core::Move(callback);
-        }
-
-        // Fraction of the track the thumb fills = viewport / content (clamped to [0,1]).
-        void SetThumbProportion(f32 proportion)
-        {
-            proportion = core::Max(0.0f, core::Min(1.0f, proportion));
-            if (proportion == m_proportion)
-                return;
-            m_proportion = proportion;
-            Invalidate();
-        }
-        [[nodiscard]] f32 GetThumbProportion() const noexcept { return m_proportion; }
 
         void SetTrackColor(Color color)
         {
@@ -112,7 +98,7 @@ export namespace experimental::gui
             const f32 track = TrackLength(b);
             const f32 thumbLen = ThumbLength(track);
             const f32 travel = core::Max(0.0f, track - thumbLen);
-            const f32 thumbStart = travel * m_value;
+            const f32 thumbStart = travel * static_cast<f32>(GetRatio());
             const f32 along = AlongAxis(event, b);
 
             if (along >= thumbStart && along <= thumbStart + thumbLen)
@@ -122,8 +108,8 @@ export namespace experimental::gui
             }
             else
             {
-                const f32 page = (m_proportion > 0.0f) ? m_proportion : 0.1f;
-                SetValue((along < thumbStart) ? (m_value - page) : (m_value + page));
+                const f64 page = GetRange().PageStep();
+                ChangeByUser(GetRange().Value + (along < thumbStart ? -page : page), true);
             }
         }
         void OnMouseMove(const MouseEvent& event) override
@@ -135,18 +121,22 @@ export namespace experimental::gui
             const f32 thumbLen = ThumbLength(track);
             const f32 travel = core::Max(0.0f, track - thumbLen);
             if (travel <= 0.0f)
-            {
-                SetValue(0.0f);
                 return;
-            }
-            SetValue((AlongAxis(event, b) - m_grabOffset) / travel);
+            ChangeByUser(GetRange().FromRatio(static_cast<f64>((AlongAxis(event, b) - m_grabOffset) / travel)), false);
         }
         void OnMouseUp(const MouseEvent& event) override
         {
             (void)event;
+            if (m_dragging)
+                Commit();
             m_dragging = false;
         }
-        void OnPointerCancel(const MouseEvent&) override { m_dragging = false; }
+        void OnPointerCancel(const MouseEvent&) override
+        {
+            if (m_dragging)
+                Commit();
+            m_dragging = false;
+        }
 
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
         {
@@ -155,7 +145,7 @@ export namespace experimental::gui
             const f32 track = TrackLength(b);
             const f32 thumbLen = ThumbLength(track);
             const f32 travel = core::Max(0.0f, track - thumbLen);
-            const f32 pos = travel * m_value;
+            const f32 pos = travel * static_cast<f32>(GetRatio());
 
             // The track is painted by the node background (themable via background-color); we
             // draw only the thumb here.
@@ -172,7 +162,7 @@ export namespace experimental::gui
         }
         [[nodiscard]] f32 ThumbLength(f32 track) const
         {
-            return core::Max(kMinThumb, track * m_proportion);
+            return core::Min(track, core::Max(kMinThumb, track * GetThumbProportion()));
         }
         [[nodiscard]] static vg::CornerRadii Radii(const Rect& r)
         {
@@ -187,14 +177,10 @@ export namespace experimental::gui
         }
 
         Orientation m_orientation = Orientation::Vertical;
-        f32 m_value = 0.0f;
-        f32 m_proportion = 0.3f;
         bool m_dragging = false;
         f32 m_grabOffset = 0.0f;
         Color m_trackColor{0.18f, 0.19f, 0.23f, 1.0f};
         Color m_thumbColor{0.42f, 0.45f, 0.52f, 1.0f};
-        core::Function<void(f32)> m_onChanged;
-
         static constexpr f32 kMinThumb = 16.0f;
     };
 

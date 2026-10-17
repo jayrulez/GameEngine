@@ -81,12 +81,12 @@ TEST_CASE("binding: one widget's state drives another's, with no subscription")
     root->AddChild(bar.Get());
     Slider* s = slider.Get();
     REQUIRE(label->BindProperty(SV(u8"text"), [s] { return core::Variant::From<f32>(s->GetValue()); }));
-    REQUIRE(bar->BindProperty(SV(u8"progress"), [s] { return core::Variant::From<f32>(s->GetValue()); }));
+    REQUIRE(bar->BindProperty(SV(u8"value"), [s] { return core::Variant::From<core::f64>(s->GetValue()); }));
 
     slider->SetValue(0.25f);
     root->GetContext().Update(Frame());
     CHECK(label->GetText() == SV(u8"0.25"));
-    CHECK(bar->GetProgress() == doctest::Approx(0.25f));
+    CHECK(bar->GetValue() == doctest::Approx(0.25f));
 }
 
 TEST_CASE("binding: a widget the user changes writes back, both ways without a loop")
@@ -102,8 +102,8 @@ TEST_CASE("binding: a widget the user changes writes back, both ways without a l
 
     slider->SetValue(0.75f); // the user drags it
     root->GetContext().Update(Frame());
-    REQUIRE(data.Get(SV(u8"volume")).TryGet<f32>() != nullptr);
-    CHECK(*data.Get(SV(u8"volume")).TryGet<f32>() == doctest::Approx(0.75f));
+    REQUIRE(data.Get(SV(u8"volume")).TryGet<core::f64>() != nullptr); // a range's value is an f64
+    CHECK(*data.Get(SV(u8"volume")).TryGet<core::f64>() == doctest::Approx(0.75));
     root->GetContext().Update(Frame());
     CHECK(root->GetContext().LastBindingCount() == 0u); // settled
 

@@ -34,6 +34,15 @@
         </Panel>
         <ProgressBar id="controls-progress" class="progress"/>
         <Label class="caption" text="The bar and the number follow the slider through script bindings."/>
+        <Panel class="ranges-row" flex-direction="row" align-items="center" gap="20">
+            <Slider id="controls-vertical" class="vslider" orientation="vertical" min="0" max="100" step="5" value="40"/>
+            <Panel gap="10">
+                <Slider id="controls-stepped" class="slider" min="0" max="10" step="1" ticks="11" value="3"/>
+                <Slider id="controls-freq" class="slider" min="20" max="20000" exponential="true" value="440"/>
+                <ProgressBar class="progress" indeterminate="true"/>
+            </Panel>
+            <Label id="controls-ranges" class="caption ranges" white-space="normal"/>
+        </Panel>
     </Panel>
 
     <Panel class="section" gap="12">

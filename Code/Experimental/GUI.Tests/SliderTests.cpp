@@ -21,31 +21,27 @@ namespace
     }
 }
 
-TEST_CASE("slider: value clamps and notifies on change")
+TEST_CASE("slider: value clamps to its range and snaps to its step; code's value reports nothing")
 {
     auto s = Make<Slider>();
     int changes = 0;
-    float last = -1.0f;
-    s->SetOnValueChanged(
-        [&](float v)
-        {
-            ++changes;
-            last = v;
-        });
+    s->SetOnValueChanged([&](core::f64) { ++changes; });
+    s->SetOnValueChanging([&](core::f64) { ++changes; });
 
-    s->SetValue(0.5f);
-    CHECK(s->GetValue() == doctest::Approx(0.5f));
-    CHECK(changes == 1);
-    CHECK(last == doctest::Approx(0.5f));
+    s->SetValue(0.5);
+    CHECK(s->GetValue() == doctest::Approx(0.5));
+    s->SetValue(2.0); // clamps to 1
+    CHECK(s->GetValue() == doctest::Approx(1.0));
+    s->SetValue(-1.0); // clamps to 0
+    CHECK(s->GetValue() == doctest::Approx(0.0));
+    CHECK(changes == 0);
 
-    s->SetValue(2.0f); // clamps to 1
-    CHECK(s->GetValue() == doctest::Approx(1.0f));
-    s->SetValue(-1.0f); // clamps to 0
-    CHECK(s->GetValue() == doctest::Approx(0.0f));
-
-    const int before = changes;
-    s->SetValue(0.0f); // no change
-    CHECK(changes == before);
+    s->SetMin(10.0);
+    s->SetMax(20.0);
+    s->SetStep(2.5);
+    CHECK(s->GetValue() == doctest::Approx(10.0)); // into the new range
+    s->SetValue(13.9);
+    CHECK(s->GetValue() == doctest::Approx(15.0)); // the nearest step
 }
 
 TEST_CASE("slider: press sets value from the cursor x")
@@ -165,4 +161,79 @@ TEST_CASE("slider: right button does not drag the value")
     d->InjectMouseDown(core::Float2{50.0f, 10.0f}, MouseButton::Right); // right press
     d->InjectMouseMove(core::Float2{90.0f, 10.0f});
     CHECK(s->GetValue() == doctest::Approx(0.0f)); // unchanged - only the left button drags
+}
+
+TEST_CASE("slider: a drag reports input as it goes and one change on release; keys and the wheel step")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{300.0f, 300.0f});
+    auto s = Make<Slider>();
+    s->SetSize(core::Float2{100.0f, 20.0f}); // usable x in [10, 90]
+    s->SetMax(100.0);
+    s->SetStep(1.0);
+    root->AddChild(s.Get());
+    EventDispatcher* d = root->GetEventDispatcher();
+    int inputs = 0, changes = 0, changeEvents = 0;
+    s->SetOnValueChanging([&](core::f64) { ++inputs; });
+    s->SetOnValueChanged([&](core::f64) { ++changes; });
+    (void)s->AddEventListener(EventType::Changed, [&](const Event&) { ++changeEvents; });
+    d->InjectMouseDown(core::Float2{30.0f, 10.0f}, MouseButton::Left); // 25
+    d->InjectMouseMove(core::Float2{50.0f, 10.0f});                    // 50
+    d->InjectMouseMove(core::Float2{70.0f, 10.0f});                    // 75
+    CHECK(s->GetValue() == doctest::Approx(75.0));
+    CHECK(inputs == 3);
+    CHECK(changes == 0);
+    d->InjectMouseUp(core::Float2{70.0f, 10.0f}, MouseButton::Left);
+    CHECK(changes == 1);
+    CHECK(changeEvents == 1);
+
+    s->RequestFocus();
+    d->InjectKeyDown(static_cast<core::u32>(KeyCode::Right));
+    CHECK(s->GetValue() == doctest::Approx(76.0)); // its step
+    d->InjectKeyDown(static_cast<core::u32>(KeyCode::PageDown));
+    CHECK(s->GetValue() == doctest::Approx(66.0)); // a tenth of the range
+    s->SetPage(25.0);
+    d->InjectKeyDown(static_cast<core::u32>(KeyCode::PageUp));
+    CHECK(s->GetValue() == doctest::Approx(91.0));
+    d->InjectKeyDown(static_cast<core::u32>(KeyCode::End));
+    CHECK(s->GetValue() == doctest::Approx(100.0));
+    CHECK(changes == 5);
+
+    // The wheel over it steps it; at its end it is left to what holds the slider.
+    int wheelsAbove = 0;
+    (void)root->AddEventListener(EventType::MouseWheel, [&](const Event&) { ++wheelsAbove; });
+    (void)d->InjectMouseWheel(core::Float2{50.0f, 10.0f}, core::Float2{0.0f, 1.0f});
+    CHECK(s->GetValue() == doctest::Approx(100.0));
+    CHECK(wheelsAbove == 1); // it could not move: the wheel went on up
+    (void)d->InjectMouseWheel(core::Float2{50.0f, 10.0f}, core::Float2{0.0f, -2.0f});
+    CHECK(s->GetValue() == doctest::Approx(98.0));
+    CHECK(wheelsAbove == 1);
+}
+
+TEST_CASE("slider: vertical grows upward; exponential spreads a wide range")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{300.0f, 300.0f});
+    auto s = Make<Slider>();
+    s->SetOrientationName(core::String(core::StringView(u8"vertical")));
+    s->SetSize(core::Float2{20.0f, 100.0f}); // usable y in [10, 90]
+    root->AddChild(s.Get());
+    EventDispatcher* d = root->GetEventDispatcher();
+    d->InjectMouseDown(core::Float2{10.0f, 30.0f}, MouseButton::Left); // a quarter down: 0.75
+    CHECK(s->GetValue() == doctest::Approx(0.75));
+    d->InjectMouseUp(core::Float2{10.0f, 30.0f}, MouseButton::Left);
+    s->RequestFocus();
+    d->InjectKeyDown(static_cast<core::u32>(KeyCode::Up));
+    CHECK(s->GetValue() == doctest::Approx(0.8));
+
+    RangeValue hz;
+    hz.Min = 20.0;
+    hz.Max = 20000.0;
+    hz.Exponential = true;
+    CHECK(hz.FromRatio(0.5) == doctest::Approx(632.45).epsilon(0.01)); // the geometric middle
+    hz.Value = 2000.0;
+    CHECK(hz.Ratio() == doctest::Approx(2.0 / 3.0).epsilon(0.01));
+    RangeValue steps;
+    steps.Step = 0.25;
+    CHECK(steps.Decimals() == 2);
 }

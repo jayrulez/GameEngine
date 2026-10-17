@@ -49,27 +49,19 @@ namespace
     };
 }
 
-TEST_CASE("scrollbar: value clamps and notifies; thumb proportion clamps")
+TEST_CASE("scrollbar: its value is an offset, kept within the range less the page; the thumb is the page's share")
 {
     auto sb = Make<ScrollBar>();
-    int changes = 0;
-    float last = -1.0f;
-    sb->SetOnValueChanged(
-        [&](float v)
-        {
-            ++changes;
-            last = v;
-        });
-
-    sb->SetValue(0.4f);
-    CHECK(sb->GetValue() == doctest::Approx(0.4f));
-    CHECK(changes == 1);
-    CHECK(last == doctest::Approx(0.4f));
-    sb->SetValue(5.0f);
-    CHECK(sb->GetValue() == doctest::Approx(1.0f));
-
-    sb->SetThumbProportion(2.0f);
+    sb->SetMax(400.0);
+    sb->SetPage(100.0); // a quarter shows
+    CHECK(sb->GetThumbProportion() == doctest::Approx(0.25f));
+    sb->SetValue(120.0);
+    CHECK(sb->GetValue() == doctest::Approx(120.0));
+    sb->SetValue(500.0);
+    CHECK(sb->GetValue() == doctest::Approx(300.0)); // the maximum less the page
+    sb->SetPage(1000.0);
     CHECK(sb->GetThumbProportion() == doctest::Approx(1.0f));
+    CHECK(sb->GetValue() == doctest::Approx(0.0)); // nothing to scroll
 }
 
 TEST_CASE("scrollbar: drag keeps tracking after the cursor leaves it (capture + hover leave)")
@@ -79,7 +71,11 @@ TEST_CASE("scrollbar: drag keeps tracking after the cursor leaves it (capture + 
     auto sb = Make<ScrollBar>();
     sb->SetOrientation(Orientation::Vertical);
     sb->SetSize(core::Float2{16.0f, 200.0f}); // vertical track length 200
-    sb->SetThumbProportion(0.5f);             // thumb 100 -> travel 100
+    sb->SetMax(200.0);
+    sb->SetPage(100.0);                       // thumb 100 -> travel 100
+    int inputs = 0, changes = 0;
+    sb->SetOnValueChanging([&](core::f64) { ++inputs; });
+    sb->SetOnValueChanged([&](core::f64) { ++changes; });
     root->AddChild(sb.Get());
     EventDispatcher* d = root->GetEventDispatcher();
 
@@ -88,22 +84,27 @@ TEST_CASE("scrollbar: drag keeps tracking after the cursor leaves it (capture + 
     CHECK(sb->IsHovered());
     d->InjectMouseDown(core::Float2{8.0f, 10.0f}, MouseButton::Left);
 
-    // Drag well past the bottom edge -> value saturates at 1 (still tracking after leave).
+    // Drag well past the bottom edge -> the value saturates at the end (still tracking after leave).
     d->InjectMouseMove(core::Float2{8.0f, 500.0f});
     CHECK_FALSE(sb->IsHovered());
-    CHECK(sb->GetValue() == doctest::Approx(1.0f));
+    CHECK(sb->GetValue() == doctest::Approx(100.0));
+    CHECK(inputs == 1);
+    CHECK(changes == 0); // committed on release
 
     // Release ends the drag.
     d->InjectMouseUp(core::Float2{8.0f, 500.0f}, MouseButton::Left);
+    CHECK(changes == 1);
     d->InjectMouseMove(core::Float2{8.0f, 10.0f});
-    CHECK(sb->GetValue() == doctest::Approx(1.0f));
+    CHECK(sb->GetValue() == doctest::Approx(100.0));
 }
 
 TEST_CASE("scrollbar: draws track + thumb")
 {
     auto sb = Make<ScrollBar>();
     sb->SetSize(core::Float2{16.0f, 120.0f});
-    sb->SetValue(0.5f);
+    sb->SetMax(100.0);
+    sb->SetPage(30.0);
+    sb->SetValue(35.0);
 
     vg::VGContext ctx;
     DrawContext dc{ctx};
@@ -118,13 +119,14 @@ TEST_CASE("scrollbar: clicking the track pages toward the click")
     auto sb = Make<ScrollBar>();
     sb->SetOrientation(Orientation::Vertical);
     sb->SetSize(core::Float2{16.0f, 200.0f});
-    sb->SetThumbProportion(0.25f); // thumb 50 -> at value 0 occupies [0,50]
+    sb->SetMax(200.0);
+    sb->SetPage(50.0); // thumb 50 -> at value 0 occupies [0,50]
     root->AddChild(sb.Get());
     EventDispatcher* d = root->GetEventDispatcher();
 
-    // Click below the thumb (y=150) -> page down by one proportion (0.25).
+    // Click below the thumb (y=150) -> page down by one page.
     d->InjectMouseDown(core::Float2{8.0f, 150.0f}, MouseButton::Left);
-    CHECK(sb->GetValue() == doctest::Approx(0.25f));
+    CHECK(sb->GetValue() == doctest::Approx(50.0));
     d->InjectMouseUp(core::Float2{8.0f, 150.0f}, MouseButton::Left);
 }
 
@@ -135,16 +137,17 @@ TEST_CASE("scrollbar: grabbing the thumb drags by cursor delta (no jump-to-cente
     auto sb = Make<ScrollBar>();
     sb->SetOrientation(Orientation::Vertical);
     sb->SetSize(core::Float2{16.0f, 200.0f});
-    sb->SetThumbProportion(0.5f); // thumb 100 -> travel 100, at value 0 occupies [0,100]
+    sb->SetMax(200.0);
+    sb->SetPage(100.0); // thumb 100 -> travel 100, at value 0 occupies [0,100]
     root->AddChild(sb.Get());
     EventDispatcher* d = root->GetEventDispatcher();
 
     // Grab the thumb at y=40 (inside [0,100]); pressing there must NOT move the value.
     d->InjectMouseDown(core::Float2{8.0f, 40.0f}, MouseButton::Left);
-    CHECK(sb->GetValue() == doctest::Approx(0.0f));
-    // Move the cursor down 20px -> thumb moves 20px -> value 20/100 = 0.2.
+    CHECK(sb->GetValue() == doctest::Approx(0.0));
+    // Move the cursor down 20px -> thumb moves 20px -> a fifth of the travel: 20 of the 100 it can go.
     d->InjectMouseMove(core::Float2{8.0f, 60.0f});
-    CHECK(sb->GetValue() == doctest::Approx(0.2f));
+    CHECK(sb->GetValue() == doctest::Approx(20.0));
 }
 
 TEST_CASE("scroll: a node that overflows scrolls over its laid-out content, the content moving with no layout")

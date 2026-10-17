@@ -64,6 +64,8 @@ target_sources(GUI
             Widgets/Button.cppm
             Widgets/CheckBox.cppm
             Widgets/Radio.cppm
+            Widgets/RangeValue.cppm
+            Widgets/RangeWidget.cppm
             Widgets/Slider.cppm
             Widgets/ProgressBar.cppm
             Widgets/Panel.cppm

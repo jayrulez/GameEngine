@@ -310,3 +310,43 @@ TEST_CASE("style-manager: a hover rule ends, and what it set returns")
     CHECK(w->GetAlpha() == doctest::Approx(1.0f));
     CHECK(w->GetPadding().Left == doctest::Approx(0.0f));
 }
+
+// ===================== E3: parts take the box properties =====================
+
+
+TEST_CASE("style-manager: a part takes a box: background, border, radii, shadow and opacity")
+{
+    auto root = NewRoot();
+    auto slider = Make<Slider>();
+    slider->SetSize(core::Float2{160.0f, 24.0f});
+    root->AddChild(slider.Get());
+    StyleManager styles(CSSParser::Parse(SV(
+        u8"slider::thumb { background-color: #ff0000; border: 2px solid #0000ff; border-radius: 3px; box-shadow: 0 2px 4px #00ff00; opacity: 0.5; }")));
+    styles.ApplyTree(*root.Get());
+    const PartStyle& thumb = slider->GetPartStyle(u8"thumb");
+    CHECK(thumb.HasBackground);
+    CHECK(thumb.HasBorderWidth);
+    CHECK(thumb.HasRadii);
+    CHECK(thumb.HasShadows);
+    CHECK(thumb.Opacity == doctest::Approx(0.5f));
+    CHECK(thumb.Box.Radii.topLeft == doctest::Approx(3.0f));
+    CHECK_FALSE(slider->GetPartStyle(u8"track").HasBackground); // the track keeps its own
+}
+
+TEST_CASE("style-manager: a part's border-color alone recolours its own outline")
+{
+    auto root = NewRoot();
+    auto box = Make<CheckBox>();
+    box->SetSize(core::Float2{20.0f, 20.0f});
+    root->AddChild(box.Get());
+    StyleManager styles(CSSParser::Parse(SV(u8"checkbox::box { border-color: #ff00ff; }")));
+    styles.ApplyTree(*root.Get());
+    const PartStyle& part = box->GetPartStyle(u8"box");
+    CHECK(part.HasBorderColor);
+    CHECK_FALSE(part.HasBorderWidth);
+    CHECK_FALSE(part.HasBackground);
+    const NodeBox drawn = part.Over(OutlinedBox(core::Color::White, 2.0f));
+    CHECK(drawn.BorderWidths.top == doctest::Approx(2.0f)); // its own width
+    CHECK(drawn.BorderColors.top.g == doctest::Approx(0.0f)); // the sheet's colour
+    CHECK(drawn.BackgroundColor.a == doctest::Approx(0.0f)); // no fill
+}

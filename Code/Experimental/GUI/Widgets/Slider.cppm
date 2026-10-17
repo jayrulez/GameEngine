@@ -94,17 +94,6 @@ export namespace experimental::gui
             out.PushBack(core::StringView(u8"thumb"));
             out.PushBack(core::StringView(u8"focus"));
         }
-        void SetThemePartColor(core::StringView part, Color color) override
-        {
-            if (part == core::StringView(u8"track"))
-                SetTrackColor(color);
-            else if (part == core::StringView(u8"fill"))
-                SetFillColor(color);
-            else if (part == core::StringView(u8"thumb"))
-                SetHandleColor(color);
-            else if (part == core::StringView(u8"focus"))
-                SetFocusColor(color);
-        }
 
         /// A track's length and a thumb's height when nothing sizes it (E2).
         [[nodiscard]] core::Float2 MeasureContent(core::Float2) override { return core::Float2{160.0f, 24.0f}; }
@@ -163,19 +152,24 @@ export namespace experimental::gui
             const f32 x1 = b.x + b.width - handleR;
             const f32 handleX = x0 + (x1 - x0) * m_value;
 
-            ctx.VG().FillRoundedRect(core::Rectangle{b.x, trackTop, b.width, trackH},
-                                     vg::CornerRadii(trackH * 0.5f), m_trackColor);
-            ctx.VG().FillRoundedRect(core::Rectangle{b.x, trackTop, handleX - b.x, trackH},
-                                     vg::CornerRadii(trackH * 0.5f), m_fillColor);
-            // Focused by the keyboard or a pad, the thumb (the part that moves) is marked: a halo
-            // under it and a ring around it, not a ring around the whole track.
-            const bool focused = IsFocusVisible();
-            if (focused)
-                ctx.VG().FillCircle(core::Float2{handleX, cy}, handleR + 6.0f,
-                                    Color{m_focusColor.r, m_focusColor.g, m_focusColor.b, m_focusColor.a * 0.3f});
-            ctx.VG().FillCircle(core::Float2{handleX, cy}, handleR, m_handleColor);
-            if (focused)
-                ctx.VG().StrokeCircle(core::Float2{handleX, cy}, handleR + 2.0f, m_focusColor, 2.0f);
+            // Each part its own look with the sheet's over it (slider::track, ::fill, ::thumb, ::focus).
+            GetPartStyle(u8"track").Draw(ctx, Rect{b.x, trackTop, b.width, trackH}, FilledBox(m_trackColor, vg::CornerRadii(trackH * 0.5f)));
+            GetPartStyle(u8"fill").Draw(ctx, Rect{b.x, trackTop, handleX - b.x, trackH}, FilledBox(m_fillColor, vg::CornerRadii(trackH * 0.5f)));
+            // Focused by the keyboard or a pad, the thumb (the part that moves) is marked: a ring
+            // round it with a glow, not a ring around the whole track.
+            if (IsFocusVisible())
+            {
+                // Its glow takes the ring's colour, the sheet's (slider::focus { border-color }) or its own.
+                const PartStyle& focus = GetPartStyle(u8"focus");
+                const Color ringColor = focus.HasBorderColor || focus.HasBorderWidth ? focus.Box.BorderColors.top : m_focusColor;
+                const f32 ringR = handleR + 3.0f;
+                NodeBox ring = OutlinedBox(ringColor, 2.0f, vg::CornerRadii(ringR));
+                ring.Shadows.PushBack(BoxShadow{core::Float2{0.0f, 0.0f}, 6.0f, 1.0f,
+                                                Color{ringColor.r, ringColor.g, ringColor.b, ringColor.a * 0.45f}, false});
+                focus.Draw(ctx, Rect{handleX - ringR, cy - ringR, ringR * 2.0f, ringR * 2.0f}, ring);
+            }
+            GetPartStyle(u8"thumb").Draw(ctx, Rect{handleX - handleR, cy - handleR, handleR * 2.0f, handleR * 2.0f},
+                                         FilledBox(m_handleColor, vg::CornerRadii(handleR)));
         }
 
     private:

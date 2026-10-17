@@ -222,4 +222,69 @@ export namespace experimental::gui
             }
         }
     };
+
+    /// How a sheet styles one of a widget's parts (`slider::thumb`, `checkbox::box`; E3): a box
+    /// and an opacity, each aspect only where the sheet gives it. A widget draws a part from its
+    /// own look (a NodeBox: its colour, radii, outline, glow) with the sheet's aspects over it.
+    struct PartStyle
+    {
+        NodeBox Box;
+        f32 Opacity = 1.0f;
+        bool HasBackground = false;  ///< background-color or background-image
+        bool HasBorderWidth = false; ///< a border's width or style
+        bool HasBorderColor = false;
+        bool HasRadii = false;
+        bool HasShadows = false;
+
+        /// `own` with the sheet's aspects over it.
+        [[nodiscard]] NodeBox Over(NodeBox own) const
+        {
+            if (HasBackground)
+            {
+                own.BackgroundColor = Box.BackgroundColor;
+                own.Layers = Box.Layers;
+            }
+            if (HasBorderWidth)
+            {
+                own.BorderWidths = Box.BorderWidths;
+                own.BorderColors = Box.BorderColors;
+            }
+            else if (HasBorderColor)
+                own.BorderColors = Box.BorderColors;
+            if (HasRadii)
+                own.Radii = Box.Radii;
+            if (HasShadows)
+                own.Shadows = Box.Shadows;
+            return own;
+        }
+        /// Draws the part over `rect`: its own look with the sheet's over it, at the sheet's opacity.
+        void Draw(DrawContext& ctx, const Rect& rect, const NodeBox& own) const
+        {
+            if (Opacity <= 0.0f)
+                return;
+            if (Opacity < 1.0f)
+                ctx.PushOpacity(Opacity);
+            Over(own).DrawUnder(ctx, rect, false);
+            if (Opacity < 1.0f)
+                ctx.PopOpacity();
+        }
+    };
+
+    /// A part's own look: a fill, with radii.
+    [[nodiscard]] inline NodeBox FilledBox(Color color, vg::CornerRadii radii = {})
+    {
+        NodeBox box;
+        box.BackgroundColor = color;
+        box.Radii = radii;
+        return box;
+    }
+    /// A part's own look: an outline of `width`, with radii.
+    [[nodiscard]] inline NodeBox OutlinedBox(Color color, f32 width, vg::CornerRadii radii = {})
+    {
+        NodeBox box;
+        box.BorderWidths = vg::BorderWidths(width);
+        box.BorderColors = vg::BorderColors(color);
+        box.Radii = radii;
+        return box;
+    }
 }

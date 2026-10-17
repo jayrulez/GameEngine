@@ -74,13 +74,6 @@ export namespace experimental::gui
             out.PushBack(core::StringView(u8"ring"));
             out.PushBack(core::StringView(u8"dot"));
         }
-        void SetThemePartColor(core::StringView part, Color color) override
-        {
-            if (part == core::StringView(u8"ring"))
-                SetRingColor(color);
-            else if (part == core::StringView(u8"dot"))
-                SetDotColor(color);
-        }
 
         /// Its dot's size when nothing sizes it (E2).
         [[nodiscard]] core::Float2 MeasureContent(core::Float2) override { return core::Float2{20.0f, 20.0f}; }
@@ -99,9 +92,13 @@ export namespace experimental::gui
             const Rect box = GetContentBounds();
             const f32 r = core::Min(box.width, box.height) * 0.5f;
             const core::Float2 c{box.x + box.width * 0.5f, box.y + box.height * 0.5f};
-            ctx.VG().StrokeCircle(c, r - 1.0f, m_ringColor, 2.0f);
+            // radio::ring its outline, ::dot the choice, each its own look with the sheet's over it.
+            GetPartStyle(u8"ring").Draw(ctx, Rect{c.x - r, c.y - r, r * 2.0f, r * 2.0f}, OutlinedBox(m_ringColor, 2.0f, vg::CornerRadii(r)));
             if (m_selected)
-                ctx.VG().FillCircle(c, r * 0.5f, m_dotColor);
+            {
+                const f32 d = r * 0.5f;
+                GetPartStyle(u8"dot").Draw(ctx, Rect{c.x - d, c.y - d, d * 2.0f, d * 2.0f}, FilledBox(m_dotColor, vg::CornerRadii(d)));
+            }
         }
 
     private:

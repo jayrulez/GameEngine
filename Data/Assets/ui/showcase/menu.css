@@ -101,8 +101,8 @@
 slider::track { background-color: rgba(255, 255, 255, 0.15); }
 slider::fill { background-color: #f3a047; }
 slider::thumb { background-color: #fff4e2; }
-slider::focus { background-color: #f3a047; } /* the thumb's ring when focused: the slider's own mark */
-checkbox::box { background-color: rgba(255, 255, 255, 0.15); }
+slider::focus { border-color: #f3a047; } /* the thumb's ring when focused: the slider's own mark */
+checkbox::box { border-color: rgba(255, 255, 255, 0.15); }
 checkbox::mark { background-color: #f3a047; }
 progressbar::track { background-color: rgba(255, 255, 255, 0.12); }
 progressbar::fill { background-color: #f3a047; }

@@ -851,13 +851,41 @@ export namespace experimental::gui
         detail::ApplyReflected(node, style, lengths);
     }
 
-    // Apply a resolved pseudo-element style to a widget part: its background-color becomes the
-    // part's color (slider::fill, window::title, scrollbar::thumb, ...).
-    inline void ApplyPartStyle(UINode& node, core::StringView part, const ResolvedStyle& style)
+    // Apply a resolved pseudo-element style to a widget part (slider::thumb, checkbox::box,
+    // window::title, ...): its box properties and opacity, each aspect marked where the sheet
+    // gives it, so the widget's own look shows through the rest.
+    inline void ApplyPartStyle(UINode& node, core::StringView part, const ResolvedStyle& input,
+                               IResourceProvider* resources = nullptr, const LengthContext& lengths = {})
     {
-        if (style.Has(core::StringView(u8"background-color")))
-            if (Optional<Color> c = ParseColor(style.Get(core::StringView(u8"background-color")));
-                c.HasValue())
-                node.SetThemePartColor(part, c.Value());
+        ResolvedStyle settledCopy;
+        const ResolvedStyle* settled = &input;
+        if (!input.IsFinalized())
+        {
+            settledCopy = input;
+            settledCopy.Finalize();
+            settled = &settledCopy;
+        }
+        const ResolvedStyle& style = *settled;
+        PartStyle out;
+        out.Box = detail::BuildBox(node, style, resources, lengths);
+        const auto any = [&](const char8_t* const (&names)[4]) {
+            for (const char8_t* n : names)
+                if (style.Has(n))
+                    return true;
+            return false;
+        };
+        static constexpr const char8_t* kWidths[4] = {u8"border-top-width", u8"border-right-width", u8"border-bottom-width", u8"border-left-width"};
+        static constexpr const char8_t* kStyles[4] = {u8"border-top-style", u8"border-right-style", u8"border-bottom-style", u8"border-left-style"};
+        static constexpr const char8_t* kColors[4] = {u8"border-top-color", u8"border-right-color", u8"border-bottom-color", u8"border-left-color"};
+        static constexpr const char8_t* kRadii[4] = {u8"border-top-left-radius", u8"border-top-right-radius", u8"border-bottom-right-radius",
+                                                     u8"border-bottom-left-radius"};
+        out.HasBackground = style.Has(u8"background-color") || style.Has(u8"background-image");
+        out.HasBorderWidth = any(kWidths) || any(kStyles);
+        out.HasBorderColor = any(kColors);
+        out.HasRadii = any(kRadii);
+        out.HasShadows = style.Has(u8"box-shadow");
+        if (const StyleValue* o = style.Value(u8"opacity"))
+            out.Opacity = o->Number;
+        node.SetPartStyle(part, out);
     }
 }

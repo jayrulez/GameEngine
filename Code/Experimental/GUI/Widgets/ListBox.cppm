@@ -80,17 +80,18 @@ export namespace experimental::gui
             if (selected == m_selected)
                 return;
             m_selected = selected;
-            SetBackground(selected ? core::RefPtr<Drawable>(core::MakeRef<RectangleDrawable>(
-                                         MemoryAllocator(), m_highlight))
-                                   : core::RefPtr<Drawable>());
             Invalidate();
         }
         void SetHighlightColor(Color color)
         {
             m_highlight = color;
-            if (m_selected)
-                SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(),
-                                                               color)); // refresh live
+            Invalidate();
+        }
+        /// The list's listbox::selection style, which a selected row draws under its text.
+        void SetSelectionStyle(const PartStyle& style)
+        {
+            m_selectionStyle = style;
+            Invalidate();
         }
 
     protected:
@@ -101,10 +102,19 @@ export namespace experimental::gui
                 m_onPicked(m_index);
         }
 
+    protected:
+        void OnDraw(DrawContext& ctx, const Rect& localBounds) override
+        {
+            if (m_selected)
+                m_selectionStyle.Draw(ctx, GetLocalBounds(), FilledBox(m_highlight));
+            Label::OnDraw(ctx, localBounds);
+        }
+
     private:
         i32 m_index = -1;
         bool m_selected = false;
         Color m_highlight{0.24f, 0.40f, 0.62f, 1.0f};
+        PartStyle m_selectionStyle;
         core::Function<void(i32)> m_onPicked;
     };
 
@@ -139,6 +149,7 @@ export namespace experimental::gui
             item->SetText(text);
             ShareTextStyle(*item);
             item->SetHighlightColor(m_highlightColor);
+            item->SetSelectionStyle(GetPartStyle(u8"selection"));
             StyleWriteScope defaults(*item); // its own values, which a sheet returns to
             item->SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
             item->SetIndex(static_cast<i32>(m_items.Size()));
@@ -208,18 +219,17 @@ export namespace experimental::gui
         {
             out.PushBack(core::StringView(u8"selection"));
         }
-        void SetThemePartColor(core::StringView part, Color color) override
-        {
-            if (part != core::StringView(u8"selection"))
-                return;
-            m_highlightColor = color;
-            for (ListBoxItem* it : m_items)
-                it->SetHighlightColor(color);
-        }
 
 
     protected:
         // Its items show its font and colour (a sheet's inheritance gives them the same).
+        // Its rows draw the selection in listbox::selection's style.
+        void OnPartStyleChange(core::StringView part) override
+        {
+            if (part == core::StringView(u8"selection"))
+                for (ListBoxItem* item : m_items)
+                    item->SetSelectionStyle(GetPartStyle(part));
+        }
         void OnTextStyleChange() override
         {
             for (ListBoxItem* item : m_items)

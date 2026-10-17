@@ -320,7 +320,7 @@ export namespace experimental::gui
             for (const core::StringView part : parts)
             {
                 const ResolvedStyle partStyle = ResolveFor(widget, subtrees, part, nullptr);
-                ApplyPartStyle(widget, part, partStyle);
+                ApplyPartStyle(widget, part, partStyle, context.Resources, context.Lengths);
             }
             return customsChanged;
         }

@@ -20,6 +20,15 @@ string rangesText()
 {
     return "vertical " + int(vertical.value) + ", stepped " + int(stepped.value) + " of 10, exponential " + int(freq.value) + " Hz";
 }
+int logLines = 0;
+void addLogLine()
+{
+    ++logLines;
+    Label@ line = Label::of(gui::root().find("controls-log").add("Label"));
+    line.text = "Line " + logLines + " arrived";
+    line.addClass("scroll-line");
+}
+
 string echoText() { return field.text == "" ? "(the echo follows the field)" : "echo: " + field.text; }
 
 void main()
@@ -30,6 +39,7 @@ void main()
     root.find("controls-reset").on("click", Action(reset));
     root.find("controls-repeat").on("click", Action(add1));
     root.find("controls-press").on("click", Action(add1));
+    root.find("controls-log-add").on("click", Action(addLogLine));
     @slider = Slider::of(root.find("controls-slider"));
     @field = TextField::of(root.find("controls-field"));
     @vertical = Slider::of(root.find("controls-vertical"));

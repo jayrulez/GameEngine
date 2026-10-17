@@ -22,7 +22,7 @@
     <Panel class="section" gap="12">
         <Label class="section-title" text="Toggles and choices"/>
         <Panel class="row" flex-direction="row" align-items="center" gap="24">
-            <CheckBox id="controls-check" class="choice" text="A checkbox"/>
+            <CheckBox id="controls-check" class="choice" text="A checkbox" checked="true"/>
             <CheckBox class="choice" text="Mixed" indeterminate="true" tooltip="Indeterminate until clicked"/>
             <ToggleSwitch class="choice" text="A switch" checked="true"/>
         </Panel>

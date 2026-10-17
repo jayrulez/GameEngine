@@ -518,6 +518,7 @@ namespace experimental::gui
                 &Image::StaticType(),        &ListBox::StaticType(),      &Window::StaticType(),
                 &ComboBox::StaticType(),     &RichText::StaticType(),     &TextArea::StaticType(),
                 &ToggleSwitch::StaticType(),   &Separator::StaticType(),    &Spacer::StaticType(),
+                &NumberField::StaticType(),
             };
             for (const TypeInfo* type : kLabElements)
                 (void)ElementTypes::Register(*type);
@@ -765,6 +766,30 @@ namespace experimental::gui
     REFLECT_MEMBERS(ScrollView, "rtti::gui")
     {
         builder.Method<&ElementOf<ScrollView>, ScrollView, Node>("of");
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(SpinButton, "rtti::gui")
+    {
+    }
+
+    REFLECT_MEMBERS(NumberField, "rtti::gui")
+    {
+        builder.AccessorProperty<&NumberField::GetValue, &NumberField::SetValue>("value")
+            .PropAttribute("css", core::String(u8"value"))
+            .PropAttribute("twoWay", true); // the user changes it: a binding may write it back
+        builder.AccessorProperty<&NumberField::GetMin, &NumberField::SetMin>("min").PropAttribute("css", core::String(u8"min"));
+        builder.AccessorProperty<&NumberField::GetMax, &NumberField::SetMax>("max").PropAttribute("css", core::String(u8"max"));
+        builder.AccessorProperty<&NumberField::GetStep, &NumberField::SetStep>("step").PropAttribute("css", core::String(u8"step"));
+        builder.AccessorProperty<&NumberField::GetPage, &NumberField::SetPage>("page").PropAttribute("css", core::String(u8"page"));
+        builder.AccessorProperty<&NumberField::IsInteger, &NumberField::SetInteger>("integer").PropAttribute("css", core::String(u8"integer"));
+        builder.AccessorProperty<&NumberField::GetPrefix, &NumberField::SetPrefix>("prefix").PropAttribute("css", core::String(u8"prefix"));
+        builder.AccessorProperty<&NumberField::GetSuffix, &NumberField::SetSuffix>("suffix").PropAttribute("css", core::String(u8"suffix"));
+        builder.AccessorProperty<&NumberField::AllowsGreater, &NumberField::SetAllowGreater>("allowGreater")
+            .PropAttribute("css", core::String(u8"allow-greater"));
+        builder.AccessorProperty<&NumberField::AllowsLesser, &NumberField::SetAllowLesser>("allowLesser")
+            .PropAttribute("css", core::String(u8"allow-lesser"));
+        builder.Method<&ElementOf<NumberField>, NumberField, Node>("of");
         builder.Creator();
     }
 

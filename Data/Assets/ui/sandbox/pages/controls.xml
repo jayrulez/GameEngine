@@ -48,6 +48,11 @@
         </Panel>
         <ProgressBar id="controls-progress" class="progress"/>
         <Label class="caption" text="The bar and the number follow the slider through script bindings."/>
+        <Panel class="row" flex-direction="row" align-items="center" gap="12">
+            <NumberField class="number" min="0" max="100" value="42" suffix=" %" tooltip="Type an expression, drag across to scrub, or use the arrows"/>
+            <NumberField class="number" min="0" max="10" step="0.25" value="1.5" prefix="$"/>
+            <NumberField class="number" min="-50" max="50" integer="true" value="-7" suffix=" px"/>
+        </Panel>
         <Panel class="ranges-row" flex-direction="row" align-items="center" gap="20">
             <Slider id="controls-vertical" class="vslider" orientation="vertical" min="0" max="100" step="5" value="40"/>
             <Panel gap="10">

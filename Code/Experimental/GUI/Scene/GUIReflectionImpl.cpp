@@ -933,6 +933,9 @@ namespace experimental::gui
             .PropAttribute("css", core::String(u8"selection-mode"));
         builder.AccessorProperty<&ItemView::GetRowTypeColumn, &ItemView::SetRowTypeColumn>("rowTypeColumn")
             .PropAttribute("css", core::String(u8"row-type-column"));
+        builder.AccessorProperty<&ItemView::GetLayoutModeName, &ItemView::SetLayoutModeName>("layout").PropAttribute("css", core::String(u8"layout"));
+        builder.AccessorProperty<&ItemView::GetCellWidth, &ItemView::SetCellWidth>("cellWidth").PropAttribute("css", core::String(u8"cell-width"));
+        builder.AccessorProperty<&ItemView::GetCellHeight, &ItemView::SetCellHeight>("cellHeight").PropAttribute("css", core::String(u8"cell-height"));
         builder.Method<&ItemView::BeginEdit>("beginEdit");
         builder.Method<&ItemView::SelectAll>("selectAll");
         builder.Method<&ItemView::ClearSelection>("clearSelection");

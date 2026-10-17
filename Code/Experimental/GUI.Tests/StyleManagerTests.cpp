@@ -172,7 +172,8 @@ TEST_CASE("style-manager: a subtree's sheet applies inside it alone, over the GU
 TEST_CASE("style-manager: markup's inline properties outrank every sheet's normal ones, not !important")
 {
     RegisterGuiElements();
-    MarkupLoader loader(ElementSet::All(), core::DefaultAllocator());
+    const ElementSet elements = ElementSet::All(); // the loader keeps a reference
+    MarkupLoader loader(elements, core::DefaultAllocator());
     core::RefPtr<Node> markup = loader.LoadFromString(SV(u8R"(<Panel><Label class="chip" opacity="0.4"/><Label class="hard" opacity="0.4"/></Panel>)"));
     REQUIRE(markup);
     auto root = NewRoot();

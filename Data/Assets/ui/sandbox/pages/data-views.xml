@@ -10,7 +10,7 @@
             <Panel gap="8">
                 <Button id="views-insert" class="btn" text="Insert at the top"/>
                 <Label class="caption" white-space="normal" width="240" height="96"
-                       text="Inserted rows land above what you see, which stays put. F2 renames a row; a double-click or Return activates it."/>
+                       text="Inserted rows land above what you see, which stays put. F2 renames a row; a double-click or Return activates it; drag a row to move it."/>
             </Panel>
         </Panel>
         <Label id="views-picked" class="caption" text="Click a row, or focus the list and use the arrows."/>
@@ -18,7 +18,7 @@
 
     <Panel class="section" gap="12">
         <Label class="section-title" text="Rows from a markup template, each its own height"/>
-        <ListView class="template-list" row-height="0" estimated-row-height="40" selection-mode="multi"
+        <ListView class="template-list" row-height="0" estimated-row-height="40" selection-mode="multi" drag-type="row"
                   items="A short row|A row with rather more to say, so that it wraps onto a second line in a list this narrow|Short again|Rows are measured as they come into view: the scroll bar settles as you go, and what is on screen never jumps|One more|And a last row, long enough to wrap onto a second line as well">
             <template>
                 <Panel class="template-row" flex-direction="row" gap="10" align-items="start">
@@ -28,7 +28,7 @@
             </template>
         </ListView>
         <Label class="caption" white-space="normal" height="40"
-               text="A ListView in markup: each row is a template filled from its item and its index. Ctrl and Shift select several; Ctrl+A all."/>
+               text="A ListView in markup: each row is a template filled from its item and its index. Ctrl and Shift select several; Ctrl+A all; drag them to reorder."/>
     </Panel>
 
     <Panel class="section" gap="12">
@@ -52,7 +52,7 @@
     </Panel>
 
     <Panel class="section" gap="12">
-        <Label class="section-title" text="TreeView: click the arrows, or use the arrow keys"/>
+        <Label class="section-title" text="TreeView: click the arrows, or use the arrow keys; drag nodes onto or beside others"/>
         <Panel id="views-tree" class="view-host" display="stack" justify-items="start" align-items="start"/>
     </Panel>
 </Panel>

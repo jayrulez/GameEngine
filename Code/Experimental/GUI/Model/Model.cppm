@@ -20,6 +20,7 @@ export module experimental.gui:model;
 import foundation.core; // Array, String, usize
 import :variant;
 import :model_index;
+import :event; // DragPayload, DropEffect (a drop on a view)
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -35,6 +36,29 @@ export namespace experimental::gui
         None,
         Ascending,
         Descending
+    };
+
+    class IModel;
+
+    /// Where in a row a drop lands (E7): before it, onto it (a tree's child), or after it.
+    enum class DropPlace : u8
+    {
+        Before,
+        On,
+        After,
+    };
+
+    /// A drop on a view, as its model hears it: what is dropped, where (a row and a place; an
+    /// invalid row is the end of the top level), with which effect, and, from a view, the ids of
+    /// the rows dragged and their model.
+    struct ModelDrop
+    {
+        const DragPayload* Payload = nullptr;
+        ModelIndex Index;
+        DropPlace Place = DropPlace::After;
+        DropEffect Effect = DropEffect::Move;
+        core::Array<ItemId> Ids;
+        const IModel* Source = nullptr;
     };
 
     // What a model tells a view. Each range defaults to a reset, so a client follows only the
@@ -117,6 +141,27 @@ export namespace experimental::gui
         virtual bool Sort(usize column, SortOrder order)
         {
             (void)column, (void)order;
+            return false;
+        }
+
+        /// What a drop would do (E7): an effect, or none, with a reason when it says why; none
+        /// with no reason means the place is not one it takes (the view tries another).
+        [[nodiscard]] virtual DropEffect CanDrop(const ModelDrop& drop, core::String& reason) const
+        {
+            (void)drop, (void)reason;
+            return DropEffect::None;
+        }
+        /// Does the drop; false when it could not.
+        virtual bool Drop(const ModelDrop& drop)
+        {
+            (void)drop;
+            return false;
+        }
+        /// Removes rows by id (what a view moved to another model leaves behind); false when it
+        /// cannot.
+        virtual bool RemoveIds(const core::Array<ItemId>& ids)
+        {
+            (void)ids;
             return false;
         }
 
@@ -212,6 +257,8 @@ export namespace experimental::gui
                 m_ids.PushBack(m_next++);
         }
         void Insert(usize row) { m_ids.Insert(row, m_next++); }
+        /// Puts an existing id back at `row` (a row moved by a drop keeps its id).
+        void InsertId(usize row, ItemId id) { m_ids.Insert(row, id); }
         void Remove(usize row) { m_ids.RemoveAt(row); }
         void Move(usize from, usize to)
         {

@@ -1070,6 +1070,7 @@ namespace experimental::gui
         builder.AccessorProperty<&ItemView::GetLayoutModeName, &ItemView::SetLayoutModeName>("layout").PropAttribute("css", core::String(u8"layout"));
         builder.AccessorProperty<&ItemView::GetCellWidth, &ItemView::SetCellWidth>("cellWidth").PropAttribute("css", core::String(u8"cell-width"));
         builder.AccessorProperty<&ItemView::GetCellHeight, &ItemView::SetCellHeight>("cellHeight").PropAttribute("css", core::String(u8"cell-height"));
+        builder.AccessorProperty<&ItemView::GetDragType, &ItemView::SetDragType>("dragType").PropAttribute("css", core::String(u8"drag-type"));
         builder.Method<&ItemView::BeginEdit>("beginEdit");
         builder.Method<&ItemView::SelectAll>("selectAll");
         builder.Method<&ItemView::ClearSelection>("clearSelection");

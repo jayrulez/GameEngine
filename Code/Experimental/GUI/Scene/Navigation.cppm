@@ -44,15 +44,10 @@ export namespace experimental::gui
     namespace detail
     {
         // Whether `node` can take focus from navigation: tab-focusable, enabled, and shown with all
-        // its ancestors.
+        // its ancestors (visible, and in the layout: not under a page switched away).
         [[nodiscard]] inline bool IsNavigable(const Node& node)
         {
-            if (!node.IsTabFocusable() || !node.IsTreeEnabled())
-                return false;
-            for (const Node* n = &node; n != nullptr; n = n->GetParent())
-                if (!n->IsVisible())
-                    return false;
-            return true;
+            return node.IsTabFocusable() && node.IsTreeEnabled() && node.IsTreeVisible();
         }
 
         // Whether a clipping ancestor hides `node` (a scroller's clip does not count: it scrolls a
@@ -73,7 +68,7 @@ export namespace experimental::gui
 
         inline void CollectNavigable(Node& node, Array<Node*>& out)
         {
-            if (!node.IsVisible())
+            if (!node.IsVisible() || !node.IsDisplayed())
                 return;
             if (IsNavigable(node))
                 out.PushBack(&node);

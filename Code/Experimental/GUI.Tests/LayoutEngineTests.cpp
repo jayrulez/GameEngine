@@ -626,21 +626,21 @@ TEST_CASE("layout: the overlay draws margins, padding, bounds and text baselines
     const core::Color margin{1.0f, 0.6f, 0.2f, 1.0f};
     const core::Color padding{0.3f, 0.85f, 0.4f, 1.0f};
     const core::Color baseline{1.0f, 0.2f, 0.9f, 1.0f};
-    const auto draw = [&](const LayoutOverlay& overlay)
+    const auto draw = [&](const DebugOverlay& overlay)
     {
-        bed.root->SetLayoutOverlay(overlay);
+        bed.root->SetDebugOverlay(overlay);
         auto vg = core::MakeUnique<foundation::vg::VGContext>(core::DefaultAllocator());
         DrawContext dc{*vg};
         bed.root->Draw(dc);
         return vg;
     };
     {
-        auto vg = draw(LayoutOverlay{});
+        auto vg = draw(DebugOverlay{});
         CHECK(ExtentOf(*vg, margin).count == 0u);
         CHECK(ExtentOf(*vg, baseline).count == 0u);
     }
     {
-        auto vg = draw(LayoutOverlay{false, false, true, false});
+        auto vg = draw(DebugOverlay{false, false, true, false});
         const Extent m = ExtentOf(*vg, margin); // the box's margin box: 0,0 to 120,60
         REQUIRE(m.count > 0u);
         CHECK(m.min.x == doctest::Approx(0.0f));
@@ -650,14 +650,14 @@ TEST_CASE("layout: the overlay draws margins, padding, bounds and text baselines
         CHECK(ExtentOf(*vg, padding).count == 0u);
     }
     {
-        auto vg = draw(LayoutOverlay{false, true, false, false});
+        auto vg = draw(DebugOverlay{false, true, false, false});
         const Extent p = ExtentOf(*vg, padding); // within its border box: 10,10 to 110,50
         REQUIRE(p.count > 0u);
         CHECK(p.min.x == doctest::Approx(10.0f));
         CHECK(p.max.y == doctest::Approx(50.0f));
     }
     {
-        auto vg = draw(LayoutOverlay{false, false, false, true});
+        auto vg = draw(DebugOverlay{false, false, false, true});
         const Extent b = ExtentOf(*vg, baseline); // the label's alone, about y 70
         REQUIRE(b.count > 0u);
         CHECK(b.min.y > 68.5f); // a hairline, with its edge fringe

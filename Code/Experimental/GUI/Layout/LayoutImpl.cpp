@@ -1424,7 +1424,7 @@ namespace experimental::gui
 
     // === The layout overlay ===
 
-    void Node::DrawLayoutOverlay(DrawContext& ctx, const LayoutOverlay& what) const
+    void Node::DrawLayoutOverlay(DrawContext& ctx, const DebugOverlay& what) const
     {
         if (!m_visible || !IsDisplayed())
             return;

@@ -211,7 +211,6 @@ private:
     UniquePtr<gui::ShellClipboard> m_clipboard;
     UniquePtr<shell::InputSurface> m_inputSurface;
     UniquePtr<shell::InputRouter> m_router;
-    UniquePtr<gui::TooltipManager> m_tooltips;
     bool m_showingMenu = false;
     f32 m_menuLeaveAt = -1.0f; // when the game menu's Leave has faded: back to the sandbox
 
@@ -424,9 +423,7 @@ void GUISandbox::BuildSandbox()
         m_clipboard = MakeUnique<gui::ShellClipboard>(AppRoot(), m_shell);
         m_root->GetEventDispatcher()->SetClipboard(m_clipboard.Get());
     }
-    m_tooltips = MakeUnique<gui::TooltipManager>(AppRoot());
-    m_tooltips->SetFont(m_font);
-    m_tooltips->SetDelay(0.4);
+    m_root->GetEventDispatcher()->SetTooltipDelay(0.4f); // tooltips are the GUI's own (E5)
 }
 
 void GUISandbox::LoadPages()
@@ -1032,8 +1029,6 @@ void GUISandbox::OnRender()
     m_gui->Update(Duration::FromSeconds(static_cast<f64>(m_deltaTime)));
     if (m_showingMenu)
         UpdateMenu();
-    else if (m_tooltips)
-        m_tooltips->Update(*m_root->GetEventDispatcher(), *m_root.Get(), static_cast<f64>(m_deltaTime));
 
     // Style the root on show (the other draws nothing), then the layout styling moved.
     gui::SceneRoot& drawn = Shown(); // the menu may have closed this frame
@@ -1136,7 +1131,6 @@ void GUISandbox::OnShutdown()
     m_inputSurface.Reset();
     m_bridge.Reset();
     m_menuBridge.Reset();
-    m_tooltips.Reset();
     m_pages.Clear();
     m_contextMenu.Reset();
     m_floating.Reset();

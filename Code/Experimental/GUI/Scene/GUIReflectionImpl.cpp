@@ -75,6 +75,7 @@ namespace experimental::gui
                 {u8"link", EventType::Link},             {u8"input", EventType::Input},
                 {u8"submit", EventType::Submit},         {u8"composition", EventType::Composition},
                 {u8"toggle", EventType::Toggle},
+                {u8"contextmenu", EventType::ContextMenu},
             };
             for (const Named& entry : kNames)
             {
@@ -115,6 +116,7 @@ namespace experimental::gui
             case EventType::MouseEnter:
             case EventType::MouseLeave:
             case EventType::PointerCancel:
+            case EventType::ContextMenu:
             {
                 const MouseEvent& mouse = static_cast<const MouseEvent&>(event);
                 place(mouse.Position);
@@ -494,6 +496,14 @@ namespace experimental::gui
             context != nullptr ? static_cast<const GuiScriptBinding*>(context->GetService(kGuiScriptService)) : nullptr;
         return binding != nullptr && binding->root != nullptr ? binding->root->HandleAs(Node::StaticType())
                                                               : core::Variant{};
+    }
+
+    // A node's tooltip by default: a Tooltip with its text (here, where the widgets are seen).
+    core::RefPtr<Node> Node::CreateTooltipContent(core::StringView text)
+    {
+        auto tip = core::MakeRef<Tooltip>(MemoryAllocator());
+        tip->SetText(text);
+        return tip;
     }
 
     void RegisterGuiElements()

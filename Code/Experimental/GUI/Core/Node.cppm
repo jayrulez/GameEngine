@@ -1253,9 +1253,12 @@ export namespace experimental::gui
             return false;
         }
 
-        // Optional hover-tooltip text. A TooltipManager reads the hovered node's answer and
-        // shows a tooltip after a delay. Empty (the default) means no tooltip.
+        // Optional hover-tooltip text: the dispatcher shows the nearest one up the parent chain
+        // from the hovered node, after a delay (E5). Empty (the default) means none here.
         [[nodiscard]] virtual core::StringView GetTooltipText() const { return {}; }
+        /// What its tooltip shows for `text` (E5): a Tooltip label by default (defined where the
+        /// widgets are); any node, for a richer one. Null: no tooltip.
+        [[nodiscard]] virtual core::RefPtr<Node> CreateTooltipContent(core::StringView text);
 
         // Tab-navigation: whether Tab / Shift+Tab focus traversal can land on this node
         // (distinct from click focus, which targets whatever is hit). Interactive widgets
@@ -1544,6 +1547,9 @@ export namespace experimental::gui
         virtual void OnKeyUp(const KeyEvent&) {}
         virtual void OnTextInput(const TextInputEvent&) {}
         virtual void OnComposition(const CompositionEvent&) {}
+        /// A context menu asked for at the event's position (a right release, a long press,
+        /// Shift+F10): open one and mark it Handled; unhandled, it bubbles up.
+        virtual void OnContextMenu(const MouseEvent&) {}
         virtual void OnFocusGained() {}
         virtual void OnFocusLost() {}
         /// Hovered or pressed changed: restyles the node (`:hover`, `:active`; its subtree when a
@@ -1636,6 +1642,7 @@ export namespace experimental::gui
             case EventType::KeyUp: OnKeyUp(static_cast<const KeyEvent&>(event)); break;
             case EventType::TextInput: OnTextInput(static_cast<const TextInputEvent&>(event)); break;
             case EventType::Composition: OnComposition(static_cast<const CompositionEvent&>(event)); break;
+            case EventType::ContextMenu: OnContextMenu(static_cast<const MouseEvent&>(event)); break;
             case EventType::PointerCaptureLost: OnPointerCaptureLost(); break;
             case EventType::PointerCancel: OnPointerCancel(static_cast<const MouseEvent&>(event)); break;
             default: break;

@@ -56,6 +56,9 @@ export namespace experimental::gui
         Rect AnchorRect{};
         bool HasAnchorRect = false;
         PopupPlacement Placement{};
+        /// Sized by what it holds, measured again every layout pass (a tooltip, whose font a sheet
+        /// gives it after it opens); else its own size when it opened.
+        bool FitContent = false;
         /// Told when it closes, and why (after the `toggle` event).
         core::Function<void(PopupCloseReason)> OnClosed;
     };
@@ -78,6 +81,28 @@ export namespace experimental::gui
         /// Whether the keyboard or the pad drives it now (the last input was a key, a pad button or
         /// a direction, not the pointer): a menu opened then lights its first item.
         [[nodiscard]] bool IsUsingKeyboard() const noexcept { return m_keyboardMode; }
+
+        // === Tooltips (E5) ===
+        // The nearest tooltip text up the parent chain from the hovered node shows as a hint popup
+        // after the delay, on this dispatcher's clock (the GUI's update ticks it); just after one
+        // hid, the next shows at once. Any press or key hides it until the pointer moves to another.
+        // A finger shows one by a long press on a node with no context menu.
+        void SetTooltipDelay(f32 seconds) noexcept { m_tipDelay = core::Max(0.0f, seconds); }
+        [[nodiscard]] f32 GetTooltipDelay() const noexcept { return m_tipDelay; }
+        /// The tooltip shown now, or null.
+        [[nodiscard]] Node* GetShownTooltip() const { return m_tip && IsPopupOpen(*m_tip) ? m_tip.Get() : nullptr; }
+
+        /// Asks for the focused node's context menu, at its bottom-left (Shift+F10, the Menu key):
+        /// a `contextmenu` event there. True when something opened one.
+        bool InjectContextMenu()
+        {
+            Node* target = KeyTarget();
+            if (target == nullptr)
+                return false;
+            UseKeyboard();
+            MouseEvent event(EventType::ContextMenu, target, target->ConvertToWorldSpace(core::Float2{0.0f, target->GetSize().y}));
+            return target->RouteEvent(event);
+        }
         [[nodiscard]] Node* GetFocusNode() const noexcept { return m_focusNode; }
         /// The focused node, read as a binding's dependency (a command's availability follows it).
         [[nodiscard]] Node* ObserveFocus() const
@@ -492,8 +517,10 @@ export namespace experimental::gui
                     anchor = e.Options.AnchorRect;
                 else
                     continue;
-                PlacedPopup placed = PlacePopup(anchor, e.Size, bounds, e.Options.Placement);
                 Node& popup = *e.Popup;
+                if (e.Options.FitContent)
+                    e.Size = popup.Measure(LayoutConstraints{});
+                PlacedPopup placed = PlacePopup(anchor, e.Size, bounds, e.Options.Placement);
                 // On the device grid, as its arrange puts it, so the two agree.
                 const f32 scale = core::Max(popup.GetPixelScale(), 0.01f);
                 const auto snap = [scale](f32 v) { return core::Round(v * scale) / scale; };
@@ -592,7 +619,14 @@ export namespace experimental::gui
         [[nodiscard]] bool IsHoldingDirection() const noexcept { return m_holding; }
         void Tick(f32 seconds)
         {
-            m_time += seconds; // the clock click counting reads
+            m_time += seconds; // the clock click counting, tooltips and long presses read
+            UpdateTooltip(seconds);
+            if (m_longPressArmed && m_touchActive)
+            {
+                m_pressHeld += seconds;
+                if (m_pressHeld >= kLongPress)
+                    LongPress();
+            }
             if (!m_holding)
                 return;
             m_heldFor += seconds;
@@ -635,6 +669,8 @@ export namespace experimental::gui
             for (usize i = m_popups.Size(); i-- > 0;)
                 if (i < m_popups.Size() && IsInSubtree(m_popups[i].Popup.Get(), &removed))
                     DropPopupAt(i, PopupCloseReason::OwnerRemoved, &removed);
+            if (IsInSubtree(m_tipProvider, &removed))
+                m_tipProvider = nullptr;
             PrunePath(m_hoverPath, removed, /*hover*/ true);
             m_overNode = m_hoverPath.IsEmpty() ? nullptr : m_hoverPath[m_hoverPath.Size() - 1];
             PrunePath(m_pressPath, removed, /*hover*/ false);
@@ -679,6 +715,8 @@ export namespace experimental::gui
         bool PointerMove(core::Float2 position, PointerType pointer, u64 id)
         {
             m_mousePos = position;
+            if (m_longPressArmed && core::Abs(position.x - m_pressAt.x) + core::Abs(position.y - m_pressAt.y) > kTapSlop)
+                m_longPressArmed = false; // the finger moved: a drag or a scroll, not a long press
             // While a drag-and-drop is in progress, route to the drop target (enter/leave/over)
             // instead of the normal hover/capture path.
             if (m_dragActive)
@@ -733,6 +771,9 @@ export namespace experimental::gui
                 return true;
             }
             CountClick(position, button, pointer);
+            m_longPressArmed = pointer == PointerType::Touch && hit != nullptr;
+            m_pressHeld = 0.0f;
+            m_pressAt = position;
             m_downNode = hit;
             SetPressPath(hit);
             // Click-to-focus: the nearest widget that takes focus, at or above what was hit; none
@@ -758,6 +799,7 @@ export namespace experimental::gui
         bool PointerUp(core::Float2 position, MouseButton button, u32 modifiers, PointerType pointer, u64 id)
         {
             m_mousePos = position;
+            m_longPressArmed = false;
             if (m_swallowing)
             {
                 m_swallowing = false; // the end of a press that closed a popup: nothing more of it
@@ -790,6 +832,13 @@ export namespace experimental::gui
                 event.Pointer = pointer;
                 event.PointerId = id;
                 used = target->RouteEvent(event);
+            }
+            // A right release asks for a context menu where it was, from the node there up.
+            if (button == MouseButton::Right && hit != nullptr && hit->IsTreeEnabled() && IsInSubtree(hit, m_root))
+            {
+                MouseEvent menu(EventType::ContextMenu, hit, position, button, modifiers);
+                menu.Pointer = pointer;
+                used = hit->RouteEvent(menu) || used;
             }
             // A click (activation) for the left button only, on the nearest node holding both the
             // pressed node and the one released over (a press dragged onto a sibling clicks their
@@ -979,12 +1028,97 @@ export namespace experimental::gui
         {
             core::RefPtr<Node> Popup;
             PopupOptions Options;
-            core::Float2 Size{0.0f, 0.0f};       // its own size, which placement shrinks from
+            mutable core::Float2 Size{0.0f, 0.0f}; // its own size, which placement shrinks from
             Array<Node::ElementRef> SavedFocus;  // the focus it took, then the nodes holding it
             NavScope ScopeBefore = NavScope::None;
         };
         Array<PopupEntry> m_popups; // the top layer, bottom first
         bool m_swallowing = false;  // a press that closed a popup: its release is consumed too
+        // Tooltips: the node whose text shows or waits, the content shown, the clock.
+        Node* m_tipProvider = nullptr;
+        core::RefPtr<Node> m_tip;
+        f32 m_tipTimer = 0.0f;
+        f32 m_tipDelay = 0.5f;
+        f32 m_tipHiddenAt = -1000.0f;
+        bool m_tipSuppressed = false;
+        static constexpr f32 kTooltipWarm = 0.6f; // seconds after one hid that the next shows at once
+        // A long press: armed by a finger's press, disarmed by moving or lifting it.
+        bool m_longPressArmed = false;
+        f32 m_pressHeld = 0.0f;
+        core::Float2 m_pressAt{0.0f, 0.0f};
+        static constexpr f32 kLongPress = 0.5f;
+        // === Tooltips and long presses ===
+        [[nodiscard]] static Node* TooltipProvider(Node* node)
+        {
+            for (Node* n = node; n != nullptr; n = n->GetParent())
+                if (n->GetTooltipText().Size() != 0)
+                    return n;
+            return nullptr;
+        }
+        void UpdateTooltip(f32 seconds)
+        {
+            Node* provider = m_touchActive ? m_tipProvider : TooltipProvider(m_overNode);
+            if (provider != m_tipProvider)
+            {
+                HideTooltip();
+                m_tipProvider = provider;
+                m_tipTimer = 0.0f;
+                m_tipSuppressed = false;
+            }
+            if (provider == nullptr || m_tipSuppressed || m_touchActive || GetShownTooltip() != nullptr)
+                return;
+            m_tipTimer += seconds;
+            const bool warm = m_time - m_tipHiddenAt <= kTooltipWarm; // one just hid: the next at once
+            if (m_tipTimer >= (warm ? 0.0f : m_tipDelay))
+                ShowTooltip(*provider, m_mousePos);
+        }
+        void ShowTooltip(Node& provider, core::Float2 at)
+        {
+            if (m_root == nullptr)
+                return;
+            core::RefPtr<Node> content = provider.CreateTooltipContent(provider.GetTooltipText());
+            if (!content)
+                return;
+            const core::Float2 p = m_root->ConvertToNodeSpace(at);
+            PopupOptions options;
+            options.Kind = PopupKind::Hint;
+            options.AnchorRect = Rect{p.x + 12.0f, p.y, 0.0f, 0.0f}; // right of the pointer
+            options.HasAnchorRect = true;
+            options.Placement = PopupPlacement{PopupSide::Below, PopupAlign::Start, 18.0f, false};
+            options.FitContent = true; // as its text measures, once its sheet styles it
+            options.OnClosed = [this](PopupCloseReason reason)
+            {
+                m_tipHiddenAt = m_time;
+                if (reason != PopupCloseReason::Code)
+                    m_tipSuppressed = true; // a press or a key: not again until the pointer moves on
+            };
+            HideTooltip();
+            m_tip = core::Move(content);
+            m_tipProvider = &provider;
+            OpenPopup(*m_root, *m_tip, core::Move(options));
+        }
+        void HideTooltip()
+        {
+            if (m_tip && IsPopupOpen(*m_tip))
+                (void)ClosePopup(*m_tip, PopupCloseReason::Code);
+        }
+        // A finger held still: a context menu at the pressed node; none taken, its tooltip.
+        void LongPress()
+        {
+            m_longPressArmed = false;
+            const core::RefPtr<Node> target{m_downNode};
+            if (!target || !target->IsTreeEnabled())
+                return;
+            MouseEvent event(EventType::ContextMenu, target.Get(), m_pressAt);
+            event.Pointer = PointerType::Touch;
+            event.PointerId = m_touchFinger;
+            const bool taken = target->RouteEvent(event);
+            CancelPointer(); // no release or click follows the long press
+            if (!taken)
+                if (Node* provider = TooltipProvider(target.Get()))
+                    ShowTooltip(*provider, m_pressAt);
+        }
+
         // === The top layer's own ===
         [[nodiscard]] i32 FindPopup(const Node& popup) const
         {

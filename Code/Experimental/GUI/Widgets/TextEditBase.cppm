@@ -15,7 +15,8 @@
 // widget submits (`submit`, SetOnSubmit), as the web's inputs do; code's value reports nothing. An
 // IME's composition shows in place, underlined over the selection it will replace, until it
 // commits as typed text, and the widget tells the host where it types, for the IME's candidates.
-// The caret blinks while it is focused.
+// The caret blinks while it is focused. A context menu (a right release, a long press, Shift+F10)
+// offers cut, copy, paste and select all, each lit only where it would do something (E5).
 //
 // A widget built on it gives the geometry: the layout it edits in (one line, or wrapped), where
 // that layout sits (scrolled), and how it scrolls to keep the caret in view.
@@ -42,6 +43,7 @@ import :text_segmentation;
 import :input_filter;
 import :text_edit_model;
 import :text_editing_keys; // kTextSubmitCommand
+import :menu; // the context menu (E5)
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -73,6 +75,8 @@ export namespace experimental::gui
         }
         /// The editing model under it (its history, its rules).
         [[nodiscard]] TextEditModel& GetModel() noexcept { return m_model; }
+        /// Its context menu (built on first use).
+        [[nodiscard]] Menu* GetContextMenu() const noexcept { return m_contextMenu.Get(); }
 
         // Byte offset of the caret (always on a grapheme boundary).
         [[nodiscard]] usize GetCaret() const noexcept { return m_model.GetCaret(); }
@@ -404,6 +408,35 @@ export namespace experimental::gui
                 event.Handled = true;
         }
 
+        // Cut, copy, paste and select all, at the event's place, lit where they would do something.
+        void OnContextMenu(const MouseEvent& event) override
+        {
+            event.Handled = true;
+            if (!m_contextMenu)
+            {
+                m_contextMenu = core::MakeRef<Menu>(MemoryAllocator());
+                m_contextMenu->SetAutoWidth(true);
+                TextEditBase* self = this;
+                const auto add = [&](const char8_t* label, TextEditCommand command)
+                {
+                    m_contextItems.PushBack(m_contextMenu->AddItem(core::StringView(label), [self, command] { self->RunEdit(command); }));
+                };
+                add(u8"Cut", TextEditCommand::Cut);
+                add(u8"Copy", TextEditCommand::Copy);
+                add(u8"Paste", TextEditCommand::Paste);
+                m_contextMenu->AddSeparator();
+                add(u8"Select all", TextEditCommand::SelectAll);
+            }
+            const bool selected = HasSelection() && m_model.IsCopyAllowed();
+            IClipboard* clipboard = Clipboard();
+            m_contextItems[0]->SetEnabled(selected && !IsReadOnly());
+            m_contextItems[1]->SetEnabled(selected);
+            m_contextItems[2]->SetEnabled(!IsReadOnly() && clipboard != nullptr && clipboard->HasText());
+            m_contextItems[3]->SetEnabled(m_model.GetText().Size() != 0);
+            Node* root = GetRootNode();
+            m_contextMenu->Open(*this, root != nullptr ? root->ConvertToNodeSpace(event.Position) : event.Position);
+        }
+
         void OnMouseDown(const MouseEvent& event) override
         {
             RequestFocus();
@@ -610,6 +643,8 @@ export namespace experimental::gui
             return ModelOffset(EditLayout().OffsetAt(core::Float2{local.x - origin.x, local.y - origin.y}));
         }
 
+        core::RefPtr<Menu> m_contextMenu;  // cut, copy, paste, select all (its child while open)
+        Array<MenuItem*> m_contextItems;   // non-owning: the menu's
         TextEditModel m_model;
         core::String m_committed;    // the value last reported as changed
         core::String m_composition;  // an IME's text not yet committed

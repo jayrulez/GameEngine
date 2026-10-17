@@ -45,3 +45,4 @@
 .danger { background-color: var(--bad); }
 .btn:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
 .btn:disabled { opacity: 0.4; }
+tooltip { font-family: Roboto; font-size: 13px; color: var(--ink); }

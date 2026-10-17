@@ -75,6 +75,8 @@ export namespace experimental::gui
         Composition,
         // A popup opened or closed (a ToggleEvent, at the popup; it bubbles to its owner).
         Toggle,
+        // A context menu asked for (a MouseEvent): a right release, a long press, Shift+F10.
+        ContextMenu,
     };
 
     /// What drives the pointer: the mouse, or a finger (the first one down).

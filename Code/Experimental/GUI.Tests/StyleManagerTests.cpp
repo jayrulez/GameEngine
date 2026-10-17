@@ -482,3 +482,41 @@ TEST_CASE("style-manager: a node says where each property's value came from: a r
                   e.Property == SV(u8"height")) ? 1 : 0;
     CHECK(found == 4);
 }
+
+TEST_CASE("style-manager: a child added restyles its siblings only when a rule reads siblings")
+{
+    const auto build = [](core::RefPtr<SceneRoot>& root, core::RefPtr<UIWidget>& column)
+    {
+        root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+        root->SetSize(core::Float2{200.0f, 400.0f});
+        column = Widget(u8"column", core::Float2{0.0f, 0.0f}, core::Float2{200.0f, 400.0f});
+        root->AddChild(column.Get());
+        for (int i = 0; i < 20; ++i)
+            column->AddChild(Widget(u8"row", core::Float2{0.0f, 0.0f}, core::Float2{200.0f, 10.0f}).Get());
+    };
+    {
+        // No rule reads siblings: the new row and its column restyle, the other twenty do not.
+        core::RefPtr<SceneRoot> root;
+        core::RefPtr<UIWidget> column;
+        build(root, column);
+        StyleManager mgr(CSSParser::Parse(SV(u8"row { opacity: 0.5; }")));
+        mgr.ApplyTree(*root.Get());
+        column->AddChild(Widget(u8"row", core::Float2{0.0f, 0.0f}, core::Float2{200.0f, 10.0f}).Get());
+        mgr.ApplyTree(*root.Get());
+        CHECK(mgr.LastRestyleCount() == 2u);
+    }
+    {
+        // :nth-child reads them: taking the first row away flips every other row's match.
+        core::RefPtr<SceneRoot> root;
+        core::RefPtr<UIWidget> column;
+        build(root, column);
+        StyleManager mgr(CSSParser::Parse(SV(u8"row { opacity: 1; } row:nth-child(odd) { opacity: 0.5; }")));
+        mgr.ApplyTree(*root.Get());
+        Node* second = column->GetChildAt(1);
+        CHECK(second->GetAlpha() == doctest::Approx(1.0f));
+        column->RemoveChild(column->GetChildAt(0));
+        mgr.ApplyTree(*root.Get());
+        CHECK(mgr.LastRestyleCount() >= 19u);
+        CHECK(second->GetAlpha() == doctest::Approx(0.5f)); // first now: odd
+    }
+}

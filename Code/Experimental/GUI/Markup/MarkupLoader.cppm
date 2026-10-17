@@ -106,6 +106,8 @@ export namespace experimental::gui
                 if (uinode != nullptr && uinode->SetMarkupAttribute(name, value))
                     continue;
                 inlineStyle.Set(name, value); // an inline CSS property
+                if (uinode != nullptr)
+                    uinode->SetInlineStyle(name, value); // kept: it outranks the sheets at every restyle
             }
             if (uinode != nullptr)
                 ApplyStyle(*uinode, inlineStyle, m_resources, m_fontService, m_lengths);

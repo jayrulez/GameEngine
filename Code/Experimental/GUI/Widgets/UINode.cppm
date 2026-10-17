@@ -30,6 +30,14 @@ namespace fonts = foundation::fonts;
 
 export namespace experimental::gui
 {
+    /// One declaration of a node's inline style: markup's attributes the node does not claim, a
+    /// script's style. The cascade's highest origin (E3).
+    struct InlineStyleDeclaration
+    {
+        core::String Name;
+        core::String Value;
+    };
+
     class UINode : public Node
     {
         RTTI_OBJECT(UINode, Node)
@@ -50,6 +58,35 @@ export namespace experimental::gui
         // CSS text-align / vertical-align reach a text widget's alignment (default no-ops).
         virtual void SetThemeTextAlign(TextHAlign) {}
         virtual void SetThemeTextAlignV(TextVAlign) {}
+
+        // === Inline style (E3) ===
+        /// Sets `name: value` in this node's inline style (replacing one of that name): it wins
+        /// over every sheet's normal declarations, at the next restyle.
+        void SetInlineStyle(core::StringView name, core::StringView value)
+        {
+            for (InlineStyleDeclaration& d : m_inlineStyle)
+                if (d.Name.AsView() == name)
+                {
+                    if (d.Value.AsView() == value)
+                        return;
+                    d.Value = core::String(value);
+                    MarkStyleDirty(false);
+                    return;
+                }
+            m_inlineStyle.PushBack(InlineStyleDeclaration{core::String(name), core::String(value)});
+            MarkStyleDirty(false);
+        }
+        void RemoveInlineStyle(core::StringView name)
+        {
+            for (usize i = 0; i < m_inlineStyle.Size(); ++i)
+                if (m_inlineStyle[i].Name.AsView() == name)
+                {
+                    m_inlineStyle.RemoveAt(i);
+                    MarkStyleDirty(false);
+                    return;
+                }
+        }
+        [[nodiscard]] core::Span<const InlineStyleDeclaration> GetInlineStyle() const noexcept { return m_inlineStyle.AsSpan(); }
 
         // Markup hook: a widget consumes its own structural XML attributes (e.g. Label "text",
         // LinearLayout "orientation"/"spacing"), returning true if it handled `name`. Attributes
@@ -81,5 +118,7 @@ export namespace experimental::gui
             return ControlState::Normal;
         }
 
+    private:
+        core::Array<InlineStyleDeclaration> m_inlineStyle;
     };
 }

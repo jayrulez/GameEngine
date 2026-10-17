@@ -776,6 +776,33 @@ Order: the core (start, payload, acceptance, preview, ending), then auto-scroll 
 hover, item views, tabs between strips, OS files, the keyboard and the pad, then markup and
 scripts; each a layer with its tests and a sandbox section.
 
+As built on `vg` (2026-10-17): the core (1f820ee02): a 6 px threshold (SetDragThreshold) and
+the walk up from the pressed node (DragRequest), ended by a node owning its press (OwnsPressDrag:
+sliders, scroll bars and a scroller's bars, text fields, a window's handles, a table header's
+resize edge, a tab in a reorderable strip); the press cancelled; a finger's drag armed by a long
+press over a source instead of a context menu; a payload of a type, a Variant value, a label and
+the effects allowed; DropQuery on every move, modifier change and RequeryDrag, a refusal with a
+reason ending the walk; `:drop-target` and `:drag-source`; the cursor by the effect (new `copy`,
+`alias`, `no-drop`, the shell showing the nearest it has); the preview (the source's, keeping its
+grab point, else a DragPreview with an effect badge) and the hint in a pointer-passing layer of
+the top layer; cancel by Escape, a right press or the source leaving; the source told through
+OnDragEnd. Auto-scroll (24 px band, up to 900 px/s) and opening on a 0.6 s rest: a tree node, an
+expander, a tab (82c18437a). Item views drag their selection and take drops before, on or after
+a row through model capabilities (ModelDrop, CanDrop, Drop, RemoveIds), a list moving its rows
+with their ids, a tree reparenting and refusing a node inside itself (e6d234ba3). Tabs torn out
+of a strip past 32 px drop on strips of their `group`, between tab views with their pages
+(138c5a720). OS files through the same path, InjectFileDrop and the bridge's DispatchFileDrops,
+a GUI handler for the rest (b3fdda3cb). `drag.pick` (Ctrl+Shift+D, the pad's North) and a drop at
+the focus (c730445f9). Markup's `drag-type`, `drag-value`, `drag-label`, `drag`, `drop-types`,
+`drop-reason`, and the script events with a `dragquery` (fcdc43074).
+Left: one drag at a time within one root (dragging between windows is the follow-up the
+positions note above describes); a script answers a query by taking it (`dragquery`), its reason
+from `drop-reason`, not by setting the effect; the drag scroll band and the hover delay are
+dispatcher settings, not style properties; an OS file shows nothing while it is dragged over
+(the shell reports only the landing); the pad's d-pad moves the focus during a keyboard drag, so
+inside a list it leaves the list where the keys would move its row; a tree takes a drop as a
+reset of its rows; a copy of a tree's own nodes is not taken.
+
 ### E8 Tooling and performance
 
 - **An inspector** built from the lab's own widgets in a second root of the same context: the

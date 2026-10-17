@@ -28,6 +28,7 @@ export namespace experimental::gui
         {
             SetTag(core::StringView(u8"scrollview"));
             SetTabFocusable(true);
+            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
             EditLayoutStyle(
                 [](LayoutStyle& s)
                 {

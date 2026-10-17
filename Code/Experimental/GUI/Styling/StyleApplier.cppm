@@ -448,51 +448,105 @@ export namespace experimental::gui
             return box;
         }
 
-        // A property the table does not name, given to the reflected property of the node's type
-        // (or a base's) that declares it as its CSS name (the `css` property attribute), parsed by
-        // that property's type.
-        inline void ApplyReflected(UINode& node, const ResolvedProperty& p, const LengthContext& lengths)
+        // The reflected property of the node's type (or a base's) that declares `name` as its CSS
+        // name (the `css` property attribute).
+        [[nodiscard]] inline const PropertyInfo* FindCssProperty(const UINode& node, core::StringView name)
         {
             for (const TypeInfo* type = node.GetType(); type != nullptr; type = type->base)
-            {
                 for (usize i = 0; i < PropertyCount(*type); ++i)
                 {
                     const PropertyInfo& property = PropertyAt(*type, i);
                     const Attribute* css = FindAttribute(property, u8"css");
                     const core::String* cssName = css != nullptr ? css->value.TryGet<core::String>() : nullptr;
-                    if (cssName == nullptr || cssName->AsView() != p.Name.AsView())
-                        continue;
-                    Instance instance = Instance::From(&node);
-                    const core::StringView text = Trim(p.Value.AsView());
-                    Variant value;
-                    if (property.type == &TypeOf<f32>())
-                    {
-                        if (Optional<f32> px = ResolveLength(text, lengths); px.HasValue())
-                            value = Variant::From<f32>(px.Value());
-                    }
-                    else if (property.type == &TypeOf<Color>())
-                    {
-                        if (Optional<Color> c = ParseColor(text); c.HasValue())
-                            value = Variant::From<Color>(c.Value());
-                    }
-                    else if (property.type == &TypeOf<bool>())
-                    {
-                        if (Optional<bool> b = ParseBool(text); b.HasValue())
-                            value = Variant::From<bool>(b.Value());
-                    }
-                    else if (property.type == &TypeOf<core::String>())
-                    {
-                        value = Variant::From<core::String>(core::String(text));
-                    }
-                    else
-                    {
-                        // Any other type a value converts to (a column count, a maximum length).
-                        value = ConvertVariant(Variant::From<core::String>(core::String(text)), *property.type);
-                    }
-                    if (!value.IsEmpty())
-                        (void)SetProperty(property, instance, value);
-                    return;
+                    if (cssName != nullptr && cssName->AsView() == name)
+                        return &property;
                 }
+            return nullptr;
+        }
+        // `text` as a value of the property's type (empty when it does not convert).
+        [[nodiscard]] inline Variant ParseForProperty(const PropertyInfo& property, core::StringView text, const LengthContext& lengths)
+        {
+            text = Trim(text);
+            if (property.type == &TypeOf<f32>())
+            {
+                if (Optional<f32> px = ResolveLength(text, lengths); px.HasValue())
+                    return Variant::From<f32>(px.Value());
+                return {};
+            }
+            if (property.type == &TypeOf<Color>())
+            {
+                if (Optional<Color> c = ParseColor(text); c.HasValue())
+                    return Variant::From<Color>(c.Value());
+                return {};
+            }
+            if (property.type == &TypeOf<bool>())
+            {
+                if (Optional<bool> b = ParseBool(text); b.HasValue())
+                    return Variant::From<bool>(b.Value());
+                return {};
+            }
+            if (property.type == &TypeOf<core::String>())
+                return Variant::From<core::String>(core::String(text));
+            // Any other type a value converts to (a column count, a maximum length).
+            return ConvertVariant(Variant::From<core::String>(core::String(text)), *property.type);
+        }
+        [[nodiscard]] inline core::String ValueText(const Variant& value)
+        {
+            const Variant text = ConvertVariant(value, TypeOf<core::String>());
+            const core::String* s = text.TryGet<core::String>();
+            return s != nullptr ? *s : core::String{};
+        }
+
+        // The reflected properties a sheet sets by their CSS names (a library's widget's own), each
+        // as a setter-applied property is: the sheet's while it sets it, the node's own value back
+        // when it stops, and code's once code changes it (seen as a value other than the one the
+        // sheet last wrote).
+        inline void ApplyReflected(UINode& node, const ResolvedStyle& style, const LengthContext& lengths)
+        {
+            Array<UINode::StyledProperty>& records = node.StyledProperties();
+            Instance instance = Instance::From(&node);
+            for (const ResolvedProperty& p : style.Properties())
+            {
+                if (ResolvedStyle::IsCustomProperty(p.Name.AsView()) || FindStyleProperty(p.Name.AsView()) != nullptr)
+                    continue;
+                const PropertyInfo* property = FindCssProperty(node, p.Name.AsView());
+                if (property == nullptr)
+                    continue;
+                UINode::StyledProperty* record = nullptr;
+                for (UINode::StyledProperty& r : records)
+                    if (r.Name.AsView() == p.Name.AsView())
+                        record = &r;
+                if (record == nullptr)
+                {
+                    records.PushBack(UINode::StyledProperty{core::String(p.Name), GetProperty(*property, instance), {}, false});
+                    record = &records[records.Size() - 1];
+                }
+                if (record->Code)
+                    continue;
+                if (record->Written.Size() != 0 && ValueText(GetProperty(*property, instance)) != record->Written)
+                {
+                    record->Code = true; // code set it since: code's now
+                    continue;
+                }
+                const Variant value = ParseForProperty(*property, p.Value.AsView(), lengths);
+                if (value.IsEmpty())
+                    continue;
+                (void)SetProperty(*property, instance, value);
+                record->Written = ValueText(GetProperty(*property, instance));
+            }
+            // What the sheet set and sets no more: back to the node's own value.
+            for (UINode::StyledProperty& r : records)
+            {
+                if (r.Code || r.Written.Size() == 0 || style.Has(r.Name.AsView()))
+                    continue;
+                const PropertyInfo* property = FindCssProperty(node, r.Name.AsView());
+                if (property == nullptr)
+                    continue;
+                if (ValueText(GetProperty(*property, instance)) != r.Written)
+                    r.Code = true;
+                else
+                    (void)SetProperty(*property, instance, r.Own);
+                r.Written = core::String{};
             }
         }
     }
@@ -530,25 +584,39 @@ export namespace experimental::gui
             return v != nullptr ? v->Keyword.AsView() : StringView{};
         };
 
-        if (const StyleValue* o = style.Value(u8"opacity"))
-            node.SetAlpha(o->Number);
+        // What the sheet sets through setters (E3): a property code pinned stays code's; one the
+        // sheet sets takes its value; one it does not returns to the node's own value.
+        Node::StyleWriteScope writing(node);
+        const Node::UnstyledValues& own = node.CaptureUnstyledValues();
+        const auto free = [&](StyleSlot slot) { return !node.IsStylePinned(slot); };
 
-        // Padding and margin per side; the sides not declared keep their value.
+        if (free(SlotOpacity))
+        {
+            const StyleValue* o = style.Value(u8"opacity");
+            const f32 alpha = o != nullptr ? o->Number : own.Alpha;
+            if (alpha != node.GetAlpha())
+                node.SetAlpha(alpha);
+        }
+
         {
             Thickness padding = node.GetPadding();
-            bool changed = false;
-            if (Optional<f32> v = length(u8"padding-top", 0.0f); v.HasValue()) { padding.Top = v.Value(); changed = true; }
-            if (Optional<f32> v = length(u8"padding-right", 0.0f); v.HasValue()) { padding.Right = v.Value(); changed = true; }
-            if (Optional<f32> v = length(u8"padding-bottom", 0.0f); v.HasValue()) { padding.Bottom = v.Value(); changed = true; }
-            if (Optional<f32> v = length(u8"padding-left", 0.0f); v.HasValue()) { padding.Left = v.Value(); changed = true; }
-            if (changed && !(padding == node.GetPadding()))
+            const auto side = [&](StyleSlot slot, const char8_t* name, f32& field, f32 ownValue)
+            {
+                if (free(slot))
+                    field = length(name, 0.0f).ValueOr(ownValue);
+            };
+            side(SlotPaddingTop, u8"padding-top", padding.Top, own.Padding.Top);
+            side(SlotPaddingRight, u8"padding-right", padding.Right, own.Padding.Right);
+            side(SlotPaddingBottom, u8"padding-bottom", padding.Bottom, own.Padding.Bottom);
+            side(SlotPaddingLeft, u8"padding-left", padding.Left, own.Padding.Left);
+            if (!(padding == node.GetPadding()))
                 node.SetPadding(padding);
         }
 
-        // Layout (E2): what the sheet declares reaches the node's layout style; what it does not
-        // keeps its value (code's, markup's). Percentages and auto wait for layout.
+        // Layout (E2): the sheet's values over the node's own, then each field code pinned as code
+        // left it. Percentages and auto wait for layout.
         {
-            LayoutStyle ls = node.GetLayoutStyle();
+            LayoutStyle ls = own.Layout;
             bool changed = false;
             const auto assign = [&changed](auto& field, const auto& value)
             {
@@ -645,22 +713,47 @@ export namespace experimental::gui
             if (const StringView t = keyword(u8"grid-row"); t.Size() != 0)
                 if (const Optional<GridPlacement> g = detail::ParseGridPlacement(t); g.HasValue())
                     assign(ls.Row, g.Value());
-            if (changed)
-                node.SetLayoutStyle(ls);
+            (void)changed;
+            LayoutStyle result = node.GetLayoutStyle();
+            ForEachLayoutField([&](StyleSlot slot, auto member)
+            {
+                if (free(slot))
+                    result.*member = ls.*member;
+            });
+            if (free(SlotMarginTop)) result.Margin.Top = ls.Margin.Top;
+            if (free(SlotMarginRight)) result.Margin.Right = ls.Margin.Right;
+            if (free(SlotMarginBottom)) result.Margin.Bottom = ls.Margin.Bottom;
+            if (free(SlotMarginLeft)) result.Margin.Left = ls.Margin.Left;
+            if (ChangedLayoutSlots(result, node.GetLayoutStyle()) != 0)
+                node.SetLayoutStyle(result);
             // Anything but visible clips the children to the box (and scroll and auto scroll them);
             // a widget that clips its own parts (an item view's rows) keeps doing so unless the
             // sheet says.
-            if (keyword(u8"overflow-x").Size() != 0 || keyword(u8"overflow-y").Size() != 0)
-                node.SetClipChildren(ls.OverflowX != Overflow::Visible || ls.OverflowY != Overflow::Visible);
+            if (free(SlotOverflowX) && free(SlotOverflowY))
+            {
+                if (keyword(u8"overflow-x").Size() != 0 || keyword(u8"overflow-y").Size() != 0)
+                    node.SetClipChildren(result.OverflowX != Overflow::Visible || result.OverflowY != Overflow::Visible);
+                else
+                    node.SetClipChildren(own.ClipChildren);
+            }
         }
 
-        if (const StringView e = keyword(u8"enabled"); e.Size() != 0)
-            if (Optional<bool> b = ParseBool(e); b.HasValue())
-                node.SetEnabled(b.Value());
-        if (const StringView v = keyword(u8"visibility"); v == StringView(u8"hidden"))
-            node.SetVisible(false);
-        else if (v == StringView(u8"visible"))
-            node.SetVisible(true);
+        if (free(SlotEnabled))
+        {
+            bool enabled = own.Enabled;
+            if (const StringView e = keyword(u8"enabled"); e.Size() != 0)
+                if (Optional<bool> b = ParseBool(e); b.HasValue())
+                    enabled = b.Value();
+            if (enabled != node.IsEnabled())
+                node.SetEnabled(enabled);
+        }
+        if (free(SlotVisibility))
+        {
+            const StringView v = keyword(u8"visibility");
+            const bool visible = v == StringView(u8"hidden") ? false : v == StringView(u8"visible") ? true : own.Visible;
+            if (visible != node.IsVisible())
+                node.SetVisible(visible);
+        }
 
         // Text: colour, alignment, face.
         if (const StyleValue* c = style.Value(u8"color"))
@@ -716,9 +809,7 @@ export namespace experimental::gui
         }
 
         // What the table does not name: a reflected property that takes it by its CSS name.
-        for (const ResolvedProperty& p : style.Properties())
-            if (!ResolvedStyle::IsCustomProperty(p.Name.AsView()) && FindStyleProperty(p.Name.AsView()) == nullptr)
-                detail::ApplyReflected(node, p, lengths);
+        detail::ApplyReflected(node, style, lengths);
     }
 
     // Apply a resolved pseudo-element style to a widget part: its background-color becomes the

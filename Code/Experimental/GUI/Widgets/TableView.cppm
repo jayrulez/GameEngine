@@ -41,6 +41,7 @@ export namespace experimental::gui
         TableHeaderCell()
         {
             SetTag(core::StringView(u8"tableheadercell"));
+            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
             SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
             SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
         }
@@ -82,6 +83,7 @@ export namespace experimental::gui
                 auto cell = core::MakeRef<Label>(MemoryAllocator());
                 cell->SetTag(
                     core::StringView(u8"tablecell")); // container-owned, not a generic label
+                StyleWriteScope defaults(*cell); // its own values, which a sheet returns to
                 cell->SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
                 cell->SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
                 cell->SetFont(font);

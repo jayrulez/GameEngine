@@ -88,6 +88,18 @@ export namespace experimental::gui
         }
         [[nodiscard]] core::Span<const InlineStyleDeclaration> GetInlineStyle() const noexcept { return m_inlineStyle.AsSpan(); }
 
+        /// A reflected property a sheet set by its CSS name: the node's own value from before, the
+        /// value the sheet last wrote (as text; empty when it writes none now), and whether code
+        /// has since taken it.
+        struct StyledProperty
+        {
+            core::String Name;
+            Variant Own;
+            core::String Written;
+            bool Code = false;
+        };
+        [[nodiscard]] core::Array<StyledProperty>& StyledProperties() noexcept { return m_styledProperties; }
+
         // Markup hook: a widget consumes its own structural XML attributes (e.g. Label "text",
         // LinearLayout "orientation"/"spacing"), returning true if it handled `name`. Attributes
         // it doesn't claim are applied as CSS properties by the markup loader. Default: none.
@@ -120,5 +132,6 @@ export namespace experimental::gui
 
     private:
         core::Array<InlineStyleDeclaration> m_inlineStyle;
+        core::Array<StyledProperty> m_styledProperties;
     };
 }

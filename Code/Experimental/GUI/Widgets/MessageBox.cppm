@@ -57,9 +57,11 @@ export namespace experimental::gui
             // reads m_message.
             m_message = core::MakeRef<Label>(MemoryAllocator());
             m_message->SetWordWrap(true);
+            StyleWriteScope messageDefaults(*m_message); // its own values, which a sheet returns to
             m_message->SetTextAlignment(TextHAlign::Left, TextVAlign::Top);
             GetContent()->AddChild(m_message.Get());
 
+            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
             SetSize(core::Float2{360.0f, 180.0f});
             LayoutContent();
         }

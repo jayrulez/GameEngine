@@ -188,3 +188,125 @@ TEST_CASE("style-manager: markup's inline properties outrank every sheet's norma
     styles.ApplyTree(*root.Get());
     CHECK(chip->GetAlpha() == doctest::Approx(0.6f));
 }
+
+// ===================== E3: computed style =====================
+
+TEST_CASE("style-manager: a rule that stops matching gives back everything it set")
+{
+    auto root = NewRoot();
+    auto w = Tagged(*root.Get(), u8"box");
+    StyleManager styles(CSSParser::Parse(SV(
+        u8"box.on { opacity: 0.5; padding: 7px; width: 120px; margin-left: 4px; display: grid; overflow: hidden; "
+        u8"visibility: hidden; enabled: false; flex-grow: 2; }")));
+    styles.ApplyTree(*root.Get());
+    const Thickness padding = w->GetPadding();
+    const LayoutStyle layout = w->GetLayoutStyle();
+
+    w->AddClass(SV(u8"on"));
+    styles.ApplyTree(*root.Get());
+    CHECK(w->GetAlpha() == doctest::Approx(0.5f));
+    CHECK(w->GetPadding().Top == doctest::Approx(7.0f));
+    CHECK(w->GetLayoutStyle().Width == LayoutLength::Px(120.0f));
+    CHECK(w->GetLayoutStyle().Kind == Display::Grid);
+    CHECK(w->ClipsChildren());
+    CHECK_FALSE(w->IsVisible());
+    CHECK_FALSE(w->IsEnabled());
+
+    w->RemoveClass(SV(u8"on"));
+    styles.ApplyTree(*root.Get());
+    CHECK(w->GetAlpha() == doctest::Approx(1.0f));
+    CHECK(w->GetPadding() == padding);
+    CHECK(ChangedLayoutSlots(w->GetLayoutStyle(), layout) == 0u);
+    CHECK_FALSE(w->ClipsChildren());
+    CHECK(w->IsVisible());
+    CHECK(w->IsEnabled());
+}
+
+TEST_CASE("style-manager: a widget's own defaults are what a rule gives back to")
+{
+    auto root = NewRoot();
+    auto tip = Make<Tooltip>(); // 6 by 3 padding of its own
+    root->AddChild(tip.Get());
+    const Thickness own = tip->GetPadding();
+    StyleManager styles(CSSParser::Parse(SV(u8"tooltip.big { padding: 20px; }")));
+    styles.ApplyTree(*root.Get());
+    CHECK(tip->GetPadding() == own); // no rule: its own, not CSS's initial 0
+    tip->AddClass(SV(u8"big"));
+    styles.ApplyTree(*root.Get());
+    CHECK(tip->GetPadding().Left == doctest::Approx(20.0f));
+    tip->RemoveClass(SV(u8"big"));
+    styles.ApplyTree(*root.Get());
+    CHECK(tip->GetPadding() == own);
+}
+
+TEST_CASE("style-manager: what code sets is code's, over the sheet, before or after a restyle")
+{
+    auto root = NewRoot();
+    auto early = Tagged(*root.Get(), u8"box");
+    auto late = Tagged(*root.Get(), u8"box");
+    early->SetAlpha(0.3f); // before any sheet
+    StyleManager styles(CSSParser::Parse(SV(u8"box { opacity: 0.8; width: 50px; }")));
+    styles.ApplyTree(*root.Get());
+    CHECK(early->GetAlpha() == doctest::Approx(0.3f));
+    CHECK(late->GetAlpha() == doctest::Approx(0.8f));
+
+    late->SetAlpha(0.6f); // after the sheet styled it
+    late->EditLayoutStyle([](LayoutStyle& s) { s.Width = LayoutLength::Px(70.0f); });
+    late->MarkStyleDirty(false);
+    styles.ApplyTree(*root.Get());
+    CHECK(late->GetAlpha() == doctest::Approx(0.6f));
+    CHECK(late->GetLayoutStyle().Width == LayoutLength::Px(70.0f));
+    CHECK(late->IsStylePinned(SlotWidth));
+    CHECK_FALSE(late->IsStylePinned(SlotHeight)); // only what code changed
+
+    // Given back, the sheet's value returns.
+    late->UnpinStyle(SlotBit(SlotOpacity) | SlotBit(SlotWidth));
+    styles.ApplyTree(*root.Get());
+    CHECK(late->GetAlpha() == doctest::Approx(0.8f));
+    CHECK(late->GetLayoutStyle().Width == LayoutLength::Px(50.0f));
+}
+
+TEST_CASE("style-manager: a reflected property the sheet set returns to its own value, unless code took it")
+{
+    RegisterGuiElements();
+    auto root = NewRoot();
+    auto field = Make<TextField>();
+    field->SetPlaceholder(SV(u8"own"));
+    root->AddChild(field.Get());
+    StyleManager styles(CSSParser::Parse(SV(u8"textfield.hint { placeholder: from the sheet; }")));
+    styles.ApplyTree(*root.Get());
+    field->AddClass(SV(u8"hint"));
+    styles.ApplyTree(*root.Get());
+    CHECK(field->GetPlaceholder() == SV(u8"from the sheet"));
+    field->RemoveClass(SV(u8"hint"));
+    styles.ApplyTree(*root.Get());
+    CHECK(field->GetPlaceholder() == SV(u8"own"));
+
+    field->AddClass(SV(u8"hint"));
+    styles.ApplyTree(*root.Get());
+    field->SetPlaceholder(SV(u8"code's")); // code takes it
+    field->RemoveClass(SV(u8"hint"));
+    styles.ApplyTree(*root.Get());
+    CHECK(field->GetPlaceholder() == SV(u8"code's"));
+    field->AddClass(SV(u8"hint"));
+    styles.ApplyTree(*root.Get());
+    CHECK(field->GetPlaceholder() == SV(u8"code's"));
+}
+
+TEST_CASE("style-manager: a hover rule ends, and what it set returns")
+{
+    auto root = NewRoot();
+    auto w = Tagged(*root.Get(), u8"button");
+    w->SetSize(core::Float2{100.0f, 40.0f});
+    StyleManager styles(CSSParser::Parse(SV(u8"button:hover { opacity: 0.7; padding-left: 12px; }")));
+    styles.ApplyTree(*root.Get());
+    EventDispatcher* d = root->GetEventDispatcher();
+    d->InjectMouseMove(core::Float2{50.0f, 20.0f});
+    styles.ApplyTree(*root.Get());
+    CHECK(w->GetAlpha() == doctest::Approx(0.7f));
+    CHECK(w->GetPadding().Left == doctest::Approx(12.0f));
+    d->InjectMouseMove(core::Float2{150.0f, 150.0f});
+    styles.ApplyTree(*root.Get());
+    CHECK(w->GetAlpha() == doctest::Approx(1.0f));
+    CHECK(w->GetPadding().Left == doctest::Approx(0.0f));
+}

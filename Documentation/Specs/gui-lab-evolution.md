@@ -944,6 +944,28 @@ would need more than the lab: partial presentation needs the host to keep the la
 chains do not), and geometry replay needs VG to record and replay a range of its batch under a
 new transform and clip. No framework surveyed presents part of a window.
 
+Stress numbers (E8a, RelWithDebInfo, clang, 2026-10-17; the window shows about one twentieth of
+the page at load 10):
+
+| Load | Nodes drawn | First frame: style | Layout | Draw | Animated frame: draw | Vertices |
+|---|---|---|---|---|---|---|
+| 1 | 2,484 | (under a frame) | | | 3.0 ms | 100,719 |
+| 5 | 11,780 | 1,335 ms (12,511 restyled) | 55 ms | 52 ms | 15.4 ms | 489,029 |
+| 10 | 22,898 | 3,021 ms (23,629 restyled) | 102 ms | 103 ms | 30.2 ms | 975,169 |
+
+- Building the rows grows faster than their count (400 rows 2.8 ms, 2,000 rows 27.5 ms, 4,000
+  rows 84 ms); the 100k-row models take about 40 ms at every load.
+- The page found a fault at once: layout doubled with each level of nesting (a one-entry measure
+  cache; a flex item is measured twice), so 500 levels never laid out. Fixed: four entries.
+- Drawing costs what the whole tree holds, not what shows: nothing is culled, so a frame with one
+  animation draws a million vertices at load 10. Culling (E8b) is the first win.
+- Styling costs about 110 to 130 µs a node against the page's 1,000 extra rules, the largest
+  cost: one class at the top restyles the tree in 3 s at load 10. Every rule is tried against
+  every node; an index of the rules by their rightmost compound (its id, classes and tag), as
+  browsers and RmlUi keep, would try only the few that can match.
+- Damage rectangles would help only frames where little changes, and the culled draw is not yet
+  measured; geometry caching is measured again after E8b.
+
 ### E9 Translation, right to left, and accessibility groundwork
 
 Before 0.1 (user, 2026-10-16), all three.

@@ -517,7 +517,7 @@ namespace experimental::gui
                 &TextField::StaticType(),    &Panel::StaticType(),        &ScrollView::StaticType(),
                 &Image::StaticType(),        &ListBox::StaticType(),      &Window::StaticType(),
                 &ComboBox::StaticType(),     &RichText::StaticType(),     &TextArea::StaticType(),
-                &ToggleSwitch::StaticType(),
+                &ToggleSwitch::StaticType(),   &Separator::StaticType(),    &Spacer::StaticType(),
             };
             for (const TypeInfo* type : kLabElements)
                 (void)ElementTypes::Register(*type);
@@ -765,6 +765,20 @@ namespace experimental::gui
     REFLECT_MEMBERS(ScrollView, "rtti::gui")
     {
         builder.Method<&ElementOf<ScrollView>, ScrollView, Node>("of");
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(Separator, "rtti::gui")
+    {
+        builder.AccessorProperty<&Separator::GetThickness, &Separator::SetThickness>("thickness").PropAttribute("css", core::String(u8"thickness"));
+        builder.Method<&ElementOf<Separator>, Separator, Node>("of");
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(Spacer, "rtti::gui")
+    {
+        builder.AccessorProperty<&Spacer::GetSpace, &Spacer::SetSpace>("size").PropAttribute("css", core::String(u8"size"));
+        builder.Method<&ElementOf<Spacer>, Spacer, Node>("of");
         builder.Creator();
     }
 

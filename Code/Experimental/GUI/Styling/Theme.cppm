@@ -74,6 +74,9 @@ export namespace experimental::gui
             slider::fill  { background-color: #4a90d9; }
             slider::thumb { background-color: #cfd6e0; }
             slider::focus { border-color: #4f9cff; }
+            dragpreview { background-color: #2b3444; color: #f0f4f8; border-radius: 6; opacity: 0.92; }
+            dragpreview::effect { background-color: #8fc1ff; }
+            tooltip.drophint.refused { color: #ff8a80; }
             /* The focus ring: where the keyboard is (a field shows it while it has the caret). */
             button:focus-visible, combobox:focus-visible, checkbox:focus-visible, radio:focus-visible,
             switch:focus-visible, tab:focus-visible, expanderheader:focus-visible, listbox:focus-visible,
@@ -143,6 +146,9 @@ export namespace experimental::gui
             slider::fill  { background-color: #2f6fb0; }
             slider::thumb { background-color: #3a4658; }
             slider::focus { border-color: #2f7de1; }
+            dragpreview { background-color: #ffffff; color: #17202b; border-radius: 6; opacity: 0.92; }
+            dragpreview::effect { background-color: #2f6fb0; }
+            tooltip.drophint.refused { color: #c0392b; }
             button:focus-visible, combobox:focus-visible, checkbox:focus-visible, radio:focus-visible,
             switch:focus-visible, tab:focus-visible, expanderheader:focus-visible, listbox:focus-visible,
             listview:focus-visible, treeview:focus-visible, tableview:focus-visible, editablelabel:focus-visible,

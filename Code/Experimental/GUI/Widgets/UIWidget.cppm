@@ -58,6 +58,17 @@ export namespace experimental::gui
             Invalidate();
         }
         [[nodiscard]] core::StringView GetId() const { return m_id.AsView(); }
+        /// Its type and, when it has one, its id ("Button #ok").
+        [[nodiscard]] core::String DebugName() const override
+        {
+            core::String name = UINode::DebugName();
+            if (m_id.Size() != 0)
+            {
+                name += core::StringView(u8" #");
+                name += m_id.AsView();
+            }
+            return name;
+        }
 
         void AddClass(core::StringView cls)
         {

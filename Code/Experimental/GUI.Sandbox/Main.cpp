@@ -1063,17 +1063,6 @@ namespace
             CollectSweep(*node.GetChildAt(i), out);
     }
 
-    String Describe(gui::Node& node)
-    {
-        const gui::UIWidget* widget = Cast<gui::UIWidget>(&node);
-        String text(node.GetType() != nullptr ? StringView(reinterpret_cast<const utf8char*>(node.GetType()->name)) : StringView(u8"?"));
-        if (widget != nullptr && widget->GetId().Size() != 0)
-        {
-            text += StringView(u8" #");
-            text += widget->GetId();
-        }
-        return text;
-    }
 }
 
 void GUISandbox::Sweep()
@@ -1094,7 +1083,7 @@ void GUISandbox::Sweep()
                 const gui::Rect bounds = node->GetScreenBounds();
                 if (bounds.y + bounds.height * 0.5f > static_cast<f32>(m_height))
                     continue; // below the fold
-                m_sweepSteps.PushBack(SweepStep{page.id, false, Float2{bounds.x + bounds.width * 0.5f, bounds.y + bounds.height * 0.5f}, Describe(*node)});
+                m_sweepSteps.PushBack(SweepStep{page.id, false, Float2{bounds.x + bounds.width * 0.5f, bounds.y + bounds.height * 0.5f}, node->DebugName()});
             }
         }
         ShowPage(m_startPage.AsView());
@@ -1193,6 +1182,8 @@ void GUISandbox::OnRender()
     {
         std::printf("GUISandbox: drew %llu of %llu frames\n", static_cast<unsigned long long>(m_drawnFrames),
                     static_cast<unsigned long long>(m_frames));
+        // The last drawn frame's costs and what asked for it (E8a).
+        std::printf("GUISandbox: last frame: %s\n", reinterpret_cast<const char*>(drawn.GetLastFrameStats().Describe().CStr()));
         std::fflush(stdout);
         m_nextStatsTime = m_totalTime + 1.0f;
     }
@@ -1210,7 +1201,7 @@ void GUISandbox::DrawAndPresent(gui::SceneRoot& root)
     m_vg->Clear();
     {
         gui::DrawContext dc{*m_vg};
-        root.Draw(dc);
+        root.DrawFrame(dc); // timed and counted: --frame-stats prints it
     }
     vg::VGBatch& batch = m_vg->GetBatch();
 

@@ -62,8 +62,16 @@ export namespace experimental::gui
             m_vg->SetTransform(transform.ToMatrix() * m_vg->GetTransform());
         }
 
+        // What a draw did (E8a): the nodes it drew and the ones it culled.
+        void CountDrawn() noexcept { ++m_nodesDrawn; }
+        void CountCulled() noexcept { ++m_nodesCulled; }
+        [[nodiscard]] u32 NodesDrawn() const noexcept { return m_nodesDrawn; }
+        [[nodiscard]] u32 NodesCulled() const noexcept { return m_nodesCulled; }
+
     private:
         vg::VGContext* m_vg;
         f32 m_dpiScale;
+        u32 m_nodesDrawn = 0;
+        u32 m_nodesCulled = 0;
     };
 }

@@ -4,7 +4,7 @@
 # and the gui.shell input bridge is a separate library. Built bottom-up.
 util_add_engine_library(GUI ALIAS Experimental::GUI)
 target_link_libraries(GUI
-    PUBLIC Foundation::Core Foundation::Script Foundation::VG Foundation::Image Foundation::Fonts Foundation::Xml Foundation::Policy)
+    PUBLIC Foundation::Core Foundation::Profiler Foundation::Script Foundation::VG Foundation::Image Foundation::Fonts Foundation::Xml Foundation::Policy)
 
 target_sources(GUI
     PUBLIC
@@ -18,6 +18,7 @@ target_sources(GUI
             Core/MutationQueue.cppm
             Core/Reactive.cppm
             Layout/LayoutStyle.cppm
+            Core/FrameStats.cppm
             Core/Node.cppm
             Scene/Action.cppm
             Scene/ActionManager.cppm

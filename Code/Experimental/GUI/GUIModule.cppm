@@ -26,6 +26,7 @@ export import :event;
 export import :clipboard;
 export import :mutation_queue;
 export import :reactive;
+export import :frame_stats;
 export import :node;
 
 // Scene coordinator + actions (Phase 3)

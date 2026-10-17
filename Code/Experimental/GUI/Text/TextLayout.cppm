@@ -20,7 +20,7 @@
 // clamp on the line count and an ellipsis at a line's end, start or middle (text-overflow), and what
 // editing needs: every glyph and line knows the bytes of the plain text it shows, so a caret finds
 // its x and a point its offset. A font with no shaper still measures; its pieces come out as text
-// to draw unshaped (they take no ellipsis).
+// to draw unshaped, each character placed by measuring (they take no ellipsis).
 
 module;
 #include "Core/Prelude.h"
@@ -105,7 +105,7 @@ export namespace experimental::gui
         f32 Size = 0.0f;
         bool SyntheticBold = false;   ///< no bold face: draw twice, `Size / 24` apart
         bool SyntheticItalic = false; ///< no italic face: slant about the baseline
-        bool Unshaped = false;        ///< its font has no shaper: draw TextStart..TextEnd at X as text
+        bool Unshaped = false;        ///< its font has no shaper: draw TextStart..TextEnd at X as text (its glyphs only place carets)
         f32 Baseline = 0.0f;
         f32 X = 0.0f;     ///< where its first glyph starts
         f32 Width = 0.0f; ///< its advance
@@ -793,8 +793,28 @@ export namespace experimental::gui
                 }
                 else
                 {
+                    // No shaper: a position for each character from the widths of what comes
+                    // before it, so carets still find their places; drawn as text.
                     glyphs.Glyphs.Clear();
                     glyphs.Unshaped = true;
+                    detail::CodepointOffsets(piece.Text, piece.Start, offsets);
+                    f32 before = 0.0f;
+                    for (usize c = 0; c + 1 < offsets.Size(); ++c)
+                    {
+                        const usize end = offsets[c + 1] - piece.Start;
+                        const f32 after = piece.Font.Font->font != nullptr
+                                              ? piece.Font.Font->font->MeasureString(piece.Text.SubStr(0, end)) + spacing * static_cast<f32>(c + 1)
+                                              : before;
+                        fonts::GlyphPosition g;
+                        g.cluster = static_cast<i32>(c);
+                        g.x = piece.X + before;
+                        g.y = at.Baseline;
+                        g.advance = after - before;
+                        glyphs.Glyphs.PushBack(g);
+                        glyphs.GlyphStart.PushBack(offsets[c]);
+                        glyphs.GlyphEnd.PushBack(offsets[c + 1]);
+                        before = after;
+                    }
                 }
                 layout.GlyphRuns.PushBack(Move(glyphs));
             }

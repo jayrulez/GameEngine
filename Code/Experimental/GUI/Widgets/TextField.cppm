@@ -3,18 +3,19 @@
 
 // GUI - :text_field partition
 //
-// TextField: a single-line, editable text control - the widget driven by the keyboard and
-// text-input path. A lean native control modeled on eepp's UITextInput (role only):
-// it maintains an editable UTF-8 buffer and a caret (a byte offset at a codepoint boundary),
-// plus a selection anchor. It inserts characters from OnTextInput, handles editing/navigation
-// keys (backspace/delete/left/right/home/end, with Shift extending the selection) and the
-// clipboard shortcuts (Ctrl+A/C/X/V) via OnKeyDown, and supports mouse selection (drag-select
-// and double-click word-select). Placeholder/hint text shows while empty; an optional
-// max-length caps the value (in codepoints). The caret blinks only when focused.
+// TextField: a single-line, editable text control over the editing model (E4 of
+// Specs/gui-lab-evolution.md). Modeled on eepp's UITextInput (role only): typed text goes to the
+// model, and every editing key reaches it as a command through the keymap, the field declaring the
+// "textinput" key context and handling the editing commands' names (BindTextEditingKeys binds the
+// keys), so a screen rebinds them and a menu shows them like any command. Its text is shaped and
+// scrolls across to keep the caret in view; a mouse press places the caret, a drag selects, a double
+// press selects a word and a triple the line.
 //
-// Clipboard access is through the dispatcher's abstract IClipboard (null-safe: cut/copy/paste
-// no-op without one). An over-long value or placeholder is cut at the padding; multi-line editing
-// and horizontal scroll of an over-long value are follow-ups (E4).
+// It reports each edit as `input` (SetOnTextChanging), and a committed value as `change`
+// (SetOnTextChanged) when Return submits it (`submit`, SetOnSubmit) or focus leaves with a value
+// other than the last committed one, as the web's inputs do. It may be read-only, filter what comes
+// in, cap its length in graphemes, and mask its text as a password (copying and cutting then take
+// nothing out). The caret blinks while it is focused.
 
 module;
 #include "Core/Prelude.h"
@@ -22,10 +23,9 @@ module;
 
 export module experimental.gui:text_field;
 
-import foundation.core; // String, StringView, Color, Function, Move, Min, Max, Utf8*Boundary, IsWhiteSpace
+import foundation.core;  // String, StringView, Color, Function, Move, Min, Max
 import foundation.fonts; // CachedFont
-import foundation.vg;    // CornerRadii
-import :reactive; // Observable (what bindings follow)
+import :reactive;        // Observable (what bindings follow)
 import :rect;
 import :draw_context;
 import :text;
@@ -34,6 +34,11 @@ import :clipboard;
 import :event_dispatcher;
 import :ui_widget;
 import :actions; // TickAction (the caret's blink)
+import :commands; // CommandEvent
+import :text_segmentation;
+import :input_filter;
+import :text_edit_model;
+import :text_editing_keys; // kTextSubmitCommand
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -48,72 +53,74 @@ export namespace experimental::gui
         TextField()
         {
             SetTag(core::StringView(u8"textfield"));
+            SetTabFocusable(true);
+            SetKeyContext(core::StringView(u8"textinput"));
+            m_text.SetWhiteSpace(TextWhiteSpace::Pre); // its spaces as typed, on one line
             m_text.SetAlignment(TextHAlign::Left, TextVAlign::Middle);
             m_hintText.SetAlignment(TextHAlign::Left, TextVAlign::Middle);
             m_hintText.SetColor(m_placeholderColor);
-            SetTabFocusable(true);
+            // Each editing command, by the name the keymap binds, runs on its model.
+            for (usize i = 0; i < static_cast<usize>(TextEditCommand::Count); ++i)
+            {
+                const TextEditCommand command = static_cast<TextEditCommand>(i);
+                (void)OnCommand(TextEditCommandName(command), [this, command](CommandEvent&) { RunEdit(command); });
+            }
+            (void)OnCommand(core::StringView(kTextSubmitCommand), [this](CommandEvent&) { Submit(); });
         }
 
         // === Value ===
+        /// Replaces the text from code: the caret goes to its end and the history goes; it is the
+        /// committed value now, and reports no edit (as the web's value does).
         void SetText(core::StringView text)
         {
-            if (text == m_value.AsView())
+            if (text == m_model.GetText())
                 return; // a binding writing back what was typed keeps the caret where it is
-            m_value = core::String(text);
-            m_caret = m_value.Size(); // caret to end
-            m_selAnchor = m_caret;    // no selection
-            SyncText();
-            NotifyChanged();
+            m_model.SetText(text);
+            m_committed = core::String(text);
+            Synced();
+            m_textChanged.Notify();
         }
         /// The text (a read a binding records).
         [[nodiscard]] core::StringView GetText() const
         {
             m_textChanged.Track();
-            return m_value.AsView();
+            return m_model.GetText();
         }
+        /// The editing model under it (its history, its rules).
+        [[nodiscard]] TextEditModel& GetModel() noexcept { return m_model; }
 
-        // Byte offset of the caret (always on a codepoint boundary).
-        [[nodiscard]] usize GetCaret() const noexcept { return m_caret; }
+        // Byte offset of the caret (always on a grapheme boundary).
+        [[nodiscard]] usize GetCaret() const noexcept { return m_model.GetCaret(); }
         void SetCaret(usize byteOffset)
         {
-            m_caret = core::Min(byteOffset, m_value.Size());
-            m_selAnchor = m_caret; // collapse the selection
-            Invalidate();
+            m_model.SetCaret(byteOffset);
+            CaretMoved();
         }
 
-        void SetOnTextChanged(core::Function<void(core::StringView)> callback)
-        {
-            m_onChanged = core::Move(callback);
-        }
+        /// Each edit, with the text after it (the `input` event).
+        void SetOnTextChanging(core::Function<void(core::StringView)> callback) { m_onChanging = core::Move(callback); }
+        /// A committed value: Return, or focus leaving with a new one (the `change` event).
+        void SetOnTextChanged(core::Function<void(core::StringView)> callback) { m_onChanged = core::Move(callback); }
+        /// Return (the `submit` event), after the value commits.
+        void SetOnSubmit(core::Function<void(core::StringView)> callback) { m_onSubmit = core::Move(callback); }
 
         // === Selection ===
-        [[nodiscard]] bool HasSelection() const noexcept { return m_selAnchor != m_caret; }
-        [[nodiscard]] usize SelectionStart() const noexcept
-        {
-            return core::Min(m_selAnchor, m_caret);
-        }
-        [[nodiscard]] usize SelectionEnd() const noexcept
-        {
-            return core::Max(m_selAnchor, m_caret);
-        }
-        [[nodiscard]] core::StringView SelectedText() const
-        {
-            return m_value.AsView().SubStr(SelectionStart(), SelectionEnd() - SelectionStart());
-        }
+        [[nodiscard]] bool HasSelection() const noexcept { return m_model.HasSelection(); }
+        [[nodiscard]] usize SelectionStart() const noexcept { return m_model.GetSelection().Start; }
+        [[nodiscard]] usize SelectionEnd() const noexcept { return m_model.GetSelection().End; }
+        [[nodiscard]] core::StringView SelectedText() const { return m_model.SelectedText(); }
         void SelectAll()
         {
-            m_selAnchor = 0;
-            m_caret = m_value.Size();
-            ResetBlink();
-            Invalidate();
+            m_model.SelectAll();
+            CaretMoved();
         }
         void ClearSelection()
         {
-            m_selAnchor = m_caret;
-            Invalidate();
+            m_model.SetCaret(m_model.GetCaret());
+            CaretMoved();
         }
 
-        // === Placeholder / limits ===
+        // === Placeholder, limits, rules ===
         // Hint text shown (dimmed) while the value is empty.
         void SetPlaceholder(core::StringView text)
         {
@@ -134,21 +141,35 @@ export namespace experimental::gui
         /// :read-only; an editable one is :read-write).
         void SetReadOnly(bool readOnly)
         {
-            if (readOnly == m_readOnly)
+            if (readOnly == m_model.IsReadOnly())
                 return;
-            m_readOnly = readOnly;
+            m_model.SetReadOnly(readOnly);
             MarkStyleStateDirty(StateReadOnly | StateReadWrite);
             Invalidate();
         }
-        [[nodiscard]] bool IsReadOnly() const noexcept { return m_readOnly; }
+        [[nodiscard]] bool IsReadOnly() const noexcept { return m_model.IsReadOnly(); }
         [[nodiscard]] u32 GetWidgetStates() const override
         {
-            return (m_readOnly ? WidgetStateNone : WidgetStateEditable) | (m_placeholderShown ? WidgetStatePlaceholderShown : WidgetStateNone);
+            return (IsReadOnly() ? WidgetStateNone : WidgetStateEditable) |
+                   (m_placeholderShown ? WidgetStatePlaceholderShown : WidgetStateNone);
         }
 
-        // Maximum length in codepoints (0 = unlimited). Inserts past the limit are truncated.
-        void SetMaxLength(usize codepoints) noexcept { m_maxLength = codepoints; }
-        [[nodiscard]] usize GetMaxLength() const noexcept { return m_maxLength; }
+        /// The most graphemes it holds (0: no limit); what does not fit is cut.
+        void SetMaxLength(usize graphemes) noexcept { m_model.SetMaxLength(graphemes); }
+        [[nodiscard]] usize GetMaxLength() const noexcept { return m_model.GetMaxLength(); }
+        /// What it lets in, typed or pasted.
+        void SetInputFilter(InputFilter filter) { m_model.SetFilter(core::Move(filter)); }
+
+        /// A password field draws a mask for each character and lets nothing out by copy or cut.
+        void SetPassword(bool password)
+        {
+            if (password == m_password)
+                return;
+            m_password = password;
+            m_model.SetCopyAllowed(!password);
+            Synced();
+        }
+        [[nodiscard]] bool IsPassword() const noexcept { return m_password; }
 
         // An enabled TextField wants platform text input while focused (the bridge enables
         // the window's IME accordingly).
@@ -175,10 +196,15 @@ export namespace experimental::gui
 
         /// Whether the caret shows now (focused, and in the visible half of its blink).
         [[nodiscard]] bool IsCaretShown() const noexcept { return IsFocused() && m_caretVisible; }
-        // Advances the caret's blink. A focused field in a GUI drives it itself, on its root's
-        // clock; a field in no GUI shows a steady caret unless its owner calls this.
+        /// How far its text is scrolled across (to keep the caret in view).
+        [[nodiscard]] f32 GetScrollX() const noexcept { return m_scrollX; }
+        // Advances the caret's blink and the model's clock. A focused field in a GUI drives it
+        // itself, on its root's clock; a field in no GUI shows a steady caret unless its owner
+        // calls this.
         void Update(f64 deltaSeconds)
         {
+            m_clock += deltaSeconds;
+            m_model.SetTime(m_clock);
             if (!IsFocused())
                 return;
             m_blinkAccum += deltaSeconds;
@@ -211,122 +237,32 @@ export namespace experimental::gui
             m_text.SetFont(GetFont());
             m_hintText.SetFont(GetFont());
             m_text.SetColor(GetTextColor());
+            m_text.SetLetterSpacing(GetTextStyle().LetterSpacing);
             m_caretColor = GetTextColor();
+            KeepCaretInView();
         }
+        void OnSizeChange() override { KeepCaretInView(); }
+
         void OnTextInput(const TextInputEvent& event) override
         {
-            if (!IsTreeEnabled() || m_readOnly || event.Text.Size() == 0)
+            if (!IsTreeEnabled() || event.Text.Size() == 0)
                 return;
-            InsertText(event.Text);
+            event.Handled = true;
+            if (m_model.Insert(event.Text))
+                Edited();
         }
 
+        // The editing keys reach it as commands, through the keymap; a key that types (a letter, a
+        // digit, the space bar) is its own, so it neither activates nor moves focus.
         void OnKeyDown(const KeyEvent& event) override
         {
-            if (!IsTreeEnabled())
+            if (!IsTreeEnabled() || event.Target != this)
                 return;
-            const bool shift = (event.Modifiers & static_cast<u32>(KeyModShift)) != 0;
-            const bool ctrl = (event.Modifiers & static_cast<u32>(KeyModCtrl)) != 0;
+            if ((event.Modifiers & (KeyModCtrl | KeyModAlt | KeyModSuper)) != 0)
+                return;
             const KeyCode key = static_cast<KeyCode>(event.KeyCode);
-            // A field keeps the keys it edits with; up and down (and leaving) are navigation's.
-            if (key != KeyCode::Up && key != KeyCode::Down && key != KeyCode::Escape && key != KeyCode::Tab)
+            if (key == KeyCode::Space || (key >= KeyCode::A && key <= KeyCode::Num9))
                 event.Handled = true;
-
-            // Editing shortcuts take precedence over plain letter handling.
-            if (ctrl)
-            {
-                switch (key)
-                {
-                case KeyCode::A:
-                    SelectAll();
-                    return;
-                case KeyCode::C:
-                    CopySelection();
-                    return;
-                case KeyCode::X:
-                    if (m_readOnly)
-                        CopySelection(); // what cut would take, left in place
-                    else
-                        CutSelection();
-                    return;
-                case KeyCode::V:
-                    if (!m_readOnly)
-                        Paste();
-                    return;
-                default:
-                    event.Handled = false; // other Ctrl combos: a binding's (ctrl-s)
-                    return;
-                }
-            }
-
-            if (m_readOnly && (key == KeyCode::Backspace || key == KeyCode::Delete))
-                return;
-            switch (key)
-            {
-            case KeyCode::Backspace:
-                if (HasSelection())
-                {
-                    DeleteSelection();
-                    NotifyChanged();
-                }
-                else if (m_caret > 0)
-                {
-                    const usize prev = core::Utf8PrevBoundary(m_value.AsView(), m_caret);
-                    m_value.Remove(prev, m_caret - prev);
-                    m_caret = prev;
-                    m_selAnchor = m_caret;
-                    SyncText();
-                    NotifyChanged();
-                }
-                break;
-            case KeyCode::Delete:
-                if (HasSelection())
-                {
-                    DeleteSelection();
-                    NotifyChanged();
-                }
-                else if (m_caret < m_value.Size())
-                {
-                    const usize next = core::Utf8NextBoundary(m_value.AsView(), m_caret);
-                    m_value.Remove(m_caret, next - m_caret);
-                    SyncText();
-                    NotifyChanged();
-                }
-                break;
-            case KeyCode::Left:
-                if (shift)
-                    m_caret = core::Utf8PrevBoundary(m_value.AsView(), m_caret);
-                else if (HasSelection())
-                    m_caret = SelectionStart();
-                else
-                    m_caret = core::Utf8PrevBoundary(m_value.AsView(), m_caret);
-                if (!shift)
-                    m_selAnchor = m_caret;
-                break;
-            case KeyCode::Right:
-                if (shift)
-                    m_caret = core::Utf8NextBoundary(m_value.AsView(), m_caret);
-                else if (HasSelection())
-                    m_caret = SelectionEnd();
-                else
-                    m_caret = core::Utf8NextBoundary(m_value.AsView(), m_caret);
-                if (!shift)
-                    m_selAnchor = m_caret;
-                break;
-            case KeyCode::Home:
-                m_caret = 0;
-                if (!shift)
-                    m_selAnchor = m_caret;
-                break;
-            case KeyCode::End:
-                m_caret = m_value.Size();
-                if (!shift)
-                    m_selAnchor = m_caret;
-                break;
-            default:
-                return; // don't reset the blink for keys we ignore
-            }
-            ResetBlink();
-            Invalidate();
         }
 
         void OnMouseDown(const MouseEvent& event) override
@@ -338,35 +274,30 @@ export namespace experimental::gui
             if (event.Button != MouseButton::Left)
                 return;
             const bool shift = (event.Modifiers & static_cast<u32>(KeyModShift)) != 0;
-            const f32 localX = ConvertToNodeSpace(event.Position).x;
-            const usize pos = CaretFromX(localX);
+            const usize pos = OffsetAtPoint(ConvertToNodeSpace(event.Position));
 
             // A double press selects the word, a triple the whole line (the dispatcher counts them).
             if (event.ClickCount >= 2 && !shift)
             {
-                if (event.ClickCount == 2)
-                    SelectWordAt(pos);
+                if (event.ClickCount == 2 && !m_password)
+                    m_model.SelectWordAt(pos);
                 else
-                    SelectAll();
+                    m_model.SelectAll(); // a password is one word
                 m_selecting = false;
-                ResetBlink();
+                CaretMoved();
                 return;
             }
-
-            m_caret = pos;
-            if (!shift)
-                m_selAnchor = pos; // plain press collapses; Shift extends from anchor
-            m_selecting = true;    // begin a drag-select (pointer is captured)
-            ResetBlink();
+            m_model.SetCaret(pos, shift); // Shift extends from the anchor
+            m_selecting = true;           // begin a drag-select (pointer is captured)
+            CaretMoved();
         }
 
         void OnMouseMove(const MouseEvent& event) override
         {
             if (!m_selecting)
                 return;
-            m_caret = CaretFromX(ConvertToNodeSpace(event.Position).x);
-            ResetBlink();
-            Invalidate();
+            m_model.SetCaret(OffsetAtPoint(ConvertToNodeSpace(event.Position)), true);
+            CaretMoved();
         }
 
         void OnMouseUp(const MouseEvent& event) override
@@ -379,7 +310,6 @@ export namespace experimental::gui
         void OnFocusGained() override
         {
             ResetBlink();
-            Invalidate();
             if (!m_blinking && GetActionManager() != nullptr)
             {
                 // Blinks while focused: the tick ends itself when focus goes (and goes with the
@@ -401,6 +331,7 @@ export namespace experimental::gui
         {
             m_caretVisible = false;
             m_selecting = false;
+            Commit();
             Invalidate();
         }
 
@@ -412,59 +343,112 @@ export namespace experimental::gui
             // field is cut at its edges (the caret's width past the end, so a caret there shows).
             ctx.PushClip(Rect{content.x, 0.0f, content.width + kCaretWidth, GetSize().y});
 
-            // Placeholder while empty (and only when we won't draw a caret over it awkwardly:
-            // shown whether focused or not, which matches common single-line fields).
-            if (m_value.Size() == 0 && m_placeholder.Size() > 0)
+            if (m_model.GetText().Size() == 0 && m_placeholder.Size() > 0)
             {
                 m_hintText.Draw(ctx, content);
             }
             else
             {
-                // Selection highlight sits behind the text.
+                const TextLayout& layout = Layout();
+                const core::Float2 origin = TextOrigin(content);
+                // The selection sits behind the text.
                 if (IsFocused() && HasSelection())
                 {
-                    const f32 x0 = content.x + PrefixWidth(SelectionStart());
-                    const f32 x1 = content.x + PrefixWidth(SelectionEnd());
+                    const f32 x0 = origin.x + layout.CaretX(DisplayOffset(SelectionStart()));
+                    const f32 x1 = origin.x + layout.CaretX(DisplayOffset(SelectionEnd()));
                     const f32 h = m_text.GetLineHeight();
                     const f32 top = content.y + content.height * 0.5f - h * 0.5f;
                     GetPartStyle(u8"selection").Draw(ctx, Rect{x0, top, x1 - x0, h}, FilledBox(m_selectionColor));
                 }
-                m_text.Draw(ctx, content);
+                m_text.DrawLayout(ctx, layout, origin);
             }
 
             if (IsFocused() && m_caretVisible && !HasSelection())
             {
-                const f32 caretX = content.x + PrefixWidth(m_caret);
+                const f32 caretX = TextOrigin(content).x + Layout().CaretX(DisplayOffset(GetCaret()));
                 const f32 h = m_text.GetLineHeight();
-                const f32 cy = content.y + content.height * 0.5f;
-                const f32 top = cy - h * 0.5f;
+                const f32 top = content.y + content.height * 0.5f - h * 0.5f;
                 GetPartStyle(u8"caret").Draw(ctx, Rect{caretX, top, kCaretWidth, h}, FilledBox(m_caretColor));
             }
             ctx.PopClip();
         }
 
     private:
-        void SyncText()
+        // === The model's changes ===
+        void RunEdit(TextEditCommand command)
         {
-            m_text.SetString(m_value.AsView());
-            SyncPlaceholderShown();
+            if (!IsTreeEnabled())
+                return;
+            const u64 version = m_model.GetVersion();
+            (void)m_model.Run(command, Clipboard());
+            if (m_model.GetVersion() != version)
+                Edited();
+            else
+                CaretMoved();
+        }
+        // An edit the user made: shown, followed, reported.
+        void Edited()
+        {
+            Synced();
+            ResetBlink();
+            m_textChanged.Notify();
+            if (m_onChanging)
+                m_onChanging(m_model.GetText());
+            SendEvent(Event(EventType::Input, this));
+        }
+        void CaretMoved()
+        {
+            KeepCaretInView();
+            ResetBlink();
             Invalidate();
         }
+        // The shown text after the model changed.
+        void Synced()
+        {
+            if (m_password)
+            {
+                core::String mask;
+                const core::StringView text = m_model.GetText();
+                for (usize at = 0; at < text.Size(); at = NextGrapheme(text, at))
+                    mask.Append(core::StringView(kMask));
+                m_text.SetString(mask.AsView());
+            }
+            else
+            {
+                m_text.SetString(m_model.GetText());
+            }
+            SyncPlaceholderShown();
+            KeepCaretInView();
+            Invalidate();
+        }
+        // The value commits: reported once for each new value.
+        void Commit()
+        {
+            if (m_model.GetText() == m_committed.AsView())
+                return;
+            m_committed = core::String(m_model.GetText());
+            if (m_onChanged)
+                m_onChanged(m_model.GetText());
+            SendEvent(Event(EventType::Changed, this));
+        }
+        void Submit()
+        {
+            if (!IsTreeEnabled())
+                return;
+            Commit();
+            if (m_onSubmit)
+                m_onSubmit(m_model.GetText());
+            SendEvent(Event(EventType::Submit, this));
+        }
+
         // :placeholder-shown follows whether the value is empty under a placeholder.
         void SyncPlaceholderShown()
         {
-            const bool shown = m_value.Size() == 0 && m_placeholder.Size() != 0;
+            const bool shown = m_model.GetText().Size() == 0 && m_placeholder.Size() != 0;
             if (shown == m_placeholderShown)
                 return;
             m_placeholderShown = shown;
             MarkStyleStateDirty(StatePlaceholderShown);
-        }
-        void NotifyChanged()
-        {
-            m_textChanged.Notify();
-            if (m_onChanged)
-                m_onChanged(m_value.AsView());
-            SendEvent(Event(EventType::Changed, this));
         }
         void ResetBlink()
         {
@@ -480,211 +464,81 @@ export namespace experimental::gui
             return dispatcher != nullptr ? dispatcher->GetClipboard() : nullptr;
         }
 
-        void CopySelection()
+        // === Where things are ===
+        [[nodiscard]] const TextLayout& Layout() const { return m_text.LayoutFor(Rect{}); } // one line, unbounded
+        // The layout's origin in the field: its content's left less the scroll, its line centred.
+        [[nodiscard]] core::Float2 TextOrigin(const Rect& content) const
         {
-            if (!HasSelection())
-                return;
-            if (IClipboard* clip = Clipboard())
-                clip->SetText(SelectedText());
+            const core::Float2 origin = m_text.Origin(Rect{content.x, content.y, 0.0f, content.height});
+            return core::Float2{origin.x - m_scrollX, origin.y};
         }
-        void CutSelection()
+        // A masked text's bytes for a value's offset, and back (each grapheme one mask).
+        [[nodiscard]] usize DisplayOffset(usize offset) const
         {
-            if (!HasSelection())
-                return;
-            if (IClipboard* clip = Clipboard())
-                clip->SetText(SelectedText());
-            DeleteSelection();
-            NotifyChanged();
+            if (!m_password)
+                return offset;
+            return GraphemeCount(m_model.GetText().SubStr(0, offset)) * kMaskBytes;
         }
-        void Paste()
+        [[nodiscard]] usize ModelOffset(usize display) const
         {
-            IClipboard* clip = Clipboard();
-            if (clip == nullptr || !clip->HasText())
-                return;
-            const core::String text = clip->GetText();
-            if (text.Size() == 0)
-                return;
-            InsertText(SanitizeSingleLine(text.AsView()).AsView());
+            if (!m_password)
+                return display;
+            const core::StringView text = m_model.GetText();
+            usize at = 0;
+            for (usize n = display / kMaskBytes; n > 0 && at < text.Size(); --n)
+                at = NextGrapheme(text, at);
+            return at;
         }
-
-        // Remove any selection (no notify); caret collapses to the selection start.
-        void DeleteSelection()
+        [[nodiscard]] usize OffsetAtPoint(core::Float2 local) const
         {
-            if (!HasSelection())
-                return;
-            const usize start = SelectionStart();
-            const usize len = SelectionEnd() - start;
-            m_value.Remove(start, len);
-            m_caret = start;
-            m_selAnchor = start;
-            SyncText();
+            const core::Float2 origin = TextOrigin(GetContentBounds());
+            return ModelOffset(Layout().OffsetAt(core::Float2{local.x - origin.x, local.y - origin.y}));
         }
-
-        // Insert text at the caret, replacing any selection and honouring the max-length cap
-        // (measured in codepoints). Fires the changed callback once.
-        void InsertText(core::StringView text)
+        // Scrolls by the least that shows the caret, and no further than the text needs.
+        void KeepCaretInView()
         {
-            if (HasSelection())
-                DeleteSelection();
-
-            core::StringView toInsert = text;
-            if (m_maxLength > 0)
-            {
-                const usize current = CountCodepoints(m_value.AsView());
-                if (current >= m_maxLength)
-                    return;
-                const usize room = m_maxLength - current;
-                toInsert = ClampCodepoints(text, room);
-                if (toInsert.Size() == 0)
-                    return;
-            }
-
-            m_value.Insert(m_caret, toInsert);
-            m_caret += toInsert.Size();
-            m_selAnchor = m_caret;
-            SyncText();
-            ResetBlink();
-            NotifyChanged();
+            const f32 view = core::Max(0.0f, GetContentBounds().width - kCaretWidth);
+            const TextLayout& layout = Layout();
+            const f32 caret = layout.CaretX(DisplayOffset(GetCaret()));
+            const f32 before = m_scrollX;
+            if (caret - m_scrollX > view)
+                m_scrollX = caret - view;
+            if (caret < m_scrollX)
+                m_scrollX = caret;
+            m_scrollX = core::Max(0.0f, core::Min(m_scrollX, layout.Width - view));
+            if (m_scrollX != before)
+                Invalidate();
         }
 
-        // Select the word (run of non-whitespace) surrounding a byte offset; an offset on
-        // whitespace selects that whitespace run instead, so a click always selects something.
-        void SelectWordAt(usize offset)
-        {
-            const core::StringView view = m_value.AsView();
-            if (view.Size() == 0)
-            {
-                m_selAnchor = m_caret = 0;
-                return;
-            }
-            offset = core::Min(offset, view.Size());
-
-            // Decide the run kind from the codepoint to the right (or left, at the very end).
-            usize probe = offset;
-            if (probe >= view.Size())
-                probe = core::Utf8PrevBoundary(view, view.Size());
-            const bool wantSpace = core::IsWhiteSpace(view[probe]);
-
-            usize start = offset;
-            while (start > 0)
-            {
-                const usize prev = core::Utf8PrevBoundary(view, start);
-                if (core::IsWhiteSpace(view[prev]) != wantSpace)
-                    break;
-                start = prev;
-            }
-            usize end = offset;
-            while (end < view.Size())
-            {
-                if (core::IsWhiteSpace(view[end]) != wantSpace)
-                    break;
-                end = core::Utf8NextBoundary(view, end);
-            }
-            m_selAnchor = start;
-            m_caret = end;
-            Invalidate();
-        }
-
-        // Strip newlines so a pasted multi-line value stays on one line.
-        static core::String SanitizeSingleLine(core::StringView text)
-        {
-            core::String out;
-            for (usize i = 0; i < text.Size(); ++i)
-            {
-                const char8_t c = text[i];
-                if (c == u8'\n' || c == u8'\r')
-                    continue;
-                out.Append(core::StringView(&c, 1));
-            }
-            return out;
-        }
-
-        [[nodiscard]] static usize CountCodepoints(core::StringView view)
-        {
-            usize count = 0;
-            usize offset = 0;
-            while (offset < view.Size())
-            {
-                offset = core::Utf8NextBoundary(view, offset);
-                ++count;
-            }
-            return count;
-        }
-
-        // The prefix of `text` holding at most `maxCodepoints` codepoints.
-        [[nodiscard]] static core::StringView ClampCodepoints(core::StringView text,
-                                                              usize maxCodepoints)
-        {
-            usize offset = 0;
-            usize count = 0;
-            while (offset < text.Size() && count < maxCodepoints)
-            {
-                offset = core::Utf8NextBoundary(text, offset);
-                ++count;
-            }
-            return text.SubStr(0, offset);
-        }
-
-        // Width of the value's prefix [0, byteOffset) in the current font (0 if no font).
-        [[nodiscard]] f32 PrefixWidth(usize byteOffset) const
-        {
-            fonts::CachedFont* font = m_text.GetFont();
-            if (font == nullptr || font->font == nullptr || byteOffset == 0)
-                return 0.0f;
-            return font->font->MeasureString(m_value.AsView().SubStr(0, byteOffset));
-        }
-
-        // The caret byte offset whose prefix width is closest to local x (within content).
-        [[nodiscard]] usize CaretFromX(f32 localX) const
-        {
-            const Rect content = GetContentBounds();
-            const f32 target = localX - content.x;
-            if (target <= 0.0f)
-                return 0;
-
-            usize best = 0;
-            f32 bestDist = target; // distance at offset 0 is |target - 0|
-            usize offset = 0;
-            const core::StringView view = m_value.AsView();
-            while (offset < view.Size())
-            {
-                offset = core::Utf8NextBoundary(view, offset);
-                const f32 w = PrefixWidth(offset);
-                const f32 dist = (w >= target) ? (w - target) : (target - w);
-                if (dist < bestDist)
-                {
-                    bestDist = dist;
-                    best = offset;
-                }
-            }
-            return best;
-        }
-
-        core::String m_value;
-        usize m_caret = 0;     // byte offset, codepoint boundary
-        usize m_selAnchor = 0; // selection anchor; selection = [min,max) with caret
-        Text m_text;
+        TextEditModel m_model;
+        core::String m_committed; // the value last reported as changed
+        Text m_text;              // what it shows: its value, or its mask
         Observable m_textChanged; // what bindings reading the text follow
 
         core::String m_placeholder;
         Text m_hintText; // placeholder renderer (shares the field's font)
         Color m_placeholderColor{0.55f, 0.58f, 0.62f, 1.0f};
-        usize m_maxLength = 0; // codepoints, 0 = unlimited
 
         Color m_caretColor{0.90f, 0.92f, 0.95f, 1.0f};
         Color m_selectionColor{0.25f, 0.45f, 0.85f, 0.60f};
+        core::Function<void(core::StringView)> m_onChanging;
         core::Function<void(core::StringView)> m_onChanged;
+        core::Function<void(core::StringView)> m_onSubmit;
 
-        bool m_selecting = false; // drag-select in progress (pointer captured)
+        f32 m_scrollX = 0.0f;
+        bool m_selecting = false; // drag-select in progress (pointer is captured)
+        bool m_password = false;
 
-        // Blink state (advances via Update()).
+        // Blink state (advances via Update()), and the model's clock.
         bool m_caretVisible = true;
         f64 m_blinkAccum = 0.0;
+        f64 m_clock = 0.0;
 
         bool m_blinking = false; // a blink tick is running
-        bool m_readOnly = false;
         bool m_placeholderShown = false;
-        static constexpr f64 kBlinkPeriod = 0.5;      // seconds per on/off half-cycle
+        static constexpr f64 kBlinkPeriod = 0.5; // seconds per on/off half-cycle
         static constexpr f32 kCaretWidth = 1.5f;
+        static constexpr const char8_t* kMask = u8"•"; // a bullet for each character
+        static constexpr usize kMaskBytes = 3;
     };
 }

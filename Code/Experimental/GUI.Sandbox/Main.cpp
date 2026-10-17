@@ -759,25 +759,23 @@ void GUISandbox::OpenWindow()
         m_floating->SetTitle(u8"A floating window");
         m_floating->SetFont(m_font);
         m_root->AddChild(m_floating.Get());
-        auto tabs = MakeRef<gui::TabWidget>(AppRoot());
+        auto tabs = MakeRef<gui::TabView>(AppRoot());
         tabs->SetFont(m_font);
-        tabs->SetTabWidth(96.0f);
-        tabs->SetTabBarHeight(28.0f);
+        tabs->EditLayoutStyle([](gui::LayoutStyle& s) { s.Grow = 1.0f; });
         m_floating->GetContent()->AddChild(tabs.Get());
-        tabs->SetSize(m_floating->GetContent()->GetSize());
         const char8_t* names[3] = {u8"First", u8"Second", u8"Third"};
         const char8_t* bodies[3] = {u8"Tabs switch the page below them.", u8"Drag the title bar to move the window.",
                                     u8"Drag the bottom-right corner to resize it."};
         for (usize i = 0; i < 3; ++i)
         {
+            gui::TabPage* page = tabs->AddPage(StringView(names[i]));
             auto body = MakeRef<gui::Label>(AppRoot());
-            body->SetSize(Float2{300.0f, 120.0f});
             body->SetPadding(gui::Thickness{12.0f});
             body->SetFont(m_font);
             body->SetWhiteSpace(gui::TextWhiteSpace::Normal);
             body->SetText(StringView(bodies[i]));
             body->AddClass(u8"text");
-            tabs->AddTab(StringView(names[i]), body.Get());
+            page->AddChild(body.Get());
         }
         return;
     }

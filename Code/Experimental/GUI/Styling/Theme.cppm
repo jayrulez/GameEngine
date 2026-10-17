@@ -30,8 +30,13 @@ export namespace experimental::gui
             button    { background-color: #33507a; color: #f4f7fb; padding: 9; text-align: center; transition: opacity 0.15s; }
             button:hover  { opacity: 0.9; }
             button:active { opacity: 0.78; }
-            .tab          { background-color: #23262e; color: #c2c9d4; }
-            .tab.selected { background-color: #33507a; color: #f4f7fb; }
+            tab           { background-color: #23262e; color: #c2c9d4; padding: 6 10; column-gap: 6; text-align: left; }
+            tab:hover     { background-color: #2b2f39; }
+            tab:checked   { background-color: #33507a; color: #f4f7fb; }
+            tab > close   { padding: 2; border-radius: 3; }
+            tab > close:hover { background-color: rgba(255, 255, 255, 0.18); }
+            tablist       { color: #c2c9d4; padding: 6 8; }
+            tablist:hover { background-color: #2b2f39; }
             textfield, textarea { background-color: #20242b; color: #f0f4f8; padding: 6; cursor: text; }
             numberfield { background-color: #20242b; color: #f0f4f8; padding: 6 22 6 6; cursor: text; }
             listbox   { background-color: #14161a; }
@@ -62,7 +67,8 @@ export namespace experimental::gui
             .menubutton          { background-color: #22262f; color: #d2d8e0; padding: 6; }
             .menubutton:hover    { background-color: #2f3644; }
             .menubutton.selected { background-color: #33507a; color: #f4f7fb; }
-            tabwidget  { background-color: #1a1d24; }
+            tabbar     { background-color: #1a1d24; }
+            tabpages   { background-color: #1a1d24; }
             slider::track { background-color: #2b2f37; }
             slider::fill  { background-color: #4a90d9; }
             slider::thumb { background-color: #cfd6e0; }
@@ -85,8 +91,13 @@ export namespace experimental::gui
             button    { background-color: #cdd8ea; color: #17202b; padding: 9; text-align: center; transition: opacity 0.15s; }
             button:hover  { opacity: 0.9; }
             button:active { opacity: 0.78; }
-            .tab          { background-color: #cfd6e2; color: #3a4453; }
-            .tab.selected { background-color: #ffffff; color: #17202b; }
+            tab           { background-color: #cfd6e2; color: #3a4453; padding: 6 10; column-gap: 6; text-align: left; }
+            tab:hover     { background-color: #c2cad8; }
+            tab:checked   { background-color: #ffffff; color: #17202b; }
+            tab > close   { padding: 2; border-radius: 3; }
+            tab > close:hover { background-color: rgba(0, 0, 0, 0.12); }
+            tablist       { color: #3a4453; padding: 6 8; }
+            tablist:hover { background-color: #c2cad8; }
             textfield, textarea { background-color: #ffffff; color: #10161d; padding: 6; cursor: text; }
             numberfield { background-color: #ffffff; color: #10161d; padding: 6 22 6 6; cursor: text; }
             spinbutton::arrow { background-color: #5a6474; }
@@ -118,7 +129,8 @@ export namespace experimental::gui
             .menubutton          { background-color: #d0d6e0; color: #1c2530; padding: 6; }
             .menubutton:hover    { background-color: #bcc4d2; }
             .menubutton.selected { background-color: #9cc0ef; color: #17202b; }
-            tabwidget  { background-color: #e6eaf1; }
+            tabbar     { background-color: #d8dee8; }
+            tabpages   { background-color: #e6eaf1; }
             slider::track { background-color: #c2cad6; }
             slider::fill  { background-color: #2f6fb0; }
             slider::thumb { background-color: #3a4658; }

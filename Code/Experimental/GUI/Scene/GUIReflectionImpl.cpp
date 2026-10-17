@@ -77,6 +77,7 @@ namespace experimental::gui
                 {u8"toggle", EventType::Toggle},
                 {u8"contextmenu", EventType::ContextMenu},
                 {u8"scroll", EventType::Scroll},
+                {u8"tabclose", EventType::TabClose},
             };
             for (const Named& entry : kNames)
             {
@@ -152,6 +153,7 @@ namespace experimental::gui
                 out.text = core::String(toggle.Open ? core::StringView(u8"open") : PopupCloseReasonName(toggle.Reason));
                 break;
             }
+            case EventType::TabClose: out.index = static_cast<const TabEvent&>(event).Index; break;
             default: break;
             }
             return out;
@@ -519,6 +521,8 @@ namespace experimental::gui
                 &ComboBox::StaticType(),     &RichText::StaticType(),     &TextArea::StaticType(),
                 &ToggleSwitch::StaticType(),   &Separator::StaticType(),    &Spacer::StaticType(),
                 &NumberField::StaticType(),    &EditableLabel::StaticType(), &Expander::StaticType(),
+                &Tab::StaticType(),            &TabBar::StaticType(),        &TabPage::StaticType(),
+                &TabView::StaticType(),
             };
             for (const TypeInfo* type : kLabElements)
                 (void)ElementTypes::Register(*type);
@@ -565,6 +569,7 @@ namespace experimental::gui
             .Property<&GuiEvent::text>("text")
             .Property<&GuiEvent::deltaX>("deltaX")
             .Property<&GuiEvent::deltaY>("deltaY")
+            .Property<&GuiEvent::index>("index")
             // Constructible, so both languages take it by value and Luau binds it (a type a script
             // can make is one it can be handed).
             .Constructor<>();
@@ -662,6 +667,7 @@ namespace experimental::gui
             .PropAttribute("css", core::String(u8"repeat-delay"));
         builder.AccessorProperty<&ButtonBase::GetRepeatInterval, &ButtonBase::SetRepeatInterval>("repeatInterval")
             .PropAttribute("css", core::String(u8"repeat-interval"));
+        builder.AccessorProperty<&ButtonBase::GetIconSource, &ButtonBase::SetIconSource>("icon").PropAttribute("css", core::String(u8"icon"));
         builder.Method<&ElementOf<ButtonBase>, ButtonBase, Node>("of");
     }
 
@@ -790,6 +796,69 @@ namespace experimental::gui
         builder.AccessorProperty<&Expander::IsAnimated, &Expander::SetAnimated>("animate").PropAttribute("css", core::String(u8"animate"));
         builder.Method<&Expander::Toggle>("toggle");
         builder.Method<&ElementOf<Expander>, Expander, Node>("of");
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(TabCloseButton, "rtti::gui")
+    {
+    }
+
+    REFLECT_MEMBERS(TabListButton, "rtti::gui")
+    {
+    }
+
+    REFLECT_MEMBERS(TabStrip, "rtti::gui")
+    {
+    }
+
+    REFLECT_MEMBERS(Tab, "rtti::gui")
+    {
+        builder.AccessorProperty<&Tab::IsClosable, &Tab::SetClosable>("closable").PropAttribute("css", core::String(u8"closable"));
+        builder.Method<&ElementOf<Tab>, Tab, Node>("of");
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(TabBar, "rtti::gui")
+    {
+        builder.AccessorProperty<&TabBar::GetSelectedIndex, &TabBar::SetSelectedIndex>("selected")
+            .PropAttribute("css", core::String(u8"selected"))
+            .PropAttribute("twoWay", true); // the user selects: a binding may write it back
+        builder.AccessorProperty<&TabBar::GetCloseDisplayName, &TabBar::SetCloseDisplayName>("closeDisplay")
+            .PropAttribute("css", core::String(u8"close-display"));
+        builder.AccessorProperty<&TabBar::IsReorderable, &TabBar::SetReorderable>("reorderable")
+            .PropAttribute("css", core::String(u8"reorderable"));
+        builder.Method<&TabBar::GetTabCount>("tabCount");
+        builder.Method<&TabBar::RemoveTab>("removeTab");
+        builder.Method<&TabBar::MoveTab>("moveTab");
+        builder.Method<&ElementOf<TabBar>, TabBar, Node>("of");
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(TabPage, "rtti::gui")
+    {
+        builder.AccessorProperty<&TabPage::GetTitleString, &TabPage::SetTitleString>("title").PropAttribute("css", core::String(u8"title"));
+        builder.AccessorProperty<&TabPage::GetIconSource, &TabPage::SetIconSource>("icon").PropAttribute("css", core::String(u8"icon"));
+        builder.AccessorProperty<&TabPage::IsClosable, &TabPage::SetClosable>("closable").PropAttribute("css", core::String(u8"closable"));
+        builder.Method<&ElementOf<TabPage>, TabPage, Node>("of");
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(TabPageHost, "rtti::gui")
+    {
+    }
+
+    REFLECT_MEMBERS(TabView, "rtti::gui")
+    {
+        builder.AccessorProperty<&TabView::GetSelectedIndex, &TabView::SetSelectedIndex>("selected")
+            .PropAttribute("css", core::String(u8"selected"))
+            .PropAttribute("twoWay", true);
+        builder.AccessorProperty<&TabView::GetCloseDisplayName, &TabView::SetCloseDisplayName>("closeDisplay")
+            .PropAttribute("css", core::String(u8"close-display"));
+        builder.AccessorProperty<&TabView::IsReorderable, &TabView::SetReorderable>("reorderable")
+            .PropAttribute("css", core::String(u8"reorderable"));
+        builder.Method<&TabView::GetPageCount>("pageCount");
+        builder.Method<&TabView::RemovePage>("removePage");
+        builder.Method<&ElementOf<TabView>, TabView, Node>("of");
         builder.Creator();
     }
 

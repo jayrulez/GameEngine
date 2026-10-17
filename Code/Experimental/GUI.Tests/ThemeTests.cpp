@@ -163,11 +163,12 @@ TEST_CASE("theme: every widget with text takes the sheet's font")
     MockFontService fs;
     StyleManager mgr;
     mgr.SetStyleSheet(CSSParser::Parse(core::StringView(
-        u8"listbox, menubar, tabwidget, window, messagebox, tooltip { font-family: Roboto; font-size: 15; }")));
+        u8"listbox, menubar, tabview, window, messagebox, tooltip { font-family: Roboto; font-size: 15; }")));
     mgr.SetFontService(&fs);
     auto list = core::MakeRef<ListBox>(core::DefaultAllocator());
     auto bar = core::MakeRef<MenuBar>(core::DefaultAllocator());
-    auto tabs = core::MakeRef<TabWidget>(core::DefaultAllocator());
+    auto tabs = core::MakeRef<TabView>(core::DefaultAllocator());
+    (void)tabs->AddPage(core::StringView(u8"One"));
     auto window = core::MakeRef<Window>(core::DefaultAllocator());
     auto box = core::MakeRef<MessageBox>(core::DefaultAllocator());
     auto tip = core::MakeRef<Tooltip>(core::DefaultAllocator());
@@ -177,6 +178,7 @@ TEST_CASE("theme: every widget with text takes the sheet's font")
     CHECK(list->GetFont() == &fs.font);
     CHECK(bar->GetFont() == &fs.font);
     CHECK(tabs->GetFont() == &fs.font);
+    CHECK(tabs->GetBar()->GetTab(0)->GetFont() == &fs.font); // its tabs take it
     CHECK(window->GetFont() == &fs.font);
     CHECK(box->GetFont() == &fs.font);
     CHECK(tip->GetFont() == &fs.font);

@@ -62,7 +62,7 @@ add_executable(GUI.Tests
     TableViewTests.cpp
     SortingProxyModelTests.cpp
     TreeViewTests.cpp
-    TabWidgetTests.cpp
+    TabTests.cpp
     WindowTests.cpp
     MessageBoxTests.cpp
     NumberFieldTests.cpp

@@ -87,7 +87,8 @@ target_sources(GUI
             Widgets/ListView.cppm
             Widgets/TableView.cppm
             Widgets/TreeView.cppm
-            Widgets/TabWidget.cppm
+            Widgets/TabBar.cppm
+            Widgets/TabView.cppm
             Widgets/Window.cppm
             Widgets/MessageBox.cppm
             Widgets/ComboBox.cppm

@@ -71,6 +71,7 @@ target_sources(GUI
             Widgets/Slider.cppm
             Widgets/ProgressBar.cppm
             Widgets/Panel.cppm
+            Widgets/Separator.cppm
             Widgets/TextEditBase.cppm
             Widgets/TextField.cppm
             Widgets/TextArea.cppm

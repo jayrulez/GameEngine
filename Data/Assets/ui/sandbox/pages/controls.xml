@@ -14,7 +14,10 @@
         <Panel class="row" flex-direction="row" align-items="start" gap="12">
             <Button id="controls-repeat" class="btn" text="Hold to add" repeat="true" tooltip="Repeats while held"/>
             <Button class="btn" text="Toggle" toggle="true"/>
+            <Separator/>
             <Button id="controls-press" class="btn" text="On press" action-on="press"/>
+            <Spacer/>
+            <Label class="caption" width="90" height="36" vertical-align="middle" text="(a spacer)"/>
         </Panel>
         <Label class="caption" text="Clicks: {{clicks}}  (a label bound to the GUI's data; the script only counts)"/>
     </Panel>

@@ -12,6 +12,7 @@ add_executable(GUI.Tests
     NodeDrawTests.cpp
     ActionTests.cpp
     SceneRootTests.cpp
+    SeparatorTests.cpp
     EventDispatcherTests.cpp
     PopupTests.cpp
     PopupKeyboardTests.cpp

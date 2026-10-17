@@ -516,6 +516,7 @@ namespace experimental::gui
                 &TextField::StaticType(),    &Panel::StaticType(),        &ScrollView::StaticType(),
                 &Image::StaticType(),        &ListBox::StaticType(),      &Window::StaticType(),
                 &ComboBox::StaticType(),     &RichText::StaticType(),     &TextArea::StaticType(),
+                &ToggleSwitch::StaticType(),
             };
             for (const TypeInfo* type : kLabElements)
                 (void)ElementTypes::Register(*type);
@@ -643,6 +644,28 @@ namespace experimental::gui
         builder.Creator();
     }
 
+    REFLECT_MEMBERS(ButtonBase, "rtti::gui")
+    {
+        builder.AccessorProperty<&ButtonBase::GetText, &ButtonBase::SetText>("text");
+        builder.AccessorProperty<&ButtonBase::IsToggle, &ButtonBase::SetToggle>("toggle").PropAttribute("css", core::String(u8"toggle"));
+        builder.AccessorProperty<&ButtonBase::IsChecked, &ButtonBase::SetChecked>("checked")
+            .PropAttribute("css", core::String(u8"checked"))
+            .PropAttribute("twoWay", true); // the user changes it: a binding may write it back
+        builder.AccessorProperty<&ButtonBase::GetName, &ButtonBase::SetName>("name").PropAttribute("css", core::String(u8"name"));
+        builder.AccessorProperty<&ButtonBase::GetActionOnName, &ButtonBase::SetActionOnName>("actionOn")
+            .PropAttribute("css", core::String(u8"action-on"));
+        builder.AccessorProperty<&ButtonBase::IsRepeat, &ButtonBase::SetRepeat>("repeat").PropAttribute("css", core::String(u8"repeat"));
+        builder.AccessorProperty<&ButtonBase::GetRepeatDelay, &ButtonBase::SetRepeatDelay>("repeatDelay")
+            .PropAttribute("css", core::String(u8"repeat-delay"));
+        builder.AccessorProperty<&ButtonBase::GetRepeatInterval, &ButtonBase::SetRepeatInterval>("repeatInterval")
+            .PropAttribute("css", core::String(u8"repeat-interval"));
+        builder.Method<&ElementOf<ButtonBase>, ButtonBase, Node>("of");
+    }
+
+    REFLECT_MEMBERS(ButtonIndicator, "rtti::gui")
+    {
+    }
+
     REFLECT_MEMBERS(Button, "rtti::gui")
     {
         builder.Method<&ElementOf<Button>, Button, Node>("of");
@@ -651,9 +674,6 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(CheckBox, "rtti::gui")
     {
-        builder.AccessorProperty<&CheckBox::IsChecked, &CheckBox::SetChecked>("checked")
-            .PropAttribute("css", core::String(u8"checked"))
-            .PropAttribute("twoWay", true); // the user changes it: a binding may write it back
         builder.AccessorProperty<&CheckBox::IsIndeterminate, &CheckBox::SetIndeterminate>("indeterminate")
             .PropAttribute("css", core::String(u8"indeterminate"));
         builder.Method<&ElementOf<CheckBox>, CheckBox, Node>("of");
@@ -663,6 +683,12 @@ namespace experimental::gui
     REFLECT_MEMBERS(RadioButton, "rtti::gui")
     {
         builder.Method<&ElementOf<RadioButton>, RadioButton, Node>("of");
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(ToggleSwitch, "rtti::gui")
+    {
+        builder.Method<&ElementOf<ToggleSwitch>, ToggleSwitch, Node>("of");
         builder.Creator();
     }
 

@@ -206,7 +206,7 @@ export namespace experimental::gui
             f32 x = 0.0f;
             for (BarEntry& e : m_entries)
             {
-                const f32 w = e.button->MeasureText().x + m_hpad * 2.0f;
+                const f32 w = (e.button->GetTextPart() != nullptr ? e.button->GetTextPart()->MeasureText().x : 0.0f) + m_hpad * 2.0f;
                 e.button->SetPosition(core::Float2{x, 0.0f});
                 e.button->SetSize(core::Float2{w, m_barHeight});
                 x += w;

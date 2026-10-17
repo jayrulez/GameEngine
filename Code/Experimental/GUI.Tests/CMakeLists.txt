@@ -45,6 +45,7 @@ add_executable(GUI.Tests
     EasingTests.cpp
     StyleManagerTests.cpp
     LabelButtonTests.cpp
+    ButtonTests.cpp
     CheckBoxTests.cpp
     SliderTests.cpp
     ProgressBarTests.cpp

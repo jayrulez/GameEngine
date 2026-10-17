@@ -3,11 +3,11 @@
 
 // GUI - :check_box partition
 //
-// CheckBox: a toggleable box. A lean native control modeled on eepp's UICheckBox
-// (role only). Clicking toggles the checked state and fires OnCheckedChanged; OnDraw renders
-// a rounded box outline with a filled inner mark when checked. Hover/press reaction comes for
-// free from UINode's control state (so a CSS background can highlight it). Pair it with a
-// Label in a horizontal LinearLayout for the usual "[x] caption" look.
+// CheckBox: the button core (E6 of Specs/gui-lab-evolution.md) as a toggle with a box for its
+// indicator, its text beside it. It is tri-state: checked, unchecked, or indeterminate (a parent
+// of mixed children, CSS's :indeterminate), drawn as a dash until it is set or clicked; a click
+// on an indeterminate box checks it. Its parts: checkbox::box (the outline) and ::mark (the
+// check or the dash).
 
 module;
 #include "Core/Prelude.h"
@@ -15,13 +15,11 @@ module;
 
 export module experimental.gui:check_box;
 
-import foundation.core; // Color, Function, Move, Max
+import foundation.core; // Color, Max
 import foundation.vg;   // CornerRadii
-import :reactive; // Observable (what bindings follow)
 import :rect;
-import :event;
 import :draw_context;
-import :ui_widget;
+import :button_base;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -29,57 +27,21 @@ namespace vg = foundation::vg;
 
 export namespace experimental::gui
 {
-    class CheckBox : public UIWidget
+    class CheckBox : public ButtonBase
     {
-        RTTI_OBJECT(CheckBox, UIWidget)
+        RTTI_OBJECT(CheckBox, ButtonBase)
     public:
         CheckBox()
         {
             SetTag(core::StringView(u8"checkbox"));
-            SetTabFocusable(true);
+            SetToggle(true);
+            MakeIndicator();
         }
 
-        /// Whether it is checked (a read a binding records).
-        [[nodiscard]] bool IsChecked() const
-        {
-            m_checkedChanged.Track();
-            return m_checked;
-        }
-        void SetChecked(bool checked)
-        {
-            if (checked == m_checked)
-                return;
-            m_checked = checked;
-            m_indeterminate = false; // a choice settles the mixed state
-            MarkStyleStateDirty(StateChecked | StateIndeterminate);
-            Invalidate();
-            m_checkedChanged.Notify();
-            if (m_onChanged)
-                m_onChanged(m_checked);
-            SendEvent(Event(EventType::Changed, this));
-        }
-        void Toggle() { SetChecked(!m_checked); }
-
-        /// Neither checked nor unchecked (CSS's :indeterminate; a parent of mixed children): drawn
-        /// as a dash until the box is set or toggled.
-        void SetIndeterminate(bool indeterminate)
-        {
-            if (indeterminate == m_indeterminate)
-                return;
-            m_indeterminate = indeterminate;
-            MarkStyleStateDirty(StateIndeterminate);
-            Invalidate();
-        }
-        [[nodiscard]] bool IsIndeterminate() const noexcept { return m_indeterminate; }
-        [[nodiscard]] u32 GetWidgetStates() const override
-        {
-            return (m_checked ? WidgetStateChecked : WidgetStateNone) | (m_indeterminate ? WidgetStateIndeterminate : WidgetStateNone);
-        }
-
-        void SetOnCheckedChanged(core::Function<void(bool)> callback)
-        {
-            m_onChanged = core::Move(callback);
-        }
+        void Toggle() { SetChecked(!IsChecked()); }
+        /// Neither checked nor unchecked, until it is set or clicked.
+        void SetIndeterminate(bool indeterminate) { SetIndeterminateState(indeterminate); }
+        [[nodiscard]] bool IsIndeterminate() const noexcept { return IsIndeterminateState(); }
 
         void SetBoxColor(Color color)
         {
@@ -99,55 +61,27 @@ export namespace experimental::gui
             out.PushBack(core::StringView(u8"mark"));
         }
 
-        /// Its box's size when nothing sizes it (E2).
-        [[nodiscard]] core::Float2 MeasureContent(core::Float2) override { return core::Float2{20.0f, 20.0f}; }
-
     protected:
-        bool OnActivate() override { return ActivateAsClick(); } // Return, Space: a click
-        void OnMouseClick(const MouseEvent& event) override
+        void DrawIndicator(DrawContext& ctx, const Rect& box) const override
         {
-            event.Handled = true;
-            // Bound to a command, the command decides (its handler toggles its checked state, which
-            // comes back here); else the box toggles itself.
-            if (HasCommand())
-                (void)RunBoundCommand();
-            else
-                Toggle();
-        }
-        void OnBoundCommandState(bool available, bool checked) override
-        {
-            SetEnabled(available);
-            SetChecked(checked);
-        }
-
-        void OnDraw(DrawContext& ctx, const Rect& localBounds) override
-        {
-            (void)localBounds;
-            const Rect box = GetContentBounds();
-            // checkbox::box its outline, ::mark the check or the dash, each its own look with the
-            // sheet's over it.
             GetPartStyle(u8"box").Draw(ctx, box, OutlinedBox(m_boxColor, 2.0f, vg::CornerRadii(3.0f)));
-            if (m_indeterminate)
+            if (IsIndeterminateState())
             {
                 const f32 h = core::Max(2.0f, box.height * 0.18f);
                 const Rect dash{box.x + 4.0f, box.y + (box.height - h) * 0.5f, core::Max(0.0f, box.width - 8.0f), h};
                 GetPartStyle(u8"mark").Draw(ctx, dash, FilledBox(m_checkColor, vg::CornerRadii(1.0f)));
             }
-            else if (m_checked)
+            else if (IsChecked())
             {
                 const f32 inset = 4.0f;
-                const Rect inner{box.x + inset, box.y + inset,
-                                 core::Max(0.0f, box.width - inset * 2.0f),
+                const Rect inner{box.x + inset, box.y + inset, core::Max(0.0f, box.width - inset * 2.0f),
                                  core::Max(0.0f, box.height - inset * 2.0f)};
                 GetPartStyle(u8"mark").Draw(ctx, inner, FilledBox(m_checkColor, vg::CornerRadii(2.0f)));
             }
         }
 
-        bool m_checked = false;
-        bool m_indeterminate = false;
-        Observable m_checkedChanged; // what bindings reading the state follow
+    private:
         Color m_boxColor{0.60f, 0.65f, 0.72f, 1.0f};
         Color m_checkColor{0.31f, 0.63f, 0.85f, 1.0f};
-        core::Function<void(bool)> m_onChanged;
     };
 }

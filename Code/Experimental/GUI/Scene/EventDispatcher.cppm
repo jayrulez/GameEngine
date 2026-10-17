@@ -271,6 +271,9 @@ export namespace experimental::gui
         void SetKeystrokeRouter(core::Function<bool(const Keystroke&)> router) { m_keystrokes = core::Move(router); }
 
         /// Activates the focused widget (Return, Space, a gamepad's South): what a click does.
+        /// The press in progress already activated what it pressed (a button acting on the press,
+        /// a repeating one): its release makes no click.
+        void SuppressClick() noexcept { m_clickSuppressed = true; }
         bool Activate() { return m_focusNode != nullptr && m_focusNode->IsTreeEnabled() && m_focusNode->HandleActivate(); }
         bool InjectKeyUp(u32 keyCode, u32 modifiers = 0) { return RouteKey(EventType::KeyUp, keyCode, modifiers); }
         bool InjectText(core::StringView text)
@@ -773,6 +776,7 @@ export namespace experimental::gui
             m_pressHeld = 0.0f;
             m_pressAt = position;
             m_downNode = hit;
+            m_clickSuppressed = false;
             SetPressPath(hit);
             // Click-to-focus: the nearest widget that takes focus, at or above what was hit; none
             // (a click on a backdrop or a label) clears focus, as browsers do, so navigation
@@ -843,7 +847,7 @@ export namespace experimental::gui
             // container, not either), as the DOM does. Right and middle presses still deliver
             // down and up (a context menu) but never activate a control. A cancelled press has no
             // pressed node, so no click.
-            if (button == MouseButton::Left && m_downNode != nullptr && hit != nullptr)
+            if (button == MouseButton::Left && m_downNode != nullptr && hit != nullptr && !m_clickSuppressed)
                 if (Node* clicked = CommonAncestor(m_downNode, hit); clicked != nullptr && clicked->IsTreeEnabled())
                 {
                     MouseEvent event(EventType::MouseClick, clicked, position, button, modifiers);
@@ -1324,6 +1328,7 @@ export namespace experimental::gui
         bool m_touchActive = false; // the first finger is down (it drives the pointer)
         u64 m_touchFinger = 0;
         Node* m_downNode = nullptr;        // non-owning
+        bool m_clickSuppressed = false;    // the press activated already (SuppressClick)
         Node* m_focusNode = nullptr;       // non-owning
         bool m_dragActive = false;                   // drag-and-drop in progress
         Node* m_dragSource = nullptr;                // non-owning

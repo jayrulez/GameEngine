@@ -72,9 +72,11 @@ export import :ui_widget;
 
 // Controls (Phase 7)
 export import :label;
+export import :button_base;
 export import :button;
 export import :check_box;
 export import :radio;
+export import :toggle_switch;
 export import :range_value;
 export import :range_widget;
 export import :slider;

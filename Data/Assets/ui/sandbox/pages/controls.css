@@ -1,5 +1,5 @@
-.check { width: 22px; height: 22px; }
-.radios { width: 590px; height: 30px; }
+.choice { height: 26px; font-family: Roboto; font-size: 15px; color: var(--ink); }
+.btn:checked { background-color: var(--accent); color: var(--accent-ink); }
 .combo { width: 200px; height: 30px; font-family: Roboto; font-size: 15px; }
 .slider { width: 280px; height: 26px; }
 .progress { width: 340px; height: 12px; }

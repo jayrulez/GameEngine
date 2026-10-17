@@ -6,7 +6,7 @@
 // show) whose sidebar buttons run page.<id> commands; each page is pages/<id>.xml with an optional
 // pages/<id>.css and pages/<id>.as, so a new page is a button and its files. This host only sizes
 // the shell, fills the few hosts that need native models or widgets (the data views, the menu bar,
-// the context menu, the floating window, the message box, a radio group, an image, anchors), and
+// the context menu, the floating window, the message box, an image, anchors), and
 // switches the theme. The game menu (Data/Assets/ui/showcase) is a second root of the same GUI:
 // it shares the data, and its Leave brings the player back here.
 //
@@ -242,7 +242,6 @@ private:
     bool m_menuWantsUpdate = false;
 
     // What native hosts hold.
-    gui::RadioGroup m_radios;
     UniquePtr<image::OwnedImageData> m_checker;
     UniquePtr<gui::StringListModel> m_listModel;
     UniquePtr<gui::TableModel> m_tableModel;
@@ -475,32 +474,7 @@ void GUISandbox::LoadPages()
 
 void GUISandbox::FillNativeHosts()
 {
-    // Controls: a radio group and a generated image.
-    if (gui::Node* host = FindById(*m_shellNode, u8"controls-radios"))
-    {
-        auto row = MakeRef<gui::Panel>(AppRoot());
-        gui::LayoutStyle rowStyle = row->GetLayoutStyle();
-        rowStyle.Direction = gui::FlexDirection::Row;
-        rowStyle.ColumnGap = 10.0f;
-        rowStyle.AlignItems = gui::Align::Center;
-        row->SetLayoutStyle(rowStyle);
-        row->SetSize(Float2{590.0f, 26.0f});
-        const char8_t* choices[3] = {u8"Low", u8"Medium", u8"High"};
-        for (const char8_t* choice : choices)
-        {
-            auto radio = MakeRef<gui::RadioButton>(AppRoot());
-            radio->SetSize(Float2{20.0f, 20.0f});
-            m_radios.Add(radio.Get());
-            row->AddChild(radio.Get());
-            auto label = MakeRef<gui::Label>(AppRoot());
-            label->SetSize(Float2{90.0f, 22.0f});
-            label->SetFont(m_font);
-            label->SetText(StringView(choice));
-            label->AddClass(u8"text");
-            row->AddChild(label.Get());
-        }
-        host->AddChild(row.Get());
-    }
+    // Controls: a generated image.
     if (gui::Node* host = FindById(*m_shellNode, u8"controls-image"))
     {
         static u8 pixels[16 * 16 * 4];

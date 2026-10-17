@@ -529,3 +529,31 @@ TEST_CASE("textfield: a right press keeps the caret and the selection")
     fx.d()->InjectMouseMove(core::Float2{2.0f * 6.0f, 12.0f}); // and no drag-select began
     CHECK(fx.field->SelectedText() == core::StringView(u8"ell"));
 }
+
+TEST_CASE("textfield: what it shows is cut at its padding, not drawn past its box")
+{
+    // 16 bytes at 6px is 96 wide, in a content box of 52 (60 less 4 each side): the selection
+    // drawn behind the whole value is clipped to the content box, with room for a caret.
+    fonts::CachedFont cf(core::DefaultAllocator(), NewMock(), nullptr, nullptr);
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{200.0f, 100.0f});
+    auto f = Make<TextField>();
+    f->SetFont(&cf);
+    f->SetPadding(Thickness{4.0f, 0.0f});
+    f->SetSize(core::Float2{60.0f, 24.0f});
+    f->SetText(core::StringView(u8"abcdefghijklmnop"));
+    root->AddChild(f.Get());
+    root->UpdateLayout();
+    f->RequestFocus();
+    f->SelectAll();
+
+    vg::VGContext ctx;
+    DrawContext dc{ctx};
+    f->Draw(dc);
+    REQUIRE_FALSE(ctx.GetBatch().commands.IsEmpty());
+    for (const vg::VGCommand& cmd : ctx.GetBatch().commands)
+    {
+        CHECK(cmd.clipRect.x >= 4.0f - 0.01f);
+        CHECK(cmd.clipRect.x + cmd.clipRect.width <= 56.0f + 1.5f + 0.01f);
+    }
+}

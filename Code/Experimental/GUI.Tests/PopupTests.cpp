@@ -467,3 +467,29 @@ TEST_CASE("popups: a popup whose old parent held the only reference to it surviv
     CHECK(popup->GetParent() == owner.Get());
     CHECK(page->ChildCount() == 0);
 }
+
+TEST_CASE("popups: one sized by its content grows when its content does (a tooltip whose font arrives late)")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{400.0f, 300.0f});
+    auto popup = core::MakeRef<Panel>(core::DefaultAllocator());
+    auto content = core::MakeRef<Panel>(core::DefaultAllocator());
+    content->EditLayoutStyle([](LayoutStyle& s)
+    {
+        s.Width = LayoutLength::Px(20.0f);
+        s.Height = LayoutLength::Px(10.0f);
+    });
+    popup->AddChild(content.Get());
+    EventDispatcher& d = *root->GetEventDispatcher();
+    PopupOptions options;
+    options.Kind = PopupKind::Hint;
+    options.AnchorRect = Rect{50.0f, 50.0f, 0.0f, 0.0f};
+    options.HasAnchorRect = true;
+    options.FitContent = true;
+    d.OpenPopup(*root, *popup, core::Move(options));
+    (void)root->UpdateLayout();
+    CHECK(popup->GetSize().x == doctest::Approx(20.0f));
+    content->EditLayoutStyle([](LayoutStyle& s) { s.Width = LayoutLength::Px(150.0f); }); // what it shows grew
+    (void)root->UpdateLayout();
+    CHECK(popup->GetSize().x == doctest::Approx(150.0f));
+}

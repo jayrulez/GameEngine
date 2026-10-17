@@ -789,6 +789,13 @@ export namespace experimental::gui
                 placed.Size = core::Float2{snap(placed.Position.x + placed.Size.x) - snap(placed.Position.x),
                                            snap(placed.Position.y + placed.Size.y) - snap(placed.Position.y)};
                 placed.Position = core::Float2{snap(placed.Position.x), snap(placed.Position.y)};
+                if (e.Options.FitContent)
+                {
+                    // Sized by what it holds: arranged, its style left auto, so the next measure
+                    // follows its content (a tooltip whose font arrives after it opened).
+                    popup.Arrange(Rect{placed.Position.x, placed.Position.y, placed.Size.x, placed.Size.y});
+                    continue;
+                }
                 Node::StyleWriteScope writing(popup); // the layer's, not code's: no pins
                 if (placed.Position.x != popup.GetPosition().x || placed.Position.y != popup.GetPosition().y)
                     popup.SetPosition(placed.Position);
@@ -1560,7 +1567,16 @@ export namespace experimental::gui
             m_dropReason = core::String(reason);
             m_dropRefused = refused;
             if (m_dropHint)
-                m_dragLayer->Place(*m_dropHint, core::Float2{rootAt.x + 16.0f, rootAt.y + 22.0f}); // below and right of the pointer
+            {
+                // Below the preview (beside the pointer when it has none), never over it.
+                core::Float2 at{rootAt.x + 16.0f, rootAt.y + 22.0f};
+                if (m_dragPreview)
+                {
+                    const core::Float2 size = m_dragPreview->Measure(LayoutConstraints{});
+                    at = core::Float2{rootAt.x - m_grabOffset.x, rootAt.y - m_grabOffset.y + size.y + 4.0f};
+                }
+                m_dragLayer->Place(*m_dropHint, at);
+            }
         }
 
         void Drop()

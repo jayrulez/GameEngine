@@ -267,3 +267,33 @@ TEST_CASE("shell.null: dialog service cancels immediately (empty result, one cal
     dialogs->OpenPath(u8"/tmp"); // headless no-op: callable, no callback, must not crash
     CHECK(calls == 3);
 }
+
+TEST_CASE("shell.null: a window records where text is typed, as a headless window records its place")
+{
+    NullWindow window(1u, WindowSettings{});
+    window.SetTextInputArea(10, 20, 100, 16, 30);
+    CHECK(window.LastTextInputArea().x == 10);
+    CHECK(window.LastTextInputArea().y == 20);
+    CHECK(window.LastTextInputArea().width == 100);
+    CHECK(window.LastTextInputArea().height == 16);
+    CHECK(window.LastTextInputArea().caretX == 30);
+}
+
+TEST_CASE("shell: an input event's text keeps whole characters when it is cut to fit")
+{
+    InputEvent e{};
+    // 22 three-byte characters (66 bytes): 21 fit (63 bytes and the terminator), the last is left out whole.
+    char source[3 * 22 + 1] = {};
+    for (int i = 0; i < 22; ++i)
+    {
+        source[i * 3] = static_cast<char>(0xe6);
+        source[i * 3 + 1] = static_cast<char>(0x97);
+        source[i * 3 + 2] = static_cast<char>(0xa5);
+    }
+    CopyEventText(e.text, source);
+    CHECK(StringView(e.text).Size() == 63u);
+    CopyEventText(e.text, "short");
+    CHECK(StringView(e.text) == StringView(u8"short"));
+    CopyEventText(e.text, nullptr);
+    CHECK(StringView(e.text).Size() == 0u);
+}

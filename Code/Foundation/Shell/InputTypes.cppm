@@ -301,6 +301,7 @@ export namespace foundation::shell
         TouchDown,
         TouchMove,
         TouchUp,
+        TextEditing, // an IME's composition so far (empty: it ended); see WindowSettings::drawsTextComposition
     };
 
     struct InputEvent
@@ -319,6 +320,26 @@ export namespace foundation::shell
         core::f32 dx = 0.0f, dy = 0.0f; // relative movement (MouseMove)
         core::f32 value = 0.0f;         // GamepadAxis value / touch pressure
         core::u64 touchId = 0;          // Touch*
-        core::utf8char text[32] = {};   // TextInput (UTF-8, null-terminated)
+        core::utf8char text[64] = {};   // TextInput / TextEditing (UTF-8, null-terminated, whole characters)
+        core::i32 editCursor = 0;       // TextEditing: the caret within the composition, in characters
+        core::i32 editLength = 0;       // TextEditing: the characters selected from the caret (0: none)
     };
+
+    /// Copies `source` (null-terminated UTF-8) into an event's text, as much as fits in whole characters.
+    inline void CopyEventText(core::utf8char (&out)[64], const char* source) noexcept
+    {
+        core::usize n = 0;
+        if (source != nullptr)
+        {
+            while (n + 1 < sizeof(out) && source[n] != '\0')
+                ++n;
+            // Back off a character the buffer would cut in two.
+            if (source[n] != '\0')
+                while (n > 0 && (static_cast<core::u8>(source[n]) & 0xC0) == 0x80)
+                    --n;
+            for (core::usize i = 0; i < n; ++i)
+                out[i] = static_cast<core::utf8char>(source[i]);
+        }
+        out[n] = static_cast<core::utf8char>('\0');
+    }
 }

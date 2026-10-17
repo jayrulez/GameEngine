@@ -83,6 +83,7 @@ export namespace foundation::shell
 
         void StartTextInput() override;
         void StopTextInput() override;
+        void SetTextInputArea(core::i32 x, core::i32 y, core::i32 width, core::i32 height, core::i32 caretX) override;
         [[nodiscard]] bool IsTextInputActive() const noexcept override { return m_textInputActive; }
 
         void SetIcon(core::Span<const WindowIconImage> images) override;

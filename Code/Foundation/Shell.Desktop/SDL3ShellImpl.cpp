@@ -103,6 +103,10 @@ namespace foundation::shell
           m_dialogs(allocator, m_windows)
     {
         SDL_SetMainReady();
+        // An application that draws the IME's composition in its fields asks for its text (SDL
+        // reads the hint as it starts).
+        if (settings.drawsTextComposition)
+            SDL_SetHint(SDL_HINT_IME_IMPLEMENTED_UI, "composition");
         if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))
         {
             m_running = false;
@@ -245,6 +249,14 @@ namespace foundation::shell
             SDL_StopTextInput(m_window);
             m_textInputActive = false;
         }
+    }
+
+    void SDL3Window::SetTextInputArea(core::i32 x, core::i32 y, core::i32 width, core::i32 height, core::i32 caretX)
+    {
+        if (m_window == nullptr)
+            return;
+        const SDL_Rect area{x, y, width, height};
+        SDL_SetTextInputArea(m_window, &area, caretX);
     }
 
     void SDL3Window::Show()
@@ -1101,16 +1113,18 @@ namespace foundation::shell
                 InputEvent e{};
                 e.kind = InputEventKind::TextInput;
                 e.window = static_cast<core::u32>(event.text.windowID);
-                if (event.text.text != nullptr)
-                {
-                    core::usize n = 0;
-                    while (n + 1 < sizeof(e.text) && event.text.text[n] != '\0')
-                    {
-                        e.text[n] = static_cast<core::utf8char>(event.text.text[n]);
-                        ++n;
-                    }
-                    e.text[n] = static_cast<core::utf8char>('\0');
-                }
+                CopyEventText(e.text, event.text.text);
+                m_input.EmitEvent(e);
+                break;
+            }
+            case SDL_EVENT_TEXT_EDITING: // an IME's composition, when the app draws it (drawsTextComposition)
+            {
+                InputEvent e{};
+                e.kind = InputEventKind::TextEditing;
+                e.window = static_cast<core::u32>(event.edit.windowID);
+                CopyEventText(e.text, event.edit.text);
+                e.editCursor = event.edit.start;
+                e.editLength = event.edit.length;
                 m_input.EmitEvent(e);
                 break;
             }

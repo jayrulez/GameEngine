@@ -59,8 +59,18 @@ export namespace foundation::shell
         void StartTextInput() override { m_textInputActive = true; }
         void StopTextInput() override { m_textInputActive = false; }
         [[nodiscard]] bool IsTextInputActive() const noexcept override { return m_textInputActive; }
+        void SetTextInputArea(core::i32 x, core::i32 y, core::i32 width, core::i32 height, core::i32 caretX) override
+        {
+            m_textInputArea = TextInputArea{x, y, width, height, caretX};
+        } // headless: just record
 
         // --- test/headless controls (no OS to drive these) ---
+        struct TextInputArea
+        {
+            core::i32 x = 0, y = 0, width = 0, height = 0, caretX = 0;
+        };
+        /// What SetTextInputArea was last told.
+        [[nodiscard]] const TextInputArea& LastTextInputArea() const noexcept { return m_textInputArea; }
         void Resize(core::u32 w, core::u32 h) noexcept
         {
             m_width = w;
@@ -77,6 +87,7 @@ export namespace foundation::shell
         bool m_open = true;
         bool m_minimized = false;
         bool m_textInputActive = false;
+        TextInputArea m_textInputArea{};
     };
 
     class NullWindowManager final : public IWindowManager

@@ -92,6 +92,9 @@ export namespace samples::framework
         }
         virtual rhi::PresentMode PresentMode() const { return rhi::PresentMode::Fifo; }
         virtual u32 BufferCount() const { return 2; }
+        /// Whether the sample draws an IME's composition in its own text fields (the shell then
+        /// sends it the composition, WindowSettings::drawsTextComposition).
+        virtual bool DrawsTextComposition() const { return false; }
 
         virtual Status OnInit() = 0;
         virtual void OnRender() = 0;
@@ -210,6 +213,7 @@ export namespace samples::framework
         ws.title = Title();
         ws.width = m_width;
         ws.height = m_height;
+        ws.drawsTextComposition = DrawsTextComposition();
 
         m_shellOwner = shell::CreateShell(foundation::core::DefaultAllocator(), ws);
         m_shell = m_shellOwner.Get();

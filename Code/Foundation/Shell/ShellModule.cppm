@@ -90,6 +90,10 @@ export namespace foundation::shell
         // A window drawn on the CPU (IWindow::PresentPixels) rather than by the GPU: a splash shown
         // before there is a graphics device. Not for a window a swapchain will present to.
         bool softwareSurface = false;
+        // The application draws an IME's composition text itself (TextEditing events), in place
+        // in its text field, rather than the platform's own box. Read when the shell starts, from
+        // the first window's settings; a backend without IMEs ignores it.
+        bool drawsTextComposition = false;
     };
 
     // One image of a window's icon: tightly packed 8-bit RGBA rows, `width` x `height`.
@@ -139,6 +143,16 @@ export namespace foundation::shell
         virtual void StartTextInput() = 0;
         virtual void StopTextInput() = 0;
         [[nodiscard]] virtual bool IsTextInputActive() const noexcept = 0;
+        // Where the text being typed is, in window coordinates, and the caret's x within it: an IME
+        // places its candidate list beside it. A backend without IMEs ignores it (the default).
+        virtual void SetTextInputArea(core::i32 x, core::i32 y, core::i32 width, core::i32 height, core::i32 caretX)
+        {
+            (void)x;
+            (void)y;
+            (void)width;
+            (void)height;
+            (void)caretX;
+        }
 
         // The window's icon (its title bar, the taskbar, the window switcher): the first image at
         // the normal scale, any others as the same icon for larger display scales. The images are

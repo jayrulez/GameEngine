@@ -690,3 +690,39 @@ TEST_CASE("layout: a row's item that does not stretch is as tall as its content,
     bed.Layout();
     CHECK(column->GetSize().y == doctest::Approx(50.0f));
 }
+
+namespace
+{
+    // A leaf that counts how often layout asks what it holds.
+    class CountingLeaf : public Node
+    {
+    public:
+        core::Float2 MeasureContent(core::Float2) override
+        {
+            ++Measures;
+            return core::Float2{50.0f, 20.0f};
+        }
+        int Measures = 0;
+    };
+}
+
+TEST_CASE("layout: deep nesting measures each node a bounded number of times, not twice per level")
+{
+    // Each flex level measures its item for the base size and again at the size resolved; with a
+    // one-entry measure cache that doubled per level (30 levels: about a billion measures).
+    Bed bed;
+    Node* at = bed.root.Get();
+    for (int i = 0; i < 30; ++i)
+    {
+        auto level = core::MakeRef<Panel>(core::DefaultAllocator());
+        level->SetPadding(Thickness{1.0f});
+        at->AddChild(level.Get());
+        at = level.Get();
+    }
+    auto leaf = core::MakeRef<CountingLeaf>(core::DefaultAllocator());
+    at->AddChild(leaf.Get());
+    bed.Layout();
+    CHECK(leaf->Measures <= 8);
+    CHECK(leaf->GetSize().x == doctest::Approx(400.0f - 2.0f * 30.0f)); // stretched across each level
+    CHECK(leaf->GetSize().y == doctest::Approx(20.0f));
+}

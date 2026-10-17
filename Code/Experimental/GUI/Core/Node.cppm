@@ -1918,9 +1918,18 @@ export namespace experimental::gui
         core::Float2 m_scrollOffset{0.0f, 0.0f}; // a scroll container's (its children move by minus it)
         f32 m_pixelScale = 1.0f; // device pixels per unit at its last arrange (its edges round to them)
         core::Float2 m_contentExtent{0.0f, 0.0f}; // the children's extent as last laid out
-        LayoutConstraints m_measureKey{};        // what the cached measure was for
-        core::Float2 m_measured{0.0f, 0.0f};
-        bool m_measureValid = false;
+        // The last few measures, by the constraints each was for. One slot is not enough: a flex
+        // item is measured for its base size and again at its resolved size, and with one slot
+        // each level of nesting would measure what it holds twice (2^depth).
+        struct MeasureEntry
+        {
+            LayoutConstraints Key{};
+            core::Float2 Size{0.0f, 0.0f};
+        };
+        static constexpr u8 kMeasureSlots = 4;
+        MeasureEntry m_measures[kMeasureSlots]{};
+        u8 m_measureCount = 0; // slots in use (0: nothing cached)
+        u8 m_measureNext = 0;  // the slot the next measure replaces once all are in use
         bool m_placing = false;                  // inside Arrange: the size and place set are the layout's
         f32 m_scrollStep = 40.0f;                // the wheel's notch and an arrow key's step
         core::Float2 m_scrollTarget{0.0f, 0.0f}; // where a smooth scroll is going

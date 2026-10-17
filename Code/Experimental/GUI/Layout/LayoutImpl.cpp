@@ -794,8 +794,9 @@ namespace experimental::gui
 
     core::Float2 Node::Measure(const LayoutConstraints& constraints)
     {
-        if (m_measureValid && constraints == m_measureKey)
-            return m_measured;
+        for (u8 i = 0; i < m_measureCount; ++i)
+            if (m_measures[i].Key == constraints)
+                return m_measures[i].Size;
         const LayoutStyle& s = m_layoutStyle;
         core::Float2 size{0.0f, 0.0f};
         if (s.Kind != Display::None)
@@ -848,9 +849,15 @@ namespace experimental::gui
             size.x = fit(size.x, w.HasValue(), constraints.Min.x, constraints.Max.x);
             size.y = fit(size.y, h.HasValue(), constraints.Min.y, constraints.Max.y);
         }
-        m_measured = size;
-        m_measureKey = constraints;
-        m_measureValid = true;
+        u8 slot = m_measureCount;
+        if (slot < kMeasureSlots)
+            ++m_measureCount;
+        else
+        {
+            slot = m_measureNext;
+            m_measureNext = static_cast<u8>((m_measureNext + 1) % kMeasureSlots);
+        }
+        m_measures[slot] = MeasureEntry{constraints, size};
         return size;
     }
 
@@ -987,7 +994,7 @@ namespace experimental::gui
 
     void Node::RequestLayout()
     {
-        m_measureValid = false;
+        m_measureCount = 0;
         m_layoutDirty = true;
         // Up through the containers whose size follows what is inside them: each measures and lays
         // out again. One of definite size stops it (its size does not change); one out of flow
@@ -1000,7 +1007,7 @@ namespace experimental::gui
             n->m_layoutDirty = true;
             if (outOfFlow)
                 break;
-            n->m_measureValid = false;
+            n->m_measureCount = 0;
         }
         for (Node* p = n->m_parent; p != nullptr && !p->m_childLayoutDirty; p = p->m_parent)
             p->m_childLayoutDirty = true;
@@ -1011,7 +1018,7 @@ namespace experimental::gui
     {
         const auto mark = [](auto& self, Node& node) -> void
         {
-            node.m_measureValid = false;
+            node.m_measureCount = 0;
             node.m_layoutDirty = true;
             for (const core::RefPtr<Node>& child : node.m_children)
                 self(self, *child);

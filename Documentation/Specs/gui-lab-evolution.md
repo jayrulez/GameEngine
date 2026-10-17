@@ -992,8 +992,8 @@ As built after the numbers (2026-10-17):
   a negative size: culling dropped turning boxes, and a rect clip inside a flip clipped all.
 - **Removed.** `KeyframeAction` (opacity and a background colour, linear, writing past the
   cascade, unused): CSS keyframes cover it.
-- **Left.** Building rows grows faster than their count (each new child marks its siblings for a
-  restyle); the stress page keeps drawing while its turning boxes are out of view (a transform
+- **Left.** (Building rows grew faster than their count, each new child marking its siblings for
+  a restyle: now the style pass restyles them once, when a rule reads siblings.) the stress page keeps drawing while its turning boxes are out of view (a transform
   animation could bring a node into view; a rotation about the centre could be bounded).
 - **E8c as built.** `DebugOverlay` (its own partition) replaces the layout overlay's flags: the
   layout half as before (F9), and an input half the root draws in its own space (F8,
@@ -1016,9 +1016,10 @@ As built after the numbers (2026-10-17):
   properties edited live, commands, listeners, bindings), a selector field, picking with the wheel
   walking out and in, the box model drawn over the inspected root, and a frames graph.
   GUISandbox hosts it as a pane (Ctrl+Shift+I, `--inspector`, `--inspect <selector>`) with an input
-  surface of its own. Its toggles found a layout fault: a single-line flex container measured
-  under a limit took the limit as its height; fixed. Not yet: resizing the pane, collapsing the
-  tree, editing a style value in place, an MCP tool over the queries.
+  surface of its own, its boundary dragged to resize it. Its toggles found a layout fault: a
+  single-line flex container measured under a limit took the limit as its height; fixed. The MCP
+  tools over its queries are a phase of the 0.2 backlog (user, 2026-10-17), once the lab has a
+  place in the foundation or the engine.
 - **E8f as built.** `GUI.Testing` (`experimental.gui.testing`): Finder (selector, text, text
   containing; Within; IncludingHidden; Parse for "text=" and "text~="), Tester (a frame of update,
   style and layout after each action on a fixed clock; click, right and double click, hover, drag,

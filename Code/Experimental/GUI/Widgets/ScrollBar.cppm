@@ -92,11 +92,6 @@ export namespace experimental::gui
         {
             out.PushBack(core::StringView(u8"thumb"));
         }
-        void SetThemePartColor(core::StringView part, Color color) override
-        {
-            if (part == core::StringView(u8"thumb"))
-                SetThumbColor(color);
-        }
 
         /// A bar's thickness and length when nothing sizes it (E2).
         [[nodiscard]] core::Float2 MeasureContent(core::Float2) override
@@ -167,7 +162,7 @@ export namespace experimental::gui
             const Rect thumb = (m_orientation == Orientation::Vertical)
                                    ? Rect{b.x, b.y + pos, b.width, thumbLen}
                                    : Rect{b.x + pos, b.y, thumbLen, b.height};
-            ctx.VG().FillRoundedRect(thumb.ToRectangle(), Radii(thumb), m_thumbColor);
+            GetPartStyle(u8"thumb").Draw(ctx, thumb, FilledBox(m_thumbColor, Radii(thumb)));
         }
 
     private:

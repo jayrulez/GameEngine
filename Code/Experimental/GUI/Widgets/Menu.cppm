@@ -90,11 +90,6 @@ export namespace experimental::gui
         {
             out.PushBack(core::StringView(u8"line"));
         }
-        void SetThemePartColor(core::StringView part, Color color) override
-        {
-            if (part == core::StringView(u8"line"))
-                m_line = color;
-        }
 
     protected:
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
@@ -102,8 +97,7 @@ export namespace experimental::gui
             (void)localBounds;
             const Rect b = GetLocalBounds();
             const f32 y = b.y + b.height * 0.5f;
-            ctx.VG().FillRect(
-                core::Rectangle{b.x + 8.0f, y, core::Max(0.0f, b.width - 16.0f), 1.0f}, m_line);
+            GetPartStyle(u8"line").Draw(ctx, Rect{b.x + 8.0f, y, core::Max(0.0f, b.width - 16.0f), 1.0f}, FilledBox(m_line));
         }
 
     private:
@@ -207,11 +201,6 @@ export namespace experimental::gui
         {
             out.PushBack(core::StringView(u8"highlight"));
         }
-        void SetThemePartColor(core::StringView part, Color color) override
-        {
-            if (part == core::StringView(u8"highlight"))
-                m_highlight = color;
-        }
 
     protected:
         // Its label and shortcut draw in its text style.
@@ -247,7 +236,7 @@ export namespace experimental::gui
             (void)localBounds;
             const Rect b = GetLocalBounds();
             if (IsHovered())
-                ctx.VG().FillRect(b.ToRectangle(), m_highlight);
+                GetPartStyle(u8"highlight").Draw(ctx, b, FilledBox(m_highlight));
 
             // Left gutter: a check mark (if checked) else an icon (if set).
             if (m_checkable && m_checked)

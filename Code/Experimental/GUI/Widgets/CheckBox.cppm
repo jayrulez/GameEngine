@@ -98,13 +98,6 @@ export namespace experimental::gui
             out.PushBack(core::StringView(u8"box"));
             out.PushBack(core::StringView(u8"mark"));
         }
-        void SetThemePartColor(core::StringView part, Color color) override
-        {
-            if (part == core::StringView(u8"box"))
-                SetBoxColor(color);
-            else if (part == core::StringView(u8"mark"))
-                SetCheckColor(color);
-        }
 
         /// Its box's size when nothing sizes it (E2).
         [[nodiscard]] core::Float2 MeasureContent(core::Float2) override { return core::Float2{20.0f, 20.0f}; }
@@ -131,12 +124,14 @@ export namespace experimental::gui
         {
             (void)localBounds;
             const Rect box = GetContentBounds();
-            ctx.VG().StrokeRoundedRect(box.ToRectangle(), vg::CornerRadii(3.0f), m_boxColor, 2.0f);
+            // checkbox::box its outline, ::mark the check or the dash, each its own look with the
+            // sheet's over it.
+            GetPartStyle(u8"box").Draw(ctx, box, OutlinedBox(m_boxColor, 2.0f, vg::CornerRadii(3.0f)));
             if (m_indeterminate)
             {
                 const f32 h = core::Max(2.0f, box.height * 0.18f);
                 const Rect dash{box.x + 4.0f, box.y + (box.height - h) * 0.5f, core::Max(0.0f, box.width - 8.0f), h};
-                ctx.VG().FillRoundedRect(dash.ToRectangle(), vg::CornerRadii(1.0f), m_checkColor);
+                GetPartStyle(u8"mark").Draw(ctx, dash, FilledBox(m_checkColor, vg::CornerRadii(1.0f)));
             }
             else if (m_checked)
             {
@@ -144,7 +139,7 @@ export namespace experimental::gui
                 const Rect inner{box.x + inset, box.y + inset,
                                  core::Max(0.0f, box.width - inset * 2.0f),
                                  core::Max(0.0f, box.height - inset * 2.0f)};
-                ctx.VG().FillRoundedRect(inner.ToRectangle(), vg::CornerRadii(2.0f), m_checkColor);
+                GetPartStyle(u8"mark").Draw(ctx, inner, FilledBox(m_checkColor, vg::CornerRadii(2.0f)));
             }
         }
 

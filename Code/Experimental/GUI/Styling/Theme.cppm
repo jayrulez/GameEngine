@@ -65,10 +65,10 @@ export namespace experimental::gui
             slider::track { background-color: #2b2f37; }
             slider::fill  { background-color: #4a90d9; }
             slider::thumb { background-color: #cfd6e0; }
-            slider::focus { background-color: #4f9cff; }
-            checkbox::box  { background-color: #8a93a2; }
+            slider::focus { border-color: #4f9cff; }
+            checkbox::box  { border-color: #8a93a2; }
             checkbox::mark { background-color: #4a90d9; }
-            radio::ring { background-color: #8a93a2; }
+            radio::ring { border-color: #8a93a2; }
             radio::dot  { background-color: #4a90d9; }
             progressbar::track { background-color: #2b2f37; }
             progressbar::fill  { background-color: #4a90d9; }
@@ -119,10 +119,10 @@ export namespace experimental::gui
             slider::track { background-color: #c2cad6; }
             slider::fill  { background-color: #2f6fb0; }
             slider::thumb { background-color: #3a4658; }
-            slider::focus { background-color: #2f7de1; }
-            checkbox::box  { background-color: #5a6474; }
+            slider::focus { border-color: #2f7de1; }
+            checkbox::box  { border-color: #5a6474; }
             checkbox::mark { background-color: #2f6fb0; }
-            radio::ring { background-color: #5a6474; }
+            radio::ring { border-color: #5a6474; }
             radio::dot  { background-color: #2f6fb0; }
             progressbar::track { background-color: #c2cad6; }
             progressbar::fill  { background-color: #2f6fb0; }

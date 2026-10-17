@@ -86,8 +86,6 @@ export namespace experimental::gui
             SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_bodyColor));
 
             m_titleBar = core::MakeRef<DragHandle>(MemoryAllocator());
-            m_titleBar->SetBackground(
-                core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_titleColor));
             Window* self = this;
             m_titleBar->OnDrag = [self](core::Float2 d)
             {
@@ -109,12 +107,11 @@ export namespace experimental::gui
             AddChild(m_contentHost.Get());
 
             m_resizeGrip = core::MakeRef<DragHandle>(MemoryAllocator());
-            m_resizeGrip->SetBackground(
-                core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_gripColor));
             m_resizeGrip->OnDrag = [self](core::Float2 d) { self->ResizeBy(d); };
             m_resizeGrip->OnPressed = [self]() { self->ToFront(); };
             m_resizeGrip->SetCursor(Cursor::NwseResize);
             AddChild(m_resizeGrip.Get());
+            RefreshPartNodes();
         }
 
         // The area for window content (add your widgets here).
@@ -138,8 +135,7 @@ export namespace experimental::gui
         void SetTitleColor(Color color)
         {
             m_titleColor = color;
-            m_titleBar->SetBackground(
-                core::MakeRef<RectangleDrawable>(MemoryAllocator(), color));
+            RefreshPartNodes();
         }
 
         // Fired when the window is closed via Close().
@@ -184,14 +180,12 @@ export namespace experimental::gui
             out.PushBack(core::StringView(u8"title"));
             out.PushBack(core::StringView(u8"grip"));
         }
-        void SetThemePartColor(core::StringView part, Color color) override
+        // Its title bar and grip are nodes of their own: window::title and ::grip give them
+        // their boxes, over their own colours.
+        void OnPartStyleChange(core::StringView part) override
         {
-            if (part == core::StringView(u8"title"))
-                m_titleBar->SetBackground(
-                    core::MakeRef<RectangleDrawable>(MemoryAllocator(), color));
-            else if (part == core::StringView(u8"grip"))
-                m_resizeGrip->SetBackground(
-                    core::MakeRef<RectangleDrawable>(MemoryAllocator(), color));
+            if (part == core::StringView(u8"title") || part == core::StringView(u8"grip"))
+                RefreshPartNodes();
         }
 
     protected:
@@ -200,6 +194,18 @@ export namespace experimental::gui
         void OnTextStyleChange() override { ShareTextStyle(*m_title, false); }
 
     private:
+        // The title bar's and the grip's boxes: their colours with window::title's and ::grip's over them.
+        void RefreshPartNodes()
+        {
+            const PartStyle& title = GetPartStyle(u8"title");
+            const PartStyle& grip = GetPartStyle(u8"grip");
+            m_titleBar->SetBox(title.Over(FilledBox(m_titleColor)), false);
+            m_resizeGrip->SetBox(grip.Over(FilledBox(m_gripColor)), false);
+            StyleWriteScope titleWrite(*m_titleBar);
+            m_titleBar->SetAlpha(title.Opacity);
+            StyleWriteScope gripWrite(*m_resizeGrip);
+            m_resizeGrip->SetAlpha(grip.Opacity);
+        }
         void OpenInternal(Node& root, bool modal)
         {
             if (m_open)

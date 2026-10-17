@@ -70,6 +70,12 @@ export namespace experimental::gui
             m_selectionColor = color;
             Invalidate();
         }
+        /// The view's ::selection style, which a selected row draws.
+        void SetSelectionStyle(const PartStyle& style)
+        {
+            m_selectionStyle = style;
+            Invalidate();
+        }
         void SetOnPicked(core::Function<void(i32, u32)> callback)
         {
             m_onPicked = core::Move(callback);
@@ -85,13 +91,14 @@ export namespace experimental::gui
         void OnDraw(DrawContext& ctx, const Rect&) override
         {
             if (m_selected)
-                ctx.VG().FillRect(GetLocalBounds().ToRectangle(), m_selectionColor);
+                m_selectionStyle.Draw(ctx, GetLocalBounds(), FilledBox(m_selectionColor));
         }
 
     private:
         i32 m_item = -1;
         bool m_selected = false;
         Color m_selectionColor{0.18f, 0.37f, 0.62f, 1.0f};
+        PartStyle m_selectionStyle;
         core::Function<void(i32, u32)> m_onPicked;
     };
 
@@ -161,14 +168,16 @@ export namespace experimental::gui
             for (const RefPtr<ItemRow>& r : m_pool)
                 r->SetSelectionColor(color);
         }
-        void SetThemePartColor(core::StringView part, Color color) override
-        {
-            if (part == core::StringView(u8"selection"))
-                SetSelectionColor(color);
-        }
         void CollectStyleParts(core::Array<core::StringView>& out) const override
         {
             out.PushBack(core::StringView(u8"selection"));
+        }
+        // Its rows draw the selection in ::selection's style.
+        void OnPartStyleChange(core::StringView part) override
+        {
+            if (part == core::StringView(u8"selection"))
+                for (const RefPtr<ItemRow>& r : m_pool)
+                    r->SetSelectionStyle(GetPartStyle(part));
         }
 
         // === Selection ===
@@ -431,6 +440,7 @@ export namespace experimental::gui
             {
                 RefPtr<ItemRow> row = CreateItemRow();
                 row->SetSelectionColor(m_selectionColor);
+                row->SetSelectionStyle(GetPartStyle(u8"selection"));
                 AbstractItemView* self = this;
                 row->SetOnPicked([self](i32 item, u32 modifiers)
                                  { self->OnRowClicked(item, modifiers); });

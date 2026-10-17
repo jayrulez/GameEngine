@@ -162,13 +162,6 @@ export namespace experimental::gui
             out.PushBack(core::StringView(u8"caret"));
             out.PushBack(core::StringView(u8"selection"));
         }
-        void SetThemePartColor(core::StringView part, Color color) override
-        {
-            if (part == core::StringView(u8"caret"))
-                SetCaretColor(color);
-            else if (part == core::StringView(u8"selection"))
-                SetSelectionColor(color);
-        }
         void SetCaretColor(Color color)
         {
             m_caretColor = color;
@@ -434,7 +427,7 @@ export namespace experimental::gui
                     const f32 x1 = content.x + PrefixWidth(SelectionEnd());
                     const f32 h = m_text.GetLineHeight();
                     const f32 top = content.y + content.height * 0.5f - h * 0.5f;
-                    ctx.VG().FillRect(core::Rectangle{x0, top, x1 - x0, h}, m_selectionColor);
+                    GetPartStyle(u8"selection").Draw(ctx, Rect{x0, top, x1 - x0, h}, FilledBox(m_selectionColor));
                 }
                 m_text.Draw(ctx, content);
             }
@@ -445,7 +438,7 @@ export namespace experimental::gui
                 const f32 h = m_text.GetLineHeight();
                 const f32 cy = content.y + content.height * 0.5f;
                 const f32 top = cy - h * 0.5f;
-                ctx.VG().FillRect(core::Rectangle{caretX, top, kCaretWidth, h}, m_caretColor);
+                GetPartStyle(u8"caret").Draw(ctx, Rect{caretX, top, kCaretWidth, h}, FilledBox(m_caretColor));
             }
             ctx.PopClip();
         }

@@ -64,13 +64,6 @@ export namespace experimental::gui
             out.PushBack(core::StringView(u8"track"));
             out.PushBack(core::StringView(u8"fill"));
         }
-        void SetThemePartColor(core::StringView part, Color color) override
-        {
-            if (part == core::StringView(u8"track"))
-                SetTrackColor(color);
-            else if (part == core::StringView(u8"fill"))
-                SetFillColor(color);
-        }
 
         /// A bar's length and thickness when nothing sizes it (E2).
         [[nodiscard]] core::Float2 MeasureContent(core::Float2) override { return core::Float2{160.0f, 10.0f}; }
@@ -81,12 +74,9 @@ export namespace experimental::gui
             (void)localBounds;
             const Rect b = GetContentBounds();
             const f32 radius = b.height * 0.5f;
-            ctx.VG().FillRoundedRect(b.ToRectangle(), vg::CornerRadii(radius), m_trackColor);
+            GetPartStyle(u8"track").Draw(ctx, b, FilledBox(m_trackColor, vg::CornerRadii(radius)));
             if (m_progress > 0.0f)
-            {
-                const Rect fill{b.x, b.y, b.width * m_progress, b.height};
-                ctx.VG().FillRoundedRect(fill.ToRectangle(), vg::CornerRadii(radius), m_fillColor);
-            }
+                GetPartStyle(u8"fill").Draw(ctx, Rect{b.x, b.y, b.width * m_progress, b.height}, FilledBox(m_fillColor, vg::CornerRadii(radius)));
         }
 
         f32 m_progress = 0.0f;

@@ -23,6 +23,7 @@ import :event;
 import :drawable;
 import :text; // TextHAlign / TextVAlign (theme text-align hooks)
 import :node;
+import :node_box; // PartStyle
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -175,10 +176,32 @@ export namespace experimental::gui
 
         // Pseudo-element parts: a widget names the parts it paints (slider "track"/"fill"/
         // "thumb", checkbox "box"/"mark", window "title"/"grip", ...) so CSS `tag::part` can
-        // style them. CollectStyleParts lists them; SetThemePartColor receives a part's
-        // background-color. Defaults: no parts / no-op.
+        // style them with the box properties and opacity (E3). CollectStyleParts lists them; the
+        // sheet sets each one's PartStyle; the widget draws a part through GetPartStyle(part).
         virtual void CollectStyleParts(core::Array<core::StringView>&) const {}
-        virtual void SetThemePartColor(core::StringView, Color) {}
+        void SetPartStyle(core::StringView part, const PartStyle& style)
+        {
+            for (NamedPartStyle& p : m_partStyles)
+                if (p.Name.AsView() == part)
+                {
+                    p.Style = style;
+                    OnPartStyleChange(part);
+                    Invalidate();
+                    return;
+                }
+            m_partStyles.PushBack(NamedPartStyle{core::String(part), style});
+            OnPartStyleChange(part);
+            Invalidate();
+        }
+        /// The sheet's style for `part` (an empty one when the sheet styles it not).
+        [[nodiscard]] const PartStyle& GetPartStyle(core::StringView part) const
+        {
+            for (const NamedPartStyle& p : m_partStyles)
+                if (p.Name.AsView() == part)
+                    return p.Style;
+            static const PartStyle kNone{};
+            return kNone;
+        }
 
         // Visual state, driven by pointer/focus/enabled (priority: disabled > pressed >
         // hover > focused > normal).
@@ -198,6 +221,8 @@ export namespace experimental::gui
     protected:
         /// The text style changed: a widget showing text refreshes what it draws with.
         virtual void OnTextStyleChange() {}
+        /// A part's style changed: a widget whose part is a node of its own passes it on.
+        virtual void OnPartStyleChange(core::StringView /*part*/) {}
 
     private:
         void ChangeTextStyle(const TextStyle& style)
@@ -217,5 +242,11 @@ export namespace experimental::gui
         bool m_unstyledTextCaptured = false;
         core::Array<InlineStyleDeclaration> m_inlineStyle;
         core::Array<StyledProperty> m_styledProperties;
+        struct NamedPartStyle
+        {
+            core::String Name;
+            PartStyle Style;
+        };
+        core::Array<NamedPartStyle> m_partStyles;
     };
 }

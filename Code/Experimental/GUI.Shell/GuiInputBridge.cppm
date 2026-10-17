@@ -72,7 +72,8 @@ export namespace experimental::gui
             m_cursorTarget->SetCursor(cursor);
         }
 
-        // Files the OS dropped (IShell::DrainDroppedFiles): the ones for `windowId` (0: any),
+        // Files the OS dropped (IShell::DrainDroppedFiles): the ones for `windowId` (0: any; a
+        // drop that names no window counts as this one's),
         // grouped by where they landed (a drop of several arrives a file at a time), each group
         // placed in content space and handed to the dispatcher as one drop (E7). True when
         // something took one.
@@ -89,7 +90,8 @@ export namespace experimental::gui
                 usize j = i;
                 for (; j < drops.Size() && drops[j].window == first.window && drops[j].x == first.x && drops[j].y == first.y; ++j)
                     paths.PushBack(drops[j].path);
-                if (windowId == 0 || first.window == windowId)
+                // A drop the OS names no window for (0) is taken as this one's.
+                if (windowId == 0 || first.window == windowId || first.window == 0)
                     taken = m_dispatcher->InjectFileDrop(ToContent(core::Float2{first.x, first.y}), paths) || taken;
                 i = j;
             }

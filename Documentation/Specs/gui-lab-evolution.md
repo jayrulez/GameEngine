@@ -535,29 +535,79 @@ but cannot build a menu yet.
 ### E6 The controls, to foundation.ui's depth
 
 The foundation.ui controls assessment lists, control by control, what foundation.ui's do that the
-lab's do not; this phase closes that list, with the systems above under it. In outline:
+lab's do not; this phase closes that list, with the systems above under it.
 
-- **A range base** (`min`, `max`, `step`, `page`, `value`) under Slider (vertical, ticks, keyboard
-  steps, wheel), ScrollBar and ProgressBar (indeterminate). (Godot's `Range`.)
-- **Buttons hold content**: a Button's text is shorthand for a label child, so any content (an
-  icon and a label) is markup, not a class; `toggle` makes a button a toggle with `:checked`;
-  `repeat` makes it fire while held. foundation.ui's IconButton, ContentButton, ToggleButton and
-  RepeatButton become these. ToggleSwitch is its own control. CheckBox gains the indeterminate
-  state; radio groups come from a `group` name in markup.
-- **New controls**: NumberField (a TextField with a filter, steps, arrows and wheel), PasswordField
-  (E4's mask), EditableLabel, Expander, Separator and Spacer as elements, and GridView (a
-  virtualised grid of items).
-- **Item views** (List, Tree, Table, Grid): rows from a template (native or markup) instead of a
-  fixed row widget, variable row heights, activation and context events, type-ahead, an editing
-  hook, horizontal scroll; models report inserted, removed, moved and changed ranges instead of a
-  whole reset (Zero's model with stable ids); drag reordering after E7.
-- **ScrollView feel**: momentum, Shift and wheel for the other axis, drag to pan for touch and pad
-  sticks (a finger moving past a threshold pans and cancels the press under it, E1b's
-  `CancelPointer`, so a row is not clicked at the end of a scroll), scrollbar policies (auto,
-  always, never, overlay), stick-to-end.
-- **TabWidget**: closable tabs, reordering, overflow scrolling.
-- **Image**: `src` from markup, fit (`object-fit`: contain, cover, fill, none, scale-down), tint.
-- **Every control is a markup element** (9 of the 25 widget types are not today).
+Evidence (surveyed 2026-10-17 by concern, read-only: Godot, GPUI and gpui-ce, eepp, RmlUi, AUI,
+Zero, traktor, LunarSong, foundation.ui and the lab; the reports are kept locally). Ranges: Godot
+shares one `Range` (min, max, step, page, value, exponential, allow greater and lesser) under
+Slider, ScrollBar, ProgressBar and SpinBox, though progress inherits a page it cannot use and
+orientation is fixed by subclass; eepp, RmlUi and foundation.ui re-implement each (foundation.ui
+has four APIs, two unreflected); Godot, AUI and LunarSong split continuous from committed change.
+Buttons: Godot's `BaseButton` holds toggle, action-on-press or release, group and shortcut, its
+check box a toggle button styled; AUI, zed and RmlUi make a button a container of any content;
+RmlUi and eepp expose `:checked`, RmlUi groups radios by `name`; foundation.ui duplicates click and
+toggle in five classes and groups radios by layout. Item views: GPUI's `list` estimates heights
+and measures lazily in a sum tree, anchors scrolling to an item and an offset, and splices
+inserts; Zero and LunarSong keep stable ids with selection and expansion as id sets, LunarSong's
+changes as versioned id sets falling back to a reset; eepp's models notify by row ranges and its
+table has the fullest column model; the lab is fixed-height and reset-only, foundation.ui O(N)
+per rebuild. Scrolling: the lab, Godot and LunarSong take the wheel only when they move, RmlUi adds
+`overscroll-behavior`; gpui-ce's tap-or-pan machine (8 px) with closed-form, frame-rate free fling
+physics is the best touch model; Godot and RmlUi cancel the press under a pan; RmlUi and eepp let
+smooth targets accumulate; eepp and AUI style the scrollbar policy, Zed fades overlay bars; AUI's
+stick-to-end re-latches; none scrolls with a pad's stick. Tabs: Godot splits a TabBar from the
+container, keeps pages alive and reorders by group; zed and eepp make each tab an element with
+slots; foundation.ui draws its tabs. Images: RmlUi and AUI put fit in styles. Number fields: Godot
+and LunarSong scrub, evaluate expressions on commit and snap to the step.
+
+Design (approved 2026-10-17):
+
+- **Ranges.** A `RangeValue` (min, max, step, page, value, exponential, allow-greater,
+  allow-lesser) that Slider, ScrollBar, ProgressBar and NumberField each hold, not a base class, so
+  progress takes no page; the same reflected properties on each; orientation a property; `input`
+  while dragging or typing and `change` on commit, as E4's fields. Slider: ticks, page keys, the
+  wheel when focused or hovered. ProgressBar: indeterminate.
+- **Buttons.** One button core: activation, `toggle`, `repeat` (delay and interval, on the GUI's
+  clock), `group`, action on press or release. A button is a container: `text` and `icon` are
+  shorthands for label and image parts, and markup may put anything inside. CheckBox, Radio and
+  ToggleSwitch are that core with a styled indicator part (user ruling 2026-10-17); the check is
+  tri-state (`:checked`, `:indeterminate`); groups by a `name` in markup or a `ButtonGroup` from
+  code, the arrows moving within a radio group. IconButton, ContentButton, ToggleButton and
+  RepeatButton are attributes, not classes.
+- **Item views.** The model/view split stays. Rows come from a template, a native factory or a
+  markup `<template>` with `{{item.x}}` bindings (user ruling: both), instantiated into a pool per
+  row type and recycled. Heights are estimated, measured on demand in a sum tree, and scrolling is
+  anchored to an item and an offset. Models report inserted, removed, moved and changed ranges,
+  else a reset; selection and expansion are id sets. Type-ahead; `activate` and `contextmenu`
+  events from rows; an edit hook (begin, commit, cancel). Tables: columns in px, % or auto, drag
+  to resize, horizontal scroll, a sort indicator. A grid is a layout mode of the same view.
+- **Scrolling.** Any overflow node scrolls, with a handle API (scroll to, scroll into view with an
+  alignment, scroll to the end); `overscroll-behavior: contain`; Shift and the wheel for the other
+  axis, a vertical wheel moving a horizontal-only scroller; smooth wheel scrolling opt-in by
+  `scroll-behavior: smooth` (off by default, user ruling); a tap-or-pan state machine with
+  time-based exponential decay, a new touch catching a fling, the pressed node cancelled; a
+  pad's right stick scrolls the nearest scroller around the focus (user ruling); scrollbars as
+  styled parts (`::scrollbar`, `::scrollbar-thumb`) with the policy (auto, always, never,
+  overlay that fades) from a style property; stick-to-end that re-latches; a `scroll` event.
+- **Tabs.** A TabBar of real tab elements (label, icon and close parts) and a TabView pairing it
+  with pages; pages kept alive by default, optionally built on first show; close a request event
+  with a display policy; reorder by dragging across a neighbour's midpoint within a strip (between
+  strips with E7); overflow scrolls the strip and adds an all-tabs dropdown; Ctrl+Tab,
+  Ctrl+Shift+Tab, Home and End.
+- **Smaller controls.** Image: `object-fit` and `object-position`, an intrinsic aspect ratio for
+  layout, `src` from markup, tint as a style property (nine-slice stays with backgrounds).
+  NumberField: on E4's field core with a RangeValue; drag to scrub past a threshold (Shift fine,
+  Ctrl coarse), repeating arrows, the wheel while focused, expressions evaluated on commit,
+  snapped to the step with decimals from it, prefix and suffix, one f64 field with an `integer`
+  flag. EditableLabel: double-click or F2 to edit, Enter and blur commit, Escape cancels, a
+  validation hook that can keep it editing. Expander: a header with a disclosure chevron part
+  (TreeView reuses it), `open` as HTML's `<details>`, exclusive groups by `name`, lazy content, an
+  optional height animation through a clip. Separator: orientation from its parent's flex
+  direction, colour and thickness from CSS. Spacer: fixed or flexible.
+- **Every control is a markup element.**
+
+Order: ranges, buttons, scrolling, the smaller controls, tabs, item views, then markup coverage;
+each a layer with its tests and a sandbox section.
 
 Tests: a feature matrix per control, the same rows as the assessment's, each a test.
 

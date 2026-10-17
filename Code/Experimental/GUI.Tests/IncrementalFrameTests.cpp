@@ -361,9 +361,9 @@ TEST_CASE("incremental: a change under a node that was hidden through a frame st
 
 TEST_CASE("incremental: a list's insert above and a click's selection each ask for a frame")
 {
+    StringListModel model; // outlives the scene, whose list is its client
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{300.0f, 300.0f});
-    StringListModel model;
     for (int i = 0; i < 50; ++i)
         model.AddItem(core::Format(u8"row {}", i).AsView());
     auto list = Make<ListView>();

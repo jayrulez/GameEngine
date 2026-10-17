@@ -397,6 +397,19 @@ TEST_CASE("bridge: the d-pad and the left stick move focus; a button runs its bi
     CHECK(back);
 }
 
+TEST_CASE("bridge: the right stick is the dispatcher's scroll stick, each axis as it moves")
+{
+    auto root = MakeScene(core::Float2{200.0f, 200.0f});
+    EventDispatcher& d = *root->GetEventDispatcher();
+    GuiInputBridge bridge{&d};
+    CHECK(bridge.Dispatch(Stick(shell::GamepadAxis::RightY, 0.7f)));
+    CHECK(d.GetScrollStick().y == doctest::Approx(0.7f));
+    CHECK(bridge.Dispatch(Stick(shell::GamepadAxis::RightX, -0.3f)));
+    CHECK(d.GetScrollStick().x == doctest::Approx(-0.3f));
+    CHECK(d.GetScrollStick().y == doctest::Approx(0.7f)); // the other axis kept
+    CHECK_FALSE(d.IsHoldingDirection());                  // it moves no focus
+}
+
 TEST_CASE("bridge: a keymap filled from the game's input map follows its bindings")
 {
     namespace input = foundation::input;

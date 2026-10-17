@@ -677,10 +677,16 @@ export namespace experimental::gui
                 m_holding = false;
         }
         [[nodiscard]] bool IsHoldingDirection() const noexcept { return m_holding; }
+        /// A pad's right stick, each axis -1 to 1 (down and right positive): while it is pushed
+        /// past its dead zone, Tick scrolls the nearest scroller around the focus (or, with no
+        /// focus, under the pointer), faster the further it is pushed.
+        void SetScrollStick(core::Float2 value) noexcept { m_scrollStick = value; }
+        [[nodiscard]] core::Float2 GetScrollStick() const noexcept { return m_scrollStick; }
         void Tick(f32 seconds)
         {
             m_time += seconds; // the clock click counting, tooltips and long presses read
             UpdateTooltip(seconds);
+            ScrollByStick(seconds);
             if (m_longPressArmed && m_touchActive)
             {
                 m_pressHeld += seconds;
@@ -1058,6 +1064,40 @@ export namespace experimental::gui
         static constexpr f32 kClickInterval = 0.45f; // seconds between the presses of a double click
         static constexpr f32 kClickSlop = 6.0f;      // device pixels between them
         static constexpr f32 kTapSlop = 24.0f;       // device pixels between two taps
+        static constexpr f32 kStickDeadZone = 0.2f;  // a stick at rest wobbles within this
+        static constexpr f32 kStickSpeed = 1400.0f;  // pixels a second, pushed all the way
+
+        // The right stick: past its dead zone, rescaled from there and squared (fine near the
+        // centre, fast at the rim), each axis moving the nearest scroller that scrolls that way.
+        void ScrollByStick(f32 seconds)
+        {
+            const auto shape = [](f32 v)
+            {
+                const f32 a = core::Abs(v);
+                if (a <= kStickDeadZone)
+                    return 0.0f;
+                const f32 t = core::Min(1.0f, (a - kStickDeadZone) / (1.0f - kStickDeadZone));
+                return (v < 0.0f ? -t : t) * t;
+            };
+            const core::Float2 push{shape(m_scrollStick.x), shape(m_scrollStick.y)};
+            if (push.x == 0.0f && push.y == 0.0f)
+                return;
+            Node* from = m_focusNode != nullptr ? m_focusNode : (m_hoverPath.IsEmpty() ? nullptr : m_hoverPath[m_hoverPath.Size() - 1]);
+            for (u32 axis = 0; axis < 2; ++axis)
+            {
+                const f32 p = axis == 0 ? push.x : push.y;
+                if (p == 0.0f)
+                    continue;
+                for (Node* n = from; n != nullptr; n = n->GetParent())
+                {
+                    if (!n->IsScrollContainer() || (axis == 0 ? n->GetScrollRange().x : n->GetScrollRange().y) <= 0.0f)
+                        continue;
+                    const f32 by = p * kStickSpeed * seconds;
+                    n->ScrollBy(axis == 0 ? core::Float2{by, 0.0f} : core::Float2{0.0f, by});
+                    break;
+                }
+            }
+        }
         static constexpr f32 kPanSlop = 8.0f;        // a finger moved this far is panning, not tapping
         static constexpr f32 kFlingMinSpeed = 60.0f; // pixels a second: slower let go just stops
         static constexpr f32 kPanWindow = 0.1f;      // seconds of the finger's path its speed is read over
@@ -1442,6 +1482,7 @@ export namespace experimental::gui
         static constexpr usize kPanSamples = 8;
         PanSample m_panSamples[kPanSamples]{};
         usize m_panSampleCount = 0;
+        core::Float2 m_scrollStick{0.0f, 0.0f}; // a pad's right stick (ScrollByStick)
         bool m_panning = false;            // the finger pans m_panScroller
         Node* m_panScroller = nullptr;     // non-owning (cleared when its subtree leaves)
         core::Float2 m_panLast{0.0f, 0.0f}; // where the finger was at the last pan step

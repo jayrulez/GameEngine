@@ -32,7 +32,7 @@ namespace
     }
 }
 
-TEST_CASE("window: OpenModal centers, adds a scrim, and sets the dispatcher modal root")
+TEST_CASE("window: OpenModal centers it as a modal popup of its owner")
 {
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{400.0f, 400.0f});
@@ -45,10 +45,10 @@ TEST_CASE("window: OpenModal centers, adds a scrim, and sets the dispatcher moda
     CHECK(window->IsOpen());
     CHECK(window->IsModal());
     CHECK(window->GetParent() == root.Get());
-    CHECK(d->GetModalRoot() == window.Get());
+    CHECK(d->TopPopup() == window.Get());
     CHECK(window->GetPosition().x == doctest::Approx(100.0f)); // (400-200)/2
     CHECK(window->GetPosition().y == doctest::Approx(150.0f)); // (400-100)/2
-    CHECK(root->ChildCount() == 2);                            // scrim + window
+    CHECK(root->ChildCount() == 1);                            // the window (its backdrop is the top layer's)
 }
 
 TEST_CASE("window: a modal swallows clicks on the background")
@@ -75,7 +75,7 @@ TEST_CASE("window: a modal swallows clicks on the background")
     CHECK(d->GetFocusNode() != background.Get());
 }
 
-TEST_CASE("window: Close removes the window + scrim, releases the modal, and fires onClose")
+TEST_CASE("window: Close takes the modal popup down and fires onClose")
 {
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{400.0f, 400.0f});
@@ -86,13 +86,13 @@ TEST_CASE("window: Close removes the window + scrim, releases the modal, and fir
     window->SetSize(core::Float2{200.0f, 100.0f});
     window->SetOnClose([&] { ++closed; });
     window->OpenModal(*root.Get());
-    REQUIRE(root->ChildCount() == 2);
+    REQUIRE(root->ChildCount() == 1);
 
     window->Close();
     CHECK_FALSE(window->IsOpen());
     CHECK(window->GetParent() == nullptr);
-    CHECK(d->GetModalRoot() == nullptr);
-    CHECK(root->ChildCount() == 0); // window + scrim both removed
+    CHECK(d->PopupCount() == 0u);
+    CHECK(root->ChildCount() == 0); // the window removed (its backdrop is the top layer's)
     CHECK(closed == 1);
 }
 
@@ -107,7 +107,7 @@ TEST_CASE("window: non-modal Open adds no scrim and no modal root")
     window->Open(*root.Get());
     CHECK(window->IsOpen());
     CHECK_FALSE(window->IsModal());
-    CHECK(d->GetModalRoot() == nullptr);
+    CHECK(d->PopupCount() == 0u);
     CHECK(root->ChildCount() == 1); // just the window
 }
 
@@ -159,5 +159,5 @@ TEST_CASE("messagebox: pressing a button reports the result and closes")
     CHECK(results == 1);
     CHECK(got == MessageBox::Result::Ok);
     CHECK_FALSE(box->IsOpen()); // closed after the result
-    CHECK(d->GetModalRoot() == nullptr);
+    CHECK(d->PopupCount() == 0u);
 }

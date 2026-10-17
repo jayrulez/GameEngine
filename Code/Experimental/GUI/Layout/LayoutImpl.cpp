@@ -25,7 +25,7 @@ namespace experimental::gui
         [[nodiscard]] bool Scrolls(Overflow o) noexcept { return o == Overflow::Scroll || o == Overflow::Auto; }
         [[nodiscard]] bool InFlow(const Node& node) noexcept
         {
-            return node.IsDisplayed() && node.GetLayoutStyle().Placement != Position::Absolute;
+            return node.IsDisplayed() && !node.IsInTopLayer() && node.GetLayoutStyle().Placement != Position::Absolute;
         }
         // Both axes sized by the style, not by what is inside: the node's size does not follow its
         // content, so a change inside it stops at it.
@@ -914,6 +914,13 @@ namespace experimental::gui
         {
             Node& child = *m_children[i];
             const LayoutStyle& cs = child.GetLayoutStyle();
+            if (child.IsDisplayed() && child.IsInTopLayer())
+            {
+                // An open popup (E5): the top layer places it; laid out where it is, so what it
+                // holds is.
+                child.Arrange(Rect{child.GetPosition().x, child.GetPosition().y, child.GetSize().x, child.GetSize().y});
+                continue;
+            }
             if (!child.IsDisplayed() || cs.Placement != Position::Absolute)
                 continue;
             const Thickness m = child.GetMargin();
@@ -941,7 +948,7 @@ namespace experimental::gui
         for (usize i = 0; i < m_children.Size(); ++i)
         {
             Node& child = *m_children[i];
-            if (!child.IsDisplayed())
+            if (!child.IsDisplayed() || child.IsInTopLayer())
                 continue;
             const LayoutStyle& cs = child.GetLayoutStyle();
             if (cs.Placement == Position::Relative)

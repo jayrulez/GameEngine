@@ -24,7 +24,8 @@ import :text;
 import :rectangle_drawable;
 import :node;
 import :ui_widget;
-import :event_dispatcher;
+import :event_dispatcher; // the popup stack (E5)
+import :popup_placement;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -87,7 +88,12 @@ export namespace experimental::gui
         void SetFont(fonts::CachedFont* font) { m_tooltip->SetFont(font); }
         void SetDelay(f64 seconds) noexcept { m_delay = seconds; }
         [[nodiscard]] Tooltip* GetTooltip() const noexcept { return m_tooltip.Get(); }
-        [[nodiscard]] bool IsShown() const noexcept { return m_shown; }
+        /// Shown: a hint popup (E5), which any press or key closes.
+        [[nodiscard]] bool IsShown() const
+        {
+            const EventDispatcher* d = m_tooltip->GetEventDispatcher();
+            return d != nullptr && d->IsPopupOpen(*m_tooltip);
+        }
 
         // Advance by `dt` seconds; `root` is where the tooltip is attached when shown.
         void Update(EventDispatcher& dispatcher, Node& root, f64 dt)
@@ -97,6 +103,7 @@ export namespace experimental::gui
             {
                 m_lastOver = over;
                 m_timer = 0.0;
+                m_closedHere = false;
                 Hide();
             }
 
@@ -108,39 +115,46 @@ export namespace experimental::gui
                 return;
             }
 
-            if (!m_shown)
+            if (!IsShown() && !m_closedHere)
             {
                 m_timer += dt;
                 if (m_timer >= m_delay)
-                    Show(root, root.ConvertToNodeSpace(dispatcher.GetMousePosition()), text); // device pixels to the root's units
+                    Show(dispatcher, root, root.ConvertToNodeSpace(dispatcher.GetMousePosition()), text); // device pixels to the root's units
             }
         }
 
         void HideNow() { Hide(); }
 
     private:
-        void Show(Node& root, core::Float2 mouse, core::StringView text)
+        // A hint popup of the root, below and right of the pointer, flipped and slid in at edges.
+        void Show(EventDispatcher& dispatcher, Node& root, core::Float2 mouse, core::StringView text)
         {
             m_tooltip->SetText(text);
-            const core::Float2 size = m_tooltip->MeasureText();
-            m_tooltip->SetSize(size);
-            m_tooltip->SetPosition(core::Float2{mouse.x + 12.0f, mouse.y + 18.0f});
-            root.AddChild(m_tooltip.Get());
-            m_shown = true;
+            m_tooltip->SetSize(m_tooltip->MeasureText());
+            PopupOptions options;
+            options.Kind = PopupKind::Hint;
+            options.AnchorRect = Rect{mouse.x + 12.0f, mouse.y, 0.0f, 0.0f}; // right of the pointer, its gap below
+            options.HasAnchorRect = true;
+            options.Placement = PopupPlacement{PopupSide::Below, PopupAlign::Start, 18.0f, false};
+            TooltipManager* self = this;
+            options.OnClosed = [self](PopupCloseReason reason)
+            {
+                if (reason != PopupCloseReason::Code)
+                    self->m_closedHere = true; // a press or a key hid it: not again until the hover moves
+            };
+            dispatcher.OpenPopup(root, *m_tooltip, core::Move(options));
         }
         void Hide()
         {
-            if (!m_shown)
-                return;
-            m_tooltip->RemoveFromParent();
-            m_shown = false;
+            if (EventDispatcher* d = m_tooltip->GetEventDispatcher())
+                (void)d->ClosePopup(*m_tooltip);
         }
 
         RefPtr<Tooltip> m_tooltip;
         Node* m_lastOver = nullptr;
         f64 m_delay = 0.5;
         f64 m_timer = 0.0;
-        bool m_shown = false;
+        bool m_closedHere = false; // closed by a press or a key under the same hover
     };
 
     RTTI_DEFINE_OBJECT(Tooltip, "rtti::gui")

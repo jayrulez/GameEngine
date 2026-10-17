@@ -162,12 +162,13 @@ TEST_CASE("navigation: a modal confines it")
     auto dialog = Make<UIWidget>();
     dialog->SetPosition(core::Float2{100.0f, 100.0f});
     dialog->SetSize(core::Float2{200.0f, 100.0f});
-    bed.root->AddChild(dialog.Get());
     auto yes = Cell(*dialog.Get(), u8"yes", 10.0f, 10.0f);
     auto no = Cell(*dialog.Get(), u8"no", 100.0f, 10.0f);
-    bed.d.SetModalRoot(dialog.Get());
-    bed.Key(KeyCode::Right); // nothing focused: the modal's first
-    CHECK(bed.Focused() == SV(u8"yes"));
+    PopupOptions modal;
+    modal.Kind = PopupKind::Manual;
+    modal.Modal = true;
+    bed.d.OpenPopup(*bed.root, *dialog, core::Move(modal));
+    CHECK(bed.Focused() == SV(u8"yes")); // focus moves in: the modal's first
     bed.Key(KeyCode::Right);
     CHECK(bed.Focused() == SV(u8"no"));
     bed.Key(KeyCode::Up); // the widget behind is out of reach

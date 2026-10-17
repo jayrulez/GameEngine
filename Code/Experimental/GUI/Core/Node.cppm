@@ -328,9 +328,17 @@ export namespace experimental::gui
             return Rect{0.0f, 0.0f, m_size.x, m_size.y};
         }
 
-        // World transform accumulates the parent chain (parentWorld * local).
+        // World transform accumulates the parent chain (parentWorld * local). A node in the top
+        // layer (an open popup) sits in its root's space instead: its position is the root's.
         [[nodiscard]] Transform2D GetWorldTransform() const
         {
+            if (m_topLayer)
+            {
+                const Node* root = this;
+                while (root->m_parent != nullptr)
+                    root = root->m_parent;
+                return root->GetTransform() * GetTransform();
+            }
             return m_parent != nullptr ? (m_parent->GetChildrenTransform() * GetTransform())
                                        : GetTransform();
         }
@@ -464,10 +472,34 @@ export namespace experimental::gui
                     return this;
             }
             for (usize i = m_children.Size(); i-- > 0;)
-                if (Node* hit = m_children[i]->OverFind(worldPoint))
-                    return hit;
+                if (!m_children[i]->m_topLayer) // the top layer is hit-tested first, from the root
+                    if (Node* hit = m_children[i]->OverFind(worldPoint))
+                        return hit;
             return PointInside(worldPoint) ? this : nullptr;
         }
+
+        // === The top layer (E5) ===
+        /// Open as a popup: drawn after the whole tree in its root's space, unclipped by its
+        /// ancestors, hit-tested first, out of its parent's layout, while staying in its owner's
+        /// subtree (its styles and its events' route). The dispatcher's popup stack sets it.
+        [[nodiscard]] bool IsInTopLayer() const noexcept { return m_topLayer; }
+        void SetInTopLayer(bool topLayer)
+        {
+            if (topLayer == m_topLayer)
+                return;
+            m_topLayer = topLayer;
+            if (m_parent != nullptr)
+                m_parent->RequestLayout(); // in or out of its parent's flow
+            Invalidate();
+        }
+        /// What a modal popup draws over the root under itself: a dim (a widget's `::backdrop` part).
+        virtual void DrawBackdrop(DrawContext& ctx, const Rect& bounds) const
+        {
+            FilledBox(Color{0.0f, 0.0f, 0.0f, 0.45f}).DrawUnder(ctx, bounds);
+        }
+        /// Where an event's route ends (a modal popup: what is below it is inert, its owner too).
+        [[nodiscard]] bool IsRouteStop() const noexcept { return m_routeStop; }
+        void SetRouteStop(bool stop) noexcept { m_routeStop = stop; }
 
         // === Drawing ===
         void SetBackground(RefPtr<Drawable> background)
@@ -563,7 +595,8 @@ export namespace experimental::gui
                 ctx.ConcatTransform(Transform2D{}.Translate(-shift.x, -shift.y));
             }
             for (const RefPtr<Node>& child : m_children)
-                child->Draw(ctx);
+                if (!child->m_topLayer) // drawn by the root's top layer, after the tree
+                    child->Draw(ctx);
             if (scrolled)
                 ctx.Restore();
             if (roundedClip)
@@ -951,6 +984,10 @@ export namespace experimental::gui
         {
             return m_parent ? m_parent->GetEventDispatcher() : nullptr;
         }
+        [[nodiscard]] const EventDispatcher* GetEventDispatcher() const
+        {
+            return const_cast<Node*>(this)->GetEventDispatcher(); // a read: which dispatcher, not a change
+        }
         /// The font service of the GUI this node is in (its SceneRoot's context's), or null: what a
         /// rich text's runs that set a font of their own ask.
         [[nodiscard]] virtual fonts::IFontService* GetFontService()
@@ -1064,15 +1101,18 @@ export namespace experimental::gui
         /// capture and target phases; this node's handler and its bubble listeners in the target
         /// and bubble phases. Everything at a node runs; marking the event Handled ends the
         /// route after it (as the DOM's stopPropagation does). A node given an event outside a
-        /// route (an enter or a leave) is given it at the target.
-        void DeliverRouted(Event& event)
+        /// route (an enter or a leave) is given it at the target. `ownHandler` false: its
+        /// listeners hear it, its own handler does not (an event from a popup it holds, E5: a click
+        /// in a menu is not a click on the button that opened it).
+        void DeliverRouted(Event& event, bool ownHandler = true)
         {
             event.CurrentTarget = this;
             if (event.Phase != EventPhase::Bubble)
                 RunListeners(event, true);
             if (event.Phase != EventPhase::Capture)
             {
-                InvokeInputHandler(event);
+                if (ownHandler)
+                    InvokeInputHandler(event);
                 RunListeners(event, false);
             }
         }
@@ -1657,6 +1697,8 @@ export namespace experimental::gui
         bool m_childLayoutDirty = false;   // some descendant's must
         bool m_layingOut = false;          // inside OnLayout: the sizes it sets are its own
         bool m_clipChildren = false;
+        bool m_topLayer = false;  // open as a popup (SetInTopLayer)
+        bool m_routeStop = false; // an event's route ends here (a modal popup)
         NavScope m_navScope = NavScope::None;
         core::String m_defaultFocusId;
         ElementRef m_rememberedFocus{}; // weak: resolved through the GUI's element table

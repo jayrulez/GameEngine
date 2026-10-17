@@ -182,26 +182,35 @@ TEST_CASE("dispatch: a subtree leaving the tree takes the hover, press and focus
     CHECK(d->GetFocusNode() == other.Get());
 }
 
-TEST_CASE("dispatch: a popup leaving the tree is forgotten, and one whose opener leaves is dismissed")
+TEST_CASE("dispatch: a popup leaving the tree, or with its owner, is dropped and told why")
 {
     auto root = MakeScene(core::Float2{200.0f, 200.0f});
     auto opener = MakePanel(core::Float2{0.0f, 0.0f}, core::Float2{50.0f, 20.0f});
     auto popup = MakePanel(core::Float2{0.0f, 20.0f}, core::Float2{50.0f, 80.0f});
     root->AddChild(opener.Get());
-    root->AddChild(popup.Get());
     EventDispatcher* d = root->GetEventDispatcher();
+    PopupCloseReason why = PopupCloseReason::Code;
     int closes = 0;
-    d->OpenPopup(popup.Get(), opener.Get(), [&] { ++closes; popup->RemoveFromParent(); });
-    root->RemoveChild(popup.Get());
-    CHECK(d->GetPopup() == nullptr);
-    CHECK(closes == 0); // it is already gone: nothing to dismiss
-
-    root->AddChild(popup.Get());
-    d->OpenPopup(popup.Get(), opener.Get(), [&] { ++closes; popup->RemoveFromParent(); });
-    root->RemoveChild(opener.Get());
-    CHECK(d->GetPopup() == nullptr);
+    const auto open = [&]
+    {
+        PopupOptions options;
+        options.OnClosed = [&](PopupCloseReason reason) { ++closes; why = reason; };
+        d->OpenPopup(*opener, *popup, core::Move(options));
+    };
+    open();
+    CHECK(popup->GetParent() == opener.Get()); // the opener's child while open
+    CHECK(popup->IsInTopLayer());
+    popup->RemoveFromParent();
+    CHECK(d->PopupCount() == 0u);
     CHECK(closes == 1);
-    CHECK(popup->GetParent() == nullptr);
+    CHECK(why == PopupCloseReason::OwnerRemoved);
+    CHECK_FALSE(popup->IsInTopLayer());
+
+    open();
+    root->RemoveChild(opener.Get());
+    CHECK(d->PopupCount() == 0u);
+    CHECK(closes == 2);
+    CHECK(why == PopupCloseReason::OwnerRemoved);
 }
 
 TEST_CASE("dispatch: a disabled widget, or one inside a disabled panel, takes no pointer input")

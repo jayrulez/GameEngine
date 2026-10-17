@@ -65,7 +65,7 @@ TEST_CASE("menubar: clicking a button opens its menu below the button")
 
     CHECK(fx.bar->CurrentMenu() == fx.fileMenu);
     CHECK(fx.fileMenu->IsOpen());
-    CHECK(fx.fileMenu->GetParent() == fx.root.Get());
+    CHECK(fx.fileMenu->GetParent() == fx.bar->ButtonAt(0)); // a popup of its button
     CHECK(fx.fileMenu->GetPosition().x == doctest::Approx(0.0f));
     CHECK(fx.fileMenu->GetPosition().y == doctest::Approx(28.0f)); // below the bar
 }

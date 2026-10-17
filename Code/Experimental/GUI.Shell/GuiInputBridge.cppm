@@ -131,7 +131,7 @@ export namespace experimental::gui
             case shell::InputEventKind::MouseMove:
             {
                 const core::Float2 at = ToContent(core::Float2{event.x, event.y});
-                routed = !IsTouchCopy(at) && m_dispatcher->InjectMouseMove(at);
+                routed = !IsTouchCopy(at) && m_dispatcher->InjectMouseMove(at, MapModifiers(event.modifiers));
                 break;
             }
             case shell::InputEventKind::MouseButtonDown:
@@ -219,12 +219,11 @@ export namespace experimental::gui
                 SyncCursor();
                 return; // the mouse is SDL's copy of a finger this frame
             }
-            m_dispatcher->InjectMouseMove(position);
-
-            // Current keyboard modifiers, so a modified click (Shift+click to extend a text
-            // selection, Ctrl+click, ...) carries its modifiers even on the poll-based path.
+            // Current keyboard modifiers, so a modified click or drag (Shift+click to extend a text
+            // selection, a Shift drag scrubbing finer) carries them even on the poll-based path.
             shell::IKeyboard* keyboard = surface.Keyboard();
             const u32 modifiers = keyboard != nullptr ? MapModifiers(keyboard->Modifiers()) : 0u;
+            m_dispatcher->InjectMouseMove(position, modifiers);
 
             const shell::MouseButton buttons[3] = {
                 shell::MouseButton::Left, shell::MouseButton::Middle, shell::MouseButton::Right};

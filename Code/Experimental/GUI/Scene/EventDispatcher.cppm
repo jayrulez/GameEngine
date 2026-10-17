@@ -122,7 +122,8 @@ export namespace experimental::gui
         // === Injection API (fed by the shell bridge) ===
         // Each returns whether the GUI used the input: a handler took it, or the pointer is over a
         // node that takes it (IsPointerOver), so a game host knows a click was the UI's.
-        bool InjectMouseMove(core::Float2 position) { return PointerMove(position, PointerType::Mouse, 0); }
+        /// `modifiers` held during the move (a drag that scrubs finer with Shift).
+        bool InjectMouseMove(core::Float2 position, u32 modifiers = 0) { return PointerMove(position, PointerType::Mouse, 0, modifiers); }
         bool InjectMouseDown(core::Float2 position, MouseButton button, u32 modifiers = 0)
         {
             return PointerDown(position, button, modifiers, PointerType::Mouse, 0);
@@ -780,7 +781,7 @@ export namespace experimental::gui
             return hit;
         }
 
-        bool PointerMove(core::Float2 position, PointerType pointer, u64 id)
+        bool PointerMove(core::Float2 position, PointerType pointer, u64 id, u32 modifiers = 0)
         {
             m_mousePos = position;
             if (m_longPressArmed && core::Abs(position.x - m_pressAt.x) + core::Abs(position.y - m_pressAt.y) > kTapSlop)
@@ -810,7 +811,7 @@ export namespace experimental::gui
             bool used = false;
             if (target != nullptr && target->IsTreeEnabled())
             {
-                MouseEvent event(EventType::MouseMove, target, position);
+                MouseEvent event(EventType::MouseMove, target, position, MouseButton::Left, modifiers);
                 event.Pointer = pointer;
                 event.PointerId = id;
                 used = target->RouteEvent(event);

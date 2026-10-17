@@ -978,7 +978,12 @@ As built after the numbers (2026-10-17):
   ancestors of where it starts. A child keeps its index and a widget its position among its
   widget siblings until its parent's children change, so `+`, `~` and `:nth-child` cost one pass
   over a column, not one each. The full restyle at load 10 with 1,000 rules: 3.0 s, then 0.62 s.
-  What is left of a restyle is mostly applying the cascade (about 14 µs a node).
+  What is left of a restyle is mostly applying the cascade (about 14 µs a node). Measured apart
+  (2026-10-17), that was the first restyle baking each font size's whole atlas as a label first
+  asked for it (Roboto's extended Latin, a size at a time: about 100 ms on the stress page, once).
+  A second full restyle at load 5 applies in 45 ms (3.6 µs a node; the layout properties the
+  largest part, 1.4 µs). Should the first one matter, the fonts could rasterize glyphs as text
+  first needs them instead of a size's whole set, or a host could bake its sizes at load.
 - **E8b.** `Node::GetInkBounds` (virtual: outer shadows at three sigma; a label adds its laid out
   text) and `GetSubtreeInk` (kept until an invalidation reaches the node, which every change below
   it does); a subtree whose ink misses VG's scissor, with a 32 unit margin for text effects an

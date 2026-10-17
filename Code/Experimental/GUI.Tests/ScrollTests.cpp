@@ -619,3 +619,34 @@ TEST_CASE("scroll: a pad's right stick scrolls the nearest scroller around the f
     gui.Update(core::Duration::FromSeconds(0.05));
     CHECK(s.view->GetScrollOffset().y == doctest::Approx(175.0f));
 }
+
+TEST_CASE("scroll: stuck to its end, it follows the content; scrolled away it lets go, and back it holds again")
+{
+    Scroller s(1); // 50 of content in a 100 view: at its end
+    s.view->SetStickToEnd(true);
+    CHECK(s.view->IsLatchedToEnd());
+    const auto addRows = [&](int count)
+    {
+        for (int i = 0; i < count; ++i)
+        {
+            s.rows.PushBack(Make<Panel>());
+            s.rows[s.rows.Size() - 1]->EditLayoutStyle([](LayoutStyle& st) { st.Height = LayoutLength::Px(50.0f); });
+            s.view->AddChild(s.rows[s.rows.Size() - 1].Get());
+        }
+        s.root->UpdateLayout();
+    };
+    addRows(3); // 200 of content: the end is 100
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(100.0f));
+    addRows(1);
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(150.0f));
+
+    s.view->ScrollBy(core::Float2{0.0f, -60.0f}); // away: it lets go
+    CHECK_FALSE(s.view->IsLatchedToEnd());
+    addRows(1);
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(90.0f));
+
+    s.view->ScrollToEnd(); // back: it holds again
+    CHECK(s.view->IsLatchedToEnd());
+    addRows(2);
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(300.0f));
+}

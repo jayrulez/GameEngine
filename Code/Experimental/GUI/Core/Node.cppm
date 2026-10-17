@@ -881,6 +881,23 @@ export namespace experimental::gui
         void ScrollTo(core::Float2 offset, ScrollBehavior behavior = ScrollBehavior::Auto);
         /// Scrolls to the end of its content (the bottom; a horizontal-only scroller's right).
         void ScrollToEnd(ScrollBehavior behavior = ScrollBehavior::Auto);
+        /// Keeps it at the end of its content as the content grows (a log, a chat), while it is at
+        /// the end: scrolled away it lets go, and back at the end it holds again (AUI's way).
+        void SetStickToEnd(bool stick)
+        {
+            m_stickToEnd = stick;
+            m_latchedToEnd = stick && IsAtScrollEnd();
+        }
+        [[nodiscard]] bool IsStickToEnd() const noexcept { return m_stickToEnd; }
+        /// Held at the end now (stick-to-end and at the end).
+        [[nodiscard]] bool IsLatchedToEnd() const noexcept { return m_stickToEnd && m_latchedToEnd; }
+        /// At the end of its content on the axis ScrollToEnd moves (within half a pixel).
+        [[nodiscard]] bool IsAtScrollEnd() const
+        {
+            const core::Float2 range = GetScrollRange();
+            const bool down = range.y > 0.0f || range.x <= 0.0f;
+            return down ? m_scrollOffset.y >= range.y - 0.5f : m_scrollOffset.x >= range.x - 0.5f;
+        }
         /// Where a smooth scroll is going (the offset itself when none runs).
         [[nodiscard]] core::Float2 GetScrollTarget() const noexcept { return m_smoothScrolling ? m_scrollTarget : m_scrollOffset; }
         [[nodiscard]] bool IsSmoothScrolling() const noexcept { return m_smoothScrolling; }
@@ -1709,6 +1726,8 @@ export namespace experimental::gui
                 return;
             m_scrollOffset = clamped;
             Invalidate();
+            if (m_stickToEnd)
+                m_latchedToEnd = IsAtScrollEnd(); // scrolled away it lets go; back at the end it holds
             if (m_layoutStyle.BarVisibility == ScrollbarVisibility::Overlay)
                 ShowOverlayScrollbars();
             SendEvent(Event(EventType::Scroll, this));
@@ -1768,6 +1787,8 @@ export namespace experimental::gui
         f32 m_scrollbarAlpha = 0.0f;             // an overlay's bars: shown while scrolling or hovered, then fading
         f32 m_scrollbarIdle = 0.0f;              // seconds since an overlay's bars were last wanted
         bool m_scrollbarFading = false;          // the overlay's tick runs
+        bool m_stickToEnd = false;               // held at the end as the content grows
+        bool m_latchedToEnd = false;             // at the end, so held there
         bool m_flinging = false;                 // a fling is gliding
         bool m_flingTicking = false;             // its tick runs
         core::Float2 m_flingVelocity{0.0f, 0.0f}; // as it was let go

@@ -579,6 +579,7 @@ namespace experimental::gui
         builder.AccessorProperty<&Node::IsDisplayed, &Node::SetDisplayed>("displayed"); // out of the layout when false
         builder.AccessorProperty<&Node::IsEnabled, &Node::SetEnabled>("enabled");
         builder.AccessorProperty<&Node::GetAlpha, &Node::SetAlpha>("opacity");
+        builder.AccessorProperty<&Node::IsStickToEnd, &Node::SetStickToEnd>("stickToEnd").PropAttribute("css", core::String(u8"stick-to-end"));
         // Navigation (G7): reflected with their CSS names, so a sheet, markup and a script set them.
         builder.AccessorProperty<&Node::GetNavUp, &Node::SetNavUp>("navUp").PropAttribute("css", core::String(u8"nav-up"));
         builder.AccessorProperty<&Node::GetNavDown, &Node::SetNavDown>("navDown").PropAttribute("css", core::String(u8"nav-down"));

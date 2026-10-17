@@ -489,6 +489,9 @@ export namespace experimental::gui
             }
             if (popup.GetParent() != &owner)
             {
+                // Held across the move: its old parent may hold the only reference (a dialog
+                // written in a page).
+                const core::RefPtr<Node> keep(&popup);
                 popup.RemoveFromParent();
                 owner.AddChild(&popup);
             }

@@ -247,6 +247,34 @@ measured unbounded, offsets clamped, the wheel and keys, a focused descendant br
 styled bar parts, a flex container scrolling itself). A debug overlay for bounds, padding, margin and baselines
 comes with this phase, since layout work needs it.
 
+As built on `vg` (2026-10-16): a `LayoutStyle` on every node (sizes as auto, px, %, the content
+sizes or none; margin; box sizing; overflow per axis; position and insets; the display kind and
+its properties) filled from sheets, markup or code; `Measure(constraints)` cached against its
+constraints, `MeasureContent(available)` per widget (a label its wrapped text, a button its label,
+a text field a line, the rest a size of their own), `Arrange(rect)` running `OnLayout`, and
+`RequestLayout` climbing until a node of definite size; each GUI lays out once a frame, a tree in
+no GUI when asked (`UpdateLayout`). Flex by the CSS rules (the automatic minimum is the content's,
+no more than the specified size), grid (px, %, auto and fr tracks, `repeat()`, `minmax()`, spans,
+auto flow), stack, dock, absolute and relative placement; `visibility: hidden` keeps its space and
+`display: none` (code's `SetDisplayed`, a script's `displayed`) gives it up. Scrolling is
+`overflow` on any node: the offset moves the children through their transform, with the wheel,
+keys, drawn and draggable bars and `ScrollIntoView`; `Panel` is the plain element and `ScrollView`
+a node with `overflow: auto`; LinearLayout, FlexLayout, GridLayout and RelativeLayout are gone
+(4aa0e07c0, d992d2d58). Baselines: every node answers `BaselineAt(size)` (a label, button, text
+field and combo box their first line's, any other the bottom of its content box) and a flex row
+lines them up, growing to hold them (38cf9c409). Arranged edges round to the root's display scale,
+each edge on its own, with relative offsets and the scroll shift; a new scale lays the whole tree
+out again (78a25bd6c). The layout overlay draws border boxes, padding, margins and text baselines
+over a root's tree (`SceneRoot::SetLayoutOverlay`; F9 or `--layout-overlay` in the sandbox,
+9af53b4a1). The sandbox's Layout page shows all of it in markup (30cb3883f).
+Left: a container's baseline is its content box's bottom, not its first child's as in CSS, and
+grid and stack place `baseline` as start; text is not snapped to the pixel grid, only boxes;
+`z-index` is parsed but does not yet order drawing or hit testing; the scroll bars are not styled
+parts and `scrollbar-width` and an overlay mode wait; no `calc()`; a node scrolling on both axes
+measures its content unbounded on both, so `fr` columns there take their content's width (scroll
+one axis to keep them shared); markup's inline properties apply once and a sheet rule overrides
+them (E3 makes inline the highest origin).
+
 ### E3 Styling structure
 
 Facts: properties applied through widget setters (size, padding, opacity, visibility, colour,

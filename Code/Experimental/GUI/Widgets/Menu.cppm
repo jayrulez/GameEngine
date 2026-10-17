@@ -4,20 +4,19 @@
 // GUI - :menu partition
 //
 // Menu (PopupMenu): a floating vertical list of rows - a context menu or a menu dropped from a
-// menu bar. Modeled on eepp's UIMenu/UIPopUpMenu family (role only). Open() shows it as a
-// top-level popup via the EventDispatcher's popup support, so an outside click or Escape
-// dismisses it. Rows come in a small hierarchy mirroring eepp:
+// menu bar. Modeled on eepp's UIMenu/UIPopUpMenu family (role only). Open() shows it as an auto
+// popup (E5), a child of what opened it, in the top layer, so a press outside or Escape closes it.
+// Rows come in a small hierarchy mirroring eepp:
 //   MenuRow          - base row (height + hover-notify hook)
 //     MenuSeparator  - a non-interactive divider line
 //     MenuItem       - an activatable row: text + optional check mark / icon / shortcut column
 //       MenuSubItem  - an item that opens a nested submenu on hover or click
 //
-// Submenus follow eepp's model: the submenu is a SIBLING in the tree (added to the root, not
-// nested inside the parent menu), positioned to the right of its item, and the parent tracks a
-// single "current submenu". Dismissal spans the whole open chain via the dispatcher's popup
-// `contains` predicate (the analog of eepp's isChildOrSubMenu): the root menu claims every node
-// in its submenu chain as "inside", so a click within any open submenu does not dismiss.
-// Activating a leaf item closes the entire chain back to the root.
+// A submenu is a popup of its item: open, it is the item's child, so the menus holding it are its
+// ancestors and the popup stack's nesting rules give the chain for free (a press inside any open
+// menu of the chain closes only the menus deeper than it; opening another item's submenu closes
+// the open one; closing a menu closes what it holds). It is placed right of its item, flipped
+// left at the root's edge. Activating a leaf item closes the whole chain from its root menu.
 
 module;
 #include "Core/Prelude.h"
@@ -36,7 +35,8 @@ import :rectangle_drawable;
 import :text;
 import :node;
 import :ui_widget;
-import :event_dispatcher;
+import :event_dispatcher; // the popup stack (E5)
+import :popup_placement;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -441,43 +441,48 @@ export namespace experimental::gui
             return n;
         }
         [[nodiscard]] usize RowCount() const noexcept { return m_rows.Size(); }
-        [[nodiscard]] bool IsOpen() const noexcept { return m_open; }
-        [[nodiscard]] Menu* CurrentSubMenu() const noexcept { return m_currentSubMenu; }
-
-        // Notified when this menu closes as a top-level popup (outside click / Escape /
-        // activation). A MenuBar uses it to clear its "open menu" state.
-        void SetOnClosed(core::Function<void()> callback) { m_onClosed = core::Move(callback); }
-
-        // Close this menu if it is open as a popup (used by a MenuBar toggle).
-        void Close()
+        [[nodiscard]] bool IsOpen() const
         {
-            if (m_open)
-                CloseSelf();
+            const EventDispatcher* d = GetEventDispatcher();
+            return d != nullptr && d->IsPopupOpen(*this);
+        }
+        /// The open submenu of one of its items, or null.
+        [[nodiscard]] Menu* CurrentSubMenu() const
+        {
+            for (MenuRow* row : m_rows)
+                if (const MenuSubItem* sub = core::Cast<MenuSubItem>(row); sub != nullptr && sub->GetSubMenu() != nullptr &&
+                                                                          sub->GetSubMenu()->IsOpen())
+                    return sub->GetSubMenu();
+            return nullptr;
         }
 
-        // Show the menu at `position` (root-local) as a popup, attached under `owner`'s root.
-        // `popupOwner` (optional) is a node whose clicks do NOT dismiss the menu - a MenuBar
-        // passes its button so clicking it again can toggle the menu closed. A context menu
-        // passes none, so ANY press outside the menu's whole open chain dismisses it. The
-        // chain-aware `contains` predicate keeps clicks inside open submenus from dismissing.
-        void Open(Node& owner, core::Float2 position, Node* popupOwner = nullptr)
+        // Notified when this menu closes, and why. A MenuBar uses it to clear its "open menu" state.
+        void SetOnClosed(core::Function<void(PopupCloseReason)> callback) { m_onClosed = core::Move(callback); }
+
+        // Close this menu (and the submenus it holds) if it is open.
+        void Close()
         {
-            Node* root = owner.GetRootNode();
-            EventDispatcher* dispatcher = owner.GetEventDispatcher();
-            if (root == nullptr || dispatcher == nullptr)
-                return;
-            if (m_open)
-            {
-                SetPosition(position);
-                return;
-            } // already open: just move it
-            SetPosition(position);
-            root->AddChild(this);
-            m_open = true;
-            Menu* self = this;
-            dispatcher->OpenPopup(
-                this, popupOwner, [self]() { self->OnClosed(); },
-                [self](Node* n) { return self->ChainContains(n); });
+            if (EventDispatcher* d = GetEventDispatcher())
+                (void)d->ClosePopup(*this);
+        }
+
+        /// Shows the menu as a popup of `owner` at `position` (in the root's space): a context
+        /// menu at the pointer, below it and to its right, above it where it does not fit, slid
+        /// back in from the edges.
+        void Open(Node& owner, core::Float2 position)
+        {
+            PopupOptions options;
+            options.AnchorRect = Rect{position.x, position.y, 0.0f, 0.0f};
+            options.HasAnchorRect = true;
+            OpenAs(owner, core::Move(options));
+        }
+        /// Shows the menu as a popup of `owner`, against `anchor` (a menu bar's button: below it).
+        void OpenBelow(Node& owner, Node& anchor)
+        {
+            PopupOptions options;
+            options.Anchor = &anchor;
+            options.Placement = PopupPlacement{PopupSide::Below, PopupAlign::Start, 0.0f, true};
+            OpenAs(owner, core::Move(options));
         }
 
     protected:
@@ -499,7 +504,7 @@ export namespace experimental::gui
                 ShareTextStyle(*it);
                 it->SetRowHeight(m_itemHeight);
                 Menu* self = this;
-                it->SetOnActivated([self]() { self->RootMenu()->CloseSelf(); });
+                it->SetOnActivated([self]() { self->RootMenu()->Close(); });
             }
             Menu* self = this;
             row->SetOnHovered([self, row]() { self->OnRowHovered(row); });
@@ -538,118 +543,60 @@ export namespace experimental::gui
             SetSize(core::Float2{width, y});
         }
 
-        // === Submenu chain ===
+        void OpenAs(Node& owner, PopupOptions options)
+        {
+            EventDispatcher* dispatcher = owner.GetEventDispatcher();
+            if (dispatcher == nullptr || IsOpen())
+                return;
+            Menu* self = this;
+            options.OnClosed = [self](PopupCloseReason reason)
+            {
+                if (self->m_onClosed)
+                    self->m_onClosed(reason);
+            };
+            dispatcher->OpenPopup(owner, *this, core::Move(options));
+        }
+
+        // === Submenus ===
+        // Opens `item`'s submenu as its popup, right of it (left at the root's edge); the stack
+        // closes another item's open submenu, which this one's owner is not inside.
         void OpenSubMenuFor(MenuSubItem* item)
         {
             Menu* sub = item->GetSubMenu();
-            if (sub == nullptr || sub == m_currentSubMenu)
-                return; // already open
-            if (m_currentSubMenu != nullptr)
-            {
-                m_currentSubMenu->HideAsSubMenu();
-                m_currentSubMenu = nullptr;
-            }
-
-            Node* root = GetRootNode();
-            if (root == nullptr)
+            if (sub == nullptr || sub->IsOpen())
                 return;
-            // Assume identity root transforms (menus attach directly to the root): the item's
-            // root-local y = this menu's position + the item's local position.
-            const core::Float2 pos{GetPosition().x + GetSize().x,
-                                   GetPosition().y + item->GetPosition().y};
-            sub->m_ownerItem = item;
-            sub->SetPosition(pos);
-            root->AddChild(sub);
-            sub->m_open = true;
-            m_currentSubMenu = sub;
+            PopupOptions options;
+            options.Anchor = item;
+            options.Placement = PopupPlacement{PopupSide::Right, PopupAlign::Start, 0.0f, true};
+            sub->OpenAs(*item, core::Move(options));
         }
 
-        // Hide this menu when shown as a submenu (recursively hides its own open submenus).
-        void HideAsSubMenu()
-        {
-            if (m_currentSubMenu != nullptr)
-            {
-                m_currentSubMenu->HideAsSubMenu();
-                m_currentSubMenu = nullptr;
-            }
-            m_open = false;
-            m_ownerItem = nullptr;
-            RemoveFromParent();
-        }
-
-        // A row was hovered: close the current submenu unless the hovered row owns it, then open
-        // this row's submenu if it is a submenu item.
+        // A row was hovered: an open submenu of another row closes; a submenu row opens its own.
         void OnRowHovered(MenuRow* row)
         {
-            if (m_currentSubMenu != nullptr && m_currentSubMenu->m_ownerItem != row)
-            {
-                m_currentSubMenu->HideAsSubMenu();
-                m_currentSubMenu = nullptr;
-            }
+            if (Menu* open = CurrentSubMenu(); open != nullptr && open->GetParent() != row)
+                open->Close();
             if (MenuSubItem* sub = core::Cast<MenuSubItem>(row))
                 OpenSubMenuFor(sub);
         }
 
-        // The root of the open chain (walk owner links up).
+        // The outermost menu holding this one (a submenu's parents up the tree).
         Menu* RootMenu()
         {
-            Menu* menu = this;
-            while (menu->m_ownerItem != nullptr)
-            {
-                Menu* parent = core::Cast<Menu>(menu->m_ownerItem->GetParent());
-                if (parent == nullptr)
-                    break;
-                menu = parent;
-            }
-            return menu;
-        }
-
-        // True if `node` is inside this menu or any menu in its open submenu chain.
-        [[nodiscard]] bool ChainContains(Node* node) const
-        {
-            if (IsInSubtree(node, this))
-                return true;
-            return m_currentSubMenu != nullptr && m_currentSubMenu->ChainContains(node);
-        }
-
-        void CloseSelf()
-        {
-            if (EventDispatcher* d = GetEventDispatcher())
-                d->ClosePopup();
-            else
-                OnClosed();
-        }
-        void OnClosed()
-        {
-            m_open = false;
-            if (m_currentSubMenu != nullptr)
-            {
-                m_currentSubMenu->HideAsSubMenu();
-                m_currentSubMenu = nullptr;
-            }
-            RemoveFromParent();
-            if (m_onClosed)
-                m_onClosed();
-        }
-
-        [[nodiscard]] static bool IsInSubtree(Node* node, const Node* ancestor)
-        {
-            for (Node* n = node; n != nullptr; n = n->GetParent())
-                if (n == ancestor)
-                    return true;
-            return false;
+            Menu* root = this;
+            for (Node* n = GetParent(); n != nullptr; n = n->GetParent())
+                if (Menu* m = core::Cast<Menu>(n))
+                    root = m;
+            return root;
         }
 
         Array<MenuRow*> m_rows;                    // rows, owned as children
-        Array<core::RefPtr<Menu>> m_ownedSubMenus; // keep submenus alive (they live under the root)
-        MenuSubItem* m_ownerItem = nullptr;        // set when shown AS a submenu
-        Menu* m_currentSubMenu = nullptr;          // the open child submenu (non-owning; a sibling)
-        bool m_open = false;
+        Array<core::RefPtr<Menu>> m_ownedSubMenus; // keep submenus alive (their items' children only while open)
         bool m_autoWidth = false;
         f32 m_width = 160.0f;
         f32 m_itemHeight = 26.0f;
         Color m_panelColor{0.16f, 0.17f, 0.21f, 1.0f};
-        core::Function<void()> m_onClosed;
+        core::Function<void(PopupCloseReason)> m_onClosed;
     };
 
     RTTI_DEFINE_OBJECT(MenuRow, "rtti::gui")

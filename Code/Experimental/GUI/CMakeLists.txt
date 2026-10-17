@@ -29,6 +29,7 @@ target_sources(GUI
             Editing/TextEditModel.cppm
             Editing/TextEditingKeys.cppm
             Scene/Navigation.cppm
+            Scene/PopupPlacement.cppm
             Scene/EventDispatcher.cppm
             Scene/ElementTypes.cppm
             Scene/Commands.cppm

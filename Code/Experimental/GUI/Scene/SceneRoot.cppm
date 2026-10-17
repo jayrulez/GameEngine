@@ -101,6 +101,9 @@ export namespace experimental::gui
         {
             return m_active != nullptr ? m_active : (m_roots.IsEmpty() ? nullptr : m_roots[0]);
         }
+        /// `root` took input from the user: it becomes the active root, and the other roots' light
+        /// popups (auto ones and tooltips) close, as a press outside them would (E5).
+        void TookInput(SceneRoot& root);
         void SetActiveRoot(SceneRoot* root)
         {
             if (root == m_active)
@@ -162,7 +165,7 @@ export namespace experimental::gui
         {
             m_context->AddRoot(*this);
             m_eventDispatcher.SetKeystrokeRouter([this](const Keystroke& stroke) { return RouteKeystroke(stroke); });
-            m_eventDispatcher.SetOnInput([this]() { m_context->SetActiveRoot(this); });
+            m_eventDispatcher.SetOnInput([this]() { m_context->TookInput(*this); });
         }
         ~SceneRoot() override { m_context->RemoveRoot(*this); }
 
@@ -173,7 +176,11 @@ export namespace experimental::gui
         /// Runs this root's layout pass: every container that requested a layout, parents first,
         /// again while a layout requests more (a child's new size can move its parent), at most a
         /// few rounds. A host runs it after styling and before drawing; Update runs it too.
-        void UpdateLayout() { m_lastLayoutCount = Node::UpdateLayout(); }
+        void UpdateLayout()
+        {
+            m_lastLayoutCount = Node::UpdateLayout();
+            m_eventDispatcher.PlacePopups(); // the top layer follows what moved
+        }
         /// How many containers the last layout pass laid out (none in a frame where nothing moved).
         [[nodiscard]] u32 LastLayoutCount() const noexcept { return m_lastLayoutCount; }
 
@@ -213,9 +220,13 @@ export namespace experimental::gui
         {
             if (const Command* command = m_context->GetCommands().Find(id); command != nullptr && !Untracked([&] { return command->IsEnabled(); }))
                 return false;
-            Array<Node*> path; // focused first, this root last
-            for (Node* n = FocusInThisTree(); n != nullptr; n = n->GetParent())
+            Array<Node*> path; // focused first, up to this root or a modal popup (below it is inert)
+            for (Node* n = CommandStart(); n != nullptr; n = n->GetParent())
+            {
                 path.PushBack(n);
+                if (n->IsRouteStop())
+                    break;
+            }
             bool ran = false;
             CommandEvent event{id, CommandPhase::Capture, false};
             for (usize i = path.Size(); i-- > 0;)
@@ -242,9 +253,13 @@ export namespace experimental::gui
             (void)m_eventDispatcher.ObserveFocus();
             if (const Command* command = m_context->GetCommands().Find(id); command != nullptr && !command->IsEnabled())
                 return false;
-            for (Node* n = FocusInThisTree(); n != nullptr; n = n->GetParent())
+            for (Node* n = CommandStart(); n != nullptr; n = n->GetParent())
+            {
                 if (n->HandlesCommand(id))
                     return true;
+                if (n->IsRouteStop())
+                    break;
+            }
             return false;
         }
 
@@ -256,8 +271,12 @@ export namespace experimental::gui
             Array<KeyContextLayer> stack; // root first, one layer per node declaring a context
             {
                 Array<Node*> path;
-                for (Node* n = FocusInThisTree(); n != nullptr; n = n->GetParent())
+                for (Node* n = CommandStart(); n != nullptr; n = n->GetParent())
+                {
                     path.PushBack(n);
+                    if (n->IsRouteStop())
+                        break;
+                }
                 KeyContextLayer layer;
                 for (usize i = path.Size(); i-- > 0;)
                     if (path[i]->GetKeyContext().Size() != 0)
@@ -316,6 +335,7 @@ export namespace experimental::gui
         [[nodiscard]] f32 TopPixelScale() const override { return m_displayScale; }
         void OnDrawAbove(DrawContext& ctx) override
         {
+            m_eventDispatcher.DrawPopups(ctx); // the top layer, after the tree (E5)
             if (m_layoutOverlay.Any())
                 DrawLayoutOverlay(ctx, m_layoutOverlay);
         }
@@ -360,6 +380,13 @@ export namespace experimental::gui
                     return focus;
             return this;
         }
+        // Where a command or a keystroke starts: the focus here, else the root; below a modal popup,
+        // the modal popup (what is under it is inert, its bindings too).
+        [[nodiscard]] Node* CommandStart()
+        {
+            Node* start = FocusInThisTree();
+            return m_eventDispatcher.IsInputLive(start) ? start : m_eventDispatcher.GetFocusScopeRoot();
+        }
 
         void ApplyViewport()
         {
@@ -390,6 +417,14 @@ export namespace experimental::gui
         m_mutationQueue.Drain();
         for (SceneRoot* root : m_roots)
             root->UpdateLayout();
+    }
+
+    inline void GUIContext::TookInput(SceneRoot& root)
+    {
+        for (SceneRoot* other : m_roots)
+            if (other != &root)
+                other->GetEventDispatcher()->CloseLightPopups();
+        SetActiveRoot(&root);
     }
 
     inline bool GUIContext::RunCommand(core::StringView id)

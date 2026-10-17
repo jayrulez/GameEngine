@@ -4,10 +4,10 @@
 // GUI - :combo_box partition
 //
 // ComboBox: a control that shows the current selection and, when clicked, drops down a list of
-// choices. Modeled on eepp's UIDropDownList (role only), built by composition: the dropdown is
-// a ListBox added as a top-level popup (over everything) via the EventDispatcher's popup
-// support, so a click outside or Escape dismisses it. Picking an item sets the selection and
-// closes the dropdown.
+// choices. Modeled on eepp's UIDropDownList (role only), built by composition: the dropdown is a
+// ListBox opened as an auto popup (E5): it stays the combo box's child while open, in the top
+// layer, placed below it (above when there is more room there, shrunk to the room), so a press
+// outside or Escape closes it. Picking an item sets the selection and closes the dropdown.
 
 module;
 #include "Core/Prelude.h"
@@ -26,7 +26,8 @@ import :node;
 import :rectangle_drawable;
 import :ui_widget;
 import :list_box;
-import :event_dispatcher;
+import :event_dispatcher; // the popup stack (E5)
+import :popup_placement;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -93,7 +94,13 @@ export namespace experimental::gui
             m_onChanged = core::Move(callback);
         }
 
-        [[nodiscard]] bool IsOpen() const noexcept { return m_open; }
+        [[nodiscard]] bool IsOpen() const
+        {
+            const EventDispatcher* dispatcher = m_dropdown ? m_dropdown->GetEventDispatcher() : nullptr;
+            return dispatcher != nullptr && dispatcher->IsPopupOpen(*m_dropdown);
+        }
+        /// The dropdown list (built on first open).
+        [[nodiscard]] ListBox* GetDropdown() const noexcept { return m_dropdown.Get(); }
         void SetItemHeight(f32 height) { m_itemHeight = height; }
 
         /// Its widest item and the arrow beside it, one line of its font tall (E2).
@@ -128,7 +135,7 @@ export namespace experimental::gui
         void OnMouseClick(const MouseEvent& event) override
         {
             event.Handled = true;
-            if (m_open)
+            if (IsOpen())
                 CloseDropdown();
             else
                 OpenDropdown();
@@ -168,47 +175,35 @@ export namespace experimental::gui
 
         void OpenDropdown()
         {
-            Node* root = GetRootNode();
             EventDispatcher* dispatcher = GetEventDispatcher();
-            if (root == nullptr || dispatcher == nullptr || m_items.IsEmpty())
+            if (dispatcher == nullptr || m_items.IsEmpty())
                 return;
             BuildDropdown();
-
-            const core::Float2 below = ConvertToRootSpace(core::Float2{0.0f, GetSize().y});
-            const f32 h =
-                core::Min(static_cast<f32>(m_items.Size()) * m_itemHeight, m_dropdownMaxHeight);
-            m_dropdown->SetPosition(below);
+            const f32 h = core::Min(static_cast<f32>(m_items.Size()) * m_itemHeight, m_dropdownMaxHeight);
             m_dropdown->SetSize(core::Float2{GetSize().x, h});
-            root->AddChild(m_dropdown.Get());
-
-            m_open = true;
-            ComboBox* self = this;
-            dispatcher->OpenPopup(m_dropdown.Get(), this, [self]() { self->CloseDropdown(); });
+            PopupOptions options;
+            options.Anchor = this;
+            options.Placement = PopupPlacement{PopupSide::Below, PopupAlign::Start, 0.0f, true};
+            dispatcher->OpenPopup(*this, *m_dropdown, core::Move(options));
         }
 
         void CloseDropdown()
         {
-            if (!m_open)
-                return;
-            m_open = false;
-            if (m_dropdown)
-                m_dropdown->RemoveFromParent();
+            if (EventDispatcher* dispatcher = GetEventDispatcher(); dispatcher != nullptr && m_dropdown)
+                (void)dispatcher->ClosePopup(*m_dropdown);
         }
 
         void OnPicked(i32 index)
         {
             SetSelectedIndex(index);
-            if (EventDispatcher* dispatcher = GetEventDispatcher())
-                dispatcher->ClosePopup();
-            else
-                CloseDropdown();
+            CloseDropdown();
         }
+
 
         Array<core::String> m_items;
         Text m_text;
-        RefPtr<ListBox> m_dropdown;
+        RefPtr<ListBox> m_dropdown; // its child while open (E5); kept here while closed
         i32 m_selected = -1;
-        bool m_open = false;
         f32 m_itemHeight = 24.0f;
         f32 m_dropdownMaxHeight = 160.0f;
         Color m_boxColor{0.18f, 0.20f, 0.25f, 1.0f};

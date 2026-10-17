@@ -73,6 +73,8 @@ export namespace experimental::gui
         Link,
         // An IME's composition so far, at the focused node (a CompositionEvent; empty text: it ended).
         Composition,
+        // A popup opened or closed (a ToggleEvent, at the popup; it bubbles to its owner).
+        Toggle,
     };
 
     /// What drives the pointer: the mouse, or a finger (the first one down).
@@ -258,6 +260,39 @@ export namespace experimental::gui
 
         TextInputEvent(Node* target, core::StringView text) noexcept
             : Event(EventType::TextInput, target), Text(text)
+        {
+        }
+    };
+
+    /// Why a popup closed (E5): code closed it, Escape, a press outside it, another popup opening
+    /// that it does not hold, or its owner leaving the tree.
+    enum class PopupCloseReason : u8
+    {
+        Code,
+        Escape,
+        OutsidePress,
+        Replaced,
+        OwnerRemoved,
+    };
+    [[nodiscard]] constexpr core::StringView PopupCloseReasonName(PopupCloseReason reason) noexcept
+    {
+        switch (reason)
+        {
+        case PopupCloseReason::Escape: return core::StringView(u8"escape");
+        case PopupCloseReason::OutsidePress: return core::StringView(u8"outside-press");
+        case PopupCloseReason::Replaced: return core::StringView(u8"replaced");
+        case PopupCloseReason::OwnerRemoved: return core::StringView(u8"owner-removed");
+        default: return core::StringView(u8"code");
+        }
+    }
+    /// A popup opened, or closed and why (the web's `toggle`).
+    struct ToggleEvent : Event
+    {
+        bool Open = false;
+        PopupCloseReason Reason = PopupCloseReason::Code; ///< when closed
+
+        ToggleEvent(Node* target, bool open, PopupCloseReason reason) noexcept
+            : Event(EventType::Toggle, target), Open(open), Reason(reason)
         {
         }
     };

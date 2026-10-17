@@ -59,13 +59,14 @@ TEST_CASE("combobox: click opens the dropdown; it registers as the dispatcher po
     EventDispatcher* d = root->GetEventDispatcher();
 
     CHECK_FALSE(cb->IsOpen());
-    CHECK(d->GetPopup() == nullptr);
+    CHECK(d->PopupCount() == 0u);
 
     // Click the combo (a press+release on it).
     d->InjectMouseDown(core::Float2{20.0f, 13.0f}, MouseButton::Left);
     d->InjectMouseUp(core::Float2{20.0f, 13.0f}, MouseButton::Left);
     CHECK(cb->IsOpen());
-    CHECK(d->GetPopup() != nullptr); // the dropdown is the active popup
+    CHECK(d->TopPopup() == cb->GetDropdown()); // the dropdown is the open popup
+    CHECK(cb->GetDropdown()->GetParent() == cb.Get()); // the combo box's child while open
 }
 
 TEST_CASE("combobox: clicking a dropdown row selects it and closes")
@@ -86,7 +87,7 @@ TEST_CASE("combobox: clicking a dropdown row selects it and closes")
     CHECK(cb->GetSelectedIndex() == 1);
     CHECK(cb->GetSelectedText() == core::StringView(u8"Green"));
     CHECK_FALSE(cb->IsOpen());
-    CHECK(root->GetEventDispatcher()->GetPopup() == nullptr);
+    CHECK(root->GetEventDispatcher()->PopupCount() == 0u);
 }
 
 TEST_CASE("combobox: clicking outside dismisses the dropdown")
@@ -103,7 +104,7 @@ TEST_CASE("combobox: clicking outside dismisses the dropdown")
     // Press far away from the combo and its dropdown -> dismissed.
     d->InjectMouseDown(core::Float2{350.0f, 350.0f}, MouseButton::Left);
     CHECK_FALSE(cb->IsOpen());
-    CHECK(d->GetPopup() == nullptr);
+    CHECK(d->PopupCount() == 0u);
 }
 
 TEST_CASE("combobox: Escape dismisses the dropdown")
@@ -119,7 +120,7 @@ TEST_CASE("combobox: Escape dismisses the dropdown")
 
     d->InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
     CHECK_FALSE(cb->IsOpen());
-    CHECK(d->GetPopup() == nullptr);
+    CHECK(d->PopupCount() == 0u);
 }
 
 TEST_CASE("combobox: the dropdown opens below the box at a display scale")
@@ -133,7 +134,7 @@ TEST_CASE("combobox: the dropdown opens below the box at a display scale")
     d->InjectMouseDown(core::Float2{60.0f, 60.0f}, MouseButton::Left); // device pixels, inside the box
     d->InjectMouseUp(core::Float2{60.0f, 60.0f}, MouseButton::Left);
     REQUIRE(cb->IsOpen());
-    REQUIRE(d->GetPopup() != nullptr);
-    CHECK(d->GetPopup()->GetPosition().x == doctest::Approx(10.0f));
-    CHECK(d->GetPopup()->GetPosition().y == doctest::Approx(46.0f)); // the box's bottom, in root units
+    REQUIRE(d->TopPopup() != nullptr);
+    CHECK(d->TopPopup()->GetPosition().x == doctest::Approx(10.0f));
+    CHECK(d->TopPopup()->GetPosition().y == doctest::Approx(46.0f)); // the box's bottom, in root units
 }

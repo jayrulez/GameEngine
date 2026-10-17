@@ -13,6 +13,7 @@ add_executable(GUI.Tests
     ActionTests.cpp
     SceneRootTests.cpp
     EventDispatcherTests.cpp
+    PopupTests.cpp
     RoutingTests.cpp
     LayoutEngineTests.cpp
     TextTests.cpp

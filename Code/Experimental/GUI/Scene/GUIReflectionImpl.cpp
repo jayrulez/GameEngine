@@ -74,6 +74,7 @@ namespace experimental::gui
                 {u8"change", EventType::Changed},        {u8"pointercancel", EventType::PointerCancel},
                 {u8"link", EventType::Link},             {u8"input", EventType::Input},
                 {u8"submit", EventType::Submit},         {u8"composition", EventType::Composition},
+                {u8"toggle", EventType::Toggle},
             };
             for (const Named& entry : kNames)
             {
@@ -142,6 +143,12 @@ namespace experimental::gui
             case EventType::TextInput: out.text = core::String(static_cast<const TextInputEvent&>(event).Text); break;
             case EventType::Link: out.text = core::String(static_cast<const LinkEvent&>(event).Link); break; // the link's id
             case EventType::Composition: out.text = core::String(static_cast<const CompositionEvent&>(event).Text); break;
+            case EventType::Toggle: // "open", or why it closed
+            {
+                const ToggleEvent& toggle = static_cast<const ToggleEvent&>(event);
+                out.text = core::String(toggle.Open ? core::StringView(u8"open") : PopupCloseReasonName(toggle.Reason));
+                break;
+            }
             default: break;
             }
             return out;

@@ -50,10 +50,10 @@ TEST_CASE("menu: Open shows it as the dispatcher popup at the given position")
 
     menu->Open(*anchor, core::Float2{100.0f, 80.0f});
     CHECK(menu->IsOpen());
-    CHECK(d->GetPopup() == menu.Get());
+    CHECK(d->TopPopup() == menu.Get());
     CHECK(menu->GetPosition().x == doctest::Approx(100.0f));
     CHECK(menu->GetPosition().y == doctest::Approx(80.0f));
-    CHECK(menu->GetParent() == root.Get()); // attached top-level
+    CHECK(menu->GetParent() == anchor.Get()); // a popup of what opened it
 }
 
 TEST_CASE("menu: activating an item runs its action and closes")
@@ -77,7 +77,7 @@ TEST_CASE("menu: activating an item runs its action and closes")
     CHECK(paste == 1);
     CHECK(cut == 0);
     CHECK_FALSE(menu->IsOpen());
-    CHECK(d->GetPopup() == nullptr);
+    CHECK(d->PopupCount() == 0u);
     CHECK(menu->GetParent() == nullptr); // removed from the tree
 }
 
@@ -125,7 +125,7 @@ TEST_CASE("menu: an outside click dismisses even when the opener covers the clic
     // Left-click on the panel, well away from the menu -> dismissed.
     d->InjectMouseDown(core::Float2{300.0f, 300.0f}, MouseButton::Left);
     CHECK_FALSE(menu->IsOpen());
-    CHECK(d->GetPopup() == nullptr);
+    CHECK(d->PopupCount() == 0u);
 }
 
 TEST_CASE("menu: can be reopened after being dismissed")
@@ -148,8 +148,8 @@ TEST_CASE("menu: can be reopened after being dismissed")
     // Reopen at a new position - must work and re-register as the popup.
     menu->Open(*panel, core::Float2{120.0f, 90.0f});
     CHECK(menu->IsOpen());
-    CHECK(d->GetPopup() == menu.Get());
-    CHECK(menu->GetParent() == root.Get());
+    CHECK(d->TopPopup() == menu.Get());
+    CHECK(menu->GetParent() == panel.Get()); // a popup of what opened it
     CHECK(menu->GetPosition().x == doctest::Approx(120.0f));
 }
 
@@ -199,7 +199,7 @@ TEST_CASE("menu: a checkable item toggles, fires its callback, and closes the me
     CHECK_FALSE(menu->IsOpen()); // menus close on activation
 }
 
-TEST_CASE("menu: a submenu opens to the right as a sibling on hover")
+TEST_CASE("menu: a submenu opens to the right of its item on hover")
 {
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{600.0f, 600.0f});
@@ -220,7 +220,7 @@ TEST_CASE("menu: a submenu opens to the right as a sibling on hover")
     d->InjectMouseMove(core::Float2{60.0f, 88.0f});
     CHECK(menu->CurrentSubMenu() == sub);
     CHECK(sub->IsOpen());
-    CHECK(sub->GetParent() == root.Get());                  // attached as a sibling of the menu
+    CHECK(sub->GetParent()->GetParent() == menu.Get());     // a popup of its item, in the menu
     CHECK(sub->GetPosition().x == doctest::Approx(210.0f)); // menu.x(50) + menu.width(160)
     CHECK(sub->GetPosition().y == doctest::Approx(76.0f));  // menu.y(50) + item.y(26)
 }
@@ -278,7 +278,7 @@ TEST_CASE(
     CHECK_FALSE(menu->IsOpen()); // the whole chain closed
     CHECK(menu->GetParent() == nullptr);
     CHECK(sub->GetParent() == nullptr);
-    CHECK(d->GetPopup() == nullptr);
+    CHECK(d->PopupCount() == 0u);
 }
 
 TEST_CASE("menu: an outside click dismisses the whole open submenu chain")
@@ -303,5 +303,5 @@ TEST_CASE("menu: an outside click dismisses the whole open submenu chain")
     CHECK_FALSE(menu->IsOpen());
     CHECK(menu->GetParent() == nullptr);
     CHECK(sub->GetParent() == nullptr);
-    CHECK(d->GetPopup() == nullptr);
+    CHECK(d->PopupCount() == 0u);
 }

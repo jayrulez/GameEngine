@@ -4,10 +4,11 @@
 // GUI - :menu_bar partition
 //
 // MenuBar: a horizontal strip of buttons, each opening a Menu below it - the classic
-// application menu bar. Modeled on eepp's UIMenuBar (role only). Clicking a button toggles its
-// menu; while any menu is open, hovering a different button switches to it (the standard menu-
-// bar behavior). Switching is clean because the dispatcher tracks a single popup: opening the
-// next menu closes the current one, whose close-notification clears the bar's state.
+// application menu bar. Modeled on eepp's UIMenuBar (role only). Clicking a button opens its menu,
+// a popup of the button (E5); a press on the button again, outside the menu, closes it without
+// reopening, as the popup stack consumes it. While a menu is open, hovering a different button
+// switches to it: opening that menu closes the other (it does not hold the new one's button), and
+// the closed menu's notice clears the bar's state.
 //
 // Keyboard left/right navigation between menus is a follow-up (eepp's showNext/showPrevMenu);
 // click + hover-switch is the core behavior.
@@ -73,7 +74,7 @@ export namespace experimental::gui
                                { self->ToggleMenu(rawButton, rawMenu); });
             button->AddEventListener(EventType::MouseEnter, [self, rawButton, rawMenu](const Event&)
                                      { self->HoverMenu(rawButton, rawMenu); });
-            menu->SetOnClosed([self, rawMenu]() { self->OnMenuClosed(rawMenu); });
+            menu->SetOnClosed([self, rawMenu](PopupCloseReason) { self->OnMenuClosed(rawMenu); });
 
             AddChild(button.Get());
             m_entries.PushBack(BarEntry{rawButton, core::Move(menu)});
@@ -123,9 +124,7 @@ export namespace experimental::gui
         }
         void OpenMenu(Button* button, Menu* menu)
         {
-                        // The button is the popup owner: clicking it again toggles the menu closed instead
-            // of the outside-click path dismissing it before the toggle runs.
-            menu->Open(*this, button->ConvertToRootSpace(core::Float2{0.0f, button->GetSize().y}), button);
+            menu->OpenBelow(*button, *button);
             // Opening closed any previous menu (its OnMenuClosed cleared m_current + deselected
             // its button); now record the new one.
             m_current = menu;

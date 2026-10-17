@@ -141,38 +141,33 @@ export namespace experimental::gui
         // Fired when the window is closed via Close().
         void SetOnClose(core::Function<void()> callback) { m_onClose = core::Move(callback); }
 
-        // Show centered in `root` as a MODAL window: a dim scrim covers everything behind it and
-        // the dispatcher confines input to this window until Close() (clicks outside are ignored,
-        // Tab stays within). Focus moves to the first focusable child.
-        void OpenModal(Node& root) { OpenInternal(root, /*modal*/ true); }
+        // Show centered in `owner` as a MODAL window (E5): a manual, modal popup of `owner`, so
+        // everything below it is inert (pointer, keys, bindings) until Close(), its `::backdrop`
+        // part dims the root behind it, Tab stays within, focus moves to its first focusable child
+        // and comes back when it closes. Popups opened inside it (a combo box's list) stack above it.
+        void OpenModal(Node& owner) { OpenInternal(owner, /*modal*/ true); }
 
         // Show centered in `root` as a normal (non-blocking) top-level window.
         void Open(Node& root) { OpenInternal(root, /*modal*/ false); }
 
-        // Remove the window (and its scrim), release any modal, and fire the close callback.
+        // Remove the window (a modal one through the popup stack, which gives focus back), and fire
+        // the close callback.
         void Close()
         {
             if (!m_open)
                 return;
-            m_open = false;
-            if (m_modal)
-                if (EventDispatcher* dispatcher = GetEventDispatcher())
-                    if (dispatcher->GetModalRoot() == this)
-                        dispatcher->SetModalRoot(nullptr);
-            if (m_scrim)
+            EventDispatcher* dispatcher = GetEventDispatcher();
+            if (m_modal && dispatcher != nullptr && dispatcher->IsPopupOpen(*this))
             {
-                m_scrim->RemoveFromParent();
-                m_scrim.Reset();
+                (void)dispatcher->ClosePopup(*this); // its OnClosed finishes
+                return;
             }
             RemoveFromParent();
-            m_modal = false;
-            if (m_onClose)
-                m_onClose();
+            Closed();
         }
 
         [[nodiscard]] bool IsOpen() const noexcept { return m_open; }
         [[nodiscard]] bool IsModal() const noexcept { return m_modal; }
-        void SetScrimColor(Color color) { m_scrimColor = color; }
 
         // Theming parts: window::title (header bar) / ::grip (resize handle).
         void CollectStyleParts(core::Array<core::StringView>& out) const override
@@ -206,29 +201,37 @@ export namespace experimental::gui
             StyleWriteScope gripWrite(*m_resizeGrip);
             m_resizeGrip->SetAlpha(grip.Opacity);
         }
-        void OpenInternal(Node& root, bool modal)
+        void OpenInternal(Node& owner, bool modal)
         {
             if (m_open)
                 return;
-            m_modal = modal;
-            if (modal)
+            EventDispatcher* dispatcher = owner.GetEventDispatcher();
+            if (modal && dispatcher != nullptr)
             {
-                m_scrim = core::MakeRef<UIWidget>(MemoryAllocator());
-                m_scrim->SetSize(root.GetSize());
-                m_scrim->SetBackground(
-                    core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_scrimColor));
-                root.AddChild(m_scrim.Get()); // below the window (added first)
+                m_modal = true;
+                m_open = true;
+                CenterIn(owner.GetRootNode() != nullptr ? *owner.GetRootNode() : owner); // in the root's space
+                PopupOptions options;
+                options.Kind = PopupKind::Manual;
+                options.Modal = true;
+                options.TakesFocus = true;
+                Window* self = this;
+                options.OnClosed = [self](PopupCloseReason) { self->Closed(); };
+                dispatcher->OpenPopup(owner, *this, core::Move(options));
+                return;
             }
-            root.AddChild(this); // on top of the scrim
-            CenterIn(root);
+            m_modal = false;
+            owner.AddChild(this);
+            CenterIn(owner);
             ToFront();
             m_open = true;
-            if (modal)
-                if (EventDispatcher* dispatcher = GetEventDispatcher())
-                {
-                    dispatcher->SetModalRoot(this);
-                    dispatcher->FocusNext(); // focus the first focusable within the modal
-                }
+        }
+        void Closed()
+        {
+            m_open = false;
+            m_modal = false;
+            if (m_onClose)
+                m_onClose();
         }
 
         void CenterIn(Node& root)
@@ -263,11 +266,9 @@ export namespace experimental::gui
         RefPtr<Label> m_title;
         RefPtr<UIWidget> m_contentHost;
         RefPtr<DragHandle> m_resizeGrip;
-        RefPtr<UIWidget> m_scrim; // dim overlay behind a modal (owned while open)
         core::Function<void()> m_onClose;
         bool m_open = false;
         bool m_modal = false;
-        Color m_scrimColor{0.0f, 0.0f, 0.0f, 0.45f};
         core::Float2 m_minSize{120.0f, 60.0f};
         f32 m_titleBarHeight = 28.0f;
         f32 m_gripSize = 14.0f;

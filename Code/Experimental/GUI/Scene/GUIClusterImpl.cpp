@@ -87,8 +87,12 @@ namespace experimental::gui
         // The path, target first, held for the walk: a handler may remove nodes from it.
         Array<RefPtr<Node>> path(MemoryAllocator());
         for (Node* n = this; n != nullptr; n = n->m_parent)
+        {
             path.PushBack(RefPtr<Node>(n));
-        Node* const root = path[path.Size() - 1].Get();
+            if (n->m_routeStop)
+                break; // a modal popup: what holds it is inert
+        }
+        Node* const root = GetRootNode();
         // A node removed from the tree during the walk takes no further part in it.
         const auto inTree = [root](Node& n) { return n.GetRootNode() == root; };
         event.Target = this;
@@ -106,9 +110,15 @@ namespace experimental::gui
         if (inTree(*this))
             DeliverRouted(event);
         event.Phase = EventPhase::Bubble;
+        // Past an open popup, its owner and what holds that hear the event in their listeners, not
+        // their own handlers: an event in a popup is not one on what opened it (E5).
+        bool pastPopup = IsInTopLayer();
         for (usize i = 1; i < path.Size() && !event.Handled; ++i)
+        {
             if (inTree(*path[i]))
-                path[i]->DeliverRouted(event);
+                path[i]->DeliverRouted(event, !pastPopup);
+            pastPopup = pastPopup || path[i]->IsInTopLayer();
+        }
         return event.Handled;
     }
 }

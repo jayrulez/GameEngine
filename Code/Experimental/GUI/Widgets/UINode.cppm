@@ -132,6 +132,11 @@ export namespace experimental::gui
         [[nodiscard]] fonts::CachedFont* GetFont() const noexcept { return m_textStyle.Font; }
         [[nodiscard]] TextHAlign GetTextAlignH() const noexcept { return m_textStyle.HAlign; }
         [[nodiscard]] TextVAlign GetTextAlignV() const noexcept { return m_textStyle.VAlign; }
+        /// A modal popup's dim: its `::backdrop` part over the default one.
+        void DrawBackdrop(DrawContext& ctx, const Rect& bounds) const override
+        {
+            GetPartStyle(u8"backdrop").Draw(ctx, bounds, FilledBox(Color{0.0f, 0.0f, 0.0f, 0.45f}));
+        }
         /// The whole text style as a sheet computed it (no pins; inside a StyleWriteScope).
         void ApplyTextStyle(const TextStyle& style) { ChangeTextStyle(style); }
         /// Its own text style, captured when a sheet first styles it (what no rule and no parent gives).

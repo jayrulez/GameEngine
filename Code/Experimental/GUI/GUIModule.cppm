@@ -34,6 +34,7 @@ export import :action_manager;
 export import :actions;
 export import :keymap;
 export import :navigation;
+export import :popup_placement;
 export import :event_dispatcher;
 export import :commands;
 export import :data_model;

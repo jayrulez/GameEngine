@@ -448,21 +448,29 @@ Design (approved 2026-10-17), the web's top layer on the retained tree:
 - **A popup stays in its owner's subtree.** Opening promotes the node into its root's top layer:
   drawn after the whole tree in opening order, unclipped by its ancestors, positioned in the
   root's space, hit-tested first. It keeps inheriting its owner's text style, sheets match it
-  where it is (`combobox > listbox`), its events bubble to its owner, and removing the owner
-  removes it. The hand-copied fonts go.
+  where it is (`combobox > listbox`), its events bubble to its owner's listeners (not to the
+  owner's own handlers: a click in a menu is not a click on the button that opened it), and
+  removing the owner removes it. The hand-copied fonts go where a sheet styles the tree.
 - **Nesting from the tree.** An entry's popup ancestors are the open popups holding it. Opening an
   auto popup closes the auto popups that are not its ancestors; closing one closes its
   descendants first.
 - **Kinds, and a policy the layer owns.** `auto` closes on a press outside it and on Escape;
   `manual` closes only from code; `hint` (a tooltip) never closes the others, never takes focus
-  and passes the pointer through. A press outside an auto popup is consumed, with the rest of its
-  gesture, so closing a menu never acts on what lies under it, and a press on the opener closes
-  without reopening (user ruling 2026-10-17). Escape reaches the focused widget first; only when
+  and passes the pointer through. A press closes the auto popups above the one it lands in; a press
+  that closes some and lands in no open popup is consumed, with the rest of its gesture, so closing
+  a menu never acts on what lies under it, and a press on the opener closes without reopening (user
+  ruling 2026-10-17); a press in a popup that stays (a parent menu closing its submenu) goes on to
+  it, as LunarSong's and native menus do. Escape reaches the focused widget first; only when
   nothing takes it does the topmost auto entry close. Every close reports its reason (escape,
   outside press, code, owner removed) in a `toggle` event, open or closed.
 - **Modal entries.** Everything below the topmost modal entry is inert: no pointer, no keys, no
   bindings. Popups opened from inside it stack above it and work. Its backdrop is a styleable
   `::backdrop` part drawn just under it.
+- **Several roots.** Each root (an OS window, a render target) has its own top layer: a popup is
+  placed, shrunk and clamped within its root and never leaves it (a host may later give a popup a
+  borderless root of its own; hosting is not a concern yet, ruling 5). Input in one root closes the
+  auto popups and hints of the others, as a press outside them would; a modal makes only its own
+  root inert.
 - **Focus.** A focus-taking entry saves the focus it took, as a weak reference, and on closing
   gives it back only while focus is still inside the popup; a saved node that has gone or been
   disabled hands focus to its nearest surviving ancestor. The topmost focus-taking entry is a

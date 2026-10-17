@@ -531,7 +531,7 @@ namespace experimental::gui
                 &ToggleSwitch::StaticType(),   &Separator::StaticType(),    &Spacer::StaticType(),
                 &NumberField::StaticType(),    &EditableLabel::StaticType(), &Expander::StaticType(),
                 &Tab::StaticType(),            &TabBar::StaticType(),        &TabPage::StaticType(),
-                &TabView::StaticType(),
+                &TabView::StaticType(),        &ListView::StaticType(),
             };
             for (const TypeInfo* type : kLabElements)
                 (void)ElementTypes::Register(*type);
@@ -917,6 +917,31 @@ namespace experimental::gui
             .PropAttribute("css", core::String(u8"object-position"));
         builder.AccessorProperty<&Image::GetImageColor, &Image::SetImageColor>("imageColor").PropAttribute("css", core::String(u8"image-color"));
         builder.Method<&ElementOf<Image>, Image, Node>("of");
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(ItemView, "rtti::gui")
+    {
+        builder.AccessorProperty<&ItemView::GetItemsText, &ItemView::SetItemsText>("items").PropAttribute("css", core::String(u8"items"));
+        builder.AccessorProperty<&ItemView::GetRowHeight, &ItemView::SetRowHeight>("rowHeight").PropAttribute("css", core::String(u8"row-height"));
+        builder.AccessorProperty<&ItemView::GetEstimatedRowHeight, &ItemView::SetEstimatedRowHeight>("estimatedRowHeight")
+            .PropAttribute("css", core::String(u8"estimated-row-height"));
+        builder.AccessorProperty<&ItemView::GetSelectedItem, &ItemView::SetSelectedItem>("selected")
+            .PropAttribute("css", core::String(u8"selected"))
+            .PropAttribute("twoWay", true); // the user selects: a binding may write it back
+        builder.AccessorProperty<&ItemView::GetSelectionModeName, &ItemView::SetSelectionModeName>("selectionMode")
+            .PropAttribute("css", core::String(u8"selection-mode"));
+        builder.AccessorProperty<&ItemView::GetRowTypeColumn, &ItemView::SetRowTypeColumn>("rowTypeColumn")
+            .PropAttribute("css", core::String(u8"row-type-column"));
+        builder.Method<&ItemView::BeginEdit>("beginEdit");
+        builder.Method<&ItemView::SelectAll>("selectAll");
+        builder.Method<&ItemView::ClearSelection>("clearSelection");
+        builder.Method<&ElementOf<ItemView>, ItemView, Node>("of");
+    }
+
+    REFLECT_MEMBERS(ListView, "rtti::gui")
+    {
+        builder.Method<&ElementOf<ListView>, ListView, Node>("of");
         builder.Creator();
     }
 

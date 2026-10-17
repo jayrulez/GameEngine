@@ -405,11 +405,14 @@ export namespace experimental::gui
             event.Handled = true;
         }
 
-        // Its parts take its font and colour (a sheet's inheritance gives the same).
+        // Its text part takes its font, colour and alignment (a sheet's inheritance gives the same).
         void OnTextStyleChange() override
         {
-            if (m_textPart)
-                ShareTextStyle(*m_textPart);
+            if (!m_textPart)
+                return;
+            ShareTextStyle(*m_textPart);
+            StyleWriteScope own(*m_textPart);
+            m_textPart->SetTextAlignment(GetTextAlignH(), TextVAlign::Middle);
         }
 
     private:
@@ -424,7 +427,7 @@ export namespace experimental::gui
                 m_textPart->SetHitTestVisible(false);
                 {
                     StyleWriteScope defaults(*m_textPart);
-                    m_textPart->SetTextAlignment(TextHAlign::Center, TextVAlign::Middle);
+                    m_textPart->SetTextAlignment(GetTextAlignH(), TextVAlign::Middle); // its button's
                     // It takes the space the icon and the indicator leave, its text aligned in it.
                     m_textPart->EditLayoutStyle([](LayoutStyle& s) { s.Grow = 1.0f; });
                 }

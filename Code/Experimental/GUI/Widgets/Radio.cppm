@@ -19,6 +19,7 @@ import foundation.vg;   // CornerRadii
 import :rect;
 import :draw_context;
 import :button_base;
+import :text; // TextHAlign
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -33,6 +34,10 @@ export namespace experimental::gui
         RadioButton()
         {
             SetTag(core::StringView(u8"radio"));
+            {
+                StyleWriteScope defaults(*this);
+                SetTextAlignment(TextHAlign::Left, TextVAlign::Middle); // its text beside its indicator
+            }
             SetToggle(true);
             SetKeepsChecked(true);
             MakeIndicator();

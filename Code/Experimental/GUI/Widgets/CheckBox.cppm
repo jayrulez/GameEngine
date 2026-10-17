@@ -20,6 +20,7 @@ import foundation.vg;   // CornerRadii, PathBuilder, StrokeStyle
 import :rect;
 import :draw_context;
 import :button_base;
+import :text; // TextHAlign
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -34,6 +35,10 @@ export namespace experimental::gui
         CheckBox()
         {
             SetTag(core::StringView(u8"checkbox"));
+            {
+                StyleWriteScope defaults(*this);
+                SetTextAlignment(TextHAlign::Left, TextVAlign::Middle); // its text beside its indicator
+            }
             SetToggle(true);
             MakeIndicator();
         }

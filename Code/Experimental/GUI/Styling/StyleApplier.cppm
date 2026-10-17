@@ -555,6 +555,15 @@ export namespace experimental::gui
                 const Variant value = ParseForProperty(*property, p.Value.AsView(), lengths);
                 if (value.IsEmpty())
                     continue;
+                // A value it holds already is not written again: a restyle would otherwise run a
+                // setter each time (a list rebuilding its rows, which restyled it again, every frame).
+                // Compared as text, so a value with none (a colour) is written as before.
+                const core::String current = ValueText(GetProperty(*property, instance));
+                if (current.Size() != 0 && ValueText(value) == current)
+                {
+                    record->Written = current;
+                    continue;
+                }
                 (void)SetProperty(*property, instance, value);
                 record->Written = ValueText(GetProperty(*property, instance));
             }

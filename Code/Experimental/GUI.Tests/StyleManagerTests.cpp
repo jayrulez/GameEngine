@@ -190,6 +190,27 @@ TEST_CASE("style-manager: markup's inline properties outrank every sheet's norma
     CHECK(chip->GetAlpha() == doctest::Approx(0.6f));
 }
 
+TEST_CASE("style-manager: a markup property a restyle meets again is not written again; the tree settles")
+{
+    RegisterGuiElements();
+    const ElementSet elements = ElementSet::All();
+    MarkupLoader loader(elements, core::DefaultAllocator());
+    core::RefPtr<Node> markup = loader.LoadFromString(SV(u8R"(<Panel><ListBox items="One|Two|Three"/></Panel>)"));
+    REQUIRE(markup);
+    auto root = NewRoot();
+    root->AddChild(markup.Get());
+    auto* list = core::Cast<ListBox>(markup->GetChildAt(0));
+    REQUIRE(list != nullptr);
+    StyleManager styles(CSSParser::Parse(SV(u8"listbox { opacity: 1; }")));
+    styles.ApplyTree(*root.Get());
+    REQUIRE(list->ItemCount() == 3u);
+    Node* firstRow = list->GetChildAt(0);
+    styles.ApplyTree(*root.Get());
+    styles.ApplyTree(*root.Get());
+    CHECK(styles.LastRestyleCount() == 0u); // a list rebuilding its rows restyled itself every frame
+    CHECK(list->GetChildAt(0) == firstRow);  // its rows were not made again
+}
+
 // ===================== E3: computed style =====================
 
 TEST_CASE("style-manager: a rule that stops matching gives back everything it set")

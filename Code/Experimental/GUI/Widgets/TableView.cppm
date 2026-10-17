@@ -10,7 +10,9 @@
 // view's width, or auto (an equal share of what is left, no narrower than a minimum); columns
 // wider than the view scroll it across. Dragging a header cell's right edge resizes its column (to
 // pixels from then on). A click on a header cell reports its column, or with nothing listening
-// sorts by it where the model can; the sorted column's cell shows which way.
+// sorts by it where the model can; the sorted column's cell shows which way. In markup,
+// `columns="Name|Score"` and `<TableItem cells="Ada|42"/>` children make a model of its own
+// (behind a sorting proxy, numbers kept as numbers so they sort by value).
 
 module;
 #include "Core/Prelude.h"
@@ -30,6 +32,10 @@ import :rectangle_drawable;
 import :model_index;
 import :model;
 import :item_view;
+import :table_model;
+import :sorting_proxy_model;
+import :variant;
+import :list_box; // SplitItems
 import :draw_context;
 import :layout_style;     // LayoutLength, Overflow
 import :event_dispatcher; // SuppressClick (a resize is no click)
@@ -120,6 +126,30 @@ export namespace experimental::gui
         Array<core::RefPtr<Label>> m_cells;
     };
 
+    /// A row of a table written in markup: its cells as text, '|' between them.
+    class TableItem : public UIWidget
+    {
+        RTTI_OBJECT(TableItem, UIWidget)
+    public:
+        TableItem()
+        {
+            SetTag(core::StringView(u8"tableitem"));
+            SetDisplayed(false); // data, not drawn
+        }
+        bool SetMarkupAttribute(core::StringView name, core::StringView value) override
+        {
+            if (name != core::StringView(u8"cells"))
+                return UIWidget::SetMarkupAttribute(name, value);
+            m_cells = core::String(value);
+            return true;
+        }
+        [[nodiscard]] core::String GetCells() const { return m_cells; }
+        void SetCells(const core::String& cells) { m_cells = cells; }
+
+    private:
+        core::String m_cells;
+    };
+
     class TableView : public ItemView
     {
         RTTI_OBJECT(TableView, ItemView)
@@ -135,6 +165,9 @@ export namespace experimental::gui
             SetTextColor(Color{0.86f, 0.89f, 0.94f, 1.0f});
             EditLayoutStyle([](LayoutStyle& s) { s.OverflowX = Overflow::Auto; }); // columns past its width
         }
+
+        // Its own model goes before the view's base would let go of it: let go first.
+        ~TableView() override { SetModel(nullptr); }
 
         void SetHeaderHeight(f32 height)
         {
@@ -216,6 +249,52 @@ export namespace experimental::gui
         /// A column's width in the last layout.
         [[nodiscard]] f32 GetColumnWidth(usize column) const { return column < m_widths.Size() ? m_widths[column] : 0.0f; }
         [[nodiscard]] usize GetColumnCount() const { return GetModel() != nullptr ? GetModel()->ColumnCount() : 0; }
+
+        // === Markup: a model of its own ===
+        /// Its columns' names, '|' between them (markup's `columns`).
+        void SetColumnsText(const core::String& text)
+        {
+            EnsureOwnModel();
+            Array<core::String> columns;
+            for (core::StringView name : SplitItems(text.AsView()))
+                columns.PushBack(core::String(name));
+            m_ownModel->SetColumns(core::Move(columns));
+        }
+        [[nodiscard]] core::String GetColumnsText() const
+        {
+            Array<core::String> columns;
+            for (usize c = 0; c < GetColumnCount(); ++c)
+                columns.PushBack(GetModel()->ColumnName(c));
+            return JoinItems(columns);
+        }
+        /// Its own model's cells may be edited in place (F2).
+        void SetEditable(bool editable)
+        {
+            EnsureOwnModel();
+            m_ownModel->SetEditable(editable);
+            m_editable = editable;
+        }
+        [[nodiscard]] bool IsEditable() const noexcept { return m_editable; }
+        /// Markup's children are its rows (TableItems).
+        [[nodiscard]] Node* GetChildHost() override
+        {
+            if (!m_markupHost)
+            {
+                TableView* self = this;
+                m_markupHost = core::MakeRef<MarkupChildHost>(MemoryAllocator(), [self](Node& host)
+                {
+                    self->EnsureOwnModel();
+                    while (host.ChildCount() != 0)
+                    {
+                        core::RefPtr<Node> child(host.GetChildAt(0));
+                        host.RemoveChild(child.Get());
+                        if (const TableItem* item = core::Cast<TableItem>(child.Get()))
+                            self->m_ownModel->AddRow(ParseCells(item->GetCells()));
+                    }
+                });
+            }
+            return m_markupHost.Get();
+        }
 
         // Header clicks (a column); with none set, a click sorts where the model can.
         void SetOnColumnHeaderClicked(core::Function<void(usize)> callback) { m_onHeaderClicked = core::Move(callback); }
@@ -342,6 +421,33 @@ export namespace experimental::gui
                 m_widths.PushBack(core::Max(m_minColumnWidth, w.Resolve(bodyWidth).ValueOr(share)));
             }
         }
+        void EnsureOwnModel()
+        {
+            if (m_ownModel)
+                return;
+            m_ownModel = core::MakeUnique<TableModel>(MemoryAllocator());
+            m_ownProxy = core::MakeUnique<SortingProxyModel>(MemoryAllocator(), m_ownModel.Get());
+            SetModel(m_ownProxy.Get());
+        }
+        // A row's cells from text: a number stays a number (it sorts by value).
+        [[nodiscard]] static Array<Variant> ParseCells(const core::String& text)
+        {
+            Array<Variant> cells;
+            for (core::StringView cell : SplitItems(text.AsView()))
+            {
+                bool integer = cell.Size() != 0;
+                for (usize i = 0; i < cell.Size(); ++i)
+                    integer = integer && ((cell[i] >= u8'0' && cell[i] <= u8'9') || (i == 0 && cell[i] == u8'-' && cell.Size() > 1));
+                const Optional<f64> number = core::ParseFloat(cell);
+                if (integer)
+                    cells.PushBack(Variant(static_cast<i64>(number.ValueOr(0.0))));
+                else if (number.HasValue() && cell.Size() != 0)
+                    cells.PushBack(Variant(number.Value()));
+                else
+                    cells.PushBack(Variant(cell));
+            }
+            return cells;
+        }
         // A drag of a header cell's edge: the column takes that many pixels.
         void ResizeColumn(usize column, f32 width) { SetColumnWidth(column, LayoutLength::Px(core::Max(m_minColumnWidth, width))); }
 
@@ -354,6 +460,10 @@ export namespace experimental::gui
         SortOrder m_sortOrder = SortOrder::None;
         f32 m_headerHeight = 26.0f;
         f32 m_minColumnWidth = 40.0f;
+        core::UniquePtr<TableModel> m_ownModel;         // markup's rows
+        core::UniquePtr<SortingProxyModel> m_ownProxy; // over it, so its header sorts
+        core::RefPtr<Node> m_markupHost;               // where markup's rows land, then taken in
+        bool m_editable = false;
         Color m_headerColor{0.20f, 0.22f, 0.27f, 1.0f};
         Color m_headerTextColor{0.86f, 0.89f, 0.94f, 1.0f};
     };
@@ -435,5 +545,4 @@ export namespace experimental::gui
 
     RTTI_DEFINE_OBJECT(TableHeaderCell, "rtti::gui")
     RTTI_DEFINE_OBJECT(TableRowContent, "rtti::gui")
-    RTTI_DEFINE_OBJECT(TableView, "rtti::gui")
 }

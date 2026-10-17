@@ -532,7 +532,7 @@ export namespace experimental::gui
         }
         /// Markup's children are its items; a menu given items there sizes to its widest.
         [[nodiscard]] Node* GetChildHost() override;
-        /// The rows markup gave it, taken in (MenuChildHost calls it).
+        /// The rows markup gave it, taken in (its MarkupChildHost calls it).
         void AdoptMarkupChildren(Node& host);
 
         [[nodiscard]] usize ItemCount() const noexcept
@@ -848,28 +848,12 @@ export namespace experimental::gui
         core::Function<void(PopupCloseReason)> m_onClosed;
     };
 
-    // Where markup's children land: unseen, each taken into its menu as it arrives.
-    class MenuChildHost : public UIWidget
-    {
-        RTTI_OBJECT(MenuChildHost, UIWidget)
-    public:
-        explicit MenuChildHost(core::Function<void(Node&)> adopt) : m_adopt(core::Move(adopt)) { SetDisplayed(false); }
-        void OnChildrenChanged() override
-        {
-            if (m_adopt && ChildCount() != 0)
-                m_adopt(*this);
-        }
-
-    private:
-        core::Function<void(Node&)> m_adopt;
-    };
-
     inline Node* Menu::GetChildHost()
     {
         if (!m_markupHost)
         {
             Menu* self = this;
-            m_markupHost = core::MakeRef<MenuChildHost>(MemoryAllocator(), [self](Node& host) { self->AdoptMarkupChildren(host); });
+            m_markupHost = core::MakeRef<MarkupChildHost>(MemoryAllocator(), [self](Node& host) { self->AdoptMarkupChildren(host); });
             m_autoWidth = true;
         }
         return m_markupHost.Get();
@@ -898,5 +882,4 @@ export namespace experimental::gui
 
     RTTI_DEFINE_OBJECT(MenuRow, "rtti::gui")
     RTTI_DEFINE_OBJECT(MenuSubItem, "rtti::gui")
-    RTTI_DEFINE_OBJECT(MenuChildHost, "rtti::gui")
 }

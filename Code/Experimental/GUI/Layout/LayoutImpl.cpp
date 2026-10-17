@@ -963,6 +963,11 @@ namespace experimental::gui
             extent.x = core::Max(extent.x, child.GetPosition().x + child.GetSize().x + m.Right - box.x);
             extent.y = core::Max(extent.y, child.GetPosition().y + child.GetSize().y + m.Bottom - box.y);
         }
+        SetScrollExtent(extent);
+    }
+
+    void Node::SetScrollExtent(core::Float2 extent)
+    {
         const bool latched = IsLatchedToEnd(); // as it was before the content changed
         m_contentExtent = extent;
         ApplyScrollOffset(m_scrollOffset); // kept within the new range, a smooth scroll going on

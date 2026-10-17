@@ -650,6 +650,7 @@ export namespace experimental::gui
             StateReadOnly = 1u << 9,
             StateReadWrite = 1u << 10,
             StatePlaceholderShown = 1u << 11,
+            StateSelected = 1u << 18, // after the selector's own flags (12 to 17)
         };
         /// `states` changed on this node: it restyles (its subtree too when the sheets read them
         /// through it).
@@ -923,6 +924,11 @@ export namespace experimental::gui
         }
         /// The content's size as last laid out: what a scroll container scrolls over.
         [[nodiscard]] core::Float2 GetContentExtent() const noexcept { return m_contentExtent; }
+        /// Sets what a scroll container scrolls over, as laying out its children does (the
+        /// offset kept within it, held at the end while latched): a container that places its
+        /// children itself (an item view, which realises only some of them) says how far its
+        /// content reaches.
+        void SetScrollExtent(core::Float2 extent); // LayoutImpl.cpp
         /// How far the wheel scrolls per notch, and the arrow keys per press.
         void SetScrollStep(f32 step) noexcept { m_scrollStep = step; }
         [[nodiscard]] f32 GetScrollStep() const noexcept { return m_scrollStep; }
@@ -1577,6 +1583,8 @@ export namespace experimental::gui
         virtual void OnParentChange() {}
         // Called on this node after a child is added or removed (containers re-layout here).
         virtual void OnChildrenChanged() {}
+        /// Its scroll offset moved (a container realising what is in view follows it here).
+        virtual void OnScrollChange() {}
 
     protected:
         /// The device pixels per logical unit the top of a tree lays out on (its children take
@@ -1730,6 +1738,7 @@ export namespace experimental::gui
                 m_latchedToEnd = IsAtScrollEnd(); // scrolled away it lets go; back at the end it holds
             if (m_layoutStyle.BarVisibility == ScrollbarVisibility::Overlay)
                 ShowOverlayScrollbars();
+            OnScrollChange();
             SendEvent(Event(EventType::Scroll, this));
         }
         /// Eases toward m_scrollTarget on the GUI's clock (LayoutImpl.cpp, which sees :actions).

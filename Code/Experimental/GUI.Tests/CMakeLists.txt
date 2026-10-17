@@ -57,6 +57,7 @@ add_executable(GUI.Tests
     ScrollTests.cpp
     RadioTests.cpp
     ImageWidgetTests.cpp
+    ItemViewTests.cpp
     ListBoxTests.cpp
     ListViewTests.cpp
     TableViewTests.cpp

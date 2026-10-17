@@ -88,7 +88,7 @@ export namespace experimental::gui
         core::String text; ///< typed text
         f32 deltaX = 0.0f; ///< the wheel
         f32 deltaY = 0.0f;
-        i32 index = -1; ///< the tab, for `tabclose`
+        i32 index = -1; ///< the tab for `tabclose`; the row for `activate`, and for a pointer event over a row
     };
 
     /// Registers the lab's own element types (ElementTypes::Register: Label, Button, the layouts,

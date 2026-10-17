@@ -46,6 +46,7 @@ namespace
         tree->SetIndentWidth(16.0f);
         root->AddChild(tree.Get());
         tree->SetModel(model);
+        (void)root->UpdateLayout();
         return tree;
     }
 }

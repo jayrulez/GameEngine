@@ -78,6 +78,7 @@ namespace experimental::gui
                 {u8"contextmenu", EventType::ContextMenu},
                 {u8"scroll", EventType::Scroll},
                 {u8"tabclose", EventType::TabClose},
+                {u8"activate", EventType::ItemActivate},
             };
             for (const Named& entry : kNames)
             {
@@ -121,6 +122,13 @@ namespace experimental::gui
             case EventType::ContextMenu:
             {
                 const MouseEvent& mouse = static_cast<const MouseEvent&>(event);
+                // Over an item view's row: which (a context menu for it).
+                for (Node* n = event.Target; n != nullptr; n = n->GetParent())
+                    if (const ItemRow* row = Cast<ItemRow>(n))
+                    {
+                        out.index = row->GetItemIndex();
+                        break;
+                    }
                 place(mouse.Position);
                 out.pointer = core::String(mouse.Pointer == PointerType::Touch ? u8"touch" : u8"mouse");
                 out.button = static_cast<i32>(mouse.Button);
@@ -154,6 +162,7 @@ namespace experimental::gui
                 break;
             }
             case EventType::TabClose: out.index = static_cast<const TabEvent&>(event).Index; break;
+            case EventType::ItemActivate: out.index = static_cast<const ItemEvent&>(event).Item; break;
             default: break;
             }
             return out;

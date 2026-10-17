@@ -963,8 +963,16 @@ namespace experimental::gui
             extent.x = core::Max(extent.x, child.GetPosition().x + child.GetSize().x + m.Right - box.x);
             extent.y = core::Max(extent.y, child.GetPosition().y + child.GetSize().y + m.Bottom - box.y);
         }
+        const bool latched = IsLatchedToEnd(); // as it was before the content changed
         m_contentExtent = extent;
         ApplyScrollOffset(m_scrollOffset); // kept within the new range, a smooth scroll going on
+        if (latched && !m_smoothScrolling && !m_flinging)
+        {
+            // Held at the end: it follows the content's new end.
+            const core::Float2 range = GetScrollRange();
+            ApplyScrollOffset(range.y > 0.0f || range.x <= 0.0f ? core::Float2{m_scrollOffset.x, range.y} : core::Float2{range.x, m_scrollOffset.y});
+            m_latchedToEnd = true;
+        }
         if (m_smoothScrolling)
         {
             const core::Float2 range = GetScrollRange();

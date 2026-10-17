@@ -209,3 +209,10 @@ TEST_CASE("markup: the text widgets' password, filter, length and rows are attri
     CHECK(rich->IsRich());
     CHECK(rich->GetTextLayout().Document().Runs[0].Bold);
 }
+
+TEST_CASE("markup: a scroller may stick to its end")
+{
+    auto root = Load(u8R"(<ScrollView stick-to-end="true"/>)");
+    REQUIRE(root.Get() != nullptr);
+    CHECK(root->IsStickToEnd());
+}

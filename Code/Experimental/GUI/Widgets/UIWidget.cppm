@@ -32,6 +32,7 @@ export namespace experimental::gui
         WidgetStateIndeterminate = 1u << 1,
         WidgetStateEditable = 1u << 2, ///< the user edits its value (:read-write; else :read-only)
         WidgetStatePlaceholderShown = 1u << 3,
+        WidgetStateSelected = 1u << 4, ///< an item view's row in its selection (:selected)
     };
 
     class UIWidget : public UINode

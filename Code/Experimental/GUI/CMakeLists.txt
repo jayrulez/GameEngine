@@ -83,7 +83,7 @@ target_sources(GUI
             Widgets/ScrollView.cppm
             Widgets/Image.cppm
             Widgets/ListBox.cppm
-            Widgets/AbstractItemView.cppm
+            Widgets/ItemView.cppm
             Widgets/ListView.cppm
             Widgets/TableView.cppm
             Widgets/TreeView.cppm

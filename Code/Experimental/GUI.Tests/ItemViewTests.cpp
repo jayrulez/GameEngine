@@ -1,0 +1,385 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026-Present Robert Campbell
+
+// GUI - ItemView (E6): the engine behind the list, tree and table views. Row heights in a sum
+// tree, measured on demand; scrolling anchored to an item; rows from a native factory, pooled by
+// type and recycled; selection as a set of ids that survives inserts and sorting; `activate`,
+// type-ahead and editing in place; and the view as a Node scroll container.
+#include <doctest/doctest.h>
+#include "Core/Prelude.h"
+import foundation.core;
+import experimental.gui;
+
+using namespace experimental::gui;
+namespace core = foundation::core;
+
+namespace
+{
+    template <typename T>
+    core::RefPtr<T> Make()
+    {
+        return core::MakeRef<T>(core::DefaultAllocator());
+    }
+    core::StringView SV(const char8_t* s) { return core::StringView(s); }
+
+    core::Array<core::String> Numbered(int count)
+    {
+        core::Array<core::String> items;
+        for (int i = 0; i < count; ++i)
+            items.PushBack(core::Format(u8"item {}", i));
+        return items;
+    }
+
+    struct Mounted
+    {
+        core::RefPtr<SceneRoot> root;
+        core::RefPtr<ListView> list;
+        EventDispatcher& D() { return *root->GetEventDispatcher(); }
+        void Layout() { (void)root->UpdateLayout(); }
+    };
+
+    Mounted MountList(IModel& model, float rowHeight = 20.0f, float height = 100.0f)
+    {
+        Mounted m;
+        m.root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+        m.root->SetSize(core::Float2{300.0f, 300.0f});
+        m.list = Make<ListView>();
+        m.list->SetSize(core::Float2{200.0f, height});
+        m.list->SetRowHeight(rowHeight);
+        m.root->AddChild(m.list.Get());
+        m.list->SetModel(&model);
+        m.Layout();
+        return m;
+    }
+
+    // A factory whose rows are as tall as the number in their text says (`item 3` is 30 high).
+    RowFactory TallRows(int* created)
+    {
+        RowFactory f;
+        f.Create = [created](core::u32)
+        {
+            ++*created;
+            auto panel = Make<Panel>();
+            return core::RefPtr<Node>(panel);
+        };
+        f.Bind = [](Node& content, const ModelIndex& index)
+        {
+            const float h = 10.0f * static_cast<float>(index.Row % 4 + 1);
+            content.EditLayoutStyle([h](LayoutStyle& s) { s.Height = LayoutLength::Px(h); });
+        };
+        return f;
+    }
+}
+
+TEST_CASE("itemview: row heights in a sum tree find a row by offset and an offset by row")
+{
+    RowHeights h;
+    h.Reset(5, 10.0f);
+    CHECK(h.Total() == doctest::Approx(50.0f));
+    CHECK(h.Top(3) == doctest::Approx(30.0f));
+    CHECK(h.Find(0.0f) == 0);
+    CHECK(h.Find(29.9f) == 2);
+    CHECK(h.Find(30.0f) == 3);
+    CHECK(h.Find(500.0f) == 4); // past the end: the last
+    CHECK(h.Set(1, 25.0f));
+    CHECK(h.IsMeasured(1));
+    CHECK(h.Top(2) == doctest::Approx(35.0f));
+    CHECK(h.Find(34.0f) == 1);
+    h.Insert(0, 2, 5.0f);
+    CHECK(h.Size() == 7);
+    CHECK(h.Top(3) == doctest::Approx(20.0f)); // 5, 5, 10, then the 25
+    CHECK(h.Top(4) == doctest::Approx(45.0f));
+    h.Remove(0, 2);
+    CHECK(h.Top(2) == doctest::Approx(35.0f));
+    h.Move(1, 1, 4); // the 25 row goes last
+    CHECK(h.At(4) == doctest::Approx(25.0f));
+    CHECK(h.Total() == doctest::Approx(65.0f));
+}
+
+TEST_CASE("itemview: measured rows take their own heights once realised, estimated until then")
+{
+    StringListModel model(Numbered(100));
+    Mounted m = MountList(model, 20.0f);
+    int created = 0;
+    m.list->SetRowFactory(TallRows(&created));
+    m.list->SetRowHeight(0.0f); // measured
+    m.list->SetEstimatedRowHeight(25.0f);
+    m.Layout();
+    // Rows 0..: 10, 20, 30, 40, 10, ... The first rows are measured; the rest still estimated.
+    const Rect r2 = m.list->ItemBounds(2);
+    CHECK(r2.y == doctest::Approx(30.0f));
+    CHECK(r2.height == doctest::Approx(30.0f));
+    CHECK(m.list->ItemBounds(99).height == doctest::Approx(25.0f));
+    CHECK(m.list->GetContentExtent().y > 100.0f * 10.0f);
+    // A row's content fills it.
+    ItemRow* row = m.list->RowForItem(3);
+    REQUIRE(row != nullptr);
+    CHECK(row->GetSize().y == doctest::Approx(40.0f));
+}
+
+TEST_CASE("itemview: rows come from a factory, one pool per type, recycled as they scroll")
+{
+    StringListModel model(Numbered(200));
+    Mounted m = MountList(model);
+    int created = 0;
+    core::u32 boundTypes[2] = {0, 0};
+    RowFactory f;
+    f.TypeOf = [](const ModelIndex& index) { return static_cast<core::u32>(index.Row % 2); };
+    f.Create = [&](core::u32 type)
+    {
+        ++created;
+        auto label = Make<Label>();
+        label->AddClass(type == 0 ? SV(u8"even") : SV(u8"odd"));
+        return core::RefPtr<Node>(label);
+    };
+    f.Bind = [&](Node& content, const ModelIndex& index)
+    {
+        auto& label = static_cast<Label&>(content);
+        CHECK(label.HasClass(index.Row % 2 == 0 ? SV(u8"even") : SV(u8"odd"))); // a row of its type
+        ++boundTypes[index.Row % 2];
+        label.SetText(model.ItemAt(static_cast<core::usize>(index.Row)));
+    };
+    m.list->SetRowFactory(core::Move(f));
+    m.Layout();
+    const int firstMade = created;
+    CHECK(firstMade == 6);
+
+    // Scrolling a long way makes no more rows: the ones that leave are taken again.
+    for (int i = 0; i < 20; ++i)
+    {
+        m.D().InjectMouseWheel(core::Float2{50.0f, 50.0f}, core::Float2{0.0f, -3.0f});
+        m.Layout();
+    }
+    CHECK(m.list->GetScrollOffset().y == doctest::Approx(1200.0f));
+    CHECK(created <= firstMade + 2);
+    CHECK(m.list->VisibleRowCount() <= 7);
+    ItemRow* row = m.list->RowForItem(61);
+    REQUIRE(row != nullptr);
+    CHECK(static_cast<Label*>(row->GetContent())->GetText() == SV(u8"item 61"));
+    CHECK(boundTypes[0] > 6);
+    CHECK(boundTypes[1] > 6);
+}
+
+TEST_CASE("itemview: rows inserted above leave what is in view where it is")
+{
+    StringListModel model(Numbered(100));
+    Mounted m = MountList(model);
+    m.list->ScrollToItem(50, ScrollAlign::Start);
+    m.Layout();
+    CHECK(m.list->GetScrollOffset().y == doctest::Approx(1000.0f));
+    for (int i = 0; i < 3; ++i)
+        model.InsertItem(0, SV(u8"new"));
+    m.Layout();
+    // Item 50 is now item 53, still at the top of the view.
+    CHECK(m.list->GetScrollOffset().y == doctest::Approx(53.0f * 20.0f));
+    ItemRow* top = m.list->RowForItem(53);
+    REQUIRE(top != nullptr);
+    CHECK(static_cast<Label*>(top->GetContent())->GetText() == SV(u8"item 50"));
+}
+
+TEST_CASE("itemview: a row above measuring taller than its estimate leaves the view where it is")
+{
+    StringListModel model(Numbered(100));
+    Mounted m = MountList(model);
+    int created = 0;
+    m.list->SetRowFactory(TallRows(&created));
+    m.list->SetRowHeight(0.0f);
+    m.list->SetEstimatedRowHeight(10.0f);
+    m.Layout();
+    // Jump to item 40: realised with the row above it (39), whose measuring is put back at once.
+    m.list->ScrollToItem(40, ScrollAlign::Start);
+    m.Layout();
+    const float before = m.list->ItemBounds(40).y;
+    CHECK(m.list->GetScrollOffset().y == doctest::Approx(before));
+    // Five pixels up realises row 38 (30 high, estimated 10): everything below it moves down 20,
+    // and the offset with it, so the view shows what it did, five pixels higher.
+    m.list->ScrollBy(core::Float2{0.0f, -5.0f});
+    m.Layout();
+    CHECK(m.list->ItemBounds(40).y - before == doctest::Approx(20.0f));
+    CHECK(m.list->ItemBounds(40).y - m.list->GetScrollOffset().y == doctest::Approx(5.0f));
+}
+
+TEST_CASE("itemview: the selection is a set of ids: it follows rows inserted above, and leaves with a removed row")
+{
+    StringListModel model(Numbered(10));
+    Mounted m = MountList(model);
+    m.list->SetSelectedItem(4);
+    model.InsertItem(0, SV(u8"new"));
+    CHECK(m.list->GetSelectedItem() == 5);
+    CHECK(m.list->GetSelectedIndex().Row == 5);
+    model.MoveItem(5, 0);
+    CHECK(m.list->GetSelectedItem() == 0);
+    model.RemoveItem(0);
+    CHECK(m.list->GetSelectedItem() == -1);
+    CHECK(m.list->GetSelectionCount() == 0);
+}
+
+TEST_CASE("itemview: a table's selection follows its row when a header click sorts it")
+{
+    TableModel model;
+    core::Array<core::String> columns;
+    columns.PushBack(core::String(SV(u8"Name")));
+    columns.PushBack(core::String(SV(u8"Score")));
+    model.SetColumns(core::Move(columns));
+    const char8_t* names[3] = {u8"b", u8"a", u8"c"};
+    const core::i64 scores[3] = {2, 10, 1};
+    for (int i = 0; i < 3; ++i)
+    {
+        core::Array<Variant> row;
+        row.PushBack(Variant(SV(names[i])));
+        row.PushBack(Variant(scores[i]));
+        model.AddRow(core::Move(row));
+    }
+    SortingProxyModel proxy(&model);
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{400.0f, 400.0f});
+    auto table = Make<TableView>();
+    table->SetSize(core::Float2{300.0f, 200.0f});
+    table->SetRowHeight(24.0f);
+    root->AddChild(table.Get());
+    table->SetModel(&proxy);
+    (void)root->UpdateLayout();
+    table->SetSelectedItem(0); // "b"
+
+    // Nothing listening to the header: a click sorts through the model's capability.
+    root->GetEventDispatcher()->InjectMouseDown(core::Float2{200.0f, 13.0f}, MouseButton::Left);
+    root->GetEventDispatcher()->InjectMouseUp(core::Float2{200.0f, 13.0f}, MouseButton::Left);
+    CHECK(proxy.GetSortColumn() == 1);
+    CHECK(proxy.Data(MakeModelIndex(0, 0)).AsString() == SV(u8"c")); // 1, 2, 10
+    CHECK(table->GetSelectedItem() == 1);                             // "b" is second now
+    CHECK(proxy.Data(MakeModelIndex(table->GetSelectedItem(), 0)).AsString() == SV(u8"b"));
+}
+
+TEST_CASE("itemview: a selected row shows :selected; a context menu asked for over a row selects it")
+{
+    RegisterGuiElements();
+    StringListModel model(Numbered(10));
+    Mounted m = MountList(model);
+    m.list->SetSelectedItem(1);
+    m.Layout();
+    ItemRow* row = m.list->RowForItem(1);
+    REQUIRE(row != nullptr);
+    CHECK((row->GetWidgetStates() & WidgetStateSelected) != 0);
+    CHECK(row->IsSelected());
+    CHECK_FALSE(m.list->RowForItem(2)->IsSelected());
+
+    bool asked = false;
+    (void)m.list->AddEventListener(EventType::ContextMenu, [&](const Event&) { asked = true; });
+    m.D().InjectMouseDown(core::Float2{50.0f, 70.0f}, MouseButton::Right); // row 3
+    m.D().InjectMouseUp(core::Float2{50.0f, 70.0f}, MouseButton::Right);
+    CHECK(asked);
+    CHECK(m.list->GetSelectedItem() == 3);
+}
+
+TEST_CASE("itemview: a double-click, Return and the pad's South report activate")
+{
+    StringListModel model(Numbered(10));
+    Mounted m = MountList(model);
+    int activations = 0;
+    core::i32 lastItem = -1;
+    ModelIndex lastIndex;
+    (void)m.list->AddEventListener(EventType::ItemActivate, [&](const Event& e)
+    {
+        ++activations;
+        lastItem = static_cast<const ItemEvent&>(e).Item;
+    });
+    m.list->SetOnActivated([&](ModelIndex index) { lastIndex = index; });
+
+    m.D().InjectMouseDown(core::Float2{50.0f, 30.0f}, MouseButton::Left);
+    m.D().InjectMouseUp(core::Float2{50.0f, 30.0f}, MouseButton::Left);
+    CHECK(activations == 0);
+    m.D().InjectMouseDown(core::Float2{50.0f, 30.0f}, MouseButton::Left); // the second press
+    m.D().InjectMouseUp(core::Float2{50.0f, 30.0f}, MouseButton::Left);
+    CHECK(activations == 1);
+    CHECK(lastItem == 1);
+    CHECK(lastIndex.Row == 1);
+
+    m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Down));
+    m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Return));
+    CHECK(activations == 2);
+    CHECK(lastItem == 2);
+}
+
+TEST_CASE("itemview: typing letters jumps to the next row starting with them")
+{
+    StringListModel model;
+    const char8_t* names[6] = {u8"Apple", u8"Banana", u8"blueberry", u8"Cherry", u8"Bilberry", u8"Date"};
+    for (const char8_t* n : names)
+        model.AddItem(SV(n));
+    Mounted m = MountList(model, 20.0f, 200.0f);
+    m.list->RequestFocus();
+    int changes = 0;
+    (void)m.list->AddEventListener(EventType::Changed, [&](const Event&) { ++changes; });
+    m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::B));
+    CHECK(m.list->GetSelectedItem() == 1);
+    m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::L)); // "bl"
+    CHECK(m.list->GetSelectedItem() == 2);
+    CHECK(changes == 2);
+    // After a pause, "b" again cycles through the b's.
+    m.root->GetContext().Update(core::Duration::FromSeconds(1.5));
+    m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::B));
+    CHECK(m.list->GetSelectedItem() == 4);
+    m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::B)); // "bb": one letter again, the next b
+    CHECK(m.list->GetSelectedItem() == 1);
+}
+
+TEST_CASE("itemview: F2 edits a row in place; the hooks may refuse; Escape cancels; Return commits")
+{
+    StringListModel model(Numbered(5));
+    Mounted m = MountList(model);
+    m.list->RequestFocus();
+    m.list->SetSelectedItem(1);
+
+    // Not editable: F2 does nothing.
+    m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::F2));
+    CHECK_FALSE(m.list->IsEditing());
+
+    model.SetEditable(true);
+    bool allowBegin = false;
+    m.list->SetOnEditBegin([&](const ModelIndex&) { return allowBegin; });
+    m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::F2));
+    CHECK_FALSE(m.list->IsEditing());
+    allowBegin = true;
+    m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::F2));
+    REQUIRE(m.list->IsEditing());
+    TextField* editor = m.list->GetEditor();
+    CHECK(editor->IsFocused());
+    CHECK(editor->GetText() == SV(u8"item 1"));
+    CHECK(editor->GetParent() == m.list->RowForItem(1));
+
+    // Escape cancels: the model keeps its text, the view the focus.
+    int cancels = 0;
+    m.list->SetOnEditCancel([&](const ModelIndex&) { ++cancels; });
+    m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
+    CHECK_FALSE(m.list->IsEditing());
+    CHECK(cancels == 1);
+    CHECK(model.ItemAt(1) == SV(u8"item 1"));
+    CHECK(m.list->IsFocused());
+
+    // The commit hook refuses an empty name: it stays editing, marked invalid.
+    m.list->SetOnEditCommit([](const ModelIndex&, core::StringView text) { return text.Size() != 0; });
+    REQUIRE(m.list->BeginEdit(1));
+    editor->SetText(SV(u8""));
+    m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Return));
+    CHECK(m.list->IsEditing());
+    CHECK(editor->HasClass(SV(u8"invalid")));
+    editor->SetText(SV(u8"renamed"));
+    m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Return));
+    CHECK_FALSE(m.list->IsEditing());
+    CHECK(model.ItemAt(1) == SV(u8"renamed"));
+    m.Layout();
+    CHECK(static_cast<Label*>(m.list->RowForItem(1)->GetContent())->GetText() == SV(u8"renamed"));
+}
+
+TEST_CASE("itemview: the view is a Node scroll container, scrolled from code like any other")
+{
+    StringListModel model(Numbered(50));
+    Mounted m = MountList(model);
+    CHECK(m.list->IsScrollContainer());
+    CHECK(m.list->GetScrollRange().y == doctest::Approx(50.0f * 20.0f - 100.0f));
+    // Scrolled from code like any scroller: the rows follow.
+    m.list->ScrollTo(core::Float2{0.0f, 400.0f}, ScrollBehavior::Instant);
+    CHECK(m.list->RowForItem(20) != nullptr);
+    CHECK(m.list->RowForItem(0) == nullptr);
+    CHECK(m.list->ItemAt(core::Float2{50.0f, 5.0f}) == 20);
+}

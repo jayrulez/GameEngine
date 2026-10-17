@@ -9,7 +9,7 @@
 // compound constrains the tag, #id, .classes, [attributes] and :pseudo-classes of one widget:
 //
 // - state: :hover, :active, :focus, :focus-visible, :focus-within, :disabled, :enabled, and the
-//   widget's own (:checked, :indeterminate, :read-only, :read-write, :placeholder-shown), which a
+//   widget's own (:checked, :indeterminate, :read-only, :read-write, :placeholder-shown, :selected), which a
 //   widget reports through UIWidget::GetWidgetStates;
 // - structure: :first-child, :last-child, :only-child, :first-of-type, :last-of-type, :empty,
 //   :nth-child(), :nth-last-child(), :nth-of-type(), :nth-last-of-type() (an+b, odd, even);
@@ -78,11 +78,13 @@ export namespace experimental::gui
         PseudoOnlyChild = 1u << 15,
         PseudoFirstOfType = 1u << 16,
         PseudoLastOfType = 1u << 17,
+        PseudoSelected = Node::StateSelected,
     };
     /// The pseudo-classes that follow interaction (what `applyPseudo = false` ignores).
     inline constexpr u32 kDynamicPseudoClasses = PseudoHover | PseudoFocus | PseudoActive | PseudoDisabled | PseudoFocusVisible |
                                                  PseudoEnabled | PseudoFocusWithin | PseudoChecked | PseudoIndeterminate |
-                                                 PseudoReadOnly | PseudoReadWrite | PseudoPlaceholderShown;
+                                                 PseudoReadOnly | PseudoReadWrite | PseudoPlaceholderShown |
+                                                 PseudoSelected;
 
     /// `:nth-child(an+b)` and its kin: the positions an+b (n = 0, 1, 2, ...), 1-based.
     struct NthPattern
@@ -644,6 +646,8 @@ export namespace experimental::gui
             return false;
         if (has(PseudoPlaceholderShown) && (states & WidgetStatePlaceholderShown) == 0)
             return false;
+        if (has(PseudoSelected) && (states & WidgetStateSelected) == 0)
+            return false;
         if (has(PseudoEmpty) && element.ChildCount() != 0)
             return false;
         const bool first = has(PseudoFirstChild) || has(PseudoOnlyChild);
@@ -807,6 +811,7 @@ export namespace experimental::gui
             {u8"read-only", PseudoReadOnly},
             {u8"read-write", PseudoReadWrite},
             {u8"placeholder-shown", PseudoPlaceholderShown},
+            {u8"selected", PseudoSelected},
             {u8"empty", PseudoEmpty},
             {u8"first-child", PseudoFirstChild},
             {u8"last-child", PseudoLastChild},

@@ -3,10 +3,9 @@
 
 // GUI - :list_view partition
 //
-// ListView: a virtualized, single-column model-backed list. Modeled on eepp's UIListView. The
-// virtualization, scrolling, and selection all live in AbstractItemView; ListView only says how
-// a row is built (an ItemRow holding one Label) and bound (the label's text = the cell's data).
-// Multi-selection is inherited (SetSelectionMode(Multi) + Ctrl/Shift).
+// ListView: a virtualised list over a model (eepp's UIListView in role). Everything but its
+// default row lives in ItemView; its default row is one label (`listcell`) showing the item's
+// display text. A row factory (native or a markup template) replaces it.
 
 module;
 #include "Core/Prelude.h"
@@ -14,45 +13,22 @@ module;
 
 export module experimental.gui:list_view;
 
-import foundation.core;  // RefPtr, MakeRef, Move
-import foundation.fonts; // CachedFont
-import :rect;
+import foundation.core; // RefPtr, MakeRef
+import :node;
 import :label;
+import :text; // TextHAlign
 import :model_index;
 import :model;
-import :abstract_item_view;
+import :item_view;
 
 using namespace foundation::core;
 namespace core = foundation::core;
-namespace fonts = foundation::fonts;
 
 export namespace experimental::gui
 {
-    // A list row: an ItemRow containing a single (hit-transparent) Label.
-    class ListRow : public ItemRow
+    class ListView : public ItemView
     {
-        RTTI_OBJECT(ListRow, ItemRow)
-    public:
-        ListRow()
-        {
-            SetTag(core::StringView(u8"listviewrow"));
-            m_label = core::MakeRef<Label>(MemoryAllocator());
-            m_label->SetTag(core::StringView(u8"listcell")); // container-owned, not a generic label
-            StyleWriteScope defaults(*m_label); // its own values, which a sheet returns to
-            m_label->SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
-            m_label->SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
-            m_label->SetHitTestVisible(false);
-            AddChild(m_label.Get());
-        }
-        [[nodiscard]] Label* GetLabel() const noexcept { return m_label.Get(); }
-
-    private:
-        RefPtr<Label> m_label;
-    };
-
-    class ListView : public AbstractItemView
-    {
-        RTTI_OBJECT(ListView, AbstractItemView)
+        RTTI_OBJECT(ListView, ItemView)
     public:
         ListView()
         {
@@ -61,34 +37,23 @@ export namespace experimental::gui
             SetTextColor(Color{0.88f, 0.90f, 0.94f, 1.0f});
         }
 
-        // Back-compat row-oriented aliases over the base's item-index selection.
-        [[nodiscard]] i32 GetSelectedRow() const noexcept { return GetSelectedItem(); }
-        void SetSelectedRow(i32 row) { SetSelectedItem(row); }
-
     protected:
-        // Its rows show its font and colour (a sheet's inheritance gives them the same).
-        void OnTextStyleChange() override
+        [[nodiscard]] core::StringView RowTag() const override { return core::StringView(u8"listviewrow"); }
+        [[nodiscard]] core::RefPtr<Node> CreateContent(u32) override
         {
-            for (const RefPtr<ItemRow>& r : RowPool())
-                ShareTextStyle(*static_cast<ListRow*>(r.Get())->GetLabel());
-            RequestRelayout();
+            auto label = core::MakeRef<Label>(MemoryAllocator());
+            label->SetTag(core::StringView(u8"listcell")); // a row's, not a sheet's generic label
+            StyleWriteScope defaults(*label);
+            label->SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
+            label->SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
+            label->SetHitTestVisible(false); // a press on it is the row's
+            return label;
         }
-        [[nodiscard]] RefPtr<ItemRow> CreateItemRow() override
+        void BindContent(Node& content, i32, const ModelIndex& index) override
         {
-            auto row = core::MakeRef<ListRow>(MemoryAllocator());
-            ShareTextStyle(*row->GetLabel());
-            return row;
+            static_cast<Label&>(content).SetText(GetModel()->Data(index).ToString().AsView());
         }
-        void BindItemRow(ItemRow& row, i32 item, f32 rowWidth) override
-        {
-            Label* label = static_cast<ListRow&>(row).GetLabel();
-            label->SetText(GetModel()->Data(MakeModelIndex(item)).ToString().AsView());
-            label->SetPosition(core::Float2{0.0f, 0.0f});
-            label->SetSize(core::Float2{rowWidth, GetRowHeight()});
-        }
-
     };
 
-    RTTI_DEFINE_OBJECT(ListRow, "rtti::gui")
     RTTI_DEFINE_OBJECT(ListView, "rtti::gui")
 }

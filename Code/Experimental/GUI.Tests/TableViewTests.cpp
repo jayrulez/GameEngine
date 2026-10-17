@@ -46,6 +46,7 @@ namespace
         table->SetHeaderHeight(26.0f);
         root->AddChild(table.Get());
         table->SetModel(model);
+        (void)root->UpdateLayout();
         return table;
     }
 }
@@ -72,7 +73,7 @@ TEST_CASE("table-view: virtualizes rows over the body viewport")
     core::RefPtr<SceneRoot> root;
     auto table = MountTable(root, &model);
 
-    // body = 200 - 26 header = 174; 174/24 + 2 buffer = 9 realized, not 1000.
+    // body = 200 - 26 header = 174: rows 0 to 7 in view and row 8 past the edge, not 1000.
     CHECK(table->VisibleRowCount() == 9);
     CHECK(table->GetModel() == &model);
 }
@@ -91,7 +92,7 @@ TEST_CASE("table-view: clicking a row selects it")
     // Row 1 spans y in [26 + 24, 26 + 48) = [50, 74); cells are hit-transparent -> row gets it.
     d->InjectMouseDown(core::Float2{60.0f, 60.0f}, MouseButton::Left);
     d->InjectMouseUp(core::Float2{60.0f, 60.0f}, MouseButton::Left);
-    CHECK(table->GetSelectedRow() == 1);
+    CHECK(table->GetSelectedItem() == 1);
     CHECK(selected == 1);
 }
 
@@ -107,9 +108,9 @@ TEST_CASE("table-view: keyboard navigation moves the selection")
     const auto key = [](KeyCode k) { return static_cast<core::u32>(k); };
     d->InjectKeyDown(key(KeyCode::Down)); // -> row 0
     d->InjectKeyDown(key(KeyCode::Down)); // -> row 1
-    CHECK(table->GetSelectedRow() == 1);
+    CHECK(table->GetSelectedItem() == 1);
     d->InjectKeyDown(key(KeyCode::End));
-    CHECK(table->GetSelectedRow() == 7);
+    CHECK(table->GetSelectedItem() == 7);
 }
 
 TEST_CASE("table-view: clicking a column header reports its index")
@@ -137,11 +138,12 @@ TEST_CASE("table-view: reacts to model updates and rebuilds the header")
     core::RefPtr<SceneRoot> root;
     auto table = MountTable(root, &model);
 
-    table->SetSelectedRow(3);
-    CHECK(table->GetSelectedRow() == 3);
+    table->SetSelectedItem(3);
+    CHECK(table->GetSelectedItem() == 3);
 
     model.Clear(); // notifies -> selection cleared, no rows
-    CHECK(table->GetSelectedRow() == -1);
+    (void)root->UpdateLayout();
+    CHECK(table->GetSelectedItem() == -1);
     CHECK(table->VisibleRowCount() == 0);
 }
 

@@ -15,6 +15,7 @@ module;
 export module experimental.gui:event;
 
 import foundation.core; // Function, String
+import :model_index; // ItemEvent
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -81,6 +82,8 @@ export namespace experimental::gui
         Scroll,
         // A tab asked to close (a TabEvent, at its bar or view): unless a listener takes it, it goes.
         TabClose,
+        // An item view's row was activated (an ItemEvent): a double-click, Return, the pad's South.
+        ItemActivate,
     };
 
     /// What drives the pointer: the mouse, or a finger (the first one down).
@@ -310,6 +313,15 @@ export namespace experimental::gui
         i32 Index = -1;
 
         TabEvent(EventType type, Node* target, i32 index) noexcept : Event(type, target), Index(index) {}
+    };
+
+    /// About one row of an item view: its item (the view's row number) and its model index.
+    struct ItemEvent : Event
+    {
+        i32 Item = -1;
+        ModelIndex Index;
+
+        ItemEvent(EventType type, Node* target, i32 item, ModelIndex index) noexcept : Event(type, target), Item(item), Index(index) {}
     };
 
     /// An IME's composition so far: its text (empty when the composition ended or was committed,

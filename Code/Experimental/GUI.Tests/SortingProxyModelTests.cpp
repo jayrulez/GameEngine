@@ -126,6 +126,7 @@ TEST_CASE("sorting-proxy: TableView header click wired to ToggleSort re-sorts th
     table->SetHeaderHeight(26.0f);
     root->AddChild(table.Get());
     table->SetModel(&proxy);
+    (void)root->UpdateLayout();
     table->SetOnColumnHeaderClicked([&](core::usize col) { proxy.ToggleSort(col); });
     EventDispatcher* d = root->GetEventDispatcher();
 

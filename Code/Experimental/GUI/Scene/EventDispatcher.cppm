@@ -396,6 +396,8 @@ export namespace experimental::gui
             SendCaptureLost(node);
         }
         [[nodiscard]] Node* GetPointerCapture() const noexcept { return m_captureNode; }
+        /// Seconds of its clock (Tick advances it): what click counting and type-ahead read.
+        [[nodiscard]] f32 GetTime() const noexcept { return m_time; }
 
         /// The pointer's look now: the nearest set `cursor` up from the node under the pointer
         /// (from the captured node while one holds the pointer, so a drag keeps its look), else

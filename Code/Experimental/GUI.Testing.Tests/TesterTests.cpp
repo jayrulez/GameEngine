@@ -10,6 +10,7 @@
 import foundation.core;
 import experimental.gui;
 import experimental.gui.testing;
+import foundation.image;
 
 using namespace experimental::gui;
 using experimental::gui::testing::Finder;
@@ -161,4 +162,32 @@ TEST_CASE("testing: a drag presses on one node, moves in steps and releases over
     CHECK(t.DragTo(Finder::Selector(SV(u8"#show")), Finder::Selector(SV(u8"#ok"))));
     CHECK(moves >= 8);                                  // the press captures the pointer: every step reaches it
     CHECK(released.y == doctest::Approx(105.0f));       // over the OK button's middle
+}
+
+TEST_CASE("testing: a picture matches its reference within a tolerance on all but a share of its pixels")
+{
+    namespace image = foundation::image;
+    const auto picture = [](core::u8 shade, usize changed, core::u8 to)
+    {
+        core::Array<core::u8> rgba;
+        rgba.Resize(100u * 100u * 4u);
+        for (usize i = 0; i < rgba.Size(); ++i)
+            rgba[i] = (i % 4 == 3) ? core::u8{255} : shade;
+        for (usize p = 0; p < changed; ++p)
+            rgba[p * 4] = to;
+        return image::Image(100, 100, image::PixelFormat::RGBA8, core::Span<const core::u8>{rgba.Data(), rgba.Size()});
+    };
+    using experimental::gui::testing::CompareImages;
+    const image::Image reference = picture(100, 0, 0);
+    CHECK(CompareImages(picture(108, 0, 0), reference).Matches);       // every channel within 8
+    CHECK_FALSE(CompareImages(picture(109, 0, 0), reference).Matches); // past it everywhere
+    CHECK(CompareImages(picture(100, 10, 200), reference).Matches);    // 10 of 10,000: within 0.1%
+    image::Image diff;
+    const auto far = CompareImages(picture(100, 11, 200), reference, 8, 0.001, &diff); // 11: past it
+    CHECK_FALSE(far.Matches);
+    CHECK(far.Differing == 11u);
+    CHECK(far.LargestDelta == 100u);
+    CHECK(diff.GetPixel(0, 0).r == 255u); // a differing pixel shows red
+    CHECK(diff.GetPixel(50, 50).g == diff.GetPixel(50, 50).r); // an equal one grey
+    CHECK_FALSE(CompareImages(image::Image(10, 10, image::PixelFormat::RGBA8), reference).SameSize);
 }

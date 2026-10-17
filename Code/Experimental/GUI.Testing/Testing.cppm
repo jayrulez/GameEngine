@@ -12,7 +12,8 @@
 // held direction, a pad button, files dropped. Each aims at the middle of what it found, and fails
 // when something else lies there. A finder that expects one node and finds none or several fails,
 // listing what it found and the tree around where it looked; failures go to a handler (a test's
-// FAIL_CHECK) and are kept.
+// FAIL_CHECK) and are kept. CompareImages is the image tests' match (E8g): every channel within a
+// tolerance on all but a small share of the pixels, with a picture of where they differ.
 
 module;
 #include "Core/Prelude.h"
@@ -21,6 +22,7 @@ module;
 export module experimental.gui.testing;
 
 import foundation.core;
+import foundation.image;
 import experimental.gui;
 import experimental.gui.inspector;
 
@@ -396,4 +398,61 @@ export namespace experimental::gui::testing
         core::Function<void(core::StringView)> m_onFailure;
         Array<core::String> m_failures;
     };
+
+    /// How a picture compares with its reference (E8g).
+    struct ImageComparison
+    {
+        bool SameSize = false;
+        u64 Differing = 0;   ///< pixels with a channel past the tolerance
+        u64 Pixels = 0;
+        u32 LargestDelta = 0; ///< the largest channel difference anywhere
+        bool Matches = false;
+    };
+
+    /// Compares `picture` with `reference` (both RGBA8): they match when they are the same size
+    /// and every channel is within `tolerance` on all but `allowedShare` of the pixels (eepp's
+    /// budget, zed's share). `diff`, when given, gets a picture of the difference: the reference
+    /// faded to grey, the differing pixels red.
+    [[nodiscard]] inline ImageComparison CompareImages(const foundation::image::Image& picture, const foundation::image::Image& reference,
+                                                       u32 tolerance = 8, f64 allowedShare = 0.001,
+                                                       foundation::image::Image* diff = nullptr)
+    {
+        namespace image = foundation::image;
+        ImageComparison out;
+        out.SameSize = picture.Width() == reference.Width() && picture.Height() == reference.Height() &&
+                       picture.Format() == image::PixelFormat::RGBA8 && reference.Format() == image::PixelFormat::RGBA8;
+        if (!out.SameSize)
+            return out;
+        out.Pixels = static_cast<u64>(picture.Width()) * picture.Height();
+        const Span<const u8> a = picture.PixelData();
+        const Span<const u8> b = reference.PixelData();
+        Array<u8> picturedDiff;
+        if (diff != nullptr)
+            picturedDiff.Resize(a.Size());
+        for (usize i = 0; i + 3 < a.Size(); i += 4)
+        {
+            u32 delta = 0;
+            for (usize c = 0; c < 4; ++c)
+            {
+                const i32 d = static_cast<i32>(a[i + c]) - static_cast<i32>(b[i + c]);
+                delta = core::Max(delta, static_cast<u32>(d < 0 ? -d : d));
+            }
+            out.LargestDelta = core::Max(out.LargestDelta, delta);
+            const bool differs = delta > tolerance;
+            out.Differing += differs ? 1u : 0u;
+            if (diff != nullptr)
+            {
+                const u8 grey = static_cast<u8>((static_cast<u32>(b[i]) + b[i + 1] + b[i + 2]) / 9u + 40u);
+                picturedDiff[i] = differs ? u8{255} : grey;
+                picturedDiff[i + 1] = differs ? u8{0} : grey;
+                picturedDiff[i + 2] = differs ? u8{0} : grey;
+                picturedDiff[i + 3] = 255;
+            }
+        }
+        out.Matches = static_cast<f64>(out.Differing) <= allowedShare * static_cast<f64>(out.Pixels);
+        if (diff != nullptr)
+            *diff = image::Image(picture.Width(), picture.Height(), image::PixelFormat::RGBA8,
+                                 Span<const u8>{picturedDiff.Data(), picturedDiff.Size()});
+        return out;
+    }
 }

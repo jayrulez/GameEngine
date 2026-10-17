@@ -3,7 +3,7 @@
 # selector and text, and the user's actions on what they find.
 util_add_engine_library(GUI.Testing ALIAS Experimental::GUI.Testing)
 target_link_libraries(GUI.Testing
-    PUBLIC Experimental::GUI Experimental::GUI.Inspector Foundation::Core)
+    PUBLIC Experimental::GUI Experimental::GUI.Inspector Foundation::Core Foundation::Image)
 
 target_sources(GUI.Testing
     PUBLIC

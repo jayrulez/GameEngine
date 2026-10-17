@@ -339,3 +339,80 @@ TEST_CASE("menu: a submenu stays open while the pointer heads for it across anot
     d->InjectMouseMove(core::Float2{100.0f, 110.0f}); // onto "Last", heading away
     CHECK_FALSE(sub->IsOpen());
 }
+
+TEST_CASE("menu: in markup, items, separators and nested menus; an item reports activate")
+{
+    RegisterGuiElements();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{600.0f, 400.0f});
+    MarkupLoader loader(*root->GetElementSet(), core::DefaultAllocator());
+    auto page = loader.LoadFromString(core::StringView(u8R"(<Panel width="600" height="400">
+        <Label id="target" text="Right-click me" width="200" height="40" context-menu="ctx"/>
+        <Menu id="ctx">
+            <MenuItem id="cut" text="Cut" shortcut="Ctrl+X"/>
+            <MenuItem id="grid" text="Show grid" checkable="true" checked="true"/>
+            <MenuSeparator/>
+            <Menu text="More">
+                <MenuItem id="rename" text="Rename"/>
+            </Menu>
+        </Menu>
+    </Panel>)"));
+    REQUIRE(page.Get() != nullptr);
+    root->AddChild(page.Get());
+    (void)root->UpdateLayout();
+
+    Menu* menu = core::Cast<Menu>(page->GetChildAt(1));
+    REQUIRE(menu != nullptr);
+    CHECK_FALSE(menu->IsDisplayed()); // waits in the page, unseen
+    CHECK(menu->RowCount() == 4);     // cut, grid, the separator, More
+    CHECK(menu->ItemCount() == 3);
+    auto* cut = core::Cast<MenuItem>(menu->GetChildAt(0));
+    REQUIRE(cut != nullptr);
+    CHECK(cut->GetText() == core::StringView(u8"Cut"));
+    CHECK(cut->GetShortcut() == core::StringView(u8"Ctrl+X"));
+    auto* grid = core::Cast<MenuItem>(menu->GetChildAt(1));
+    REQUIRE(grid != nullptr);
+    CHECK(grid->IsCheckable());
+    CHECK(grid->IsChecked());
+
+    // A context menu asked for over the label opens it at the pointer.
+    int activations = 0;
+    (void)cut->AddEventListener(EventType::ItemActivate, [&](const Event&) { ++activations; });
+    // It bubbles through the menu to what opened it, and on up: one listener hears every item.
+    Node* heardFrom = nullptr;
+    (void)page->AddEventListener(EventType::ItemActivate, [&](const Event& e) { heardFrom = e.Target; });
+    EventDispatcher& d = *root->GetEventDispatcher();
+    d.InjectMouseDown(core::Float2{50.0f, 20.0f}, MouseButton::Right);
+    d.InjectMouseUp(core::Float2{50.0f, 20.0f}, MouseButton::Right);
+    REQUIRE(menu->IsOpen());
+    CHECK(menu->IsDisplayed());
+    (void)root->UpdateLayout();
+    const Rect at = cut->GetScreenBounds();
+    d.InjectMouseMove(core::Float2{at.x + 10.0f, at.y + at.height * 0.5f});
+    d.InjectMouseDown(core::Float2{at.x + 10.0f, at.y + at.height * 0.5f}, MouseButton::Left);
+    d.InjectMouseUp(core::Float2{at.x + 10.0f, at.y + at.height * 0.5f}, MouseButton::Left);
+    CHECK(activations == 1);
+    CHECK(heardFrom == cut);
+    CHECK_FALSE(menu->IsOpen());
+    // Closed, it left the page; the label keeps it, and it opens again.
+    d.InjectMouseDown(core::Float2{50.0f, 20.0f}, MouseButton::Right);
+    d.InjectMouseUp(core::Float2{50.0f, 20.0f}, MouseButton::Right);
+    CHECK(menu->IsOpen());
+}
+
+TEST_CASE("menubar: in markup, its children are its menus, each a button")
+{
+    RegisterGuiElements();
+    static const ElementSet elements = ElementSet::All();
+    MarkupLoader loader(elements, core::DefaultAllocator());
+    auto tree = loader.LoadFromString(core::StringView(u8R"(<MenuBar>
+        <Menu text="File"><MenuItem text="Open"/><MenuItem text="Save"/></Menu>
+        <Menu text="Edit"><MenuItem text="Undo"/></Menu>
+    </MenuBar>)"));
+    auto* bar = core::Cast<MenuBar>(tree.Get());
+    REQUIRE(bar != nullptr);
+    CHECK(bar->MenuCount() == 2);
+    CHECK(bar->ButtonAt(0)->GetText() == core::StringView(u8"File"));
+    CHECK(bar->ButtonAt(1)->GetText() == core::StringView(u8"Edit"));
+    CHECK(bar->MenuAt(0)->ItemCount() == 2);
+}

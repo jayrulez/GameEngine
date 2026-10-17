@@ -15,6 +15,8 @@
 // Left and Right move between the buttons, and between the menus while one is open (a submenu's
 // item takes Right first, and a submenu Left); Escape closes the menu, focus going back to its
 // button.
+//
+// In markup its children are its menus, each `<Menu text="File">` a button.
 
 module;
 #include "Core/Prelude.h"
@@ -72,15 +74,15 @@ export namespace experimental::gui
         }
 
         // Add a top-level menu with its button label; returns the (empty) Menu to populate.
-        Menu* AddMenu(core::StringView text)
+        Menu* AddMenu(core::StringView text) { return AdoptMenu(core::MakeRef<Menu>(MemoryAllocator()), text); }
+        /// Takes `menu` (made elsewhere: markup's) under a new button titled `text`.
+        Menu* AdoptMenu(core::RefPtr<Menu> menu, core::StringView text)
         {
             auto button = core::MakeRef<Button>(MemoryAllocator());
             button->SetText(text);
             ShareTextStyle(*button, false);
             button->AddClass(
                 core::StringView(u8"menubutton")); // flat bar styling (class beats the button tag)
-
-            auto menu = core::MakeRef<Menu>(MemoryAllocator());
             ShareTextStyle(*menu, false);
 
             Button* rawButton = button.Get();
@@ -96,6 +98,26 @@ export namespace experimental::gui
             m_entries.PushBack(BarEntry{rawButton, core::Move(menu)});
             Relayout();
             return rawMenu;
+        }
+
+        /// Markup's children are its menus (each taken as it arrives).
+        [[nodiscard]] Node* GetChildHost() override
+        {
+            if (!m_markupHost)
+            {
+                MenuBar* self = this;
+                m_markupHost = core::MakeRef<MenuChildHost>(MemoryAllocator(), [self](Node& host)
+                {
+                    while (host.ChildCount() != 0)
+                    {
+                        core::RefPtr<Node> child(host.GetChildAt(0));
+                        host.RemoveChild(child.Get());
+                        if (Menu* menu = core::Cast<Menu>(child.Get()))
+                            (void)self->AdoptMenu(core::RefPtr<Menu>(menu), menu->GetTitle());
+                    }
+                });
+            }
+            return m_markupHost.Get();
         }
 
         [[nodiscard]] usize MenuCount() const noexcept { return m_entries.Size(); }
@@ -222,6 +244,7 @@ export namespace experimental::gui
             core::RefPtr<Menu> menu;
         };
         Array<BarEntry> m_entries;
+        core::RefPtr<Node> m_markupHost; // where markup's menus land, then taken in
         Menu* m_current = nullptr;         // the open menu (non-owning)
         Button* m_currentButton = nullptr; // its button (non-owning)
         f32 m_barHeight = 28.0f;
@@ -229,5 +252,4 @@ export namespace experimental::gui
         Color m_barColor{0.13f, 0.15f, 0.18f, 1.0f};
     };
 
-    RTTI_DEFINE_OBJECT(MenuBar, "rtti::gui")
 }

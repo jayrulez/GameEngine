@@ -17,6 +17,7 @@ export module experimental.gui:ui_widget;
 import foundation.core; // String, StringView, Array
 import :thickness;
 import :ui_node;
+import :event; // MouseEvent (a context menu)
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -106,10 +107,34 @@ export namespace experimental::gui
             return m_tooltip.AsView();
         }
 
+        // === Context menu ===
+        /// The id of a Menu in its GUI (markup's `<Menu id="...">`) that a context menu asked for
+        /// over it opens, at the pointer (markup's `context-menu`).
+        void SetContextMenuId(const core::String& id)
+        {
+            m_contextMenuId = id;
+            m_contextMenu = core::RefPtr<Node>{};
+        }
+        [[nodiscard]] core::String GetContextMenuId() const { return m_contextMenuId; }
+
+    protected:
+        void OnContextMenu(const MouseEvent& event) override
+        {
+            if (!m_contextMenuId.IsEmpty() && OpenContextMenu(event))
+                event.Handled = true;
+        }
+
     private:
+        // Finds the menu (kept once found: open, it leaves the page for the top layer, and
+        // closed, the tree) and opens it at the event's position. GUIClusterImpl.cpp, which sees
+        // :menu.
+        bool OpenContextMenu(const MouseEvent& event);
+
         core::String m_tag;
         core::String m_id;
         Array<core::String> m_classes;
         core::String m_tooltip;
+        core::String m_contextMenuId;
+        core::RefPtr<Node> m_contextMenu; // the menu it opens, once found
     };
 }

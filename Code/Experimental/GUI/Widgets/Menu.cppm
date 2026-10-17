@@ -20,6 +20,10 @@
 // While the pointer heads for an open submenu across other rows (inside the triangle from where
 // it was to the submenu's near edge, Godot's safe area), the submenu stays open; if the pointer
 // rests there a moment, the row under it takes over.
+//
+// In markup a Menu holds MenuItems (`text`, `shortcut`, `checkable`, `checked`, a `command`),
+// MenuSeparators and nested Menus (its `text` the submenu item's); an item reports `activate`.
+// A menu is not shown until opened: one in a page waits there for a `context-menu` naming it.
 
 module;
 #include "Core/Prelude.h"
@@ -44,6 +48,7 @@ import :image_drawable;   // a command's icon
 import :resource_provider;
 import foundation.image;  // ImageData
 import :popup_placement;
+import :model_index; // ItemEvent (an item's `activate`)
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -204,6 +209,20 @@ export namespace experimental::gui
                         SetIcon(core::MakeRef<ImageDrawable>(MemoryAllocator(), image));
         }
 
+        // Markup: its text and shortcut exactly as written.
+        bool SetMarkupAttribute(core::StringView name, core::StringView value) override
+        {
+            if (name == core::StringView(u8"text"))
+                SetText(value);
+            else if (name == core::StringView(u8"shortcut"))
+                SetShortcut(value);
+            else
+                return MenuRow::SetMarkupAttribute(name, value);
+            return true;
+        }
+        [[nodiscard]] core::String GetTextString() const { return core::String(GetText()); }
+        void SetTextString(const core::String& text) { SetText(text.AsView()); }
+
         // The user's action (run before the menu closes).
         void SetOnPicked(core::Function<void()> callback) { m_onPicked = core::Move(callback); }
         // The menu installs this to close the whole chain after activation.
@@ -261,6 +280,10 @@ export namespace experimental::gui
                 SetChecked(!m_checked);
             if (m_onPicked)
                 m_onPicked();
+            // A script's `activate`: it bubbles (through the menu to what opened it), so one
+            // listener hears a whole menu's items, the event's id saying which.
+            ItemEvent activated(EventType::ItemActivate, this, -1, ModelIndex{});
+            (void)RouteEvent(activated);
             if (m_onActivated)
                 m_onActivated();
         }
@@ -403,6 +426,7 @@ export namespace experimental::gui
             // up and down go round its items.
             SetTabFocusable(true);
             SetNavScope(NavScope::Wrap);
+            SetDisplayed(false); // shown when opened (one in a page waits there, unseen)
             SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_panelColor));
             StyleWriteScope defaults(*this); // its own values, which a sheet returns to
             SetTextColor(Color{0.88f, 0.90f, 0.94f, 1.0f});
@@ -460,9 +484,9 @@ export namespace experimental::gui
         }
 
         // Add a horizontal separator (a non-interactive divider).
-        void AddSeparator()
+        void AddSeparator() { AdoptSeparator(core::MakeRef<MenuSeparator>(MemoryAllocator())); }
+        void AdoptSeparator(core::RefPtr<MenuSeparator> sep)
         {
-            auto sep = core::MakeRef<MenuSeparator>(MemoryAllocator());
             MenuSeparator* raw = sep.Get();
             Menu* self = this;
             raw->SetOnHovered([self, raw]() { self->OnRowHovered(raw); });
@@ -473,11 +497,12 @@ export namespace experimental::gui
 
         // Add a submenu item; returns the (empty) child Menu to populate. The child is owned by
         // this menu and shown to the item's right on hover/click.
-        Menu* AddSubMenu(core::StringView text)
+        Menu* AddSubMenu(core::StringView text) { return AdoptSubMenu(core::MakeRef<Menu>(MemoryAllocator()), text); }
+        /// Takes `sub` as the submenu of a new item titled `text` (markup's nested Menu).
+        Menu* AdoptSubMenu(core::RefPtr<Menu> sub, core::StringView text)
         {
             auto item = core::MakeRef<MenuSubItem>(MemoryAllocator());
             item->SetText(text);
-            auto sub = core::MakeRef<Menu>(MemoryAllocator());
             ShareTextStyle(*sub, false);
             sub->SetItemHeight(m_itemHeight);
             item->SetSubMenu(sub.Get());
@@ -491,6 +516,24 @@ export namespace experimental::gui
             m_ownedSubMenus.PushBack(core::Move(sub)); // keep the submenu alive
             return rawSub;
         }
+
+        /// Takes an item made elsewhere (markup's MenuItem).
+        void AdoptItem(MenuItem& item) { AddItemNode(&item, &item); }
+
+        /// Its title: a menu bar's button, or a submenu's item (markup's `text`).
+        void SetTitle(core::StringView title) { m_title = core::String(title); }
+        [[nodiscard]] core::StringView GetTitle() const noexcept { return m_title.AsView(); }
+        bool SetMarkupAttribute(core::StringView name, core::StringView value) override
+        {
+            if (name != core::StringView(u8"text"))
+                return UIWidget::SetMarkupAttribute(name, value);
+            SetTitle(value);
+            return true;
+        }
+        /// Markup's children are its items; a menu given items there sizes to its widest.
+        [[nodiscard]] Node* GetChildHost() override;
+        /// The rows markup gave it, taken in (MenuChildHost calls it).
+        void AdoptMarkupChildren(Node& host);
 
         [[nodiscard]] usize ItemCount() const noexcept
         {
@@ -658,6 +701,7 @@ export namespace experimental::gui
             EventDispatcher* dispatcher = owner.GetEventDispatcher();
             if (dispatcher == nullptr || IsOpen())
                 return;
+            SetDisplayed(true);
             Menu* self = this;
             options.OnClosed = [self](PopupCloseReason reason)
             {
@@ -785,6 +829,9 @@ export namespace experimental::gui
             return root;
         }
 
+        core::String m_title;
+        core::RefPtr<Node> m_markupHost;           // where markup's children land, then taken in
+        bool m_adopting = false;
         Array<MenuRow*> m_rows;                    // rows, owned as children
         Array<core::RefPtr<Menu>> m_ownedSubMenus; // keep submenus alive (their items' children only while open)
         bool m_autoWidth = false;
@@ -801,11 +848,55 @@ export namespace experimental::gui
         core::Function<void(PopupCloseReason)> m_onClosed;
     };
 
+    // Where markup's children land: unseen, each taken into its menu as it arrives.
+    class MenuChildHost : public UIWidget
+    {
+        RTTI_OBJECT(MenuChildHost, UIWidget)
+    public:
+        explicit MenuChildHost(core::Function<void(Node&)> adopt) : m_adopt(core::Move(adopt)) { SetDisplayed(false); }
+        void OnChildrenChanged() override
+        {
+            if (m_adopt && ChildCount() != 0)
+                m_adopt(*this);
+        }
+
+    private:
+        core::Function<void(Node&)> m_adopt;
+    };
+
+    inline Node* Menu::GetChildHost()
+    {
+        if (!m_markupHost)
+        {
+            Menu* self = this;
+            m_markupHost = core::MakeRef<MenuChildHost>(MemoryAllocator(), [self](Node& host) { self->AdoptMarkupChildren(host); });
+            m_autoWidth = true;
+        }
+        return m_markupHost.Get();
+    }
+
+    inline void Menu::AdoptMarkupChildren(Node& host)
+    {
+        if (m_adopting)
+            return;
+        m_adopting = true;
+        while (host.ChildCount() != 0)
+        {
+            core::RefPtr<Node> child(host.GetChildAt(0));
+            host.RemoveChild(child.Get());
+            if (Menu* sub = core::Cast<Menu>(child.Get()))
+                (void)AdoptSubMenu(core::RefPtr<Menu>(sub), sub->GetTitle());
+            else if (MenuSeparator* sep = core::Cast<MenuSeparator>(child.Get()))
+                AdoptSeparator(core::RefPtr<MenuSeparator>(sep));
+            else if (MenuItem* item = core::Cast<MenuItem>(child.Get()))
+                AdoptItem(*item);
+        }
+        m_adopting = false;
+    }
+
     inline bool MenuSubItem::IsLit() const { return MenuItem::IsLit() || (m_subMenu != nullptr && m_subMenu->IsOpen()); }
 
     RTTI_DEFINE_OBJECT(MenuRow, "rtti::gui")
-    RTTI_DEFINE_OBJECT(MenuSeparator, "rtti::gui")
-    RTTI_DEFINE_OBJECT(MenuItem, "rtti::gui")
     RTTI_DEFINE_OBJECT(MenuSubItem, "rtti::gui")
-    RTTI_DEFINE_OBJECT(Menu, "rtti::gui")
+    RTTI_DEFINE_OBJECT(MenuChildHost, "rtti::gui")
 }

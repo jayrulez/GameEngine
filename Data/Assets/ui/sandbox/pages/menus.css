@@ -6,3 +6,4 @@
 .field { width: 300px; height: 32px; font-family: Roboto; font-size: 15px; padding-left: 8px; border-radius: 6; }
 .combo { width: 150px; height: 32px; font-family: Roboto; font-size: 15px; }
 .tip-card { width: 590px; padding: 10px; gap: 2px; background-color: var(--surface-2); border-radius: 8; }
+menubar, menu { font-family: Roboto; font-size: 15px; }

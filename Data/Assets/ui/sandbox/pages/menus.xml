@@ -16,6 +16,31 @@
         </Panel>
     </Panel>
 
+    <Panel id="menus-markup" class="section" gap="12">
+        <Label class="section-title" text="Menus written in markup"/>
+        <MenuBar class="bar-host">
+            <Menu text="Shapes">
+                <MenuItem id="Circle" text="Circle" shortcut="C"/>
+                <MenuItem id="Square" text="Square" shortcut="S"/>
+                <MenuSeparator/>
+                <Menu text="More">
+                    <MenuItem id="Star" text="Star"/>
+                </Menu>
+            </Menu>
+            <Menu text="View">
+                <MenuItem id="Snap to grid" text="Snap to grid" checkable="true" checked="true"/>
+            </Menu>
+        </MenuBar>
+        <Panel class="context-area" display="stack" justify-items="start" align-items="start" context-menu="menus-markup-context">
+            <Label class="context-hint" text="Right-click here for a menu written in markup"/>
+        </Panel>
+        <Menu id="menus-markup-context">
+            <MenuItem id="Copy" text="Copy" shortcut="Ctrl+C"/>
+            <MenuItem id="Paste" text="Paste" shortcut="Ctrl+V"/>
+        </Menu>
+        <Label id="menus-markup-said" class="caption" text="Picked from markup: nothing yet"/>
+    </Panel>
+
     <Panel class="section" gap="12">
         <Label class="section-title" text="Popups and the keyboard"/>
         <Label class="caption tall" white-space="normal"

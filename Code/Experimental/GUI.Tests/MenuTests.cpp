@@ -305,3 +305,37 @@ TEST_CASE("menu: an outside click dismisses the whole open submenu chain")
     CHECK(sub->GetParent() == nullptr);
     CHECK(d->PopupCount() == 0u);
 }
+
+TEST_CASE("menu: a submenu stays open while the pointer heads for it across another row, then gives way")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{600.0f, 400.0f});
+    auto anchor = Make<UIWidget>();
+    root->AddChild(anchor.Get());
+    EventDispatcher* d = root->GetEventDispatcher();
+    auto menu = Make<Menu>();
+    menu->SetItemHeight(26.0f);
+    Menu* sub = menu->AddSubMenu(core::StringView(u8"More"));
+    sub->AddItem(core::StringView(u8"A"), [] {});
+    sub->AddItem(core::StringView(u8"B"), [] {});
+    sub->AddItem(core::StringView(u8"C"), [] {});
+    menu->AddItem(core::StringView(u8"Next"), [] {});
+    menu->AddItem(core::StringView(u8"Last"), [] {});
+    menu->Open(*anchor, core::Float2{50.0f, 50.0f}); // rows at y 50, 76, 102; 160 wide
+    d->InjectMouseMove(core::Float2{100.0f, 60.0f}); // on "More": its submenu opens at x 210, y 50
+    REQUIRE(sub->IsOpen());
+    d->InjectMouseMove(core::Float2{150.0f, 70.0f});
+    // Down and right toward the submenu, over "Next": the submenu stays.
+    d->InjectMouseMove(core::Float2{190.0f, 80.0f});
+    CHECK(sub->IsOpen());
+    // Resting on "Next" a moment: it takes over.
+    for (int i = 0; i < 5; ++i)
+        root->GetContext().Update(core::Duration::FromSeconds(0.1));
+    CHECK_FALSE(sub->IsOpen());
+
+    // Straight down, away from it: the submenu closes at once.
+    d->InjectMouseMove(core::Float2{100.0f, 60.0f});
+    REQUIRE(sub->IsOpen());
+    d->InjectMouseMove(core::Float2{100.0f, 110.0f}); // onto "Last", heading away
+    CHECK_FALSE(sub->IsOpen());
+}

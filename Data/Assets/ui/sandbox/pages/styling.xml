@@ -1,6 +1,6 @@
 <Panel id="page-styling" class="page" gap="18">
     <Label class="page-title" text="Styling"/>
-    <Label class="page-lead" wrap="true"
+    <Label class="page-lead" white-space="normal"
            text="Box properties from the sheet: gradients, several shadows, a border per side, radii, transforms about an origin, and var() inside any of them. Each card is styled by its classes alone."/>
 
     <Panel class="section" gap="12">

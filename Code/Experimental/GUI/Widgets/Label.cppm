@@ -3,10 +3,11 @@
 
 // GUI - :label partition
 //
-// Label: a UIWidget that displays a line of text. The thinnest real control - it composes
-// the Phase-4 Text primitive (drawn in the padding-inset content bounds) onto the widget
-// base. Modeled on eepp's UITextView (role, not a line-for-line port). Wrapping / rich text
-// follow the Text primitive's own growth.
+// Label: a UIWidget that displays text. It composes the Text primitive (drawn in the
+// padding-inset content bounds) onto the widget base; modeled on eepp's UITextView (role, not a
+// line-for-line port). Its text is shaped and laid out by :text_layout (E4): it wraps as its
+// white-space says, takes line-height and letter-spacing, ends an overflowing line as its
+// text-overflow says and clamps its lines; a rich label's text is markup, its links events.
 
 module;
 #include "Core/Prelude.h"
@@ -22,6 +23,7 @@ import :draw_context;
 import :text;
 import :ui_widget;
 import :layout_style; // kUnbounded
+import :event;        // LinkEvent
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -29,6 +31,29 @@ namespace fonts = foundation::fonts;
 
 export namespace experimental::gui
 {
+    /// CSS's text-overflow keyword for `overflow` ("clip", "ellipsis", "ellipsis-start", "ellipsis-middle").
+    [[nodiscard]] inline core::StringView TextOverflowName(TextOverflow overflow) noexcept
+    {
+        switch (overflow)
+        {
+        case TextOverflow::Ellipsis: return core::StringView(u8"ellipsis");
+        case TextOverflow::EllipsisStart: return core::StringView(u8"ellipsis-start");
+        case TextOverflow::EllipsisMiddle: return core::StringView(u8"ellipsis-middle");
+        default: return core::StringView(u8"clip");
+        }
+    }
+    /// The overflow a keyword names (clip for one it does not know).
+    [[nodiscard]] inline TextOverflow TextOverflowNamed(core::StringView name) noexcept
+    {
+        if (name == core::StringView(u8"ellipsis"))
+            return TextOverflow::Ellipsis;
+        if (name == core::StringView(u8"ellipsis-start"))
+            return TextOverflow::EllipsisStart;
+        if (name == core::StringView(u8"ellipsis-middle"))
+            return TextOverflow::EllipsisMiddle;
+        return TextOverflow::Clip;
+    }
+
     class Label : public UIWidget
     {
         RTTI_OBJECT(Label, UIWidget)
@@ -40,11 +65,15 @@ export namespace experimental::gui
             SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
         }
 
+        /// Its text: plain, or a rich text's markup when it is rich (SetRich).
         void SetText(core::StringView text)
         {
             if (text == m_text.GetString())
                 return;
-            m_text.SetString(text);
+            if (m_rich)
+                m_text.SetMarkup(text);
+            else
+                m_text.SetString(text);
             RequestLayout(); // its size follows its text
             Invalidate();
             m_textChanged.Notify();
@@ -56,8 +85,25 @@ export namespace experimental::gui
             return m_text.GetString();
         }
 
+        /// A rich label's text is markup: runs in their own colours, sizes, faces and effects,
+        /// underlines, inline icons and links (:text_runs), a click on a link reported as a `link`
+        /// event with its id. Markup's `rich="true"`, or the RichText element.
+        void SetRich(bool rich)
+        {
+            if (rich == m_rich)
+                return;
+            m_rich = rich;
+            const core::String text(m_text.GetString());
+            if (rich)
+                m_text.SetMarkup(text.AsView());
+            else
+                m_text.SetString(text.AsView());
+            RequestLayout();
+            Invalidate();
+        }
+        [[nodiscard]] bool IsRich() const noexcept { return m_rich; }
 
-        // Markup: <Label text="Hello" wrap="true">.
+        // Markup: <Label text="Hello" rich="true">.
         bool SetMarkupAttribute(core::StringView name, core::StringView value) override
         {
             if (name == core::StringView(u8"text"))
@@ -65,33 +111,44 @@ export namespace experimental::gui
                 SetText(value);
                 return true;
             }
-            if (name == core::StringView(u8"wrap"))
+            if (name == core::StringView(u8"rich"))
             {
-                SetWordWrap(value == core::StringView(u8"true"));
+                SetRich(value == core::StringView(u8"true"));
                 return true;
             }
             return UIWidget::SetMarkupAttribute(name, value);
         }
 
-
-        // Word wrap: when on, the label draws multiple lines within its content width.
-        void SetWordWrap(bool enabled)
+        /// CSS's text-overflow: what shows where a line passes the label's width (clip, or an
+        /// ellipsis at its end, start or middle). Not inherited.
+        void SetTextOverflow(TextOverflow overflow)
         {
-            m_text.SetWordWrap(enabled);
+            m_text.SetOverflow(overflow);
+            Invalidate();
+        }
+        [[nodiscard]] TextOverflow GetTextOverflow() const noexcept { return m_text.GetOverflow(); }
+        void SetTextOverflowName(const core::String& name) { SetTextOverflow(TextOverflowNamed(Trim(name.AsView()))); }
+        [[nodiscard]] core::String GetTextOverflowName() const { return core::String(TextOverflowName(GetTextOverflow())); }
+        /// CSS's line-clamp: the most lines it shows, the last ending in an ellipsis when its
+        /// text-overflow has one (0: all). Not inherited.
+        void SetLineClamp(i32 lines)
+        {
+            m_text.SetMaxLines(static_cast<u32>(core::Max(0, lines)));
             RequestLayout();
             Invalidate();
         }
-        [[nodiscard]] bool IsWordWrap() const { return m_text.IsWordWrap(); }
+        [[nodiscard]] i32 GetLineClamp() const noexcept { return static_cast<i32>(m_text.GetMaxLines()); }
 
         // The natural size of the text (for layout).
         [[nodiscard]] core::Float2 MeasureText() const { return m_text.Measure(); }
-        /// Its text's size (E2): one line, or wrapped to the width available (its longest word when
-        /// none is), lines broken where the text breaks them.
+        /// Its text's size (E2, E4): shaped, on one line, or wrapped to the width available where
+        /// its white-space wraps (its longest word when no width is given), clamped to its lines.
         [[nodiscard]] core::Float2 MeasureContent(core::Float2 available) override
         {
-            if (!(m_text.GetFont() != nullptr) || m_text.GetString().Size() == 0)
+            SyncServices();
+            if (m_text.GetFont() == nullptr || m_text.IsEmpty())
                 return core::Float2{0.0f, (m_text.GetFont() != nullptr) ? m_text.GetLineHeight() : 0.0f};
-            return m_text.MeasureWrapped(m_text.IsWordWrap() && !IsUnbounded(available.x) ? available.x : kUnbounded);
+            return m_text.MeasureWrapped(available.x);
         }
         /// Its text's first baseline, where it draws it in the content box.
         [[nodiscard]] f32 BaselineAt(core::Float2 size) const override
@@ -101,27 +158,66 @@ export namespace experimental::gui
                                              core::Max(0.0f, size.y - c.TotalVertical())});
         }
         // The size wrapped text occupies at `maxWidth` (widest line x total height).
-        [[nodiscard]] core::Float2 MeasureWrapped(f32 maxWidth) const
-        {
-            return m_text.MeasureWrapped(maxWidth);
-        }
+        [[nodiscard]] core::Float2 MeasureWrapped(f32 maxWidth) const { return m_text.MeasureWrapped(maxWidth); }
+        /// What it lays out and draws.
+        [[nodiscard]] const Text& GetTextLayout() const noexcept { return m_text; }
 
     protected:
         // Its text draws in its text style (its own, a sheet's, or what it inherits).
         void OnTextStyleChange() override
         {
+            const TextStyle& style = GetTextStyle();
             m_text.SetFont(GetFont());
             m_text.SetColor(GetTextColor());
             m_text.SetAlignment(GetTextAlignH(), GetTextAlignV());
+            m_text.SetWhiteSpace(style.WhiteSpace);
+            m_text.SetLineHeight(style.LineHeightPixels());
+            m_text.SetLetterSpacing(style.LetterSpacing);
         }
 
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
         {
             (void)localBounds;
+            SyncServices();
             m_text.Draw(ctx, GetContentBounds()); // aligned within the padding-inset bounds
         }
 
+        // A click on a rich text's link reports it.
+        void OnMouseClick(const MouseEvent& event) override
+        {
+            if (!m_rich)
+                return;
+            const core::StringView link = m_text.LinkAt(GetContentBounds(), ConvertToNodeSpace(event.Position));
+            if (link.Size() == 0)
+                return;
+            event.Handled = true;
+            const core::String id(link); // the event outlives no relayout
+            SendEvent(LinkEvent(this, id.AsView()));
+        }
+
+        // The GUI's fonts and resources, which a rich text's own faces and icons need.
+        void SyncServices()
+        {
+            if (!m_rich)
+                return;
+            m_text.SetFontService(GetFontService());
+            m_text.SetResourceProvider(GetResourceProvider());
+        }
+
         Text m_text;
+        bool m_rich = false;
         Observable m_textChanged; // what bindings reading the text follow
+    };
+
+    /// A label whose text is markup (Label with rich on), for markup's <RichText text="...">.
+    class RichText : public Label
+    {
+        RTTI_OBJECT(RichText, Label)
+    public:
+        RichText()
+        {
+            SetTag(core::StringView(u8"richtext"));
+            SetRich(true);
+        }
     };
 }

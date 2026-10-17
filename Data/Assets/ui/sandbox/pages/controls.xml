@@ -1,6 +1,6 @@
 <Panel id="page-controls" class="page" gap="18">
     <Label class="page-title" text="Controls"/>
-    <Label class="page-lead" wrap="true"
+    <Label class="page-lead" white-space="normal"
            text="The lab's widgets as markup makes them, themed by the built-in sheet. Each keeps its own state here; the Data binding page binds the same widgets to data."/>
 
     <Panel class="section" gap="12">

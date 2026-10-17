@@ -755,8 +755,9 @@ export namespace experimental::gui
                 node.SetVisible(visible);
         }
 
-        // Text (E3): colour, the font and text-align inherit (the sheet's value, else the parent's,
-        // else the node's own; `initial` is the node's own); vertical-align does not.
+        // Text (E3, E4): colour, the font, text-align, white-space, line-height and letter-spacing
+        // inherit (the sheet's value, else the parent's, else the node's own; `initial` is the
+        // node's own, or CSS's where the table names one); vertical-align does not.
         {
             const UINode::TextStyle& ownText = node.CaptureUnstyledText();
             const UINode* parent = core::Cast<UINode>(node.GetParent());
@@ -822,6 +823,64 @@ export namespace experimental::gui
                             text.FontSize = size;
                         }
                 }
+            }
+            // white-space, line-height and letter-spacing inherit as the rest do (E4).
+            if (free(SlotWhiteSpace))
+            {
+                const StringView v = keyword(u8"white-space");
+                if (v == StringView(u8"normal"))
+                    text.WhiteSpace = TextWhiteSpace::Normal;
+                else if (v == StringView(u8"nowrap"))
+                    text.WhiteSpace = TextWhiteSpace::NoWrap;
+                else if (v == StringView(u8"pre"))
+                    text.WhiteSpace = TextWhiteSpace::Pre;
+                else if (v == StringView(u8"pre-wrap") || v == StringView(u8"pre-line") || v == StringView(u8"break-spaces"))
+                    text.WhiteSpace = TextWhiteSpace::PreWrap;
+                else
+                    text.WhiteSpace = inherits(u8"white-space") ? parent->GetTextStyle().WhiteSpace : ownText.WhiteSpace;
+            }
+            if (free(SlotLineHeight))
+            {
+                // normal; a bare number, a multiple of each node's own font size (inherited as the
+                // number); a length; a percentage of the font size (inherited as the pixels).
+                const StringView v = Trim(keyword(u8"line-height"));
+                const Optional<f64> number = v.Size() != 0 ? ParseFloat(v) : Optional<f64>{};
+                const UINode::TextStyle& from = inherits(u8"line-height") ? parent->GetTextStyle() : ownText;
+                if (v == StringView(u8"normal"))
+                {
+                    text.LineHeight = 0.0f;
+                    text.LineHeightFactor = false;
+                }
+                else if (number.HasValue())
+                {
+                    text.LineHeight = core::Max(0.0f, static_cast<f32>(number.Value()));
+                    text.LineHeightFactor = true;
+                }
+                else if (v.Size() > 1 && v[v.Size() - 1] == u8'%' && ParseFloat(v.SubStr(0, v.Size() - 1)).HasValue())
+                {
+                    text.LineHeight = core::Max(0.0f, static_cast<f32>(ParseFloat(v.SubStr(0, v.Size() - 1)).Value()) * 0.01f * text.FontSize);
+                    text.LineHeightFactor = false;
+                }
+                else if (const Optional<f32> px = v.Size() != 0 ? ResolveLength(v, lengths) : Optional<f32>{}; px.HasValue())
+                {
+                    text.LineHeight = core::Max(0.0f, px.Value());
+                    text.LineHeightFactor = false;
+                }
+                else
+                {
+                    text.LineHeight = from.LineHeight;
+                    text.LineHeightFactor = from.LineHeightFactor;
+                }
+            }
+            if (free(SlotLetterSpacing))
+            {
+                const StringView v = Trim(keyword(u8"letter-spacing"));
+                if (v == StringView(u8"normal"))
+                    text.LetterSpacing = 0.0f;
+                else if (const Optional<f32> px = v.Size() != 0 ? ResolveLength(v, lengths) : Optional<f32>{}; px.HasValue())
+                    text.LetterSpacing = px.Value();
+                else
+                    text.LetterSpacing = inherits(u8"letter-spacing") ? parent->GetTextStyle().LetterSpacing : ownText.LetterSpacing;
             }
             node.ApplyTextStyle(text);
         }

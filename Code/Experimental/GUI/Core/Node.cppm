@@ -18,6 +18,7 @@ export module experimental.gui:node;
 import foundation.core; // Object, RefPtr, Array, Move, Float2
 import foundation.script; // IScriptDelegate (the script surface's event handlers)
 import foundation.vg;     // PathBuilder, ShapeBuilder (rounded clips), layers
+import foundation.fonts;  // IFontService (what a rich text's runs ask, E4)
 import :rect;
 import :transform2d;
 import :transformable;
@@ -36,9 +37,11 @@ import :css_values;  // LengthValue
 import :style_value; // TransformFunction
 import :thickness;
 import :layout_style; // LayoutStyle, LayoutConstraints (E2)
+import :resource_provider; // IResourceProvider (a rich text's icons, E4)
 
 using namespace foundation::core;
 namespace core = foundation::core;
+namespace fonts = foundation::fonts;
 namespace vg = foundation::vg;
 
 export namespace experimental::gui
@@ -947,6 +950,17 @@ export namespace experimental::gui
         [[nodiscard]] virtual EventDispatcher* GetEventDispatcher()
         {
             return m_parent ? m_parent->GetEventDispatcher() : nullptr;
+        }
+        /// The font service of the GUI this node is in (its SceneRoot's context's), or null: what a
+        /// rich text's runs that set a font of their own ask.
+        [[nodiscard]] virtual fonts::IFontService* GetFontService()
+        {
+            return m_parent ? m_parent->GetFontService() : nullptr;
+        }
+        /// The resources of the GUI this node is in, or null: what loads a rich text's icons.
+        [[nodiscard]] virtual IResourceProvider* GetResourceProvider()
+        {
+            return m_parent ? m_parent->GetResourceProvider() : nullptr;
         }
 
         // Programmatic focus (routes through the dispatcher; defined in the impl unit).

@@ -185,3 +185,39 @@ TEST_CASE("inheritance: inherit, initial and unset")
     CHECK(bed.inner->GetLayoutStyle().Width.IsAuto());                // initial: the table's (auto)
     CHECK(bed.inner->GetPadding().Left == doctest::Approx(0.0f));     // unset: initial, the node's own
 }
+
+TEST_CASE("inheritance: white-space, line-height and letter-spacing pass down; text-overflow and line-clamp do not")
+{
+    Bed bed(u8".outer { font-family: Serif; font-size: 20px; white-space: pre-wrap; line-height: 1.5; letter-spacing: 2px; "
+            u8"text-overflow: ellipsis; line-clamp: 2; } "
+            u8"label.fixed { line-height: 24px; white-space: nowrap; } label.cut { text-overflow: ellipsis-middle; line-clamp: 3; }");
+    const UINode::TextStyle& text = bed.label->GetTextStyle();
+    CHECK(text.WhiteSpace == TextWhiteSpace::PreWrap);
+    CHECK(text.LineHeightFactor);
+    CHECK(text.LineHeightPixels() == doctest::Approx(30.0f)); // 1.5 of its own 20px
+    CHECK(text.LetterSpacing == doctest::Approx(2.0f));
+    CHECK(bed.label->GetTextOverflow() == TextOverflow::Clip); // not inherited
+    CHECK(bed.label->GetLineClamp() == 0);
+
+    bed.label->AddClass(SV(u8"fixed"));
+    bed.label->AddClass(SV(u8"cut"));
+    bed.Restyle();
+    CHECK(bed.label->GetTextStyle().WhiteSpace == TextWhiteSpace::NoWrap);
+    CHECK(bed.label->GetTextStyle().LineHeightPixels() == doctest::Approx(24.0f));
+    CHECK(bed.label->GetTextOverflow() == TextOverflow::EllipsisMiddle);
+    CHECK(bed.label->GetLineClamp() == 3);
+
+    bed.label->RemoveClass(SV(u8"cut"));
+    bed.panel->RemoveClass(SV(u8"outer"));
+    bed.Restyle();
+    CHECK(bed.label->GetTextOverflow() == TextOverflow::Clip); // the rule went: its own again
+    CHECK(bed.label->GetLineClamp() == 0);
+    CHECK(bed.label->GetTextStyle().LetterSpacing == doctest::Approx(0.0f));
+
+    // Code's value is code's.
+    bed.label->RemoveClass(SV(u8"fixed"));
+    bed.label->SetWhiteSpace(TextWhiteSpace::Pre);
+    bed.panel->AddClass(SV(u8"outer"));
+    bed.Restyle();
+    CHECK(bed.label->GetTextStyle().WhiteSpace == TextWhiteSpace::Pre);
+}

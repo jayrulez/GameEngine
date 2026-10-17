@@ -43,10 +43,13 @@ import :reactive;    // EffectScheduler
 import :data_model;
 import :commands;
 import :keymap;
+import foundation.fonts;   // IFontService
+import :resource_provider; // IResourceProvider
 import :text_editing_keys; // the editing keys every GUI starts with (E4)
 
 using namespace foundation::core;
 namespace core = foundation::core;
+namespace fonts = foundation::fonts;
 
 export namespace experimental::gui
 {
@@ -79,6 +82,11 @@ export namespace experimental::gui
         [[nodiscard]] CommandSet& GetCommands() noexcept { return m_commands; }
         Command& DefineCommand(core::StringView id) { return m_commands.Define(id, MemoryAllocator()); }
         [[nodiscard]] Keymap& GetKeymap() noexcept { return m_keymap; }
+        /// The fonts and resources its text asks for (a rich text's own faces and its icons); not owned.
+        void SetFontService(fonts::IFontService* fonts) noexcept { m_fontService = fonts; }
+        [[nodiscard]] fonts::IFontService* GetFontService() const noexcept { return m_fontService; }
+        void SetResourceProvider(IResourceProvider* resources) noexcept { m_resources = resources; }
+        [[nodiscard]] IResourceProvider* GetResourceProvider() const noexcept { return m_resources; }
         [[nodiscard]] ElementTable* GetElementTable() noexcept { return m_elements.Get(); }
         [[nodiscard]] const ElementSet& GetElementSet() const noexcept { return m_elementSet; }
         /// What this GUI's markup and scripts may create (every registered element by default).
@@ -121,6 +129,8 @@ export namespace experimental::gui
         RefPtr<DataModel> m_data;        // shared with the bindings to it
         CommandSet m_commands;
         Keymap m_keymap;
+        fonts::IFontService* m_fontService = nullptr;
+        IResourceProvider* m_resources = nullptr;
         Array<Keystroke> m_chord; // a chord typed so far (in the active root)
         f32 m_chordAge = 0.0f;
         static constexpr f32 kChordTimeout = 1.0f;
@@ -189,6 +199,8 @@ export namespace experimental::gui
         [[nodiscard]] ActionManager* GetActionManager() override { return &m_context->m_actionManager; }
         [[nodiscard]] MutationQueue* GetMutationQueue() override { return &m_context->m_mutationQueue; }
         [[nodiscard]] EventDispatcher* GetEventDispatcher() override { return &m_eventDispatcher; }
+        [[nodiscard]] fonts::IFontService* GetFontService() override { return m_context->GetFontService(); }
+        [[nodiscard]] IResourceProvider* GetResourceProvider() override { return m_context->GetResourceProvider(); }
         [[nodiscard]] ElementTable* GetElementTable() override { return m_context->m_elements.Get(); }
         [[nodiscard]] const ElementSet* GetElementSet() const override { return &m_context->m_elementSet; }
 

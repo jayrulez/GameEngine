@@ -64,11 +64,18 @@ export namespace experimental::gui
             f32 FontSize = 0.0f;     ///< in pixels (0: unknown)
             TextHAlign HAlign = TextHAlign::Left;
             TextVAlign VAlign = TextVAlign::Top;
+            TextWhiteSpace WhiteSpace = TextWhiteSpace::NoWrap; ///< a node's own: one line (CSS's initial is normal)
+            f32 LineHeight = 0.0f;        ///< pixels, or a multiple of the font size when LineHeightFactor; 0: normal
+            bool LineHeightFactor = false; ///< a unitless line-height, which each node applies to its own font size
+            f32 LetterSpacing = 0.0f;     ///< pixels
             [[nodiscard]] bool operator==(const TextStyle& o) const noexcept
             {
                 return TextColor == o.TextColor && Font == o.Font && FontFamily == o.FontFamily && FontSize == o.FontSize &&
-                       HAlign == o.HAlign && VAlign == o.VAlign;
+                       HAlign == o.HAlign && VAlign == o.VAlign && WhiteSpace == o.WhiteSpace && LineHeight == o.LineHeight &&
+                       LineHeightFactor == o.LineHeightFactor && LetterSpacing == o.LetterSpacing;
             }
+            /// The line height in pixels (0: the font's own).
+            [[nodiscard]] f32 LineHeightPixels() const noexcept { return LineHeightFactor ? LineHeight * FontSize : LineHeight; }
         };
         void SetTextColor(Color color)
         {
@@ -94,6 +101,32 @@ export namespace experimental::gui
             style.VAlign = vertical;
             ChangeTextStyle(style);
         }
+        /// CSS's white-space (inherited): whether spaces collapse and lines wrap.
+        void SetWhiteSpace(TextWhiteSpace whiteSpace)
+        {
+            PinStyle(SlotBit(SlotWhiteSpace));
+            TextStyle style = m_textStyle;
+            style.WhiteSpace = whiteSpace;
+            ChangeTextStyle(style);
+        }
+        /// CSS's line-height (inherited): pixels, or with `factor` a multiple of the font size; 0: normal.
+        void SetLineHeight(f32 value, bool factor = false)
+        {
+            PinStyle(SlotBit(SlotLineHeight));
+            TextStyle style = m_textStyle;
+            style.LineHeight = core::Max(0.0f, value);
+            style.LineHeightFactor = factor;
+            ChangeTextStyle(style);
+        }
+        /// CSS's letter-spacing (inherited), in pixels.
+        void SetLetterSpacing(f32 pixels)
+        {
+            PinStyle(SlotBit(SlotLetterSpacing));
+            TextStyle style = m_textStyle;
+            style.LetterSpacing = pixels;
+            ChangeTextStyle(style);
+        }
+        [[nodiscard]] TextWhiteSpace GetWhiteSpace() const noexcept { return m_textStyle.WhiteSpace; }
         [[nodiscard]] const TextStyle& GetTextStyle() const noexcept { return m_textStyle; }
         [[nodiscard]] Color GetTextColor() const noexcept { return m_textStyle.TextColor; }
         [[nodiscard]] fonts::CachedFont* GetFont() const noexcept { return m_textStyle.Font; }

@@ -1,6 +1,6 @@
 <Panel id="page-binding" class="page" gap="18">
     <Label class="page-title" text="Data binding"/>
-    <Label class="page-lead" wrap="true"
+    <Label class="page-lead" white-space="normal"
            text="Markup bound to the GUI's data by name, in double braces: the slider, the checkbox and the field write their values back, and everything reading them follows. No handler is wired. The game menu reads the same values."/>
 
     <Panel class="section" gap="12">

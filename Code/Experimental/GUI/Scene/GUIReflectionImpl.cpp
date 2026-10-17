@@ -72,6 +72,7 @@ namespace experimental::gui
                 {u8"keyup", EventType::KeyUp},           {u8"textinput", EventType::TextInput},
                 {u8"focus", EventType::FocusGained},     {u8"blur", EventType::FocusLost},
                 {u8"change", EventType::Changed},        {u8"pointercancel", EventType::PointerCancel},
+                {u8"link", EventType::Link},
             };
             for (const Named& entry : kNames)
             {
@@ -138,6 +139,7 @@ namespace experimental::gui
                 break;
             }
             case EventType::TextInput: out.text = core::String(static_cast<const TextInputEvent&>(event).Text); break;
+            case EventType::Link: out.text = core::String(static_cast<const LinkEvent&>(event).Link); break; // the link's id
             default: break;
             }
             return out;
@@ -494,7 +496,7 @@ namespace experimental::gui
                 &RadioButton::StaticType(),  &Slider::StaticType(),       &ProgressBar::StaticType(),
                 &TextField::StaticType(),    &Panel::StaticType(),        &ScrollView::StaticType(),
                 &Image::StaticType(),        &ListBox::StaticType(),      &Window::StaticType(),
-                &ComboBox::StaticType(),
+                &ComboBox::StaticType(),     &RichText::StaticType(),
             };
             for (const TypeInfo* type : kLabElements)
                 (void)ElementTypes::Register(*type);
@@ -608,7 +610,17 @@ namespace experimental::gui
     {
         builder.AccessorProperty<&Label::GetText, &Label::SetText>("text");
         builder.AccessorProperty<&Label::GetTextColor, &Label::SetTextColor>("textColor");
+        builder.AccessorProperty<&Label::IsRich, &Label::SetRich>("rich");
+        builder.AccessorProperty<&Label::GetTextOverflowName, &Label::SetTextOverflowName>("textOverflow")
+            .PropAttribute("css", core::String(u8"text-overflow"));
+        builder.AccessorProperty<&Label::GetLineClamp, &Label::SetLineClamp>("lineClamp").PropAttribute("css", core::String(u8"line-clamp"));
         builder.Method<&ElementOf<Label>, Label, Node>("of");
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(RichText, "rtti::gui")
+    {
+        builder.Method<&ElementOf<RichText>, RichText, Node>("of");
         builder.Creator();
     }
 

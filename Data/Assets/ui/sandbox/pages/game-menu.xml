@@ -1,6 +1,6 @@
 <Panel id="page-game-menu" class="page" gap="18">
     <Label class="page-title" text="Game menu"/>
-    <Label class="page-lead" wrap="true"
+    <Label class="page-lead" white-space="normal"
            text="A game's main menu built from markup, a sheet and AngelScript, with nothing native but its host. It is a second root of this GUI: it shares the data (your name, the volume) and returns here when you leave it."/>
     <Panel class="section" gap="14">
         <Label class="section-title" text="AURORA"/>

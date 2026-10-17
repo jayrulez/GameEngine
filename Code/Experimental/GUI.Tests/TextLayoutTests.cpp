@@ -192,3 +192,199 @@ TEST_CASE("text layout: plain runs draw in the label's font; with no service a b
     CHECK(ResolveRunFont(big, style).Font == style.Font);
     CHECK(ResolveRunFont(big, style).Size == doctest::Approx(16.0f));
 }
+
+// ============================================================================================
+// The lab's additions: ellipses, the clamp, line height and spacing on shaped text, carets.
+// ============================================================================================
+
+namespace
+{
+    // The plain text the glyphs on a line stand for, an ellipsis as "~".
+    String Shown(const TextLayout& layout, StringView plain, usize line)
+    {
+        String out;
+        for (const LaidOutGlyphs& run : layout.GlyphRuns)
+        {
+            if (run.Line != line)
+                continue;
+            if (run.Run < 0)
+            {
+                out.Append(StringView(u8"~"));
+                continue;
+            }
+            for (usize g = 0; g < run.Glyphs.Size(); ++g)
+                out.Append(plain.SubStr(run.GlyphStart[g], run.GlyphEnd[g] - run.GlyphStart[g]));
+        }
+        return out;
+    }
+    // Runs in x order (an ellipsis may be added after the runs it sits between).
+    String ShownInOrder(TextLayout layout, StringView plain, usize line)
+    {
+        for (usize i = 0; i < layout.GlyphRuns.Size(); ++i)
+            for (usize j = i + 1; j < layout.GlyphRuns.Size(); ++j)
+                if (layout.GlyphRuns[j].X < layout.GlyphRuns[i].X)
+                {
+                    LaidOutGlyphs swap = Move(layout.GlyphRuns[i]);
+                    layout.GlyphRuns[i] = Move(layout.GlyphRuns[j]);
+                    layout.GlyphRuns[j] = Move(swap);
+                }
+        return Shown(layout, plain, line);
+    }
+}
+
+TEST_CASE("text layout: an overflowing line ends in an ellipsis at its end, start or middle, inside the width")
+{
+    RobotoService fonts;
+    const StringView path(u8"/home/player/saves/slot-three/profile.dat");
+    const TextDocument doc = TextDocument::Plain(path);
+    TextLayoutStyle style = Style(fonts, 150.0f);
+    style.Wrap = false;
+    const TextLayout full = LayOutText(doc, style);
+    CHECK(full.Width > 150.0f); // clipped: as wide as the text
+    CHECK_FALSE(full.Lines[0].Ellipsized);
+
+    style.Overflow = TextOverflow::Ellipsis;
+    const TextLayout end = LayOutText(doc, style);
+    CHECK(end.Lines[0].Ellipsized);
+    CHECK(end.Width <= 150.0f + 0.01f);
+    const String endShown = ShownInOrder(end, path, 0);
+    CHECK(endShown.AsView().SubStr(0, 6) == StringView(u8"/home/"));
+    CHECK(endShown.AsView().SubStr(endShown.Size() - 1, 1) == StringView(u8"~"));
+
+    style.Overflow = TextOverflow::EllipsisStart;
+    const TextLayout start = LayOutText(doc, style);
+    CHECK(start.Width <= 150.0f + 0.01f);
+    const String startShown = ShownInOrder(start, path, 0);
+    CHECK(startShown.AsView().SubStr(0, 1) == StringView(u8"~"));
+    CHECK(startShown.AsView().SubStr(startShown.Size() - 4, 4) == StringView(u8".dat"));
+    for (const LaidOutGlyphs& run : start.GlyphRuns)
+        for (const fonts::GlyphPosition& g : run.Glyphs)
+            CHECK(g.x >= -0.01f);
+
+    style.Overflow = TextOverflow::EllipsisMiddle;
+    const TextLayout middle = LayOutText(doc, style);
+    CHECK(middle.Width <= 150.0f + 0.01f);
+    const String middleShown = ShownInOrder(middle, path, 0);
+    CHECK(middleShown.AsView().SubStr(0, 6) == StringView(u8"/home/"));
+    CHECK(middleShown.AsView().SubStr(middleShown.Size() - 4, 4) == StringView(u8".dat"));
+    bool ellipsisInside = false;
+    for (usize i = 1; i + 1 < middleShown.Size(); ++i)
+        ellipsisInside = ellipsisInside || middleShown[i] == u8'~';
+    CHECK(ellipsisInside);
+
+    // Centred, the shortened line centres.
+    style.Overflow = TextOverflow::Ellipsis;
+    style.Align = TextHAlign::Center;
+    const TextLayout centred = LayOutText(doc, style);
+    CHECK(centred.Lines[0].Left == doctest::Approx((150.0f - centred.Lines[0].Width) * 0.5f));
+}
+
+TEST_CASE("text layout: a clamp keeps its lines and ends the last in an ellipsis")
+{
+    RobotoService fonts;
+    TextLayoutStyle style = Style(fonts, 120.0f);
+    style.MaxLines = 2;
+    style.Overflow = TextOverflow::Ellipsis;
+    const TextLayout layout = LayOutText(
+        TextDocument::Plain(u8"The guests dance while the band plays on into the night and the masks turn"), style);
+    REQUIRE(layout.Lines.Size() == 2u);
+    CHECK(layout.Clamped);
+    CHECK(layout.Lines[1].Ellipsized);
+    CHECK_FALSE(layout.Lines[0].Ellipsized);
+    CHECK(layout.Height == doctest::Approx(layout.Lines[1].Top + layout.Lines[1].Height));
+    for (const LaidOutGlyphs& run : layout.GlyphRuns)
+        CHECK(run.Line < 2u);
+}
+
+TEST_CASE("text layout: line height spaces shaped lines; letter spacing widens each glyph's step")
+{
+    RobotoService fonts;
+    TextLayoutStyle style = Style(fonts, 60.0f);
+    style.LineHeight = 40.0f;
+    const TextLayout tall = LayOutText(TextDocument::Plain(u8"one two three"), style);
+    REQUIRE(tall.Lines.Size() >= 2u);
+    CHECK(tall.Lines[1].Top == doctest::Approx(40.0f));
+    CHECK(tall.Lines[1].Baseline - tall.Lines[0].Baseline == doctest::Approx(40.0f));
+
+    TextLayoutStyle plain = Style(fonts);
+    const TextLayout narrow = LayOutText(TextDocument::Plain(u8"abc"), plain);
+    plain.LetterSpacing = 3.0f;
+    const TextLayout wide = LayOutText(TextDocument::Plain(u8"abc"), plain);
+    CHECK(wide.Width == doctest::Approx(narrow.Width + 9.0f));
+    REQUIRE(wide.GlyphRuns[0].Glyphs.Size() == 3u);
+    CHECK(wide.GlyphRuns[0].Glyphs[2].x - narrow.GlyphRuns[0].Glyphs[2].x == doctest::Approx(6.0f));
+}
+
+TEST_CASE("text layout: a caret's x follows its offset, and a point finds the nearest offset on its line")
+{
+    RobotoService fonts;
+    const StringView text(u8"ab cd\nefg");
+    const TextLayout layout = LayOutText(TextDocument::Plain(text), Style(fonts));
+    REQUIRE(layout.Lines.Size() == 2u);
+    CHECK(layout.Lines[0].Start == 0u);
+    CHECK(layout.Lines[0].End == 5u);
+    CHECK(layout.Lines[1].Start == 6u);
+    CHECK(layout.Lines[1].End == 9u);
+    CHECK(layout.LineOf(5) == 0u);
+    CHECK(layout.LineOf(6) == 1u);
+    f32 last = -1.0f;
+    for (usize offset = 0; offset <= 5; ++offset)
+    {
+        const f32 x = layout.CaretX(offset);
+        CHECK(x > last);
+        last = x;
+        CHECK(layout.OffsetAt(Float2{x + 0.5f, layout.Lines[0].Baseline}) == offset);
+    }
+    CHECK(layout.CaretX(6) == doctest::Approx(0.0f));
+    CHECK(layout.OffsetAt(Float2{1000.0f, layout.Lines[1].Baseline}) == 9u);
+    CHECK(layout.OffsetAt(Float2{-5.0f, -5.0f}) == 0u);
+}
+
+TEST_CASE("text layout: a wrapped line's caret end stays on it")
+{
+    RobotoService fonts;
+    const TextLayout layout = LayOutText(TextDocument::Plain(u8"alpha beta"), Style(fonts, 50.0f));
+    REQUIRE(layout.Lines.Size() == 2u);
+    CHECK(layout.Lines[0].End == layout.Lines[1].Start);
+    const usize end = layout.OffsetAt(Float2{49.0f, layout.Lines[0].Baseline});
+    CHECK(layout.LineOf(end) == 0u);
+}
+
+TEST_CASE("label: measures shaped text, and a rich label reports a clicked link")
+{
+    RobotoService fonts;
+    auto context = MakeRef<GUIContext>(DefaultAllocator());
+    context->SetFontService(&fonts.service);
+    auto root = MakeRef<SceneRoot>(DefaultAllocator(), context);
+    root->SetSize(Float2{400.0f, 200.0f});
+    fonts::CachedFont* roboto = fonts.service.GetFont(u8"Roboto", 16.0f);
+
+    auto label = MakeRef<Label>(DefaultAllocator());
+    label->SetFont(roboto);
+    label->SetText(u8"Shaped width");
+    CHECK(label->MeasureContent(Float2{kUnbounded, kUnbounded}).x ==
+          doctest::Approx(LayOutText(TextDocument::Plain(u8"Shaped width"), Style(fonts)).Width));
+
+    auto rich = MakeRef<RichText>(DefaultAllocator());
+    rich->SetFont(roboto);
+    rich->SetText(u8"go [link=door]open the door[/link] now");
+    rich->SetPosition(Float2{0.0f, 0.0f});
+    rich->SetSize(Float2{400.0f, 40.0f});
+    root->AddChild(rich.Get());
+    String heard;
+    (void)rich->AddEventListener(EventType::Link,
+                                 [&heard](const Event& e) { heard = String(static_cast<const LinkEvent&>(e).Link); });
+    const Rect bounds = rich->GetContentBounds();
+    const TextLayout& layout = rich->GetTextLayout().LayoutFor(bounds);
+    REQUIRE_FALSE(layout.Links.IsEmpty());
+    const Float2 origin = rich->GetTextLayout().Origin(bounds);
+    const Float2 onLink{origin.x + layout.Links[0].Rect.x + 2.0f, origin.y + layout.Links[0].Rect.y + layout.Links[0].Rect.height * 0.5f};
+    EventDispatcher* d = root->GetEventDispatcher();
+    d->InjectMouseDown(onLink, MouseButton::Left);
+    d->InjectMouseUp(onLink, MouseButton::Left);
+    CHECK(heard == StringView(u8"door"));
+    heard.Clear();
+    d->InjectMouseDown(Float2{origin.x + 1.0f, onLink.y}, MouseButton::Left); // on "go"
+    d->InjectMouseUp(Float2{origin.x + 1.0f, onLink.y}, MouseButton::Left);
+    CHECK(heard.IsEmpty());
+}

@@ -23,3 +23,8 @@
 dragpreview { background-color: var(--surface-2); color: var(--ink); border-radius: 6; font-family: Roboto; font-size: 14px; }
 tooltip.drophint.refused { color: #ff8a80; }
 .dnd-row { width: 590px; }
+.dnd-long { width: 260px; height: 110px; padding: 6px; border: 1px dashed var(--line); border-radius: 8; }
+.dnd-long:drop-target { border-color: var(--accent); }
+.dnd-line { width: 240px; height: 24px; color: var(--muted); font-family: Roboto; font-size: 13px; }
+.dnd-more { width: 300px; }
+.dnd-more > expanderheader { height: 28px; font-family: Roboto; font-size: 14px; color: var(--ink); }

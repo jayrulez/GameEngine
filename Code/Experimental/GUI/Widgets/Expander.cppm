@@ -58,6 +58,14 @@ export namespace experimental::gui
                 indicator->Invalidate();
         }
         void CollectStyleParts(core::Array<core::StringView>& out) const override { out.PushBack(core::StringView(u8"chevron")); }
+        // A drag resting on a closed header opens its expander (E7).
+        bool OnDragHoverOpen(core::Float2) override
+        {
+            if (m_open)
+                return false;
+            (void)ActivateAsClick();
+            return true;
+        }
 
     protected:
         [[nodiscard]] core::Float2 IndicatorSize() const override { return core::Float2{12.0f, 12.0f}; }

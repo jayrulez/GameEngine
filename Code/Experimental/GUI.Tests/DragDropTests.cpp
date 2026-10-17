@@ -372,3 +372,115 @@ TEST_CASE("dnd: code can start a drag (no press of its own), and RequeryDrag ask
     s.D().InjectMouseUp(core::Float2{250.0f, 50.0f}, MouseButton::Left);
     CHECK(s.ended.Effect == DropEffect::Move);
 }
+
+TEST_CASE("dnd: a drag near a scroller's edge scrolls it, faster deeper in, and asks the drop again")
+{
+    Scene s;
+    auto list = Box(*s.root, 200.0f, 120.0f, 150.0f, 100.0f);
+    list->EditLayoutStyle([](LayoutStyle& st) { st.OverflowY = Overflow::Auto; });
+    for (int i = 0; i < 20; ++i)
+    {
+        auto row = core::MakeRef<Panel>(core::DefaultAllocator());
+        row->EditLayoutStyle([](LayoutStyle& st)
+        {
+            st.Height = LayoutLength::Px(30.0f);
+            st.Shrink = 0.0f;
+        });
+        list->AddChild(row.Get());
+    }
+    int queries = 0;
+    list->SetOnDragQuery([&](DropQuery& q)
+    {
+        ++queries;
+        q.Accept();
+    });
+    (void)s.root->UpdateLayout();
+    s.DragTo(core::Float2{270.0f, 170.0f}); // the middle: no scroll
+    s.D().Tick(0.1f);
+    CHECK(list->GetScrollOffset().y == doctest::Approx(0.0f));
+    const int before = queries;
+    s.D().InjectMouseMove(core::Float2{270.0f, 210.0f}); // 10 into the bottom band of 24
+    s.D().Tick(0.1f);
+    const float slow = list->GetScrollOffset().y;
+    CHECK(slow > 0.0f);
+    CHECK(queries > before + 1); // asked again as the content moved
+    s.D().InjectMouseMove(core::Float2{270.0f, 219.0f}); // at the edge
+    s.D().Tick(0.1f);
+    CHECK(list->GetScrollOffset().y - slow > slow);
+    s.D().CancelDrag();
+    s.D().InjectMouseUp(core::Float2{270.0f, 219.0f}, MouseButton::Left);
+}
+
+TEST_CASE("dnd: a drag resting a moment opens a closed tree node and selects a tab")
+{
+    TreeModel model; // outlives the scene, whose tree is its client
+    Scene s;
+    const core::i32 a = model.AddNode(TreeModel::kRoot, core::StringView(u8"A"));
+    (void)model.AddNode(a, core::StringView(u8"A1"));
+    auto tree = core::MakeRef<TreeView>(core::DefaultAllocator());
+    tree->EditLayoutStyle([](LayoutStyle& st)
+    {
+        st.Placement = Position::Absolute;
+        st.Left = LayoutLength::Px(200.0f);
+        st.Top = LayoutLength::Px(150.0f);
+        st.Width = LayoutLength::Px(150.0f);
+        st.Height = LayoutLength::Px(100.0f);
+    });
+    tree->SetRowHeight(20.0f);
+    s.root->AddChild(tree.Get());
+    tree->SetModel(&model);
+    (void)s.root->UpdateLayout();
+
+    s.DragTo(core::Float2{260.0f, 160.0f}); // over row 0, A (closed)
+    s.D().Tick(0.3f);
+    CHECK_FALSE(tree->IsItemExpanded(0));
+    s.D().Tick(0.4f);
+    CHECK(tree->IsItemExpanded(0));
+    s.D().CancelDrag();
+    s.D().InjectMouseUp(core::Float2{260.0f, 160.0f}, MouseButton::Left);
+
+    auto bar = core::MakeRef<TabBar>(core::DefaultAllocator());
+    bar->EditLayoutStyle([](LayoutStyle& st)
+    {
+        st.Placement = Position::Absolute;
+        st.Left = LayoutLength::Px(10.0f);
+        st.Top = LayoutLength::Px(250.0f);
+    });
+    s.root->AddChild(bar.Get());
+    const char8_t* const names[] = {u8"One", u8"Two"};
+    for (const char8_t* name : names)
+        bar->AddTab(core::StringView(name))->EditLayoutStyle([](LayoutStyle& st)
+        {
+            st.Width = LayoutLength::Px(60.0f);
+            st.Height = LayoutLength::Px(24.0f);
+        });
+    (void)s.root->UpdateLayout();
+    const Rect two = bar->GetTab(1)->GetScreenBounds();
+    s.DragTo(core::Float2{two.x + 20.0f, two.y + 10.0f});
+    s.D().Tick(0.7f);
+    CHECK(bar->GetSelectedIndex() == 1);
+    s.D().CancelDrag();
+    s.D().InjectMouseUp(core::Float2{two.x + 20.0f, two.y + 10.0f}, MouseButton::Left);
+}
+
+TEST_CASE("dnd: a drag resting on a closed expander's header opens it")
+{
+    Scene s;
+    auto expander = core::MakeRef<Expander>(core::DefaultAllocator());
+    expander->SetTitle(core::StringView(u8"More"));
+    expander->EditLayoutStyle([](LayoutStyle& st)
+    {
+        st.Placement = Position::Absolute;
+        st.Left = LayoutLength::Px(10.0f);
+        st.Top = LayoutLength::Px(150.0f);
+        st.Width = LayoutLength::Px(150.0f);
+    });
+    s.root->AddChild(expander.Get());
+    (void)s.root->UpdateLayout();
+    const Rect header = expander->GetHeader()->GetScreenBounds();
+    s.DragTo(core::Float2{header.x + 40.0f, header.y + header.height * 0.5f});
+    s.D().Tick(0.7f);
+    CHECK(expander->IsOpen());
+    s.D().CancelDrag();
+    s.D().InjectMouseUp(core::Float2{header.x + 40.0f, header.y + 5.0f}, MouseButton::Left);
+}

@@ -94,6 +94,7 @@
         <Label class="section-title" text="Text input"/>
         <TextField id="controls-field" class="field" placeholder="Type here: select, Ctrl+C/V..." max-length="32"/>
         <Label id="controls-echo" class="caption"/>
+        <EditableLabel class="text editable" text="Double-click or F2 to rename me" tooltip="Return or leaving commits, Escape cancels"/>
     </Panel>
 
     <Panel class="section" gap="12">

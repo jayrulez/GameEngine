@@ -86,6 +86,7 @@ export import :text_edit_base;
 export import :text_field;
 export import :text_area;
 export import :number_field;
+export import :editable_label;
 export import :scroll_bar;
 export import :scroll_view;
 export import :image;

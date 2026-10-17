@@ -518,7 +518,7 @@ namespace experimental::gui
                 &Image::StaticType(),        &ListBox::StaticType(),      &Window::StaticType(),
                 &ComboBox::StaticType(),     &RichText::StaticType(),     &TextArea::StaticType(),
                 &ToggleSwitch::StaticType(),   &Separator::StaticType(),    &Spacer::StaticType(),
-                &NumberField::StaticType(),
+                &NumberField::StaticType(),    &EditableLabel::StaticType(),
             };
             for (const TypeInfo* type : kLabElements)
                 (void)ElementTypes::Register(*type);
@@ -766,6 +766,13 @@ namespace experimental::gui
     REFLECT_MEMBERS(ScrollView, "rtti::gui")
     {
         builder.Method<&ElementOf<ScrollView>, ScrollView, Node>("of");
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(EditableLabel, "rtti::gui")
+    {
+        builder.Method<&EditableLabel::BeginEdit>("beginEdit");
+        builder.Method<&ElementOf<EditableLabel>, EditableLabel, Node>("of");
         builder.Creator();
     }
 

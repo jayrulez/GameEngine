@@ -1479,11 +1479,16 @@ export namespace experimental::gui
                                                                  : NavScope::None;
         }
 
-        // === Invalidation === (marks self + ancestors until an already-dirty one)
+        // === Invalidation === (marks self and every ancestor up to the root)
+        // Not stopping at an ancestor already marked: one marked after it was drawn in a frame (a
+        // later node's drawing touched it) or never drawn (hidden) keeps its mark while the root's
+        // is cleared, and a change under it would never reach the root; a skipped frame then hid
+        // it (a list's rows, a field's committed value, a selection showed only once something
+        // else redrew).
         void Invalidate()
         {
             m_needsRedraw = true;
-            for (Node* p = m_parent; p != nullptr && !p->m_needsRedraw; p = p->m_parent)
+            for (Node* p = m_parent; p != nullptr; p = p->m_parent)
                 p->m_needsRedraw = true;
         }
         [[nodiscard]] bool NeedsRedraw() const noexcept { return m_needsRedraw; }

@@ -1697,6 +1697,20 @@ export namespace experimental::gui
         }
         void ClearBindings() { m_bindings.Clear(); }
         [[nodiscard]] usize BindingCount() const noexcept { return m_bindings.Size(); }
+        /// Calls `f(id, phase)` for each command it handles (the inspector lists them).
+        template <typename F>
+        void ForEachCommandHandler(F&& f) const
+        {
+            for (const CommandHandlerEntry& entry : m_commandHandlers)
+                f(entry.Id.AsView(), entry.Phase);
+        }
+        /// Calls `f(type, capture)` for each event listener on it (the inspector lists them).
+        template <typename F>
+        void ForEachListener(F&& f) const
+        {
+            for (const Listener& listener : m_listeners)
+                f(listener.Type, listener.Capture);
+        }
 
         // === Command handlers (G7 of Specs/vg-and-gui-lab.md) ===
         // A node handles commands by id: running one walks the focus path (capture from the root

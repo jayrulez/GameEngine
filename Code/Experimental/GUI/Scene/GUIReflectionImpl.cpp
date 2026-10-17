@@ -57,44 +57,6 @@ namespace experimental::gui
             return typed != nullptr ? typed->HandleAs(T::StaticType()) : core::Variant{};
         }
 
-        [[nodiscard]] bool EventTypeNamed(StringView name, EventType& out) noexcept
-        {
-            struct Named
-            {
-                const char8_t* name;
-                EventType type;
-            };
-            static constexpr Named kNames[] = {
-                {u8"click", EventType::MouseClick},      {u8"mousedown", EventType::MouseDown},
-                {u8"mouseup", EventType::MouseUp},       {u8"mouseenter", EventType::MouseEnter},
-                {u8"mouseleave", EventType::MouseLeave}, {u8"mousemove", EventType::MouseMove},
-                {u8"wheel", EventType::MouseWheel},      {u8"keydown", EventType::KeyDown},
-                {u8"keyup", EventType::KeyUp},           {u8"textinput", EventType::TextInput},
-                {u8"focus", EventType::FocusGained},     {u8"blur", EventType::FocusLost},
-                {u8"change", EventType::Changed},        {u8"pointercancel", EventType::PointerCancel},
-                {u8"link", EventType::Link},             {u8"input", EventType::Input},
-                {u8"submit", EventType::Submit},         {u8"composition", EventType::Composition},
-                {u8"toggle", EventType::Toggle},
-                {u8"contextmenu", EventType::ContextMenu},
-                {u8"scroll", EventType::Scroll},
-                {u8"tabclose", EventType::TabClose},
-                {u8"activate", EventType::ItemActivate},
-                {u8"dragstart", EventType::DragStart},  {u8"dragend", EventType::DragEnd},
-                {u8"dragenter", EventType::DragEnter},  {u8"dragover", EventType::DragOver},
-                {u8"dragleave", EventType::DragLeave},  {u8"drop", EventType::Drop},
-                {u8"dragquery", EventType::DragQuery},
-            };
-            for (const Named& entry : kNames)
-            {
-                if (StringView(entry.name) == name)
-                {
-                    out = entry.type;
-                    return true;
-                }
-            }
-            return false;
-        }
-
         // An event as a script handler sees it: positions in the GUI's units (from device pixels
         // through the root's display scale).
         [[nodiscard]] GuiEvent ScriptEventOf(const Event& event, StringView name)

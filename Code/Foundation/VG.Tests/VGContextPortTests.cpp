@@ -126,3 +126,27 @@ TEST_CASE("vgcontext: IsRectVisible tracks the scissor clip (draw-culling query)
     ctx.PopClip();
     CHECK(ctx.IsRectVisible(Rectangle{200, 200, 10, 10})); // clip gone
 }
+
+TEST_CASE("vgcontext: IsRectVisible and a clip rect hold under a rotation or a flip")
+{
+    VGContext ctx;
+    ctx.PushClipRect(Rectangle{0, 0, 100, 100});
+    // Turned half way round about (50, 50): the box stays where it was, its corners swapped.
+    ctx.PushState();
+    ctx.Translate(50.0f, 50.0f); // canvas order: the last call applies to points first
+    ctx.Rotate(3.14159265f);
+    ctx.Translate(-50.0f, -50.0f);
+    CHECK(ctx.IsRectVisible(Rectangle{40, 40, 20, 20}));
+    CHECK(!ctx.IsRectVisible(Rectangle{-300, 40, 20, 20})); // turned to x = 380
+    CHECK(ctx.IsRectVisible(Rectangle{90, 40, 20, 20}));     // turned to straddle the left edge
+    ctx.PopState();
+    // Flipped: a rect clip pushed inside keeps a positive size.
+    ctx.PushState();
+    ctx.Translate(100.0f, 0.0f);
+    ctx.Scale(-1.0f, 1.0f);
+    ctx.PushClipRect(Rectangle{10, 10, 30, 30}); // at x 60 to 90 once flipped
+    CHECK(ctx.IsRectVisible(Rectangle{20, 20, 5, 5}));
+    CHECK(!ctx.IsRectVisible(Rectangle{70, 20, 5, 5}));
+    ctx.PopClip();
+    ctx.PopState();
+}

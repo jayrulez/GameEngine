@@ -2527,16 +2527,25 @@ export namespace foundation::vg
                 m_batch.vertices[i].color = ApplyOpacity(m_batch.vertices[i].color);
         }
 
+        // The bounds of `rect`'s four corners under the current transform: under a rotation or a
+        // flip two opposite corners alone can swap, giving a negative size.
         [[nodiscard]] Rectangle TransformRect(Rectangle rect) const
         {
             if (m_currentState.transform == Float4x4::Identity())
                 return rect;
 
-            const Float2 topLeft = TransformPoint(Float2{rect.x, rect.y});
-            const Float2 bottomRight =
-                TransformPoint(Float2{rect.x + rect.width, rect.y + rect.height});
-            return Rectangle{topLeft.x, topLeft.y, bottomRight.x - topLeft.x,
-                             bottomRight.y - topLeft.y};
+            const Float2 corners[4] = {TransformPoint(Float2{rect.x, rect.y}),
+                                       TransformPoint(Float2{rect.x + rect.width, rect.y}),
+                                       TransformPoint(Float2{rect.x, rect.y + rect.height}),
+                                       TransformPoint(Float2{rect.x + rect.width, rect.y + rect.height})};
+            Float2 mn = corners[0];
+            Float2 mx = corners[0];
+            for (const Float2& c : corners)
+            {
+                mn = Float2{Min(mn.x, c.x), Min(mn.y, c.y)};
+                mx = Float2{Max(mx.x, c.x), Max(mx.y, c.y)};
+            }
+            return Rectangle{mn.x, mn.y, mx.x - mn.x, mx.y - mn.y};
         }
 
         VGBatch m_batch;

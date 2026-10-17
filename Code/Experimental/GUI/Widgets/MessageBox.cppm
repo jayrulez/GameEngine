@@ -9,7 +9,8 @@
 // and closes the dialog. Shown via Window::OpenModal, a modal popup (E5): what is behind it is
 // inert and its backdrop dims it. Its default button (the rightmost, OK or Yes) has focus when it
 // opens, so Return or a pad's South picks it; Escape (or a pad's East) picks the cancel one
-// (Cancel, No, or OK when it is the only one).
+// (Cancel, No, or OK when it is the only one), as its close button does. Its message wraps and
+// its height fits it; it is not resizable unless asked.
 
 module;
 #include "Core/Prelude.h"
@@ -26,6 +27,8 @@ import :button;
 import :text;
 import :ui_widget;
 import :window;
+import :panel;
+import :layout_style;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -55,16 +58,43 @@ export namespace experimental::gui
         {
             SetTag(core::StringView(u8"messagebox"));
 
-            // Create the message before SetSize, since SetSize -> OnSizeChange -> LayoutContent
-            // reads m_message.
+            // The content flows: the message (wrapping) above a row of buttons at the right.
+            {
+                StyleWriteScope hostDefaults(*GetContent());
+                GetContent()->EditLayoutStyle([](LayoutStyle& st)
+                {
+                    st.Direction = FlexDirection::Column;
+                    st.AlignItems = Align::Stretch;
+                    st.RowGap = kGap;
+                });
+                static_cast<UIWidget*>(GetContent())->SetPadding(Thickness{kPad});
+            }
             m_message = core::MakeRef<Label>(MemoryAllocator());
-            StyleWriteScope messageDefaults(*m_message); // its own values, which a sheet returns to
-            m_message->SetWhiteSpace(TextWhiteSpace::Normal); // a message wraps
-            m_message->SetTextAlignment(TextHAlign::Left, TextVAlign::Top);
+            m_message->AddClass(core::StringView(u8"dialogmessage")); // white-space inherits under a sheet: the theme wraps it
+            {
+                StyleWriteScope messageDefaults(*m_message); // its own values, which a sheet returns to
+                m_message->SetWhiteSpace(TextWhiteSpace::Normal); // a message wraps
+                m_message->SetTextAlignment(TextHAlign::Left, TextVAlign::Top);
+                m_message->EditLayoutStyle([](LayoutStyle& st) { st.Grow = 1.0f; });
+            }
             GetContent()->AddChild(m_message.Get());
+            m_buttonRow = core::MakeRef<Panel>(MemoryAllocator());
+            m_buttonRow->SetTag(core::StringView(u8"dialogbuttons"));
+            {
+                StyleWriteScope rowDefaults(*m_buttonRow);
+                m_buttonRow->EditLayoutStyle([](LayoutStyle& st)
+                {
+                    st.Direction = FlexDirection::Row;
+                    st.JustifyContent = Justify::End;
+                    st.ColumnGap = kButtonGap;
+                    st.Shrink = 0.0f;
+                });
+            }
+            GetContent()->AddChild(m_buttonRow.Get());
 
             StyleWriteScope defaults(*this); // its own values, which a sheet returns to
-            SetSize(core::Float2{360.0f, 180.0f});
+            SetResizable(false);
+            SetSize(core::Float2{kWidth, 180.0f});
             LayoutContent();
             // Open, the default button takes focus.
             MessageBox* self = this;
@@ -148,10 +178,14 @@ export namespace experimental::gui
             Finish(m_results[0]); // the leftmost: Cancel or No, or the only one
         }
 
-        void OnSizeChange() override
+    public:
+        // Its close button answers as Escape does.
+        void RequestClose() override
         {
-            Window::OnSizeChange(); // relayout title bar / content host / grip
-            LayoutContent();
+            if (m_results.IsEmpty())
+                Close();
+            else
+                Finish(m_results[0]);
         }
 
     protected:
@@ -162,6 +196,7 @@ export namespace experimental::gui
             ShareTextStyle(*m_message, false);
             for (const RefPtr<Button>& b : m_buttons)
                 ShareTextStyle(*b, false);
+            LayoutContent(); // the font sizes the message
         }
 
     private:
@@ -196,7 +231,15 @@ export namespace experimental::gui
             button->AddClass(core::StringView(u8"dialogbutton"));
             MessageBox* self = this;
             button->SetOnClick([self, result]() { self->Finish(result); });
-            GetContent()->AddChild(button.Get());
+            {
+                StyleWriteScope buttonDefaults(*button);
+                button->EditLayoutStyle([](LayoutStyle& st)
+                {
+                    st.MinWidth = LayoutLength::Px(kButtonWidth);
+                    st.Height = LayoutLength::Px(kButtonHeight);
+                });
+            }
+            m_buttonRow->AddChild(button.Get());
             m_buttons.PushBack(core::Move(button));
             m_results.PushBack(result);
         }
@@ -222,34 +265,23 @@ export namespace experimental::gui
                 home->AddChildAt(this, core::Min(m_homeIndex, home->ChildCount()));
         }
 
+        // Its height fits its message, wrapped at its width, and its buttons (the flow places them).
         void LayoutContent()
         {
-            Node* content = GetContent();
-            if (content == nullptr || !m_message)
+            if (!m_message || !m_buttonRow)
                 return; // may run mid-construction
-            const core::Float2 cs = content->GetSize();
-
-            const f32 buttonAreaTop = core::Max(0.0f, cs.y - kButtonHeight - kPad);
-            m_message->SetPosition(core::Float2{kPad, kPad});
-            m_message->SetSize(core::Float2{core::Max(0.0f, cs.x - 2.0f * kPad),
-                                            core::Max(0.0f, buttonAreaTop - kPad)});
-
-            // Right-align the button group at the bottom.
-            const usize n = m_buttons.Size();
-            if (n == 0)
-                return;
-            const f32 totalWidth =
-                static_cast<f32>(n) * kButtonWidth + static_cast<f32>(n - 1) * kButtonGap;
-            const f32 startX = core::Max(kPad, cs.x - kPad - totalWidth);
-            for (usize i = 0; i < n; ++i)
+            const f32 inner = core::Max(0.0f, GetSize().x - 2.0f * kPad);
+            const f32 text = m_message->Measure(LayoutConstraints{core::Float2{inner, 0.0f}, core::Float2{inner, kUnbounded}, core::Float2{inner, -1.0f}}).y;
+            const f32 height = GetTitleBarHeight() + kPad + text + kGap + kButtonHeight + kPad;
+            if (core::Abs(height - GetSize().y) > 0.5f)
             {
-                m_buttons[i]->SetPosition(core::Float2{
-                    startX + static_cast<f32>(i) * (kButtonWidth + kButtonGap), buttonAreaTop});
-                m_buttons[i]->SetSize(core::Float2{kButtonWidth, kButtonHeight});
+                StyleWriteScope own(*this);
+                SetSize(core::Float2{GetSize().x, height});
             }
         }
 
         RefPtr<Label> m_message;
+        RefPtr<Panel> m_buttonRow;
         Array<RefPtr<Button>> m_buttons;
         Array<Result> m_results; // each button's, in order
         core::Function<void(Result)> m_onResult;
@@ -258,6 +290,8 @@ export namespace experimental::gui
         usize m_homeIndex = 0;
 
         static constexpr f32 kPad = 16.0f;
+        static constexpr f32 kGap = 14.0f;
+        static constexpr f32 kWidth = 380.0f;
         static constexpr f32 kButtonWidth = 84.0f;
         static constexpr f32 kButtonHeight = 30.0f;
         static constexpr f32 kButtonGap = 10.0f;

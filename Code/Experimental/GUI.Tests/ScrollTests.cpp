@@ -481,3 +481,110 @@ TEST_CASE("scroll: overlay bars show while it scrolls or is hovered, then fade")
     CHECK(t.view->GetLayoutStyle().BarWidth == ScrollbarWidth::Thin);
     CHECK(t.view->GetLayoutStyle().BarVisibility == ScrollbarVisibility::Overlay);
 }
+
+namespace
+{
+    // The fixture's rows are their content's width (none) in a scroller on both axes; a finger
+    // test needs them under it.
+    void WidenRows(Scroller& s)
+    {
+        for (auto& row : s.rows)
+            row->EditLayoutStyle([](LayoutStyle& st) { st.Width = LayoutLength::Px(80.0f); });
+        s.root->UpdateLayout();
+    }
+}
+
+TEST_CASE("scroll: a finger that stays put taps; one that moves pans, cancelling the press")
+{
+    Scroller s(10);
+    WidenRows(s);
+    int clicks = 0, cancels = 0;
+    s.rows[1]->AddEventListener(EventType::MouseClick, [&](const Event&) { ++clicks; });
+    s.rows[1]->AddEventListener(EventType::PointerCancel, [&](const Event&) { ++cancels; });
+    EventDispatcher& d = s.D();
+
+    d.InjectTouchDown(1, core::Float2{40.0f, 70.0f}); // row 1 (50..100)
+    d.InjectTouchMove(1, core::Float2{42.0f, 74.0f}); // within the slop
+    d.InjectTouchUp(1, core::Float2{42.0f, 74.0f});
+    CHECK(clicks == 1);
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(0.0f));
+
+    d.InjectTouchDown(1, core::Float2{40.0f, 90.0f});
+    d.InjectTouchMove(1, core::Float2{40.0f, 75.0f}); // past the slop: a pan
+    CHECK(d.IsPanning());
+    CHECK(cancels == 1);
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(15.0f)); // the content keeps to the finger
+    d.InjectTouchMove(1, core::Float2{40.0f, 50.0f});
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(40.0f));
+    d.InjectTouchUp(1, core::Float2{40.0f, 50.0f}); // let go still: no fling, no click
+    CHECK_FALSE(d.IsPanning());
+    CHECK_FALSE(s.view->IsFlinging());
+    CHECK(clicks == 1);
+}
+
+TEST_CASE("scroll: let go moving, a pan flings on, slowing, and a new finger catches it")
+{
+    Scroller s(40); // 2000 tall: room to glide
+    WidenRows(s);
+    GUIContext& gui = s.root->GetContext();
+    EventDispatcher& d = s.D();
+    int clicks = 0;
+    for (auto& row : s.rows)
+        row->AddEventListener(EventType::MouseClick, [&](const Event&) { ++clicks; });
+
+    d.InjectTouchDown(1, core::Float2{40.0f, 95.0f});
+    for (int i = 1; i <= 5; ++i) // 15 px a step at 60 Hz: 900 px a second upward
+    {
+        gui.Update(core::Duration::FromSeconds(1.0 / 60.0));
+        d.InjectTouchMove(1, core::Float2{40.0f, 95.0f - 15.0f * static_cast<float>(i)});
+    }
+    d.InjectTouchUp(1, core::Float2{40.0f, 20.0f});
+    CHECK(s.view->IsFlinging());
+    const f32 released = s.view->GetScrollOffset().y;
+    CHECK(released == doctest::Approx(75.0f));
+    gui.Update(core::Duration::FromSeconds(0.1));
+    const f32 early = s.view->GetScrollOffset().y - released;
+    gui.Update(core::Duration::FromSeconds(0.1));
+    const f32 later = s.view->GetScrollOffset().y - released - early;
+    CHECK(early > 0.0f);
+    CHECK(later < early); // slowing
+
+    d.InjectTouchDown(2, core::Float2{40.0f, 50.0f}); // caught
+    CHECK_FALSE(s.view->IsFlinging());
+    const f32 caughtAt = s.view->GetScrollOffset().y;
+    d.InjectTouchUp(2, core::Float2{40.0f, 50.0f});
+    gui.Update(core::Duration::FromSeconds(0.5));
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(caughtAt));
+    CHECK(clicks == 0); // neither the pan nor the catch clicked a row
+
+    // Left alone, a fling stops by itself (or at the end).
+    d.InjectTouchDown(3, core::Float2{40.0f, 95.0f});
+    for (int i = 1; i <= 5; ++i)
+    {
+        gui.Update(core::Duration::FromSeconds(1.0 / 60.0));
+        d.InjectTouchMove(3, core::Float2{40.0f, 95.0f - 15.0f * static_cast<float>(i)});
+    }
+    d.InjectTouchUp(3, core::Float2{40.0f, 20.0f});
+    for (int i = 0; i < 200 && s.view->IsFlinging(); ++i)
+        gui.Update(core::Duration::FromSeconds(1.0 / 60.0));
+    CHECK_FALSE(s.view->IsFlinging());
+}
+
+TEST_CASE("scroll: only a finger pans; a sideways finger over a scroller that cannot move across presses on")
+{
+    Scroller s(10);
+    WidenRows(s);
+    EventDispatcher& d = s.D();
+    d.InjectMouseDown(core::Float2{40.0f, 90.0f}, MouseButton::Left);
+    d.InjectMouseMove(core::Float2{40.0f, 40.0f});
+    d.InjectMouseUp(core::Float2{40.0f, 40.0f}, MouseButton::Left);
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(0.0f));
+
+    int cancels = 0;
+    s.rows[1]->AddEventListener(EventType::PointerCancel, [&](const Event&) { ++cancels; });
+    d.InjectTouchDown(1, core::Float2{20.0f, 70.0f});
+    d.InjectTouchMove(1, core::Float2{60.0f, 72.0f}); // across: nothing scrolls that way
+    CHECK_FALSE(d.IsPanning());
+    CHECK(cancels == 0);
+    d.InjectTouchUp(1, core::Float2{60.0f, 72.0f});
+}

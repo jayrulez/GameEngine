@@ -869,8 +869,14 @@ export namespace experimental::gui
         void SetScrollOffset(core::Float2 offset)
         {
             m_smoothScrolling = false;
+            m_flinging = false;
             ApplyScrollOffset(offset);
         }
+        /// Flings it at `velocity` (offset units a second, as a finger left it): it glides on,
+        /// slowing by e^(-t/tau) whatever the frame rate, until it nearly stops or meets an end.
+        void Fling(core::Float2 velocity); // LayoutImpl.cpp, which sees :actions
+        void StopFling() noexcept { m_flinging = false; }
+        [[nodiscard]] bool IsFlinging() const noexcept { return m_flinging; }
         /// Scrolls to `offset`, at once or easing there (Auto: as the node's `scroll-behavior` says).
         void ScrollTo(core::Float2 offset, ScrollBehavior behavior = ScrollBehavior::Auto);
         /// Scrolls to the end of its content (the bottom; a horizontal-only scroller's right).
@@ -1762,6 +1768,11 @@ export namespace experimental::gui
         f32 m_scrollbarAlpha = 0.0f;             // an overlay's bars: shown while scrolling or hovered, then fading
         f32 m_scrollbarIdle = 0.0f;              // seconds since an overlay's bars were last wanted
         bool m_scrollbarFading = false;          // the overlay's tick runs
+        bool m_flinging = false;                 // a fling is gliding
+        bool m_flingTicking = false;             // its tick runs
+        core::Float2 m_flingVelocity{0.0f, 0.0f}; // as it was let go
+        core::Float2 m_flingStart{0.0f, 0.0f};   // the offset it was let go at
+        f32 m_flingTime = 0.0f;                  // seconds since
         u32 m_scrollDragAxis = 2;                // a bar being dragged (0, 1), 2 for none
         f32 m_scrollDragGrab = 0.0f;             // where on the thumb it was taken
         f32 m_alpha = 1.0f;

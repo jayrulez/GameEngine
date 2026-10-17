@@ -55,6 +55,31 @@
     </Panel>
 
     <Panel class="section" gap="12">
+        <Label class="section-title" text="Tabs"/>
+        <TabView id="controls-tabs" class="tabs" close-display="hover" reorderable="true">
+            <TabPage title="Overview" closable="false">
+                <Label class="caption" white-space="normal" height="60" text="A tab view pairs a bar of tabs with their pages. Drag a tab across its neighbour to reorder; hover one to close it, or middle-click it. This first tab is not closable."/>
+            </TabPage>
+            <TabPage title="Settings" icon="Assets/images/logo.png">
+                <CheckBox class="choice" text="A page keeps its state while hidden"/>
+            </TabPage>
+            <TabPage title="Notes">
+                <TextField class="field" placeholder="Type, switch tabs, come back"/>
+            </TabPage>
+        </TabView>
+        <Panel flex-direction="row" gap="12" align-items="center">
+            <Button id="controls-tab-add" class="btn" text="Add a tab"/>
+            <Label class="caption" text="Ctrl+Tab and Ctrl+Shift+Tab cycle; the arrows, Home and End move along a focused strip."/>
+        </Panel>
+        <TabBar class="tabstrip-demo" close-display="always" reorderable="true">
+            <Tab text="main.cpp"/><Tab text="Node.cppm"/><Tab text="LayoutImpl.cpp"/><Tab text="TabBar.cppm"/>
+            <Tab text="TabView.cppm"/><Tab text="Theme.cppm"/><Tab text="controls.xml"/><Tab text="controls.css"/>
+            <Tab text="sandbox.css"/><Tab text="README.md"/>
+        </TabBar>
+        <Label class="caption" text="A strip too narrow for its tabs scrolls (the wheel turns it) and lists every tab at its end."/>
+    </Panel>
+
+    <Panel class="section" gap="12">
         <Label class="section-title" text="Values"/>
         <Panel class="row" flex-direction="row" align-items="start" gap="12">
             <Slider id="controls-slider" class="slider" value="0.35"/>

@@ -79,6 +79,8 @@ export namespace experimental::gui
         ContextMenu,
         // A scroll container's offset moved (its own listeners hear it; it does not bubble).
         Scroll,
+        // A tab asked to close (a TabEvent, at its bar or view): unless a listener takes it, it goes.
+        TabClose,
     };
 
     /// What drives the pointer: the mouse, or a finger (the first one down).
@@ -300,6 +302,14 @@ export namespace experimental::gui
             : Event(EventType::Toggle, target), Open(open), Reason(reason)
         {
         }
+    };
+
+    /// About one tab of a bar or a view: which, by index.
+    struct TabEvent : Event
+    {
+        i32 Index = -1;
+
+        TabEvent(EventType type, Node* target, i32 index) noexcept : Event(type, target), Index(index) {}
     };
 
     /// An IME's composition so far: its text (empty when the composition ended or was committed,

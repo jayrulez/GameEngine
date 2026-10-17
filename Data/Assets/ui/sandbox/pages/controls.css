@@ -22,3 +22,8 @@
 .exp > expanderheader:hover { background-color: rgba(255, 255, 255, 0.05); }
 .exp expandercontent { padding: 4px 0 8px 22px; gap: 4px; }
 .exp expandercontent > label { width: 560px; }
+.tabs { width: 590px; height: 150px; border-radius: 6; }
+.tabs > tabbar, .tabstrip-demo { font-family: Roboto; font-size: 14px; }
+.tabs tabpage { padding: 10px; gap: 8px; }
+.tabs tab > icon { width: 16px; height: 16px; }
+.tabstrip-demo { width: 590px; }

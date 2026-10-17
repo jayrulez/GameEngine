@@ -226,16 +226,21 @@ export namespace experimental::gui
                 }
                 return;
             }
-            if (!m_iconPart)
-            {
-                m_iconPart = core::MakeRef<Image>(MemoryAllocator());
-                m_iconPart->SetTag(core::StringView(u8"icon"));
-                m_iconPart->SetHitTestVisible(false); // a press on it is the button's
-                m_iconPart->SetFit(ObjectFit::Contain);
-                AddChildAt(m_iconPart.Get(), PartIndex());
-            }
+            EnsureIconPart();
             m_iconPart->SetDrawable(core::Move(icon));
         }
+        /// Its icon by path (markup's `icon`), loaded through the GUI's resource provider; empty: none.
+        void SetIconSource(const core::String& path)
+        {
+            if (path.IsEmpty())
+            {
+                SetIcon(core::RefPtr<Drawable>{});
+                return;
+            }
+            EnsureIconPart();
+            m_iconPart->SetSource(path);
+        }
+        [[nodiscard]] core::String GetIconSource() const { return m_iconPart ? m_iconPart->GetSource() : core::String{}; }
         /// The parts it made (null until it has them).
         [[nodiscard]] Label* GetTextPart() const noexcept { return m_textPart.Get(); }
         [[nodiscard]] Image* GetIconPart() const noexcept { return m_iconPart.Get(); }
@@ -438,6 +443,16 @@ export namespace experimental::gui
                 return;
             m_textPart->SetText(text);
             m_textChanged.Notify();
+        }
+        void EnsureIconPart()
+        {
+            if (m_iconPart)
+                return;
+            m_iconPart = core::MakeRef<Image>(MemoryAllocator());
+            m_iconPart->SetTag(core::StringView(u8"icon"));
+            m_iconPart->SetHitTestVisible(false); // a press on it is the button's
+            m_iconPart->SetFit(ObjectFit::Contain);
+            AddChildAt(m_iconPart.Get(), PartIndex());
         }
         // Where its first part goes: after its indicator.
         [[nodiscard]] usize PartIndex() const noexcept { return m_indicator ? 1 : 0; }

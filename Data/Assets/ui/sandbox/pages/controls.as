@@ -29,6 +29,17 @@ void addLogLine()
     line.addClass("scroll-line");
 }
 
+int addedTabs = 0;
+void addTab()
+{
+    ++addedTabs;
+    TabPage@ page = TabPage::of(gui::root().find("controls-tabs").add("TabPage"));
+    page.title = "Added " + addedTabs;
+    Label@ body = Label::of(page.add("Label"));
+    body.text = "A page added by the script.";
+    body.addClass("caption");
+}
+
 string echoText() { return field.text == "" ? "(the echo follows the field)" : "echo: " + field.text; }
 
 void main()
@@ -40,6 +51,7 @@ void main()
     root.find("controls-repeat").on("click", Action(add1));
     root.find("controls-press").on("click", Action(add1));
     root.find("controls-log-add").on("click", Action(addLogLine));
+    root.find("controls-tab-add").on("click", Action(addTab));
     @slider = Slider::of(root.find("controls-slider"));
     @field = TextField::of(root.find("controls-field"));
     @vertical = Slider::of(root.find("controls-vertical"));

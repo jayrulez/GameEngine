@@ -199,6 +199,7 @@ export namespace experimental::gui
             child->m_parent = this;
             m_children.PushBack(core::Move(keepAlive));
             child->MarkStyleDirty(true); // its selectors may match differently here
+            ChildrenStyleChanged();
             child->HandleParentChange();
             OnChildrenChanged();
             RequestLayout(); // what it holds changed
@@ -227,6 +228,7 @@ export namespace experimental::gui
             RefPtr<Node> keepAlive = m_children[index]; // hold across detach + callback
             child->m_parent = nullptr;
             m_children.RemoveAt(index);
+            ChildrenStyleChanged();
             child->HandleParentChange();
             OnChildrenChanged();
             RequestLayout();
@@ -278,6 +280,7 @@ export namespace experimental::gui
             RefPtr<Node> ref = m_children[cur];
             m_children.RemoveAt(cur);
             m_children.Insert(newIndex, core::Move(ref));
+            ChildrenStyleChanged();
             RequestLayout(); // the flow follows the child order
             Invalidate();
         }
@@ -585,6 +588,15 @@ export namespace experimental::gui
             m_styleSubtreeDirty = m_styleSubtreeDirty || withDescendants;
             for (Node* p = m_parent; p != nullptr && !p->m_childStyleDirty; p = p->m_parent)
                 p->m_childStyleDirty = true;
+        }
+        /// The children changed (one joined, left or moved): what matches by position or by
+        /// sibling (:first-child, :nth-child(), `+`, `~`) may change for each, and :empty for this
+        /// node.
+        void ChildrenStyleChanged()
+        {
+            MarkStyleDirty(false);
+            for (const RefPtr<Node>& child : m_children)
+                child->MarkStyleDirty(true);
         }
         [[nodiscard]] bool IsStyleDirty() const noexcept { return m_styleDirty; }
         [[nodiscard]] bool IsStyleSubtreeDirty() const noexcept { return m_styleSubtreeDirty; }
@@ -974,6 +986,11 @@ export namespace experimental::gui
         {
             m_focused = true;
             MarkStyleDirty(true); // :focus
+            for (Node* p = m_parent; p != nullptr; p = p->m_parent) // :focus-within
+            {
+                ++p->m_focusWithin;
+                p->MarkStyleDirty(false);
+            }
             OnFocusGained();
             SendEvent(Event(EventType::FocusGained, this));
         }
@@ -981,11 +998,19 @@ export namespace experimental::gui
         {
             m_focused = false;
             MarkStyleDirty(true);
+            for (Node* p = m_parent; p != nullptr; p = p->m_parent)
+            {
+                if (p->m_focusWithin > 0)
+                    --p->m_focusWithin;
+                p->MarkStyleDirty(false);
+            }
             OnFocusLost();
             SendEvent(Event(EventType::FocusLost, this));
         }
 
         [[nodiscard]] bool IsFocused() const noexcept { return m_focused; }
+        /// Focused, or holding the focused node (CSS's :focus-within).
+        [[nodiscard]] bool IsFocusWithin() const noexcept { return m_focused || m_focusWithin > 0; }
         /// Focused, and by the keyboard or a gamepad (CSS's :focus-visible): the focus ring shows
         /// in that use only, not after a click.
         [[nodiscard]] bool IsFocusVisible() const noexcept { return m_focused && m_focusVisible; }
@@ -1515,6 +1540,7 @@ export namespace experimental::gui
         core::String m_navOverrides[NavOverrideCount]; // nav-up and the rest: an id, none, or auto
         core::String m_keyContext;                     // for bindings (key-context)
         bool m_focused = false;
+        u32 m_focusWithin = 0; // focused descendants (one at most; a count survives odd orders)
         bool m_focusVisible = false; // focused by the keyboard or a gamepad
         bool m_tabFocusable = false;
         bool m_hitTestVisible = true;

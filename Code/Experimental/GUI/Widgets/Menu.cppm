@@ -169,13 +169,17 @@ export namespace experimental::gui
             if (m_checked == checked)
                 return;
             m_checked = checked;
+            MarkStyleDirty(true); // :checked
             Invalidate();
             if (m_onToggled)
                 m_onToggled(m_checked);
         }
         [[nodiscard]] bool IsChecked() const noexcept { return m_checked; }
+        [[nodiscard]] u32 GetWidgetStates() const override { return m_checkable && m_checked ? WidgetStateChecked : WidgetStateNone; }
         void SetCheckedSilently(bool checked)
         {
+            if (checked != m_checked)
+                MarkStyleDirty(true);
             m_checked = checked;
             Invalidate();
         } // no callback (init)

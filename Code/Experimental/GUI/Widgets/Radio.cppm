@@ -41,6 +41,7 @@ export namespace experimental::gui
         }
 
         [[nodiscard]] bool IsSelected() const noexcept { return m_selected; }
+        [[nodiscard]] u32 GetWidgetStates() const override { return m_selected ? WidgetStateChecked : WidgetStateNone; } // :checked
 
         // Select this button (routes through the group so the others clear). Selecting an
         // already-selected button is a no-op.
@@ -111,6 +112,7 @@ export namespace experimental::gui
             if (selected == m_selected)
                 return;
             m_selected = selected;
+            MarkStyleDirty(true); // :checked
             Invalidate();
             if (m_selected && m_onSelected)
                 m_onSelected();

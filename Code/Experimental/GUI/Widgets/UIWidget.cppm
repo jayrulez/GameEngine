@@ -23,6 +23,17 @@ namespace core = foundation::core;
 
 export namespace experimental::gui
 {
+    /// The states a widget's own pseudo-classes read (E3): :checked, :indeterminate, :read-only
+    /// and :read-write, :placeholder-shown.
+    enum WidgetState : u32
+    {
+        WidgetStateNone = 0,
+        WidgetStateChecked = 1u << 0,
+        WidgetStateIndeterminate = 1u << 1,
+        WidgetStateEditable = 1u << 2, ///< the user edits its value (:read-write; else :read-only)
+        WidgetStatePlaceholderShown = 1u << 3,
+    };
+
     class UIWidget : public UINode
     {
         RTTI_OBJECT(UIWidget, UINode)
@@ -81,6 +92,10 @@ export namespace experimental::gui
                 AddClass(cls);
         }
         [[nodiscard]] usize ClassCount() const noexcept { return m_classes.Size(); }
+
+        /// Its WidgetState flags; a widget with such a state reports it, and marks itself for a
+        /// restyle when it changes.
+        [[nodiscard]] virtual u32 GetWidgetStates() const { return WidgetStateNone; }
         [[nodiscard]] const Array<core::String>& Classes() const noexcept { return m_classes; }
 
         // === Hover tooltip ===

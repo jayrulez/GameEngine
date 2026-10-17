@@ -16,6 +16,7 @@ export module experimental.gui:css_parser;
 import foundation.core; // String, StringView, Move
 import :style_rule;
 import :style_sheet;
+import :style_selector; // StyleSelector::SplitList
 import :media_query;
 
 using namespace foundation::core;
@@ -260,23 +261,14 @@ export namespace experimental::gui
         static void EmitRules(StyleSheet& sheet, core::StringView selectorList,
                               core::StringView block, const MediaQuery& media)
         {
-            usize start = 0;
-            const usize n = selectorList.Size();
-            for (usize i = 0; i <= n; ++i)
+            // Commas inside :is(), :not() or [a="b,c"] do not split.
+            for (const core::StringView selector : StyleSelector::SplitList(selectorList))
             {
-                if (i == n || selectorList[i] == u8',')
-                {
-                    const core::StringView selector = Trim(selectorList.SubStr(start, i - start));
-                    if (selector.Size() != 0)
-                    {
-                        StyleRule rule{selector};
-                        ApplyDeclarations(rule, block);
-                        if (!media.IsEmpty())
-                            rule.SetMedia(media);
-                        sheet.AddRule(core::Move(rule));
-                    }
-                    start = i + 1;
-                }
+                StyleRule rule{selector};
+                ApplyDeclarations(rule, block);
+                if (!media.IsEmpty())
+                    rule.SetMedia(media);
+                sheet.AddRule(core::Move(rule));
             }
         }
 

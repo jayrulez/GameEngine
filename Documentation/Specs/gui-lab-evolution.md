@@ -658,17 +658,123 @@ where they read as numbers; a tooltip is an attribute, not an element.
 
 ### E7 Drag and drop
 
-Facts: the lab drags a payload with enter, over, leave and drop; no effects, no preview, no
-threshold, no cancel.
+Facts: the lab drags a payload (a type and a string) that a widget starts by hand from its own
+moves; the dispatcher sends enter, over, leave and drop to the nearest ancestor whose predicate
+accepts the type, and a drop on release. There is no threshold, effect, preview, cancel key,
+outcome for the source, insertion feedback, auto-scroll, OS drop or keyboard path; the tab strip
+reorders with a live swap of its own. The shell reports an OS file drop only once it lands (a
+window, a position, a path), with nothing while a file is dragged over the window.
 
-Design: a typed payload (a type name and a Variant); a drag starts past a distance threshold from a
-press (E1's gestures); each move asks the node under the pointer whether it accepts the payload
-and with which effect (none, copy, move, link), and the answer sets the cursor and the preview
-(Zero's drop test, Godot's `can_drop_data`); the source gives a preview node that follows the
-pointer; Escape cancels; the source is told the outcome. A control may claim a press for its own
-drag before a draggable ancestor sees it (a scrollbar thumb inside a draggable row).
+Survey (2026-10-17): thresholds are Godot 10 px (per viewport), Zero 6, LunarSong 6, foundation.ui
+4, GPUI 2, eepp, RmlUi and AUI none. Godot offers the drag to the pressed control and then up its
+parents, a control that stops the mouse ending the walk; GPUI's bubble order lets the deepest
+`on_drag` win; RmlUi walks a CSS `drag` property (`none` passes up, `block` stops an ancestor,
+`drag`, `drag-drop` and `clone` claim); foundation.ui stops at a view that owns its press drag (a
+scroll bar, a slider). Payloads: Godot an untyped Variant, GPUI a Rust value matched by TypeId,
+LunarSong a typed `std::any` with a label and an icon, foundation.ui a DragData object with a
+format string, AUI MIME data, eepp and RmlUi the dragged element itself. Acceptance per move:
+Godot's `can_drop_data` walks up the parents and sets the can-drop or forbidden cursor; Zero sends
+each move a test drop (`MetaDropTest`, `Testing`) whose target writes the text of what a drop would
+do, or why it cannot, into a tooltip (red when refused); LunarSong's `CanDrop` gives allowed, a
+reason, a CSS class and whether to hide the ghost; foundation.ui alone returns an effect (none,
+move, copy, link), and Zed fakes copy with a modifier. Previews: Godot a control the source makes,
+its corner at the pointer; GPUI a view keeping the grab offset; RmlUi a clone in a cursor document
+styled with `:drag`; foundation.ui an adorner in the popup layer; LunarSong an icon, label and
+badge. Ending: Godot cancels on Escape, a right press or `gui_cancel_drag`, and the source asks
+`is_drag_successful` at DRAG_END; foundation.ui tells the source the effect and whether it was
+cancelled; GPUI, eepp, RmlUi, AUI and Zero tell the source nothing. Insertion: Godot's Tree drops
+above, on, below or as first child by quarters of a row, drawing lines on the hierarchy; Zero and
+LunarSong use edge bands with Before, On and After, falling back when a mode is refused, and reject
+a parent under its own child with a reason; Godot's TabBar and eepp move tabs between bars of one
+group, eepp tears a tab off after 64 dp across and splits a panel on an edge drop, Zed draws a
+border on the side a tab would land. Opening on hover: Godot's Tree, Zed's panel and LunarSong
+expand a collapsed node after a pause; Godot's TabBar switches tabs under a drag. Auto-scroll:
+Godot's ScrollContainer (opt-in) and Tree, Zero's tree and LunarSong's lists, each a band at the
+edge with a speed ramp; GPUI, eepp, RmlUi, AUI and foundation.ui none. OS drops: GPUI turns an OS
+drag into the same drag (a typed `ExternalPaths` value), LunarSong replays a dropped file as a drag
+and a drop at the cursor, the others take files apart from the drag. Keyboard: Godot alone, an
+action that picks up from the focus and drops at the focus, positions given as infinity.
 
-Tests: threshold, acceptance per move, effects, cancel, the source's outcome, nested claims.
+Design (approved 2026-10-17):
+
+- **Starting.** A press that moves past `drag-threshold` (6 px, a GUI setting; a finger after a
+  long press, since a finger's move pans a scroller first) offers the drag to the pressed node and
+  then up its ancestors (Godot's walk); the first that gives a payload starts it. A node that owns
+  its press (a scroll bar's thumb, a slider, a text field selecting, a number field scrubbing, a
+  tab strip reordering) ends the walk, so a draggable row never takes its scroll bar's drag; markup
+  says the same with `drag="none | auto | block"` (RmlUi's property: `block` stops the walk at a
+  node that drags nothing). The pressed widget's press is cancelled (E1's PointerCancel), so no
+  click follows.
+- **The payload.** A type (a short name such as `text`, `files`, `lab/tab`, `asset/mesh`), a
+  Variant value (a string, a number, a list, a weak node handle), a label for the preview and for
+  accessibility, and the effects the source allows (copy, move, link, a set). Markup:
+  `drag-type`, `drag-value` (which may be a `{{name}}`), `drag-label`; scripts hear `dragstart`
+  and may fill the payload there.
+- **Acceptance on every move.** Each move, each change of the modifiers, and each scroll under a
+  still pointer asks the node under the pointer and then its ancestors what a drop would do (Godot's
+  walk, Zero's test drop): an effect (none, copy, move or link, from those the source allows, the
+  modifiers choosing as the platform does: Ctrl copy, Shift move, both link), a reason (what it
+  would do, or why not), and where (a position the target draws). The first that takes it is the
+  target; one that refuses with a reason ends the walk and shows it. Markup's `drop-types="card
+  files"` accepts those types with the source's preferred effect; a script's `dragover` handler
+  may set the effect and the reason. The cursor follows the effect (`copy`, `alias`, `move`,
+  `no-drop`: new cursor names), the target shows `:drop-target` while it would take the drop, and
+  the reason shows as a hint by the pointer (Zero's tooltip, red when refused).
+- **The preview.** The source may give a node; otherwise a label of the payload's label in the
+  `dragpreview` style. It lies in the top layer at the pointer, keeping the grab offset (GPUI),
+  takes no hits, and shows the effect as a badge (`dragpreview::effect`); the source shows
+  `:drag-source` while it is dragged.
+- **Ending.** A release over a target drops (`drop`, the effect and the position given); anywhere
+  else, or on Escape, a right press, the pad's East, the source leaving the tree, or the GUI
+  losing focus, it is cancelled. The source is told the outcome (`dragend`: the effect, none when
+  cancelled), so a move removes what was moved (foundation.ui's `OnDragCompleted`).
+- **Auto-scroll and opening on hover.** A scroll container under the pointer, near its edge (a
+  band, `drag-scroll-band`, speed ramping with depth, on the GUI's clock), scrolls, the innermost
+  that can first, so a drag reaches rows out of view; acceptance is asked again as the content
+  moves. Resting a drag on a closed tree node, an expander's header or a tab for a moment opens
+  or selects it.
+- **Item views as sources and targets.** A view drags its selected rows (their ids, the payload
+  type its own or the model's). As a target it finds where in a row a drop lands: before, on or
+  after, by bands (a quarter at each edge, halves when the model takes no drop onto a row), falling
+  back when a place is refused (Zero, LunarSong), and draws an insertion line (`::drop-indicator`)
+  or lights the row. The model has the capability: what a drop at an index and a place would do,
+  and doing it; a list moves rows within itself, a tree reparents and refuses a node under its own
+  child with a reason.
+- **Tabs between strips.** A tab dragged out of its strip past a tear distance (eepp's resistance)
+  becomes a drag of type `lab/tab`; strips of one `group` take it (Godot's rearrange group), the
+  insertion mark between the tabs it would land between; within a strip the live swap stays.
+- **OS files.** A file the OS drops comes through the same path, as LunarSong replays one: a
+  payload of type `files` (the paths) asked at the drop's position and dropped there, effect copy;
+  one no target takes goes to the GUI's own handler. (The shell gives no hover, so nothing shows
+  while a file is dragged over the window.)
+- **The keyboard and the pad.** `drag.pick` on the focused widget starts a drag of what it would
+  drag; focus then moves as usual (the arrows, Tab, the pad), the focused node asked as the pointer
+  would be (a position of "the focused item"); `drag.drop` (Return, the pad's South) drops,
+  Escape (East) cancels (Godot's accessibility drag). One drag at a time, within one root.
+- **Positions.** A drag keeps the pointer in two spaces: its root's (what hit-tests and places
+  the preview) and, where the host gives one, the screen's; each node is asked in its own local
+  space (scrolled and transformed). Deltas that move something are taken in the space that does
+  not move with it: foundation's docking found that a floated window following the drag moves the
+  frame its window-local positions are measured in, so it measured in screen space, routed the
+  drag past the window under the pointer when that window was the one being dragged, and took the
+  shell's button state as the authority when a release was lost at a window's edge (Wayland,
+  which also gives no global position). E7 stays within one root; the screen position is kept so
+  that dragging between windows, a follow-up that needs the shell to say which window the pointer
+  is over, adds a router rather than a rewrite.
+
+Rulings (user, 2026-10-17): the design as written; OS files through the same path (each window's
+root takes the drops that land in it, no app code); the keyboard and the pad in E7; dragging
+between windows a follow-up, minding local and global positions (above).
+
+Tests: the threshold, by mouse and by finger; the walk up and a node owning its press; acceptance
+per move, per modifier and per scroll, with reasons; effects and cursors; the preview's offset;
+cancel by each way; the source's outcome; auto-scroll and opening on hover; item view insertion
+places and fallbacks, a list's move and a tree's reparent with a refusal; tabs between strips;
+an OS drop through the path; a keyboard drag; markup and script drags.
+
+Order: the core (start, payload, acceptance, preview, ending), then auto-scroll and opening on
+hover, item views, tabs between strips, OS files, the keyboard and the pad, then markup and
+scripts; each a layer with its tests and a sandbox section.
 
 ### E8 Tooling and performance
 

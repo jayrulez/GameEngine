@@ -16,6 +16,9 @@ add_executable(GUI.Tests
     RoutingTests.cpp
     LayoutEngineTests.cpp
     TextTests.cpp
+    TextRunsTests.cpp
+    TextLayoutTests.cpp
+    EditingTests.cpp
     ModelTests.cpp
     WidgetTests.cpp
     StyleSelectorTests.cpp
@@ -64,7 +67,7 @@ add_executable(GUI.Tests
     MarkupTests.cpp)
 
 target_link_libraries(GUI.Tests PRIVATE
-    Experimental::GUI doctest::doctest)
+    Experimental::GUI Foundation::Fonts.TrueType Foundation::VFS doctest::doctest)
 
 target_compile_definitions(GUI.Tests PRIVATE
     DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS)

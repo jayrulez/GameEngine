@@ -1436,7 +1436,7 @@ export namespace foundation::vg
                 offsetY = bounds.y + (bounds.height - fm.lineHeight) * 0.5f + fm.ascent;
                 break;
             case fonts::VerticalAlignment::Bottom:
-                offsetY = bounds.y + bounds.height - fm.descent;
+                offsetY = bounds.y + bounds.height + fm.descent;
                 break;
             case fonts::VerticalAlignment::Baseline:
                 offsetY = bounds.y;
@@ -1483,7 +1483,7 @@ export namespace foundation::vg
                                                                        : bounds.x;
                 const f32 y = vAlign == fonts::VerticalAlignment::Top      ? bounds.y + fm.ascent
                               : vAlign == fonts::VerticalAlignment::Middle ? bounds.y + (bounds.height - fm.lineHeight) * 0.5f + fm.ascent
-                              : vAlign == fonts::VerticalAlignment::Bottom ? bounds.y + bounds.height - fm.descent
+                              : vAlign == fonts::VerticalAlignment::Bottom ? bounds.y + bounds.height + fm.descent
                                                                            : bounds.y;
                 DrawPositionedGlyphs(*glyphs, font, x, y, color);
                 return;

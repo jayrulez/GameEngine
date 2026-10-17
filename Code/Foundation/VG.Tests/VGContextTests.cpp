@@ -1546,6 +1546,41 @@ TEST_CASE("vg.context: text drawn in a font with a shaper is shaped (once), so l
     CHECK(calls == 1); // across frames too
 }
 
+TEST_CASE("vg.context: bottom-aligned text keeps its descenders in the box, shaped or not")
+{
+    // The test font's ascent is 10 and its descent -3 (below the baseline, as fonts report it),
+    // and its glyphs stand 8 tall on the baseline: in a 20-tall box the baseline sits at 17, the
+    // descent above the bottom, not 3 below it.
+    const auto lowest = [](VGContext& ctx)
+    {
+        f32 y = -1.0e9f;
+        for (const VGVertex& v : ctx.GetBatch().vertices)
+            y = v.position.y > y ? v.position.y : y;
+        return y;
+    };
+    for (i32 pass = 0; pass < 2; ++pass)
+    {
+        const bool shaped = pass == 1;
+        i32 calls = 0;
+        LigatureShaper* shaper = nullptr;
+        if (shaped)
+        {
+            shaper = DefaultAllocator().New<LigatureShaper>();
+            shaper->calls = &calls;
+        }
+        foundation::fonts::CachedFont font(DefaultAllocator(), DefaultAllocator().New<LigatureFont>(),
+                                           DefaultAllocator().New<LigatureAtlas>(), shaper);
+        OneFontService service;
+        service.font = &font;
+        VGContext ctx;
+        ctx.SetFontService(&service);
+        ctx.DrawText(u8"fi", &font, Rectangle{0, 0, 100, 20}, foundation::fonts::TextAlignment::Left,
+                     foundation::fonts::VerticalAlignment::Bottom, Color::White);
+        REQUIRE_FALSE(ctx.GetBatch().vertices.IsEmpty());
+        CHECK(lowest(ctx) == doctest::Approx(17.0f));
+    }
+}
+
 TEST_CASE("vg.context: a box takes a border colour per side, analytic or tessellated")
 {
     const Color top{1.0f, 0.0f, 0.0f, 1.0f};

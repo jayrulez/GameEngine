@@ -43,6 +43,10 @@ target_sources(GUI
             Drawing/LayerDrawable.cppm
             Drawing/NodeBox.cppm
             Text/Text.cppm
+            Text/TextRuns.cppm
+            Text/TextLayout.cppm
+            Editing/UndoStack.cppm
+            Editing/InputFilter.cppm
             Model/Variant.cppm
             Model/ModelIndex.cppm
             Model/Model.cppm

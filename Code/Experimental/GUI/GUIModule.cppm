@@ -57,6 +57,10 @@ export import :node_box;
 
 // Text (Phase 4)
 export import :text;
+export import :text_runs;
+export import :text_layout;
+export import :undo_stack;
+export import :input_filter;
 
 // Widget base (Phase 5)
 export import :ui_node;

@@ -13,3 +13,22 @@
 .tf-scale { transform: scale(0.85, 1.05); }
 .tf-skew { transform: skew(-12deg, 0deg); }
 .tf-origin { transform-origin: 0% 100%; transform: rotate(6deg); }
+
+/* Selectors, inheritance and parts (E3). */
+.pick-row { width: 590px; padding-top: 8px; }
+.zebra { width: 140px; padding: 6px 0; background-color: var(--surface-2); border-radius: 10; font-family: Roboto; font-size: 14px; color: var(--ink); }
+.zebra > label { height: 26px; padding: 0 12px; vertical-align: middle; }
+.zebra > label:nth-child(odd) { background-color: rgba(255, 255, 255, 0.06); }
+.zebra > label:first-child { color: var(--accent); }
+.warm { width: 200px; padding: 12px; background-color: var(--surface-2); border-radius: 10;
+        color: #f0b040; font-family: Lilita; font-size: 17px; }
+.warm > label { height: 22px; }
+.warm > .cool { color: #60c0f0; font-family: Roboto; font-size: 14px; }
+.choices { width: 220px; }
+.choice > label { height: 24px; font-family: Roboto; font-size: 14px; color: var(--muted); }
+.choice > checkbox:checked + label { color: var(--accent); }
+.quiet { width: 200px; height: 30px; padding: 0 8px; font-family: Roboto; font-size: 14px; border-radius: 6; }
+.quiet:placeholder-shown { opacity: 0.6; }
+.fancy { width: 200px; height: 24px; }
+.fancy::thumb { background: linear-gradient(180deg, #ffd27a, #e0607a); border: 2px solid #ffffff; border-radius: 6px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5); }
+.fancy::fill { background-color: #e0607a; }

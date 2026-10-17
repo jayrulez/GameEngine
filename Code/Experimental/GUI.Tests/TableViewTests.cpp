@@ -175,3 +175,93 @@ TEST_CASE("table-view: sorting from a header click survives the header it rebuil
     CHECK(proxy.GetSortColumn() == 1);
     CHECK(proxy.GetSortOrder() == SortOrder::Ascending);
 }
+
+TEST_CASE("table-view: columns are pixels, percentages or auto shares, none under the minimum")
+{
+    TableModel model;
+    core::Array<core::String> cols;
+    const char8_t* const names[] = {u8"A", u8"B", u8"C", u8"D"};
+    for (const char8_t* name : names)
+        cols.PushBack(core::String(SV(name)));
+    model.SetColumns(core::Move(cols));
+    core::RefPtr<SceneRoot> root;
+    auto table = MountTable(root, &model);
+    table->SetColumnWidthsText(core::String(SV(u8"60px 20% auto")));
+    (void)root->UpdateLayout();
+    // 300 wide: A 60, B 60 (20%), C and D share the 180 left.
+    CHECK(table->GetColumnWidth(0) == doctest::Approx(60.0f));
+    CHECK(table->GetColumnWidth(1) == doctest::Approx(60.0f));
+    CHECK(table->GetColumnWidth(2) == doctest::Approx(90.0f));
+    CHECK(table->GetColumnWidth(3) == doctest::Approx(90.0f));
+    CHECK(table->GetColumnWidthsText() == SV(u8"60px 20% auto"));
+    CHECK(table->GetScrollRange().x == doctest::Approx(0.0f));
+
+    // Too many pixels: the autos keep the minimum, and the table scrolls across.
+    table->SetColumnWidth(0, LayoutLength::Px(250.0f));
+    (void)root->UpdateLayout();
+    CHECK(table->GetColumnWidth(2) == doctest::Approx(table->GetMinColumnWidth()));
+    CHECK(table->GetColumnsWidth() == doctest::Approx(250.0f + 60.0f + 80.0f));
+    CHECK(table->GetScrollRange().x == doctest::Approx(90.0f));
+    // The header scrolls across with the rows (and stays at the top as they scroll down).
+    table->ScrollTo(core::Float2{90.0f, 0.0f}, ScrollBehavior::Instant);
+    (void)root->UpdateLayout();
+    CHECK(table->GetHeader()->GetSize().x == doctest::Approx(390.0f));
+}
+
+TEST_CASE("table-view: dragging a header cell's right edge resizes its column, without sorting")
+{
+    TableModel model;
+    FillPeople(model, 3);
+    SortingProxyModel proxy(&model);
+    core::RefPtr<SceneRoot> root;
+    auto table = MountTable(root, &proxy);
+    EventDispatcher* d = root->GetEventDispatcher();
+    CHECK(table->GetColumnWidth(0) == doctest::Approx(150.0f));
+
+    // Column 0's edge is at x 150: press just inside it and drag 40 right.
+    d->InjectMouseMove(core::Float2{148.0f, 13.0f});
+    CHECK(d->GetCursor() == Cursor::EwResize);
+    d->InjectMouseDown(core::Float2{148.0f, 13.0f}, MouseButton::Left);
+    d->InjectMouseMove(core::Float2{188.0f, 13.0f});
+    (void)root->UpdateLayout();
+    d->InjectMouseUp(core::Float2{188.0f, 13.0f}, MouseButton::Left);
+    (void)root->UpdateLayout();
+    CHECK(table->GetColumnWidth(0) == doctest::Approx(190.0f));
+    CHECK(table->GetColumnWidth(1) == doctest::Approx(110.0f)); // the auto one takes what is left
+    CHECK(proxy.GetSortColumn() == -1);                          // a resize is no click
+    // Dragged past the minimum, it stops there.
+    d->InjectMouseDown(core::Float2{188.0f, 13.0f}, MouseButton::Left);
+    d->InjectMouseMove(core::Float2{0.0f, 13.0f});
+    d->InjectMouseUp(core::Float2{0.0f, 13.0f}, MouseButton::Left);
+    (void)root->UpdateLayout();
+    CHECK(table->GetColumnWidth(0) == doctest::Approx(table->GetMinColumnWidth()));
+}
+
+TEST_CASE("table-view: a header click sorts where the model can, and the cell shows which way")
+{
+    TableModel model;
+    FillPeople(model, 3);
+    SortingProxyModel proxy(&model);
+    core::RefPtr<SceneRoot> root;
+    auto table = MountTable(root, &proxy);
+    EventDispatcher* d = root->GetEventDispatcher();
+    CHECK(table->GetSortColumn() == -1);
+    d->InjectMouseDown(core::Float2{200.0f, 13.0f}, MouseButton::Left);
+    d->InjectMouseUp(core::Float2{200.0f, 13.0f}, MouseButton::Left);
+    CHECK(table->GetSortColumn() == 1);
+    CHECK(table->GetSortOrder() == SortOrder::Ascending);
+    d->InjectMouseDown(core::Float2{200.0f, 13.0f}, MouseButton::Left);
+    d->InjectMouseUp(core::Float2{200.0f, 13.0f}, MouseButton::Left);
+    CHECK(table->GetSortOrder() == SortOrder::Descending);
+    CHECK(proxy.GetSortOrder() == SortOrder::Descending);
+    CHECK(proxy.Data(MakeModelIndex(0, 1)).AsInt() == 22);
+
+    // A table alone cannot sort: no indicator.
+    TableModel plain;
+    FillPeople(plain, 2);
+    core::RefPtr<SceneRoot> root2;
+    auto table2 = MountTable(root2, &plain);
+    root2->GetEventDispatcher()->InjectMouseDown(core::Float2{200.0f, 13.0f}, MouseButton::Left);
+    root2->GetEventDispatcher()->InjectMouseUp(core::Float2{200.0f, 13.0f}, MouseButton::Left);
+    CHECK(table2->GetSortColumn() == -1);
+}

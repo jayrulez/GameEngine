@@ -6,18 +6,18 @@
     <Panel class="section" gap="10">
         <Label class="section-title" text="Flex: grow, shrink and wrap"/>
         <Label class="caption" text="flex-grow 1, 2 and 0: the free space shared one part to two"/>
-        <Panel class="lane" flex-direction="row" gap="8">
-            <Label class="bar" flex-grow="1" text="grow 1"/>
-            <Label class="bar" flex-grow="2" text="grow 2"/>
-            <Label class="bar" text="none"/>
+        <Panel class="lay-lane" flex-direction="row" gap="8">
+            <Label class="lay-bar" flex-grow="1" text="grow 1"/>
+            <Label class="lay-bar" flex-grow="2" text="grow 2"/>
+            <Label class="lay-bar" text="none"/>
         </Panel>
         <Label class="caption" text="Too wide for the row: each shrinks, but no narrower than its text"/>
-        <Panel class="lane" flex-direction="row" gap="8">
-            <Label class="bar" width="300px" text="three hundred wide"/>
-            <Label class="bar" width="300px" text="also three hundred"/>
+        <Panel class="lay-lane" flex-direction="row" gap="8">
+            <Label class="lay-bar" width="300px" text="three hundred wide"/>
+            <Label class="lay-bar" width="300px" text="also three hundred"/>
         </Panel>
         <Label class="caption" text="flex-wrap: wrap, with a row and a column gap"/>
-        <Panel class="well" flex-direction="row" flex-wrap="wrap" gap="8">
+        <Panel class="lay-well" flex-direction="row" flex-wrap="wrap" gap="8">
             <Label class="chip" text="one"/><Label class="chip" text="two"/><Label class="chip" text="three"/>
             <Label class="chip" text="four"/><Label class="chip" text="five"/><Label class="chip" text="six"/>
             <Label class="chip" text="seven"/><Label class="chip" text="eight"/>
@@ -27,19 +27,19 @@
     <Panel class="section" gap="10">
         <Label class="section-title" text="Flex: justify-content"/>
         <Label class="caption" text="start, center, end, space-between, space-evenly"/>
-        <Panel class="lane" flex-direction="row" justify-content="start" align-items="center" gap="8">
+        <Panel class="lay-lane" flex-direction="row" justify-content="start" align-items="center" gap="8">
             <Label class="chip" text="A"/><Label class="chip" text="B"/><Label class="chip" text="C"/>
         </Panel>
-        <Panel class="lane" flex-direction="row" justify-content="center" align-items="center" gap="8">
+        <Panel class="lay-lane" flex-direction="row" justify-content="center" align-items="center" gap="8">
             <Label class="chip" text="A"/><Label class="chip" text="B"/><Label class="chip" text="C"/>
         </Panel>
-        <Panel class="lane" flex-direction="row" justify-content="end" align-items="center" gap="8">
+        <Panel class="lay-lane" flex-direction="row" justify-content="end" align-items="center" gap="8">
             <Label class="chip" text="A"/><Label class="chip" text="B"/><Label class="chip" text="C"/>
         </Panel>
-        <Panel class="lane" flex-direction="row" justify-content="space-between" align-items="center">
+        <Panel class="lay-lane" flex-direction="row" justify-content="space-between" align-items="center">
             <Label class="chip" text="A"/><Label class="chip" text="B"/><Label class="chip" text="C"/>
         </Panel>
-        <Panel class="lane" flex-direction="row" justify-content="space-evenly" align-items="center">
+        <Panel class="lay-lane" flex-direction="row" justify-content="space-evenly" align-items="center">
             <Label class="chip" text="A"/><Label class="chip" text="B"/><Label class="chip" text="C"/>
         </Panel>
     </Panel>
@@ -48,39 +48,39 @@
         <Label class="section-title" text="Flex: align-items"/>
         <Label class="caption" text="start, center, end and stretch, across items of different heights"/>
         <Panel flex-direction="row" gap="8">
-            <Panel class="well tall" flex-direction="row" align-items="start" gap="4">
-                <Label class="chip short" text="start"/><Label class="chip" text=""/>
+            <Panel class="lay-well lay-tall" flex-direction="row" align-items="start" gap="4">
+                <Label class="chip lay-short" text="start"/><Label class="chip" text=""/>
             </Panel>
-            <Panel class="well tall" flex-direction="row" align-items="center" gap="4">
-                <Label class="chip short" text="center"/><Label class="chip" text=""/>
+            <Panel class="lay-well lay-tall" flex-direction="row" align-items="center" gap="4">
+                <Label class="chip lay-short" text="center"/><Label class="chip" text=""/>
             </Panel>
-            <Panel class="well tall" flex-direction="row" align-items="end" gap="4">
-                <Label class="chip short" text="end"/><Label class="chip" text=""/>
+            <Panel class="lay-well lay-tall" flex-direction="row" align-items="end" gap="4">
+                <Label class="chip lay-short" text="end"/><Label class="chip" text=""/>
             </Panel>
-            <Panel class="well tall" flex-direction="row" align-items="stretch" gap="4">
-                <Label class="chip free" text="stretch"/><Label class="chip free" text=""/>
+            <Panel class="lay-well lay-tall" flex-direction="row" align-items="stretch" gap="4">
+                <Label class="chip lay-free" text="stretch"/><Label class="chip lay-free" text=""/>
             </Panel>
         </Panel>
         <Label class="caption" text="baseline: text of three sizes and a field, on one line"/>
-        <Panel class="well" flex-direction="row" align-items="baseline" gap="12">
-            <Label class="say small" text="Small"/>
-            <Label class="say big" text="Big"/>
-            <Label class="say huge" text="Huge"/>
-            <TextField class="field" placeholder="a field"/>
+        <Panel class="lay-well" flex-direction="row" align-items="baseline" gap="12">
+            <Label class="lay-say lay-small" text="Small"/>
+            <Label class="lay-say lay-big" text="Big"/>
+            <Label class="lay-say lay-huge" text="Huge"/>
+            <TextField class="lay-field" placeholder="a field"/>
         </Panel>
     </Panel>
 
     <Panel class="section" gap="10">
         <Label class="section-title" text="Grid, scrolling itself"/>
         <Label class="caption" text="Columns 80px, 1fr and 2fr; cells span; overflow-y: auto, no wrapper"/>
-        <Panel class="grid" display="grid" grid-template-columns="80px 1fr 2fr" gap="8">
-            <Label class="cell" text="80px"/><Label class="cell" text="1fr"/><Label class="cell" text="2fr"/>
-            <Label class="cell" grid-column="span 2" text="spans two"/><Label class="cell" text="6"/>
-            <Label class="cell" text="7"/><Label class="cell" grid-column="span 2" text="spans two"/>
-            <Label class="cell" grid-column="1 / 4" text="the whole row"/>
-            <Label class="cell" text="11"/><Label class="cell" text="12"/><Label class="cell" text="13"/>
-            <Label class="cell" text="14"/><Label class="cell" text="15"/><Label class="cell" text="16"/>
-            <Label class="cell" text="17"/><Label class="cell" text="18"/><Label class="cell" text="19"/>
+        <Panel class="lay-grid" display="grid" grid-template-columns="80px 1fr 2fr" gap="8">
+            <Label class="lay-cell" text="80px"/><Label class="lay-cell" text="1fr"/><Label class="lay-cell" text="2fr"/>
+            <Label class="lay-cell" grid-column="span 2" text="spans two"/><Label class="lay-cell" text="6"/>
+            <Label class="lay-cell" text="7"/><Label class="lay-cell" grid-column="span 2" text="spans two"/>
+            <Label class="lay-cell" grid-column="1 / 4" text="the whole row"/>
+            <Label class="lay-cell" text="11"/><Label class="lay-cell" text="12"/><Label class="lay-cell" text="13"/>
+            <Label class="lay-cell" text="14"/><Label class="lay-cell" text="15"/><Label class="lay-cell" text="16"/>
+            <Label class="lay-cell" text="17"/><Label class="lay-cell" text="18"/><Label class="lay-cell" text="19"/>
         </Panel>
         <Label class="caption" text="Scroll it with the wheel, the bar, or focus inside it and use the arrow keys."/>
     </Panel>
@@ -88,37 +88,37 @@
     <Panel class="section" gap="10">
         <Label class="section-title" text="Stack and dock"/>
         <Label class="caption" text="A stack: children over each other, each placed by its own alignment"/>
-        <Panel class="stage" display="stack">
-            <Label class="chip wide" justify-self="start" align-self="start" text="top left"/>
-            <Label class="chip wide" justify-self="end" align-self="start" text="top right"/>
-            <Label class="chip wide" justify-self="center" align-self="center" text="centre"/>
-            <Label class="chip wide" justify-self="start" align-self="end" text="bottom left"/>
-            <Label class="chip wide" justify-self="end" align-self="end" text="bottom right"/>
+        <Panel class="lay-stage" display="stack">
+            <Label class="chip lay-wide" justify-self="start" align-self="start" text="top left"/>
+            <Label class="chip lay-wide" justify-self="end" align-self="start" text="top right"/>
+            <Label class="chip lay-wide" justify-self="center" align-self="center" text="centre"/>
+            <Label class="chip lay-wide" justify-self="start" align-self="end" text="bottom left"/>
+            <Label class="chip lay-wide" justify-self="end" align-self="end" text="bottom right"/>
         </Panel>
         <Label class="caption" text="A dock: top, left, right and bottom in order, the last filling what is left"/>
-        <Panel class="stage" display="dock">
-            <Label class="slot" dock="top" height="26px" text="top"/>
-            <Label class="slot" dock="left" width="90px" text="left"/>
-            <Label class="slot" dock="right" width="90px" text="right"/>
-            <Label class="slot" dock="bottom" height="26px" text="bottom"/>
-            <Label class="slot fill" text="fill"/>
+        <Panel class="lay-stage" display="dock">
+            <Label class="lay-slot" dock="top" height="26px" text="top"/>
+            <Label class="lay-slot" dock="left" width="90px" text="left"/>
+            <Label class="lay-slot" dock="right" width="90px" text="right"/>
+            <Label class="lay-slot" dock="bottom" height="26px" text="bottom"/>
+            <Label class="lay-slot lay-fill" text="fill"/>
         </Panel>
     </Panel>
 
     <Panel class="section" gap="10">
         <Label class="section-title" text="Sizes and placement"/>
         <Label class="caption" text="Percentages of the container, and a max-width that caps one"/>
-        <Panel class="well" gap="6" align-items="start">
-            <Label class="bar" width="25%" text="25%"/>
-            <Label class="bar" width="50%" text="50%"/>
-            <Label class="bar" width="100%" max-width="320px" text="100%, max 320px"/>
+        <Panel class="lay-well" gap="6" align-items="start">
+            <Label class="lay-bar" width="25%" text="25%"/>
+            <Label class="lay-bar" width="50%" text="50%"/>
+            <Label class="lay-bar" width="100%" max-width="320px" text="100%, max 320px"/>
         </Panel>
         <Label class="caption" text="position: absolute, by its insets; relative, moved after the flow"/>
-        <Panel class="stage placed" flex-direction="row" align-items="center" gap="10">
+        <Panel class="lay-stage lay-placed" flex-direction="row" align-items="center" gap="10">
             <Label class="chip" text="in flow"/>
             <Label class="chip" position="relative" top="-16px" text="nudged"/>
             <Label class="chip" text="in flow"/>
-            <Label class="badge" position="absolute" top="8px" right="8px" text="3"/>
+            <Label class="lay-badge" position="absolute" top="8px" right="8px" text="3"/>
         </Panel>
     </Panel>
 </Panel>

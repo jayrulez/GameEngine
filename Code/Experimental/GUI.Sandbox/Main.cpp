@@ -104,6 +104,7 @@ public:
     void SetFrameStats(bool stats) { m_frameStats = stats; }
     void SetSweep(bool sweep) { m_sweep = sweep; }
     void SetScroll(f32 pixels) { m_scroll = pixels; }
+    void SetLayoutOverlay(bool on) { m_layoutOverlay = on; }
 
     GUISandbox()
     {
@@ -136,6 +137,8 @@ private:
     // === Running ===
     void ShowPage(StringView id);
     void ToggleTheme();
+    // The layout overlay (F9) on both roots: bounds, padding, margins and text baselines.
+    void ApplyLayoutOverlay();
     void OpenWindow();
     void ShowMessage();
     void OpenMenu();
@@ -153,6 +156,7 @@ private:
     bool m_openMenuAtStart = false;
     String m_menuCall; // a game-menu script function to call once it is up (a screenshot of a panel)
     String m_keys;     // keystrokes to type into the root on show, one every 15 frames
+    bool m_layoutOverlay = false;
     f32 m_scroll = 0.0f; // the page scrolled down this far once it is up (a screenshot further down)
     bool m_alwaysRedraw = false;
     bool m_frameStats = false;
@@ -403,6 +407,9 @@ void GUISandbox::BuildSandbox()
     (void)m_root->OnCommand(u8"demo.window", [self](gui::CommandEvent&) { self->OpenWindow(); });
     (void)m_root->OnCommand(u8"demo.message", [self](gui::CommandEvent&) { self->ShowMessage(); });
     (void)m_root->OnCommand(u8"showcase.open", [self](gui::CommandEvent&) { self->OpenMenu(); });
+    (void)m_root->OnCommand(u8"debug.layout", [self](gui::CommandEvent&) { self->m_layoutOverlay = !self->m_layoutOverlay; self->ApplyLayoutOverlay(); });
+    (void)m_gui->GetKeymap().Bind(u8"f9", u8"debug.layout");
+    ApplyLayoutOverlay();
 
     m_styles.SetFontService(m_fontService.Get());
     ApplySandboxSheet();
@@ -675,12 +682,26 @@ void GUISandbox::ApplySandboxSheet()
     m_styles.SetStyleSheet(gui::CSSParser::Parse(sheet.AsView()));
 }
 
+void GUISandbox::ApplyLayoutOverlay()
+{
+    const gui::LayoutOverlay overlay = m_layoutOverlay ? gui::LayoutOverlay::All() : gui::LayoutOverlay{};
+    if (m_root)
+        m_root->SetLayoutOverlay(overlay);
+    if (m_menuRoot)
+        m_menuRoot->SetLayoutOverlay(overlay);
+}
+
 void GUISandbox::BuildMenu()
 {
     m_menuRoot = MakeRef<gui::SceneRoot>(AppRoot(), m_gui);
     m_menuRoot->SetDisplayScale(m_window != nullptr ? m_window->ContentScale() : 1.0f);
     m_menuRoot->SetViewportSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)});
     m_menuBinding.root = m_menuRoot.Get();
+    {
+        GUISandbox* self = this;
+        (void)m_menuRoot->OnCommand(u8"debug.layout", [self](gui::CommandEvent&) { self->m_layoutOverlay = !self->m_layoutOverlay; self->ApplyLayoutOverlay(); });
+    }
+    ApplyLayoutOverlay();
     String path(kMenuDir);
     path += StringView(u8"menu.xml");
     RefPtr<gui::Node> menu = LoadMarkup(ReadText(path.AsView()).AsView());
@@ -1174,7 +1195,8 @@ int main(int argc, char** argv)
     // ("down down return", "pad-east"). --always-redraw: draw every frame. --frame-stats: print,
     // each second, how many frames drew. --sweep: hover, click and right-click every widget of every
     // page, then open the game menu, printing each step, and exit (a smoke test; a crash's last line
-    // names its widget). --scroll <px>: scroll the page down that far once it is up. With the
+    // names its widget). --scroll <px>: scroll the page down that far once it is up.
+    // --layout-overlay: start with the layout overlay on (F9 toggles it). With the
     // framework's --screenshot flags, a picture of any of it.
     for (int i = 1; i < argc; ++i)
     {
@@ -1194,6 +1216,8 @@ int main(int argc, char** argv)
             app.SetFrameStats(true);
         else if (arg == StringView(u8"--sweep"))
             app.SetSweep(true);
+        else if (arg == StringView(u8"--layout-overlay"))
+            app.SetLayoutOverlay(true);
         else if (arg == StringView(u8"--scroll") && i + 1 < argc)
             app.SetScroll(static_cast<f32>(std::atof(reinterpret_cast<const char*>(argv[++i]))));
     }

@@ -1294,7 +1294,6 @@ namespace foundation::script
             // JsonValue.Set) persists to the script's value, matching the reference semantics
             // AngelScript gives asOBJ_REF reflected types. A copy here silently dropped mutations.
             Variant* boxedSelf = nullptr;
-            Array<Variant> args;
             int firstArg = 1;
             if (!method.isStatic)
             {
@@ -1306,42 +1305,50 @@ namespace foundation::script
                 }
                 firstArg = 2;
             }
-            for (int i = firstArg; i <= argCount; ++i)
-            {
-                // Honour the reflected param type for this arg (enum -> number carried as i64);
-                // extra args beyond the signature fall back to plain conversion.
-                const u32 paramIndex = static_cast<u32>(i - firstArg);
-                const TypeInfo* expected =
-                    (paramIndex < method.paramCount && method.params[paramIndex].type != nullptr)
-                        ? method.params[paramIndex].type()
-                        : nullptr;
-                args.PushBack(context->ToVariantForParam(state, i, expected));
-            }
-
             if (!method.isStatic && ToInstance(*boxedSelf).Pointer() == nullptr)
             {
                 // A handle whose object is gone (destroyed, or a component no longer on its
-                // entity): the script's error, said here, never a call through null.
+                // entity): the script's error, said here, never a call through null. Said before
+                // the arguments are read, since lua_error leaves this frame without unwinding it.
                 lua_pushstring(state, kObjectGoneMessage);
                 lua_error(state);
             }
-            ScriptCallScope scope(context);
-            Result<Variant> result =
-                method.isStatic
-                    ? InvokeStatic(method, Span<Variant>{args.Data(), args.Size()})
-                    : InvokeMethod(method, ToInstance(*boxedSelf),
-                                   Span<Variant>{args.Data(), args.Size()});
-            if (!result.HasValue())
+            bool pushed = false;
+            bool failed = false;
+            {
+                // What owns memory lives in this block alone: lua_error below jumps out of the
+                // frame without running destructors.
+                Array<Variant> args;
+                for (int i = firstArg; i <= argCount; ++i)
+                {
+                    // Honour the reflected param type for this arg (enum -> number carried as i64);
+                    // extra args beyond the signature fall back to plain conversion.
+                    const u32 paramIndex = static_cast<u32>(i - firstArg);
+                    const TypeInfo* expected =
+                        (paramIndex < method.paramCount && method.params[paramIndex].type != nullptr)
+                            ? method.params[paramIndex].type()
+                            : nullptr;
+                    args.PushBack(context->ToVariantForParam(state, i, expected));
+                }
+                ScriptCallScope scope(context);
+                Result<Variant> result =
+                    method.isStatic
+                        ? InvokeStatic(method, Span<Variant>{args.Data(), args.Size()})
+                        : InvokeMethod(method, ToInstance(*boxedSelf),
+                                       Span<Variant>{args.Data(), args.Size()});
+                failed = !result.HasValue();
+                if (!failed && !result.Value().IsEmpty())
+                {
+                    context->PushVariant(state, result.Value());
+                    pushed = true;
+                }
+            }
+            if (failed)
             {
                 lua_pushstring(state, "reflected method invocation failed");
                 lua_error(state);
             }
-            if (result.Value().IsEmpty())
-            {
-                return 0;
-            }
-            context->PushVariant(state, result.Value());
-            return 1;
+            return pushed ? 1 : 0;
         }
 
         // How many methods on `type`'s chain bind to (script name, static-ness) - the ARITY FAMILY

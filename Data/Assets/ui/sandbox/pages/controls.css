@@ -15,3 +15,5 @@
 .smooth { scroll-behavior: smooth; scrollbar-width: thin; scrollbar-visibility: overlay; }
 .scroll-line { width: 200px; height: 22px; font-family: Roboto; font-size: 14px; color: var(--ink); }
 .number { width: 130px; height: 30px; font-family: Roboto; font-size: 15px; padding-left: 8px; border-radius: 6; }
+.editable { width: 360px; height: 28px; padding-left: 6px; border-radius: 6; }
+.editable:hover { background-color: rgba(255, 255, 255, 0.05); }

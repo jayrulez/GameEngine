@@ -278,12 +278,20 @@ export namespace experimental::gui
         /// viewport's device pixels over the scale.
         void SetDisplayScale(f32 scale)
         {
+            const f32 was = m_displayScale;
             m_displayScale = core::Max(scale, 0.01f);
             Transformable::SetScale(core::Float2{m_displayScale, m_displayScale});
+            if (m_displayScale != was)
+                RequestLayoutTree(); // every edge rounds to the new grid
             Invalidate();
             ApplyViewport();
         }
         [[nodiscard]] f32 GetDisplayScale() const noexcept { return m_displayScale; }
+
+    protected:
+        [[nodiscard]] f32 TopPixelScale() const override { return m_displayScale; }
+
+    public:
 
         /// The device pixels this root covers (its window's or target's); its size is them in
         /// logical units.

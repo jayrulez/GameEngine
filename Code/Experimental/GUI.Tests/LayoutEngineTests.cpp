@@ -117,7 +117,7 @@ TEST_CASE("layout: flex rows justify and align their items")
     CHECK(end[0] == doctest::Approx(200.0f));
     CHECK(end[2] == doctest::Approx(80.0f));
     auto evenly = row(Justify::SpaceEvenly, Align::Start);
-    CHECK(evenly[0] == doctest::Approx(200.0f / 3.0f));
+    CHECK(evenly[0] == doctest::Approx(67.0f)); // a third of 200, on the pixel grid
     auto center = row(Justify::Center, Align::Start);
     CHECK(center[0] == doctest::Approx(100.0f));
 }
@@ -218,13 +218,13 @@ TEST_CASE("layout: grid tracks of lengths, fr and auto; items flow, span and sit
     auto wide = Box(*grid.Get(), [](LayoutStyle& s) { s.Height = LayoutLength::Px(10.0f); s.Column.Span = 2; });
     auto placed = Box(*grid.Get(), [](LayoutStyle& s) { s.Height = LayoutLength::Px(10.0f); s.Column.Start = 1; s.Row.Start = 3; });
     bed.Layout();
-    // 400 - 100 - 20 gaps = 280 for 3fr: 93.33 and 186.67.
+    // 400 - 100 - 20 gaps = 280 for 3fr: 93.33 and 186.67, edges on whole pixels.
     CheckRect(*a, 0, 0, 100, 20);
     CHECK(b->GetPosition().x == doctest::Approx(110.0f));
-    CHECK(b->GetSize().x == doctest::Approx(280.0f / 3.0f));
-    CHECK(c->GetPosition().x == doctest::Approx(110.0f + 280.0f / 3.0f + 10.0f));
+    CHECK(b->GetSize().x == doctest::Approx(93.0f)); // 110 to 203.33
+    CHECK(c->GetPosition().x == doctest::Approx(213.0f));
     CHECK(wide->GetPosition().y == doctest::Approx(30.0f + 5.0f)); // the first row as tall as its tallest
-    CHECK(wide->GetSize().x == doctest::Approx(100.0f + 10.0f + 280.0f / 3.0f));
+    CHECK(wide->GetSize().x == doctest::Approx(203.0f));
     CHECK(placed->GetPosition().x == doctest::Approx(0.0f));
     CHECK(placed->GetPosition().y == doctest::Approx(35.0f + 10.0f + 5.0f));
 }
@@ -533,4 +533,53 @@ TEST_CASE("layout: a label's baseline follows its vertical alignment and its wra
     auto panel = core::MakeRef<Panel>(core::DefaultAllocator());
     panel->SetPadding(Thickness{0.0f, 0.0f, 0.0f, 5.0f});
     CHECK(panel->BaselineAt(core::Float2{50.0f, 30.0f}) == doctest::Approx(25.0f));
+}
+
+TEST_CASE("layout: arranged edges round to the device grid at scales 1, 1.25 and 2")
+{
+    // Three equal items across 100 units: edges at 33.33 and 66.67. Each edge rounds on its own,
+    // so neighbours still meet and the widths add up; in device pixels every edge is whole.
+    const f32 scales[] = {1.0f, 1.25f, 2.0f};
+    for (const f32 scale : scales)
+    {
+        CAPTURE(scale);
+        Bed bed(400.0f, 300.0f);
+        bed.root->SetDisplayScale(scale);
+        auto row = Box(*bed.root.Get(), [](LayoutStyle& s) {
+            s.Direction = FlexDirection::Row;
+            s.Width = LayoutLength::Px(100.0f);
+            s.Height = LayoutLength::Px(10.3f);
+        });
+        row->SetPadding(Thickness{0.3f, 0.0f, 0.0f, 0.0f});
+        core::RefPtr<Panel> cells[3];
+        for (auto& cell : cells)
+            cell = Box(*row.Get(), [](LayoutStyle& s) { s.Grow = 1.0f; });
+        bed.Layout();
+        const auto whole = [scale](f32 v) { return doctest::Approx(core::Round(v * scale)) == v * scale; };
+        f32 x = cells[0]->GetPosition().x;
+        for (const auto& cell : cells)
+        {
+            CHECK(whole(cell->GetPosition().x));
+            CHECK(whole(cell->GetSize().x));
+            CHECK(whole(cell->GetSize().y));
+            CHECK(cell->GetPosition().x == doctest::Approx(x)); // meets its neighbour
+            x += cell->GetSize().x;
+        }
+        CHECK(whole(row->GetSize().y));
+        CHECK(row->GetPixelScale() == doctest::Approx(scale));
+    }
+}
+
+TEST_CASE("layout: a new display scale lays the whole tree out again on its grid")
+{
+    Bed bed(400.0f, 300.0f);
+    auto row = Box(*bed.root.Get(), [](LayoutStyle& s) { s.Direction = FlexDirection::Row; s.Width = LayoutLength::Px(100.0f); });
+    auto inner = Box(*row.Get(), [](LayoutStyle& s) { s.Width = LayoutLength::Px(50.0f); s.Height = LayoutLength::Px(10.0f); });
+    auto leaf = Box(*inner.Get(), [](LayoutStyle& s) { s.Width = LayoutLength::Px(10.3f); s.Height = LayoutLength::Px(4.0f); });
+    bed.Layout();
+    CHECK(leaf->GetSize().x == doctest::Approx(10.0f));
+    bed.root->SetDisplayScale(2.0f);
+    bed.Layout();
+    CHECK(leaf->GetPixelScale() == doctest::Approx(2.0f));
+    CHECK(leaf->GetSize().x == doctest::Approx(10.5f)); // 20.6 device pixels round to 21
 }

@@ -861,9 +861,17 @@ namespace experimental::gui
 
     void Node::Arrange(const Rect& rect)
     {
+        // Each edge rounds to the device grid on its own, so neighbours that share an edge still
+        // share it and a box's size is what its edges make (a third of 400 is 133 or 134 wide).
+        // The container's own origin is on the grid already, so its space's grid is the device's.
+        m_pixelScale = m_parent != nullptr ? m_parent->m_pixelScale : TopPixelScale();
+        const f32 s = m_pixelScale;
+        const auto snap = [s](f32 v) { return core::Round(v * s) / s; };
+        const f32 left = snap(rect.x);
+        const f32 top = snap(rect.y);
         m_placing = true;
-        SetPosition(core::Float2{rect.x, rect.y});
-        const core::Float2 size{rect.width, rect.height};
+        SetPosition(core::Float2{left, top});
+        const core::Float2 size{core::Max(0.0f, snap(rect.x + rect.width) - left), core::Max(0.0f, snap(rect.y + rect.height) - top)};
         const bool resized = size != m_size;
         if (resized)
         {
@@ -937,7 +945,9 @@ namespace experimental::gui
             {
                 const f32 dx = cs.Left.Resolve(box.width).ValueOr(-cs.Right.Resolve(box.width).ValueOr(0.0f));
                 const f32 dy = cs.Top.Resolve(box.height).ValueOr(-cs.Bottom.Resolve(box.height).ValueOr(0.0f));
-                child.SetPosition(core::Float2{child.GetPosition().x + dx, child.GetPosition().y + dy});
+                const f32 s = m_pixelScale; // moved by whole device pixels, keeping it on the grid
+                child.SetPosition(core::Float2{child.GetPosition().x + core::Round(dx * s) / s,
+                                               child.GetPosition().y + core::Round(dy * s) / s});
             }
             const Thickness m = child.GetMargin();
             extent.x = core::Max(extent.x, child.GetPosition().x + child.GetSize().x + m.Right - box.x);
@@ -967,6 +977,19 @@ namespace experimental::gui
         for (Node* p = n->m_parent; p != nullptr && !p->m_childLayoutDirty; p = p->m_parent)
             p->m_childLayoutDirty = true;
         Invalidate();
+    }
+
+    void Node::RequestLayoutTree()
+    {
+        const auto mark = [](auto& self, Node& node) -> void
+        {
+            node.m_measureValid = false;
+            node.m_layoutDirty = true;
+            for (const core::RefPtr<Node>& child : node.m_children)
+                self(self, *child);
+        };
+        mark(mark, *this);
+        RequestLayout();
     }
 
     u32 Node::UpdateLayout()

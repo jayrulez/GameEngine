@@ -733,21 +733,25 @@ export namespace experimental::gui
             return true;
         const u32 states = element.GetWidgetStates();
         const auto has = [&](u32 flag) { return (wanted & flag) != 0; };
-        if (has(PseudoHover) && !element.IsHovered())
+        // A state the inspector forces reads as set (E8d); forced disabled is not enabled.
+        const u32 forced = element.GetForcedStyleStates();
+        const auto forcing = [forced](u32 state) { return (forced & state) != 0; };
+        const bool enabled = element.IsEnabled() && !forcing(Node::StateDisabled);
+        if (has(PseudoHover) && !element.IsHovered() && !forcing(Node::StateHover))
             return false;
-        if (has(PseudoActive) && !element.IsPressed())
+        if (has(PseudoActive) && !element.IsPressed() && !forcing(Node::StateActive))
             return false;
-        if (has(PseudoFocusVisible) && !element.IsFocusVisible())
+        if (has(PseudoFocusVisible) && !element.IsFocusVisible() && !forcing(Node::StateFocusVisible))
             return false;
-        if (has(PseudoFocus) && !element.IsFocused())
+        if (has(PseudoFocus) && !element.IsFocused() && !forcing(Node::StateFocus) && !forcing(Node::StateFocusVisible))
             return false;
-        if (has(PseudoFocusWithin) && !element.IsFocusWithin())
+        if (has(PseudoFocusWithin) && !element.IsFocusWithin() && !forcing(Node::StateFocusWithin))
             return false;
-        if (has(PseudoDisabled) && element.IsEnabled())
+        if (has(PseudoDisabled) && enabled)
             return false;
-        if (has(PseudoEnabled) && !element.IsEnabled())
+        if (has(PseudoEnabled) && !enabled)
             return false;
-        if (has(PseudoChecked) && (states & WidgetStateChecked) == 0)
+        if (has(PseudoChecked) && (states & WidgetStateChecked) == 0 && !forcing(Node::StateChecked))
             return false;
         if (has(PseudoIndeterminate) && (states & WidgetStateIndeterminate) == 0)
             return false;

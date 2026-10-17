@@ -747,6 +747,23 @@ export namespace experimental::gui
             MarkStyleDirty(false);
         }
         [[nodiscard]] u32 GetChangedStyleStates() const noexcept { return m_changedStyleStates; }
+        /// States the style pass reads as set whatever the node's own (E8d: the inspector forcing
+        /// :hover, :active, :focus, :focus-visible, :checked or :disabled to see their rules).
+        void SetForcedStyleStates(u32 states)
+        {
+            const u32 changed = states ^ m_forcedStyleStates;
+            if (changed == 0)
+                return;
+            m_forcedStyleStates = states;
+            // What a forced state turns with it: disabled is not enabled, focus-visible is focus.
+            u32 marks = changed;
+            if ((changed & StateDisabled) != 0)
+                marks |= StateEnabled;
+            if ((changed & StateFocusVisible) != 0)
+                marks |= StateFocus;
+            MarkStyleStateDirty(marks);
+        }
+        [[nodiscard]] u32 GetForcedStyleStates() const noexcept { return m_forcedStyleStates; }
 
         /// The children changed (one joined, left or moved): what matches by position or by
         /// sibling (:first-child, :nth-child(), `+`, `~`) may change for each, and :empty for this
@@ -2053,6 +2070,7 @@ export namespace experimental::gui
         bool m_needsRedraw = true;
         mutable bool m_subtreeInkValid = false; // m_subtreeInk holds what it and its subtree draw
         u32 m_drawnFrame = 0;                   // the host's frame it was last drawn in
+        u32 m_forcedStyleStates = 0;            // StyleState bits the style pass reads as set
         bool m_invalidatedSelf = true;          // invalidated itself (not through a descendant) since drawn
         u8 m_quietInvalidations = 0;            // inside BeginQuietInvalidation's
         mutable Rect m_subtreeInk{};

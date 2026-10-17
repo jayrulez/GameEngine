@@ -5,7 +5,7 @@
 .lift-steps { transition: transform 0.4s steps(4), box-shadow 0.4s steps(4); }
 .lift:hover { transform: translate(0, -8px) scale(1.05); box-shadow: 0 12px 20px rgba(0, 0, 0, 0.5); }
 
-.dot { width: 18px; height: 18px; border-radius: 9; margin-top: 10px; }
+.dot { width: 18px; height: 18px; border-radius: 9; }
 .pulse-fast { background-color: #6bd685; animation: pulse 0.7s infinite; }
 .pulse { background-color: #5ca8f2; animation: pulse 1.4s infinite; }
 .pulse-slow { background-color: #f2c75a; animation: pulse 2.3s infinite; }
@@ -22,7 +22,7 @@
 .ease-row { width: 590px; height: 30px; }
 .ease-name { width: 120px; height: 28px; font-family: Roboto; font-size: 14px; color: var(--muted); vertical-align: middle; }
 .track { width: 400px; height: 28px; background-color: var(--surface-2); border-radius: 14; }
-.ball { width: 24px; height: 24px; margin-top: 2px; border-radius: 12; background-color: var(--accent); }
+.ball { width: 24px; height: 24px; border-radius: 12; background-color: var(--accent); }
 .e-linear { animation: slide 2s linear infinite alternate; }
 .e-inout { animation: slide 2s ease-in-out infinite alternate; }
 .e-back { animation: slide-back 2s cubic-bezier(0.68, -0.4, 0.32, 1.4) infinite alternate; }

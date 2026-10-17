@@ -5,18 +5,18 @@
 
     <Panel class="section" gap="12">
         <Label class="section-title" text="Bound both ways"/>
-        <Panel class="row" flex-direction="row" align-items="start" gap="12">
+        <Panel class="row" flex-direction="row" align-items="center" gap="12">
             <Label class="text label-col" text="Volume" vertical-align="middle"/>
             <Slider class="bind-slider" value="{{volume}}"/>
             <ProgressBar class="bind-bar" progress="{{volume}}"/>
             <Label id="binding-percent" class="text value-col" vertical-align="middle"/>
         </Panel>
-        <Panel class="row" flex-direction="row" align-items="start" gap="12">
+        <Panel class="row" flex-direction="row" align-items="center" gap="12">
             <Label class="text label-col" text="Music" vertical-align="middle"/>
             <CheckBox class="bind-check" checked="{{music}}"/>
             <Label class="text" width="300" height="30" vertical-align="middle" text="music is {{music}}"/>
         </Panel>
-        <Panel class="row" flex-direction="row" align-items="start" gap="12">
+        <Panel class="row" flex-direction="row" align-items="center" gap="12">
             <Label class="text label-col" text="Name" vertical-align="middle"/>
             <TextField class="bind-field" text="{{name}}"/>
             <Label class="text" width="220" height="30" vertical-align="middle" text="Hello, {{name}}!"/>

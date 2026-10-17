@@ -9,3 +9,4 @@ module;
 export module experimental.gui.inspector;
 
 export import :queries;
+export import :inspector;

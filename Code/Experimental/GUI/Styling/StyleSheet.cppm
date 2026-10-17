@@ -317,6 +317,14 @@ export namespace experimental::gui
         }
         [[nodiscard]] usize RuleCount() const noexcept { return m_rules.Size(); }
         [[nodiscard]] const Array<StyleRule>& Rules() const noexcept { return m_rules; }
+        /// `rule` as one to change, when it is this sheet's (null when it is not).
+        [[nodiscard]] StyleRule* MutableRule(const StyleRule* rule) noexcept
+        {
+            for (StyleRule& r : m_rules)
+                if (&r == rule)
+                    return &r;
+            return nullptr;
+        }
 
         void AddKeyframes(Keyframes keyframes) { m_keyframes.PushBack(core::Move(keyframes)); }
         [[nodiscard]] usize KeyframesCount() const noexcept { return m_keyframes.Size(); }

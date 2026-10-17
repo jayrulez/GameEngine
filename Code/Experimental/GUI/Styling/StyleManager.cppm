@@ -59,6 +59,7 @@ export namespace experimental::gui
         core::String Value;    ///< as written
         bool Important = false;
         bool Inline = false;
+        const StyleRule* Rule = nullptr; ///< its rule (null for the inline style), for EditDeclaration
     };
     /// A property of a node, its value and where the value came from.
     struct StyleExplanation
@@ -439,6 +440,24 @@ export namespace experimental::gui
             }
             return out;
         }
+        /// Sets `property` to `value` in `rule` (one of its sheets'), as an inspector edits a rule:
+        /// every node it matches restyles. A longhand set in a rule written with its shorthand
+        /// comes after it there, so it wins for that side alone. False when the rule is none of
+        /// its sheets' (it is only compared, so one from a sheet replaced since is safe to pass).
+        bool EditDeclaration(const StyleRule* rule, core::StringView property, core::StringView value)
+        {
+            StyleRule* editable = m_userAgent.MutableRule(rule);
+            if (editable == nullptr)
+                editable = m_sheet.MutableRule(rule);
+            for (usize i = 0; editable == nullptr && i < m_subtrees.Size(); ++i)
+                editable = m_subtrees[i].Sheet.MutableRule(rule);
+            if (editable == nullptr)
+                return false;
+            editable->SetProperty(property, value);
+            m_allDirty = true;
+            return true;
+        }
+
         /// One property of `widget`, as ExplainStyle gives it (its own value when nothing sets it).
         [[nodiscard]] StyleExplanation ExplainProperty(const UIWidget& widget, core::StringView property) const
         {
@@ -532,6 +551,7 @@ export namespace experimental::gui
                     }
                     else
                     {
+                        source.Rule = d.Rule;
                         source.Sheet = core::String(SheetAt(d.Origin, subtrees).Name());
                         source.Line = d.Rule->Line();
                         source.Selector = core::String(d.Rule->SelectorText());

@@ -127,7 +127,7 @@ export namespace experimental::gui::inspector
         }
 
         /// What it inspects: a root and the style manager that styles it (for the styles' origins).
-        void Inspect(SceneRoot* target, const StyleManager* targetStyles)
+        void Inspect(SceneRoot* target, StyleManager* targetStyles)
         {
             m_target = target;
             m_targetStyles = targetStyles;
@@ -157,7 +157,7 @@ export namespace experimental::gui::inspector
             // The details again when the selection changed, and now and then for values that moved,
             // but not under a field being edited there.
             Node* selected = GetSelected();
-            if (selected != m_detailsFor || (m_refreshes % 60 == 0 && !EditingDetails()))
+            if (selected != m_detailsFor || m_detailsStale || (m_refreshes % 60 == 0 && !EditingDetails()))
                 RebuildDetails();
         }
 
@@ -329,7 +329,7 @@ export namespace experimental::gui::inspector
             }
         }
 
-        /// The details' rows (for tests): each label's text, in order.
+        /// The details' rows (for tests): each label's and field's text, in order.
         [[nodiscard]] Array<core::String> DetailsText() const
         {
             Array<core::String> out;
@@ -337,6 +337,8 @@ export namespace experimental::gui::inspector
             {
                 if (const gui::Label* label = core::Cast<gui::Label>(&node))
                     out.PushBack(core::String(label->GetText()));
+                else if (const TextField* field = core::Cast<TextField>(&node))
+                    out.PushBack(core::String(field->GetText()));
                 for (usize i = 0; i < node.ChildCount(); ++i)
                     self(self, *node.GetChildAt(i));
             };
@@ -538,6 +540,7 @@ export namespace experimental::gui::inspector
             if (m_details == nullptr)
                 return;
             m_details->RemoveAllChildren();
+            m_detailsStale = false;
             Node* node = GetSelected();
             m_detailsFor = node;
             if (node == nullptr)
@@ -603,16 +606,28 @@ export namespace experimental::gui::inspector
                            core::Format(u8"measures {} x {} unbounded", static_cast<i32>(wanted.x), static_cast<i32>(wanted.y)).AsView());
             }
 
-            // Styles, grouped by rule (the winner of each property first; overridden ones dim).
+            // Styles, grouped by rule (the winner of each property first; overridden ones dim). A
+            // rule's declaration and the inline style's are fields: Enter edits the rule itself
+            // (every node it matches follows), or the node's inline style.
             if (const UIWidget* widget = core::Cast<UIWidget>(node); widget != nullptr && m_targetStyles != nullptr)
             {
                 (void)Text(body, core::StringView(u8"isection"), core::StringView(u8"Styles"));
+                (void)Text(body, core::StringView(u8"idim"), core::StringView(u8"Grouped by rule; a dim name is overridden. Enter edits the rule (or the inline style)."));
                 const Array<StyleExplanation> explained = m_targetStyles->ExplainStyle(*widget);
+                struct Line
+                {
+                    core::String Property;
+                    core::String Value;
+                    bool Won = true;
+                    bool Important = false;
+                    bool Editable = false;
+                    bool Inline = false;
+                    const StyleRule* Rule = nullptr;
+                };
                 struct Group
                 {
                     core::String Header;
-                    Array<core::String> Lines;
-                    Array<bool> Won;
+                    Array<Line> Lines;
                 };
                 Array<Group> groups;
                 const auto group = [&groups](const core::String& header) -> Group&
@@ -620,43 +635,57 @@ export namespace experimental::gui::inspector
                     for (Group& g : groups)
                         if (g.Header == header)
                             return g;
-                    groups.PushBack(Group{header, {}, {}});
+                    groups.PushBack(Group{header, {}});
                     return groups[groups.Size() - 1];
                 };
                 for (const StyleExplanation& e : explained)
                 {
                     if (e.Origin == StyleOrigin::Inherited && e.InheritedFrom != nullptr)
                     {
-                        Group& g = group(core::Format(u8"inherited from {}", Label(*e.InheritedFrom)));
-                        g.Lines.PushBack(core::Format(u8"{}: {}", e.Property, e.Value));
-                        g.Won.PushBack(true);
+                        group(core::Format(u8"inherited from {}", Label(*e.InheritedFrom))).Lines.PushBack(Line{e.Property, e.Value});
                         continue;
                     }
                     if (e.Origin == StyleOrigin::Code)
-                    {
-                        Group& g = group(core::String(core::StringView(u8"set by code")));
-                        g.Lines.PushBack(core::String(e.Property));
-                        g.Won.PushBack(true);
-                    }
+                        group(core::String(core::StringView(u8"set by code"))).Lines.PushBack(Line{e.Property, {}});
                     for (usize i = 0; i < e.Declarations.Size(); ++i)
                     {
-                        const StyleDeclarationSource& s = e.Declarations[i];
-                        const core::String header = s.Inline ? core::String(core::StringView(u8"inline style"))
-                                                             : core::Format(u8"{}   {}:{}", s.Selector, s.Sheet, s.Line);
-                        Group& g = group(header);
-                        g.Lines.PushBack(core::Format(u8"{}: {}{}", e.Property, s.Value, s.Important ? core::StringView(u8" !important") : core::StringView{}));
-                        g.Won.PushBack(i == 0 && e.Origin != StyleOrigin::Code);
+                        const StyleDeclarationSource& d = e.Declarations[i];
+                        const core::String header = d.Inline ? core::String(core::StringView(u8"inline style"))
+                                                             : core::Format(u8"{}   {}:{}", d.Selector, d.Sheet, d.Line);
+                        group(header).Lines.PushBack(Line{e.Property, d.Value, i == 0 && e.Origin != StyleOrigin::Code, d.Important,
+                                                          true, d.Inline, d.Rule});
                     }
                 }
+                Inspector* self = this;
                 for (const Group& g : groups)
                 {
                     (void)Text(body, core::StringView(u8"irule"), g.Header.AsView());
-                    for (usize i = 0; i < g.Lines.Size(); ++i)
+                    for (const Line& line : g.Lines)
                     {
-                        core::String line = g.Lines[i];
-                        if (!g.Won[i])
-                            line += core::StringView(u8"   (overridden)");
-                        (void)Text(body, core::StringView(g.Won[i] ? u8"iline" : u8"iover"), line.AsView());
+                        if (!line.Editable)
+                        {
+                            (void)Text(body, core::StringView(u8"iline"),
+                                       line.Value.Size() != 0 ? core::Format(u8"{}: {}", line.Property, line.Value).AsView() : line.Property.AsView());
+                            continue;
+                        }
+                        RefPtr<Panel> row = Add<Panel>(body, core::StringView(u8"iprop"));
+                        (void)Text(*row, core::StringView(line.Won ? u8"iline" : u8"iover"), line.Property.AsView());
+                        RefPtr<TextField> field = Add<TextField>(*row);
+                        field->SetText(line.Important ? core::Format(u8"{} !important", line.Value).AsView() : line.Value.AsView());
+                        const core::String property = line.Property;
+                        const StyleRule* rule = line.Rule; // compared, never followed: a sheet replaced since makes it a miss
+                        const bool inlineStyle = line.Inline;
+                        field->SetOnSubmit([self, property, rule, inlineStyle](core::StringView text)
+                        {
+                            Node* n = self->GetSelected();
+                            if (n == nullptr || self->m_targetStyles == nullptr)
+                                return;
+                            if (inlineStyle)
+                                (void)SetProperty(*n, property.AsView(), text);
+                            else if (rule != nullptr)
+                                (void)self->m_targetStyles->EditDeclaration(rule, property.AsView(), text);
+                            self->m_detailsStale = true; // shown again next refresh, not under this field's call
+                        });
                     }
                 }
                 if (groups.IsEmpty())
@@ -705,7 +734,8 @@ export namespace experimental::gui::inspector
         RefPtr<SceneRoot> m_root;
         StyleManager m_styles;
         SceneRoot* m_target = nullptr;              // not owned: the host's
-        const StyleManager* m_targetStyles = nullptr;
+        StyleManager* m_targetStyles = nullptr; // edits its rules (the styles' fields)
+        bool m_detailsStale = false;            // an edit wants the details shown again
         UniquePtr<StringListModel> m_model;         // before the views (they go first, in the destructor)
         Panel* m_shell = nullptr;                   // owned by the root, as the rest
         CheckBox* m_pick = nullptr;

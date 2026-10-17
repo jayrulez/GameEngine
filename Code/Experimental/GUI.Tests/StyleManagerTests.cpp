@@ -520,3 +520,28 @@ TEST_CASE("style-manager: a child added restyles its siblings only when a rule r
         CHECK(second->GetAlpha() == doctest::Approx(0.5f)); // first now: odd
     }
 }
+
+TEST_CASE("style-manager: a declaration edited in its rule restyles every node the rule matches")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{200.0f, 200.0f});
+    auto a = Widget(u8"button", core::Float2{0.0f, 0.0f}, core::Float2{50.0f, 20.0f});
+    auto b = Widget(u8"button", core::Float2{0.0f, 30.0f}, core::Float2{50.0f, 20.0f});
+    root->AddChild(a.Get());
+    root->AddChild(b.Get());
+    StyleManager mgr(CSSParser::Parse(SV(u8"button { opacity: 0.8; padding: 4px; }"), SV(u8"app.css")));
+    mgr.ApplyTree(*root.Get());
+    const StyleExplanation opacity = mgr.ExplainProperty(*a.Get(), SV(u8"opacity"));
+    REQUIRE(opacity.Declarations.Size() == 1u);
+    REQUIRE(opacity.Declarations[0].Rule != nullptr);
+    CHECK(mgr.EditDeclaration(opacity.Declarations[0].Rule, SV(u8"opacity"), SV(u8"0.4")));
+    // A longhand of the rule's shorthand: that side alone.
+    CHECK(mgr.EditDeclaration(opacity.Declarations[0].Rule, SV(u8"padding-left"), SV(u8"9px")));
+    mgr.ApplyTree(*root.Get());
+    CHECK(a->GetAlpha() == doctest::Approx(0.4f));
+    CHECK(b->GetAlpha() == doctest::Approx(0.4f)); // the rule's every node
+    CHECK(a->GetPadding().Left == doctest::Approx(9.0f));
+    CHECK(a->GetPadding().Top == doctest::Approx(4.0f));
+    const StyleRule stranger(SV(u8"button"));
+    CHECK_FALSE(mgr.EditDeclaration(&stranger, SV(u8"opacity"), SV(u8"1")));
+}

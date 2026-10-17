@@ -135,6 +135,9 @@ export namespace experimental::gui
         [[nodiscard]] u32 GetPseudoClasses() const noexcept { return m_pseudo; }
         // The `::part` pseudo-element (empty = none) - its declarations style a widget part.
         [[nodiscard]] core::StringView GetPseudoElement() const { return m_pseudoElement.AsView(); }
+        /// The part's own states it asks for (`::scrollbar-thumb:hover`): :hover and :active after
+        /// the part, which the widget reports for it (GetPartStates).
+        [[nodiscard]] u32 GetPartPseudoClasses() const noexcept { return m_partPseudo; }
         /// Whether it names a pseudo-class the lab does not know (it then matches nothing).
         [[nodiscard]] bool IsNever() const noexcept { return m_never; }
         /// Calls `f(selector)` for each selector in its :not(), :is() and :where().
@@ -152,6 +155,7 @@ export namespace experimental::gui
         core::String m_tag;
         core::String m_id;
         core::String m_pseudoElement;
+        u32 m_partPseudo = 0; // pseudo-classes after the part: the part's states
         Array<core::String> m_classes;
         Array<AttributeTest> m_attributes;
         Array<NthPattern> m_nths;
@@ -178,6 +182,11 @@ export namespace experimental::gui
         [[nodiscard]] core::StringView PseudoElement() const
         {
             return m_rules.Size() != 0 ? m_rules[m_rules.Size() - 1].GetPseudoElement() : core::StringView{};
+        }
+        /// The part's own states the subject asks for (none for a normal selector).
+        [[nodiscard]] u32 PartPseudoClasses() const noexcept
+        {
+            return m_rules.Size() != 0 ? m_rules[m_rules.Size() - 1].GetPartPseudoClasses() : 0u;
         }
 
         // True if `element` matches this selector: the rightmost compound matches it and each
@@ -706,6 +715,19 @@ export namespace experimental::gui
                     i += 2;
                     m_pseudoElement = core::String(ReadIdent(fragment, i));
                 }
+                else if (m_pseudoElement.AsView().Size() != 0)
+                {
+                    // After the part, a pseudo-class is the part's own state: :hover and :active,
+                    // the states a part has (any other matches nothing).
+                    ++i;
+                    const core::StringView name = ReadIdent(fragment, i);
+                    if (name == core::StringView(u8"hover"))
+                        m_partPseudo |= PseudoHover;
+                    else if (name == core::StringView(u8"active"))
+                        m_partPseudo |= PseudoActive;
+                    else
+                        m_never = true;
+                }
                 else
                 {
                     ++i;
@@ -806,7 +828,7 @@ export namespace experimental::gui
         i64 s = 0;
         if (m_id.AsView().Size() != 0)
             s += kSpecificityId;
-        u32 pseudo = m_pseudo;
+        u32 pseudo = m_pseudo | (m_partPseudo << 16); // a part's states count as pseudo-classes too
         i64 classes = static_cast<i64>(m_classes.Size() + m_attributes.Size() + m_nths.Size());
         while (pseudo != 0)
         {

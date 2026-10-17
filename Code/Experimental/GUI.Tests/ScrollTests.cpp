@@ -392,3 +392,92 @@ TEST_CASE("scroll: a sheet sets scroll-behavior and overscroll-behavior")
     CHECK(s.view->GetLayoutStyle().Scrolling == ScrollBehavior::Smooth);
     CHECK(s.view->GetLayoutStyle().Overscroll == OverscrollBehavior::Contain);
 }
+
+TEST_CASE("scroll: a selector may ask for a part's own state after it")
+{
+    const StyleSelector plain(core::StringView(u8"scrollview::scrollbar-thumb"));
+    const StyleSelector hovered(core::StringView(u8"scrollview::scrollbar-thumb:hover"));
+    const StyleSelector held(core::StringView(u8"::scrollbar-thumb:active"));
+    CHECK(hovered.PseudoElement() == core::StringView(u8"scrollbar-thumb"));
+    CHECK(hovered.PartPseudoClasses() == PseudoHover);
+    CHECK(held.PartPseudoClasses() == PseudoActive);
+    CHECK(plain.PartPseudoClasses() == 0u);
+    CHECK(hovered.Specificity() > plain.Specificity());
+    // A state a part does not have matches nothing.
+    CHECK(StyleSelector(core::StringView(u8"::scrollbar-thumb:focus")).RuleAt(0).IsNever());
+}
+
+TEST_CASE("scroll: the bars are ::scrollbar and ::scrollbar-thumb, styled per their own hover and drag")
+{
+    Scroller s;
+    StyleManager styles(CSSParser::Parse(core::StringView(
+        u8"scrollview::scrollbar { background-color: #101010; }"
+        u8"scrollview::scrollbar-thumb { background-color: #202020; }"
+        u8"scrollview::scrollbar-thumb:hover { background-color: #303030; }"
+        u8"scrollview::scrollbar-thumb:active { background-color: #404040; }")));
+    styles.ApplyTree(*s.root);
+    const auto thumb = [&]() { return s.view->FindPartStyle(u8"scrollbar-thumb")->Box.BackgroundColor; };
+    REQUIRE(s.view->FindPartStyle(u8"scrollbar") != nullptr);
+    CHECK(s.view->FindPartStyle(u8"scrollbar")->Box.BackgroundColor == ParseColor(core::StringView(u8"#101010")).Value());
+    CHECK(thumb() == ParseColor(core::StringView(u8"#202020")).Value());
+
+    const Rect bar = s.view->ScrollBarThumb(1);
+    const core::Float2 onThumb{bar.x + bar.width * 0.5f, bar.y + 5.0f};
+    s.D().InjectMouseMove(onThumb);
+    CHECK((s.view->GetPartStates(u8"scrollbar-thumb") & Node::StateHover) != 0);
+    styles.ApplyTree(*s.root);
+    CHECK(thumb() == ParseColor(core::StringView(u8"#303030")).Value());
+
+    s.D().InjectMouseDown(onThumb, MouseButton::Left);
+    styles.ApplyTree(*s.root);
+    CHECK(thumb() == ParseColor(core::StringView(u8"#404040")).Value());
+    s.D().InjectMouseUp(onThumb, MouseButton::Left);
+
+    s.D().InjectMouseMove(core::Float2{20.0f, 20.0f}); // over the content, off the bar
+    CHECK(s.view->GetPartStates(u8"scrollbar-thumb") == 0u);
+    styles.ApplyTree(*s.root);
+    CHECK(thumb() == ParseColor(core::StringView(u8"#202020")).Value());
+}
+
+TEST_CASE("scroll: scrollbar-width thins or hides the bars; hidden, it still scrolls")
+{
+    Scroller s;
+    CHECK(s.view->ScrollBarTrack(1).width == doctest::Approx(8.0f));
+    s.view->EditLayoutStyle([](LayoutStyle& st) { st.BarWidth = ScrollbarWidth::Thin; });
+    CHECK(s.view->ScrollBarTrack(1).width == doctest::Approx(5.0f));
+    s.view->EditLayoutStyle([](LayoutStyle& st) { st.BarWidth = ScrollbarWidth::None; });
+    CHECK(s.view->ScrollBarTrack(1).width == doctest::Approx(0.0f));
+    s.root->UpdateLayout();
+    s.D().InjectMouseWheel(core::Float2{95.0f, 50.0f}, core::Float2{0.0f, -1.0f});
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(40.0f));
+}
+
+TEST_CASE("scroll: overlay bars show while it scrolls or is hovered, then fade")
+{
+    Scroller s;
+    s.view->EditLayoutStyle([](LayoutStyle& st) { st.BarVisibility = ScrollbarVisibility::Overlay; });
+    s.root->UpdateLayout();
+    GUIContext& gui = s.root->GetContext();
+    CHECK(s.view->GetScrollbarOpacity() == doctest::Approx(0.0f));
+    s.view->ScrollBy(core::Float2{0.0f, 30.0f});
+    CHECK(s.view->GetScrollbarOpacity() == doctest::Approx(1.0f));
+    gui.Update(core::Duration::FromSeconds(0.5)); // lingering
+    CHECK(s.view->GetScrollbarOpacity() == doctest::Approx(1.0f));
+    gui.Update(core::Duration::FromSeconds(0.45)); // past the linger, fading
+    CHECK(s.view->GetScrollbarOpacity() < 1.0f);
+    gui.Update(core::Duration::FromSeconds(0.5));
+    CHECK(s.view->GetScrollbarOpacity() == doctest::Approx(0.0f));
+
+    // Hovered, it shows and stays.
+    s.D().InjectMouseMove(core::Float2{50.0f, 50.0f});
+    gui.Update(core::Duration::FromSeconds(2.0));
+    CHECK(s.view->GetScrollbarOpacity() == doctest::Approx(1.0f));
+
+    // A sheet chooses it, and the width.
+    Scroller t;
+    t.view->AddClass(core::StringView(u8"slim"));
+    StyleManager styles(CSSParser::Parse(core::StringView(u8".slim { scrollbar-width: thin; scrollbar-visibility: overlay; }")));
+    styles.ApplyTree(*t.root);
+    CHECK(t.view->GetLayoutStyle().BarWidth == ScrollbarWidth::Thin);
+    CHECK(t.view->GetLayoutStyle().BarVisibility == ScrollbarVisibility::Overlay);
+}

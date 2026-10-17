@@ -147,6 +147,8 @@ export namespace experimental::gui
             {u8"overflow-y", StyleGrammar::Keyword, u8"visible"},
             {u8"scroll-behavior", StyleGrammar::Keyword, u8"auto"},
             {u8"overscroll-behavior", StyleGrammar::Keyword, u8"auto"},
+            {u8"scrollbar-width", StyleGrammar::Keyword, u8"auto"},
+            {u8"scrollbar-visibility", StyleGrammar::Keyword, u8"auto"},
             {u8"box-sizing", StyleGrammar::Keyword},
             {u8"display", StyleGrammar::Keyword},
             {u8"position", StyleGrammar::Keyword},

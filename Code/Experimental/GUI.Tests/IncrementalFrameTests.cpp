@@ -16,6 +16,24 @@ namespace vg = foundation::vg;
 
 namespace
 {
+    // A node whose drawing marks another node (one drawn before it) dirty, once.
+    class Toucher : public Node
+    {
+    public:
+        Node* Touches = nullptr;
+        bool Done = false;
+
+    protected:
+        void OnDraw(DrawContext&, const Rect&) override
+        {
+            if (Touches != nullptr && !Done)
+            {
+                Done = true;
+                Touches->Invalidate();
+            }
+        }
+    };
+
     template <typename T>
     core::RefPtr<T> Make()
     {
@@ -311,4 +329,90 @@ TEST_CASE("incremental: a child displayed or not lays its container out again")
     CHECK(settings->GetPosition().y == doctest::Approx(20.0f)); // under the title, where the menu was
     root->UpdateLayout();
     CHECK(root->LastLayoutCount() == 0u);
+}
+
+TEST_CASE("incremental: a change under a node that was hidden through a frame still asks for a frame")
+{
+    // A hidden node is not drawn, so it keeps its invalidation: a change under it later must still
+    // reach the root (pooled item rows are hidden and shown again; their changes went unseen).
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{200.0f, 200.0f});
+    auto row = Widget(u8"panel");
+    auto label = Make<Label>();
+    root->AddChild(row.Get());
+    row->AddChild(label.Get());
+    StyleManager styles(CSSParser::Parse(SV(u8"panel { opacity: 1; }")));
+    row->SetDisplayed(false);
+    Frame(*root.Get(), styles);
+    CHECK_FALSE(root->NeedsFrame());
+    row->SetDisplayed(true);
+    Frame(*root.Get(), styles);
+    CHECK_FALSE(root->NeedsFrame());
+    row->SetDisplayed(false);
+    Frame(*root.Get(), styles);
+    label->SetText(SV(u8"changed while hidden"));
+    Frame(*root.Get(), styles);
+    row->SetDisplayed(true);
+    label->SetText(SV(u8"changed again, shown"));
+    styles.ApplyTree(*root.Get());
+    (void)root->UpdateLayout();
+    CHECK(root->NeedsFrame());
+}
+
+TEST_CASE("incremental: a list's insert above and a click's selection each ask for a frame")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{300.0f, 300.0f});
+    StringListModel model;
+    for (int i = 0; i < 50; ++i)
+        model.AddItem(core::Format(u8"row {}", i).AsView());
+    auto list = Make<ListView>();
+    list->SetSize(core::Float2{200.0f, 100.0f});
+    list->SetRowHeight(20.0f);
+    root->AddChild(list.Get());
+    list->SetModel(&model);
+    StyleManager styles(CSSParser::Parse(SV(u8"listview { opacity: 1; }")));
+    Frame(*root.Get(), styles);
+    list->ScrollTo(core::Float2{0.0f, 400.0f}, ScrollBehavior::Instant);
+    Frame(*root.Get(), styles);
+    list->ScrollTo(core::Float2{0.0f, 0.0f}, ScrollBehavior::Instant); // rows released and taken again
+    Frame(*root.Get(), styles);
+    Frame(*root.Get(), styles);
+    CHECK_FALSE(root->NeedsFrame());
+
+    model.InsertItem(0, SV(u8"inserted"));
+    root->GetContext().Update(Sec(0.016));
+    (void)root->UpdateLayout();
+    CHECK(root->NeedsFrame());
+    Frame(*root.Get(), styles);
+    Frame(*root.Get(), styles);
+    CHECK_FALSE(root->NeedsFrame());
+
+    root->GetEventDispatcher()->InjectMouseDown(core::Float2{50.0f, 30.0f}, MouseButton::Left);
+    root->GetEventDispatcher()->InjectMouseUp(core::Float2{50.0f, 30.0f}, MouseButton::Left);
+    styles.ApplyTree(*root.Get());
+    (void)root->UpdateLayout();
+    CHECK(root->NeedsFrame());
+}
+
+TEST_CASE("incremental: a node marked during the frame's drawing does not stop later changes under it asking for a frame")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{200.0f, 200.0f});
+    auto a = Widget(u8"panel");
+    auto label = Make<Label>();
+    a->AddChild(label.Get());
+    root->AddChild(a.Get());
+    auto toucher = core::MakeRef<Toucher>(core::DefaultAllocator());
+    toucher->SetSize(core::Float2{10.0f, 10.0f});
+    toucher->Touches = a.Get(); // drawn after `a`, it marks `a` again
+    root->AddChild(toucher.Get());
+    StyleManager styles(CSSParser::Parse(SV(u8"panel { opacity: 1; }")));
+    Frame(*root.Get(), styles); // `a` is marked again after it was drawn
+    // A host skips a frame the root does not need, so `a` stays marked; a change under it must
+    // still reach the root.
+    label->SetText(SV(u8"a change under it"));
+    styles.ApplyTree(*root.Get());
+    (void)root->UpdateLayout(); // as a host does before it asks
+    CHECK(root->NeedsFrame());
 }

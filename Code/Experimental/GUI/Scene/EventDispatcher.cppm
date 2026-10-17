@@ -137,18 +137,64 @@ export namespace experimental::gui
         // === Touch === The first finger down drives the pointer as the mouse does (a press,
         // moves, a release, a click), its events marked as touch; other fingers are ignored. A
         // finger hovers only while it is down, so nothing stays hovered after a tap.
+        //
+        // A finger is a tap or a pan (gpui-ce's machine): once it moves past kPanSlop the nearest
+        // scroller under where it went down that can move that way takes it, the press is
+        // cancelled (the row under the finger is not clicked), and the content follows the
+        // finger; let go moving, the scroller flings. A finger that lands on a flinging scroller
+        // catches it: the fling stops and that touch clicks nothing.
         bool InjectTouchDown(u64 finger, core::Float2 position)
         {
             if (m_touchActive)
                 return false; // a second finger
             m_touchActive = true;
             m_touchFinger = finger;
-            return PointerDown(position, MouseButton::Left, 0, PointerType::Touch, finger);
+            m_panning = false;
+            m_panScroller = nullptr;
+            m_panSampleCount = 0;
+            bool caught = false;
+            for (Node* n = HitTest(position); n != nullptr; n = n->GetParent())
+                if (n->IsFlinging())
+                {
+                    n->StopFling();
+                    caught = true;
+                }
+            const bool used = PointerDown(position, MouseButton::Left, 0, PointerType::Touch, finger);
+            AddPanSample(position);
+            if (caught)
+            {
+                CancelPointer(); // a catch, not a tap
+                m_longPressArmed = false;
+                return true;
+            }
+            return used;
         }
         bool InjectTouchMove(u64 finger, core::Float2 position)
         {
             if (!m_touchActive || finger != m_touchFinger)
                 return false;
+            AddPanSample(position);
+            if (!m_panning && !m_dragActive)
+            {
+                const core::Float2 moved{position.x - m_pressAt.x, position.y - m_pressAt.y};
+                if (core::Abs(moved.x) > kPanSlop || core::Abs(moved.y) > kPanSlop)
+                    if (Node* scroller = PanScrollerFor(moved))
+                    {
+                        m_panning = true;
+                        m_panScroller = scroller;
+                        m_panLast = m_pressAt; // the content keeps to the finger from where it went down
+                        CancelPointer();
+                        m_longPressArmed = false;
+                    }
+            }
+            if (m_panning)
+            {
+                if (m_panScroller != nullptr)
+                    m_panScroller->ScrollBy(core::Float2{m_panLast.x - position.x, m_panLast.y - position.y});
+                m_panLast = position;
+                m_mousePos = position;
+                return true;
+            }
             return PointerMove(position, PointerType::Touch, finger);
         }
         bool InjectTouchUp(u64 finger, core::Float2 position)
@@ -156,10 +202,23 @@ export namespace experimental::gui
             if (!m_touchActive || finger != m_touchFinger)
                 return false;
             m_touchActive = false;
+            if (m_panning)
+            {
+                AddPanSample(position);
+                m_panning = false;
+                const core::Float2 v = PanVelocity();
+                if (m_panScroller != nullptr && core::Abs(v.x) + core::Abs(v.y) > kFlingMinSpeed)
+                    m_panScroller->Fling(core::Float2{-v.x, -v.y});
+                m_panScroller = nullptr;
+                UpdateHoverPath(nullptr, position);
+                return true;
+            }
             const bool used = PointerUp(position, MouseButton::Left, 0, PointerType::Touch, finger);
             UpdateHoverPath(nullptr, position); // the finger lifted: nothing is under it
             return used;
         }
+        /// A finger is panning a scroller (its press was cancelled).
+        [[nodiscard]] bool IsPanning() const noexcept { return m_panning; }
         [[nodiscard]] bool IsTouchActive() const noexcept { return m_touchActive; }
 
         /// Cancels the press in progress: the pressed node hears PointerCancel (a widget drops its
@@ -679,6 +738,8 @@ export namespace experimental::gui
             PrunePath(m_pressPath, removed, /*hover*/ false);
             if (IsInSubtree(m_downNode, &removed))
                 m_downNode = nullptr;
+            if (IsInSubtree(m_panScroller, &removed))
+                m_panScroller = nullptr; // the finger pans nothing now
             if (IsInSubtree(m_captureNode, &removed))
             {
                 Node* lost = m_captureNode;
@@ -999,6 +1060,51 @@ export namespace experimental::gui
         static constexpr f32 kClickInterval = 0.45f; // seconds between the presses of a double click
         static constexpr f32 kClickSlop = 6.0f;      // device pixels between them
         static constexpr f32 kTapSlop = 24.0f;       // device pixels between two taps
+        static constexpr f32 kPanSlop = 8.0f;        // a finger moved this far is panning, not tapping
+        static constexpr f32 kFlingMinSpeed = 60.0f; // pixels a second: slower let go just stops
+        static constexpr f32 kPanWindow = 0.1f;      // seconds of the finger's path its speed is read over
+
+        // The nearest scroller at or above where the finger went down that can move along the
+        // way it moved (its larger axis).
+        [[nodiscard]] Node* PanScrollerFor(core::Float2 moved) const
+        {
+            const bool across = core::Abs(moved.x) > core::Abs(moved.y);
+            for (Node* n = HitTest(m_pressAt); n != nullptr; n = n->GetParent())
+            {
+                if (!n->IsScrollContainer())
+                    continue;
+                const core::Float2 range = n->GetScrollRange();
+                if ((across ? range.x : range.y) > 0.0f)
+                    return n;
+            }
+            return nullptr;
+        }
+        void AddPanSample(core::Float2 position)
+        {
+            // A ring of the last few points on the dispatcher's clock.
+            m_panSamples[m_panSampleCount % kPanSamples] = PanSample{m_time, position};
+            ++m_panSampleCount;
+        }
+        // The finger's speed over its last kPanWindow: from the oldest sample within it to the latest.
+        [[nodiscard]] core::Float2 PanVelocity() const
+        {
+            if (m_panSampleCount < 2)
+                return core::Float2{0.0f, 0.0f};
+            const PanSample& last = m_panSamples[(m_panSampleCount - 1) % kPanSamples];
+            const PanSample* first = &last;
+            const usize kept = core::Min<usize>(m_panSampleCount, kPanSamples);
+            for (usize i = 1; i < kept; ++i)
+            {
+                const PanSample& s = m_panSamples[(m_panSampleCount - 1 - i) % kPanSamples];
+                if (last.Time - s.Time > kPanWindow)
+                    break;
+                first = &s;
+            }
+            const f32 dt = last.Time - first->Time;
+            if (dt <= 0.004f)
+                return core::Float2{0.0f, 0.0f};
+            return core::Float2{(last.Position.x - first->Position.x) / dt, (last.Position.y - first->Position.y) / dt};
+        }
 
         // True if `node` is `ancestor` or a descendant of it.
         [[nodiscard]] static bool IsInSubtree(const Node* node, const Node* ancestor)
@@ -1330,6 +1436,17 @@ export namespace experimental::gui
         bool m_touchActive = false; // the first finger is down (it drives the pointer)
         u64 m_touchFinger = 0;
         Node* m_downNode = nullptr;        // non-owning
+        struct PanSample
+        {
+            f32 Time;
+            core::Float2 Position;
+        };
+        static constexpr usize kPanSamples = 8;
+        PanSample m_panSamples[kPanSamples]{};
+        usize m_panSampleCount = 0;
+        bool m_panning = false;            // the finger pans m_panScroller
+        Node* m_panScroller = nullptr;     // non-owning (cleared when its subtree leaves)
+        core::Float2 m_panLast{0.0f, 0.0f}; // where the finger was at the last pan step
         bool m_clickSuppressed = false;    // the press activated already (SuppressClick)
         Node* m_focusNode = nullptr;       // non-owning
         bool m_dragActive = false;                   // drag-and-drop in progress

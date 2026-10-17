@@ -1098,6 +1098,47 @@ namespace experimental::gui
             ctx.PopOpacity();
     }
 
+    void Node::Fling(core::Float2 velocity)
+    {
+        // A finger's speed has a ceiling (a stray sample must not throw the page a mile).
+        constexpr f32 kMaxSpeed = 8000.0f;
+        velocity = core::Float2{core::Clamp(velocity.x, -kMaxSpeed, kMaxSpeed), core::Clamp(velocity.y, -kMaxSpeed, kMaxSpeed)};
+        m_smoothScrolling = false;
+        m_flingVelocity = velocity;
+        m_flingStart = m_scrollOffset;
+        m_flingTime = 0.0f;
+        m_flinging = true;
+        if (m_flingTicking || GetActionManager() == nullptr)
+            return;
+        m_flingTicking = true;
+        Node* self = this;
+        RunAction(core::MakeRef<TickAction>(MemoryAllocator(), [self](core::Duration elapsed)
+        {
+            if (!self->m_flinging)
+            {
+                self->m_flingTicking = false;
+                return false;
+            }
+            // Closed form: where it is after t, and how fast, the same at any frame rate.
+            constexpr f32 kTau = 0.35f;      // seconds for the speed to fall to a third
+            constexpr f32 kStopSpeed = 12.0f; // offset units a second: stopped
+            self->m_flingTime += static_cast<f32>(elapsed.AsSecondsF());
+            const f32 decay = core::Exp(-self->m_flingTime / kTau);
+            const core::Float2 v = self->m_flingVelocity;
+            const core::Float2 before = self->m_scrollOffset;
+            self->ApplyScrollOffset(core::Float2{self->m_flingStart.x + v.x * kTau * (1.0f - decay),
+                                                 self->m_flingStart.y + v.y * kTau * (1.0f - decay)});
+            const bool slow = core::Abs(v.x) * decay < kStopSpeed && core::Abs(v.y) * decay < kStopSpeed;
+            if (slow || self->m_scrollOffset == before) // nearly stopped, or held at an end
+            {
+                self->m_flinging = false;
+                self->m_flingTicking = false;
+                return false;
+            }
+            return true;
+        }));
+    }
+
     void Node::SetScrollHover(u8 part)
     {
         if (part == m_scrollHover)

@@ -18,6 +18,7 @@ import foundation.vg;   // CornerRadii
 import :rect;
 import :draw_context;
 import :button_base;
+import :text; // TextHAlign
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -32,6 +33,10 @@ export namespace experimental::gui
         ToggleSwitch()
         {
             SetTag(core::StringView(u8"switch"));
+            {
+                StyleWriteScope defaults(*this);
+                SetTextAlignment(TextHAlign::Left, TextVAlign::Middle); // its text beside its indicator
+            }
             SetToggle(true);
             MakeIndicator();
         }

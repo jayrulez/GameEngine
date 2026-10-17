@@ -72,10 +72,12 @@ TEST_CASE("inspector: the details show what the selected node is and where its s
     CHECK(bed.inspect.GetSelected() == bed.ok.Get());
     CHECK(bed.DetailsHave(SV(u8"Button #ok")));
     CHECK(bed.DetailsHave(SV(u8"button   app.css:2"))); // the rule, its sheet and line
-    CHECK(bed.DetailsHave(SV(u8"opacity: 0.8")));
+    CHECK(bed.DetailsHave(SV(u8"opacity"))); // the declaration: its name, and its value in a field
+    CHECK(bed.DetailsHave(SV(u8"0.8")));
     bed.inspect.Select(bed.page.Get());
     CHECK(bed.DetailsHave(SV(u8"#page   app.css:1")));
-    CHECK(bed.DetailsHave(SV(u8"padding-top: 10px")));
+    CHECK(bed.DetailsHave(SV(u8"padding-top")));
+    CHECK(bed.DetailsHave(SV(u8"10px")));
     bed.page->RemoveChild(bed.ok.Get());
     bed.inspect.Select(bed.ok.Get());
     bed.ok.Reset(); // gone: the selection lets it go
@@ -123,4 +125,29 @@ TEST_CASE("inspector: a branch folds out of the tree and opens again, and select
     CHECK(bed.inspect.TreeRowCount() == folded);
     bed.inspect.SetCollapsed(bed.page.Get(), false);
     CHECK(bed.inspect.TreeRowCount() == all);
+}
+
+TEST_CASE("inspector: a style value edited in its field changes the rule, and every node it matches follows")
+{
+    Bed bed;
+    bed.inspect.Select(bed.ok.Get());
+    // The field showing opacity's 0.8 (the button rule's).
+    TextField* field = nullptr;
+    const auto find = [&field](auto& self, Node& node) -> void
+    {
+        if (TextField* f = core::Cast<TextField>(&node); f != nullptr && f->GetText() == SV(u8"0.8"))
+            field = f;
+        for (usize i = 0; i < node.ChildCount(); ++i)
+            self(self, *node.GetChildAt(i));
+    };
+    find(find, bed.inspect.GetRoot());
+    REQUIRE(field != nullptr);
+    EventDispatcher& d = *bed.inspect.GetRoot().GetEventDispatcher();
+    d.SetFocusNode(field);
+    field->SetText(SV(u8"0.3"));
+    (void)d.InjectKeyDown(static_cast<core::u32>(KeyCode::Return));
+    bed.styles.ApplyTree(*bed.root.Get());
+    CHECK(bed.ok->GetAlpha() == doctest::Approx(0.3f));
+    bed.inspect.Refresh(); // shown again, with the new value
+    CHECK(bed.DetailsHave(SV(u8"0.3")));
 }

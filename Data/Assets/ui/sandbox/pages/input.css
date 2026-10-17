@@ -13,3 +13,13 @@
 .cursor-move { cursor: move; }
 .cursor-not-allowed { width: 110px; cursor: not-allowed; background-color: var(--bad); }
 .cursor-crosshair { width: 100px; cursor: crosshair; }
+.dnd-cards { width: 170px; }
+.dnd-card { width: 160px; height: 30px; padding-left: 10px; border-radius: 6; background-color: var(--surface-2); color: var(--ink); font-family: Roboto; font-size: 14px; vertical-align: middle; cursor: grab; }
+.dnd-card:drag-source { opacity: 0.45; }
+.chip-card { color: var(--muted); }
+.dnd-bin { width: 190px; height: 110px; padding: 8px; gap: 4px; border: 1px dashed var(--line); border-radius: 8; }
+.dnd-bin:drop-target { border-color: var(--accent); background-color: rgba(47, 125, 225, 0.12); }
+.dnd-bin-title { width: 170px; height: 20px; color: var(--muted); font-family: Roboto; font-size: 13px; }
+dragpreview { background-color: var(--surface-2); color: var(--ink); border-radius: 6; font-family: Roboto; font-size: 14px; }
+tooltip.drophint.refused { color: #ff8a80; }
+.dnd-row { width: 590px; }

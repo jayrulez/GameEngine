@@ -148,6 +148,8 @@ export namespace experimental::gui
             event.Handled = GetRange().Value != before;
         }
 
+        // Its press is its own (E7): a drag from what holds it is not offered.
+        [[nodiscard]] bool OwnsPressDrag(core::Float2) const override { return true; }
         void OnMouseDown(const MouseEvent& event) override
         {
             if (event.Button != MouseButton::Left)

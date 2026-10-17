@@ -532,6 +532,54 @@ void GUISandbox::FillNativeHosts()
     }
 
     // Data views over native models.
+    // Drag and drop (E7): the cards are sources, the bins targets; the hand takes cards, the
+    // discard pile refuses aces with a reason; the chip goes nowhere.
+    {
+        auto* said = Cast<gui::Label>(FindById(*m_shellNode, u8"dnd-said"));
+        const char8_t* cards[3] = {u8"dnd-ace", u8"dnd-king", u8"dnd-chip"};
+        for (const char8_t* id : cards)
+            if (gui::Node* card = FindById(*m_shellNode, id))
+            {
+                const bool chip = StringView(id) == StringView(u8"dnd-chip");
+                gui::Label* label = Cast<gui::Label>(card);
+                card->SetDragSource([label, chip](gui::DragRequest& r)
+                {
+                    r.Payload.Type = String(chip ? u8"chip" : u8"card");
+                    r.Payload.Label = String(label != nullptr ? label->GetText() : StringView{});
+                    r.Payload.Value = Variant::From<String>(r.Payload.Label);
+                    return true;
+                });
+                card->SetOnDragEnd([said, label](const gui::DragResult& r)
+                {
+                    if (said == nullptr || label == nullptr)
+                        return;
+                    const char8_t* how = r.Cancelled ? u8"cancelled" : r.Effect == gui::DropEffect::Copy ? u8"copied" : r.Effect == gui::DropEffect::Move ? u8"moved" : r.Effect == gui::DropEffect::Link ? u8"linked" : u8"dropped nowhere";
+                    said->SetText(Format(u8"{}: {}", label->GetText(), how).AsView());
+                });
+            }
+        if (gui::Node* hand = FindById(*m_shellNode, u8"dnd-hand"))
+            hand->SetOnDragQuery([](gui::DropQuery& q)
+            {
+                if (q.Payload.Type.AsView() != StringView(u8"card"))
+                    return;
+                q.Accept();
+                q.Reason = Format(u8"{} it to the hand", q.Effect == gui::DropEffect::Copy ? u8"Copy" : u8"Move");
+            });
+        if (gui::Node* discard = FindById(*m_shellNode, u8"dnd-discard"))
+            discard->SetOnDragQuery([](gui::DropQuery& q)
+            {
+                if (q.Payload.Type.AsView() != StringView(u8"card"))
+                    return;
+                if (q.Payload.Label.AsView().Size() >= 3 && q.Payload.Label.AsView().SubStr(0, 3) == StringView(u8"Ace"))
+                    q.Refuse(u8"The discard pile takes no aces");
+                else
+                {
+                    q.Accept(gui::DropEffect::Move);
+                    q.Reason = String(u8"Discard it");
+                }
+            });
+    }
+
     if (gui::Node* host = FindById(*m_shellNode, u8"views-list"))
     {
         m_listModel = MakeUnique<gui::StringListModel>(AppRoot());

@@ -44,6 +44,8 @@ export namespace experimental::gui
         core::Function<void()> OnPressed;
 
     protected:
+        // A press moves or resizes the window (E7): a drag from what holds it is not offered.
+        [[nodiscard]] bool OwnsPressDrag(core::Float2) const override { return true; }
         void OnMouseDown(const MouseEvent& event) override
         {
             event.Handled = true;

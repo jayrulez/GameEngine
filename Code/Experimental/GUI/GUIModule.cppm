@@ -89,6 +89,7 @@ export import :number_field;
 export import :editable_label;
 export import :disclosure;
 export import :expander;
+export import :drag_preview;
 export import :scroll_bar;
 export import :scroll_view;
 export import :image;

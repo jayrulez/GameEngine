@@ -651,6 +651,8 @@ export namespace experimental::gui
             StateReadWrite = 1u << 10,
             StatePlaceholderShown = 1u << 11,
             StateSelected = 1u << 18, // after the selector's own flags (12 to 17)
+            StateDropTarget = 1u << 19,
+            StateDragSource = 1u << 20,
         };
         /// `states` changed on this node: it restyles (its subtree too when the sheets read them
         /// through it).
@@ -1247,38 +1249,108 @@ export namespace experimental::gui
         /// shows it, or with its start, centre or end at the box's.
         void ScrollIntoView(Node& descendant, ScrollAlign align = ScrollAlign::Nearest, ScrollBehavior behavior = ScrollBehavior::Auto);
 
-        // === Drag-and-drop target ===
-        // Set a predicate deciding which payloads this node accepts; when it returns true the
-        // dispatcher delivers the drag-enter/over/leave and drop here (nearest accepting
-        // ancestor of the cursor wins). Each also fires the matching DragEvent to listeners.
-        void SetDropAcceptor(core::Function<bool(const DragPayload&)> predicate)
+        // === Drag and drop (E7) ===
+        // A press that moves past the GUI's threshold offers a drag to the pressed node and then
+        // up its ancestors: the first that fills the request starts it, and one that owns its
+        // press (a slider, a scroll bar's thumb, a field selecting) ends the walk. While it goes,
+        // the node under the pointer and up its ancestors are asked what a drop would do; the
+        // first that takes it is the target (`:drop-target`). The source shows `:drag-source` and
+        // is told how it ended.
+
+        /// Gives what a press on it drags (an alternative to overriding OnDragRequested).
+        void SetDragSource(core::Function<bool(DragRequest&)> source) { m_dragSource = core::Move(source); }
+        /// Takes drops of these types (markup's `drop-types`, space-separated) with the source's
+        /// preferred effect; an alternative to overriding OnDragQuery or SetOnDragQuery.
+        void SetDropTypes(const core::String& types) { m_dropTypes = types; }
+        [[nodiscard]] core::String GetDropTypes() const { return m_dropTypes; }
+        /// Answers each drop query here (after OnDragQuery leaves it undecided).
+        void SetOnDragQuery(core::Function<void(DropQuery&)> query) { m_dropQuery = core::Move(query); }
+        /// How a drag from here ended.
+        void SetOnDragEnd(core::Function<void(const DragResult&)> callback) { m_dragEnd = core::Move(callback); }
+
+        /// Whether it takes drops of a type, by its drop types.
+        [[nodiscard]] bool TakesDropType(core::StringView type) const
         {
-            m_dropAcceptor = core::Move(predicate);
+            core::StringView rest = core::Trim(m_dropTypes.AsView());
+            while (rest.Size() != 0)
+            {
+                usize end = 0;
+                while (end < rest.Size() && rest[end] != u8' ')
+                    ++end;
+                if (rest.SubStr(0, end) == type)
+                    return true;
+                rest = core::Trim(rest.SubStr(end, rest.Size() - end));
+            }
+            return false;
         }
-        [[nodiscard]] bool AcceptsDrop(const DragPayload& payload) const
+
+        // The dispatcher's calls (each runs the virtual, then the callbacks, then the listeners).
+        bool HandleDragRequested(DragRequest& request)
         {
-            return m_dropAcceptor ? m_dropAcceptor(payload) : false;
+            if (OnDragRequested(request))
+                return true;
+            return m_dragSource && m_dragSource(request);
         }
-        void HandleDragEnter(const DragPayload& p)
+        void HandleDragQuery(DropQuery& query)
         {
-            OnDragEnter(p);
-            SendEvent(DragEvent(EventType::DragEnter, this, p));
+            OnDragQuery(query);
+            if (query.Effect == DropEffect::None && !query.Refused && m_dropQuery)
+                m_dropQuery(query);
+            if (query.Effect == DropEffect::None && !query.Refused && TakesDropType(query.Payload.Type.AsView()))
+                query.Accept();
         }
-        void HandleDragOver(const DragPayload& p)
+        void HandleDragEvent(const DragEvent& event)
         {
-            OnDragOver(p);
-            SendEvent(DragEvent(EventType::DragOver, this, p));
+            switch (event.Type)
+            {
+            case EventType::DragEnter: OnDragEnter(event); break;
+            case EventType::DragOver: OnDragOver(event); break;
+            case EventType::DragLeave: OnDragLeave(event); break;
+            case EventType::Drop: OnDrop(event); break;
+            default: break;
+            }
+            SendEvent(event);
         }
-        void HandleDragLeave(const DragPayload& p)
+        void HandleDragEnd(const DragResult& result, const DragEvent& event)
         {
-            OnDragLeave(p);
-            SendEvent(DragEvent(EventType::DragLeave, this, p));
+            OnDragEnd(result);
+            if (m_dragEnd)
+                m_dragEnd(result);
+            SendEvent(event);
         }
-        void HandleDrop(const DragPayload& p)
+        /// The dispatcher's: whether it is the drag's target now (`:drop-target`), or its source
+        /// (`:drag-source`).
+        void SetDropTargetState(bool target)
         {
-            OnDrop(p);
-            SendEvent(DragEvent(EventType::Drop, this, p));
+            if (target == m_dropTargetState)
+                return;
+            m_dropTargetState = target;
+            MarkStyleStateDirty(StateDropTarget);
+            Invalidate();
         }
+        [[nodiscard]] bool IsDropTarget() const noexcept { return m_dropTargetState; }
+        void SetDragSourceState(bool source)
+        {
+            if (source == m_dragSourceState)
+                return;
+            m_dragSourceState = source;
+            MarkStyleStateDirty(StateDragSource);
+            Invalidate();
+        }
+        [[nodiscard]] bool IsDragSource() const noexcept { return m_dragSourceState; }
+        /// It owns a press at `local` for a drag of its own (a slider's thumb, a scroll bar, a
+        /// field selecting): a drag from an ancestor is not offered.
+        [[nodiscard]] virtual bool OwnsPressDrag(core::Float2 local) const
+        {
+            // A scroll container's bars are its own.
+            return IsScrollContainer() && (ScrollBarTrack(0).Contains(local) || ScrollBarTrack(1).Contains(local));
+        }
+        /// The preview a drag shows when its source gives none (GUIClusterImpl.cpp: a label of
+        /// the payload's label), and the hint beside the pointer with a target's reason.
+        [[nodiscard]] virtual core::RefPtr<Node> CreateDragPreview(const DragPayload& payload);
+        [[nodiscard]] virtual core::RefPtr<Node> CreateDropHint(core::StringView reason, bool refused);
+        /// A preview hears the effect a drop would have now (a default preview shows a badge).
+        virtual void OnDragPreviewEffect(DropEffect) {}
 
         // True if this node edits text and wants the platform's text-input (IME) enabled
         // while it holds focus. The gui.shell bridge reads the focused node's answer and
@@ -1633,10 +1705,17 @@ export namespace experimental::gui
         virtual void OnPointerCaptureLost() {}
         /// The press on this node (or inside it) was cancelled: no release or click follows.
         virtual void OnPointerCancel(const MouseEvent&) {}
-        virtual void OnDragEnter(const DragPayload&) {}
-        virtual void OnDragOver(const DragPayload&) {}
-        virtual void OnDragLeave(const DragPayload&) {}
-        virtual void OnDrop(const DragPayload&) {}
+        /// A source's answer to a drag offered by a press on it or inside it: fill the request's
+        /// payload (and a preview) and return true to start it.
+        virtual bool OnDragRequested(DragRequest&) { return false; }
+        /// A target's answer: what a drop here would do (DropQuery::Accept, Refuse).
+        virtual void OnDragQuery(DropQuery&) {}
+        virtual void OnDragEnter(const DragEvent&) {}
+        virtual void OnDragOver(const DragEvent&) {}
+        virtual void OnDragLeave(const DragEvent&) {}
+        virtual void OnDrop(const DragEvent&) {}
+        /// A source hears how its drag ended (a move removes what was moved).
+        virtual void OnDragEnd(const DragResult&) {}
 
         void HandlePositionChange()
         {
@@ -1773,8 +1852,12 @@ export namespace experimental::gui
         bool m_commandBound = false;      // its binding made (once)
         // Tells this GUI's commands that what decides availability changed (GUIClusterImpl.cpp).
         void NotifyCommandsChanged();
-        Function<bool(const DragPayload&)>
-            m_dropAcceptor; // drop-target predicate (empty = rejects)
+        core::Function<bool(DragRequest&)> m_dragSource;
+        core::Function<void(DropQuery&)> m_dropQuery;
+        core::Function<void(const DragResult&)> m_dragEnd;
+        core::String m_dropTypes;
+        bool m_dropTargetState = false;
+        bool m_dragSourceState = false;
         RefPtr<Drawable> m_background;
         RefPtr<Drawable> m_foreground;
         core::Float2 m_size{0.0f, 0.0f};

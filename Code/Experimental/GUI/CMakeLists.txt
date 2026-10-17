@@ -79,6 +79,7 @@ target_sources(GUI
             Widgets/EditableLabel.cppm
             Widgets/Disclosure.cppm
             Widgets/Expander.cppm
+            Widgets/DragPreview.cppm
             Widgets/ScrollBar.cppm
             Widgets/ScrollView.cppm
             Widgets/Image.cppm

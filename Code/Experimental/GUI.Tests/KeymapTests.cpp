@@ -195,3 +195,99 @@ TEST_CASE("keymap: a text field keeps its keys, and leaves a shortcut to the bin
     bed.root->GetEventDispatcher()->InjectKeyDown(static_cast<core::u32>(KeyCode::Unknown), KeyModCtrl);
     CHECK(bed.ran.IsEmpty());
 }
+
+TEST_CASE("keymap: `>` holds for a context inside another")
+{
+    KeyContextLayer outer;
+    outer.Declare(SV(u8"menu"));
+    KeyContextLayer inner = outer;
+    inner.Declare(SV(u8"textinput"));
+    KeyContextLayer elsewhere;
+    elsewhere.Declare(SV(u8"textinput"));
+    const KeyContextLayer nested[] = {outer, inner};
+    const KeyContextLayer alone[] = {elsewhere};
+    ContextPredicate p;
+    REQUIRE(p.Parse(SV(u8"menu > textinput")));
+    CHECK(p.Eval(core::Span<const KeyContextLayer>(nested, 2), 1));
+    CHECK_FALSE(p.Eval(core::Span<const KeyContextLayer>(nested, 2), 0)); // the menu itself
+    CHECK_FALSE(p.Eval(core::Span<const KeyContextLayer>(alone, 1), 0)); // a field in no menu
+    REQUIRE(p.Parse(SV(u8"menu > textinput && !multiline || game"))); // `>` binds loosest
+    CHECK(p.Eval(core::Span<const KeyContextLayer>(nested, 2), 1));
+    CHECK_FALSE(p.Parse(SV(u8"menu >")));
+
+    // A binding for fields inside a menu beats the fields' own.
+    Bed bed;
+    bed.Handle(u8"menu.field-escape");
+    auto field = Make<TextField>();
+    field->SetSize(core::Float2{100.0f, 20.0f});
+    bed.screen->AddChild(field.Get());
+    REQUIRE(bed.root->GetContext().GetKeymap().Bind(SV(u8"ctrl-a"), SV(u8"menu.field-escape"), SV(u8"menu > textinput")));
+    field->RequestFocus();
+    bed.Key(KeyCode::A, KeyModCtrl);
+    REQUIRE(bed.ran.Size() == 1u);
+    CHECK(bed.ran[0] == SV(u8"menu.field-escape"));
+}
+
+TEST_CASE("keymap: a command's keys as text, the latest binding's, following a rebinding")
+{
+    Keymap keymap;
+    CHECK(keymap.ShortcutText(SV(u8"save")).Size() == 0u);
+    REQUIRE(keymap.Bind(SV(u8"ctrl-s"), SV(u8"save")));
+    CHECK(keymap.ShortcutText(SV(u8"save")) == SV(u8"Ctrl+S"));
+    REQUIRE(keymap.Bind(SV(u8"ctrl-k ctrl-shift-s"), SV(u8"save")));
+    CHECK(keymap.ShortcutText(SV(u8"save")) == SV(u8"Ctrl+K Ctrl+Shift+S"));
+    REQUIRE(keymap.Bind(SV(u8"f12"), SV(u8"shot")));
+    CHECK(keymap.ShortcutText(SV(u8"shot")) == SV(u8"F12"));
+    REQUIRE(keymap.Bind(SV(u8"pad-east"), SV(u8"back")));
+    CHECK(keymap.ShortcutText(SV(u8"back")) == SV(u8"Pad East"));
+    CHECK(KeystrokeText(ParseKeystroke(SV(u8"alt-enter")).Value()) == SV(u8"Alt+Enter"));
+}
+
+TEST_CASE("keymap: a control bound to a command shows its label and keys, and follows them")
+{
+    Bed bed;
+    Command& save = bed.root->GetContext().DefineCommand(SV(u8"save"));
+    save.SetLabel(SV(u8"Save"));
+    bed.Handle(u8"save");
+    auto button = Make<Button>();
+    bed.screen->AddChild(button.Get());
+    button->SetCommand(SV(u8"save"));
+    auto menu = Make<Menu>();
+    MenuItem* item = menu->AddItem(SV(u8""), [] {});
+    bed.screen->AddChild(menu.Get()); // in the tree, so its binding runs
+    item->SetCommand(SV(u8"save"));
+    REQUIRE(bed.root->GetContext().GetKeymap().Bind(SV(u8"ctrl-s"), SV(u8"save")));
+    bed.root->GetContext().Update(core::Duration::FromSeconds(0.016)); // bindings run once a frame
+    CHECK(button->GetText() == SV(u8"Save"));
+    CHECK(item->GetText() == SV(u8"Save"));
+    CHECK(item->GetShortcut() == SV(u8"Ctrl+S"));
+
+    save.SetLabel(SV(u8"Save all"));
+    REQUIRE(bed.root->GetContext().GetKeymap().Bind(SV(u8"ctrl-shift-s"), SV(u8"save")));
+    bed.root->GetContext().Update(core::Duration::FromSeconds(0.016));
+    CHECK(button->GetText() == SV(u8"Save all"));
+    CHECK(item->GetShortcut() == SV(u8"Ctrl+Shift+S"));
+
+    // A control with its own text keeps it.
+    auto own = Make<Button>();
+    own->SetText(SV(u8"Keep"));
+    bed.screen->AddChild(own.Get());
+    own->SetCommand(SV(u8"save"));
+    bed.root->GetContext().Update(core::Duration::FromSeconds(0.016));
+    CHECK(own->GetText() == SV(u8"Keep"));
+}
+
+TEST_CASE("keymap: a text field's context menu shows the keys bound to its commands")
+{
+    Bed bed;
+    auto field = Make<TextField>();
+    field->SetSize(core::Float2{100.0f, 20.0f});
+    bed.screen->AddChild(field.Get());
+    field->RequestFocus();
+    (void)bed.root->GetEventDispatcher()->InjectContextMenu();
+    Menu* menu = field->GetContextMenu();
+    REQUIRE(menu != nullptr);
+    const MenuItem* cut = core::Cast<MenuItem>(menu->GetChildAt(0));
+    REQUIRE(cut != nullptr);
+    CHECK(cut->GetShortcut() == SV(u8"Ctrl+X"));
+}

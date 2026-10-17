@@ -49,6 +49,20 @@ namespace experimental::gui
                  const bool checked = command != nullptr && command->IsChecked();
                  Untracked([&] { OnBoundCommandState(available, checked); });
              });
+        // A second follows what the control shows of it: its label and icon, and its keys (E5).
+        Bind([this]()
+             {
+                 const core::String commandId(m_command.Get());
+                 SceneRoot* root = ObserveSceneRoot();
+                 if (commandId.Size() == 0 || root == nullptr)
+                     return;
+                 root->GetContext().GetCommands().TrackChanges();
+                 const Command* command = root->GetContext().GetCommands().Find(commandId.AsView());
+                 const core::String label(command != nullptr ? command->GetLabel() : commandId.AsView());
+                 const core::String icon(command != nullptr ? command->GetIcon() : core::StringView{});
+                 const core::String shortcut = root->GetContext().GetKeymap().ShortcutText(commandId.AsView());
+                 Untracked([&] { OnBoundCommandText(label.AsView(), icon.AsView(), shortcut.AsView()); });
+             });
     }
 
     bool Node::RunBoundCommand()

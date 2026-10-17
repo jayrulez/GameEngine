@@ -36,12 +36,16 @@ import :text;
 import :node;
 import :ui_widget;
 import :event_dispatcher; // the popup stack (E5)
+import :image_drawable;   // a command's icon
+import :resource_provider;
+import foundation.image;  // ImageData
 import :popup_placement;
 
 using namespace foundation::core;
 namespace core = foundation::core;
 namespace fonts = foundation::fonts;
 namespace vg = foundation::vg;
+namespace image = foundation::image;
 
 export namespace experimental::gui
 {
@@ -176,6 +180,25 @@ export namespace experimental::gui
         {
             m_onToggled = core::Move(callback);
         }
+        // An item bound to a command shows its label where it has no text of its own, its keys
+        // where it has no shortcut of its own, and its icon.
+        void OnBoundCommandText(core::StringView label, core::StringView icon, core::StringView shortcut) override
+        {
+            if (GetText().Size() == 0 || m_textFromCommand)
+            {
+                SetText(label);
+                m_textFromCommand = true;
+            }
+            if (GetShortcut().Size() == 0 || m_shortcutFromCommand)
+            {
+                SetShortcut(shortcut);
+                m_shortcutFromCommand = true;
+            }
+            if (icon.Size() != 0)
+                if (IResourceProvider* resources = GetResourceProvider())
+                    if (const image::ImageData* image = resources->LoadImage(icon))
+                        SetIcon(core::MakeRef<ImageDrawable>(MemoryAllocator(), image));
+        }
 
         // The user's action (run before the menu closes).
         void SetOnPicked(core::Function<void()> callback) { m_onPicked = core::Move(callback); }
@@ -291,6 +314,8 @@ export namespace experimental::gui
         core::Function<void()> m_onPicked;
         core::Function<void()> m_onActivated;
         core::Function<void(bool)> m_onToggled;
+        bool m_textFromCommand = false;     // its text, its shortcut: its command's (OnBoundCommandText)
+        bool m_shortcutFromCommand = false;
     };
 
     class Menu; // for MenuSubItem's submenu pointer

@@ -995,6 +995,44 @@ As built after the numbers (2026-10-17):
 - **Left.** Building rows grows faster than their count (each new child marks its siblings for a
   restyle); the stress page keeps drawing while its turning boxes are out of view (a transform
   animation could bring a node into view; a rotation about the centre could be bounded).
+- **E8c as built.** `DebugOverlay` (its own partition) replaces the layout overlay's flags: the
+  layout half as before (F9), and an input half the root draws in its own space (F8,
+  `--input-overlay`): the focus path named; every tab stop numbered and joined (the dispatcher's
+  `TabStops`, which Tab uses); the last directional move's `NavTrace` (each candidate's bounds,
+  name, score and verdict: chosen, beaten, behind, clipped; overrides and wraps); the node under
+  the pointer; a red flash fading over half a second on each node that invalidated itself (a frame
+  reason of its own, "overlay"). Its first picture found Tab and the arrows reaching widgets under
+  a node out of the layout; fixed.
+- **E8d as built.** A sheet is named when parsed; a rule keeps its selector as written and its
+  line (comments are blanked keeping their line breaks). `Node::SetForcedStyleStates` (the style
+  state bits; forced disabled is not enabled, forced focus-visible is focus).
+  `StyleManager::ExplainStyle` and `ExplainProperty` over `StyleSheet::Trace`: per longhand every
+  declaration in precedence, the winner first, and code's pins, inheritance (which ancestor) and
+  running animations.
+- **E8e as built.** `GUI.Inspector` (`experimental.gui.inspector`): queries (Tree, Describe,
+  Query, SetProperty as markup sets it) and the Inspector, a root of its own on the context: the
+  tree as an indented list rebuilt when the tree's shape hash changes, the details (identity,
+  states with force toggles, box and measure, styles by rule with sheet and line, reflected
+  properties edited live, commands, listeners, bindings), a selector field, picking with the wheel
+  walking out and in, the box model drawn over the inspected root, and a frames graph.
+  GUISandbox hosts it as a pane (Ctrl+Shift+I, `--inspector`, `--inspect <selector>`) with an input
+  surface of its own. Its toggles found a layout fault: a single-line flex container measured
+  under a limit took the limit as its height; fixed. Not yet: resizing the pane, collapsing the
+  tree, editing a style value in place, an MCP tool over the queries.
+- **E8f as built.** `GUI.Testing` (`experimental.gui.testing`): Finder (selector, text, text
+  containing; Within; IncludingHidden; Parse for "text=" and "text~="), Tester (a frame of update,
+  style and layout after each action on a fixed clock; click, right and double click, hover, drag,
+  type, chords, held directions, pad buttons, file drops; each aims at a node's middle and fails
+  when it is covered; One fails on none or several with the tree), and `CompareImages`.
+  GUISandbox's `--keys` pointer steps take finders.
+- **E8g as built.** `GUISandbox --image-tests` (`--vulkan`, `--webgpu`): each page but Stress, 40
+  frames on a fixed clock at 960x720 and scale 1, drawn offscreen and read back through the
+  screenshot capture, compared with `Data/Tests/GUI/Images/<page>.png` (or `<page>.<backend>.png`):
+  every channel within 8 on all but 0.1% of the pixels; a miss writes a diff; exit 1 on a miss, 77
+  without a device. `--approve-images` (or `--approve-images backend`) writes the references, once
+  the user has looked. Deterministic: two Vulkan runs give the same bytes, and WebGPU on the same
+  GPU the same pixels. The references wait for the user's approval, and the ctest entries for
+  them. The culling differential runs in GUI.Tests on VG's geometry rather than here.
 
 ### E9 Translation, right to left, and accessibility groundwork
 

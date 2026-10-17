@@ -63,6 +63,7 @@ export namespace experimental::gui
             : m_elements(core::MakeRef<ElementTable>(MemoryAllocator())), m_data(core::MakeRef<DataModel>(MemoryAllocator()))
         {
             BindTextEditingKeys(m_keymap); // a GUI's own bindings come later, so they win a tie
+            (void)m_keymap.Bind(core::StringView(u8"f10"), core::StringView(u8"menu.enter-bar"));
         }
         GUIContext(const GUIContext&) = delete;
         GUIContext& operator=(const GUIContext&) = delete;
@@ -166,6 +167,8 @@ export namespace experimental::gui
             m_context->AddRoot(*this);
             m_eventDispatcher.SetKeystrokeRouter([this](const Keystroke& stroke) { return RouteKeystroke(stroke); });
             m_eventDispatcher.SetOnInput([this]() { m_context->TookInput(*this); });
+            // F10 (bound in every GUI): the first node in this tree that takes it, a menu bar.
+            (void)OnCommand(core::StringView(u8"menu.enter-bar"), [this](CommandEvent&) { (void)EnterFromKeyboardIn(*this); });
         }
         ~SceneRoot() override { m_context->RemoveRoot(*this); }
 
@@ -379,6 +382,18 @@ export namespace experimental::gui
                 if (n == this)
                     return focus;
             return this;
+        }
+        // The first visible, enabled node from `node` down (pre-order) that takes the keyboard's entry.
+        static bool EnterFromKeyboardIn(Node& node)
+        {
+            if (!node.IsVisible() || !node.IsTreeEnabled())
+                return false;
+            if (&node != node.GetRootNode() && node.EnterFromKeyboard())
+                return true;
+            for (usize i = 0; i < node.ChildCount(); ++i)
+                if (EnterFromKeyboardIn(*node.GetChildAt(i)))
+                    return true;
+            return false;
         }
         // Where a command or a keystroke starts: the focus here, else the root; below a modal popup,
         // the modal popup (what is under it is inert, its bindings too).

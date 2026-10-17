@@ -75,6 +75,9 @@ export namespace experimental::gui
 
 
         [[nodiscard]] Node* GetOverNode() const noexcept { return m_overNode; }
+        /// Whether the keyboard or the pad drives it now (the last input was a key, a pad button or
+        /// a direction, not the pointer): a menu opened then lights its first item.
+        [[nodiscard]] bool IsUsingKeyboard() const noexcept { return m_keyboardMode; }
         [[nodiscard]] Node* GetFocusNode() const noexcept { return m_focusNode; }
         /// The focused node, read as a binding's dependency (a command's availability follows it).
         [[nodiscard]] Node* ObserveFocus() const
@@ -224,7 +227,7 @@ export namespace experimental::gui
             return true;
         }
         /// A gamepad button (the d-pad goes to PressDirection): the bindings first; unbound, South
-        /// activates and East goes back (the `back` command).
+        /// activates and East is Escape (a dialog cancels, the topmost auto popup closes).
         void InjectPadButton(PadButton button)
         {
             NoteInput();
@@ -233,6 +236,8 @@ export namespace experimental::gui
                 return;
             if (button == PadButton::South)
                 (void)Activate();
+            else if (button == PadButton::East)
+                (void)InjectKeyDown(static_cast<u32>(KeyCode::Escape)); // unbound, East is Escape: back out of a popup or a dialog
         }
         /// Told on input a user gave this root (a press, a key, the gamepad): its GUI makes it the
         /// active root.
@@ -416,14 +421,15 @@ export namespace experimental::gui
             popup.SetRouteStop(entry.Options.Modal);
             m_popups.PushBack(core::Move(entry));
             PlacePopups();
-            ToggleEvent opened(&popup, true, PopupCloseReason::Code);
-            (void)popup.RouteEvent(opened);
-            if (focusing && FindPopup(popup) >= 0)
+            if (focusing)
             {
                 core::Array<Node*> stops;
                 CollectTabStops(&popup, stops);
                 SetFocusNode(!stops.IsEmpty() ? stops[0] : (popup.IsTabFocusable() ? &popup : nullptr));
             }
+            // Told after focus moved in, so a listener may move it on (a dialog's default button).
+            ToggleEvent opened(&popup, true, PopupCloseReason::Code);
+            (void)popup.RouteEvent(opened);
         }
         /// Closes `popup` and the popups it holds. False when it is not open.
         bool ClosePopup(Node& popup, PopupCloseReason reason = PopupCloseReason::Code)

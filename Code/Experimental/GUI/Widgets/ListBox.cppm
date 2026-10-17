@@ -154,7 +154,12 @@ export namespace experimental::gui
             item->SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
             item->SetIndex(static_cast<i32>(m_items.Size()));
             ListBox* self = this;
-            item->SetOnPicked([self](i32 index) { self->SetSelectedIndex(index); });
+            item->SetOnPicked([self](i32 index)
+                              {
+                                  self->SetSelectedIndex(index);
+                                  if (self->m_onActivated)
+                                      self->m_onActivated(index);
+                              });
             item->EditLayoutStyle([this](LayoutStyle& s) { s.Height = LayoutLength::Px(m_itemHeight); });
             AddChild(item.Get());
             m_items.PushBack(item.Get());
@@ -213,6 +218,8 @@ export namespace experimental::gui
         {
             m_onChanged = core::Move(callback);
         }
+        /// An item chosen, not just selected: clicked, or Return, Space or a pad's South on the list.
+        void SetOnItemActivated(core::Function<void(i32)> callback) { m_onActivated = core::Move(callback); }
 
         // Theming: listbox::selection = the row-selection highlight (its text style reaches the rows).
         void CollectStyleParts(core::Array<core::StringView>& out) const override
@@ -236,6 +243,14 @@ export namespace experimental::gui
                 ShareTextStyle(*item);
         }
 
+
+        bool OnActivate() override
+        {
+            if (m_selected < 0 || !m_onActivated)
+                return false;
+            m_onActivated(m_selected);
+            return true;
+        }
 
         void OnKeyDown(const KeyEvent& event) override
         {
@@ -293,6 +308,7 @@ export namespace experimental::gui
         Color m_panelColor{0.13f, 0.14f, 0.17f, 1.0f};
         Color m_highlightColor{0.24f, 0.40f, 0.62f, 1.0f};
         core::Function<void(i32)> m_onChanged;
+        core::Function<void(i32)> m_onActivated;
     };
 
     RTTI_DEFINE_OBJECT(ListBoxItem, "rtti::gui")

@@ -492,6 +492,9 @@ export namespace experimental::gui
                 m_parent->RequestLayout(); // in or out of its parent's flow
             Invalidate();
         }
+        /// Takes the GUI's "enter the menu bar" key (F10, the `menu.enter-bar` command): a menu bar
+        /// focuses its first menu. False when it is not one to enter.
+        virtual bool EnterFromKeyboard() { return false; }
         /// What a modal popup draws over the root under itself: a dim (a widget's `::backdrop` part).
         virtual void DrawBackdrop(DrawContext& ctx, const Rect& bounds) const
         {

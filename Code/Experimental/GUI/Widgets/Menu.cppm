@@ -225,6 +225,8 @@ export namespace experimental::gui
 
         // The user's action (run before the menu closes).
         void SetOnPicked(core::Function<void()> callback) { m_onPicked = core::Move(callback); }
+        // The menu installs this: its text style changed (its width may have).
+        void SetOnTextStyleChanged(core::Function<void()> callback) { m_onTextStyleChanged = core::Move(callback); }
         // The menu installs this to close the whole chain after activation.
         void SetOnActivated(core::Function<void()> callback)
         {
@@ -257,6 +259,8 @@ export namespace experimental::gui
             m_shortcut.SetFont(GetFont());
             m_text.SetColor(GetTextColor());
             m_shortcut.SetColor(GetTextColor());
+            if (m_onTextStyleChanged)
+                m_onTextStyleChanged(); // its menu measures again (a font that arrives widens it)
         }
 
         void OnMouseClick(const MouseEvent& event) override
@@ -344,6 +348,7 @@ export namespace experimental::gui
         core::Function<void()> m_onPicked;
         core::Function<void()> m_onActivated;
         core::Function<void(bool)> m_onToggled;
+        core::Function<void()> m_onTextStyleChanged;
         bool m_textFromCommand = false;     // its text, its shortcut: its command's (OnBoundCommandText)
         bool m_shortcutFromCommand = false;
     };
@@ -658,6 +663,7 @@ export namespace experimental::gui
                 it->SetRowHeight(m_itemHeight);
                 Menu* self = this;
                 it->SetOnActivated([self]() { self->RootMenu()->Close(); });
+                it->SetOnTextStyleChanged([self]() { self->Relayout(); });
             }
             Menu* self = this;
             row->SetOnHovered([self, row]() { self->OnRowHovered(row); });
@@ -702,6 +708,8 @@ export namespace experimental::gui
             if (dispatcher == nullptr || IsOpen())
                 return;
             SetDisplayed(true);
+            Relayout();
+            options.FitContent = true; // sized as it measures, again when a font arrives
             Menu* self = this;
             options.OnClosed = [self](PopupCloseReason reason)
             {

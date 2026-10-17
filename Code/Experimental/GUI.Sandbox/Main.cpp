@@ -274,6 +274,7 @@ private:
     // What native hosts hold.
     UniquePtr<image::OwnedImageData> m_checker;
     UniquePtr<gui::StringListModel> m_listModel;
+    i32 m_insertedRows = 0; // rows the Data views page inserted at the top
     UniquePtr<gui::TableModel> m_tableModel;
     UniquePtr<gui::SortingProxyModel> m_tableProxy;
     UniquePtr<gui::TreeModel> m_treeModel;
@@ -543,6 +544,7 @@ void GUISandbox::FillNativeHosts()
         list->SetFont(m_font);
         list->SetRowHeight(24.0f);
         list->SetModel(m_listModel.Get());
+        m_listModel->SetEditable(true); // F2 renames a row
         auto* picked = Cast<gui::Label>(FindById(*m_shellNode, u8"views-picked"));
         gui::StringListModel* model = m_listModel.Get();
         list->SetOnSelectionChanged(
@@ -551,7 +553,18 @@ void GUISandbox::FillNativeHosts()
                 if (picked != nullptr && index.IsValid())
                     picked->SetText(Format(u8"picked: {}", model->ItemAt(static_cast<usize>(index.Row))).AsView());
             });
+        list->SetOnActivated(
+            [picked, model](gui::ModelIndex index)
+            {
+                if (picked != nullptr && index.IsValid())
+                    picked->SetText(Format(u8"activated: {}", model->ItemAt(static_cast<usize>(index.Row))).AsView());
+            });
         host->AddChild(list.Get());
+        if (auto* insert = Cast<gui::Button>(FindById(*m_shellNode, u8"views-insert")))
+        {
+            i32* inserted = &m_insertedRows;
+            insert->SetOnClick([model, inserted]() { model->InsertItem(0, Format(u8"Inserted {}", ++*inserted).AsView()); });
+        }
     }
     if (gui::Node* host = FindById(*m_shellNode, u8"views-table"))
     {
@@ -569,12 +582,14 @@ void GUISandbox::FillNativeHosts()
             cells.PushBack(gui::Variant(static_cast<i64>(scores[i])));
             m_tableModel->AddRow(Move(cells));
         }
+        m_tableModel->SetEditable(true); // F2 edits a name
         m_tableProxy = MakeUnique<gui::SortingProxyModel>(AppRoot(), m_tableModel.Get());
         auto table = MakeRef<gui::TableView>(AppRoot());
         table->SetSize(Float2{320.0f, 180.0f});
         table->SetFont(m_font);
         table->SetRowHeight(24.0f);
         table->SetModel(m_tableProxy.Get()); // a header click sorts through the proxy (the model's sort capability)
+        table->SetColumnWidthsText(String(u8"60% auto"));
         host->AddChild(table.Get());
     }
     if (gui::Node* host = FindById(*m_shellNode, u8"views-tree"))

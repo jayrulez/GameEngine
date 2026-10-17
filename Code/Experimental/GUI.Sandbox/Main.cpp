@@ -33,6 +33,7 @@ import foundation.vg.renderer;
 import experimental.gui;
 import experimental.gui.shell;
 import experimental.gui.inspector; // Ctrl+Shift+I (E8e)
+import experimental.gui.testing;   // --keys targets by selector or text (E8f)
 import gui.sandbox.stress; // the Stress page (E8a)
 import foundation.script; // the pages' and the game menu's scripts
 #ifdef OPTION_HAS_ANGELSCRIPT
@@ -1122,7 +1123,9 @@ void GUISandbox::TypeKeys(gui::SceneRoot& root)
     const usize index = static_cast<usize>((m_frames - 10) / 15);
     if (index >= keys.Size())
         return;
-    // Pointer steps (logical units, as a screenshot is): click:x,y rclick:x,y move:x,y down:x,y up:x,y.
+    // Pointer steps (logical units, as a screenshot is): click:x,y rclick:x,y move:x,y down:x,y up:x,y;
+    // or at the middle of what a selector or a text finds: click:#ok, click:text=Show,
+    // move:text~=Sett (no spaces: a step ends at one).
     const StringView step = keys[index];
     usize colon = 0;
     while (colon < step.Size() && step[colon] != u8':')
@@ -1135,8 +1138,20 @@ void GUISandbox::TypeKeys(gui::SceneRoot& root)
         while (comma < where.Size() && where[comma] != u8',')
             ++comma;
         const f32 scale = root.GetDisplayScale();
-        const Float2 at{static_cast<f32>(ParseFloat(where.SubStr(0, comma)).ValueOr(0.0)) * scale,
-                        comma < where.Size() ? static_cast<f32>(ParseFloat(where.SubStr(comma + 1, where.Size() - comma - 1)).ValueOr(0.0)) * scale : 0.0f};
+        Float2 at{static_cast<f32>(ParseFloat(where.SubStr(0, comma)).ValueOr(0.0)) * scale,
+                  comma < where.Size() ? static_cast<f32>(ParseFloat(where.SubStr(comma + 1, where.Size() - comma - 1)).ValueOr(0.0)) * scale : 0.0f};
+        const bool numeric = where.Size() != 0 && ((where[0] >= u8'0' && where[0] <= u8'9') || where[0] == u8'-');
+        if (!numeric)
+        {
+            const Array<gui::Node*> found = gui::testing::Finder::Parse(where).All(root);
+            if (found.IsEmpty())
+            {
+                std::printf("GUISandbox: --keys: %s found nothing\n", reinterpret_cast<const char*>(String(where).CStr()));
+                return;
+            }
+            const gui::Rect box = found[0]->GetScreenBounds();
+            at = Float2{box.x + box.width * 0.5f, box.y + box.height * 0.5f};
+        }
         gui::EventDispatcher& d = *root.GetEventDispatcher();
         if (verb == StringView(u8"move"))
             (void)d.InjectMouseMove(at);
@@ -1456,7 +1471,8 @@ int main(int argc, char** argv)
     // motion, binding, navigation, game-menu). --showcase: open the game menu at once.
     // --menu-call <function>: call one of the game menu's script functions once it is up (onSettings,
     // onPlay, onQuit). --keys "<keys>": type keystrokes into what is shown, one every 15 frames
-    // (pointer steps too, in logical units: click:x,y rclick:x,y move:x,y down:x,y up:x,y)
+    // (pointer steps too, in logical units: click:x,y rclick:x,y move:x,y down:x,y up:x,y, or at
+    // what a selector or a text finds: click:#ok, click:text=Show, move:text~=Sett)
     // ("down down return", "pad-east"). --always-redraw: draw every frame. --frame-stats: print,
     // each second, how many frames drew. --sweep: hover, click and right-click every widget of every
     // page, then open the game menu, printing each step, and exit (a smoke test; a crash's last line

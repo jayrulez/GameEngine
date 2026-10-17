@@ -216,7 +216,10 @@ export namespace experimental::gui
                         parent->GetChildAt(i)->MarkStyleDirty(true);
             const bool self = forceSubtree || forceSelf || node.IsStyleDirty();
             const bool subtree = forceSubtree || node.IsStyleSubtreeDirty() || (states & m_ancestorStates) != 0;
-            const bool descend = subtree || node.HasStyleDirtyDescendant();
+            // Its children came, went or moved: when a sheet reads siblings, each may match
+            // differently (with what it holds); else only the new ones restyle (marked so).
+            const bool rearranged = m_readsSiblings && node.ChildrenArrangementChanged();
+            const bool descend = subtree || rearranged || node.HasStyleDirtyDescendant();
             node.ClearStyleDirty();
             bool customsChanged = false;
             if (self)
@@ -234,7 +237,7 @@ export namespace experimental::gui
                 m_ancestors.Push(*above);
             for (usize i = 0; i < node.ChildCount(); ++i)
                 if (Node* child = node.GetChildAt(i))
-                    Visit(*child, subtree, customsChanged);
+                    Visit(*child, subtree || rearranged, customsChanged);
             if (above != nullptr)
                 m_ancestors.Pop();
         }
@@ -618,10 +621,14 @@ export namespace experimental::gui
         {
             m_ancestorStates = 0;
             m_siblingStates = 0;
+            m_readsSiblings = false;
             const auto learn = [&](const StyleSheet& sheet)
             {
                 for (const StyleRule& rule : sheet.Rules())
+                {
                     rule.Selector().CollectRelationStates(m_ancestorStates, m_siblingStates);
+                    m_readsSiblings = m_readsSiblings || rule.Selector().ReadsSiblings();
+                }
             };
             learn(m_userAgent);
             learn(m_sheet);
@@ -645,6 +652,7 @@ export namespace experimental::gui
         u32 m_ancestorStates = 0; // states a rule reads through an ancestor: a change restyles the subtree
         u32 m_siblingStates = 0;  // states a rule reads through an earlier sibling: a change restyles the later siblings
         u32 m_lastRestyleCount = 0;
+        bool m_readsSiblings = false; // some rule reads siblings: a rearrangement restyles them
         AncestorFilter m_ancestors; // the names above the widget ApplyTree's walk is at
         bool m_filtering = false;   // inside that walk (a widget styled any other way has no filter)
     };

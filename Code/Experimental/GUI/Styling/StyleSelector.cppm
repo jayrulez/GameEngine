@@ -145,6 +145,13 @@ export namespace experimental::gui
         [[nodiscard]] u32 GetPartPseudoClasses() const noexcept { return m_partPseudo; }
         /// Whether it names a pseudo-class the lab does not know (it then matches nothing).
         [[nodiscard]] bool IsNever() const noexcept { return m_never; }
+        /// Whether it asks where the widget stands among its siblings (:nth-child, :first-child,
+        /// :last-of-type and their kin).
+        [[nodiscard]] bool ReadsPosition() const noexcept
+        {
+            constexpr u32 kPosition = PseudoFirstChild | PseudoLastChild | PseudoOnlyChild | PseudoFirstOfType | PseudoLastOfType;
+            return !m_nths.IsEmpty() || (m_pseudo & kPosition) != 0;
+        }
         /// Calls `f(selector)` for each selector in its :not(), :is() and :where().
         template <typename F>
         void ForEachNested(F&& f) const;
@@ -226,6 +233,25 @@ export namespace experimental::gui
                 rule.ForEachNested([&](const StyleSelector& s) { s.CollectRelationStates(nestedAncestor, nestedSibling, 1, viaSibling); });
                 (viaSibling ? sibling : ancestor) |= nestedAncestor | nestedSibling | AllDynamic(rule);
             }
+        }
+
+        /// Whether it reads a widget's siblings anywhere (its position among them, or `+` and `~`),
+        /// nested selectors included: then a change to the children's arrangement can change what
+        /// it matches.
+        [[nodiscard]] bool ReadsSiblings() const
+        {
+            for (usize i = 0; i < m_rules.Size(); ++i)
+            {
+                const StyleSelectorRule& rule = m_rules[i];
+                const Combinator c = rule.GetCombinator();
+                if (rule.ReadsPosition() || (i > 0 && (c == Combinator::Adjacent || c == Combinator::Sibling)))
+                    return true;
+                bool nested = false;
+                rule.ForEachNested([&nested](const StyleSelector& s) { nested = nested || s.ReadsSiblings(); });
+                if (nested)
+                    return true;
+            }
+            return false;
         }
 
         /// A comma-separated list split at its top level (commas inside parentheses, brackets or

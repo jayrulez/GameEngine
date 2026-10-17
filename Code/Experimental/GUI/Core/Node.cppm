@@ -775,12 +775,16 @@ export namespace experimental::gui
                 m_childrenGeneration = 0;
             moved.m_indexGeneration = kNoGeneration;
         }
+        // Its children's arrangement changed: a selector reading siblings (:nth-child, `+`, `~`)
+        // may match them differently. The style pass decides once whether they restyle (it knows
+        // its sheets); marking each child here made building a long list quadratic.
         void ChildrenStyleChanged()
         {
+            m_childrenArrangementChanged = true;
             MarkStyleDirty(false);
-            for (const RefPtr<Node>& child : m_children)
-                child->MarkStyleDirty(true);
         }
+        /// Its children were added, removed or moved since its last restyle.
+        [[nodiscard]] bool ChildrenArrangementChanged() const noexcept { return m_childrenArrangementChanged; }
         [[nodiscard]] bool IsStyleDirty() const noexcept { return m_styleDirty; }
         [[nodiscard]] bool IsStyleSubtreeDirty() const noexcept { return m_styleSubtreeDirty; }
         [[nodiscard]] bool HasStyleDirtyDescendant() const noexcept { return m_childStyleDirty; }
@@ -789,6 +793,7 @@ export namespace experimental::gui
             m_styleDirty = false;
             m_styleSubtreeDirty = false;
             m_childStyleDirty = false;
+            m_childrenArrangementChanged = false;
             m_changedStyleStates = 0;
         }
 
@@ -2091,6 +2096,7 @@ export namespace experimental::gui
         bool m_styleDirty = true;          // restyle this node
         bool m_styleSubtreeDirty = true;   // ... and every descendant
         bool m_childStyleDirty = false;    // some descendant waits for a restyle
+        bool m_childrenArrangementChanged = false; // its children were added, removed or moved
         bool m_layoutDirty = false;        // this container's layout must run
         bool m_childLayoutDirty = false;   // some descendant's must
         bool m_layingOut = false;          // inside OnLayout: the sizes it sets are its own

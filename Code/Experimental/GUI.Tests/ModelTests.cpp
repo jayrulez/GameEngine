@@ -44,6 +44,10 @@ TEST_CASE("variant: Compare orders numbers and strings")
     CHECK(Variant(static_cast<core::i64>(5)).Compare(Variant(static_cast<core::i64>(5))) == 0);
     CHECK(Variant(SV(u8"apple")).Compare(Variant(SV(u8"banana"))) < 0);
     CHECK(Variant(SV(u8"pear")).Compare(Variant(SV(u8"peach"))) > 0);
+    // An int against a float by value, not by type (a mixed numeric column sorts as numbers).
+    CHECK(Variant(static_cast<core::i64>(3)).Compare(Variant(2.5)) > 0);
+    CHECK(Variant(1.5).Compare(Variant(static_cast<core::i64>(2))) < 0);
+    CHECK(Variant(static_cast<core::i64>(2)).Compare(Variant(2.0)) == 0);
 }
 
 TEST_CASE("model-index: validity + equality")

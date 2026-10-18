@@ -84,10 +84,18 @@ export namespace experimental::gui
             return core::String{};
         }
 
-        // Order two variants: numbers by value, strings lexicographically, bools false<true.
-        // Mixed/empty types compare by their Type ordinal (a stable, if arbitrary, total order).
+        // Order two variants: numbers by value (an int against a float too, so a column mixing
+        // them sorts as numbers), strings lexicographically, bools false<true. Other mixed and
+        // empty types compare by their Type ordinal (a stable, if arbitrary, total order).
         [[nodiscard]] i32 Compare(const Variant& other) const
         {
+            const bool numbers = (m_type == Type::Int || m_type == Type::Float) && (other.m_type == Type::Int || other.m_type == Type::Float);
+            if (numbers && m_type != other.m_type)
+            {
+                const f64 a = m_type == Type::Int ? static_cast<f64>(m_int) : m_float;
+                const f64 b = other.m_type == Type::Int ? static_cast<f64>(other.m_int) : other.m_float;
+                return a == b ? 0 : (a < b ? -1 : 1);
+            }
             if (m_type != other.m_type)
                 return static_cast<i32>(m_type) < static_cast<i32>(other.m_type) ? -1 : 1;
             switch (m_type)

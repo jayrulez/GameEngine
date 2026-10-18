@@ -656,6 +656,44 @@ TEST_CASE("vg.context: a layer's draws go into it, and its composite into what i
     CHECK(batch.commands[3].layer == -1);
 }
 
+TEST_CASE("vg.context: a layer's colour filters ride its composite's vertices")
+{
+    using foundation::vg::VGDrawMode;
+    VGContext ctx;
+    ctx.SetLayers(true);
+    ctx.PushLayer(1.0f, foundation::vg::VGBlendMode::Normal, 0.0f, 0.25f, 1.5f);
+    ctx.FillPath(Square(10, 10, 30, 30), Color::Red, FillRule::NonZero, false);
+    ctx.PopLayer();
+    ctx.PushLayer(1.0f);
+    ctx.FillPath(Square(10, 10, 30, 30), Color::Red, FillRule::NonZero, false);
+    ctx.PopLayer();
+
+    const VGBatch& batch = ctx.GetBatch();
+    REQUIRE(batch.layers.Size() == 2u);
+    CHECK(batch.layers[0].saturation == doctest::Approx(0.25f));
+    CHECK(batch.layers[0].brightness == doctest::Approx(1.5f));
+    usize composites = 0;
+    for (const foundation::vg::VGCommand& cmd : batch.commands)
+    {
+        if (cmd.drawMode != VGDrawMode::Layer)
+            continue;
+        const foundation::vg::VGVertex& v = batch.vertices[batch.indices[static_cast<usize>(cmd.startIndex)]];
+        if (cmd.compositeLayer == 0)
+        {
+            // (1 - saturation, brightness - 1), what the layer shader reads.
+            CHECK(v.effect.x == doctest::Approx(0.75f));
+            CHECK(v.effect.y == doctest::Approx(0.5f));
+        }
+        else
+        {
+            CHECK(v.effect.x == doctest::Approx(0.0f)); // a plain layer: untouched
+            CHECK(v.effect.y == doctest::Approx(0.0f));
+        }
+        ++composites;
+    }
+    CHECK(composites == 2u);
+}
+
 TEST_CASE("vg.context: inside a layer no clip or opacity applies; around it they apply to its composite")
 {
     using foundation::vg::VGClipMode;

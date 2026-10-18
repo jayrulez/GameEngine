@@ -1168,6 +1168,47 @@ namespace
         CHECK(Abs(static_cast<i32>(px.At(60, 50)[0]) - outside) <= 2); // and symmetric
     }
 
+    // Colour filters at a layer's composite, in an Encoded canvas (byte values as authored): a red
+    // square greyed by saturation 0 reads its luma, 0.2126 of 255; a white one at brightness 0.5
+    // reads half; saturation 2 leaves red red (it cannot be more vivid); a plain layer is
+    // untouched.
+    void ProbeLayerFilters(rhi::Device& device, const char* name, u32 sampleCount)
+    {
+        INFO(doctest::String(name), " x", sampleCount);
+        const Pixels px = RenderScene(
+            device,
+            [](vg::VGContext& ctx)
+            {
+                ctx.PushLayer(1.0f, vg::VGBlendMode::Normal, 0.0f, 0.0f, 1.0f);
+                ctx.FillRect(Rectangle{8, 8, 20, 20}, ByteColor(255, 0, 0));
+                ctx.PopLayer();
+                ctx.PushLayer(1.0f, vg::VGBlendMode::Normal, 0.0f, 1.0f, 0.5f);
+                ctx.FillRect(Rectangle{40, 8, 20, 20}, ByteColor(255, 255, 255));
+                ctx.PopLayer();
+                ctx.PushLayer(1.0f, vg::VGBlendMode::Normal, 0.0f, 2.0f, 1.0f);
+                ctx.FillRect(Rectangle{72, 8, 20, 20}, ByteColor(255, 0, 0));
+                ctx.PopLayer();
+                ctx.PushLayer(1.0f);
+                ctx.FillRect(Rectangle{104, 8, 20, 20}, ByteColor(0, 128, 255));
+                ctx.PopLayer();
+            },
+            sampleCount, vg::VGBlendSpace::Encoded);
+        REQUIRE(px.valid);
+        const u8* grey = px.At(18, 18);
+        INFO("grey ", static_cast<i32>(grey[0]), ",", static_cast<i32>(grey[1]), ",", static_cast<i32>(grey[2]));
+        CHECK(Abs(static_cast<i32>(grey[0]) - 54) <= 2);
+        CHECK(Abs(static_cast<i32>(grey[1]) - 54) <= 2);
+        CHECK(Abs(static_cast<i32>(grey[2]) - 54) <= 2);
+        const u8* dim = px.At(50, 18);
+        CHECK(Abs(static_cast<i32>(dim[0]) - 128) <= 2);
+        const u8* vivid = px.At(82, 18);
+        CHECK(vivid[0] >= 253);
+        CHECK(vivid[1] <= 2);
+        const u8* plain = px.At(114, 18);
+        CHECK(Abs(static_cast<i32>(plain[1]) - 128) <= 2);
+        CHECK(plain[2] >= 253);
+    }
+
     // A red half and a blue half meet at x = 64; a backdrop blur over the middle of the seam mixes
     // them there and leaves the seam sharp above it, and a half-faded green layer drawn before it
     // (moved under the backdrop's layer) still reads half. Encoded, so a half is byte 128.
@@ -1220,6 +1261,8 @@ TEST_CASE("vg.pixels: a layer fades a group as one, nests, clips inside, blurs, 
         ProbeLayerBlur(device, name, 4);
         ProbeBackdropBlur(device, name, 1);
         ProbeBackdropBlur(device, name, 4);
+        ProbeLayerFilters(device, name, 1);
+        ProbeLayerFilters(device, name, 4);
     };
     if (rhi::Device* device = MakeDevice(vulkan))
     {

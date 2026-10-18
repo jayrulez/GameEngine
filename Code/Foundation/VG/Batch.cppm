@@ -65,6 +65,10 @@ export namespace foundation::vg
         f32 blur = 0.0f; ///< A Gaussian blur's sigma in device pixels, 0 for none (bounds carry 3 sigma).
         /// A blurred copy to draw for backdrop composites, its sigma (the layer itself stays sharp).
         f32 backdropBlur = 0.0f;
+        /// Colour filters applied at the composite: 0 is grey and 1 unchanged (CSS's saturate(),
+        /// grayscale() its complement), and a factor on the colour (brightness()).
+        f32 saturation = 1.0f;
+        f32 brightness = 1.0f;
     };
 
     /// Batched vector-graphics geometry and draw commands. The output of

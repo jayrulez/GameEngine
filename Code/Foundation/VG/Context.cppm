@@ -404,7 +404,10 @@ export namespace foundation::vg
         /// composite); the transform carries on. `blur` blurs the layer before its composite, a
         /// Gaussian of that sigma in device pixels (up to MaxLayerBlur). Without SetLayers, or past
         /// MaxLayers in a batch, an opacity push instead (and no blur).
-        void PushLayer(f32 opacity, VGBlendMode blendMode = VGBlendMode::Normal, f32 blur = 0.0f)
+        /// `saturation` (0 grey, 1 unchanged, above 1 more vivid) and `brightness` (a factor on
+        /// the colour) filter the layer at its composite; without layers they are dropped with it.
+        void PushLayer(f32 opacity, VGBlendMode blendMode = VGBlendMode::Normal, f32 blur = 0.0f,
+                       f32 saturation = 1.0f, f32 brightness = 1.0f)
         {
             if (!m_layersEnabled || m_batch.layers.Size() >= static_cast<usize>(MaxLayers))
             {
@@ -433,6 +436,8 @@ export namespace foundation::vg
             layer.opacity = Clamp(opacity, 0.0f, 1.0f);
             layer.blendMode = blendMode;
             layer.blur = Clamp(blur, 0.0f, MaxLayerBlur);
+            layer.saturation = Max(0.0f, saturation);
+            layer.brightness = Max(0.0f, brightness);
             save.layer = static_cast<i32>(m_batch.layers.Size());
             m_batch.layers.PushBack(layer);
             m_currentLayer = save.layer;
@@ -542,15 +547,23 @@ export namespace foundation::vg
         // current clips apply (a pushed layer's); else none (drawing moved aside keeps its own).
         void EmitComposite(i32 index, f32 alpha, VGBlendMode blendMode, bool clipped)
         {
-            const Rectangle bounds = m_batch.layers[static_cast<usize>(index)].bounds;
+            const VGLayer& layer = m_batch.layers[static_cast<usize>(index)];
+            const Rectangle bounds = layer.bounds;
             const Color tint{1.0f, 1.0f, 1.0f, alpha};
+            // The colour filters ride the vertices' effect pair, which no blend space touches:
+            // (1 - saturation, brightness - 1), so a plain composite carries zeros.
+            const Float2 filters{1.0f - layer.saturation, layer.brightness - 1.0f};
             const i32 start = static_cast<i32>(m_batch.indices.Size());
             const u32 base = static_cast<u32>(m_batch.vertices.Size());
             const f32 x0 = bounds.x, y0 = bounds.y, x1 = bounds.x + bounds.width, y1 = bounds.y + bounds.height;
-            m_batch.vertices.PushBack(VGVertex(Float2{x0, y0}, Float2{0.0f, 0.0f}, tint));
-            m_batch.vertices.PushBack(VGVertex(Float2{x1, y0}, Float2{1.0f, 0.0f}, tint));
-            m_batch.vertices.PushBack(VGVertex(Float2{x1, y1}, Float2{1.0f, 1.0f}, tint));
-            m_batch.vertices.PushBack(VGVertex(Float2{x0, y1}, Float2{0.0f, 1.0f}, tint));
+            const Float2 corners[4] = {Float2{x0, y0}, Float2{x1, y0}, Float2{x1, y1}, Float2{x0, y1}};
+            const Float2 uvs[4] = {Float2{0.0f, 0.0f}, Float2{1.0f, 0.0f}, Float2{1.0f, 1.0f}, Float2{0.0f, 1.0f}};
+            for (usize i = 0; i < 4; ++i)
+            {
+                VGVertex v(corners[i], uvs[i], tint);
+                v.effect = filters;
+                m_batch.vertices.PushBack(v);
+            }
             const u32 quad[6] = {0, 1, 2, 0, 2, 3};
             for (const u32 i : quad)
             {

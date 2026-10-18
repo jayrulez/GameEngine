@@ -904,18 +904,51 @@ export namespace experimental::gui
         {
             PinStyle(SlotBit(SlotPaddingTop) | SlotBit(SlotPaddingRight) | SlotBit(SlotPaddingBottom) | SlotBit(SlotPaddingLeft));
             m_padding = padding;
+            m_paddingPercent = Thickness{};
             RequestLayout();
             Invalidate();
         }
-        [[nodiscard]] Thickness GetPadding() const noexcept { return m_padding; }
+        /// Padding in percentages of the containing box's width beside the lengths (CSS's
+        /// `padding: 5%`; the style pass sets it), resolved against the width it was last measured in.
+        void SetPaddingPercent(Thickness percent)
+        {
+            if (percent == m_paddingPercent)
+                return;
+            m_paddingPercent = percent;
+            RequestLayout();
+            Invalidate();
+        }
+        [[nodiscard]] Thickness GetPaddingPercent() const noexcept { return m_paddingPercent; }
+        [[nodiscard]] Thickness GetPadding() const noexcept
+        {
+            if (m_paddingPercent == Thickness{} || m_percentWidth <= 0.0f)
+                return m_padding;
+            const f32 k = m_percentWidth * 0.01f;
+            return Thickness{m_padding.Left + m_paddingPercent.Left * k, m_padding.Top + m_paddingPercent.Top * k,
+                             m_padding.Right + m_paddingPercent.Right * k, m_padding.Bottom + m_paddingPercent.Bottom * k};
+        }
+        /// Its padding as set, without the percentages.
+        [[nodiscard]] Thickness GetPaddingLengths() const noexcept { return m_padding; }
         /// The space outside the border its container keeps clear.
         void SetMargin(Thickness margin)
         {
             PinStyle(SlotBit(SlotMarginTop) | SlotBit(SlotMarginRight) | SlotBit(SlotMarginBottom) | SlotBit(SlotMarginLeft));
             m_layoutStyle.Margin = margin;
+            m_layoutStyle.MarginPercent = Thickness{}; // code gives lengths
             RequestBoxLayout();
         }
         [[nodiscard]] Thickness GetMargin() const noexcept { return m_layoutStyle.Margin; }
+        /// Its margin within a containing box `width` wide: its lengths and its percentages of
+        /// that width (none when the width is not known, below 0).
+        [[nodiscard]] Thickness GetMarginWithin(f32 width) const noexcept
+        {
+            const Thickness& p = m_layoutStyle.MarginPercent;
+            if (width <= 0.0f || p == Thickness{})
+                return m_layoutStyle.Margin;
+            const f32 k = width * 0.01f;
+            const Thickness& m = m_layoutStyle.Margin;
+            return Thickness{m.Left + p.Left * k, m.Top + p.Top * k, m.Right + p.Right * k, m.Bottom + p.Bottom * k};
+        }
         /// The box's border widths (its NodeBox's), the part of its chrome a sheet's border gives.
         [[nodiscard]] Thickness GetBorderThickness() const noexcept
         {
@@ -926,8 +959,8 @@ export namespace experimental::gui
         [[nodiscard]] Thickness GetChrome() const noexcept
         {
             const Thickness b = GetBorderThickness();
-            return Thickness{m_padding.Left + b.Left, m_padding.Top + b.Top, m_padding.Right + b.Right,
-                             m_padding.Bottom + b.Bottom};
+            const Thickness p = GetPadding();
+            return Thickness{p.Left + b.Left, p.Top + b.Top, p.Right + b.Right, p.Bottom + b.Bottom};
         }
         /// The local bounds inset by the padding and border: where content and children go.
         [[nodiscard]] Rect GetContentBounds() const
@@ -1655,6 +1688,13 @@ export namespace experimental::gui
                 p->m_accessChildDirty = true;
         }
         [[nodiscard]] bool IsAccessDirty() const noexcept { return m_accessDirty; }
+        /// A hash of what was last sent of it to the bridge: marked again (an animation's frames),
+        /// it is sent only when what it reads changed.
+        [[nodiscard]] u64 GetAccessSent() const noexcept { return m_accessSent; }
+        /// Whether code placed it (SetPosition): its insets are a place in its parent's box, not a
+        /// sheet's insets from inside the parent's border.
+        [[nodiscard]] bool IsPlacedByCode() const noexcept { return m_placedByCode; }
+        void SetAccessSent(u64 hash) noexcept { m_accessSent = hash; }
         [[nodiscard]] bool HasAccessDirtyDescendant() const noexcept { return m_accessChildDirty; }
         void ClearAccessDirty() noexcept
         {
@@ -1676,6 +1716,7 @@ export namespace experimental::gui
                 PinStyle(SlotBit(SlotPosition) | SlotBit(SlotLeft) | SlotBit(SlotTop) | SlotBit(SlotRight) | SlotBit(SlotBottom));
                 const bool wasInFlow = m_layoutStyle.Placement != Position::Absolute;
                 m_layoutStyle.Placement = Position::Absolute;
+                m_placedByCode = true; // at this place in its parent's box, not inside its border
                 m_layoutStyle.Left = LayoutLength::Px(position.x);
                 m_layoutStyle.Top = LayoutLength::Px(position.y);
                 m_layoutStyle.Right = LayoutLength{};
@@ -2300,6 +2341,8 @@ export namespace experimental::gui
         LayoutStyle m_layoutStyle;              // what it asks of layout (E2)
         Display m_displayBeforeNone = Display::Flex; // what SetDisplayed(true) gives back
         Thickness m_padding{};
+        Thickness m_paddingPercent{}; // of the containing box's width (CSS's padding percentages)
+        f32 m_percentWidth = -1.0f;   // the containing box's width it was last measured in (-1: unknown)
         core::Float2 m_scrollOffset{0.0f, 0.0f}; // a scroll container's (its children move by minus it)
         f32 m_pixelScale = 1.0f; // device pixels per unit at its last arrange (its edges round to them)
         core::Float2 m_contentExtent{0.0f, 0.0f}; // the children's extent as last laid out
@@ -2347,6 +2390,8 @@ export namespace experimental::gui
         bool m_mirrorOnRtl = false;
         bool m_accessDirty = true;       // its accessibility node waits to be sent (E9d)
         bool m_accessChildDirty = false; // some descendant's does
+        u64 m_accessSent = 0;            // a hash of its node as last sent (0: never)
+        bool m_placedByCode = false;     // SetPosition put it where it is (its insets are in the parent's box)
         bool m_mirrored = false; // mirror-on-rtl, and it runs right to left: flipped about its centre
         mutable Observable m_translationChanged; // its auto-translation changed (its translated bindings follow)
         core::String m_lang;                     // its language, empty: inherited

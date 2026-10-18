@@ -62,7 +62,7 @@ namespace experimental::gui
         // want, kept within the space less its margins).
         [[nodiscard]] core::Float2 MeasureItem(Node& child, f32 availW, f32 availH, core::Float2 percentBase)
         {
-            const Thickness m = child.GetMargin();
+            const Thickness m = child.GetMarginWithin(percentBase.x);
             LayoutConstraints c;
             c.Max = core::Float2{Less(availW, m.TotalHorizontal()), Less(availH, m.TotalVertical())};
             c.PercentBase = percentBase;
@@ -84,10 +84,20 @@ namespace experimental::gui
         // mirror puts them back).
         [[nodiscard]] Thickness FlowMargin(const Flow& f, const Node& child) noexcept
         {
-            Thickness m = child.GetMargin();
+            Thickness m = child.GetMarginWithin(BaseOf(f.width));
             if (f.rtl)
                 core::Swap(m.Left, m.Right);
             return m;
+        }
+        // The gaps between a container's columns and its rows: their lengths and their
+        // percentages of its content width and height (none where those are unbounded).
+        [[nodiscard]] f32 ColumnGapOf(const Flow& f) noexcept
+        {
+            return f.style.ColumnGap + (IsUnbounded(f.width) ? 0.0f : f.style.ColumnGapPercent * 0.01f * f.width);
+        }
+        [[nodiscard]] f32 RowGapOf(const Flow& f) noexcept
+        {
+            return f.style.RowGap + (IsUnbounded(f.height) ? 0.0f : f.style.RowGapPercent * 0.01f * f.height);
         }
         void Place(Flow& f, Node& child, f32 x, f32 y, f32 w, f32 h)
         {
@@ -175,8 +185,8 @@ namespace experimental::gui
             const f32 crossAvail = row ? f.height : f.width;
             const bool mainDefinite = !IsUnbounded(mainAvail);
             const bool crossDefinite = !IsUnbounded(crossAvail);
-            const f32 mainGap = row ? s.ColumnGap : s.RowGap;
-            const f32 crossGap = row ? s.RowGap : s.ColumnGap;
+            const f32 mainGap = row ? ColumnGapOf(f) : RowGapOf(f);
+            const f32 crossGap = row ? RowGapOf(f) : ColumnGapOf(f);
             const core::Float2 percentBase{BaseOf(f.width), BaseOf(f.height)};
             const auto mainOf = [row](core::Float2 v) { return row ? v.x : v.y; };
             const auto crossOf = [row](core::Float2 v) { return row ? v.y : v.x; };
@@ -625,6 +635,8 @@ namespace experimental::gui
         [[nodiscard]] core::Float2 Grid(Flow& f)
         {
             const LayoutStyle& s = f.style;
+            const f32 columnGap = ColumnGapOf(f);
+            const f32 rowGap = RowGapOf(f);
             const core::Float2 percentBase{BaseOf(f.width), BaseOf(f.height)};
             Array<GridItem> items;
             for (Node* child : FlowChildren(f.container))
@@ -634,19 +646,19 @@ namespace experimental::gui
             }
             i32 columns = 0, rows = 0;
             PlaceGridItems(s, items, columns, rows);
-            const Array<f32> widths = SizeTracks(s.Columns, s.AutoColumns, columns, f.width, s.ColumnGap, items, true,
+            const Array<f32> widths = SizeTracks(s.Columns, s.AutoColumns, columns, f.width, columnGap, items, true,
                                                  [&](const GridItem& item) { return MeasureItem(*item.node, kUnbounded, kUnbounded, percentBase).x; });
             const auto areaWidth = [&](const GridItem& item)
             {
-                f32 w = s.ColumnGap * static_cast<f32>(item.columnSpan - 1);
+                f32 w = columnGap * static_cast<f32>(item.columnSpan - 1);
                 for (i32 i = item.column; i < item.column + item.columnSpan && i < columns; ++i)
                     w += widths[static_cast<usize>(i)];
                 return w;
             };
-            const Array<f32> heights = SizeTracks(s.Rows, s.AutoRows, rows, f.height, s.RowGap, items, false,
+            const Array<f32> heights = SizeTracks(s.Rows, s.AutoRows, rows, f.height, rowGap, items, false,
                                                   [&](const GridItem& item) { return MeasureItem(*item.node, areaWidth(item), kUnbounded, percentBase).y; });
-            f32 contentW = s.ColumnGap * static_cast<f32>(columns > 0 ? columns - 1 : 0);
-            f32 contentH = s.RowGap * static_cast<f32>(rows > 0 ? rows - 1 : 0);
+            f32 contentW = columnGap * static_cast<f32>(columns > 0 ? columns - 1 : 0);
+            f32 contentH = rowGap * static_cast<f32>(rows > 0 ? rows - 1 : 0);
             for (f32 w : widths)
                 contentW += w;
             for (f32 h : heights)
@@ -658,20 +670,20 @@ namespace experimental::gui
                 for (f32 w : widths)
                 {
                     xs.PushBack(at);
-                    at += w + s.ColumnGap;
+                    at += w + columnGap;
                 }
                 at = 0.0f;
                 for (f32 h : heights)
                 {
                     ys.PushBack(at);
-                    at += h + s.RowGap;
+                    at += h + rowGap;
                 }
                 for (const GridItem& item : items)
                 {
                     const LayoutStyle& cs = item.node->GetLayoutStyle();
                     const Thickness m = FlowMargin(f, *item.node);
                     const f32 areaW = areaWidth(item);
-                    f32 areaH = s.RowGap * static_cast<f32>(item.rowSpan - 1);
+                    f32 areaH = rowGap * static_cast<f32>(item.rowSpan - 1);
                     for (i32 i = item.row; i < item.row + item.rowSpan && i < rows; ++i)
                         areaH += heights[static_cast<usize>(i)];
                     const Align jx = SelfAlign(cs.JustifySelf, s.JustifyItems);
@@ -742,14 +754,24 @@ namespace experimental::gui
             f32 left = 0.0f, top = 0.0f, right = 0.0f, bottom = 0.0f; // what the docked children took
             f32 needW = 0.0f, needH = 0.0f;
             const bool rtl = f.container.IsRightToLeft(); // start and end are the sides it runs from and to
-            for (Node* child : FlowChildren(f.container))
+            // The docked children first, in order, then those that fill: a fill takes what every
+            // side left, wherever it stands among them (several fills share that box, over each
+            // other, as a stack's children do).
+            const Array<Node*> children = FlowChildren(f.container);
+            Array<Node*> ordered;
+            const bool passes[] = {false, true};
+            for (const bool fills : passes)
+                for (Node* child : children)
+                    if ((child->GetLayoutStyle().DockSide == Dock::Fill) == fills)
+                        ordered.PushBack(child);
+            for (Node* child : ordered)
             {
                 Dock side = child->GetLayoutStyle().DockSide;
                 if (side == Dock::Start || side == Dock::End)
                     side = (side == Dock::Start) != rtl ? Dock::Left : Dock::Right;
                 const f32 availW = Less(f.width, left + right);
                 const f32 availH = Less(f.height, top + bottom);
-                const Thickness m = child->GetMargin();
+                const Thickness m = child->GetMarginWithin(percentBase.x);
                 const bool horizontal = side == Dock::Left || side == Dock::Right;
                 const bool vertical = side == Dock::Top || side == Dock::Bottom;
                 // Docked to a side, it fills that side's length; filling, it takes what is left.
@@ -819,6 +841,9 @@ namespace experimental::gui
             if (m_measures[i].Key == constraints)
                 return m_measures[i].Size;
         const LayoutStyle& s = m_layoutStyle;
+        // Its padding's percentages are of the box that holds it, the width it is measured in.
+        if (constraints.PercentBase.x >= 0.0f)
+            m_percentWidth = constraints.PercentBase.x;
         core::Float2 size{0.0f, 0.0f};
         if (s.Kind != Display::None)
         {
@@ -946,7 +971,7 @@ namespace experimental::gui
             f32 span = box.width;
             for (usize i = 0; i < m_children.Size(); ++i)
                 if (const Node& child = *m_children[i]; InFlow(child))
-                    span = core::Max(span, child.GetPosition().x - box.x + child.GetSize().x + child.GetMargin().Left);
+                    span = core::Max(span, child.GetPosition().x - box.x + child.GetSize().x + child.GetMarginWithin(box.width).Left);
             for (usize i = 0; i < m_children.Size(); ++i)
                 if (Node& child = *m_children[i]; InFlow(child))
                     child.SetPosition(core::Float2{box.x + span - (child.GetPosition().x - box.x) - child.GetSize().x,
@@ -968,22 +993,31 @@ namespace experimental::gui
             }
             if (!child.IsDisplayed() || cs.Placement != Position::Absolute)
                 continue;
-            const Thickness m = child.GetMargin();
-            const Optional<f32> left = cs.Left.Resolve(m_size.x);
-            const Optional<f32> right = cs.Right.Resolve(m_size.x);
-            const Optional<f32> top = cs.Top.Resolve(m_size.y);
-            const Optional<f32> bottom = cs.Bottom.Resolve(m_size.y);
+            // A sheet's insets are from the padding box, inside the border, as CSS's are; a
+            // position code gave (SetPosition) is in the box itself, as it was given.
+            const Thickness border = GetBorderThickness();
+            const bool codeX = child.IsPlacedByCode();
+            const bool codeY = child.IsPlacedByCode();
+            const f32 x0 = codeX ? 0.0f : border.Left, x1 = codeX ? 0.0f : border.Right;
+            const f32 y0 = codeY ? 0.0f : border.Top, y1 = codeY ? 0.0f : border.Bottom;
+            const f32 spanX = core::Max(0.0f, m_size.x - x0 - x1);
+            const f32 spanY = core::Max(0.0f, m_size.y - y0 - y1);
+            const Thickness m = child.GetMarginWithin(spanX);
+            const Optional<f32> left = cs.Left.Resolve(spanX);
+            const Optional<f32> right = cs.Right.Resolve(spanX);
+            const Optional<f32> top = cs.Top.Resolve(spanY);
+            const Optional<f32> bottom = cs.Bottom.Resolve(spanY);
             Optional<f32> w, h;
             if (cs.Width.IsAuto() && left.HasValue() && right.HasValue())
-                w = core::Max(0.0f, m_size.x - left.Value() - right.Value() - m.TotalHorizontal());
+                w = core::Max(0.0f, spanX - left.Value() - right.Value() - m.TotalHorizontal());
             if (cs.Height.IsAuto() && top.HasValue() && bottom.HasValue())
-                h = core::Max(0.0f, m_size.y - top.Value() - bottom.Value() - m.TotalVertical());
-            const core::Float2 b = MeasureBorder(child, w, h, kUnbounded, kUnbounded, m_size);
-            const f32 x = left.HasValue() ? left.Value() + m.Left
-                          : right.HasValue() ? m_size.x - right.Value() - b.x - m.Right
+                h = core::Max(0.0f, spanY - top.Value() - bottom.Value() - m.TotalVertical());
+            const core::Float2 b = MeasureBorder(child, w, h, kUnbounded, kUnbounded, core::Float2{spanX, spanY});
+            const f32 x = left.HasValue() ? x0 + left.Value() + m.Left
+                          : right.HasValue() ? m_size.x - x1 - right.Value() - b.x - m.Right
                                              : box.x + m.Left;
-            const f32 y = top.HasValue() ? top.Value() + m.Top
-                          : bottom.HasValue() ? m_size.y - bottom.Value() - b.y - m.Bottom
+            const f32 y = top.HasValue() ? y0 + top.Value() + m.Top
+                          : bottom.HasValue() ? m_size.y - y1 - bottom.Value() - b.y - m.Bottom
                                               : box.y + m.Top;
             child.Arrange(Rect{x, y, b.x, b.y});
         }
@@ -1004,7 +1038,7 @@ namespace experimental::gui
                 child.SetPosition(core::Float2{child.GetPosition().x + core::Round(dx * s) / s,
                                                child.GetPosition().y + core::Round(dy * s) / s});
             }
-            const Thickness m = child.GetMargin();
+            const Thickness m = child.GetMarginWithin(box.width);
             extent.x = core::Max(extent.x, child.GetPosition().x + child.GetSize().x + m.Right - box.x);
             extent.y = core::Max(extent.y, child.GetPosition().y + child.GetSize().y + m.Bottom - box.y);
         }
@@ -1489,14 +1523,14 @@ namespace experimental::gui
         const Rect border{0.0f, 0.0f, m_size.x, m_size.y};
         if (what.Margin)
         {
-            const Thickness m = GetMargin();
+            const Thickness m = GetMarginWithin(m_percentWidth);
             ring(Rect{-m.Left, -m.Top, m_size.x + m.TotalHorizontal(), m_size.y + m.TotalVertical()}, border,
                  core::Color{1.0f, 0.6f, 0.2f, 0.35f});
         }
         if (what.Padding)
         {
             const Rect content = GetContentBounds();
-            const Thickness p = m_padding;
+            const Thickness p = GetPadding();
             ring(Rect{content.x - p.Left, content.y - p.Top, content.width + p.TotalHorizontal(), content.height + p.TotalVertical()},
                  content, core::Color{0.3f, 0.85f, 0.4f, 0.35f});
         }

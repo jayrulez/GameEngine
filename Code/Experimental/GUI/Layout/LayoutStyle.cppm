@@ -224,6 +224,9 @@ export namespace experimental::gui
         LayoutLength MaxWidth = LayoutLength::None();
         LayoutLength MaxHeight = LayoutLength::None();
         Thickness Margin{};
+        /// Percentages of the containing box's width each side adds (CSS's `margin: 5%`), resolved
+        /// at layout, where that width is known.
+        Thickness MarginPercent{};
         BoxSizing Sizing = BoxSizing::BorderBox;
         Overflow OverflowX = Overflow::Visible;
         Overflow OverflowY = Overflow::Visible;
@@ -250,6 +253,8 @@ export namespace experimental::gui
         Align JustifyItems = Align::Stretch; ///< grid and stack
         f32 RowGap = 0.0f;
         f32 ColumnGap = 0.0f;
+        f32 RowGapPercent = 0.0f;    ///< of the container's content height, resolved at layout
+        f32 ColumnGapPercent = 0.0f; ///< of its content width
         Array<GridTrack> Columns;
         Array<GridTrack> Rows;
         GridTrack AutoRows{};
@@ -392,10 +397,12 @@ export namespace experimental::gui
             if (!detail::SameField(a.*member, b.*member))
                 bits |= SlotBit(slot);
         });
-        if (a.Margin.Top != b.Margin.Top) bits |= SlotBit(SlotMarginTop);
-        if (a.Margin.Right != b.Margin.Right) bits |= SlotBit(SlotMarginRight);
-        if (a.Margin.Bottom != b.Margin.Bottom) bits |= SlotBit(SlotMarginBottom);
-        if (a.Margin.Left != b.Margin.Left) bits |= SlotBit(SlotMarginLeft);
+        if (a.Margin.Top != b.Margin.Top || a.MarginPercent.Top != b.MarginPercent.Top) bits |= SlotBit(SlotMarginTop);
+        if (a.Margin.Right != b.Margin.Right || a.MarginPercent.Right != b.MarginPercent.Right) bits |= SlotBit(SlotMarginRight);
+        if (a.Margin.Bottom != b.Margin.Bottom || a.MarginPercent.Bottom != b.MarginPercent.Bottom) bits |= SlotBit(SlotMarginBottom);
+        if (a.Margin.Left != b.Margin.Left || a.MarginPercent.Left != b.MarginPercent.Left) bits |= SlotBit(SlotMarginLeft);
+        if (a.RowGapPercent != b.RowGapPercent) bits |= SlotBit(SlotRowGap);
+        if (a.ColumnGapPercent != b.ColumnGapPercent) bits |= SlotBit(SlotColumnGap);
         return bits;
     }
 

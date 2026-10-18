@@ -823,3 +823,64 @@ TEST_CASE("layout: a single-line row measured under a height limit is as tall as
     // Told its height exactly, it takes it.
     CHECK(row->Measure(LayoutConstraints::Tight(core::Float2{100.0f, 48.0f}, core::Float2{-1.0f, -1.0f})).y == doctest::Approx(48.0f));
 }
+
+TEST_CASE("layout: a dock's fill takes what every side left, wherever it stands among them")
+{
+    Bed bed;
+    auto dock = Box(*bed.root.Get(), [](LayoutStyle& s) { s.Kind = Display::Dock; s.Height = LayoutLength::Px(300.0f); });
+    auto fill = Box(*dock.Get(), [](LayoutStyle&) {}); // first, though it fills
+    auto left = Box(*dock.Get(), [](LayoutStyle& s) { s.DockSide = Dock::Left; s.Width = LayoutLength::Px(80.0f); });
+    auto top = Box(*dock.Get(), [](LayoutStyle& s) { s.DockSide = Dock::Top; s.Height = LayoutLength::Px(30.0f); });
+    bed.Layout();
+    CheckRect(*left, 0, 0, 80, 300);
+    CheckRect(*top, 80, 0, 320, 30);
+    CheckRect(*fill, 80, 30, 320, 270); // not under the sides
+}
+
+TEST_CASE("layout: a sheet's insets are from inside the border; a position code gives is in the box")
+{
+    Bed bed;
+    auto holder = Box(*bed.root.Get(), [](LayoutStyle& s) { s.Width = LayoutLength::Px(200.0f); s.Height = LayoutLength::Px(100.0f); });
+    NodeBox box;
+    box.BorderWidths = foundation::vg::BorderWidths(5.0f);
+    holder->SetBox(box);
+    auto styled = Box(*holder.Get(), [](LayoutStyle& s) {
+        s.Placement = Position::Absolute;
+        s.Left = LayoutLength::Px(10.0f);
+        s.Top = LayoutLength::Px(10.0f);
+        s.Width = LayoutLength::Px(20.0f);
+        s.Height = LayoutLength::Px(20.0f);
+    });
+    auto placed = Fixed(*holder.Get(), 20.0f, 20.0f);
+    placed->SetPosition(core::Float2{10.0f, 10.0f});
+    bed.Layout();
+    CheckRect(*styled, 15, 15, 20, 20); // 10 inside the 5-wide border
+    CheckRect(*placed, 10, 10, 20, 20); // where code put it
+}
+
+TEST_CASE("layout: percentage margins, padding and gaps are of the container's content size, as CSS's")
+{
+    Bed bed; // 400 wide
+    auto row = Box(*bed.root.Get(), [](LayoutStyle& s) { s.Direction = FlexDirection::Row; s.AlignItems = Align::Start; });
+    auto a = Fixed(*row.Get(), 50.0f, 20.0f);
+    auto b = Fixed(*row.Get(), 50.0f, 20.0f);
+    StyleManager styles(CSSParser::Parse(SV(u8".row { column-gap: 10%; padding-left: 5%; } .a { margin-left: 25%; }")));
+    row->AddClass(SV(u8"row"));
+    a->AddClass(SV(u8"a"));
+    styles.ApplyTree(*bed.root.Get());
+    bed.Layout();
+    CHECK(row->GetPadding().Left == doctest::Approx(20.0f)); // 5% of the root's 400
+    // a starts after the padding (20) and its margin (25% of the row's content width, 380: 95).
+    CHECK(a->GetPosition().x == doctest::Approx(20.0f + 95.0f));
+    CHECK(b->GetPosition().x == doctest::Approx(20.0f + 95.0f + 50.0f + 38.0f)); // the gap: 10% of 380
+}
+
+TEST_CASE("layout: fit-content is as wide as what it holds, not stretched across")
+{
+    Bed bed;
+    auto column = Box(*bed.root.Get(), [](LayoutStyle&) {}); // a column stretches its children across
+    auto fit = Box(*column.Get(), [](LayoutStyle& s) { s.Width = LayoutLength{LayoutLengthKind::FitContent, 0.0f}; });
+    Fixed(*fit.Get(), 60.0f, 20.0f);
+    bed.Layout();
+    CHECK(fit->GetSize().x == doctest::Approx(60.0f));
+}

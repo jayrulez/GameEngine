@@ -611,6 +611,14 @@ export namespace experimental::gui
                 return {};
             return ResolveLengthValue(v->Length, lengths, base);
         };
+        // A length given as a percentage, which layout resolves (a margin's, a padding's, a gap's).
+        const auto percentOf = [&](const char8_t* name) -> Optional<f32>
+        {
+            const StyleValue* v = style.Value(name);
+            if (v == nullptr || v->Kind != StyleValueKind::Length || v->Length.Unit != LengthUnit::Percent)
+                return {};
+            return v->Length.Value;
+        };
         const auto keyword = [&](const char8_t* name) -> StringView
         {
             const StyleValue* v = style.Value(name);
@@ -658,20 +666,41 @@ export namespace experimental::gui
         };
 
         {
-            Thickness padding = node.GetPadding();
-            const auto side = [&](StyleSlot slot, const char8_t* name, f32& field, f32 ownValue)
+            Thickness padding = node.GetPaddingLengths();
+            Thickness paddingPercent = node.GetPaddingPercent();
+            const auto side = [&](StyleSlot slot, const char8_t* name, f32& field, f32 ownValue, f32& percentField)
             {
-                if (free(slot))
-                    field = length(name, 0.0f).ValueOr(ownValue);
+                if (!free(slot))
+                    return;
+                // A percentage is of the containing box's width, which layout knows.
+                const Optional<f32> percent = percentOf(name);
+                percentField = percent.ValueOr(0.0f);
+                field = percent.HasValue() ? 0.0f : length(name, 0.0f).ValueOr(ownValue);
             };
-            side(SlotPaddingTop, u8"padding-top", padding.Top, own.Padding.Top);
-            side(SlotPaddingRight, u8"padding-right", padding.Right, own.Padding.Right);
-            side(SlotPaddingBottom, u8"padding-bottom", padding.Bottom, own.Padding.Bottom);
-            side(SlotPaddingLeft, u8"padding-left", padding.Left, own.Padding.Left);
-            if (Optional<f32> v = length(logical(u8"padding-", u8"left"), 0.0f); v.HasValue() && free(SlotPaddingLeft)) padding.Left = v.Value();
-            if (Optional<f32> v = length(logical(u8"padding-", u8"right"), 0.0f); v.HasValue() && free(SlotPaddingRight)) padding.Right = v.Value();
-            if (!(padding == node.GetPadding()))
+            side(SlotPaddingTop, u8"padding-top", padding.Top, own.Padding.Top, paddingPercent.Top);
+            side(SlotPaddingRight, u8"padding-right", padding.Right, own.Padding.Right, paddingPercent.Right);
+            side(SlotPaddingBottom, u8"padding-bottom", padding.Bottom, own.Padding.Bottom, paddingPercent.Bottom);
+            side(SlotPaddingLeft, u8"padding-left", padding.Left, own.Padding.Left, paddingPercent.Left);
+            const auto logicalSide = [&](StyleSlot slot, const char8_t* name, f32& field, f32& percentField)
+            {
+                if (!free(slot))
+                    return;
+                if (const Optional<f32> percent = percentOf(name); percent.HasValue())
+                {
+                    percentField = percent.Value();
+                    field = 0.0f;
+                }
+                else if (const Optional<f32> v = length(name, 0.0f); v.HasValue())
+                {
+                    field = v.Value();
+                    percentField = 0.0f;
+                }
+            };
+            logicalSide(SlotPaddingLeft, logical(u8"padding-", u8"left"), padding.Left, paddingPercent.Left);
+            logicalSide(SlotPaddingRight, logical(u8"padding-", u8"right"), padding.Right, paddingPercent.Right);
+            if (!(padding == node.GetPaddingLengths()))
                 node.SetPadding(padding);
+            node.SetPaddingPercent(paddingPercent);
         }
 
         // Layout (E2): the sheet's values over the node's own, then each field code pinned as code
@@ -712,14 +741,30 @@ export namespace experimental::gui
             size(logical(u8"inset-", u8"right"), ls.Right);
             size(u8"flex-basis", ls.Basis);
             {
+                // A side as a length, or as a percentage of the containing box's width (layout's).
                 Thickness margin = ls.Margin;
-                if (Optional<f32> v = length(u8"margin-top", 0.0f); v.HasValue()) margin.Top = v.Value();
-                if (Optional<f32> v = length(u8"margin-right", 0.0f); v.HasValue()) margin.Right = v.Value();
-                if (Optional<f32> v = length(u8"margin-bottom", 0.0f); v.HasValue()) margin.Bottom = v.Value();
-                if (Optional<f32> v = length(u8"margin-left", 0.0f); v.HasValue()) margin.Left = v.Value();
-                if (Optional<f32> v = length(logical(u8"margin-", u8"left"), 0.0f); v.HasValue()) margin.Left = v.Value();
-                if (Optional<f32> v = length(logical(u8"margin-", u8"right"), 0.0f); v.HasValue()) margin.Right = v.Value();
+                Thickness percent = ls.MarginPercent;
+                const auto marginSide = [&](const char8_t* name, f32& field, f32& percentField)
+                {
+                    if (const Optional<f32> p = percentOf(name); p.HasValue())
+                    {
+                        percentField = p.Value();
+                        field = 0.0f;
+                    }
+                    else if (const Optional<f32> v = length(name, 0.0f); v.HasValue())
+                    {
+                        field = v.Value();
+                        percentField = 0.0f;
+                    }
+                };
+                marginSide(u8"margin-top", margin.Top, percent.Top);
+                marginSide(u8"margin-right", margin.Right, percent.Right);
+                marginSide(u8"margin-bottom", margin.Bottom, percent.Bottom);
+                marginSide(u8"margin-left", margin.Left, percent.Left);
+                marginSide(logical(u8"margin-", u8"left"), margin.Left, percent.Left);
+                marginSide(logical(u8"margin-", u8"right"), margin.Right, percent.Right);
                 assign(ls.Margin, margin);
+                assign(ls.MarginPercent, percent);
             }
             const auto number = [&](const char8_t* name) -> Optional<f32>
             {
@@ -731,8 +776,21 @@ export namespace experimental::gui
             if (const Optional<f32> n = number(u8"flex-shrink"); n.HasValue()) assign(ls.Shrink, n.Value());
             if (const Optional<f32> n = number(u8"order"); n.HasValue()) assign(ls.Order, static_cast<i32>(n.Value()));
             if (const Optional<f32> n = number(u8"z-index"); n.HasValue()) assign(ls.ZIndex, static_cast<i32>(n.Value()));
-            if (Optional<f32> v = length(u8"row-gap", 0.0f); v.HasValue()) assign(ls.RowGap, v.Value());
-            if (Optional<f32> v = length(u8"column-gap", 0.0f); v.HasValue()) assign(ls.ColumnGap, v.Value());
+            // A gap as a length, or a percentage of the container's content size (layout's).
+            if (const Optional<f32> p = percentOf(u8"row-gap"); p.HasValue())
+            {
+                assign(ls.RowGapPercent, p.Value());
+                assign(ls.RowGap, 0.0f);
+            }
+            else if (Optional<f32> v = length(u8"row-gap", 0.0f); v.HasValue())
+                assign(ls.RowGap, v.Value());
+            if (const Optional<f32> p = percentOf(u8"column-gap"); p.HasValue())
+            {
+                assign(ls.ColumnGapPercent, p.Value());
+                assign(ls.ColumnGap, 0.0f);
+            }
+            else if (Optional<f32> v = length(u8"column-gap", 0.0f); v.HasValue())
+                assign(ls.ColumnGap, v.Value());
             const auto choose = [&](const char8_t* name, auto& field, auto parse)
             {
                 if (const StringView k = keyword(name); k.Size() != 0)
@@ -789,10 +847,12 @@ export namespace experimental::gui
                 if (free(slot))
                     result.*member = ls.*member;
             });
-            if (free(SlotMarginTop)) result.Margin.Top = ls.Margin.Top;
-            if (free(SlotMarginRight)) result.Margin.Right = ls.Margin.Right;
-            if (free(SlotMarginBottom)) result.Margin.Bottom = ls.Margin.Bottom;
-            if (free(SlotMarginLeft)) result.Margin.Left = ls.Margin.Left;
+            if (free(SlotMarginTop)) { result.Margin.Top = ls.Margin.Top; result.MarginPercent.Top = ls.MarginPercent.Top; }
+            if (free(SlotMarginRight)) { result.Margin.Right = ls.Margin.Right; result.MarginPercent.Right = ls.MarginPercent.Right; }
+            if (free(SlotMarginBottom)) { result.Margin.Bottom = ls.Margin.Bottom; result.MarginPercent.Bottom = ls.MarginPercent.Bottom; }
+            if (free(SlotMarginLeft)) { result.Margin.Left = ls.Margin.Left; result.MarginPercent.Left = ls.MarginPercent.Left; }
+            if (free(SlotRowGap)) result.RowGapPercent = ls.RowGapPercent;
+            if (free(SlotColumnGap)) result.ColumnGapPercent = ls.ColumnGapPercent;
             if (ChangedLayoutSlots(result, node.GetLayoutStyle()) != 0)
                 node.SetLayoutStyle(result);
             // Anything but visible clips the children to the box (and scroll and auto scroll them);

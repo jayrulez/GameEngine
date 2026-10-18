@@ -121,9 +121,12 @@ export namespace experimental::gui
             const bool vertical = m_orientation == Orientation::Vertical;
             const f64 step = GetRange().KeyStep();
             const f64 v = GetRange().Value;
-            if ((!vertical && key == KeyCode::Left) || (vertical && key == KeyCode::Down))
+            // A horizontal one runs from its start: Left raises it in right to left (E9b).
+            const KeyCode lower = Reversed() ? KeyCode::Right : KeyCode::Left;
+            const KeyCode raise = Reversed() ? KeyCode::Left : KeyCode::Right;
+            if ((!vertical && key == lower) || (vertical && key == KeyCode::Down))
                 ChangeByUser(v - step, true);
-            else if ((!vertical && key == KeyCode::Right) || (vertical && key == KeyCode::Up))
+            else if ((!vertical && key == raise) || (vertical && key == KeyCode::Up))
                 ChangeByUser(v + step, true);
             else if (key == KeyCode::PageDown)
                 ChangeByUser(v - GetRange().PageStep(), true);
@@ -188,8 +191,9 @@ export namespace experimental::gui
             const f32 ratio = static_cast<f32>(GetRatio());
             const f32 lo = (vertical ? b.y : b.x) + handleR;
             const f32 hi = (vertical ? b.y + b.height : b.x + b.width) - handleR;
-            // Along the track: left to right, or bottom to top.
-            const f32 along = vertical ? hi - (hi - lo) * ratio : lo + (hi - lo) * ratio;
+            // Along the track: from its start (left, or right in right to left), or bottom to top.
+            const bool reversed = Reversed();
+            const f32 along = vertical || reversed ? hi - (hi - lo) * ratio : lo + (hi - lo) * ratio;
             const f32 mid = vertical ? b.x + b.width * 0.5f : b.y + b.height * 0.5f;
             const core::Float2 handle = vertical ? core::Float2{mid, along} : core::Float2{along, mid};
             const vg::CornerRadii round(trackW * 0.5f);
@@ -197,7 +201,9 @@ export namespace experimental::gui
             // Each part its own look with the sheet's over it (slider::track, ::fill, ::tick, ::thumb, ::focus).
             const Rect track = vertical ? Rect{mid - trackW * 0.5f, b.y, trackW, b.height} : Rect{b.x, mid - trackW * 0.5f, b.width, trackW};
             GetPartStyle(u8"track").Draw(ctx, track, FilledBox(m_trackColor, round));
-            const Rect fill = vertical ? Rect{track.x, along, trackW, b.y + b.height - along} : Rect{b.x, track.y, along - b.x, trackW};
+            const Rect fill = vertical   ? Rect{track.x, along, trackW, b.y + b.height - along}
+                              : reversed ? Rect{along, track.y, b.x + b.width - along, trackW}
+                                         : Rect{b.x, track.y, along - b.x, trackW};
             GetPartStyle(u8"fill").Draw(ctx, fill, FilledBox(m_fillColor, round));
             if (m_ticks >= 2)
             {
@@ -228,6 +234,9 @@ export namespace experimental::gui
         }
 
     private:
+        /// A horizontal slider in right to left runs from the right.
+        [[nodiscard]] bool Reversed() const { return m_orientation == Orientation::Horizontal && IsRightToLeft(); }
+
         void UpdateFromEvent(const MouseEvent& event)
         {
             const Rect b = GetContentBounds();
@@ -238,7 +247,7 @@ export namespace experimental::gui
             const f32 hi = (vertical ? b.y + b.height : b.x + b.width) - handleR;
             const f32 at = vertical ? local.y : local.x;
             f32 ratio = hi > lo ? (at - lo) / (hi - lo) : 0.0f;
-            if (vertical)
+            if (vertical || Reversed())
                 ratio = 1.0f - ratio;
             ChangeByUser(GetRange().FromRatio(static_cast<f64>(ratio)), false);
         }

@@ -132,6 +132,16 @@ export namespace experimental::gui
         }
 
     protected:
+        // Its buttons sit where Relayout puts them, left to right; right to left, mirrored (E9b).
+        void OnLayout() override
+        {
+            LayoutChildren();
+            if (!IsRightToLeft())
+                return;
+            for (BarEntry& e : m_entries)
+                e.button->SetPosition(core::Float2{GetSize().x - e.button->GetPosition().x - e.button->GetSize().x, e.button->GetPosition().y});
+        }
+
         // Its buttons and their menus take its font.
         void OnTextStyleChange() override
         {
@@ -184,7 +194,9 @@ export namespace experimental::gui
             const i32 count = static_cast<i32>(m_entries.Size());
             if (key == KeyCode::Left || key == KeyCode::Right)
             {
-                const i32 next = (at + (key == KeyCode::Right ? 1 : -1) + count) % count;
+                // Along the bar as it runs: right to left, Left goes on to the next menu (E9b).
+                const bool onward = (key == KeyCode::Right) != IsRightToLeft();
+                const i32 next = (at + (onward ? 1 : -1) + count) % count;
                 BarEntry& e = m_entries[static_cast<usize>(next)];
                 event.Handled = true;
                 if (m_current != nullptr)

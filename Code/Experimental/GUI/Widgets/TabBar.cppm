@@ -707,8 +707,9 @@ export namespace experimental::gui
         i32 to = -1;
         switch (static_cast<KeyCode>(event.KeyCode))
         {
-        case KeyCode::Left: to = at - 1; break;
-        case KeyCode::Right: to = at + 1; break;
+        // Along the strip as it runs: right to left, Left goes on to the next tab (E9b).
+        case KeyCode::Left: to = IsRightToLeft() ? at + 1 : at - 1; break;
+        case KeyCode::Right: to = IsRightToLeft() ? at - 1 : at + 1; break;
         case KeyCode::Home: to = 0; break;
         case KeyCode::End: to = bar->GetTabCount() - 1; break;
         default: return;

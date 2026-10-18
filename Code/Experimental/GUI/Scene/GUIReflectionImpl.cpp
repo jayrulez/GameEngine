@@ -698,6 +698,8 @@ namespace experimental::gui
             .PropAttribute("css", core::String(u8"auto-translate"));
         builder.AccessorProperty<&Node::GetLang, &Node::SetLang>("lang").PropAttribute("css", core::String(u8"lang"));
         builder.AccessorProperty<&Node::GetDirectionName, &Node::SetDirectionName>("direction");
+        builder.AccessorProperty<&Node::GetMirrorOnRtl, &Node::SetMirrorOnRtl>("mirrorOnRtl")
+            .PropAttribute("css", core::String(u8"mirror-on-rtl"));
         builder.Method<&Node::AddElement, Node>("add");
         builder.Method<&Node::FindElement, Node>("find");
         builder.Method<&Node::ParentElement, Node>("parent");

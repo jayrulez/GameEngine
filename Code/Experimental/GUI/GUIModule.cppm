@@ -40,6 +40,7 @@ export import :popup_placement;
 export import :event_dispatcher;
 export import :commands;
 export import :data_model;
+export import :accessibility;
 export import :scene_root;
 export import :element_types;
 export import :gui_script;

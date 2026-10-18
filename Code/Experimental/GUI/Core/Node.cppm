@@ -780,6 +780,7 @@ export namespace experimental::gui
         // its sheets); marking each child here made building a long list quadratic.
         void ChildrenStyleChanged()
         {
+            MarkAccessDirty(); // its accessibility node's children changed (E9d)
             m_childrenArrangementChanged = true;
             MarkStyleDirty(false);
         }
@@ -1616,6 +1617,7 @@ export namespace experimental::gui
         // reaches the root again once shown (showing it invalidates, or lays out).
         void Invalidate()
         {
+            MarkAccessDirty(); // what shows differently may read differently (E9d)
             m_needsRedraw = true;
             m_invalidatedSelf = true;
             m_subtreeInkValid = false;
@@ -1628,6 +1630,22 @@ export namespace experimental::gui
             }
         }
         [[nodiscard]] bool NeedsRedraw() const noexcept { return m_needsRedraw; }
+
+        /// Its accessibility node may read differently (E9d): the next update sends it, and its
+        /// ancestors learn something below waits, so the walk finds it. A node starts marked.
+        void MarkAccessDirty() noexcept
+        {
+            m_accessDirty = true;
+            for (Node* p = m_parent; p != nullptr && !p->m_accessChildDirty; p = p->m_parent)
+                p->m_accessChildDirty = true;
+        }
+        [[nodiscard]] bool IsAccessDirty() const noexcept { return m_accessDirty; }
+        [[nodiscard]] bool HasAccessDirtyDescendant() const noexcept { return m_accessChildDirty; }
+        void ClearAccessDirty() noexcept
+        {
+            m_accessDirty = false;
+            m_accessChildDirty = false;
+        }
         void ClearNeedsRedraw() noexcept { m_needsRedraw = false; }
 
         // === Transformable overrides: geometry changes invalidate + notify ===
@@ -2281,6 +2299,8 @@ export namespace experimental::gui
         AutoTranslate m_autoTranslate = AutoTranslate::Inherit;
         LayoutDirection m_direction = LayoutDirection::Inherit;
         bool m_mirrorOnRtl = false;
+        bool m_accessDirty = true;       // its accessibility node waits to be sent (E9d)
+        bool m_accessChildDirty = false; // some descendant's does
         bool m_mirrored = false; // mirror-on-rtl, and it runs right to left: flipped about its centre
         mutable Observable m_translationChanged; // its auto-translation changed (its translated bindings follow)
         core::String m_lang;                     // its language, empty: inherited

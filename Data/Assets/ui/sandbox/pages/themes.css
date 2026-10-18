@@ -20,12 +20,12 @@
     --button-skin: url(Assets/ui/sandbox/themes/ember/button.png) 8 fill / 8px stretch;
     --button-hover-skin: url(Assets/ui/sandbox/themes/ember/button-hover.png) 8 fill / 8px stretch;
     --field-skin: url(Assets/ui/sandbox/themes/ember/field.png) 5 fill / 5px stretch;
+    --button-radius: 6px; --field-radius: 4px; /* as round as the art: focus rings follow */
     --slider-thumb: #f1dcc0;
     background-color: transparent; border-width: 0;
     border-image: url(Assets/ui/sandbox/themes/ember/panel.png) 16 fill / 16px stretch;
 }
 .ember .theme-title { font-family: Lilita; font-size: 24px; color: #ffcf8a; text-shadow: 0 2px 2px rgba(0, 0, 0, 0.6); }
-.ember .setting-button { border-radius: 0; }
 
 /* Border styles (E13): dashes and dots fitted to each side, sides of different styles meeting on
    the corner's diagonal, square and rounded. */

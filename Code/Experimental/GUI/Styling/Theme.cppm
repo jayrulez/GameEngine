@@ -134,14 +134,15 @@ export namespace experimental::gui
             radio::dot  { background-color: var(--radio-dot, var(--accent-strong)); }
             progressbar::track { background-color: var(--progress-track, var(--track)); }
             progressbar::fill  { background-color: var(--progress-fill, var(--accent-strong)); }
-            /* Skins are tokens too: a theme's art for a control (a border-image), none by default. */
-            button { border-image: var(--button-skin, none); }
+            /* Skins are tokens too: a theme's art for a control (a border-image), none by default, and
+               a radius beside each, so a box as round as its art keeps its focus ring to it. */
+            button { border-image: var(--button-skin, none); border-radius: var(--button-radius, 0); }
             button:hover { border-image: var(--button-hover-skin, var(--button-skin, none)); }
             button:active { border-image: var(--button-pressed-skin, var(--button-hover-skin, var(--button-skin, none))); }
-            textfield, textarea, numberfield { border-image: var(--field-skin, none); }
-            combobox { border-image: var(--combobox-skin, var(--field-skin, none)); }
-            window, messagebox { border-image: var(--window-skin, none); }
-            menu { border-image: var(--menu-skin, none); }
+            textfield, textarea, numberfield { border-image: var(--field-skin, none); border-radius: var(--field-radius, 0); }
+            combobox { border-image: var(--combobox-skin, var(--field-skin, none)); border-radius: var(--combobox-radius, var(--field-radius, 0)); }
+            window, messagebox { border-image: var(--window-skin, none); border-radius: var(--window-radius, var(--radius-large)); }
+            menu { border-image: var(--menu-skin, none); border-radius: var(--menu-radius, 0); }
 
             /* Light: the base tokens again, and the widget tokens whose light look is not the base's. */
             @media (prefers-color-scheme: light) {

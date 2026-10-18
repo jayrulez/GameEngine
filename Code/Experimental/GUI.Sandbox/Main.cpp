@@ -27,6 +27,7 @@ import foundation.image;
 import foundation.image.io; // the resource provider's pictures
 import foundation.fonts;
 import foundation.fonts.truetype;
+import foundation.fonts.bidi;
 import foundation.fonts.distancefield.baker; // the Lilita distance-field face
 import foundation.vg;
 import foundation.vg.renderer;
@@ -394,6 +395,8 @@ Status GUISandbox::OnInit()
     if (m_device->CreateFence(0, m_fence) != ErrorCode::Ok)
         return ErrorCode::Unknown;
 
+    // Mixed-direction text reorders by the Unicode bidirectional algorithm (E9c), as Engine.UI's does.
+    fonts::BidiAlgorithm::Install();
     m_fontService = MakeUnique<fonts::TrueTypeFontService>(AppRoot(), AppRoot());
     LoadFonts();
     m_vg = MakeUnique<vg::VGContext>(AppRoot(), m_fontService.Get());

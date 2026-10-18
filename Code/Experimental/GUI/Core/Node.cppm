@@ -1734,11 +1734,23 @@ export namespace experimental::gui
             m_mirrored = mirrored;
             UpdateStyleTransform();
         }
+        /// Tells it and what it holds that the way they run may have changed (stopping below at a
+        /// node that sets its own): text takes its paragraphs' direction from it (E9c).
+        void NotifyDirectionChange()
+        {
+            OnDirectionChange();
+            for (usize i = 0; i < m_children.Size(); ++i)
+                if (Node* child = m_children[i].Get(); child != nullptr && child->m_direction == LayoutDirection::Inherit)
+                    child->NotifyDirectionChange();
+        }
+        /// The way it runs may have changed (its own direction, an ancestor's, or a new parent).
+        virtual void OnDirectionChange() {}
         /// The direction changed here or above: the subtree lays out again (its rows run the other
         /// way) and restyles (text-align's start and end follow it).
         void DirectionChanged()
         {
             RequestLayoutTree();
+            NotifyDirectionChange();
             if (m_styleWriting) // the style pass applies it before its text: only what it holds waits
             {
                 for (usize i = 0; i < m_children.Size(); ++i)
@@ -2101,6 +2113,8 @@ export namespace experimental::gui
         void HandleParentChange()
         {
             OnParentChange();
+            if (m_direction == LayoutDirection::Inherit)
+                NotifyDirectionChange(); // it may run another way under its new parent
             Invalidate();
             SendEvent(Event(EventType::ParentChanged, this));
             NotifySceneRootChanged(); // the subtree may have joined or left a GUI

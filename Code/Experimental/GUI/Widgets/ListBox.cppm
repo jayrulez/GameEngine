@@ -68,7 +68,7 @@ export namespace experimental::gui
         ListBoxItem()
         {
             StyleWriteScope defaults(*this); // its own values, which a sheet returns to
-            SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
+            SetTextAlignment(TextHAlign::Start, TextVAlign::Middle);
         }
 
         void SetIndex(i32 index) noexcept { m_index = index; }

@@ -35,8 +35,8 @@ export namespace experimental::gui
         {
             SetTag(core::StringView(u8"textfield"));
             ShownText().SetWhiteSpace(TextWhiteSpace::Pre); // its spaces as typed, on one line
-            ShownText().SetAlignment(TextHAlign::Left, TextVAlign::Middle);
-            HintText().SetAlignment(TextHAlign::Left, TextVAlign::Middle);
+            ShownText().SetAlignment(TextHAlign::Start, TextVAlign::Middle);
+            HintText().SetAlignment(TextHAlign::Start, TextVAlign::Middle);
             (void)OnCommand(core::StringView(kTextSubmitCommand), [this](CommandEvent&) { Submit(); });
         }
 

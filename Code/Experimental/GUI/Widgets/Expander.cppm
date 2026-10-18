@@ -47,7 +47,7 @@ export namespace experimental::gui
             SetTag(core::StringView(u8"expanderheader"));
             {
                 StyleWriteScope defaults(*this);
-                SetTextAlignment(TextHAlign::Left, TextVAlign::Middle); // its text beside its indicator
+                SetTextAlignment(TextHAlign::Start, TextVAlign::Middle); // its text beside its indicator
             }
             MakeIndicator();
         }

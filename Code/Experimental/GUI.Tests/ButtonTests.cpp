@@ -312,7 +312,7 @@ TEST_CASE("button: a command's label fills a button with no text of its own")
     CHECK(b->GetText() == core::StringView(u8"Mine"));
 }
 
-TEST_CASE("button: its text part is aligned as the button is: centred on a button, left beside an indicator")
+TEST_CASE("button: its text part is aligned as the button is: centred on a button, at its start beside an indicator")
 {
     auto b = Make<Button>();
     b->SetText(core::StringView(u8"OK"));
@@ -322,5 +322,5 @@ TEST_CASE("button: its text part is aligned as the button is: centred on a butto
 
     auto check = Make<CheckBox>();
     check->SetText(core::StringView(u8"Music"));
-    CHECK(check->GetTextPart()->GetTextAlignH() == TextHAlign::Left);
+    CHECK(check->GetTextPart()->GetTextAlignH() == TextHAlign::Start);
 }

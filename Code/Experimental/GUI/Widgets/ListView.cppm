@@ -44,7 +44,7 @@ export namespace experimental::gui
             auto label = core::MakeRef<Label>(MemoryAllocator());
             label->SetTag(core::StringView(u8"listcell")); // a row's, not a sheet's generic label
             StyleWriteScope defaults(*label);
-            label->SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
+            label->SetTextAlignment(TextHAlign::Start, TextVAlign::Middle);
             label->SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
             label->SetHitTestVisible(false); // a press on it is the row's
             return label;

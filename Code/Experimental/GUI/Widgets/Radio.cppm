@@ -36,7 +36,7 @@ export namespace experimental::gui
             SetTag(core::StringView(u8"radio"));
             {
                 StyleWriteScope defaults(*this);
-                SetTextAlignment(TextHAlign::Left, TextVAlign::Middle); // its text beside its indicator
+                SetTextAlignment(TextHAlign::Start, TextVAlign::Middle); // its text beside its indicator
             }
             SetToggle(true);
             SetKeepsChecked(true);

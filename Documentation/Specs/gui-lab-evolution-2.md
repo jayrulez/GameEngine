@@ -168,6 +168,31 @@ Tests: fallback across faces in one run; weight and style selection; `@font-face
 fake provider; auto direction; logical word moves in mixed text; long-word breaking; the
 Language page in its real fonts (an image reference the user approves).
 
+As built on `vg` (2026-10-18): `font-family` takes a list; the first family the font service has is
+the font and the rest, up to four, are the faces a character it lacks falls back to; a piece is
+shaped with the whole list and its glyphs come out as one run per face (59724859a). `font-weight`
+and `font-style` inherit and choose a family's face in CSS's order, the style first, among faces
+named as font files name them ("Roboto Bold", "Roboto Light Italic"), synthesizing bold and italic
+only where no face has them; a run's `<b>` is bolder (579755b0a). `@font-face` names a face and its
+file, and the style manager asks a loader the host gives for each, once per sheet (e9bb4733f).
+`direction: auto` runs each paragraph as its first strong character reads, one with none as its
+node does, its boxes as its parent's (43d86c028). In a right-to-left paragraph a word to the left is
+the next one and Left collapses a selection to its logical end; deletes, Home and End keep to the
+text's order (9f39cfa19). `overflow-wrap: break-word` breaks a word wider than its line between
+graphemes (64a5919da); the style slots passed 64 on the way, so the pins are two words (5d65fefe6).
+A rich text's link shows the pointer hand (b75a7ba94). A password field's text input is secret, so
+the platform's IME keeps out of it: a text input kind on the shell, on master too (3673074e5,
+master b2e1b288f). HarfBuzz: the lab shapes through `ITextShaper` and names no shaper, its hosts
+install HarfBuzz before loading fonts, and now GUI.Tests does too; that showed a piece measured by
+its characters but drawn shaped, now measured as shaped, and a caret that skipped the inside of a
+ligature, now stopping at each grapheme in one (131667e6d). The Language page draws in Roboto with
+DejaVu behind it, and the sandbox loads Roboto's bold through `@font-face` (0d8a2f3f9, references
+approved, 6fe3e3726). On the way: the gcc lane had not built five of the lab's implementation units
+(a4ce90633), and the web build had stopped configuring (b3a0a9545, master 155c735c6).
+Left: a bold or italic run's fallback faces are the families' regular ones; fallback faces come only
+from the list (no generic families mapped to bundled fonts); a font with no shaper draws its
+fallback stretches in the run's own face.
+
 ### E12 The keyboard's breadth
 
 Facts: the lab's key codes stop at the editing and navigation keys, the letters, the digits and F1

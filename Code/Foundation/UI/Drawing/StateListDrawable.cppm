@@ -112,6 +112,15 @@ export namespace foundation::ui
             }
         }
 
+        [[nodiscard]] Optional<vg::CornerRadii> OutlineRadii(ControlState state) const override
+        {
+            if (Drawable* d = Get(state))
+            {
+                return d->OutlineRadii(state);
+            }
+            return {};
+        }
+
     private:
         HashMap<u32, RefPtr<Drawable>> m_drawables;
     };

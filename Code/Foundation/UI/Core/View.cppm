@@ -1391,13 +1391,29 @@ export namespace foundation::ui
         /// rounded by the child's corner radius (plus the spread, as CSS does).
         static void DrawBoxShadow(UIDrawContext& ctx, View& child, const BoxShadow& shadow)
         {
-            const f32 radius = Max(0.0f, child.ResolveStyleFloat(StyleProperty::CornerRadius, 0.0f));
+            // The shadow follows the shape it sits under: the view's corner-radius, or without one
+            // the corners its background rounds (rounded-rect(..., radius=24) sets no
+            // corner-radius, and its shadow was square).
+            vg::CornerRadii radii{Max(0.0f, child.ResolveStyleFloat(StyleProperty::CornerRadius, 0.0f))};
+            if (child.ResolveStyle(StyleProperty::CornerRadius).GetKind() == StyleValue::Kind::None)
+            {
+                if (Drawable* bg = child.ResolveStyleDrawable(StyleProperty::Background))
+                {
+                    const Optional<vg::CornerRadii> outline = bg->OutlineRadii(child.GetControlState());
+                    if (outline.HasValue())
+                    {
+                        radii = outline.Value();
+                    }
+                }
+            }
             const f32 spread = shadow.Inset ? -shadow.Spread : shadow.Spread;
             const Rectangle rect{shadow.OffsetX - spread, shadow.OffsetY - spread,
                                  child.Width() + 2.0f * spread, child.Height() + 2.0f * spread};
-            const f32 r = Max(0.0f, radius + spread);
-            ctx.VG().FillBoxShadow(rect, vg::CornerRadii{r, r, r, r}, shadow.Blur, shadow.Color,
-                                   shadow.Inset);
+            const auto grow = [spread](f32 r) { return Max(0.0f, r + spread); };
+            ctx.VG().FillBoxShadow(rect,
+                                   vg::CornerRadii{grow(radii.topLeft), grow(radii.topRight),
+                                                   grow(radii.bottomRight), grow(radii.bottomLeft)},
+                                   shadow.Blur, shadow.Color, shadow.Inset);
         }
 
         /// The visual children in draw order: ascending ZIndex, child order within a level

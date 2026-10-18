@@ -50,6 +50,12 @@ export namespace foundation::ui
         {
         }
 
+        [[nodiscard]] Optional<vg::CornerRadii> OutlineRadii(ControlState state) const override
+        {
+            (void)state;
+            return Radii;
+        }
+
         void Draw(UIDrawContext& ctx, const Rectangle& bounds) override
         {
             // Border strokes are INSET (stroke center pulled in by half the width) so the whole

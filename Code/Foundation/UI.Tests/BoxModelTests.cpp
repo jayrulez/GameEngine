@@ -319,6 +319,47 @@ TEST_CASE("box-model: box-shadow emits the DF shadow quad under the child with t
     }
 }
 
+TEST_CASE("box-model: a box-shadow follows the corners its background rounds")
+{
+    // Sky Hopper's cards round their background (rounded-rect(..., radius=24)) and set no
+    // corner-radius; their shadows were square. The shadow's corners, in sigma units, ride every
+    // shadow vertex's coverage: blur 8 is sigma 4.
+    const auto shadowCoverage = [](StringView sheetText) -> f32
+    {
+        UIContext ctx{DefaultAllocator()};
+        auto root = MakeRoot();
+        EnsureGlobals();
+        Init(ctx, root.Get(), 400, 300);
+        ctx.SetStyleSheet(LoadSSS(sheetText));
+        auto child = RV(100, 50, 1);
+        root->AddView(child.Get());
+        LayoutPass(ctx, root.Get());
+        vg::VGContext vgContext;
+        ctx.DrawRootView(root.Get(), vgContext);
+        const vg::VGBatch& batch = vgContext.GetBatch();
+        for (usize i = 0; i < batch.vertices.Size(); ++i)
+        {
+            const vg::VGVertex& v = batch.vertices[i];
+            if (v.color.a > 0.49f && v.color.a < 0.51f)
+            {
+                return v.coverage;
+            }
+        }
+        return -1.0f;
+    };
+    CHECK(shadowCoverage(u8"RecordingView { background: rounded-rect(#FFFFFF, radius=12); "
+                         u8"box-shadow: 0 0 8 #00000080; }") == doctest::Approx(12.0f / 4.0f));
+    // Its spread grows the corners as it grows the box.
+    CHECK(shadowCoverage(u8"RecordingView { background: rounded-rect(#FFFFFF, radius=12); "
+                         u8"box-shadow: 0 0 8 2 #00000080; }") == doctest::Approx(14.0f / 4.0f));
+    // A corner-radius the view sets still decides.
+    CHECK(shadowCoverage(u8"RecordingView { background: rounded-rect(#FFFFFF, radius=12); "
+                         u8"corner-radius: 3; box-shadow: 0 0 8 #00000080; }") == doctest::Approx(3.0f / 4.0f));
+    // A background that rounds nothing leaves the shadow square.
+    CHECK(shadowCoverage(u8"RecordingView { background: #FFFFFF; box-shadow: 0 0 8 #00000080; }") ==
+          doctest::Approx(0.0f));
+}
+
 TEST_CASE("box-model: box-shadow parses none, the inset keyword and a bare color")
 {
     core::RefPtr<StyleSheet> sheet = LoadSSS(u8"TestView { box-shadow: 1 2 #ff0000 inset; }"

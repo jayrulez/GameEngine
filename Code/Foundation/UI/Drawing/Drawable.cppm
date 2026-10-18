@@ -17,6 +17,7 @@ module;
 export module foundation.ui:drawable;
 
 import foundation.core; // Object, Optional, Float2, Rectangle
+import foundation.vg;   // CornerRadii
 import :thickness;
 import :control_state;
 import :draw_context;
@@ -80,6 +81,15 @@ export namespace foundation::ui
         /// Padding contributed by this drawable (e.g. nine-slice borders). Layout can
         /// merge via max(drawablePadding, explicitPadding).
         [[nodiscard]] virtual Thickness DrawablePadding() const { return Thickness{}; }
+
+        /// The corners of the box this drawable fills in `state`, when it fills a rounded box: what
+        /// a box-shadow under it follows when the view sets no corner-radius. Empty for a drawable
+        /// that is no such box (an image, a gradient, a custom shape).
+        [[nodiscard]] virtual Optional<vg::CornerRadii> OutlineRadii(ControlState state) const
+        {
+            (void)state;
+            return {};
+        }
 
     protected:
         /// State-aware draw body - the default delegates to the state-unaware overload.

@@ -135,6 +135,7 @@ option(OPTION_BUILD_TOOLS "Build editor/authoring tooling (the editor libraries 
 # Experimental modules and optional extensions are independently switchable; each exposes a
 # OPTION_HAS_* compile define (see the policy block) so C++ can guard usage with #if.
 option(OPTION_EXPERIMENTAL_GUI "Build the experimental GUI framework (experimental.gui + shell/vfs)" ON)
+option(OPTION_GUI_LIBFUZZER "Build a libFuzzer executable per GUI fuzz target (clang; configure the tree with -fsanitize=fuzzer-no-link,address)" OFF)
 option(OPTION_EXTENSION_IMGUI  "Build the Dear ImGui debug-UI extension (extensions.imgui)" ON)
 # Script backends are independently switchable; each defines OPTION_HAS_<backend> (presence macro,
 # guard C++ with `#ifdef`) when enabled. At least one must stay on. AngelScript additionally needs
@@ -725,6 +726,7 @@ if(OPTION_BUILD_TESTS)
     util_test_suite(Code/Experimental/GUI.Shell.Tests               Experimental::GUI.Shell)
     util_test_suite(Code/Experimental/GUI.Inspector.Tests           Experimental::GUI.Inspector)
     util_test_suite(Code/Experimental/GUI.Testing.Tests             Experimental::GUI.Testing)
+    util_test_suite(Code/Experimental/GUI.Fuzz.Tests                Experimental::GUI.Testing)
     util_test_suite(Code/Experimental/GUI.Tests                     Experimental::GUI)
     util_test_suite(Code/Experimental/GUI.Script.Tests              Experimental::GUI)
     util_test_suite(Code/Experimental/GUI.VFS.Tests                 Experimental::GUI.VFS)

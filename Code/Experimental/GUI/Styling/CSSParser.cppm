@@ -6,8 +6,8 @@
 // CSSParser: turns `.css` text into a StyleSheet. Ported from eepp's css/StyleSheetParser
 // (common subset). Handles `/* comments */`, comma-separated selector lists, `name: value;`
 // declaration blocks (custom properties and `!important` among them), `@media` blocks and
-// `@keyframes`; best-effort (malformed bits are skipped). Other at-rules (`@import`,
-// `@font-face`) are skipped, and nesting is not read.
+// `@keyframes` and `@font-face`; best-effort (malformed bits are skipped). Other at-rules
+// (`@import`) are skipped, and nesting is not read.
 
 module;
 #include "Core/Prelude.h"
@@ -158,6 +158,10 @@ export namespace experimental::gui
                         ParseKeyframes(sheet, Trim(prelude.SubStr(10, prelude.Size() - 10)),
                                        inner); // after "@keyframes"
                     }
+                    else if (prelude == core::StringView(u8"@font-face"))
+                    {
+                        ParseFontFace(sheet, inner);
+                    }
                     // unknown at-rule blocks are consumed and skipped
                     continue;
                 }
@@ -190,6 +194,50 @@ export namespace experimental::gui
         {
             return prelude.Size() >= 10 &&
                    prelude.SubStr(0, 10) == core::StringView(u8"@keyframes");
+        }
+
+        // An @font-face's declarations: font-family and src (its first url, a path), font-weight
+        // (a number, normal or bold) and font-style; one without a family or a source is dropped.
+        static void ParseFontFace(StyleSheet& sheet, core::StringView block)
+        {
+            FontFaceRule face;
+            for (const StyleProperty& p : ParseDeclList(block))
+            {
+                const core::StringView value = Trim(p.Value.AsView());
+                if (p.Name.AsView() == core::StringView(u8"font-family"))
+                {
+                    core::StringView family = value;
+                    if (family.Size() >= 2 && (family[0] == u8'"' || family[0] == u8'\'') && family[family.Size() - 1] == family[0])
+                        family = Trim(family.SubStr(1, family.Size() - 2));
+                    face.Family = core::String(family);
+                }
+                else if (p.Name.AsView() == core::StringView(u8"src"))
+                {
+                    // The first source of a list (`url(a.ttf) format("truetype"), url(b.woff)`).
+                    usize end = 0;
+                    while (end < value.Size() && value[end] != u8')' && value[end] != u8',')
+                        ++end;
+                    core::StringView first = Trim(value.SubStr(0, end < value.Size() && value[end] == u8')' ? end + 1 : end));
+                    if (first.Size() >= 5 && first.SubStr(0, 4) == core::StringView(u8"url(") && first[first.Size() - 1] == u8')')
+                        first = Trim(first.SubStr(4, first.Size() - 5));
+                    if (first.Size() >= 2 && (first[0] == u8'"' || first[0] == u8'\'') && first[first.Size() - 1] == first[0])
+                        first = first.SubStr(1, first.Size() - 2);
+                    face.Source = core::String(first);
+                }
+                else if (p.Name.AsView() == core::StringView(u8"font-weight"))
+                {
+                    if (value == core::StringView(u8"bold"))
+                        face.Weight = 700;
+                    else if (const Optional<f64> w = ParseFloat(value); w.HasValue() && w.Value() >= 1.0 && w.Value() <= 1000.0)
+                        face.Weight = static_cast<u16>(w.Value());
+                }
+                else if (p.Name.AsView() == core::StringView(u8"font-style"))
+                {
+                    face.Italic = value == core::StringView(u8"italic") || value.StartsWith(core::StringView(u8"oblique"));
+                }
+            }
+            if (face.Family.Size() != 0 && face.Source.Size() != 0)
+                sheet.AddFontFace(core::Move(face));
         }
 
         // Parse the inner of @keyframes: a run of `<offset-list> { decls }` stops (offset is a

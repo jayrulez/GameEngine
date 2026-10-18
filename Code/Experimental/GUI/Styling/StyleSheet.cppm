@@ -269,6 +269,16 @@ export namespace experimental::gui
         Array<StyleProperty> Properties;
     };
 
+    // An @font-face rule (E11 of Specs/gui-lab-evolution-2.md): a face of a family, and the file
+    // it is in, which the host loads (StyleManager::SetFontFaceLoader).
+    struct FontFaceRule
+    {
+        core::String Family;
+        core::String Source; ///< its src, url() and quotes taken off
+        u16 Weight = 400;
+        bool Italic = false;
+    };
+
     // A named @keyframes animation: an ordered list of stops.
     struct Keyframes
     {
@@ -327,6 +337,8 @@ export namespace experimental::gui
         }
 
         void AddKeyframes(Keyframes keyframes) { m_keyframes.PushBack(core::Move(keyframes)); }
+        void AddFontFace(FontFaceRule face) { m_fontFaces.PushBack(core::Move(face)); }
+        [[nodiscard]] const Array<FontFaceRule>& FontFaces() const noexcept { return m_fontFaces; }
         [[nodiscard]] usize KeyframesCount() const noexcept { return m_keyframes.Size(); }
         [[nodiscard]] const Keyframes* FindKeyframes(core::StringView name) const
         {
@@ -593,6 +605,7 @@ export namespace experimental::gui
 
         Array<StyleRule> m_rules;
         Array<Keyframes> m_keyframes;
+        Array<FontFaceRule> m_fontFaces;
         mutable RuleIndex m_index;
         core::String m_name;
     };

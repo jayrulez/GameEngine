@@ -88,6 +88,7 @@ export namespace experimental::gui
             m_cache = {};
             m_allDirty = true; // hot-reload: every widget restyles
             m_relationsKnown = false;
+            m_fontFacesLoaded = false;
         }
         [[nodiscard]] const StyleSheet& GetStyleSheet() const noexcept { return m_sheet; }
 
@@ -99,6 +100,7 @@ export namespace experimental::gui
             m_cache = {};
             m_allDirty = true;
             m_relationsKnown = false;
+            m_fontFacesLoaded = false;
         }
         [[nodiscard]] const StyleSheet& GetUserAgentSheet() const noexcept { return m_userAgent; }
 
@@ -161,9 +163,22 @@ export namespace experimental::gui
         void SetFontService(fonts::IFontService* fontService) noexcept
         {
             m_allDirty = m_allDirty || fontService != m_fontService;
+            m_fontFacesLoaded = m_fontFacesLoaded && fontService == m_fontService; // a new service lacks the faces
             m_fontService = fontService;
         }
         [[nodiscard]] fonts::IFontService* GetFontService() const noexcept { return m_fontService; }
+
+        /// Loads a sheet's @font-face (E11): the host puts the file at `source` (a path as the
+        /// sheet wrote it) into its font service under `face`, the name the face is chosen by
+        /// ("Family", "Family Bold", "Family Light Italic"), and says whether it did. Each face is
+        /// asked for once per sheet, before the restyle that may draw in it; one the service
+        /// already has is not asked for. Null: @font-face is skipped.
+        void SetFontFaceLoader(Function<bool(core::StringView face, core::StringView source)> loader)
+        {
+            m_fontFaceLoader = core::Move(loader);
+            m_fontFacesLoaded = false;
+            m_allDirty = true;
+        }
 
         // Resolve + apply one widget. A property that changed and has a `transition` moves from
         // the value showing toward its new one, an `animation` runs its @keyframes, both through
@@ -187,6 +202,8 @@ export namespace experimental::gui
             m_lastRestyleCount = 0;
             if (!m_relationsKnown)
                 LearnRelations();
+            if (!m_fontFacesLoaded)
+                LoadFontFaces();
             const bool all = m_allDirty;
             m_allDirty = false;
             // The names above what is styled, from the walk's start up (E8): pushed on the way down.
@@ -608,6 +625,26 @@ export namespace experimental::gui
                                        part.Size() == 0 ? widget.GetInlineStyle() : core::Span<const InlineStyleDeclaration>{});
         }
 
+        // The sheets' @font-face, through the host's loader: each under the name ChooseFace looks
+        // for (the family, its weight's name, " Italic").
+        void LoadFontFaces()
+        {
+            m_fontFacesLoaded = true;
+            if (!m_fontFaceLoader)
+                return;
+            const StyleSheet* const sheets[] = {&m_userAgent, &m_sheet};
+            for (const StyleSheet* sheet : sheets)
+                for (const FontFaceRule& rule : sheet->FontFaces())
+                {
+                    core::String face = detail::WithSuffix(rule.Family.AsView(), detail::WeightSuffix(rule.Weight));
+                    if (rule.Italic)
+                        face.Append(core::StringView(u8" Italic"));
+                    if (m_fontService != nullptr && m_fontService->HasFamily(face.AsView()))
+                        continue;
+                    (void)m_fontFaceLoader(face.AsView(), rule.Source.AsView());
+                }
+        }
+
         // A @keyframes by name: the innermost subtree's, then the GUI's, then the user agent's.
         [[nodiscard]] const Keyframes* FindKeyframes(const Array<const StyleSheet*>& subtrees, core::StringView name) const
         {
@@ -675,6 +712,8 @@ export namespace experimental::gui
         MediaContext m_context;
         IResourceProvider* m_resources = nullptr;     // non-owning; loads background-image assets
         fonts::IFontService* m_fontService = nullptr; // non-owning; resolves font-family
+        Function<bool(core::StringView, core::StringView)> m_fontFaceLoader; // the host's; loads @font-face
+        bool m_fontFacesLoaded = false; // this sheet's faces were asked for
         f32 m_rootFontSize = 16.0f;                   // CSS `rem` base
         HashMap<Node*, ResolvedStyle> m_cache; // last-applied style per widget (non-owning keys)
         HashMap<Node*, RefPtr<StyleAnimation>> m_animations; // widget -> its running transitions and animations

@@ -111,6 +111,7 @@ export namespace experimental::gui
             m_fontService = service;
             Dirty();
         }
+        [[nodiscard]] fonts::IFontService* GetFontService() const noexcept { return m_fontService; }
         /// Loads a rich text's inline icons (null: they keep their space, undrawn).
         void SetResourceProvider(IResourceProvider* resources) noexcept { m_resources = resources; }
 

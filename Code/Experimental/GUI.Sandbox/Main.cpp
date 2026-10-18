@@ -285,6 +285,7 @@ private:
 
     // === Building ===
     void LoadFonts();
+    [[nodiscard]] bool LoadFontFace(StringView face, StringView source);
     [[nodiscard]] String ReadText(StringView relative);
     [[nodiscard]] RefPtr<gui::Node> LoadMarkup(StringView text);
     RefPtr<script::IScriptContext> RunScript(StringView relative, gui::GuiScriptBinding& binding);
@@ -650,6 +651,20 @@ void GUISandbox::LoadFonts()
         std::fprintf(stderr, "GUISandbox: the DejaVu face did not load\n");
 }
 
+// A sheet's @font-face (E11): the file under the data folder, into the font service under the
+// face's name, in coverage atlases as Roboto's are.
+bool GUISandbox::LoadFontFace(StringView face, StringView source)
+{
+    fonts::FontLoadOptions options = fonts::FontLoadOptions::ExtendedLatin();
+    options.pixelHeight = 16.0f;
+    options.lastCodepoint = 0x17F;
+    if (m_fontService->LoadFont(face, DataPath(source).AsView(), options) == fonts::FontLoadResult::Success)
+        return true;
+    std::fprintf(stderr, "GUISandbox: the @font-face %.*s (%.*s) did not load\n", static_cast<int>(face.Size()),
+                 reinterpret_cast<const char*>(face.Data()), static_cast<int>(source.Size()), reinterpret_cast<const char*>(source.Data()));
+    return false;
+}
+
 String GUISandbox::ReadText(StringView relative)
 {
     Result<Array<byte>> bytes = ReadFile(DataPath(relative).AsView(), AppRoot());
@@ -744,9 +759,10 @@ void GUISandbox::BuildSandbox()
     m_root->SetDebugFont(m_font);
     ApplyDebugOverlay();
 
-    m_styles.SetFontService(m_fontService.Get());
-    m_gui->SetFontService(m_fontService.Get()); // a rich text's own faces
     GUISandbox* app = this;
+    m_styles.SetFontService(m_fontService.Get());
+    m_styles.SetFontFaceLoader([app](StringView face, StringView source) { return app->LoadFontFace(face, source); });
+    m_gui->SetFontService(m_fontService.Get()); // a rich text's own faces
     m_resources = MakeUnique<SandboxResources>(AppRoot(), [app](StringView path) { return app->DataPath(path); });
     m_styles.SetResourceProvider(m_resources.Get());
     m_gui->SetResourceProvider(m_resources.Get());
@@ -1176,6 +1192,7 @@ void GUISandbox::BuildMenu()
     String css(kMenuDir);
     css += StringView(u8"menu.css");
     m_menuStyles.SetFontService(m_fontService.Get());
+    m_menuStyles.SetFontFaceLoader([this](StringView face, StringView source) { return LoadFontFace(face, source); });
     m_menuStyles.SetStyleSheet(gui::CSSParser::Parse(ReadText(css.AsView()).AsView(), css.AsView()));
     // Leave: the menu fades out, then the sandbox comes back.
     RefPtr<gui::DataModel> model = m_gui->GetDataRef();

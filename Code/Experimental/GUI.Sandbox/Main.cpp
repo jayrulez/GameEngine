@@ -1203,6 +1203,7 @@ void GUISandbox::OnRender()
     m_renderer.Render(*rp, m_width, m_height, static_cast<i32>(m_frameIndex), slice);
     rp->End();
 
+    CaptureBackbuffer(*enc, m_swapChain->CurrentTexture()); // F12 or --screenshot: this frame, as presented
     enc->TransitionTexture(m_swapChain->CurrentTexture(), rhi::ResourceState::RenderTarget,
                            rhi::ResourceState::Present);
 

@@ -468,3 +468,22 @@ TEST_CASE("menu: a markup context menu opens again after an item is picked and a
     rclick(core::Float2{150.0f, 50.0f});
     CHECK(menu->IsOpen());
 }
+
+TEST_CASE("menu: a submenu added before its title is set (a script's add, then title) names its row")
+{
+    auto menu = core::MakeRef<Menu>(core::DefaultAllocator());
+    auto sub = core::MakeRef<Menu>(core::DefaultAllocator());
+    menu->GetChildHost()->AddChild(sub.Get()); // taken in at once, with no title yet
+    sub->SetTitle(core::StringView(u8"Recent"));
+    REQUIRE(menu->RowCount() == 1u);
+    const auto named = [](auto& self, Node& node) -> bool
+    {
+        if (const MenuItem* item = core::Cast<MenuItem>(&node); item != nullptr && item->GetText() == core::StringView(u8"Recent"))
+            return true;
+        for (core::usize i = 0; i < node.ChildCount(); ++i)
+            if (Node* child = node.GetChildAt(i); child != nullptr && self(self, *child))
+                return true;
+        return false;
+    };
+    CHECK(named(named, *menu.Get()));
+}

@@ -294,3 +294,19 @@ TEST_CASE("table-view: a resized column resizes its cells in every row, not only
         CHECK(content->CellAt(1)->GetPosition().x == doctest::Approx(column));
     }
 }
+
+TEST_CASE("table-view: a row added before its cells are set (a script's add, then cells) shows them, and its item lives on")
+{
+    auto table = core::MakeRef<TableView>(core::DefaultAllocator());
+    table->SetColumnsText(core::String(u8"Name|Score"));
+    auto item = core::MakeRef<TableItem>(core::DefaultAllocator());
+    table->GetChildHost()->AddChild(item.Get()); // taken in at once, with no cells yet
+    TableItem* raw = item.Get();
+    item.Reset(); // the caller keeps only a weak handle, as a script does
+    raw->SetCells(core::String(u8"Ada|9"));
+    IModel* model = table->GetModel();
+    REQUIRE(model != nullptr);
+    REQUIRE(model->RowCount() == 1u);
+    CHECK(model->Data(model->Index(0, 0)).ToString() == core::String(u8"Ada"));
+    CHECK(model->Data(model->Index(0, 1)).ToString() == core::String(u8"9"));
+}

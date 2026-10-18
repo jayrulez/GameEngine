@@ -147,10 +147,20 @@ export namespace experimental::gui
             return true;
         }
         [[nodiscard]] core::String GetCells() const { return m_cells; }
-        void SetCells(const core::String& cells) { m_cells = cells; }
+        /// Its cells, '|' between them; set after the table took it in (a script's `add` then
+        /// `cells`), the table's row follows.
+        void SetCells(const core::String& cells)
+        {
+            m_cells = cells;
+            if (m_onCellsChanged)
+                m_onCellsChanged();
+        }
+        /// The table that took it in hears when its cells change.
+        void SetOnCellsChanged(core::Function<void()> callback) { m_onCellsChanged = core::Move(callback); }
 
     private:
         core::String m_cells;
+        core::Function<void()> m_onCellsChanged;
     };
 
     class TableView : public ItemView
@@ -291,8 +301,20 @@ export namespace experimental::gui
                     {
                         core::RefPtr<Node> child(host.GetChildAt(0));
                         host.RemoveChild(child.Get());
-                        if (const TableItem* item = core::Cast<TableItem>(child.Get()))
-                            self->m_ownModel->AddRow(ParseCells(item->GetCells()));
+                        TableItem* item = core::Cast<TableItem>(child.Get());
+                        if (item == nullptr)
+                            continue;
+                        // Its row, and the item kept: a script that added it sets its cells after,
+                        // through the handle it holds, and the row follows.
+                        const usize row = self->m_ownModel->RowCount(ModelIndex{});
+                        self->m_ownModel->AddRow(ParseCells(item->GetCells()));
+                        item->SetOnCellsChanged([self, item, row]()
+                        {
+                            const Array<Variant> cells = ParseCells(item->GetCells());
+                            for (usize c = 0; c < cells.Size(); ++c)
+                                self->m_ownModel->SetCell(row, c, cells[c]);
+                        });
+                        self->m_rowItems.PushBack(core::RefPtr<TableItem>(item));
                     }
                 });
             }
@@ -474,6 +496,7 @@ export namespace experimental::gui
         f32 m_headerHeight = 26.0f;
         f32 m_minColumnWidth = 40.0f;
         core::UniquePtr<TableModel> m_ownModel;         // markup's rows
+        Array<core::RefPtr<TableItem>> m_rowItems;      // the items they came from, each its row's
         core::UniquePtr<SortingProxyModel> m_ownProxy; // over it, so its header sorts
         core::RefPtr<Node> m_markupHost;               // where markup's rows land, then taken in
         bool m_editable = false;

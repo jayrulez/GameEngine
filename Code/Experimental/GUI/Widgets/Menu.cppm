@@ -513,6 +513,7 @@ export namespace experimental::gui
             ShareTextStyle(*sub, false);
             sub->SetItemHeight(m_itemHeight);
             item->SetSubMenu(sub.Get());
+            sub->m_row = item.Get(); // its title, set later (a script's `add` then `title`), names the row
 
             MenuSubItem* rawItem = item.Get();
             Menu* rawSub = sub.Get();
@@ -528,7 +529,12 @@ export namespace experimental::gui
         void AdoptItem(MenuItem& item) { AddItemNode(&item, &item); }
 
         /// Its title: a menu bar's button, or a submenu's item (markup's `text`).
-        void SetTitle(core::StringView title) { m_title = core::String(title); }
+        void SetTitle(core::StringView title)
+        {
+            m_title = core::String(title);
+            if (m_row != nullptr)
+                m_row->SetText(title); // the row in the menu that holds it
+        }
         [[nodiscard]] core::StringView GetTitle() const noexcept { return m_title.AsView(); }
         bool SetMarkupAttribute(core::StringView name, core::StringView value) override
         {
@@ -840,6 +846,7 @@ export namespace experimental::gui
         }
 
         core::String m_title;
+        MenuSubItem* m_row = nullptr; // its row in the menu holding it (not owned), when a submenu
         core::RefPtr<Node> m_markupHost;           // where markup's children land, then taken in
         bool m_adopting = false;
         Array<MenuRow*> m_rows;                    // rows, owned as children

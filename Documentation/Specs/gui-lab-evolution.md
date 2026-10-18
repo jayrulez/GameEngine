@@ -1073,6 +1073,106 @@ Tests: translated text and templates, a language change, auto-translate inherita
 kind mirrored under `rtl`; the accessibility tree for each control, incremental updates after a
 change, actions routed as input, and no tree built while the bridge is inactive (a mock bridge).
 
+What the engine has (surveyed 2026-10-17): no translation anywhere (Foundation, Engine, Editor);
+no right-to-left in foundation.ui or the lab; no accessibility. Foundation.Fonts resolves bidi
+levels (UAX#9 to I2, SheenBidi behind `IBidiResolver`, installed by Engine.UI and the editor but
+not by the lab) and reorders a line's runs (`ReorderLine`, L1 and L2); `ShapeRequest` takes a
+direction and a BCP 47 language. The lab's text layout shapes word pieces left to right with no
+base direction, `text-align: start` is left, and the caret and its moves are logical and left to
+right. The context already carries shared services (`SetFontService`, `SetResourceProvider`); the
+clipboard is per root.
+
+Survey (the clones, read 2026-10-17):
+- **Translation.** Godot alone has a runtime design: the source string is the key (gettext, with
+  a context and plurals), a widget keeps its text and the translated copy apart, `auto_translate_
+  mode` (inherit, always, disabled) is resolved up the tree and cached, a language change walks
+  the tree and re-resolves, catalogs are PO or CSV, and pseudolocalization (accents, expansion,
+  brackets, fake bidi) makes untranslated text show. RmlUi passes every text node through one host
+  hook once at load (and translates a binding after interpolation, which breaks keys); eepp's
+  `@string/key` with an inline default harvests missing keys; ezEngine chains translators and can
+  show every string's key; aui, zed and LunarSong have none.
+- **Right to left.** Godot flips every control's x after layout ("left" means start; mirrored
+  theme icons); eepp mirrors inside each layout on logical axes and keeps logical and physical
+  declarations apart until layout (`margin-inline-start` resolved per edge, so a direction change
+  reloads no style); gpui-ce resolves direction in a pass before layout and hands taffy `Rtl`.
+  Text: Godot runs paragraph, bidi runs, script, style span, shape, wrap, then reorders each line
+  (eepp reorders before wrapping, a known fault); gpui-ce's caret is a logical index with an
+  affinity, arrows move visually, delete works on logical clusters. Icons mirror only on opt-in.
+- **Accessibility.** Godot (AccessKit through an abstract server: persistent ids, a set of dirty
+  nodes flushed once a frame, focus recomputed at each flush, the whole window queued on
+  activation, actions bound per node and run on the main thread), gpui (AccessKit, the whole tree
+  rebuilt each frame, gated on an atomic latched per frame; gpui-ce adds a forced mode for tests),
+  eepp (its own backends: roles from the widget's type with overrides and `aria-*` in markup, a
+  name from labelled-by, label, own text, then tooltip, leaf roles hiding parts, an audit of
+  unnamed controls, polite and assertive announcements). Godot keeps text to speech a separate
+  service.
+
+Design (approved 2026-10-17, with the rulings below), in layers:
+
+- **E9a Translation, over foundation.i18n.** The engine's own layer (`Specs/i18n.md`, built
+  2026-10-17) holds the texts: string tables with dotted keys, plural entries and each locale's
+  plural rule and direction, a `Localization` its owner holds. The lab takes the host's
+  `Localization` on its context (a translator interface, a thin adapter, as the font service is
+  set). A reflected string property marked `translatable` (a property attribute, so a library
+  widget's joins with no list: a label's and a button's text, a tooltip, a placeholder) keeps its
+  source and shows its resolution: markup writes a key as `text="@menu.play"`, and text without
+  the `@` stays as written. `auto-translate` (inherit, always, off; the root always), resolved up
+  the tree and cached, Godot's. A binding's template is a key too (`text="@files.count"` with
+  `count="{{n}}"` and arguments from bindings), formatted with `FormatPlural` and `Format` before
+  it fills (not after, which breaks keys). The `Localization`'s `OnChanged` re-resolves every
+  translated property in the GUI's roots, and a node joining a tree resolves on entry.
+  `:lang(xx)` matches a node's language (the `lang` attribute, inherited, else the context's).
+  Pseudolocalization is the `Localization`'s, told to leave the lab's rich-text tags and bindings
+  untouched. The inspector shows a text's key beside its resolution.
+- **E9b Direction and the layouts.** `direction: ltr | rtl` (inherited; at the root the
+  language's, from the `Localization`'s `IsRightToLeft`, which its tables say), resolved and cached; a
+  change lays out again, no restyle. Each layout mirrors on logical axes (eepp's and taffy's way,
+  not Godot's flip after layout): a row runs from inline-start, a grid's columns from inline-
+  start, `start` and `end` in justify, align and text-align follow the direction, dock takes
+  `start` and `end` beside its physical sides. Logical `margin-inline-*`, `padding-inline-*` and
+  `inset-inline-*` stay apart from the physical ones until layout. A scroller's bar goes to its
+  inline-end; its offsets stay physical. `mirror-on-rtl` flips a node's drawing (a submenu arrow,
+  a tree's expander), opt-in. Widgets whose Left and Right keys move along their own axis (a
+  slider, a tab bar, a menu bar) follow the direction; Tab order stays the document's.
+- **E9c Bidirectional text.** The lab's text layout gets a paragraph direction (the node's, or the
+  first strong character for `auto`), splits bidi runs through Foundation's resolver (GUISandbox
+  installs SheenBidi as Engine.UI does), shapes each run in its direction, wraps, then reorders
+  each line (Godot's order; not before wrapping). The caret becomes a byte offset with an
+  affinity: arrows move visually, backspace and delete logically; a selection is a list of
+  rectangles; at a direction boundary the caret draws at its affinity's side.
+- **E9d The accessibility tree and the bridge.** AccessKit's model, owned in C++: `AccessNode`
+  (a stable id from the element table, a role, a name, description and value, numeric value, min,
+  max and step, bounds in root space, states, children, labelled-by, described-by and controls, and
+  the actions it supports), `AccessTreeUpdate` (the nodes that changed, the root on the first,
+  the focus) and `AccessActionRequest` (focus, activate, set value, increment, decrement, scroll
+  into view, expand, collapse; a string or a number). `IAccessibilityBridge` on the context says
+  whether anything listens and takes updates; requests it sends are queued and run on the GUI's
+  thread through the paths input uses (the dispatcher's focus, Activate, a value's setter, scroll
+  into view), and one a node does not advertise is refused. The tree is built only while the
+  bridge listens (or forced, for tests and the inspector): the whole root on activation, then the
+  nodes marked since (an invalidation, a state, the children changing), flushed once a frame with
+  the focus. A widget type declares its role as a type attribute and which reflected properties
+  give its name and value as property attributes; markup overrides with `role`, `aria-label`,
+  `aria-labelledby`, `aria-describedby` and `aria-hidden`. A name is the labelled-by node's, else
+  the label, else its text, else its tooltip; a button's label part is no node of its own (leaf
+  roles hide their parts). `GUIContext::Announce(text, polite | assertive)` for narration. The
+  inspector gets an Accessibility section (role, name, actions) and an audit (focusable controls
+  without a name, relations to no node).
+- **E9e The sandbox's page.** A Language and direction page: a language picker over string tables
+  in `Data/Assets/ui/sandbox/i18n` (English, pseudolocalized English, and a right-to-left one), a direction
+  toggle, mixed-direction text and a text field to edit it, and `--narrate`, a bridge that prints
+  each focus change and announcement as a screen reader would speak it (the console stands in
+  for text to speech). Image tests gain the page in a right-to-left language.
+
+Rulings (user, 2026-10-17): translation stands on the engine's own foundation.i18n, revised and
+built first, with named keys (its dotted ids), not source strings; a table holds its texts,
+plural entries and each locale's plural rule and direction, and other formats (CSV) are the
+pipeline layer's to convert. Styling by language is `:lang()`, per subtree, not a media feature.
+In mixed-direction text the arrows move the caret visually, delete and backspace logically.
+
+Not in E9: the platform adapters (UI Automation, NSAccessibility, AT-SPI) and real text to speech,
+which are host work with hosting; vertical text; locale-aware number and date formats.
+
 ## Not taken
 
 Left out on purpose, with where it comes from: CSS block, inline, float and table layout (RmlUi);

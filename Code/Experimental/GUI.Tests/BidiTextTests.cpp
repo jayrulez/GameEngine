@@ -282,3 +282,32 @@ TEST_CASE("bidi text: the model moves Left and Right across the view's caret pla
     CHECK(model.Run(TextEditCommand::MoveRight));
     CHECK(model.GetCaret() == 1u); // without, as the bytes go
 }
+
+TEST_CASE("bidi text: a clamped right-to-left paragraph ends its last line's ellipsis on the left")
+{
+    DejaVu font;
+    Bidi bidi;
+    String text;
+    for (int i = 0; i < 6; ++i)
+    {
+        text.Append(StringView(kWord));
+        text.Append(StringView(u8" "));
+    }
+    TextLayoutStyle style = Style(font, fonts::TextDirection::RightToLeft, 120.0f);
+    style.MaxLines = 1;
+    style.Overflow = TextOverflow::Ellipsis;
+    const TextLayout layout = LayOutText(ParseTextMarkup(text.AsView()), style);
+    REQUIRE(layout.Clamped);
+    const LaidOutGlyphs* ellipsis = nullptr;
+    f32 textLeft = 1e9f;
+    for (const LaidOutGlyphs& run : layout.GlyphRuns)
+    {
+        if (run.Run < 0)
+            ellipsis = &run;
+        else
+            for (const fonts::GlyphPosition& g : run.Glyphs)
+                textLeft = Min(textLeft, g.x);
+    }
+    REQUIRE(ellipsis != nullptr);
+    CHECK(ellipsis->X < textLeft); // the end of a right-to-left line is its left
+}

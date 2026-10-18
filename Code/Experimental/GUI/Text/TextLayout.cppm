@@ -854,7 +854,7 @@ export namespace experimental::gui
 
         // Ends `line` in an ellipsis where it passes `maxWidth` (always, when `forced`: the clamp cut
         // the lines after it), at its end, start or middle. The line is still unaligned (from 0).
-        inline void Ellipsize(TextLayout& layout, usize line, f32 maxWidth, TextOverflow mode, bool forced)
+        inline void Ellipsize(TextLayout& layout, usize line, f32 maxWidth, TextOverflow mode, bool forced, bool rightToLeft = false)
         {
             LaidOutLine& at = layout.Lines[line];
             const LaidOutGlyphs* first = nullptr;
@@ -871,8 +871,8 @@ export namespace experimental::gui
             const LaidOutGlyphs firstStyle = *first; // copies: the runs change below
             const LaidOutGlyphs lastStyle = *last;
             const f32 width = at.Width;
-            if (forced && mode != TextOverflow::Ellipsis)
-                mode = TextOverflow::Ellipsis; // a clamped paragraph ends at its end
+            if (forced)
+                mode = rightToLeft ? TextOverflow::EllipsisStart : TextOverflow::Ellipsis; // a clamped paragraph ends at its end: its left in right to left
             const f32 e = EllipsisWidth(mode == TextOverflow::EllipsisStart ? firstStyle : lastStyle);
             const f32 room = Max(0.0f, maxWidth - e);
             if (mode == TextOverflow::Ellipsis)
@@ -1235,12 +1235,12 @@ export namespace experimental::gui
             const bool forced = layout.Clamped && l + 1 == layout.Lines.Size() && style.Overflow != TextOverflow::Clip;
             // A right-to-left line ends on its left: its end ellipsis is the visual start's.
             TextOverflow overflow = style.Overflow;
-            if (layout.Lines[l].RightToLeft && overflow == TextOverflow::Ellipsis && !forced)
+            if (layout.Lines[l].RightToLeft && overflow == TextOverflow::Ellipsis)
                 overflow = TextOverflow::EllipsisStart;
             else if (layout.Lines[l].RightToLeft && overflow == TextOverflow::EllipsisStart)
                 overflow = TextOverflow::Ellipsis;
             if (bounded && style.Overflow != TextOverflow::Clip && (forced || layout.Lines[l].Width > style.MaxWidth + 0.01f))
-                detail::Ellipsize(layout, l, style.MaxWidth, overflow, forced);
+                detail::Ellipsize(layout, l, style.MaxWidth, overflow, forced, layout.Lines[l].RightToLeft);
             LaidOutLine& line = layout.Lines[l];
             // Start and end are the paragraph's (E9c).
             TextHAlign align = style.Align;

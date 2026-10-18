@@ -384,6 +384,76 @@ TEST_CASE("sss: DrawableFactory_Gradient")
     CHECK(gd->Direction == GradientDirection::LeftToRight);
 }
 
+TEST_CASE("sss: linear-gradient and radial-gradient take CSS's stops, angles and the box's rounding")
+{
+    const auto gradientOf = [](StringView sheetText, core::RefPtr<StyleSheet>& keep) -> GradientDrawable*
+    {
+        keep = LoadSSS(sheetText);
+        Fixture f(keep);
+        core::RefPtr<TestView> view = f.AddView();
+        return core::Cast<GradientDrawable>(view->ResolveStyleDrawable(StyleProperty::Background));
+    };
+    core::RefPtr<StyleSheet> sheet;
+    GradientDrawable* g = gradientOf(u8"View { background: linear-gradient(90deg, #FF0000, #00FF00 30%, #0000FF, "
+                                     u8"#FFFFFF); }",
+                                     sheet);
+    REQUIRE(g != nullptr);
+    REQUIRE(g->AngleDegrees.HasValue());
+    CHECK(g->AngleDegrees.Value() == doctest::Approx(90.0f));
+    REQUIRE(g->Stops.Size() == 4u);
+    // Offsets left out spread evenly between their neighbours: 0, 0.3, then 0.65 and 1.
+    CHECK(g->Stops[0].offset == doctest::Approx(0.0f));
+    CHECK(g->Stops[1].offset == doctest::Approx(0.3f));
+    CHECK(g->Stops[2].offset == doctest::Approx(0.65f));
+    CHECK(g->Stops[3].offset == doctest::Approx(1.0f));
+    CHECK(g->Stops[1].color.g == doctest::Approx(1.0f));
+
+    g = gradientOf(u8"View { background: linear-gradient(#000000, #FFFFFF); }", sheet);
+    REQUIRE(g != nullptr);
+    CHECK(g->AngleDegrees.Value() == doctest::Approx(180.0f)); // down, as CSS's default
+
+    g = gradientOf(u8"View { background: linear-gradient(to right, #000000, #FFFFFF, radius=8); }", sheet);
+    REQUIRE(g != nullptr);
+    CHECK(g->AngleDegrees.Value() == doctest::Approx(90.0f));
+    CHECK(g->Radii.topLeft == doctest::Approx(8.0f));
+    REQUIRE(g->OutlineRadii(ControlState::Normal).HasValue());
+
+    g = gradientOf(u8"View { background: linear-gradient(to bottom left, #000000, #FFFFFF); }", sheet);
+    REQUIRE(g != nullptr);
+    CHECK(g->AngleDegrees.Value() == doctest::Approx(225.0f).epsilon(0.001));
+
+    g = gradientOf(u8"View { background: linear-gradient(0.25turn, #000000, #FFFFFF); }", sheet);
+    REQUIRE(g != nullptr);
+    CHECK(g->AngleDegrees.Value() == doctest::Approx(90.0f));
+
+    g = gradientOf(u8"View { background: radial-gradient(#FFFFFF, #000000 80%, radius=4 4 0 0); }", sheet);
+    REQUIRE(g != nullptr);
+    CHECK(g->Radial);
+    REQUIRE(g->Stops.Size() == 2u);
+    CHECK(g->Stops[1].offset == doctest::Approx(0.8f));
+    CHECK(g->Radii.bottomLeft == doctest::Approx(0.0f));
+    CHECK(g->Radii.topRight == doctest::Approx(4.0f));
+
+    // The old form takes the rounding too.
+    g = gradientOf(u8"View { background: gradient(left-to-right, #000000, #FFFFFF, radius=6); }", sheet);
+    REQUIRE(g != nullptr);
+    CHECK(g->Direction == GradientDirection::LeftToRight);
+    CHECK(g->Radii.topLeft == doctest::Approx(6.0f));
+
+    // Rounded, the fill follows the corners: more of an outline than the four corners of a rect.
+    const auto vertices = [](GradientDrawable& drawable)
+    {
+        foundation::vg::VGContext canvas;
+        UIDrawContext ctx(canvas, 1.0f, nullptr);
+        drawable.Draw(ctx, Rectangle{0, 0, 100, 50});
+        return canvas.GetBatch().vertices.Size();
+    };
+    GradientDrawable square(Color{0, 0, 0, 1}, Color{1, 1, 1, 1});
+    GradientDrawable rounded(Color{0, 0, 0, 1}, Color{1, 1, 1, 1});
+    rounded.Radii = foundation::vg::CornerRadii(12.0f);
+    CHECK(vertices(rounded) > vertices(square) + 8u);
+}
+
 TEST_CASE("sss: DrawableFactory_StateList")
 {
     Fixture f(LoadSSS(u8R"(

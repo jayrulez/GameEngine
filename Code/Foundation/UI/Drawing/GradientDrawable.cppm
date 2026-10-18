@@ -3,8 +3,9 @@
 
 // UI - :gradient_drawable partition
 //
-// Linear gradient fill with two colors and a direction. Ported from
-// Sedulous.UI/src/Drawing/GradientDrawable.bf (VGLinearGradientFill + a rect Path).
+// A gradient fill of the view's box, rounded by Radii: linear (two colours and a direction, or
+// colour stops along a CSS angle) or radial (stops from the centre out to the farthest corner).
+// Ported from Sedulous.UI/src/Drawing/GradientDrawable.bf (VGLinearGradientFill + a rect Path).
 
 module;
 #include "Core/Prelude.h"
@@ -38,6 +39,15 @@ export namespace foundation::ui
         core::Color StartColor{};
         core::Color EndColor{};
         GradientDirection Direction = GradientDirection::TopToBottom;
+        /// Colour stops at offsets along the gradient (0 to 1), in place of StartColor and EndColor.
+        Array<vg::GradientStop> Stops;
+        /// A CSS angle in degrees, in place of Direction: 0 runs up, 90 to the right, 180 down;
+        /// the gradient line passes through the centre and is as long as the box's extent along it.
+        Optional<f32> AngleDegrees;
+        /// Radial: from the centre out to the farthest corner (a circle).
+        bool Radial = false;
+        /// The box's corners: the fill is rounded to them, and a shadow under it follows them.
+        vg::CornerRadii Radii{};
 
         GradientDrawable() = default;
         GradientDrawable(core::Color start, core::Color end,
@@ -46,41 +56,86 @@ export namespace foundation::ui
         {
         }
 
+        [[nodiscard]] Optional<vg::CornerRadii> OutlineRadii(ControlState state) const override
+        {
+            (void)state;
+            return Radii;
+        }
+
         void Draw(UIDrawContext& ctx, const Rectangle& bounds) override
         {
             const f32 x = bounds.x, y = bounds.y, w = bounds.width, h = bounds.height;
-            Float2 from{}, to{};
-            switch (Direction)
-            {
-            case GradientDirection::TopToBottom:
-                from = Float2{x, y};
-                to = Float2{x, y + h};
-                break;
-            case GradientDirection::LeftToRight:
-                from = Float2{x, y};
-                to = Float2{x + w, y};
-                break;
-            case GradientDirection::TopLeftToBottomRight:
-                from = Float2{x, y};
-                to = Float2{x + w, y + h};
-                break;
-            case GradientDirection::TopRightToBottomLeft:
-                from = Float2{x + w, y};
-                to = Float2{x, y + h};
-                break;
-            }
-
-            vg::VGLinearGradientFill fill{from, to};
-            fill.AddStop(0.0f, StartColor);
-            fill.AddStop(1.0f, EndColor);
-
             vg::PathBuilder pb;
-            pb.MoveTo(x, y);
-            pb.LineTo(x + w, y);
-            pb.LineTo(x + w, y + h);
-            pb.LineTo(x, y + h);
-            pb.Close();
+            if (Radii.IsZero())
+            {
+                pb.MoveTo(x, y);
+                pb.LineTo(x + w, y);
+                pb.LineTo(x + w, y + h);
+                pb.LineTo(x, y + h);
+                pb.Close();
+            }
+            else
+            {
+                vg::ShapeBuilder::BuildRoundedRect(bounds, Radii, pb);
+            }
+            const Float2 centre{x + w * 0.5f, y + h * 0.5f};
+            if (Radial)
+            {
+                vg::VGRadialGradientFill fill{centre, Sqrt(w * w + h * h) * 0.5f};
+                AddStopsTo(fill);
+                ctx.VG().FillPath(pb.ToPath(), fill);
+                return;
+            }
+            Float2 from{}, to{};
+            if (AngleDegrees.HasValue())
+            {
+                const f32 a = AngleDegrees.Value() * kDegToRad;
+                const Float2 dir{Sin(a), -Cos(a)};
+                const f32 half = (Abs(w * dir.x) + Abs(h * dir.y)) * 0.5f;
+                from = Float2{centre.x - dir.x * half, centre.y - dir.y * half};
+                to = Float2{centre.x + dir.x * half, centre.y + dir.y * half};
+            }
+            else
+            {
+                switch (Direction)
+                {
+                case GradientDirection::TopToBottom:
+                    from = Float2{x, y};
+                    to = Float2{x, y + h};
+                    break;
+                case GradientDirection::LeftToRight:
+                    from = Float2{x, y};
+                    to = Float2{x + w, y};
+                    break;
+                case GradientDirection::TopLeftToBottomRight:
+                    from = Float2{x, y};
+                    to = Float2{x + w, y + h};
+                    break;
+                case GradientDirection::TopRightToBottomLeft:
+                    from = Float2{x + w, y};
+                    to = Float2{x, y + h};
+                    break;
+                }
+            }
+            vg::VGLinearGradientFill fill{from, to};
+            AddStopsTo(fill);
             ctx.VG().FillPath(pb.ToPath(), fill);
+        }
+
+    private:
+        template <typename Fill>
+        void AddStopsTo(Fill& fill) const
+        {
+            if (Stops.IsEmpty())
+            {
+                fill.AddStop(0.0f, StartColor);
+                fill.AddStop(1.0f, EndColor);
+                return;
+            }
+            for (const vg::GradientStop& stop : Stops)
+            {
+                fill.AddStop(stop.offset, stop.color);
+            }
         }
     };
 

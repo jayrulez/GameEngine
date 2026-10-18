@@ -281,6 +281,66 @@ export namespace foundation::ui
         /// Check if next token is a number.
         [[nodiscard]] bool PeekIsNumber() { return Peek().Kind == TokenKind::Number; }
 
+        /// An angle in degrees: a number with deg (or none), turn or rad.
+        f32 ParseAngleDegrees()
+        {
+            const Token tok = Consume();
+            if (tok.UnitSuffix == StringView(u8"turn"))
+                return tok.NumericValue * 360.0f;
+            if (tok.UnitSuffix == StringView(u8"rad"))
+                return tok.NumericValue * kRadToDeg;
+            return tok.NumericValue;
+        }
+
+        /// A gradient's colour stops, each `<color> [<offset>%]`, separated by commas, up to a
+        /// keyword argument or the closing parenthesis. Offsets left out are spread evenly
+        /// between their neighbours, the first at 0 and the last at 1, as CSS spreads them.
+        Array<vg::GradientStop> ParseGradientStops()
+        {
+            Array<vg::GradientStop> stops;
+            Array<bool> placed;
+            while (!IsAtRParen() && PeekKeywordArg().IsEmpty())
+            {
+                vg::GradientStop stop;
+                stop.color = ParseColorValue();
+                const bool hasOffset = Peek().Kind == TokenKind::Number;
+                if (hasOffset)
+                    stop.offset = ParseFloatValue();
+                stops.PushBack(stop);
+                placed.PushBack(hasOffset);
+                if (!MatchComma())
+                    break;
+            }
+            if (stops.IsEmpty())
+                return stops;
+            if (!placed[0])
+            {
+                stops[0].offset = 0.0f;
+                placed[0] = true;
+            }
+            if (!placed.Back())
+            {
+                stops.Back().offset = 1.0f;
+                placed.Back() = true;
+            }
+            for (usize i = 1; i < stops.Size(); ++i)
+            {
+                if (placed[i])
+                    continue;
+                usize next = i;
+                while (!placed[next])
+                    ++next;
+                const f32 from = stops[i - 1].offset;
+                const f32 step = (stops[next].offset - from) / static_cast<f32>(next - i + 1);
+                for (usize j = i; j < next; ++j)
+                {
+                    stops[j].offset = from + step * static_cast<f32>(j - i + 1);
+                    placed[j] = true;
+                }
+            }
+            return stops;
+        }
+
         /// Resolve a registered SVG by name. Returns the SVG text or empty.
         Optional<StringView> ResolveSvg(StringView name)
         {
@@ -1431,6 +1491,23 @@ export namespace foundation::ui
         [[nodiscard]] bool& DrawableBuiltinsRegisteredFlag();
         [[nodiscard]] Mutex& DrawableRegistrationLock();
 
+        /// A gradient's trailing `radius=` (1 or 4 values, as rounded-rect takes them).
+        inline void ParseGradientRadius(SSSParser& parser, GradientDrawable& drawable)
+        {
+            while (parser.MatchComma() || !parser.PeekKeywordArg().IsEmpty())
+            {
+                if (parser.PeekKeywordArg() == StringView(u8"radius"))
+                {
+                    parser.ConsumeKeywordArg();
+                    drawable.Radii = parser.ParseCornerRadiiValue();
+                }
+                else
+                {
+                    break;
+                }
+            }
+        }
+
         [[nodiscard]] inline ControlState ParseStateName(StringView name)
         {
             if (name == StringView(u8"normal"))
@@ -1549,7 +1626,7 @@ export namespace foundation::ui
                      return d;
                  });
 
-        // gradient(direction, color1, color2) -> GradientDrawable
+        // gradient(direction, color1, color2[, radius=r]) -> GradientDrawable
         Register(u8"gradient",
                  [](SSSParser& parser, StyleSheet& sheet) -> RefPtr<Drawable>
                  {
@@ -1584,6 +1661,65 @@ export namespace foundation::ui
                      const Color c2 = parser.ParseColorArg();
                      RefPtr<GradientDrawable> d =
                          MakeRef<GradientDrawable>(parser.Allocator(), c1, c2, dir);
+                     detail::ParseGradientRadius(parser, *d);
+                     sheet.OwnDrawable(d);
+                     return d;
+                 });
+
+        // linear-gradient([<angle> | to <side> [<side>],] <color> [<offset>%], ...[, radius=r]),
+        // as CSS writes it (180deg, down, when no direction is given) -> GradientDrawable
+        Register(u8"linear-gradient",
+                 [](SSSParser& parser, StyleSheet& sheet) -> RefPtr<Drawable>
+                 {
+                     RefPtr<GradientDrawable> d = MakeRef<GradientDrawable>(parser.Allocator());
+                     f32 angle = 180.0f;
+                     if (parser.PeekIsNumber())
+                     {
+                         angle = parser.ParseAngleDegrees();
+                         parser.MatchComma();
+                     }
+                     else if (parser.PeekIdent() == StringView(u8"to"))
+                     {
+                         parser.ConsumeIdent();
+                         // A side or a corner, as two sides in either order.
+                         f32 dx = 0.0f;
+                         f32 dy = 0.0f;
+                         for (i32 word = 0; word < 2; ++word)
+                         {
+                             const StringView side = parser.PeekIdent();
+                             if (side == StringView(u8"top"))
+                                 dy = -1.0f;
+                             else if (side == StringView(u8"bottom"))
+                                 dy = 1.0f;
+                             else if (side == StringView(u8"left"))
+                                 dx = -1.0f;
+                             else if (side == StringView(u8"right"))
+                                 dx = 1.0f;
+                             else
+                                 break;
+                             parser.ConsumeIdent();
+                         }
+                         // A corner points the line at it through a square's diagonal: CSS's
+                         // corner follows the box's shape, kept to 45 degrees here.
+                         angle = Atan2(dx, -dy) * kRadToDeg;
+                         parser.MatchComma();
+                     }
+                     d->AngleDegrees = angle < 0.0f ? angle + 360.0f : angle;
+                     d->Stops = parser.ParseGradientStops();
+                     detail::ParseGradientRadius(parser, *d);
+                     sheet.OwnDrawable(d);
+                     return d;
+                 });
+
+        // radial-gradient(<color> [<offset>%], ...[, radius=r]): from the centre out to the farthest
+        // corner, a circle -> GradientDrawable
+        Register(u8"radial-gradient",
+                 [](SSSParser& parser, StyleSheet& sheet) -> RefPtr<Drawable>
+                 {
+                     RefPtr<GradientDrawable> d = MakeRef<GradientDrawable>(parser.Allocator());
+                     d->Radial = true;
+                     d->Stops = parser.ParseGradientStops();
+                     detail::ParseGradientRadius(parser, *d);
                      sheet.OwnDrawable(d);
                      return d;
                  });

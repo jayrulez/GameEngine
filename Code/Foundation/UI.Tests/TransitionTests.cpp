@@ -515,3 +515,112 @@ TEST_CASE("transition: detaching a view mid-flight de-lists it and the tick stay
     f.ctx.BeginFrame(0.05f); // nothing dangling to tick
     CHECK(f.ctx.TransitioningViewCount() == 0);
 }
+
+// === animations (@keyframes) ===
+
+namespace
+{
+    f32 OpacityOf(View& v) { return v.ResolveStyleFloat(StyleProperty::Opacity, -1.0f); }
+}
+
+TEST_CASE("animation: @keyframes and the animation list parse")
+{
+    core::RefPtr<StyleSheet> sheet = LoadSSS(
+        u8"@keyframes pulse { to { opacity: 1; } from { opacity: 0; } 25%, 75% { opacity: 0.8; } }\n"
+        u8"TestView { animation: pulse 2s cubic-bezier(0.2, 0, 0, 1) 500ms infinite alternate both, "
+        u8"spin 300ms 3 reverse forwards; }\n"
+        u8".none { animation: none; }\n");
+    REQUIRE(sheet);
+    const KeyframesRule* pulse = sheet->FindKeyframes(u8"pulse");
+    REQUIRE(pulse != nullptr);
+    // Sorted by offset, a shared block under each of its selectors.
+    REQUIRE(pulse->Frames.Size() == 4u);
+    CHECK(pulse->Frames[0].Offset == doctest::Approx(0.0f));
+    CHECK(pulse->Frames[1].Offset == doctest::Approx(0.25f));
+    CHECK(pulse->Frames[2].Offset == doctest::Approx(0.75f));
+    CHECK(pulse->Frames[3].Offset == doctest::Approx(1.0f));
+    CHECK(pulse->Animates(StyleProperty::Opacity));
+    CHECK_FALSE(pulse->Animates(StyleProperty::TextColor));
+    CHECK(sheet->FindKeyframes(u8"spin") == nullptr);
+
+    const AnimationList* list = sheet->GetRule(0).GetValue(StyleProperty::Animation).Value().AsAnimations();
+    REQUIRE(list != nullptr);
+    REQUIRE(list->Specs.Size() == 2u);
+    const AnimationSpec& a = list->Specs[0];
+    CHECK(a.Name == StringView(u8"pulse"));
+    CHECK(a.Duration == doctest::Approx(2.0f));
+    CHECK(a.Delay == doctest::Approx(0.5f));
+    CHECK(a.Iterations < 0.0f);
+    CHECK(a.Direction == AnimationDirection::Alternate);
+    CHECK(a.Fill == AnimationFill::Both);
+    CHECK(a.Easing == TimingFunction::CubicBezier(0.2f, 0.0f, 0.0f, 1.0f));
+    const AnimationSpec& b = list->Specs[1];
+    CHECK(b.Duration == doctest::Approx(0.3f));
+    CHECK(b.Iterations == doctest::Approx(3.0f));
+    CHECK(b.Direction == AnimationDirection::Reverse);
+    CHECK(b.Fill == AnimationFill::Forwards);
+    const AnimationList* none = sheet->GetRule(1).GetValue(StyleProperty::Animation).Value().AsAnimations();
+    REQUIRE(none != nullptr);
+    CHECK(none->Specs.IsEmpty());
+}
+
+TEST_CASE("animation: keyframes play over the cascade, a missing frame is the cascade's, fill holds the end")
+{
+    Fixture f(LoadSSS(u8"@keyframes fade { to { opacity: 1; } }\n"
+                      u8"TestView { opacity: 0.2; animation: fade 1s linear forwards; }\n"));
+    auto v = f.Leaf();
+    CHECK(OpacityOf(*v) == doctest::Approx(0.2f)); // starts at the cascade's value: no from frame
+    f.ctx.BeginFrame(0.5f);
+    CHECK(OpacityOf(*v) == doctest::Approx(0.6f));
+    f.ctx.BeginFrame(0.75f); // past the end
+    CHECK(OpacityOf(*v) == doctest::Approx(1.0f)); // forwards holds the last frame
+    CHECK(v->RunningAnimationCount() == 0u);
+    f.ctx.BeginFrame(1.0f); // and it does not start again while the cascade names it
+    CHECK(OpacityOf(*v) == doctest::Approx(1.0f));
+}
+
+TEST_CASE("animation: without a fill it gives the cascade back; a delay waits, backwards shows the first frame")
+{
+    Fixture f(LoadSSS(u8"@keyframes dim { from { opacity: 0.5; } to { opacity: 0; } }\n"
+                      u8"TestView { opacity: 1; animation: dim 1s linear 1s; }\n"
+                      u8".early { animation: dim 1s linear 1s backwards; }\n"));
+    auto v = f.Leaf();
+    CHECK(OpacityOf(*v) == doctest::Approx(1.0f)); // inside the delay: the cascade
+    f.ctx.BeginFrame(1.5f);
+    CHECK(OpacityOf(*v) == doctest::Approx(0.25f));
+    f.ctx.BeginFrame(1.0f);
+    CHECK(OpacityOf(*v) == doctest::Approx(1.0f)); // ended, no fill: the cascade again
+
+    auto early = f.Leaf();
+    early->AddClass(u8"early");
+    CHECK(OpacityOf(*early) == doctest::Approx(0.5f)); // its delay shows the first frame
+}
+
+TEST_CASE("animation: alternate runs every other iteration backwards, each segment eased")
+{
+    Fixture f(LoadSSS(u8"@keyframes swing { from { opacity: 0; } 50% { opacity: 1; } to { opacity: 0.5; } }\n"
+                      u8"TestView { animation: swing 1s linear infinite alternate; }\n"));
+    auto v = f.Leaf();
+    (void)OpacityOf(*v);
+    f.ctx.BeginFrame(0.25f);
+    CHECK(OpacityOf(*v) == doctest::Approx(0.5f)); // half way to the 50% frame
+    f.ctx.BeginFrame(0.5f);
+    CHECK(OpacityOf(*v) == doctest::Approx(0.75f)); // 75%: half way from 1 to 0.5
+    f.ctx.BeginFrame(0.5f); // 1.25 s: the second iteration runs backwards, at 75% again
+    CHECK(OpacityOf(*v) == doctest::Approx(0.75f));
+    CHECK(v->RunningAnimationCount() == 1u);
+}
+
+TEST_CASE("animation: a transform keyframe animates the drawn transform and only redraws")
+{
+    Fixture f(LoadSSS(u8"@keyframes bob { from { transform: translateY(0); } to { transform: translateY(-10); } }\n"
+                      u8"TestView { animation: bob 1s linear; }\n"));
+    auto v = f.Leaf();
+    LayoutPass(f.ctx, f.root.Get());
+    f.ctx.ClearLayoutDamage();
+    f.ctx.BeginFrame(0.5f);
+    CHECK_FALSE(f.ctx.NeedsLayout()); // a transform never moves the layout
+    vg::VGContext canvas;
+    f.ctx.DrawRootView(f.root.Get(), canvas);
+    CHECK(v->EffectiveTransform().Translation.y == doctest::Approx(-5.0f));
+}

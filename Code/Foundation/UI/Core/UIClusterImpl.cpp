@@ -119,6 +119,187 @@ namespace foundation::ui
         return m_transitionState ? m_transitionState->Active.Size() : 0u;
     }
 
+    usize View::RunningAnimationCount() const noexcept
+    {
+        usize running = 0;
+        for (const RunningAnimation& animation : m_animations)
+        {
+            running += animation.Finished ? 0u : 1u;
+        }
+        return running;
+    }
+
+    const KeyframesRule* View::FindKeyframes(StringView name) const
+    {
+        for (const View* v = this; v != nullptr; v = v->Parent)
+        {
+            if (v->m_localStyleSheet)
+            {
+                if (const KeyframesRule* found = v->m_localStyleSheet->FindKeyframes(name))
+                {
+                    return found;
+                }
+            }
+        }
+        if (Context != nullptr)
+        {
+            if (const StyleSheet* sheet = Context->GetStyleSheet())
+            {
+                return sheet->FindKeyframes(name);
+            }
+        }
+        return nullptr;
+    }
+
+    void View::SyncAnimations()
+    {
+        // Read from the cache just built, never through ComputeStyle: a view outside a context
+        // keeps no valid cache, and would rebuild it here, and sync again.
+        StyleValue value;
+        if (const StyleRule* winner = m_styleCache.winners[static_cast<usize>(StyleProperty::Animation)])
+        {
+            if (const Optional<StyleValue> raw = winner->GetValue(StyleProperty::Animation); raw.HasValue())
+            {
+                value = raw.Value();
+            }
+        }
+        const AnimationList* list = value.AsAnimations();
+        if ((list == nullptr || list->Specs.IsEmpty()) && m_animations.IsEmpty())
+        {
+            return;
+        }
+        Array<RunningAnimation> next;
+        if (list != nullptr)
+        {
+            for (const AnimationSpec& spec : list->Specs)
+            {
+                const KeyframesRule* keyframes = FindKeyframes(spec.Name.AsView());
+                if (keyframes == nullptr)
+                {
+                    continue; // no such @keyframes: nothing plays
+                }
+                RunningAnimation running;
+                running.Spec = spec;
+                running.Keyframes = RefPtr<KeyframesRule>(const_cast<KeyframesRule*>(keyframes));
+                // The same name over the same keyframes carries on where it was.
+                for (const RunningAnimation& old : m_animations)
+                {
+                    if (old.Spec.Name == spec.Name && old.Keyframes.Get() == keyframes)
+                    {
+                        running.Elapsed = old.Elapsed;
+                        running.Finished = old.Finished;
+                    }
+                }
+                next.PushBack(Move(running));
+            }
+        }
+        bool changed = next.Size() != m_animations.Size();
+        for (usize i = 0; !changed && i < next.Size(); ++i)
+        {
+            changed = next[i].Keyframes.Get() != m_animations[i].Keyframes.Get() ||
+                      next[i].Spec.Name != m_animations[i].Spec.Name;
+        }
+        m_animations = Move(next);
+        if (RunningAnimationCount() > 0)
+        {
+            RegisterTransitioning();
+        }
+        if (changed)
+        {
+            InvalidateVisual();
+        }
+    }
+
+    Optional<StyleValue> View::AnimatedValue(StyleProperty prop, const StyleValue& base)
+    {
+        for (usize a = m_animations.Size(); a-- > 0;)
+        {
+            const RunningAnimation& running = m_animations[a];
+            const AnimationSpec& spec = running.Spec;
+            const KeyframesRule& keyframes = *running.Keyframes;
+            if (!keyframes.Animates(prop))
+            {
+                continue;
+            }
+            // Where in its run the animation is: an iteration and the way through it.
+            const f32 local = running.Elapsed - spec.Delay;
+            const bool infinite = spec.Iterations < 0.0f;
+            const f32 duration = Max(spec.Duration, 0.0f);
+            const f32 total = infinite ? kFloatMax : duration * spec.Iterations;
+            f32 iteration = 0.0f;
+            f32 progress = 0.0f;
+            if (local < 0.0f)
+            {
+                if (spec.Fill != AnimationFill::Backwards && spec.Fill != AnimationFill::Both)
+                {
+                    continue;
+                }
+            }
+            else if (!infinite && local >= total)
+            {
+                if (spec.Fill != AnimationFill::Forwards && spec.Fill != AnimationFill::Both)
+                {
+                    continue;
+                }
+                // The end of the last iteration: a count of 2.5 ends half way through the third.
+                const f32 whole = Floor(spec.Iterations);
+                iteration = spec.Iterations > whole ? whole : Max(0.0f, whole - 1.0f);
+                progress = spec.Iterations > whole ? spec.Iterations - whole : 1.0f;
+            }
+            else if (duration > 0.0f)
+            {
+                iteration = Floor(local / duration);
+                progress = local / duration - iteration;
+            }
+            else
+            {
+                progress = 1.0f;
+            }
+            const bool odd = static_cast<i64>(iteration) % 2 == 1;
+            const bool reversed = spec.Direction == AnimationDirection::Reverse ||
+                                  (spec.Direction == AnimationDirection::Alternate && odd) ||
+                                  (spec.Direction == AnimationDirection::AlternateReverse && !odd);
+            const f32 p = reversed ? 1.0f - progress : progress;
+
+            // The frames either side of p that declare the property; a missing first or last
+            // frame is the cascade's value, as CSS fills it in.
+            f32 fromOffset = 0.0f;
+            StyleValue from = base;
+            f32 toOffset = 1.0f;
+            StyleValue to = base;
+            for (const KeyframesRule::Frame& frame : keyframes.Frames)
+            {
+                const Optional<StyleValue> raw = frame.Declarations->GetValue(prop);
+                if (!raw.HasValue())
+                {
+                    continue;
+                }
+                if (frame.Offset <= p)
+                {
+                    fromOffset = frame.Offset;
+                    from = ResolveKeywords(prop, raw.Value(), 0);
+                }
+                else
+                {
+                    toOffset = frame.Offset;
+                    to = ResolveKeywords(prop, raw.Value(), 0);
+                    break;
+                }
+            }
+            if (toOffset <= fromOffset)
+            {
+                return from;
+            }
+            const f32 t = spec.Easing.Evaluate((p - fromOffset) / (toOffset - fromOffset));
+            if (from.IsNone() || to.IsNone() || !StyleValuesInterpolable(from, to))
+            {
+                return t < 0.5f ? from : to;
+            }
+            return LerpStyleValue(from, to, t);
+        }
+        return {};
+    }
+
     bool View::IsTransitioning() const noexcept
     {
         return m_transitionState &&
@@ -142,10 +323,49 @@ namespace foundation::ui
 
     bool View::AdvanceTransitions(f32 deltaTime)
     {
+        // The running animations advance on the same tick; each frame they redraw the view, or
+        // lay it out when one animates a property that moves geometry.
+        bool animating = false;
+        bool animated = false;
+        bool animationLayoutDamage = false;
+        for (RunningAnimation& running : m_animations)
+        {
+            if (running.Finished)
+            {
+                continue;
+            }
+            animated = true;
+            running.Elapsed += deltaTime;
+            const AnimationSpec& spec = running.Spec;
+            if (spec.Iterations >= 0.0f && running.Elapsed >= spec.Delay + Max(spec.Duration, 0.0f) * spec.Iterations)
+            {
+                running.Finished = true;
+            }
+            animating = animating || !running.Finished;
+            for (const KeyframesRule::Frame& frame : running.Keyframes->Frames)
+            {
+                for (usize e = 0; e < frame.Declarations->PropertyCount(); ++e)
+                {
+                    animationLayoutDamage =
+                        animationLayoutDamage || !IsVisualOnlyStyleProperty(frame.Declarations->GetProperty(e).Prop);
+                }
+            }
+        }
+        if (animated)
+        {
+            if (animationLayoutDamage)
+            {
+                Invalidate();
+            }
+            else
+            {
+                InvalidateVisual();
+            }
+        }
         if (!m_transitionState)
         {
-            m_transitionRegistered = false;
-            return false;
+            m_transitionRegistered = animating;
+            return animating;
         }
         TransitionState& st = *m_transitionState;
         bool layoutDamage = false;
@@ -178,7 +398,7 @@ namespace foundation::ui
         {
             InvalidateVisual();
         }
-        const bool active = !st.Active.IsEmpty() || st.StateBlendActive;
+        const bool active = !st.Active.IsEmpty() || st.StateBlendActive || animating;
         if (!active)
         {
             m_transitionRegistered = false;
@@ -461,6 +681,7 @@ namespace foundation::ui
         {
             BeginTransitions(oldWinners, oldState, state);
         }
+        SyncAnimations();
         return cache;
     }
 
@@ -537,6 +758,15 @@ namespace foundation::ui
                 }
                 return LerpStyleValue(tr.From, tr.To,
                                       TransitionProgress(tr.Elapsed, tr.Duration, tr.Delay, tr.Easing));
+            }
+        }
+        // An animation's values over the cascade's (a transition, above, wins over both, as in
+        // CSS).
+        if (!m_animations.IsEmpty() && prop != StyleProperty::Animation)
+        {
+            if (Optional<StyleValue> animated = AnimatedValue(prop, value); animated.HasValue())
+            {
+                return animated.Value();
             }
         }
         return value;
@@ -720,7 +950,8 @@ namespace foundation::ui
     void View::RefreshStyleTransform()
     {
         const StyleCache& cache = EnsureStyleCache();
-        if (cache.winners[static_cast<usize>(StyleProperty::Transform)] == nullptr && ActiveTransitionCount() == 0)
+        if (cache.winners[static_cast<usize>(StyleProperty::Transform)] == nullptr && ActiveTransitionCount() == 0 &&
+            m_animations.IsEmpty())
         {
             m_styleTransform = StyleTransform{};
             return;

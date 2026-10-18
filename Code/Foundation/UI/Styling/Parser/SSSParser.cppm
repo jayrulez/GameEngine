@@ -382,8 +382,60 @@ export namespace foundation::ui
                 ParseImageDirective();
             else if (dir.Text == StringView(u8"@import"))
                 ParseImportDirective();
+            else if (dir.Text == StringView(u8"@keyframes"))
+                ParseKeyframesDirective();
             else
                 SkipUntilSemicolon();
+        }
+
+        void ParseKeyframesDirective()
+        {
+            // @keyframes name { from { ... } 50% { ... } to { ... } }: a frame's selector is from
+            // (0%), to (100%) or a percentage, several separated by commas sharing its block.
+            RefPtr<KeyframesRule> keyframes = MakeRef<KeyframesRule>(*m_allocator);
+            keyframes->Name = String(ConsumeIdent());
+            Expect(TokenKind::LBrace);
+            while (!IsAtEnd() && Peek().Kind != TokenKind::RBrace)
+            {
+                Array<f32> offsets;
+                for (;;)
+                {
+                    if (Peek().Kind == TokenKind::Ident)
+                    {
+                        const StringView word = Consume().Text;
+                        if (word == StringView(u8"from"))
+                            offsets.PushBack(0.0f);
+                        else if (word == StringView(u8"to"))
+                            offsets.PushBack(1.0f);
+                    }
+                    else if (Peek().Kind == TokenKind::Number)
+                    {
+                        offsets.PushBack(Clamp(ParseFloatValue(), 0.0f, 1.0f)); // 50% reads as 0.5
+                    }
+                    else
+                    {
+                        break;
+                    }
+                    if (!MatchComma())
+                        break;
+                }
+                RefPtr<StyleRule> declarations = MakeRef<StyleRule>(*m_allocator);
+                Expect(TokenKind::LBrace);
+                while (!IsAtEnd() && Peek().Kind != TokenKind::RBrace)
+                    ParseProperty(*declarations);
+                Expect(TokenKind::RBrace);
+                if (offsets.IsEmpty())
+                    continue; // a frame with no selector this reads: dropped
+                for (const f32 offset : offsets)
+                {
+                    usize at = keyframes->Frames.Size();
+                    while (at > 0 && keyframes->Frames[at - 1].Offset > offset)
+                        --at;
+                    keyframes->Frames.Insert(at, KeyframesRule::Frame{offset, declarations});
+                }
+            }
+            Expect(TokenKind::RBrace);
+            m_sheet->AddKeyframes(Move(keyframes));
         }
 
         void ParsePaletteDirective()
@@ -887,6 +939,8 @@ export namespace foundation::ui
                 return ParseFilterValue();
             if (prop == StyleProperty::Transform)
                 return ParseTransformValue();
+            if (prop == StyleProperty::Animation)
+                return ParseAnimationValue();
             if (prop == StyleProperty::TextShadow || prop == StyleProperty::TextOutline ||
                 prop == StyleProperty::TextGlow)
                 return ParseTextEffectValue(prop);
@@ -1070,6 +1124,80 @@ export namespace foundation::ui
                 any = true;
             }
             return any ? StyleValue::TransformVal(transform) : StyleValue::None();
+        }
+
+        /// `animation: none` or a comma list of `<name> <duration> [timing] [delay] [count |
+        /// infinite] [direction] [fill]`, in any order as CSS allows: the first time is the
+        /// duration and the second the delay (each with s or ms), a bare number the iteration
+        /// count, and the first word no keyword claims the @keyframes' name.
+        StyleValue ParseAnimationValue()
+        {
+            RefPtr<AnimationList> list = MakeRef<AnimationList>(*m_allocator);
+            if (Peek().Kind == TokenKind::Ident && Peek().Text == StringView(u8"none"))
+            {
+                Consume();
+                return StyleValue::AnimationsRef(Move(list));
+            }
+            while (!IsAtEnd() && Peek().Kind != TokenKind::Semicolon && Peek().Kind != TokenKind::RBrace)
+            {
+                AnimationSpec spec;
+                bool haveDuration = false;
+                while (Peek().Kind == TokenKind::Ident || Peek().Kind == TokenKind::Number)
+                {
+                    if (Peek().Kind == TokenKind::Number)
+                    {
+                        const Token& tok = Peek();
+                        if (tok.UnitSuffix == StringView(u8"s") || tok.UnitSuffix == StringView(u8"ms"))
+                        {
+                            (haveDuration ? spec.Delay : spec.Duration) = ParseTimeSeconds();
+                            haveDuration = true;
+                        }
+                        else
+                        {
+                            spec.Iterations = Max(0.0f, Consume().NumericValue);
+                        }
+                        continue;
+                    }
+                    const StringView word = Peek().Text;
+                    if (word == StringView(u8"infinite"))
+                        spec.Iterations = -1.0f;
+                    else if (word == StringView(u8"normal"))
+                        spec.Direction = AnimationDirection::Normal;
+                    else if (word == StringView(u8"reverse"))
+                        spec.Direction = AnimationDirection::Reverse;
+                    else if (word == StringView(u8"alternate"))
+                        spec.Direction = AnimationDirection::Alternate;
+                    else if (word == StringView(u8"alternate-reverse"))
+                        spec.Direction = AnimationDirection::AlternateReverse;
+                    else if (word == StringView(u8"forwards"))
+                        spec.Fill = AnimationFill::Forwards;
+                    else if (word == StringView(u8"backwards"))
+                        spec.Fill = AnimationFill::Backwards;
+                    else if (word == StringView(u8"both"))
+                        spec.Fill = AnimationFill::Both;
+                    else if (IsTimingFunctionName(word))
+                    {
+                        spec.Easing = ParseTimingFunction();
+                        continue;
+                    }
+                    else if (spec.Name.IsEmpty())
+                        spec.Name = String(word);
+                    Consume();
+                }
+                if (!spec.Name.IsEmpty())
+                    list->Specs.PushBack(Move(spec));
+                if (!MatchComma())
+                    break;
+            }
+            return StyleValue::AnimationsRef(Move(list));
+        }
+
+        [[nodiscard]] static bool IsTimingFunctionName(StringView word)
+        {
+            return word == StringView(u8"linear") || word == StringView(u8"ease") || word == StringView(u8"ease-in") ||
+                   word == StringView(u8"ease-out") || word == StringView(u8"ease-in-out") ||
+                   word == StringView(u8"step-start") || word == StringView(u8"step-end") ||
+                   word == StringView(u8"cubic-bezier") || word == StringView(u8"steps");
         }
 
         /// A `<time>`: `120ms`, `0.2s`, or a bare number of milliseconds. Seconds out.
@@ -1383,6 +1511,8 @@ export namespace foundation::ui
                 return StyleProperty::Filter;
             if (name == StringView(u8"transform"))
                 return StyleProperty::Transform;
+            if (name == StringView(u8"animation"))
+                return StyleProperty::Animation;
             if (name == StringView(u8"backdrop-filter"))
                 return StyleProperty::BackdropFilter;
 

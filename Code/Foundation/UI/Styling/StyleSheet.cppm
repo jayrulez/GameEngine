@@ -52,6 +52,36 @@ export namespace foundation::ui
         }
     }
 
+    /// A sheet's `@keyframes name { ... }`: its frames by offset (0 to 1, ascending), each the
+    /// declarations written under it held as a rule.
+    class KeyframesRule : public Object
+    {
+        RTTI_OBJECT(KeyframesRule, Object)
+    public:
+        struct Frame
+        {
+            f32 Offset = 0.0f;
+            RefPtr<StyleRule> Declarations;
+        };
+        String Name;
+        Array<Frame> Frames;
+
+        KeyframesRule() = default;
+
+        /// Whether any frame declares `prop`.
+        [[nodiscard]] bool Animates(StyleProperty prop) const
+        {
+            for (const Frame& frame : Frames)
+            {
+                if (frame.Declarations->GetValue(prop).HasValue())
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+    };
+
     class StyleSheet : public Object
     {
         RTTI_OBJECT(StyleSheet, Object)
@@ -93,6 +123,34 @@ export namespace foundation::ui
         }
         [[nodiscard]] usize RuleCount() const noexcept { return m_rules.Size(); }
 
+        /// Adds an @keyframes, replacing one of the same name (the later wins, as in CSS).
+        void AddKeyframes(RefPtr<KeyframesRule> keyframes)
+        {
+            for (RefPtr<KeyframesRule>& existing : m_keyframes)
+            {
+                if (existing->Name == keyframes->Name)
+                {
+                    existing = Move(keyframes);
+                    ++m_version;
+                    return;
+                }
+            }
+            m_keyframes.PushBack(Move(keyframes));
+            ++m_version;
+        }
+        /// The @keyframes of this name, or null.
+        [[nodiscard]] const KeyframesRule* FindKeyframes(StringView name) const
+        {
+            for (const RefPtr<KeyframesRule>& keyframes : m_keyframes)
+            {
+                if (keyframes->Name == name)
+                {
+                    return keyframes.Get();
+                }
+            }
+            return nullptr;
+        }
+
         [[nodiscard]] bool IsEmpty() const noexcept { return m_rules.Size() == 0; }
         /// Access a rule by index (surfaced for tests; Beef reached mRules via [Friend]).
         [[nodiscard]] const StyleRule& GetRule(usize index) const { return *m_rules[index]; }
@@ -114,6 +172,10 @@ export namespace foundation::ui
             for (const RefPtr<Object>& res : other.m_ownedResources)
             {
                 m_ownedResources.PushBack(res);
+            }
+            for (const RefPtr<KeyframesRule>& keyframes : other.m_keyframes)
+            {
+                AddKeyframes(keyframes);
             }
             ++m_version;
         }
@@ -352,10 +414,12 @@ export namespace foundation::ui
         }
 
         Array<RefPtr<StyleRule>> m_rules;
+        Array<RefPtr<KeyframesRule>> m_keyframes;
         Array<RefPtr<Drawable>> m_ownedDrawables;
         Array<RefPtr<Object>> m_ownedResources;
         u32 m_version = 1;
     };
 
+    RTTI_DEFINE_OBJECT(KeyframesRule, "rtti::ui")
     RTTI_DEFINE_OBJECT(StyleSheet, "rtti::ui")
 }

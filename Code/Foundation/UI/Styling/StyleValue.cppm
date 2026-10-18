@@ -199,6 +199,49 @@ export namespace foundation::ui
         }
     };
 
+    /// Which way an animation's iterations run (CSS's animation-direction).
+    enum class AnimationDirection : u8
+    {
+        Normal,
+        Reverse,
+        Alternate,        ///< forwards, then backwards, ...
+        AlternateReverse, ///< backwards, then forwards, ...
+    };
+
+    /// What an animation's values do outside its run (CSS's animation-fill-mode): none leaves
+    /// the cascade's, forwards holds the last frame after it ends, backwards shows the first during
+    /// its delay, both does both.
+    enum class AnimationFill : u8
+    {
+        None,
+        Forwards,
+        Backwards,
+        Both,
+    };
+
+    /// One entry of an `animation:` list: the @keyframes it plays and how.
+    struct AnimationSpec
+    {
+        String Name;
+        f32 Duration = 0.0f; ///< seconds, one iteration
+        f32 Delay = 0.0f;    ///< seconds
+        TimingFunction Easing = TimingFunction::Ease();
+        f32 Iterations = 1.0f; ///< negative: infinite
+        AnimationDirection Direction = AnimationDirection::Normal;
+        AnimationFill Fill = AnimationFill::None;
+    };
+
+    /// The parsed `animation:` list, shared by every StyleValue copy that carries it. An EMPTY
+    /// list is `animation: none`.
+    class AnimationList : public Object
+    {
+        RTTI_OBJECT(AnimationList, Object)
+    public:
+        Array<AnimationSpec> Specs;
+
+        AnimationList() = default;
+    };
+
     /// A `var(--name, fallback)` reference: resolved against the view's custom properties at
     /// COMPUTE time (never at parse time - the value depends on where the view sits). Shared
     /// by every copy of the StyleValue that carries it; immutable once built.
@@ -233,6 +276,8 @@ export namespace foundation::ui
             Shadow,
             /// A StyleTransform (transform).
             Transform,
+            /// An `animation:` list (AnimationList).
+            Animations,
             /// A `transition:` list (TransitionList).
             Transitions,
             /// The `inherit` keyword: take the parent's computed value.
@@ -294,6 +339,19 @@ export namespace foundation::ui
             v.m_length = length;
             return v;
         }
+        [[nodiscard]] static StyleValue AnimationsRef(RefPtr<AnimationList> list)
+        {
+            StyleValue v;
+            v.m_kind = Kind::Animations;
+            v.m_animations = Move(list);
+            return v;
+        }
+        /// The animation list (null unless Kind::Animations); borrowed, valid while this value is.
+        [[nodiscard]] const AnimationList* AsAnimations() const noexcept
+        {
+            return m_kind == Kind::Animations ? m_animations.Get() : nullptr;
+        }
+
         [[nodiscard]] static StyleValue TransformVal(const StyleTransform& transform)
         {
             StyleValue v;
@@ -460,6 +518,7 @@ export namespace foundation::ui
         StyleTransform m_transform{};
         RefPtr<VariableReference> m_variable;
         RefPtr<TransitionList> m_transitions;
+        RefPtr<AnimationList> m_animations;
     };
 
     /// Equality for transition retargeting: same kind and same payload (drawables by
@@ -509,6 +568,8 @@ export namespace foundation::ui
         }
         case StyleValue::Kind::Transitions:
             return a.AsTransitions() == b.AsTransitions();
+        case StyleValue::Kind::Animations:
+            return a.AsAnimations() == b.AsAnimations();
         default:
             return false;
         }
@@ -680,4 +741,5 @@ export namespace foundation::ui
     RTTI_DEFINE_OBJECT(VariableReference, "rtti::ui")
     RTTI_DEFINE_OBJECT(StyleValueBox, "rtti::ui")
     RTTI_DEFINE_OBJECT(TransitionList, "rtti::ui")
+    RTTI_DEFINE_OBJECT(AnimationList, "rtti::ui")
 }

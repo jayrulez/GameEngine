@@ -599,6 +599,8 @@ export namespace foundation::ui
         // === Transitions (P3; spec section 4) ===
         /// Running style transitions on this view (for tests/tools).
         [[nodiscard]] usize ActiveTransitionCount() const noexcept;
+        /// Animations running (not finished) on the view.
+        [[nodiscard]] usize RunningAnimationCount() const noexcept;
         [[nodiscard]] bool IsTransitioning() const noexcept;
         /// Advance every running transition by `deltaTime` and mark damage; returns whether
         /// any is still running. Called by UIContext::BeginFrame.
@@ -1033,6 +1035,26 @@ export namespace foundation::ui
             TimingFunction BlendEasing = TimingFunction::Ease();
         };
         UniquePtr<TransitionState> m_transitionState; ///< null until the first transition
+
+        // The sheet's `animation`s running on the view, in the list's order (a later one wins a
+        // property both animate). A finished one stays listed, so it does not start again while
+        // the cascade still names it.
+        struct RunningAnimation
+        {
+            AnimationSpec Spec;
+            RefPtr<KeyframesRule> Keyframes;
+            f32 Elapsed = 0.0f;
+            bool Finished = false;
+        };
+        Array<RunningAnimation> m_animations;
+        /// Starts, keeps or ends the running animations to match the cascade's `animation`
+        /// (after a style recompute).
+        void SyncAnimations();
+        /// The @keyframes of this name the view's sheets hold: the nearest local sheet's, else
+        /// the context's.
+        [[nodiscard]] const KeyframesRule* FindKeyframes(StringView name) const;
+        /// The value an animation gives `prop` now, over `base` (the cascade's), if one does.
+        [[nodiscard]] Optional<StyleValue> AnimatedValue(StyleProperty prop, const StyleValue& base);
         bool m_transitionRegistered = false;          ///< listed in the context's tick set
         void RegisterTransitioning();                  // impl unit
 

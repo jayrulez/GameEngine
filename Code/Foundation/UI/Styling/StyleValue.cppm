@@ -45,6 +45,24 @@ export namespace foundation::ui
         [[nodiscard]] constexpr bool operator==(const BoxShadow&) const noexcept = default;
     };
 
+    /// A sheet's `transform`: a move (dp), a turn (degrees, clockwise) and a scale, about the view's
+    /// transform origin. It composes with the view's own Transform field: moves and turns add,
+    /// scales multiply. Its parts apply as translate, rotate, then scale, whatever order the sheet
+    /// writes them in.
+    struct StyleTransform
+    {
+        core::Float2 Translate{0.0f, 0.0f};
+        f32 RotateDegrees = 0.0f;
+        core::Float2 Scale{1.0f, 1.0f};
+
+        [[nodiscard]] constexpr bool IsIdentity() const noexcept
+        {
+            return Translate.x == 0.0f && Translate.y == 0.0f && RotateDegrees == 0.0f && Scale.x == 1.0f &&
+                   Scale.y == 1.0f;
+        }
+        [[nodiscard]] constexpr bool operator==(const StyleTransform&) const noexcept = default;
+    };
+
     /// A CSS timing function: the cubic Bezier from (0, 0) to (1, 1) through (X1, Y1) and (X2, Y2)
     /// that `cubic-bezier()` writes (the named easings are presets of it), or `steps(n)`, which
     /// holds each of n levels and jumps at a step's end (or, with StepsJumpStart, its start).
@@ -213,6 +231,8 @@ export namespace foundation::ui
             Length,
             /// A BoxShadow tuple (box-shadow).
             Shadow,
+            /// A StyleTransform (transform).
+            Transform,
             /// A `transition:` list (TransitionList).
             Transitions,
             /// The `inherit` keyword: take the parent's computed value.
@@ -274,6 +294,22 @@ export namespace foundation::ui
             v.m_length = length;
             return v;
         }
+        [[nodiscard]] static StyleValue TransformVal(const StyleTransform& transform)
+        {
+            StyleValue v;
+            v.m_kind = Kind::Transform;
+            v.m_transform = transform;
+            return v;
+        }
+        [[nodiscard]] Optional<StyleTransform> AsTransform() const
+        {
+            if (m_kind == Kind::Transform)
+            {
+                return m_transform;
+            }
+            return {};
+        }
+
         /// The most shadows a value holds; a list written with more keeps its first ones.
         static constexpr usize kMaxShadows = 4;
 
@@ -421,6 +457,7 @@ export namespace foundation::ui
         Unit m_length{};
         BoxShadow m_shadows[kMaxShadows]{};
         u8 m_shadowCount = 0;
+        StyleTransform m_transform{};
         RefPtr<VariableReference> m_variable;
         RefPtr<TransitionList> m_transitions;
     };
@@ -451,6 +488,8 @@ export namespace foundation::ui
             return a.AsString().Value() == b.AsString().Value();
         case StyleValue::Kind::Length:
             return a.AsLength().Value() == b.AsLength().Value();
+        case StyleValue::Kind::Transform:
+            return a.AsTransform().Value() == b.AsTransform().Value();
         case StyleValue::Kind::Shadow:
         {
             const Span<const BoxShadow> sa = a.AsShadows();
@@ -493,7 +532,8 @@ export namespace foundation::ui
             return false;
         }
         return ka == StyleValue::Kind::Color || ka == StyleValue::Kind::Thickness ||
-               ka == StyleValue::Kind::Shadow || ka == StyleValue::Kind::Drawable;
+               ka == StyleValue::Kind::Shadow || ka == StyleValue::Kind::Transform ||
+               ka == StyleValue::Kind::Drawable;
     }
 
     /// The value `t` of the way from `a` to `b` (t clamped to 0..1). Colors, floats,
@@ -550,6 +590,16 @@ export namespace foundation::ui
             const Thickness tb = b.AsThickness().Value();
             return StyleValue::ThicknessVal(Thickness{lerp(ta.Left, tb.Left), lerp(ta.Top, tb.Top),
                                                       lerp(ta.Right, tb.Right), lerp(ta.Bottom, tb.Bottom)});
+        }
+        case StyleValue::Kind::Transform:
+        {
+            const StyleTransform ta = a.AsTransform().Value();
+            const StyleTransform tb = b.AsTransform().Value();
+            StyleTransform out;
+            out.Translate = core::Float2{lerp(ta.Translate.x, tb.Translate.x), lerp(ta.Translate.y, tb.Translate.y)};
+            out.RotateDegrees = lerp(ta.RotateDegrees, tb.RotateDegrees);
+            out.Scale = core::Float2{lerp(ta.Scale.x, tb.Scale.x), lerp(ta.Scale.y, tb.Scale.y)};
+            return StyleValue::TransformVal(out);
         }
         case StyleValue::Kind::Shadow:
         {

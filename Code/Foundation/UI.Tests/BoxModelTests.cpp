@@ -501,6 +501,59 @@ TEST_CASE("box-model: a box under a scaled view rounds to the device pixels it i
     CHECK(child->Bounds.x == doctest::Approx(3.0f));
 }
 
+// === transform ===
+
+TEST_CASE("box-model: a sheet's transform moves, scales and turns a view as drawn and hit-tested")
+{
+    core::RefPtr<StyleSheet> sheet = LoadSSS(u8".lift { transform: translate(10, 0) scale(2); }"
+                                             u8".turn { transform: rotate(0.25turn); }"
+                                             u8".bad { transform: skew(10deg); }");
+    REQUIRE(sheet);
+    const Optional<StyleTransform> lift = sheet->GetRule(0).GetValue(StyleProperty::Transform).Value().AsTransform();
+    REQUIRE(lift.HasValue());
+    CHECK(lift.Value().Translate.x == doctest::Approx(10.0f));
+    CHECK(lift.Value().Scale.y == doctest::Approx(2.0f));
+    CHECK(sheet->GetRule(1).GetValue(StyleProperty::Transform).Value().AsTransform().Value().RotateDegrees ==
+          doctest::Approx(90.0f));
+    CHECK_FALSE(sheet->GetRule(2).GetValue(StyleProperty::Transform).HasValue()); // not drawn yet
+
+    UIContext ctx{DefaultAllocator()};
+    auto root = MakeRoot();
+    EnsureGlobals();
+    Init(ctx, root.Get(), 400, 300);
+    ctx.SetStyleSheet(sheet);
+    auto child = RV(100, 50, 1);
+    child->AddClass(u8"lift");
+    child->Transform.Translation = Float2{0.0f, 4.0f}; // the code's own transform stays under it
+    auto frame = New<FrameLayout>();
+    frame->Padding = Thickness{150, 100, 0, 0};
+    frame->AddView(child.Get());
+    root->AddView(frame.Get());
+    LayoutPass(ctx, root.Get());
+    const Rectangle box = child->Bounds; // layout keeps its box
+    CHECK(box.width == doctest::Approx(100.0f));
+    vg::VGContext vgContext;
+    ctx.DrawRootView(root.Get(), vgContext);
+    // About the centre: (0, 0) is (-50, -25) from it, doubled to (-100, -50), back by (50, 25),
+    // then moved by (10, 0) and the field's (0, 4).
+    const Float2 corner = child->LocalToParent(Float2{0.0f, 0.0f}); // in the frame's space
+    CHECK(corner.x == doctest::Approx(box.x - 40.0f));
+    CHECK(corner.y == doctest::Approx(box.y - 21.0f));
+    const Float2 back = child->ParentToLocal(corner);
+    CHECK(back.x == doctest::Approx(0.0f).epsilon(0.001));
+    CHECK(back.y == doctest::Approx(0.0f).epsilon(0.001));
+    // The drawn quad spans the scaled box.
+    f32 minX = 1e9f, maxX = -1e9f;
+    for (const vg::VGVertex& v : vgContext.GetBatch().vertices)
+    {
+        minX = Min(minX, v.position.x);
+        maxX = Max(maxX, v.position.x);
+    }
+    CHECK(maxX - minX == doctest::Approx(200.0f));
+    // Hit testing follows it: a point the scaled view covers outside its layout box.
+    CHECK(root->HitTest(Float2{box.x - 30.0f, box.y + 10.0f}) == child.Get()); // frame at the root's origin
+}
+
 // === opacity ===
 
 TEST_CASE("box-model: opacity composes down the tree")

@@ -885,6 +885,8 @@ export namespace foundation::ui
                 return ParseTransitionValue();
             if (prop == StyleProperty::Filter || prop == StyleProperty::BackdropFilter)
                 return ParseFilterValue();
+            if (prop == StyleProperty::Transform)
+                return ParseTransformValue();
             if (prop == StyleProperty::TextShadow || prop == StyleProperty::TextOutline ||
                 prop == StyleProperty::TextGlow)
                 return ParseTextEffectValue(prop);
@@ -1012,6 +1014,62 @@ export namespace foundation::ui
             if (Peek().Kind != TokenKind::Semicolon && Peek().Kind != TokenKind::RBrace)
                 effect.Color = ParseColorValue();
             return StyleValue::ShadowVal(effect);
+        }
+
+        /// `transform: none` or a list of transform functions: translate(x[, y]), translateX,
+        /// translateY (dp), scale(s[, t]), scaleX, scaleY, rotate(<angle>). Moves and turns add,
+        /// scales multiply; an unknown function leaves the property unset.
+        StyleValue ParseTransformValue()
+        {
+            StyleTransform transform;
+            if (Peek().Kind == TokenKind::Ident && Peek().Text == StringView(u8"none"))
+            {
+                Consume();
+                return StyleValue::TransformVal(transform);
+            }
+            const auto numberArg = [this](f32 fallback)
+            {
+                return Peek().Kind == TokenKind::Number ? ParseFloatValue() : fallback;
+            };
+            bool any = false;
+            while (Peek().Kind == TokenKind::Ident)
+            {
+                const StringView name = Consume().Text;
+                if (Peek().Kind != TokenKind::LParen)
+                    return StyleValue::None();
+                Consume();
+                if (name == StringView(u8"translate"))
+                {
+                    const f32 x = numberArg(0.0f);
+                    const f32 y = MatchComma() ? numberArg(0.0f) : 0.0f;
+                    transform.Translate.x += x;
+                    transform.Translate.y += y;
+                }
+                else if (name == StringView(u8"translateX"))
+                    transform.Translate.x += numberArg(0.0f);
+                else if (name == StringView(u8"translateY"))
+                    transform.Translate.y += numberArg(0.0f);
+                else if (name == StringView(u8"scale"))
+                {
+                    const f32 x = numberArg(1.0f);
+                    const f32 y = MatchComma() ? numberArg(1.0f) : x;
+                    transform.Scale.x *= x;
+                    transform.Scale.y *= y;
+                }
+                else if (name == StringView(u8"scaleX"))
+                    transform.Scale.x *= numberArg(1.0f);
+                else if (name == StringView(u8"scaleY"))
+                    transform.Scale.y *= numberArg(1.0f);
+                else if (name == StringView(u8"rotate"))
+                    transform.RotateDegrees += PeekIsNumber() ? ParseAngleDegrees() : 0.0f;
+                else
+                    return StyleValue::None();
+                if (Peek().Kind != TokenKind::RParen)
+                    return StyleValue::None();
+                Consume();
+                any = true;
+            }
+            return any ? StyleValue::TransformVal(transform) : StyleValue::None();
         }
 
         /// A `<time>`: `120ms`, `0.2s`, or a bare number of milliseconds. Seconds out.
@@ -1323,6 +1381,8 @@ export namespace foundation::ui
             // Filters
             if (name == StringView(u8"filter"))
                 return StyleProperty::Filter;
+            if (name == StringView(u8"transform"))
+                return StyleProperty::Transform;
             if (name == StringView(u8"backdrop-filter"))
                 return StyleProperty::BackdropFilter;
 

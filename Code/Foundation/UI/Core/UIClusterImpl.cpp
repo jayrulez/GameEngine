@@ -717,13 +717,25 @@ namespace foundation::ui
 
     f32 ViewGroup::RootDpiScale(RootView* root) { return root != nullptr ? root->DpiScale : 1.0f; }
 
+    void View::RefreshStyleTransform()
+    {
+        const StyleCache& cache = EnsureStyleCache();
+        if (cache.winners[static_cast<usize>(StyleProperty::Transform)] == nullptr && ActiveTransitionCount() == 0)
+        {
+            m_styleTransform = StyleTransform{};
+            return;
+        }
+        const Optional<StyleTransform> styled = ResolveStyle(StyleProperty::Transform).AsTransform();
+        m_styleTransform = styled.HasValue() ? styled.Value() : StyleTransform{};
+    }
+
     f32 View::DeviceUnitScale() const
     {
         f32 scale = 1.0f;
         const View* top = this;
         for (const View* above = Parent; above != nullptr; above = above->Parent)
         {
-            const ViewTransform& t = above->Transform;
+            const ViewTransform t = above->EffectiveTransform();
             // A rotation or an uneven scale has no one grid to round to: those keep the DPI's.
             if (t.Rotation == 0.0f && t.Scale.x == t.Scale.y && t.Scale.x > 0.0f)
             {

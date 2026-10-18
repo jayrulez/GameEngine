@@ -99,6 +99,12 @@ export namespace foundation::ui
         /// `text-glow: <radius> [color]` (the radius rides as the shadow's blur).
         TextGlow,
 
+        // === Motion ===
+        /// `transform: translate(x[, y]) | translateX(x) | translateY(y) | scale(s[, t]) | scaleX(s) |
+        /// scaleY(t) | rotate(<angle>) ... | none` (a Transform): drawn and hit-tested moved, turned
+        /// and scaled about the view's origin, over its own Transform; layout keeps its box.
+        Transform,
+
         /// Number of known properties (for array sizing).
         COUNT
     };
@@ -135,6 +141,7 @@ export namespace foundation::ui
         case StyleProperty::TextShadow:
         case StyleProperty::TextOutline:
         case StyleProperty::TextGlow:
+        case StyleProperty::Transform:
             return true;
         default:
             return false;
@@ -184,6 +191,7 @@ export namespace foundation::ui
         case StyleProperty::TextShadow:
         case StyleProperty::TextOutline:
         case StyleProperty::TextGlow:
+        case StyleProperty::Transform:
             return true;
         default:
             return false;

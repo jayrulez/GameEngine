@@ -284,6 +284,22 @@ TEST_CASE("transition: easing and delay shape the curve")
     CHECK(Red(*v) == doctest::Approx(0.3154f).epsilon(0.002));
 }
 
+TEST_CASE("transition: a transform interpolates its move, turn and scale")
+{
+    StyleTransform from;
+    StyleTransform to;
+    to.Translate = Float2{0.0f, -8.0f};
+    to.RotateDegrees = 90.0f;
+    to.Scale = Float2{1.5f, 1.5f};
+    const StyleTransform mid =
+        LerpStyleValue(StyleValue::TransformVal(from), StyleValue::TransformVal(to), 0.5f).AsTransform().Value();
+    CHECK(mid.Translate.y == doctest::Approx(-4.0f));
+    CHECK(mid.RotateDegrees == doctest::Approx(45.0f));
+    CHECK(mid.Scale.x == doctest::Approx(1.25f));
+    CHECK(IsAnimatableStyleProperty(StyleProperty::Transform));
+    CHECK(IsVisualOnlyStyleProperty(StyleProperty::Transform)); // a lift never relays the page out
+}
+
 TEST_CASE("transition: timing functions are CSS's curves, cubic-bezier and steps")
 {
     // The named easings at their midpoints, as a browser computes them.

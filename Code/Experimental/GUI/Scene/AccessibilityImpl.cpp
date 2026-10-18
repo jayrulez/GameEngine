@@ -381,6 +381,27 @@ namespace experimental::gui
         return update;
     }
 
+    bool GUIContext::DescribeAccess(Node& node, AccessNode& out)
+    {
+        SceneRoot* root = node.GetSceneRoot();
+        if (root == nullptr)
+            return false;
+        for (Node* n = &node; n != nullptr; n = n->GetParent())
+        {
+            if (Excluded(*n) && core::Cast<SceneRoot>(n) == nullptr)
+                return false;
+            if (n != &node && IsLeafRole(RoleOf(*n)))
+                return false; // a leaf's part
+        }
+        const AccessRole role = RoleOf(node);
+        if (role == AccessRole::None)
+            return false;
+        Builder builder{*root};
+        out = AccessNode{};
+        builder.Describe(node, role, out);
+        return true;
+    }
+
     void GUIContext::FlushAccessibility()
     {
         if (m_accessBridge == nullptr || !m_accessBridge->IsListening())

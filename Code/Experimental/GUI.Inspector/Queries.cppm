@@ -176,6 +176,123 @@ export namespace experimental::gui::inspector
         return d;
     }
 
+    /// What a screen reader is told of a node (E9d).
+    struct AccessDescription
+    {
+        bool Own = false;         ///< it has a node of its own (else it reads as part of an ancestor)
+        core::String ReadAs;      ///< when not: the ancestor it reads as part of (its tree label)
+        core::String Role;
+        core::String Name;
+        core::String Value;
+        core::String Description;
+        Array<core::String> States;
+        Array<core::String> Actions;
+    };
+    [[nodiscard]] inline AccessDescription DescribeAccess(Node& node)
+    {
+        AccessDescription d;
+        SceneRoot* root = node.GetSceneRoot();
+        if (root == nullptr)
+            return d;
+        AccessNode a;
+        if (!root->GetContext().DescribeAccess(node, a))
+        {
+            for (Node* up = node.GetParent(); up != nullptr; up = up->GetParent())
+                if (root->GetContext().DescribeAccess(*up, a))
+                {
+                    d.ReadAs = Label(*up);
+                    break;
+                }
+            return d;
+        }
+        d.Own = true;
+        d.Role = core::String(AccessRoleName(a.Role));
+        d.Name = a.Name;
+        d.Value = a.HasNumber ? core::Format(u8"{} (from {} to {}, by {})", a.Number, a.Min, a.Max, a.Step) : a.Value;
+        d.Description = a.Description;
+        struct Named
+        {
+            u32 Bit;
+            const char8_t* Name;
+        };
+        static constexpr Named kStates[] = {
+            {AccessFocusable, u8"focusable"}, {AccessFocused, u8"focused"},     {AccessDisabled, u8"disabled"},
+            {AccessChecked, u8"checked"},     {AccessMixed, u8"mixed"},         {AccessSelected, u8"selected"},
+            {AccessExpanded, u8"expanded"},   {AccessCollapsed, u8"collapsed"}, {AccessEditable, u8"editable"},
+        };
+        for (const Named& s : kStates)
+            if ((a.States & s.Bit) != 0)
+                d.States.PushBack(core::String(s.Name));
+        static constexpr Named kActions[] = {
+            {AccessActionBit(AccessAction::Focus), u8"focus"},       {AccessActionBit(AccessAction::Activate), u8"activate"},
+            {AccessActionBit(AccessAction::SetValue), u8"set value"}, {AccessActionBit(AccessAction::Increment), u8"increment"},
+            {AccessActionBit(AccessAction::Decrement), u8"decrement"}, {AccessActionBit(AccessAction::ScrollIntoView), u8"scroll into view"},
+            {AccessActionBit(AccessAction::Expand), u8"expand"},     {AccessActionBit(AccessAction::Collapse), u8"collapse"},
+        };
+        for (const Named& s : kActions)
+            if ((a.Actions & s.Bit) != 0)
+                d.Actions.PushBack(core::String(s.Name));
+        return d;
+    }
+
+    /// One thing a screen reader would trip on.
+    struct AccessIssue
+    {
+        Node* Target = nullptr;
+        core::String Message;
+    };
+    /// What under `root` a screen reader would trip on (E9d): a control the keyboard reaches with no
+    /// name, and an aria relation naming no widget.
+    [[nodiscard]] inline Array<AccessIssue> AuditAccess(SceneRoot& root)
+    {
+        Array<AccessIssue> out;
+        const auto byId = [&root](core::StringView id)
+        {
+            const auto find = [id](auto& self, Node& node) -> bool
+            {
+                if (const UIWidget* w = core::Cast<UIWidget>(&node); w != nullptr && w->GetId() == id)
+                    return true;
+                for (usize i = 0; i < node.ChildCount(); ++i)
+                    if (Node* child = node.GetChildAt(i); child != nullptr && self(self, *child))
+                        return true;
+                return false;
+            };
+            return find(find, root);
+        };
+        const auto relation = [&](Node& node, const char8_t* attribute, const core::String& ids)
+        {
+            usize i = 0;
+            const core::StringView list = ids.AsView();
+            while (i < list.Size())
+            {
+                while (i < list.Size() && list[i] == u8' ')
+                    ++i;
+                const usize start = i;
+                while (i < list.Size() && list[i] != u8' ')
+                    ++i;
+                if (i > start && !byId(list.SubStr(start, i - start)))
+                    out.PushBack(AccessIssue{&node, core::Format(u8"{} names no widget: #{}", core::StringView(attribute), list.SubStr(start, i - start))});
+            }
+        };
+        const auto walk = [&](auto& self, Node& node) -> void
+        {
+            if (UIWidget* widget = core::Cast<UIWidget>(&node))
+            {
+                AccessNode a;
+                if (node.IsTabFocusable() && root.GetContext().DescribeAccess(node, a) && a.Name.Size() == 0)
+                    out.PushBack(AccessIssue{&node, core::Format(u8"a focusable {} with no name", AccessRoleName(a.Role))});
+                relation(node, u8"aria-labelledby", widget->GetAccessLabelledBy());
+                relation(node, u8"aria-describedby", widget->GetAccessDescribedBy());
+                relation(node, u8"aria-controls", widget->GetAccessControls());
+            }
+            for (usize i = 0; i < node.ChildCount(); ++i)
+                if (Node* child = node.GetChildAt(i))
+                    self(self, *child);
+        };
+        walk(walk, root);
+        return out;
+    }
+
     /// The widgets under `root` (itself included) a CSS selector matches, in document order.
     [[nodiscard]] inline Array<Node*> Query(Node& root, core::StringView selector)
     {

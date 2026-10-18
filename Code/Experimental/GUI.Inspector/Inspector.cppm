@@ -716,6 +716,46 @@ export namespace experimental::gui::inspector
                 });
             }
 
+            // What a screen reader is told of it (E9d), and what in the GUI it would trip on.
+            {
+                (void)Text(body, core::StringView(u8"isection"), core::StringView(u8"Accessibility"));
+                const AccessDescription a = DescribeAccess(*node);
+                if (!a.Own)
+                    (void)Text(body, core::StringView(u8"idim"),
+                               a.ReadAs.Size() != 0 ? core::Format(u8"no node of its own: read as part of {}", a.ReadAs).AsView()
+                                                    : core::StringView(u8"not read: hidden, or in no GUI"));
+                else
+                {
+                    const auto joined = [](const Array<core::String>& items)
+                    {
+                        core::String out;
+                        for (const core::String& item : items)
+                        {
+                            if (out.Size() != 0)
+                                out += core::StringView(u8", ");
+                            out += item.AsView();
+                        }
+                        return out.Size() != 0 ? out : core::String(core::StringView(u8"(none)"));
+                    };
+                    (void)Text(body, core::StringView(u8"iline"), core::Format(u8"{} \"{}\"", a.Role, a.Name).AsView());
+                    if (a.Value.Size() != 0)
+                        (void)Text(body, core::StringView(u8"iline"), core::Format(u8"value {}", a.Value).AsView());
+                    if (a.Description.Size() != 0)
+                        (void)Text(body, core::StringView(u8"iline"), core::Format(u8"description {}", a.Description).AsView());
+                    (void)Text(body, core::StringView(u8"idim"), core::Format(u8"states {}", joined(a.States)).AsView());
+                    (void)Text(body, core::StringView(u8"idim"), core::Format(u8"actions {}", joined(a.Actions)).AsView());
+                }
+                if (SceneRoot* root = node->GetSceneRoot())
+                {
+                    const Array<AccessIssue> issues = AuditAccess(*root);
+                    (void)Text(body, core::StringView(u8"idim"),
+                               issues.IsEmpty() ? core::StringView(u8"audit: nothing in this GUI a screen reader trips on")
+                                                : core::Format(u8"audit: {} in this GUI", issues.Size()).AsView());
+                    for (const AccessIssue& issue : issues)
+                        (void)Text(body, core::StringView(u8"iline"), core::Format(u8"{}: {}", Label(*issue.Target), issue.Message).AsView());
+                }
+            }
+
             const auto list = [&](const char8_t* title, const Array<core::String>& items)
             {
                 if (items.IsEmpty())

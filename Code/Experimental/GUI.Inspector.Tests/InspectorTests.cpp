@@ -3,7 +3,8 @@
 
 // GUI.Inspector - the inspector (E8e of Specs/gui-lab-evolution.md): its tree follows the
 // inspected one, its details show what a node is and where its styles came from, and picking
-// walks out through what holds the node under the pointer and selects on a click.
+// walks out through what holds the node under the pointer and selects on a click; its details say
+// what a screen reader is told (E9d).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -150,4 +151,14 @@ TEST_CASE("inspector: a style value edited in its field changes the rule, and ev
     CHECK(bed.ok->GetAlpha() == doctest::Approx(0.3f));
     bed.inspect.Refresh(); // shown again, with the new value
     CHECK(bed.DetailsHave(SV(u8"0.3")));
+}
+
+TEST_CASE("inspector: the details say what a screen reader is told of the node")
+{
+    Bed bed;
+    bed.ok->SetText(SV(u8"Save"));
+    bed.inspect.Select(bed.ok.Get());
+    CHECK(bed.DetailsHave(SV(u8"Accessibility")));
+    CHECK(bed.DetailsHave(SV(u8"button \"Save\"")));
+    CHECK(bed.DetailsHave(SV(u8"audit: nothing in this GUI a screen reader trips on")));
 }

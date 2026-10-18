@@ -119,3 +119,31 @@ TEST_CASE("inspector: a property set as markup sets it: the widget's own attribu
     CHECK_FALSE(inspector::SetProperty(*bed.ok.Get(), SV(u8"no-such-property"), SV(u8"1")));
     CHECK_FALSE(inspector::SetProperty(*bed.root.Get(), SV(u8"opacity"), SV(u8"1"))); // no widget
 }
+
+TEST_CASE("inspector: what a screen reader is told of a node, and what in the GUI it would trip on")
+{
+    Bed bed;
+    const inspector::AccessDescription ok = inspector::DescribeAccess(*bed.ok.Get());
+    CHECK(ok.Own);
+    CHECK(ok.Role == core::String(u8"button"));
+    CHECK(ok.Name == core::String(u8"OK"));
+    bool activates = false;
+    for (const core::String& a : ok.Actions)
+        activates = activates || a == core::String(u8"activate");
+    CHECK(activates);
+    const inspector::AccessDescription page = inspector::DescribeAccess(*bed.page.Get());
+    CHECK_FALSE(page.Own); // a panel has no role: what it holds is the window's
+    CHECK(page.ReadAs.Size() != 0);
+    CHECK_FALSE(inspector::DescribeAccess(*bed.note.Get()).Own); // hidden
+
+    CHECK(inspector::AuditAccess(*bed.root.Get()).IsEmpty());
+    auto unnamed = core::MakeRef<Button>(core::DefaultAllocator());
+    bed.page->AddChild(unnamed.Get());
+    bed.ok->SetAccessLabelledBy(core::String(u8"nowhere"));
+    const core::Array<inspector::AccessIssue> issues = inspector::AuditAccess(*bed.root.Get());
+    REQUIRE(issues.Size() == 2u);
+    CHECK(issues[0].Target == bed.ok.Get());
+    CHECK(issues[0].Message == core::String(u8"aria-labelledby names no widget: #nowhere"));
+    CHECK(issues[1].Target == unnamed.Get());
+    CHECK(issues[1].Message == core::String(u8"a focusable button with no name"));
+}

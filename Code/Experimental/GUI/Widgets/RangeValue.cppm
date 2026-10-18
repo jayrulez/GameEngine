@@ -8,8 +8,8 @@
 // snapped to a step, a page (a scroll bar's visible part, PageShown: the value goes no further
 // than the maximum less it; a slider's and a number field's page-key step), optionally exponential (its
 // place along the track by logarithm, for a frequency or a zoom) and optionally allowed past either
-// end (a number field typed beyond its range). Each control holds one rather than deriving from a
-// base, so a progress bar takes no page it cannot use, and reflects the same properties.
+// end (a number field typed beyond its range). The controls derive from RangeWidget, which holds
+// one and reflects its properties (so a progress bar carries a page it hides).
 
 module;
 #include "Core/Prelude.h"

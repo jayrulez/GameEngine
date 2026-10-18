@@ -5,8 +5,8 @@
 //
 // StyleProperty + StyleRule: a CSS declaration block. Ported from eepp's
 // css/StyleSheetProperty + StyleSheetStyle. A StyleRule pairs one StyleSelector with a list
-// of name/value declarations. Values stay as strings here; interpreting them into typed
-// widget properties (color/length/drawable) is a later CSS increment.
+// of name/value declarations: the value as written, and its longhands parsed into typed values
+// once, by the first cascade that reaches it (a value with var() is parsed at each).
 
 module;
 #include "Core/Prelude.h"

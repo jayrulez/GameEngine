@@ -470,7 +470,7 @@ export namespace experimental::gui
             const char8_t* name;
             EventType type;
         };
-        // The names markup's on-<event> attributes and scripts use.
+        // The names scripts use for events (`on("click", ...)`) and the inspector shows.
         inline constexpr NamedEventType kEventTypeNames[] = {
             {u8"click", EventType::MouseClick},      {u8"mousedown", EventType::MouseDown},
             {u8"mouseup", EventType::MouseUp},       {u8"mouseenter", EventType::MouseEnter},

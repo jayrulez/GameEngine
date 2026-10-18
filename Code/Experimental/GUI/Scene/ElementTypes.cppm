@@ -13,7 +13,7 @@
 //
 // ElementSet is what one GUI may create from those: every registered type by default (including
 // ones registered later), or only the tags it allows, with aliases of its own. A GUI holds one
-// (SceneRoot::SetElementSet), so two GUIs in one process can offer different elements, e.g. a mod's
+// (GUIContext::SetElementSet), so two GUIs in one process can offer different elements, e.g. a mod's
 // markup limited to a few.
 
 module;

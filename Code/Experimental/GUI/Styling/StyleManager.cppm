@@ -10,9 +10,11 @@
 //
 // The per-widget cache lives here (not on UIWidget) to avoid a :ui_widget <-> :style_sheet
 // partition cycle. ApplyTree re-resolves only what changed: the widgets a state, class, tag, id
-// or parent change marked (Node::MarkStyleDirty) and their subtrees, the children of a widget
-// whose custom properties changed, and everything after a new sheet, media or fonts. Cache entries are keyed by raw
-// Node* - call Forget()/Clear() when widgets are destroyed (no automatic lifecycle wiring).
+// or parent change marked (Node::MarkStyleDirty), with their subtrees or later siblings when a
+// sheet reads that state through them, the children of a widget whose children were rearranged
+// when a sheet reads siblings, the children of one whose custom properties changed, and
+// everything after a new sheet, media or fonts. Cache entries are keyed by raw Node*: call
+// Forget() or Clear() when widgets are destroyed (no automatic lifecycle wiring).
 
 module;
 #include "Core/Prelude.h"

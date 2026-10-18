@@ -7,8 +7,8 @@
 // the widgets and their properties are reflected through our RTTI (GUIReflectionImpl.cpp), so the
 // engine's reflection-driven binding reaches the node tree from AngelScript and Luau alike, and
 // markup creates the same reflected element types by tag (ElementTypes). What lives here is the way in: the
-// `gui` facade (`gui.root()`, the root the host installed for the calling script), the binding a
-// host installs per script context, and the registry of element types creatable by name.
+// `gui` facade (`gui.root()`, the root the host installed for the calling script) and the binding
+// a host installs per script context; the element types creatable by name are ElementTypes'.
 
 module;
 #include "Core/Prelude.h"

@@ -123,7 +123,7 @@ export namespace experimental::gui
         return false;
     }
 
-    /// Shared by its SceneRoot and every binding to it (MakeRef), so a binding never outlives it.
+    /// Shared by its GUIContext and every binding to it (MakeRef), so a binding never outlives it.
     class DataModel : public RefCounted
     {
     public:

@@ -4,8 +4,8 @@
 // GUI - :model_index partition
 //
 // ModelIndex + ModelRole: the address of a cell in a Model, and the aspect a view asks for.
-// Modeled on eepp's Models::ModelIndex / ModelRole (role only). This v1 is flat (row + column,
-// for list and table models); a parent handle for tree models is a follow-up.
+// Modeled on eepp's Models::ModelIndex / ModelRole (role only): a row and a column, and for a tree
+// model the node's opaque id (InternalId) that locates it under its parent.
 
 module;
 #include "Core/Prelude.h"

@@ -209,9 +209,9 @@ export namespace experimental::gui
         };
         [[nodiscard]] core::Array<StyledProperty>& StyledProperties() noexcept { return m_styledProperties; }
 
-        // Markup hook: a widget consumes its own structural XML attributes (e.g. Label "text",
-        // LinearLayout "orientation"/"spacing"), returning true if it handled `name`. Attributes
-        // it doesn't claim are applied as CSS properties by the markup loader. Default: none.
+        // Markup hook: a widget consumes its own structural XML attributes (e.g. a number field's
+        // "prefix" and "suffix", a table item's "cells"), returning true if it handled `name`.
+        // Attributes it doesn't claim are applied as CSS properties by the markup loader. Default: none.
         virtual bool SetMarkupAttribute(core::StringView /*name*/, core::StringView /*value*/)
         {
             return false;

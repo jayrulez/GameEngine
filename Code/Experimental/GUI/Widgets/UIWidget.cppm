@@ -4,9 +4,8 @@
 // GUI - :ui_widget partition
 //
 // UIWidget: a UINode with the CSS identity + layout inputs the styling engine matches on.
-// Ported from eepp's UI::UIWidget - element tag, id, and style classes (the selector
-// surface for Phase 6's CSS engine). Size policies + attribute/markup
-// loading arrive with the layout and CSS phases.
+// Ported from eepp's UI::UIWidget: element tag, id and style classes (what selectors match), its
+// tooltip, context menu, drag and drop in markup, and its accessibility overrides.
 
 module;
 #include "Core/Prelude.h"

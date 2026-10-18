@@ -67,9 +67,10 @@ export namespace experimental::gui
 
     /// One GUI's element table (G1 of Specs/vg-and-gui-lab.md): what a script's handle to a node
     /// resolves through, a slot and a generation, so the tree owns its nodes and a script only
-    /// ever holds them weakly. Each SceneRoot owns one, so two GUIs never share slots. Handles
-    /// retain the table (an anchored resolve-mode Variant): when its SceneRoot goes, the table is
-    /// closed and every handle into it reads as gone, never as freed memory.
+    /// ever holds them weakly. Each GUIContext owns one, so two GUIs never share slots and a handle
+    /// survives its node moving between roots. Handles retain the table (an anchored resolve-mode
+    /// Variant): when its GUI goes, the table is closed and every handle into it reads as gone,
+    /// never as freed memory.
     class ElementTable : public RefCounted
     {
     public:

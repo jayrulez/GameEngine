@@ -4,9 +4,10 @@
 // GUI - :css_parser partition
 //
 // CSSParser: turns `.css` text into a StyleSheet. Ported from eepp's css/StyleSheetParser
-// (common subset). Handles `/* comments */`, comma-separated selector lists, and
-// `name: value;` declaration blocks; best-effort (malformed bits are skipped). Deferred:
-// @media / @keyframes / @import, custom properties (--var), nesting, !important.
+// (common subset). Handles `/* comments */`, comma-separated selector lists, `name: value;`
+// declaration blocks (custom properties and `!important` among them), `@media` blocks and
+// `@keyframes`; best-effort (malformed bits are skipped). Other at-rules (`@import`,
+// `@font-face`) are skipped, and nesting is not read.
 
 module;
 #include "Core/Prelude.h"

@@ -9,8 +9,8 @@
 // when the source changes). Sorting uses Variant::Compare on the Sort role, so numeric columns
 // order by value. A stable sort keeps equal rows in source order.
 //
-// Because a TableView is a client of this proxy, wiring a column-header click to ToggleSort()
-// re-sorts and refreshes the view with no view-side changes.
+// Because a TableView is a client of this proxy, its column-header click asks the model to Sort,
+// which re-sorts and refreshes the view with no view-side changes.
 
 module;
 #include "Core/Prelude.h"

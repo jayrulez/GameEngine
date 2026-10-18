@@ -145,8 +145,8 @@ export namespace experimental::gui
 
         // Translate one platform input event into a dispatcher injection. Returns true if the GUI
         // used it (a handler took it, or the pointer is over a node that takes it), so a game host
-        // leaves it alone; false if the GUI did not (or the event is not routed: touch, an
-        // unmapped button). Reconciles text input and the cursor afterwards, since a routed event
+        // leaves it alone; false if the GUI did not (or the event is not routed: an unmapped
+        // button, or SDL's mouse copy of a finger, which the touch events already brought). Reconciles text input and the cursor afterwards, since a routed event
         // (a click, a Tab) can change focus and what is under the pointer.
         bool Dispatch(const shell::InputEvent& event)
         {

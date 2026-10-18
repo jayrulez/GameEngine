@@ -236,8 +236,8 @@ export namespace experimental::gui
 
     class Effect;
 
-    /// Where effects wait to run: a SceneRoot holds one and flushes it once a frame, so changes in
-    /// between cost one run of each effect they reach.
+    /// Where effects wait to run: a GUIContext holds one and flushes it once a frame, for all its
+    /// roots, so changes in between cost one run of each effect they reach.
     class EffectScheduler
     {
     public:

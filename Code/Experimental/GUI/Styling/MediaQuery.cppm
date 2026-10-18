@@ -4,11 +4,10 @@
 // GUI - :media_query partition
 //
 // MediaQuery + MediaContext: `@media` condition evaluation. Ported from eepp's css/MediaQuery
-// (common subset): width/height feature tests (min-/max-/exact) combined with `and`. A rule
-// carries an (optional) MediaQuery; StyleSheet::Resolve skips rules whose query doesn't match
-// the supplied MediaContext (viewport size / dpi); a query naming any other feature matches
-// nothing. Deferred: orientation, aspect-ratio, `or`
-// / comma lists, `not`.
+// (common subset): width, height and resolution feature tests (min-, max-, exact) combined with
+// `and`. A rule carries an (optional) MediaQuery; StyleSheet::Resolve skips rules whose query
+// doesn't match the supplied MediaContext (viewport size, dpi); a query naming any other feature
+// matches nothing. Deferred: orientation, aspect-ratio, `or` and comma lists, `not`.
 
 module;
 #include "Core/Prelude.h"

@@ -14,9 +14,10 @@
 // once a frame through GUIContext::Update.
 //
 // SceneRoot: the root of one GUI's widget tree AND its coordinator (eepp's Scene::SceneNode, by
-// role). A Node subclass that sits at the top; it owns the ActionManager, the MutationQueue, the
-// event dispatcher, the element table and set, and its display scale. Update ticks running
-// actions then drains deferred tree edits. Drawing is inherited from Node::Draw.
+// role). A Node subclass that sits at the top; it owns the event dispatcher and its display
+// scale, and reaches its GUIContext's ActionManager, MutationQueue, element table and set.
+// GUIContext::Update ticks running actions, then drains deferred tree edits. Drawing is
+// inherited from Node::Draw, with the top layer drawn after the tree (DrawFrame).
 //
 // Each root is scaled on its own (one per window, or per render target: a panel in the world, a
 // texture): its tree lays out in logical units, which its display scale (the window's content

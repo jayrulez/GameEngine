@@ -43,7 +43,6 @@ target_sources(Editor.Scene
         PieRunToolImpl.cpp
         GamePageImpl.cpp
         SettingsProfilesImpl.cpp
-        SettingsProfilePageImpl.cpp
         SceneLoadingImpl.cpp
     PUBLIC
         FILE_SET editorscene_modules TYPE CXX_MODULES FILES
@@ -73,6 +72,5 @@ target_sources(Editor.Scene
             ScenePage.cppm
             GamePage.cppm
             GameResolution.cppm
-            SettingsProfilePage.cppm
             EditorSceneModule.cppm)
 

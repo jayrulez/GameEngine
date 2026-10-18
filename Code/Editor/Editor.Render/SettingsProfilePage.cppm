@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Scene - :settings_profile_page partition.
+// Editor::Render - :settings_profile_page partition.
 //
 // SettingsProfilePage: edits a profile asset (an Environment Profile, a Post Process Profile;
 // any pipeline::SettingsProfileAsset) - a preview on the left rendered with the profile applied,
@@ -25,7 +25,7 @@ module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
 
-export module editor.scene:settings_profile_page;
+export module editor.render:settings_profile_page;
 
 import foundation.core;
 import foundation.content;

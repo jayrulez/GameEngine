@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Scene - :settings_profile_page implementation (see SettingsProfilePage.cppm).
+// Editor::Render - :settings_profile_page implementation (see SettingsProfilePage.cppm).
 
 module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
 
-module editor.scene;
+module editor.render;
 
 import foundation.core;
 import foundation.content;
@@ -15,6 +15,7 @@ import foundation.graphics;
 import foundation.runtime;
 import foundation.runtime.client;
 import foundation.scene;
+import foundation.settings; // the project's editor store (the kept preview scene)
 import foundation.resource;
 import foundation.geometry;
 import foundation.materials;
@@ -26,9 +27,7 @@ import foundation.ui.runtime;
 import editor.core;
 import editor.app;
 import editor.preview;
-import :inspector; // SettingsRows (the rows a scene's settings section shows)
-import :scene_loading; // LoadEditorScene, SceneWorldBounds (a project scene to preview on)
-import :view_settings; // LoadSceneViewPref (where that scene's page left its camera)
+import editor.scene; // SettingsRows (a scene's settings rows), LoadEditorScene, SceneWorldBounds, LoadSceneViewPref
 
 using namespace foundation::core;
 namespace scene = foundation::scene;

@@ -311,15 +311,19 @@ TEST_CASE("itemview: typing letters jumps to the next row starting with them")
     int changes = 0;
     (void)m.list->AddEventListener(EventType::Changed, [&](const Event&) { ++changes; });
     m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::B));
+    m.D().InjectText(SV(u8"b")); // the text it types: what type-ahead reads (E12)
     CHECK(m.list->GetSelectedItem() == 1);
-    m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::L)); // "bl"
+    m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::L));
+    m.D().InjectText(SV(u8"l")); // "bl"
     CHECK(m.list->GetSelectedItem() == 2);
     CHECK(changes == 2);
     // After a pause, "b" again cycles through the b's.
     m.root->GetContext().Update(core::Duration::FromSeconds(1.5));
     m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::B));
+    m.D().InjectText(SV(u8"b"));
     CHECK(m.list->GetSelectedItem() == 4);
-    m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::B)); // "bb": one letter again, the next b
+    m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::B));
+    m.D().InjectText(SV(u8"b")); // "bb": one letter again, the next b
     CHECK(m.list->GetSelectedItem() == 1);
 }
 

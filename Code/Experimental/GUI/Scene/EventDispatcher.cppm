@@ -312,9 +312,54 @@ export namespace experimental::gui
             return used || IsPointerTaken(hit);
         }
 
+        // === Capturing the next key (E12 of Specs/gui-lab-evolution-2.md) ===
+        /// The next key or pad button goes to `onKey` before the keymap, navigation or any widget
+        /// sees it (a rebinding screen). A modifier pressed alone is taken as it is released (so
+        /// Ctrl then S is Ctrl+S); the text a taken key types is dropped. Escape calls `onCancel`
+        /// instead, unless `takeEscape`. A capture asked for while one waits replaces it (its
+        /// cancel is called).
+        void CaptureNextKey(core::Function<void(const Keystroke&)> onKey, core::Function<void()> onCancel = {}, bool takeEscape = false)
+        {
+            CancelKeyCapture();
+            m_capture.OnKey = core::Move(onKey);
+            m_capture.OnCancel = core::Move(onCancel);
+            m_capture.TakeEscape = takeEscape;
+            m_capture.Waiting = true;
+            m_capture.PendingModifier = 0;
+        }
+        /// Stops a capture waiting, calling its cancel.
+        void CancelKeyCapture()
+        {
+            if (!m_capture.Waiting)
+                return;
+            m_capture.Waiting = false;
+            core::Function<void()> cancel = core::Move(m_capture.OnCancel);
+            m_capture.OnKey = {};
+            if (cancel)
+                cancel();
+        }
+        [[nodiscard]] bool IsCapturingKey() const noexcept { return m_capture.Waiting; }
         bool InjectKeyDown(u32 keyCode, u32 modifiers = 0)
         {
             NoteInput();
+            m_capture.DropText = false;
+            if (m_capture.Waiting)
+            {
+                const KeyCode key = static_cast<KeyCode>(keyCode);
+                if (key == KeyCode::Escape && modifiers == 0 && !m_capture.TakeEscape)
+                {
+                    CancelKeyCapture();
+                    return true;
+                }
+                if (ModifierOfKey(key) != 0)
+                {
+                    m_capture.PendingModifier = keyCode; // alone if it is released before another key
+                    return true;
+                }
+                m_capture.DropText = true; // what it types is not text now
+                TakeCapturedKey(Keystroke{keyCode, modifiers, false});
+                return true;
+            }
             // A keyboard drag: Escape (a pad's East) cancels, Return or Space drops at the focus,
             // the rest move the focus as ever, and the focus is asked again.
             if (m_dragActive && m_dragFromKeyboard)
@@ -370,7 +415,8 @@ export namespace experimental::gui
                 (modifiers & (~static_cast<u32>(KeyModShift))) == 0)
                 return (modifiers & KeyModShift) != 0 ? FocusPrevious() : FocusNext();
             // Then the bindings (a keystroke bound to a command where the focus path's contexts allow).
-            if (m_keystrokes && m_keystrokes(Keystroke{keyCode, modifiers, false}))
+            const u32 strokeModifiers = modifiers & ~ModifierOfKey(static_cast<KeyCode>(keyCode)); // Left Shift alone is "leftshift"
+            if (m_keystrokes && m_keystrokes(Keystroke{keyCode, strokeModifiers, false}))
                 return true;
             if (modifiers != 0)
                 return false;
@@ -421,6 +467,11 @@ export namespace experimental::gui
         {
             NoteInput();
             UseKeyboard();
+            if (m_capture.Waiting)
+            {
+                TakeCapturedKey(Keystroke{static_cast<u32>(button), 0, true});
+                return;
+            }
             if (m_keystrokes && m_keystrokes(Keystroke{static_cast<u32>(button), 0, true}))
                 return;
             if (button == PadButton::South)
@@ -451,6 +502,13 @@ export namespace experimental::gui
         }
         bool InjectKeyUp(u32 keyCode, u32 modifiers = 0)
         {
+            if (m_capture.Waiting)
+            {
+                // A modifier released with nothing pressed after it: the modifier key itself.
+                if (m_capture.PendingModifier == keyCode)
+                    TakeCapturedKey(Keystroke{keyCode, modifiers & ~ModifierOfKey(static_cast<KeyCode>(keyCode)), false});
+                return true;
+            }
             if (m_dragActive && !m_dragFromKeyboard)
             {
                 if (modifiers != m_dragModifiers)
@@ -464,6 +522,11 @@ export namespace experimental::gui
         }
         bool InjectText(core::StringView text)
         {
+            if (m_capture.Waiting || m_capture.DropText)
+            {
+                m_capture.DropText = false; // a captured key's text
+                return true;
+            }
             Node* target = KeyTarget();
             if (target == nullptr)
                 return false;
@@ -2116,6 +2179,25 @@ export namespace experimental::gui
         core::Float2 m_mousePos{0.0f, 0.0f};
         Observable m_focusChanged;   // told when focus moves
         core::Function<bool(const Keystroke&)> m_keystrokes; // the keymap (SceneRoot)
+        // CaptureNextKey's wait (E12).
+        struct KeyCapture
+        {
+            core::Function<void(const Keystroke&)> OnKey;
+            core::Function<void()> OnCancel;
+            bool TakeEscape = false;
+            bool Waiting = false;
+            bool DropText = false;    // the key it took types text next: dropped
+            u32 PendingModifier = 0;  // a modifier key down, taken alone if released first
+        };
+        KeyCapture m_capture;
+        void TakeCapturedKey(const Keystroke& stroke)
+        {
+            m_capture.Waiting = false;
+            core::Function<void(const Keystroke&)> onKey = core::Move(m_capture.OnKey);
+            m_capture.OnCancel = {};
+            if (onKey)
+                onKey(stroke);
+        }
         core::Function<void()> m_onInput;                    // this root took input (GUIContext)
         void NoteInput()
         {

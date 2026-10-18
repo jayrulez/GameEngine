@@ -27,6 +27,12 @@ namespace
         Bed() { root->SetSize(core::Float2{600.0f, 400.0f}); }
         EventDispatcher& d() { return *root->GetEventDispatcher(); }
         void Key(KeyCode k, core::u32 mods = 0) { (void)d().InjectKeyDown(K(k), mods); }
+        // A key that types: its key, then its text (what type-ahead reads, E12).
+        void Type(KeyCode k, const char8_t* text)
+        {
+            Key(k);
+            (void)d().InjectText(core::StringView(text));
+        }
     };
 
     // The text of the focused menu item, or empty.
@@ -104,11 +110,11 @@ TEST_CASE("keyboard: a combo box steps its selection closed, types ahead, and op
 
     bed.Key(KeyCode::Down);
     CHECK(combo->GetSelectedIndex() == 1);
-    bed.Key(KeyCode::B); // the next starting with b
+    bed.Type(KeyCode::B, u8"b"); // the next starting with b
     CHECK(combo->GetSelectedText() == SV(u8"Blueberry"));
-    bed.Key(KeyCode::B); // round to the first b
+    bed.Type(KeyCode::B, u8"b"); // round to the first b
     CHECK(combo->GetSelectedText() == SV(u8"Banana"));
-    bed.Key(KeyCode::C);
+    bed.Type(KeyCode::C, u8"c");
     CHECK(combo->GetSelectedIndex() == 3);
     bed.Key(KeyCode::Down); // at the end: given back, the selection stays
     CHECK(combo->GetSelectedIndex() == 3);

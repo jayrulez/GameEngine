@@ -200,20 +200,28 @@ export namespace experimental::gui
                 SelectByUser(m_selected - 1);
                 event.Handled = true;
             }
-            else if (const char8_t typed = TypedCharacter(key); typed != 0)
+            else if (KeyTypesText(key))
+                event.Handled = true; // its text arrives next, for type-ahead (E12)
+        }
+        // Typed text (E12: through the keyboard layout and an IME): the next item after the
+        // selection starting with its first character, round the end.
+        [[nodiscard]] bool WantsTextInput() const override { return IsTreeEnabled() && !m_items.IsEmpty(); }
+        void OnTextInput(const TextInputEvent& event) override
+        {
+            if (event.Target != this || m_items.IsEmpty() || event.Text.Size() == 0)
+                return;
+            usize end = 0;
+            (void)core::DecodeUtf8(event.Text, end);
+            const core::StringView typed = event.Text.SubStr(0, end);
+            event.Handled = true;
+            const i32 count = static_cast<i32>(m_items.Size());
+            for (i32 n = 1; n <= count; ++n)
             {
-                // Type-ahead: the next item after the selection starting with it, round the end.
-                const i32 count = static_cast<i32>(m_items.Size());
-                for (i32 n = 1; n <= count; ++n)
+                const i32 i = (m_selected + n + count) % count;
+                if (StartsWithIgnoringCase(m_items[static_cast<usize>(i)].AsView(), typed))
                 {
-                    const i32 i = (m_selected + n + count) % count;
-                    const core::StringView item = m_items[static_cast<usize>(i)].AsView();
-                    if (item.Size() != 0 && Lower(item[0]) == typed)
-                    {
-                        SelectByUser(i);
-                        event.Handled = true;
-                        break;
-                    }
+                    SelectByUser(i);
+                    break;
                 }
             }
         }
@@ -279,17 +287,6 @@ export namespace experimental::gui
             CloseDropdown();
         }
 
-        // The character a letter or digit key types (lower case), or 0.
-        [[nodiscard]] static char8_t TypedCharacter(KeyCode key) noexcept
-        {
-            for (usize i = 0; i < 26; ++i)
-                if (kLetterKeys[i] == key)
-                    return static_cast<char8_t>(u8'a' + i);
-            if (key >= KeyCode::Num0 && key <= KeyCode::Num9)
-                return static_cast<char8_t>(u8'0' + (static_cast<u32>(key) - static_cast<u32>(KeyCode::Num0)));
-            return 0;
-        }
-        [[nodiscard]] static char8_t Lower(char8_t c) noexcept { return c >= u8'A' && c <= u8'Z' ? static_cast<char8_t>(c - u8'A' + u8'a') : c; }
 
 
         Array<core::String> m_items;

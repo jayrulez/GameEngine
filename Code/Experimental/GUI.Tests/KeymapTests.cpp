@@ -323,3 +323,43 @@ TEST_CASE("keymap: a command's keys as text are those bound where the control is
     const core::Array<KeyContextLayer> here = bed.root->KeyContextsAt(bed.item.Get());
     CHECK(keys.ShortcutText(SV(u8"save"), here.AsSpan()) == core::String(u8"Ctrl+S"));
 }
+
+TEST_CASE("keymap: the whole keyboard has names, the keypad apart from the digits, each shown as a menu writes it")
+{
+    CHECK(ParseKeystroke(SV(u8"numpad5")).Value().Code == static_cast<core::u32>(KeyCode::Keypad5));
+    CHECK(ParseKeystroke(SV(u8"5")).Value().Code == static_cast<core::u32>(KeyCode::Num5));
+    CHECK(ParseKeystroke(SV(u8"f24")).Value().Code == static_cast<core::u32>(KeyCode::F24));
+    CHECK(ParseKeystroke(SV(u8"f13")).Value().Code == static_cast<core::u32>(KeyCode::F13));
+    CHECK_FALSE(ParseKeystroke(SV(u8"f25")).HasValue());
+    CHECK(ParseKeystroke(SV(u8"ctrl-slash")).Value().Code == static_cast<core::u32>(KeyCode::Slash));
+    CHECK(KeystrokeText(ParseKeystroke(SV(u8"ctrl-minus")).Value()) == SV(u8"Ctrl+-"));
+    CHECK(KeystrokeText(ParseKeystroke(SV(u8"numpadenter")).Value()) == SV(u8"Numpad Enter"));
+    CHECK(KeystrokeText(ParseKeystroke(SV(u8"f17")).Value()) == SV(u8"F17"));
+    CHECK(KeystrokeText(ParseKeystroke(SV(u8"backslash")).Value()) == SV(u8"\\"));
+    // Every named key reads back from its own name.
+    for (const detail::NamedKey& key : detail::kKeyNames)
+    {
+        const auto stroke = ParseKeystroke(SV(key.Name));
+        REQUIRE(stroke.HasValue());
+        CHECK(stroke.Value().Code == static_cast<core::u32>(key.Code));
+    }
+}
+
+TEST_CASE("keymap: a modifier key binds alone, though pressing it sets its own modifier")
+{
+    Bed bed;
+    bed.Handle(u8"sprint");
+    bed.Handle(u8"zoom");
+    Keymap& keys = bed.root->GetContext().GetKeymap();
+    REQUIRE(keys.Bind(SV(u8"leftshift"), SV(u8"sprint")));
+    REQUIRE(keys.Bind(SV(u8"ctrl-rightshift"), SV(u8"zoom")));
+    bed.Key(KeyCode::LeftShift, KeyModShift); // the platform reports Shift held as the key goes down
+    REQUIRE(bed.ran.Size() == 1u);
+    CHECK(bed.ran[0] == SV(u8"sprint"));
+    bed.Key(KeyCode::RightShift, KeyModShift | KeyModCtrl);
+    REQUIRE(bed.ran.Size() == 2u);
+    CHECK(bed.ran[1] == SV(u8"zoom"));
+    bed.Key(KeyCode::Keypad5);
+    CHECK(bed.ran.Size() == 2u); // unbound: Numpad 5 is not 5
+}
+

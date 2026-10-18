@@ -465,14 +465,43 @@ export namespace experimental::gui
                     mapped = static_cast<KeyCode>(static_cast<u32>(KeyCode::Num0) + (static_cast<u32>(key) - static_cast<u32>(shell::KeyCode::Num0)));
                 else if (key >= shell::KeyCode::F1 && key <= shell::KeyCode::F12)
                     mapped = static_cast<KeyCode>(static_cast<u32>(KeyCode::F1) + (static_cast<u32>(key) - static_cast<u32>(shell::KeyCode::F1)));
+                else if (key == shell::KeyCode::Menu)
+                    mapped = KeyCode::Menu;
                 else
-                    mapped = KeyCode::Unknown;
+                    mapped = MapKeyRange(key);
                 break;
             }
             return static_cast<u32>(mapped);
         }
 
     private:
+        // The rest of the keyboard (E12): runs of keys the shell and the GUI list in the same order.
+        [[nodiscard]] static KeyCode MapKeyRange(shell::KeyCode key) noexcept
+        {
+            struct Run
+            {
+                shell::KeyCode First, Last;
+                KeyCode To;
+            };
+            static constexpr Run kRuns[] = {
+                {shell::KeyCode::F13, shell::KeyCode::F24, KeyCode::F13},
+                {shell::KeyCode::Minus, shell::KeyCode::Slash, KeyCode::Minus},
+                {shell::KeyCode::CapsLock, shell::KeyCode::Pause, KeyCode::CapsLock},
+                {shell::KeyCode::Keypad0, shell::KeyCode::KeypadDecimal, KeyCode::Keypad0},
+                {shell::KeyCode::LeftCtrl, shell::KeyCode::RightGui, KeyCode::LeftCtrl},
+            };
+            // Each run as long on both sides (a key added to one list breaks the build, not the map).
+            constexpr auto span = [](auto first, auto last) { return static_cast<u32>(last) - static_cast<u32>(first); };
+            static_assert(span(shell::KeyCode::F13, shell::KeyCode::F24) == span(KeyCode::F13, KeyCode::F24));
+            static_assert(span(shell::KeyCode::Minus, shell::KeyCode::Slash) == span(KeyCode::Minus, KeyCode::Slash));
+            static_assert(span(shell::KeyCode::CapsLock, shell::KeyCode::Pause) == span(KeyCode::CapsLock, KeyCode::Pause));
+            static_assert(span(shell::KeyCode::Keypad0, shell::KeyCode::KeypadDecimal) == span(KeyCode::Keypad0, KeyCode::KeypadDecimal));
+            static_assert(span(shell::KeyCode::LeftCtrl, shell::KeyCode::RightGui) == span(KeyCode::LeftCtrl, KeyCode::RightSuper));
+            for (const Run& run : kRuns)
+                if (key >= run.First && key <= run.Last)
+                    return static_cast<KeyCode>(static_cast<u32>(run.To) + (static_cast<u32>(key) - static_cast<u32>(run.First)));
+            return KeyCode::Unknown;
+        }
 
         // A gamepad (G7): the d-pad holds a direction (focus moves, then repeats); the face,
         // shoulder and menu buttons are keystrokes for the keymap (South activates when unbound).

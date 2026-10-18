@@ -58,16 +58,87 @@ export namespace experimental::gui
             const char8_t* Name;
             u32 Code;
         };
-        inline constexpr NamedCode kKeyNames[] = {
-            {u8"enter", static_cast<u32>(KeyCode::Return)},    {u8"return", static_cast<u32>(KeyCode::Return)},
-            {u8"escape", static_cast<u32>(KeyCode::Escape)},   {u8"backspace", static_cast<u32>(KeyCode::Backspace)},
-            {u8"tab", static_cast<u32>(KeyCode::Tab)},         {u8"space", static_cast<u32>(KeyCode::Space)},
-            {u8"delete", static_cast<u32>(KeyCode::Delete)},   {u8"insert", static_cast<u32>(KeyCode::Insert)},
-            {u8"home", static_cast<u32>(KeyCode::Home)},       {u8"end", static_cast<u32>(KeyCode::End)},
-            {u8"pageup", static_cast<u32>(KeyCode::PageUp)},   {u8"pagedown", static_cast<u32>(KeyCode::PageDown)},
-            {u8"left", static_cast<u32>(KeyCode::Left)},       {u8"right", static_cast<u32>(KeyCode::Right)},
-            {u8"up", static_cast<u32>(KeyCode::Up)},           {u8"down", static_cast<u32>(KeyCode::Down)},
+        /// Every key with a name of its own: what a binding writes ("pageup", "numpad5") and what a
+        /// menu shows ("PgUp", "Numpad 5"). Letters, digits and F1 to F24 are named by rule.
+        struct NamedKey
+        {
+            KeyCode Code;
+            const char8_t* Name;
+            const char8_t* Text;
         };
+        inline constexpr NamedKey kKeyNames[] = {
+            {KeyCode::Return, u8"enter", u8"Enter"},
+            {KeyCode::Return, u8"return", u8"Enter"},
+            {KeyCode::Escape, u8"escape", u8"Esc"},
+            {KeyCode::Backspace, u8"backspace", u8"Backspace"},
+            {KeyCode::Tab, u8"tab", u8"Tab"},
+            {KeyCode::Space, u8"space", u8"Space"},
+            {KeyCode::Delete, u8"delete", u8"Del"},
+            {KeyCode::Insert, u8"insert", u8"Ins"},
+            {KeyCode::Home, u8"home", u8"Home"},
+            {KeyCode::End, u8"end", u8"End"},
+            {KeyCode::PageUp, u8"pageup", u8"PgUp"},
+            {KeyCode::PageDown, u8"pagedown", u8"PgDn"},
+            {KeyCode::Left, u8"left", u8"Left"},
+            {KeyCode::Right, u8"right", u8"Right"},
+            {KeyCode::Up, u8"up", u8"Up"},
+            {KeyCode::Down, u8"down", u8"Down"},
+            {KeyCode::Minus, u8"minus", u8"-"},
+            {KeyCode::Equals, u8"equals", u8"="},
+            {KeyCode::LeftBracket, u8"leftbracket", u8"["},
+            {KeyCode::RightBracket, u8"rightbracket", u8"]"},
+            {KeyCode::Backslash, u8"backslash", u8"\\"},
+            {KeyCode::Semicolon, u8"semicolon", u8";"},
+            {KeyCode::Apostrophe, u8"apostrophe", u8"'"},
+            {KeyCode::Grave, u8"grave", u8"`"},
+            {KeyCode::Comma, u8"comma", u8","},
+            {KeyCode::Period, u8"period", u8"."},
+            {KeyCode::Slash, u8"slash", u8"/"},
+            {KeyCode::CapsLock, u8"capslock", u8"Caps Lock"},
+            {KeyCode::ScrollLock, u8"scrolllock", u8"Scroll Lock"},
+            {KeyCode::NumLock, u8"numlock", u8"Num Lock"},
+            {KeyCode::PrintScreen, u8"printscreen", u8"Print Screen"},
+            {KeyCode::Pause, u8"pause", u8"Pause"},
+            {KeyCode::Menu, u8"menu", u8"Menu"},
+            {KeyCode::Keypad0, u8"numpad0", u8"Numpad 0"},
+            {KeyCode::Keypad1, u8"numpad1", u8"Numpad 1"},
+            {KeyCode::Keypad2, u8"numpad2", u8"Numpad 2"},
+            {KeyCode::Keypad3, u8"numpad3", u8"Numpad 3"},
+            {KeyCode::Keypad4, u8"numpad4", u8"Numpad 4"},
+            {KeyCode::Keypad5, u8"numpad5", u8"Numpad 5"},
+            {KeyCode::Keypad6, u8"numpad6", u8"Numpad 6"},
+            {KeyCode::Keypad7, u8"numpad7", u8"Numpad 7"},
+            {KeyCode::Keypad8, u8"numpad8", u8"Numpad 8"},
+            {KeyCode::Keypad9, u8"numpad9", u8"Numpad 9"},
+            {KeyCode::KeypadDivide, u8"numpaddivide", u8"Numpad /"},
+            {KeyCode::KeypadMultiply, u8"numpadmultiply", u8"Numpad *"},
+            {KeyCode::KeypadMinus, u8"numpadminus", u8"Numpad -"},
+            {KeyCode::KeypadPlus, u8"numpadplus", u8"Numpad +"},
+            {KeyCode::KeypadEnter, u8"numpadenter", u8"Numpad Enter"},
+            {KeyCode::KeypadDecimal, u8"numpaddecimal", u8"Numpad ."},
+            {KeyCode::LeftCtrl, u8"leftctrl", u8"Left Ctrl"},
+            {KeyCode::LeftShift, u8"leftshift", u8"Left Shift"},
+            {KeyCode::LeftAlt, u8"leftalt", u8"Left Alt"},
+            {KeyCode::LeftSuper, u8"leftsuper", u8"Left Super"},
+            {KeyCode::RightCtrl, u8"rightctrl", u8"Right Ctrl"},
+            {KeyCode::RightShift, u8"rightshift", u8"Right Shift"},
+            {KeyCode::RightAlt, u8"rightalt", u8"Right Alt"},
+            {KeyCode::RightSuper, u8"rightsuper", u8"Right Super"},
+        };
+        /// F1 to F24's place: 1 to 24, or 0 for a key that is none of them.
+        [[nodiscard]] constexpr u32 FunctionKeyNumber(KeyCode key) noexcept
+        {
+            if (key >= KeyCode::F1 && key <= KeyCode::F12)
+                return static_cast<u32>(key) - static_cast<u32>(KeyCode::F1) + 1;
+            if (key >= KeyCode::F13 && key <= KeyCode::F24)
+                return static_cast<u32>(key) - static_cast<u32>(KeyCode::F13) + 13;
+            return 0;
+        }
+        [[nodiscard]] constexpr KeyCode FunctionKey(u32 number) noexcept
+        {
+            return number <= 12 ? static_cast<KeyCode>(static_cast<u32>(KeyCode::F1) + number - 1)
+                                : static_cast<KeyCode>(static_cast<u32>(KeyCode::F13) + number - 13);
+        }
         inline constexpr NamedCode kPadNames[] = {
             {u8"south", static_cast<u32>(PadButton::South)},   {u8"east", static_cast<u32>(PadButton::East)},
             {u8"west", static_cast<u32>(PadButton::West)},     {u8"north", static_cast<u32>(PadButton::North)},
@@ -114,13 +185,13 @@ export namespace experimental::gui
                 return {};
             rest = rest.SubStr(dash + 1, rest.Size() - dash - 1);
         }
-        for (const detail::NamedCode& key : detail::kKeyNames)
+        for (const detail::NamedKey& key : detail::kKeyNames)
             if (rest == core::StringView(key.Name))
             {
-                stroke.Code = key.Code;
+                stroke.Code = static_cast<u32>(key.Code);
                 return stroke;
             }
-        // A letter, a digit, or f1 to f12.
+        // A letter, a digit, or f1 to f24.
         if (rest.Size() == 1 && rest[0] >= u8'a' && rest[0] <= u8'z')
         {
             stroke.Code = static_cast<u32>(kLetterKeys[rest[0] - u8'a']);
@@ -140,9 +211,9 @@ export namespace experimental::gui
                     return {};
                 n = n * 10 + static_cast<u32>(rest[i] - u8'0');
             }
-            if (n >= 1 && n <= 12)
+            if (n >= 1 && n <= 24)
             {
-                stroke.Code = static_cast<u32>(KeyCode::F1) + n - 1;
+                stroke.Code = static_cast<u32>(detail::FunctionKey(n));
                 return stroke;
             }
         }
@@ -169,20 +240,8 @@ export namespace experimental::gui
             out.Append(core::StringView(u8"Shift+"));
         if ((stroke.Modifiers & KeyModSuper) != 0)
             out.Append(core::StringView(u8"Super+"));
-        struct Named
-        {
-            KeyCode Code;
-            const char8_t* Text;
-        };
-        static constexpr Named kNamed[] = {
-            {KeyCode::Return, u8"Enter"},   {KeyCode::Escape, u8"Esc"},    {KeyCode::Backspace, u8"Backspace"},
-            {KeyCode::Tab, u8"Tab"},        {KeyCode::Space, u8"Space"},   {KeyCode::Delete, u8"Del"},
-            {KeyCode::Insert, u8"Ins"},     {KeyCode::Home, u8"Home"},     {KeyCode::End, u8"End"},
-            {KeyCode::PageUp, u8"PgUp"},    {KeyCode::PageDown, u8"PgDn"}, {KeyCode::Left, u8"Left"},
-            {KeyCode::Right, u8"Right"},    {KeyCode::Up, u8"Up"},         {KeyCode::Down, u8"Down"},
-        };
         const KeyCode key = static_cast<KeyCode>(stroke.Code);
-        for (const Named& n : kNamed)
+        for (const detail::NamedKey& n : detail::kKeyNames)
             if (n.Code == key)
             {
                 out.Append(core::StringView(n.Text));
@@ -196,12 +255,11 @@ export namespace experimental::gui
             }
         if (key >= KeyCode::Num0 && key <= KeyCode::Num9)
             out.PushBack(static_cast<char8_t>(u8'0' + (stroke.Code - static_cast<u32>(KeyCode::Num0))));
-        else if (key >= KeyCode::F1 && key <= KeyCode::F12)
+        else if (const u32 n = detail::FunctionKeyNumber(key); n != 0)
         {
-            const u32 n = stroke.Code - static_cast<u32>(KeyCode::F1) + 1;
             out.PushBack(u8'F');
             if (n >= 10)
-                out.PushBack(u8'1');
+                out.PushBack(static_cast<char8_t>(u8'0' + n / 10));
             out.PushBack(static_cast<char8_t>(u8'0' + n % 10));
         }
         return out;

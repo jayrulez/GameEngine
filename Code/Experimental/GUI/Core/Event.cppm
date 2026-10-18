@@ -227,6 +227,15 @@ export namespace experimental::gui
         B, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, W, Y, Z,
         Num0, Num1, Num2, Num3, Num4, Num5, Num6, Num7, Num8, Num9,
         F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12,
+        // The rest of the keyboard (E12 of Specs/gui-lab-evolution-2.md): punctuation, the keypad
+        // with codes of its own (a game binds Numpad 5 apart from 5), the lock and system keys,
+        // and the modifier keys themselves (a game binds Left Shift to sprint).
+        F13, F14, F15, F16, F17, F18, F19, F20, F21, F22, F23, F24,
+        Minus, Equals, LeftBracket, RightBracket, Backslash, Semicolon, Apostrophe, Grave, Comma, Period, Slash,
+        CapsLock, ScrollLock, NumLock, PrintScreen, Pause, Menu,
+        Keypad0, Keypad1, Keypad2, Keypad3, Keypad4, Keypad5, Keypad6, Keypad7, Keypad8, Keypad9,
+        KeypadDivide, KeypadMultiply, KeypadMinus, KeypadPlus, KeypadEnter, KeypadDecimal,
+        LeftCtrl, LeftShift, LeftAlt, LeftSuper, RightCtrl, RightShift, RightAlt, RightSuper,
     };
 
     /// The letter keys in alphabetical order (their codes are not contiguous: A, C, V and X came first).
@@ -245,6 +254,36 @@ export namespace experimental::gui
         KeyModAlt = 1u << 2,
         KeyModSuper = 1u << 3,
     };
+
+    /// Whether a key types a character (a letter, a digit, punctuation, the keypad's digits and
+    /// signs): what a widget that takes typed text (type-ahead, E12) claims, so a binding of the
+    /// bare key does not take it from under the text.
+    [[nodiscard]] constexpr bool KeyTypesText(KeyCode key) noexcept
+    {
+        for (const KeyCode letter : kLetterKeys)
+            if (letter == key)
+                return true;
+        return (key >= KeyCode::Num0 && key <= KeyCode::Num9) || (key >= KeyCode::Minus && key <= KeyCode::Slash) ||
+               (key >= KeyCode::Keypad0 && key <= KeyCode::KeypadDecimal && key != KeyCode::KeypadEnter);
+    }
+
+    /// The modifier a modifier key is (Left Shift: Shift), else none: pressed alone, the key is
+    /// itself, not Shift plus itself.
+    [[nodiscard]] constexpr u32 ModifierOfKey(KeyCode key) noexcept
+    {
+        switch (key)
+        {
+        case KeyCode::LeftShift:
+        case KeyCode::RightShift: return KeyModShift;
+        case KeyCode::LeftCtrl:
+        case KeyCode::RightCtrl: return KeyModCtrl;
+        case KeyCode::LeftAlt:
+        case KeyCode::RightAlt: return KeyModAlt;
+        case KeyCode::LeftSuper:
+        case KeyCode::RightSuper: return KeyModSuper;
+        default: return KeyModNone;
+        }
+    }
 
     // Base event. The typed subclasses below carry payload; a listener registered for a
     // given EventType may static_cast to the matching subclass (the dispatcher always

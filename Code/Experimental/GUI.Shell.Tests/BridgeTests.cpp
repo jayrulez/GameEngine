@@ -177,8 +177,26 @@ TEST_CASE("bridge: navigation keys map platform KeyCode to the GUI KeyCode")
     CHECK(seenKey == static_cast<core::u32>(KeyCode::Num7));
     bridge.Dispatch(Key(shell::InputEventKind::KeyDown, shell::KeyCode::F5));
     CHECK(seenKey == static_cast<core::u32>(KeyCode::F5));
-    bridge.Dispatch(Key(shell::InputEventKind::KeyDown, shell::KeyCode::F13)); // past what bindings name
-    CHECK(seenKey == static_cast<core::u32>(KeyCode::Unknown));
+    // The rest of the keyboard too (E12): punctuation, the keypad apart from the digits, F13 to
+    // F24, the lock keys and the modifier keys themselves.
+    const struct
+    {
+        shell::KeyCode From;
+        KeyCode To;
+    } kRest[] = {
+        {shell::KeyCode::F13, KeyCode::F13},          {shell::KeyCode::F24, KeyCode::F24},
+        {shell::KeyCode::Minus, KeyCode::Minus},      {shell::KeyCode::Slash, KeyCode::Slash},
+        {shell::KeyCode::Grave, KeyCode::Grave},      {shell::KeyCode::Keypad5, KeyCode::Keypad5},
+        {shell::KeyCode::KeypadEnter, KeyCode::KeypadEnter}, {shell::KeyCode::KeypadDecimal, KeyCode::KeypadDecimal},
+        {shell::KeyCode::CapsLock, KeyCode::CapsLock}, {shell::KeyCode::Pause, KeyCode::Pause},
+        {shell::KeyCode::Menu, KeyCode::Menu},        {shell::KeyCode::LeftShift, KeyCode::LeftShift},
+        {shell::KeyCode::RightGui, KeyCode::RightSuper},
+    };
+    for (const auto& key : kRest)
+    {
+        bridge.Dispatch(Key(shell::InputEventKind::KeyDown, key.From));
+        CHECK(seenKey == static_cast<core::u32>(key.To));
+    }
 }
 
 TEST_CASE("bridge: text-input target follows focus of an editable widget")

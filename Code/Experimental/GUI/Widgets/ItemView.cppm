@@ -54,6 +54,7 @@ import :variant;
 import :model_index;
 import :model;
 import :text_field;
+import :text;             // StartsWithIgnoringCase (type-ahead)
 import :event_dispatcher; // GetTime (type-ahead)
 import :reactive;         // Observable (what bindings follow)
 import :element_types;    // ElementSet (a template's elements)
@@ -767,6 +768,13 @@ export namespace experimental::gui
             RequestLayout();
         }
         void OnKeyDown(const KeyEvent& event) override;
+        // Typed text is its type-ahead (E12): it asks for text input while it has items.
+        [[nodiscard]] bool WantsTextInput() const override { return IsTreeEnabled() && ItemCount() > 0; }
+        void OnTextInput(const TextInputEvent& event) override
+        {
+            if (event.Target == this && TypeAhead(event.Text))
+                event.Handled = true;
+        }
         bool OnActivate() override
         {
             const i32 item = GetCurrentItem();
@@ -982,7 +990,7 @@ export namespace experimental::gui
         // The rows in view (and one past each edge) realised, measured and placed; the scroll
         // anchor kept where it was when rows above it measured differently from their estimate.
         void Realize();
-        bool TypeAhead(KeyCode key);
+        bool TypeAhead(core::StringView typed);
         // A row for `item`: the live one showing its id, else one from its type's pool, else new.
         ItemRow* TakeRow(i32 item, core::Array<core::RefPtr<ItemRow>>& next);
         void ReleaseRow(ItemRow& row)
@@ -1443,7 +1451,9 @@ export namespace experimental::gui
             event.Handled = true;
             return;
         }
-        if ((event.Modifiers & ~static_cast<u32>(KeyModShift)) == 0 && TypeAhead(key))
+        // A key that types is its type-ahead's (E12): the text it types arrives next, through the
+        // keyboard layout and an IME, and no binding of the bare key takes it.
+        if ((event.Modifiers & ~static_cast<u32>(KeyModShift)) == 0 && KeyTypesText(key) && ItemCount() > 0)
         {
             event.Handled = true;
             return;
@@ -1502,49 +1512,35 @@ export namespace experimental::gui
     }
 
     // Typing jumps to the next item whose text starts with what was typed (within a second of
-    // the last key; one letter again cycles through the items starting with it). False when the
-    // key is no letter or digit.
-    inline bool ItemView::TypeAhead(KeyCode key)
+    // the last text; one character again cycles through the items starting with it). The text is
+    // typed text (E12): it follows the keyboard layout and an IME. False for no text or no items.
+    inline bool ItemView::TypeAhead(core::StringView typed)
     {
-        char8_t typed = 0;
-        for (usize i = 0; i < 26; ++i)
-            if (kLetterKeys[i] == key)
-                typed = static_cast<char8_t>(u8'a' + i);
-        if (key >= KeyCode::Num0 && key <= KeyCode::Num9)
-            typed = static_cast<char8_t>(u8'0' + (static_cast<u32>(key) - static_cast<u32>(KeyCode::Num0)));
-        if (typed == 0)
+        if (typed.Size() == 0 || ItemCount() == 0)
             return false;
         const EventDispatcher* d = GetEventDispatcher();
         const f32 now = d != nullptr ? d->GetTime() : 0.0f;
         if (now - m_typedAt > 1.0f)
             m_typed = core::String{};
         m_typedAt = now;
-        const char8_t one[1] = {typed};
-        m_typed.Append(core::StringView(one, 1));
-        const auto lower = [](char8_t c) { return (c >= u8'A' && c <= u8'Z') ? static_cast<char8_t>(c + 32) : c; };
-        const auto startsWith = [&](core::StringView text, core::StringView prefix)
-        {
-            if (text.Size() < prefix.Size())
-                return false;
-            for (usize i = 0; i < prefix.Size(); ++i)
-                if (lower(text[i]) != lower(prefix[i]))
-                    return false;
-            return true;
-        };
-        // One letter typed again: the next item starting with it.
+        m_typed.Append(typed);
+        // One character typed again: the next item starting with it.
         core::StringView prefix = m_typed.AsView();
-        bool repeated = prefix.Size() > 1;
-        for (usize i = 1; i < prefix.Size() && repeated; ++i)
-            repeated = prefix[i] == prefix[0];
+        usize firstEnd = 0;
+        (void)core::DecodeUtf8(prefix, firstEnd);
+        const core::StringView first = prefix.SubStr(0, firstEnd);
+        bool repeated = prefix.Size() > firstEnd;
+        for (usize at = firstEnd; at < prefix.Size() && repeated; at += firstEnd)
+            repeated = prefix.Size() - at >= firstEnd && prefix.SubStr(at, firstEnd) == first;
         if (repeated)
-            prefix = prefix.SubStr(0, 1);
+            prefix = first;
         const i32 items = static_cast<i32>(ItemCount());
         const i32 current = GetCurrentItem();
-        const i32 start = (prefix.Size() == 1 || current < 0) ? current + 1 : current;
+        const i32 start = (prefix.Size() == firstEnd || current < 0) ? current + 1 : current; // one character: past the current
         for (i32 n = 0; n < items; ++n)
         {
             const i32 item = ((start + n) % items + items) % items;
-            if (startsWith(TypeAheadText(item).AsView(), prefix))
+            if (StartsWithIgnoringCase(TypeAheadText(item).AsView(), prefix))
             {
                 SelectOnly(item);
                 NotifySelectionByUser();

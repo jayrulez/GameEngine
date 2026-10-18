@@ -33,6 +33,42 @@ namespace vg = foundation::vg;
 
 export namespace experimental::gui
 {
+    /// A character in lower case, for the scripts type-ahead matches by case: Latin (ASCII,
+    /// Latin-1 and Latin Extended-A), Greek and Cyrillic; any other as it is.
+    [[nodiscard]] constexpr char32_t SimpleLowerCase(char32_t c) noexcept
+    {
+        if ((c >= U'A' && c <= U'Z') || (c >= 0xC0 && c <= 0xDE && c != 0xD7) || (c >= 0x391 && c <= 0x3AB && c != 0x3A2) ||
+            (c >= 0x410 && c <= 0x42F))
+            return c + 0x20;
+        if (c >= 0x400 && c <= 0x40F)
+            return c + 0x50;
+        // Latin Extended-A pairs: upper case even, lower odd, but for a run where it is the other way.
+        if ((c >= 0x100 && c <= 0x137 && c != 0x130 && (c & 1u) == 0) || (c >= 0x14A && c <= 0x177 && (c & 1u) == 0))
+            return c + 1;
+        if (((c >= 0x139 && c <= 0x148) || (c >= 0x179 && c <= 0x17E)) && (c & 1u) == 1)
+            return c + 1;
+        if (c == 0x178)
+            return 0xFF;
+        return c;
+    }
+
+    /// Whether `text` starts with `prefix`, letters in either case alike (SimpleLowerCase): what
+    /// type-ahead matches.
+    [[nodiscard]] inline bool StartsWithIgnoringCase(core::StringView text, core::StringView prefix) noexcept
+    {
+        usize t = 0;
+        usize p = 0;
+        while (p < prefix.Size())
+        {
+            if (t >= text.Size())
+                return false;
+            if (SimpleLowerCase(static_cast<char32_t>(core::DecodeUtf8(text, t))) !=
+                SimpleLowerCase(static_cast<char32_t>(core::DecodeUtf8(prefix, p))))
+                return false;
+        }
+        return true;
+    }
+
     class Text
     {
     public:

@@ -327,6 +327,52 @@ TEST_CASE("sss: DrawableFactory_RoundedRect")
     CHECK(rrd->BorderWidth == 1.0f);
 }
 
+TEST_CASE("sss: DrawableFactory_RoundedRect takes a border width and colour per side")
+{
+    Fixture f(LoadSSS(u8"View { background: rounded-rect(#336699, radius=6, border=#FF0000, "
+                      u8"border-width=1 2 3 4, border-left=#00FF00); }"));
+    core::RefPtr<TestView> view = f.AddView();
+    RoundedRectDrawable* rrd = core::Cast<RoundedRectDrawable>(view->ResolveStyleDrawable(StyleProperty::Background));
+    REQUIRE(rrd != nullptr);
+    // CSS's order: top, right, bottom, left.
+    REQUIRE(rrd->SideWidths.HasValue());
+    CHECK(rrd->Widths() == foundation::vg::BorderWidths(1.0f, 2.0f, 3.0f, 4.0f));
+    REQUIRE(rrd->SideColors.HasValue());
+    CHECK(rrd->Colors().top == Color{1.0f, 0.0f, 0.0f, 1.0f}); // border= for the sides not named
+    CHECK(rrd->Colors().right == Color{1.0f, 0.0f, 0.0f, 1.0f});
+    CHECK(rrd->Colors().left == Color{0.0f, 1.0f, 0.0f, 1.0f});
+    // The border is chrome content clears, side by side.
+    const Thickness pad = rrd->DrawablePadding();
+    CHECK(pad.Left == 4.0f);
+    CHECK(pad.Top == 1.0f);
+    CHECK(pad.Right == 2.0f);
+    CHECK(pad.Bottom == 3.0f);
+
+    // Drawn, each side takes its own colour.
+    foundation::vg::VGContext canvas;
+    UIDrawContext ctx(canvas, 1.0f, nullptr);
+    rrd->Draw(ctx, Rectangle{0, 0, 40, 30});
+    bool red = false;
+    bool green = false;
+    for (const foundation::vg::VGVertex& v : canvas.GetBatch().vertices)
+    {
+        red = red || (v.color.r > 0.99f && v.color.g < 0.01f);
+        green = green || (v.color.g > 0.99f && v.color.r < 0.01f);
+    }
+    CHECK(red);
+    CHECK(green);
+
+    // One width and no side colour stay the uniform border.
+    Fixture plain(LoadSSS(u8"View { background: rounded-rect(#336699, border=#FF0000, border-width=2 2); }"));
+    core::RefPtr<TestView> plainView = plain.AddView();
+    RoundedRectDrawable* uniform =
+        core::Cast<RoundedRectDrawable>(plainView->ResolveStyleDrawable(StyleProperty::Background));
+    REQUIRE(uniform != nullptr);
+    CHECK_FALSE(uniform->SideWidths.HasValue());
+    CHECK_FALSE(uniform->SideColors.HasValue());
+    CHECK(uniform->BorderWidth == 2.0f);
+}
+
 TEST_CASE("sss: DrawableFactory_Gradient")
 {
     Fixture f(LoadSSS(u8"View { background: gradient(left-to-right, #000000, #ffffff); }"));

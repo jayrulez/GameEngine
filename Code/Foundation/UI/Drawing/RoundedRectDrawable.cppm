@@ -3,7 +3,8 @@
 
 // UI - :rounded_rect_drawable partition
 //
-// Filled rounded rectangle with optional border; per-corner radii via vg::CornerRadii.
+// Filled rounded rectangle with optional border; per-corner radii via vg::CornerRadii, and a
+// width and colour per side when SideWidths or SideColors is set.
 // Ported from Sedulous.UI/src/Drawing/RoundedRectDrawable.bf.
 
 module;
@@ -32,6 +33,22 @@ export namespace foundation::ui
         core::Color BorderColor = core::Color::Transparent;
         f32 BorderWidth = 0.0f;
         vg::CornerRadii Radii{};
+        /// A width per side, in place of BorderWidth (CSS's border-top-width and the rest).
+        Optional<vg::BorderWidths> SideWidths;
+        /// A colour per side, in place of BorderColor; where two sides meet, the corner splits
+        /// between them as CSS draws it.
+        Optional<vg::BorderColors> SideColors;
+
+        /// The border's width on each side: SideWidths, or BorderWidth on all four.
+        [[nodiscard]] vg::BorderWidths Widths() const
+        {
+            return SideWidths.HasValue() ? SideWidths.Value() : vg::BorderWidths(BorderWidth);
+        }
+        /// The border's colour on each side: SideColors, or BorderColor on all four.
+        [[nodiscard]] vg::BorderColors Colors() const
+        {
+            return SideColors.HasValue() ? SideColors.Value() : vg::BorderColors(BorderColor);
+        }
 
         RoundedRectDrawable() = default;
         /// Uniform corner radius.
@@ -62,6 +79,17 @@ export namespace foundation::ui
             // border lies INSIDE bounds - border-box painting. VG strokes are
             // centered on the path, so an un-inset stroke would hang half outside the view,
             // where ClipsContent would amputate it and adjacent siblings' borders would overlap.
+            if (SideWidths.HasValue() || SideColors.HasValue())
+            {
+                // Sides that differ: VG's box draws them, analytically or tessellated.
+                const vg::BorderColors colors = Colors();
+                const bool bordered = !colors.IsTransparent() && !Widths().IsZero();
+                if (FillColor.a > 0.0f || bordered)
+                {
+                    ctx.VG().DrawBox(bounds, Radii, FillColor, bordered ? Widths() : vg::BorderWidths{}, colors);
+                }
+                return;
+            }
             if (ctx.VG().AnalyticBoxes())
             {
                 // Fill and border as ONE box: one signed distance gives both, so they cannot
@@ -112,7 +140,8 @@ export namespace foundation::ui
         /// into padding by View::ResolveBoxMetrics / Panel::EffectivePadding.
         [[nodiscard]] Thickness DrawablePadding() const override
         {
-            return Thickness{BorderWidth, BorderWidth, BorderWidth, BorderWidth};
+            const vg::BorderWidths w = Widths();
+            return Thickness{w.left, w.top, w.right, w.bottom};
         }
     };
 

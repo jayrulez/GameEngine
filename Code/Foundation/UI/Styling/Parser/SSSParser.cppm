@@ -185,6 +185,16 @@ export namespace foundation::ui
             return vg::CornerRadii(count > 0 ? values[0] : 0.0f);
         }
 
+        /// 1, 2 or 4 numbers as CSS writes a box's sides (padding, a drawable's border widths).
+        Thickness ParseThicknessValue()
+        {
+            f32 values[4] = {};
+            i32 count = 0;
+            while (count < 4 && Peek().Kind == TokenKind::Number)
+                values[count++] = ParseFloatValue();
+            return StyleValueParser::ParseThickness(values, count);
+        }
+
 
         /// Parse a float value (number, possibly followed by %).
         f32 ParseFloatValue()
@@ -1089,14 +1099,6 @@ export namespace foundation::ui
             return result;
         }
 
-        Thickness ParseThicknessValue()
-        {
-            f32 values[4] = {};
-            i32 count = 0;
-            while (count < 4 && Peek().Kind == TokenKind::Number)
-                values[count++] = ParseFloatValue();
-            return StyleValueParser::ParseThickness(values, count);
-        }
 
         // === Property name resolution (all ~48 properties) ===
 
@@ -1465,14 +1467,18 @@ export namespace foundation::ui
                      return d;
                  });
 
-        // rounded-rect($color, radius=6, border=$color, border-width=1) -> RoundedRectDrawable
+        // rounded-rect($color, radius=6, border=$color, border-width=1) -> RoundedRectDrawable.
+        // border-width takes 1, 2 or 4 values in CSS's order (top, right, bottom, left), and
+        // border-top=, border-right=, border-bottom= and border-left= colour one side over border=.
         Register(u8"rounded-rect",
                  [](SSSParser& parser, StyleSheet& sheet) -> RefPtr<Drawable>
                  {
                      const Color fillColor = parser.ParseColorArg();
                      vg::CornerRadii radii{};
                      Color borderColor = Color::Transparent;
-                     f32 borderWidth = 0.0f;
+                     Thickness widths{};
+                     bool sideWidths = false;
+                     Optional<Color> sides[4]; // top, right, bottom, left
 
                      while (parser.MatchComma())
                      {
@@ -1485,19 +1491,38 @@ export namespace foundation::ui
                          else if (kw == StringView(u8"border-width"))
                          {
                              parser.ConsumeKeywordArg();
-                             borderWidth = parser.ParseFloatValue();
+                             widths = parser.ParseThicknessValue();
+                             sideWidths = widths.Top != widths.Right || widths.Top != widths.Bottom ||
+                                          widths.Top != widths.Left;
                          }
                          else if (kw == StringView(u8"border"))
                          {
                              parser.ConsumeKeywordArg();
                              borderColor = parser.ParseColorArg();
                          }
+                         else if (kw == StringView(u8"border-top") || kw == StringView(u8"border-right") ||
+                                  kw == StringView(u8"border-bottom") || kw == StringView(u8"border-left"))
+                         {
+                             const usize side = kw == StringView(u8"border-top")     ? 0
+                                                : kw == StringView(u8"border-right") ? 1
+                                                : kw == StringView(u8"border-bottom") ? 2
+                                                                                       : 3;
+                             parser.ConsumeKeywordArg();
+                             sides[side] = parser.ParseColorArg();
+                         }
                          else
                              radii = parser.ParseCornerRadiiValue();
                      }
 
                      RefPtr<RoundedRectDrawable> d = MakeRef<RoundedRectDrawable>(
-                         parser.Allocator(), fillColor, radii, borderColor, borderWidth);
+                         parser.Allocator(), fillColor, radii, borderColor, widths.Top);
+                     if (sideWidths)
+                         d->SideWidths = vg::BorderWidths(widths.Top, widths.Right, widths.Bottom, widths.Left);
+                     if (sides[0].HasValue() || sides[1].HasValue() || sides[2].HasValue() || sides[3].HasValue())
+                     {
+                         const auto side = [&](usize i) { return sides[i].HasValue() ? sides[i].Value() : borderColor; };
+                         d->SideColors = vg::BorderColors(side(0), side(1), side(2), side(3));
+                     }
                      sheet.OwnDrawable(d);
                      return d;
                  });

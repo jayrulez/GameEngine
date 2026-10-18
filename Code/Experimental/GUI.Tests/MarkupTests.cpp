@@ -216,3 +216,40 @@ TEST_CASE("markup: a scroller may stick to its end")
     REQUIRE(root.Get() != nullptr);
     CHECK(root->IsStickToEnd());
 }
+
+namespace
+{
+    // The GUI's warnings, kept for a test to read.
+    struct WarningSink final : core::ILogSink
+    {
+        core::Array<core::String> Lines;
+        void Write(core::LogLevel level, core::StringView category, core::StringView message) noexcept override
+        {
+            if (level == core::LogLevel::Warning && category == core::StringView(u8"GUI"))
+                Lines.PushBack(core::String(message));
+        }
+    };
+}
+
+TEST_CASE("markup: an element or an attribute nothing takes is said, not dropped in silence")
+{
+    WarningSink sink;
+    core::GlobalLogger().AddSink(&sink);
+    RegisterGuiElements();
+    const ElementSet elements = ElementSet::All();
+    MarkupLoader loader(elements, core::DefaultAllocator());
+    core::RefPtr<Node> page = loader.LoadFromString(core::StringView(
+        u8R"(<Panel padding="4" border="1px solid #fff" auto-translate="off" colour="red"><Lable text="x"/></Panel>)"));
+    core::GlobalLogger().RemoveSink(&sink);
+    REQUIRE(page);
+    REQUIRE(sink.Lines.Size() == 2u); // colour, and <Lable>; the style property, the shorthand and the
+                                      // reflected one pass
+    bool colour = false, lable = false;
+    for (const core::String& line : sink.Lines)
+    {
+        colour = colour || MarkupLoader::FindFrom(line.AsView(), core::StringView(u8"colour"), 0) < line.Size();
+        lable = lable || MarkupLoader::FindFrom(line.AsView(), core::StringView(u8"Lable"), 0) < line.Size();
+    }
+    CHECK(colour);
+    CHECK(lable);
+}

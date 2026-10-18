@@ -6,16 +6,19 @@
 // MarkupLoader: inflate a widget tree from XML markup. Modeled on eepp's layout loading (role
 // only). An element name is a tag the loader's ElementSet resolves to a registered element type
 // (ElementTypes: the lab's widgets and any library's), made from the loader's allocator; nested
-// elements become children;
-// attributes are applied in three tiers:
+// elements become children; an element it does not know is left out with a warning.
+// Attributes are applied in tiers:
 //   - `id` / `class` set the widget's CSS identity,
+//   - a value starting with `@` on a translatable property is a translation key (E9a), with
+//     `<prop>-count` and `<prop>-args` beside it; `@@` is a literal @,
 //   - a value with `{{name}}` in it binds the reflected property of that name to the loader's
 //     data model (G5): `value="{{volume}}"` follows `volume`, and writes it back when the property
 //     is one the user changes (a slider's value, a checkbox, a text field's text);
 //     `text="Score: {{score}}"` follows the text built from it,
 //   - an attribute a widget claims (via UINode::SetMarkupAttribute - e.g. Label "text"
 //     and "wrap") is consumed structurally,
-//   - everything else is treated as an inline CSS property and run through the StyleApplier,
+//   - everything else is treated as an inline CSS property and run through the StyleApplier (one
+//     naming no style property, shorthand or reflected property is warned about),
 //   - a `<template type="...">` child is markup kept by its parent (UINode::SetMarkupTemplate)
 //     to make nodes from later (an item view's rows); loaded with item bindings, a value with
 //     `{{item}}`, `{{item.Column}}` or `{{index}}` in it is recorded for the row to fill,
@@ -30,6 +33,7 @@
 
 module;
 #include "Core/Prelude.h"
+#include "Core/Log/Log.h" // LOG_WARNING: what markup names that nothing takes
 
 export module experimental.gui:markup;
 
@@ -113,7 +117,12 @@ export namespace experimental::gui
         {
             RefPtr<Node> widget = m_elements->Create(element.TagName(), *m_allocator);
             if (!widget)
-                return {}; // unknown element name
+            {
+                // An element this GUI does not make (a typo, or one its element set leaves out): said,
+                // rather than the subtree vanishing without a word.
+                LOG_WARNING(u8"GUI", u8"markup: no element <{}>; it and what it holds are left out", element.TagName());
+                return {};
+            }
 
             UINode* uinode = core::Cast<UINode>(widget.Get());
             UIWidget* uiwidget = core::Cast<UIWidget>(widget.Get());
@@ -158,6 +167,8 @@ export namespace experimental::gui
                     continue;
                 if (uinode != nullptr && uinode->SetMarkupAttribute(name, value))
                     continue;
+                if (!IsStyleName(uinode, name, value))
+                    LOG_WARNING(u8"GUI", u8"markup: <{}> has no attribute or style property '{}'", element.TagName(), name);
                 inlineStyle.Set(name, value); // an inline CSS property
                 if (uinode != nullptr)
                     uinode->SetInlineStyle(name, value); // kept: it outranks the sheets at every restyle
@@ -185,6 +196,18 @@ export namespace experimental::gui
             }
 
             return widget;
+        }
+
+        // Whether an attribute names something a style sets: a property the sheets know, a shorthand
+        // of them, a custom property, or a property the widget's type takes by its CSS name.
+        [[nodiscard]] static bool IsStyleName(const UINode* node, core::StringView name, core::StringView value)
+        {
+            if (FindStyleProperty(name) != nullptr || (name.Size() > 2 && name[0] == u8'-' && name[1] == u8'-'))
+                return true;
+            Array<StyleLonghand> longhands;
+            if (ExpandStyleShorthand(name, value, longhands) && !(longhands.Size() == 1 && longhands[0].Name.AsView() == name))
+                return true;
+            return node != nullptr && detail::FindCssProperty(*node, name) != nullptr;
         }
 
     public:

@@ -25,7 +25,7 @@ cooked -> loaded -> rendered path.
 
 ## Editor authoring page (shipped)
 
-`ParticleEffectEditorPage` (`Editor.Scene`) is a full three-pane authoring tool: an authoring TREE
+`ParticleEffectEditorPage` (`Editor.Particles`) is a full three-pane authoring tool: an authoring TREE
 (Effect -> System -> Emitter -> init/behavior modules) driving selection, a LIVE PREVIEW with transport
 (Play/Stop/Restart + speed slider + pause) where the effect plays and picks up edits immediately, and a
 node INSPECTOR showing the selected node's reflected fields - including CurveCanvas-backed curve editors

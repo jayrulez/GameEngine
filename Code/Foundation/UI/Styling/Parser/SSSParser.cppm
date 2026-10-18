@@ -981,6 +981,9 @@ export namespace foundation::ui
 
         /// `box-shadow: <x> <y> [blur [spread]] <color> [inset]` (also `none`). Lengths are
         /// plain numbers (dp); the color is any color syntax; `inset` may lead or trail.
+        /// `box-shadow: none`, or one or more shadows separated by commas, each `[inset] <x> <y>
+        /// [blur] [spread] [color] [inset]`; the first is painted on top. A list keeps its first
+        /// StyleValue::kMaxShadows; one that does not parse makes the value none.
         StyleValue ParseBoxShadowValue()
         {
             if (Peek().Kind == TokenKind::Ident && Peek().Text == StringView(u8"none"))
@@ -988,7 +991,25 @@ export namespace foundation::ui
                 Consume();
                 return StyleValue::None();
             }
-            BoxShadow shadow;
+            BoxShadow shadows[StyleValue::kMaxShadows];
+            usize count = 0;
+            do
+            {
+                BoxShadow shadow;
+                if (!ParseOneBoxShadow(shadow))
+                {
+                    return StyleValue::None();
+                }
+                if (count < StyleValue::kMaxShadows)
+                {
+                    shadows[count++] = shadow;
+                }
+            } while (MatchComma());
+            return StyleValue::ShadowsVal(Span<const BoxShadow>(shadows, count));
+        }
+
+        bool ParseOneBoxShadow(BoxShadow& shadow)
+        {
             if (Peek().Kind == TokenKind::Ident && Peek().Text == StringView(u8"inset"))
             {
                 Consume();
@@ -1002,13 +1023,14 @@ export namespace foundation::ui
             }
             if (count < 2)
             {
-                return StyleValue::None();
+                return false;
             }
             shadow.OffsetX = lengths[0];
             shadow.OffsetY = lengths[1];
             shadow.Blur = count > 2 ? Max(0.0f, lengths[2]) : 0.0f;
             shadow.Spread = count > 3 ? lengths[3] : 0.0f;
             if (Peek().Kind != TokenKind::Semicolon && Peek().Kind != TokenKind::RBrace &&
+                Peek().Kind != TokenKind::Comma &&
                 !(Peek().Kind == TokenKind::Ident && Peek().Text == StringView(u8"inset")))
             {
                 shadow.Color = ParseColorValue();
@@ -1018,7 +1040,7 @@ export namespace foundation::ui
                 Consume();
                 shadow.Inset = true;
             }
-            return StyleValue::ShadowVal(shadow);
+            return true;
         }
 
         Color ParseRgbFunction()

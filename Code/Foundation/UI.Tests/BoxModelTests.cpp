@@ -422,6 +422,50 @@ TEST_CASE("box-model: box-shadow parses none, the inset keyword and a bare color
     CHECK(c.Value().Color.a == doctest::Approx(0.5f)); // the default shadow color
 }
 
+TEST_CASE("box-model: box-shadow takes a list, each drawn, the first on top")
+{
+    core::RefPtr<StyleSheet> sheet =
+        LoadSSS(u8"RecordingView { box-shadow: 0 2 4 rgba(255, 0, 0, 0.5), inset 1 1 2 #0000FF80, 0 8 16 #00FF0080; }");
+    REQUIRE(sheet);
+    const Span<const BoxShadow> shadows = sheet->GetRule(0).GetValue(StyleProperty::BoxShadow).Value().AsShadows();
+    REQUIRE(shadows.Size() == 3u);
+    CHECK(shadows[0].Color.r == doctest::Approx(1.0f)); // the rgba()'s commas are its own
+    CHECK(shadows[1].Inset);
+    CHECK(shadows[2].Blur == doctest::Approx(16));
+
+    UIContext ctx{DefaultAllocator()};
+    auto root = MakeRoot();
+    EnsureGlobals();
+    Init(ctx, root.Get(), 400, 300);
+    ctx.SetStyleSheet(sheet);
+    auto child = RV(100, 50, 1);
+    root->AddView(child.Get());
+    LayoutPass(ctx, root.Get());
+    vg::VGContext vgContext;
+    ctx.DrawRootView(root.Get(), vgContext);
+    const vg::VGBatch& batch = vgContext.GetBatch();
+    // The outer two under the content, the green (last) one first so the red is on top of it;
+    // the inset one over the content.
+    Array<char> order;
+    bool contentSeen = false;
+    for (usize i = 0; i + 3 < batch.vertices.Size(); i += 4)
+    {
+        const vg::VGVertex& v = batch.vertices[i];
+        const bool shadow = v.color.a > 0.49f && v.color.a < 0.51f;
+        const char tag = !shadow ? 'c' : v.color.r > 0.99f ? 'r' : v.color.g > 0.99f ? 'g' : 'b';
+        if (tag == 'c' && contentSeen)
+            continue;
+        contentSeen = contentSeen || tag == 'c';
+        if (order.IsEmpty() || order.Back() != tag)
+            order.PushBack(tag);
+    }
+    REQUIRE(order.Size() == 4u);
+    CHECK(order[0] == 'g');
+    CHECK(order[1] == 'r');
+    CHECK(order[2] == 'c');
+    CHECK(order[3] == 'b');
+}
+
 // === opacity ===
 
 TEST_CASE("box-model: opacity composes down the tree")

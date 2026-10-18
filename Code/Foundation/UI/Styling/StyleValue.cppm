@@ -30,8 +30,9 @@ export namespace foundation::ui
 {
     class StyleValue;
 
-    /// `box-shadow` value: the CSS tuple. Offsets/blur/spread are logical units (dp) at
-    /// resolve time; the VG draws it as one blurred rounded-rect (VGContext::FillBoxShadow).
+    /// One `box-shadow` (or text effect): the CSS tuple. Offsets/blur/spread are logical units (dp)
+    /// at resolve time; the VG draws it as one blurred rounded-rect (VGContext::FillBoxShadow). A
+    /// box-shadow value holds a list of them (StyleValue::AsShadows).
     struct BoxShadow
     {
         f32 OffsetX = 0.0f;
@@ -185,11 +186,23 @@ export namespace foundation::ui
             v.m_length = length;
             return v;
         }
+        /// The most shadows a value holds; a list written with more keeps its first ones.
+        static constexpr usize kMaxShadows = 4;
+
         [[nodiscard]] static StyleValue ShadowVal(const BoxShadow& shadow)
+        {
+            return ShadowsVal(Span<const BoxShadow>(&shadow, 1));
+        }
+        /// A list of shadows, the first painted on top as CSS paints them.
+        [[nodiscard]] static StyleValue ShadowsVal(Span<const BoxShadow> shadows)
         {
             StyleValue v;
             v.m_kind = Kind::Shadow;
-            v.m_shadow = shadow;
+            v.m_shadowCount = static_cast<u8>(Min(shadows.Size(), kMaxShadows));
+            for (usize i = 0; i < v.m_shadowCount; ++i)
+            {
+                v.m_shadows[i] = shadows[i];
+            }
             return v;
         }
         [[nodiscard]] static StyleValue TransitionsRef(RefPtr<TransitionList> list)
@@ -247,13 +260,19 @@ export namespace foundation::ui
         {
             return m_kind == Kind::Transitions ? m_transitions.Get() : nullptr;
         }
+        /// The first shadow (a text effect's only one).
         [[nodiscard]] Optional<BoxShadow> AsShadow() const
         {
-            if (m_kind == Kind::Shadow)
+            if (m_kind == Kind::Shadow && m_shadowCount > 0)
             {
-                return m_shadow;
+                return m_shadows[0];
             }
             return {};
+        }
+        /// Every shadow, the first painted on top; empty for a value that is none.
+        [[nodiscard]] Span<const BoxShadow> AsShadows() const noexcept
+        {
+            return m_kind == Kind::Shadow ? Span<const BoxShadow>(m_shadows, m_shadowCount) : Span<const BoxShadow>{};
         }
         [[nodiscard]] Optional<core::Color> AsColor() const
         {
@@ -312,7 +331,8 @@ export namespace foundation::ui
         bool m_bool = false;
         String m_string;
         Unit m_length{};
-        BoxShadow m_shadow{};
+        BoxShadow m_shadows[kMaxShadows]{};
+        u8 m_shadowCount = 0;
         RefPtr<VariableReference> m_variable;
         RefPtr<TransitionList> m_transitions;
     };
@@ -344,7 +364,22 @@ export namespace foundation::ui
         case StyleValue::Kind::Length:
             return a.AsLength().Value() == b.AsLength().Value();
         case StyleValue::Kind::Shadow:
-            return a.AsShadow().Value() == b.AsShadow().Value();
+        {
+            const Span<const BoxShadow> sa = a.AsShadows();
+            const Span<const BoxShadow> sb = b.AsShadows();
+            if (sa.Size() != sb.Size())
+            {
+                return false;
+            }
+            for (usize i = 0; i < sa.Size(); ++i)
+            {
+                if (!(sa[i] == sb[i]))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
         case StyleValue::Kind::Transitions:
             return a.AsTransitions() == b.AsTransitions();
         default:
@@ -430,17 +465,33 @@ export namespace foundation::ui
         }
         case StyleValue::Kind::Shadow:
         {
-            const BoxShadow sa = a.AsShadow().Value();
-            const BoxShadow sb = b.AsShadow().Value();
-            BoxShadow s;
-            s.OffsetX = lerp(sa.OffsetX, sb.OffsetX);
-            s.OffsetY = lerp(sa.OffsetY, sb.OffsetY);
-            s.Blur = lerp(sa.Blur, sb.Blur);
-            s.Spread = lerp(sa.Spread, sb.Spread);
-            s.Color = core::Color{lerp(sa.Color.r, sb.Color.r), lerp(sa.Color.g, sb.Color.g),
-                                  lerp(sa.Color.b, sb.Color.b), lerp(sa.Color.a, sb.Color.a)};
-            s.Inset = t < 0.5f ? sa.Inset : sb.Inset;
-            return StyleValue::ShadowVal(s);
+            // Shadow by shadow; the shorter list is padded with transparent shadows of the other's
+            // kind, as CSS pads it, so a shadow added on hover fades in.
+            const Span<const BoxShadow> la = a.AsShadows();
+            const Span<const BoxShadow> lb = b.AsShadows();
+            const usize count = Max(la.Size(), lb.Size());
+            BoxShadow out[StyleValue::kMaxShadows];
+            for (usize i = 0; i < count; ++i)
+            {
+                const auto clear = [](const BoxShadow& like)
+                {
+                    BoxShadow none;
+                    none.Color = core::Color{like.Color.r, like.Color.g, like.Color.b, 0.0f};
+                    none.Inset = like.Inset;
+                    return none;
+                };
+                const BoxShadow sa = i < la.Size() ? la[i] : clear(lb[i]);
+                const BoxShadow sb = i < lb.Size() ? lb[i] : clear(la[i]);
+                BoxShadow& s = out[i];
+                s.OffsetX = lerp(sa.OffsetX, sb.OffsetX);
+                s.OffsetY = lerp(sa.OffsetY, sb.OffsetY);
+                s.Blur = lerp(sa.Blur, sb.Blur);
+                s.Spread = lerp(sa.Spread, sb.Spread);
+                s.Color = core::Color{lerp(sa.Color.r, sb.Color.r), lerp(sa.Color.g, sb.Color.g),
+                                      lerp(sa.Color.b, sb.Color.b), lerp(sa.Color.a, sb.Color.a)};
+                s.Inset = t < 0.5f ? sa.Inset : sb.Inset;
+            }
+            return StyleValue::ShadowsVal(Span<const BoxShadow>(out, count));
         }
         default:
             return t < 0.5f ? a : b;

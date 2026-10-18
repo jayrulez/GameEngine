@@ -1325,11 +1325,8 @@ export namespace foundation::ui
                 }
                 // The outer box-shadow sits UNDER the child's own drawing and outside its
                 // clip; an inset shadow is drawn over the child (after OnDraw) inside it.
-                Optional<BoxShadow> shadow = child->ResolveStyle(StyleProperty::BoxShadow).AsShadow();
-                if (shadow.HasValue() && !shadow.Value().Inset)
-                {
-                    DrawBoxShadow(ctx, *child, shadow.Value());
-                }
+                const StyleValue shadows = child->ResolveStyle(StyleProperty::BoxShadow);
+                DrawBoxShadows(ctx, *child, shadows.AsShadows(), false);
                 // A clipping view clips to its box, and a rounded one to its corners too, so a card
                 // holds an image, a header or a scrolled list without its corners leaking; clips
                 // nest, each inside the ones around it.
@@ -1352,10 +1349,7 @@ export namespace foundation::ui
                 const DrawBlend previousBlend = ctx.SetBlend(child->CurrentDrawBlend());
                 child->OnDraw(ctx);
                 ctx.SetBlend(previousBlend);
-                if (shadow.HasValue() && shadow.Value().Inset)
-                {
-                    DrawBoxShadow(ctx, *child, shadow.Value());
-                }
+                DrawBoxShadows(ctx, *child, shadows.AsShadows(), true);
 
                 if (ctx.DebugSettings().AnyEnabled())
                 {
@@ -1424,6 +1418,18 @@ export namespace foundation::ui
         /// One `box-shadow` for `child` (the VG is already translated to the child's origin):
         /// the border box grown by the spread, offset, blurred by the VG's DF shadow mode,
         /// rounded by the child's corner radius (plus the spread, as CSS does).
+        /// The outer shadows (or the inset ones) of a list, the last first so the first is on top.
+        static void DrawBoxShadows(UIDrawContext& ctx, View& child, Span<const BoxShadow> shadows, bool inset)
+        {
+            for (usize i = shadows.Size(); i > 0; --i)
+            {
+                if (shadows[i - 1].Inset == inset)
+                {
+                    DrawBoxShadow(ctx, child, shadows[i - 1]);
+                }
+            }
+        }
+
         static void DrawBoxShadow(UIDrawContext& ctx, View& child, const BoxShadow& shadow)
         {
             // The shadow follows the shape it sits under.

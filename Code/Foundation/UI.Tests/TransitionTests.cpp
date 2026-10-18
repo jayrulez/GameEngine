@@ -148,6 +148,27 @@ TEST_CASE("transition: the list parses properties, all, times in ms/s, easings, 
     CHECK(partial->Specs[0].Duration == doctest::Approx(0.5f));
 }
 
+TEST_CASE("transition: shadow lists interpolate shadow by shadow, the shorter padded with clear ones")
+{
+    BoxShadow one;
+    one.Blur = 4.0f;
+    one.Color = Color{0, 0, 0, 1};
+    BoxShadow two[2] = {one, one};
+    two[1].OffsetY = 10.0f;
+    two[1].Color = Color{1, 0, 0, 1};
+    const StyleValue mid = LerpStyleValue(StyleValue::ShadowVal(one),
+                                          StyleValue::ShadowsVal(Span<const BoxShadow>(two, 2)), 0.5f);
+    const Span<const BoxShadow> shadows = mid.AsShadows();
+    REQUIRE(shadows.Size() == 2u);
+    CHECK(shadows[0].Blur == doctest::Approx(4.0f));
+    // The added shadow fades in from a clear one of its own colour.
+    CHECK(shadows[1].OffsetY == doctest::Approx(5.0f));
+    CHECK(shadows[1].Color.r == doctest::Approx(1.0f));
+    CHECK(shadows[1].Color.a == doctest::Approx(0.5f));
+    CHECK_FALSE(StyleValueEquivalent(StyleValue::ShadowVal(one),
+                                     StyleValue::ShadowsVal(Span<const BoxShadow>(two, 2))));
+}
+
 TEST_CASE("transition: LerpStyleValue interpolates colors, numbers, lengths, thicknesses, shadows")
 {
     const StyleValue c = LerpStyleValue(StyleValue::ColorVal(Color{0, 0, 0, 1}),

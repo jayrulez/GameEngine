@@ -471,6 +471,11 @@ export namespace experimental::gui
         {
             if (!m_hitTestVisible)
                 return false;
+            return WithinBox(worldPoint);
+        }
+        /// Whether a world point lies in its box, whether or not it takes the pointer.
+        [[nodiscard]] bool WithinBox(core::Float2 worldPoint) const
+        {
             const core::Float2 p = ConvertToNodeSpace(worldPoint);
             return p.x >= 0.0f && p.x <= m_size.x && p.y >= 0.0f && p.y <= m_size.y;
         }
@@ -486,10 +491,13 @@ export namespace experimental::gui
                 if (ScrollBarTrack(0).Contains(p) || ScrollBarTrack(1).Contains(p))
                     return this;
             }
-            for (usize i = m_children.Size(); i-- > 0;)
-                if (!m_children[i]->m_topLayer) // the top layer is hit-tested first, from the root
-                    if (Node* hit = m_children[i]->OverFind(worldPoint))
-                        return hit;
+            // What it clips is hit only where it shows: a row scrolled out of a list takes no press
+            // over what lies beyond the list (navigation skips it likewise).
+            if (!ClipsChildren() || WithinBox(worldPoint))
+                for (usize i = m_children.Size(); i-- > 0;)
+                    if (!m_children[i]->m_topLayer) // the top layer is hit-tested first, from the root
+                        if (Node* hit = m_children[i]->OverFind(worldPoint))
+                            return hit;
             return PointInside(worldPoint) ? this : nullptr;
         }
 

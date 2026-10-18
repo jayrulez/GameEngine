@@ -650,3 +650,13 @@ TEST_CASE("scroll: stuck to its end, it follows the content; scrolled away it le
     addRows(2);
     CHECK(s.view->GetScrollOffset().y == doctest::Approx(300.0f));
 }
+
+TEST_CASE("scroll: content clipped away takes no press: a row below the view is not hit beneath it")
+{
+    Scroller s; // a 100 x 100 view of six 50-high rows: rows 2 to 5 lie below it, clipped
+    WidenRows(s);
+    Node* hit = s.root->OverFind(core::Float2{20.0f, 150.0f});
+    CHECK(hit != s.rows[3].Get());
+    CHECK(hit == s.root.Get()); // what lies beyond the view there: the root
+    CHECK(s.root->OverFind(core::Float2{20.0f, 20.0f}) == s.rows[0].Get()); // inside, the row
+}

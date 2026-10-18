@@ -18,6 +18,7 @@ export module experimental.gui:node_box;
 import foundation.core;
 import foundation.image;
 import foundation.vg;
+import foundation.vg.svg; // SVGDocument, SVGRenderer (an SVG layer)
 import :rect;
 import :draw_context;
 
@@ -70,6 +71,12 @@ export namespace experimental::gui
         bool IsImage = false;
         BoxGradient Gradient;
         const image::ImageData* Image = nullptr; ///< Not owned (the resource provider's).
+        /// An SVG picture instead of Image (E13): drawn as paths at the size it lands, crisp at any
+        /// scale. Not owned (the resource provider's).
+        const foundation::vg::svg::SVGDocument* Svg = nullptr;
+        /// The region of Image it draws (a sprite of an atlas, `url(atlas.png#xywh=x,y,w,h)`, E13);
+        /// empty: all of it.
+        Rectangle Source{};
         LayerSize Size = LayerSize::Fill;
         LayerLength Width{0.0f, 0.0f, true};
         LayerLength Height{0.0f, 0.0f, true};
@@ -77,6 +84,27 @@ export namespace experimental::gui
         /// (the box less the image: 50% centres it, 100% puts it at the far edge).
         LayerLength X{};
         LayerLength Y{};
+    };
+
+    /// How a border image fills an edge (CSS's border-image-repeat).
+    enum class BorderImageRepeat : u8
+    {
+        Stretch, ///< one piece stretched along
+        Repeat,  ///< tiles from the middle out, cut at the ends
+        Round,   ///< whole tiles, stretched to fit a whole number
+    };
+    /// A nine-slice skin over the box (CSS's border-image, E13 of Specs/gui-lab-evolution-2.md):
+    /// the image cut by Slice into corners, edges and a middle, drawn into Width from the box's
+    /// edges, in place of the border; the middle too when Fill.
+    struct BorderImage
+    {
+        const image::ImageData* Image = nullptr; ///< Not owned (the resource provider's).
+        Rectangle Source{};                      ///< its region of Image (a sprite); empty: all of it
+        f32 Slice[4]{};                          ///< top, right, bottom, left, in the image's pixels
+        f32 Width[4]{-1.0f, -1.0f, -1.0f, -1.0f}; ///< top, right, bottom, left, in pixels; below 0: the border's width
+        bool Fill = false;
+        BorderImageRepeat RepeatX = BorderImageRepeat::Stretch; ///< top, bottom and middle across
+        BorderImageRepeat RepeatY = BorderImageRepeat::Stretch; ///< left, right and middle down
     };
 
     /// Where an image of `iw` by `ih` pixels lands for `layer` in `box`: its size by the layer's
@@ -138,6 +166,7 @@ export namespace experimental::gui
     {
         Color BackgroundColor{0.0f, 0.0f, 0.0f, 0.0f};
         Array<BoxLayer> Layers; ///< First on top, as CSS lists them.
+        BorderImage Skin;       ///< border-image: drawn in place of the border when it has an image (E13)
         vg::BorderWidths BorderWidths{};
         vg::BorderColors BorderColors{};
         vg::CornerRadii Radii{};
@@ -177,7 +206,7 @@ export namespace experimental::gui
         [[nodiscard]] bool IsEmpty() const noexcept
         {
             return BackgroundColor.a <= 0.0f && Layers.IsEmpty() && BorderWidths.IsZero() && Shadows.IsEmpty() &&
-                   BackdropBlur <= 0.0f;
+                   BackdropBlur <= 0.0f && Skin.Image == nullptr;
         }
         /// Whether the node must draw through a layer of its own: a filter or a blend applies to
         /// the node and its subtree as one picture.
@@ -217,7 +246,9 @@ export namespace experimental::gui
                                        rect.width - 2.0f * shadow.Spread, rect.height - 2.0f * shadow.Spread};
                 canvas.FillBoxShadow(shrunk, Grown(Radii, -shadow.Spread), shadow.Blur, shadow.ShadowColor, true);
             }
-            if (!BorderWidths.IsZero() && !BorderColors.IsTransparent())
+            if (Skin.Image != nullptr)
+                DrawSkin(canvas, rect); // a border image stands in for the border (CSS)
+            else if (!BorderWidths.IsZero() && !BorderColors.IsTransparent())
                 canvas.DrawBox(rect, Radii, Color{0.0f, 0.0f, 0.0f, 0.0f}, BorderWidths, BorderColors);
         }
 
@@ -239,20 +270,124 @@ export namespace experimental::gui
         // source cropped to match, so nothing spills past the box or its corners).
         void DrawImageLayer(vg::VGContext& canvas, const BoxLayer& layer, const Rectangle& rect) const
         {
-            const f32 iw = static_cast<f32>(layer.Image->Width());
-            const f32 ih = static_cast<f32>(layer.Image->Height());
+            const bool region = layer.Source.width > 0.0f && layer.Source.height > 0.0f; // a sprite
+            const f32 iw = region ? layer.Source.width : static_cast<f32>(layer.Image->Width());
+            const f32 ih = region ? layer.Source.height : static_cast<f32>(layer.Image->Height());
+            const f32 ix = region ? layer.Source.x : 0.0f;
+            const f32 iy = region ? layer.Source.y : 0.0f;
             const Rectangle placed = PlaceImageLayer(layer, rect, iw, ih);
             if (placed.width <= 0.0f || placed.height <= 0.0f)
                 return;
             const Rectangle shown = Rectangle::Intersect(placed, rect);
             if (shown.width <= 0.0f || shown.height <= 0.0f)
                 return;
-            const Rectangle source{(shown.x - placed.x) / placed.width * iw, (shown.y - placed.y) / placed.height * ih,
+            const Rectangle source{ix + (shown.x - placed.x) / placed.width * iw, iy + (shown.y - placed.y) / placed.height * ih,
                                    shown.width / placed.width * iw, shown.height / placed.height * ih};
             if (Radii.topLeft > 0.0f || Radii.topRight > 0.0f || Radii.bottomRight > 0.0f || Radii.bottomLeft > 0.0f)
                 canvas.DrawImageRounded(layer.Image, shown, source, Radii);
             else
                 canvas.DrawImage(layer.Image, shown, source, Color::White);
+        }
+
+        // The border image: nine pieces of the image (its region) into the box, corners as they
+        // are cut, edges and the middle stretched, repeated or rounded along.
+        void DrawSkin(vg::VGContext& canvas, const Rectangle& rect) const
+        {
+            const Rectangle src = Skin.Source.width > 0.0f && Skin.Source.height > 0.0f
+                                      ? Skin.Source
+                                      : Rectangle{0.0f, 0.0f, static_cast<f32>(Skin.Image->Width()), static_cast<f32>(Skin.Image->Height())};
+            const f32 borders[4] = {BorderWidths.top, BorderWidths.right, BorderWidths.bottom, BorderWidths.left};
+            f32 w[4];
+            for (usize i = 0; i < 4; ++i)
+                w[i] = Skin.Width[i] >= 0.0f ? Skin.Width[i] : borders[i];
+            // Widths too big for the box shrink together (CSS's rule).
+            const f32 fitX = w[1] + w[3] > rect.width && w[1] + w[3] > 0.0f ? rect.width / (w[1] + w[3]) : 1.0f;
+            const f32 fitY = w[0] + w[2] > rect.height && w[0] + w[2] > 0.0f ? rect.height / (w[0] + w[2]) : 1.0f;
+            const f32 fit = Min(fitX, fitY);
+            for (f32& v : w)
+                v *= fit;
+            const f32 s[4] = {Min(Skin.Slice[0], src.height), Min(Skin.Slice[1], src.width), Min(Skin.Slice[2], src.height),
+                              Min(Skin.Slice[3], src.width)};
+            // Columns and rows, of the box and of the image.
+            const f32 dx[4] = {rect.x, rect.x + w[3], rect.x + rect.width - w[1], rect.x + rect.width};
+            const f32 dy[4] = {rect.y, rect.y + w[0], rect.y + rect.height - w[2], rect.y + rect.height};
+            const f32 sx[4] = {src.x, src.x + s[3], src.x + src.width - s[1], src.x + src.width};
+            const f32 sy[4] = {src.y, src.y + s[0], src.y + src.height - s[2], src.y + src.height};
+            for (usize row = 0; row < 3; ++row)
+                for (usize col = 0; col < 3; ++col)
+                {
+                    if (row == 1 && col == 1 && !Skin.Fill)
+                        continue;
+                    const Rectangle d{dx[col], dy[row], dx[col + 1] - dx[col], dy[row + 1] - dy[row]};
+                    const Rectangle piece{sx[col], sy[row], sx[col + 1] - sx[col], sy[row + 1] - sy[row]};
+                    if (d.width <= 0.0f || d.height <= 0.0f || piece.width <= 0.0f || piece.height <= 0.0f)
+                        continue;
+                    // An edge's tile is as tall (or wide) as the edge, its length scaled alike.
+                    const BorderImageRepeat along = col == 1 ? Skin.RepeatX : BorderImageRepeat::Stretch;
+                    const BorderImageRepeat down = row == 1 ? Skin.RepeatY : BorderImageRepeat::Stretch;
+                    const f32 tileW = col == 1 ? piece.width * (row == 1 ? (w[0] > 0.0f ? w[0] / Max(s[0], 1.0f) : 1.0f) : d.height / piece.height) : d.width;
+                    const f32 tileH = row == 1 ? piece.height * (col == 1 ? (w[3] > 0.0f ? w[3] / Max(s[3], 1.0f) : 1.0f) : d.width / piece.width) : d.height;
+                    DrawTiled(canvas, d, piece, along, down, tileW, tileH);
+                }
+        }
+        // `piece` of the skin's image over `d`: stretched, or tiled at `tileW` by `tileH` (repeat:
+        // centred, cut at the ends; round: a whole number, stretched to fit).
+        void DrawTiled(vg::VGContext& canvas, const Rectangle& d, const Rectangle& piece, BorderImageRepeat along,
+                       BorderImageRepeat down, f32 tileW, f32 tileH) const
+        {
+            const auto layout = [](BorderImageRepeat mode, f32 length, f32 tile, f32& size, f32& start, usize& count)
+            {
+                if (mode == BorderImageRepeat::Stretch || tile <= 0.5f)
+                {
+                    size = length;
+                    start = 0.0f;
+                    count = 1;
+                    return;
+                }
+                if (mode == BorderImageRepeat::Round)
+                {
+                    count = static_cast<usize>(Max(1.0f, static_cast<f32>(static_cast<i32>(length / tile + 0.5f))));
+                    size = length / static_cast<f32>(count);
+                    start = 0.0f;
+                    return;
+                }
+                size = tile;
+                count = static_cast<usize>(length / tile) + 2; // centred: a part tile at each end
+                start = (length - tile * static_cast<f32>(count)) * 0.5f;
+            };
+            f32 tw, th, x0, y0;
+            usize nx, ny;
+            layout(along, d.width, tileW, tw, x0, nx);
+            layout(down, d.height, tileH, th, y0, ny);
+            for (usize j = 0; j < ny; ++j)
+                for (usize i = 0; i < nx; ++i)
+                {
+                    const Rectangle tile{d.x + x0 + tw * static_cast<f32>(i), d.y + y0 + th * static_cast<f32>(j), tw, th};
+                    const Rectangle shown = Rectangle::Intersect(tile, d);
+                    if (shown.width <= 0.0f || shown.height <= 0.0f)
+                        continue;
+                    const Rectangle part{piece.x + (shown.x - tile.x) / tw * piece.width, piece.y + (shown.y - tile.y) / th * piece.height,
+                                         shown.width / tw * piece.width, shown.height / th * piece.height};
+                    canvas.DrawImage(Skin.Image, shown, part, Color::White);
+                }
+        }
+
+        // An SVG layer: sized and placed as an image of its own size is, drawn as paths, the part
+        // past the box clipped off.
+        static void DrawSvgLayer(vg::VGContext& canvas, const BoxLayer& layer, const Rectangle& rect)
+        {
+            const f32 w = layer.Svg->width > 0.0f ? layer.Svg->width : rect.width;
+            const f32 h = layer.Svg->height > 0.0f ? layer.Svg->height : rect.height;
+            const Rectangle placed = PlaceImageLayer(layer, rect, w, h);
+            if (placed.width <= 0.0f || placed.height <= 0.0f)
+                return;
+            const bool spills = placed.x < rect.x || placed.y < rect.y || placed.x + placed.width > rect.x + rect.width ||
+                                placed.y + placed.height > rect.y + rect.height;
+            if (spills)
+                canvas.PushClipRect(rect);
+            foundation::vg::svg::SVGRenderer::Render(canvas, *layer.Svg, placed);
+            if (spills)
+                canvas.PopClip();
         }
 
         void DrawLayer(vg::VGContext& canvas, const BoxLayer& layer, const Rectangle& rect) const
@@ -261,6 +396,8 @@ export namespace experimental::gui
             {
                 if (layer.Image != nullptr)
                     DrawImageLayer(canvas, layer, rect);
+                else if (layer.Svg != nullptr)
+                    DrawSvgLayer(canvas, layer, rect);
                 return;
             }
             const BoxGradient& g = layer.Gradient;

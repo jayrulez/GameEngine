@@ -9,6 +9,7 @@
 import foundation.core;
 import foundation.vg;
 import foundation.image;
+import foundation.vg.svg;
 import experimental.gui;
 
 using namespace experimental::gui;
@@ -197,6 +198,7 @@ namespace
             return path == core::StringView(u8"pic.png") ? &img : nullptr;
         }
         bool LoadText(core::StringView, core::String&) override { return false; }
+        const foundation::vg::svg::SVGDocument* LoadSvg(core::StringView) override { return nullptr; }
     };
 
     // Counts how it is drawn, and with what tint.

@@ -103,6 +103,7 @@ export namespace experimental::gui
             m_allDirty = true;
             m_relationsKnown = false;
             m_fontFacesLoaded = false;
+            m_importsExpanded = false; // its sprites, as the author sheet's
         }
         [[nodiscard]] const StyleSheet& GetUserAgentSheet() const noexcept { return m_userAgent; }
 
@@ -635,6 +636,22 @@ export namespace experimental::gui
         void ExpandImports()
         {
             m_importsExpanded = true;
+            ExpandSheetImports();
+            // Sprites (E13): a url() naming one, in either sheet, as its image and region.
+            Array<Spritesheet> sprites;
+            for (const Spritesheet& s : m_userAgent.Spritesheets())
+                sprites.PushBack(s);
+            for (const Spritesheet& s : m_sheet.Spritesheets())
+                sprites.PushBack(s);
+            if (sprites.IsEmpty())
+                return;
+            m_userAgent.ResolveSprites(sprites.AsSpan());
+            m_sheet.ResolveSprites(sprites.AsSpan());
+            m_cache = {};
+            m_allDirty = true;
+        }
+        void ExpandSheetImports()
+        {
             if (m_resources == nullptr || m_sheet.Imports().IsEmpty())
                 return;
             Array<core::String> chain;

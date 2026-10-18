@@ -36,6 +36,7 @@ import foundation.xml.serialization;
 import foundation.fonts.distancefield.baker; // the Lilita distance-field face
 import foundation.vg;
 import foundation.vg.renderer;
+import foundation.vg.svg; // the resource provider's SVG pictures (E13)
 import experimental.gui;
 import experimental.gui.shell;
 import experimental.gui.inspector; // Ctrl+Shift+I (E8e)
@@ -132,6 +133,20 @@ namespace
             m_images.PushBack(Entry{String(path), Move(picture)});
             return m_images[m_images.Size() - 1].Picture.Get();
         }
+        // A CSS SVG image (E13), parsed once and kept (missing: remembered as such).
+        const foundation::vg::svg::SVGDocument* LoadSvg(StringView path) override
+        {
+            for (const SvgEntry& e : m_svgs)
+                if (e.Path.AsView() == path)
+                    return e.Document.Get();
+            UniquePtr<foundation::vg::svg::SVGDocument> document;
+            String text;
+            if (LoadText(path, text))
+                if (Result<foundation::vg::svg::SVGDocument> parsed = foundation::vg::svg::SVGLoader::Load(text.AsView()); parsed.HasValue())
+                    document = MakeUnique<foundation::vg::svg::SVGDocument>(AppRoot(), Move(parsed.Value()));
+            m_svgs.PushBack(SvgEntry{String(path), Move(document)});
+            return m_svgs[m_svgs.Size() - 1].Document.Get();
+        }
         // A sheet's @import, from the data folder.
         bool LoadText(StringView path, String& out) override
         {
@@ -148,8 +163,14 @@ namespace
             String Path;
             UniquePtr<image::Image> Picture;
         };
+        struct SvgEntry
+        {
+            String Path;
+            UniquePtr<foundation::vg::svg::SVGDocument> Document;
+        };
         Function<String(StringView)> m_resolve;
         Array<Entry> m_images;
+        Array<SvgEntry> m_svgs;
     };
 
     // --narrate (E9e): a bridge that speaks to the console as a screen reader would aloud: each

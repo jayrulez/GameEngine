@@ -17,6 +17,7 @@ export module experimental.gui:resource_provider;
 
 import foundation.core;  // StringView
 import foundation.image; // ImageData
+import foundation.vg.svg; // SVGDocument
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -35,5 +36,8 @@ export namespace experimental::gui
         // A text file's contents (a sheet's @import, E13 of Specs/gui-lab-evolution-2.md): true and
         // `out` filled when it is there.
         [[nodiscard]] virtual bool LoadText(core::StringView path, core::String& out) = 0;
+        // An SVG picture (a CSS image whose path ends in .svg, E13): a borrowed document the provider
+        // keeps (parsed once), drawn as paths at whatever size it fills; null if not found.
+        [[nodiscard]] virtual const foundation::vg::svg::SVGDocument* LoadSvg(core::StringView path) = 0;
     };
 }

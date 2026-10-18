@@ -9,6 +9,7 @@
 import foundation.core;
 import foundation.fonts;
 import foundation.image;
+import foundation.vg.svg;
 import experimental.gui;
 
 using namespace experimental::gui;
@@ -80,6 +81,7 @@ namespace
         static constexpr core::u8 kPixels[16] = {255, 0, 0,   255, 0,   255, 0,   255,
                                                  0,   0, 255, 255, 255, 255, 255, 255};
         bool LoadText(core::StringView, core::String&) override { return false; }
+        const foundation::vg::svg::SVGDocument* LoadSvg(core::StringView) override { return nullptr; }
     };
 
     // A font service that hands out one font, recording the requested family + size.

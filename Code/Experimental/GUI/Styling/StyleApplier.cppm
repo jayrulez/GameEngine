@@ -357,6 +357,151 @@ export namespace experimental::gui
             return false;
         }
 
+        // An image's path and, after `#xywh=`, the region of it to draw (a sprite of an atlas, as
+        // Media Fragments write one: `atlas.png#xywh=0,32,16,16`); no region: all of it.
+        inline core::StringView ImagePath(core::StringView url, Rectangle& region)
+        {
+            region = Rectangle{};
+            static constexpr core::StringView kFragment(u8"#xywh=");
+            for (usize i = 0; i + kFragment.Size() <= url.Size(); ++i)
+                if (url.SubStr(i, kFragment.Size()) == kFragment)
+                {
+                    f32 v[4]{};
+                    usize n = 0;
+                    for (const core::StringView part : SplitTopLevel(url.SubStr(i + kFragment.Size(), url.Size() - i - kFragment.Size()), u8','))
+                        if (const Optional<f32> number = ParseLength(Trim(part)); number.HasValue() && n < 4)
+                            v[n++] = number.Value();
+                    if (n == 4)
+                        region = Rectangle{v[0], v[1], v[2], v[3]};
+                    return url.SubStr(0, i);
+                }
+            return url;
+        }
+
+        // border-image (E13): `url(skin.png) <slice>{1,4} [fill] [/ <width>{1,4} [/ <outset>]]
+        // [stretch | repeat | round | space]{1,2}`. A slice is image pixels or a percentage of
+        // the image; a width a length, or a number times the border's width.
+        inline void ParseBorderImage(core::StringView value, IResourceProvider* resources, const LengthContext& lengths, const vg::BorderWidths& borders,
+                                     BorderImage& out)
+        {
+            core::String spaced; // a top-level '/' parted from what touches it (one in a url() is the path's)
+            usize depth = 0;
+            for (const char8_t c : value)
+            {
+                depth += c == u8'(' ? 1u : 0u;
+                if (c == u8')' && depth > 0)
+                    --depth;
+                if (c == u8'/' && depth == 0)
+                    spaced.Append(core::StringView(u8" / "));
+                else
+                    spaced.PushBack(c);
+            }
+            core::StringView source;
+            f32 slice[4]{};
+            usize slices = 0;
+            bool sliceIsPercent[4]{};
+            f32 width[4]{-1.0f, -1.0f, -1.0f, -1.0f};
+            usize widths = 0;
+            BorderImageRepeat repeats[2]{BorderImageRepeat::Stretch, BorderImageRepeat::Stretch};
+            usize repeatCount = 0;
+            int section = 0; // 0 slices, 1 widths, 2 outsets
+            const f32 borderOf[4] = {borders.top, borders.right, borders.bottom, borders.left};
+            for (const core::StringView token : SplitTopLevel(spaced.AsView(), u8' '))
+            {
+                core::StringView name, arguments;
+                if (SplitFunction(token, name, arguments) && name == core::StringView(u8"url"))
+                {
+                    source = Trim(arguments);
+                    if (source.Size() >= 2 && (source[0] == u8'"' || source[0] == u8'\'') && source[source.Size() - 1] == source[0])
+                        source = source.SubStr(1, source.Size() - 2);
+                }
+                else if (token == core::StringView(u8"/"))
+                    ++section;
+                else if (token == core::StringView(u8"fill"))
+                    out.Fill = true;
+                else if (token == core::StringView(u8"stretch") || token == core::StringView(u8"repeat") || token == core::StringView(u8"round") ||
+                         token == core::StringView(u8"space"))
+                {
+                    if (repeatCount < 2)
+                        repeats[repeatCount++] = token == core::StringView(u8"stretch") ? BorderImageRepeat::Stretch
+                                                 : token == core::StringView(u8"round") ? BorderImageRepeat::Round
+                                                                                        : BorderImageRepeat::Repeat;
+                }
+                else if (section == 0 && slices < 4)
+                {
+                    const bool percent = token.Size() > 1 && token[token.Size() - 1] == u8'%';
+                    if (const Optional<f32> n = ParseLength(percent ? token.SubStr(0, token.Size() - 1) : token); n.HasValue())
+                    {
+                        sliceIsPercent[slices] = percent;
+                        slice[slices++] = n.Value();
+                    }
+                }
+                else if (section == 1 && widths < 4)
+                {
+                    bool plain = token.Size() != 0; // a bare number (ParseLength would read "6px" as 6 too)
+                    for (const char8_t c : token)
+                        plain = plain && (IsDigit(c) || c == u8'.' || c == u8'-' || c == u8'+');
+                    if (const Optional<f32> n = plain ? ParseLength(token) : Optional<f32>{}; n.HasValue())
+                        width[widths] = -2.0f - n.Value(); // a multiple of the border's, settled below
+                    else if (const Optional<LengthValue> l = ParseLengthValue(token); l.HasValue())
+                        width[widths] = ResolveLengthValue(l.Value(), lengths, 0.0f);
+                    ++widths;
+                }
+            }
+            if (source.Size() == 0 || resources == nullptr)
+                return;
+            Rectangle region;
+            out.Image = resources->LoadImage(ImagePath(source, region));
+            if (out.Image == nullptr)
+                return;
+            out.Source = region;
+            const f32 iw = region.width > 0.0f ? region.width : static_cast<f32>(out.Image->Width());
+            const f32 ih = region.width > 0.0f ? region.height : static_cast<f32>(out.Image->Height());
+            // One to four values, as margins take them: top, right, bottom, left.
+            const auto spread = [](f32 (&v)[4], usize count)
+            {
+                if (count == 1)
+                    v[1] = v[2] = v[3] = v[0];
+                else if (count == 2)
+                {
+                    v[2] = v[0];
+                    v[3] = v[1];
+                }
+                else if (count == 3)
+                    v[3] = v[1];
+            };
+            const auto spreadFlags = [](bool (&v)[4], usize count)
+            {
+                if (count == 1)
+                    v[1] = v[2] = v[3] = v[0];
+                else if (count == 2)
+                {
+                    v[2] = v[0];
+                    v[3] = v[1];
+                }
+                else if (count == 3)
+                    v[3] = v[1];
+            };
+            if (slices == 0)
+            {
+                slices = 1;
+                slice[0] = 100.0f;
+                sliceIsPercent[0] = true; // CSS's initial slice: 100%
+            }
+            spread(slice, slices);
+            spreadFlags(sliceIsPercent, slices);
+            for (usize i = 0; i < 4; ++i)
+                out.Slice[i] = sliceIsPercent[i] ? slice[i] * ((i % 2 == 0) ? ih : iw) * 0.01f : slice[i];
+            if (widths > 0)
+            {
+                spread(width, widths);
+                for (usize i = 0; i < 4; ++i)
+                    out.Width[i] = width[i] <= -2.0f ? (-2.0f - width[i]) * borderOf[i] : width[i];
+            }
+            out.RepeatX = repeats[0];
+            out.RepeatY = repeatCount > 1 ? repeats[1] : repeats[0];
+        }
+
         // One axis of a layer's size or position: a length, a percentage, or (`allowAuto`) auto.
         [[nodiscard]] inline Optional<LayerLength> ParseLayerLength(core::StringView t, const LengthContext& lengths, bool allowAuto)
         {
@@ -449,8 +594,15 @@ export namespace experimental::gui
                     if (layer.Kind == BackgroundKind::Image)
                     {
                         out.IsImage = true;
-                        out.Image = resources != nullptr ? resources->LoadImage(layer.Image.AsView()) : nullptr;
-                        if (out.Image == nullptr)
+                        // An SVG by its name (E13): paths, drawn at the size it fills.
+                        const core::StringView path = layer.Image.AsView();
+                        const bool svg = path.Size() > 4 && (path.SubStr(path.Size() - 4, 4) == core::StringView(u8".svg") ||
+                                                             path.SubStr(path.Size() - 4, 4) == core::StringView(u8".SVG"));
+                        if (resources != nullptr && svg)
+                            out.Svg = resources->LoadSvg(path);
+                        else if (resources != nullptr)
+                            out.Image = resources->LoadImage(ImagePath(path, out.Source)); // a sprite's region too
+                        if (out.Image == nullptr && out.Svg == nullptr)
                             continue; // not loaded (no provider, or no such image)
                         if (!sizes.IsEmpty())
                             ParseLayerSize(Trim(sizes[Min(at, sizes.Size() - 1)]), lengths, out);
@@ -491,6 +643,9 @@ export namespace experimental::gui
             side(u8"right", box.BorderWidths.right, box.BorderColors.right);
             side(u8"bottom", box.BorderWidths.bottom, box.BorderColors.bottom);
             side(u8"left", box.BorderWidths.left, box.BorderColors.left);
+            // A border image over the border's widths (E13).
+            if (const core::StringView skin = style.Get(u8"border-image"); skin.Size() != 0 && skin != core::StringView(u8"none"))
+                ParseBorderImage(skin, resources, lengths, box.BorderWidths, box.Skin);
             // Radii: a percentage of the box's smaller side.
             const core::Float2 size = node.GetSize();
             const f32 percentBase = Min(size.x, size.y);

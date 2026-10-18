@@ -350,6 +350,21 @@ export namespace experimental::gui
         bool Italic = false;
     };
 
+    // An @spritesheet (RmlUi's, E13 of Specs/gui-lab-evolution-2.md): one image's named regions, which
+    // a sheet names as images (`url(button-normal)`); the style manager writes each such url as the
+    // image and its region (`url(atlas.png#xywh=0,0,64,32)`).
+    struct Sprite
+    {
+        core::String Name;
+        f32 X = 0.0f, Y = 0.0f, Width = 0.0f, Height = 0.0f;
+    };
+    struct Spritesheet
+    {
+        core::String Name;
+        core::String Source; ///< its image's path
+        Array<Sprite> Sprites;
+    };
+
     // A named @keyframes animation: an ordered list of stops.
     struct Keyframes
     {
@@ -411,6 +426,62 @@ export namespace experimental::gui
         void AddFontFace(FontFaceRule face) { m_fontFaces.PushBack(core::Move(face)); }
         /// The paths it @imports, in order (E13): the style manager loads and expands them.
         void AddImport(core::StringView path) { m_imports.PushBack(core::String(path)); }
+        void AddSpritesheet(Spritesheet sheet) { m_spritesheets.PushBack(core::Move(sheet)); }
+        [[nodiscard]] const Array<Spritesheet>& Spritesheets() const noexcept { return m_spritesheets; }
+        /// Every rule's value naming one of `sprites` as an image (url(name)) written as its
+        /// spritesheet's image and region instead.
+        void ResolveSprites(Span<const Spritesheet> sheets)
+        {
+            for (StyleRule& rule : m_rules)
+                for (const StyleProperty& p : rule.Properties())
+                {
+                    core::StringView value = p.Value.AsView();
+                    bool hasUrl = false;
+                    for (usize i = 0; i + 4 <= value.Size() && !hasUrl; ++i)
+                        hasUrl = value.SubStr(i, 4) == core::StringView(u8"url(");
+                    if (!hasUrl)
+                        continue;
+                    core::String out;
+                    bool changed = false;
+                    for (usize i = 0; i < value.Size();)
+                    {
+                        if (i + 4 > value.Size() || value.SubStr(i, 4) != core::StringView(u8"url("))
+                        {
+                            out.PushBack(value[i++]);
+                            continue;
+                        }
+                        usize close = i + 4;
+                        while (close < value.Size() && value[close] != u8')')
+                            ++close;
+                        core::StringView name = Trim(value.SubStr(i + 4, close - i - 4));
+                        if (name.Size() >= 2 && (name[0] == u8'"' || name[0] == u8'\'') && name[name.Size() - 1] == name[0])
+                            name = name.SubStr(1, name.Size() - 2);
+                        const Sprite* found = nullptr;
+                        const Spritesheet* in = nullptr;
+                        for (const Spritesheet& sheet : sheets)
+                            for (const Sprite& sprite : sheet.Sprites)
+                                if (found == nullptr && sprite.Name.AsView() == name)
+                                {
+                                    found = &sprite;
+                                    in = &sheet;
+                                }
+                        if (found == nullptr)
+                        {
+                            out.Append(value.SubStr(i, close - i));
+                            i = close;
+                            continue;
+                        }
+                        out.Append(core::StringView(u8"url("));
+                        out.Append(in->Source.AsView());
+                        out.Append(core::Format(u8"#xywh={},{},{},{}", found->X, found->Y, found->Width, found->Height).AsView());
+                        i = close;
+                        changed = true;
+                    }
+                    if (changed)
+                        rule.SetProperty(p.Name.AsView(), out.AsView(), p.Important);
+                }
+            m_index.Built = false;
+        }
         [[nodiscard]] const Array<core::String>& Imports() const noexcept { return m_imports; }
         /// Puts `imported`'s rules before its own (an import comes first in source order, so this
         /// sheet's own win a tie), and takes its keyframes and font faces after its own.
@@ -423,6 +494,8 @@ export namespace experimental::gui
                 m_keyframes.PushBack(core::Move(k));
             for (FontFaceRule& f : imported.m_fontFaces)
                 m_fontFaces.PushBack(core::Move(f));
+            for (Spritesheet& s : imported.m_spritesheets)
+                m_spritesheets.PushBack(core::Move(s));
             m_index.Built = false;
         }
         [[nodiscard]] const Array<FontFaceRule>& FontFaces() const noexcept { return m_fontFaces; }
@@ -712,6 +785,7 @@ export namespace experimental::gui
         Array<Keyframes> m_keyframes;
         Array<FontFaceRule> m_fontFaces;
         Array<core::String> m_imports;
+        Array<Spritesheet> m_spritesheets;
         mutable RuleIndex m_index;
         core::String m_name;
     };

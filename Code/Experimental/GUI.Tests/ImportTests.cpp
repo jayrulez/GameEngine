@@ -8,6 +8,7 @@
 #include "Core/Prelude.h"
 import foundation.core;
 import foundation.image;
+import foundation.vg.svg;
 import experimental.gui;
 
 using namespace experimental::gui;
@@ -30,6 +31,7 @@ namespace
             texts.PushBack(core::String(SV(text)));
         }
         const foundation::image::ImageData* LoadImage(core::StringView) override { return nullptr; }
+        const foundation::vg::svg::SVGDocument* LoadSvg(core::StringView) override { return nullptr; }
         bool LoadText(core::StringView path, core::String& out) override
         {
             loaded.PushBack(core::String(path));

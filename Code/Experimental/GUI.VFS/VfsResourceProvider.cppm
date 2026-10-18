@@ -22,6 +22,7 @@ import foundation.image;    // ImageData, Image, OwnedImageData
 import foundation.image.io; // LoadImageFromMemory
 import foundation.vfs;      // IFileSystem
 import experimental.gui;      // IResourceProvider
+import foundation.vg.svg;     // SVGDocument, SVGLoader
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -92,12 +93,35 @@ export namespace experimental::gui::vfs
             return true;
         }
 
+        // An SVG parsed the first time it is asked for, kept (asked again after a failure, it tries
+        // again: it may have arrived).
+        const foundation::vg::svg::SVGDocument* LoadSvg(core::StringView path) override
+        {
+            for (const SvgEntry& e : m_svgs)
+                if (e.Path.AsView() == path)
+                    return e.Document.Get();
+            core::String text;
+            if (!LoadText(path, text))
+                return nullptr;
+            Result<foundation::vg::svg::SVGDocument> parsed = foundation::vg::svg::SVGLoader::Load(text.AsView());
+            if (!parsed.HasValue())
+                return nullptr;
+            m_svgs.PushBack(SvgEntry{core::String(path), MakeUnique<foundation::vg::svg::SVGDocument>(m_allocator, Move(parsed.Value()))});
+            return m_svgs[m_svgs.Size() - 1].Document.Get();
+        }
+
     private:
         struct Entry
         {
             core::String Path;
             UniquePtr<image::OwnedImageData> Image;
         };
+        struct SvgEntry
+        {
+            core::String Path;
+            UniquePtr<foundation::vg::svg::SVGDocument> Document;
+        };
+        Array<SvgEntry> m_svgs; // parsed SVGs, one per path
         foundation::vfs::IFileSystem* m_fs;
         IAllocator& m_allocator;
         Array<Entry> m_images; // decoded images owned by this provider, one per path

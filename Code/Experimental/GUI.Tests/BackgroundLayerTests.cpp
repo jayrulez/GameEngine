@@ -8,6 +8,7 @@
 #include "Core/Prelude.h"
 import foundation.core;
 import foundation.image;
+import foundation.vg.svg;
 import experimental.gui;
 
 using namespace experimental::gui;
@@ -25,6 +26,13 @@ namespace
         image::OwnedImageData img{40, 20, image::PixelFormat::RGBA8, core::Span<const core::u8>(kPixels, sizeof(kPixels))};
         const image::ImageData* LoadImage(core::StringView) override { return &img; }
         bool LoadText(core::StringView, core::String&) override { return false; }
+        foundation::vg::svg::SVGDocument svg{24.0f, 12.0f};
+        core::Array<core::String> svgsAsked;
+        const foundation::vg::svg::SVGDocument* LoadSvg(core::StringView path) override
+        {
+            svgsAsked.PushBack(core::String(path));
+            return &svg;
+        }
     };
     void CheckRect(const core::Rectangle& r, core::f32 x, core::f32 y, core::f32 w, core::f32 h)
     {
@@ -81,4 +89,27 @@ TEST_CASE("background: background-size and background-position from a sheet, a c
     CHECK(layers[1].Y.Percent == doctest::Approx(50.0f));
     CHECK(layers[2].Size == LayerSize::Lengths); // past the list: the last again
     CHECK(layers[2].X.Px == doctest::Approx(10.0f));
+}
+
+TEST_CASE("background: an SVG layer is asked for as SVG and placed by its own size")
+{
+    Pictures pictures;
+    core::RefPtr<SceneRoot> root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    core::RefPtr<Panel> panel = core::MakeRef<Panel>(core::DefaultAllocator());
+    panel->AddClass(SV(u8"badge"));
+    root->AddChild(panel.Get());
+    StyleManager styles;
+    styles.SetResourceProvider(&pictures);
+    styles.SetStyleSheet(CSSParser::Parse(SV(u8".badge { background-image: url(icons/star.svg), url(paper.png); background-size: contain; }")));
+    styles.ApplyTree(*root.Get());
+    const auto& layers = panel->GetBox().Layers;
+    REQUIRE(layers.Size() == 2u);
+    CHECK(layers[0].Svg == &pictures.svg);
+    CHECK(layers[0].Image == nullptr);
+    CHECK(layers[1].Image == &pictures.img);
+    REQUIRE(pictures.svgsAsked.Size() == 1u);
+    CHECK(pictures.svgsAsked[0] == SV(u8"icons/star.svg"));
+    // Contained in a 100 by 100 box, the 24 by 12 picture is 100 by 50.
+    const core::Rectangle placed = PlaceImageLayer(layers[0], core::Rectangle{0.0f, 0.0f, 100.0f, 100.0f}, 24.0f, 12.0f);
+    CheckRect(placed, 0.0f, 0.0f, 100.0f, 50.0f);
 }

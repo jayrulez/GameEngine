@@ -167,6 +167,10 @@ export namespace experimental::gui
                     {
                         ParseFontFace(sheet, inner);
                     }
+                    else if (prelude.Size() > 13 && prelude.SubStr(0, 13) == core::StringView(u8"@spritesheet "))
+                    {
+                        ParseSpritesheet(sheet, Trim(prelude.SubStr(13, prelude.Size() - 13)), inner);
+                    }
                     // unknown at-rule blocks are consumed and skipped
                     continue;
                 }
@@ -189,6 +193,45 @@ export namespace experimental::gui
 
                 EmitRules(sheet, source.LineOf(selectorList), selectorList, block, media);
             }
+        }
+
+        // An @spritesheet's block (E13): `src: url(atlas.png);` and a `name: x y width height;` per
+        // sprite, in the image's pixels (px or none). One without a source is dropped.
+        static void ParseSpritesheet(StyleSheet& sheet, core::StringView name, core::StringView block)
+        {
+            Spritesheet out;
+            out.Name = core::String(name);
+            for (const StyleProperty& p : ParseDeclList(block))
+            {
+                const core::StringView value = Trim(p.Value.AsView());
+                if (p.Name.AsView() == core::StringView(u8"src"))
+                {
+                    core::StringView path = value;
+                    if (path.Size() > 5 && path.SubStr(0, 4) == core::StringView(u8"url(") && path[path.Size() - 1] == u8')')
+                        path = Trim(path.SubStr(4, path.Size() - 5));
+                    if (path.Size() >= 2 && (path[0] == u8'"' || path[0] == u8'\'') && path[path.Size() - 1] == path[0])
+                        path = path.SubStr(1, path.Size() - 2);
+                    out.Source = core::String(path);
+                    continue;
+                }
+                f32 v[4]{};
+                usize n = 0;
+                usize start = 0;
+                for (usize i = 0; i <= value.Size() && n < 4; ++i)
+                    if (i == value.Size() || value[i] == u8' ')
+                    {
+                        core::StringView token = value.SubStr(start, i - start);
+                        if (token.Size() > 2 && token.SubStr(token.Size() - 2, 2) == core::StringView(u8"px"))
+                            token = token.SubStr(0, token.Size() - 2);
+                        if (const Optional<f32> number = ParseLength(token); token.Size() != 0 && number.HasValue())
+                            v[n++] = number.Value();
+                        start = i + 1;
+                    }
+                if (n == 4)
+                    out.Sprites.PushBack(Sprite{core::String(p.Name.AsView()), v[0], v[1], v[2], v[3]});
+            }
+            if (out.Source.Size() != 0)
+                sheet.AddSpritesheet(core::Move(out));
         }
 
         // An @import's path: its url() or its quoted string (a media list after it is ignored).

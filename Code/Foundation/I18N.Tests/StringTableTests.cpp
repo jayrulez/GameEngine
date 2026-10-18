@@ -118,3 +118,81 @@ TEST_CASE("i18n.table: texts, plural entries, rules and directions survive the p
     CHECK(read.GetDirection(u8"he") == TextDirection::RightToLeft);
     CHECK(read.HasKey(u8"menu.play")); // the index rebuilt
 }
+
+namespace
+{
+    // A payload shaped as a table's, but whose one entry has a cell for one of its two locales: what
+    // a damaged file, or a fuzzer, hands the reader.
+    void WriteShortEntry(ISerializer& ar)
+    {
+        BeginVersionedPayload(ar, StringTable::StaticType());
+        u32 locales = 2;
+        ar.Key("locales");
+        ar.BeginArray(locales);
+        const char8_t* ids[2] = {u8"en", u8"fr"};
+        for (const char8_t* id : ids)
+        {
+            String localeId(id);
+            bool hasRule = false;
+            String rule;
+            String direction(u8"unset");
+            ar.BeginObject();
+            foundation::core::Serialize(ar, "id", localeId);
+            foundation::core::Serialize(ar, "hasRule", hasRule);
+            foundation::core::Serialize(ar, "rule", rule);
+            foundation::core::Serialize(ar, "direction", direction);
+            ar.EndObject();
+        }
+        ar.EndArray();
+        u32 entries = 1;
+        ar.Key("entries");
+        ar.BeginArray(entries);
+        String key(u8"menu.play");
+        bool plural = false;
+        ar.BeginObject();
+        foundation::core::Serialize(ar, "key", key);
+        foundation::core::Serialize(ar, "plural", plural);
+        u32 cells = 1;
+        ar.Key("cells");
+        ar.BeginArray(cells);
+        bool present = true;
+        String text(u8"Play");
+        u8 forms = 0;
+        ar.BeginObject();
+        foundation::core::Serialize(ar, "present", present);
+        foundation::core::Serialize(ar, "text", text);
+        foundation::core::Serialize(ar, "forms", forms);
+        for (u32 f = 0; f < kPluralCategoryCount; ++f)
+        {
+            String form;
+            const String name(PluralCategoryName(static_cast<PluralCategory>(f)));
+            ar.Key(reinterpret_cast<const char*>(name.CStr()));
+            ar.Text(form);
+        }
+        ar.EndObject();
+        ar.EndArray();
+        ar.EndObject();
+        ar.EndArray();
+        EndVersionedPayload(ar);
+    }
+}
+
+TEST_CASE("i18n.table: an entry short of its locales' cells fails the read and leaves the table safe to ask")
+{
+    // Found by the GUI lab's string table fuzzer: the read failed, but kept the short entry, and a
+    // caller that did not check asked a locale past its cells.
+    RegisterStringTableType();
+    MemoryStream stream;
+    {
+        BinarySerializer ar(stream, SerializeMode::Write);
+        WriteShortEntry(ar);
+        REQUIRE(ar.IsPayloadOk());
+    }
+    REQUIRE(stream.Seek(0, SeekOrigin::Begin) == 0);
+    StringTable read;
+    BinarySerializer ar(stream, SerializeMode::Read);
+    read.Serialize(ar);
+    CHECK_FALSE(ar.IsPayloadOk());
+    CHECK(*read.Text(u8"menu.play", u8"en") == String(u8"Play"));
+    CHECK(read.Text(u8"menu.play", u8"fr") == nullptr); // the missing cell: missing, not past the end
+}

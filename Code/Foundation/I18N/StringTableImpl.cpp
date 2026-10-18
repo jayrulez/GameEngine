@@ -111,7 +111,13 @@ namespace foundation::i18n
             if (reading)
             {
                 if (entry.Cells.Size() != m_locales.Size())
-                    ar.FailPayload(ErrorCode::InvalidArgument); // a cell a locale, or the table is not one
+                {
+                    // A cell a locale, or the table is not one: the read fails, and the entry keeps a
+                    // cell for each locale so that a caller not checking the payload cannot index
+                    // past them (a fuzzer's find).
+                    ar.FailPayload(ErrorCode::InvalidArgument);
+                    entry.Cells.Resize(m_locales.Size());
+                }
                 m_entries.PushBack(Move(entry));
             }
         }

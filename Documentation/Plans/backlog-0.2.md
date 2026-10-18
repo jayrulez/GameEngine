@@ -52,6 +52,57 @@ panel shows that player's frames as it shows the editor's, as Traktor's target c
 ezInspector do. The capture store is UI-free already; this is a transport (the engine's reliable
 UDP), a player-side server armed by a flag, and the panel choosing its source.
 
+## The GUI lab after E9: stability first, then the decision (user 2026-10-17)
+
+The lab's evolution (`Specs/gui-lab-evolution.md`) is built through E9. Before anyone thinks about
+it replacing foundation.ui, it has to be shown as stable as foundation.ui is (the user,
+2026-10-17: "a lot of testing"). In order:
+
+1. **Stability.** The user's visual pass over every sandbox page (most are unchecked: Text,
+   Layout, Styling, Effects, Motion, Data binding, Navigation, Language and direction, the game
+   menu, and the desk fixes' re-checks); the full lanes (gcc, clang-shared, wasm, ASAN) green on
+   the lab and kept so; `--sweep` over every page on both backends; the markup and CSS parsers
+   and the input dispatcher fed malformed and random input; long soak runs watching memory and
+   frame time (in RelWithDebInfo); and a real screen or two built on it (a game's menus and HUD)
+   to find what the sandbox does not. Bugs found go in as they come.
+2. **The decision.** Only then: whether the lab replaces foundation.ui's core (the editor and the
+   samples moving over) or pieces move across one at a time (the spec's "end state").
+3. **Then** the toolkit and gamekit on whichever core that leaves.
+
+Gaps the phases left, by area (each phase's own notes say more):
+
+- **Text.** A font fallback list in the lab's text (the Language page draws everything in DejaVu
+  Sans Mono because Roboto has no Arabic); `direction: auto` / `unicode-bidi: plaintext` for typed
+  text; word moves, deletes and Home and End logical in mixed-direction text, and a selection
+  collapsing to its logical end; a right-to-left line's clamp ellipsis on its right; full UAX #29
+  (Hangul jamo, Indic conjuncts) and words from the shaper; a password taking no composition; a
+  link with no pointer cursor; HarfBuzz as the lab's default shaper outside the sandbox.
+- **Direction.** A right-to-left horizontal scroller starts at its left, not its inline start.
+- **Accessibility.** Item views expose only the rows they have made, not every item (rows need
+  a model of their own); the platform adapters (UI Automation, NSAccessibility, AT-SPI) and real
+  text to speech are host work.
+- **Layout.** A container's baseline is its content box's bottom, not its first child's; grid and
+  stack place `baseline` as start; text is not snapped to the pixel grid; `z-index` is parsed but
+  orders neither drawing nor hit testing; no `calc()`; a node scrolling on both axes gives `fr`
+  columns their content's width.
+- **Styling.** Parts take no motion and no text properties; `inherit` on a non-inherited property
+  takes the parent's cascaded value, not its live one; attribute selectors read reflected
+  properties only; a reflected property code set before the sheet first styled the node loses
+  to the sheet.
+- **Overlays.** No OS popup windows (a popup never leaves its root), modality per root;
+  type-ahead by first letter only; a shrunk menu clips rather than scrolls; tooltips for the
+  pointer only, never interactive; no Alt mnemonics; scripts cannot build a menu.
+- **Controls.** The range is a base class (a progress bar carries a page it hides); every radio
+  and every tab is a tab stop; type-ahead reads keys, not text input; a tree resets on every
+  model range.
+- **Drag and drop.** One drag within one root (none between windows); a script answers a query
+  by taking it; the scroll band and hover delay are dispatcher settings, not styles; an OS file
+  shows nothing while dragged over; the pad's d-pad moves focus during a keyboard drag inside a
+  list; a tree takes a drop as a reset; a copy of a tree's own nodes is not taken.
+- **Events and the rest.** Escape closing a popup is the dispatcher's special case; click
+  thresholds are device pixels, not scaled; the stress page's turning boxes keep drawing out of
+  view (a rotation about the centre could be bounded).
+
 ## The GUI lab's inspector as MCP tools: a phase of its own (user 2026-10-17)
 
 The lab's inspector (`Specs/gui-lab-evolution.md`, E8e) answers its questions through a C++ API

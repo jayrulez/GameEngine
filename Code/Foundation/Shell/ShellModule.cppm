@@ -104,6 +104,14 @@ export namespace foundation::shell
         core::u32 height = 0;
     };
 
+    /// What the field being typed in holds. A platform's IME composes ordinary text; it stays out
+    /// of a secret one (a password: no composition, no suggestions, nothing learned from it).
+    enum class TextInputKind : core::u8
+    {
+        Text,
+        Secret,
+    };
+
     class IWindow
     {
     public:
@@ -139,10 +147,13 @@ export namespace foundation::shell
 
         // Text-input (IME/composition) control. Platforms only emit TextInput events
         // for a window while text input is active; a GUI enables it when an editable
-        // control is focused and disables it otherwise. Default off.
-        virtual void StartTextInput() = 0;
+        // control is focused and disables it otherwise. Default off. Started again with
+        // another kind while active, it switches to that kind.
+        virtual void StartTextInput(TextInputKind kind) = 0;
         virtual void StopTextInput() = 0;
         [[nodiscard]] virtual bool IsTextInputActive() const noexcept = 0;
+        /// The kind text input was last started with.
+        [[nodiscard]] virtual TextInputKind GetTextInputKind() const noexcept = 0;
         // Where the text being typed is, in window coordinates, and the caret's x within it: an IME
         // places its candidate list beside it. A backend without IMEs ignores it (the default).
         virtual void SetTextInputArea(core::i32 x, core::i32 y, core::i32 width, core::i32 height, core::i32 caretX)

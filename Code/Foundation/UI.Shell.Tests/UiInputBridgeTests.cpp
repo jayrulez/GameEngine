@@ -73,9 +73,15 @@ namespace
         [[nodiscard]] bool IsOpen() const noexcept override { return true; }
         [[nodiscard]] bool IsMinimized() const noexcept override { return false; }
         void Close() override {}
-        void StartTextInput() override { active = true; }
+        void StartTextInput(shell::TextInputKind k) override
+        {
+            active = true;
+            kind = k;
+        }
         void StopTextInput() override { active = false; }
         [[nodiscard]] bool IsTextInputActive() const noexcept override { return active; }
+        [[nodiscard]] shell::TextInputKind GetTextInputKind() const noexcept override { return kind; }
+        shell::TextInputKind kind = shell::TextInputKind::Text;
     };
 }
 
@@ -128,6 +134,31 @@ TEST_CASE("ui-shell: text input target follows focus (IME sync)")
     ctx.GetFocusManager()->ClearFocus();
     bridge.SyncTextInput();
     CHECK(!window.active); // nothing focused -> IME off
+}
+
+TEST_CASE("ui-shell: a password box starts secret text input, and a move to a field switches it back")
+{
+    UIContext ctx{DefaultAllocator()};
+    RefPtr<RootView> root;
+    SetupRoot(ctx, root);
+    auto field = core::MakeRef<EditText>(core::DefaultAllocator());
+    auto password = core::MakeRef<PasswordBox>(core::DefaultAllocator());
+    root->AddView(field.Get());
+    root->AddView(password.Get());
+    LayoutPass(ctx, root.Get());
+
+    MockWindow window;
+    UiInputBridge bridge(&ctx);
+    bridge.SetTextInputTarget(&window);
+
+    ctx.GetFocusManager()->SetFocus(password.Get());
+    bridge.SyncTextInput();
+    CHECK(window.active);
+    CHECK(window.kind == shell::TextInputKind::Secret); // the IME keeps out
+    ctx.GetFocusManager()->SetFocus(field.Get());
+    bridge.SyncTextInput();
+    CHECK(window.active);
+    CHECK(window.kind == shell::TextInputKind::Text);
 }
 
 TEST_CASE("ui-shell: a window going away stops being the text input target")

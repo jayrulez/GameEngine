@@ -233,13 +233,20 @@ namespace foundation::shell
         return (SDL_GetWindowFlags(m_window) & SDL_WINDOW_MINIMIZED) != 0;
     }
 
-    void SDL3Window::StartTextInput()
+    void SDL3Window::StartTextInput(TextInputKind kind)
     {
-        if (m_window != nullptr && !m_textInputActive)
-        {
-            SDL_StartTextInput(m_window);
-            m_textInputActive = true;
-        }
+        if (m_window == nullptr || (m_textInputActive && kind == m_textInputKind))
+            return;
+        if (m_textInputActive)
+            SDL_StopTextInput(m_window); // another kind: started again as that
+        // A secret field tells the platform it is a hidden password: its IME composes nothing there.
+        const SDL_PropertiesID props = SDL_CreateProperties();
+        SDL_SetNumberProperty(props, SDL_PROP_TEXTINPUT_TYPE_NUMBER,
+                              kind == TextInputKind::Secret ? SDL_TEXTINPUT_TYPE_TEXT_PASSWORD_HIDDEN : SDL_TEXTINPUT_TYPE_TEXT);
+        SDL_StartTextInputWithProperties(m_window, props);
+        SDL_DestroyProperties(props);
+        m_textInputActive = true;
+        m_textInputKind = kind;
     }
 
     void SDL3Window::StopTextInput()

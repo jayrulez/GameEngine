@@ -56,8 +56,9 @@ export namespace experimental::gui
             if (m_textInputTarget == nullptr || m_dispatcher == nullptr)
                 return;
             const bool want = m_dispatcher->WantsTextInput();
-            if (want && !m_textInputTarget->IsTextInputActive())
-                m_textInputTarget->StartTextInput();
+            const shell::TextInputKind kind = m_dispatcher->IsTextInputSecret() ? shell::TextInputKind::Secret : shell::TextInputKind::Text;
+            if (want && (!m_textInputTarget->IsTextInputActive() || m_textInputTarget->GetTextInputKind() != kind))
+                m_textInputTarget->StartTextInput(kind); // a move between a field and a password switches kind
             else if (!want && m_textInputTarget->IsTextInputActive())
                 m_textInputTarget->StopTextInput();
         }

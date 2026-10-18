@@ -72,6 +72,12 @@ namespace foundation::ui
         return focused != nullptr && focused->WantsTextInput();
     }
 
+    bool UIContext::IsTextInputSecret() const
+    {
+        const View* focused = m_focusManager.FocusedView();
+        return focused != nullptr && focused->IsTextInputSecret();
+    }
+
     // ============================ FocusManager ============================
 
     View* FocusManager::FocusedView() const { return m_context->GetViewById(m_focusedId); }

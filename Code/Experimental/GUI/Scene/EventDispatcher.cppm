@@ -56,6 +56,8 @@ export namespace experimental::gui
         {
             return m_focusNode != nullptr && m_focusNode->WantsTextInput();
         }
+        /// Whether the focused node's text input is secret (a password).
+        [[nodiscard]] bool IsTextInputSecret() const { return m_focusNode != nullptr && m_focusNode->IsTextInputSecret(); }
 
         // === Injection API (fed by the shell bridge) ===
         void InjectMouseMove(core::Float2 position)

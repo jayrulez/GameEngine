@@ -56,9 +56,14 @@ export namespace foundation::shell
         [[nodiscard]] bool IsMinimized() const noexcept override { return m_minimized; }
         void Close() override { m_open = false; }
 
-        void StartTextInput() override { m_textInputActive = true; }
+        void StartTextInput(TextInputKind kind) override
+        {
+            m_textInputActive = true;
+            m_textInputKind = kind;
+        }
         void StopTextInput() override { m_textInputActive = false; }
         [[nodiscard]] bool IsTextInputActive() const noexcept override { return m_textInputActive; }
+        [[nodiscard]] TextInputKind GetTextInputKind() const noexcept override { return m_textInputKind; }
         void SetTextInputArea(core::i32 x, core::i32 y, core::i32 width, core::i32 height, core::i32 caretX) override
         {
             m_textInputArea = TextInputArea{x, y, width, height, caretX};
@@ -87,6 +92,7 @@ export namespace foundation::shell
         bool m_open = true;
         bool m_minimized = false;
         bool m_textInputActive = false;
+        TextInputKind m_textInputKind = TextInputKind::Text;
         TextInputArea m_textInputArea{};
     };
 

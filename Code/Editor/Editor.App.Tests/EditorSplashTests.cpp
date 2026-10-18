@@ -63,9 +63,10 @@ namespace
         [[nodiscard]] bool IsOpen() const noexcept override { return true; }
         [[nodiscard]] bool IsMinimized() const noexcept override { return false; }
         void Close() override {}
-        void StartTextInput() override {}
+        void StartTextInput(shell::TextInputKind) override {}
         void StopTextInput() override {}
         [[nodiscard]] bool IsTextInputActive() const noexcept override { return false; }
+        [[nodiscard]] shell::TextInputKind GetTextInputKind() const noexcept override { return shell::TextInputKind::Text; }
         void SetIcon(Span<const shell::WindowIconImage> images) override
         {
             sizes.Clear();

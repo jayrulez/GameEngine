@@ -81,10 +81,11 @@ export namespace foundation::shell
         [[nodiscard]] bool IsMinimized() const noexcept override;
         void Close() override { m_open = false; }
 
-        void StartTextInput() override;
+        void StartTextInput(TextInputKind kind) override;
         void StopTextInput() override;
         void SetTextInputArea(core::i32 x, core::i32 y, core::i32 width, core::i32 height, core::i32 caretX) override;
         [[nodiscard]] bool IsTextInputActive() const noexcept override { return m_textInputActive; }
+        [[nodiscard]] TextInputKind GetTextInputKind() const noexcept override { return m_textInputKind; }
 
         void SetIcon(core::Span<const WindowIconImage> images) override;
         void Show() override;
@@ -100,6 +101,7 @@ export namespace foundation::shell
         core::u32 m_height = 0;
         bool m_open = true;
         bool m_textInputActive = false;
+        TextInputKind m_textInputKind = TextInputKind::Text;
     };
 
     // Sdl3WindowFlags() (SDL window-creation flags) is a file-local helper in SDL3ShellImpl.cpp.

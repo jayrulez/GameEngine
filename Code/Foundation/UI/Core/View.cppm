@@ -498,6 +498,8 @@ export namespace foundation::ui
         /// override to return true. The ui.shell bridge reads UIContext::WantsTextInput() (this view, if
         /// focused) to start/stop the window's text input - the mechanism Sedulous shell never finished.
         [[nodiscard]] virtual bool WantsTextInput() const { return false; }
+        /// Whether what it takes is secret (a password): the platform's IME keeps out of it.
+        [[nodiscard]] virtual bool IsTextInputSecret() const { return false; }
 
         // === Effective state ===
         [[nodiscard]] bool IsEffectivelyEnabled() const
@@ -1771,6 +1773,8 @@ export namespace foundation::ui
         /// this to enable/disable the window's text input as focus moves. Defined in the impl unit (needs
         /// FocusManager::FocusedView()).
         [[nodiscard]] bool WantsTextInput() const;
+        /// Whether the focused view's text input is secret (a password).
+        [[nodiscard]] bool IsTextInputSecret() const;
 
         [[nodiscard]] StyleSheet* GetStyleSheet() const noexcept { return m_styleSheet.Get(); }
         /// Install the context sheet (the theme; its motion included - see the shipped

@@ -35,6 +35,9 @@ export namespace foundation::ui
             PasswordChar.SetOwner(this, InvalidationKind::Visual);
         }
 
+        /// A password: the platform's IME composes nothing in it, suggests nothing, learns nothing.
+        [[nodiscard]] bool IsTextInputSecret() const override { return true; }
+
         void GetDisplayText(String& outText) const override
         {
             outText.Clear();

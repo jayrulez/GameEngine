@@ -493,6 +493,8 @@ export namespace experimental::gui
         // while it holds focus. The gui.shell bridge reads the focused node's answer and
         // drives the window's StartTextInput/StopTextInput accordingly. Default: false.
         [[nodiscard]] virtual bool WantsTextInput() const { return false; }
+        /// Whether what it takes is secret (a password): the platform's IME keeps out of it.
+        [[nodiscard]] virtual bool IsTextInputSecret() const { return false; }
 
         // Optional hover-tooltip text. A TooltipManager reads the hovered node's answer and
         // shows a tooltip after a delay. Empty (the default) means no tooltip.

@@ -61,9 +61,14 @@ export namespace foundation::shell
         [[nodiscard]] bool IsMinimized() const noexcept override { return false; }
         void Close() override { m_open = false; }
 
-        void StartTextInput() override { m_textInputActive = true; }
+        void StartTextInput(TextInputKind kind) override
+        {
+            m_textInputActive = true;
+            m_textInputKind = kind;
+        }
         void StopTextInput() override { m_textInputActive = false; }
         [[nodiscard]] bool IsTextInputActive() const noexcept override { return m_textInputActive; }
+        [[nodiscard]] TextInputKind GetTextInputKind() const noexcept override { return m_textInputKind; }
 
         [[nodiscard]] core::StringView Selector() const noexcept { return m_selector.AsView(); }
 
@@ -100,5 +105,6 @@ export namespace foundation::shell
         core::u32 m_height;
         bool m_open = true;
         bool m_textInputActive = false;
+        TextInputKind m_textInputKind = TextInputKind::Text;
     };
 }

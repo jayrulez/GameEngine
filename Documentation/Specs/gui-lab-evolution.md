@@ -1248,6 +1248,10 @@ first spec left ("Moving into `foundation.ui`") becomes concrete: whether the la
 foundation.ui's core, with the editor and samples moving over, or pieces move across one at a time.
 That is decided then.
 
+Ruling (user, 2026-10-17, after E9): not before a testing campaign shows the lab as stable as
+foundation.ui. The campaign, the decision and every gap the phases left are in
+`Plans/backlog-0.2.md` ("The GUI lab after E9").
+
 ## Open questions
 
 None left from the draft; new ones go here as the phases meet them.

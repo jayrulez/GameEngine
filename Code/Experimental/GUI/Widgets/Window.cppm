@@ -315,6 +315,10 @@ export namespace experimental::gui
         }
         void OpenInternal(Node& owner, bool modal)
         {
+            // Not inside itself or what it holds: the tree would loop.
+            for (const Node* n = &owner; n != nullptr; n = n->GetParent())
+                if (n == this)
+                    return;
             if (m_open)
                 return;
             EventDispatcher* dispatcher = owner.GetEventDispatcher();

@@ -145,11 +145,15 @@ export namespace experimental::gui
             return Window::SetMarkupAttribute(name, value);
         }
         /// Shows it as a modal dialog over the GUI it is in (it comes back to where it was).
-        void Show()
+        /// Opens it, modal, in the GUI it is in; false when it is in none (a box shows over a
+        /// tree: one with no parent has nothing to show over).
+        bool Show()
         {
             if (IsOpen())
-                return;
+                return true;
             Node* root = GetRootNode();
+            if (root == nullptr || root == this)
+                return false;
             if (Node* home = GetParent())
             {
                 m_home = core::RefPtr<Node>(home);
@@ -157,6 +161,7 @@ export namespace experimental::gui
             }
             SetDisplayed(true);
             OpenModal(*root);
+            return true;
         }
         /// The last answer: "ok", "cancel", "yes" or "no" (empty: none yet).
         [[nodiscard]] core::String GetResultName() const { return m_resultName; }

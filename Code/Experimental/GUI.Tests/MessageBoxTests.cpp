@@ -281,3 +281,14 @@ TEST_CASE("messagebox: under the theme, its message wraps (styled after it is wr
     CHECK_FALSE(longBox->GetBox().Radii.IsZero());
     CHECK_FALSE(longBox->GetBox().Shadows.IsEmpty());
 }
+
+TEST_CASE("message box: shown in no GUI it refuses, rather than becoming its own child")
+{
+    auto box = core::MakeRef<MessageBox>(core::DefaultAllocator());
+    CHECK_FALSE(box->Show());
+    CHECK(box->GetParent() == nullptr);
+    CHECK(box->GetChildIndex(box.Get()) == Node::kInvalidIndex);
+    auto window = core::MakeRef<Window>(core::DefaultAllocator());
+    window->OpenModal(*window); // inside itself: refused
+    CHECK_FALSE(window->IsOpen());
+}

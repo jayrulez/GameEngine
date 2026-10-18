@@ -686,6 +686,46 @@ TEST_CASE("box-model: filter blurs a view through a layer; backdrop-filter blurs
     CHECK(batch.layers.Size() == 2u); // `filter: none` makes none
 }
 
+TEST_CASE("box-model: a backdrop blur keeps to the corners the view's background rounds")
+{
+    // The backdrop's shape: its composite's geometry, a rounded outline where the background
+    // rounds (and no corner-radius is set), four corners where nothing does.
+    const auto backdropIndices = [](StringView sheetText) -> u32
+    {
+        UIContext ctx{DefaultAllocator()};
+        auto root = MakeRoot();
+        EnsureGlobals();
+        Init(ctx, root.Get(), 400, 300);
+        ctx.SetStyleSheet(LoadSSS(sheetText));
+        auto under = RV(200, 200, 1);
+        auto glass = RV(80, 60, 2);
+        glass->AddClass(u8"glass");
+        auto frame = New<FrameLayout>();
+        frame->AddView(under.Get());
+        frame->AddView(glass.Get());
+        root->AddView(frame.Get());
+        LayoutPass(ctx, root.Get());
+        vg::VGContext vgContext;
+        vgContext.SetLayers(true);
+        ctx.DrawRootView(root.Get(), vgContext);
+        const vg::VGBatch& batch = vgContext.GetBatch();
+        for (usize i = 0; i < batch.CommandCount(); ++i)
+        {
+            const vg::VGCommand c = batch.GetCommand(i);
+            if (c.drawMode == vg::VGDrawMode::Layer && c.backdrop)
+            {
+                return static_cast<u32>(c.indexCount);
+            }
+        }
+        return 0;
+    };
+    const u32 square = backdropIndices(u8".glass { backdrop-filter: blur(6); background: #FFFFFF40; }");
+    const u32 rounded =
+        backdropIndices(u8".glass { backdrop-filter: blur(6); background: rounded-rect(#FFFFFF40, radius=10); }");
+    REQUIRE(square > 0u);
+    CHECK(rounded > square);
+}
+
 // === sheet-driven LayoutStyle ===
 
 TEST_CASE("box-model: the cascade fills undeclared LayoutStyle fields; inline wins")

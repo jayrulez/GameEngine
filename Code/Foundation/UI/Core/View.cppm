@@ -1355,11 +1355,11 @@ export namespace foundation::ui
                     Max(0.0f, child->ResolveStyleFloat(StyleProperty::BackdropFilter, 0.0f)) * deviceScale;
                 if (backdrop > 0.0f)
                 {
-                    // What the parent drew behind the view, blurred inside its corners, fading with it.
-                    const f32 radius = Max(0.0f, child->ResolveStyleFloat(StyleProperty::CornerRadius, 0.0f));
+                    // What the parent drew behind the view, blurred inside its corners (the ones its
+                    // shadow follows), fading with it.
                     ctx.VG().PushOpacity(opacity);
                     ctx.VG().DrawBackdropBlur(Rectangle{0, 0, child->Width(), child->Height()},
-                                              vg::CornerRadii{radius, radius, radius, radius}, backdrop);
+                                              child->OutlineRadii(), backdrop);
                     ctx.VG().PopOpacity();
                 }
                 const bool faded = opacity < 1.0f;

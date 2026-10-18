@@ -363,6 +363,30 @@ easings.net's ten families in, out and in-out, Foundation's curves, written `eas
 sheets and code alike. Of the eepp actions only `TickAction` has callers outside tests; the others
 go, their tests moving to the tweens.
 
+As built on `vg` (2026-10-18): named eases, easings.net's ten families in, out and in-out over
+Foundation's curves, in sheets and code (f80dda733). `Node::Animate` returns a `Tween`; a sheet's
+property on a node a sheet styles goes into the node's animated layer (`MotionValue`), which the
+style pass composes over the cascade and its transitions, applying the cached style again when only
+motion changed (`MarkStyleMotionDirty`); a tween holds its end until `StopAnimation`; any other name,
+or any property of a node no sheet styles, moves through its reflected property; a tween waits,
+repeats, runs back and forth and calls back; `background-color` and `box-shadow` gained CSS's
+initial values (7f079d3dc). Groups: `TweenSequence` and `TweenParallel` of tweens, waits, calls and
+groups, repeated as a whole, each step starting with the time the last ran past its end
+(`Action::GetOverrun`); a tween's start takes its property from any other, inside a group too, and a
+replacement starts from the value showing now (10158f57b). Springs: `Tween::Spring`, `Retarget`
+and `Node::SpringTo`, the speed carried across a retarget in the value's units where both spans have
+a measure (214401c6a). eepp's Move, Fade, Scale, Delay, Runnable and Sequence actions and
+`ActionInterpolation` removed, their tests moved to tweens; `TickAction` stays (087307716). Scripts
+in both languages: `node.tween` (an expander's `animate` property took the name), `createTween`,
+`springTo`, `stopAnimation`, `play`, and the tweens' and groups' chains, `repeats` for repeat, a
+word of Luau's (2511db13d). The GUI's clock was already each root's, with its own time scale and
+pause, apart from a game's. Screen: a level's end on the Motion page, played by its script, and the
+named eases beside CSS's (fd87ea59a).
+Left: a tween of a sheet's property needs a style pass to show (a GUI with no StyleManager moves
+only reflected properties); a group repeats but does not run backwards (ping-pong is each tween's);
+a spring retargeted across shadows, transforms or gradients keeps its speed in progress, not in
+the value's units; a node's own scale is not reflected, so only a sheet's `transform` scales.
+
 ### E15 Retained rendering
 
 Facts: a drawn frame rebuilds every visible node's geometry; culling skips what is off screen and

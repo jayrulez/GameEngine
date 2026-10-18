@@ -409,6 +409,22 @@ export namespace experimental::gui
 
         void AddKeyframes(Keyframes keyframes) { m_keyframes.PushBack(core::Move(keyframes)); }
         void AddFontFace(FontFaceRule face) { m_fontFaces.PushBack(core::Move(face)); }
+        /// The paths it @imports, in order (E13): the style manager loads and expands them.
+        void AddImport(core::StringView path) { m_imports.PushBack(core::String(path)); }
+        [[nodiscard]] const Array<core::String>& Imports() const noexcept { return m_imports; }
+        /// Puts `imported`'s rules before its own (an import comes first in source order, so this
+        /// sheet's own win a tie), and takes its keyframes and font faces after its own.
+        void PrependImported(StyleSheet imported)
+        {
+            for (StyleRule& rule : m_rules)
+                imported.m_rules.PushBack(core::Move(rule));
+            m_rules = core::Move(imported.m_rules);
+            for (Keyframes& k : imported.m_keyframes)
+                m_keyframes.PushBack(core::Move(k));
+            for (FontFaceRule& f : imported.m_fontFaces)
+                m_fontFaces.PushBack(core::Move(f));
+            m_index.Built = false;
+        }
         [[nodiscard]] const Array<FontFaceRule>& FontFaces() const noexcept { return m_fontFaces; }
         [[nodiscard]] usize KeyframesCount() const noexcept { return m_keyframes.Size(); }
         [[nodiscard]] const Keyframes* FindKeyframes(core::StringView name) const
@@ -695,6 +711,7 @@ export namespace experimental::gui
         Array<StyleRule> m_rules;
         Array<Keyframes> m_keyframes;
         Array<FontFaceRule> m_fontFaces;
+        Array<core::String> m_imports;
         mutable RuleIndex m_index;
         core::String m_name;
     };

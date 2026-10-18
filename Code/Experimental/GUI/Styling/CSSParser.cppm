@@ -121,8 +121,13 @@ export namespace experimental::gui
                     if (i < n && src[i] == u8';')
                     {
                         ++i;
+                        // @import url(path) or "path" (E13): the style manager loads it through
+                        // its resource provider. Other at-statements are skipped.
+                        if (prelude.Size() > 7 && prelude.SubStr(0, 7) == core::StringView(u8"@import"))
+                            if (const core::StringView path = ImportPath(prelude.SubStr(7, prelude.Size() - 7)); path.Size() != 0)
+                                sheet.AddImport(path);
                         continue;
-                    } // at-statement (e.g. @import) - skipped
+                    }
                     if (i >= n)
                         break;
 
@@ -184,6 +189,29 @@ export namespace experimental::gui
 
                 EmitRules(sheet, source.LineOf(selectorList), selectorList, block, media);
             }
+        }
+
+        // An @import's path: its url() or its quoted string (a media list after it is ignored).
+        [[nodiscard]] static core::StringView ImportPath(core::StringView rest)
+        {
+            core::StringView s = Trim(rest);
+            if (s.Size() > 5 && s.SubStr(0, 4) == core::StringView(u8"url("))
+            {
+                usize close = 4;
+                while (close < s.Size() && s[close] != u8')')
+                    ++close;
+                s = Trim(s.SubStr(4, close - 4));
+            }
+            else if (s.Size() != 0 && (s[0] == u8'"' || s[0] == u8'\''))
+            {
+                usize close = 1;
+                while (close < s.Size() && s[close] != s[0])
+                    ++close;
+                return s.SubStr(1, close - 1);
+            }
+            if (s.Size() >= 2 && (s[0] == u8'"' || s[0] == u8'\'') && s[s.Size() - 1] == s[0])
+                s = s.SubStr(1, s.Size() - 2);
+            return s;
         }
 
         [[nodiscard]] static bool IsMedia(core::StringView prelude) noexcept

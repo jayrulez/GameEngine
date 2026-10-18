@@ -74,6 +74,24 @@ export namespace experimental::gui::vfs
             return raw;
         }
 
+        // A text file read whole (a sheet's @import).
+        bool LoadText(core::StringView path, core::String& out) override
+        {
+            if (m_fs == nullptr)
+                return false;
+            UniquePtr<IStream> stream = m_fs->Open(path, FileMode::Read);
+            if (!stream)
+                return false;
+            const i64 length = stream->Size();
+            if (length < 0)
+                return false;
+            Array<u8> buf;
+            buf.Resize(static_cast<usize>(length));
+            const u64 read = stream->Read(buf.Data(), static_cast<u64>(length));
+            out = core::String(core::StringView(reinterpret_cast<const char8_t*>(buf.Data()), static_cast<usize>(read)));
+            return true;
+        }
+
     private:
         struct Entry
         {

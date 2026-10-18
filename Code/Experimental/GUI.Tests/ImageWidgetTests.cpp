@@ -196,6 +196,7 @@ namespace
             ++loads;
             return path == core::StringView(u8"pic.png") ? &img : nullptr;
         }
+        bool LoadText(core::StringView, core::String&) override { return false; }
     };
 
     // Counts how it is drawn, and with what tint.

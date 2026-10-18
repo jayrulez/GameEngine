@@ -52,6 +52,7 @@ add_executable(GUI.Tests
     KeyboardTests.cpp
     CalcTests.cpp
     ColorFunctionTests.cpp
+    ImportTests.cpp
     AccessibilityTests.cpp
     EffectsTests.cpp
     ReactiveTests.cpp

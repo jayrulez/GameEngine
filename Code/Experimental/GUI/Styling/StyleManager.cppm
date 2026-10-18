@@ -36,6 +36,7 @@ import :style_applier;
 import :style_animation;
 import :resource_provider;
 import :css_values; // ParseLength
+import :css_parser; // an @import's sheet
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -89,6 +90,7 @@ export namespace experimental::gui
             m_allDirty = true; // hot-reload: every widget restyles
             m_relationsKnown = false;
             m_fontFacesLoaded = false;
+            m_importsExpanded = false;
         }
         [[nodiscard]] const StyleSheet& GetStyleSheet() const noexcept { return m_sheet; }
 
@@ -151,6 +153,7 @@ export namespace experimental::gui
         void SetResourceProvider(IResourceProvider* resources) noexcept
         {
             m_allDirty = m_allDirty || resources != m_resources;
+            m_importsExpanded = m_importsExpanded && resources == m_resources;
             m_resources = resources;
         }
         [[nodiscard]] IResourceProvider* GetResourceProvider() const noexcept
@@ -202,6 +205,8 @@ export namespace experimental::gui
             m_lastRestyleCount = 0;
             if (!m_relationsKnown)
                 LearnRelations();
+            if (!m_importsExpanded)
+                ExpandImports();
             if (!m_fontFacesLoaded)
                 LoadFontFaces();
             const bool all = m_allDirty;
@@ -625,6 +630,39 @@ export namespace experimental::gui
                                        part.Size() == 0 ? widget.GetInlineStyle() : core::Span<const InlineStyleDeclaration>{});
         }
 
+        // The sheet's @import, through the resource provider (E13): each imported sheet (its own
+        // imports first) before what imported it; a chain that comes back to a sheet stops there.
+        void ExpandImports()
+        {
+            m_importsExpanded = true;
+            if (m_resources == nullptr || m_sheet.Imports().IsEmpty())
+                return;
+            Array<core::String> chain;
+            chain.PushBack(core::String(m_sheet.Name()));
+            ExpandImportsOf(m_sheet, chain);
+            m_cache = {};
+            m_allDirty = true;
+            m_relationsKnown = false;
+        }
+        void ExpandImportsOf(StyleSheet& sheet, Array<core::String>& chain)
+        {
+            const Array<core::String> imports = sheet.Imports();
+            for (usize i = imports.Size(); i-- > 0;) // the last first: each goes in front of the rest
+            {
+                bool cycle = false;
+                for (const core::String& seen : chain)
+                    cycle = cycle || seen.AsView() == imports[i].AsView();
+                core::String text;
+                if (cycle || !m_resources->LoadText(imports[i].AsView(), text))
+                    continue;
+                StyleSheet imported = CSSParser::Parse(text.AsView(), imports[i].AsView());
+                chain.PushBack(imports[i]);
+                ExpandImportsOf(imported, chain);
+                chain.PopBack();
+                sheet.PrependImported(core::Move(imported));
+            }
+        }
+
         // The sheets' @font-face, through the host's loader: each under the name ChooseFace looks
         // for (the family, its weight's name, " Italic").
         void LoadFontFaces()
@@ -714,6 +752,7 @@ export namespace experimental::gui
         fonts::IFontService* m_fontService = nullptr; // non-owning; resolves font-family
         Function<bool(core::StringView, core::StringView)> m_fontFaceLoader; // the host's; loads @font-face
         bool m_fontFacesLoaded = false; // this sheet's faces were asked for
+        bool m_importsExpanded = false; // this sheet's @imports are in it
         f32 m_rootFontSize = 16.0f;                   // CSS `rem` base
         HashMap<Node*, ResolvedStyle> m_cache; // last-applied style per widget (non-owning keys)
         HashMap<Node*, RefPtr<StyleAnimation>> m_animations; // widget -> its running transitions and animations

@@ -32,5 +32,8 @@ export namespace experimental::gui
         // Load image data for a path (background-image: url(path)). Returns a borrowed pointer
         // owned by the provider (valid until the provider releases it), or null if not found.
         [[nodiscard]] virtual const image::ImageData* LoadImage(core::StringView path) = 0;
+        // A text file's contents (a sheet's @import, E13 of Specs/gui-lab-evolution-2.md): true and
+        // `out` filled when it is there.
+        [[nodiscard]] virtual bool LoadText(core::StringView path, core::String& out) = 0;
     };
 }

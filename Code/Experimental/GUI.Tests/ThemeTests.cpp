@@ -79,6 +79,7 @@ namespace
     private:
         static constexpr core::u8 kPixels[16] = {255, 0, 0,   255, 0,   255, 0,   255,
                                                  0,   0, 255, 255, 255, 255, 255, 255};
+        bool LoadText(core::StringView, core::String&) override { return false; }
     };
 
     // A font service that hands out one font, recording the requested family + size.

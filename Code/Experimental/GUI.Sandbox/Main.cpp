@@ -132,6 +132,15 @@ namespace
             m_images.PushBack(Entry{String(path), Move(picture)});
             return m_images[m_images.Size() - 1].Picture.Get();
         }
+        // A sheet's @import, from the data folder.
+        bool LoadText(StringView path, String& out) override
+        {
+            Result<Array<byte>> bytes = ReadFile(m_resolve(path).AsView(), AppRoot());
+            if (!bytes.HasValue())
+                return false;
+            out = String(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
+            return true;
+        }
 
     private:
         struct Entry

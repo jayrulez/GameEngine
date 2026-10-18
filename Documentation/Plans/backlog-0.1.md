@@ -106,44 +106,29 @@
 
 A survey of ours against LunarSong, RmlUi, AUI and eepp (text and fonts left out) found that
 most of the polish gap is in how our samples and themes use the framework, but these are real
-gaps in it, ranked by how much polish they cost, and two bugs. Done and moved to the week of
-2026-10-10: the sheet's opacity (a bug) and blending as authored rather than in linear light.
+gaps in it, ranked by how much polish they cost, and two bugs. Done: the sheet's opacity (a bug)
+and blending as authored (week of 2026-10-10); the shadow's corners (the other bug), rounded
+clipping, per-side borders, shadow lists, gradients, baseline alignment, device-pixel rounding
+under a scaled canvas, easing curves, sheet transforms, keyframe animations and colour filters
+(week of 2026-10-17). What is left of them:
 
-- **Bug: a shadow takes its radius from `corner-radius`, not from the background's radius**
-  (`View.cppm:1308`): Sky Hopper's `.cloud` and `.hud` cards (`GameTheme.sss`) round their
-  background with `radius=24`/`20` but set no `corner-radius`, so they cast square shadows. The
-  shadow should follow the shape it sits under.
-- **Game UI at a reference resolution is scaled as a transform** (`Engine.UI/UISubsystemImpl.cpp`,
-  the canvas scaler sets `Transform.Scale`): layout runs in reference pixels, so the device-pixel
-  rounding the DPI path does never sees the real scale, and rounded rects and strokes land on
-  fractional pixels (a 2 px border at 0.48 scale is a soft 0.96 px line). Feed the scale to
-  layout, as DPI is, instead.
-- **No rounded clipping in views**: VG has stencil path clipping (`VG/Context.cppm`,
-  `PushClipPath`, one level deep), but no view uses it, so a rounded card cannot hold an image, a
-  header bar or a scrolled list without its corners leaking. Clip to the rounded box, nested.
-- **Sheet gradients**: `gradient()` takes two colours and four directions and ignores the corner
-  radius (`SSSParser.cppm:1433`). Stops, angles, radial, and the box's rounding.
-- **No offscreen layers in VG**: opacity is per vertex (`VG/Context.cppm`), so a fading card shows
-  its children through each other and state cross-fades double-blend translucent backgrounds; and
-  there is no backdrop blur or filter (desaturate, glow). One layer seam serves all three. Built
-  (V3 of `Specs/vg-and-gui-lab.md`): group opacity, `filter: blur()`, `backdrop-filter: blur()`;
-  desaturate and glow remain.
-- **Motion in sheets**: no `transform` property (rotate, skew, scale), no keyframes, and only
-  quadratic easings (no `cubic-bezier`), so hover lifts, press squashes and focus pulses need
-  script.
-- **Box paint**: one shadow per box; no per-side borders in sheets (VG draws a colour per side
-  since e220e7d42, which no drawable uses yet) or border styles; `var()` cannot reach inside a
-  drawable's arguments.
-- **Baseline alignment in FlexLayout** (user 2026-10-16; found by the GUI lab assessments): markup
-  takes `align-items="baseline"` and `align-self="baseline"` (`MarkupRegistry.cppm:397`, `:683`)
-  and `Align::Baseline` exists, but FlexLayout treats it as `start` (`FlexLayout.cppm:500`), so a
-  row of mixed text sizes asking for baseline alignment is top-aligned instead. Views need to
-  report a baseline (a text view its first line's, others the bottom of their content box) for
-  the cross-axis placement to use. The GUI lab has no baseline alignment yet either; its layout
-  design covers it.
-- **To check visually**: the fill is drawn over the full bounds and the border stroked inset on
-  top (`RoundedRectDrawable.cppm`), which may leave a faint fill-coloured halo outside a thin or
-  translucent border at the corners.
+- **A content-shaped glow**: CSS's `filter: drop-shadow()`, a blurred, tinted copy of what a view
+  draws under it. It needs a layer drawn twice, sharp and blurred (VG keeps one blurred copy for
+  backdrops only). A box's glow is already a `box-shadow` with no offset.
+- **More colour filters**: `contrast()`, `sepia()`, `hue-rotate()`, `invert()` and `opacity()`
+  are not drawn (an unknown function leaves `filter` unset); the layer shader takes saturation
+  and brightness through the composite's effect pair, which has no room for more.
+- **Transforms as CSS writes them**: a sheet's `transform` applies translate, rotate, then scale
+  whatever order it lists them in, and has no `skew()` or `transform-origin` (it pivots about the
+  view's own Transform origin, the centre by default).
+- **Box paint**: border styles (dashed, dotted) need VG stroking of their own; `var()` cannot
+  reach inside a drawable's arguments.
+- **Keyframes**: a keyframe cannot set its own timing function (every segment takes the
+  animation's), and no event says an animation ended or iterated.
+- **To check visually**: without the box shaders (the analytic box path, which both hosts give
+  VG) the fill is drawn over the full bounds and the border stroked inset on top
+  (`RoundedRectDrawable.cppm`), which may leave a faint halo outside a thin or translucent border
+  at the corners. With them, fill and border come from one distance (726dbc5a3) and have none.
 
 ### Scripts
 

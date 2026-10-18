@@ -171,6 +171,7 @@ export namespace experimental::gui
         Array<core::String> m_classes;
         Array<AttributeTest> m_attributes;
         Array<NthPattern> m_nths;
+        Array<core::String> m_langs;  // :lang(list): the widget's language is one of them or under one
         Array<StyleSelector> m_not;   // :not(list): matches none
         Array<StyleSelector> m_is;    // :is(list): matches one
         Array<StyleSelector> m_where; // :where(list): as :is, adding no specificity
@@ -670,6 +671,26 @@ export namespace experimental::gui
             return test;
         }
 
+        // Whether `language` is one of `ranges` or a sub-language of one (`pt-BR` under `pt`),
+        // ignoring case and `_` against `-`.
+        [[nodiscard]] inline bool LanguageMatches(core::StringView language, const Array<core::String>& ranges)
+        {
+            const auto lower = [](utf8char c)
+            { return c == u8'_' ? u8'-' : (c >= u8'A' && c <= u8'Z') ? static_cast<utf8char>(c - u8'A' + u8'a') : c; };
+            for (const core::String& range : ranges)
+            {
+                const core::StringView r = range.AsView();
+                if (r.Size() > language.Size())
+                    continue;
+                bool same = true;
+                for (usize i = 0; same && i < r.Size(); ++i)
+                    same = lower(r[i]) == lower(language[i]);
+                if (same && (r.Size() == language.Size() || language[r.Size()] == u8'-' || language[r.Size()] == u8'_'))
+                    return true;
+            }
+            return false;
+        }
+
         // The 1-based position of `element` among its parent's widgets (of its tag when
         // `ofType`), from the start or the end.
         [[nodiscard]] inline i32 PositionAmongSiblings(const UIWidget& element, bool ofType, bool fromEnd)
@@ -731,6 +752,8 @@ export namespace experimental::gui
             if (!detail::AttributeMatches(test, element))
                 return false;
         if (!MatchesPseudo(element, applyPseudo))
+            return false;
+        if (!m_langs.IsEmpty() && !detail::LanguageMatches(element.Language(), m_langs))
             return false;
         for (const NthPattern& nth : m_nths)
             if (!nth.Matches(detail::PositionAmongSiblings(element, nth.OfType, nth.FromEnd)))
@@ -934,6 +957,15 @@ export namespace experimental::gui
                 nth.Value().FromEnd = name == core::StringView(u8"nth-last-child") || name == core::StringView(u8"nth-last-of-type");
                 m_nths.PushBack(nth.Value());
             }
+            else if (name == core::StringView(u8"lang"))
+            {
+                // :lang(pt) matches pt and pt-BR (a language and its regions); a list matches any.
+                for (const core::StringView part : StyleSelector::SplitList(argument))
+                    if (const core::StringView lang = core::Trim(part); lang.Size() != 0)
+                        m_langs.PushBack(core::String(lang));
+                if (m_langs.IsEmpty())
+                    m_never = true;
+            }
             else
                 m_never = true; // an unknown function
             return;
@@ -981,7 +1013,7 @@ export namespace experimental::gui
         if (m_id.AsView().Size() != 0)
             s += kSpecificityId;
         u32 pseudo = m_pseudo | (m_partPseudo << 16); // a part's states count as pseudo-classes too
-        i64 classes = static_cast<i64>(m_classes.Size() + m_attributes.Size() + m_nths.Size());
+        i64 classes = static_cast<i64>(m_classes.Size() + m_attributes.Size() + m_nths.Size() + (m_langs.IsEmpty() ? 0u : 1u));
         while (pseudo != 0)
         {
             classes += pseudo & 1u;

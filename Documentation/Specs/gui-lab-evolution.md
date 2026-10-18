@@ -1117,9 +1117,10 @@ Design (approved 2026-10-17, with the rulings below), in layers:
   widget's joins with no list: a label's and a button's text, a tooltip, a placeholder) keeps its
   source and shows its resolution: markup writes a key as `text="@menu.play"`, and text without
   the `@` stays as written. `auto-translate` (inherit, always, off; the root always), resolved up
-  the tree and cached, Godot's. A binding's template is a key too (`text="@files.count"` with
-  `count="{{n}}"` and arguments from bindings), formatted with `FormatPlural` and `Format` before
-  it fills (not after, which breaks keys). The `Localization`'s `OnChanged` re-resolves every
+  the tree and cached, Godot's. A key takes a count and arguments from sibling attributes named
+  for its property (`text="@files.count" text-count="{{n}}" text-args="{{player}}"`, each a value or
+  a binding), formatted with `FormatPlural` and `Format` before anything fills (not after, which
+  breaks keys); `@@` writes a literal @. The `Localization`'s `OnChanged` re-resolves every
   translated property in the GUI's roots, and a node joining a tree resolves on entry.
   `:lang(xx)` matches a node's language (the `lang` attribute, inherited, else the context's).
   Pseudolocalization is the `Localization`'s, told to leave the lab's rich-text tags and bindings

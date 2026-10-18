@@ -365,6 +365,59 @@ namespace experimental::gui
         return true;
     }
 
+    bool Node::BindTranslation(StringView property, StringView key, RefPtr<DataModel> data, Optional<TranslationArgument> count,
+                               Array<TranslationArgument> args)
+    {
+        const PropertyInfo* info = FindReflectedProperty(GetType(), property);
+        if (info == nullptr || FindAttribute(*info, u8"translatable") == nullptr)
+            return false;
+        const core::String keyText(key);
+        bool recorded = false;
+        for (TranslatedProperty& t : m_translations)
+            if (t.Property.AsView() == property)
+            {
+                t.Key = keyText;
+                recorded = true;
+            }
+        if (!recorded)
+            m_translations.PushBack(TranslatedProperty{core::String(property), keyText});
+        return BindProperty(property,
+                            [this, keyText, data = core::Move(data), count = core::Move(count), args = core::Move(args)]() -> core::Variant
+                            {
+                                // The GUI it is in (a binding made before it joins one reruns when it does).
+                                SceneRoot* root = ObserveSceneRoot();
+                                foundation::i18n::Localization* loc = root != nullptr ? root->GetContext().GetLocalization() : nullptr;
+                                if (root != nullptr)
+                                    root->GetContext().TrackLanguage();
+                                if (loc == nullptr || !IsAutoTranslating())
+                                    return core::Variant::From<core::String>(keyText);
+                                // Arguments as text, a named one read from the GUI's data (followed).
+                                const auto value = [&data](const TranslationArgument& a) -> core::Variant
+                                {
+                                    if (a.IsName && data)
+                                        return data->Get(a.Text.AsView());
+                                    return core::Variant::From<core::String>(a.Text);
+                                };
+                                Array<core::Variant> values;
+                                i64 n = 0;
+                                if (count.HasValue())
+                                {
+                                    const core::Variant c = ConvertVariant(value(count.Value()), TypeOf<i64>());
+                                    if (const i64* v = c.TryGet<i64>())
+                                        n = *v;
+                                    values.PushBack(core::Variant::From<i64>(n));
+                                }
+                                for (const TranslationArgument& a : args)
+                                    values.PushBack(core::Variant::From<core::String>(FormatVariant(value(a))));
+                                const Span<const core::Variant> span(values.Data(), values.Size());
+                                if (count.HasValue())
+                                    return core::Variant::From<core::String>(loc->FormatPlural(keyText.AsView(), n, span));
+                                if (!args.IsEmpty())
+                                    return core::Variant::From<core::String>(loc->Format(keyText.AsView(), span));
+                                return core::Variant::From<core::String>(core::String(loc->Text(keyText.AsView())));
+                            });
+    }
+
     bool Node::BindPropertyBack(StringView name, core::Function<void(const core::Variant&)> write)
     {
         const PropertyInfo* property = FindReflectedProperty(GetType(), name);
@@ -641,6 +694,9 @@ namespace experimental::gui
         builder.AccessorProperty<&Node::GetKeyContext, &Node::SetKeyContext>("keyContext").PropAttribute("css", core::String(u8"key-context"));
         builder.AccessorProperty<&Node::GetPointerEvents, &Node::SetPointerEvents>("pointerEvents").PropAttribute("css", core::String(u8"pointer-events"));
         builder.AccessorProperty<&Node::GetCursorName, &Node::SetCursorName>("cursor").PropAttribute("css", core::String(u8"cursor"));
+        builder.AccessorProperty<&Node::GetAutoTranslateName, &Node::SetAutoTranslateName>("autoTranslate")
+            .PropAttribute("css", core::String(u8"auto-translate"));
+        builder.AccessorProperty<&Node::GetLang, &Node::SetLang>("lang").PropAttribute("css", core::String(u8"lang"));
         builder.Method<&Node::AddElement, Node>("add");
         builder.Method<&Node::FindElement, Node>("find");
         builder.Method<&Node::ParentElement, Node>("parent");
@@ -668,7 +724,9 @@ namespace experimental::gui
     REFLECT_MEMBERS(UIWidget, "rtti::gui")
     {
         builder.AccessorProperty<&UIWidget::GetId, &UIWidget::SetId>("id");
-        builder.AccessorProperty<&UIWidget::GetTooltipText, &UIWidget::SetTooltip>("tooltip").PropAttribute("css", core::String(u8"tooltip"));
+        builder.AccessorProperty<&UIWidget::GetTooltipText, &UIWidget::SetTooltip>("tooltip")
+            .PropAttribute("css", core::String(u8"tooltip"))
+            .PropAttribute("translatable", true);
         builder.AccessorProperty<&UIWidget::GetContextMenuId, &UIWidget::SetContextMenuId>("contextMenu")
             .PropAttribute("css", core::String(u8"context-menu"));
         builder.AccessorProperty<&UIWidget::GetDragType, &UIWidget::SetDragType>("dragType").PropAttribute("css", core::String(u8"drag-type"));
@@ -685,7 +743,7 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(Label, "rtti::gui")
     {
-        builder.AccessorProperty<&Label::GetText, &Label::SetText>("text");
+        builder.AccessorProperty<&Label::GetText, &Label::SetText>("text").PropAttribute("translatable", true);
         builder.AccessorProperty<&Label::GetTextColor, &Label::SetTextColor>("textColor");
         builder.AccessorProperty<&Label::IsRich, &Label::SetRich>("rich");
         builder.AccessorProperty<&Label::GetTextOverflowName, &Label::SetTextOverflowName>("textOverflow")
@@ -703,7 +761,7 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(ButtonBase, "rtti::gui")
     {
-        builder.AccessorProperty<&ButtonBase::GetText, &ButtonBase::SetText>("text");
+        builder.AccessorProperty<&ButtonBase::GetText, &ButtonBase::SetText>("text").PropAttribute("translatable", true);
         builder.AccessorProperty<&ButtonBase::IsToggle, &ButtonBase::SetToggle>("toggle").PropAttribute("css", core::String(u8"toggle"));
         builder.AccessorProperty<&ButtonBase::IsChecked, &ButtonBase::SetChecked>("checked")
             .PropAttribute("css", core::String(u8"checked"))
@@ -787,7 +845,9 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(TextEditBase, "rtti::gui")
     {
-        builder.AccessorProperty<&TextEditBase::GetPlaceholder, &TextEditBase::SetPlaceholder>("placeholder").PropAttribute("css", core::String(u8"placeholder"));
+        builder.AccessorProperty<&TextEditBase::GetPlaceholder, &TextEditBase::SetPlaceholder>("placeholder")
+            .PropAttribute("css", core::String(u8"placeholder"))
+            .PropAttribute("translatable", true);
         builder.AccessorProperty<&TextEditBase::GetMaxLength, &TextEditBase::SetMaxLength>("maxLength").PropAttribute("css", core::String(u8"max-length"));
         builder.AccessorProperty<&TextEditBase::IsReadOnly, &TextEditBase::SetReadOnly>("readOnly").PropAttribute("css", core::String(u8"read-only"));
         builder.AccessorProperty<&TextEditBase::GetInputFilterName, &TextEditBase::SetInputFilterName>("inputFilter")

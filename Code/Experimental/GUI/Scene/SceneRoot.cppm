@@ -49,6 +49,7 @@ import :data_model;
 import :commands;
 import :keymap;
 import foundation.fonts;   // IFontService
+import foundation.i18n;    // Localization (E9a)
 import :resource_provider; // IResourceProvider
 import :text_editing_keys; // the editing keys every GUI starts with (E4)
 
@@ -77,7 +78,11 @@ export namespace experimental::gui
         }
         GUIContext(const GUIContext&) = delete;
         GUIContext& operator=(const GUIContext&) = delete;
-        ~GUIContext() override { m_elements->Close(); }
+        ~GUIContext() override
+        {
+            SetLocalization(nullptr);
+            m_elements->Close();
+        }
 
         /// Advances every root by `elapsed`, once a frame: the clock (each root's actions at its own
         /// time scale), each root's input repeat and per-frame hook, the bindings whose values
@@ -97,6 +102,25 @@ export namespace experimental::gui
         void SetFontService(fonts::IFontService* fonts) noexcept { m_fontService = fonts; }
         [[nodiscard]] fonts::IFontService* GetFontService() const noexcept { return m_fontService; }
         void SetResourceProvider(IResourceProvider* resources) noexcept { m_resources = resources; }
+        /// The texts its translated properties resolve through (E9a), the host's; not owned. Its
+        /// changes (a language, a table, pseudolocalization) re-resolve every translated property
+        /// and restyle the roots (`:lang`). Null: a translated property shows its key.
+        void SetLocalization(foundation::i18n::Localization* localization)
+        {
+            if (localization == m_localization)
+                return;
+            if (m_localization != nullptr)
+                m_localization->RemoveOnChanged(m_localizationToken);
+            m_localization = localization;
+            m_localizationToken = 0;
+            if (m_localization != nullptr)
+                m_localizationToken = m_localization->OnChanged([this]() { LanguageChanged(); });
+            LanguageChanged();
+        }
+        [[nodiscard]] foundation::i18n::Localization* GetLocalization() const noexcept { return m_localization; }
+        /// Read by what follows the language (a translated property's binding): it reruns when it
+        /// changes.
+        void TrackLanguage() const { m_languageChanged.Track(); }
         [[nodiscard]] IResourceProvider* GetResourceProvider() const noexcept { return m_resources; }
         [[nodiscard]] ElementTable* GetElementTable() noexcept { return m_elements.Get(); }
         [[nodiscard]] const ElementSet& GetElementSet() const noexcept { return m_elementSet; }
@@ -145,6 +169,9 @@ export namespace experimental::gui
         Keymap m_keymap;
         fonts::IFontService* m_fontService = nullptr;
         IResourceProvider* m_resources = nullptr;
+        foundation::i18n::Localization* m_localization = nullptr; // the host's
+        u32 m_localizationToken = 0;
+        Observable m_languageChanged;
         Array<Keystroke> m_chord; // a chord typed so far (in the active root)
         f32 m_chordAge = 0.0f;
         static constexpr f32 kChordTimeout = 1.0f;
@@ -154,6 +181,7 @@ export namespace experimental::gui
         u32 m_lastBindingCount = 0;
 
         void AddRoot(SceneRoot& root) { m_roots.PushBack(&root); }
+        void LanguageChanged(); // after SceneRoot, which it restyles
         void RemoveRoot(SceneRoot& root)
         {
             for (usize i = 0; i < m_roots.Size(); ++i)
@@ -424,6 +452,12 @@ export namespace experimental::gui
 
     protected:
         [[nodiscard]] f32 TopPixelScale() const override { return m_displayScale; }
+        // A node with no `lang` above it speaks the GUI's language (its Localization's).
+        [[nodiscard]] core::String ContextLanguage() const override
+        {
+            const foundation::i18n::Localization* loc = m_context->GetLocalization();
+            return loc != nullptr ? core::String(loc->Language()) : core::String{};
+        }
         void OnDrawAbove(DrawContext& ctx) override
         {
             m_eventDispatcher.DrawPopups(ctx); // the top layer, after the tree (E5)
@@ -562,6 +596,13 @@ export namespace experimental::gui
         m_mutationQueue.Drain();
         for (SceneRoot* root : m_roots)
             root->UpdateLayout();
+    }
+
+    inline void GUIContext::LanguageChanged()
+    {
+        m_languageChanged.Notify(); // translated properties resolve again
+        for (SceneRoot* root : m_roots)
+            root->MarkStyleDirty(true); // what :lang matches may differ
     }
 
     inline void GUIContext::TookInput(SceneRoot& root)

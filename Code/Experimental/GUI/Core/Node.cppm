@@ -1670,6 +1670,93 @@ export namespace experimental::gui
             Invalidate();
         }
 
+        // === Translation (E9a of Specs/gui-lab-evolution.md) ===
+
+        /// Whether its translated properties resolve their keys: as what holds it does (the root
+        /// does), always, or never (a key then shows as written).
+        enum class AutoTranslate : u8
+        {
+            Inherit,
+            Always,
+            Off,
+        };
+        void SetAutoTranslate(AutoTranslate mode)
+        {
+            if (mode == m_autoTranslate)
+                return;
+            m_autoTranslate = mode;
+            m_translationChanged.Notify();
+        }
+        [[nodiscard]] AutoTranslate GetAutoTranslate() const noexcept { return m_autoTranslate; }
+        void SetAutoTranslateName(const core::String& name)
+        {
+            SetAutoTranslate(name == core::StringView(u8"always") ? AutoTranslate::Always
+                             : name == core::StringView(u8"off")  ? AutoTranslate::Off
+                                                                  : AutoTranslate::Inherit);
+        }
+        [[nodiscard]] core::String GetAutoTranslateName() const
+        {
+            return core::String(m_autoTranslate == AutoTranslate::Always ? core::StringView(u8"always")
+                                : m_autoTranslate == AutoTranslate::Off  ? core::StringView(u8"off")
+                                                                         : core::StringView(u8"inherit"));
+        }
+        /// Whether its translated properties resolve now (the first ancestor not inheriting says;
+        /// the top of a tree does). Read by a translated binding, which follows a change above.
+        [[nodiscard]] bool IsAutoTranslating() const
+        {
+            for (const Node* n = this; n != nullptr; n = n->m_parent)
+            {
+                n->m_translationChanged.Track();
+                if (n->m_autoTranslate != AutoTranslate::Inherit)
+                    return n->m_autoTranslate == AutoTranslate::Always;
+            }
+            return true;
+        }
+
+        /// The language it speaks (`lang`, as markup's attribute; inherited: empty takes what holds
+        /// it speaks, the top of a GUI its Localization's). `:lang()` matches it.
+        void SetLang(const core::String& lang)
+        {
+            if (lang == m_lang)
+                return;
+            m_lang = lang;
+            MarkStyleDirty(true); // what :lang matches here and below may differ
+        }
+        [[nodiscard]] core::String GetLang() const { return m_lang; }
+        [[nodiscard]] core::String Language() const
+        {
+            for (const Node* n = this; n != nullptr; n = n->m_parent)
+            {
+                if (!n->m_lang.IsEmpty())
+                    return n->m_lang;
+                if (n->m_parent == nullptr)
+                    return n->ContextLanguage();
+            }
+            return {};
+        }
+
+        /// One argument of a translated text: a literal, or a value of the GUI's data by name.
+        struct TranslationArgument
+        {
+            core::String Text;
+            bool IsName = false;
+        };
+        /// Binds reflected property `property` (one marked `translatable`) to the text of `key` in
+        /// the GUI's Localization: resolved now and again when the language changes, the node joins
+        /// a GUI, or a named argument changes. With a count, the key's plural form for it, `{0}`
+        /// the count and `args` from `{1}`; else `args` from `{0}`. A key shows as written while no
+        /// Localization is set or auto-translation is off. False when the property is none such.
+        bool BindTranslation(core::StringView property, core::StringView key, RefPtr<DataModel> data = {},
+                             Optional<TranslationArgument> count = {}, Array<TranslationArgument> args = {}); // GUIReflectionImpl.cpp
+        /// The key a translated property resolves (null when it is not translated).
+        [[nodiscard]] const core::String* TranslationKey(core::StringView property) const
+        {
+            for (const TranslatedProperty& t : m_translations)
+                if (t.Property.AsView() == property)
+                    return &t.Key;
+            return nullptr;
+        }
+
         // === Bindings (G5 of Specs/vg-and-gui-lab.md) ===
 
         /// Runs `body` now, and again on this GUI's frame whenever something it read changed (at
@@ -1835,6 +1922,8 @@ export namespace experimental::gui
         /// The device pixels per logical unit the top of a tree lays out on (its children take
         /// theirs from it): 1, or a GUI root's display scale.
         [[nodiscard]] virtual f32 TopPixelScale() const { return 1.0f; }
+        /// The language of a tree with no `lang` on it: none, or a GUI root's Localization's.
+        [[nodiscard]] virtual core::String ContextLanguage() const { return {}; }
         /// Draws over this node and everything under it, after them, in its space and at full
         /// opacity: what a GUI root puts over its tree (the layout overlay).
         virtual void OnDrawAbove(DrawContext&) {}
@@ -2092,6 +2181,15 @@ export namespace experimental::gui
         u32 m_forcedStyleStates = 0;            // StyleState bits the style pass reads as set
         bool m_invalidatedSelf = true;          // invalidated itself (not through a descendant) since drawn
         u8 m_quietInvalidations = 0;            // inside BeginQuietInvalidation's
+        AutoTranslate m_autoTranslate = AutoTranslate::Inherit;
+        mutable Observable m_translationChanged; // its auto-translation changed (its translated bindings follow)
+        core::String m_lang;                     // its language, empty: inherited
+        struct TranslatedProperty
+        {
+            core::String Property;
+            core::String Key;
+        };
+        Array<TranslatedProperty> m_translations; // what BindTranslation bound (the inspector reads it)
         mutable Rect m_subtreeInk{};
         bool m_styleDirty = true;          // restyle this node
         bool m_styleSubtreeDirty = true;   // ... and every descendant

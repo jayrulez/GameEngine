@@ -41,6 +41,7 @@ add_executable(GUI.Tests
     FrameStatsTests.cpp
     CullingTests.cpp
     DebugOverlayTests.cpp
+    TranslationTests.cpp
     EffectsTests.cpp
     ReactiveTests.cpp
     BindingTests.cpp

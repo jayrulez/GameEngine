@@ -42,7 +42,7 @@ namespace
         style.Font = faces.Roboto();
         style.Fonts = &faces.service;
         style.Family = String(u8"Roboto");
-        style.FallbackFamilies = String(fallbacks);
+        style.Selection.FallbackFamilies = String(fallbacks);
         style.Size = 16.0f;
         return style;
     }
@@ -151,7 +151,7 @@ TEST_CASE("font fallback: a sheet's font-family list gives a label its font, its
     styles.ApplyTree(*root.Get());
 
     CHECK(label->GetTextStyle().FontFamily == StringView(u8"Roboto"));
-    CHECK(label->GetTextStyle().FallbackFamilies == StringView(u8"DejaVu"));
+    CHECK(label->GetTextStyle().Selection.FallbackFamilies == StringView(u8"DejaVu"));
     CHECK(label->GetFont() == faces.Roboto());
     const TextLayout& layout = label->GetTextLayout().LayoutFor(Rect{0.0f, 0.0f, 400.0f, 40.0f});
     const LaidOutGlyphs* arabic = RunOf(layout, 3, 11);

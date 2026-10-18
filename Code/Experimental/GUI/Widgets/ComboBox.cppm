@@ -155,7 +155,7 @@ export namespace experimental::gui
         void OnTextStyleChange() override
         {
             m_text.SetFont(GetFont());
-            m_text.SetFallbackFamilies(GetFontService(), GetTextStyle().FallbackFamilies.AsView());
+            m_text.SetFontSelection(GetFontService(), GetTextStyle().FontFamily.AsView(), GetTextStyle().Selection);
             m_text.SetDirection(TextDirectionFor());
             m_text.SetColor(GetTextColor());
             m_arrowColor = GetTextColor();

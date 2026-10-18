@@ -61,8 +61,8 @@ export namespace experimental::gui
             Color TextColor = Color::White;
             fonts::CachedFont* Font = nullptr;
             core::String FontFamily; ///< the font's family as CSS names it (empty: unknown)
-            /// The rest of its font-family list (comma separated): faces for what the font lacks.
-            core::String FallbackFamilies;
+            /// Its font-family list's rest, its font-weight and its font-style (E11).
+            FontSelection Selection;
             f32 FontSize = 0.0f;     ///< in pixels (0: unknown)
             TextHAlign HAlign = TextHAlign::Start;
             TextVAlign VAlign = TextVAlign::Top;
@@ -73,7 +73,7 @@ export namespace experimental::gui
             [[nodiscard]] bool operator==(const TextStyle& o) const noexcept
             {
                 return TextColor == o.TextColor && Font == o.Font && FontFamily == o.FontFamily &&
-                       FallbackFamilies == o.FallbackFamilies && FontSize == o.FontSize &&
+                       Selection == o.Selection && FontSize == o.FontSize &&
                        HAlign == o.HAlign && VAlign == o.VAlign && WhiteSpace == o.WhiteSpace && LineHeight == o.LineHeight &&
                        LineHeightFactor == o.LineHeightFactor && LetterSpacing == o.LetterSpacing;
             }
@@ -93,7 +93,7 @@ export namespace experimental::gui
             TextStyle style = m_textStyle;
             style.Font = font;
             style.FontFamily = font != nullptr && font->font != nullptr ? core::String(font->font->FamilyName()) : core::String{};
-            style.FallbackFamilies.Clear();
+            style.Selection.FallbackFamilies.Clear();
             style.FontSize = font != nullptr && font->font != nullptr ? font->font->PixelHeight() : 0.0f;
             ChangeTextStyle(style);
         }
@@ -128,6 +128,22 @@ export namespace experimental::gui
             PinStyle(SlotBit(SlotLetterSpacing));
             TextStyle style = m_textStyle;
             style.LetterSpacing = pixels;
+            ChangeTextStyle(style);
+        }
+        /// CSS's font-weight (inherited), 100 to 900: the face of the nearest weight the family has.
+        void SetFontWeight(u16 weight)
+        {
+            PinStyle(SlotBit(SlotFontWeight));
+            TextStyle style = m_textStyle;
+            style.Selection.Weight = core::Clamp<u16>(weight, 1, 1000);
+            ChangeTextStyle(style);
+        }
+        /// CSS's font-style (inherited): italic takes the family's italic face, or slants.
+        void SetFontItalic(bool italic)
+        {
+            PinStyle(SlotBit(SlotFontStyle));
+            TextStyle style = m_textStyle;
+            style.Selection.Italic = italic;
             ChangeTextStyle(style);
         }
         [[nodiscard]] TextWhiteSpace GetWhiteSpace() const noexcept { return m_textStyle.WhiteSpace; }
@@ -166,7 +182,7 @@ export namespace experimental::gui
             TextStyle style = child.m_textStyle;
             style.Font = m_textStyle.Font;
             style.FontFamily = m_textStyle.FontFamily;
-            style.FallbackFamilies = m_textStyle.FallbackFamilies;
+            style.Selection = m_textStyle.Selection;
             style.FontSize = m_textStyle.FontSize;
             if (color)
                 style.TextColor = m_textStyle.TextColor;

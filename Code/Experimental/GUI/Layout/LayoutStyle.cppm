@@ -293,6 +293,7 @@ export namespace experimental::gui
         SlotColor, SlotFontFamily, SlotFontSize, SlotTextAlign, SlotVerticalAlign,
         SlotWhiteSpace, SlotLineHeight, SlotLetterSpacing,
         SlotDirection,
+        SlotFontWeight, SlotFontStyle,
         SlotCount,
     };
     static_assert(SlotCount <= 64, "the pins are one u64");
@@ -317,6 +318,7 @@ export namespace experimental::gui
             u8"color", u8"font-family", u8"font-size", u8"text-align", u8"vertical-align",
             u8"white-space", u8"line-height", u8"letter-spacing",
             u8"direction",
+            u8"font-weight", u8"font-style",
         };
         static_assert(sizeof(kNames) / sizeof(kNames[0]) == SlotCount, "a name for every slot");
         return kNames[slot];

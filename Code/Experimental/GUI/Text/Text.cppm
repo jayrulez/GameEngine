@@ -87,16 +87,18 @@ export namespace experimental::gui
             Dirty();
         }
         [[nodiscard]] fonts::CachedFont* GetFont() const noexcept { return m_font; }
-        /// The families a character its font lacks is drawn in, in order (a font-family list's rest,
-        /// comma separated), and the service that has them (a rich text's own faces come from it
-        /// too).
-        void SetFallbackFamilies(fonts::IFontService* service, core::StringView families)
+        /// What of the font CSS chose past its size: the family as the sheet names it (its faces
+        /// are named after it, not after the font file's own name), the fallback families, the
+        /// weight and the style; and the service that has those faces (a rich text's own faces
+        /// come from it too).
+        void SetFontSelection(fonts::IFontService* service, core::StringView family, const FontSelection& selection)
         {
-            if (families.Size() != 0)
+            if (!(selection == FontSelection{}))
                 SetFontService(service);
-            if (families == m_fallbackFamilies.AsView())
+            if (selection == m_selection && family == m_family.AsView())
                 return;
-            m_fallbackFamilies = core::String(families);
+            m_selection = selection;
+            m_family = core::String(family);
             Dirty();
         }
         /// A font that can draw (one is set and loaded).
@@ -381,10 +383,10 @@ export namespace experimental::gui
             style.Fonts = m_fontService;
             if (HasFont())
             {
-                style.Family = core::String(m_font->font->FamilyName());
+                style.Family = m_family.Size() != 0 ? m_family : core::String(m_font->font->FamilyName());
                 style.Size = m_font->font->PixelHeight();
             }
-            style.FallbackFamilies = m_fallbackFamilies;
+            style.Selection = m_selection;
             style.TextColor = m_color;
             style.Align = m_hAlign;
             style.Wrap = IsWrapping();
@@ -439,7 +441,8 @@ export namespace experimental::gui
         bool m_rich = false;
         fonts::CachedFont* m_font = nullptr; // non-owning (owned by the font service)
         fonts::IFontService* m_fontService = nullptr;
-        core::String m_fallbackFamilies;
+        FontSelection m_selection;
+        core::String m_family; // as the sheet names it (empty: the font's own name)
         IResourceProvider* m_resources = nullptr;
         Color m_color = Color::White;
         TextHAlign m_hAlign = TextHAlign::Start;

@@ -103,15 +103,27 @@ export namespace experimental::gui
         return FontDraws(font, core::StringView(u8"\u2026")) ? core::StringView(u8"\u2026") : core::StringView(u8"...");
     }
 
+    /// What CSS chooses of a font past its family and size (E11 of Specs/gui-lab-evolution-2.md):
+    /// the families a character the font lacks falls back to, the weight and the style.
+    struct FontSelection
+    {
+        /// The rest of a font-family list (comma separated), in order.
+        core::String FallbackFamilies;
+        u16 Weight = 400; ///< 100 to 900, CSS's font-weight
+        bool Italic = false;
+        [[nodiscard]] bool operator==(const FontSelection& o) const noexcept
+        {
+            return FallbackFamilies == o.FallbackFamilies && Weight == o.Weight && Italic == o.Italic;
+        }
+    };
     /// What a run takes when its markup leaves a style unset, and how the lines go.
     struct TextLayoutStyle
     {
         fonts::CachedFont* Font = nullptr;    ///< the label's font: plain runs draw in it
         fonts::IFontService* Fonts = nullptr; ///< resolves a run's own family, size, bold and italic
         core::String Family;                  ///< the label's family as the service names it
-        /// The rest of the label's `font-family` list (comma separated): the faces, in order, a
-        /// character Family lacks is drawn in.
-        core::String FallbackFamilies;
+        /// The label's fallback families, weight and style: a run takes its face from them.
+        FontSelection Selection;
         f32 Size = 16.0f;                     ///< the label's size in pixels
         Color TextColor = Color::White;
         TextHAlign Align = TextHAlign::Left;
@@ -498,6 +510,93 @@ export namespace experimental::gui
             name.Append(core::StringView(suffix));
             return name;
         }
+
+        /// The name a family's face of a weight is loaded under: "Roboto Light", "Roboto", "Roboto
+        /// Bold" (the weights' common names, as font files name them).
+        [[nodiscard]] constexpr const char8_t* WeightSuffix(u16 weight) noexcept
+        {
+            constexpr const char8_t* kSuffixes[] = {u8" Thin", u8" ExtraLight", u8" Light", u8"", u8" Medium",
+                                                    u8" SemiBold", u8" Bold", u8" ExtraBold", u8" Black"};
+            return kSuffixes[(core::Clamp<u16>(weight, 100, 900) + 50) / 100 - 1];
+        }
+        /// CSS's bolder and lighter, from the weight inherited.
+        [[nodiscard]] constexpr u16 Bolder(u16 weight) noexcept { return weight < 350 ? 400 : weight < 550 ? 700 : 900; }
+        [[nodiscard]] constexpr u16 Lighter(u16 weight) noexcept { return weight < 550 ? 100 : weight < 750 ? 400 : 700; }
+
+        /// The weights CSS tries for `desired`, nearest first (the hundreds; CSS Fonts 4, 5.2): from
+        /// 400 to 500 up to 500 then down then above 500; below 400 down then up; above 500 up then
+        /// down.
+        inline void WeightOrder(u16 desired, u16 (&out)[9]) noexcept
+        {
+            const u16 want = static_cast<u16>((core::Clamp<u16>(desired, 100, 900) + 50) / 100 * 100);
+            usize n = 0;
+            const auto up = [&](u16 from, u16 to)
+            {
+                for (u16 w = from; w <= to; w = static_cast<u16>(w + 100))
+                    out[n++] = w;
+            };
+            const auto down = [&](u16 from)
+            {
+                for (u16 w = from; w >= 100; w = static_cast<u16>(w - 100))
+                    out[n++] = w;
+            };
+            if (want >= 400 && want <= 500)
+            {
+                up(want, 500);
+                down(static_cast<u16>(want - 100));
+                up(600, 900);
+            }
+            else if (want < 400)
+            {
+                down(want);
+                up(static_cast<u16>(want + 100), 900);
+            }
+            else
+            {
+                up(want, 900);
+                down(static_cast<u16>(want - 100));
+            }
+        }
+
+        /// The face a family draws a weight and style in, and what of them it must synthesize.
+        struct FaceChoice
+        {
+            core::String Face;
+            bool SyntheticBold = false;
+            bool SyntheticItalic = false;
+        };
+        /// CSS's matching over the faces the service has: the style first (an italic face of any
+        /// weight before an upright one), then the nearest weight. Bold is synthesized where 600 or
+        /// more was asked for and the face is lighter than 600, italic where no italic face is;
+        /// with no face of the family at all, the family is asked for as it is.
+        [[nodiscard]] inline FaceChoice ChooseFace(const fonts::IFontService& service, core::StringView family, u16 weight, bool italic)
+        {
+            u16 order[9]{};
+            WeightOrder(weight, order);
+            FaceChoice out;
+            const bool styles[] = {true, false};
+            for (const bool slanted : styles)
+            {
+                if (slanted && !italic)
+                    continue;
+                for (const u16 w : order)
+                {
+                    core::String name = WithSuffix(family, WeightSuffix(w));
+                    if (slanted)
+                        name.Append(core::StringView(u8" Italic"));
+                    if (!service.HasFamily(name.AsView()))
+                        continue;
+                    out.Face = Move(name);
+                    out.SyntheticBold = weight >= 600 && w < 600;
+                    out.SyntheticItalic = italic && !slanted;
+                    return out;
+                }
+            }
+            out.Face = core::String(family);
+            out.SyntheticBold = weight >= 600;
+            out.SyntheticItalic = italic;
+            return out;
+        }
     }
 
     /// The faces a run falls back to, at its size: for a run of its own family the label's family
@@ -522,7 +621,7 @@ export namespace experimental::gui
         };
         if (ownFamily && style.Family.Size() != 0)
             add(style.Family.AsView());
-        ForEachFamily(style.FallbackFamilies.AsView(), add);
+        ForEachFamily(style.Selection.FallbackFamilies.AsView(), add);
     }
 
     [[nodiscard]] inline ResolvedRunFont ResolveRunFont(const TextRun& run, const TextLayoutStyle& style)
@@ -530,7 +629,10 @@ export namespace experimental::gui
         ResolvedRunFont out;
         out.Font = style.Font;
         out.Size = run.Size.HasValue() ? run.Size.Value() : style.Size;
-        const bool ownFont = run.Family.HasValue() || run.Size.HasValue() || run.Bold || run.Italic;
+        // A run's <b> is CSS's bolder, its <i> italic, over the label's own weight and style.
+        const u16 weight = run.Bold ? detail::Bolder(style.Selection.Weight) : style.Selection.Weight;
+        const bool italic = run.Italic || style.Selection.Italic;
+        const bool ownFont = run.Family.HasValue() || run.Size.HasValue() || weight != 400 || italic;
         if (!ownFont)
         {
             AddFallbacks(out, style, false);
@@ -540,34 +642,16 @@ export namespace experimental::gui
         {
             // No service to ask: the label's font, its style synthesized.
             out.Size = style.Size;
-            out.SyntheticBold = run.Bold;
-            out.SyntheticItalic = run.Italic;
+            out.SyntheticBold = weight >= 600;
+            out.SyntheticItalic = italic;
             return out;
         }
         fonts::IFontService& service = *style.Fonts;
         const core::StringView family = run.Family.HasValue() ? run.Family.Value().AsView() : style.Family.AsView();
-        core::String face(family);
-        if (run.Bold || run.Italic)
-        {
-            core::String styled = detail::WithSuffix(family, run.Bold && run.Italic ? u8" Bold Italic"
-                                                             : run.Bold             ? u8" Bold"
-                                                                                    : u8" Italic");
-            if (service.HasFamily(styled.AsView()))
-            {
-                face = Move(styled);
-            }
-            else if (run.Bold && run.Italic && service.HasFamily(detail::WithSuffix(family, u8" Bold").AsView()))
-            {
-                face = detail::WithSuffix(family, u8" Bold");
-                out.SyntheticItalic = true;
-            }
-            else
-            {
-                out.SyntheticBold = run.Bold;
-                out.SyntheticItalic = run.Italic;
-            }
-        }
-        if (fonts::CachedFont* font = service.GetFont(face.AsView(), out.Size))
+        const detail::FaceChoice face = detail::ChooseFace(service, family, weight, italic);
+        out.SyntheticBold = face.SyntheticBold;
+        out.SyntheticItalic = face.SyntheticItalic;
+        if (fonts::CachedFont* font = service.GetFont(face.Face.AsView(), out.Size))
             out.Font = font;
         AddFallbacks(out, style, run.Family.HasValue());
         return out;

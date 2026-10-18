@@ -168,7 +168,7 @@ export namespace experimental::gui
         {
             const TextStyle& style = GetTextStyle();
             m_text.SetFont(GetFont());
-            m_text.SetFallbackFamilies(GetFontService(), GetTextStyle().FallbackFamilies.AsView());
+            m_text.SetFontSelection(GetFontService(), GetTextStyle().FontFamily.AsView(), GetTextStyle().Selection);
             m_text.SetColor(GetTextColor());
             m_text.SetAlignment(GetTextAlignH(), GetTextAlignV());
             m_text.SetDirection(TextDirectionFor());

@@ -974,20 +974,20 @@ export namespace experimental::gui
                 {
                     text.Font = from.Font;
                     text.FontFamily = from.FontFamily;
-                    text.FallbackFamilies = from.FallbackFamilies;
+                    text.Selection.FallbackFamilies = from.Selection.FallbackFamilies;
                     text.FontSize = from.FontSize;
                 }
                 else
                 {
                     const core::String family = familyDeclared ? core::String(declaredFamily) : from.FontFamily;
-                    const core::String fallbacks = familyDeclared ? Move(declaredFallbacks) : from.FallbackFamilies;
+                    const core::String fallbacks = familyDeclared ? Move(declaredFallbacks) : from.Selection.FallbackFamilies;
                     const f32 size = sizeDeclared ? declaredSize.Value() : (from.FontSize > 0.0f ? from.FontSize : 16.0f);
                     if (fontService != nullptr && family.Size() != 0)
                         if (fonts::CachedFont* font = fontService->GetFont(family.AsView(), size))
                         {
                             text.Font = font;
                             text.FontFamily = family;
-                            text.FallbackFamilies = fallbacks;
+                            text.Selection.FallbackFamilies = fallbacks;
                             text.FontSize = size;
                         }
                 }
@@ -1039,6 +1039,36 @@ export namespace experimental::gui
                     text.LineHeight = from.LineHeight;
                     text.LineHeightFactor = from.LineHeightFactor;
                 }
+            }
+            // font-weight and font-style (E11) inherit; a run's face is chosen from them as it lays
+            // out. bolder and lighter are of the parent's weight.
+            if (free(SlotFontWeight))
+            {
+                const StringView v = Trim(keyword(u8"font-weight"));
+                const u16 inherited = parent != nullptr ? parent->GetTextStyle().Selection.Weight : u16{400};
+                const Optional<f64> number = v.Size() != 0 ? ParseFloat(v) : Optional<f64>{};
+                if (v == StringView(u8"normal"))
+                    text.Selection.Weight = 400;
+                else if (v == StringView(u8"bold"))
+                    text.Selection.Weight = 700;
+                else if (v == StringView(u8"bolder"))
+                    text.Selection.Weight = detail::Bolder(inherited);
+                else if (v == StringView(u8"lighter"))
+                    text.Selection.Weight = detail::Lighter(inherited);
+                else if (number.HasValue() && number.Value() >= 1.0 && number.Value() <= 1000.0)
+                    text.Selection.Weight = static_cast<u16>(number.Value());
+                else
+                    text.Selection.Weight = inherits(u8"font-weight") ? inherited : ownText.Selection.Weight;
+            }
+            if (free(SlotFontStyle))
+            {
+                const StringView v = Trim(keyword(u8"font-style"));
+                if (v == StringView(u8"normal"))
+                    text.Selection.Italic = false;
+                else if (v == StringView(u8"italic") || v.StartsWith(StringView(u8"oblique")))
+                    text.Selection.Italic = true;
+                else
+                    text.Selection.Italic = inherits(u8"font-style") ? parent->GetTextStyle().Selection.Italic : ownText.Selection.Italic;
             }
             if (free(SlotLetterSpacing))
             {

@@ -130,6 +130,8 @@ export namespace experimental::gui
             {u8"vertical-align", StyleGrammar::Keyword},
             {u8"font-family", StyleGrammar::Text, nullptr, true},
             {u8"font-size", StyleGrammar::Length, nullptr, true},
+            {u8"font-weight", StyleGrammar::Text, u8"normal", true},
+            {u8"font-style", StyleGrammar::Keyword, u8"normal", true},
             {u8"white-space", StyleGrammar::Keyword, nullptr, true},
             {u8"line-height", StyleGrammar::Text, u8"normal", true},
             {u8"letter-spacing", StyleGrammar::Text, u8"normal", true},

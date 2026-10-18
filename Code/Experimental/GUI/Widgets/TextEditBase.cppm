@@ -363,9 +363,9 @@ export namespace experimental::gui
         void OnTextStyleChange() override
         {
             m_text.SetFont(GetFont());
-            m_text.SetFallbackFamilies(GetFontService(), GetTextStyle().FallbackFamilies.AsView());
+            m_text.SetFontSelection(GetFontService(), GetTextStyle().FontFamily.AsView(), GetTextStyle().Selection);
             m_hintText.SetFont(GetFont());
-            m_hintText.SetFallbackFamilies(GetFontService(), GetTextStyle().FallbackFamilies.AsView());
+            m_hintText.SetFontSelection(GetFontService(), GetTextStyle().FontFamily.AsView(), GetTextStyle().Selection);
             m_text.SetDirection(TextDirectionFor());
             m_hintText.SetDirection(TextDirectionFor());
             m_text.SetColor(GetTextColor());

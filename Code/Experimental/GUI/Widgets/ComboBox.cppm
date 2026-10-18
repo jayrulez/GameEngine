@@ -51,7 +51,7 @@ export namespace experimental::gui
             SetTabFocusable(true);
             // A visible box so it reads as a control even before it is opened.
             SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_boxColor));
-            m_text.SetAlignment(TextHAlign::Left, TextVAlign::Middle);
+            m_text.SetAlignment(TextHAlign::Start, TextVAlign::Middle);
         }
 
 
@@ -131,6 +131,7 @@ export namespace experimental::gui
         void OnTextStyleChange() override
         {
             m_text.SetFont(GetFont());
+            m_text.SetDirection(TextDirectionFor());
             m_text.SetColor(GetTextColor());
             m_arrowColor = GetTextColor();
             if (m_dropdown)

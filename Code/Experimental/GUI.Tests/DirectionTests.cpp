@@ -7,10 +7,11 @@
 // stays physical, its start and end sides following the direction; the logical margins, paddings
 // and insets land on the sides the direction puts them on; a scroller's bar goes to the inline end;
 // a slider, a tab strip and a menu bar take Left and Right along the way they run; mirror-on-rtl
-// flips a node's drawing; text-align's start and end follow the direction, and CSS's `direction` sets it.
+// flips a node's drawing; text runs as its node does, and CSS's `direction` sets it.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
+import foundation.fonts;
 import foundation.i18n;
 import experimental.gui;
 
@@ -134,17 +135,17 @@ TEST_CASE("direction: CSS's direction sets it; text-align start and end follow i
     page->AddChild(other.Get());
     StyleManager styles(CSSParser::Parse(SV(u8".start { text-align: start; } .end { text-align: end; }")));
     styles.ApplyTree(*bed.root.Get());
-    CHECK(label->GetTextAlignH() == TextHAlign::Left);
-    CHECK(other->GetTextAlignH() == TextHAlign::Right);
+    CHECK(label->GetTextAlignH() == TextHAlign::Start); // the paragraph's direction places them (E9c)
+    CHECK(other->GetTextAlignH() == TextHAlign::End);
+    CHECK(label->GetTextLayout().GetDirection() == foundation::fonts::TextDirection::LeftToRight);
     styles.SetStyleSheet(CSSParser::Parse(SV(u8".page { direction: rtl; } .start { text-align: start; } .end { text-align: end; }")));
     styles.ApplyTree(*bed.root.Get());
     CHECK(page->GetLayoutDirection() == Node::LayoutDirection::RightToLeft);
-    CHECK(label->GetTextAlignH() == TextHAlign::Right);
-    CHECK(other->GetTextAlignH() == TextHAlign::Left);
+    CHECK(label->GetTextLayout().GetDirection() == foundation::fonts::TextDirection::RightToLeft); // its text runs as it does
     styles.SetStyleSheet(CSSParser::Parse(SV(u8".start { text-align: start; }")));
     styles.ApplyTree(*bed.root.Get());
     CHECK(page->GetLayoutDirection() == Node::LayoutDirection::Inherit); // the sheet no longer says
-    CHECK(label->GetTextAlignH() == TextHAlign::Left);
+    CHECK(label->GetTextLayout().GetDirection() == foundation::fonts::TextDirection::LeftToRight);
 }
 
 TEST_CASE("direction: inline start and end margins, paddings and insets land on the sides the direction puts them on")

@@ -58,7 +58,7 @@ export namespace experimental::gui
         {
             SetTag(core::StringView(u8"tableheadercell"));
             StyleWriteScope defaults(*this); // its own values, which a sheet returns to
-            SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
+            SetTextAlignment(TextHAlign::Start, TextVAlign::Middle);
             SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
         }
         void SetColumn(usize column) noexcept { m_column = column; }
@@ -104,7 +104,7 @@ export namespace experimental::gui
                 auto cell = core::MakeRef<Label>(MemoryAllocator());
                 cell->SetTag(core::StringView(u8"tablecell")); // a row's, not a sheet's generic label
                 StyleWriteScope defaults(*cell);
-                cell->SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
+                cell->SetTextAlignment(TextHAlign::Start, TextVAlign::Middle);
                 cell->SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
                 cell->SetHitTestVisible(false); // a press on it is the row's
                 ShareTextStyle(*cell);

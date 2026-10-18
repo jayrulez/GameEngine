@@ -62,7 +62,7 @@ export namespace experimental::gui
         {
             SetTag(core::StringView(u8"label"));
             StyleWriteScope defaults(*this); // its own values, which a sheet returns to
-            SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
+            SetTextAlignment(TextHAlign::Start, TextVAlign::Middle);
         }
 
         /// Its text: plain, or a rich text's markup when it is rich (SetRich).
@@ -170,6 +170,7 @@ export namespace experimental::gui
             m_text.SetFont(GetFont());
             m_text.SetColor(GetTextColor());
             m_text.SetAlignment(GetTextAlignH(), GetTextAlignV());
+            m_text.SetDirection(TextDirectionFor());
             m_text.SetWhiteSpace(style.WhiteSpace);
             m_text.SetLineHeight(style.LineHeightPixels());
             m_text.SetLetterSpacing(style.LetterSpacing);

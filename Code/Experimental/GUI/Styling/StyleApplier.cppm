@@ -842,15 +842,18 @@ export namespace experimental::gui
             }
             if (free(SlotTextAlign))
             {
-                // start and end are the line's start and end: right and left in right to left.
+                // start and end are the line's (E9c): its paragraph's direction places them.
                 const StringView v = keyword(u8"text-align");
-                const bool rtl = (v == StringView(u8"start") || v == StringView(u8"end")) && node.IsRightToLeft();
-                if (v == StringView(u8"left") || v == StringView(u8"justify") || (v == StringView(u8"start") && !rtl) || (v == StringView(u8"end") && rtl))
+                if (v == StringView(u8"left") || v == StringView(u8"justify"))
                     text.HAlign = TextHAlign::Left;
                 else if (v == StringView(u8"center") || v == StringView(u8"centre"))
                     text.HAlign = TextHAlign::Center;
-                else if (v == StringView(u8"right") || v == StringView(u8"end") || v == StringView(u8"start"))
+                else if (v == StringView(u8"right"))
                     text.HAlign = TextHAlign::Right;
+                else if (v == StringView(u8"start"))
+                    text.HAlign = TextHAlign::Start;
+                else if (v == StringView(u8"end"))
+                    text.HAlign = TextHAlign::End;
                 else
                     text.HAlign = inherits(u8"text-align") ? parent->GetTextAlignH() : ownText.HAlign;
             }

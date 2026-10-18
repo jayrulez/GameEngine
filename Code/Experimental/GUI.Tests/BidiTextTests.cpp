@@ -1,0 +1,179 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026-Present Robert Campbell
+
+// GUI - bidirectional text (E9c of Specs/gui-lab-evolution.md): the formatter resolves each
+// paragraph's levels through Foundation's resolver (SheenBidi installed here, as GUISandbox does),
+// wraps in logical order, then lays each line out in visual order, each piece shaped the way it
+// reads; start and end alignment follow the paragraph; a caret's x is a glyph's leading edge and a
+// point's offset the nearest edge, both the right way round in right-to-left text. Over DejaVu Sans
+// Mono, which draws Arabic.
+#include <doctest/doctest.h>
+#include "Core/Prelude.h"
+
+import foundation.core;
+import foundation.vfs;
+import foundation.fonts;
+import foundation.fonts.truetype;
+import foundation.fonts.bidi;
+import experimental.gui;
+
+using namespace foundation::core;
+using namespace experimental::gui;
+namespace fonts = foundation::fonts;
+
+namespace
+{
+    struct DejaVu
+    {
+        fonts::TrueTypeFontService service{DefaultAllocator()};
+        DejaVu()
+        {
+            fonts::TrueTypeFonts::Initialize();
+            const String root = foundation::vfs::FindDataRoot();
+            REQUIRE(service.LoadFont(u8"DejaVu", foundation::vfs::DataPath(root.AsView(), u8"Assets/fonts/dejavu/DejaVuSansMono.ttf").AsView()) ==
+                    fonts::FontLoadResult::Success);
+        }
+    };
+    // The resolver for one test, removed after it.
+    struct Bidi
+    {
+        Bidi() { fonts::BidiAlgorithm::Install(); }
+        ~Bidi() { fonts::BidiAlgorithm::Uninstall(); }
+    };
+
+    TextLayoutStyle Style(DejaVu& font, fonts::TextDirection direction, f32 maxWidth = 0.0f)
+    {
+        TextLayoutStyle style;
+        style.Font = font.service.GetFont(u8"DejaVu", 16.0f);
+        style.Family = String(u8"DejaVu");
+        style.Size = 16.0f;
+        style.MaxWidth = maxWidth;
+        style.Direction = direction;
+        return style;
+    }
+    // The left edge of the glyphs drawing bytes [start, end) of the plain text.
+    f32 LeftOf(const TextLayout& layout, usize start, usize end)
+    {
+        f32 left = 1e9f;
+        for (const LaidOutGlyphs& run : layout.GlyphRuns)
+            for (usize g = 0; g < run.Glyphs.Size(); ++g)
+                if (run.GlyphStart[g] >= start && run.GlyphEnd[g] <= end)
+                    left = Min(left, run.Glyphs[g].x);
+        return left;
+    }
+    // Salaam (four letters, eight bytes).
+    constexpr const char8_t* kWord = u8"\u0633\u0644\u0627\u0645";
+}
+
+TEST_CASE("bidi text: a right-to-left paragraph runs from the right, its first word rightmost, each glyph read right to left")
+{
+    DejaVu font;
+    Bidi bidi;
+    String text(kWord);
+    text.Append(StringView(u8" "));
+    text.Append(StringView(kWord)); // bytes 0 to 8, a space, 9 to 17
+    const TextLayout layout = LayOutText(ParseTextMarkup(text.AsView()), Style(font, fonts::TextDirection::RightToLeft));
+    REQUIRE(layout.Lines.Size() == 1u);
+    CHECK(layout.Lines[0].RightToLeft);
+    CHECK(LeftOf(layout, 0, 8) > LeftOf(layout, 9, 17));
+    for (const LaidOutGlyphs& run : layout.GlyphRuns)
+        for (const fonts::GlyphPosition& g : run.Glyphs)
+            CHECK(g.rightToLeft);
+    CHECK(LeftOf(layout, 0, 2) > LeftOf(layout, 6, 8)); // its first letter on its right
+}
+
+TEST_CASE("bidi text: Latin inside a right-to-left paragraph reads left to right, to the Arabic's left")
+{
+    DejaVu font;
+    Bidi bidi;
+    String text(kWord);
+    text.Append(StringView(u8" hello world")); // Arabic 0 to 8; hello 9 to 14; world 15 to 20
+    const TextLayout layout = LayOutText(ParseTextMarkup(text.AsView()), Style(font, fonts::TextDirection::RightToLeft));
+    CHECK(LeftOf(layout, 9, 14) < LeftOf(layout, 0, 8));
+    CHECK(LeftOf(layout, 9, 14) < LeftOf(layout, 15, 20));
+    CHECK(LeftOf(layout, 15, 20) < LeftOf(layout, 0, 8));
+}
+
+TEST_CASE("bidi text: an Arabic word inside a left-to-right paragraph keeps its place and reads right to left")
+{
+    DejaVu font;
+    Bidi bidi;
+    String text(u8"a ");
+    text.Append(StringView(kWord));
+    text.Append(StringView(u8" b")); // a 0; Arabic 2 to 10; b 11
+    const TextLayout layout = LayOutText(ParseTextMarkup(text.AsView()), Style(font, fonts::TextDirection::LeftToRight));
+    CHECK_FALSE(layout.Lines[0].RightToLeft);
+    CHECK(LeftOf(layout, 0, 1) < LeftOf(layout, 2, 10));
+    CHECK(LeftOf(layout, 2, 10) < LeftOf(layout, 11, 12));
+    CHECK(LeftOf(layout, 2, 4) > LeftOf(layout, 8, 10));
+}
+
+TEST_CASE("bidi text: start and end follow the paragraph; a wrapped right-to-left paragraph starts each line on the right")
+{
+    DejaVu font;
+    Bidi bidi;
+    String one(kWord);
+    one.Append(StringView(u8" "));
+    const f32 word = Style(font, fonts::TextDirection::LeftToRight).Font->font->MeasureString(one.AsView());
+    String text;
+    for (int i = 0; i < 3; ++i)
+    {
+        text.Append(StringView(kWord));
+        if (i < 2)
+            text.Append(StringView(u8" "));
+    }
+    TextLayoutStyle style = Style(font, fonts::TextDirection::RightToLeft, word * 2.5f);
+    style.Align = TextHAlign::Start;
+    const TextLayout layout = LayOutText(ParseTextMarkup(text.AsView()), style);
+    REQUIRE(layout.Lines.Size() == 2u);
+    for (const LaidOutLine& line : layout.Lines)
+        CHECK(line.Left + line.Width == doctest::Approx(word * 2.5f));
+    CHECK(LeftOf(layout, 0, 8) > LeftOf(layout, 9, 17)); // the first line's first word on its right
+    style.Align = TextHAlign::End;
+    CHECK(LayOutText(ParseTextMarkup(text.AsView()), style).Lines[0].Left == doctest::Approx(0.0f));
+    TextLayoutStyle ltr = Style(font, fonts::TextDirection::LeftToRight, 300.0f);
+    ltr.Align = TextHAlign::Start;
+    CHECK(LayOutText(ParseTextMarkup(StringView(u8"hello")), ltr).Lines[0].Left == doctest::Approx(0.0f));
+}
+
+TEST_CASE("bidi text: a caret stands at a glyph's leading edge, and a point finds the nearest edge, the right way round")
+{
+    DejaVu font;
+    Bidi bidi;
+    const TextLayout layout = LayOutText(ParseTextMarkup(StringView(kWord)), Style(font, fonts::TextDirection::RightToLeft));
+    const LaidOutLine& line = layout.Lines[0];
+    const f32 right = line.Left + line.Width;
+    CHECK(layout.CaretX(0) == doctest::Approx(right)); // before its first letter: the right edge
+    CHECK(layout.CaretX(8) == doctest::Approx(line.Left)); // after its last: the left edge
+    CHECK(layout.CaretX(2) < right);
+    CHECK(layout.CaretX(2) > layout.CaretX(4));
+    const f32 y = line.Top + line.Height * 0.5f;
+    CHECK(layout.OffsetAt(Float2{right - 0.5f, y}) == 0u);
+    CHECK(layout.OffsetAt(Float2{line.Left + 0.5f, y}) == 8u);
+}
+
+TEST_CASE("bidi text: with no resolver a right-to-left paragraph keeps its order and starts on the right")
+{
+    DejaVu font;
+    TextLayoutStyle style = Style(font, fonts::TextDirection::RightToLeft, 300.0f);
+    style.Align = TextHAlign::Start;
+    const TextLayout layout = LayOutText(ParseTextMarkup(StringView(u8"ab cd")), style);
+    CHECK(layout.Lines[0].RightToLeft);
+    CHECK(LeftOf(layout, 0, 2) < LeftOf(layout, 3, 5));
+    CHECK(layout.Lines[0].Left + layout.Lines[0].Width == doctest::Approx(300.0f));
+}
+
+TEST_CASE("bidi text: left-to-right text lays out the same with the resolver installed")
+{
+    DejaVu font;
+    const TextLayout before = LayOutText(ParseTextMarkup(StringView(u8"hello [b]bold[/b] world")), Style(font, fonts::TextDirection::LeftToRight, 80.0f));
+    Bidi bidi;
+    const TextLayout after = LayOutText(ParseTextMarkup(StringView(u8"hello [b]bold[/b] world")), Style(font, fonts::TextDirection::LeftToRight, 80.0f));
+    REQUIRE(before.GlyphRuns.Size() == after.GlyphRuns.Size());
+    for (usize r = 0; r < before.GlyphRuns.Size(); ++r)
+    {
+        REQUIRE(before.GlyphRuns[r].Glyphs.Size() == after.GlyphRuns[r].Glyphs.Size());
+        for (usize g = 0; g < before.GlyphRuns[r].Glyphs.Size(); ++g)
+            CHECK(before.GlyphRuns[r].Glyphs[g].x == after.GlyphRuns[r].Glyphs[g].x);
+    }
+}

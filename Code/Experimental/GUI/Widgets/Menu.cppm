@@ -127,8 +127,8 @@ export namespace experimental::gui
         {
             SetTag(core::StringView(u8"menuitem"));
             SetTabFocusable(true); // the keyboard and the pad walk the items (a disabled one is skipped)
-            m_text.SetAlignment(TextHAlign::Left, TextVAlign::Middle);
-            m_shortcut.SetAlignment(TextHAlign::Right, TextVAlign::Middle);
+            m_text.SetAlignment(TextHAlign::Start, TextVAlign::Middle);
+            m_shortcut.SetAlignment(TextHAlign::End, TextVAlign::Middle);
         }
 
         // Content.
@@ -257,6 +257,8 @@ export namespace experimental::gui
         {
             m_text.SetFont(GetFont());
             m_shortcut.SetFont(GetFont());
+            m_text.SetDirection(TextDirectionFor());
+            m_shortcut.SetDirection(TextDirectionFor());
             m_text.SetColor(GetTextColor());
             m_shortcut.SetColor(GetTextColor());
             if (m_onTextStyleChanged)

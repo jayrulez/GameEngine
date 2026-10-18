@@ -62,7 +62,7 @@ export namespace experimental::gui
             fonts::CachedFont* Font = nullptr;
             core::String FontFamily; ///< the font's family as CSS names it (empty: unknown)
             f32 FontSize = 0.0f;     ///< in pixels (0: unknown)
-            TextHAlign HAlign = TextHAlign::Left;
+            TextHAlign HAlign = TextHAlign::Start;
             TextVAlign VAlign = TextVAlign::Top;
             TextWhiteSpace WhiteSpace = TextWhiteSpace::NoWrap; ///< a node's own: one line (CSS's initial is normal)
             f32 LineHeight = 0.0f;        ///< pixels, or a multiple of the font size when LineHeightFactor; 0: normal
@@ -131,6 +131,11 @@ export namespace experimental::gui
         [[nodiscard]] Color GetTextColor() const noexcept { return m_textStyle.TextColor; }
         [[nodiscard]] fonts::CachedFont* GetFont() const noexcept { return m_textStyle.Font; }
         [[nodiscard]] TextHAlign GetTextAlignH() const noexcept { return m_textStyle.HAlign; }
+        /// Which way its text's paragraphs run: as it does (E9c).
+        [[nodiscard]] fonts::TextDirection TextDirectionFor() const
+        {
+            return IsRightToLeft() ? fonts::TextDirection::RightToLeft : fonts::TextDirection::LeftToRight;
+        }
         [[nodiscard]] TextVAlign GetTextAlignV() const noexcept { return m_textStyle.VAlign; }
         /// A modal popup's dim: its `::backdrop` part over the default one.
         void DrawBackdrop(DrawContext& ctx, const Rect& bounds) const override
@@ -257,6 +262,17 @@ export namespace experimental::gui
     protected:
         /// The text style changed: a widget showing text refreshes what it draws with.
         virtual void OnTextStyleChange() {}
+        /// The way it runs may have changed: what shows text takes it in OnTextStyleChange.
+        void OnDirectionChange() override
+        {
+            const bool rtl = IsRightToLeft();
+            if (rtl == m_textRightToLeft)
+                return; // it runs as it did: joining a tree that runs the same way costs nothing
+            m_textRightToLeft = rtl;
+            OnTextStyleChange();
+            RequestLayout();
+            Invalidate();
+        }
         /// A part's style changed: a widget whose part is a node of its own passes it on.
         virtual void OnPartStyleChange(core::StringView /*part*/) {}
 
@@ -274,6 +290,7 @@ export namespace experimental::gui
         }
 
         TextStyle m_textStyle;
+        bool m_textRightToLeft = false; // the direction its text was last told (E9c)
         TextStyle m_unstyledText;
         bool m_unstyledTextCaptured = false;
         core::Array<InlineStyleDeclaration> m_inlineStyle;

@@ -232,8 +232,8 @@ export namespace experimental::gui
         {
             SetTabFocusable(true);
             SetKeyContext(core::StringView(u8"textinput"));
-            m_text.SetAlignment(TextHAlign::Left, TextVAlign::Top);
-            m_hintText.SetAlignment(TextHAlign::Left, TextVAlign::Top);
+            m_text.SetAlignment(TextHAlign::Start, TextVAlign::Top);
+            m_hintText.SetAlignment(TextHAlign::Start, TextVAlign::Top);
             m_hintText.SetColor(m_placeholderColor);
             // Each editing command, by the name the keymap binds, runs on its model.
             for (usize i = 0; i < static_cast<usize>(TextEditCommand::Count); ++i)
@@ -363,6 +363,8 @@ export namespace experimental::gui
         {
             m_text.SetFont(GetFont());
             m_hintText.SetFont(GetFont());
+            m_text.SetDirection(TextDirectionFor());
+            m_hintText.SetDirection(TextDirectionFor());
             m_text.SetColor(GetTextColor());
             m_text.SetLetterSpacing(GetTextStyle().LetterSpacing);
             m_text.SetLineHeight(GetTextStyle().LineHeightPixels());

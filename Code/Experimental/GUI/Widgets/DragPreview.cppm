@@ -36,7 +36,7 @@ export namespace experimental::gui
         {
             SetTag(core::StringView(u8"dragpreview"));
             StyleWriteScope defaults(*this);
-            SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
+            SetTextAlignment(TextHAlign::Start, TextVAlign::Middle);
             SetPadding(Thickness{8.0f, 4.0f, 24.0f, 4.0f}); // room for the badge at its right
         }
         [[nodiscard]] DropEffect GetEffect() const noexcept { return m_effect; }

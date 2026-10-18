@@ -118,6 +118,16 @@ export namespace experimental::gui
             Dirty();
         }
         [[nodiscard]] TextHAlign GetHAlign() const noexcept { return m_hAlign; }
+        /// Which way its paragraphs run (E9c): left to right, right to left, or (Auto) as each one's
+        /// first strong character says.
+        void SetDirection(fonts::TextDirection direction)
+        {
+            if (direction == m_direction)
+                return;
+            m_direction = direction;
+            Dirty();
+        }
+        [[nodiscard]] fonts::TextDirection GetDirection() const noexcept { return m_direction; }
         [[nodiscard]] TextVAlign GetVAlign() const noexcept { return m_vAlign; }
 
         /// CSS's white-space: whether spaces collapse and lines wrap. A Text starts as NoWrap (one line,
@@ -370,6 +380,7 @@ export namespace experimental::gui
             style.LetterSpacing = m_letterSpacing;
             style.MaxLines = m_maxLines;
             style.Overflow = m_overflow;
+            style.Direction = m_direction;
             slot.Layout = LayOutText(m_document, style);
             slot.Width = maxWidth;
             slot.Valid = true;
@@ -417,7 +428,8 @@ export namespace experimental::gui
         fonts::IFontService* m_fontService = nullptr;
         IResourceProvider* m_resources = nullptr;
         Color m_color = Color::White;
-        TextHAlign m_hAlign = TextHAlign::Left;
+        TextHAlign m_hAlign = TextHAlign::Start;
+        fonts::TextDirection m_direction = fonts::TextDirection::LeftToRight;
         TextVAlign m_vAlign = TextVAlign::Top;
         TextWhiteSpace m_whiteSpace = TextWhiteSpace::NoWrap;
         f32 m_lineHeight = 0.0f;

@@ -182,7 +182,7 @@ export namespace experimental::gui
 
             m_title = core::MakeRef<Label>(MemoryAllocator());
             StyleWriteScope defaults(*m_title); // its own values, which a sheet returns to
-            m_title->SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
+            m_title->SetTextAlignment(TextHAlign::Start, TextVAlign::Middle);
             m_title->SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
             m_title->SetHitTestVisible(false); // clicks fall through to the draggable title bar
             m_title->EditLayoutStyle([](LayoutStyle& st) { st.Grow = 1.0f; });

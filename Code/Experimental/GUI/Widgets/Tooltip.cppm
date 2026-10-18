@@ -40,7 +40,7 @@ export namespace experimental::gui
             StyleWriteScope defaults(*this); // its own values, which a sheet returns to
             SetPadding(Thickness{6.0f, 3.0f, 6.0f, 3.0f});
             SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_bgColor));
-            m_text.SetAlignment(TextHAlign::Left, TextVAlign::Middle);
+            m_text.SetAlignment(TextHAlign::Start, TextVAlign::Middle);
         }
 
         void SetText(core::StringView text)
@@ -65,6 +65,7 @@ export namespace experimental::gui
         void OnTextStyleChange() override
         {
             m_text.SetFont(GetFont());
+            m_text.SetDirection(TextDirectionFor());
             m_text.SetColor(GetTextColor());
         }
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override

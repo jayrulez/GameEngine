@@ -74,7 +74,7 @@ export namespace experimental::gui
             {
                 StyleWriteScope messageDefaults(*m_message); // its own values, which a sheet returns to
                 m_message->SetWhiteSpace(TextWhiteSpace::Normal); // a message wraps
-                m_message->SetTextAlignment(TextHAlign::Left, TextVAlign::Top);
+                m_message->SetTextAlignment(TextHAlign::Start, TextVAlign::Top);
                 m_message->EditLayoutStyle([](LayoutStyle& st) { st.Grow = 1.0f; });
             }
             GetContent()->AddChild(m_message.Get());

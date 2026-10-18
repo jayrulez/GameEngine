@@ -41,7 +41,9 @@ export namespace experimental::gui
     {
         Left,
         Center,
-        Right
+        Right,
+        Start, ///< the line's start: left, or right in a right-to-left paragraph (E9c)
+        End,   ///< the line's end
     };
     enum class TextVAlign
     {
@@ -113,6 +115,8 @@ export namespace experimental::gui
         f32 LetterSpacing = 0.0f; ///< Added after every character, in pixels.
         u32 MaxLines = 0;         ///< The most lines kept (line-clamp); 0: all.
         TextOverflow Overflow = TextOverflow::Clip;
+        /// Each paragraph's base direction (E9c): its node's, or (Auto) its first strong character's.
+        fonts::TextDirection Direction = fonts::TextDirection::LeftToRight;
     };
 
     /// A run's glyphs on one line: positions in layout coordinates, y on the baseline.
@@ -149,6 +153,7 @@ export namespace experimental::gui
         usize Start = 0;  ///< its bytes of the plain text, its line break left out
         usize End = 0;
         bool Ellipsized = false; ///< an ellipsis stands for some of its text
+        bool RightToLeft = false; ///< its paragraph runs right to left: its start is on its right
     };
 
     /// A rectangle a part of the text covers, with its run (an icon's, an underline's, a link's).
@@ -202,7 +207,11 @@ export namespace experimental::gui
         {
             if (line >= Lines.Size())
                 return 0.0f;
-            f32 x = Lines[line].Left;
+            // The leading edge of the glyph the offset starts (a right-to-left glyph's is its
+            // right), else the trailing edge of the one before it, else the line's start.
+            const LaidOutLine& at = Lines[line];
+            f32 x = at.RightToLeft ? at.Left + at.Width : at.Left;
+            usize before = 0;
             bool found = false;
             for (const LaidOutGlyphs& run : GlyphRuns)
             {
@@ -216,16 +225,17 @@ export namespace experimental::gui
                     {
                         // Inside a ligature: the share of its advance before the offset.
                         const f32 share = end > start ? static_cast<f32>(offset - start) / static_cast<f32>(end - start) : 0.0f;
-                        return glyph.x + glyph.advance * share;
+                        return glyph.rightToLeft ? glyph.x + glyph.advance * (1.0f - share) : glyph.x + glyph.advance * share;
                     }
-                    if (offset >= end)
+                    if (offset >= end && (!found || end >= before))
                     {
-                        x = glyph.x + glyph.advance;
+                        x = glyph.rightToLeft ? glyph.x : glyph.x + glyph.advance;
+                        before = end;
                         found = true;
                     }
                 }
             }
-            return found ? x : Lines[line].Left;
+            return x;
         }
         /// The offset a caret takes for a point: the line under its y (the first above, the last
         /// below), then the glyph edge nearest its x.
@@ -249,7 +259,7 @@ export namespace experimental::gui
                 return 0;
             usize best = Lines[line].Start;
             usize lastStart = Lines[line].Start; // the last glyph's start: a wrapped line's end
-            f32 bestDistance = Abs(x - Lines[line].Left);
+            f32 bestDistance = Abs(x - (Lines[line].RightToLeft ? Lines[line].Left + Lines[line].Width : Lines[line].Left));
             for (const LaidOutGlyphs& run : GlyphRuns)
             {
                 if (run.Line != line || run.Run < 0)
@@ -259,15 +269,18 @@ export namespace experimental::gui
                     const fonts::GlyphPosition& glyph = run.Glyphs[g];
                     const f32 left = Abs(x - glyph.x);
                     const f32 right = Abs(x - (glyph.x + glyph.advance));
+                    // A right-to-left glyph's start is on its right.
+                    const usize leftOffset = glyph.rightToLeft ? run.GlyphEnd[g] : run.GlyphStart[g];
+                    const usize rightOffset = glyph.rightToLeft ? run.GlyphStart[g] : run.GlyphEnd[g];
                     if (left < bestDistance)
                     {
                         bestDistance = left;
-                        best = run.GlyphStart[g];
+                        best = leftOffset;
                     }
                     if (right < bestDistance)
                     {
                         bestDistance = right;
-                        best = run.GlyphEnd[g];
+                        best = rightOffset;
                     }
                     lastStart = core::Max(lastStart, run.GlyphStart[g]);
                 }
@@ -363,6 +376,9 @@ export namespace experimental::gui
             bool LineBreak = false;
             f32 X = 0.0f;   // placed, from its line's start
             usize Line = 0; // the line it landed on
+            u8 Level = 0;          // its bidi embedding level (E9c): odd reads right to left
+            u8 ParagraphLevel = 0; // its paragraph's
+            fonts::TextDirection Shaping = fonts::TextDirection::Auto; // the direction it is shaped in
         };
 
         [[nodiscard]] inline usize CodepointCount(core::StringView text)
@@ -405,6 +421,175 @@ export namespace experimental::gui
                 if ((static_cast<u8>(text[i]) & 0xC0) != 0x80)
                     out.PushBack(base + i);
             out.PushBack(base + text.Size());
+        }
+
+        // Bidi (E9c): each paragraph's embedding levels from the installed resolver over its pieces'
+        // characters (an icon as U+FFFC), and a piece crossing a level change split there, so each
+        // piece reads one way. False when nothing reads right to left and the base direction is
+        // left to right (the layout then runs as it always has, the pieces untouched). With no
+        // resolver installed, a right-to-left paragraph keeps its pieces in order (only its start
+        // moves to the right) and each is shaped as its script reads.
+        [[nodiscard]] inline bool ResolveBidi(Array<TextPiece>& pieces, fonts::TextDirection direction, f32 letterSpacing)
+        {
+            const u8 baseLevel = direction == fonts::TextDirection::RightToLeft ? 1 : 0;
+            bool rightToLeftText = false; // (a right-to-left base needs the path even for no text)
+            for (const TextPiece& piece : pieces)
+                for (usize i = 0; i < piece.Text.Size() && !rightToLeftText; ++i)
+                    rightToLeftText = static_cast<u8>(piece.Text[i]) >= 0xD6; // a lead byte of U+0590 or above
+            if (baseLevel == 0 && !rightToLeftText)
+                return false;
+            fonts::IBidiResolver* resolver = fonts::BidiResolverFactory::Resolver();
+            Array<TextPiece> out;
+            Array<u32> codepoints;
+            Array<usize> owner;  // each character's piece
+            Array<usize> within; // its byte in that piece's text
+            fonts::BidiLevels levels;
+            bool any = baseLevel != 0;
+            usize first = 0;
+            while (first < pieces.Size())
+            {
+                usize last = first; // a paragraph runs to its break
+                while (last < pieces.Size() && !pieces[last].LineBreak)
+                    ++last;
+                codepoints.Clear();
+                owner.Clear();
+                within.Clear();
+                for (usize p = first; p < last; ++p)
+                {
+                    if (pieces[p].Icon)
+                    {
+                        codepoints.PushBack(0xFFFC);
+                        owner.PushBack(p);
+                        within.PushBack(0);
+                        continue;
+                    }
+                    const core::StringView t = pieces[p].Text;
+                    for (usize i = 0; i < t.Size();)
+                    {
+                        within.PushBack(i);
+                        codepoints.PushBack(static_cast<u32>(core::DecodeUtf8(t, i)));
+                        owner.PushBack(p);
+                    }
+                }
+                u8 paragraph = baseLevel;
+                levels.levels.Clear();
+                const bool resolved = resolver != nullptr && !codepoints.IsEmpty();
+                if (resolved)
+                {
+                    resolver->Resolve(Span<const u32>(codepoints.Data(), codepoints.Size()), direction, levels);
+                    paragraph = levels.paragraphLevel;
+                }
+                while (levels.levels.Size() < codepoints.Size())
+                    levels.levels.PushBack(resolved ? paragraph : u8{0});
+                any = any || paragraph != 0;
+                usize c = 0;
+                for (usize p = first; p < last; ++p)
+                {
+                    const TextPiece& piece = pieces[p];
+                    const usize begin = c;
+                    while (c < owner.Size() && owner[c] == p)
+                        ++c;
+                    if (begin == c)
+                    {
+                        TextPiece part = piece;
+                        part.Level = part.ParagraphLevel = paragraph;
+                        out.PushBack(part);
+                        continue;
+                    }
+                    usize from = begin;
+                    for (usize k = begin + 1; k <= c; ++k)
+                    {
+                        if (k < c && levels.levels[k] == levels.levels[from])
+                            continue;
+                        TextPiece part = piece;
+                        part.Level = levels.levels[from];
+                        part.ParagraphLevel = paragraph;
+                        part.Shaping = !resolved ? fonts::TextDirection::Auto
+                                       : (part.Level & 1u) != 0 ? fonts::TextDirection::RightToLeft
+                                                                : fonts::TextDirection::LeftToRight;
+                        if (!piece.Icon && (from != begin || k != c))
+                        {
+                            const usize a = within[from];
+                            const usize b = k == c ? piece.Text.Size() : within[k];
+                            part.Text = piece.Text.SubStr(a, b - a);
+                            part.Start = piece.Start + a;
+                            part.Width = 0.0f;
+                            part.TrailingSpace = 0.0f;
+                            MeasurePiece(part, letterSpacing);
+                        }
+                        any = any || part.Level != 0;
+                        out.PushBack(part);
+                        from = k;
+                    }
+                }
+                if (last < pieces.Size())
+                {
+                    TextPiece lineBreak = pieces[last];
+                    lineBreak.Level = lineBreak.ParagraphLevel = paragraph;
+                    out.PushBack(lineBreak);
+                }
+                first = last + 1;
+            }
+            pieces = Move(out);
+            return any;
+        }
+
+        // Places pieces [from, to) of one line in visual order (rule L1: its trailing spaces at
+        // the paragraph's level; L2: the runs at each level reversed), each from where the one to
+        // its left ends. The line's last piece in logical order loses its trailing spaces' width,
+        // which hang past its end (to its left when it reads right to left).
+        inline void OrderLine(Array<TextPiece>& pieces, usize from, usize to, u8 baseLevel, LaidOutLine& line)
+        {
+            Array<usize> items;
+            for (usize p = from; p < to; ++p)
+                if (!pieces[p].LineBreak)
+                    items.PushBack(p);
+            const u8 paragraph = from < to ? pieces[from].ParagraphLevel : baseLevel; // an empty text: the base's
+            line.RightToLeft = (paragraph & 1u) != 0;
+            if (items.IsEmpty())
+                return;
+            fonts::BidiLevels levels;
+            levels.paragraphLevel = paragraph;
+            Array<u32> marks; // no character is whitespace to ReorderLine: L1 is applied by piece here
+            for (const usize p : items)
+            {
+                levels.levels.PushBack(pieces[p].Level);
+                marks.PushBack(U'x');
+            }
+            for (usize k = items.Size(); k-- > 0;)
+            {
+                const TextPiece& piece = pieces[items[k]];
+                if (piece.Icon || piece.Text.Size() == 0 || piece.TrailingSpace < piece.Width - 0.001f)
+                    break;
+                levels.levels[k] = paragraph; // a piece of nothing but spaces at the line's end
+            }
+            Array<fonts::BidiRun> runs;
+            fonts::ReorderLine(levels, Span<const u32>(marks.Data(), marks.Size()), 0, items.Size(), runs);
+            const usize lastLogical = items.Back();
+            f32 x = 0.0f;
+            const auto place = [&](usize p)
+            {
+                TextPiece& piece = pieces[p];
+                f32 width = piece.Width;
+                f32 hang = 0.0f;
+                if (p == lastLogical)
+                {
+                    width -= piece.TrailingSpace;
+                    if ((piece.Level & 1u) != 0)
+                        hang = piece.TrailingSpace;
+                }
+                piece.X = x - hang;
+                x += width;
+            };
+            for (const fonts::BidiRun& run : runs)
+            {
+                if (run.RightToLeft())
+                    for (usize k = run.end; k-- > run.start;)
+                        place(items[k]);
+                else
+                    for (usize k = run.start; k < run.end; ++k)
+                        place(items[k]);
+            }
         }
 
         // Shifts everything laid out on `line` across by `dx`.
@@ -678,6 +863,8 @@ export namespace experimental::gui
             runStart += text.Size();
         }
 
+        const bool bidi = detail::ResolveBidi(pieces, style.Direction, spacing);
+
         // The base font's metrics size an empty line.
         TextPiece empty;
         empty.Font = ResolveRunFont(TextRun{}, style);
@@ -688,8 +875,10 @@ export namespace experimental::gui
         usize lineStart = 0;
         f32 x = 0.0f;
         usize nextOffset = 0; // where the next line's text starts
+        Array<usize> lineFirstPiece; // each line's first piece (its last is before the next's first)
         const auto finishLine = [&](usize end)
         {
+            lineFirstPiece.PushBack(lineStart);
             LaidOutLine line;
             line.Top = layout.Height;
             f32 ascent = 0.0f, descent = 0.0f, gap = 0.0f;
@@ -775,6 +964,12 @@ export namespace experimental::gui
             layout.Height = layout.Lines.Back().Top + layout.Lines.Back().Height;
         }
 
+        // Each line in visual order (E9c), its pieces placed again from its left.
+        if (bidi)
+            for (usize l = 0; l < keptLines; ++l)
+                detail::OrderLine(pieces, lineFirstPiece[l], l + 1 < lineFirstPiece.Size() ? lineFirstPiece[l + 1] : pieces.Size(),
+                                  style.Direction == fonts::TextDirection::RightToLeft ? u8{1} : u8{0}, layout.Lines[l]);
+
         // Glyphs, icons, underlines and links, from each line's start.
         Array<usize> offsets;
         for (usize p = 0; p < pieces.Size(); ++p)
@@ -809,9 +1004,22 @@ export namespace experimental::gui
                 glyphs.TextEnd = piece.Start + piece.Text.Size();
                 glyphs.Line = piece.Line;
                 glyphs.Run = piece.Run;
-                if (piece.Font.Font->shaper != nullptr && piece.Font.Font->font != nullptr &&
-                    piece.Font.Font->shaper->ShapeText(*piece.Font.Font->font, piece.Text, piece.X, at.Baseline, glyphs.Glyphs)
-                        .HasValue())
+                // Shaped as it reads (E9c): one way, the level its piece is at.
+                const auto shape = [&]() -> bool
+                {
+                    fonts::ITextShaper& shaper = *piece.Font.Font->shaper;
+                    if (!bidi)
+                        return shaper.ShapeText(*piece.Font.Font->font, piece.Text, piece.X, at.Baseline, glyphs.Glyphs).HasValue();
+                    fonts::IFont* const list[1] = {piece.Font.Font->font};
+                    fonts::ShapeRequest request;
+                    request.text = piece.Text;
+                    request.fonts = Span<fonts::IFont* const>(list, 1);
+                    request.direction = piece.Shaping;
+                    request.startX = piece.X;
+                    request.startY = at.Baseline;
+                    return shaper.Shape(request, glyphs.Glyphs).HasValue();
+                };
+                if (piece.Font.Font->shaper != nullptr && piece.Font.Font->font != nullptr && shape())
                 {
                     // Each glyph's bytes from its cluster (a character index); letter spacing after
                     // every character before it.
@@ -859,8 +1067,10 @@ export namespace experimental::gui
                 const fonts::TextDecorationMetrics decorations = piece.Font.Font->font->Metrics().decorations;
                 LaidOutBox underline;
                 // A word's underline runs on under the spaces after it unless it ends the line.
+                // (Its spaces are on its left when it reads right to left.)
                 const bool lastOnLine = p + 1 >= pieces.Size() || pieces[p + 1].LineBreak || pieces[p + 1].Line != piece.Line;
-                underline.Rect = Rectangle{piece.X, at.Baseline + decorations.underlinePosition,
+                const f32 hang = lastOnLine && (piece.Level & 1u) != 0 ? piece.TrailingSpace : 0.0f;
+                underline.Rect = Rectangle{piece.X + hang, at.Baseline + decorations.underlinePosition,
                                            lastOnLine ? visible : piece.Width, decorations.underlineThickness};
                 underline.Run = piece.Run;
                 underline.Line = piece.Line;
@@ -881,12 +1091,24 @@ export namespace experimental::gui
         for (usize l = 0; l < layout.Lines.Size(); ++l)
         {
             const bool forced = layout.Clamped && l + 1 == layout.Lines.Size() && style.Overflow != TextOverflow::Clip;
+            // A right-to-left line ends on its left: its end ellipsis is the visual start's.
+            TextOverflow overflow = style.Overflow;
+            if (layout.Lines[l].RightToLeft && overflow == TextOverflow::Ellipsis && !forced)
+                overflow = TextOverflow::EllipsisStart;
+            else if (layout.Lines[l].RightToLeft && overflow == TextOverflow::EllipsisStart)
+                overflow = TextOverflow::Ellipsis;
             if (bounded && style.Overflow != TextOverflow::Clip && (forced || layout.Lines[l].Width > style.MaxWidth + 0.01f))
-                detail::Ellipsize(layout, l, style.MaxWidth, style.Overflow, forced);
+                detail::Ellipsize(layout, l, style.MaxWidth, overflow, forced);
             LaidOutLine& line = layout.Lines[l];
-            if (bounded && style.Align == TextHAlign::Center)
+            // Start and end are the paragraph's (E9c).
+            TextHAlign align = style.Align;
+            if (align == TextHAlign::Start)
+                align = line.RightToLeft ? TextHAlign::Right : TextHAlign::Left;
+            else if (align == TextHAlign::End)
+                align = line.RightToLeft ? TextHAlign::Left : TextHAlign::Right;
+            if (bounded && align == TextHAlign::Center)
                 line.Left = (style.MaxWidth - line.Width) * 0.5f;
-            else if (bounded && style.Align == TextHAlign::Right)
+            else if (bounded && align == TextHAlign::Right)
                 line.Left = style.MaxWidth - line.Width;
             detail::ShiftLine(layout, l, line.Left);
             layout.Width = Max(layout.Width, line.Width);

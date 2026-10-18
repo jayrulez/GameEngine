@@ -68,6 +68,26 @@ namespace experimental::gui
         return tween;
     }
 
+    RefPtr<Tween> Node::SpringTo(core::StringView property, core::StringView to, f32 stiffness, f32 damping, f32 mass)
+    {
+        RefPtr<Tween> running;
+        ForEachRunningTween(*this, [&](Tween& tween)
+        {
+            if (tween.IsSpring() && tween.ResolveTarget() == this && tween.GetProperty() == property)
+                running = RefPtr<Tween>(&tween);
+        });
+        if (running)
+        {
+            running->Spring(stiffness, damping, mass);
+            running->Retarget(to);
+            return running;
+        }
+        RefPtr<Tween> tween = CreateTween(property, to, 0.0f);
+        tween->Spring(stiffness, damping, mass);
+        RunAction(tween);
+        return tween;
+    }
+
     bool Node::StopAnimation(core::StringView property)
     {
         bool stopped = false;

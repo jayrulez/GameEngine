@@ -1315,6 +1315,11 @@ export namespace experimental::gui
         /// repeats); inert on a node in no GUI. Defined in Styling/TweenImpl.cpp.
         RefPtr<Tween> Animate(core::StringView property, core::StringView to, f32 seconds,
                               core::StringView easing = core::StringView(u8"ease"));
+        /// Moves `property` toward `to` as a damped spring (E14, Tween::Spring): a spring already
+        /// moving it turns toward the new end from where it is, at the speed it has, rather than
+        /// starting again. The spring, running.
+        RefPtr<Tween> SpringTo(core::StringView property, core::StringView to, f32 stiffness = 170.0f, f32 damping = 26.0f,
+                               f32 mass = 1.0f);
         /// A tween of this node as Animate makes one, not yet running: a step for a group (E14).
         RefPtr<Tween> CreateTween(core::StringView property, core::StringView to, f32 seconds,
                                   core::StringView easing = core::StringView(u8"ease"));

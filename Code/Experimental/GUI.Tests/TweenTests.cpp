@@ -291,3 +291,96 @@ TEST_CASE("tween: a tween started on its own takes its property from a group's s
     bed.Frame(0.0);
     CHECK(bed.widget->GetAlpha() == doctest::Approx(1.0f));
 }
+
+TEST_CASE("tween: a spring settles on its end; little damping overshoots and rings back")
+{
+    Bed bed(u8"box { opacity: 0; }");
+    int finished = 0;
+    core::RefPtr<Tween> spring = bed.widget->SpringTo(SV(u8"opacity"), SV(u8"1"));
+    spring->OnFinished([&finished]() { ++finished; });
+    CHECK(spring->IsSpring());
+    float last = 0.0f;
+    bool rising = true;
+    for (int i = 0; i < 30 && !spring->IsDone(); ++i)
+    {
+        bed.Frame(1.0 / 60.0);
+        rising = rising && bed.widget->GetAlpha() >= last; // a damped spring comes straight in
+        last = bed.widget->GetAlpha();
+    }
+    CHECK(rising);
+    for (int i = 0; i < 600 && !spring->IsDone(); ++i)
+        bed.Frame(1.0 / 60.0);
+    CHECK(spring->IsDone());
+    CHECK(finished == 1);
+    CHECK(bed.widget->GetAlpha() == doctest::Approx(1.0f));
+
+    // Loose: past the end, then back under it.
+    Bed loose(u8"box { width: 100; }");
+    loose.widget->SpringTo(SV(u8"width"), SV(u8"200"), 300.0f, 4.0f);
+    float most = 0.0f, leastAfter = 1000.0f;
+    for (int i = 0; i < 240; ++i)
+    {
+        loose.Frame(1.0 / 60.0);
+        const float w = loose.widget->GetSize().x;
+        most = w > most ? w : most;
+        if (most > 200.0f)
+            leastAfter = w < leastAfter ? w : leastAfter;
+    }
+    CHECK(most > 210.0f);
+    CHECK(leastAfter < 200.0f);
+}
+
+TEST_CASE("tween: a spring retargeted mid-flight turns from where it is, with its speed")
+{
+    Bed bed(u8"box { width: 100; }");
+    core::RefPtr<Tween> spring = bed.widget->SpringTo(SV(u8"width"), SV(u8"300"));
+    for (int i = 0; i < 6; ++i)
+        bed.Frame(1.0 / 60.0);
+    const float before = bed.widget->GetSize().x;
+    bed.Frame(1.0 / 60.0);
+    const float speed = bed.widget->GetSize().x - before; // per frame
+    REQUIRE(speed > 0.0f);
+    core::RefPtr<Tween> again = bed.widget->SpringTo(SV(u8"width"), SV(u8"400"));
+    CHECK(again.Get() == spring.Get()); // the same spring, turned
+    const float at = bed.widget->GetSize().x;
+    bed.Frame(1.0 / 60.0);
+    const float step = bed.widget->GetSize().x - at;
+    CHECK(step > 0.0f);
+    CHECK(step == doctest::Approx(speed).epsilon(0.5)); // no jolt: about the speed it had
+    for (int i = 0; i < 600 && !spring->IsDone(); ++i)
+        bed.Frame(1.0 / 60.0);
+    CHECK(bed.widget->GetSize().x == doctest::Approx(400.0f).epsilon(0.01));
+
+    // Toward a value of a different kind of distance (a colour): still continuous.
+    Bed colour(u8"box { background-color: #000000; }");
+    colour.widget->SpringTo(SV(u8"background-color"), SV(u8"#ff0000"));
+    for (int i = 0; i < 6; ++i)
+        colour.Frame(1.0 / 60.0);
+    const float red = colour.Red();
+    colour.widget->SpringTo(SV(u8"background-color"), SV(u8"#0000ff"));
+    colour.Frame(0.0);
+    CHECK(colour.Red() == doctest::Approx(red));
+}
+
+TEST_CASE("tween: a spring moves a reflected property, and runs as a group's step")
+{
+    Bed bed(u8"box { }");
+    auto slider = core::MakeRef<Slider>(core::DefaultAllocator());
+    slider->SetMax(100.0f);
+    bed.root->AddChild(slider.Get());
+    core::RefPtr<Tween> spring = slider->SpringTo(SV(u8"value"), SV(u8"60"));
+    for (int i = 0; i < 600 && !spring->IsDone(); ++i)
+        bed.Frame(1.0 / 60.0);
+    CHECK(slider->GetValue() == doctest::Approx(60.0));
+
+    auto sequence = core::MakeRef<TweenSequence>(core::DefaultAllocator());
+    core::RefPtr<Tween> step = bed.widget->CreateTween(SV(u8"opacity"), SV(u8"0"), 0.0f);
+    step->Spring(400.0f, 40.0f);
+    bool after = false;
+    sequence->Add(step).Call([&after]() { after = true; });
+    bed.widget->RunAction(sequence);
+    for (int i = 0; i < 600 && !sequence->IsDone(); ++i)
+        bed.Frame(1.0 / 60.0);
+    CHECK(after);
+    CHECK(bed.widget->GetAlpha() == doctest::Approx(0.0f));
+}

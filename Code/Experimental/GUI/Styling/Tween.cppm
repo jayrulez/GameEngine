@@ -84,6 +84,21 @@ export namespace experimental::gui
             m_easing = easing;
             return *this;
         }
+        /// Moves as a damped spring toward its end rather than over a time (GPUI's and react-spring's
+        /// springs): `stiffness` pulls, `damping` slows, `mass` resists; little damping overshoots and
+        /// rings. Its duration, easing, repeats and ping-pong no longer apply; it ends once settled.
+        Tween& Spring(f32 stiffness = 170.0f, f32 damping = 26.0f, f32 mass = 1.0f)
+        {
+            m_spring = true;
+            m_stiffness = core::Max(0.0f, stiffness);
+            m_damping = core::Max(0.0f, damping);
+            m_mass = core::Max(1e-4f, mass);
+            return *this;
+        }
+        [[nodiscard]] bool IsSpring() const noexcept { return m_spring; }
+        /// Sends it toward another end from where it is now, its speed carried over: a drag that
+        /// settles, a menu that follows the pointer, without a jolt.
+        void Retarget(core::StringView to);
         /// Called once it reaches its end (not when stopped or replaced).
         Tween& OnFinished(core::Function<void()> callback)
         {
@@ -118,6 +133,8 @@ export namespace experimental::gui
             m_overrun = 0.0f;
             m_done = false;
             m_route = Route::Unbound;
+            m_springX = 0.0f;
+            m_springV = 0.0f;
             ReplaceOthersOf(*this);
         }
         void Stop() override { m_done = true; }
@@ -149,6 +166,23 @@ export namespace experimental::gui
                     m_done = true;
                     return;
                 }
+            }
+            if (m_spring)
+            {
+                StepSpring(core::Min(active, elapsed.AsSecondsF()));
+                const bool settled = Abs(1.0f - m_springX) < 1e-3f && Abs(m_springV) < 1e-3f;
+                if (settled)
+                    m_springX = 1.0f;
+                m_progress = core::Clamp(m_springX, 0.0f, 1.0f);
+                Write(*target, m_springX);
+                if (settled)
+                {
+                    m_done = true;
+                    if (m_onFinished)
+                        m_onFinished();
+                    FireDone();
+                }
+                return;
             }
             bool finished = false;
             f32 local = 1.0f;
@@ -202,6 +236,67 @@ export namespace experimental::gui
             Style,
             Reflected,
         };
+
+        // The spring's progress toward 1 over `seconds`, in small steps (semi-implicit Euler holds
+        // a stiff spring steady where one big step would fly off).
+        void StepSpring(f32 seconds)
+        {
+            constexpr f32 kStep = 1.0f / 240.0f;
+            while (seconds > 0.0f)
+            {
+                const f32 h = core::Min(seconds, kStep);
+                const f32 force = -m_stiffness * (m_springX - 1.0f) - m_damping * m_springV;
+                m_springV += force / m_mass * h;
+                m_springX += m_springV * h;
+                seconds -= h;
+            }
+        }
+        // How far apart two values are, where that has a measure (a number, a length of one unit,
+        // a colour, a point); 0 where it has none.
+        [[nodiscard]] static f32 Distance(const StyleValue& a, const StyleValue& b)
+        {
+            if (a.Kind != b.Kind)
+                return 0.0f;
+            switch (a.Kind)
+            {
+            case StyleValueKind::Number:
+                return Abs(b.Number - a.Number);
+            case StyleValueKind::Length:
+                return a.Length.Unit == b.Length.Unit ? Abs(b.Length.Value - a.Length.Value) : 0.0f;
+            case StyleValueKind::ColorValue:
+            {
+                const Color d{b.ColorValue.r - a.ColorValue.r, b.ColorValue.g - a.ColorValue.g, b.ColorValue.b - a.ColorValue.b,
+                              b.ColorValue.a - a.ColorValue.a};
+                return Sqrt(d.r * d.r + d.g * d.g + d.b * d.b + d.a * d.a);
+            }
+            default:
+                return 0.0f;
+            }
+        }
+        [[nodiscard]] static f32 Distance(const Variant& a, const Variant& b)
+        {
+            if (const f32* x = a.TryGet<f32>())
+                if (const f32* y = b.TryGet<f32>())
+                    return Abs(*y - *x);
+            if (const f64* x = a.TryGet<f64>())
+                if (const f64* y = b.TryGet<f64>())
+                    return static_cast<f32>(*y > *x ? *y - *x : *x - *y);
+            if (const i32* x = a.TryGet<i32>())
+                if (const i32* y = b.TryGet<i32>())
+                    return Abs(static_cast<f32>(*y - *x));
+            if (const core::Float2* x = a.TryGet<core::Float2>())
+                if (const core::Float2* y = b.TryGet<core::Float2>())
+                    return core::Length(core::Float2{y->x - x->x, y->y - x->y});
+            return 0.0f;
+        }
+        // The speed carried to a new span: the same speed in the value's own units where both
+        // spans have a measure, the same speed in progress where not.
+        void CarrySpeed(f32 before, f32 after) noexcept
+        {
+            if (before > 0.0f && after > 0.0f)
+                m_springV *= before / after;
+            m_springX = 0.0f;
+        }
 
         // The property a sheet does not name, by its CSS name or its reflected one.
         [[nodiscard]] static const PropertyInfo* FindReflected(const Node& node, core::StringView name)
@@ -313,6 +408,13 @@ export namespace experimental::gui
         Easing m_easing;
         core::Function<void()> m_onFinished;
 
+        bool m_spring = false;
+        f32 m_stiffness = 170.0f;
+        f32 m_damping = 26.0f;
+        f32 m_mass = 1.0f;
+        f32 m_springX = 0.0f; // progress, past 1 when it overshoots
+        f32 m_springV = 0.0f; // its speed, in progress per second
+
         Route m_route = Route::Unbound;
         const PropertyInfo* m_reflected = nullptr;
         Variant m_from;
@@ -325,6 +427,40 @@ export namespace experimental::gui
     };
 
     RTTI_DEFINE_OBJECT(Tween, "rtti::gui")
+
+    inline void Tween::Retarget(core::StringView to)
+    {
+        m_toText = core::String(to);
+        Node* target = ResolveTarget();
+        if (target == nullptr || m_route == Route::Unbound)
+            return; // it reads its end at its first frame
+        if (!m_spring)
+            m_elapsed = m_delay; // a timed tween runs its time again, from where it is
+        if (m_route == Route::Style)
+        {
+            UINode* node = core::Cast<UINode>(target);
+            MotionValue* motion = node != nullptr ? node->FindMotion(m_property.AsView()) : nullptr;
+            const StyleValue next = ResolvedStyle::ParseLonghand(m_property.AsView(), to);
+            if (motion == nullptr || motion->Owner != m_owner || next.Kind == StyleValueKind::None)
+                return;
+            const StyleValue now = motion->HasUnder ? InterpolateStyleValue(motion->Under, motion->To, motion->Progress) : motion->Shown;
+            const f32 before = motion->HasUnder ? Distance(motion->Under, motion->To) : 0.0f;
+            CarrySpeed(before, Distance(now, next));
+            motion->From = now;
+            motion->HasFrom = true;
+            motion->To = next;
+            motion->Progress = 0.0f;
+            node->MarkStyleMotionDirty();
+            return;
+        }
+        const Variant next = detail::ParseForProperty(*m_reflected, to, LengthContext{});
+        if (next.IsEmpty())
+            return;
+        const Variant now = Mix(m_from, m_to, m_springX);
+        CarrySpeed(Distance(m_from, m_to), Distance(now, next));
+        m_from = now;
+        m_to = next;
+    }
 
     // === Groups (E14) ===
 

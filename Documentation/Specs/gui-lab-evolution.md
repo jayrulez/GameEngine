@@ -1171,6 +1171,28 @@ plural entries and each locale's plural rule and direction, and other formats (C
 pipeline layer's to convert. Styling by language is `:lang()`, per subtree, not a media feature.
 In mixed-direction text the arrows move the caret visually, delete and backspace logically.
 
+- **E9a as built.** `GUIContext::SetLocalization` (a foundation.i18n `Localization`, the host's);
+  its `OnChanged` re-resolves every translated property in the context's roots and restyles them.
+  A reflected property marked `translatable` (a text, a tooltip, a placeholder) takes `@key` in
+  markup through `Node::BindTranslation`, with `<prop>-count` and `<prop>-args` (values or
+  bindings); `@@` is a literal @, and a property not so marked takes @ literally. A node resolves
+  when it joins a GUI and keeps its key for the inspector. `auto-translate` (inherit, always, off)
+  and `lang` inherit down the tree; `:lang()` matches by prefix and counts in specificity.
+- **E9b as built.** `Node::SetLayoutDirection` (inherit, ltr, rtl; CSS's `direction`, a slot of
+  its own) and `IsRightToLeft`: the first ancestor that says, else the GUI root's Localization's
+  language. Unlike the plan, a change restyles the subtree as well as laying it out, since
+  text-align's start and end and the logical sides resolve by it in the style pass (the direction
+  is applied first there). Flex, grid and stack lay out as left to right with each child's left
+  and right margins swapped, then mirror x within the box (or the content, when wider): the same
+  answer as running on logical axes, in one place. `margin-inline-*`, `padding-inline-*` and
+  `inset-inline-*` (and their two-value shorthands) resolve to physical sides by the node's own
+  direction when applied; beside a physical property for the same side, the logical one wins.
+  Dock takes `start` and `end` by its container's direction. The vertical scroll bar goes to the
+  inline end. A horizontal slider runs from the right; tab strips and menu bars take Left and
+  Right along the way they run. `mirror-on-rtl` flips a node's drawing about its centre, through
+  the style transform. A right-to-left horizontal scroller still starts at offset 0 (its left);
+  starting at its inline start waits for a use.
+
 Not in E9: the platform adapters (UI Automation, NSAccessibility, AT-SPI) and real text to speech,
 which are host work with hosting; vertical text; locale-aware number and date formats.
 

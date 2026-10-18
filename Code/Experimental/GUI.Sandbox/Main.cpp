@@ -28,6 +28,10 @@ import foundation.image.io; // the resource provider's pictures
 import foundation.fonts;
 import foundation.fonts.truetype;
 import foundation.fonts.bidi;
+import foundation.fonts.harfbuzz; // joined Arabic (E9e)
+import foundation.i18n;           // the Language and direction page's table (E9e)
+import foundation.xml;
+import foundation.xml.serialization;
 import foundation.fonts.distancefield.baker; // the Lilita distance-field face
 import foundation.vg;
 import foundation.vg.renderer;
@@ -59,6 +63,8 @@ namespace
 
     constexpr StringView kRoboto = u8"Assets/fonts/roboto/Roboto-Regular.ttf";
     constexpr StringView kLilita = u8"Assets/fonts/lilita-one/LilitaOne-Regular.ttf";
+    constexpr StringView kDejaVu = u8"Assets/fonts/dejavu/DejaVuSansMono.ttf"; // Arabic, which Roboto has not
+    constexpr StringView kStrings = u8"Assets/ui/sandbox/i18n/sandbox.strings.xml";
     constexpr StringView kSandboxDir = u8"Assets/ui/sandbox/";
     constexpr StringView kMenuDir = u8"Assets/ui/showcase/";
     constexpr StringView kPageCommand = u8"page.";
@@ -115,6 +121,62 @@ namespace
         Array<Entry> m_images;
     };
 
+    // --narrate (E9e): a bridge that speaks to the console as a screen reader would aloud: each
+    // focus change (what it reached, what it is, its value and states) and each announcement.
+    class NarrateBridge final : public gui::IAccessibilityBridge
+    {
+    public:
+        explicit NarrateBridge(IAllocator& allocator) : m_nodes(allocator) {}
+        [[nodiscard]] bool IsListening() const override { return true; }
+        void Update(const gui::AccessTreeUpdate& update) override
+        {
+            if (update.Full)
+                m_nodes.Clear();
+            for (const gui::AccessNode& node : update.Nodes)
+                m_nodes.InsertOrAssign(node.Id, node);
+            if (update.Focus == m_focus)
+                return;
+            m_focus = update.Focus;
+            const gui::AccessNode* focused = m_nodes.Find(update.Focus);
+            if (focused == nullptr || focused->Role == gui::AccessRole::Window)
+                return;
+            String line = focused->Name.Size() != 0 ? focused->Name : String(u8"(no name)");
+            line += StringView(u8", ");
+            line += gui::AccessRoleName(focused->Role);
+            if (focused->Value.Size() != 0)
+            {
+                line += StringView(u8", ");
+                line += focused->Value.AsView();
+            }
+            if (focused->Has(gui::AccessChecked))
+                line += StringView(u8", checked");
+            if (focused->Has(gui::AccessCollapsed))
+                line += StringView(u8", collapsed");
+            if (focused->Has(gui::AccessExpanded))
+                line += StringView(u8", expanded");
+            if (focused->Has(gui::AccessDisabled))
+                line += StringView(u8", dimmed");
+            if (focused->Description.Size() != 0)
+            {
+                line += StringView(u8". ");
+                line += focused->Description.AsView();
+            }
+            std::printf("narrate: %s\n", reinterpret_cast<const char*>(line.CStr()));
+            std::fflush(stdout);
+        }
+        void Announce(StringView text, gui::AnnouncePriority priority) override
+        {
+            const String said(text);
+            std::printf("narrate (%s): %s\n", priority == gui::AnnouncePriority::Assertive ? "now" : "next",
+                        reinterpret_cast<const char*>(said.CStr()));
+            std::fflush(stdout);
+        }
+
+    private:
+        HashMap<u64, gui::AccessNode> m_nodes;
+        u64 m_focus = 0;
+    };
+
     struct ScriptErrors final : script::IScriptErrorHandler
     {
         void OnError(const script::ScriptError& error) override
@@ -163,6 +225,10 @@ public:
         return m_imageFailures == 0 ? 0 : 1;
     }
     void SetInspectSelector(StringView selector) { m_openInspector = true; m_inspectSelector = String(selector); }
+    /// --lang <locale>: the GUI's language at start (E9e; "pseudo": English pseudolocalized).
+    void SetStartLanguage(StringView locale) { m_startLanguage = String(locale); }
+    /// --narrate: a stand-in screen reader on the console.
+    void SetNarrate(bool on) { m_narrate = on; }
 
     GUISandbox()
     {
@@ -218,6 +284,8 @@ private:
 
     // === Options ===
     String m_startPage = String(u8"controls");
+    String m_startLanguage = String(u8"en");
+    bool m_narrate = false;
     bool m_openMenuAtStart = false;
     String m_menuCall; // a game-menu script function to call once it is up (a screenshot of a panel)
     String m_keys;     // keystrokes to type into the root on show, one every 15 frames
@@ -269,6 +337,15 @@ private:
 
     // The Stress page's builder and its views' models: before the GUI, so it outlives the views.
     UniquePtr<sandbox::StressPage> m_stress;
+
+    // The texts the Language and direction page shows (E9e), the GUI's localization: before the
+    // GUI, which lets go of it when it goes. The narrating bridge likewise.
+    foundation::i18n::StringTable m_strings;
+    foundation::i18n::Localization m_localization;
+    UniquePtr<NarrateBridge> m_narrator;
+    void LoadStrings();
+    void SetLanguage(StringView locale); // "pseudo": English pseudolocalized
+    void SetPageDirection(gui::Node::LayoutDirection direction);
 
     // === The GUI: one context, two roots ===
     RefPtr<gui::GUIContext> m_gui;
@@ -397,6 +474,9 @@ Status GUISandbox::OnInit()
 
     // Mixed-direction text reorders by the Unicode bidirectional algorithm (E9c), as Engine.UI's does.
     fonts::BidiAlgorithm::Install();
+    // Shaped by HarfBuzz (E9e): Arabic joins its letters. Installed before any font loads, so each
+    // one's atlas takes the joined forms its shaping reaches.
+    fonts::HarfBuzzShaping::Install();
     m_fontService = MakeUnique<fonts::TrueTypeFontService>(AppRoot(), AppRoot());
     LoadFonts();
     m_vg = MakeUnique<vg::VGContext>(AppRoot(), m_fontService.Get());
@@ -426,12 +506,63 @@ Status GUISandbox::OnInit()
     data.Set(StringView(u8"status"), Variant::From<String>(String(u8"Loading...")));
     data.Set(StringView(u8"progress"), Variant::From<f32>(0.0f));
     data.Set(StringView(u8"quit"), Variant::From<bool>(false));
+    data.Set(StringView(u8"files"), Variant::From<i32>(3)); // the Language page's count
+    LoadStrings();
+    if (m_narrate)
+    {
+        m_narrator = MakeUnique<NarrateBridge>(AppRoot(), AppRoot());
+        m_gui->SetAccessibilityBridge(m_narrator.Get());
+    }
 
     BuildSandbox();
     BuildMenu();
     if (m_openMenuAtStart)
         OpenMenu();
     return ErrorCode::Ok;
+}
+
+// The Language and direction page's table (E9e): the serialized StringTable in the data folder,
+// read through the XML serializer, given to the GUI as its localization in the start language.
+void GUISandbox::LoadStrings()
+{
+    foundation::i18n::RegisterStringTableType();
+    const String text = ReadText(kStrings);
+    foundation::xml::XmlDocument document(AppRoot());
+    if (text.Size() == 0 || document.Parse(text.AsView()) != foundation::xml::XmlResult::Ok)
+    {
+        std::fprintf(stderr, "GUISandbox: the string table did not load\n");
+        return;
+    }
+    foundation::xml::XmlSerializer reader(document);
+    m_strings.Serialize(reader);
+    if (!reader.IsPayloadOk())
+    {
+        std::fprintf(stderr, "GUISandbox: the string table did not read\n");
+        return;
+    }
+    m_localization.AddTable(&m_strings);
+    m_gui->SetLocalization(&m_localization);
+    SetLanguage(m_startLanguage.AsView());
+}
+
+void GUISandbox::SetLanguage(StringView locale)
+{
+    const bool pseudo = locale == StringView(u8"pseudo");
+    foundation::i18n::PseudoOptions options;
+    options.Enabled = pseudo;
+    // Rich-text tags and bindings stay as they are.
+    options.Untouched.PushBack(foundation::i18n::UntouchedSpan{String(u8"["), String(u8"]")});
+    options.Untouched.PushBack(foundation::i18n::UntouchedSpan{String(u8"{{"), String(u8"}}")});
+    m_localization.SetPseudolocalization(Move(options));
+    m_localization.SetLanguage(pseudo ? StringView(u8"en") : locale);
+    m_gui->Announce(m_localization.Text(u8"lang.changed"));
+}
+
+void GUISandbox::SetPageDirection(gui::Node::LayoutDirection direction)
+{
+    for (const Page& page : m_pages)
+        if (page.id.AsView() == StringView(u8"language"))
+            page.node->SetLayoutDirection(direction);
 }
 
 void GUISandbox::LoadFonts()
@@ -441,6 +572,7 @@ void GUISandbox::LoadFonts()
     // edge at the bake size).
     fonts::FontLoadOptions roboto = fonts::FontLoadOptions::ExtendedLatin();
     roboto.pixelHeight = 16.0f;
+    roboto.lastCodepoint = 0x17F; // Latin Extended-A too: European languages, and pseudolocalized text
     (void)m_fontService->LoadFont(u8"Roboto", DataPath(kRoboto).AsView(), roboto);
     m_font = m_fontService->GetFont(u8"Roboto", 16.0f);
     fonts::DistanceFieldFonts::Initialize();
@@ -449,6 +581,15 @@ void GUISandbox::LoadFonts()
     lilita.distanceFieldRange = 12.0f;
     if (m_fontService->LoadFont(u8"Lilita", DataPath(kLilita).AsView(), lilita) != fonts::FontLoadResult::Success)
         std::fprintf(stderr, "GUISandbox: the Lilita face did not load\n");
+    // DejaVu Sans Mono for Arabic (E9e): Latin, Greek, Cyrillic, Hebrew and Arabic, and the joined
+    // forms HarfBuzz reaches from them.
+    fonts::FontLoadOptions dejavu = fonts::FontLoadOptions::ExtendedLatin();
+    dejavu.pixelHeight = 16.0f;
+    dejavu.lastCodepoint = 0x6FF;
+    dejavu.atlasWidth = 2048;
+    dejavu.atlasHeight = 2048;
+    if (m_fontService->LoadFont(u8"DejaVu", DataPath(kDejaVu).AsView(), dejavu) != fonts::FontLoadResult::Success)
+        std::fprintf(stderr, "GUISandbox: the DejaVu face did not load\n");
 }
 
 String GUISandbox::ReadText(StringView relative)
@@ -525,6 +666,22 @@ void GUISandbox::BuildSandbox()
     (void)m_gui->GetKeymap().Bind(u8"f9", u8"debug.layout");
     (void)m_gui->GetKeymap().Bind(u8"f8", u8"debug.input");
     (void)m_root->OnCommand(u8"inspector.toggle", [self](gui::CommandEvent&) { self->ToggleInspector(); });
+    // The Language and direction page's (E9e).
+    (void)m_root->OnCommand(u8"lang.en", [self](gui::CommandEvent&) { self->SetLanguage(u8"en"); });
+    (void)m_root->OnCommand(u8"lang.pseudo", [self](gui::CommandEvent&) { self->SetLanguage(u8"pseudo"); });
+    (void)m_root->OnCommand(u8"lang.ar", [self](gui::CommandEvent&) { self->SetLanguage(u8"ar"); });
+    (void)m_root->OnCommand(u8"dir.language", [self](gui::CommandEvent&) { self->SetPageDirection(gui::Node::LayoutDirection::Inherit); });
+    (void)m_root->OnCommand(u8"dir.ltr", [self](gui::CommandEvent&) { self->SetPageDirection(gui::Node::LayoutDirection::LeftToRight); });
+    (void)m_root->OnCommand(u8"dir.rtl", [self](gui::CommandEvent&) { self->SetPageDirection(gui::Node::LayoutDirection::RightToLeft); });
+    const auto count = [self](i32 by)
+    {
+        gui::DataModel& data = self->m_gui->GetData();
+        const Variant now = data.Get(StringView(u8"files"));
+        const i32 files = now.TryGet<i32>() != nullptr ? *now.TryGet<i32>() : 0;
+        data.Set(StringView(u8"files"), Variant::From<i32>(Max(0, files + by)));
+    };
+    (void)m_root->OnCommand(u8"files.more", [count](gui::CommandEvent&) { count(1); });
+    (void)m_root->OnCommand(u8"files.fewer", [count](gui::CommandEvent&) { count(-1); });
     (void)m_gui->GetKeymap().Bind(u8"ctrl-shift-i", u8"inspector.toggle");
     m_root->SetDebugFont(m_font);
     ApplyDebugOverlay();
@@ -1524,7 +1681,11 @@ void GUISandbox::RunImageTests()
     {
         for (const Page& page : m_pages)
             if (page.id.AsView() != StringView(u8"stress")) // its numbers are the machine's
+            {
                 m_imagePages.PushBack(page.id);
+                if (page.id.AsView() == StringView(u8"language"))
+                    m_imagePages.PushBack(String(u8"language@ar")); // and right to left, in Arabic (E9e)
+            }
         rhi::TextureDesc desc = rhi::TextureDesc::RenderTarget(m_swapChain->Format(), kImageWidth, kImageHeight);
         desc.usage = desc.usage | rhi::TextureUsage::CopySrc;
         if (m_device->CreateTexture(desc, m_imageTarget) != ErrorCode::Ok ||
@@ -1546,9 +1707,23 @@ void GUISandbox::RunImageTests()
         Exit();
         return;
     }
-    const String& id = m_imagePages[m_imagePage];
+    // "<page>@<language>": the page in that language; any other in English. Pictured as
+    // <page>.<language>.
+    const String& entry = m_imagePages[m_imagePage];
+    usize at = entry.Size();
+    for (usize i = 0; i < entry.Size(); ++i)
+        if (entry[i] == u8'@')
+            at = i;
+    const bool another = at < entry.Size();
+    const StringView pageId = entry.AsView().SubStr(0, at);
+    const StringView language = another ? entry.AsView().SubStr(at + 1, entry.Size() - at - 1) : StringView(u8"en");
+    const String id = another ? Format(u8"{}.{}", pageId, language) : entry;
     if (m_imageFrame == 0)
-        ShowPage(id.AsView());
+    {
+        if (m_localization.Language() != language || m_localization.GetPseudolocalization().Enabled)
+            SetLanguage(language);
+        ShowPage(pageId);
+    }
     // A fixed size and scale and a fixed clock: the same frames on every machine.
     m_root->SetDisplayScale(1.0f);
     m_root->SetViewportSize(Float2{static_cast<f32>(kImageWidth), static_cast<f32>(kImageHeight)});
@@ -1739,7 +1914,9 @@ int main(int argc, char** argv)
     // offscreen at 960x720 on a fixed clock and compare it with its reference (Data/Tests/GUI/
     // Images; the pictures go to --image-out <dir>, build/gui-images by default; exit 1 on a miss,
     // 77 with no device); --approve-images [backend]: write them as the references instead, after
-    // looking at them. --stress <n>: start on
+    // looking at them. --lang <locale>: start in that language (en, ar, or pseudo: English
+    // pseudolocalized). --narrate: print what a screen reader would say (each focus change and
+    // announcement). --stress <n>: start on
     // the Stress page, built at load n (1 to 20; measure in RelWithDebInfo). With the
     // framework's --screenshot flags, a picture of any of it.
     for (int i = 1; i < argc; ++i)
@@ -1778,6 +1955,10 @@ int main(int argc, char** argv)
             app.SetBackendName(u8"dx12");
         else if (arg == StringView(u8"--inspect") && i + 1 < argc)
             app.SetInspectSelector(next());
+        else if (arg == StringView(u8"--lang") && i + 1 < argc)
+            app.SetStartLanguage(next());
+        else if (arg == StringView(u8"--narrate"))
+            app.SetNarrate(true);
         else if (arg == StringView(u8"--stress") && i + 1 < argc)
             app.SetStress(std::atoi(reinterpret_cast<const char*>(argv[++i])));
         else if (arg == StringView(u8"--scroll") && i + 1 < argc)

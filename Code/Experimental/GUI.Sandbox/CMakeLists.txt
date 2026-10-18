@@ -4,7 +4,7 @@ target_sources(GUISandbox PRIVATE FILE_SET sandbox_modules TYPE CXX_MODULES FILE
 target_link_libraries(GUISandbox PRIVATE
     Foundation::Core Foundation::RHI Foundation::Shaders Foundation::Shaders.System
     Samples::Framework
-    Foundation::Shell Foundation::Image Foundation::Image.IO Foundation::Fonts Foundation::Fonts.TrueType Foundation::Fonts.Bidi Foundation::Fonts.DistanceField.Baker
+    Foundation::Shell Foundation::Image Foundation::Image.IO Foundation::Fonts Foundation::Fonts.TrueType Foundation::Fonts.Bidi Foundation::Fonts.HarfBuzz Foundation::Xml.Serialization Foundation::Fonts.DistanceField.Baker
     Foundation::VG Foundation::VG.Renderer Experimental::GUI Experimental::GUI.Shell Experimental::GUI.Inspector Experimental::GUI.Testing Foundation::RHI.Capture
     Foundation::Script ${SCRIPTLIB_ANGELSCRIPT}) # the showcase (G6) runs AngelScript
 util_copy_sdl3_dll(GUISandbox)

@@ -1218,6 +1218,16 @@ In mixed-direction text the arrows move the caret visually, delete and backspace
   are in the window's pixels. Item views expose the rows they have made, not every item, which
   waits for virtualized rows to have a model of their own. The inspector shows a node's
   accessibility and an audit (a focusable control with no name, an aria relation naming no widget).
+- **E9e as built.** The Language and direction page reads `i18n/sandbox.strings.xml` (a
+  StringTable in English and Arabic through the XML serializer; `strings.py` beside it writes the
+  table from its texts). Its buttons switch the language (English, English pseudolocalized, Arabic)
+  and the page's own direction; a count from the GUI's data takes Arabic's plural forms. The
+  sandbox shapes with HarfBuzz and bakes DejaVu Sans Mono over U+0020 to U+06FF for Arabic (Roboto
+  has none; a font fallback list in the lab's text would let Roboto keep the Latin); Roboto's bake
+  takes Latin Extended-A, which pseudolocalization's accents were narrowed to. `--lang` and
+  `--narrate` (each focus change and announcement printed as a screen reader speaks it). The image
+  tests add `language.ar`; every reference changed with HarfBuzz and the sidebar's entry, and the
+  new set waits for the user's approval.
 
 Not in E9: the platform adapters (UI Automation, NSAccessibility, AT-SPI) and real text to speech,
 which are host work with hosting; vertical text; locale-aware number and date formats.

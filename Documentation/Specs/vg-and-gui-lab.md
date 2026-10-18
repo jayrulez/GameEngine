@@ -51,13 +51,13 @@ with a 0.75 px fringe (`VG/Tessellation.cppm`).
   wgpu-native says no and falls back); VG's `VGBlendSpace::Encoded` keeps colours as authored and
   encodes what it samples back; the editor's windows draw Encoded. Found on the way: gradient ramps
   are baked from the authored stops, so gradients already ran as authored in both spaces; the
-  difference is in translucency. The game's screen UI followed (fda100af8): the overlay pass draws
+  difference is in translucency. The game's screen UI followed (aa9a00103): the overlay pass draws
   through the target's UNORM view when the host gives one (the player's back buffer, the Game tab's
   viewport, now 8-bit sRGB like the player's window); world panels and render-texture canvases stay
   Linear, lit as part of the scene.
 - **V2 Nested clips.** Clip paths nest (an intersection, not a replacement), so a rounded card can
   hold a scrolled list of rounded items. Tests: two nested rounded clips probed at their corners.
-  As built on `vg` (519edf76d): a nested clip writes its winding inside the mask and applies over
+  As built on `vg` (afdc172e1): a nested clip writes its winding inside the mask and applies over
   the outer's bounds (the intersection, no new pipeline); a pop replays the clips that remain; a
   clip rect inside a path clip scissors and stencil-tests together. `foundation.ui` does not use
   path clips yet (rounded overflow clipping is G4's, or a later layer here).
@@ -70,26 +70,26 @@ with a 0.75 px fringe (`VG/Tessellation.cppm`).
   Gaussian); its offscreen target is the whole viewport, so ours sizes a layer to its bounds, for
   the web build's budget.
   As built on `vg`: `PushLayer`/`PopLayer` record a layer's draws apart
-  and one composite quad (a9f623693); `VGRenderer::RenderLayers` draws each layer, innermost first,
+  and one composite quad (0654bc70c); `VGRenderer::RenderLayers` draws each layer, innermost first,
   into a target of its own (the renderer's format, sample count and stencil, so clips work inside;
   64-pixel size buckets from a pool per frame slot) before the host's pass, and the composite
-  scales the premultiplied target by the opacity through `vg_layer` (26a152b6c). Layers are a host
+  scales the premultiplied target by the opacity through `vg_layer` (0c4977e0c). Layers are a host
   opt-in (`SetLayers`), and past 128 in a batch a layer is an opacity push. `foundation.ui` fades a
-  view group through a layer (a leaf keeps the opacity push) and a fading popup (308714c46); the
+  view group through a layer (a leaf keeps the opacity push) and a fading popup (0ee738bf8); the
   editor's windows draw them, and the game's screen UI does through a new step before the shared
-  overlay pass, `IScreenOverlay::PrepareOverlay` (7ac90c055, f5fda55fb). World panels, render
+  overlay pass, `IScreenOverlay::PrepareOverlay` (7a086d477, 31be678a2). World panels, render
   texture canvases and the scene tier draw inside passes and keep layers off. Fixed on the way: the
-  pipeline variant tables were one kind short since V4 (204a59959). Probes: two overlapping opaque
+  pipeline variant tables were one kind short since V4 (7f179a1d3). Probes: two overlapping opaque
   reds in a half layer read 188 linear and 128 encoded, overlap and not; a half layer in a half
   layer is a quarter; clips inside a layer land in place; the same multisampled.
-  Filters (95acfd514, 960fdaa48): a layer may be blurred (a Gaussian sigma, separable, in the
+  Filters (5c60c362c, 0f29861a9): a layer may be blurred (a Gaussian sigma, separable, in the
   canvas's blend space, up to 32), and `DrawBackdropBlur` blurs what the canvas drew behind a
   rounded shape: everything drawn so far in the current target moves into a layer (layers are
   then ordered by depth, not index) whose blurred copy the shape samples. The backdrop is the
   canvas's own drawing, not the scene under a game's UI, which would need the host's target; and
   none is drawn inside a clip path. Sheets reach both as `filter: blur()` and
-  `backdrop-filter: blur()`, and the sheet's `opacity` now applies (b7ad83366). The UI sandbox has
-  a Layers tab to look at (d1fab9534). Desaturate and colour matrices are left for a need.
+  `backdrop-filter: blur()`, and the sheet's `opacity` now applies (dc10e620d). The UI sandbox has
+  a Layers tab to look at (3cea2ecab). Desaturate and colour matrices are left for a need.
 - **V4 An analytic box.** A rounded box with border and shadow drawn as one signed-distance
   primitive (fill, border and shadow from one coverage function), so the three cannot disagree, a
   thin border has no halo, and small radii are exact; multiple shadows and per-side borders follow
@@ -100,7 +100,7 @@ with a 0.75 px fringe (`VG/Tessellation.cppm`).
   fringe on a side of zero width, and the analytic rounded-box shadow (an erf blur), inset shadows
   too; adapted under its licence. GPUI draws fill, border and shadow as separate primitives over
   the same snapped bounds; ours keeps them one coverage function where it can.
-  As built on `vg` (3f260b613, 66f136e37): `VGContext::DrawBox` (per-corner radii, per-side borders)
+  As built on `vg` (726dbc5a3, a946cc595): `VGContext::DrawBox` (per-corner radii, per-side borders)
   drawn by `vg_box` (GPUI's coverage and border, credited in ThirdParty/gpui/), box vertices after
   the slice's ordinary ones in the same buffer; both UI hosts turn it on, rounded fills and strokes
   route through it, and the theme's rounded drawable is one box. Shadows stay their own analytic
@@ -133,7 +133,7 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   shaper fills them degenerately; hit testing, cursor movement and the 21 files that use
   `GlyphPosition` move to clusters. Tests: every text test green with no visual change; cluster
   behaviour pinned for a one-to-one script before any shaper can vary it.
-  As built on `vg` (d1d63d14e): `GlyphPosition` is {cluster, glyphId, x, y, advance, glyphInfo,
+  As built on `vg` (5b35833eb): `GlyphPosition` is {cluster, glyphId, x, y, advance, glyphInfo,
   clusterLength, xOffset, yOffset}. Clusters count codepoints, not bytes (the older spec said
   byte offset but also that stb fills `cluster = stringIndex`, which counted codepoints; editing
   works in characters, and a shaper fed UTF-32 reports clusters in that unit). Hit tests answer
@@ -147,15 +147,15 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   gown]" in its colour is one label. Tests: a paragraph mixing two sizes and three colours measures
   and wraps; an icon sits on the baseline; a malformed tag is shown as text and logged, never
   dropped; both script backends set runs.
-  As built on `vg`: runs and the markup (07f54ef0d): [b] [i] [u] [color=] [size=] [font=] [link=]
+  As built on `vg`: runs and the markup (1684246d5): [b] [i] [u] [color=] [size=] [font=] [link=]
   closed by [/name] or [/], [icon=path], "[[" for a bracket; malformed text kept and reported with
-  its offset. The inline formatter (861930e0a) breaks after spaces, shares a baseline across sizes,
+  its offset. The inline formatter (edd929d80) breaks after spaces, shares a baseline across sizes,
   sits icons on it; bold and italic take a "<family> Bold" / "Italic" face when the font service
-  has one (`IFontService::HasFamily`, 99ee0925b) and are synthesized when not (bold drawn twice,
-  italic slanted). `RichText` (a19fb788d) beside Label, in SML as `<RichText markup="...">`, with
+  has one (`IFontService::HasFamily`, 291bafa65) and are synthesized when not (bold drawn twice,
+  italic slanted). `RichText` (c3413fe25) beside Label, in SML as `<RichText markup="...">`, with
   OnLink and a hand pointer over links; scripts get `ui.findRichText` with setMarkup, plainText,
-  addRun, and onLink reading `clickedLink` (cdbb1bd57). The UI sandbox has a Rich Text tab
-  (f50d7d4f0). Kerning across a run boundary and breaking inside an over-long word are left out.
+  addRun, and onLink reading `clickedLink` (21a0332c8). The UI sandbox has a Rich Text tab
+  (e5fd473a0). Kerning across a run boundary and breaking inside an over-long word are left out.
 - **F3 Real shaping.** `Fonts.HarfBuzz` behind the factory, `ITextShaper` widened to a script, a
   language, a direction and a font list, with itemization and fallback inside the shaper; then the
   bidi algorithm for mixed-direction paragraphs. HarfBuzz is not hard-coded anywhere (user
@@ -174,21 +174,21 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   maps to plus every glyph its substitutions can reach (the closure), cooked fonts carry the font
   tables the shaper reads, the stb shaper writes glyph ids too, and the font data version bumps
   with a migration, so shipped games shape as the editor does. HarfBuzz 14.5.1 is vendored
-  (ac3396dab).
-  As built on `vg` so far: atlases answer GlyphFor(codepoint) and look up by glyph id (730e3cf3d);
+  (42ff2e55e).
+  As built on `vg` so far: atlases answer GlyphFor(codepoint) and look up by glyph id (b66cb7e6e);
   every atlas, baker and cooked font keys by glyph index, the TrueType atlas packing glyph indices
-  itself, and every shaper writes them (c80aec10e; FontResource 3); fonts expose their file and
-  cooked fonts keep it (3f65b0d16); a TextShaperFactory and a shared ClusterTextShaper (3276b36b0);
-  Fonts.HarfBuzz, HarfBuzz behind ITextShaper only (57d622573); bakers bake what a shaper's
-  substitutions reach, through ITextShaper::CollectReachableGlyphs (23d4e26a7; font builder 8);
-  the engine's UI, the editor and the UI sandbox install it (a40662a37). Then: ITextShaper::Shape
+  itself, and every shaper writes them (410ab8e40; FontResource 3); fonts expose their file and
+  cooked fonts keep it (46f33ae29); a TextShaperFactory and a shared ClusterTextShaper (1c7bc2499);
+  Fonts.HarfBuzz, HarfBuzz behind ITextShaper only (f1fb65f6d); bakers bake what a shaper's
+  substitutions reach, through ITextShaper::CollectReachableGlyphs (652a889ec; font builder 8);
+  the engine's UI, the editor and the UI sandbox install it (a29edfef9). Then: ITextShaper::Shape
   takes a ShapeRequest (a font list with fallback, a direction, an ISO 15924 script, a BCP 47
-  language; a6c260383); VG shapes single-line text through the font's shaper, cached across
-  frames (63e94cfa2); the distance-field cook keeps every baked glyph (795d7f4b0, a bug the game's
-  title showed); SheenBidi 3.0.0 is vendored (be3970ad4, Apache-2.0; the project enables C for
+  language; 17bdff2ba); VG shapes single-line text through the font's shaper, cached across
+  frames (c53fd4dbe); the distance-field cook keeps every baked glyph (620290d46, a bug the game's
+  title showed); SheenBidi 3.0.0 is vendored (b76db8a01, Apache-2.0; the project enables C for
   it); the bidi seam (IBidiResolver, ReorderLine for L1/L2) and shapers that lay lines out in
-  visual order, with right-to-left carets and hit tests (c98a1618d); Fonts.Bidi, SheenBidi behind
-  IBidiResolver only (a18c658fd); the hosts install it (ae6c58ece). Left: a label measures with
+  visual order, with right-to-left carets and hit tests (4854bf5b1); Fonts.Bidi, SheenBidi behind
+  IBidiResolver only (fdee57524); the hosts install it (fdd809607). Left: a label measures with
   its font's own MeasureString (unshaped), so a ligated label is laid out a little wide; the basic
   shaper's wrapping knows no bidi; editing right-to-left text (caret movement by arrow keys,
   selection across a direction change) is untested.
@@ -197,20 +197,20 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   panel behind it. Tests: an outline's width and a shadow's offset probed in pixels; effects on one
   run of a rich paragraph and not its neighbours.
   As built on `vg`: the distance-field baker writes MTSDF, the true signed distance in alpha beside
-  the multi-channel field (6cf7438a7; font builder 10, editor cache 4), so contours past the edge
-  round a corner. `VGContext::SetTextEffects` (dd8e7fc70) puts a `TextEffects` (outline, shadow,
+  the multi-channel field (f7a6e6776; font builder 10, editor cache 4), so contours past the edge
+  round a corner. `VGContext::SetTextEffects` (e7443d4bd) puts a `TextEffects` (outline, shadow,
   glow) on the state; a text draw emits its glyphs once per pass, shadow, glow, outline, then the
   glyphs, each pass carrying two values per vertex (`VGVertex::effect`: the edge moved out and its
   ramp widened, in field units converted from the text's pixels per glyph), and the shader reads
   alpha for those passes and the median for the glyphs. An effect reaches as far as the field
   holds (half its range) and is scaled down past that; a coverage font draws a shadow's offset copy
   only. Probed on Vulkan and WebGPU: a 1.5 px outline adds 1.5 px each side of a 48 px stem and
-  leaves the stem, a shadow lands its offset. Markup and sheets (1403695e1): `[outline=<w>
+  leaves the stem, a shadow lands its offset. Markup and sheets (4d56aef7a): `[outline=<w>
   [colour]]`, `[shadow=<x> <y> [blur] [colour]]`, `[glow=<r> [colour]]` per run, the parts a run
   leaves out the control's; RichText draws every run's effects before any run's glyphs
   (`SetTextEffectsOnly`); `text-shadow`, `text-outline` and `text-glow` in sheets go onto the VG
   state as a view draws, reaching its children as CSS's text-shadow does, `none` turning one off.
-  A field's range is a load option and a font asset field (0d8c3da3b and after; 4 texels by
+  A field's range is a load option and a font asset field (3c77244bc and after; 4 texels by
   default), so an effects font bakes a wider field; the UI sandbox's Rich Text tab shows effects
   over bright stripes from a 12-texel Roboto. Left: a coverage font (a raster-ramp asset, the
   sandbox's other faces) draws a shadow's copy only; a glow is a linear ramp, not a Gaussian.
@@ -243,10 +243,10 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   is, and each GUI decides what it may create. Native code is first-class: the typed API stays
   as it is, and holds widgets weakly through the same table.
   As built on `vg`: script backends share one gone-handle rule, `isValid()` on every handle and
-  any other use an error, Luau raising on a gone read and write as AngelScript did (7b92d7582);
-  AngelScript binds a type's bases' members as Luau does (62c44a3f6); a resolve-mode Variant may
-  retain an anchor (cc77c6efa); reflection takes a StringView API as it is and declares creators
-  (`TypeBuilder::Creator`, never a script constructor; 0442029d4). The lab (472df48af): each
+  any other use an error, Luau raising on a gone read and write as AngelScript did (fc1cb1d7c);
+  AngelScript binds a type's bases' members as Luau does (309b1d3a0); a resolve-mode Variant may
+  retain an anchor (5dffbb5a1); reflection takes a StringView API as it is and declares creators
+  (`TypeBuilder::Creator`, never a script constructor; 75623f639). The lab (17f145f05): each
   SceneNode's ElementTable, `Element<T>` natively and handles in scripts; `ElementTypes`
   (register a reflected Node type with a creator under its tag, the `element` attribute or the
   type name; a taken tag refused, loudly) and a GUI's `ElementSet` (all, or allowed tags with
@@ -268,8 +268,8 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   once, one property table, the box as a value on the node; then each SceneRoot scaled on its own
   (one per window or render target; SceneNode renamed SceneRoot, `GetSceneRoot()` beside
   `GetRootNode()`).
-  As built on `vg`: VG boxes take a border colour per side (0cceb5d70). The style system
-  (209e92ca7): declarations expand into longhands and parse once into typed StyleValues (cached on
+  As built on `vg`: VG boxes take a border colour per side (e220e7d42). The style system
+  (76c806a41): declarations expand into longhands and parse once into typed StyleValues (cached on
   a declaration without var()); the cascade sets longhands; var() is substituted anywhere,
   nested, with fallbacks, custom properties inheriting from the parent's style; StyleProperties
   names the properties and grammars, and a property it does not name reaches a widget's
@@ -277,15 +277,15 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   (background colour and gradient or image layers, a border per side, radii, box shadows) drawn
   through VG, owned by the sheet; `transform` and `transform-origin` a style transform whose
   percentages follow the size; a border with no style draws none, as CSS has it. SceneRoot and
-  its display scale (7b7435d82): logical units mapped to device pixels by the root's own
+  its display scale (5f7005068): logical units mapped to device pixels by the root's own
   transform, so drawing and hit testing agree; the media context gives logical size and density;
-  media queries take resolution. Per-property tests and a sandbox row of four cards (8c60c8d21).
+  media queries take resolution. Per-property tests and a sandbox row of four cards (c7c3199ab).
   Left: text at a scale is crisp through distance-field fonts only, as in foundation.ui (see Open
   limits).
 - **G3 Motion.** Every animatable property transitions, with real easings (`cubic-bezier`,
   `steps`, the named ones); `@keyframes` animate any property, not only opacity and colour. Tests:
   sampled curves against the formula.
-  As built on `vg` (96f14996f): easing (cubic-bezier solved for x, steps() with every jump
+  As built on `vg` (0424cce0e): easing (cubic-bezier solved for x, steps() with every jump
   position, linear and the named curves, ease the default); interpolation over the typed values
   (numbers, lengths of one unit, colours, shadow lists padded with transparent shadows, transform
   lists of the same functions, origins, gradient layers of one shape; the rest switches halfway);
@@ -293,7 +293,7 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   track per property (transitions retargeting from a running track; keyframes with per-stop
   timing, implicit end keys, delay, iteration count, direction, fill mode), ended tracks returning
   to the target or the property's initial value, the widget held weakly. The sandbox's cards lift
-  on hover and the tilted one sways (ebf0fcd29). Then the follow-up the first pass left: transform
+  on hover and the tilted one sways (cd30de36e). Then the follow-up the first pass left: transform
   lists of different functions move through their decomposed matrices (translation, rotation the
   short way round, skew, scale), lengths in different units in pixels (a percentage against
   another unit still switches), the transition and animation shorthands expand into their
@@ -310,7 +310,7 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   before a hit test); a container outside a scene still lays out at once. Setting geometry to
   what it is changes nothing. `SceneRoot::NeedsFrame` says whether anything is waiting (a redraw,
   a running action, a layout), and GUISandbox skips a frame that needs none (drawing while a
-  screenshot waits; `--always-redraw`, `--frame-stats`) (9f26b72b0, 7855ce02d).
+  screenshot waits; `--always-redraw`, `--frame-stats`) (57b1b0d45, a68414659).
   Then the effects: `filter: blur()` (blurs in a list add as variances) and `backdrop-filter:
   blur()`, which animate, `mix-blend-mode` (normal, multiply, screen, plus-lighter: the blends VG
   composites), and `overflow`, all written to the node's box by the sheet. A node with a filter or
@@ -321,28 +321,28 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   multisampled colour and stencil targets for any host; the UI runtime moved onto it, and
   GUISandbox now draws with everything VG has (analytic boxes, layers and blurs, stencil fills), in
   a row of effect cards over stripes. A screenshot of it found repeating gradients repeating the
-  whole line rather than their stops' span; fixed (ed07570fe, 51067f95b, e85933062, db627fee0).
+  whole line rather than their stops' span; fixed (b5ba2d50c, d51dd3f2a, 6e0e8d1ad, f01fa4c40).
 - **G5 Data binding.** Properties that update what depends on them (AUI's model: dependency
   tracking, no manual subscriptions), bound from markup and script. Tests: a bound label follows
   its source.
-  As built on `vg`: the reactive core (b0cc350ce), a Property recording its readers, a Computed
+  As built on `vg`: the reactive core (ffcf72a9b), a Property recording its readers, a Computed
   recomputing lazily, an Effect rerunning when what it read changed, its sources found again on
   every run; effects wait on their SceneRoot's scheduler and run once per frame however many
   changes reach them (outside a scene, at once). The evaluating observer is per thread, not per
-  GUI. A node owns its bindings (37c1f5e18): any reflected property binds by name, the value
+  GUI. A node owns its bindings (989eab239): any reflected property binds by name, the value
   converted to its type, so a library's widget binds with no code of its own; a property the user
   changes (`twoWay`: slider value, checkbox, text field text) writes back; the user-set widget
   state is observable. Each SceneRoot holds a DataModel of named values. Markup binds `{{name}}`
-  (6aefb794d): a name alone follows and writes back, text around names follows the text built from
-  them. Scripts bind through reflection (6f65e7ebf): `node.bind(property, function)`,
+  (52adcf108): a name alone follows and writes back, text around names follows the text built from
+  them. Scripts bind through reflection (982c7925d): `node.bind(property, function)`,
   `node.bindData(property, name)`, `gui.getNumber`/`getText`/`getBool` (reads a binding follows;
   typed because AngelScript cannot return an untyped value) and `gui.set`, the same story tested in
-  AngelScript and Luau. An f32 bound to text reads as its own shortest form (4d487f5dc). GUISandbox
-  shows a bound row with no handler wired (1a04d0426).
+  AngelScript and Luau. An f32 bound to text reads as its own shortest form (c4555d215). GUISandbox
+  shows a bound row with no handler wired (65518d27a).
 - **G6 A showcase.** The sandbox becomes a small scripted demo (a game menu with transforms,
   shadows, gradients, blur and animated states, written in AngelScript), the proof that it looks
   the part.
-  As built on `vg`: `GUISandbox --showcase` (2ea5e9e11) shows a main menu from
+  As built on `vg`: `GUISandbox --showcase` (a6fe2508f) shows a main menu from
   `Data/Assets/ui/showcase`: markup for the widgets, a sheet for every look (a radial background,
   drifting orbs under blur filters, a distance-field title with a breathing glow, gradient buttons
   that lean in on hover and give on a press; the title fixed in the upper third with one slot under
@@ -352,13 +352,13 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   data and fills a loading bar through `update(dt)`, which the host calls only while it asks.
   Native code sizes the layers, seeds the data and closes the window once Leave has faded;
   `--showcase-call <function>` opens another panel for a screenshot. The sheet's text effects came
-  first (75cee63f6: text-shadow, text-outline and text-glow, inherited through the VG's state and
+  first (89f000618: text-shadow, text-outline and text-glow, inherited through the VG's state and
   animatable). Building it found four defects, each fixed with a test: a container never heard a
   child resize, so a flex layout kept the zero basis it met a child with before the sheet sized it
-  (2a43072ba); the lab's `X.of(variable)` did not compile in AngelScript, its Variant parameter a
-  `?&in` sink there (1fd2077bd lets a method declare a Variant parameter's type, 3fa253776 uses it);
+  (e4c7ea85e); the lab's `X.of(variable)` did not compile in AngelScript, its Variant parameter a
+  `?&in` sink there (b2b318cf0 lets a method declare a Variant parameter's type, 78222f33c uses it);
   and an explicit handle passed to a Variant sink was read one level short, which crashed
-  (70e0f05a7).
+  (c0a11098c).
 
 - **G7 Navigation and commands (must-haves, user 2026-10-14; every other phase designs for them).**
   `foundation.ui` has a spatial picker with code-only directional overrides (`View::NextFocusUp`
@@ -395,27 +395,27 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
     action; those stay as specified above.
   Tests: the picker over grid and irregular layouts, overrides and scopes (wrap, contain, focus
   memory), repeat timing, and a command's state reaching a button, a menu item and a binding.
-  As built on `vg`: directional navigation (e70e353b8), a picker preferring neighbours overlapping
+  As built on `vg`: directional navigation (6462fdfe0), a picker preferring neighbours overlapping
   on the cross axis, then the nearest along it, skipping hidden, disabled and clipped-away widgets
   (a scroller's clip excepted) and the focused widget's own ancestors; focus scopes that pass, wrap
   or contain and remember their last focus; keys to the focused widget first, its unused arrows
   (KeyEvent::Handled) moving focus, so a list gives them back at its ends (a slider keeps left
   and right even there: holding the d-pad to its end must not throw focus off it, user ruling); Return or
   Space activating as a click. Overrides and scopes from sheets, markup and scripts alike
-  (f4daab463: nav-up and the rest, nav-scope, nav-default, reflected properties carrying their CSS
+  (72f1e43b4: nav-up and the rest, nav-scope, nav-default, reflected properties carrying their CSS
   names). A held direction repeating after 0.4 s from 0.16 s down to 0.05 s, focus scrolling into
-  view, and `:focus-visible` for a keyboard or gamepad focus ring (ff5ffc297). One command model
+  view, and `:focus-visible` for a keyboard or gamepad focus ring (04625cf82). One command model
   dispatched along the focus path, capture then bubble, available while enabled with a handler on
   the path, its state reaching a bound button, checkbox and menu item as a binding follows it, and
-  scripts defining, switching, handling and running commands (3c7af4cf9). A keymap after GPUI's,
+  scripts defining, switching, handling and running commands (049c4e109). A keymap after GPUI's,
   keystrokes and chords bound to commands under context predicates, the deepest match then the
   later binding winning, unbinding by binding to nothing; the lab's KeyCode grew every letter,
   digit and F1 to F12; the shell bridge routes the d-pad, the left stick (with hysteresis) and the
-  buttons, and BindFromInputMap fills a keymap from the game's input map (ac79e5e2a). Focusing a
-  page lands on its entry, and Tab stays in a containing scope (6725ec1bd). The showcase plays by
-  keyboard and gamepad, its Back on Escape and the East button (b004a0a6e). Answering whether the
+  buttons, and BindFromInputMap fills a keymap from the game's input map (d16b70e28). Focusing a
+  page lands on its entry, and Tab stays in a containing scope (cabcfadfd). The showcase plays by
+  keyboard and gamepad, its Back on Escape and the East button (cd36ded44). Answering whether the
   reactive core is re-entrant found an effect without a scheduler rerunning inside its own run;
-  fixed (5dce386d8).
+  fixed (0c14186e8).
 
 - **After G7: GUIContext (user direction 2026-10-16).** One GUI of several roots (windows, render
   targets, a panel in the world). The context holds what is the GUI's: one animation clock (each root
@@ -426,15 +426,15 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   availability follow (user ruling). A root keeps its dispatcher, display scale, viewport, media
   context, layout and drawing. Every root is made in a context and the host advances the GUI through
   GUIContext::Update; the first cut's shims for single-root code (a private context, a forwarding
-  SceneRoot::Update and accessors) went (4a700e9c6, user direction: the lab has no users to keep
+  SceneRoot::Update and accessors) went (e3848daca, user direction: the lab has no users to keep
   them for). Before it, actions
-  learnt to hold their target weakly and run on a per-target time scale (0b0fa7b9b); the context
-  itself is f4bc06def. Playing the showcase found four defects, each fixed with a test: a held
-  d-pad direction skipped the focused widget (d8c0b19f6); a click focused the full-window backdrop,
-  so the first arrow found nothing (25a9872ee: a click focuses what takes focus, navigation from
+  learnt to hold their target weakly and run on a per-target time scale (9ae4e9370); the context
+  itself is af65a9d67. Playing the showcase found four defects, each fixed with a test: a held
+  d-pad direction skipped the focused widget (950b75377); a click focused the full-window backdrop,
+  so the first arrow found nothing (251292e28: a click focuses what takes focus, navigation from
   what does not starts from the entry, and focus shows until the pointer is used); a slider gave its
-  arrows back at its ends (fd7e5f95c: it keeps them, user ruling); and Right took a wide field in
-  the row above (dd8341bc7: a candidate must start past the focused widget's edge).
+  arrows back at its ends (fadf8c341: it keeps them, user ruling); and Right took a wide field in
+  the row above (6a58abbea: a candidate must start past the focused widget's edge).
 
 ## Open limits
 

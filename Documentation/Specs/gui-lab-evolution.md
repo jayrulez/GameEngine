@@ -69,7 +69,7 @@ needs: events and layout first, since every widget's behaviour and size rests on
 Facts: the dispatcher sends each pointer and key event to one node (`Scene/EventDispatcher.cppm`);
 a node's handlers are its `On*` overrides and its listeners; only the wheel walks up, to the
 nearest node that wants it. `:hover` matches the node under the pointer only. Script handlers get
-no event data. Disabled widgets are filtered since 337969cc3.
+no event data. Disabled widgets are filtered since 57011941d.
 
 Design:
 
@@ -109,7 +109,7 @@ Tests: capture and bubble order and stopping; a handler removing its own ancesto
 `pointer-events: none`; double and triple click; `Inject*` results; script handlers reading event
 data in both languages.
 
-As built on `vg` (2026-10-16): the route (`Node::RouteEvent`, d8a87b8e2): capture listeners from
+As built on `vg` (2026-10-16): the route (`Node::RouteEvent`, 9a313a648): capture listeners from
 the root down, then at each node from the target up its own handler and its bubble listeners;
 everything at a node runs and Handled ends the route after it (the DOM's stopPropagation); the
 path is held for the walk. The hover and press paths set `Node::IsHovered` and `IsPressed`
@@ -120,8 +120,8 @@ clock; `Node::TakesPointer` (a painted box, focus, or pointer listeners) behind 
 result and `IsPointerOver`. `WantsWheel` is gone: scrollers mark the wheel handled only when they
 moved, and act on keys only when focused. `pointer-events` and `cursor` are reflected with their
 CSS names, the dispatcher answers `GetCursor`, and the shell bridge applies it and reports use
-from `Dispatch` (1da80863d). Script handlers get a constructible `GuiEvent` value and take the
-event by returning true (cac74aaff). The sandbox's Input page (bc1ad7a4a).
+from `Dispatch` (6753d542c). Script handlers get a constructible `GuiEvent` value and take the
+event by returning true (6731150c1). The sandbox's Input page (d2fe0f6cb).
 Left: drag and drop still goes to its target alone (E7); Escape closing a popup is still the
 dispatcher's special case (E5); the first hover restyles the hovered top-level node's subtree
 (E3's restyle cost); the click thresholds are device pixels, not scaled; the sandbox has no plain
@@ -161,9 +161,9 @@ the mouse copies.
 As built on `vg` (2026-10-16): the dispatcher's `InjectTouchDown`, `Move` and `Up` share the
 mouse's pointer paths, with `PointerType` and the finger's id on each event and `pointer` in a
 script's `GuiEvent`; taps count within 24 device pixels (clicks 6); `CancelPointer` and
-`PointerCancel`, which Slider, ScrollBar, a window's drag handles and TextField handle (33edce325).
+`PointerCancel`, which Slider, ScrollBar, a window's drag handles and TextField handle (4ca0b15e2).
 The bridge forwards touch from `Dispatch` (placed with `SetWindowSize`) and from a surface's polled
-fingers, and drops SDL's mouse copies (18b6df7f8). Not yet tried on a touch screen.
+fingers, and drops SDL's mouse copies (dfa9aa570). Not yet tried on a touch screen.
 Left: long press (E5) and panning (E6).
 
 ### E2 Measure and arrange
@@ -260,13 +260,13 @@ auto flow), stack, dock, absolute and relative placement; `visibility: hidden` k
 `overflow` on any node: the offset moves the children through their transform, with the wheel,
 keys, drawn and draggable bars and `ScrollIntoView`; `Panel` is the plain element and `ScrollView`
 a node with `overflow: auto`; LinearLayout, FlexLayout, GridLayout and RelativeLayout are gone
-(4aa0e07c0, d992d2d58). Baselines: every node answers `BaselineAt(size)` (a label, button, text
+(3d0c69729, 8c7d6e4e9). Baselines: every node answers `BaselineAt(size)` (a label, button, text
 field and combo box their first line's, any other the bottom of its content box) and a flex row
-lines them up, growing to hold them (38cf9c409). Arranged edges round to the root's display scale,
+lines them up, growing to hold them (e6db1fec3). Arranged edges round to the root's display scale,
 each edge on its own, with relative offsets and the scroll shift; a new scale lays the whole tree
-out again (78a25bd6c). The layout overlay draws border boxes, padding, margins and text baselines
+out again (1d369d485). The layout overlay draws border boxes, padding, margins and text baselines
 over a root's tree (`SceneRoot::SetLayoutOverlay`; F9 or `--layout-overlay` in the sandbox,
-9af53b4a1). The sandbox's Layout page shows all of it in markup (30cb3883f).
+9d9c4d5bc). The sandbox's Layout page shows all of it in markup (22d67ab76).
 Left: a container's baseline is its content box's bottom, not its first child's as in CSS, and
 grid and stack place `baseline` as start; text is not snapped to the pixel grid, only boxes;
 `z-index` is parsed but does not yet order drawing or hit testing; the scroll bars are not styled
@@ -279,7 +279,7 @@ them (E3 makes inline the highest origin).
 
 Facts: properties applied through widget setters (size, padding, opacity, visibility, colour,
 font) keep their last value when the rule that set them stops matching; `color` and fonts do not
-inherit, so six widgets needed a per-widget font hook (8e9964e39); parts take only
+inherit, so six widgets needed a per-widget font hook (3e766ab7b); parts take only
 `background-color`; there are no sibling, structural, attribute or `:not` selectors; an unknown
 pseudo-class is ignored, so a rule with a typo matches more than it should.
 
@@ -317,20 +317,20 @@ tests against the id, the classes and reflected properties by CSS name, `:focus-
 `:enabled`, and the widgets' own `:checked`, `:indeterminate`, `:read-only`, `:read-write` and
 `:placeholder-shown` (UIWidget::GetWidgetStates; CheckBox gains an indeterminate state, TextField
 a read-only one); matching backtracks; an unknown pseudo-class matches nothing; a change of
-children restyles the siblings (242d76f5c). The cascade orders by origin: the user agent's sheet,
+children restyles the siblings (ec6ed7171). The cascade orders by origin: the user agent's sheet,
 the GUI's, a subtree's (held weakly by its root, an inner over an outer), then the node's inline
 style, which markup's unclaimed attributes fill; the sandbox loads its theme as the user agent's
-and each page's sheet for its page (9ef0a66c2). A setter called from code pins its property as
+and each page's sheet for its page (a4e94f2ac). A setter called from code pins its property as
 code's (UnpinStyle gives it back); the applier writes in a Node::StyleWriteScope; what no rule
 sets returns to the node's own value, its default (widgets write theirs in a scope) or what code
-set before a sheet first styled it (7729bbf84). Every node carries a text style (colour, font
+set before a sheet first styled it (fb87619cd). Every node carries a text style (colour, font
 with family and size, alignment) that inherits, read by widgets through OnTextStyleChange; the
 SetTheme hooks are gone; the table marks the inherited properties; inherit, initial and unset
-work (1c0acc07b). A part's style is a box and an opacity, each aspect over the widget's own look
-(c86ac3372). A state change restyles the node alone unless a rule reads that state through an
-ancestor (its subtree) or a sibling (its later siblings) (ffa899849). Found on the way: a flex
-row clamped a non-stretched item's height to the row's (6e8bdd980). The Styling page shows the
-selectors, inheritance and parts (e0cb7daee).
+work (ad3c1da49). A part's style is a box and an opacity, each aspect over the widget's own look
+(1fceed0e8). A state change restyles the node alone unless a rule reads that state through an
+ancestor (its subtree) or a sibling (its later siblings) (d21ff1e93). Found on the way: a flex
+row clamped a non-stretched item's height to the row's (9cf7b51d1). The Styling page shows the
+selectors, inheritance and parts (92cae52d4).
 Left: parts take no motion (a transition or keyframes on `slider::thumb`) and no text
 properties; `inherit` on a property that does not inherit takes the parent's cascaded value, not
 its live one; a parent's animated colour reaches its children at their next restyle, not each
@@ -387,28 +387,28 @@ password masking; preedit; `changing` against `changed`.
 As built on `vg` (2026-10-17): TextRuns, TextLayout, UndoStack and InputFilter are copied into
 the lab with their tests, under the lab's names, colours parsed as its sheets parse them, the
 undo stack in byte offsets, and the layout drawing plain runs in the label's own font, asking a
-font service only for a run that sets its own (83dae18d1). Neither fonts nor core segments text,
+font service only for a run that sets its own (da55baf42). Neither fonts nor core segments text,
 so graphemes (combining marks, joined emoji, flags, CR LF) and words are the lab's own, over
 tables of the common ranges; the editing model runs named commands over them (move, select and
 delete by grapheme, word, line, page and document; undo, redo, cut, copy, paste), with a
 filter, a grapheme limit, read-only and copy-forbidding rules and undo that folds a run of
 typing or deleting; every GUI binds the editing keys in the "textinput" context, the vertical
-keys and Return in "textinput && multiline" (fd817554a). The Text every widget draws with lays
+keys and Return in "textinput && multiline" (92e81d3e5). The Text every widget draws with lays
 out through the copied layout, which gains a line height with half-leading, letter spacing, a
 clamp, an ellipsis at a line's end, start or middle, and byte offsets for every glyph and line;
 white-space, line-height and letter-spacing inherit through the text style, text-overflow and
 line-clamp are a label's own; a label is rich with `rich="true"` or as a RichText element, its
 links `link` events; a GUI context carries the font service and resources rich text needs
-(5d2458385). TextField edits through the model and the keymap, scrolls across, filters, masks a
+(a2643ac1f). TextField edits through the model and the keymap, scrolls across, filters, masks a
 password and reports `input`, `change` (a commit: Return or leaving with a new value) and
-`submit`; a font with no shaper places characters by measuring (f5aaa9f16). The shell reports
+`submit`; a font with no shaper places characters by measuring (4d7d4e4fc). The shell reports
 an IME's composition when the application asks (WindowSettings::drawsTextComposition) and takes
-where text is typed, for the candidates (63e064258). An ellipsis or a password bullet the
+where text is typed, for the candidates (bc40975c2). An ellipsis or a password bullet the
 font's atlas lacks falls back to full stops or a middle dot, and overflow clips a label's own
-text (d59c99328). TextArea and TextField share TextEditBase; the text area wraps, keeps its
+text (ffc2146b4). TextArea and TextField share TextEditBase; the text area wraps, keeps its
 column across shown lines, pages and scrolls; a composition shows underlined in place and the
-bridge tells the window where the field types (20976429c). The Text page shows it all
-(9fb8acfd7).
+bridge tells the window where the field types (71777463e). The Text page shows it all
+(7534c4acb).
 Left: the context menu waits for E5's popups; the web shell reports no composition and ignores
 the input area; segmentation covers the common ranges, not all of UAX #29 (no Hangul jamo or
 Indic conjunct rules), and words are not the shaper's; carets assume left-to-right text (E9); a
@@ -508,22 +508,22 @@ and at display scales, and follows a scrolled anchor; tooltips found from a chil
 pad walks through a menu bar, a submenu, a combo box and a message box.
 
 As built on `vg` (2026-10-17): the design above was rewritten after a survey of how the others
-design popups (4074b78f2). A popup opens as a child of its owner and is promoted into its root's
+design popups (f89fac712). A popup opens as a child of its owner and is promoted into its root's
 top layer: drawn after the tree, hit-tested first, laid out where the layer places it (on the
 device grid, every layout pass, so it follows its anchor), styled and routed where it is, its
 events reaching the owner's listeners and not the owner's own handlers. The dispatcher's stack
 replaces the single popup and the modal root; ComboBox, Menu, MenuBar, the modal Window and the
-tooltip moved onto it; the menu's chain bookkeeping and the window's scrim went (196466558). A
+tooltip moved onto it; the menu's chain bookkeeping and the window's scrim went (0dfd468a2). A
 press is consumed only when it closes popups and lands in none (a press in a parent menu
 closing its submenu goes on to it). Menus, the menu bar (F10 to enter, `menu.enter-bar`), the
 combo box and the message box take the keyboard and the pad; a list tells an item chosen from
-one selected; a pad's East, unbound, is Escape (62f970c48). Tooltips are the dispatcher's, on the
+one selected; a pad's East, unbound, is Escape (c211601a7). Tooltips are the dispatcher's, on the
 GUI's clock, from the nearest text up the parent chain, any node as content; a right release,
 Shift+F10 (`menu.context`) or a long press is a `contextmenu` event; the text fields have their
-context menu (bbb573f6e). The keymap takes `>` and gives shortcut text; controls bound to a
-command follow its label, icon and keys (d5f28bee4). Godot's safe area keeps a submenu open while
-the pointer heads for it (774cf699b), and a submenu's item stays lit while it is open
-(2fe5ae7e9). The Menus page shows the keys and the popups (e6f51183c).
+context menu (fb80bb47a). The keymap takes `>` and gives shortcut text; controls bound to a
+command follow its label, icon and keys (cdcac506c). Godot's safe area keeps a submenu open while
+the pointer heads for it (5928e6884), and a submenu's item stays lit while it is open
+(9d2b08698). The Menus page shows the keys and the popups (90cf40dca).
 Left: a popup never leaves its root (no OS popup windows) and modality is per root; a closed
 combo box steps its selection with Up and Down and opens with Alt+Down or activation (the
 Windows convention, where the draft said Down opens); type-ahead jumps by first letter only, with
@@ -614,34 +614,34 @@ Tests: a feature matrix per control, the same rows as the assessment's, each a t
 As built on `vg` (2026-10-17): ranges are a RangeValue held by a RangeWidget base that the slider,
 the scroll bar and the progress bar derive from, the page protected (a progress bar has none);
 the slider is horizontal or vertical with ticks and the wheel, the progress bar indeterminate
-(b6be7fe2e). One button core, ButtonBase: toggle, action on press, repeat on the GUI's clock,
+(223991675). One button core, ButtonBase: toggle, action on press, repeat on the GUI's clock,
 groups by a ButtonGroup or a `name` scoped to the GUI, the arrows round a group; its text, icon
 and indicator are child parts, a check box's indicator sized by a sheet as `checkbox > indicator`;
-RadioGroup went (b314cf1e9); a checked box draws a tick, the mixed state a bar (91b8bdba5); the
-text part follows the button's alignment (9d75c5100). Scrolling is Node's: a handle API, the
+RadioGroup went (18d20a5c4); a checked box draws a tick, the mixed state a bar (5f854c46f); the
+text part follows the button's alignment (b8b4c103b). Scrolling is Node's: a handle API, the
 `scroll` event, Shift and the wheel, `overscroll-behavior: contain`, smooth wheel scrolling by
-`scroll-behavior: smooth` (5d676e81d); `::scrollbar` and `::scrollbar-thumb` are parts with
+`scroll-behavior: smooth` (1d1fc531b); `::scrollbar` and `::scrollbar-thumb` are parts with
 states of their own (a pseudo-class after a part is the part's state), `scrollbar-width` and an
-overlay that fades (9a8061d62); a tap-or-pan machine with a closed-form fling and a catch
-(2b1117668); the pad's right stick (e8a0bc281); stick-to-end that re-latches (58fa7edda). The
+overlay that fades (d8deeaaf6); a tap-or-pan machine with a closed-form fling and a catch
+(75ccc1c3e); the pad's right stick (cee3d206a); stick-to-end that re-latches (0c0b24844). The
 smaller controls: Image by object-fit and object-position, `src` through the resource provider,
-`image-color` (27ee72685); Separator and Spacer (9280f3e0f); NumberField as expressions,
-scrubbing (moves carry modifiers, 95b3447f9) and repeating arrows (9f084391d); EditableLabel
-(62b8eb73e); Expander, its chevron the tree's (73b49e6f2). Tabs: a TabBar of Tab elements with a
+`image-color` (9f2a65c53); Separator and Spacer (42c429ced); NumberField as expressions,
+scrubbing (moves carry modifiers, cc5b6d4ec) and repeating arrows (3432ea4a0); EditableLabel
+(798b536ee); Expander, its chevron the tree's (6f079c3de). Tabs: a TabBar of Tab elements with a
 close part, close a request (`tabclose`) under a display policy, reorder by a neighbour's
 midpoint, an overflowing strip that scrolls and lists every tab, Ctrl+Tab; a TabView of TabPages
-kept alive or built on first show; TabWidget went (ad19f6b28). Models report row ranges and give
-rows ids; editing and sorting are capabilities (dfb22d647). ItemView replaces AbstractItemView:
+kept alive or built on first show; TabWidget went (0b6d5aa69). Models report row ranges and give
+rows ids; editing and sorting are capabilities (726011918). ItemView replaces AbstractItemView:
 a Node scroll container (Node gained SetScrollExtent and OnScrollChange) realising the rows in
 view from pools per row type, heights fixed or measured in a Fenwick sum tree, scrolling anchored
 to an item, selection a set of ids, `:selected`, `activate`, type-ahead, editing with hooks
-(0ff50cd71); rows from a markup `<template>` with `{{item}}`, `{{item.Column}}` and `{{index}}`,
-picked by `row-type-column` (e69c1666a, 3b6b299d6); table columns in px, % or auto, resizable,
-scrolling across, sorted with an indicator (dacc4c6d0); a grid layout mode (f31347354). Menus are
+(db250d553); rows from a markup `<template>` with `{{item}}`, `{{item.Column}}` and `{{index}}`,
+picked by `row-type-column` (c74c427ca, 327096941); table columns in px, % or auto, resizable,
+scrolling across, sorted with an indicator (f223dd117); a grid layout mode (b08eb3da4). Menus are
 markup (`<Menu>`, `<MenuItem>`, `<MenuSeparator>`, nested menus, `<MenuBar>`), with
-`context-menu="id"` and a bubbling `activate` whose event carries the target's id (3ce0ab836);
+`context-menu="id"` and a bubbling `activate` whose event carries the target's id (9a850dae2);
 TreeView, TableView, ScrollBar and MessageBox are elements, the views taking their data from
-markup and a message box shown from its page and coming back answered (dbd104bcf). The Controls
+markup and a message box shown from its page and coming back answered (e50f40169). The Controls
 and Data views pages and the Menus page show it all.
 Left: the range is a base class, not a member each control holds as the design said, so a
 progress bar carries a page it hides; every radio in a group is a tab stop, and so is every tab
@@ -776,7 +776,7 @@ Order: the core (start, payload, acceptance, preview, ending), then auto-scroll 
 hover, item views, tabs between strips, OS files, the keyboard and the pad, then markup and
 scripts; each a layer with its tests and a sandbox section.
 
-As built on `vg` (2026-10-17): the core (1f820ee02): a 6 px threshold (SetDragThreshold) and
+As built on `vg` (2026-10-17): the core (cf3c82295): a 6 px threshold (SetDragThreshold) and
 the walk up from the pressed node (DragRequest), ended by a node owning its press (OwnsPressDrag:
 sliders, scroll bars and a scroller's bars, text fields, a window's handles, a table header's
 resize edge, a tab in a reorderable strip); the press cancelled; a finger's drag armed by a long
@@ -787,14 +787,14 @@ reason ending the walk; `:drop-target` and `:drag-source`; the cursor by the eff
 grab point, else a DragPreview with an effect badge) and the hint in a pointer-passing layer of
 the top layer; cancel by Escape, a right press or the source leaving; the source told through
 OnDragEnd. Auto-scroll (24 px band, up to 900 px/s) and opening on a 0.6 s rest: a tree node, an
-expander, a tab (82c18437a). Item views drag their selection and take drops before, on or after
+expander, a tab (4fba803b6). Item views drag their selection and take drops before, on or after
 a row through model capabilities (ModelDrop, CanDrop, Drop, RemoveIds), a list moving its rows
-with their ids, a tree reparenting and refusing a node inside itself (e6d234ba3). Tabs torn out
+with their ids, a tree reparenting and refusing a node inside itself (4b73d8795). Tabs torn out
 of a strip past 32 px drop on strips of their `group`, between tab views with their pages
-(138c5a720). OS files through the same path, InjectFileDrop and the bridge's DispatchFileDrops,
-a GUI handler for the rest (b3fdda3cb). `drag.pick` (Ctrl+Shift+D, the pad's North) and a drop at
-the focus (c730445f9). Markup's `drag-type`, `drag-value`, `drag-label`, `drag`, `drop-types`,
-`drop-reason`, and the script events with a `dragquery` (fcdc43074).
+(9196e1bec). OS files through the same path, InjectFileDrop and the bridge's DispatchFileDrops,
+a GUI handler for the rest (561699e33). `drag.pick` (Ctrl+Shift+D, the pad's North) and a drop at
+the focus (6338a6a01). Markup's `drag-type`, `drag-value`, `drag-label`, `drag`, `drop-types`,
+`drop-reason`, and the script events with a `dragquery` (2e7b761ad).
 Left: one drag at a time within one root (dragging between windows is the follow-up the
 positions note above describes); a script answers a query by taking it (`dragquery`), its reason
 from `drop-reason`, not by setting the effect; the drag scroll band and the hover delay are
@@ -816,9 +816,9 @@ Facts (read and measured 2026-10-17):
   pages are small: none of them is a worst case.
 - The same run found the idle GUI was not idle: every page drew every frame, and 13 nodes
   restyled on every frame. An indeterminate progress bar on a hidden page kept asking for
-  frames (fixed in 299423922: a node not shown marks itself alone, and NeedsFrame counts actions
+  frames (fixed in d692b1e9e: a node not shown marks itself alone, and NeedsFrame counts actions
   on shown nodes only), and the style pass wrote markup's `items` to a list box at every restyle,
-  which rebuilt its rows and so restyled it again (fixed in 5815404cc: a reflected property is
+  which rebuilt its rows and so restyled it again (fixed in c5608a58e: a reflected property is
   not written the value it holds). Now a still page draws 2 frames of 840 and restyles nothing.
 - Tooling: the F9 layout overlay (bounds, padding, margin, baselines), and GUISandbox's `--keys`
   (keys, pad buttons, and pointer steps at coordinates), `--sweep` (hover, click and right-click

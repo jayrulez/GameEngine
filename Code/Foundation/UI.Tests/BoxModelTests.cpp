@@ -466,6 +466,41 @@ TEST_CASE("box-model: box-shadow takes a list, each drawn, the first on top")
     CHECK(order[3] == 'b');
 }
 
+// === device-pixel rounding ===
+
+TEST_CASE("box-model: a box under a scaled view rounds to the device pixels it is drawn on")
+{
+    // A game canvas scaled to its reference resolution draws its document at a scale: at 0.5, a
+    // box at 3 layout units would sit at 1.5 device pixels. It rounds to 4 (2 device pixels), and
+    // the top at 5 (2.5) to 6.
+    UIContext ctx{DefaultAllocator()};
+    auto root = MakeRoot();
+    Init(ctx, root.Get(), 400, 300);
+    auto canvas = New<FrameLayout>();
+    canvas->Transform.Scale = Float2{0.5f, 0.5f};
+    canvas->Transform.Origin = Float2{0.0f, 0.0f};
+    auto child = TV(21, 11);
+    LayoutStyle placed;
+    placed.Margin = Thickness{3, 5, 0, 0};
+    child->SetLayout(placed);
+    canvas->AddView(child.Get());
+    root->AddView(canvas.Get());
+    LayoutPass(ctx, root.Get());
+    CHECK(child->Bounds.x == doctest::Approx(4.0f));
+    CHECK(child->Bounds.y == doctest::Approx(6.0f));
+    // Its far edges too, from where they fall: 5 + 11 = 16 is 8 device pixels, and 3 + 21 = 24 is
+    // 12, so the box keeps its size.
+    CHECK(child->Bounds.x + child->Bounds.width == doctest::Approx(24.0f));
+    CHECK(child->Bounds.y + child->Bounds.height == doctest::Approx(16.0f));
+    CHECK(child->DeviceUnitScale() == doctest::Approx(0.5f));
+
+    // Unscaled, the DPI's grid alone.
+    canvas->Transform.Scale = Float2{1.0f, 1.0f};
+    child->Invalidate();
+    LayoutPass(ctx, root.Get());
+    CHECK(child->Bounds.x == doctest::Approx(3.0f));
+}
+
 // === opacity ===
 
 TEST_CASE("box-model: opacity composes down the tree")

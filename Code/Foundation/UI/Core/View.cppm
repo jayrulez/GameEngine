@@ -231,6 +231,9 @@ export namespace foundation::ui
         [[nodiscard]] bool IsAttached() const noexcept { return Context != nullptr; }
         /// The RootView this view belongs to (walks up the parent chain). Defined below (needs RootView).
         [[nodiscard]] RootView* Root() const;
+        /// Device pixels per layout unit where this view's box is drawn: the root's DPI times the
+        /// uniform scales of the views above it. Layout rounds the box to this grid.
+        [[nodiscard]] f32 DeviceUnitScale() const;
 
         View() = default;
 

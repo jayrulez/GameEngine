@@ -734,6 +734,24 @@ namespace foundation::ui
 
     f32 ViewGroup::RootDpiScale(RootView* root) { return root != nullptr ? root->DpiScale : 1.0f; }
 
+    f32 View::DeviceUnitScale() const
+    {
+        f32 scale = 1.0f;
+        const View* top = this;
+        for (const View* above = Parent; above != nullptr; above = above->Parent)
+        {
+            const ViewTransform& t = above->Transform;
+            // A rotation or an uneven scale has no one grid to round to: those keep the DPI's.
+            if (t.Rotation == 0.0f && t.Scale.x == t.Scale.y && t.Scale.x > 0.0f)
+            {
+                scale *= t.Scale.x;
+            }
+            top = above;
+        }
+        const RootView* root = Cast<RootView>(const_cast<View*>(top));
+        return Max((root != nullptr ? root->DpiScale : 1.0f) * scale, 0.01f);
+    }
+
     // The base measure template method. Lives here because the dpi query
     // needs RootView complete. See the declaration comment in View.cppm for the contract.
     void View::RefreshEffectiveLayout()
@@ -1001,8 +1019,10 @@ namespace foundation::ui
         f32 bw = Max(0.0f, width - margin.TotalHorizontal());
         f32 bh = Max(0.0f, height - margin.TotalVertical());
 
-        RootView* root = Root();
-        const f32 dpi = (root != nullptr) ? Max(root->DpiScale, 0.01f) : 1.0f;
+        // Rounded to device pixels at the scale this box is drawn at: the root's DPI, times the
+        // uniform scales of the views above it (a game canvas scaled to its reference
+        // resolution), so a border at a scale of 0.48 lands on whole pixels too.
+        const f32 dpi = DeviceUnitScale();
         const f32 x1 = Round((bx + bw) * dpi) / dpi;
         const f32 y1 = Round((by + bh) * dpi) / dpi;
         bx = Round(bx * dpi) / dpi;

@@ -116,8 +116,11 @@ namespace engine::ui
             {
                 // The standard rule: uniform min-fit, letterboxed and centered.
                 scale = Min(width / inner.x, height / inner.y);
-                offsetX = (width - inner.x * scale) * 0.5f;
-                offsetY = (height - inner.y * scale) * 0.5f;
+                // Centred on a whole device pixel, so the document's own rounding lands its
+                // boxes on the device grid.
+                const f32 device = DeviceUnitScale();
+                offsetX = Round((width - inner.x * scale) * 0.5f * device) / device;
+                offsetY = Round((height - inner.y * scale) * 0.5f * device) / device;
             }
             for (usize i = 0; i < ChildCount(); ++i)
             {
@@ -126,11 +129,12 @@ namespace engine::ui
                 {
                     continue;
                 }
-                child->Layout(offsetX, offsetY, inner.x, inner.y);
-                // Scale around the top-left so drawn rect = offset + scale * content;
-                // hit testing undoes the same transform (ViewGroup::HitTest).
+                // Scale around the top-left so drawn rect = offset + scale * content; hit testing
+                // undoes the same transform (ViewGroup::HitTest). Set before the layout, which
+                // rounds the document's boxes to device pixels at that scale.
                 child->Transform.Scale = Float2{scale, scale};
                 child->Transform.Origin = Float2{0.0f, 0.0f};
+                child->Layout(offsetX, offsetY, inner.x, inner.y);
             }
         }
     };

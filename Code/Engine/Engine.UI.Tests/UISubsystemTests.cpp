@@ -1083,6 +1083,22 @@ TEST_CASE(
     View* bar = root->HitTest(Float2{50.0f, 30.0f});
     CHECK((bar == nullptr || bar == root));
 
+    // Where the letterbox falls between pixels it is centred on a whole one, so the document's
+    // boxes, rounded at its scale, land on the device grid: at 1000 x 700 the scale is 0.625 and
+    // the bars (700 - 562.5) / 2 = 68.75 high, so the document starts at 69.
+    root->ViewportSize = Float2{1000.0f, 700.0f};
+    ui->Context().UpdateRootView(root);
+    CHECK(c->root->Transform.Scale.x == doctest::Approx(0.625f));
+    CHECK(c->root->Bounds.y == doctest::Approx(69.0f));
+    View* button = root->FindByName(u8"btn");
+    REQUIRE(button != nullptr);
+    CHECK(button->DeviceUnitScale() == doctest::Approx(0.625f));
+    const f32 deviceRight = (button->Bounds.x + button->Bounds.width) * 0.625f;
+    CHECK(deviceRight == doctest::Approx(Round(deviceRight)));
+
+    root->ViewportSize = Float2{800.0f, 600.0f};
+    ui->Context().UpdateRootView(root);
+
     // Switching back to ConstantPixel restores 1:1 layout on the next sync.
     c->scalerMode = CanvasScalerMode::ConstantPixel;
     ctx.BeginFrame(1.0f / 60.0f);

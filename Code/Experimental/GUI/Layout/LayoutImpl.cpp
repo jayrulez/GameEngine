@@ -741,9 +741,12 @@ namespace experimental::gui
             const core::Float2 percentBase{BaseOf(f.width), BaseOf(f.height)};
             f32 left = 0.0f, top = 0.0f, right = 0.0f, bottom = 0.0f; // what the docked children took
             f32 needW = 0.0f, needH = 0.0f;
+            const bool rtl = f.container.IsRightToLeft(); // start and end are the sides it runs from and to
             for (Node* child : FlowChildren(f.container))
             {
-                const Dock side = child->GetLayoutStyle().DockSide;
+                Dock side = child->GetLayoutStyle().DockSide;
+                if (side == Dock::Start || side == Dock::End)
+                    side = (side == Dock::Start) != rtl ? Dock::Left : Dock::Right;
                 const f32 availW = Less(f.width, left + right);
                 const f32 availH = Less(f.height, top + bottom);
                 const Thickness m = child->GetMargin();
@@ -759,6 +762,8 @@ namespace experimental::gui
                 const f32 h = b.y + m.TotalVertical();
                 switch (side)
                 {
+                case Dock::Start: // resolved above
+                case Dock::End:
                 case Dock::Left:
                     Place(f, *child, left + m.Left, top + m.Top, b.x, b.y);
                     needH = core::Max(needH, top + bottom + h);

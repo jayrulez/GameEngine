@@ -128,6 +128,8 @@ export namespace experimental::gui
         Top,
         Right,
         Bottom,
+        Start, ///< the inline start: left, or right in right to left (E9b)
+        End,   ///< the inline end
     };
     /// Visible draws children outside the box; hidden clips them; scroll and auto clip and
     /// scroll (scroll always shows its bar, auto when the content overflows).

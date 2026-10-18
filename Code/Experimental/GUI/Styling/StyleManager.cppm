@@ -220,7 +220,7 @@ export namespace experimental::gui
             // Its children came, went or moved: when a sheet reads siblings, each may match
             // differently (with what it holds); else only the new ones restyle (marked so).
             const bool rearranged = m_readsSiblings && node.ChildrenArrangementChanged();
-            const bool descend = subtree || rearranged || node.HasStyleDirtyDescendant();
+            bool descend = subtree || rearranged || node.HasStyleDirtyDescendant();
             node.ClearStyleDirty();
             bool customsChanged = false;
             if (self)
@@ -231,6 +231,8 @@ export namespace experimental::gui
                     ++m_lastRestyleCount;
                 }
             }
+            // Applying it may have marked what it holds (a direction it now runs in, E9b).
+            descend = descend || node.HasStyleDirtyDescendant();
             if (!descend && !customsChanged)
                 return;
             const UIWidget* above = core::Cast<UIWidget>(&node);

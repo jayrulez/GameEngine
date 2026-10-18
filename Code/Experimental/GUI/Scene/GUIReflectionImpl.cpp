@@ -697,6 +697,7 @@ namespace experimental::gui
         builder.AccessorProperty<&Node::GetAutoTranslateName, &Node::SetAutoTranslateName>("autoTranslate")
             .PropAttribute("css", core::String(u8"auto-translate"));
         builder.AccessorProperty<&Node::GetLang, &Node::SetLang>("lang").PropAttribute("css", core::String(u8"lang"));
+        builder.AccessorProperty<&Node::GetDirectionName, &Node::SetDirectionName>("direction");
         builder.Method<&Node::AddElement, Node>("add");
         builder.Method<&Node::FindElement, Node>("find");
         builder.Method<&Node::ParentElement, Node>("parent");

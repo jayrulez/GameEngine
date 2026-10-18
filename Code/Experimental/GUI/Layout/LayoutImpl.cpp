@@ -52,6 +52,10 @@ namespace experimental::gui
             f32 height;
             core::Float2 origin;
             bool arrange;
+            /// Right to left (E9b): laid out as left to right with each child's left and right
+            /// margins swapped, then mirrored within the box (LayoutChildren), so its margins stay
+            /// where its style puts them.
+            bool rtl = false;
         };
 
         // A child's margin-box size within the space given (the size its own style and content
@@ -75,6 +79,15 @@ namespace experimental::gui
             c.Max = core::Float2{w.HasValue() ? w.Value() : maxW, h.HasValue() ? h.Value() : maxH};
             c.PercentBase = percentBase;
             return child.Measure(c);
+        }
+        // The child's margin as the flow lays it out: in right to left, left and right swapped (the
+        // mirror puts them back).
+        [[nodiscard]] Thickness FlowMargin(const Flow& f, const Node& child) noexcept
+        {
+            Thickness m = child.GetMargin();
+            if (f.rtl)
+                core::Swap(m.Left, m.Right);
+            return m;
         }
         void Place(Flow& f, Node& child, f32 x, f32 y, f32 w, f32 h)
         {
@@ -174,7 +187,7 @@ namespace experimental::gui
                 const LayoutStyle& cs = child->GetLayoutStyle();
                 FlexItem item;
                 item.node = child;
-                item.margin = child->GetMargin();
+                item.margin = FlowMargin(f, *child);
                 item.marginMain = row ? item.margin.TotalHorizontal() : item.margin.TotalVertical();
                 item.marginCross = row ? item.margin.TotalVertical() : item.margin.TotalHorizontal();
                 item.align = SelfAlign(cs.AlignSelf, s.AlignItems);
@@ -656,7 +669,7 @@ namespace experimental::gui
                 for (const GridItem& item : items)
                 {
                     const LayoutStyle& cs = item.node->GetLayoutStyle();
-                    const Thickness m = item.node->GetMargin();
+                    const Thickness m = FlowMargin(f, *item.node);
                     const f32 areaW = areaWidth(item);
                     f32 areaH = s.RowGap * static_cast<f32>(item.rowSpan - 1);
                     for (i32 i = item.row; i < item.row + item.rowSpan && i < rows; ++i)
@@ -702,7 +715,7 @@ namespace experimental::gui
                 for (Node* child : children)
                 {
                     const LayoutStyle& cs = child->GetLayoutStyle();
-                    const Thickness m = child->GetMargin();
+                    const Thickness m = FlowMargin(f, *child);
                     const Align jx = SelfAlign(cs.JustifySelf, s.JustifyItems);
                     const Align ay = SelfAlign(cs.AlignSelf, s.AlignItems);
                     const f32 roomW = core::Max(0.0f, w - m.TotalHorizontal());
@@ -916,7 +929,22 @@ namespace experimental::gui
         // A scroll container's content is laid out with no limit on the axes it scrolls.
         Flow flow{*this, m_layoutStyle, Scrolls(m_layoutStyle.OverflowX) ? kUnbounded : box.width,
                   Scrolls(m_layoutStyle.OverflowY) ? kUnbounded : box.height, core::Float2{box.x, box.y}, true};
+        // Right to left (E9b): rows, grid columns and a stack's start run from the right. Dock
+        // stays physical (its sides say where; start and end are its logical sides).
+        flow.rtl = m_layoutStyle.Kind != Display::Dock && m_layoutStyle.Kind != Display::None && IsRightToLeft();
         (void)RunFlow(flow);
+        if (flow.rtl)
+        {
+            // Mirrored within the box, or within the content when it is wider (a scroller's).
+            f32 span = box.width;
+            for (usize i = 0; i < m_children.Size(); ++i)
+                if (const Node& child = *m_children[i]; InFlow(child))
+                    span = core::Max(span, child.GetPosition().x - box.x + child.GetSize().x + child.GetMargin().Left);
+            for (usize i = 0; i < m_children.Size(); ++i)
+                if (Node& child = *m_children[i]; InFlow(child))
+                    child.SetPosition(core::Float2{box.x + span - (child.GetPosition().x - box.x) - child.GetSize().x,
+                                                   child.GetPosition().y});
+        }
 
         // Out of flow: placed by the insets against this node's box, sized by their style, by both
         // insets of an axis, or by their content.

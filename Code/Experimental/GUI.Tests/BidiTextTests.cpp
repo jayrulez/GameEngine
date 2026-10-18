@@ -259,6 +259,8 @@ namespace
             out = step > 0 ? offset - 1 : offset + 1;
             return true;
         }
+        bool IsRightToLeftAt(usize) const override { return RightToLeft; }
+        bool RightToLeft = true;
     };
 }
 
@@ -310,4 +312,35 @@ TEST_CASE("bidi text: a clamped right-to-left paragraph ends its last line's ell
     }
     REQUIRE(ellipsis != nullptr);
     CHECK(ellipsis->X < textLeft); // the end of a right-to-left line is its left
+}
+
+TEST_CASE("bidi text: in a right-to-left paragraph a word to the left is the next one, and Left collapses a selection to its end")
+{
+    TextEditModel model;
+    model.SetText(StringView(u8"one two three"));
+    Reversed places;
+    places.Size = 13;
+    model.SetCaretPlaces(&places);
+    model.SetCaret(4); // before "two"
+    CHECK(model.Run(TextEditCommand::MoveWordLeft));
+    CHECK(model.GetCaret() > 4u); // on through the text: past "two"
+    const usize past = model.GetCaret();
+    CHECK(model.Run(TextEditCommand::MoveWordRight));
+    CHECK(model.GetCaret() < past); // back
+    model.SetCaret(4);
+    CHECK(model.Run(TextEditCommand::SelectWordLeft));
+    CHECK(model.GetAnchor() == 4u);
+    CHECK(model.Run(TextEditCommand::MoveLeft));
+    CHECK(model.GetCaret() == model.GetAnchor());
+    CHECK(model.GetCaret() > 4u); // the selection's left end is its logical end
+    // Deletes keep to the text's order: backward is backward.
+    model.SetCaret(7); // after "two"
+    CHECK(model.Run(TextEditCommand::DeleteWordBackward));
+    CHECK(model.GetText() == StringView(u8"one  three"));
+    // Left to right, as before.
+    places.RightToLeft = false;
+    model.SetText(StringView(u8"one two"));
+    model.SetCaret(4);
+    CHECK(model.Run(TextEditCommand::MoveWordLeft));
+    CHECK(model.GetCaret() == 0u);
 }

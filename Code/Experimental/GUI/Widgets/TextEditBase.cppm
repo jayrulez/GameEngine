@@ -642,6 +642,11 @@ export namespace experimental::gui
                 outOffset = m_edit.ModelOffset(display);
                 return true;
             }
+            [[nodiscard]] bool IsRightToLeftAt(usize offset) const override
+            {
+                const TextLayout& layout = m_edit.EditLayout();
+                return !layout.Lines.IsEmpty() && layout.Lines[layout.LineOf(m_edit.DisplayOffset(offset))].RightToLeft;
+            }
 
         private:
             TextEditBase& m_edit;

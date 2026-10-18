@@ -123,6 +123,9 @@ export namespace experimental::gui
         /// The caret one place left (`step` below 0) or right of (`offset`, `upstream`); false when
         /// there is none that way (it stays).
         [[nodiscard]] virtual bool OffsetVisually(usize offset, bool upstream, i32 step, usize& outOffset, bool& outUpstream) const = 0;
+        /// Whether the paragraph holding `offset` runs right to left: there a word to the left is
+        /// the next one, and a selection's left end its logical end (E11).
+        [[nodiscard]] virtual bool IsRightToLeftAt(usize offset) const = 0;
     };
 
     class TextEditModel
@@ -222,17 +225,26 @@ export namespace experimental::gui
             const core::StringView text = m_text.AsView();
             switch (command)
             {
-            // Across what the view shows (E9c); a selection collapses to its start or end.
+            // Across what the view shows (E9c); a selection collapses to its end on that side (in a
+            // right-to-left paragraph, Left goes to its logical end).
             case C::MoveLeft:
-                return HasSelection() ? MoveCaret(GetSelection().Start, false) : MoveAcross(-1, false);
+                return HasSelection() ? MoveCaret(RightToLeftHere() ? GetSelection().End : GetSelection().Start, false)
+                                      : MoveAcross(-1, false);
             case C::MoveRight:
-                return HasSelection() ? MoveCaret(GetSelection().End, false) : MoveAcross(1, false);
+                return HasSelection() ? MoveCaret(RightToLeftHere() ? GetSelection().Start : GetSelection().End, false)
+                                      : MoveAcross(1, false);
             case C::SelectLeft: return MoveAcross(-1, true);
             case C::SelectRight: return MoveAcross(1, true);
+            // A word on that side, by the text's order in the caret's paragraph (E11): to the left
+            // of a right-to-left one is the next word.
             case C::MoveWordLeft:
-            case C::SelectWordLeft: return MoveCaret(PrevWordBoundary(text, m_caret), command == C::SelectWordLeft);
+            case C::SelectWordLeft:
+                return MoveCaret(RightToLeftHere() ? NextWordBoundary(text, m_caret) : PrevWordBoundary(text, m_caret),
+                                 command == C::SelectWordLeft);
             case C::MoveWordRight:
-            case C::SelectWordRight: return MoveCaret(NextWordBoundary(text, m_caret), command == C::SelectWordRight);
+            case C::SelectWordRight:
+                return MoveCaret(RightToLeftHere() ? PrevWordBoundary(text, m_caret) : NextWordBoundary(text, m_caret),
+                                 command == C::SelectWordRight);
             case C::MoveLineStart:
             case C::SelectLineStart: return MoveCaret(LineAt(m_caret).Start, command == C::SelectLineStart);
             case C::MoveLineEnd:
@@ -321,6 +333,9 @@ export namespace experimental::gui
                 --offset;
             return offset;
         }
+
+        // Whether the caret's paragraph runs right to left (the view says; none: left to right).
+        [[nodiscard]] bool RightToLeftHere() const { return m_places != nullptr && m_places->IsRightToLeftAt(m_caret); }
 
         // One place left or right: across the view where it says where carets stand, else by a
         // grapheme as the bytes go.

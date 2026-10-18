@@ -252,6 +252,7 @@ public:
         m_stressLoad = load;
     }
     void SetOpenMenu(bool open) { m_openMenuAtStart = open; }
+    void SetLightAtStart(bool light) { m_lightAtStart = light; }
     void SetMenuCall(StringView function) { m_menuCall = String(function); }
     void SetKeys(StringView keys) { m_keys = String(keys); }
     void SetAlwaysRedraw(bool always) { m_alwaysRedraw = always; }
@@ -353,6 +354,7 @@ private:
     String m_startLanguage = String(u8"en");
     bool m_narrate = false;
     bool m_openMenuAtStart = false;
+    bool m_lightAtStart = false; // --light: the light colour scheme from the start
     String m_menuCall; // a game-menu script function to call once it is up (a screenshot of a panel)
     String m_keys;     // keystrokes to type into the root on show, one every 15 frames
     bool m_layoutOverlay = false; // F9: the debug overlay's layout half
@@ -797,6 +799,8 @@ void GUISandbox::BuildSandbox()
     m_styles.SetResourceProvider(m_resources.Get());
     m_gui->SetResourceProvider(m_resources.Get());
     ApplySandboxSheet();
+    if (m_lightAtStart)
+        ToggleTheme();
     ShowPage(m_startPage.AsView());
 
     m_bridge = MakeUnique<gui::GuiInputBridge>(AppRoot(), m_root->GetEventDispatcher());
@@ -2098,6 +2102,8 @@ int main(int argc, char** argv)
             app.SetStartPage(next());
         else if (arg == StringView(u8"--showcase"))
             app.SetOpenMenu(true);
+        else if (arg == StringView(u8"--light"))
+            app.SetLightAtStart(true);
         else if (arg == StringView(u8"--menu-call") && i + 1 < argc)
             app.SetMenuCall(next());
         else if (arg == StringView(u8"--keys") && i + 1 < argc)

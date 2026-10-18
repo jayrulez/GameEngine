@@ -12,7 +12,7 @@
                 tooltip="Switch the built-in theme and the sandbox's colours"/>
     </Panel>
     <Panel id="body" flex-direction="row" align-items="start">
-        <Panel id="sidebar" class="sidebar" flex-direction="column" gap="4" nav-scope="pass" nav-default="nav-controls">
+        <Panel id="sidebar" class="sidebar" flex-direction="column" gap="2" nav-scope="pass" nav-default="nav-controls">
             <Label class="nav-heading" text="WIDGETS"/>
             <Button id="nav-controls" class="nav" text="Controls" command="page.controls"/>
             <Button id="nav-text" class="nav" text="Text" command="page.text"/>
@@ -23,6 +23,7 @@
             <Button id="nav-styling" class="nav" text="Styling" command="page.styling"/>
             <Button id="nav-effects" class="nav" text="Effects" command="page.effects"/>
             <Button id="nav-motion" class="nav" text="Motion" command="page.motion"/>
+            <Button id="nav-themes" class="nav" text="Themes" command="page.themes"/>
             <Label class="nav-heading" text="BEHAVIOUR"/>
             <Button id="nav-binding" class="nav" text="Data binding" command="page.binding"/>
             <Button id="nav-input" class="nav" text="Input" command="page.input"/>

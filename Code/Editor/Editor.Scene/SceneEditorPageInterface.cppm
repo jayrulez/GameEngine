@@ -20,6 +20,7 @@ module;
 export module editor.scene:scene_page_interface;
 
 import foundation.core;
+import foundation.scene;
 import editor.core;
 import editor.camera;
 import :edit;
@@ -51,6 +52,28 @@ export namespace editor
         u32 renderWidth = 0;
         u32 renderHeight = 0;
     };
+
+    /// A page running the game in a scene (a Game tab), as the scene tools read it: entity_inspect
+    /// with `pie` reads the scene of the one with that id. Play in editor (editor.play) publishes
+    /// it, through its IPieInstancePage.
+    class IGameScenePage : public IPageService
+    {
+    public:
+        /// The tab's id: `game-page` (kPrimaryPieId) for the primary, `game-page-1`,
+        /// `game-page-2`, ... for the instances Play New Instance opens. The dock persists the tab
+        /// under it too.
+        [[nodiscard]] virtual StringView PieId() const noexcept = 0;
+        /// A run is going.
+        [[nodiscard]] virtual bool IsRunning() const noexcept = 0;
+        /// The scene the run is in now; null when it has none.
+        [[nodiscard]] virtual foundation::scene::Scene* RunningScene() noexcept = 0;
+
+    protected:
+        ~IGameScenePage() = default;
+    };
+
+    /// The primary Game tab's PIE id.
+    inline constexpr StringView kPrimaryPieId = u8"game-page";
 
     class ISceneEditorPage : public IPageService
     {

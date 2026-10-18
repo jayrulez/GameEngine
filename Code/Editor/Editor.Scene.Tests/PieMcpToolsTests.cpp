@@ -33,6 +33,7 @@ namespace
             : EditorPage(DefaultAllocator()), m_pieId(pieId)
         {
             Provide<IPieInstancePage>(*this);
+            Provide<IGameScenePage>(*this); // as the Game page does: entity_inspect reads it
         }
         [[nodiscard]] StringView Title() const override { return u8"Game"; }
         [[nodiscard]] Status Save() override { return Status{}; }

@@ -272,6 +272,7 @@ export namespace editor
               m_gameInstance(instance), m_pieId(pieId)
         {
             Provide<IPieInstancePage>(*this); // what the PIE tools act through
+            Provide<IGameScenePage>(*this);   // what the scene tools read of the run
             Provide<IGameRunPage>(*this);     // what the editor stops before a native reload
             m_scenes = host.Ctx().GetSubsystem<engine::scene::SceneSubsystem>();
             m_render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>();

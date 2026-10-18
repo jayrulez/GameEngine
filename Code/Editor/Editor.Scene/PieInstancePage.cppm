@@ -3,7 +3,8 @@
 // Editor::Scene - :pie_page_interface partition (agent-playtesting-and-asset-creation.md P3).
 //
 // IPieInstancePage: what one play-in-editor instance, a Game tab, lets the PIE tools act through:
-// its id, its run's start and stop, the state of the run, a capture of what it renders, the scene
+// beyond what the scene tools read (IGameScenePage: its id, whether it runs and its scene), its
+// run's start and stop, the state of the run, a capture of what it renders, the scene
 // and game script it runs, a scripted input timeline in place of the viewport's (P4), and the
 // resolution it draws at. The Game page publishes it (EditorPage::Service<IPieInstancePage>).
 module;
@@ -30,20 +31,15 @@ export namespace editor
         Faulted, ///< it stopped on its own (IPieInstancePage::ScriptFault says why)
     };
 
-    class IPieInstancePage : public IPageService
+    class IPieInstancePage : public IGameScenePage
     {
     public:
-        /// The tab's id: `game-page` for the primary, `game-page-1`, `game-page-2`, ... for the
-        /// instances Play New Instance opens. The dock persists the tab under it too.
-        [[nodiscard]] virtual StringView PieId() const noexcept = 0;
 
         /// Asks for a cook and starts the run once the cook is idle; nothing while running.
         virtual void Play() = 0;
         /// Stops the run; the tab stays open.
         virtual void Stop() = 0;
 
-        /// A run is going.
-        [[nodiscard]] virtual bool IsRunning() const noexcept = 0;
         /// Play was asked for and the run waits on the cook.
         [[nodiscard]] virtual bool IsStarting() const noexcept = 0;
         /// The scene the run is in, empty when it has none (a script that owns boot, between
@@ -65,8 +61,6 @@ export namespace editor
         /// The latest request's state, as it advances frame by frame.
         [[nodiscard]] virtual const ViewportCapture& LastViewportCapture() const noexcept = 0;
 
-        /// The scene the run is in now; null when it has none.
-        [[nodiscard]] virtual foundation::scene::Scene* RunningScene() noexcept = 0;
         /// Reads a property of the running game script; NotFound without a script or with no
         /// such property.
         [[nodiscard]] virtual Result<Variant> GetScriptProperty(StringView name) const = 0;

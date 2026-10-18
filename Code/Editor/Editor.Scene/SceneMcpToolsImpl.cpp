@@ -61,16 +61,37 @@ namespace editor
             return out;
         }
 
+        /// The Game tab entity_inspect's `pie` names (empty: the primary), as the PIE tools resolve
+        /// one; the reason, for the agent to read, when none is open.
+        Result<IGameScenePage*, String> ResolveGameScene(const EditorContext& context, const JsonValue& args)
+        {
+            const String asked = args.Get(u8"pie").AsString();
+            const StringView id = asked.IsEmpty() ? kPrimaryPieId : asked.AsView();
+            for (const UniquePtr<EditorPage>& open : context.OpenPages())
+            {
+                IGameScenePage* game = ServiceOf<IGameScenePage>(open.Get());
+                if (game != nullptr && game->PieId() == id)
+                {
+                    return game;
+                }
+            }
+            if (id == kPrimaryPieId)
+            {
+                return Err(String(u8"no Game tab is open (pie_start opens and runs one)"));
+            }
+            return Err(Format(u8"no PIE instance '{}' (pie_list names them)", id));
+        }
+
         /// entity_inspect over a running PIE instance: `entity` by guid, name or path in the
         /// scene that game is in now.
         ToolResult InspectPie(EditorContext& context, const JsonValue& args)
         {
-            Result<EditorPage*, String> resolved = ResolvePie(context, args);
+            Result<IGameScenePage*, String> resolved = ResolveGameScene(context, args);
             if (!resolved.HasValue())
             {
                 return Err(Move(resolved.Error()));
             }
-            IPieInstancePage* pie = ServiceOf<IPieInstancePage>(resolved.Value());
+            IGameScenePage* pie = resolved.Value();
             scene::Scene* running = pie->RunningScene();
             if (!pie->IsRunning() || running == nullptr)
             {

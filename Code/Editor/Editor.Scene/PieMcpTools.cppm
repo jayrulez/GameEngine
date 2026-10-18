@@ -26,8 +26,6 @@ export namespace editor
 {
     /// The number of tools RegisterPieTools registers; a tripwire like kSceneLiveToolCount.
     inline constexpr usize kPieToolCount = 7;
-    /// The primary Game tab's PIE id.
-    inline constexpr StringView kPrimaryPieId = u8"game-page";
 
     void RegisterPieTools(foundation::mcp::McpServer& server, EditorContext& context);
 

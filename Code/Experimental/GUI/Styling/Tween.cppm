@@ -317,11 +317,10 @@ export namespace experimental::gui
         // Its first frame: which way it writes, and its values parsed.
         bool Bind(Node& target)
         {
-            if (FindStyleProperty(m_property.AsView()) != nullptr)
+            // A sheet's property on a node a sheet styles; on any other node, its reflected one (a
+            // plain node's opacity, x, y).
+            if (UINode* node = core::Cast<UINode>(&target); node != nullptr && FindStyleProperty(m_property.AsView()) != nullptr)
             {
-                UINode* node = core::Cast<UINode>(&target);
-                if (node == nullptr)
-                    return false;
                 MotionValue motion;
                 motion.Property = m_property;
                 motion.To = ResolvedStyle::ParseLonghand(m_property.AsView(), m_toText.AsView());

@@ -102,8 +102,8 @@ TEST_CASE("context: a root's animations pause or slow on the shared clock")
     auto b = Make<Node>();
     t.hud->AddChild(a.Get());
     t.menu->AddChild(b.Get());
-    a->RunAction(Make<MoveAction>(core::Float2{0.0f, 0.0f}, core::Float2{100.0f, 0.0f}, core::Duration::FromSeconds(1.0)));
-    b->RunAction(Make<MoveAction>(core::Float2{0.0f, 0.0f}, core::Float2{100.0f, 0.0f}, core::Duration::FromSeconds(1.0)));
+    a->Animate(core::StringView(u8"x"), core::StringView(u8"100"), 1.0f, core::StringView(u8"linear"));
+    b->Animate(core::StringView(u8"x"), core::StringView(u8"100"), 1.0f, core::StringView(u8"linear"));
     t.menu->SetPaused(true); // the game paused under its menu: the menu's own root keeps going
     t.gui->Update(core::Duration::FromSeconds(0.5));
     CHECK(a->GetPosition().x == doctest::Approx(50.0f));

@@ -238,7 +238,7 @@ TEST_CASE("style-manager: a rule that stops matching gives back everything it se
     styles.ApplyTree(*root.Get());
     CHECK(w->GetAlpha() == doctest::Approx(1.0f));
     CHECK(w->GetPadding() == padding);
-    CHECK(ChangedLayoutSlots(w->GetLayoutStyle(), layout) == 0u);
+    CHECK_FALSE(ChangedLayoutSlots(w->GetLayoutStyle(), layout).Any());
     CHECK_FALSE(w->ClipsChildren());
     CHECK(w->IsVisible());
     CHECK(w->IsEnabled());

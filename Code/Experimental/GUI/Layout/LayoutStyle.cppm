@@ -296,8 +296,35 @@ export namespace experimental::gui
         SlotFontWeight, SlotFontStyle,
         SlotCount,
     };
-    static_assert(SlotCount <= 64, "the pins are one u64");
-    [[nodiscard]] constexpr u64 SlotBit(StyleSlot slot) noexcept { return u64{1} << slot; }
+    /// A set of StyleSlots: what code pinned, what a change touched. Two words: the slots passed 64
+    /// with E11's font-weight, font-style and overflow-wrap.
+    struct StyleSlotSet
+    {
+        static constexpr usize kWords = 2;
+        u64 Words[kWords]{};
+        [[nodiscard]] constexpr StyleSlotSet operator|(StyleSlotSet o) const noexcept
+        {
+            return StyleSlotSet{{Words[0] | o.Words[0], Words[1] | o.Words[1]}};
+        }
+        [[nodiscard]] constexpr StyleSlotSet operator&(StyleSlotSet o) const noexcept
+        {
+            return StyleSlotSet{{Words[0] & o.Words[0], Words[1] & o.Words[1]}};
+        }
+        [[nodiscard]] constexpr StyleSlotSet operator~() const noexcept { return StyleSlotSet{{~Words[0], ~Words[1]}}; }
+        constexpr StyleSlotSet& operator|=(StyleSlotSet o) noexcept { return *this = *this | o; }
+        constexpr StyleSlotSet& operator&=(StyleSlotSet o) noexcept { return *this = *this & o; }
+        [[nodiscard]] constexpr bool operator==(const StyleSlotSet&) const noexcept = default;
+        /// Whether any slot is in it.
+        [[nodiscard]] constexpr bool Any() const noexcept { return (Words[0] | Words[1]) != 0; }
+        [[nodiscard]] constexpr bool Has(StyleSlot slot) const noexcept { return (Words[slot / 64] & (u64{1} << (slot % 64))) != 0; }
+    };
+    static_assert(SlotCount <= StyleSlotSet::kWords * 64, "a bit for every slot");
+    [[nodiscard]] constexpr StyleSlotSet SlotBit(StyleSlot slot) noexcept
+    {
+        StyleSlotSet set;
+        set.Words[slot / 64] = u64{1} << (slot % 64);
+        return set;
+    }
     /// The longhand a slot is, as a sheet names it (the inspector's "set by code").
     [[nodiscard]] constexpr const char8_t* StyleSlotProperty(StyleSlot slot) noexcept
     {
@@ -391,9 +418,9 @@ export namespace experimental::gui
         }
     }
     /// The slots whose values differ between two layout styles.
-    [[nodiscard]] inline u64 ChangedLayoutSlots(const LayoutStyle& a, const LayoutStyle& b)
+    [[nodiscard]] inline StyleSlotSet ChangedLayoutSlots(const LayoutStyle& a, const LayoutStyle& b)
     {
-        u64 bits = 0;
+        StyleSlotSet bits;
         ForEachLayoutField([&](StyleSlot slot, auto member)
         {
             if (!detail::SameField(a.*member, b.*member))

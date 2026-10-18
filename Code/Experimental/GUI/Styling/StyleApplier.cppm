@@ -854,7 +854,7 @@ export namespace experimental::gui
             if (free(SlotMarginLeft)) { result.Margin.Left = ls.Margin.Left; result.MarginPercent.Left = ls.MarginPercent.Left; }
             if (free(SlotRowGap)) result.RowGapPercent = ls.RowGapPercent;
             if (free(SlotColumnGap)) result.ColumnGapPercent = ls.ColumnGapPercent;
-            if (ChangedLayoutSlots(result, node.GetLayoutStyle()) != 0)
+            if (ChangedLayoutSlots(result, node.GetLayoutStyle()).Any())
                 node.SetLayoutStyle(result);
             // Anything but visible clips the children to the box (and scroll and auto scroll them);
             // a widget that clips its own parts (an item view's rows) keeps doing so unless the

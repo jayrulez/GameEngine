@@ -891,19 +891,19 @@ export namespace experimental::gui
             bool m_was;
         };
         /// Pins `slots` as code's (no-op while a StyleWriteScope lives).
-        void PinStyle(u64 slots) noexcept
+        void PinStyle(StyleSlotSet slots) noexcept
         {
             if (!m_styleWriting)
                 m_stylePins |= slots;
         }
         /// Gives `slots` back to the sheet: the next restyle sets them, or returns them to the node's own value.
-        void UnpinStyle(u64 slots) noexcept
+        void UnpinStyle(StyleSlotSet slots) noexcept
         {
             m_stylePins &= ~slots;
             MarkStyleDirty(false);
         }
-        [[nodiscard]] bool IsStylePinned(StyleSlot slot) const noexcept { return (m_stylePins & SlotBit(slot)) != 0; }
-        [[nodiscard]] u64 GetStylePins() const noexcept { return m_stylePins; }
+        [[nodiscard]] bool IsStylePinned(StyleSlot slot) const noexcept { return m_stylePins.Has(slot); }
+        [[nodiscard]] StyleSlotSet GetStylePins() const noexcept { return m_stylePins; }
         /// A StyleWriteScope lives (a sheet or a widget's defaults are writing).
         [[nodiscard]] bool IsStyleWriting() const noexcept { return m_styleWriting; }
         /// Its own values, captured now unless they were already.
@@ -2482,7 +2482,7 @@ export namespace experimental::gui
         core::String m_keyContext;                     // for bindings (key-context)
         bool m_focused = false;
         bool m_styleWriting = false; // a StyleWriteScope lives: setters do not pin
-        u64 m_stylePins = 0;         // the StyleSlots code set (they are its, over the sheet's)
+        StyleSlotSet m_stylePins;    // the StyleSlots code set (they are its, over the sheet's)
         UnstyledValues m_unstyled;
         u32 m_focusWithin = 0;
         u32 m_changedStyleStates = 0; // the StyleStates that changed since the last style pass // focused descendants (one at most; a count survives odd orders)

@@ -114,9 +114,12 @@ TEST_CASE("bidi text: start and end follow the paragraph; a wrapped right-to-lef
 {
     DejaVu font;
     Bidi bidi;
-    String one(kWord);
-    one.Append(StringView(u8" "));
-    const f32 word = Style(font, fonts::TextDirection::LeftToRight).Font->font->MeasureString(one.AsView());
+    // A word and its space, as the layout shapes them (Salaam's lam and alef join in one glyph).
+    String two(kWord);
+    two.Append(StringView(u8" "));
+    two.Append(StringView(kWord));
+    const f32 word = LayOutText(ParseTextMarkup(two.AsView()), Style(font, fonts::TextDirection::LeftToRight)).Lines[0].Width -
+                     LayOutText(ParseTextMarkup(StringView(kWord)), Style(font, fonts::TextDirection::LeftToRight)).Lines[0].Width;
     String text;
     for (int i = 0; i < 3; ++i)
     {

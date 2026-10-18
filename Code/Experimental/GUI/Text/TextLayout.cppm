@@ -205,6 +205,7 @@ export namespace experimental::gui
         Array<LaidOutBox> Icons;
         Array<LaidOutBox> Underlines;
         Array<LaidOutBox> Links; ///< one per run per line it spans
+        core::String Text;       ///< the plain text the offsets index (a ligature's inner caret places)
         f32 Width = 0.0f;  ///< the widest line
         f32 Height = 0.0f; ///< every line
         bool Clamped = false; ///< lines past the clamp were left out
@@ -384,7 +385,14 @@ export namespace experimental::gui
                 for (const LaidOutGlyphs& run : GlyphRuns)
                     if (run.Line == line && run.Run >= 0)
                         for (usize g = 0; g < run.Glyphs.Size(); ++g)
+                        {
                             add(up ? run.GlyphEnd[g] : run.GlyphStart[g], up);
+                            // Inside a ligature (fi, lam-alef), a place between each of its graphemes.
+                            if (!up && run.GlyphEnd[g] <= Text.Size())
+                                for (usize at = NextGrapheme(Text.AsView(), run.GlyphStart[g]); at < run.GlyphEnd[g];
+                                     at = NextGrapheme(Text.AsView(), at))
+                                    add(at, false);
+                        }
             for (usize i = 1; i < stops.Size(); ++i) // insertion sort: a line's stops are few
                 for (usize j = i; j > 0 && stops[j].X < stops[j - 1].X; --j)
                     Swap(stops[j], stops[j - 1]);
@@ -756,14 +764,59 @@ export namespace experimental::gui
             return width;
         }
 
+        // `text` shaped with `font`'s faces as it will be drawn (ligatures, joined forms, kerning):
+        // its advance, and in `trailing` that of the glyphs from character `trailingFrom` on; the
+        // faces that drew any gathered in `used`. False with no shaper (the caller measures).
+        [[nodiscard]] inline bool MeasureShaped(const ResolvedRunFont& font, core::StringView text, usize trailingFrom, f32& advance,
+                                                f32& trailing, u32& used)
+        {
+            if (font.Font->shaper == nullptr)
+                return false;
+            fonts::IFont* list[1 + ResolvedRunFont::kMaxFallbacks]{};
+            for (usize f = 0; f < font.FaceCount(); ++f)
+                list[f] = font.Face(f)->font;
+            fonts::ShapeRequest request;
+            request.text = text;
+            request.fonts = Span<fonts::IFont* const>(list, font.FaceCount());
+            Array<fonts::GlyphPosition> glyphs;
+            if (!font.Font->shaper->Shape(request, glyphs).HasValue())
+                return false;
+            advance = trailing = 0.0f;
+            for (const fonts::GlyphPosition& g : glyphs)
+            {
+                advance += g.advance;
+                if (static_cast<usize>(Max(0, g.cluster)) >= trailingFrom)
+                    trailing += g.advance;
+                used |= 1u << g.font;
+            }
+            return true;
+        }
+
         inline void MeasurePiece(TextPiece& piece, f32 letterSpacing)
         {
             if (piece.Font.Font == nullptr || piece.Font.Font->font == nullptr)
                 return;
             u32 used = 1; // the run's own face sets the line's height even where a fallback draws it all
-            piece.Width = piece.Text.Size() != 0 ? MeasureInFaces(piece.Font, piece.Text, &used) +
-                                                       letterSpacing * static_cast<f32>(CodepointCount(piece.Text))
-                                                 : 0.0f;
+            usize spaces = piece.Text.Size();
+            while (spaces > 0 && piece.Text[spaces - 1] == u8' ')
+                --spaces;
+            const core::StringView kept = piece.Text.SubStr(0, spaces);
+            const usize characters = CodepointCount(piece.Text);
+            const usize keptCharacters = CodepointCount(kept);
+            if (piece.Text.Size() != 0)
+            {
+                // Measured as it is shaped, so a line is as wide as what it draws; measured by
+                // its characters' advances only where there is no shaper (it draws unshaped then).
+                f32 advance = 0.0f;
+                f32 trailing = 0.0f;
+                if (!MeasureShaped(piece.Font, piece.Text, keptCharacters, advance, trailing, used))
+                {
+                    advance = MeasureInFaces(piece.Font, piece.Text, &used);
+                    trailing = spaces < piece.Text.Size() ? advance - MeasureInFaces(piece.Font, kept) : 0.0f;
+                }
+                piece.Width = advance + letterSpacing * static_cast<f32>(characters);
+                piece.TrailingSpace = trailing + letterSpacing * static_cast<f32>(characters - keptCharacters);
+            }
             // Its line holds the tallest face it draws in.
             for (usize f = 0; f < piece.Font.FaceCount(); ++f)
                 if ((used & (1u << f)) != 0 && piece.Font.Face(f)->font != nullptr)
@@ -773,17 +826,6 @@ export namespace experimental::gui
                     piece.Descent = Max(piece.Descent, Abs(metrics.descent));
                     piece.Gap = Max(piece.Gap, metrics.lineGap);
                 }
-            if (piece.Text.Size() == 0)
-                return;
-            usize spaces = piece.Text.Size();
-            while (spaces > 0 && piece.Text[spaces - 1] == u8' ')
-                --spaces;
-            if (spaces < piece.Text.Size())
-            {
-                const core::StringView kept = piece.Text.SubStr(0, spaces);
-                piece.TrailingSpace =
-                    piece.Width - MeasureInFaces(piece.Font, kept) - letterSpacing * static_cast<f32>(CodepointCount(kept));
-            }
         }
 
         // The bytes of `piece` from its start that fit in `width`: whole graphemes, one at the
@@ -796,7 +838,12 @@ export namespace experimental::gui
             {
                 const usize next = NextGrapheme(text, at);
                 const core::StringView head = text.SubStr(0, next);
-                if (MeasureInFaces(piece.Font, head) + letterSpacing * static_cast<f32>(CodepointCount(head)) > width)
+                f32 advance = 0.0f;
+                f32 trailing = 0.0f;
+                u32 used = 0;
+                if (!MeasureShaped(piece.Font, head, head.Size(), advance, trailing, used))
+                    advance = MeasureInFaces(piece.Font, head);
+                if (advance + letterSpacing * static_cast<f32>(CodepointCount(head)) > width)
                     break;
                 fits = next;
                 at = next;
@@ -1330,6 +1377,7 @@ export namespace experimental::gui
         detail::MeasurePiece(empty, spacing);
 
         TextLayout layout;
+        layout.Text = document.PlainText();
         const bool bounded = style.MaxWidth > 0.0f;
         usize lineStart = 0;
         f32 x = 0.0f;

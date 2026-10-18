@@ -90,7 +90,7 @@ add_executable(GUI.Tests
     MarkupTests.cpp)
 
 target_link_libraries(GUI.Tests PRIVATE
-    Experimental::GUI Foundation::Fonts.TrueType Foundation::Fonts.Bidi Foundation::VFS doctest::doctest)
+    Experimental::GUI Foundation::Fonts.TrueType Foundation::Fonts.Bidi Foundation::Fonts.HarfBuzz Foundation::VFS doctest::doctest)
 
 target_compile_definitions(GUI.Tests PRIVATE
     DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS)

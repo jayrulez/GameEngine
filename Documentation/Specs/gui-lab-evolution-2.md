@@ -1,6 +1,6 @@
 # The GUI lab's second evolution: the gaps the field still shows
 
-> STATUS: DRAFT 2026-10-18, its questions answered (rulings below); awaiting the user's approval. Follows `gui-lab-evolution.md` (E1 to E9, built
+> STATUS: APPROVED 2026-10-18 (user: "approved"; theming to be discussed before E13 starts). Follows `gui-lab-evolution.md` (E1 to E9, built
 > on `vg`). Read CONVENTIONS.md first.
 
 ## Why

@@ -30,3 +30,21 @@
 @keyframes slide { from { transform: translate(2px, 2px); } to { transform: translate(374px, 2px); } }
 /* This curve overshoots by 5.8% of the travel at both ends: travel 332px, inset by its 19px. */
 @keyframes slide-back { from { transform: translate(22px, 2px); } to { transform: translate(354px, 2px); } }
+.e-out-back { animation: slide-out-back 2s ease-out-back infinite alternate; }
+.e-out-elastic { animation: slide-out-elastic 2s ease-out-elastic infinite alternate; }
+.e-out-bounce { animation: slide 2s ease-out-bounce infinite alternate; }
+/* The named curves past CSS's (E14) overshoot past their end only: back by 10%, elastic by 37%. */
+@keyframes slide-out-back { from { transform: translate(2px, 2px); } to { transform: translate(340px, 2px); } }
+@keyframes slide-out-elastic { from { transform: translate(2px, 2px); } to { transform: translate(273px, 2px); } }
+
+/* A level's end (E14): motion.as plays it with tweens; at rest it shows its end. */
+.reward-card { width: 300px; padding: 16px; border-radius: 14; background: linear-gradient(160deg, #2c3f63, #3c2c5c);
+               box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45); transform-origin: 50% 50%; }
+.reward-title { font-family: Roboto; font-size: 20px; color: #ffffff; text-align: center; }
+.gem-row { width: 268px; height: 40px; }
+.gem { width: 26px; height: 26px; margin: 7px 0 0 0; border-radius: 4; background: linear-gradient(135deg, #ffe08a, #f0a030);
+       box-shadow: 0 0 10px rgba(255, 200, 80, 0.6); transform: rotate(45deg) scale(1); transform-origin: 50% 50%; }
+.score-bar { width: 240px; height: 10px; }
+.score { font-family: Roboto; font-size: 15px; color: #dfe6f3; text-align: center; width: 240px; }
+.toast { width: 200px; height: 40px; border-radius: 8; font-family: Roboto; font-size: 14px; color: #17202b; text-align: center;
+         vertical-align: middle; background-color: #9fe0a8; opacity: 0; }

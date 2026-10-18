@@ -934,7 +934,31 @@ export namespace experimental::gui
                 // The family and the size each from the sheet, the parent or the node itself; the
                 // font is the parent's or the node's own when both come from there, else the
                 // font service's for the pair.
-                const StringView declaredFamily = initial(u8"font-family") ? StringView{} : ParseUrl(keyword(u8"font-family")); // strips quotes
+                // A list (E11 of Specs/gui-lab-evolution-2.md): the first family the service has is
+                // the font, the rest after it the faces a character it lacks falls back to. When it
+                // has none of them, the first is asked for all the same (a service may resolve a
+                // family it does not list, to its default).
+                const StringView declaredList = initial(u8"font-family") ? StringView{} : keyword(u8"font-family");
+                StringView declaredFamily;
+                StringView firstFamily;
+                core::String declaredFallbacks;
+                ForEachFamily(declaredList,
+                              [&](StringView family)
+                              {
+                                  if (firstFamily.Size() == 0)
+                                      firstFamily = family;
+                                  if (declaredFamily.Size() == 0)
+                                  {
+                                      if (fontService == nullptr || fontService->HasFamily(family))
+                                          declaredFamily = family;
+                                      return;
+                                  }
+                                  if (declaredFallbacks.Size() != 0)
+                                      declaredFallbacks.Append(u8", ");
+                                  declaredFallbacks.Append(family);
+                              });
+                if (declaredFamily.Size() == 0)
+                    declaredFamily = firstFamily;
                 // font-size's em and percentages are of the parent's size, not its own.
                 LengthContext parentLengths = lengths;
                 parentLengths.ElementFontSize = parent != nullptr && parent->GetTextStyle().FontSize > 0.0f ? parent->GetTextStyle().FontSize
@@ -950,17 +974,20 @@ export namespace experimental::gui
                 {
                     text.Font = from.Font;
                     text.FontFamily = from.FontFamily;
+                    text.FallbackFamilies = from.FallbackFamilies;
                     text.FontSize = from.FontSize;
                 }
                 else
                 {
                     const core::String family = familyDeclared ? core::String(declaredFamily) : from.FontFamily;
+                    const core::String fallbacks = familyDeclared ? Move(declaredFallbacks) : from.FallbackFamilies;
                     const f32 size = sizeDeclared ? declaredSize.Value() : (from.FontSize > 0.0f ? from.FontSize : 16.0f);
                     if (fontService != nullptr && family.Size() != 0)
                         if (fonts::CachedFont* font = fontService->GetFont(family.AsView(), size))
                         {
                             text.Font = font;
                             text.FontFamily = family;
+                            text.FallbackFamilies = fallbacks;
                             text.FontSize = size;
                         }
                 }

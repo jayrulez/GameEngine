@@ -13,7 +13,10 @@
 // a size, bold or italic asks the font service; bold and italic take the family's "<family> Bold",
 // "<family> Italic" or "<family> Bold Italic" face when one is loaded, and are synthesized when not
 // (bold drawn twice a little apart, italic slanted), as browsers do. With no service, such a run
-// draws in the style's font, its bold and italic synthesized.
+// draws in the style's font, its bold and italic synthesized. A character a run's face lacks takes
+// the first of the style's fallback families that has it (the rest of a font-family list, E11 of
+// Specs/gui-lab-evolution-2.md): a piece is measured in its faces' stretches, shaped with the
+// whole list, and its glyphs come out as one run per face.
 //
 // Copied from foundation.ui's :text_layout (E4 of Specs/gui-lab-evolution.md), and the lab's own
 // from then on. The lab adds what CSS's text properties need: a line height, letter spacing, a
@@ -106,6 +109,9 @@ export namespace experimental::gui
         fonts::CachedFont* Font = nullptr;    ///< the label's font: plain runs draw in it
         fonts::IFontService* Fonts = nullptr; ///< resolves a run's own family, size, bold and italic
         core::String Family;                  ///< the label's family as the service names it
+        /// The rest of the label's `font-family` list (comma separated): the faces, in order, a
+        /// character Family lacks is drawn in.
+        core::String FallbackFamilies;
         f32 Size = 16.0f;                     ///< the label's size in pixels
         Color TextColor = Color::White;
         TextHAlign Align = TextHAlign::Left;
@@ -436,13 +442,51 @@ export namespace experimental::gui
         }
     };
 
-    /// The font a run draws in, and what of its style the face lacks (to synthesize).
+    /// Calls `each` with every family of a CSS `font-family` list, in order: split at commas, the
+    /// spaces and quotes around each taken off (`"Roboto", 'Noto Sans Arabic', sans-serif`).
+    template <typename F>
+    inline void ForEachFamily(core::StringView list, F&& each)
+    {
+        usize start = 0;
+        while (start <= list.Size())
+        {
+            usize end = start;
+            while (end < list.Size() && list[end] != u8',')
+                ++end;
+            core::StringView family = core::Trimmed(list.SubStr(start, end - start));
+            if (family.Size() >= 2 && (family[0] == u8'"' || family[0] == u8'\'') && family[family.Size() - 1] == family[0])
+                family = core::Trimmed(family.SubStr(1, family.Size() - 2));
+            if (family.Size() != 0)
+                each(family);
+            start = end + 1;
+        }
+    }
+
+    /// The font a run draws in, the faces it falls back to for what that one lacks (the rest of its
+    /// `font-family` list, E11 of Specs/gui-lab-evolution-2.md), and what of its style the face
+    /// lacks (to synthesize).
     struct ResolvedRunFont
     {
+        static constexpr usize kMaxFallbacks = 4;
         fonts::CachedFont* Font = nullptr;
+        fonts::CachedFont* Fallbacks[kMaxFallbacks]{};
+        u8 FallbackCount = 0;
         f32 Size = 16.0f;
         bool SyntheticBold = false;
         bool SyntheticItalic = false;
+
+        /// Face `i` of the list: 0 the run's font, then its fallbacks.
+        [[nodiscard]] fonts::CachedFont* Face(usize i) const noexcept { return i == 0 ? Font : Fallbacks[i - 1]; }
+        [[nodiscard]] usize FaceCount() const noexcept { return Font != nullptr ? 1u + FallbackCount : 0u; }
+        /// The first face that has `codepoint` (the run's font when none has it, its missing glyph
+        /// then drawn as that font draws one).
+        [[nodiscard]] usize FaceFor(i32 codepoint) const noexcept
+        {
+            for (usize i = 0; i < FaceCount(); ++i)
+                if (Face(i)->font != nullptr && Face(i)->font->HasGlyph(codepoint))
+                    return i;
+            return 0;
+        }
     };
 
     namespace detail
@@ -456,6 +500,31 @@ export namespace experimental::gui
         }
     }
 
+    /// The faces a run falls back to, at its size: for a run of its own family the label's family
+    /// first, then the rest of the label's list; up to ResolvedRunFont::kMaxFallbacks, a face already
+    /// chosen not added again. (They are the families' regular faces: a bold run's fallback glyphs
+    /// are not bold.)
+    inline void AddFallbacks(ResolvedRunFont& out, const TextLayoutStyle& style, bool ownFamily)
+    {
+        if (style.Fonts == nullptr || out.Font == nullptr)
+            return;
+        const auto add = [&](core::StringView family)
+        {
+            if (out.FallbackCount >= ResolvedRunFont::kMaxFallbacks || !style.Fonts->HasFamily(family))
+                return;
+            fonts::CachedFont* face = style.Fonts->GetFont(family, out.Size);
+            if (face == nullptr || face == out.Font)
+                return;
+            for (usize i = 0; i < out.FallbackCount; ++i)
+                if (out.Fallbacks[i] == face)
+                    return;
+            out.Fallbacks[out.FallbackCount++] = face;
+        };
+        if (ownFamily && style.Family.Size() != 0)
+            add(style.Family.AsView());
+        ForEachFamily(style.FallbackFamilies.AsView(), add);
+    }
+
     [[nodiscard]] inline ResolvedRunFont ResolveRunFont(const TextRun& run, const TextLayoutStyle& style)
     {
         ResolvedRunFont out;
@@ -463,7 +532,10 @@ export namespace experimental::gui
         out.Size = run.Size.HasValue() ? run.Size.Value() : style.Size;
         const bool ownFont = run.Family.HasValue() || run.Size.HasValue() || run.Bold || run.Italic;
         if (!ownFont)
+        {
+            AddFallbacks(out, style, false);
             return out;
+        }
         if (style.Fonts == nullptr)
         {
             // No service to ask: the label's font, its style synthesized.
@@ -497,6 +569,7 @@ export namespace experimental::gui
         }
         if (fonts::CachedFont* font = service.GetFont(face.AsView(), out.Size))
             out.Font = font;
+        AddFallbacks(out, style, run.Family.HasValue());
         return out;
     }
 
@@ -532,18 +605,78 @@ export namespace experimental::gui
             return count;
         }
 
+        // Calls `each(face, text)` for the stretches of `text` each face of `font` draws, as the
+        // shapers split a font list: a character takes the first face that has it, a neutral one
+        // (a space, an ASCII digit or punctuation) the stretch's face where that has it.
+        template <typename F>
+        inline void ForEachFaceStretch(const ResolvedRunFont& font, core::StringView text, F&& each)
+        {
+            if (font.FallbackCount == 0)
+            {
+                each(usize{0}, text);
+                return;
+            }
+            const auto neutral = [](i32 cp)
+            {
+                return cp == U' ' || cp == U'\t' || cp == 0xA0 || (cp >= 0x21 && cp <= 0x40) || (cp >= 0x5B && cp <= 0x60) ||
+                       (cp >= 0x7B && cp <= 0x7E);
+            };
+            usize start = 0;
+            usize face = 0;
+            for (usize i = 0; i < text.Size();)
+            {
+                const usize at = i;
+                const i32 cp = static_cast<i32>(core::DecodeUtf8(text, i));
+                const fonts::IFont* current = font.Face(face)->font;
+                const usize next = at != 0 && neutral(cp) && current != nullptr && current->HasGlyph(cp) ? face : font.FaceFor(cp);
+                if (at == 0)
+                    face = next;
+                else if (next != face)
+                {
+                    each(face, text.SubStr(start, at - start));
+                    start = at;
+                    face = next;
+                }
+            }
+            if (start < text.Size())
+                each(face, text.SubStr(start, text.Size() - start));
+        }
+
+        // The width `font` draws `text` in, its faces each measuring their own stretches; `used`
+        // gathers the faces that drew any (a bit each).
+        [[nodiscard]] inline f32 MeasureInFaces(const ResolvedRunFont& font, core::StringView text, u32* used = nullptr)
+        {
+            f32 width = 0.0f;
+            ForEachFaceStretch(font, text,
+                               [&](usize face, core::StringView stretch)
+                               {
+                                   if (const fonts::IFont* f = font.Face(face)->font)
+                                       width += f->MeasureString(stretch);
+                                   if (used != nullptr)
+                                       *used |= 1u << face;
+                               });
+            return width;
+        }
+
         inline void MeasurePiece(TextPiece& piece, f32 letterSpacing)
         {
             if (piece.Font.Font == nullptr || piece.Font.Font->font == nullptr)
                 return;
-            fonts::IFont& font = *piece.Font.Font->font;
-            const fonts::FontMetrics metrics = font.Metrics();
-            piece.Ascent = metrics.ascent;
-            piece.Descent = Abs(metrics.descent);
-            piece.Gap = metrics.lineGap;
+            u32 used = 1; // the run's own face sets the line's height even where a fallback draws it all
+            piece.Width = piece.Text.Size() != 0 ? MeasureInFaces(piece.Font, piece.Text, &used) +
+                                                       letterSpacing * static_cast<f32>(CodepointCount(piece.Text))
+                                                 : 0.0f;
+            // Its line holds the tallest face it draws in.
+            for (usize f = 0; f < piece.Font.FaceCount(); ++f)
+                if ((used & (1u << f)) != 0 && piece.Font.Face(f)->font != nullptr)
+                {
+                    const fonts::FontMetrics metrics = piece.Font.Face(f)->font->Metrics();
+                    piece.Ascent = Max(piece.Ascent, metrics.ascent);
+                    piece.Descent = Max(piece.Descent, Abs(metrics.descent));
+                    piece.Gap = Max(piece.Gap, metrics.lineGap);
+                }
             if (piece.Text.Size() == 0)
                 return;
-            piece.Width = font.MeasureString(piece.Text) + letterSpacing * static_cast<f32>(CodepointCount(piece.Text));
             usize spaces = piece.Text.Size();
             while (spaces > 0 && piece.Text[spaces - 1] == u8' ')
                 --spaces;
@@ -551,7 +684,7 @@ export namespace experimental::gui
             {
                 const core::StringView kept = piece.Text.SubStr(0, spaces);
                 piece.TrailingSpace =
-                    piece.Width - font.MeasureString(kept) - letterSpacing * static_cast<f32>(CodepointCount(kept));
+                    piece.Width - MeasureInFaces(piece.Font, kept) - letterSpacing * static_cast<f32>(CodepointCount(kept));
             }
         }
 
@@ -731,6 +864,44 @@ export namespace experimental::gui
                 else
                     for (usize k = run.start; k < run.end; ++k)
                         place(items[k]);
+            }
+        }
+
+        // A piece's glyphs from a list of faces, as runs of one face each (the face a run is drawn
+        // and measured with), in order.
+        inline void SplitByFace(TextLayout& layout, LaidOutGlyphs&& glyphs, const ResolvedRunFont& font)
+        {
+            usize g = 0;
+            while (g < glyphs.Glyphs.Size())
+            {
+                const u8 face = glyphs.Glyphs[g].font;
+                LaidOutGlyphs part;
+                part.Font = face < font.FaceCount() ? font.Face(face) : font.Font;
+                part.TextColor = glyphs.TextColor;
+                part.Size = glyphs.Size;
+                part.SyntheticBold = glyphs.SyntheticBold;
+                part.SyntheticItalic = glyphs.SyntheticItalic;
+                part.Baseline = glyphs.Baseline;
+                part.Line = glyphs.Line;
+                part.Run = glyphs.Run;
+                part.TextStart = glyphs.GlyphStart[g];
+                part.TextEnd = glyphs.GlyphEnd[g];
+                f32 left = glyphs.Glyphs[g].x;
+                f32 right = left;
+                for (; g < glyphs.Glyphs.Size() && glyphs.Glyphs[g].font == face; ++g)
+                {
+                    const fonts::GlyphPosition& glyph = glyphs.Glyphs[g];
+                    part.Glyphs.PushBack(glyph);
+                    part.GlyphStart.PushBack(glyphs.GlyphStart[g]);
+                    part.GlyphEnd.PushBack(glyphs.GlyphEnd[g]);
+                    part.TextStart = Min(part.TextStart, glyphs.GlyphStart[g]);
+                    part.TextEnd = Max(part.TextEnd, glyphs.GlyphEnd[g]);
+                    left = Min(left, glyph.x);
+                    right = Max(right, glyph.x + glyph.advance);
+                }
+                part.X = left;
+                part.Width = right - left;
+                layout.GlyphRuns.PushBack(Move(part));
             }
         }
 
@@ -1150,12 +1321,15 @@ export namespace experimental::gui
                 const auto shape = [&]() -> bool
                 {
                     fonts::ITextShaper& shaper = *piece.Font.Font->shaper;
-                    if (!bidi)
+                    if (!bidi && piece.Font.FallbackCount == 0)
                         return shaper.ShapeText(*piece.Font.Font->font, piece.Text, piece.X, at.Baseline, glyphs.Glyphs).HasValue();
-                    fonts::IFont* const list[1] = {piece.Font.Font->font};
+                    // Its faces in order: a character takes the first that has it.
+                    fonts::IFont* list[1 + ResolvedRunFont::kMaxFallbacks]{};
+                    for (usize f = 0; f < piece.Font.FaceCount(); ++f)
+                        list[f] = piece.Font.Face(f)->font;
                     fonts::ShapeRequest request;
                     request.text = piece.Text;
-                    request.fonts = Span<fonts::IFont* const>(list, 1);
+                    request.fonts = Span<fonts::IFont* const>(list, piece.Font.FaceCount());
                     request.direction = piece.Shaping;
                     request.startX = piece.X;
                     request.startY = at.Baseline;
@@ -1202,7 +1376,10 @@ export namespace experimental::gui
                         before = after;
                     }
                 }
-                layout.GlyphRuns.PushBack(Move(glyphs));
+                if (piece.Font.FallbackCount == 0 || glyphs.Unshaped)
+                    layout.GlyphRuns.PushBack(Move(glyphs));
+                else
+                    detail::SplitByFace(layout, Move(glyphs), piece.Font);
             }
             if (run.Underline && visible > 0.0f && piece.Font.Font != nullptr && piece.Font.Font->font != nullptr)
             {

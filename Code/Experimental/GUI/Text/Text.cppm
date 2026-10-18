@@ -87,6 +87,18 @@ export namespace experimental::gui
             Dirty();
         }
         [[nodiscard]] fonts::CachedFont* GetFont() const noexcept { return m_font; }
+        /// The families a character its font lacks is drawn in, in order (a font-family list's rest,
+        /// comma separated), and the service that has them (a rich text's own faces come from it
+        /// too).
+        void SetFallbackFamilies(fonts::IFontService* service, core::StringView families)
+        {
+            if (families.Size() != 0)
+                SetFontService(service);
+            if (families == m_fallbackFamilies.AsView())
+                return;
+            m_fallbackFamilies = core::String(families);
+            Dirty();
+        }
         /// A font that can draw (one is set and loaded).
         [[nodiscard]] bool HasFont() const noexcept { return m_font != nullptr && m_font->font != nullptr; }
         /// Resolves runs that set a family, a size, bold or italic of their own (null: they take its font).
@@ -372,6 +384,7 @@ export namespace experimental::gui
                 style.Family = core::String(m_font->font->FamilyName());
                 style.Size = m_font->font->PixelHeight();
             }
+            style.FallbackFamilies = m_fallbackFamilies;
             style.TextColor = m_color;
             style.Align = m_hAlign;
             style.Wrap = IsWrapping();
@@ -426,6 +439,7 @@ export namespace experimental::gui
         bool m_rich = false;
         fonts::CachedFont* m_font = nullptr; // non-owning (owned by the font service)
         fonts::IFontService* m_fontService = nullptr;
+        core::String m_fallbackFamilies;
         IResourceProvider* m_resources = nullptr;
         Color m_color = Color::White;
         TextHAlign m_hAlign = TextHAlign::Start;

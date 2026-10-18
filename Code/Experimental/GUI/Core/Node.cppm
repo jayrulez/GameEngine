@@ -61,6 +61,7 @@ export namespace experimental::gui
 
     class EventDispatcher; // owned by the SceneRoot; reached via GetEventDispatcher()
     class Tween;           // a property moving on the GUI's clock (:tween, E14)
+    class TweenGroup;      // tweens run as one (:tween)
     class ElementSet;      // what a GUI may create (:element_types); its SceneRoot holds one
     class SceneRoot;       // the root of a GUI (:scene_root)
     class GUIContext;      // the GUI a root is part of (:scene_root)
@@ -1320,6 +1321,8 @@ export namespace experimental::gui
         /// starting again. The spring, running.
         RefPtr<Tween> SpringTo(core::StringView property, core::StringView to, f32 stiffness = 170.0f, f32 damping = 26.0f,
                                f32 mass = 1.0f);
+        /// Runs `group` on this node's GUI clock (a script's RunAction for a group, E14).
+        void Play(RefPtr<TweenGroup> group);
         /// A tween of this node as Animate makes one, not yet running: a step for a group (E14).
         RefPtr<Tween> CreateTween(core::StringView property, core::StringView to, f32 seconds,
                                   core::StringView easing = core::StringView(u8"ease"));

@@ -633,3 +633,84 @@ TEST_CASE("gui-script: an AngelScript source and targets drag and drop, a dragqu
     CHECK(bed.Number(u8"droppedCount") == doctest::Approx(2.0));
 }
 #endif // OPTION_HAS_ANGELSCRIPT
+
+namespace
+{
+    // Motion from a script (E14): the script has put a Label "box" first under the root, tweening
+    // its x to 100 over a second (a callback at the end), playing a sequence that moves its y to 50
+    // over a second, waits half a second and calls back, and a Slider second, springing its value
+    // to 0.4. `finishedCount` counts the callbacks; `keptDone` reads the kept tween.
+    void CheckMotion(GuiBed& bed)
+    {
+        REQUIRE(bed.errors.count == 0);
+        gui::Node* box = bed.root->GetChildAt(0);
+        gui::Slider* slider = Cast<gui::Slider>(bed.root->GetChildAt(1));
+        REQUIRE(box != nullptr);
+        REQUIRE(slider != nullptr);
+        const auto advance = [&](double seconds) { bed.root->GetContext().Update(Duration::FromSeconds(seconds)); };
+        advance(0.5);
+        CHECK(box->GetPosition().x == doctest::Approx(50.0f));
+        CHECK(box->GetPosition().y == doctest::Approx(25.0f));
+        CHECK(bed.Number(u8"keptDone") == doctest::Approx(0.0));
+        advance(0.5);
+        CHECK(box->GetPosition().x == doctest::Approx(100.0f));
+        CHECK(box->GetPosition().y == doctest::Approx(50.0f));
+        CHECK(bed.Number(u8"finishedCount") == doctest::Approx(1.0)); // the tween's
+        CHECK(bed.Number(u8"keptDone") == doctest::Approx(1.0));
+        advance(0.5);
+        CHECK(bed.Number(u8"finishedCount") == doctest::Approx(2.0)); // and the sequence's call
+        for (int i = 0; i < 300; ++i)
+            advance(1.0 / 60.0);
+        CHECK(slider->GetValue() == doctest::Approx(0.4).epsilon(0.01));
+    }
+}
+
+#ifdef OPTION_HAS_ANGELSCRIPT
+TEST_CASE("gui-script: AngelScript tweens, springs and plays a sequence (E14)")
+{
+    RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    const Status loaded = bed.context->Load(
+        u8"funcdef void Done();\n"
+        u8"int finished = 0;\n"
+        u8"void tick() { finished++; }\n"
+        u8"Tween@ kept;\n"
+        u8"void main() {\n"
+        u8"  Node@ root = gui::root();\n"
+        u8"  Node@ box = root.add(\"Label\");\n"
+        u8"  @kept = box.tween(\"x\", \"100\", 1.0, \"linear\").onFinished(Done(tick));\n"
+        u8"  box.play(TweenSequence().add(box.createTween(\"y\", \"50\", 1.0, \"linear\")).wait(0.5).call(Done(tick)));\n"
+        u8"  Node@ slider = root.add(\"Slider\");\n"
+        u8"  slider.springTo(\"value\", \"0.4\", 400, 40, 1);\n"
+        u8"}\n"
+        u8"double finishedCount() { return finished; }\n"
+        u8"double keptDone() { return kept.isDone() ? 1 : 0; }\n",
+        u8"main");
+    INFO(doctest::String(reinterpret_cast<const char*>(bed.errors.last.CStr())));
+    REQUIRE(loaded.IsOk());
+    CheckMotion(bed);
+}
+#endif
+
+#ifdef OPTION_HAS_LUAU
+TEST_CASE("gui-script: Luau tweens, springs and plays a sequence (E14)")
+{
+    RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    const Status loaded = bed.context->Load(
+        u8"local finished = 0\n"
+        u8"local root = gui.root()\n"
+        u8"local box = root:add(\"Label\")\n"
+        u8"local kept = box:tween(\"x\", \"100\", 1.0, \"linear\"):onFinished(function() finished = finished + 1 end)\n"
+        u8"box:play(TweenSequence.new():add(box:createTween(\"y\", \"50\", 1.0, \"linear\")):wait(0.5)"
+        u8":call(function() finished = finished + 1 end))\n"
+        u8"local slider = root:add(\"Slider\")\n"
+        u8"slider:springTo(\"value\", \"0.4\", 400, 40, 1)\n"
+        u8"function finishedCount() return finished end\n"
+        u8"function keptDone() return kept:isDone() and 1 or 0 end\n",
+        u8"main");
+    INFO(doctest::String(reinterpret_cast<const char*>(bed.errors.last.CStr())));
+    REQUIRE(loaded.IsOk());
+    CheckMotion(bed);
+}
+#endif

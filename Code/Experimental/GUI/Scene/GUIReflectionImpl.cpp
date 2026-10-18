@@ -668,6 +668,10 @@ namespace experimental::gui
             registry.Register(UINode::StaticType());
             registry.Register(UIWidget::StaticType());
             registry.Register(Gui::StaticType()); // binds as `gui` (its scriptName)
+            registry.Register(Tween::StaticType()); // what node.animate gives (E14)
+            registry.Register(TweenGroup::StaticType());
+            registry.Register(TweenSequence::StaticType());
+            registry.Register(TweenParallel::StaticType());
             foundation::script::RegisterDelegateShape(u8"void KeyHandler(const string &in keys)"); // gui::captureKey's
             return true;
         }();
@@ -746,7 +750,49 @@ namespace experimental::gui
         builder.Method<&Node::OnCommandScript>("onCommand");
         builder.Method<&Node::FocusElement>("focus");
         builder.Method<&Node::Destroy>("destroy");
+        // Motion (E14): a tween, a spring, a group's run, and the property given back.
+        builder.Method<&Node::Animate>("tween"); // `animate` is an expander's property
+        builder.Method<&Node::CreateTween>("createTween");
+        builder.Method<&Node::SpringTo>("springTo");
+        builder.Method<&Node::StopAnimation>("stopAnimation");
+        builder.Method<&Node::Play>("play");
         builder.Method<&ElementOf<Node>, Node, Node>("of");
+    }
+
+    // Motion (E14): `repeats`, as `repeat` is a word of Luau's.
+    REFLECT_MEMBERS(Tween, "rtti::gui")
+    {
+        builder.Method<&Tween::FromScript>("from");
+        builder.Method<&Tween::DelayScript>("delay");
+        builder.Method<&Tween::RepeatScript>("repeats");
+        builder.Method<&Tween::PingPongScript>("pingPong");
+        builder.Method<&Tween::EaseScript>("ease");
+        builder.Method<&Tween::SpringScript>("spring");
+        builder.Method<&Tween::OnFinishedScript>("onFinished");
+        builder.Method<&Tween::Retarget>("retarget");
+        builder.Method<&Tween::Cancel>("cancel");
+        builder.Method<&Tween::IsFinished>("isDone");
+    }
+
+    REFLECT_MEMBERS(TweenGroup, "rtti::gui")
+    {
+        builder.Method<&TweenGroup::AddScript>("add");
+        builder.Method<&TweenGroup::AddGroupScript>("addGroup");
+        builder.Method<&TweenGroup::WaitScript>("wait");
+        builder.Method<&TweenGroup::CallScript>("call");
+        builder.Method<&TweenGroup::RepeatScript>("repeats");
+        builder.Method<&TweenGroup::OnFinishedScript>("onFinished");
+        builder.Method<&TweenGroup::IsFinished>("isDone");
+    }
+
+    REFLECT_MEMBERS(TweenSequence, "rtti::gui")
+    {
+        builder.Constructor<>(); // a script makes one: TweenSequence() / TweenSequence.new()
+    }
+
+    REFLECT_MEMBERS(TweenParallel, "rtti::gui")
+    {
+        builder.Constructor<>();
     }
 
     REFLECT_MEMBERS(SceneRoot, "rtti::gui")

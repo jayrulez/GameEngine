@@ -19,6 +19,7 @@ module;
 export module experimental.gui:tween;
 
 import foundation.core;
+import foundation.script; // IScriptDelegate: a script's callback at the end
 import :action;
 import :node;
 import :ui_node;
@@ -105,6 +106,22 @@ export namespace experimental::gui
             m_onFinished = core::Move(callback);
             return *this;
         }
+
+        // === The script surface (reflected in GUIReflectionImpl.cpp): each returns the tween, so a
+        // script chains them as native code does.
+        RefPtr<Tween> FromScript(core::StringView text) { return Self(From(text)); }
+        RefPtr<Tween> DelayScript(f32 seconds) { return Self(Delay(seconds)); }
+        RefPtr<Tween> RepeatScript(i32 count) { return Self(Repeat(count)); }
+        RefPtr<Tween> PingPongScript(bool on) { return Self(PingPong(on)); }
+        RefPtr<Tween> EaseScript(core::StringView easing) { return Self(Ease(ParseEasing(easing).ValueOr(Easing::Ease()))); }
+        RefPtr<Tween> SpringScript(f32 stiffness, f32 damping, f32 mass) { return Self(Spring(stiffness, damping, mass)); }
+        RefPtr<Tween> OnFinishedScript(RefPtr<foundation::script::IScriptDelegate> handler)
+        {
+            if (handler)
+                OnFinished([handler]() { (void)handler->Invoke(Span<core::Variant>{}); });
+            return RefPtr<Tween>(this);
+        }
+        [[nodiscard]] bool IsFinished() { return IsDone(); }
 
         [[nodiscard]] core::StringView GetProperty() const noexcept { return m_property.AsView(); }
         /// Whether it composes over the cascade (a property a sheet names) rather than through a
@@ -236,6 +253,8 @@ export namespace experimental::gui
             Style,
             Reflected,
         };
+
+        [[nodiscard]] RefPtr<Tween> Self(Tween& self) { return RefPtr<Tween>(&self); }
 
         // The spring's progress toward 1 over `seconds`, in small steps (semi-implicit Euler holds
         // a stiff spring steady where one big step would fly off).
@@ -425,7 +444,7 @@ export namespace experimental::gui
         bool m_done = false;
     };
 
-    RTTI_DEFINE_OBJECT(Tween, "rtti::gui")
+    // StaticType: REFLECT_MEMBERS(Tween) in Scene/GUIReflectionImpl.cpp (the script surface).
 
     inline void Tween::Retarget(core::StringView to)
     {
@@ -564,6 +583,23 @@ export namespace experimental::gui
         }
         [[nodiscard]] usize StepCount() const noexcept { return m_steps.Size(); }
 
+        // === The script surface (reflected in GUIReflectionImpl.cpp), chaining as Add and the rest do.
+        RefPtr<TweenGroup> AddScript(RefPtr<Tween> tween) { return Self(Add(core::Move(tween))); }
+        RefPtr<TweenGroup> AddGroupScript(RefPtr<TweenGroup> group) { return Self(Add(core::Move(group))); }
+        RefPtr<TweenGroup> WaitScript(f32 seconds) { return Self(Wait(seconds)); }
+        RefPtr<TweenGroup> CallScript(RefPtr<foundation::script::IScriptDelegate> handler)
+        {
+            return Self(Call([handler]() { if (handler) (void)handler->Invoke(Span<core::Variant>{}); }));
+        }
+        RefPtr<TweenGroup> RepeatScript(i32 count) { return Self(Repeat(count)); }
+        RefPtr<TweenGroup> OnFinishedScript(RefPtr<foundation::script::IScriptDelegate> handler)
+        {
+            if (handler)
+                OnFinished([handler]() { (void)handler->Invoke(Span<core::Variant>{}); });
+            return RefPtr<TweenGroup>(this);
+        }
+        [[nodiscard]] bool IsFinished() { return IsDone(); }
+
         /// Calls `f(step)` for each step running now (a replacement finds a tween inside a group).
         template <typename F>
         void ForEachRunning(F&& f)
@@ -623,6 +659,7 @@ export namespace experimental::gui
         [[nodiscard]] core::Duration GetOverrun() const override { return core::Duration::FromSeconds(static_cast<f64>(m_overrun)); }
 
     protected:
+        [[nodiscard]] RefPtr<TweenGroup> Self(TweenGroup& self) { return RefPtr<TweenGroup>(&self); }
         virtual void StartRun() = 0;
         /// Runs the steps `seconds` on; true when this run has ended, with what it left over.
         virtual bool Advance(f32 seconds, f32& overrun) = 0;
@@ -637,7 +674,7 @@ export namespace experimental::gui
         bool m_done = false;
         core::Function<void()> m_onFinished;
     };
-    RTTI_DEFINE_OBJECT(TweenGroup, "rtti::gui")
+    // StaticType: REFLECT_MEMBERS(TweenGroup) in Scene/GUIReflectionImpl.cpp (the script surface).
 
     /// Steps one after another: each starts as the last ends, with the time it left.
     class TweenSequence : public TweenGroup
@@ -673,7 +710,7 @@ export namespace experimental::gui
     private:
         usize m_index = 0;
     };
-    RTTI_DEFINE_OBJECT(TweenSequence, "rtti::gui")
+    // StaticType: REFLECT_MEMBERS(TweenSequence) in Scene/GUIReflectionImpl.cpp (the script surface).
 
     /// Steps together: the run ends with the last of them.
     class TweenParallel : public TweenGroup
@@ -704,5 +741,5 @@ export namespace experimental::gui
         }
         [[nodiscard]] bool IsRunning(const Action& step) const override { return !const_cast<Action&>(step).IsDone(); }
     };
-    RTTI_DEFINE_OBJECT(TweenParallel, "rtti::gui")
+    // StaticType: REFLECT_MEMBERS(TweenParallel) in Scene/GUIReflectionImpl.cpp (the script surface).
 }

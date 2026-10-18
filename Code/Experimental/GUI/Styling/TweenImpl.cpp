@@ -88,6 +88,12 @@ namespace experimental::gui
         return tween;
     }
 
+    void Node::Play(RefPtr<TweenGroup> group)
+    {
+        if (group)
+            RunAction(core::Move(group));
+    }
+
     bool Node::StopAnimation(core::StringView property)
     {
         bool stopped = false;

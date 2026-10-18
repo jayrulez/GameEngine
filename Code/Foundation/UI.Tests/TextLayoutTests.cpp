@@ -282,6 +282,16 @@ TEST_CASE("rich text: an effect on one run draws under that run's glyphs and not
     const foundation::vg::VGBatch& batch = canvas.GetBatch();
     // A shadow quad for each letter of "mask", none for "the" or "falls".
     CHECK(QuadsIn(batch, Color{0.0f, 0.0f, 1.0f, 1.0f}) == 4u);
+    // And each glyph once, the effects' pass drawing none of its own: the letters of "the",
+    // "mask" and "falls" (a space's quad covers nothing).
+    usize glyphs = 0;
+    for (usize i = 0; i + 3 < batch.vertices.Size(); i += 4)
+    {
+        const bool shadow = batch.vertices[i].color.b > 0.99f && batch.vertices[i].color.r < 0.01f;
+        if (!shadow && batch.vertices[i + 2].position.x > batch.vertices[i].position.x)
+            ++glyphs;
+    }
+    CHECK(glyphs == 12u);
     // The shadows all come before the first glyph: no run's shadow covers a neighbour.
     usize lastShadow = 0;
     usize firstGlyph = batch.vertices.Size();

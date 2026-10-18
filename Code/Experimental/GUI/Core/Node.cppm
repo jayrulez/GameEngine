@@ -479,6 +479,24 @@ export namespace experimental::gui
             const core::Float2 p = ConvertToNodeSpace(worldPoint);
             return p.x >= 0.0f && p.x <= m_size.x && p.y >= 0.0f && p.y <= m_size.y;
         }
+        /// Whether any child sets a z-index (else they paint and hit-test as they stand).
+        [[nodiscard]] bool HasStackedChildren() const noexcept
+        {
+            for (const RefPtr<Node>& child : m_children)
+                if (child->m_layoutStyle.ZIndex != 0)
+                    return true;
+            return false;
+        }
+        /// Its children in paint order: by z-index (CSS's, among siblings), then as they stand.
+        void ChildrenInPaintOrder(Array<Node*>& out) const
+        {
+            out.Clear();
+            for (const RefPtr<Node>& child : m_children)
+                out.PushBack(child.Get());
+            for (usize i = 1; i < out.Size(); ++i) // insertion sort: stable, and sibling lists are short
+                for (usize j = i; j > 0 && out[j]->m_layoutStyle.ZIndex < out[j - 1]->m_layoutStyle.ZIndex; --j)
+                    core::Swap(out[j], out[j - 1]);
+        }
         // Topmost visible descendant (or self) under a world point; nullptr if none.
         [[nodiscard]] virtual Node* OverFind(core::Float2 worldPoint)
         {
@@ -494,10 +512,20 @@ export namespace experimental::gui
             // What it clips is hit only where it shows: a row scrolled out of a list takes no press
             // over what lies beyond the list (navigation skips it likewise).
             if (!ClipsChildren() || WithinBox(worldPoint))
-                for (usize i = m_children.Size(); i-- > 0;)
-                    if (!m_children[i]->m_topLayer) // the top layer is hit-tested first, from the root
-                        if (Node* hit = m_children[i]->OverFind(worldPoint))
+            {
+                // The topmost first: the last drawn (z-index, then the order they stand in).
+                Array<Node*> order;
+                if (HasStackedChildren())
+                    ChildrenInPaintOrder(order);
+                const usize count = order.IsEmpty() ? m_children.Size() : order.Size();
+                for (usize i = count; i-- > 0;)
+                {
+                    Node* child = order.IsEmpty() ? m_children[i].Get() : order[i];
+                    if (!child->m_topLayer) // the top layer is hit-tested first, from the root
+                        if (Node* hit = child->OverFind(worldPoint))
                             return hit;
+                }
+            }
             return PointInside(worldPoint) ? this : nullptr;
         }
 
@@ -639,9 +667,20 @@ export namespace experimental::gui
                 const core::Float2 shift = ScrollShift();
                 ctx.ConcatTransform(Transform2D{}.Translate(-shift.x, -shift.y));
             }
-            for (const RefPtr<Node>& child : m_children)
-                if (!child->m_topLayer) // drawn by the root's top layer, after the tree
-                    child->Draw(ctx);
+            if (!HasStackedChildren())
+            {
+                for (const RefPtr<Node>& child : m_children)
+                    if (!child->m_topLayer) // drawn by the root's top layer, after the tree
+                        child->Draw(ctx);
+            }
+            else
+            {
+                Array<Node*> order;
+                ChildrenInPaintOrder(order);
+                for (Node* child : order)
+                    if (!child->m_topLayer)
+                        child->Draw(ctx);
+            }
             if (scrolled)
                 ctx.Restore();
             if (roundedClip)

@@ -884,3 +884,20 @@ TEST_CASE("layout: fit-content is as wide as what it holds, not stretched across
     bed.Layout();
     CHECK(fit->GetSize().x == doctest::Approx(60.0f));
 }
+
+TEST_CASE("layout: z-index orders siblings for drawing and the pointer, else they stand as they are")
+{
+    Bed bed;
+    auto stack = Box(*bed.root.Get(), [](LayoutStyle& s) { s.Kind = Display::Stack; s.Width = LayoutLength::Px(100.0f); s.Height = LayoutLength::Px(100.0f); });
+    auto under = Fixed(*stack.Get(), 100.0f, 100.0f);
+    auto over = Fixed(*stack.Get(), 100.0f, 100.0f);
+    bed.Layout();
+    CHECK(bed.root->OverFind(core::Float2{50.0f, 50.0f}) == over.Get()); // the later stands on top
+    under->EditLayoutStyle([](LayoutStyle& s) { s.ZIndex = 1; });
+    bed.Layout();
+    CHECK(bed.root->OverFind(core::Float2{50.0f, 50.0f}) == under.Get()); // raised above its sibling
+    core::Array<Node*> order;
+    stack->ChildrenInPaintOrder(order);
+    REQUIRE(order.Size() == 2u);
+    CHECK(order[1] == under.Get()); // drawn last
+}

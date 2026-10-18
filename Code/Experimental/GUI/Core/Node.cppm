@@ -1905,7 +1905,31 @@ export namespace experimental::gui
             (void)BindPropertyBack(property, [model, name](const Variant& v) { model->Set(name.AsView(), v); });
             return true;
         }
-        void ClearBindings() { m_bindings.Clear(); }
+        void ClearBindings()
+        {
+            m_bindings.Clear();
+            m_propertyBindings.Clear();
+        }
+        /// Bind for one reflected property (`back`: the write-back from it): binding the property
+        /// again replaces the binding, rather than leaving the old one running beside it.
+        Effect& BindFor(const void* property, bool back, core::Function<void()> body)
+        {
+            for (usize i = 0; i < m_propertyBindings.Size(); ++i)
+                if (m_propertyBindings[i].Property == property && m_propertyBindings[i].Back == back)
+                {
+                    for (usize b = 0; b < m_bindings.Size(); ++b)
+                        if (m_bindings[b].Get() == m_propertyBindings[i].Bound)
+                        {
+                            m_bindings.RemoveAt(b);
+                            break;
+                        }
+                    m_propertyBindings.RemoveAt(i);
+                    break;
+                }
+            Effect& bound = Bind(core::Move(body));
+            m_propertyBindings.PushBack(PropertyBinding{property, back, &bound});
+            return bound;
+        }
         [[nodiscard]] usize BindingCount() const noexcept { return m_bindings.Size(); }
         /// Calls `f(id, phase)` for each command it handles (the inspector lists them).
         template <typename F>
@@ -2237,6 +2261,13 @@ export namespace experimental::gui
         Array<RefPtr<Node>> m_children; // owning
         Array<Listener> m_listeners;
         Array<UniquePtr<Effect>> m_bindings; // this node's bindings (Bind, BindProperty)
+        struct PropertyBinding
+        {
+            const void* Property; // its PropertyInfo
+            bool Back;            // the write-back from it (BindPropertyBack)
+            Effect* Bound;        // one of m_bindings
+        };
+        Array<PropertyBinding> m_propertyBindings; // which binding is each property's
         Observable m_sceneRootChanged;       // told when this subtree joins or leaves a GUI
         struct CommandHandlerEntry
         {

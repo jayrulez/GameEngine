@@ -335,7 +335,8 @@ namespace experimental::gui
 
     namespace
     {
-        // The reflected property named `name` on `type` or a base, or null.
+        // The reflected property named `name` on `type` or a base, by its own name or the CSS name
+        // markup writes it by (`aria-label` for `ariaLabel`), or null.
         const PropertyInfo* FindReflectedProperty(const TypeInfo* type, StringView name)
         {
             for (; type != nullptr; type = type->base)
@@ -344,6 +345,9 @@ namespace experimental::gui
                     const PropertyInfo& property = PropertyAt(*type, i);
                     if (StringView(reinterpret_cast<const utf8char*>(property.name)) == name)
                         return &property;
+                    if (const Attribute* css = FindAttribute(property, u8"css"))
+                        if (const core::String* cssName = css->value.TryGet<core::String>(); cssName != nullptr && cssName->AsView() == name)
+                            return &property;
                 }
             return nullptr;
         }
@@ -355,7 +359,14 @@ namespace experimental::gui
         if (property == nullptr || property->type == nullptr ||
             (static_cast<u32>(property->flags) & static_cast<u32>(PropertyFlags::ReadOnly)) != 0)
             return false;
-        Bind([this, property, expression = core::Move(expression)]() mutable
+        // Bound again, a translation of it ends (BindTranslation records its own after this).
+        for (usize i = 0; i < m_translations.Size(); ++i)
+            if (FindReflectedProperty(GetType(), m_translations[i].Property.AsView()) == property)
+            {
+                m_translations.RemoveAt(i);
+                break;
+            }
+        BindFor(property, false, [this, property, expression = core::Move(expression)]() mutable
              {
                  const core::Variant value = ConvertVariant(expression(), *property->type);
                  // The write is not a read: setting a property must not make this binding follow it.
@@ -372,16 +383,7 @@ namespace experimental::gui
         if (info == nullptr || FindAttribute(*info, u8"translatable") == nullptr)
             return false;
         const core::String keyText(key);
-        bool recorded = false;
-        for (TranslatedProperty& t : m_translations)
-            if (t.Property.AsView() == property)
-            {
-                t.Key = keyText;
-                recorded = true;
-            }
-        if (!recorded)
-            m_translations.PushBack(TranslatedProperty{core::String(property), keyText});
-        return BindProperty(property,
+        const bool bound = BindProperty(property,
                             [this, keyText, data = core::Move(data), count = core::Move(count), args = core::Move(args)]() -> core::Variant
                             {
                                 // The GUI it is in (a binding made before it joins one reruns when it does).
@@ -416,6 +418,12 @@ namespace experimental::gui
                                     return core::Variant::From<core::String>(loc->Format(keyText.AsView(), span));
                                 return core::Variant::From<core::String>(core::String(loc->Text(keyText.AsView())));
                             });
+        if (!bound)
+            return false;
+        // Recorded by the property's own name (the inspector asks by it), after the binding, which
+        // ends any translation the property had.
+        m_translations.PushBack(TranslatedProperty{core::String(StringView(reinterpret_cast<const utf8char*>(info->name))), keyText});
+        return true;
     }
 
     bool Node::BindPropertyBack(StringView name, core::Function<void(const core::Variant&)> write)
@@ -423,7 +431,7 @@ namespace experimental::gui
         const PropertyInfo* property = FindReflectedProperty(GetType(), name);
         if (property == nullptr || FindAttribute(*property, u8"twoWay") == nullptr)
             return false;
-        Bind([this, property, write = core::Move(write)]() mutable
+        BindFor(property, true, [this, property, write = core::Move(write)]() mutable
              {
                  const core::Variant value = GetProperty(*property, Instance::From(this)); // followed
                  Untracked([&] { write(value); });

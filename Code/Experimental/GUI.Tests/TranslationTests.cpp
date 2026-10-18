@@ -193,3 +193,45 @@ TEST_CASE("translation: an attribute ending in -count or -args is the widget's o
     CHECK(count); // not taken for a translation's count
     CHECK(args);  // tooltip is no @key here
 }
+
+TEST_CASE("translation: a property markup names by its CSS name takes @key and {{}} by that name")
+{
+    Texts texts;
+    Bed bed;
+    bed.root->GetContext().SetLocalization(&texts.loc);
+    bed.root->GetContext().GetData().Set(SV(u8"who"), core::Variant::From<core::String>(core::String(u8"Ana")));
+    core::RefPtr<Node> page = bed.Load(u8R"(
+        <Panel>
+            <Button id="go" aria-label="@menu.play"/>
+            <Button id="named" aria-label="{{who}}"/>
+        </Panel>)");
+    bed.root->AddChild(page.Get());
+    bed.Step();
+    CHECK(core::Cast<UIWidget>(Find(*page, SV(u8"go")))->GetAccessLabel() == core::String(u8"Play"));
+    CHECK(core::Cast<UIWidget>(Find(*page, SV(u8"named")))->GetAccessLabel() == core::String(u8"Ana"));
+    CHECK(Find(*page, SV(u8"go"))->TranslationKey(SV(u8"ariaLabel")) != nullptr); // recorded by its own name
+}
+
+TEST_CASE("translation: binding a property again replaces its binding, a translation's included")
+{
+    Texts texts;
+    Bed bed;
+    bed.root->GetContext().SetLocalization(&texts.loc);
+    DataModel& data = bed.root->GetContext().GetData();
+    data.Set(SV(u8"a"), core::Variant::From<core::String>(core::String(u8"first")));
+    data.Set(SV(u8"b"), core::Variant::From<core::String>(core::String(u8"second")));
+    auto label = core::MakeRef<Label>(core::DefaultAllocator());
+    bed.root->AddChild(label.Get());
+    REQUIRE(label->BindTranslation(SV(u8"text"), SV(u8"menu.play"), bed.root->GetContext().GetDataRef(), {}, {}));
+    const core::usize bindings = label->BindingCount();
+    REQUIRE(label->BindData(SV(u8"text"), bed.root->GetContext().GetDataRef(), SV(u8"a")));
+    REQUIRE(label->BindData(SV(u8"text"), bed.root->GetContext().GetDataRef(), SV(u8"b")));
+    bed.Step();
+    CHECK(label->GetText() == SV(u8"second"));
+    CHECK(label->TranslationKey(SV(u8"text")) == nullptr); // no longer translated
+    data.Set(SV(u8"a"), core::Variant::From<core::String>(core::String(u8"changed")));
+    texts.loc.SetLanguage(SV(u8"pt"));
+    bed.Step();
+    CHECK(label->GetText() == SV(u8"second")); // neither the old data binding nor the translation runs
+    CHECK(label->BindingCount() <= bindings + 1); // the data binding, and its write-back at most
+}

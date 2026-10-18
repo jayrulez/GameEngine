@@ -343,7 +343,10 @@ export namespace experimental::gui
                 }
                 return true;
             }
-            ClosePopupsOfKind(PopupKind::Hint, PopupCloseReason::Code); // a key hides a tooltip
+            // A key hides a tooltip, and keeps it hidden until the pointer moves on (as a press does).
+            if (m_tipProvider != nullptr)
+                m_tipSuppressed = true;
+            ClosePopupsOfKind(PopupKind::Hint, PopupCloseReason::Code);
             // The focused widget, and its ancestors (capture, then bubble from the focus), first.
             if (RouteKey(EventType::KeyDown, keyCode, modifiers))
             {

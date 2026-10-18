@@ -102,6 +102,18 @@ TEST_CASE("tooltip: a press hides it until the pointer moves to another node")
     CHECK(bed.d().GetShownTooltip() == nullptr); // not again under the same pointer
 }
 
+TEST_CASE("tooltip: a key hides it until the pointer moves to another node")
+{
+    Bed bed;
+    bed.d().InjectMouseMove(core::Float2{20.0f, 20.0f});
+    bed.Frames(6);
+    REQUIRE(bed.d().GetShownTooltip() != nullptr);
+    bed.d().InjectKeyDown(static_cast<core::u32>(KeyCode::A));
+    CHECK(bed.d().GetShownTooltip() == nullptr);
+    bed.Frames(10);
+    CHECK(bed.d().GetShownTooltip() == nullptr); // not reopened at the next tick
+}
+
 TEST_CASE("tooltip: sits by the pointer at a display scale")
 {
     Bed bed;

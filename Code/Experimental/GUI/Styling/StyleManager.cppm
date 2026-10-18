@@ -281,9 +281,17 @@ export namespace experimental::gui
             context.Lengths.RootFontSize = m_rootFontSize;
             context.Lengths.ViewportWidth = m_context.Width;
             context.Lengths.ViewportHeight = m_context.Height;
+            // The element's font size, what its em lengths measure by: its own font-size resolved
+            // against its parent's (em and percentages of the parent's, rem of the root's), else
+            // the parent's as it inherits.
+            const UINode* parentNode = core::Cast<UINode>(widget.GetParent());
+            const f32 parentSize =
+                parentNode != nullptr && parentNode->GetTextStyle().FontSize > 0.0f ? parentNode->GetTextStyle().FontSize : m_rootFontSize;
+            LengthContext parentLengths = context.Lengths;
+            parentLengths.ElementFontSize = parentSize;
+            const core::StringView fontSize = resolved.Get(core::StringView(u8"font-size"), core::StringView(u8""));
             context.Lengths.ElementFontSize =
-                ParseLength(resolved.Get(core::StringView(u8"font-size"), core::StringView(u8"")))
-                    .ValueOr(m_rootFontSize);
+                fontSize.Size() != 0 ? ResolveLength(fontSize, parentLengths, parentSize).ValueOr(parentSize) : parentSize;
 
             RefPtr<StyleAnimation>* running = m_animations.Find(&widget);
             if (running != nullptr && (*running)->IsDone())

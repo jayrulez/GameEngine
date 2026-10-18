@@ -545,3 +545,18 @@ TEST_CASE("style-manager: a declaration edited in its rule restyles every node t
     const StyleRule stranger(SV(u8"button"));
     CHECK_FALSE(mgr.EditDeclaration(&stranger, SV(u8"opacity"), SV(u8"1")));
 }
+
+TEST_CASE("style: em measures by the element's own font size, which takes em and percentages of its parent's")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    auto box = core::MakeRef<Panel>(core::DefaultAllocator());
+    box->AddClass(core::StringView(u8"big"));
+    root->AddChild(box.Get());
+    auto pct = core::MakeRef<Panel>(core::DefaultAllocator());
+    pct->AddClass(core::StringView(u8"pct"));
+    root->AddChild(pct.Get());
+    StyleManager styles(CSSParser::Parse(core::StringView(u8".big { font-size: 2em; padding-left: 1em; } .pct { font-size: 150%; padding-left: 1em; }")));
+    styles.ApplyTree(*root.Get());
+    CHECK(box->GetPadding().Left == doctest::Approx(32.0f)); // 2em of the root's 16, then 1em of that
+    CHECK(pct->GetPadding().Left == doctest::Approx(24.0f));
+}

@@ -875,7 +875,14 @@ export namespace experimental::gui
                 // font is the parent's or the node's own when both come from there, else the
                 // font service's for the pair.
                 const StringView declaredFamily = initial(u8"font-family") ? StringView{} : ParseUrl(keyword(u8"font-family")); // strips quotes
-                const Optional<f32> declaredSize = length(u8"font-size", 0.0f);
+                // font-size's em and percentages are of the parent's size, not its own.
+                LengthContext parentLengths = lengths;
+                parentLengths.ElementFontSize = parent != nullptr && parent->GetTextStyle().FontSize > 0.0f ? parent->GetTextStyle().FontSize
+                                                                                                             : lengths.RootFontSize;
+                const StyleValue* sizeValue = style.Value(u8"font-size");
+                const Optional<f32> declaredSize = sizeValue != nullptr && sizeValue->Kind == StyleValueKind::Length
+                                                       ? Optional<f32>(ResolveLengthValue(sizeValue->Length, parentLengths, parentLengths.ElementFontSize))
+                                                       : Optional<f32>{};
                 const UINode::TextStyle& from = inherits(u8"font-family") || inherits(u8"font-size") ? parent->GetTextStyle() : ownText;
                 const bool familyDeclared = free(SlotFontFamily) && declaredFamily.Size() != 0;
                 const bool sizeDeclared = free(SlotFontSize) && declaredSize.HasValue() && declaredSize.Value() > 0.0f;

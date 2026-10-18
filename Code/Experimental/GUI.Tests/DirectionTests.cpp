@@ -4,7 +4,8 @@
 // GUI - direction (E9b of Specs/gui-lab-evolution.md): a node runs as the first ancestor that says
 // does, else as the GUI's language is written; right to left mirrors flex rows, a column's cross
 // start, grid columns and a stack's start, margins staying on the sides their style names; dock
-// stays physical; text-align's start and end follow the direction, and CSS's `direction` sets it.
+// stays physical, its start and end sides following the direction; the logical margins, paddings
+// and insets land on the sides the direction puts them on; text-align's start and end follow the direction, and CSS's `direction` sets it.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -142,4 +143,51 @@ TEST_CASE("direction: CSS's direction sets it; text-align start and end follow i
     styles.ApplyTree(*bed.root.Get());
     CHECK(page->GetLayoutDirection() == Node::LayoutDirection::Inherit); // the sheet no longer says
     CHECK(label->GetTextAlignH() == TextHAlign::Left);
+}
+
+TEST_CASE("direction: inline start and end margins, paddings and insets land on the sides the direction puts them on")
+{
+    Bed bed;
+    auto page = core::MakeRef<Panel>(core::DefaultAllocator());
+    page->AddClass(SV(u8"page"));
+    bed.root->AddChild(page.Get());
+    auto item = core::MakeRef<Panel>(core::DefaultAllocator());
+    item->AddClass(SV(u8"item"));
+    page->AddChild(item.Get());
+    auto pinned = core::MakeRef<Panel>(core::DefaultAllocator());
+    pinned->AddClass(SV(u8"pinned"));
+    page->AddChild(pinned.Get());
+    const char8_t* const rules = u8".item { margin-inline: 4 6; padding-inline-start: 3; margin-left: 50; } "
+                                 u8".pinned { position: absolute; inset-inline-start: 7; }";
+    StyleManager styles(CSSParser::Parse(SV(rules)));
+    styles.ApplyTree(*bed.root.Get());
+    CHECK(item->GetMargin().Left == doctest::Approx(4.0f)); // the logical side wins over margin-left
+    CHECK(item->GetMargin().Right == doctest::Approx(6.0f));
+    CHECK(item->GetPadding().Left == doctest::Approx(3.0f));
+    CHECK(pinned->GetLayoutStyle().Left.Resolve(0.0f).ValueOr(-1.0f) == doctest::Approx(7.0f));
+
+    core::String rtl(u8".page { direction: rtl; } ");
+    rtl.Append(SV(rules));
+    styles.SetStyleSheet(CSSParser::Parse(rtl.AsView()));
+    styles.ApplyTree(*bed.root.Get());
+    CHECK(item->GetMargin().Right == doctest::Approx(4.0f));
+    CHECK(item->GetMargin().Left == doctest::Approx(6.0f));
+    CHECK(item->GetPadding().Right == doctest::Approx(3.0f));
+    CHECK(item->GetPadding().Left == doctest::Approx(0.0f));
+    CHECK(pinned->GetLayoutStyle().Right.Resolve(0.0f).ValueOr(-1.0f) == doctest::Approx(7.0f));
+}
+
+TEST_CASE("direction: dock's start and end are left and right, swapped in right to left")
+{
+    Bed bed;
+    auto dock = Box(*bed.root.Get(), [](LayoutStyle& s) { s.Kind = Display::Dock; s.Height = LayoutLength::Px(20.0f); });
+    auto start = Box(*dock.Get(), [](LayoutStyle& s) { s.DockSide = Dock::Start; s.Width = LayoutLength::Px(15.0f); });
+    auto end = Box(*dock.Get(), [](LayoutStyle& s) { s.DockSide = Dock::End; s.Width = LayoutLength::Px(10.0f); });
+    bed.Layout();
+    CHECK(start->GetPosition().x == doctest::Approx(0.0f));
+    CHECK(end->GetPosition().x == doctest::Approx(90.0f));
+    dock->SetLayoutDirection(Node::LayoutDirection::RightToLeft);
+    bed.Layout();
+    CHECK(start->GetPosition().x == doctest::Approx(85.0f));
+    CHECK(end->GetPosition().x == doctest::Approx(0.0f));
 }

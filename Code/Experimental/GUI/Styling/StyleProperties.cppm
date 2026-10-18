@@ -117,6 +117,12 @@ export namespace experimental::gui
             {u8"margin-right", StyleGrammar::Length, u8"0"},
             {u8"margin-bottom", StyleGrammar::Length, u8"0"},
             {u8"margin-left", StyleGrammar::Length, u8"0"},
+            {u8"margin-inline-start", StyleGrammar::Length},
+            {u8"margin-inline-end", StyleGrammar::Length},
+            {u8"padding-inline-start", StyleGrammar::Length},
+            {u8"padding-inline-end", StyleGrammar::Length},
+            {u8"inset-inline-start", StyleGrammar::Size},
+            {u8"inset-inline-end", StyleGrammar::Size},
             {u8"enabled", StyleGrammar::Keyword},
             {u8"visibility", StyleGrammar::Keyword, u8"visible", true},
             {u8"color", StyleGrammar::Color, nullptr, true},
@@ -392,7 +398,7 @@ export namespace experimental::gui
 
     /// The longhands `name: text` sets: itself when it is one, its longhands when it is a
     /// shorthand (border, border-<side>, border-width, border-color, border-style, border-radius,
-    /// padding, margin, background, transition, animation). False when a shorthand's value does not parse.
+    /// padding, margin, margin-inline, padding-inline, inset-inline, background, transition, animation). False when a shorthand's value does not parse.
     [[nodiscard]] inline bool ExpandStyleShorthand(core::StringView name, core::StringView text,
                                                    Array<StyleLonghand>& out)
     {
@@ -521,6 +527,20 @@ export namespace experimental::gui
         }
         if (name == core::StringView(u8"margin"))
             return sides(u8"margin-", u8"");
+        if (name == core::StringView(u8"margin-inline") || name == core::StringView(u8"padding-inline") ||
+            name == core::StringView(u8"inset-inline"))
+        {
+            // The inline start, then the end (one value for both).
+            const Array<core::StringView> parts = SplitTopLevel(value, u8' ');
+            if (parts.IsEmpty() || parts.Size() > 2)
+                return false;
+            core::String start(name), end(name);
+            start.Append(core::StringView(u8"-start"));
+            end.Append(core::StringView(u8"-end"));
+            detail::Push(out, start.AsView(), parts[0]);
+            detail::Push(out, end.AsView(), parts[parts.Size() - 1]);
+            return true;
+        }
         if (name == core::StringView(u8"border-radius"))
         {
             const Optional<Array<core::StringView>> parts =

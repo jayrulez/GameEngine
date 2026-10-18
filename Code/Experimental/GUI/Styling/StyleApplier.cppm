@@ -167,8 +167,8 @@ export namespace experimental::gui
         }
         [[nodiscard]] inline Optional<Dock> DockNamed(core::StringView k)
         {
-            static constexpr core::StringView names[] = {u8"fill", u8"left", u8"top", u8"right", u8"bottom"};
-            static constexpr Dock values[] = {Dock::Fill, Dock::Left, Dock::Top, Dock::Right, Dock::Bottom};
+            static constexpr core::StringView names[] = {u8"fill", u8"left", u8"top", u8"right", u8"bottom", u8"start", u8"end"};
+            static constexpr Dock values[] = {Dock::Fill, Dock::Left, Dock::Top, Dock::Right, Dock::Bottom, Dock::Start, Dock::End};
             return Named(k, names, values);
         }
 
@@ -631,6 +631,32 @@ export namespace experimental::gui
                 node.SetAlpha(alpha);
         }
 
+        // The direction (E9b): first, as the logical sides (inline start and end)
+        // and the text's start and end follow it. Not inherited
+        // through the style: a node with none runs as the first ancestor that says does.
+        if (free(SlotDirection))
+        {
+            const StringView v = keyword(u8"direction");
+            node.SetLayoutDirection(v == StringView(u8"rtl")   ? Node::LayoutDirection::RightToLeft
+                                    : v == StringView(u8"ltr") ? Node::LayoutDirection::LeftToRight
+                                                               : Node::LayoutDirection::Inherit);
+        }
+
+        // The logical sides (E9b) name the physical ones the node's direction puts them on; given
+        // beside a physical one for the same side, the logical one wins.
+        const bool rtl = node.IsRightToLeft();
+        const char8_t* const startSide = rtl ? u8"right" : u8"left";
+        const auto logical = [&](const char8_t* prefix, const char8_t* side) -> const char8_t*
+        {
+            // margin- / padding- / inset- with inline-start or inline-end, by which side `side` is.
+            const bool start = StringView(side) == StringView(startSide);
+            if (StringView(prefix) == StringView(u8"margin-"))
+                return start ? u8"margin-inline-start" : u8"margin-inline-end";
+            if (StringView(prefix) == StringView(u8"padding-"))
+                return start ? u8"padding-inline-start" : u8"padding-inline-end";
+            return start ? u8"inset-inline-start" : u8"inset-inline-end";
+        };
+
         {
             Thickness padding = node.GetPadding();
             const auto side = [&](StyleSlot slot, const char8_t* name, f32& field, f32 ownValue)
@@ -642,6 +668,8 @@ export namespace experimental::gui
             side(SlotPaddingRight, u8"padding-right", padding.Right, own.Padding.Right);
             side(SlotPaddingBottom, u8"padding-bottom", padding.Bottom, own.Padding.Bottom);
             side(SlotPaddingLeft, u8"padding-left", padding.Left, own.Padding.Left);
+            if (Optional<f32> v = length(logical(u8"padding-", u8"left"), 0.0f); v.HasValue() && free(SlotPaddingLeft)) padding.Left = v.Value();
+            if (Optional<f32> v = length(logical(u8"padding-", u8"right"), 0.0f); v.HasValue() && free(SlotPaddingRight)) padding.Right = v.Value();
             if (!(padding == node.GetPadding()))
                 node.SetPadding(padding);
         }
@@ -680,6 +708,8 @@ export namespace experimental::gui
             size(u8"right", ls.Right);
             size(u8"bottom", ls.Bottom);
             size(u8"left", ls.Left);
+            size(logical(u8"inset-", u8"left"), ls.Left);
+            size(logical(u8"inset-", u8"right"), ls.Right);
             size(u8"flex-basis", ls.Basis);
             {
                 Thickness margin = ls.Margin;
@@ -687,6 +717,8 @@ export namespace experimental::gui
                 if (Optional<f32> v = length(u8"margin-right", 0.0f); v.HasValue()) margin.Right = v.Value();
                 if (Optional<f32> v = length(u8"margin-bottom", 0.0f); v.HasValue()) margin.Bottom = v.Value();
                 if (Optional<f32> v = length(u8"margin-left", 0.0f); v.HasValue()) margin.Left = v.Value();
+                if (Optional<f32> v = length(logical(u8"margin-", u8"left"), 0.0f); v.HasValue()) margin.Left = v.Value();
+                if (Optional<f32> v = length(logical(u8"margin-", u8"right"), 0.0f); v.HasValue()) margin.Right = v.Value();
                 assign(ls.Margin, margin);
             }
             const auto number = [&](const char8_t* name) -> Optional<f32>
@@ -790,16 +822,6 @@ export namespace experimental::gui
             const bool visible = v == StringView(u8"hidden") ? false : v == StringView(u8"visible") ? true : own.Visible;
             if (visible != node.IsVisible())
                 node.SetVisible(visible);
-        }
-
-        // The direction (E9b): before the text, whose start and end follow it. Not inherited
-        // through the style: a node with none runs as the first ancestor that says does.
-        if (free(SlotDirection))
-        {
-            const StringView v = keyword(u8"direction");
-            node.SetLayoutDirection(v == StringView(u8"rtl")   ? Node::LayoutDirection::RightToLeft
-                                    : v == StringView(u8"ltr") ? Node::LayoutDirection::LeftToRight
-                                                               : Node::LayoutDirection::Inherit);
         }
 
         // Text (E3, E4): colour, the font, text-align, white-space, line-height and letter-spacing

@@ -74,13 +74,52 @@ export namespace experimental::gui
         Rem,
         Vw,
         Vh,
-        Percent
+        Percent,
+        Calc, ///< calc() (E13 of Specs/gui-lab-evolution-2.md): a sum of the units above, in Terms
     };
+    inline constexpr usize kLengthUnitCount = 6; ///< the units a calc() sums (all but Calc)
 
     struct LengthValue
     {
         f32 Value = 0.0f;
         LengthUnit Unit = LengthUnit::Px;
+        /// A calc()'s amount of each unit (Px to Percent): calc(100% - 2em + 4px) is 100 of
+        /// Percent, -2 of Em and 4 of Px. Unused for a plain length.
+        f32 Terms[kLengthUnitCount]{};
+
+        /// Any length as its terms (a plain one: its value in its unit).
+        constexpr void ToTerms(f32 (&out)[kLengthUnitCount]) const noexcept
+        {
+            for (usize i = 0; i < kLengthUnitCount; ++i)
+                out[i] = Unit == LengthUnit::Calc ? Terms[i] : 0.0f;
+            if (Unit != LengthUnit::Calc)
+                out[static_cast<usize>(Unit)] = Value;
+        }
+        /// Its percentage part (a plain percentage's value; a calc()'s percent term).
+        [[nodiscard]] constexpr f32 PercentPart() const noexcept
+        {
+            return Unit == LengthUnit::Calc ? Terms[static_cast<usize>(LengthUnit::Percent)] : Unit == LengthUnit::Percent ? Value : 0.0f;
+        }
+        [[nodiscard]] static constexpr LengthValue FromTerms(const f32 (&terms)[kLengthUnitCount]) noexcept
+        {
+            LengthValue v;
+            v.Value = 1.0f; // never "a zero", which converts to any unit
+            v.Unit = LengthUnit::Calc;
+            for (usize i = 0; i < kLengthUnitCount; ++i)
+                v.Terms[i] = terms[i];
+            return v;
+        }
+        [[nodiscard]] constexpr bool operator==(const LengthValue& o) const noexcept
+        {
+            if (Unit != o.Unit)
+                return false;
+            if (Unit != LengthUnit::Calc)
+                return Value == o.Value;
+            for (usize i = 0; i < kLengthUnitCount; ++i)
+                if (Terms[i] != o.Terms[i])
+                    return false;
+            return true;
+        }
     };
 
     // Resolution context: root/element font sizes (for rem/em) and the viewport (for vw/vh).
@@ -94,11 +133,169 @@ export namespace experimental::gui
 
     // Parse a number with an optional unit suffix: "12", "12px", "1.5rem", "2em", "50vw",
     // "80vh", "50%". Unitless is treated as px. An unrecognized unit yields nothing.
+    namespace detail
+    {
+        // calc()'s grammar over a linear sum of units (E13): + and - between terms, * and / by a
+        // plain number, parentheses and nested calc(). Each value is its terms and whether it is a
+        // plain number (what * and / need on one side).
+        struct CalcValue
+        {
+            f32 Terms[kLengthUnitCount]{};
+            f32 Number = 0.0f;
+            bool IsNumber = false;
+        };
+        class CalcParser
+        {
+        public:
+            explicit CalcParser(core::StringView text) : m_text(text) {}
+            [[nodiscard]] bool Parse(CalcValue& out)
+            {
+                if (!Sum(out))
+                    return false;
+                Skip();
+                return m_at == m_text.Size();
+            }
+
+        private:
+            void Skip()
+            {
+                while (m_at < m_text.Size() && (m_text[m_at] == u8' ' || m_text[m_at] == u8'\t'))
+                    ++m_at;
+            }
+            bool Sum(CalcValue& out)
+            {
+                if (!Product(out))
+                    return false;
+                for (;;)
+                {
+                    Skip();
+                    if (m_at >= m_text.Size() || (m_text[m_at] != u8'+' && m_text[m_at] != u8'-'))
+                        return true;
+                    const bool minus = m_text[m_at++] == u8'-';
+                    CalcValue rhs;
+                    if (!Product(rhs) || rhs.IsNumber != out.IsNumber)
+                        return false; // a number and a length do not add
+                    const f32 sign = minus ? -1.0f : 1.0f;
+                    out.Number += sign * rhs.Number;
+                    for (usize i = 0; i < kLengthUnitCount; ++i)
+                        out.Terms[i] += sign * rhs.Terms[i];
+                }
+            }
+            bool Product(CalcValue& out)
+            {
+                if (!Factor(out))
+                    return false;
+                for (;;)
+                {
+                    Skip();
+                    if (m_at >= m_text.Size() || (m_text[m_at] != u8'*' && m_text[m_at] != u8'/'))
+                        return true;
+                    const bool divide = m_text[m_at++] == u8'/';
+                    CalcValue rhs;
+                    if (!Factor(rhs))
+                        return false;
+                    if (divide)
+                    {
+                        if (!rhs.IsNumber || rhs.Number == 0.0f)
+                            return false;
+                        Scale(out, 1.0f / rhs.Number);
+                    }
+                    else if (rhs.IsNumber)
+                        Scale(out, rhs.Number);
+                    else if (out.IsNumber)
+                    {
+                        const f32 by = out.Number;
+                        out = rhs;
+                        Scale(out, by);
+                    }
+                    else
+                        return false; // a length times a length
+                }
+            }
+            static void Scale(CalcValue& v, f32 by)
+            {
+                v.Number *= by;
+                for (f32& t : v.Terms)
+                    t *= by;
+            }
+            bool Factor(CalcValue& out)
+            {
+                Skip();
+                if (m_at < m_text.Size() && m_text[m_at] == u8'(')
+                    return Group(out);
+                if (m_text.SubStr(m_at, core::Min<usize>(5, m_text.Size() - m_at)) == core::StringView(u8"calc("))
+                {
+                    m_at += 4;
+                    return Group(out);
+                }
+                usize end = m_at;
+                if (end < m_text.Size() && (m_text[end] == u8'+' || m_text[end] == u8'-'))
+                    ++end;
+                while (end < m_text.Size() && (IsDigit(m_text[end]) || m_text[end] == u8'.'))
+                    ++end;
+                const Optional<f32> number = ParseLength(m_text.SubStr(m_at, end - m_at));
+                if (!number.HasValue())
+                    return false;
+                usize unitEnd = end;
+                while (unitEnd < m_text.Size() && ((m_text[unitEnd] >= u8'a' && m_text[unitEnd] <= u8'z') || m_text[unitEnd] == u8'%'))
+                    ++unitEnd;
+                const core::StringView unit = m_text.SubStr(end, unitEnd - end);
+                m_at = unitEnd;
+                out = CalcValue{};
+                if (unit.Size() == 0)
+                {
+                    out.IsNumber = true;
+                    out.Number = number.Value();
+                    return true;
+                }
+                static constexpr const char8_t* kUnits[kLengthUnitCount] = {u8"px", u8"em", u8"rem", u8"vw", u8"vh", u8"%"};
+                for (usize i = 0; i < kLengthUnitCount; ++i)
+                    if (unit == core::StringView(kUnits[i]))
+                    {
+                        out.Terms[i] = number.Value();
+                        return true;
+                    }
+                return false;
+            }
+            bool Group(CalcValue& out)
+            {
+                ++m_at; // '('
+                if (!Sum(out))
+                    return false;
+                Skip();
+                if (m_at >= m_text.Size() || m_text[m_at] != u8')')
+                    return false;
+                ++m_at;
+                return true;
+            }
+            core::StringView m_text;
+            usize m_at = 0;
+        };
+    }
+
+    /// A calc() expression's length (E13): `calc(100% - 2 * 8px)`. Empty when it does not parse or
+    /// comes to a plain number (a length is wanted).
+    [[nodiscard]] inline Optional<LengthValue> ParseCalcLength(core::StringView value)
+    {
+        const core::StringView s = Trim(value);
+        if (s.Size() < 6 || s.SubStr(0, 5) != core::StringView(u8"calc(") || s[s.Size() - 1] != u8')')
+            return {};
+        detail::CalcValue calc;
+        detail::CalcParser parser(s.SubStr(4, s.Size() - 4)); // "(...)": the group
+        if (!parser.Parse(calc))
+            return {};
+        if (calc.IsNumber)
+            return calc.Number == 0.0f ? Optional<LengthValue>(LengthValue{}) : Optional<LengthValue>{};
+        return LengthValue::FromTerms(calc.Terms);
+    }
+
     [[nodiscard]] inline Optional<LengthValue> ParseLengthValue(core::StringView value)
     {
         const core::StringView s = Trim(value);
         if (s.Size() == 0)
             return {};
+        if (s.Size() > 5 && s.SubStr(0, 5) == core::StringView(u8"calc("))
+            return ParseCalcLength(s);
         usize i = 0;
         if (s[i] == u8'+' || s[i] == u8'-')
             ++i;
@@ -153,6 +350,19 @@ export namespace experimental::gui
             return lv.Value * ctx.ViewportHeight / 100.0f;
         case LengthUnit::Percent:
             return lv.Value * percentBase / 100.0f;
+        case LengthUnit::Calc:
+        {
+            f32 sum = 0.0f;
+            for (usize i = 0; i < kLengthUnitCount; ++i)
+                if (lv.Terms[i] != 0.0f)
+                {
+                    LengthValue term;
+                    term.Value = lv.Terms[i];
+                    term.Unit = static_cast<LengthUnit>(i);
+                    sum += ResolveLengthValue(term, ctx, percentBase);
+                }
+            return sum;
+        }
         }
         return lv.Value;
     }

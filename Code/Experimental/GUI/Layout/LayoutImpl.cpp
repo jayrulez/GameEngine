@@ -33,7 +33,8 @@ namespace experimental::gui
         [[nodiscard]] bool HasDefiniteSize(const Node& node) noexcept
         {
             const LayoutStyle& s = node.GetLayoutStyle();
-            const auto definite = [](LayoutLength l) { return l.Kind == LayoutLengthKind::Px || l.Kind == LayoutLengthKind::Percent; };
+            const auto definite = [](LayoutLength l)
+            { return l.Kind == LayoutLengthKind::Px || l.Kind == LayoutLengthKind::Percent || l.Kind == LayoutLengthKind::Calc; };
             return definite(s.Width) && definite(s.Height);
         }
         [[nodiscard]] f32 Less(f32 available, f32 by) noexcept

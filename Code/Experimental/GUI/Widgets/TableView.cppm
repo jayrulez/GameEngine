@@ -228,9 +228,11 @@ export namespace experimental::gui
                 if (c > 0)
                     text.Append(core::StringView(u8" "));
                 const LayoutLength& w = m_columnWidths[c];
-                text.Append(w.Kind == LayoutLengthKind::Px ? core::Format(u8"{}px", w.Value).AsView()
-                            : w.Kind == LayoutLengthKind::Percent ? core::Format(u8"{}%", w.Value).AsView()
-                                                                 : core::StringView(u8"auto"));
+                const core::String written = w.Kind == LayoutLengthKind::Px        ? core::Format(u8"{}px", w.Value)
+                                             : w.Kind == LayoutLengthKind::Percent ? core::Format(u8"{}%", w.Value)
+                                             : w.Kind == LayoutLengthKind::Calc    ? core::Format(u8"calc({}px + {}%)", w.Value, w.PercentPart)
+                                                                                   : core::String(core::StringView(u8"auto"));
+                text.Append(written.AsView());
             }
             return text;
         }

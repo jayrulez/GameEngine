@@ -172,6 +172,16 @@ export namespace experimental::gui
             return Named(k, names, values);
         }
 
+        // A sheet's length as layout takes it: a percentage, pixels, or (a calc() with a percentage
+        // part, E13) both, the units other than % resolved now.
+        [[nodiscard]] inline LayoutLength ToLayoutLength(const LengthValue& l, const LengthContext& lengths)
+        {
+            if (l.Unit == LengthUnit::Percent)
+                return LayoutLength::Percent(l.Value);
+            const f32 px = ResolveLengthValue(l, lengths, 0.0f); // a calc()'s percent term drops out at base 0
+            return l.PercentPart() != 0.0f ? LayoutLength::Calc(px, l.PercentPart()) : LayoutLength::Px(px);
+        }
+
         // One track size: a length or percentage, auto, min-content, max-content, <n>fr.
         [[nodiscard]] inline Optional<LayoutLength> TrackLength(core::StringView t, const LengthContext& lengths)
         {
@@ -180,8 +190,7 @@ export namespace experimental::gui
             if (t == core::StringView(u8"min-content") || t == core::StringView(u8"max-content"))
                 return LayoutLength{}; // sized by content, as auto
             if (Optional<LengthValue> l = ParseLengthValue(t); l.HasValue())
-                return l.Value().Unit == LengthUnit::Percent ? LayoutLength::Percent(l.Value().Value)
-                                                             : LayoutLength::Px(ResolveLengthValue(l.Value(), lengths, 0.0f));
+                return ToLayoutLength(l.Value(), lengths);
             return {};
         }
         [[nodiscard]] inline Optional<f32> Fraction(core::StringView t)
@@ -615,9 +624,9 @@ export namespace experimental::gui
         const auto percentOf = [&](const char8_t* name) -> Optional<f32>
         {
             const StyleValue* v = style.Value(name);
-            if (v == nullptr || v->Kind != StyleValueKind::Length || v->Length.Unit != LengthUnit::Percent)
+            if (v == nullptr || v->Kind != StyleValueKind::Length || v->Length.PercentPart() == 0.0f)
                 return {};
-            return v->Length.Value;
+            return v->Length.PercentPart(); // a calc()'s too: layout adds it to the pixels
         };
         const auto keyword = [&](const char8_t* name) -> StringView
         {
@@ -674,9 +683,10 @@ export namespace experimental::gui
                 if (!free(slot))
                     return;
                 // A percentage is of the containing box's width, which layout knows.
+                // A calc() has both: its percent part here, its pixels (base 0 drops the percent) there.
                 const Optional<f32> percent = percentOf(name);
                 percentField = percent.ValueOr(0.0f);
-                field = percent.HasValue() ? 0.0f : length(name, 0.0f).ValueOr(ownValue);
+                field = length(name, 0.0f).ValueOr(percent.HasValue() ? 0.0f : ownValue);
             };
             side(SlotPaddingTop, u8"padding-top", padding.Top, own.Padding.Top, paddingPercent.Top);
             side(SlotPaddingRight, u8"padding-right", padding.Right, own.Padding.Right, paddingPercent.Right);
@@ -689,7 +699,7 @@ export namespace experimental::gui
                 if (const Optional<f32> percent = percentOf(name); percent.HasValue())
                 {
                     percentField = percent.Value();
-                    field = 0.0f;
+                    field = length(name, 0.0f).ValueOr(0.0f); // a calc()'s pixels beside its percent
                 }
                 else if (const Optional<f32> v = length(name, 0.0f); v.HasValue())
                 {
@@ -723,8 +733,7 @@ export namespace experimental::gui
                 if (v == nullptr)
                     return;
                 if (v->Kind == StyleValueKind::Length)
-                    assign(field, v->Length.Unit == LengthUnit::Percent ? LayoutLength::Percent(v->Length.Value)
-                                                                       : LayoutLength::Px(ResolveLengthValue(v->Length, lengths, 0.0f)));
+                    assign(field, detail::ToLayoutLength(v->Length, lengths));
                 else if (v->Kind == StyleValueKind::Keyword)
                     assign(field, detail::LayoutKeyword(v->Keyword.AsView()));
             };
@@ -750,7 +759,7 @@ export namespace experimental::gui
                     if (const Optional<f32> p = percentOf(name); p.HasValue())
                     {
                         percentField = p.Value();
-                        field = 0.0f;
+                        field = length(name, 0.0f).ValueOr(0.0f); // a calc()'s pixels beside its percent
                     }
                     else if (const Optional<f32> v = length(name, 0.0f); v.HasValue())
                     {
@@ -781,14 +790,14 @@ export namespace experimental::gui
             if (const Optional<f32> p = percentOf(u8"row-gap"); p.HasValue())
             {
                 assign(ls.RowGapPercent, p.Value());
-                assign(ls.RowGap, 0.0f);
+                assign(ls.RowGap, length(u8"row-gap", 0.0f).ValueOr(0.0f));
             }
             else if (Optional<f32> v = length(u8"row-gap", 0.0f); v.HasValue())
                 assign(ls.RowGap, v.Value());
             if (const Optional<f32> p = percentOf(u8"column-gap"); p.HasValue())
             {
                 assign(ls.ColumnGapPercent, p.Value());
-                assign(ls.ColumnGap, 0.0f);
+                assign(ls.ColumnGap, length(u8"column-gap", 0.0f).ValueOr(0.0f));
             }
             else if (Optional<f32> v = length(u8"column-gap", 0.0f); v.HasValue())
                 assign(ls.ColumnGap, v.Value());

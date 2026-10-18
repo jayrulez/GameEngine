@@ -49,6 +49,17 @@ export namespace experimental::gui
         [[nodiscard]] inline bool MixLength(LengthValue a, LengthValue b, f32 t, LengthValue& out,
                                             const StyleInterpolationContext* ctx = nullptr) noexcept
         {
+            // A calc() on either side: term by term (E13), each unit as it is.
+            if (a.Unit == LengthUnit::Calc || b.Unit == LengthUnit::Calc)
+            {
+                f32 x[kLengthUnitCount]{}, y[kLengthUnitCount]{}, mixed[kLengthUnitCount]{};
+                a.ToTerms(x);
+                b.ToTerms(y);
+                for (usize i = 0; i < kLengthUnitCount; ++i)
+                    mixed[i] = Mix(x[i], y[i], t);
+                out = LengthValue::FromTerms(mixed);
+                return true;
+            }
             // A zero converts to any unit (CSS writes 0 unitless).
             if (a.Value == 0.0f)
                 a.Unit = b.Unit;

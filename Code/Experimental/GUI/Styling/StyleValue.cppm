@@ -195,7 +195,7 @@ export namespace experimental::gui
 
         [[nodiscard]] bool operator==(const ShadowValue& o) const noexcept
         {
-            const auto same = [](LengthValue a, LengthValue b) { return a.Value == b.Value && a.Unit == b.Unit; };
+            const auto same = [](LengthValue a, LengthValue b) { return a == b; };
             return same(OffsetX, o.OffsetX) && same(OffsetY, o.OffsetY) && same(Blur, o.Blur) &&
                    same(Spread, o.Spread) && ShadowColor == o.ShadowColor && Inset == o.Inset;
         }
@@ -266,7 +266,7 @@ export namespace experimental::gui
 
         [[nodiscard]] bool operator==(const FilterFunction& o) const noexcept
         {
-            return Kind == o.Kind && Amount.Value == o.Amount.Value && Amount.Unit == o.Amount.Unit;
+            return Kind == o.Kind && Amount == o.Amount;
         }
     };
 
@@ -484,6 +484,8 @@ export namespace experimental::gui
     /// else as written (pixels).
     [[nodiscard]] inline f32 ResolveAgainst(LengthValue v, f32 size) noexcept
     {
+        if (v.Unit == LengthUnit::Calc) // its pixels and percentage (E13)
+            return v.Terms[static_cast<usize>(LengthUnit::Px)] + v.Terms[static_cast<usize>(LengthUnit::Percent)] * size / 100.0f;
         return v.Unit == LengthUnit::Percent ? v.Value * size / 100.0f : v.Value;
     }
 

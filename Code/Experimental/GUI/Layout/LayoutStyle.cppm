@@ -36,15 +36,18 @@ export namespace experimental::gui
         MinContent,
         MaxContent,
         None,
+        Calc, ///< Value pixels and Percent of the base (a calc() mixing them, E13)
     };
     struct LayoutLength
     {
         LayoutLengthKind Kind = LayoutLengthKind::Auto;
         f32 Value = 0.0f;
+        f32 PercentPart = 0.0f; ///< a Calc's percentage part
 
         [[nodiscard]] static constexpr LayoutLength Px(f32 v) noexcept { return {LayoutLengthKind::Px, v}; }
         [[nodiscard]] static constexpr LayoutLength Percent(f32 v) noexcept { return {LayoutLengthKind::Percent, v}; }
         [[nodiscard]] static constexpr LayoutLength None() noexcept { return {LayoutLengthKind::None, 0.0f}; }
+        [[nodiscard]] static constexpr LayoutLength Calc(f32 px, f32 percent) noexcept { return {LayoutLengthKind::Calc, px, percent}; }
         [[nodiscard]] constexpr bool IsAuto() const noexcept { return Kind == LayoutLengthKind::Auto; }
         /// The length in pixels against `base` (the container's content length, negative when it
         /// is not known yet); none for auto, a content size, or a percentage of an unknown base.
@@ -56,6 +59,10 @@ export namespace experimental::gui
             case LayoutLengthKind::Percent:
                 if (base >= 0.0f)
                     return Value * base / 100.0f;
+                return {};
+            case LayoutLengthKind::Calc:
+                if (base >= 0.0f)
+                    return Value + PercentPart * base / 100.0f;
                 return {};
             default: return {};
             }

@@ -50,6 +50,7 @@ add_executable(GUI.Tests
     AutoDirectionTests.cpp
     OverflowWrapTests.cpp
     KeyboardTests.cpp
+    CalcTests.cpp
     AccessibilityTests.cpp
     EffectsTests.cpp
     ReactiveTests.cpp

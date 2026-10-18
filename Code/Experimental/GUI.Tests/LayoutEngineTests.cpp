@@ -875,6 +875,31 @@ TEST_CASE("layout: percentage margins, padding and gaps are of the container's c
     CHECK(b->GetPosition().x == doctest::Approx(20.0f + 95.0f + 50.0f + 38.0f)); // the gap: 10% of 380
 }
 
+TEST_CASE("layout: calc() mixes pixels and percentages where percentages resolve")
+{
+    Bed bed; // 400 wide
+    auto row = Box(*bed.root.Get(), [](LayoutStyle& s) { s.Direction = FlexDirection::Row; s.AlignItems = Align::Start; });
+    // Their heights from code; their widths the sheet's.
+    auto a = Box(*row.Get(), [](LayoutStyle& s) { s.Height = LayoutLength::Px(20.0f); });
+    auto b = Box(*row.Get(), [](LayoutStyle& s) { s.Height = LayoutLength::Px(20.0f); });
+    row->AddClass(SV(u8"row"));
+    a->AddClass(SV(u8"a"));
+    b->AddClass(SV(u8"b"));
+    StyleManager styles(CSSParser::Parse(SV(u8".row { padding-left: calc(10% - 20px); column-gap: calc(10px + 5%); }"
+                                             u8".a { width: calc(50% - 2 * 10px); margin-left: calc((10% + 4px) / 2); }"
+                                             u8".b { width: calc(1em + 4px); }")));
+    styles.ApplyTree(*bed.root.Get());
+    bed.Layout();
+    CHECK(a->GetLayoutStyle().Width.Kind == LayoutLengthKind::Calc);
+    CHECK(row->GetPadding().Left == doctest::Approx(20.0f)); // 10% of 400, less 20
+    // The row's content is 380 wide: a is half of it less 20, after its margin (5% of 380, and 2).
+    CHECK(a->GetSize().x == doctest::Approx(170.0f));
+    CHECK(a->GetPosition().x == doctest::Approx(20.0f + 21.0f));
+    CHECK(b->GetLayoutStyle().Width.Kind == LayoutLengthKind::Px); // no percent part: plain pixels
+    CHECK(b->GetSize().x == doctest::Approx(20.0f));                // 1em of 16, and 4
+    CHECK(b->GetPosition().x == doctest::Approx(41.0f + 170.0f + 29.0f)); // the gap: 10 and 5% of 380
+}
+
 TEST_CASE("layout: fit-content is as wide as what it holds, not stretched across")
 {
     Bed bed;

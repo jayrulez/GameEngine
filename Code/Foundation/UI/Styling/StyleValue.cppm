@@ -22,6 +22,7 @@ import :thickness;
 import :unit;
 import :drawable;
 import :style_property;
+import :transform2d; // StyleTransform::Compose
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -45,22 +46,113 @@ export namespace foundation::ui
         [[nodiscard]] constexpr bool operator==(const BoxShadow&) const noexcept = default;
     };
 
-    /// A sheet's `transform`: a move (dp), a turn (degrees, clockwise) and a scale, about the view's
-    /// transform origin. It composes with the view's own Transform field: moves and turns add,
-    /// scales multiply. Its parts apply as translate, rotate, then scale, whatever order the sheet
-    /// writes them in.
+    /// One function of a sheet's `transform`. Translate moves by X and Y (lengths: dp, or a percent of
+    /// the view's own size); Scale scales by A and B; Rotate turns by A degrees (clockwise); Skew
+    /// slants by A and B degrees (CSS's skew(ax, ay)); Matrix is M (a, b, c, d, tx, ty), what
+    /// interpolating two lists of different functions gives.
+    enum class TransformFunctionKind : u8
+    {
+        Translate,
+        Scale,
+        Rotate,
+        Skew,
+        Matrix,
+    };
+    struct TransformFunction
+    {
+        TransformFunctionKind Kind = TransformFunctionKind::Translate;
+        Unit X{};
+        Unit Y{};
+        f32 A = 0.0f;
+        f32 B = 0.0f;
+        f32 M[6] = {1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f};
+
+        /// The function that does nothing, of this one's kind (CSS pads `none` with them).
+        [[nodiscard]] TransformFunction Identity() const noexcept
+        {
+            TransformFunction f;
+            f.Kind = Kind;
+            f.A = Kind == TransformFunctionKind::Scale ? 1.0f : 0.0f;
+            f.B = Kind == TransformFunctionKind::Scale ? 1.0f : 0.0f;
+            return f;
+        }
+        [[nodiscard]] bool operator==(const TransformFunction& o) const noexcept
+        {
+            if (Kind != o.Kind || !(X == o.X) || !(Y == o.Y) || A != o.A || B != o.B)
+                return false;
+            for (usize i = 0; i < 6; ++i)
+                if (M[i] != o.M[i])
+                    return false;
+            return true;
+        }
+    };
+
+    /// A sheet's `transform`: its functions in written order, composed as CSS composes them (the
+    /// last written applies to the view first), about the view's `transform-origin`. It is drawn
+    /// over the view's own Transform field.
     struct StyleTransform
     {
-        core::Float2 Translate{0.0f, 0.0f};
-        f32 RotateDegrees = 0.0f;
-        core::Float2 Scale{1.0f, 1.0f};
+        static constexpr usize kMaxFunctions = 8;
+        TransformFunction Functions[kMaxFunctions]{};
+        u8 Count = 0;
 
-        [[nodiscard]] constexpr bool IsIdentity() const noexcept
+        [[nodiscard]] bool IsIdentity() const noexcept { return Count == 0; }
+        /// Appends a function; a list written with more keeps its first ones.
+        void Push(const TransformFunction& f) noexcept
         {
-            return Translate.x == 0.0f && Translate.y == 0.0f && RotateDegrees == 0.0f && Scale.x == 1.0f &&
-                   Scale.y == 1.0f;
+            if (Count < kMaxFunctions)
+                Functions[Count++] = f;
         }
-        [[nodiscard]] constexpr bool operator==(const StyleTransform&) const noexcept = default;
+        [[nodiscard]] Span<const TransformFunction> List() const noexcept
+        {
+            return Span<const TransformFunction>(Functions, Count);
+        }
+        /// The functions as one matrix, for a view of `size` (a translate's percentages) at
+        /// `dpiScale`. The origin is the caller's.
+        [[nodiscard]] Transform2D Compose(core::Float2 size, f32 dpiScale) const noexcept
+        {
+            Transform2D m;
+            for (usize i = 0; i < Count; ++i)
+            {
+                const TransformFunction& f = Functions[i];
+                switch (f.Kind)
+                {
+                case TransformFunctionKind::Translate:
+                    m.Translate(f.X.Resolve(dpiScale, size.x, 0.0f), f.Y.Resolve(dpiScale, size.y, 0.0f));
+                    break;
+                case TransformFunctionKind::Scale:
+                    m.Scale(f.A, f.B);
+                    break;
+                case TransformFunctionKind::Rotate:
+                    m.Rotate(f.A * kDegToRad);
+                    break;
+                case TransformFunctionKind::Skew:
+                    m.Skew(f.A * kDegToRad, f.B * kDegToRad);
+                    break;
+                case TransformFunctionKind::Matrix:
+                    m.Combine(Transform2D{f.M[0], f.M[1], f.M[2], f.M[3], f.M[4], f.M[5]});
+                    break;
+                }
+            }
+            return m;
+        }
+        [[nodiscard]] bool operator==(const StyleTransform& o) const noexcept
+        {
+            if (Count != o.Count)
+                return false;
+            for (usize i = 0; i < Count; ++i)
+                if (!(Functions[i] == o.Functions[i]))
+                    return false;
+            return true;
+        }
+    };
+
+    /// A point as two lengths, x then y (CSS's transform-origin: dp, or a percent of the view).
+    struct StylePoint
+    {
+        Unit X = Unit::Percent(50.0f);
+        Unit Y = Unit::Percent(50.0f);
+        [[nodiscard]] bool operator==(const StylePoint& o) const noexcept { return X == o.X && Y == o.Y; }
     };
 
     /// A sheet's `filter` (or `backdrop-filter`): a blur's sigma in dp, and the colour filters
@@ -288,6 +380,8 @@ export namespace foundation::ui
             Shadow,
             /// A StyleTransform (transform).
             Transform,
+            /// A StylePoint (transform-origin).
+            Point,
             /// An `animation:` list (AnimationList).
             Animations,
             /// A StyleFilter (filter, backdrop-filter).
@@ -386,6 +480,22 @@ export namespace foundation::ui
                 StyleFilter blurOnly;
                 blurOnly.Blur = m_float;
                 return blurOnly;
+            }
+            return {};
+        }
+
+        [[nodiscard]] static StyleValue PointVal(const StylePoint& point)
+        {
+            StyleValue v;
+            v.m_kind = Kind::Point;
+            v.m_point = point;
+            return v;
+        }
+        [[nodiscard]] Optional<StylePoint> AsPoint() const
+        {
+            if (m_kind == Kind::Point)
+            {
+                return m_point;
             }
             return {};
         }
@@ -554,6 +664,7 @@ export namespace foundation::ui
         BoxShadow m_shadows[kMaxShadows]{};
         u8 m_shadowCount = 0;
         StyleTransform m_transform{};
+        StylePoint m_point{};
         StyleFilter m_filter{};
         RefPtr<VariableReference> m_variable;
         RefPtr<TransitionList> m_transitions;
@@ -588,6 +699,8 @@ export namespace foundation::ui
             return a.AsLength().Value() == b.AsLength().Value();
         case StyleValue::Kind::Transform:
             return a.AsTransform().Value() == b.AsTransform().Value();
+        case StyleValue::Kind::Point:
+            return a.AsPoint().Value() == b.AsPoint().Value();
         case StyleValue::Kind::Filter:
             return a.AsFilter().Value() == b.AsFilter().Value();
         case StyleValue::Kind::Shadow:
@@ -635,7 +748,123 @@ export namespace foundation::ui
         }
         return ka == StyleValue::Kind::Color || ka == StyleValue::Kind::Thickness ||
                ka == StyleValue::Kind::Shadow || ka == StyleValue::Kind::Transform || ka == StyleValue::Kind::Filter ||
+               ka == StyleValue::Kind::Point ||
                ka == StyleValue::Kind::Drawable;
+    }
+
+    /// A length `t` of the way from `a` to `b`, component by component.
+    [[nodiscard]] inline Unit LerpUnit(const Unit& a, const Unit& b, f32 t) noexcept
+    {
+        const auto lerp = [t](f32 x, f32 y) { return x + (y - x) * t; };
+        Unit u = b;
+        u.dp = lerp(a.dp, b.dp);
+        u.pt = lerp(a.pt, b.pt);
+        u.px = lerp(a.px, b.px);
+        u.percent = lerp(a.percent, b.percent);
+        u.em = lerp(a.em, b.em);
+        return u;
+    }
+
+    /// A 2D matrix as translation, rotation, skew and scale: M = T * R(angle) * K(skew) * S, K the
+    /// x-shear (x' = x + skew y), the scale's y taking a reflection's sign (the GUI lab's
+    /// decomposition, after CSS's).
+    struct DecomposedTransform
+    {
+        f32 Tx = 0.0f, Ty = 0.0f, Angle = 0.0f, Skew = 0.0f, Sx = 1.0f, Sy = 1.0f;
+
+        [[nodiscard]] static DecomposedTransform Of(const Transform2D& m) noexcept
+        {
+            DecomposedTransform d;
+            d.Tx = m.tx;
+            d.Ty = m.ty;
+            d.Sx = Sqrt(m.a * m.a + m.b * m.b);
+            if (d.Sx <= 1e-12f)
+            {
+                d.Sx = 0.0f;
+                d.Sy = Sqrt(m.c * m.c + m.d * m.d);
+                return d;
+            }
+            d.Angle = Atan2(m.b, m.a);
+            const f32 cs = Cos(d.Angle), sn = Sin(d.Angle);
+            const f32 skewed = m.c * cs + m.d * sn;
+            d.Sy = -m.c * sn + m.d * cs;
+            d.Skew = d.Sy != 0.0f ? skewed / d.Sy : 0.0f;
+            return d;
+        }
+        [[nodiscard]] Transform2D Matrix() const noexcept
+        {
+            Transform2D m;
+            m.Translate(Tx, Ty);
+            m.Rotate(Angle);
+            m.Combine(Transform2D{1.0f, 0.0f, Skew, 1.0f, 0.0f, 0.0f});
+            m.Scale(Sx, Sy);
+            return m;
+        }
+    };
+
+    /// A transform `t` of the way from `a` to `b`, as CSS interpolates them: function by function
+    /// when both lists name the same functions (`none` padded with the other's identities, so
+    /// `none` to rotate(90deg) turns from 0), else through their decomposed matrices, turning the
+    /// short way. A translate's percentages need the view's size there, so lists that differ and
+    /// hold one are resolved at a size of 0 (their percent parts drop out).
+    [[nodiscard]] inline StyleTransform LerpTransforms(const StyleTransform& a, const StyleTransform& b, f32 t) noexcept
+    {
+        const auto lerp = [t](f32 x, f32 y) { return x + (y - x) * t; };
+        StyleTransform from = a;
+        StyleTransform to = b;
+        if (from.Count == 0)
+        {
+            for (usize i = 0; i < to.Count; ++i)
+                from.Push(to.Functions[i].Identity());
+        }
+        else if (to.Count == 0)
+        {
+            for (usize i = 0; i < from.Count; ++i)
+                to.Push(from.Functions[i].Identity());
+        }
+        bool sameShape = from.Count == to.Count;
+        for (usize i = 0; sameShape && i < from.Count; ++i)
+            sameShape = from.Functions[i].Kind == to.Functions[i].Kind;
+        StyleTransform out;
+        if (sameShape)
+        {
+            for (usize i = 0; i < from.Count; ++i)
+            {
+                const TransformFunction& fa = from.Functions[i];
+                const TransformFunction& fb = to.Functions[i];
+                TransformFunction f = fa;
+                f.X = LerpUnit(fa.X, fb.X, t);
+                f.Y = LerpUnit(fa.Y, fb.Y, t);
+                f.A = lerp(fa.A, fb.A);
+                f.B = lerp(fa.B, fb.B);
+                for (usize k = 0; k < 6; ++k)
+                    f.M[k] = lerp(fa.M[k], fb.M[k]);
+                out.Push(f);
+            }
+            return out;
+        }
+        const DecomposedTransform x = DecomposedTransform::Of(from.Compose(core::Float2{0.0f, 0.0f}, 1.0f));
+        const DecomposedTransform y = DecomposedTransform::Of(to.Compose(core::Float2{0.0f, 0.0f}, 1.0f));
+        f32 turn = y.Angle - x.Angle; // the short way round
+        while (turn > kPi)
+            turn -= kTwoPi;
+        while (turn < -kPi)
+            turn += kTwoPi;
+        DecomposedTransform mixed;
+        mixed.Tx = lerp(x.Tx, y.Tx);
+        mixed.Ty = lerp(x.Ty, y.Ty);
+        mixed.Angle = x.Angle + turn * t;
+        mixed.Skew = lerp(x.Skew, y.Skew);
+        mixed.Sx = lerp(x.Sx, y.Sx);
+        mixed.Sy = lerp(x.Sy, y.Sy);
+        const Transform2D m = mixed.Matrix();
+        TransformFunction f;
+        f.Kind = TransformFunctionKind::Matrix;
+        const f32 values[6] = {m.a, m.b, m.c, m.d, m.tx, m.ty};
+        for (usize k = 0; k < 6; ++k)
+            f.M[k] = values[k];
+        out.Push(f);
+        return out;
     }
 
     /// The value `t` of the way from `a` to `b` (t clamped to 0..1). Colors, floats,
@@ -704,14 +933,12 @@ export namespace foundation::ui
             return StyleValue::FilterVal(out);
         }
         case StyleValue::Kind::Transform:
+            return StyleValue::TransformVal(LerpTransforms(a.AsTransform().Value(), b.AsTransform().Value(), t));
+        case StyleValue::Kind::Point:
         {
-            const StyleTransform ta = a.AsTransform().Value();
-            const StyleTransform tb = b.AsTransform().Value();
-            StyleTransform out;
-            out.Translate = core::Float2{lerp(ta.Translate.x, tb.Translate.x), lerp(ta.Translate.y, tb.Translate.y)};
-            out.RotateDegrees = lerp(ta.RotateDegrees, tb.RotateDegrees);
-            out.Scale = core::Float2{lerp(ta.Scale.x, tb.Scale.x), lerp(ta.Scale.y, tb.Scale.y)};
-            return StyleValue::TransformVal(out);
+            const StylePoint pa = a.AsPoint().Value();
+            const StylePoint pb = b.AsPoint().Value();
+            return StyleValue::PointVal(StylePoint{LerpUnit(pa.X, pb.X, t), LerpUnit(pa.Y, pb.Y, t)});
         }
         case StyleValue::Kind::Shadow:
         {

@@ -507,15 +507,18 @@ TEST_CASE("box-model: a sheet's transform moves, scales and turns a view as draw
 {
     core::RefPtr<StyleSheet> sheet = LoadSSS(u8".lift { transform: translate(10, 0) scale(2); }"
                                              u8".turn { transform: rotate(0.25turn); }"
-                                             u8".bad { transform: skew(10deg); }");
+                                             u8".bad { transform: perspective(10); }");
     REQUIRE(sheet);
     const Optional<StyleTransform> lift = sheet->GetRule(0).GetValue(StyleProperty::Transform).Value().AsTransform();
     REQUIRE(lift.HasValue());
-    CHECK(lift.Value().Translate.x == doctest::Approx(10.0f));
-    CHECK(lift.Value().Scale.y == doctest::Approx(2.0f));
-    CHECK(sheet->GetRule(1).GetValue(StyleProperty::Transform).Value().AsTransform().Value().RotateDegrees ==
+    REQUIRE(lift.Value().Count == 2u); // in the order written
+    CHECK(lift.Value().Functions[0].Kind == TransformFunctionKind::Translate);
+    CHECK(lift.Value().Functions[0].X.dp == doctest::Approx(10.0f));
+    CHECK(lift.Value().Functions[1].Kind == TransformFunctionKind::Scale);
+    CHECK(lift.Value().Functions[1].B == doctest::Approx(2.0f));
+    CHECK(sheet->GetRule(1).GetValue(StyleProperty::Transform).Value().AsTransform().Value().Functions[0].A ==
           doctest::Approx(90.0f));
-    CHECK_FALSE(sheet->GetRule(2).GetValue(StyleProperty::Transform).HasValue()); // not drawn yet
+    CHECK_FALSE(sheet->GetRule(2).GetValue(StyleProperty::Transform).HasValue()); // a 3D function: not drawn
 
     UIContext ctx{DefaultAllocator()};
     auto root = MakeRoot();
@@ -552,6 +555,45 @@ TEST_CASE("box-model: a sheet's transform moves, scales and turns a view as draw
     CHECK(maxX - minX == doctest::Approx(200.0f));
     // Hit testing follows it: a point the scaled view covers outside its layout box.
     CHECK(root->HitTest(Float2{box.x - 30.0f, box.y + 10.0f}) == child.Get()); // frame at the root's origin
+}
+
+TEST_CASE("box-model: a transform composes in the order written, about its transform-origin")
+{
+    // Composed as CSS composes them: the last function written applies to the view first.
+    const auto cornerOf = [](StringView sheetText) -> Float2
+    {
+        UIContext ctx{DefaultAllocator()};
+        auto root = MakeRoot();
+        EnsureGlobals();
+        Init(ctx, root.Get(), 400, 300);
+        ctx.SetStyleSheet(LoadSSS(sheetText));
+        auto child = RV(100, 50, 1);
+        child->AddClass(u8"t");
+        auto frame = New<FrameLayout>();
+        frame->AddView(child.Get());
+        root->AddView(frame.Get());
+        LayoutPass(ctx, root.Get());
+        vg::VGContext vgContext;
+        ctx.DrawRootView(root.Get(), vgContext);
+        // The view's own top-right corner, in its box's space (Bounds at the origin here).
+        return child->LocalToParent(Float2{100.0f, 0.0f});
+    };
+    // Turned a quarter about the top-left, then moved 20 along the turned x (now down).
+    const Float2 a = cornerOf(u8".t { transform-origin: left top; transform: rotate(90deg) translateX(20); }");
+    CHECK(a.x == doctest::Approx(0.0f).epsilon(0.001));
+    CHECK(a.y == doctest::Approx(120.0f));
+    // Moved 20 right first, then turned about the top-left: the move turns with it.
+    const Float2 b = cornerOf(u8".t { transform-origin: left top; transform: translateX(20) rotate(90deg); }");
+    CHECK(b.x == doctest::Approx(20.0f));
+    CHECK(b.y == doctest::Approx(100.0f));
+    // Scaled up from the bottom-right corner: that corner stays, the top-left moves away.
+    const Float2 c = cornerOf(u8".t { transform-origin: right bottom; transform: scale(2); }");
+    CHECK(c.x == doctest::Approx(100.0f));
+    CHECK(c.y == doctest::Approx(-50.0f));
+    // A percentage moves by the view's own size; a skew slants x by y.
+    const Float2 d = cornerOf(u8".t { transform-origin: 0 0; transform: translate(50%, 10%) skewY(45deg); }");
+    CHECK(d.x == doctest::Approx(150.0f));
+    CHECK(d.y == doctest::Approx(105.0f)); // 5 down, then 100 along x slanted 45 degrees
 }
 
 // === opacity ===

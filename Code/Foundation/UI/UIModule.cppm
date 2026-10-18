@@ -16,6 +16,7 @@ export module foundation.ui;
 export import :enums;
 export import :thickness;
 export import :view_transform;
+export import :transform2d;
 export import :view_id;
 export import :event;
 export import :property_owner;

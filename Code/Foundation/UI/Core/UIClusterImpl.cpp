@@ -953,11 +953,27 @@ namespace foundation::ui
         if (cache.winners[static_cast<usize>(StyleProperty::Transform)] == nullptr && ActiveTransitionCount() == 0 &&
             m_animations.IsEmpty())
         {
-            m_styleTransform = StyleTransform{};
+            m_styleMatrix = Transform2D{};
             return;
         }
         const Optional<StyleTransform> styled = ResolveStyle(StyleProperty::Transform).AsTransform();
-        m_styleTransform = styled.HasValue() ? styled.Value() : StyleTransform{};
+        if (!styled.HasValue() || styled.Value().IsIdentity())
+        {
+            m_styleMatrix = Transform2D{};
+            return;
+        }
+        RootView* root = Root();
+        const f32 dpi = root != nullptr ? Max(root->DpiScale, 0.01f) : 1.0f;
+        const Float2 size{Width(), Height()};
+        const Optional<StylePoint> origin = ResolveStyle(StyleProperty::TransformOrigin).AsPoint();
+        const StylePoint pivot = origin.HasValue() ? origin.Value() : StylePoint{};
+        const f32 ox = pivot.X.Resolve(dpi, size.x, 0.0f);
+        const f32 oy = pivot.Y.Resolve(dpi, size.y, 0.0f);
+        Transform2D m;
+        m.Translate(ox, oy);
+        m.Combine(styled.Value().Compose(size, dpi));
+        m.Translate(-ox, -oy);
+        m_styleMatrix = m;
     }
 
     f32 View::DeviceUnitScale() const
@@ -966,11 +982,11 @@ namespace foundation::ui
         const View* top = this;
         for (const View* above = Parent; above != nullptr; above = above->Parent)
         {
-            const ViewTransform t = above->EffectiveTransform();
-            // A rotation or an uneven scale has no one grid to round to: those keep the DPI's.
-            if (t.Rotation == 0.0f && t.Scale.x == t.Scale.y && t.Scale.x > 0.0f)
+            // A turn, a skew or an uneven scale has no one grid to round to: those keep the DPI's.
+            f32 uniform = 1.0f;
+            if (above->TransformMatrix().UniformScale(uniform))
             {
-                scale *= t.Scale.x;
+                scale *= uniform;
             }
             top = above;
         }

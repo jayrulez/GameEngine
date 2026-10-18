@@ -296,20 +296,38 @@ TEST_CASE("transition: a filter interpolates its blur and colour factors")
     CHECK(mid.Brightness == doctest::Approx(1.0f));
 }
 
-TEST_CASE("transition: a transform interpolates its move, turn and scale")
+TEST_CASE("transition: a transform interpolates function by function, or through its matrix")
 {
-    StyleTransform from;
-    StyleTransform to;
-    to.Translate = Float2{0.0f, -8.0f};
-    to.RotateDegrees = 90.0f;
-    to.Scale = Float2{1.5f, 1.5f};
-    const StyleTransform mid =
-        LerpStyleValue(StyleValue::TransformVal(from), StyleValue::TransformVal(to), 0.5f).AsTransform().Value();
-    CHECK(mid.Translate.y == doctest::Approx(-4.0f));
-    CHECK(mid.RotateDegrees == doctest::Approx(45.0f));
-    CHECK(mid.Scale.x == doctest::Approx(1.25f));
+    const auto parse = [](StringView text) -> StyleTransform
+    {
+        core::RefPtr<StyleSheet> sheet = LoadSSS(Format(u8"TestView {{ transform: {}; }}", text).AsView());
+        return sheet->GetRule(0).GetValue(StyleProperty::Transform).Value().AsTransform().Value();
+    };
+    const auto lerp = [](const StyleTransform& a, const StyleTransform& b, f32 t)
+    { return LerpStyleValue(StyleValue::TransformVal(a), StyleValue::TransformVal(b), t).AsTransform().Value(); };
+
+    // The same functions: each one's values.
+    StyleTransform mid = lerp(parse(u8"translateY(0) rotate(0deg) scale(1)"),
+                              parse(u8"translateY(-8) rotate(90deg) scale(1.5)"), 0.5f);
+    REQUIRE(mid.Count == 3u);
+    CHECK(mid.Functions[0].Y.dp == doctest::Approx(-4.0f));
+    CHECK(mid.Functions[1].A == doctest::Approx(45.0f));
+    CHECK(mid.Functions[2].A == doctest::Approx(1.25f));
+    // `none` against a list: the list's identities, so it turns from 0.
+    mid = lerp(parse(u8"none"), parse(u8"rotate(90deg)"), 0.5f);
+    REQUIRE(mid.Count == 1u);
+    CHECK(mid.Functions[0].A == doctest::Approx(45.0f));
+    // Different functions: through the decomposed matrices, turning the short way.
+    mid = lerp(parse(u8"rotate(170deg)"), parse(u8"scale(2) rotate(-170deg)"), 0.5f);
+    REQUIRE(mid.Count == 1u);
+    CHECK(mid.Functions[0].Kind == TransformFunctionKind::Matrix);
+    const Transform2D m = mid.Compose(Float2{0.0f, 0.0f}, 1.0f);
+    const f32 angle = Atan2(m.b, m.a) * kRadToDeg;
+    CHECK(Abs(Abs(angle) - 180.0f) < 0.5f);                       // through 180, not through 0
+    CHECK(Sqrt(m.a * m.a + m.b * m.b) == doctest::Approx(1.5f)); // half way to twice the size
     CHECK(IsAnimatableStyleProperty(StyleProperty::Transform));
     CHECK(IsVisualOnlyStyleProperty(StyleProperty::Transform)); // a lift never relays the page out
+    CHECK(IsAnimatableStyleProperty(StyleProperty::TransformOrigin));
 }
 
 TEST_CASE("transition: timing functions are CSS's curves, cubic-bezier and steps")
@@ -634,5 +652,5 @@ TEST_CASE("animation: a transform keyframe animates the drawn transform and only
     CHECK_FALSE(f.ctx.NeedsLayout()); // a transform never moves the layout
     vg::VGContext canvas;
     f.ctx.DrawRootView(f.root.Get(), canvas);
-    CHECK(v->EffectiveTransform().Translation.y == doctest::Approx(-5.0f));
+    CHECK(v->TransformMatrix().ty == doctest::Approx(-5.0f));
 }

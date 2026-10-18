@@ -234,8 +234,9 @@ export namespace foundation::ui
         /// Device pixels per layout unit where this view's box is drawn: the root's DPI times the
         /// uniform scales of the views above it. Layout rounds the box to this grid.
         [[nodiscard]] f32 DeviceUnitScale() const;
-        /// Reads the sheet's `transform` (a transition's value while one runs) into what
-        /// EffectiveTransform composes; DrawChildren calls it before drawing the view.
+        /// Composes the sheet's `transform` and `transform-origin` (a transition's or an
+        /// animation's values while one runs) for TransformMatrix; DrawChildren calls it before
+        /// drawing the view.
         void RefreshStyleTransform();
 
         View() = default;
@@ -286,73 +287,42 @@ export namespace foundation::ui
             return static_cast<T*>(GetUserData(key));
         }
 
-        /// The transform the view is drawn and hit-tested with: its Transform field, with the
-        /// sheet's `transform` over it (moves and turns added, scales multiplied), as it was last
-        /// drawn.
-        [[nodiscard]] ViewTransform EffectiveTransform() const noexcept
+        /// The transform the view is drawn and hit-tested with, from its own space to its box in
+        /// the parent's: its Transform field (about its Origin: rotated, scaled, then moved), with the
+        /// sheet's `transform` about its transform-origin inside it, as the view was last drawn.
+        [[nodiscard]] Transform2D TransformMatrix() const noexcept
         {
-            if (m_styleTransform.IsIdentity())
+            Transform2D m;
+            if (!Transform.IsIdentity())
             {
-                return Transform;
+                const f32 ox = Width() * Transform.Origin.x;
+                const f32 oy = Height() * Transform.Origin.y;
+                m.Translate(Transform.Translation.x + ox, Transform.Translation.y + oy);
+                m.Scale(Transform.Scale.x, Transform.Scale.y);
+                m.Rotate(Transform.Rotation);
+                m.Translate(-ox, -oy);
             }
-            ViewTransform t = Transform;
-            t.Translation = Float2{t.Translation.x + m_styleTransform.Translate.x,
-                                   t.Translation.y + m_styleTransform.Translate.y};
-            t.Rotation += m_styleTransform.RotateDegrees * kDegToRad;
-            t.Scale = Float2{t.Scale.x * m_styleTransform.Scale.x, t.Scale.y * m_styleTransform.Scale.y};
-            return t;
+            if (!m_styleMatrix.IsIdentity())
+            {
+                m.Combine(m_styleMatrix);
+            }
+            return m;
         }
 
         // === Coordinate conversion ===
-        /// A point of this view in its parent's space: through its EffectiveTransform as DrawChildren
-        /// draws it (about the origin, rotated, then scaled, then translated) and its Bounds.
+        /// A point of this view in its parent's space: through its TransformMatrix, as DrawChildren
+        /// draws it, and its Bounds.
         [[nodiscard]] Float2 LocalToParent(Float2 local) const
         {
-            const ViewTransform transform = EffectiveTransform();
-            Float2 p = local;
-            if (!transform.IsIdentity())
-            {
-                const f32 ox = Width() * transform.Origin.x;
-                const f32 oy = Height() * transform.Origin.y;
-                p.x -= ox;
-                p.y -= oy;
-                if (transform.Rotation != 0.0f)
-                {
-                    const f32 c = Cos(transform.Rotation);
-                    const f32 s = Sin(transform.Rotation);
-                    p = Float2{p.x * c - p.y * s, p.x * s + p.y * c};
-                }
-                p.x = p.x * transform.Scale.x + ox + transform.Translation.x;
-                p.y = p.y * transform.Scale.y + oy + transform.Translation.y;
-            }
+            const Float2 p = TransformMatrix().Apply(local);
             return Float2{p.x + Bounds.x, p.y + Bounds.y};
         }
         /// The inverse of LocalToParent: a point of the parent's space in this view's.
         [[nodiscard]] Float2 ParentToLocal(Float2 parent) const
         {
-            const ViewTransform transform = EffectiveTransform();
-            Float2 p{parent.x - Bounds.x, parent.y - Bounds.y};
-            if (!transform.IsIdentity())
-            {
-                const f32 ox = Width() * transform.Origin.x;
-                const f32 oy = Height() * transform.Origin.y;
-                p.x -= transform.Translation.x + ox;
-                p.y -= transform.Translation.y + oy;
-                if (transform.Scale.x != 0.0f && transform.Scale.y != 0.0f)
-                {
-                    p.x /= transform.Scale.x;
-                    p.y /= transform.Scale.y;
-                }
-                if (transform.Rotation != 0.0f)
-                {
-                    const f32 c = Cos(-transform.Rotation);
-                    const f32 s = Sin(-transform.Rotation);
-                    p = Float2{p.x * c - p.y * s, p.x * s + p.y * c};
-                }
-                p.x += ox;
-                p.y += oy;
-            }
-            return p;
+            const Float2 p{parent.x - Bounds.x, parent.y - Bounds.y};
+            const Transform2D m = TransformMatrix();
+            return m.IsIdentity() ? p : m.Inverse().Apply(p);
         }
         /// A point of this view in its root's space, through every view's bounds and transform.
         [[nodiscard]] Float2 LocalToScreen(Float2 local) const
@@ -1081,9 +1051,9 @@ export namespace foundation::ui
         LayoutStyle m_layout;          ///< inline (declared) intent
         LayoutStyle m_effectiveLayout; ///< inline + cascade (see Layout())
         bool m_styledOverflowHidden = false;
-        /// The sheet's `transform` as the view was last drawn (RefreshStyleTransform), what
-        /// EffectiveTransform puts over the Transform field.
-        StyleTransform m_styleTransform{};
+        /// The sheet's `transform` about its transform-origin, as the view was last drawn
+        /// (RefreshStyleTransform): what TransformMatrix puts inside the Transform field's.
+        Transform2D m_styleMatrix{};
         RefPtr<StyleSheet> m_inlineSheet;
         RefPtr<StyleSheet> m_localStyleSheet;
         HashMap<String, void*> m_userData;
@@ -1318,7 +1288,7 @@ export namespace foundation::ui
                 // identity render transforms (a transform can move content into view), and only
                 // under an active clip (unclipped layers keep out-of-bounds drawing freedom).
                 child->RefreshStyleTransform();
-                const ViewTransform transform = child->EffectiveTransform();
+                const Transform2D transform = child->TransformMatrix();
                 if (transform.IsIdentity() && !ctx.IsRectVisible(child->Bounds))
                 {
                     continue;
@@ -1326,22 +1296,9 @@ export namespace foundation::ui
 
                 ctx.VG().PushState();
                 ctx.VG().Translate(child->Bounds.x, child->Bounds.y);
-
                 if (!transform.IsIdentity())
                 {
-                    const f32 ox = child->Width() * transform.Origin.x;
-                    const f32 oy = child->Height() * transform.Origin.y;
-                    if (transform.Translation.x != 0 || transform.Translation.y != 0)
-                        ctx.VG().Translate(transform.Translation.x, transform.Translation.y);
-                    if (transform.Rotation != 0 || transform.Scale.x != 1 || transform.Scale.y != 1)
-                    {
-                        ctx.VG().Translate(ox, oy);
-                        if (transform.Scale.x != 1 || transform.Scale.y != 1)
-                            ctx.VG().Scale(transform.Scale.x, transform.Scale.y);
-                        if (transform.Rotation != 0)
-                            ctx.VG().Rotate(transform.Rotation);
-                        ctx.VG().Translate(-ox, -oy);
-                    }
+                    ctx.VG().SetTransform(transform.ToMatrix() * ctx.VG().GetTransform());
                 }
 
                 // The view's opacity (its field times the sheet's) and filters. A faded view with

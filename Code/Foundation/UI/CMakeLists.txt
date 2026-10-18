@@ -27,6 +27,7 @@ target_sources(UI
             Core/Enums.cppm
             Core/Thickness.cppm
             Core/ViewTransform.cppm
+            Core/Transform2D.cppm
             Core/ViewId.cppm
             Core/Event.cppm
             Core/IPropertyOwner.cppm

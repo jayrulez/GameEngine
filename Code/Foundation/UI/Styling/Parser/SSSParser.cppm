@@ -939,6 +939,8 @@ export namespace foundation::ui
                 return ParseFilterValue();
             if (prop == StyleProperty::Transform)
                 return ParseTransformValue();
+            if (prop == StyleProperty::TransformOrigin)
+                return ParseTransformOriginValue();
             if (prop == StyleProperty::Animation)
                 return ParseAnimationValue();
             if (prop == StyleProperty::TextShadow || prop == StyleProperty::TextOutline ||
@@ -1092,9 +1094,11 @@ export namespace foundation::ui
             return StyleValue::ShadowVal(effect);
         }
 
-        /// `transform: none` or a list of transform functions: translate(x[, y]), translateX,
-        /// translateY (dp), scale(s[, t]), scaleX, scaleY, rotate(<angle>). Moves and turns add,
-        /// scales multiply; an unknown function leaves the property unset.
+        /// `transform: none` or a list of transform functions, composed in the order written as
+        /// CSS composes them: translate(x[, y]), translateX, translateY (lengths: dp, px, or a percent
+        /// of the view), scale(s[, t]), scaleX, scaleY, rotate(<angle>), skew(<ax>[, <ay>]),
+        /// skewX, skewY. A list keeps its first StyleTransform::kMaxFunctions; an unknown function
+        /// leaves the property unset.
         StyleValue ParseTransformValue()
         {
             StyleTransform transform;
@@ -1103,10 +1107,8 @@ export namespace foundation::ui
                 Consume();
                 return StyleValue::TransformVal(transform);
             }
-            const auto numberArg = [this](f32 fallback)
-            {
-                return Peek().Kind == TokenKind::Number ? ParseFloatValue() : fallback;
-            };
+            const auto factor = [this]() { return Peek().Kind == TokenKind::Number ? Consume().NumericValue : 1.0f; };
+            const auto angle = [this]() { return PeekIsNumber() ? ParseAngleDegrees() : 0.0f; };
             bool any = false;
             while (Peek().Kind == TokenKind::Ident)
             {
@@ -1114,38 +1116,102 @@ export namespace foundation::ui
                 if (Peek().Kind != TokenKind::LParen)
                     return StyleValue::None();
                 Consume();
+                TransformFunction f;
                 if (name == StringView(u8"translate"))
                 {
-                    const f32 x = numberArg(0.0f);
-                    const f32 y = MatchComma() ? numberArg(0.0f) : 0.0f;
-                    transform.Translate.x += x;
-                    transform.Translate.y += y;
+                    f.Kind = TransformFunctionKind::Translate;
+                    f.X = ParseLengthTerm();
+                    if (MatchComma())
+                        f.Y = ParseLengthTerm();
                 }
                 else if (name == StringView(u8"translateX"))
-                    transform.Translate.x += numberArg(0.0f);
+                {
+                    f.Kind = TransformFunctionKind::Translate;
+                    f.X = ParseLengthTerm();
+                }
                 else if (name == StringView(u8"translateY"))
-                    transform.Translate.y += numberArg(0.0f);
+                {
+                    f.Kind = TransformFunctionKind::Translate;
+                    f.Y = ParseLengthTerm();
+                }
                 else if (name == StringView(u8"scale"))
                 {
-                    const f32 x = numberArg(1.0f);
-                    const f32 y = MatchComma() ? numberArg(1.0f) : x;
-                    transform.Scale.x *= x;
-                    transform.Scale.y *= y;
+                    f.Kind = TransformFunctionKind::Scale;
+                    f.A = factor();
+                    f.B = MatchComma() ? factor() : f.A;
                 }
-                else if (name == StringView(u8"scaleX"))
-                    transform.Scale.x *= numberArg(1.0f);
-                else if (name == StringView(u8"scaleY"))
-                    transform.Scale.y *= numberArg(1.0f);
+                else if (name == StringView(u8"scaleX") || name == StringView(u8"scaleY"))
+                {
+                    f.Kind = TransformFunctionKind::Scale;
+                    const f32 s = factor();
+                    f.A = name == StringView(u8"scaleX") ? s : 1.0f;
+                    f.B = name == StringView(u8"scaleY") ? s : 1.0f;
+                }
                 else if (name == StringView(u8"rotate"))
-                    transform.RotateDegrees += PeekIsNumber() ? ParseAngleDegrees() : 0.0f;
+                {
+                    f.Kind = TransformFunctionKind::Rotate;
+                    f.A = angle();
+                }
+                else if (name == StringView(u8"skew"))
+                {
+                    f.Kind = TransformFunctionKind::Skew;
+                    f.A = angle();
+                    f.B = MatchComma() ? angle() : 0.0f;
+                }
+                else if (name == StringView(u8"skewX") || name == StringView(u8"skewY"))
+                {
+                    f.Kind = TransformFunctionKind::Skew;
+                    const f32 a = angle();
+                    f.A = name == StringView(u8"skewX") ? a : 0.0f;
+                    f.B = name == StringView(u8"skewY") ? a : 0.0f;
+                }
                 else
+                {
                     return StyleValue::None();
+                }
                 if (Peek().Kind != TokenKind::RParen)
                     return StyleValue::None();
                 Consume();
+                transform.Push(f);
                 any = true;
             }
             return any ? StyleValue::TransformVal(transform) : StyleValue::None();
+        }
+
+        /// `transform-origin: <x> [<y>]`: each left, center, right (top, center, bottom for y), a
+        /// length or a percentage; one keyword of the other axis sets that axis, the rest centred.
+        StyleValue ParseTransformOriginValue()
+        {
+            StylePoint point;
+            bool xSet = false;
+            for (i32 part = 0; part < 2; ++part)
+            {
+                if (Peek().Kind == TokenKind::Ident)
+                {
+                    const StringView word = Peek().Text;
+                    if (word == StringView(u8"left") || word == StringView(u8"right"))
+                    {
+                        point.X = Unit::Percent(word == StringView(u8"left") ? 0.0f : 100.0f);
+                        xSet = true;
+                    }
+                    else if (word == StringView(u8"top") || word == StringView(u8"bottom"))
+                        point.Y = Unit::Percent(word == StringView(u8"top") ? 0.0f : 100.0f);
+                    else if (word != StringView(u8"center"))
+                        break;
+                    Consume();
+                }
+                else if (Peek().Kind == TokenKind::Number)
+                {
+                    const Unit length = ParseLengthTerm();
+                    (part == 0 && !xSet ? point.X : point.Y) = length;
+                    xSet = xSet || part == 0;
+                }
+                else
+                {
+                    break;
+                }
+            }
+            return StyleValue::PointVal(point);
         }
 
         /// `animation: none` or a comma list of `<name> <duration> [timing] [delay] [count |
@@ -1533,6 +1599,8 @@ export namespace foundation::ui
                 return StyleProperty::Filter;
             if (name == StringView(u8"transform"))
                 return StyleProperty::Transform;
+            if (name == StringView(u8"transform-origin"))
+                return StyleProperty::TransformOrigin;
             if (name == StringView(u8"animation"))
                 return StyleProperty::Animation;
             if (name == StringView(u8"backdrop-filter"))

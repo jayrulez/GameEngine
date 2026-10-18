@@ -9,6 +9,7 @@ module;
 
 module experimental.gui;
 
+using namespace foundation::core;
 namespace core = foundation::core;
 
 namespace experimental::gui

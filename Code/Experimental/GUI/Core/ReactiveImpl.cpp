@@ -10,6 +10,8 @@ module;
 
 module experimental.gui;
 
+using namespace foundation::core;
+
 namespace experimental::gui
 {
     Observer*& CurrentObserverSlot() noexcept

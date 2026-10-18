@@ -175,6 +175,7 @@ export namespace experimental::gui
             m_text.SetWhiteSpace(style.WhiteSpace);
             m_text.SetLineHeight(style.LineHeightPixels());
             m_text.SetLetterSpacing(style.LetterSpacing);
+            m_text.SetBreakWords(style.BreakWords);
         }
 
         /// Its box and, unless it clips it, its text where it is laid out (a line past the box).

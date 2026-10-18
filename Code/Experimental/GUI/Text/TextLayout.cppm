@@ -33,6 +33,7 @@ export module experimental.gui:text_layout;
 import foundation.core;  // Array, String, Rectangle, Float2, Max, Min, Abs
 import foundation.fonts; // CachedFont, IFontService, GlyphPosition
 import :text_runs;
+import :text_segmentation; // NextGrapheme
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -141,6 +142,7 @@ export namespace experimental::gui
         f32 MaxWidth = 0.0f;      ///< The width lines wrap at, align in and end in an ellipsis past; 0: unbounded.
         f32 LineHeight = 0.0f;    ///< Each line's height in pixels; 0: its fonts' own.
         f32 LetterSpacing = 0.0f; ///< Added after every character, in pixels.
+        bool BreakWords = false;  ///< overflow-wrap: a word wider than a line breaks between its graphemes
         u32 MaxLines = 0;         ///< The most lines kept (line-clamp); 0: all.
         TextOverflow Overflow = TextOverflow::Clip;
         /// Each paragraph's base direction (E9c): its node's, or (Auto) its first strong character's.
@@ -784,6 +786,24 @@ export namespace experimental::gui
             }
         }
 
+        // The bytes of `piece` from its start that fit in `width`: whole graphemes, one at the
+        // least (a line holds something).
+        [[nodiscard]] inline usize FittingPrefix(const TextPiece& piece, f32 width, f32 letterSpacing)
+        {
+            const core::StringView text = piece.Text;
+            usize fits = NextGrapheme(text, 0);
+            for (usize at = fits; at < text.Size();)
+            {
+                const usize next = NextGrapheme(text, at);
+                const core::StringView head = text.SubStr(0, next);
+                if (MeasureInFaces(piece.Font, head) + letterSpacing * static_cast<f32>(CodepointCount(head)) > width)
+                    break;
+                fits = next;
+                at = next;
+            }
+            return fits;
+        }
+
         // The byte offset of each codepoint of `text` from `base`, and the end (count + 1 entries).
         inline void CodepointOffsets(core::StringView text, usize base, Array<usize>& out)
         {
@@ -1387,8 +1407,27 @@ export namespace experimental::gui
             }
             if (style.Wrap && bounded && p > lineStart && x + piece.Width - piece.TrailingSpace > style.MaxWidth)
                 finishLine(p);
-            piece.X = x;
-            x += piece.Width;
+            // overflow-wrap (E11): a word wider than the whole line breaks where the line ends,
+            // between graphemes (one at the least), the rest going on as a piece of its own.
+            if (style.Wrap && style.BreakWords && bounded && !piece.Icon && p == lineStart &&
+                piece.Width - piece.TrailingSpace > style.MaxWidth)
+            {
+                const usize cut = detail::FittingPrefix(piece, style.MaxWidth, spacing);
+                if (cut < piece.Text.Size())
+                {
+                    TextPiece rest = piece;
+                    rest.Text = piece.Text.SubStr(cut, piece.Text.Size() - cut);
+                    rest.Start = piece.Start + cut;
+                    rest.Width = rest.TrailingSpace = 0.0f;
+                    detail::MeasurePiece(rest, spacing);
+                    piece.Text = piece.Text.SubStr(0, cut);
+                    piece.Width = piece.TrailingSpace = 0.0f;
+                    detail::MeasurePiece(piece, spacing);
+                    pieces.Insert(p + 1, Move(rest));
+                }
+            }
+            pieces[p].X = x;
+            x += pieces[p].Width;
         }
         if (lineStart < pieces.Size() || layout.Lines.IsEmpty() || (!pieces.IsEmpty() && pieces.Back().LineBreak))
             finishLine(pieces.Size());

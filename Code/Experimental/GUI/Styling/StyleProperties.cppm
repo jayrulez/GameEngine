@@ -132,6 +132,7 @@ export namespace experimental::gui
             {u8"font-size", StyleGrammar::Length, nullptr, true},
             {u8"font-weight", StyleGrammar::Text, u8"normal", true},
             {u8"font-style", StyleGrammar::Keyword, u8"normal", true},
+            {u8"overflow-wrap", StyleGrammar::Keyword, u8"normal", true},
             {u8"white-space", StyleGrammar::Keyword, nullptr, true},
             {u8"line-height", StyleGrammar::Text, u8"normal", true},
             {u8"letter-spacing", StyleGrammar::Text, u8"normal", true},

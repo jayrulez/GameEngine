@@ -370,6 +370,7 @@ export namespace experimental::gui
             m_hintText.SetDirection(TextDirectionFor());
             m_text.SetColor(GetTextColor());
             m_text.SetLetterSpacing(GetTextStyle().LetterSpacing);
+            m_text.SetBreakWords(GetTextStyle().BreakWords);
             m_text.SetLineHeight(GetTextStyle().LineHeightPixels());
             m_hintText.SetLineHeight(GetTextStyle().LineHeightPixels());
             m_caretColor = GetTextColor();

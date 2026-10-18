@@ -1071,6 +1071,16 @@ export namespace experimental::gui
                 else
                     text.Selection.Italic = inherits(u8"font-style") ? parent->GetTextStyle().Selection.Italic : ownText.Selection.Italic;
             }
+            if (free(SlotOverflowWrap))
+            {
+                const StringView v = keyword(u8"overflow-wrap");
+                if (v == StringView(u8"normal"))
+                    text.BreakWords = false;
+                else if (v == StringView(u8"break-word") || v == StringView(u8"anywhere"))
+                    text.BreakWords = true;
+                else
+                    text.BreakWords = inherits(u8"overflow-wrap") ? parent->GetTextStyle().BreakWords : ownText.BreakWords;
+            }
             if (free(SlotLetterSpacing))
             {
                 const StringView v = Trim(keyword(u8"letter-spacing"));

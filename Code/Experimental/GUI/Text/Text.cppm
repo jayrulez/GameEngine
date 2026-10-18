@@ -173,6 +173,16 @@ export namespace experimental::gui
             Dirty();
         }
         [[nodiscard]] f32 GetLetterSpacing() const noexcept { return m_letterSpacing; }
+        /// CSS's overflow-wrap: a word wider than its line breaks between its characters
+        /// (break-word, anywhere) rather than running out of its box (normal).
+        void SetBreakWords(bool breakWords)
+        {
+            if (breakWords == m_breakWords)
+                return;
+            m_breakWords = breakWords;
+            Dirty();
+        }
+        [[nodiscard]] bool GetBreakWords() const noexcept { return m_breakWords; }
         void SetOverflow(TextOverflow overflow)
         {
             if (overflow == m_overflow)
@@ -394,6 +404,7 @@ export namespace experimental::gui
             style.MaxWidth = maxWidth;
             style.LineHeight = m_lineHeight;
             style.LetterSpacing = m_letterSpacing;
+            style.BreakWords = m_breakWords;
             style.MaxLines = m_maxLines;
             style.Overflow = m_overflow;
             style.Direction = m_direction.Direction;
@@ -453,6 +464,7 @@ export namespace experimental::gui
         TextWhiteSpace m_whiteSpace = TextWhiteSpace::NoWrap;
         f32 m_lineHeight = 0.0f;
         f32 m_letterSpacing = 0.0f;
+        bool m_breakWords = false;
         u32 m_maxLines = 0;
         TextOverflow m_overflow = TextOverflow::Clip;
 

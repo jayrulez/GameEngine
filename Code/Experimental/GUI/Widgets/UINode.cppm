@@ -70,12 +70,14 @@ export namespace experimental::gui
             f32 LineHeight = 0.0f;        ///< pixels, or a multiple of the font size when LineHeightFactor; 0: normal
             bool LineHeightFactor = false; ///< a unitless line-height, which each node applies to its own font size
             f32 LetterSpacing = 0.0f;     ///< pixels
+            bool BreakWords = false;      ///< overflow-wrap: break-word or anywhere
             [[nodiscard]] bool operator==(const TextStyle& o) const noexcept
             {
                 return TextColor == o.TextColor && Font == o.Font && FontFamily == o.FontFamily &&
                        Selection == o.Selection && FontSize == o.FontSize &&
                        HAlign == o.HAlign && VAlign == o.VAlign && WhiteSpace == o.WhiteSpace && LineHeight == o.LineHeight &&
-                       LineHeightFactor == o.LineHeightFactor && LetterSpacing == o.LetterSpacing;
+                       LineHeightFactor == o.LineHeightFactor && LetterSpacing == o.LetterSpacing &&
+                       BreakWords == o.BreakWords;
             }
             /// The line height in pixels (0: the font's own).
             [[nodiscard]] f32 LineHeightPixels() const noexcept { return LineHeightFactor ? LineHeight * FontSize : LineHeight; }
@@ -128,6 +130,14 @@ export namespace experimental::gui
             PinStyle(SlotBit(SlotLetterSpacing));
             TextStyle style = m_textStyle;
             style.LetterSpacing = pixels;
+            ChangeTextStyle(style);
+        }
+        /// CSS's overflow-wrap (inherited): a word wider than its line breaks inside it.
+        void SetBreakWords(bool breakWords)
+        {
+            PinStyle(SlotBit(SlotOverflowWrap));
+            TextStyle style = m_textStyle;
+            style.BreakWords = breakWords;
             ChangeTextStyle(style);
         }
         /// CSS's font-weight (inherited), 100 to 900: the face of the nearest weight the family has.

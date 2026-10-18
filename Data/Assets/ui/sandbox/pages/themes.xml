@@ -51,9 +51,16 @@
         </Panel>
     </Panel>
     <Panel class="border-row" flex-direction="row" align-items="center" gap="16">
-        <Label class="border-sample dashed" text="dashed"/>
-        <Label class="border-sample dotted" text="dotted"/>
-        <Label class="border-sample mixed" text="dashed, dotted, solid"/>
+        <Label class="border-sample solid" text="Solid"/>
+        <Label class="border-sample dotted" text="Dotted"/>
+        <Label class="border-sample dashed" text="Dashed"/>
+        <Label class="border-sample mixed" white-space="normal" text="Mixed: dashed top, dotted sides, solid bottom"/>
+    </Panel>
+    <Panel class="border-row" flex-direction="row" align-items="center" gap="16">
+        <Label class="border-sample solid rounded" text="Solid"/>
+        <Label class="border-sample dotted rounded" text="Dotted"/>
+        <Label class="border-sample dashed rounded" text="Dashed"/>
+        <Label class="border-sample mixed rounded" white-space="normal" text="Mixed: dashed top, dotted sides, solid bottom"/>
     </Panel>
     <Label class="caption" white-space="normal" height="40"
            text="The Light theme button above switches the built-in tokens by the colour scheme the GUI is told; the Ember card keeps its own, a subtree's override winning."/>

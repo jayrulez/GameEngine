@@ -305,61 +305,113 @@ export namespace experimental::gui
                 canvas.DrawImage(layer.Image, shown, source, Color::White);
         }
 
-        // A border with dashed or dotted sides (E13): one rounded stroke when every side is alike,
-        // else each side a straight stroke of its own along its edge.
+        // A border with dashed or dotted sides (E13), drawn as browsers draw one. Each side is a
+        // path down the middle of its band: from the half-way point of its first corner's arc,
+        // along its edge, to the half-way point of the next (a square corner: the corner itself).
+        // Its dashes or dots are fitted to that length, so it starts and ends on one; dots are as
+        // long as the border is wide with gaps as long (round from 3 wide). Each side is kept to
+        // its trapezoid, so sides of different styles or colours meet on the corner's diagonal.
         void DrawLinedBorder(vg::VGContext& canvas, const Rectangle& rect) const
         {
             const f32 widths[4] = {BorderWidths.top, BorderWidths.right, BorderWidths.bottom, BorderWidths.left};
             const Color colors[4] = {BorderColors.top, BorderColors.right, BorderColors.bottom, BorderColors.left};
-            const auto pattern = [](BorderLine line, f32 w, f32 (&out)[2], vg::StrokeStyle& style) -> usize
-            {
-                style = vg::StrokeStyle(w);
-                if (line == BorderLine::Dashed)
-                {
-                    out[0] = 3.0f * w;
-                    out[1] = 2.0f * w;
-                    return 2;
-                }
-                if (line == BorderLine::Dotted)
-                {
-                    style.cap = vg::VGLineCap::Round;
-                    out[0] = 0.001f; // a dot: its round caps
-                    out[1] = 2.0f * w;
-                    return 2;
-                }
-                return 0;
-            };
-            bool alike = true;
-            for (usize i = 1; i < 4; ++i)
-                alike = alike && widths[i] == widths[0] && BorderLines[i] == BorderLines[0] && colors[i] == colors[0];
-            if (alike && widths[0] > 0.0f)
-            {
-                const f32 w = widths[0];
-                const Rectangle inset{rect.x + w * 0.5f, rect.y + w * 0.5f, rect.width - w, rect.height - w};
-                const auto shrink = [w](f32 r) { return Max(0.0f, r - w * 0.5f); };
-                vg::PathBuilder shape;
-                vg::ShapeBuilder::BuildRoundedRect(inset, vg::CornerRadii(shrink(Radii.topLeft), shrink(Radii.topRight), shrink(Radii.bottomRight), shrink(Radii.bottomLeft)),
-                                                   shape);
-                f32 dash[2];
-                vg::StrokeStyle style;
-                const usize n = pattern(BorderLines[0], w, dash, style);
-                canvas.StrokePath(shape.ToPath(), colors[0], style, Span<const f32>(dash, n));
-                return;
-            }
             const f32 l = rect.x, t = rect.y, r = rect.x + rect.width, b = rect.y + rect.height;
-            const core::Float2 from[4] = {{l, t + widths[0] * 0.5f}, {r - widths[1] * 0.5f, t}, {r, b - widths[2] * 0.5f}, {l + widths[3] * 0.5f, b}};
-            const core::Float2 to[4] = {{r, t + widths[0] * 0.5f}, {r - widths[1] * 0.5f, b}, {l, b - widths[2] * 0.5f}, {l + widths[3] * 0.5f, t}};
+            // The corners clockwise from the top left, and each side between corners i and i + 1.
+            const f32 radii[4] = {Radii.topLeft, Radii.topRight, Radii.bottomRight, Radii.bottomLeft};
+            // Each side's own region: its outer edge, and the corners' diagonals (outer corner
+            // through inner corner) carried far enough in to hold the corner arcs' halves.
+            f32 deepest = 0.0f, thinnest = 1e9f;
+            for (usize k = 0; k < 4; ++k)
+            {
+                deepest = Max(deepest, radii[k] + widths[k]);
+                if (widths[k] > 0.0f)
+                    thinnest = Min(thinnest, widths[k]);
+            }
+            const f32 reach = Min(Max(1.0f, deepest / Max(thinnest, 0.5f)), 0.5f * Min(rect.width, rect.height) / Max(thinnest, 0.5f));
+            const f32 il = l + widths[3] * reach, it = t + widths[0] * reach, ir = r - widths[1] * reach, ib = b - widths[2] * reach;
+            const core::Float2 shapes[4][4] = {
+                {{l, t}, {r, t}, {ir, it}, {il, it}},
+                {{r, t}, {r, b}, {ir, ib}, {ir, it}},
+                {{r, b}, {l, b}, {il, ib}, {ir, ib}},
+                {{l, b}, {l, t}, {il, it}, {il, ib}},
+            };
+            const core::Float2 corners[4] = {{l, t}, {r, t}, {r, b}, {l, b}};
+            const core::Float2 inward[4] = {{1.0f, 1.0f}, {-1.0f, 1.0f}, {-1.0f, -1.0f}, {1.0f, -1.0f}}; // a corner's centre is inside it
             for (usize i = 0; i < 4; ++i)
             {
                 if (widths[i] <= 0.0f || colors[i].a <= 0.0f)
                     continue;
-                vg::PathBuilder edge;
-                edge.MoveTo(from[i]);
-                edge.LineTo(to[i]);
-                f32 dash[2];
-                vg::StrokeStyle style;
-                const usize n = pattern(BorderLines[i], widths[i], dash, style);
-                canvas.StrokePath(edge.ToPath(), colors[i], style, Span<const f32>(dash, n));
+                const f32 w = widths[i];
+                const usize c0 = i, c1 = (i + 1) % 4;
+                // The side's path, with its length.
+                vg::PathBuilder path;
+                f32 length = 0.0f;
+                const auto along = [&](usize corner, bool start) -> core::Float2
+                {
+                    // Where the side's middle meets corner `corner`'s straight run (a square corner: the corner).
+                    const f32 R = radii[corner];
+                    const core::Float2 c = corners[corner];
+                    const core::Float2 in = inward[corner];
+                    const bool horizontal = i % 2 == 0;
+                    const f32 off = w * 0.5f;
+                    const f32 run = R > off ? R : 0.0f;
+                    (void)start;
+                    return horizontal ? core::Float2{c.x + in.x * run, c.y + in.y * off} : core::Float2{c.x + in.x * off, c.y + in.y * run};
+                };
+                const auto halfway = [&](usize corner) -> core::Float2
+                {
+                    const f32 R = radii[corner];
+                    const core::Float2 c = corners[corner];
+                    const core::Float2 in = inward[corner];
+                    const f32 rc = R - w * 0.5f;
+                    const core::Float2 centre{c.x + in.x * R, c.y + in.y * R};
+                    return core::Float2{centre.x - in.x * rc * 0.70710678f, centre.y - in.y * rc * 0.70710678f};
+                };
+                constexpr f32 kEighth = 0.78539816f; // a quarter circle's half, in radians
+                const f32 rc0 = radii[c0] - w * 0.5f, rc1 = radii[c1] - w * 0.5f;
+                const core::Float2 runStart = along(c0, true), runEnd = along(c1, false);
+                if (rc0 > 0.0f)
+                {
+                    path.MoveTo(halfway(c0));
+                    path.ArcTo(rc0, rc0, 0.0f, false, true, runStart);
+                    length += rc0 * kEighth;
+                }
+                else
+                    path.MoveTo(runStart);
+                path.LineTo(runEnd);
+                length += Max(Abs(runEnd.x - runStart.x), Abs(runEnd.y - runStart.y));
+                if (rc1 > 0.0f)
+                {
+                    path.ArcTo(rc1, rc1, 0.0f, false, true, halfway(c1));
+                    length += rc1 * kEighth;
+                }
+                // Its pattern, fitted.
+                vg::StrokeStyle style(w);
+                f32 dash[2] = {0.0f, 0.0f};
+                usize dashes = 0;
+                if (BorderLines[i] != BorderLine::Solid && length > 0.0f)
+                {
+                    const bool round = BorderLines[i] == BorderLine::Dotted && w >= 3.0f;
+                    const f32 piece = BorderLines[i] == BorderLine::Dashed ? 3.0f * w : round ? 0.0f : w;
+                    const f32 gap = BorderLines[i] == BorderLine::Dashed ? 2.0f * w : round ? 2.0f * w : w;
+                    const f32 n = Max(1.0f, static_cast<f32>(static_cast<i32>((length + gap) / (piece + gap) + 0.5f)));
+                    if (n > 1.0f && length > piece)
+                    {
+                        dash[0] = Max(piece, 0.001f);
+                        dash[1] = Max((length - piece * n) / (n - 1.0f), 0.001f);
+                        dashes = 2;
+                    }
+                    if (round)
+                        style.cap = vg::VGLineCap::Round;
+                }
+                vg::PathBuilder trapezoid;
+                trapezoid.MoveTo(shapes[i][0]);
+                for (usize k = 1; k < 4; ++k)
+                    trapezoid.LineTo(shapes[i][k]);
+                trapezoid.Close();
+                canvas.PushClipPath(trapezoid.ToPath());
+                canvas.StrokePath(path.ToPath(), colors[i], style, Span<const f32>(dash, dashes));
+                canvas.PopClipPath();
             }
         }
 

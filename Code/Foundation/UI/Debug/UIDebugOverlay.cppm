@@ -17,6 +17,8 @@ export module foundation.ui:ui_debug_overlay;
 import foundation.core;
 import :draw_context; // UIDrawContext (referenced in the signature; body uses ctx.VG()/DebugSettings())
 
+using namespace foundation::core;
+
 export namespace foundation::ui
 {
     class View;

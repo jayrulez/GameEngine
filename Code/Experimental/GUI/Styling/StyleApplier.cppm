@@ -792,6 +792,16 @@ export namespace experimental::gui
                 node.SetVisible(visible);
         }
 
+        // The direction (E9b): before the text, whose start and end follow it. Not inherited
+        // through the style: a node with none runs as the first ancestor that says does.
+        if (free(SlotDirection))
+        {
+            const StringView v = keyword(u8"direction");
+            node.SetLayoutDirection(v == StringView(u8"rtl")   ? Node::LayoutDirection::RightToLeft
+                                    : v == StringView(u8"ltr") ? Node::LayoutDirection::LeftToRight
+                                                               : Node::LayoutDirection::Inherit);
+        }
+
         // Text (E3, E4): colour, the font, text-align, white-space, line-height and letter-spacing
         // inherit (the sheet's value, else the parent's, else the node's own; `initial` is the
         // node's own, or CSS's where the table names one); vertical-align does not.
@@ -810,12 +820,14 @@ export namespace experimental::gui
             }
             if (free(SlotTextAlign))
             {
+                // start and end are the line's start and end: right and left in right to left.
                 const StringView v = keyword(u8"text-align");
-                if (v == StringView(u8"left") || v == StringView(u8"justify") || v == StringView(u8"start"))
+                const bool rtl = (v == StringView(u8"start") || v == StringView(u8"end")) && node.IsRightToLeft();
+                if (v == StringView(u8"left") || v == StringView(u8"justify") || (v == StringView(u8"start") && !rtl) || (v == StringView(u8"end") && rtl))
                     text.HAlign = TextHAlign::Left;
                 else if (v == StringView(u8"center") || v == StringView(u8"centre"))
                     text.HAlign = TextHAlign::Center;
-                else if (v == StringView(u8"right") || v == StringView(u8"end"))
+                else if (v == StringView(u8"right") || v == StringView(u8"end") || v == StringView(u8"start"))
                     text.HAlign = TextHAlign::Right;
                 else
                     text.HAlign = inherits(u8"text-align") ? parent->GetTextAlignH() : ownText.HAlign;

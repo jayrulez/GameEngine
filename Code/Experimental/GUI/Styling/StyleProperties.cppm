@@ -127,6 +127,7 @@ export namespace experimental::gui
             {u8"white-space", StyleGrammar::Keyword, nullptr, true},
             {u8"line-height", StyleGrammar::Text, u8"normal", true},
             {u8"letter-spacing", StyleGrammar::Text, u8"normal", true},
+            {u8"direction", StyleGrammar::Keyword},
             {u8"background-color", StyleGrammar::Color},
             {u8"background-image", StyleGrammar::Layers},
             {u8"border-top-width", StyleGrammar::Length},

@@ -1670,6 +1670,66 @@ export namespace experimental::gui
             Invalidate();
         }
 
+        // === Direction (E9b of Specs/gui-lab-evolution.md) ===
+
+        /// Which way its content runs: as what holds it does (the top of a GUI: its language's,
+        /// as the Localization's tables say), left to right, or right to left (CSS's `direction`).
+        enum class LayoutDirection : u8
+        {
+            Inherit,
+            LeftToRight,
+            RightToLeft,
+        };
+        void SetLayoutDirection(LayoutDirection direction)
+        {
+            PinStyle(SlotBit(SlotDirection));
+            if (direction == m_direction)
+                return;
+            m_direction = direction;
+            DirectionChanged();
+        }
+        [[nodiscard]] LayoutDirection GetLayoutDirection() const noexcept { return m_direction; }
+        void SetDirectionName(const core::String& name)
+        {
+            SetLayoutDirection(name == core::StringView(u8"rtl")   ? LayoutDirection::RightToLeft
+                               : name == core::StringView(u8"ltr") ? LayoutDirection::LeftToRight
+                                                                   : LayoutDirection::Inherit);
+        }
+        [[nodiscard]] core::String GetDirectionName() const
+        {
+            return core::String(m_direction == LayoutDirection::RightToLeft   ? core::StringView(u8"rtl")
+                                : m_direction == LayoutDirection::LeftToRight ? core::StringView(u8"ltr")
+                                                                              : core::StringView(u8"inherit"));
+        }
+        /// Whether its content runs right to left (the first ancestor not inheriting says, else
+        /// the GUI's language).
+        [[nodiscard]] bool IsRightToLeft() const
+        {
+            for (const Node* n = this; n != nullptr; n = n->m_parent)
+            {
+                if (n->m_direction != LayoutDirection::Inherit)
+                    return n->m_direction == LayoutDirection::RightToLeft;
+                if (n->m_parent == nullptr)
+                    return n->ContextRightToLeft();
+            }
+            return false;
+        }
+        /// The direction changed here or above: the subtree lays out again (its rows run the other
+        /// way) and restyles (text-align's start and end follow it).
+        void DirectionChanged()
+        {
+            RequestLayoutTree();
+            if (m_styleWriting) // the style pass applies it before its text: only what it holds waits
+            {
+                for (usize i = 0; i < m_children.Size(); ++i)
+                    if (Node* child = m_children[i].Get())
+                        child->MarkStyleDirty(true);
+            }
+            else
+                MarkStyleDirty(true);
+            Invalidate();
+        }
+
         // === Translation (E9a of Specs/gui-lab-evolution.md) ===
 
         /// Whether its translated properties resolve their keys: as what holds it does (the root
@@ -1924,6 +1984,9 @@ export namespace experimental::gui
         [[nodiscard]] virtual f32 TopPixelScale() const { return 1.0f; }
         /// The language of a tree with no `lang` on it: none, or a GUI root's Localization's.
         [[nodiscard]] virtual core::String ContextLanguage() const { return {}; }
+        /// The direction of a tree with no `direction` on it: left to right, or as a GUI root's
+        /// Localization's language is written.
+        [[nodiscard]] virtual bool ContextRightToLeft() const { return false; }
         /// Draws over this node and everything under it, after them, in its space and at full
         /// opacity: what a GUI root puts over its tree (the layout overlay).
         virtual void OnDrawAbove(DrawContext&) {}
@@ -2182,6 +2245,7 @@ export namespace experimental::gui
         bool m_invalidatedSelf = true;          // invalidated itself (not through a descendant) since drawn
         u8 m_quietInvalidations = 0;            // inside BeginQuietInvalidation's
         AutoTranslate m_autoTranslate = AutoTranslate::Inherit;
+        LayoutDirection m_direction = LayoutDirection::Inherit;
         mutable Observable m_translationChanged; // its auto-translation changed (its translated bindings follow)
         core::String m_lang;                     // its language, empty: inherited
         struct TranslatedProperty

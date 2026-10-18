@@ -458,6 +458,11 @@ export namespace experimental::gui
             const foundation::i18n::Localization* loc = m_context->GetLocalization();
             return loc != nullptr ? core::String(loc->Language()) : core::String{};
         }
+        [[nodiscard]] bool ContextRightToLeft() const override
+        {
+            const foundation::i18n::Localization* loc = m_context->GetLocalization();
+            return loc != nullptr && loc->IsRightToLeft();
+        }
         void OnDrawAbove(DrawContext& ctx) override
         {
             m_eventDispatcher.DrawPopups(ctx); // the top layer, after the tree (E5)
@@ -602,7 +607,7 @@ export namespace experimental::gui
     {
         m_languageChanged.Notify(); // translated properties resolve again
         for (SceneRoot* root : m_roots)
-            root->MarkStyleDirty(true); // what :lang matches may differ
+            root->DirectionChanged(); // :lang may match otherwise, and the language's direction may differ
     }
 
     inline void GUIContext::TookInput(SceneRoot& root)

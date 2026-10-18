@@ -324,6 +324,14 @@ TEST_CASE("rhi.validation: a view in a texture's sRGB or UNORM twin needs the te
     device->DestroyTextureView(own);
     device->DestroyTexture(texture);
 
+    // A destroyed texture is reported, and its freed desc is not read for the twin check.
+    REQUIRE(device->CreateTexture(plain, texture).IsOk());
+    device->DestroyTexture(texture);
+    TextureView* stale = nullptr;
+    (void)device->CreateTextureView(texture, unorm, stale); // no read of freed memory (ASAN checks)
+    if (stale != nullptr)
+        device->DestroyTextureView(stale);
+
     // An alternate that is not the twin is refused at creation.
     TextureDesc wrong = plain;
     wrong.alternateViewFormat = TextureFormat::RGBA16Float;

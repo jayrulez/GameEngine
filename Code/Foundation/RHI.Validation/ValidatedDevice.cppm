@@ -277,13 +277,12 @@ export namespace foundation::rhi::validation
                 return ErrorCode::InvalidArgument;
             }
             // Use-after-destroy detection.
-            {
-                bool tracked = false;
-                for (usize i = 0; i < m_liveTextures.Size(); ++i) { if (m_liveTextures[i] == tex) { tracked = true; break; } }
-                if (!tracked) LogError("[Validation] CreateTextureView: texture has been destroyed or was not created by this device");
-            }
-            // A view in the texture's sRGB or UNORM twin needs the texture to have declared it.
-            if (d.format != TextureFormat::Undefined && d.format != tex->desc.format &&
+            bool tracked = false;
+            for (usize i = 0; i < m_liveTextures.Size(); ++i) { if (m_liveTextures[i] == tex) { tracked = true; break; } }
+            if (!tracked) LogError("[Validation] CreateTextureView: texture has been destroyed or was not created by this device");
+            // A view in the texture's sRGB or UNORM twin needs the texture to have declared it. Only
+            // a texture this device tracks is read: a destroyed one's desc is freed memory.
+            if (tracked && d.format != TextureFormat::Undefined && d.format != tex->desc.format &&
                 d.format == SrgbTwin(tex->desc.format) && tex->desc.alternateViewFormat != d.format)
             {
                 LogError("[Validation] CreateTextureView: a view in the texture's sRGB or UNORM twin needs "

@@ -60,7 +60,9 @@ namespace experimental::gui
                  const Command* command = root->GetContext().GetCommands().Find(commandId.AsView());
                  const core::String label(command != nullptr ? command->GetLabel() : commandId.AsView());
                  const core::String icon(command != nullptr ? command->GetIcon() : core::StringView{});
-                 const core::String shortcut = root->GetContext().GetKeymap().ShortcutText(commandId.AsView());
+                 // The keys that run it here: the binding matched in this node's own contexts.
+                 const Array<KeyContextLayer> contexts = root->KeyContextsAt(this);
+                 const core::String shortcut = root->GetContext().GetKeymap().ShortcutText(commandId.AsView(), contexts.AsSpan());
                  Untracked([&] { OnBoundCommandText(label.AsView(), icon.AsView(), shortcut.AsView()); });
              });
     }

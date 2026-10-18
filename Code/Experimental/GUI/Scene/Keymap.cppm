@@ -504,12 +504,31 @@ export namespace experimental::gui
         /// binding follows: a rebinding changes it.
         [[nodiscard]] core::String ShortcutText(core::StringView command) const
         {
+            return ShortcutText(command, Span<const KeyContextLayer>{});
+        }
+        /// The keys that run `command` where the context `stack` holds (root first; a menu item's
+        /// own): the binding a keystroke there would match, so a shortcut shown is one that works
+        /// there. With an empty stack, any binding, the last first.
+        [[nodiscard]] core::String ShortcutText(core::StringView command, Span<const KeyContextLayer> stack) const
+        {
             m_changed.Track();
+            const KeyBinding* chosen = nullptr;
+            i32 bestDepth = -2;
             for (usize i = m_bindings.Size(); i-- > 0;)
             {
                 const KeyBinding& b = m_bindings[i];
                 if (b.Command.AsView() != command)
                     continue;
+                const i32 depth = stack.Size() == 0 ? -1 : MatchDepth(b, stack);
+                if (depth > bestDepth) // deeper wins; at a tie, the later binding (met first here)
+                {
+                    bestDepth = depth;
+                    chosen = &b;
+                }
+            }
+            if (chosen != nullptr)
+            {
+                const KeyBinding& b = *chosen;
                 core::String text;
                 for (usize k = 0; k < b.Sequence.Size(); ++k)
                 {
@@ -520,6 +539,33 @@ export namespace experimental::gui
                 return text;
             }
             return {};
+        }
+        /// The binding `typed` is whole for in `stack` (none longer considered): what a chord cut
+        /// short (timed out, or broken off by a key that continues no binding) runs. False when none.
+        [[nodiscard]] bool MatchWhole(Span<const Keystroke> typed, Span<const KeyContextLayer> stack, core::String& command) const
+        {
+            i32 bestDepth = -2;
+            const KeyBinding* best = nullptr;
+            for (const KeyBinding& binding : m_bindings)
+            {
+                if (binding.Sequence.Size() != typed.Size())
+                    continue;
+                bool same = true;
+                for (usize i = 0; i < typed.Size() && same; ++i)
+                    same = binding.Sequence[i] == typed[i];
+                if (!same)
+                    continue;
+                const i32 depth = MatchDepth(binding, stack);
+                if (depth >= -1 && depth >= bestDepth)
+                {
+                    bestDepth = depth;
+                    best = &binding;
+                }
+            }
+            if (best == nullptr || best->Command.Size() == 0)
+                return false;
+            command = best->Command;
+            return true;
         }
 
         /// Matches what was typed (a chord so far) against the bindings in the context `stack`

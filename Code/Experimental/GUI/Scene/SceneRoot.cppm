@@ -430,25 +430,43 @@ export namespace experimental::gui
         /// A keystroke no widget used: matched against the GUI's keymap in this root's focus-path
         /// contexts (a chord waits for its next keystroke); a match runs its command. True when it
         /// was taken (a match, or the start of a chord).
+        /// The key contexts in force at `from` (root first, one layer per node up from it that
+        /// declares one, up to this root or a modal popup): what the keymap matches against there.
+        [[nodiscard]] Array<KeyContextLayer> KeyContextsAt(Node* from) const
+        {
+            Array<KeyContextLayer> stack;
+            Array<Node*> path;
+            for (Node* n = from; n != nullptr; n = n->GetParent())
+            {
+                path.PushBack(n);
+                if (n->IsRouteStop())
+                    break;
+            }
+            KeyContextLayer layer;
+            for (usize i = path.Size(); i-- > 0;)
+                if (path[i]->GetKeyContext().Size() != 0)
+                {
+                    layer.Declare(path[i]->GetKeyContext());
+                    stack.PushBack(layer);
+                }
+            return stack;
+        }
+        /// A chord cut short: what its keys so far are whole for runs (a binding of its first key
+        /// alone, which waited to see if the chord went on), and the chord ends.
+        void FinishChord()
+        {
+            Array<Keystroke>& chord = m_context->m_chord;
+            core::String command;
+            const Array<KeyContextLayer> stack = KeyContextsAt(CommandStart());
+            const bool whole = !chord.IsEmpty() && m_context->GetKeymap().MatchWhole(chord.AsSpan(), stack.AsSpan(), command);
+            chord.Clear();
+            if (whole)
+                (void)RunCommand(command.AsView());
+        }
+
         bool RouteKeystroke(const Keystroke& stroke)
         {
-            Array<KeyContextLayer> stack; // root first, one layer per node declaring a context
-            {
-                Array<Node*> path;
-                for (Node* n = CommandStart(); n != nullptr; n = n->GetParent())
-                {
-                    path.PushBack(n);
-                    if (n->IsRouteStop())
-                        break;
-                }
-                KeyContextLayer layer;
-                for (usize i = path.Size(); i-- > 0;)
-                    if (path[i]->GetKeyContext().Size() != 0)
-                    {
-                        layer.Declare(path[i]->GetKeyContext());
-                        stack.PushBack(layer);
-                    }
-            }
+            const Array<KeyContextLayer> stack = KeyContextsAt(CommandStart()); // root first
             Array<Keystroke>& chord = m_context->m_chord;
             chord.PushBack(stroke);
             m_context->m_chordAge = 0.0f;
@@ -456,7 +474,10 @@ export namespace experimental::gui
             KeymapMatch match = m_context->GetKeymap().Match(chord.AsSpan(), stack.AsSpan(), command);
             if (match == KeymapMatch::None && chord.Size() > 1)
             {
-                chord.Clear(); // a chord broken off: the keystroke alone
+                // A chord broken off: what came before runs as whole if it is (its first key's own
+                // binding), then the keystroke alone.
+                chord.PopBack();
+                FinishChord();
                 chord.PushBack(stroke);
                 match = m_context->GetKeymap().Match(chord.AsSpan(), stack.AsSpan(), command);
             }
@@ -639,7 +660,12 @@ export namespace experimental::gui
                                    return root != nullptr ? root->EffectiveTimeScale() : 1.0f;
                                });
         if (!m_chord.IsEmpty() && (m_chordAge += seconds) > kChordTimeout)
-            m_chord.Clear(); // a chord not finished in time is dropped
+        {
+            // A chord not finished in time: what its keys so far bind (its first key alone) runs.
+            if (SceneRoot* root = GetActiveRoot())
+                root->FinishChord();
+            m_chord.Clear();
+        }
         // A root's hook may add or remove roots: walk a copy.
         const Array<SceneRoot*> roots = m_roots;
         for (SceneRoot* root : roots)

@@ -443,9 +443,14 @@ export namespace experimental::gui
             // Each shows the keys the GUI binds to its command ("Ctrl+X").
             static constexpr TextEditCommand kCommands[] = {TextEditCommand::Cut, TextEditCommand::Copy, TextEditCommand::Paste,
                                                             TextEditCommand::SelectAll};
-            if (GUIContext* gui = GetGUIContext())
+            if (SceneRoot* scene = GetSceneRoot())
+            {
+                // The keys bound in the field's own contexts ("textinput"): the ones that work here.
+                const Array<KeyContextLayer> contexts = scene->KeyContextsAt(this);
                 for (usize i = 0; i < m_contextItems.Size(); ++i)
-                    m_contextItems[i]->SetShortcut(gui->GetKeymap().ShortcutText(TextEditCommandName(kCommands[i])).AsView());
+                    m_contextItems[i]->SetShortcut(
+                        scene->GetContext().GetKeymap().ShortcutText(TextEditCommandName(kCommands[i]), contexts.AsSpan()).AsView());
+            }
             Node* root = GetRootNode();
             m_contextMenu->Open(*this, root != nullptr ? root->ConvertToNodeSpace(event.Position) : event.Position);
         }

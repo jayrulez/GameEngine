@@ -291,3 +291,35 @@ TEST_CASE("keymap: a text field's context menu shows the keys bound to its comma
     REQUIRE(cut != nullptr);
     CHECK(cut->GetShortcut() == SV(u8"Ctrl+X"));
 }
+
+TEST_CASE("keymap: a chord cut short runs what its first key binds alone: timed out, or broken off")
+{
+    Bed bed;
+    bed.Handle(u8"kill");
+    bed.Handle(u8"kill-all");
+    bed.Handle(u8"select-all");
+    Keymap& keys = bed.root->GetContext().GetKeymap();
+    REQUIRE(keys.Bind(SV(u8"ctrl-k"), SV(u8"kill")));
+    REQUIRE(keys.Bind(SV(u8"ctrl-k ctrl-a"), SV(u8"kill-all")));
+    REQUIRE(keys.Bind(SV(u8"ctrl-a"), SV(u8"select-all")));
+    bed.Key(KeyCode::K, KeyModCtrl); // waits: a chord may follow
+    CHECK(bed.ran.IsEmpty());
+    bed.root->GetContext().Update(core::Duration::FromSeconds(1.5)); // none did
+    REQUIRE(bed.ran.Size() == 1u);
+    CHECK(bed.ran[0] == core::String(u8"kill"));
+
+    bed.Key(KeyCode::K, KeyModCtrl);
+    bed.Key(KeyCode::Z, KeyModCtrl); // continues no binding: ctrl-k alone, then ctrl-z (unbound)
+    REQUIRE(bed.ran.Size() == 2u);
+    CHECK(bed.ran[1] == core::String(u8"kill"));
+}
+
+TEST_CASE("keymap: a command's keys as text are those bound where the control is")
+{
+    Bed bed;
+    Keymap& keys = bed.root->GetContext().GetKeymap();
+    REQUIRE(keys.Bind(SV(u8"ctrl-s"), SV(u8"save"), SV(u8"menu")));
+    REQUIRE(keys.Bind(SV(u8"ctrl-shift-s"), SV(u8"save"), SV(u8"editor"))); // later, but elsewhere
+    const core::Array<KeyContextLayer> here = bed.root->KeyContextsAt(bed.item.Get());
+    CHECK(keys.ShortcutText(SV(u8"save"), here.AsSpan()) == core::String(u8"Ctrl+S"));
+}

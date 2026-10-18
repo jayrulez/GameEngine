@@ -42,6 +42,16 @@ export namespace experimental::gui
     };
 
     /// One key with its modifiers, or one gamepad button.
+    /// The key context menus and menu bars declare, and the commands their keys run there (E12
+    /// of Specs/gui-lab-evolution-2.md): the arrows by default, which a game rebinds like any key.
+    /// Each widget gives a direction its meaning (Left closes a submenu, moves along a bar, and
+    /// right to left the bar runs the other way).
+    inline constexpr const char8_t* kMenuKeyContext = u8"menu";
+    inline constexpr const char8_t* kMenuUpCommand = u8"menu.up";
+    inline constexpr const char8_t* kMenuDownCommand = u8"menu.down";
+    inline constexpr const char8_t* kMenuLeftCommand = u8"menu.left";
+    inline constexpr const char8_t* kMenuRightCommand = u8"menu.right";
+
     struct Keystroke
     {
         u32 Code = 0; ///< a KeyCode, or a PadButton when Pad

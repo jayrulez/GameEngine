@@ -73,6 +73,11 @@ export namespace experimental::gui
             BindTextEditingKeys(m_keymap); // a GUI's own bindings come later, so they win a tie
             (void)m_keymap.Bind(core::StringView(u8"f10"), core::StringView(u8"menu.enter-bar"));
             (void)m_keymap.Bind(core::StringView(u8"shift-f10"), core::StringView(u8"menu.context"));
+            // A menu's moves (E12), bindings in its key context.
+            (void)m_keymap.Bind(core::StringView(u8"up"), core::StringView(kMenuUpCommand), core::StringView(kMenuKeyContext));
+            (void)m_keymap.Bind(core::StringView(u8"down"), core::StringView(kMenuDownCommand), core::StringView(kMenuKeyContext));
+            (void)m_keymap.Bind(core::StringView(u8"left"), core::StringView(kMenuLeftCommand), core::StringView(kMenuKeyContext));
+            (void)m_keymap.Bind(core::StringView(u8"right"), core::StringView(kMenuRightCommand), core::StringView(kMenuKeyContext));
             // A drag from the keys and the pad (E7): picked up at the focus, dropped with Return
             // or South (the dispatcher's while it drags).
             (void)m_keymap.Bind(core::StringView(u8"ctrl-shift-d"), core::StringView(u8"drag.pick"));
@@ -487,6 +492,17 @@ export namespace experimental::gui
             chord.Clear();
             if (match == KeymapMatch::None || command.Size() == 0)
                 return false; // no binding, or unbound here: as if none
+            // Nothing on the focus path handles it (a menu's keys on a bar button with no menu open,
+            // E12): as if unbound, so the key goes on to navigation. One disabled is still taken.
+            bool handled = false;
+            for (Node* n = CommandStart(); n != nullptr && !handled; n = n->GetParent())
+            {
+                handled = n->HandlesCommand(command.AsView());
+                if (n->IsRouteStop())
+                    break;
+            }
+            if (!handled)
+                return false;
             (void)RunCommand(command.AsView());
             return true;
         }

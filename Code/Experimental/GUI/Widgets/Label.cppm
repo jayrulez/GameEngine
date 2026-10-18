@@ -66,6 +66,16 @@ export namespace experimental::gui
         }
 
         /// Its text: plain, or a rich text's markup when it is rich (SetRich).
+        /// The bytes of its text an access key is (E12): underlined while access keys show; start ==
+        /// end for none. Its button sets it, having taken the `&` out.
+        void SetMnemonicRange(usize start, usize end)
+        {
+            m_mnemonicStart = start;
+            m_mnemonicEnd = end;
+            if (end <= start)
+                m_text.SetUnderline(0, 0);
+            Invalidate();
+        }
         void SetText(core::StringView text)
         {
             if (text == m_text.GetString())
@@ -194,6 +204,12 @@ export namespace experimental::gui
         {
             (void)localBounds;
             SyncServices();
+            // An access key underlined while access keys show (E12).
+            if (m_mnemonicEnd > m_mnemonicStart)
+            {
+                const bool shown = AreMnemonicsShown();
+                m_text.SetUnderline(shown ? m_mnemonicStart : 0, shown ? m_mnemonicEnd : 0);
+            }
             // Overflow other than visible clips its own text too, as CSS's does an element's content.
             const bool clip = ClipsChildren();
             if (clip)
@@ -236,6 +252,8 @@ export namespace experimental::gui
         Text m_text;
         bool m_rich = false;
         bool m_overLink = false; // the pointer is over one of its links
+        usize m_mnemonicStart = 0; // the access key's bytes, underlined while access keys show
+        usize m_mnemonicEnd = 0;
         Observable m_textChanged; // what bindings reading the text follow
     };
 

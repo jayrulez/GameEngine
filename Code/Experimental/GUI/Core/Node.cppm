@@ -268,6 +268,11 @@ export namespace experimental::gui
         /// The root of the GUI this node is in, or null when it is in none (a detached subtree:
         /// GetRootNode gives its topmost node).
         [[nodiscard]] SceneRoot* GetSceneRoot();
+        /// Its access key (E12 of Specs/gui-lab-evolution-2.md: the `F` of `&File`, lower case), or 0:
+        /// Alt and the key focus and activate it in its window or menu.
+        [[nodiscard]] virtual char32_t GetMnemonic() const { return 0; }
+        /// Whether access keys are underlined now (while Alt is held, or always as its GUI says).
+        [[nodiscard]] bool AreMnemonicsShown();
         /// The GUI this node is in, read as a binding's dependency: the binding reruns when the node
         /// joins or leaves one (a control bound to a command, made by markup before it is attached).
         [[nodiscard]] SceneRoot* ObserveSceneRoot()

@@ -48,9 +48,17 @@ export namespace experimental::gui
         {
             SetTag(core::StringView(u8"menubar"));
             SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_barColor));
-            // Left and Right that nothing took, from a button or an open menu (which bubbles here).
+            // Its keys are bindings in the menu key context (E12): Left and Right from a button or
+            // an open menu (which passes them on here) move along the bar, Down opens a button's.
+            SetKeyContext(core::StringView(kMenuKeyContext));
             MenuBar* self = this;
-            (void)AddEventListener(EventType::KeyDown, [self](const Event& e) { self->OnBarKey(static_cast<const KeyEvent&>(e)); });
+            (void)OnCommand(core::StringView(kMenuLeftCommand), [self](CommandEvent&) { self->Along(false); });
+            (void)OnCommand(core::StringView(kMenuRightCommand), [self](CommandEvent&) { self->Along(true); });
+            (void)OnCommand(core::StringView(kMenuDownCommand), [self](CommandEvent& e)
+                            {
+                                if (!self->OpenFromButton())
+                                    e.Propagate = true;
+                            });
         }
 
         /// F10: its first button takes focus.
@@ -183,45 +191,42 @@ export namespace experimental::gui
             m_currentButton = button;
             button->AddClass(core::StringView(u8"selected"));
         }
-        void OnBarKey(const KeyEvent& event)
+        // Left or Right along the bar as it runs (right to left, Left goes on to the next menu,
+        // E9b): an open menu moves to the next, a focused button to the next button.
+        void Along(bool right)
         {
-            if (event.Modifiers != 0 || m_entries.IsEmpty())
-                return;
-            const KeyCode key = static_cast<KeyCode>(event.KeyCode);
-            const i32 at = EntryHolding(event.Target);
-            if (at < 0)
+            const i32 at = FocusedEntry();
+            if (at < 0 || m_entries.IsEmpty())
                 return;
             const i32 count = static_cast<i32>(m_entries.Size());
-            if (key == KeyCode::Left || key == KeyCode::Right)
+            const bool onward = right != IsRightToLeft();
+            const i32 next = (at + (onward ? 1 : -1) + count) % count;
+            BarEntry& e = m_entries[static_cast<usize>(next)];
+            if (m_current != nullptr)
             {
-                // Along the bar as it runs: right to left, Left goes on to the next menu (E9b).
-                const bool onward = (key == KeyCode::Right) != IsRightToLeft();
-                const i32 next = (at + (onward ? 1 : -1) + count) % count;
-                BarEntry& e = m_entries[static_cast<usize>(next)];
-                event.Handled = true;
-                if (m_current != nullptr)
-                {
-                    OpenMenu(e.button, e.menu.Get()); // the open one closes: it does not hold this button
-                    e.menu->FocusFirstItem();
-                }
-                else
-                    e.button->RequestFocus();
-            }
-            else if (key == KeyCode::Down && m_current == nullptr && event.Target == m_entries[static_cast<usize>(at)].button)
-            {
-                event.Handled = true;
-                BarEntry& e = m_entries[static_cast<usize>(at)];
-                OpenMenu(e.button, e.menu.Get());
+                OpenMenu(e.button, e.menu.Get()); // the open one closes: it does not hold this button
                 e.menu->FocusFirstItem();
             }
+            else
+                e.button->RequestFocus();
         }
-        // The entry whose button is `node` or holds it (its open menu too), or -1.
-        [[nodiscard]] i32 EntryHolding(const Node* node) const
+        // Down on a focused button with no menu open opens its menu and goes in.
+        bool OpenFromButton()
+        {
+            const i32 at = FocusedEntry();
+            if (at < 0 || m_current != nullptr || !m_entries[static_cast<usize>(at)].button->IsFocused())
+                return false;
+            BarEntry& e = m_entries[static_cast<usize>(at)];
+            OpenMenu(e.button, e.menu.Get());
+            e.menu->FocusFirstItem();
+            return true;
+        }
+        // The entry whose button holds the focus (its open menu too), or -1.
+        [[nodiscard]] i32 FocusedEntry() const
         {
             for (usize i = 0; i < m_entries.Size(); ++i)
-                for (const Node* n = node; n != nullptr && n != this; n = n->GetParent())
-                    if (n == m_entries[i].button)
-                        return static_cast<i32>(i);
+                if (m_entries[i].button->IsFocusWithin())
+                    return static_cast<i32>(i);
             return -1;
         }
 

@@ -172,6 +172,52 @@ TEST_CASE("keyboard: a widget that captures Tab takes Tab and Shift+Tab as keys;
     CHECK(editor->GetText() == SV(u8"\t"));
 }
 
+TEST_CASE("keyboard: a menu's moves are bindings in the menu key context, rebound like any key")
+{
+    Bed bed;
+    bed.root->SetSize(core::Float2{600.0f, 400.0f});
+    core::RefPtr<MenuBar> bar = Make<MenuBar>();
+    bed.root->AddChild(bar.Get());
+    Menu* file = bar->AddMenu(SV(u8"File"));
+    file->AddItem(SV(u8"Open"), [] {});
+    file->AddItem(SV(u8"Save"), [] {});
+    Menu* edit = bar->AddMenu(SV(u8"Edit"));
+    edit->AddItem(SV(u8"Undo"), [] {});
+    bed.root->UpdateLayout();
+    Keymap& keys = bed.root->GetContext().GetKeymap();
+    const char8_t* const wasd[][2] = {{u8"w", u8"menu.up"}, {u8"s", u8"menu.down"}, {u8"a", u8"menu.left"}, {u8"d", u8"menu.right"}};
+    for (const auto& b : wasd)
+        REQUIRE(keys.Bind(SV(b[0]), SV(b[1]), SV(kMenuKeyContext)));
+
+    const auto item = [&]() -> core::StringView
+    {
+        const MenuItem* it = core::Cast<MenuItem>(bed.D().GetFocusNode());
+        return it != nullptr ? it->GetText() : core::StringView{};
+    };
+    bar->ButtonAt(0)->RequestFocus();
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::S), 0); // opens File
+    CHECK(file->IsOpen());
+    CHECK(item() == SV(u8"Open"));
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::S), 0);
+    CHECK(item() == SV(u8"Save"));
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::D), 0); // along the bar
+    CHECK(edit->IsOpen());
+    CHECK(item() == SV(u8"Undo"));
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::A), 0);
+    CHECK(file->IsOpen());
+}
+
+TEST_CASE("keyboard: a binding whose command nothing on the focus path handles lets the key go on")
+{
+    Bed bed;
+    bed.Add(u8"a").SetPosition(core::Float2{0.0f, 0.0f});
+    bed.Add(u8"b").SetPosition(core::Float2{0.0f, 40.0f});
+    REQUIRE(bed.root->GetContext().GetKeymap().Bind(SV(u8"down"), SV(u8"nobody.handles")));
+    bed.D().SetFocusNode(bed.buttons[0].Get());
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Down), 0);
+    CHECK(bed.Focused() == SV(u8"b")); // navigation had it
+}
+
 TEST_CASE("keyboard: CaptureNextKey takes the next key before bindings and widgets, with its modifiers, and drops its text")
 {
     Bed bed;
@@ -239,6 +285,69 @@ TEST_CASE("keyboard: Escape cancels a capture, unless the caller takes it")
     bed.D().CaptureNextKey([&](const Keystroke& k) { taken.PushBack(k); }, [&] { ++cancels; });
     bed.D().CaptureNextKey([&](const Keystroke& k) { taken.PushBack(k); });
     CHECK(cancels == 2);
+}
+
+TEST_CASE("keyboard: an & marks an access key; && is an ampersand")
+{
+    Mnemonic m = ParseMnemonic(SV(u8"&File"));
+    CHECK(m.Shown == SV(u8"File"));
+    CHECK(m.Key == U'f');
+    CHECK(m.Start == 0u);
+    CHECK(m.End == 1u);
+    m = ParseMnemonic(SV(u8"E&xit"));
+    CHECK(m.Shown == SV(u8"Exit"));
+    CHECK(m.Key == U'x');
+    CHECK(m.Start == 1u);
+    m = ParseMnemonic(SV(u8"Save && Quit"));
+    CHECK(m.Shown == SV(u8"Save & Quit"));
+    CHECK(m.Key == 0);
+}
+
+TEST_CASE("keyboard: Alt and a button's access key focus and press it; its letter is underlined while Alt is held")
+{
+    Bed bed;
+    Button& other = bed.Add(u8"other");
+    Button& apply = bed.Add(u8"apply");
+    apply.SetText(SV(u8"&Apply"));
+    other.SetText(SV(u8"Other"));
+    int clicks = 0;
+    apply.SetOnClick([&] { ++clicks; });
+    CHECK(apply.GetText() == SV(u8"Apply"));
+    CHECK(apply.GetMnemonic() == U'a');
+    bed.D().SetFocusNode(&other);
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::A), KeyModAlt);
+    CHECK(clicks == 1);
+    CHECK(bed.Focused() == SV(u8"apply"));
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Q), KeyModAlt); // nothing marked Q
+    CHECK(clicks == 1);
+
+    REQUIRE(apply.GetTextPart() != nullptr);
+    CHECK_FALSE(bed.D().AreMnemonicsShown());
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::LeftAlt), KeyModAlt);
+    CHECK(bed.D().AreMnemonicsShown());
+    bed.D().InjectKeyUp(static_cast<core::u32>(KeyCode::LeftAlt), 0);
+    CHECK_FALSE(bed.D().AreMnemonicsShown());
+    bed.D().SetMnemonicsAlwaysShown(true);
+    CHECK(bed.D().AreMnemonicsShown());
+}
+
+TEST_CASE("keyboard: Alt and a key open a menu bar's menu, and run an item of the open menu")
+{
+    Bed bed;
+    bed.root->SetSize(core::Float2{600.0f, 400.0f});
+    core::RefPtr<MenuBar> bar = Make<MenuBar>();
+    bed.root->AddChild(bar.Get());
+    int opened = 0;
+    Menu* file = bar->AddMenu(SV(u8"&File"));
+    file->AddItem(SV(u8"&Open"), [&] { ++opened; });
+    file->AddItem(SV(u8"E&xit"), [] {});
+    (void)bar->AddMenu(SV(u8"&Edit"));
+    bed.root->UpdateLayout();
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::F), KeyModAlt);
+    CHECK(file->IsOpen());
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::O), KeyModAlt);
+    CHECK(opened == 1);
+    CHECK_FALSE(file->IsOpen());
 }
 
 TEST_CASE("keyboard: type-ahead reads typed text, so it follows the layout and an IME: a Cyrillic list types ahead")

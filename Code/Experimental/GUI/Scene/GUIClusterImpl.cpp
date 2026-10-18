@@ -21,6 +21,12 @@ namespace experimental::gui
 {
     SceneRoot* Node::GetSceneRoot() { return core::Cast<SceneRoot>(GetRootNode()); }
 
+    bool Node::AreMnemonicsShown()
+    {
+        SceneRoot* root = GetSceneRoot();
+        return root != nullptr && root->GetEventDispatcher()->AreMnemonicsShown();
+    }
+
     const PartStyle& UINode::GetPartStyle(core::StringView part) const
     {
         for (const NamedPartStyle& p : m_partStyles)

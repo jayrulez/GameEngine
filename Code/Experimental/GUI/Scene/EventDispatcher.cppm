@@ -339,10 +339,27 @@ export namespace experimental::gui
                 cancel();
         }
         [[nodiscard]] bool IsCapturingKey() const noexcept { return m_capture.Waiting; }
+
+        // === Access keys (E12) ===
+        /// Whether access keys are underlined now: while Alt is held, or always.
+        [[nodiscard]] bool AreMnemonicsShown() const noexcept { return m_mnemonicsAlways || m_altHeld; }
+        /// Underlines access keys always, not only while Alt is held (a platform that does).
+        void SetMnemonicsAlwaysShown(bool always)
+        {
+            if (always == m_mnemonicsAlways)
+                return;
+            const bool was = AreMnemonicsShown();
+            m_mnemonicsAlways = always;
+            if (was != AreMnemonicsShown())
+                RedrawMnemonics();
+        }
+
         bool InjectKeyDown(u32 keyCode, u32 modifiers = 0)
         {
             NoteInput();
             m_capture.DropText = false;
+            if (keyCode == static_cast<u32>(KeyCode::LeftAlt) || keyCode == static_cast<u32>(KeyCode::RightAlt))
+                SetAltHeld(true);
             if (m_capture.Waiting)
             {
                 const KeyCode key = static_cast<KeyCode>(keyCode);
@@ -424,6 +441,10 @@ export namespace experimental::gui
             // Then the bindings (a keystroke bound to a command where the focus path's contexts allow).
             const u32 strokeModifiers = modifiers & ~ModifierOfKey(static_cast<KeyCode>(keyCode)); // Left Shift alone is "leftshift"
             if (m_keystrokes && m_keystrokes(Keystroke{keyCode, strokeModifiers, false}))
+                return true;
+            // Alt and an access key no binding took (E12): the widget it marks, in the open menu or
+            // the focus scope, takes focus and acts.
+            if (modifiers == KeyModAlt && ActivateMnemonic(MnemonicOfKey(static_cast<KeyCode>(keyCode))))
                 return true;
             if (modifiers != 0)
                 return false;
@@ -539,6 +560,8 @@ export namespace experimental::gui
         }
         bool InjectKeyUp(u32 keyCode, u32 modifiers = 0)
         {
+            if (keyCode == static_cast<u32>(KeyCode::LeftAlt) || keyCode == static_cast<u32>(KeyCode::RightAlt))
+                SetAltHeld(false);
             if (m_capture.Waiting)
             {
                 // A modifier released with nothing pressed after it: the modifier key itself.
@@ -2226,6 +2249,79 @@ export namespace experimental::gui
         core::Float2 m_mousePos{0.0f, 0.0f};
         Observable m_focusChanged;   // told when focus moves
         core::Function<bool(const Keystroke&)> m_keystrokes; // the keymap (SceneRoot)
+        bool m_altHeld = false;         // access keys show while it is
+        bool m_mnemonicsAlways = false; // access keys always show
+        void SetAltHeld(bool held)
+        {
+            if (held == m_altHeld)
+                return;
+            const bool was = AreMnemonicsShown();
+            m_altHeld = held;
+            if (was != AreMnemonicsShown())
+                RedrawMnemonics();
+        }
+        // What draws an access key draws again (it and its parts), in the tree and its popups.
+        void RedrawMnemonics()
+        {
+            const auto visit = [](auto& self, Node* node, bool marked) -> void
+            {
+                if (node == nullptr)
+                    return;
+                const bool here = marked || node->GetMnemonic() != 0;
+                if (here)
+                    node->Invalidate();
+                for (usize i = 0; i < node->ChildCount(); ++i)
+                    self(self, node->GetChildAt(i), here);
+            };
+            visit(visit, m_root, false);
+            for (const PopupEntry& entry : m_popups)
+                visit(visit, entry.Popup.Get(), false);
+        }
+        // The character a key types for an access key: its letter (lower case) or digit, else 0.
+        [[nodiscard]] static char32_t MnemonicOfKey(KeyCode key) noexcept
+        {
+            for (usize i = 0; i < 26; ++i)
+                if (kLetterKeys[i] == key)
+                    return static_cast<char32_t>(U'a' + i);
+            if (key >= KeyCode::Num0 && key <= KeyCode::Num9)
+                return static_cast<char32_t>(U'0' + (static_cast<u32>(key) - static_cast<u32>(KeyCode::Num0)));
+            return 0;
+        }
+        // The first shown, enabled widget marked `key` in the open menu (else the focus scope)
+        // takes focus where it can and acts. False when none is marked so.
+        bool ActivateMnemonic(char32_t key)
+        {
+            if (key == 0)
+                return false;
+            Node* within = FocusScopeRoot();
+            for (usize i = m_popups.Size(); i-- > 0;)
+                if (m_popups[i].Options.Kind != PopupKind::Hint) // a tooltip is never where keys go
+                {
+                    within = m_popups[i].Popup.Get();
+                    break;
+                }
+            Node* found = nullptr;
+            const auto find = [&](auto& self, Node* node) -> void
+            {
+                if (node == nullptr || found != nullptr || !node->IsVisible() || !node->IsDisplayed() || !node->IsTreeEnabled())
+                    return;
+                if (node->GetMnemonic() == key)
+                {
+                    found = node;
+                    return;
+                }
+                for (usize i = 0; i < node->ChildCount(); ++i)
+                    self(self, node->GetChildAt(i));
+            };
+            find(find, within);
+            if (found == nullptr)
+                return false;
+            UseKeyboard();
+            if (found->IsTabFocusable())
+                SetFocusNode(found);
+            (void)found->HandleActivate();
+            return true;
+        }
         // CaptureNextKey's wait (E12).
         struct KeyCapture
         {

@@ -69,6 +69,47 @@ export namespace experimental::gui
         return true;
     }
 
+    /// A label's text with its access key marked (`&File`, E12 of Specs/gui-lab-evolution-2.md):
+    /// what it shows (`File`, `&&` an ampersand), the key (the marked character, lower case; 0 for
+    /// none) and the bytes of the shown text it underlines.
+    struct Mnemonic
+    {
+        core::String Shown;
+        char32_t Key = 0;
+        usize Start = 0;
+        usize End = 0;
+    };
+    [[nodiscard]] inline Mnemonic ParseMnemonic(core::StringView text)
+    {
+        Mnemonic out;
+        for (usize i = 0; i < text.Size();)
+        {
+            if (text[i] == u8'&' && i + 1 < text.Size())
+            {
+                if (text[i + 1] == u8'&')
+                {
+                    out.Shown.PushBack(u8'&');
+                    i += 2;
+                    continue;
+                }
+                if (out.Key == 0)
+                {
+                    usize next = i + 1;
+                    const char32_t c = static_cast<char32_t>(core::DecodeUtf8(text, next));
+                    out.Key = c >= U'A' && c <= U'Z' ? c - U'A' + U'a' : c;
+                    out.Start = out.Shown.Size();
+                    out.Shown.Append(text.SubStr(i + 1, next - i - 1));
+                    out.End = out.Shown.Size();
+                    i = next;
+                    continue;
+                }
+            }
+            out.Shown.PushBack(text[i]);
+            ++i;
+        }
+        return out;
+    }
+
     class Text
     {
     public:
@@ -95,6 +136,15 @@ export namespace experimental::gui
                 return;
             m_string = core::String(markup);
             m_rich = true;
+            Dirty();
+        }
+        /// Underlines bytes [start, end) of a plain text (a mnemonic's letter, E12); start == end: none.
+        void SetUnderline(usize start, usize end)
+        {
+            if (start == m_underlineStart && end == m_underlineEnd)
+                return;
+            m_underlineStart = start;
+            m_underlineEnd = end;
             Dirty();
         }
         /// What was set: the plain text, or the markup.
@@ -376,6 +426,22 @@ export namespace experimental::gui
                 return;
             m_synced = true;
             TextDocument document = m_rich ? ParseTextMarkup(m_string.AsView()) : TextDocument::Plain(m_string.AsView());
+            // A plain text's underlined range (a mnemonic): its own run between the rest.
+            if (!m_rich && m_underlineStart < m_underlineEnd && m_underlineEnd <= m_string.Size() && document.Runs.Size() == 1)
+            {
+                TextRun middle = document.Runs[0];
+                TextRun after = document.Runs[0];
+                const core::StringView all = m_string.AsView();
+                document.Runs[0].Text = core::String(all.SubStr(0, m_underlineStart));
+                middle.Text = core::String(all.SubStr(m_underlineStart, m_underlineEnd - m_underlineStart));
+                middle.Underline = true;
+                after.Text = core::String(all.SubStr(m_underlineEnd, all.Size() - m_underlineEnd));
+                document.Runs.PushBack(core::Move(middle));
+                document.Runs.PushBack(core::Move(after));
+                for (usize r = document.Runs.Size(); r-- > 0;)
+                    if (document.Runs[r].Text.Size() == 0)
+                        document.Runs.RemoveAt(r);
+            }
             if (CollapsesSpaces(m_whiteSpace))
             {
                 // Spaces, tabs and line breaks become one space; none at the start or the end.
@@ -496,6 +562,8 @@ export namespace experimental::gui
         Color m_color = Color::White;
         TextHAlign m_hAlign = TextHAlign::Start;
         ParagraphDirection m_direction;
+        usize m_underlineStart = 0; // a plain text's underlined bytes (a mnemonic)
+        usize m_underlineEnd = 0;
         TextVAlign m_vAlign = TextVAlign::Top;
         TextWhiteSpace m_whiteSpace = TextWhiteSpace::NoWrap;
         f32 m_lineHeight = 0.0f;

@@ -153,6 +153,8 @@ export namespace experimental::gui
                 ApplyChecked(false);
         }
         [[nodiscard]] bool IsToggle() const noexcept { return m_toggle; }
+        /// Its access key: the character its text marked with `&` (E12).
+        [[nodiscard]] char32_t GetMnemonic() const override { return m_mnemonic; }
         /// A checked button that keeps its check (a radio) is its focus group's current member.
         [[nodiscard]] bool IsCurrentInGroup() const override { return m_checked && KeepsChecked(); }
 
@@ -423,8 +425,12 @@ export namespace experimental::gui
         }
 
     private:
-        void ApplyText(core::StringView text)
+        void ApplyText(core::StringView marked)
         {
+            // Its access key (E12): `&File` shows `File`, F its key.
+            const Mnemonic mnemonic = ParseMnemonic(marked);
+            m_mnemonic = mnemonic.Key;
+            const core::StringView text = mnemonic.Shown.AsView();
             if (text.Size() == 0 && !m_textPart)
                 return;
             if (!m_textPart)
@@ -441,9 +447,11 @@ export namespace experimental::gui
                 ShareTextStyle(*m_textPart);
                 AddChildAt(m_textPart.Get(), PartIndex() + (m_iconPart ? 1 : 0));
             }
+            m_textPart->SetMnemonicRange(mnemonic.Start, mnemonic.End);
             if (text == m_textPart->GetText())
                 return;
             m_textPart->SetText(text);
+            m_textPart->SetMnemonicRange(mnemonic.Start, mnemonic.End);
             m_textChanged.Notify();
         }
         void EnsureIconPart()
@@ -555,6 +563,7 @@ export namespace experimental::gui
         core::RefPtr<ButtonGroup> m_group;
         core::String m_name;
         core::RefPtr<Label> m_textPart;
+        char32_t m_mnemonic = 0; // its access key (E12), from an `&` in its text
         core::RefPtr<Image> m_iconPart;
         core::RefPtr<ButtonIndicator> m_indicator;
         Observable m_checkedChanged; // what bindings reading the state follow

@@ -132,12 +132,19 @@ export namespace experimental::gui
         }
 
         // Content.
+        /// Its text; an `&` marks its access key (`&Open`: O, E12), `&&` an ampersand.
         void SetText(core::StringView text)
         {
-            m_text.SetString(text);
+            const Mnemonic mnemonic = ParseMnemonic(text);
+            m_mnemonic = mnemonic.Key;
+            m_mnemonicStart = mnemonic.Start;
+            m_mnemonicEnd = mnemonic.End;
+            m_text.SetString(mnemonic.Shown.AsView());
             Invalidate();
         }
+        /// Its text as it shows (the `&` taken out).
         [[nodiscard]] core::StringView GetText() const { return m_text.GetString(); }
+        [[nodiscard]] char32_t GetMnemonic() const override { return m_mnemonic; }
         void SetShortcut(core::StringView text)
         {
             m_shortcut.SetString(text);
@@ -317,6 +324,11 @@ export namespace experimental::gui
             // Text + shortcut share the inner rect (opposite alignments).
             const Rect inner{b.x + kGutter, b.y, core::Max(0.0f, b.width - kGutter - kRightPad),
                              b.height};
+            if (m_mnemonicEnd > m_mnemonicStart) // its access key underlined while access keys show
+            {
+                const bool shown = AreMnemonicsShown();
+                m_text.SetUnderline(shown ? m_mnemonicStart : 0, shown ? m_mnemonicEnd : 0);
+            }
             m_text.Draw(ctx, inner);
             if (m_shortcut.GetString().Size() > 0)
                 m_shortcut.Draw(ctx, inner);
@@ -342,6 +354,9 @@ export namespace experimental::gui
 
     private:
         Text m_text;
+        char32_t m_mnemonic = 0; // its access key (E12)
+        usize m_mnemonicStart = 0;
+        usize m_mnemonicEnd = 0;
         Text m_shortcut;
         core::RefPtr<Drawable> m_icon;
         bool m_checkable = false;
@@ -367,7 +382,13 @@ export namespace experimental::gui
     {
         RTTI_OBJECT(MenuSubItem, MenuItem)
     public:
-        MenuSubItem() { SetTag(core::StringView(u8"menusubmenu")); }
+        MenuSubItem()
+        {
+            SetTag(core::StringView(u8"menusubmenu"));
+            // Right (menu.right in the menu key context, E12) opens it and goes in.
+            MenuSubItem* self = this;
+            (void)OnCommand(core::StringView(kMenuRightCommand), [self](CommandEvent&) { (void)self->OnActivate(); });
+        }
 
         void SetSubMenu(Menu* menu) noexcept { m_subMenu = menu; }
         [[nodiscard]] Menu* GetSubMenu() const noexcept { return m_subMenu; }
@@ -391,14 +412,6 @@ export namespace experimental::gui
             if (m_onOpen)
                 m_onOpen(true);
             return true;
-        }
-        void OnKeyDown(const KeyEvent& event) override
-        {
-            if (event.Target == this && event.KeyCode == static_cast<u32>(KeyCode::Right) && event.Modifiers == 0)
-            {
-                event.Handled = true;
-                (void)OnActivate();
-            }
         }
 
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
@@ -436,6 +449,21 @@ export namespace experimental::gui
             SetTabFocusable(true);
             SetNavScope(NavScope::Wrap);
             SetDisplayed(false); // shown when opened (one in a page waits there, unseen)
+            // Its keys are bindings in the menu key context (E12): a game remaps them like any.
+            SetKeyContext(core::StringView(kMenuKeyContext));
+            Menu* self = this;
+            (void)OnCommand(core::StringView(kMenuDownCommand), [self](CommandEvent&) { self->Step(1); });
+            (void)OnCommand(core::StringView(kMenuUpCommand), [self](CommandEvent&) { self->Step(-1); });
+            // Left in a submenu closes it, focus going back to its item; in a menu of a bar, on to
+            // the bar (which moves along it).
+            (void)OnCommand(core::StringView(kMenuLeftCommand), [self](CommandEvent& e)
+                            {
+                                if (core::Cast<MenuSubItem>(self->GetParent()) != nullptr)
+                                    self->Close();
+                                else
+                                    e.Propagate = true;
+                            });
+            (void)OnCommand(core::StringView(kMenuRightCommand), [](CommandEvent& e) { e.Propagate = true; });
             SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_panelColor));
             StyleWriteScope defaults(*this); // its own values, which a sheet returns to
             SetTextColor(Color{0.88f, 0.90f, 0.94f, 1.0f});
@@ -618,36 +646,17 @@ export namespace experimental::gui
 
         void OnSizeChange() override { Relayout(); }
 
-        // Up and down go round the items (from the menu itself: the first or the last); Left in a
-        // submenu closes it, focus going back to its item.
-        void OnKeyDown(const KeyEvent& event) override
+    private:
+        // Up and down go round the items (from the menu itself: the first or the last).
+        void Step(i32 step)
         {
-            if (event.Modifiers != 0)
-                return;
-            const KeyCode key = static_cast<KeyCode>(event.KeyCode);
-            if (key == KeyCode::Down || key == KeyCode::Up)
-            {
-                const i32 step = key == KeyCode::Down ? 1 : -1;
-                const i32 at = IndexOfRow(event.Target);
-                event.Handled = FocusItem(at < 0 ? (step > 0 ? 0 : static_cast<i32>(m_rows.Size()) - 1) : at + step, step);
-            }
-            else if (key == KeyCode::Left && core::Cast<MenuSubItem>(GetParent()) != nullptr)
-            {
-                event.Handled = true;
-                Close();
-            }
+            i32 at = -1;
+            for (usize i = 0; i < m_rows.Size(); ++i)
+                if (m_rows[i]->IsFocusWithin())
+                    at = static_cast<i32>(i);
+            (void)FocusItem(at < 0 ? (step > 0 ? 0 : static_cast<i32>(m_rows.Size()) - 1) : at + step, step);
         }
 
-    private:
-        // The row `node` is (or is in), or -1.
-        [[nodiscard]] i32 IndexOfRow(const Node* node) const
-        {
-            for (usize i = 0; i < m_rows.Size(); ++i)
-                for (const Node* n = node; n != nullptr && n != this; n = n->GetParent())
-                    if (n == m_rows[i])
-                        return static_cast<i32>(i);
-            return -1;
-        }
         // Focuses the first item from `start` going `step` (round the end) that can take focus.
         bool FocusItem(i32 start, i32 step)
         {

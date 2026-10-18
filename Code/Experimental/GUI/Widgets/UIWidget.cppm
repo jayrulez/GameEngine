@@ -148,6 +148,49 @@ export namespace experimental::gui
             return m_tooltip.AsView();
         }
 
+        // === Accessibility in markup (E9d) ===
+        /// What a screen reader takes it for, over its type's (markup's `role`; empty: its type's).
+        void SetAccessRoleName(const core::String& role)
+        {
+            m_accessRole = role;
+            MarkAccessDirty();
+        }
+        [[nodiscard]] core::String GetAccessRoleName() const { return m_accessRole; }
+        /// Its name over what it shows (`aria-label`).
+        void SetAccessLabel(const core::String& label)
+        {
+            m_accessLabel = label;
+            MarkAccessDirty();
+        }
+        [[nodiscard]] core::String GetAccessLabel() const { return m_accessLabel; }
+        /// The ids of the widgets that name it and describe it (`aria-labelledby`,
+        /// `aria-describedby`; space-separated), and of those it controls (`aria-controls`).
+        void SetAccessLabelledBy(const core::String& ids)
+        {
+            m_accessLabelledBy = ids;
+            MarkAccessDirty();
+        }
+        [[nodiscard]] core::String GetAccessLabelledBy() const { return m_accessLabelledBy; }
+        void SetAccessDescribedBy(const core::String& ids)
+        {
+            m_accessDescribedBy = ids;
+            MarkAccessDirty();
+        }
+        [[nodiscard]] core::String GetAccessDescribedBy() const { return m_accessDescribedBy; }
+        void SetAccessControls(const core::String& ids)
+        {
+            m_accessControls = ids;
+            MarkAccessDirty();
+        }
+        [[nodiscard]] core::String GetAccessControls() const { return m_accessControls; }
+        /// Hidden from screen readers, with what it holds (`aria-hidden`): a decoration.
+        void SetAccessHidden(bool hidden)
+        {
+            m_accessHidden = hidden;
+            MarkAccessDirty();
+        }
+        [[nodiscard]] bool IsAccessHidden() const noexcept { return m_accessHidden; }
+
         // === Drag and drop in markup (E7) ===
         /// Drags as this payload type (markup's `drag-type`; empty: it does not drag).
         void SetDragType(const core::String& type) { m_dragType = type; }
@@ -229,6 +272,12 @@ export namespace experimental::gui
         mutable i32 m_position = 1;
         mutable i32 m_positionCount = 1;
         core::String m_tooltip;
+        core::String m_accessRole;
+        core::String m_accessLabel;
+        core::String m_accessLabelledBy;
+        core::String m_accessDescribedBy;
+        core::String m_accessControls;
+        bool m_accessHidden = false;
         core::String m_contextMenuId;
         core::String m_dragType;
         core::String m_dragValue;

@@ -52,6 +52,7 @@ import foundation.fonts;   // IFontService
 import foundation.i18n;    // Localization (E9a)
 import :resource_provider; // IResourceProvider
 import :text_editing_keys; // the editing keys every GUI starts with (E4)
+import :accessibility;     // the accessibility tree's model and the host's bridge (E9d)
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -157,6 +158,39 @@ export namespace experimental::gui
         /// How many bindings the last Update ran.
         [[nodiscard]] u32 LastBindingCount() const noexcept { return m_lastBindingCount; }
 
+        // === Accessibility (E9d) ===
+        /// The host's bridge to a screen reader (not owned; null: none). While it listens, each
+        /// Update sends every root's nodes that changed (all of them the first time) and the focus.
+        void SetAccessibilityBridge(IAccessibilityBridge* bridge) noexcept
+        {
+            m_accessBridge = bridge;
+            m_accessListening = false; // a new listener starts from the whole tree
+        }
+        [[nodiscard]] IAccessibilityBridge* GetAccessibilityBridge() const noexcept { return m_accessBridge; }
+        /// Speaks `text` through the bridge (a score, a level loaded: news no node holds).
+        void Announce(core::StringView text, AnnouncePriority priority = AnnouncePriority::Polite)
+        {
+            if (m_accessBridge != nullptr && m_accessBridge->IsListening())
+                m_accessBridge->Announce(text, priority);
+        }
+        /// Asks for an action a platform sends (from any thread); it runs in the next Update, on
+        /// the GUI's thread, through the paths input takes.
+        void RequestAccessAction(const AccessActionRequest& request)
+        {
+            m_accessLock.Lock();
+            m_accessRequests.PushBack(request);
+            m_accessLock.Unlock();
+        }
+        /// Runs an action now; false when its node is gone or does not take it. AccessibilityImpl.cpp.
+        bool RunAccessAction(const AccessActionRequest& request);
+        /// `root`'s whole tree as it is now, listening or not (the inspector's, a test's).
+        [[nodiscard]] AccessTreeUpdate BuildAccessTree(SceneRoot& root);
+        /// The node an accessibility id names, or null when it is gone.
+        [[nodiscard]] Node* ResolveAccessId(u64 id) const noexcept
+        {
+            return m_elements->Resolve(static_cast<u32>(id & 0xFFFFFFFFu), static_cast<u32>(id >> 32));
+        }
+
     private:
         friend class SceneRoot;
         ActionManager m_actionManager;
@@ -173,6 +207,12 @@ export namespace experimental::gui
         u32 m_localizationToken = 0;
         Observable m_languageChanged;
         Array<Keystroke> m_chord; // a chord typed so far (in the active root)
+        IAccessibilityBridge* m_accessBridge = nullptr; // the host's
+        bool m_accessListening = false;                 // it listened at the last update
+        core::Mutex m_accessLock;                       // guards the requests, which any thread adds
+        Array<AccessActionRequest> m_accessRequests;
+        void RunAccessRequests();  // AccessibilityImpl.cpp: the requests queued, each run
+        void FlushAccessibility(); // AccessibilityImpl.cpp: each root's changes to the bridge
         f32 m_chordAge = 0.0f;
         static constexpr f32 kChordTimeout = 1.0f;
         Array<SceneRoot*> m_roots; // non-owning: each root registers itself and leaves on destruction
@@ -519,6 +559,8 @@ export namespace experimental::gui
     private:
         friend class GUIContext;
         RefPtr<GUIContext> m_context;            // the GUI this root is part of (declared first: outlives the rest)
+        bool m_accessSent = false;               // its whole tree went to the bridge (E9d)
+        u64 m_accessFocus = 0;                   // the focus the bridge was last told
         EventDispatcher m_eventDispatcher{this}; // pointer, hover and focus: this root's own
         f32 m_displayScale = 1.0f;
         DebugOverlay m_debugOverlay;
@@ -581,6 +623,7 @@ export namespace experimental::gui
 
     inline void GUIContext::Update(core::Duration elapsed)
     {
+        RunAccessRequests(); // what a platform asked since: this frame shows it
         const f32 seconds = static_cast<f32>(elapsed.AsSecondsF());
         m_actionManager.Update(elapsed,
                                [](Node& target)
@@ -601,6 +644,7 @@ export namespace experimental::gui
         m_mutationQueue.Drain();
         for (SceneRoot* root : m_roots)
             root->UpdateLayout();
+        FlushAccessibility();
     }
 
     inline void GUIContext::LanguageChanged()

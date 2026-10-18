@@ -36,6 +36,7 @@ target_sources(GUI
             Scene/ElementTypes.cppm
             Scene/Commands.cppm
             Scene/DataModel.cppm
+            Scene/Accessibility.cppm
             Scene/SceneRoot.cppm
             Scene/GuiScript.cppm
             Drawing/ControlState.cppm
@@ -123,6 +124,7 @@ target_sources(GUI
         Scene/GUIClusterImpl.cpp
         Layout/LayoutImpl.cpp
         Scene/ActionManagerImpl.cpp
+        Scene/AccessibilityImpl.cpp
         Scene/DebugOverlayImpl.cpp
         Scene/GUIReflectionImpl.cpp
         Core/ReactiveImpl.cpp)

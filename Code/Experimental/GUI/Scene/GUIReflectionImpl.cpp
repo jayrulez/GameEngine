@@ -730,6 +730,19 @@ namespace experimental::gui
         builder.AccessorProperty<&UIWidget::GetTooltipText, &UIWidget::SetTooltip>("tooltip")
             .PropAttribute("css", core::String(u8"tooltip"))
             .PropAttribute("translatable", true);
+        // Accessibility in markup (E9d): over what its type and its properties say.
+        builder.AccessorProperty<&UIWidget::GetAccessRoleName, &UIWidget::SetAccessRoleName>("role").PropAttribute("css", core::String(u8"role"));
+        builder.AccessorProperty<&UIWidget::GetAccessLabel, &UIWidget::SetAccessLabel>("ariaLabel")
+            .PropAttribute("css", core::String(u8"aria-label"))
+            .PropAttribute("translatable", true);
+        builder.AccessorProperty<&UIWidget::GetAccessLabelledBy, &UIWidget::SetAccessLabelledBy>("ariaLabelledBy")
+            .PropAttribute("css", core::String(u8"aria-labelledby"));
+        builder.AccessorProperty<&UIWidget::GetAccessDescribedBy, &UIWidget::SetAccessDescribedBy>("ariaDescribedBy")
+            .PropAttribute("css", core::String(u8"aria-describedby"));
+        builder.AccessorProperty<&UIWidget::GetAccessControls, &UIWidget::SetAccessControls>("ariaControls")
+            .PropAttribute("css", core::String(u8"aria-controls"));
+        builder.AccessorProperty<&UIWidget::IsAccessHidden, &UIWidget::SetAccessHidden>("ariaHidden")
+            .PropAttribute("css", core::String(u8"aria-hidden"));
         builder.AccessorProperty<&UIWidget::GetContextMenuId, &UIWidget::SetContextMenuId>("contextMenu")
             .PropAttribute("css", core::String(u8"context-menu"));
         builder.AccessorProperty<&UIWidget::GetDragType, &UIWidget::SetDragType>("dragType").PropAttribute("css", core::String(u8"drag-type"));
@@ -746,7 +759,8 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(Label, "rtti::gui")
     {
-        builder.AccessorProperty<&Label::GetText, &Label::SetText>("text").PropAttribute("translatable", true);
+        builder.Attribute("accessRole", core::String(u8"label")); // what a screen reader takes it for (E9d)
+        builder.AccessorProperty<&Label::GetText, &Label::SetText>("text").PropAttribute("access", core::String(u8"name")).PropAttribute("translatable", true);
         builder.AccessorProperty<&Label::GetTextColor, &Label::SetTextColor>("textColor");
         builder.AccessorProperty<&Label::IsRich, &Label::SetRich>("rich");
         builder.AccessorProperty<&Label::GetTextOverflowName, &Label::SetTextOverflowName>("textOverflow")
@@ -764,7 +778,9 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(ButtonBase, "rtti::gui")
     {
-        builder.AccessorProperty<&ButtonBase::GetText, &ButtonBase::SetText>("text").PropAttribute("translatable", true);
+        builder.Attribute("accessRole", core::String(u8"button")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessActivate", true); // a screen reader may press it
+        builder.AccessorProperty<&ButtonBase::GetText, &ButtonBase::SetText>("text").PropAttribute("access", core::String(u8"name")).PropAttribute("translatable", true);
         builder.AccessorProperty<&ButtonBase::IsToggle, &ButtonBase::SetToggle>("toggle").PropAttribute("css", core::String(u8"toggle"));
         builder.AccessorProperty<&ButtonBase::IsChecked, &ButtonBase::SetChecked>("checked")
             .PropAttribute("css", core::String(u8"checked"))
@@ -793,6 +809,7 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(CheckBox, "rtti::gui")
     {
+        builder.Attribute("accessRole", core::String(u8"checkbox")); // what a screen reader takes it for (E9d)
         builder.AccessorProperty<&CheckBox::IsIndeterminate, &CheckBox::SetIndeterminate>("indeterminate")
             .PropAttribute("css", core::String(u8"indeterminate"));
         builder.Method<&ElementOf<CheckBox>, CheckBox, Node>("of");
@@ -801,24 +818,26 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(RadioButton, "rtti::gui")
     {
+        builder.Attribute("accessRole", core::String(u8"radio")); // what a screen reader takes it for (E9d)
         builder.Method<&ElementOf<RadioButton>, RadioButton, Node>("of");
         builder.Creator();
     }
 
     REFLECT_MEMBERS(ToggleSwitch, "rtti::gui")
     {
+        builder.Attribute("accessRole", core::String(u8"switch")); // what a screen reader takes it for (E9d)
         builder.Method<&ElementOf<ToggleSwitch>, ToggleSwitch, Node>("of");
         builder.Creator();
     }
 
     REFLECT_MEMBERS(RangeWidget, "rtti::gui")
     {
-        builder.AccessorProperty<&RangeWidget::GetValue, &RangeWidget::SetValue>("value")
+        builder.AccessorProperty<&RangeWidget::GetValue, &RangeWidget::SetValue>("value").PropAttribute("access", core::String(u8"value"))
             .PropAttribute("css", core::String(u8"value"))
             .PropAttribute("twoWay", true); // the user changes it: a binding may write it back
-        builder.AccessorProperty<&RangeWidget::GetMin, &RangeWidget::SetMin>("min").PropAttribute("css", core::String(u8"min"));
-        builder.AccessorProperty<&RangeWidget::GetMax, &RangeWidget::SetMax>("max").PropAttribute("css", core::String(u8"max"));
-        builder.AccessorProperty<&RangeWidget::GetStep, &RangeWidget::SetStep>("step").PropAttribute("css", core::String(u8"step"));
+        builder.AccessorProperty<&RangeWidget::GetMin, &RangeWidget::SetMin>("min").PropAttribute("access", core::String(u8"min")).PropAttribute("css", core::String(u8"min"));
+        builder.AccessorProperty<&RangeWidget::GetMax, &RangeWidget::SetMax>("max").PropAttribute("access", core::String(u8"max")).PropAttribute("css", core::String(u8"max"));
+        builder.AccessorProperty<&RangeWidget::GetStep, &RangeWidget::SetStep>("step").PropAttribute("access", core::String(u8"step")).PropAttribute("css", core::String(u8"step"));
         builder.AccessorProperty<&RangeWidget::IsExponential, &RangeWidget::SetExponential>("exponential")
             .PropAttribute("css", core::String(u8"exponential"));
         builder.AccessorProperty<&RangeWidget::AllowsGreater, &RangeWidget::SetAllowGreater>("allowGreater")
@@ -830,6 +849,7 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(Slider, "rtti::gui")
     {
+        builder.Attribute("accessRole", core::String(u8"slider")); // what a screen reader takes it for (E9d)
         builder.AccessorProperty<&Slider::GetPage, &Slider::SetPage>("page").PropAttribute("css", core::String(u8"page"));
         builder.AccessorProperty<&Slider::GetOrientationName, &Slider::SetOrientationName>("orientation")
             .PropAttribute("css", core::String(u8"orientation"));
@@ -840,6 +860,7 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(ProgressBar, "rtti::gui")
     {
+        builder.Attribute("accessRole", core::String(u8"progress")); // what a screen reader takes it for (E9d)
         builder.AccessorProperty<&ProgressBar::IsIndeterminate, &ProgressBar::SetIndeterminate>("indeterminate")
             .PropAttribute("css", core::String(u8"indeterminate"));
         builder.Method<&ElementOf<ProgressBar>, ProgressBar, Node>("of");
@@ -848,14 +869,14 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(TextEditBase, "rtti::gui")
     {
-        builder.AccessorProperty<&TextEditBase::GetPlaceholder, &TextEditBase::SetPlaceholder>("placeholder")
+        builder.AccessorProperty<&TextEditBase::GetPlaceholder, &TextEditBase::SetPlaceholder>("placeholder").PropAttribute("access", core::String(u8"description"))
             .PropAttribute("css", core::String(u8"placeholder"))
             .PropAttribute("translatable", true);
         builder.AccessorProperty<&TextEditBase::GetMaxLength, &TextEditBase::SetMaxLength>("maxLength").PropAttribute("css", core::String(u8"max-length"));
         builder.AccessorProperty<&TextEditBase::IsReadOnly, &TextEditBase::SetReadOnly>("readOnly").PropAttribute("css", core::String(u8"read-only"));
         builder.AccessorProperty<&TextEditBase::GetInputFilterName, &TextEditBase::SetInputFilterName>("inputFilter")
             .PropAttribute("css", core::String(u8"input-filter"));
-        builder.AccessorProperty<&TextEditBase::GetText, &TextEditBase::SetText>("text")
+        builder.AccessorProperty<&TextEditBase::GetText, &TextEditBase::SetText>("text").PropAttribute("access", core::String(u8"value"))
             .PropAttribute("css", core::String(u8"text"))
             .PropAttribute("twoWay", true); // the user changes it: a binding may write it back
         builder.Method<&ElementOf<TextEditBase>, TextEditBase, Node>("of");
@@ -863,13 +884,17 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(TextField, "rtti::gui")
     {
-        builder.AccessorProperty<&TextField::IsPassword, &TextField::SetPassword>("password").PropAttribute("css", core::String(u8"password"));
+        builder.Attribute("accessRole", core::String(u8"textbox")); // what a screen reader takes it for (E9d)
+        builder.AccessorProperty<&TextField::IsPassword, &TextField::SetPassword>("password")
+            .PropAttribute("css", core::String(u8"password"))
+            .PropAttribute("access", core::String(u8"secret")); // its value is not read out (E9d)
         builder.Method<&ElementOf<TextField>, TextField, Node>("of");
         builder.Creator();
     }
 
     REFLECT_MEMBERS(TextArea, "rtti::gui")
     {
+        builder.Attribute("accessRole", core::String(u8"textarea")); // what a screen reader takes it for (E9d)
         builder.AccessorProperty<&TextArea::GetRows, &TextArea::SetRows>("rows").PropAttribute("css", core::String(u8"rows"));
         builder.Method<&ElementOf<TextArea>, TextArea, Node>("of");
         builder.Creator();
@@ -883,6 +908,7 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(ScrollView, "rtti::gui")
     {
+        builder.Attribute("accessRole", core::String(u8"scrollview")); // what a screen reader takes it for (E9d)
         builder.Method<&ElementOf<ScrollView>, ScrollView, Node>("of");
         builder.Creator();
     }
@@ -900,8 +926,9 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(Expander, "rtti::gui")
     {
-        builder.AccessorProperty<&Expander::GetTitleString, &Expander::SetTitleString>("title").PropAttribute("css", core::String(u8"title"));
-        builder.AccessorProperty<&Expander::IsOpen, &Expander::SetOpen>("open")
+        builder.Attribute("accessRole", core::String(u8"group")); // what a screen reader takes it for (E9d)
+        builder.AccessorProperty<&Expander::GetTitleString, &Expander::SetTitleString>("title").PropAttribute("access", core::String(u8"name")).PropAttribute("css", core::String(u8"title"));
+        builder.AccessorProperty<&Expander::IsOpen, &Expander::SetOpen>("open").PropAttribute("access", core::String(u8"expanded"))
             .PropAttribute("css", core::String(u8"open"))
             .PropAttribute("twoWay", true); // the user opens it: a binding may write it back
         builder.AccessorProperty<&Expander::GetName, &Expander::SetName>("name").PropAttribute("css", core::String(u8"name"));
@@ -921,10 +948,12 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(TabStrip, "rtti::gui")
     {
+        builder.Attribute("accessRole", core::String(u8"tablist")); // what a screen reader takes it for (E9d)
     }
 
     REFLECT_MEMBERS(Tab, "rtti::gui")
     {
+        builder.Attribute("accessRole", core::String(u8"tab")); // what a screen reader takes it for (E9d)
         builder.AccessorProperty<&Tab::IsClosable, &Tab::SetClosable>("closable").PropAttribute("css", core::String(u8"closable"));
         builder.Method<&ElementOf<Tab>, Tab, Node>("of");
         builder.Creator();
@@ -949,7 +978,8 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(TabPage, "rtti::gui")
     {
-        builder.AccessorProperty<&TabPage::GetTitleString, &TabPage::SetTitleString>("title").PropAttribute("css", core::String(u8"title"));
+        builder.Attribute("accessRole", core::String(u8"tabpanel")); // what a screen reader takes it for (E9d)
+        builder.AccessorProperty<&TabPage::GetTitleString, &TabPage::SetTitleString>("title").PropAttribute("access", core::String(u8"name")).PropAttribute("css", core::String(u8"title"));
         builder.AccessorProperty<&TabPage::GetIconSource, &TabPage::SetIconSource>("icon").PropAttribute("css", core::String(u8"icon"));
         builder.AccessorProperty<&TabPage::IsClosable, &TabPage::SetClosable>("closable").PropAttribute("css", core::String(u8"closable"));
         builder.Method<&ElementOf<TabPage>, TabPage, Node>("of");
@@ -982,12 +1012,13 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(NumberField, "rtti::gui")
     {
-        builder.AccessorProperty<&NumberField::GetValue, &NumberField::SetValue>("value")
+        builder.Attribute("accessRole", core::String(u8"spinbutton")); // what a screen reader takes it for (E9d)
+        builder.AccessorProperty<&NumberField::GetValue, &NumberField::SetValue>("value").PropAttribute("access", core::String(u8"value"))
             .PropAttribute("css", core::String(u8"value"))
             .PropAttribute("twoWay", true); // the user changes it: a binding may write it back
-        builder.AccessorProperty<&NumberField::GetMin, &NumberField::SetMin>("min").PropAttribute("css", core::String(u8"min"));
-        builder.AccessorProperty<&NumberField::GetMax, &NumberField::SetMax>("max").PropAttribute("css", core::String(u8"max"));
-        builder.AccessorProperty<&NumberField::GetStep, &NumberField::SetStep>("step").PropAttribute("css", core::String(u8"step"));
+        builder.AccessorProperty<&NumberField::GetMin, &NumberField::SetMin>("min").PropAttribute("access", core::String(u8"min")).PropAttribute("css", core::String(u8"min"));
+        builder.AccessorProperty<&NumberField::GetMax, &NumberField::SetMax>("max").PropAttribute("access", core::String(u8"max")).PropAttribute("css", core::String(u8"max"));
+        builder.AccessorProperty<&NumberField::GetStep, &NumberField::SetStep>("step").PropAttribute("access", core::String(u8"step")).PropAttribute("css", core::String(u8"step"));
         builder.AccessorProperty<&NumberField::GetPage, &NumberField::SetPage>("page").PropAttribute("css", core::String(u8"page"));
         builder.AccessorProperty<&NumberField::IsInteger, &NumberField::SetInteger>("integer").PropAttribute("css", core::String(u8"integer"));
         builder.AccessorProperty<&NumberField::GetPrefix, &NumberField::SetPrefix>("prefix").PropAttribute("css", core::String(u8"prefix"));
@@ -1002,6 +1033,7 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(Separator, "rtti::gui")
     {
+        builder.Attribute("accessRole", core::String(u8"separator")); // what a screen reader takes it for (E9d)
         builder.AccessorProperty<&Separator::GetThickness, &Separator::SetThickness>("thickness").PropAttribute("css", core::String(u8"thickness"));
         builder.Method<&ElementOf<Separator>, Separator, Node>("of");
         builder.Creator();
@@ -1016,6 +1048,7 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(Image, "rtti::gui")
     {
+        builder.Attribute("accessRole", core::String(u8"image")); // what a screen reader takes it for (E9d)
         builder.AccessorProperty<&Image::GetSource, &Image::SetSource>("src").PropAttribute("css", core::String(u8"src"));
         builder.AccessorProperty<&Image::GetFitName, &Image::SetFitName>("objectFit").PropAttribute("css", core::String(u8"object-fit"));
         builder.AccessorProperty<&Image::GetObjectPositionName, &Image::SetObjectPositionName>("objectPosition")
@@ -1046,6 +1079,7 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(TreeView, "rtti::gui")
     {
+        builder.Attribute("accessRole", core::String(u8"tree")); // what a screen reader takes it for (E9d)
         builder.Method<&TreeView::ExpandItem>("expandItem");
         builder.Method<&TreeView::CollapseItem>("collapseItem");
         builder.Method<&ElementOf<TreeView>, TreeView, Node>("of");
@@ -1060,6 +1094,7 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(TableView, "rtti::gui")
     {
+        builder.Attribute("accessRole", core::String(u8"table")); // what a screen reader takes it for (E9d)
         builder.AccessorProperty<&TableView::GetColumnsText, &TableView::SetColumnsText>("columns").PropAttribute("css", core::String(u8"columns"));
         builder.AccessorProperty<&TableView::GetColumnWidthsText, &TableView::SetColumnWidthsText>("columnWidths")
             .PropAttribute("css", core::String(u8"column-widths"));
@@ -1070,6 +1105,7 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(ScrollBar, "rtti::gui")
     {
+        builder.Attribute("accessRole", core::String(u8"scrollbar")); // what a screen reader takes it for (E9d)
         builder.AccessorProperty<&ScrollBar::GetPage, &ScrollBar::SetPage>("page").PropAttribute("css", core::String(u8"page"));
         builder.AccessorProperty<&ScrollBar::GetOrientationName, &ScrollBar::SetOrientationName>("orientation")
             .PropAttribute("css", core::String(u8"orientation"));
@@ -1079,6 +1115,7 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(MessageBox, "rtti::gui")
     {
+        builder.Attribute("accessRole", core::String(u8"dialog")); // what a screen reader takes it for (E9d)
         builder.ComputedProperty<&MessageBox::GetResultName>("result");
         builder.Method<&MessageBox::Show>("show");
         builder.Method<&ElementOf<MessageBox>, MessageBox, Node>("of");
@@ -1087,12 +1124,15 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(MenuSeparator, "rtti::gui")
     {
+        builder.Attribute("accessRole", core::String(u8"separator")); // what a screen reader takes it for (E9d)
         builder.Creator();
     }
 
     REFLECT_MEMBERS(MenuItem, "rtti::gui")
     {
-        builder.AccessorProperty<&MenuItem::GetTextString, &MenuItem::SetTextString>("text");
+        builder.Attribute("accessRole", core::String(u8"menuitem")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessActivate", true); // a screen reader may press it
+        builder.AccessorProperty<&MenuItem::GetTextString, &MenuItem::SetTextString>("text").PropAttribute("access", core::String(u8"name"));
         builder.AccessorProperty<&MenuItem::IsCheckable, &MenuItem::SetCheckable>("checkable").PropAttribute("css", core::String(u8"checkable"));
         builder.AccessorProperty<&MenuItem::IsChecked, &MenuItem::SetChecked>("checked").PropAttribute("css", core::String(u8"checked"));
         builder.Method<&ElementOf<MenuItem>, MenuItem, Node>("of");
@@ -1101,6 +1141,7 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(Menu, "rtti::gui")
     {
+        builder.Attribute("accessRole", core::String(u8"menu")); // what a screen reader takes it for (E9d)
         builder.Method<&Menu::Close>("close");
         builder.Method<&ElementOf<Menu>, Menu, Node>("of");
         builder.Creator();
@@ -1108,6 +1149,7 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(MenuBar, "rtti::gui")
     {
+        builder.Attribute("accessRole", core::String(u8"menubar")); // what a screen reader takes it for (E9d)
         builder.Method<&ElementOf<MenuBar>, MenuBar, Node>("of");
         builder.Creator();
     }
@@ -1136,12 +1178,14 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(ListView, "rtti::gui")
     {
+        builder.Attribute("accessRole", core::String(u8"list")); // what a screen reader takes it for (E9d)
         builder.Method<&ElementOf<ListView>, ListView, Node>("of");
         builder.Creator();
     }
 
     REFLECT_MEMBERS(ListBox, "rtti::gui")
     {
+        builder.Attribute("accessRole", core::String(u8"list")); // what a screen reader takes it for (E9d)
         builder.AccessorProperty<&ListBox::GetItemsText, &ListBox::SetItemsText>("items").PropAttribute("css", core::String(u8"items"));
         builder.Method<&ElementOf<ListBox>, ListBox, Node>("of");
         builder.Creator();
@@ -1149,6 +1193,8 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(ComboBox, "rtti::gui")
     {
+        builder.Attribute("accessRole", core::String(u8"combobox")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessActivate", true); // a screen reader may press it
         builder.AccessorProperty<&ComboBox::GetItemsText, &ComboBox::SetItemsText>("items").PropAttribute("css", core::String(u8"items"));
         builder.Method<&ElementOf<ComboBox>, ComboBox, Node>("of");
         builder.Creator();
@@ -1156,7 +1202,8 @@ namespace experimental::gui
 
     REFLECT_MEMBERS(Window, "rtti::gui")
     {
-        builder.AccessorProperty<&Window::GetTitle, &Window::SetTitle>("title").PropAttribute("css", core::String(u8"title"));
+        builder.Attribute("accessRole", core::String(u8"window")); // what a screen reader takes it for (E9d)
+        builder.AccessorProperty<&Window::GetTitle, &Window::SetTitle>("title").PropAttribute("access", core::String(u8"name")).PropAttribute("css", core::String(u8"title"));
         builder.Method<&ElementOf<Window>, Window, Node>("of");
         builder.Creator();
     }

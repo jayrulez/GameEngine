@@ -258,10 +258,11 @@ export namespace experimental::gui
         void Open(Node& root) { OpenInternal(root, /*modal*/ false); }
 
         // Remove the window (a modal one through the popup stack, which gives focus back), and fire
-        // the close callback.
+        // the close callback. A window placed in a tree as a child, never opened, closes the same
+        // way: its close button works however it came to be shown.
         void Close()
         {
-            if (!m_open)
+            if (!m_open && GetParent() == nullptr)
                 return;
             EventDispatcher* dispatcher = GetEventDispatcher();
             if (m_modal && dispatcher != nullptr && dispatcher->IsPopupOpen(*this))

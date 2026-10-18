@@ -1314,7 +1314,11 @@ void GUISandbox::OpenWindow()
         }
         return;
     }
-    m_floating->SetVisible(!m_floating->IsVisible());
+    // The button toggles it; closed (its close button, or this), it opens again in the middle.
+    if (m_floating->GetParent() != nullptr)
+        m_floating->Close();
+    else
+        m_floating->Open(*m_root.Get());
 }
 
 void GUISandbox::ShowMessage()

@@ -139,3 +139,40 @@ TEST_CASE("window: the right button does not drag the window")
     CHECK(win->GetPosition().x == doctest::Approx(50.0f)); // did not move
     CHECK(win->GetPosition().y == doctest::Approx(50.0f));
 }
+
+TEST_CASE("window: the close button closes a window placed in a tree, which opens again")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{600.0f, 400.0f});
+    auto win = Make<Window>();
+    win->SetSize(core::Float2{200.0f, 150.0f});
+    win->SetPosition(core::Float2{50.0f, 50.0f});
+    win->SetTitleBarHeight(28.0f);
+    int closed = 0;
+    win->SetOnClose([&closed]() { ++closed; });
+    root->AddChild(win.Get()); // placed, as a page's markup or a host does, never opened
+    (void)root->UpdateLayout();
+
+    Node* close = nullptr;
+    for (Node* bar = win->GetFirstChild(); bar != nullptr && close == nullptr; bar = bar->GetNextSibling())
+        for (core::usize i = 0; i < bar->ChildCount(); ++i)
+            if (core::Cast<WindowCloseButton>(bar->GetChildAt(i)) != nullptr)
+                close = bar->GetChildAt(i);
+    REQUIRE(close != nullptr);
+    const auto middle = [close]() { return close->ConvertToWorldSpace(core::Float2{close->GetSize().x * 0.5f, close->GetSize().y * 0.5f}); };
+    const core::Float2 at = middle();
+    EventDispatcher* d = root->GetEventDispatcher();
+    d->InjectMouseDown(at, MouseButton::Left);
+    d->InjectMouseUp(at, MouseButton::Left);
+    CHECK(win->GetParent() == nullptr);
+    CHECK(closed == 1);
+
+    win->Open(*root.Get()); // and opens again where it was asked to
+    CHECK(win->GetParent() == root.Get());
+    CHECK(win->IsOpen());
+    (void)root->UpdateLayout();
+    d->InjectMouseDown(middle(), MouseButton::Left);
+    d->InjectMouseUp(middle(), MouseButton::Left);
+    CHECK(win->GetParent() == nullptr);
+    CHECK(closed == 2);
+}

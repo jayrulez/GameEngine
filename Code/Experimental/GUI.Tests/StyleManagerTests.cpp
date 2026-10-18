@@ -560,3 +560,18 @@ TEST_CASE("style: em measures by the element's own font size, which takes em and
     CHECK(box->GetPadding().Left == doctest::Approx(32.0f)); // 2em of the root's 16, then 1em of that
     CHECK(pct->GetPadding().Left == doctest::Approx(24.0f));
 }
+
+TEST_CASE("style: a number property takes a percentage as a fraction and refuses a unit")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    auto half = core::MakeRef<Panel>(core::DefaultAllocator());
+    half->AddClass(core::StringView(u8"half"));
+    root->AddChild(half.Get());
+    auto junk = core::MakeRef<Panel>(core::DefaultAllocator());
+    junk->AddClass(core::StringView(u8"junk"));
+    root->AddChild(junk.Get());
+    StyleManager styles(CSSParser::Parse(core::StringView(u8".half { opacity: 50%; } .junk { opacity: 0.3px; }")));
+    styles.ApplyTree(*root.Get());
+    CHECK(half->GetAlpha() == doctest::Approx(0.5f)); // not 50
+    CHECK(junk->GetAlpha() == doctest::Approx(1.0f)); // not a number: its own value
+}

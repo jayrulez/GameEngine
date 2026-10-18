@@ -230,13 +230,21 @@ export namespace experimental::gui
         switch (grammar)
         {
         case StyleGrammar::Number:
-            if (Optional<f32> n = ParseLength(v); n.HasValue())
+        {
+            // A plain number, or a percentage of one (`opacity: 50%` is 0.5); a unit is no number.
+            const bool percent = v.Size() > 1 && v[v.Size() - 1] == u8'%';
+            const core::StringView digits = percent ? v.SubStr(0, v.Size() - 1) : v;
+            for (usize i = 0; i < digits.Size(); ++i)
+                if ((digits[i] >= u8'a' && digits[i] <= u8'z') || (digits[i] >= u8'A' && digits[i] <= u8'Z') || digits[i] == u8'%')
+                    return false;
+            if (Optional<f32> n = ParseLength(digits); n.HasValue())
             {
                 out.Kind = StyleValueKind::Number;
-                out.Number = n.Value();
+                out.Number = percent ? n.Value() * 0.01f : n.Value();
                 return true;
             }
             return false;
+        }
         case StyleGrammar::Length:
             if (Optional<LengthValue> l = ParseLengthValue(v); l.HasValue())
             {

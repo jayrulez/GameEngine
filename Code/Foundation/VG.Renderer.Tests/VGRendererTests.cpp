@@ -768,4 +768,7 @@ TEST_CASE("vg.renderer: pass targets configure, create, resize and describe the 
     CHECK_FALSE(targets.Create(rhi::TextureFormat::BGRA8Unorm, 0, 0));
     CHECK_FALSE(targets.Matches(80, 32));
     CHECK_FALSE(targets.NeedsResize(80, 32));
+    // A resize does not bring targets that are off back (a host resizing after a failed Create).
+    CHECK_FALSE(targets.Resize(96, 48));
+    CHECK_FALSE(targets.Matches(96, 48));
 }

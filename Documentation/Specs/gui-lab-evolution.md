@@ -1227,7 +1227,7 @@ In mixed-direction text the arrows move the caret visually, delete and backspace
   takes Latin Extended-A, which pseudolocalization's accents were narrowed to. `--lang` and
   `--narrate` (each focus change and announcement printed as a screen reader speaks it). The image
   tests add `language.ar`; every reference changed with HarfBuzz and the sidebar's entry, and the
-  new set waits for the user's approval.
+  user approved the new set (2026-10-17).
 
 Not in E9: the platform adapters (UI Automation, NSAccessibility, AT-SPI) and real text to speech,
 which are host work with hosting; vertical text; locale-aware number and date formats.

@@ -81,6 +81,9 @@ export namespace experimental::gui
         PseudoSelected = Node::StateSelected,
         PseudoDropTarget = Node::StateDropTarget, ///< a drag would drop here (E7)
         PseudoDragSource = Node::StateDragSource, ///< it is being dragged (E7)
+        /// A widget at the top of its tree, under no widget (E13: where a theme's tokens go, so
+        /// every widget inherits them and a subtree can override them).
+        PseudoRoot = 1u << 21,
     };
     /// The pseudo-classes that follow interaction (what `applyPseudo = false` ignores).
     inline constexpr u32 kDynamicPseudoClasses = PseudoHover | PseudoFocus | PseudoActive | PseudoDisabled | PseudoFocusVisible |
@@ -818,6 +821,8 @@ export namespace experimental::gui
             return false;
         if (has(PseudoEmpty) && element.ChildCount() != 0)
             return false;
+        if (has(PseudoRoot) && element.GetParent() != nullptr && core::Cast<UIWidget>(element.GetParent()) != nullptr)
+            return false;
         const bool first = has(PseudoFirstChild) || has(PseudoOnlyChild);
         const bool last = has(PseudoLastChild) || has(PseudoOnlyChild);
         if (first && detail::PositionAmongSiblings(element, false, false) != 1)
@@ -992,6 +997,7 @@ export namespace experimental::gui
             {u8"drop-target", PseudoDropTarget},
             {u8"drag-source", PseudoDragSource},
             {u8"empty", PseudoEmpty},
+            {u8"root", PseudoRoot},
             {u8"first-child", PseudoFirstChild},
             {u8"last-child", PseudoLastChild},
             {u8"only-child", PseudoOnlyChild},

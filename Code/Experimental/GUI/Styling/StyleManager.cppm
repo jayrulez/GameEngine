@@ -433,9 +433,12 @@ export namespace experimental::gui
                 parts.PushBack(core::StringView(u8"scrollbar"));
                 parts.PushBack(core::StringView(u8"scrollbar-thumb"));
             }
+            // A part inherits from its widget, as CSS's pseudo-elements do: its custom properties
+            // (a theme's tokens, E13) and currentColor reach it.
+            const ResolvedStyle* widgetStyle = m_cache.Find(&widget);
             for (const core::StringView part : parts)
             {
-                const ResolvedStyle partStyle = ResolveFor(widget, subtrees, part, nullptr, widget.GetPartStates(part));
+                const ResolvedStyle partStyle = ResolveFor(widget, subtrees, part, widgetStyle, widget.GetPartStates(part));
                 ApplyPartStyle(widget, part, partStyle, context.Resources, context.Lengths);
             }
             return customsChanged;

@@ -21,8 +21,8 @@
 
 .ease-row { width: 590px; height: 30px; }
 .ease-name { width: 120px; height: 28px; font-family: Roboto; font-size: 14px; color: var(--muted); vertical-align: middle; }
-.track { width: 400px; height: 28px; background-color: var(--surface-2); border-radius: 14; }
-.ball { width: 24px; height: 24px; border-radius: 12; background-color: var(--accent); }
+.track { width: 400px; height: 28px; background-color: var(--shell-surface-2); border-radius: 14; }
+.ball { width: 24px; height: 24px; border-radius: 12; background-color: var(--shell-accent); }
 .e-linear { animation: slide 2s linear infinite alternate; }
 .e-inout { animation: slide 2s ease-in-out infinite alternate; }
 .e-back { animation: slide-back 2s cubic-bezier(0.68, -0.4, 0.32, 1.4) infinite alternate; }

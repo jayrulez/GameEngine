@@ -1109,7 +1109,7 @@ void GUISandbox::ApplySandboxSheet()
 {
     // The built-in theme for the widgets (the user agent's), the sandbox's look over it, and each
     // page's own sheet over that, styling its page alone.
-    m_styles.SetUserAgentSheet(gui::CSSParser::Parse(m_light ? gui::DefaultLightThemeCSS() : gui::DefaultDarkThemeCSS(), StringView(m_light ? u8"theme (light)" : u8"theme (dark)")));
+    m_styles.SetUserAgentSheet(gui::CSSParser::Parse(gui::DefaultThemeCSS(), StringView(u8"theme")));
     String path(kSandboxDir);
     path += StringView(u8"sandbox.css");
     m_styles.SetStyleSheet(gui::CSSParser::Parse(ReadText(path.AsView()).AsView(), path.AsView()));
@@ -1275,7 +1275,8 @@ void GUISandbox::ToggleTheme()
     }
     if (m_themeToggle != nullptr)
         m_themeToggle->SetText(m_light ? StringView(u8"Dark theme") : StringView(u8"Light theme"));
-    ApplySandboxSheet();
+    // The theme's light tokens come from its own media query (E13): the GUI says the user's scheme.
+    m_gui->SetColorScheme(!m_light);
 }
 
 void GUISandbox::OpenWindow()

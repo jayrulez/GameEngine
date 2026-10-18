@@ -211,7 +211,7 @@ TEST_CASE("theme: the built-in default theme restyles the standard widgets")
     root->AddChild(textfield.Get());
 
     StyleManager mgr;
-    mgr.SetStyleSheet(CSSParser::Parse(DefaultDarkThemeCSS()));
+    mgr.SetStyleSheet(CSSParser::Parse(DefaultThemeCSS()));
     mgr.ApplyTree(*root.Get());
 
     // The theme gives the button a background + padding and the textfield padding.
@@ -220,10 +220,13 @@ TEST_CASE("theme: the built-in default theme restyles the standard widgets")
     CHECK(textfield->GetBox().BackgroundColor.a > 0.0f);
     CHECK(textfield->GetPadding().Left == doctest::Approx(6.0f));
 
-    // Switching to the light theme is just swapping the sheet (hot-reload).
-    mgr.SetStyleSheet(CSSParser::Parse(DefaultLightThemeCSS()));
+    // Its tokens: the dark accent, then (the user's scheme light) the light one, from the same sheet.
+    CHECK(button->GetBox().BackgroundColor.r == doctest::Approx(0x33 / 255.0f).epsilon(0.01));
+    MediaContext light;
+    light.DarkScheme = false;
+    mgr.SetMediaContext(light);
     mgr.ApplyTree(*root.Get());
-    CHECK(button->GetBox().BackgroundColor.a > 0.0f); // restyled, still has a bg
+    CHECK(button->GetBox().BackgroundColor.r == doctest::Approx(0xcd / 255.0f).epsilon(0.01));
 }
 
 TEST_CASE("theme: pseudo-element (::part) rules resolve separately from the element style")
@@ -254,16 +257,43 @@ TEST_CASE("theme: pseudo-element (::part) rules resolve separately from the elem
 TEST_CASE("theme: the default theme carries pseudo-element part rules")
 {
     // Sanity: the built-in themes actually contain ::part rules a Slider/Window can pick up.
-    StyleSheet dark = CSSParser::Parse(DefaultDarkThemeCSS());
+    // A part inherits its widget's style (its tokens, from :root).
+    StyleSheet dark = CSSParser::Parse(DefaultThemeCSS());
     auto slider = Make<UIWidget>();
     slider->SetTag(core::StringView(u8"slider"));
+    const ResolvedStyle sliderStyle = dark.Resolve(*slider.Get(), MediaContext{});
     ResolvedStyle fill =
-        dark.Resolve(*slider.Get(), MediaContext{}, true, core::StringView(u8"fill"));
+        dark.Resolve(*slider.Get(), MediaContext{}, true, core::StringView(u8"fill"), &sliderStyle);
     CHECK(fill.Has(core::StringView(u8"background-color")));
 
     auto window = Make<UIWidget>();
     window->SetTag(core::StringView(u8"window"));
+    const ResolvedStyle windowStyle = dark.Resolve(*window.Get(), MediaContext{});
     ResolvedStyle title =
-        dark.Resolve(*window.Get(), MediaContext{}, true, core::StringView(u8"title"));
+        dark.Resolve(*window.Get(), MediaContext{}, true, core::StringView(u8"title"), &windowStyle);
     CHECK(title.Has(core::StringView(u8"background-color")));
+}
+
+TEST_CASE("theme: tokens retint everything, a subtree overrides them, and a widget token changes one control")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    auto page = Make<Panel>();
+    auto inside = Make<Button>();
+    auto outside = Make<Button>();
+    auto slider = Make<Slider>();
+    root->AddChild(page.Get());
+    root->AddChild(outside.Get());
+    root->AddChild(slider.Get());
+    page->AddChild(inside.Get());
+    page->AddClass(core::StringView(u8"special"));
+    StyleManager mgr;
+    mgr.SetUserAgentSheet(CSSParser::Parse(DefaultThemeCSS()));
+    // A game's sheet: the base accent retinted, a subtree's own accent, and one widget token.
+    mgr.SetStyleSheet(CSSParser::Parse(core::StringView(u8":root { --accent: #ff0000; --slider-fill: #00ff00; } .special { --accent: #0000ff; }")));
+    mgr.ApplyTree(*root.Get());
+    CHECK(outside->GetBox().BackgroundColor.r == doctest::Approx(1.0f));
+    CHECK(inside->GetBox().BackgroundColor.b == doctest::Approx(1.0f)); // the subtree's
+    CHECK(slider->GetPartStyle(core::StringView(u8"fill")).Box.BackgroundColor.g == doctest::Approx(1.0f)); // one control's token
+    // A part with no override reads its widget token through to the base one.
+    CHECK(slider->GetPartStyle(core::StringView(u8"track")).HasBackground);
 }

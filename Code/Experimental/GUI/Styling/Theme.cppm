@@ -3,11 +3,22 @@
 
 // GUI - :theme partition
 //
-// A theme is just a default stylesheet: built-in CSS that styles the standard widget tags plus
-// their pseudo-element parts (slider::fill, window::title, scrollbar::thumb, checkbox::mark,
-// ...). Parse one with CSSParser and set it on a StyleManager (optionally with an
-// IResourceProvider for background-image/font-family). Switching themes is just swapping the
-// sheet - the StyleManager already hot-reloads.
+// A theme is a stylesheet at the user-agent origin: built-in CSS that styles the standard widget
+// tags and their parts (slider::fill, window::title, scrollbar::thumb, checkbox::mark, ...). The
+// built-in one is written in tokens (E13 of Specs/gui-lab-evolution-2.md), custom properties on
+// :root that every widget inherits, in three layers:
+//   1. Base tokens: the palette (surfaces, controls, the accent and the text on it, text, borders,
+//      the focus ring, selection, danger, success, warning) and the metrics (radii, a spacing
+//      scale, font sizes, border and focus widths, motion's durations and easing). A theme that
+//      sets only these restyles everything consistently.
+//   2. Derived states (hover, pressed, disabled), mixed from the base with color-mix() unless a
+//      theme sets its own.
+//   3. Widget tokens: each part reads a token of its own, falling back to a base one
+//      (`button { background-color: var(--button-background, var(--accent)) }`), so a theme can
+//      change one control alone, its art too (a border-image or an SVG).
+// Light and high contrast are @media (prefers-color-scheme) and (prefers-contrast) blocks of the
+// same sheet, chosen by the host's flags (GUIContext::SetColorScheme). A game ships its own theme
+// as a sheet (overriding tokens, or importing this one), set with SetUserAgentSheet.
 
 module;
 #include "Core/Prelude.h"
@@ -21,151 +32,133 @@ namespace core = foundation::core;
 
 export namespace experimental::gui
 {
-    // Built-in dark theme.
-    [[nodiscard]] inline core::StringView DefaultDarkThemeCSS()
+    /// The built-in theme: tokens, dark by default, light and high contrast by media query.
+    [[nodiscard]] inline core::StringView DefaultThemeCSS()
     {
         return core::StringView(u8R"(
-            .panel    { background-color: #14161c; }
-            label, menuitem, menusubmenu, checkbox, radio, switch, expanderheader { color: #d2d8e0; }
-            button    { background-color: #33507a; color: #f4f7fb; padding: 9; text-align: center; transition: opacity 0.15s; }
+            /* 1. Base tokens (dark). */
+            :root {
+                --accent: #33507a; --on-accent: #f4f7fb; --accent-strong: #4a90d9; --selection: #2f5f9e; --focus-ring: #4f9cff;
+                --surface: #14161c; --surface-sunken: #14161a; --surface-raised: #1d2129; --surface-header: #252a35;
+                --control: #20242b; --control-raised: #23262e; --chrome: #1a1d24; --chrome-raised: #22262f;
+                --track: #2b2f37; --scrollbar: #1e2128; --thumb: #4a505c;
+                --text: #d2d8e0; --text-dim: #c2c9d4; --text-strong: #f0f4f8; --text-title: #e6ebf2;
+                --border: #343b49; --outline: #8a93a2; --separator: #3a3f4b; --grip: #5a6274;
+                --danger: #c0392b; --success: #3fa06a; --warning: #d9a03a; --shadow-color: rgba(0, 0, 0, 0.5);
+                --window-close-text: #aab3c2;
+                --radius-small: 3px; --radius: 6px; --radius-large: 10px;
+                --space-xs: 2px; --space-s: 4px; --space-m: 6px; --space-l: 9px; --space-xl: 14px;
+                --font-small: 12px; --font-body: 16px; --font-title: 20px; --font-heading: 28px;
+                --border-width: 1px; --focus-width: 2px;
+                --motion-fast: 0.15s; --motion-slow: 0.3s; --easing: ease;
+                /* 2. Derived states. */
+                --control-hover: color-mix(in srgb, var(--control-raised) 94%, white);
+                --chrome-hover: color-mix(in srgb, var(--chrome-raised) 90%, white);
+                --overlay-hover: rgba(255, 255, 255, 0.18);
+                --disabled-opacity: 0.45;
+            }
+            /* 3. Widgets, each part through a token of its own. */
+            .panel    { background-color: var(--panel-background, var(--surface)); }
+            label, menuitem, menusubmenu, checkbox, radio, switch, expanderheader { color: var(--label-text, var(--text)); }
+            button    { background-color: var(--button-background, var(--accent)); color: var(--button-text, var(--on-accent));
+                        padding: var(--button-padding, var(--space-l)); text-align: center; transition: opacity var(--motion-fast); }
             button:hover  { opacity: 0.9; }
             button:active { opacity: 0.78; }
-            tab           { background-color: #23262e; color: #c2c9d4; padding: 6 10; column-gap: 6; text-align: start; }
-            tab:hover     { background-color: #2b2f39; }
-            tab:checked   { background-color: #33507a; color: #f4f7fb; }
-            tab.dragging  { background-color: #4a6fa5; color: #ffffff; cursor: grabbing; }
-            tab > close   { padding: 2; border-radius: 3; }
-            tab > close:hover { background-color: rgba(255, 255, 255, 0.18); }
-            tablist       { color: #c2c9d4; padding: 6 8; }
-            tablist:hover { background-color: #2b2f39; }
-            textfield, textarea { background-color: #20242b; color: #f0f4f8; padding: 6; cursor: text; }
-            numberfield { background-color: #20242b; color: #f0f4f8; padding: 6 22 6 6; cursor: text; }
-            listbox   { background-color: #14161a; }
-            listbox::selection { background-color: #2f5f9e; }
-            listview  { background-color: #14161a; color: #d2d8e0; } /* color propagates to rows */
-            listview::selection { background-color: #2f5f9e; }
-            tableview { background-color: #14161a; color: #d2d8e0; } /* color -> body cells */
-            tableview::selection { background-color: #2f5f9e; }
-            tableheader { background-color: #23262e; }
-            tableheadercell { color: #c2c9d4; }
-            treeview  { background-color: #14161a; color: #d2d8e0; } /* color -> rows */
-            treeview::selection { background-color: #2f5f9e; }
-            combobox  { background-color: #20242b; color: #eef2f7; padding: 4; }
-            scrollview { background-color: #14161a; }
-            scrollbar  { background-color: #1e2128; }
-            scrollbar::thumb { background-color: #4a505c; }
-            window, messagebox { background-color: #1d2129; color: #d2d8e0; border: 1px solid #343b49; border-radius: 10;
-                                 box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5); }
-            window::title, messagebox::title { background-color: #252a35; }
-            window::grip  { background-color: #5a6274; }
-            titlebar > label { color: #e6ebf2; }
-            titlebar > close { color: #aab3c2; padding: 4; border-radius: 4; }
-            titlebar > close:hover { background-color: #c0392b; color: #ffffff; }
+            tab           { background-color: var(--tab-background, var(--control-raised)); color: var(--tab-text, var(--text-dim));
+                            padding: var(--space-m) 10; column-gap: var(--space-m); text-align: start; }
+            tab:hover     { background-color: var(--tab-hover-background, var(--control-hover)); }
+            tab:checked   { background-color: var(--tab-checked-background, var(--accent)); color: var(--tab-checked-text, var(--on-accent)); }
+            tab.dragging  { background-color: var(--tab-dragging-background, #4a6fa5); color: var(--tab-dragging-text, #ffffff); cursor: grabbing; }
+            tab > close   { padding: var(--space-xs); border-radius: var(--radius-small); }
+            tab > close:hover { background-color: var(--overlay-hover); }
+            tablist       { color: var(--text-dim); padding: var(--space-m) 8; }
+            tablist:hover { background-color: var(--control-hover); }
+            textfield, textarea { background-color: var(--field-background, var(--control)); color: var(--field-text, var(--text-strong));
+                                  padding: var(--space-m); cursor: text; }
+            numberfield { background-color: var(--field-background, var(--control)); color: var(--field-text, var(--text-strong));
+                          padding: var(--space-m) 22 var(--space-m) var(--space-m); cursor: text; }
+            spinbutton::arrow { background-color: var(--spinbutton-arrow); }
+            listbox   { background-color: var(--list-background, var(--surface-sunken)); }
+            listbox::selection { background-color: var(--list-selection, var(--selection)); }
+            listview  { background-color: var(--list-background, var(--surface-sunken)); color: var(--list-text, var(--text)); }
+            listview::selection { background-color: var(--list-selection, var(--selection)); }
+            tableview { background-color: var(--list-background, var(--surface-sunken)); color: var(--list-text, var(--text)); }
+            tableview::selection { background-color: var(--list-selection, var(--selection)); }
+            tableheader { background-color: var(--table-header-background, var(--control-raised)); }
+            tableheadercell { color: var(--table-header-text, var(--text-dim)); }
+            treeview  { background-color: var(--list-background, var(--surface-sunken)); color: var(--list-text, var(--text)); }
+            treeview::selection { background-color: var(--list-selection, var(--selection)); }
+            combobox  { background-color: var(--combobox-background, var(--control)); color: var(--combobox-text, var(--text-strong));
+                        padding: var(--space-s); }
+            scrollview { background-color: var(--scrollview-background, var(--surface-sunken)); }
+            scrollbar  { background-color: var(--scrollbar-background, var(--scrollbar)); }
+            scrollbar::thumb { background-color: var(--scrollbar-thumb, var(--thumb)); }
+            window, messagebox { background-color: var(--window-background, var(--surface-raised)); color: var(--window-text, var(--text));
+                                 border: var(--border-width) solid var(--window-border, var(--border)); border-radius: var(--radius-large);
+                                 box-shadow: 0 14px 36px var(--shadow-color); }
+            window::title, messagebox::title { background-color: var(--window-title-background, var(--surface-header)); }
+            window::grip  { background-color: var(--window-grip, var(--grip)); }
+            titlebar > label { color: var(--window-title-text, var(--text-title)); }
+            titlebar > close { color: var(--window-close-text, var(--outline)); padding: var(--space-s); border-radius: var(--space-s); }
+            titlebar > close:hover { background-color: var(--danger); color: #ffffff; }
             .dialogmessage { white-space: normal; }
-            .dialogbutton { background-color: #33507a; color: #f4f7fb; border-radius: 6; padding: 6 14; transition: opacity 0.15s; }
+            .dialogbutton { background-color: var(--button-background, var(--accent)); color: var(--button-text, var(--on-accent));
+                            border-radius: var(--radius); padding: var(--space-m) var(--space-xl); transition: opacity var(--motion-fast); }
             .dialogbutton:hover { opacity: 0.9; }
-            menu       { background-color: #1a1d24; }
-            menuitem::highlight, menusubmenu::highlight { background-color: #2f5f9e; }
-            menuseparator::line { background-color: #3a3f4b; }
-            menubar    { background-color: #22262f; }
-            .menubutton          { background-color: #22262f; color: #d2d8e0; padding: 6; }
-            .menubutton:hover    { background-color: #2f3644; }
-            .menubutton.selected { background-color: #33507a; color: #f4f7fb; }
-            tabbar     { background-color: #1a1d24; }
-            tabpages   { background-color: #1a1d24; }
-            slider::track { background-color: #2b2f37; }
-            slider::fill  { background-color: #4a90d9; }
-            slider::thumb { background-color: #cfd6e0; }
-            slider::focus { border-color: #4f9cff; }
-            dragpreview { background-color: #2b3444; color: #f0f4f8; border-radius: 6; opacity: 0.92; }
-            dragpreview::effect { background-color: #8fc1ff; }
-            tooltip.drophint.refused { color: #ff8a80; }
+            menu       { background-color: var(--menu-background, var(--chrome)); }
+            menuitem::highlight, menusubmenu::highlight { background-color: var(--menu-highlight, var(--selection)); }
+            menuseparator::line { background-color: var(--menu-separator, var(--separator)); }
+            menubar    { background-color: var(--menubar-background, var(--chrome-raised)); }
+            .menubutton          { background-color: var(--menubar-background, var(--chrome-raised)); color: var(--text); padding: var(--space-m); }
+            .menubutton:hover    { background-color: var(--menubar-hover, var(--chrome-hover)); }
+            .menubutton.selected { background-color: var(--menubar-selected, var(--accent)); color: var(--menubar-selected-text, var(--on-accent)); }
+            tabbar     { background-color: var(--tabbar-background, var(--chrome)); }
+            tabpages   { background-color: var(--tabpages-background, var(--chrome)); }
+            slider::track { background-color: var(--slider-track, var(--track)); }
+            slider::fill  { background-color: var(--slider-fill, var(--accent-strong)); }
+            slider::thumb { background-color: var(--slider-thumb, #cfd6e0); }
+            slider::focus { border-color: var(--focus-ring); }
+            dragpreview { background-color: var(--dragpreview-background, #2b3444); color: var(--text-strong); border-radius: var(--radius);
+                          opacity: 0.92; }
+            dragpreview::effect { background-color: var(--dragpreview-effect, #8fc1ff); }
+            tooltip.drophint.refused { color: var(--drop-refused, #ff8a80); }
             /* The focus ring: where the keyboard is (a field shows it while it has the caret). */
             button:focus-visible, combobox:focus-visible, checkbox:focus-visible, radio:focus-visible,
             switch:focus-visible, tab:focus-visible, expanderheader:focus-visible, listbox:focus-visible,
             listview:focus-visible, treeview:focus-visible, tableview:focus-visible, editablelabel:focus-visible,
-            menubar:focus-within { box-shadow: 0 0 0 2px #4f9cff; }
-            textfield:focus, textarea:focus, numberfield:focus { box-shadow: 0 0 0 2px #4f9cff; }
-            checkbox::box  { border-color: #8a93a2; }
-            checkbox::mark { background-color: #4a90d9; }
-            radio::ring { border-color: #8a93a2; }
-            radio::dot  { background-color: #4a90d9; }
-            progressbar::track { background-color: #2b2f37; }
-            progressbar::fill  { background-color: #4a90d9; }
-        )");
-    }
+            menubar:focus-within { box-shadow: 0 0 0 var(--focus-width) var(--focus-ring); }
+            textfield:focus, textarea:focus, numberfield:focus { box-shadow: 0 0 0 var(--focus-width) var(--focus-ring); }
+            checkbox::box  { border-color: var(--checkbox-box, var(--outline)); }
+            checkbox::mark { background-color: var(--checkbox-mark, var(--accent-strong)); }
+            radio::ring { border-color: var(--radio-ring, var(--outline)); }
+            radio::dot  { background-color: var(--radio-dot, var(--accent-strong)); }
+            progressbar::track { background-color: var(--progress-track, var(--track)); }
+            progressbar::fill  { background-color: var(--progress-fill, var(--accent-strong)); }
 
-    // Built-in light theme (same structure, light palette).
-    [[nodiscard]] inline core::StringView DefaultLightThemeCSS()
-    {
-        return core::StringView(u8R"(
-            .panel    { background-color: #dde3ec; }
-            label, menuitem, menusubmenu, checkbox, radio, switch, expanderheader { color: #1c2530; }
-            button    { background-color: #cdd8ea; color: #17202b; padding: 9; text-align: center; transition: opacity 0.15s; }
-            button:hover  { opacity: 0.9; }
-            button:active { opacity: 0.78; }
-            tab           { background-color: #cfd6e2; color: #3a4453; padding: 6 10; column-gap: 6; text-align: start; }
-            tab:hover     { background-color: #c2cad8; }
-            tab:checked   { background-color: #ffffff; color: #17202b; }
-            tab.dragging  { background-color: #9cc0ef; color: #17202b; cursor: grabbing; }
-            tab > close   { padding: 2; border-radius: 3; }
-            tab > close:hover { background-color: rgba(0, 0, 0, 0.12); }
-            tablist       { color: #3a4453; padding: 6 8; }
-            tablist:hover { background-color: #c2cad8; }
-            textfield, textarea { background-color: #ffffff; color: #10161d; padding: 6; cursor: text; }
-            numberfield { background-color: #ffffff; color: #10161d; padding: 6 22 6 6; cursor: text; }
-            spinbutton::arrow { background-color: #5a6474; }
-            listbox   { background-color: #f2f4f8; }
-            listbox::selection { background-color: #bcd6f4; }
-            listview  { background-color: #f2f4f8; color: #1c2530; } /* color propagates to rows */
-            listview::selection { background-color: #bcd6f4; }
-            tableview { background-color: #f2f4f8; color: #1c2530; } /* color -> body cells */
-            tableview::selection { background-color: #bcd6f4; }
-            tableheader { background-color: #cfd6e2; }
-            tableheadercell { color: #3a4453; }
-            treeview  { background-color: #f2f4f8; color: #1c2530; } /* color -> rows */
-            treeview::selection { background-color: #bcd6f4; }
-            combobox  { background-color: #ffffff; color: #10161d; padding: 4; }
-            scrollview { background-color: #f2f4f8; }
-            scrollbar  { background-color: #d5dbe4; }
-            scrollbar::thumb { background-color: #a3abb8; }
-            window, messagebox { background-color: #f6f8fb; color: #1c2530; border: 1px solid #c9d1dd; border-radius: 10;
-                                 box-shadow: 0 14px 36px rgba(20, 30, 50, 0.25); }
-            window::title, messagebox::title { background-color: #e7ebf2; }
-            window::grip  { background-color: #9aa4b4; }
-            titlebar > label { color: #17202b; }
-            titlebar > close { color: #5a6474; padding: 4; border-radius: 4; }
-            titlebar > close:hover { background-color: #c0392b; color: #ffffff; }
-            .dialogmessage { white-space: normal; }
-            .dialogbutton { background-color: #cdd8ea; color: #17202b; border-radius: 6; padding: 6 14; transition: opacity 0.15s; }
-            .dialogbutton:hover { opacity: 0.9; }
-            menu       { background-color: #f2f4f8; }
-            menuitem::highlight, menusubmenu::highlight { background-color: #9cc0ef; }
-            menuseparator::line { background-color: #c2c8d2; }
-            menubar    { background-color: #d0d6e0; }
-            .menubutton          { background-color: #d0d6e0; color: #1c2530; padding: 6; }
-            .menubutton:hover    { background-color: #bcc4d2; }
-            .menubutton.selected { background-color: #9cc0ef; color: #17202b; }
-            tabbar     { background-color: #d8dee8; }
-            tabpages   { background-color: #e6eaf1; }
-            slider::track { background-color: #c2cad6; }
-            slider::fill  { background-color: #2f6fb0; }
-            slider::thumb { background-color: #3a4658; }
-            slider::focus { border-color: #2f7de1; }
-            dragpreview { background-color: #ffffff; color: #17202b; border-radius: 6; opacity: 0.92; }
-            dragpreview::effect { background-color: #2f6fb0; }
-            tooltip.drophint.refused { color: #c0392b; }
-            button:focus-visible, combobox:focus-visible, checkbox:focus-visible, radio:focus-visible,
-            switch:focus-visible, tab:focus-visible, expanderheader:focus-visible, listbox:focus-visible,
-            listview:focus-visible, treeview:focus-visible, tableview:focus-visible, editablelabel:focus-visible,
-            menubar:focus-within { box-shadow: 0 0 0 2px #2f7de1; }
-            textfield:focus, textarea:focus, numberfield:focus { box-shadow: 0 0 0 2px #2f7de1; }
-            checkbox::box  { border-color: #5a6474; }
-            checkbox::mark { background-color: #2f6fb0; }
-            radio::ring { border-color: #5a6474; }
-            radio::dot  { background-color: #2f6fb0; }
-            progressbar::track { background-color: #c2cad6; }
-            progressbar::fill  { background-color: #2f6fb0; }
+            /* Light: the base tokens again, and the widget tokens whose light look is not the base's. */
+            @media (prefers-color-scheme: light) {
+                :root {
+                    --accent: #cdd8ea; --on-accent: #17202b; --accent-strong: #2f6fb0; --selection: #bcd6f4; --focus-ring: #2f7de1;
+                    --surface: #dde3ec; --surface-sunken: #f2f4f8; --surface-raised: #f6f8fb; --surface-header: #e7ebf2;
+                    --control: #ffffff; --control-raised: #cfd6e2; --chrome: #f2f4f8; --chrome-raised: #d0d6e0;
+                    --track: #c2cad6; --scrollbar: #d5dbe4; --thumb: #a3abb8;
+                    --text: #1c2530; --text-dim: #3a4453; --text-strong: #10161d; --text-title: #17202b;
+                    --border: #c9d1dd; --outline: #5a6474; --separator: #c2c8d2; --grip: #9aa4b4;
+                    --shadow-color: rgba(20, 30, 50, 0.25);
+                    --control-hover: color-mix(in srgb, var(--control-raised) 94%, black);
+                    --chrome-hover: color-mix(in srgb, var(--chrome-raised) 92%, black);
+                    --overlay-hover: rgba(0, 0, 0, 0.12);
+                    --tab-checked-background: #ffffff; --tab-checked-text: #17202b; --tab-dragging-background: #9cc0ef; --tab-dragging-text: #17202b;
+                    --menu-highlight: #9cc0ef; --menubar-selected: #9cc0ef; --menubar-selected-text: #17202b;
+                    --tabbar-background: #d8dee8; --tabpages-background: #e6eaf1; --slider-thumb: #3a4658;
+                    --spinbutton-arrow: #5a6474; --dragpreview-background: #ffffff; --dragpreview-effect: #2f6fb0;
+                    --drop-refused: #c0392b; --window-title-text: #17202b; --window-close-text: #5a6474;
+                }
+            }
+            /* More contrast: stronger outlines, brighter text, a wider focus ring. */
+            @media (prefers-contrast: more) {
+                :root { --border: #9aa4b4; --outline: #c2c9d4; --separator: #8a93a2; --text-dim: var(--text); --focus-width: 3px; }
+            }
         )");
     }
 }

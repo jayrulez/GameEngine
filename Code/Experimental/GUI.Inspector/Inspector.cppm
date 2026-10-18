@@ -113,7 +113,7 @@ export namespace experimental::gui::inspector
             m_font = fontService != nullptr ? fontService->GetFont(m_options.FontFamily.AsView(), m_options.FontSize) : nullptr;
             m_root->SetDebugFont(m_font);
             m_styles.SetFontService(fontService);
-            m_styles.SetUserAgentSheet(CSSParser::Parse(DefaultDarkThemeCSS(), core::StringView(u8"theme (dark)")));
+            m_styles.SetUserAgentSheet(CSSParser::Parse(DefaultThemeCSS(), core::StringView(u8"theme")));
             m_styles.SetStyleSheet(CSSParser::Parse(Sheet().AsView(), core::StringView(u8"inspector")));
             Build();
         }

@@ -274,7 +274,7 @@ TEST_CASE("messagebox: under the theme, its message wraps (styled after it is wr
     auto shortBox = make(u8"Short.");
     auto longBox = make(u8"A much longer message that cannot fit on one line of a dialog this wide, so it wraps onto several lines, and the dialog grows to hold them all.");
     StyleManager styles;
-    styles.SetUserAgentSheet(CSSParser::Parse(DefaultDarkThemeCSS()));
+    styles.SetUserAgentSheet(CSSParser::Parse(DefaultThemeCSS()));
     styles.ApplyTree(*root.Get());
     (void)root->UpdateLayout();
     CHECK(longBox->GetSize().y >= shortBox->GetSize().y + 24.0f); // three lines of 12 px, not one

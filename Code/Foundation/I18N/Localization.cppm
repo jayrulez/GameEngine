@@ -304,13 +304,14 @@ export namespace foundation::i18n
             }
             return 0;
         }
-        // An ASCII letter's accented look-alike (empty for anything else).
+        // An ASCII letter's accented look-alike (empty for anything else, and for a letter with
+        // none in Latin-1 or Latin Extended-A: a font baked for European languages draws them all).
         [[nodiscard]] static StringView Accented(utf8char c) noexcept
         {
-            static constexpr const char8_t* kLower[26] = {u8"á", u8"ƀ", u8"ç", u8"ð", u8"é", u8"ƒ", u8"ĝ", u8"ĥ", u8"î", u8"ĵ", u8"ķ", u8"ļ", u8"ɱ",
-                                                          u8"ñ", u8"ö", u8"þ", u8"ǫ", u8"ŕ", u8"š", u8"ţ", u8"û", u8"ṽ", u8"ŵ", u8"ẋ", u8"ý", u8"ž"};
-            static constexpr const char8_t* kUpper[26] = {u8"Å", u8"Ɓ", u8"Ç", u8"Ð", u8"É", u8"Ƒ", u8"Ĝ", u8"Ĥ", u8"Î", u8"Ĵ", u8"Ķ", u8"Ļ", u8"Ṁ",
-                                                          u8"Ñ", u8"Ö", u8"Þ", u8"Ǫ", u8"Ŕ", u8"Š", u8"Ţ", u8"Û", u8"Ṽ", u8"Ŵ", u8"Ẋ", u8"Ý", u8"Ž"};
+            static constexpr const char8_t* kLower[26] = {u8"á", u8"", u8"ç", u8"ð", u8"é", u8"", u8"ĝ", u8"ĥ", u8"î", u8"ĵ", u8"ķ", u8"ļ", u8"",
+                                                          u8"ñ", u8"ö", u8"þ", u8"", u8"ŕ", u8"š", u8"ţ", u8"û", u8"", u8"ŵ", u8"", u8"ý", u8"ž"};
+            static constexpr const char8_t* kUpper[26] = {u8"Å", u8"", u8"Ç", u8"Ð", u8"É", u8"", u8"Ĝ", u8"Ĥ", u8"Î", u8"Ĵ", u8"Ķ", u8"Ļ", u8"",
+                                                          u8"Ñ", u8"Ö", u8"Þ", u8"", u8"Ŕ", u8"Š", u8"Ţ", u8"Û", u8"", u8"Ŵ", u8"", u8"Ý", u8"Ž"};
             if (c >= u8'a' && c <= u8'z')
                 return StringView(kLower[c - u8'a']);
             if (c >= u8'A' && c <= u8'Z')

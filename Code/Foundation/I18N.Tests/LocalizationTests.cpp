@@ -153,14 +153,14 @@ TEST_CASE("i18n.localization: pseudolocalization transforms text, leaving placeh
     pseudo.Lengthen = 0.0f;
     pseudo.Untouched.PushBack(UntouchedSpan{String(u8"["), String(u8"]")});
     loc.SetPseudolocalization(pseudo);
-    CHECK(loc.Text(u8"msg") == StringView(u8"[Ĥî {0} [b]ẋ[/b]]"));
+    CHECK(loc.Text(u8"msg") == StringView(u8"[Ĥî {0} [b]x[/b]]"));
     pseudo.Lengthen = 0.5f;
     pseudo.Brackets = false;
     pseudo.Untouched.Clear();
     pseudo.ShowKeys = true;
     loc.SetPseudolocalization(pseudo);
     REQUIRE(t.Set(u8"two", u8"en", u8"ab"));
-    CHECK(loc.Text(u8"two") == StringView(u8"two: áƀ~"));        // half again as long
+    CHECK(loc.Text(u8"two") == StringView(u8"two: áb~"));        // half again as long
     CHECK(loc.Text(u8"gone") == StringView(u8"gone: ĝöñé~~"));    // a miss transformed too
 }
 

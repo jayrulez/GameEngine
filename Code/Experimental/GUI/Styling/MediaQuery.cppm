@@ -6,8 +6,9 @@
 // MediaQuery + MediaContext: `@media` condition evaluation. Ported from eepp's css/MediaQuery
 // (common subset): width/height feature tests (min-/max-/exact) combined with `and`. A rule
 // carries an (optional) MediaQuery; StyleSheet::Resolve skips rules whose query doesn't match
-// the supplied MediaContext (viewport size / dpi). Deferred: orientation, aspect-ratio, `or`
-// / comma lists, `not`, resolution units.
+// the supplied MediaContext (viewport size / dpi); a query naming any other feature matches
+// nothing. Deferred: orientation, aspect-ratio, `or`
+// / comma lists, `not`.
 
 module;
 #include "Core/Prelude.h"
@@ -49,18 +50,22 @@ export namespace experimental::gui
         f32 Value;
     };
 
-    // A conjunction of feature tests (all must hold). An empty query always matches.
+    // A conjunction of feature tests (all must hold). An empty query always matches; one with a
+    // feature the lab does not know never does (CSS's "not all"), so a rule written for a feature
+    // it cannot test is not applied everywhere.
     class MediaQuery
     {
     public:
         MediaQuery() = default;
         explicit MediaQuery(core::StringView text) { Parse(text); }
 
-        [[nodiscard]] bool IsEmpty() const noexcept { return m_features.Size() == 0; }
+        [[nodiscard]] bool IsEmpty() const noexcept { return m_features.Size() == 0 && !m_unknown; }
         [[nodiscard]] usize FeatureCount() const noexcept { return m_features.Size(); }
 
         [[nodiscard]] bool Evaluate(const MediaContext& context) const
         {
+            if (m_unknown)
+                return false;
             for (const MediaFeature& f : m_features)
                 if (!EvaluateFeature(f, context))
                     return false;
@@ -126,7 +131,10 @@ export namespace experimental::gui
                     break;
                 }
             if (colon >= group.Size())
+            {
+                m_unknown = true; // a boolean feature ("(orientation)"): none is known
                 return;
+            }
 
             const core::StringView name = core::Trim(group.SubStr(0, colon));
             const core::StringView text = core::Trim(group.SubStr(colon + 1, group.Size() - colon - 1));
@@ -135,7 +143,10 @@ export namespace experimental::gui
                                     name == core::StringView(u8"resolution");
             const Optional<f32> value = resolution ? ParseResolution(text) : ParseLength(text);
             if (!value.HasValue())
+            {
+                m_unknown = true; // a value it cannot read (`orientation: landscape`)
                 return;
+            }
 
             MediaFeatureType type;
             if (name == core::StringView(u8"min-width"))
@@ -157,7 +168,10 @@ export namespace experimental::gui
             else if (name == core::StringView(u8"resolution"))
                 type = MediaFeatureType::Resolution;
             else
-                return; // unknown feature ignored
+            {
+                m_unknown = true; // a feature it does not know
+                return;
+            }
 
             m_features.PushBack(MediaFeature{type, value.Value()});
         }
@@ -183,5 +197,6 @@ export namespace experimental::gui
         }
 
         Array<MediaFeature> m_features;
+        bool m_unknown = false; // a feature it cannot test: the query matches nothing
     };
 }

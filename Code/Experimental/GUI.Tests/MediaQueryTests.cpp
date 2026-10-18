@@ -86,3 +86,14 @@ TEST_CASE("media-query: multiple rules inside one @media block")
           SV(u8"red"));
     CHECK_FALSE(sheet.Resolve(*btn.Get(), MediaContext{400.0f, 0.0f, 96.0f}).Has(SV(u8"color")));
 }
+
+TEST_CASE("media-query: a feature it does not know matches nothing, rather than everything")
+{
+    const MediaContext wide{800.0f, 600.0f, 96.0f};
+    CHECK_FALSE(MediaQuery(SV(u8"(orientation: landscape)")).Evaluate(wide));
+    CHECK_FALSE(MediaQuery(SV(u8"(prefers-reduced-motion)")).Evaluate(wide));
+    CHECK_FALSE(MediaQuery(SV(u8"(min-width: 600px) and (hover: hover)")).Evaluate(wide));
+    CHECK(MediaQuery(SV(u8"(min-width: 600px)")).Evaluate(wide));
+    StyleSheet sheet = CSSParser::Parse(SV(u8"button { color: black; } @media (orientation: landscape) { button { color: red; } }"));
+    CHECK(sheet.Resolve(*Widget(u8"button").Get(), wide).Get(SV(u8"color")) == SV(u8"black"));
+}

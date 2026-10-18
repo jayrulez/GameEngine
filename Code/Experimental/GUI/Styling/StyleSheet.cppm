@@ -162,14 +162,18 @@ export namespace experimental::gui
             for (ResolvedProperty& p : written)
                 if (IsCustomProperty(p.Name.AsView()))
                     Put(p.Name.AsView(), p.Value.AsView(), StyleValue{}, p.Important);
+            // currentColor (E13 of Specs/gui-lab-evolution-2.md): the nearest `color` declared here
+            // or above, kept as a custom property (which inherits) so every element finds it.
+            for (const ResolvedProperty& p : written)
+                if (p.Name.AsView() == core::StringView(u8"color"))
+                    SetCurrentColor(p.Value.AsView(), inherited);
             for (const ResolvedProperty& p : written)
             {
                 if (IsCustomProperty(p.Name.AsView()))
                     continue;
                 core::String text;
-                if (!Substitute(p.Value.AsView(), inherited, text))
-                    continue;
-                SetDeclaration(p.Name.AsView(), text.AsView(), p.Important);
+                if (ResolveText(p.Name.AsView(), p.Value.AsView(), inherited, text))
+                    SetDeclaration(p.Name.AsView(), text.AsView(), p.Important);
             }
             m_finalized = true;
         }
@@ -218,6 +222,73 @@ export namespace experimental::gui
                 return {};
             };
             return SubstituteVariables(value, lookup, out);
+        }
+
+        /// A declaration's text as it applies here: var() substituted, then currentColor (the
+        /// nearest declared colour; for `color` itself, the parent's). False when either cannot.
+        [[nodiscard]] bool ResolveText(core::StringView name, core::StringView value, const ResolvedStyle* inherited, core::String& out) const
+        {
+            core::String text;
+            if (!Substitute(value, inherited, text))
+                return false;
+            if (!HasCurrentColor(text.AsView()))
+            {
+                out = Move(text);
+                return true;
+            }
+            return ReplaceCurrentColor(text.AsView(), name == core::StringView(u8"color") ? inherited : this, out);
+        }
+        /// Records the colour currentColor reads here: `color`'s winning text among `declarations`
+        /// (name, value, important, in cascade order), resolved; none declared: the parent's stays.
+        void SetCurrentColor(core::StringView colorText, const ResolvedStyle* inherited)
+        {
+            core::String resolved;
+            if (ResolveText(core::StringView(u8"color"), colorText, inherited, resolved))
+                Put(kCurrentColorProperty, resolved.AsView(), StyleValue{}, false);
+        }
+        [[nodiscard]] static bool HasCurrentColor(core::StringView value)
+        {
+            core::String ignored;
+            return !ReplaceCurrentColor(value, nullptr, ignored);
+        }
+
+        /// Where currentColor reads the nearest declared `color` (a custom property: it inherits).
+        static constexpr const char8_t* kCurrentColorProperty = u8"--gui-current-color";
+
+        /// `value` with each currentColor (in any case) replaced by `from`'s nearest declared colour;
+        /// false when it has one and no colour was declared.
+        [[nodiscard]] static bool ReplaceCurrentColor(core::StringView value, const ResolvedStyle* from, core::String& out)
+        {
+            static constexpr core::StringView kWord(u8"currentcolor");
+            const auto at = [&](usize i)
+            {
+                if (i + kWord.Size() > value.Size())
+                    return false;
+                for (usize k = 0; k < kWord.Size(); ++k)
+                {
+                    char8_t c = value[i + k];
+                    if (c >= u8'A' && c <= u8'Z')
+                        c = static_cast<char8_t>(c - u8'A' + u8'a');
+                    if (c != kWord[k])
+                        return false;
+                }
+                return true;
+            };
+            out = core::String{};
+            for (usize i = 0; i < value.Size();)
+            {
+                if (at(i))
+                {
+                    const ResolvedProperty* color = from != nullptr ? from->Find(core::StringView(kCurrentColorProperty)) : nullptr;
+                    if (color == nullptr)
+                        return false;
+                    out.Append(color->Value.AsView());
+                    i += kWord.Size();
+                    continue;
+                }
+                out.PushBack(value[i++]);
+            }
+            return true;
         }
 
         /// This style's custom properties and `parent`'s it does not set (custom properties inherit).
@@ -426,6 +497,22 @@ export namespace experimental::gui
                     out.SetParsed(d.Name.AsView(), d.Value.AsView(), StyleValue{}, false);
             if (inherited != nullptr)
                 out.InheritCustomProperties(*inherited);
+            // currentColor's colour (E13): the winning `color` here, before anything reads it.
+            {
+                const StyleProperty* winner = nullptr;
+                core::StringView inlineColor;
+                for (const StyleRuleMatch& m : matches)
+                    for (const StyleProperty& p : m.Rule->Properties())
+                        if (p.Name.AsView() == core::StringView(u8"color") && (winner == nullptr || p.Important || !winner->Important))
+                            winner = &p;
+                for (const InlineStyleDeclaration& d : inlineStyle)
+                    if (d.Name.AsView() == core::StringView(u8"color") && (winner == nullptr || !winner->Important))
+                        inlineColor = d.Value.AsView();
+                if (inlineColor.Size() != 0)
+                    out.SetCurrentColor(inlineColor, inherited);
+                else if (winner != nullptr)
+                    out.SetCurrentColor(winner->Value.AsView(), inherited);
+            }
             for (const StyleRuleMatch& m : matches)
             {
                 for (const StyleProperty& p : m.Rule->Properties())
@@ -441,7 +528,7 @@ export namespace experimental::gui
                         continue;
                     }
                     core::String text;
-                    if (out.Substitute(p.Value.AsView(), nullptr, text))
+                    if (out.ResolveText(p.Name.AsView(), p.Value.AsView(), inherited, text))
                         out.SetDeclaration(p.Name.AsView(), text.AsView(), p.Important);
                 }
             }
@@ -450,7 +537,7 @@ export namespace experimental::gui
                 if (ResolvedStyle::IsCustomProperty(d.Name.AsView()))
                     continue;
                 core::String text;
-                if (out.Substitute(d.Value.AsView(), nullptr, text))
+                if (out.ResolveText(d.Name.AsView(), d.Value.AsView(), inherited, text))
                     out.SetDeclaration(d.Name.AsView(), text.AsView(), false);
             }
             return out;
@@ -540,6 +627,8 @@ export namespace experimental::gui
             for (usize i = 0; i + 3 < p.Value.Size(); ++i)
                 if (p.Value.AsView().SubStr(i, 4) == core::StringView(u8"var("))
                     return; // re-substituted each cascade
+            if (ResolvedStyle::HasCurrentColor(p.Value.AsView()))
+                return; // its colour is each element's
             Array<StyleLonghand> longhands;
             if (!ExpandStyleShorthand(p.Name.AsView(), p.Value.AsView(), longhands))
             {

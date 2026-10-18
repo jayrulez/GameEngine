@@ -389,11 +389,147 @@ export namespace experimental::gui
         return {};
     }
 
+    namespace detail
+    {
+        // The arguments of a colour function, split at commas or, failing that, spaces (a `/`
+        // before an alpha read as a separator).
+        inline usize ColorArguments(core::StringView inside, core::StringView (&out)[4])
+        {
+            bool comma = false;
+            for (usize i = 0; i < inside.Size(); ++i)
+                comma = comma || inside[i] == u8',';
+            usize n = 0;
+            usize start = 0;
+            for (usize i = 0; i <= inside.Size() && n < 4; ++i)
+            {
+                const bool split = i == inside.Size() || (comma ? inside[i] == u8',' : (inside[i] == u8' ' || inside[i] == u8'/'));
+                if (!split)
+                    continue;
+                const core::StringView part = Trim(inside.SubStr(start, i - start));
+                if (part.Size() != 0)
+                    out[n++] = part;
+                start = i + 1;
+            }
+            return n;
+        }
+        // A number, or a percentage as its fraction of `full` (an alpha: of 1; a saturation: of 100).
+        inline Optional<f32> NumberOrPercent(core::StringView t, f32 full)
+        {
+            if (t.Size() > 1 && t[t.Size() - 1] == u8'%')
+            {
+                const Optional<f32> v = ParseLength(t.SubStr(0, t.Size() - 1));
+                return v.HasValue() ? Optional<f32>(v.Value() * full / 100.0f) : Optional<f32>{};
+            }
+            return ParseLength(t);
+        }
+        // hsl() to rgb (CSS Color 4's algorithm), hue in degrees, saturation and lightness 0 to 1.
+        inline Color HslToRgb(f32 h, f32 s, f32 l, f32 a)
+        {
+            h = h - 360.0f * static_cast<f32>(static_cast<i32>(h / 360.0f));
+            if (h < 0.0f)
+                h += 360.0f;
+            const auto f = [&](f32 n)
+            {
+                f32 k = n + h / 30.0f;
+                k = k - 12.0f * static_cast<f32>(static_cast<i32>(k / 12.0f));
+                const f32 amount = s * Min(l, 1.0f - l);
+                return l - amount * Max(-1.0f, Min(Min(k - 3.0f, 9.0f - k), 1.0f));
+            };
+            return Color{f(0.0f), f(8.0f), f(4.0f), a};
+        }
+    }
+
     [[nodiscard]] inline Optional<Color> ParseColor(core::StringView value)
     {
         const core::StringView s = Trim(value);
         if (s.Size() == 0)
             return {};
+        const auto function = [&](const char8_t* name, core::StringView& inside)
+        {
+            const core::StringView n(name);
+            if (s.Size() <= n.Size() + 1 || s.SubStr(0, n.Size()) != n || s[n.Size()] != u8'(' || s[s.Size() - 1] != u8')')
+                return false;
+            inside = s.SubStr(n.Size() + 1, s.Size() - n.Size() - 2);
+            return true;
+        };
+        core::StringView inside;
+        // hsl() / hsla() (E13 of Specs/gui-lab-evolution-2.md): hue in degrees (deg or none),
+        // saturation and lightness as percentages, alpha a number or a percentage.
+        if (function(u8"hsl", inside) || function(u8"hsla", inside))
+        {
+            core::StringView args[4];
+            const usize n = detail::ColorArguments(inside, args);
+            if (n < 3)
+                return {};
+            core::StringView hue = args[0];
+            if (hue.Size() > 3 && hue.SubStr(hue.Size() - 3, 3) == core::StringView(u8"deg"))
+                hue = hue.SubStr(0, hue.Size() - 3);
+            const Optional<f32> h = ParseLength(hue);
+            const Optional<f32> sat = detail::NumberOrPercent(args[1], 100.0f);
+            const Optional<f32> light = detail::NumberOrPercent(args[2], 100.0f);
+            const Optional<f32> alpha = n > 3 ? detail::NumberOrPercent(args[3], 1.0f) : Optional<f32>(1.0f);
+            if (!h.HasValue() || !sat.HasValue() || !light.HasValue() || !alpha.HasValue())
+                return {};
+            return detail::HslToRgb(h.Value(), Clamp(sat.Value() / 100.0f, 0.0f, 1.0f), Clamp(light.Value() / 100.0f, 0.0f, 1.0f),
+                                    Clamp(alpha.Value(), 0.0f, 1.0f));
+        }
+        // color-mix(in srgb, A [p%], B [q%]) (E13): premultiplied by alpha, the percentages made to
+        // sum to 100 (one left out is the rest; a sum under 100 scales the alpha).
+        if (function(u8"color-mix", inside))
+        {
+            core::StringView parts[3];
+            usize n = 0, start = 0, depth = 0;
+            for (usize i = 0; i <= inside.Size() && n < 3; ++i)
+            {
+                if (i < inside.Size() && inside[i] == u8'(')
+                    ++depth;
+                else if (i < inside.Size() && inside[i] == u8')' && depth > 0)
+                    --depth;
+                else if (i == inside.Size() || (inside[i] == u8',' && depth == 0))
+                {
+                    parts[n++] = Trim(inside.SubStr(start, i - start));
+                    start = i + 1;
+                }
+            }
+            if (n != 3 || (parts[0] != core::StringView(u8"in srgb") && parts[0] != core::StringView(u8"in srgb-linear")))
+                return {};
+            Color colors[2];
+            Optional<f32> amounts[2];
+            for (usize k = 0; k < 2; ++k)
+            {
+                core::StringView part = parts[k + 1];
+                usize space = part.Size();
+                for (usize i = part.Size(); i-- > 0;)
+                    if (part[i] == u8' ')
+                    {
+                        space = i;
+                        break;
+                    }
+                if (space < part.Size() && part[part.Size() - 1] == u8'%')
+                {
+                    amounts[k] = detail::NumberOrPercent(part.SubStr(space + 1, part.Size() - space - 1), 100.0f);
+                    part = Trim(part.SubStr(0, space));
+                }
+                const Optional<Color> c = ParseColor(part);
+                if (!c.HasValue())
+                    return {};
+                colors[k] = c.Value();
+            }
+            f32 p1 = amounts[0].HasValue() ? amounts[0].Value() : (amounts[1].HasValue() ? 100.0f - amounts[1].Value() : 50.0f);
+            f32 p2 = amounts[1].HasValue() ? amounts[1].Value() : 100.0f - p1;
+            const f32 sum = p1 + p2;
+            if (sum <= 0.0f)
+                return {};
+            const f32 scaleAlpha = Min(sum, 100.0f) / 100.0f;
+            p1 /= sum;
+            p2 /= sum;
+            const f32 a = colors[0].a * p1 + colors[1].a * p2;
+            if (a <= 0.0f)
+                return Color{0.0f, 0.0f, 0.0f, 0.0f};
+            const auto channel = [&](f32 x, f32 y) { return (x * colors[0].a * p1 + y * colors[1].a * p2) / a; };
+            return Color{channel(colors[0].r, colors[1].r), channel(colors[0].g, colors[1].g), channel(colors[0].b, colors[1].b),
+                         a * scaleAlpha};
+        }
 
         // #hex
         if (s[0] == u8'#')

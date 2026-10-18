@@ -51,6 +51,7 @@ add_executable(GUI.Tests
     OverflowWrapTests.cpp
     KeyboardTests.cpp
     CalcTests.cpp
+    ColorFunctionTests.cpp
     AccessibilityTests.cpp
     EffectsTests.cpp
     ReactiveTests.cpp

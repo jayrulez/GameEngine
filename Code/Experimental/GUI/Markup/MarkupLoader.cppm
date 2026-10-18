@@ -122,7 +122,18 @@ export namespace experimental::gui
             for (xml::XmlAttribute* attr : element.Attributes())
             {
                 const core::StringView name = attr->Name();
-                const core::StringView value = attr->Value();
+                core::StringView value = attr->Value();
+                // A translated text (E9a): `text="@menu.play"`, its count and arguments in
+                // `text-count` and `text-args` (each a value or a {{binding}}); `@@` is a literal @.
+                if (IsTranslationExtra(name))
+                    continue;
+                if (value.Size() > 1 && value[0] == u8'@')
+                {
+                    if (value[1] == u8'@')
+                        value = value.SubStr(1, value.Size() - 1);
+                    else if (BindTranslated(element, *widget, name, value.SubStr(1, value.Size() - 1)))
+                        continue;
+                }
                 if (name == core::StringView(u8"id"))
                 {
                     if (uiwidget != nullptr)
@@ -214,6 +225,48 @@ export namespace experimental::gui
         // value as it is (and writes it back where the property allows); text around names
         // follows the text built from them. False when nothing bound (no such property, or a
         // malformed template), so the attribute is handled as written.
+        // `text-count` and `text-args` belong to `text`'s translation (when `text` is a key).
+        [[nodiscard]] static bool IsTranslationExtra(core::StringView name) noexcept
+        {
+            const auto ends = [name](core::StringView suffix)
+            { return name.Size() > suffix.Size() && name.SubStr(name.Size() - suffix.Size(), suffix.Size()) == suffix; };
+            return ends(core::StringView(u8"-count")) || ends(core::StringView(u8"-args"));
+        }
+        // One argument: {{name}} reads the GUI's data, anything else is itself.
+        [[nodiscard]] static Node::TranslationArgument TranslationArgumentOf(core::StringView text)
+        {
+            text = core::Trim(text);
+            if (text.Size() > 4 && text.SubStr(0, 2) == core::StringView(u8"{{") && text.SubStr(text.Size() - 2, 2) == core::StringView(u8"}}"))
+                return Node::TranslationArgument{core::String(core::Trim(text.SubStr(2, text.Size() - 4))), true};
+            return Node::TranslationArgument{core::String(text), false};
+        }
+        bool BindTranslated(xml::XmlElement& element, Node& node, core::StringView property, core::StringView key)
+        {
+            core::String countName(property);
+            countName.Append(core::StringView(u8"-count"));
+            core::String argsName(property);
+            argsName.Append(core::StringView(u8"-args"));
+            Optional<Node::TranslationArgument> count;
+            Array<Node::TranslationArgument> args;
+            for (xml::XmlAttribute* attr : element.Attributes())
+            {
+                if (attr->Name() == countName.AsView())
+                    count = TranslationArgumentOf(attr->Value());
+                else if (attr->Name() == argsName.AsView())
+                {
+                    const core::StringView list = attr->Value();
+                    usize start = 0;
+                    for (usize i = 0; i <= list.Size(); ++i)
+                        if (i == list.Size() || list[i] == u8',')
+                        {
+                            args.PushBack(TranslationArgumentOf(list.SubStr(start, i - start)));
+                            start = i + 1;
+                        }
+                }
+            }
+            return node.BindTranslation(property, key, m_data, core::Move(count), core::Move(args));
+        }
+
         bool Bind(Node& node, core::StringView property, core::StringView value)
         {
             Array<MarkupTemplatePart> parts;

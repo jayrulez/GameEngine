@@ -75,6 +75,7 @@ export namespace experimental::gui::inspector
         core::String Name;    ///< as the type names it
         core::String CssName; ///< as markup and sheets name it (empty when they cannot set it)
         core::String Value;   ///< as text (empty when it has none)
+        core::String Key;     ///< the key it is translated from (E9a; empty when it is not)
         bool ReadOnly = false;
     };
 
@@ -149,6 +150,8 @@ export namespace experimental::gui::inspector
                     if (const core::String* name = css->value.TryGet<core::String>())
                         value.CssName = *name;
                 value.ReadOnly = (static_cast<u32>(property.flags) & static_cast<u32>(core::PropertyFlags::ReadOnly)) != 0;
+                if (const core::String* key = node.TranslationKey(value.Name.AsView()))
+                    value.Key = *key;
                 const core::Variant now = core::GetProperty(property, core::Instance::From(const_cast<Node*>(&node)));
                 const core::Variant text = ConvertVariant(now, core::TypeOf<core::String>());
                 if (const core::String* s = text.TryGet<core::String>())

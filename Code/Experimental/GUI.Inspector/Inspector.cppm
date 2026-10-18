@@ -697,7 +697,9 @@ export namespace experimental::gui::inspector
             for (const ReflectedValue& p : d.Properties)
             {
                 RefPtr<Panel> row = Add<Panel>(body, core::StringView(u8"iprop"));
-                (void)Text(*row, {}, p.CssName.Size() != 0 ? p.CssName.AsView() : p.Name.AsView());
+                // A translated one names its key ("text @menu.play").
+                const core::StringView shown = p.CssName.Size() != 0 ? p.CssName.AsView() : p.Name.AsView();
+                (void)Text(*row, {}, p.Key.Size() != 0 ? core::Format(u8"{} @{}", shown, p.Key).AsView() : shown);
                 if (p.ReadOnly)
                 {
                     (void)Text(*row, core::StringView(u8"idim"), p.Value.AsView());

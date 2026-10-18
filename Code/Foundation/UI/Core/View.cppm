@@ -48,6 +48,7 @@ import :style_value;
 import :style_selector;
 import :style_rule;
 import :style_sheet;
+import :event;      // OnAnimationEnd, OnAnimationIteration
 import :event_args; // MouseEventArgs/KeyEventArgs/MouseWheelEventArgs/TextInputEventArgs
 import :iaccelerator_handler;
 import :itooltip_provider; // pattern-A tooltip content provider (View::AsTooltipProvider())
@@ -571,6 +572,12 @@ export namespace foundation::ui
         [[nodiscard]] usize ActiveTransitionCount() const noexcept;
         /// Animations running (not finished) on the view.
         [[nodiscard]] usize RunningAnimationCount() const noexcept;
+        /// A sheet's animation on the view ran its last iteration (an infinite one never does), and
+        /// one began another iteration; each with its @keyframes' name. Delivered through the
+        /// context's mutation queue after the frame's tick, never inside it, so a handler may change
+        /// the tree (at once without a context).
+        Event<void(View*, StringView)> OnAnimationEnd;
+        Event<void(View*, StringView)> OnAnimationIteration;
         [[nodiscard]] bool IsTransitioning() const noexcept;
         /// Advance every running transition by `deltaTime` and mark damage; returns whether
         /// any is still running. Called by UIContext::BeginFrame.
@@ -1020,6 +1027,8 @@ export namespace foundation::ui
         /// Starts, keeps or ends the running animations to match the cascade's `animation`
         /// (after a style recompute).
         void SyncAnimations();
+        /// Queues OnAnimationEnd (or OnAnimationIteration) for the named animation.
+        void DeliverAnimationEvent(bool ended, const String& name);
         /// The @keyframes of this name the view's sheets hold: the nearest local sheet's, else
         /// the context's.
         [[nodiscard]] const KeyframesRule* FindKeyframes(StringView name) const;

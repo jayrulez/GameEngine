@@ -49,6 +49,48 @@ namespace
     };
 }
 
+namespace
+{
+    // Keeps the name the last call passed.
+    class NamingDelegate final : public foundation::script::IScriptDelegate
+    {
+    public:
+        int calls = 0;
+        String name;
+        Result<Variant> Invoke(Span<Variant> args) override
+        {
+            ++calls;
+            if (!args.IsEmpty())
+            {
+                if (const String* text = args[0].TryGet<String>())
+                {
+                    name = *text;
+                }
+            }
+            return Variant{};
+        }
+    };
+}
+
+TEST_CASE("uiscript.handle: a view's animation end and iteration reach a script with the keyframes' name")
+{
+    auto root = MakeRef<ui::FrameLayout>(DefaultAllocator());
+    root->AddView(MakeLabel(u8"spinner", u8"").Get());
+    uis::Label spinner = Group(root.Get()).findLabel(u8"spinner");
+    REQUIRE(spinner.isValid());
+    auto ended = MakeRef<NamingDelegate>(DefaultAllocator());
+    auto looped = MakeRef<NamingDelegate>(DefaultAllocator());
+    spinner.onAnimationEnd(RefPtr<foundation::script::IScriptDelegate>(ended.Get()));
+    spinner.onAnimationIteration(RefPtr<foundation::script::IScriptDelegate>(looped.Get()));
+    ui::View* view = root->GetChildAt(0);
+    view->OnAnimationEnd.Invoke(view, u8"fade-in");
+    view->OnAnimationIteration.Invoke(view, u8"spin");
+    CHECK(ended->calls == 1);
+    CHECK(ended->name == StringView(u8"fade-in"));
+    CHECK(looped->calls == 1);
+    CHECK(looped->name == StringView(u8"spin"));
+}
+
 TEST_CASE("uiscript.handle: an owning handle keeps its view alive after the tree drops it")
 {
     auto group = MakeRef<ui::FrameLayout>(DefaultAllocator());

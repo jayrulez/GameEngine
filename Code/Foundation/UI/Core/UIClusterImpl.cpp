@@ -151,6 +151,21 @@ namespace foundation::ui
         return nullptr;
     }
 
+    void View::DeliverAnimationEvent(bool ended, const String& name)
+    {
+        RefPtr<View> self(this);
+        auto fire = [self, ended, name]()
+        { (ended ? self->OnAnimationEnd : self->OnAnimationIteration).Invoke(self.Get(), name.AsView()); };
+        if (Context != nullptr)
+        {
+            Context->MutationQueueRef().QueueAction(Move(fire));
+        }
+        else
+        {
+            fire();
+        }
+    }
+
     void View::SyncAnimations()
     {
         // Read from the cache just built, never through ComputeStyle: a view outside a context
@@ -335,11 +350,19 @@ namespace foundation::ui
                 continue;
             }
             animated = true;
+            const f32 before = running.Elapsed;
             running.Elapsed += deltaTime;
             const AnimationSpec& spec = running.Spec;
-            if (spec.Iterations >= 0.0f && running.Elapsed >= spec.Delay + Max(spec.Duration, 0.0f) * spec.Iterations)
+            const f32 duration = Max(spec.Duration, 0.0f);
+            if (spec.Iterations >= 0.0f && running.Elapsed >= spec.Delay + duration * spec.Iterations)
             {
                 running.Finished = true;
+                DeliverAnimationEvent(true, running.Spec.Name);
+            }
+            else if (duration > 0.0f && running.Elapsed > spec.Delay &&
+                     Floor(Max(before - spec.Delay, 0.0f) / duration) < Floor((running.Elapsed - spec.Delay) / duration))
+            {
+                DeliverAnimationEvent(false, running.Spec.Name); // a new iteration began
             }
             animating = animating || !running.Finished;
             for (const KeyframesRule::Frame& frame : running.Keyframes->Frames)

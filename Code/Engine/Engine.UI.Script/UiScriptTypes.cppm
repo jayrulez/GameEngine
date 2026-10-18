@@ -87,7 +87,11 @@ export namespace engine::uiscript
     void rotateTo(f32 degrees, f32 seconds);                                                            \
     void rotateTo(f32 degrees, f32 seconds, Ease ease);                                                 \
     /* From the normal size out to `peak` times it and back over `seconds`: a counter that changed. */ \
-    void pulse(f32 peak, f32 seconds);
+    void pulse(f32 peak, f32 seconds);                                                                  \
+    /* A sheet's animation on the view (its `animation`) ran its last iteration, or began another: */ \
+    /* the handler takes the @keyframes' name (UiAnimationHandler), after the frame's tick. */        \
+    void onAnimationEnd(RefPtr<foundation::script::IScriptDelegate> handler);                           \
+    void onAnimationIteration(RefPtr<foundation::script::IScriptDelegate> handler);
 
     /// A bare view - identity + visibility/enabled. What find / childAt return.
     struct View

@@ -87,6 +87,11 @@ Play-in-editor works by construction (the same event stream through the viewport
   Each property tweens on its own channel: a new tween of one property replaces the running one of
   that property only, so a score can rise, fade and swell at once, and a `set` stops only its own
   property's tween. Zero seconds, or a view in no tree yet, is a set.
+- **Sheet animations** - a theme's `@keyframes` and `animation` play on their own; every handle's
+  `onAnimationEnd(handler)` and `onAnimationIteration(handler)` call a `UiAnimationHandler`
+  (`void (const string &in name)`, the @keyframes' name) when one of the view's animations ends or
+  begins another iteration, after the frame's tick, so a screen can chain a slide-in into the
+  next step or remove a toast once it has faded.
 - **Vector images** - an `.svg` imports as a `UIVectorImage` asset (linked in `Sources/`, validated
   at cook by the same SVG loader that draws it: the icon-systems subset, paths and basic shapes with
   fills and strokes). A game theme names one with `@icon heart "{guid}"` and draws it with

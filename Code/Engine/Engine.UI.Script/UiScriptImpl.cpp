@@ -233,6 +233,30 @@ namespace engine::uiscript
     }
 
     // Defined once via a macro (the value structs share the members but have no inheritance).
+    // A sheet animation's end or iteration on `view`, handed to a script with the @keyframes' name.
+    // The view already delivers it through the mutation queue after the frame's tick, so the
+    // handler may change the tree; the delegate lives as long as the subscription.
+    static void OnViewAnimation(ui::View* view, RefPtr<foundation::script::IScriptDelegate> handler, bool ended)
+    {
+        if (view == nullptr || !handler)
+        {
+            return; // null-but-valid handle, or no handler: a safe no-op
+        }
+        auto deliver = [handler](ui::View*, StringView name)
+        {
+            Variant args[1] = {Variant::From(String(name))};
+            (void)handler->Invoke(Span<Variant>(args, 1));
+        };
+        if (ended)
+        {
+            view->OnAnimationEnd.Add(Move(deliver));
+        }
+        else
+        {
+            view->OnAnimationIteration.Add(Move(deliver));
+        }
+    }
+
 #define UI_SCRIPT_DEFINE_COMMON(H)                                                                      \
     bool H::isValid() const { return static_cast<bool>(view); }                                         \
     String H::name() const { return view ? String(view->Name.AsView()) : String{}; }                   \
@@ -280,7 +304,15 @@ namespace engine::uiscript
     void H::scaleTo(f32 target, f32 seconds, Ease ease) { ScaleViewTo(view.Get(), target, seconds, ease); } \
     void H::rotateTo(f32 degrees, f32 seconds) { RotateViewTo(view.Get(), degrees, seconds, Ease::InOut); } \
     void H::rotateTo(f32 degrees, f32 seconds, Ease ease) { RotateViewTo(view.Get(), degrees, seconds, ease); } \
-    void H::pulse(f32 peak, f32 seconds) { PulseView(view.Get(), peak, seconds); }
+    void H::pulse(f32 peak, f32 seconds) { PulseView(view.Get(), peak, seconds); }                    \
+    void H::onAnimationEnd(RefPtr<foundation::script::IScriptDelegate> handler)                         \
+    {                                                                                                   \
+        OnViewAnimation(view.Get(), Move(handler), true);                                               \
+    }                                                                                                   \
+    void H::onAnimationIteration(RefPtr<foundation::script::IScriptDelegate> handler)                   \
+    {                                                                                                   \
+        OnViewAnimation(view.Get(), Move(handler), false);                                              \
+    }
 
     UI_SCRIPT_DEFINE_COMMON(View)
     UI_SCRIPT_DEFINE_COMMON(Label)
@@ -751,7 +783,9 @@ namespace engine::uiscript
     builder.Method<static_cast<void (H::*)(f32, f32)>(&H::rotateTo)>("rotateTo", {"degrees", "seconds"}); \
     builder.Method<static_cast<void (H::*)(f32, f32, Ease)>(&H::rotateTo)>(                            \
         "rotateTo", {"degrees", "seconds", "ease"});                                                    \
-    builder.Method<&H::pulse>("pulse", {"peak", "seconds"})
+    builder.Method<&H::pulse>("pulse", {"peak", "seconds"});                                            \
+    builder.Method<&H::onAnimationEnd>("onAnimationEnd", {"handler"});                                  \
+    builder.Method<&H::onAnimationIteration>("onAnimationIteration", {"handler"})
 
     REFLECT_ENUM(Ease, "rtti::engine.ui.script")
     {
@@ -1050,6 +1084,9 @@ namespace engine::uiscript
             GlobalTypeRegistry().Register(TypeOf<Screen>());
             RttiRegisterEnum_Ease();                         // the tweens' easing choice
             GlobalTypeRegistry().Register(TypeOf<Ease>());
+            // onAnimationEnd / onAnimationIteration's handler, so an AngelScript screen passes one
+            // without declaring it.
+            foundation::script::RegisterDelegateShape(u8"void UiAnimationHandler(const string &in name)");
             return true;
         }();
         (void)once;

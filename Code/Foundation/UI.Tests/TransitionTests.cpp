@@ -654,3 +654,28 @@ TEST_CASE("animation: a transform keyframe animates the drawn transform and only
     f.ctx.DrawRootView(f.root.Get(), canvas);
     CHECK(v->TransformMatrix().ty == doctest::Approx(-5.0f));
 }
+
+TEST_CASE("animation: the view says when an animation iterates and ends, after the frame's tick")
+{
+    Fixture f(LoadSSS(u8"@keyframes blink { to { opacity: 0; } }\n"
+                      u8"TestView { animation: blink 1s linear 3; }\n"));
+    auto v = f.Leaf();
+    Array<String> events;
+    v->OnAnimationIteration.Add([&events](View*, StringView name) { events.PushBack(Format(u8"iteration {}", name)); });
+    v->OnAnimationEnd.Add([&events](View*, StringView name) { events.PushBack(Format(u8"end {}", name)); });
+    (void)OpacityOf(*v);
+    f.ctx.BeginFrame(1.25f); // into the second iteration
+    // Queued during the tick: delivered at the next drain, not inside it.
+    f.ctx.BeginFrame(0.0f);
+    REQUIRE(events.Size() == 1u);
+    CHECK(events[0] == StringView(u8"iteration blink"));
+    f.ctx.BeginFrame(1.0f);  // the third
+    f.ctx.BeginFrame(1.0f);  // past the last
+    f.ctx.BeginFrame(0.0f);
+    REQUIRE(events.Size() == 3u);
+    CHECK(events[1] == StringView(u8"iteration blink"));
+    CHECK(events[2] == StringView(u8"end blink"));
+    f.ctx.BeginFrame(1.0f); // ended: nothing more
+    f.ctx.BeginFrame(0.0f);
+    CHECK(events.Size() == 3u);
+}

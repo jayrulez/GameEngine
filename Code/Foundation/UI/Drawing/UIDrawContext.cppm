@@ -75,6 +75,16 @@ export namespace foundation::ui
         void PushClip(const Rectangle& rect) { m_vg->PushClipRect(rect); }
         /// Pops the last pushed clip.
         void PopClip() { m_vg->PopClip(); }
+        /// Clips to `rect` rounded by `radii` (current local coordinates), inside any rounded clip
+        /// already pushed. Balance with PopClipRounded.
+        void PushClipRounded(const Rectangle& rect, const vg::CornerRadii& radii)
+        {
+            vg::PathBuilder builder;
+            vg::ShapeBuilder::BuildRoundedRect(rect, radii, builder);
+            m_vg->PushClipPath(builder.ToPath());
+        }
+        /// Pops the last rounded clip.
+        void PopClipRounded() { m_vg->PopClipPath(); }
         /// Whether a rect (current local coordinates) can contribute pixels under the active
         /// clip. True when no clip is active. The child-draw loop culls with this so clipped-out
         /// subtrees cost no tessellation (viewport-sized draw lists, not content-sized).

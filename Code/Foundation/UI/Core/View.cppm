@@ -750,6 +750,25 @@ export namespace foundation::ui
         /// A Float property; a Length value (em/px/pt/dp, calc) resolves too, against this
         /// view's font size - so `font-size: 1.2em` or `corner-radius: 0.5em` in a theme reach
         /// every control that reads floats. Percent has no reference box on this path (0).
+        /// The corners of the view's box, which its shadow and its rounded clip follow: its
+        /// corner-radius, or without one the corners its background rounds
+        /// (rounded-rect(..., radius=24) sets no corner-radius).
+        [[nodiscard]] vg::CornerRadii OutlineRadii()
+        {
+            if (ResolveStyle(StyleProperty::CornerRadius).GetKind() == StyleValue::Kind::None)
+            {
+                if (Drawable* bg = ResolveStyleDrawable(StyleProperty::Background))
+                {
+                    const Optional<vg::CornerRadii> outline = bg->OutlineRadii(GetControlState());
+                    if (outline.HasValue())
+                    {
+                        return outline.Value();
+                    }
+                }
+            }
+            return vg::CornerRadii{Max(0.0f, ResolveStyleFloat(StyleProperty::CornerRadius, 0.0f))};
+        }
+
         [[nodiscard]] f32 ResolveStyleFloat(StyleProperty prop, f32 defaultVal = 0.0f)
         {
             const StyleValue value = ResolveStyle(prop);
@@ -1311,10 +1330,22 @@ export namespace foundation::ui
                 {
                     DrawBoxShadow(ctx, *child, shadow.Value());
                 }
+                // A clipping view clips to its box, and a rounded one to its corners too, so a card
+                // holds an image, a header or a scrolled list without its corners leaking; clips
+                // nest, each inside the ones around it.
                 const bool clips = child->EffectiveClipsContent();
+                bool clipsRounded = false;
                 if (clips)
                 {
-                    ctx.PushClip(Rectangle{0, 0, child->Width(), child->Height()});
+                    const Rectangle box{0, 0, child->Width(), child->Height()};
+                    ctx.PushClip(box);
+                    const vg::CornerRadii radii = child->OutlineRadii();
+                    clipsRounded = radii.topLeft > 0.0f || radii.topRight > 0.0f ||
+                                   radii.bottomRight > 0.0f || radii.bottomLeft > 0.0f;
+                    if (clipsRounded)
+                    {
+                        ctx.PushClipRounded(box, radii);
+                    }
                 }
 
                 ApplyTextEffects(ctx, *child);
@@ -1331,6 +1362,10 @@ export namespace foundation::ui
                     UIDebugOverlay::DrawOverlays(ctx, *child, i);
                 }
 
+                if (clipsRounded)
+                {
+                    ctx.PopClipRounded();
+                }
                 if (clips)
                 {
                     ctx.PopClip();
@@ -1391,21 +1426,8 @@ export namespace foundation::ui
         /// rounded by the child's corner radius (plus the spread, as CSS does).
         static void DrawBoxShadow(UIDrawContext& ctx, View& child, const BoxShadow& shadow)
         {
-            // The shadow follows the shape it sits under: the view's corner-radius, or without one
-            // the corners its background rounds (rounded-rect(..., radius=24) sets no
-            // corner-radius, and its shadow was square).
-            vg::CornerRadii radii{Max(0.0f, child.ResolveStyleFloat(StyleProperty::CornerRadius, 0.0f))};
-            if (child.ResolveStyle(StyleProperty::CornerRadius).GetKind() == StyleValue::Kind::None)
-            {
-                if (Drawable* bg = child.ResolveStyleDrawable(StyleProperty::Background))
-                {
-                    const Optional<vg::CornerRadii> outline = bg->OutlineRadii(child.GetControlState());
-                    if (outline.HasValue())
-                    {
-                        radii = outline.Value();
-                    }
-                }
-            }
+            // The shadow follows the shape it sits under.
+            const vg::CornerRadii radii = child.OutlineRadii();
             const f32 spread = shadow.Inset ? -shadow.Spread : shadow.Spread;
             const Rectangle rect{shadow.OffsetX - spread, shadow.OffsetY - spread,
                                  child.Width() + 2.0f * spread, child.Height() + 2.0f * spread};

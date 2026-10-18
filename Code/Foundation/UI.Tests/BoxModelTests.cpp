@@ -360,6 +360,46 @@ TEST_CASE("box-model: a box-shadow follows the corners its background rounds")
           doctest::Approx(0.0f));
 }
 
+TEST_CASE("box-model: a clipping view with rounded corners clips its children to them")
+{
+    // What a clipping card holds draws inside its corners: through a stencil clip of its rounded
+    // box, over the rectangle clip every clipping view keeps. A square one stays a scissor.
+    const auto stencilClippedDraws = [](StringView sheetText) -> usize
+    {
+        UIContext ctx{DefaultAllocator()};
+        auto root = MakeRoot();
+        EnsureGlobals();
+        Init(ctx, root.Get(), 400, 300);
+        ctx.SetStyleSheet(LoadSSS(sheetText));
+        auto card = New<FrameLayout>();
+        card->AddClass(u8"card");
+        card->ClipsContent = true;
+        auto content = RV(100, 50, 1);
+        card->AddView(content.Get());
+        root->AddView(card.Get());
+        LayoutPass(ctx, root.Get());
+        vg::VGContext vgContext;
+        vgContext.SetStencilFills(true);
+        ctx.DrawRootView(root.Get(), vgContext);
+        const vg::VGBatch& batch = vgContext.GetBatch();
+        usize clipped = 0;
+        for (usize i = 0; i < batch.CommandCount(); ++i)
+        {
+            const vg::VGCommand c = batch.GetCommand(i);
+            if (c.indexCount > 0 && c.clipMode == vg::VGClipMode::Stencil &&
+                c.fillPhase == vg::VGFillPhase::Direct)
+            {
+                ++clipped;
+            }
+        }
+        return clipped;
+    };
+    CHECK(stencilClippedDraws(u8".card { corner-radius: 8; }") > 0u);
+    // The corners a background rounds clip as they shape the shadow.
+    CHECK(stencilClippedDraws(u8".card { background: rounded-rect(#FFFFFF, radius=12); }") > 0u);
+    CHECK(stencilClippedDraws(u8".card { background: #FFFFFF; }") == 0u);
+}
+
 TEST_CASE("box-model: box-shadow parses none, the inset keyword and a bare color")
 {
     core::RefPtr<StyleSheet> sheet = LoadSSS(u8"TestView { box-shadow: 1 2 #ff0000 inset; }"

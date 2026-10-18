@@ -273,6 +273,26 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1 # puts cl + the Windows SDK on PATH for the later steps
       - name: Install Ninja
         run: choco install ninja -y # the msvc preset uses the Ninja generator (C++20 modules)
+      # The Vulkan SDK, so find_package(Vulkan) succeeds and Foundation::RHI.Vulkan is actually
+      # COMPILED. Without it the root CMakeLists quietly skips that target, Graphics.Gpu never
+      # gets OPTION_HAS_VULKAN, and the binary has no Vulkan backend at all - which is how a
+      # Windows editor artifact shipped that could not create a graphics device, because the
+      # DEFAULT backend is Vulkan and this build did not contain it. It is also why the
+      # MemoryBarrier/winnt.h collision in RHI.Vulkan.Tests stayed invisible to CI.
+      - name: Install the Vulkan SDK
+        shell: pwsh
+        run: |
+          choco install vulkan-sdk -y --no-progress
+          # choco sets VULKAN_SDK as a MACHINE variable, which later steps in this job do not
+          # inherit - publish it through GITHUB_ENV, falling back to the newest install on disk.
+          $sdk = $env:VULKAN_SDK
+          if (-not $sdk -or -not (Test-Path $sdk)) {
+            $sdk = (Get-ChildItem 'C:\VulkanSDK' -Directory -ErrorAction SilentlyContinue |
+                    Sort-Object Name -Descending | Select-Object -First 1).FullName
+          }
+          if (-not $sdk) { throw "Vulkan SDK not present after install" }
+          "VULKAN_SDK=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "VULKAN_SDK=$sdk"
       - name: Configure
         run: cmake --preset msvc
       - name: Build
@@ -300,6 +320,26 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1 # puts cl + the Windows SDK on PATH for the later steps
       - name: Install Ninja
         run: choco install ninja -y # the msvc-shared preset uses the Ninja generator (C++20 modules)
+      # The Vulkan SDK, so find_package(Vulkan) succeeds and Foundation::RHI.Vulkan is actually
+      # COMPILED. Without it the root CMakeLists quietly skips that target, Graphics.Gpu never
+      # gets OPTION_HAS_VULKAN, and the binary has no Vulkan backend at all - which is how a
+      # Windows editor artifact shipped that could not create a graphics device, because the
+      # DEFAULT backend is Vulkan and this build did not contain it. It is also why the
+      # MemoryBarrier/winnt.h collision in RHI.Vulkan.Tests stayed invisible to CI.
+      - name: Install the Vulkan SDK
+        shell: pwsh
+        run: |
+          choco install vulkan-sdk -y --no-progress
+          # choco sets VULKAN_SDK as a MACHINE variable, which later steps in this job do not
+          # inherit - publish it through GITHUB_ENV, falling back to the newest install on disk.
+          $sdk = $env:VULKAN_SDK
+          if (-not $sdk -or -not (Test-Path $sdk)) {
+            $sdk = (Get-ChildItem 'C:\VulkanSDK' -Directory -ErrorAction SilentlyContinue |
+                    Sort-Object Name -Descending | Select-Object -First 1).FullName
+          }
+          if (-not $sdk) { throw "Vulkan SDK not present after install" }
+          "VULKAN_SDK=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "VULKAN_SDK=$sdk"
       - name: Configure
         run: cmake --preset msvc-shared
       - name: Build
@@ -408,9 +448,45 @@ jobs:
 
       - name: Install Ninja
         run: choco install ninja -y
+      # The Vulkan SDK, so find_package(Vulkan) succeeds and Foundation::RHI.Vulkan is actually
+      # COMPILED. Without it the root CMakeLists quietly skips that target, Graphics.Gpu never
+      # gets OPTION_HAS_VULKAN, and the binary has no Vulkan backend at all - which is how a
+      # Windows editor artifact shipped that could not create a graphics device, because the
+      # DEFAULT backend is Vulkan and this build did not contain it. It is also why the
+      # MemoryBarrier/winnt.h collision in RHI.Vulkan.Tests stayed invisible to CI.
+      - name: Install the Vulkan SDK
+        shell: pwsh
+        run: |
+          choco install vulkan-sdk -y --no-progress
+          # choco sets VULKAN_SDK as a MACHINE variable, which later steps in this job do not
+          # inherit - publish it through GITHUB_ENV, falling back to the newest install on disk.
+          $sdk = $env:VULKAN_SDK
+          if (-not $sdk -or -not (Test-Path $sdk)) {
+            $sdk = (Get-ChildItem 'C:\VulkanSDK' -Directory -ErrorAction SilentlyContinue |
+                    Sort-Object Name -Descending | Select-Object -First 1).FullName
+          }
+          if (-not $sdk) { throw "Vulkan SDK not present after install" }
+          "VULKAN_SDK=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "VULKAN_SDK=$sdk"
 
       - name: Build editor distribution
         run: pwsh scripts/build-editor-dist.ps1 -Out dist/Editor-Win64
+      # Fail LOUDLY if the Vulkan backend did not make it into the artifact. find_package(Vulkan)
+      # failing is only a STATUS message, so a missing SDK silently produces an editor with no
+      # Vulkan backend - and since Vulkan is the default backend, that artifact cannot start on a
+      # machine whose only working path is the one it does contain. Cheap check, caught late once.
+      - name: Verify the Vulkan backend is in the build
+        shell: pwsh
+        run: |
+          $cache = 'build/msvc-reldbg/CMakeCache.txt'
+          if (-not (Test-Path $cache)) { throw "$cache missing - did the dist build change its preset?" }
+          $line = Select-String -Path $cache -Pattern '^Vulkan_LIBRARY:FILEPATH=(.+)$' |
+                  Select-Object -First 1
+          if (-not $line) {
+            throw "Foundation::RHI.Vulkan was NOT compiled in (no Vulkan_LIBRARY in $cache). " +
+                  "The Vulkan SDK step above did not take effect."
+          }
+          Write-Host ("Vulkan backend present: " + $line.Matches[0].Groups[1].Value)
 
       - name: Build deployment template
         shell: pwsh

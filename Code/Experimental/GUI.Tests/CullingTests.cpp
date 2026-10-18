@@ -288,3 +288,17 @@ TEST_CASE("culling: a fading box out of view asks for no frames, scrolled into v
     CHECK(HostFrame(*root.Get(), styles));
     CHECK(root->GetLastFrameStats().Reasons.Animation);
 }
+
+TEST_CASE("culling: a box in view fading in from nothing keeps asking for frames")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{400.0f, 300.0f});
+    auto fading = Add(*root.Get(), u8"fading");
+    StyleManager styles(CSSParser::Parse(SV(
+        u8"fading { width: 40px; height: 40px; background-color: #ffffff; animation: rise 1s infinite alternate; }"
+        u8"@keyframes rise { from { opacity: 0; } to { opacity: 1; } }")));
+    CHECK(HostFrame(*root.Get(), styles)); // the first frame, at opacity 0
+    CHECK(fading->GetDrawnFrame() != 0u);   // in view, though nothing of it shows
+    CHECK(HostFrame(*root.Get(), styles));  // its fade asks: it is no quiet animation out of sight
+    CHECK(root->GetLastFrameStats().Reasons.Animation);
+}

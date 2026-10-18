@@ -565,7 +565,7 @@ export namespace experimental::gui
         // children (back-to-front) -> foreground.
         void Draw(DrawContext& ctx)
         {
-            if (!m_visible || m_alpha <= 0.0f || !IsDisplayed())
+            if (!m_visible || !IsDisplayed())
                 return;
 
             ctx.Save();
@@ -577,8 +577,15 @@ export namespace experimental::gui
                 ctx.Restore();
                 return;
             }
-            ctx.CountDrawn();
+            // In view though fully transparent, it counts as drawn: a fade in from nothing is in
+            // view, so its frames are asked for (not taken for a quiet animation out of sight).
             m_drawnFrame = ctx.Frame();
+            if (m_alpha <= 0.0f)
+            {
+                ctx.Restore();
+                return;
+            }
+            ctx.CountDrawn();
             if (m_invalidatedSelf && ctx.RecordsRedraws() && m_parent != nullptr) // the root would flash all
                 ctx.RecordRedraw(GetScreenBounds());
             m_invalidatedSelf = false;

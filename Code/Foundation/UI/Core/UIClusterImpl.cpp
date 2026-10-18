@@ -103,31 +103,14 @@ namespace foundation::ui
 
     namespace
     {
-        [[nodiscard]] f32 ApplyTransitionEasing(TransitionEasing easing, f32 t)
-        {
-            switch (easing)
-            {
-            case TransitionEasing::Linear:
-                return t;
-            case TransitionEasing::EaseIn:
-                return t * t;
-            case TransitionEasing::EaseOut:
-                return 1.0f - (1.0f - t) * (1.0f - t);
-            case TransitionEasing::Ease:
-            case TransitionEasing::EaseInOut:
-            default:
-                return t < 0.5f ? 2.0f * t * t : 1.0f - 2.0f * (1.0f - t) * (1.0f - t);
-            }
-        }
-
-        [[nodiscard]] f32 TransitionProgress(f32 elapsed, f32 duration, f32 delay, TransitionEasing easing)
+        [[nodiscard]] f32 TransitionProgress(f32 elapsed, f32 duration, f32 delay, const TimingFunction& easing)
         {
             if (duration <= 0.0f)
             {
                 return 1.0f;
             }
             const f32 t = Clamp((elapsed - delay) / duration, 0.0f, 1.0f);
-            return ApplyTransitionEasing(easing, t);
+            return easing.Evaluate(t);
         }
     }
 

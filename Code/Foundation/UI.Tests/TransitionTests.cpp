@@ -125,13 +125,13 @@ TEST_CASE("transition: the list parses properties, all, times in ms/s, easings, 
     CHECK(list->Specs[0].Property == StyleProperty::TextColor);
     CHECK(list->Specs[0].Duration == doctest::Approx(0.2f));
     CHECK(list->Specs[0].Delay == doctest::Approx(0.05f));
-    CHECK(list->Specs[0].Easing == TransitionEasing::EaseIn);
+    CHECK(list->Specs[0].Easing == TimingFunction::EaseIn());
     CHECK(list->Specs[1].Property == StyleProperty::Opacity);
     CHECK(list->Specs[1].Duration == doctest::Approx(1.0f));
-    CHECK(list->Specs[1].Easing == TransitionEasing::Ease);
+    CHECK(list->Specs[1].Easing == TimingFunction::Ease());
     CHECK(list->Specs[2].Property == StyleProperty::COUNT); // all
     CHECK(list->Specs[2].Duration == doctest::Approx(0.12f)); // bare number = ms
-    CHECK(list->Specs[2].Easing == TransitionEasing::EaseOut);
+    CHECK(list->Specs[2].Easing == TimingFunction::EaseOut());
     // Later entries govern: `all` came last, so it covers text-color too.
     CHECK(list->Find(StyleProperty::TextColor) == &list->Specs[2]);
     CHECK(list->Find(StyleProperty::BorderColor) == &list->Specs[2]);
@@ -280,8 +280,42 @@ TEST_CASE("transition: easing and delay shape the curve")
     CHECK(Red(*v) == doctest::Approx(0.0f));
     f.ctx.BeginFrame(0.05f); // inside the delay
     CHECK(Red(*v) == doctest::Approx(0.0f));
-    f.ctx.BeginFrame(0.05f); // t = 0.5 -> ease-in = 0.25
-    CHECK(Red(*v) == doctest::Approx(0.25f));
+    f.ctx.BeginFrame(0.05f); // t = 0.5 -> CSS's ease-in, cubic-bezier(0.42, 0, 1, 1), is 0.3154
+    CHECK(Red(*v) == doctest::Approx(0.3154f).epsilon(0.002));
+}
+
+TEST_CASE("transition: timing functions are CSS's curves, cubic-bezier and steps")
+{
+    // The named easings at their midpoints, as a browser computes them.
+    CHECK(TimingFunction::Linear().Evaluate(0.5f) == doctest::Approx(0.5f));
+    CHECK(TimingFunction::Ease().Evaluate(0.5f) == doctest::Approx(0.8024f).epsilon(0.002));
+    CHECK(TimingFunction::EaseIn().Evaluate(0.5f) == doctest::Approx(0.3154f).epsilon(0.002));
+    CHECK(TimingFunction::EaseOut().Evaluate(0.5f) == doctest::Approx(1.0f - 0.3154f).epsilon(0.002));
+    CHECK(TimingFunction::EaseInOut().Evaluate(0.5f) == doctest::Approx(0.5f));
+    CHECK(TimingFunction::Ease().Evaluate(0.0f) == doctest::Approx(0.0f));
+    CHECK(TimingFunction::Ease().Evaluate(1.0f) == doctest::Approx(1.0f));
+    // A curve may overshoot (a back-out bounce): y past 1 between the ends.
+    const TimingFunction back = TimingFunction::CubicBezier(0.34f, 1.56f, 0.64f, 1.0f);
+    CHECK(back.Evaluate(0.6f) > 1.0f);
+    // Steps hold each level, jumping at a step's end, or its start.
+    CHECK(TimingFunction::StepsOf(4).Evaluate(0.3f) == doctest::Approx(0.25f));
+    CHECK(TimingFunction::StepsOf(4, true).Evaluate(0.3f) == doctest::Approx(0.5f));
+    CHECK(TimingFunction::StepsOf(4).Evaluate(1.0f) == doctest::Approx(1.0f));
+
+    core::RefPtr<StyleSheet> sheet = LoadSSS(
+        u8"TestView { transition: opacity 200ms cubic-bezier(0.34, 1.56, 0.64, 1), text-color 1s steps(5, start), "
+        u8"background 1s step-end, border-color 1s cubic-bezier(1.5, 0, -1, 1); }");
+    REQUIRE(sheet);
+    const TransitionList* list = sheet->GetRule(0).GetValue(StyleProperty::Transition).Value().AsTransitions();
+    REQUIRE(list != nullptr);
+    REQUIRE(list->Specs.Size() == 4u);
+    CHECK(list->Specs[0].Easing == back);
+    CHECK(list->Specs[0].Duration == doctest::Approx(0.2f));
+    CHECK(list->Specs[1].Easing == TimingFunction::StepsOf(5, true));
+    CHECK(list->Specs[2].Easing == TimingFunction::StepsOf(1, false));
+    // CSS keeps a curve's x within 0 to 1.
+    CHECK(list->Specs[3].Easing.X1 == doctest::Approx(1.0f));
+    CHECK(list->Specs[3].Easing.X2 == doctest::Approx(0.0f));
 }
 
 TEST_CASE("transition: a control-state change cross-fades a state-aware background")
@@ -374,7 +408,7 @@ TEST_CASE("transition: motion comes from the theme's View rule; the engine adds 
     const TransitionSpec* all = onLeaf.AsTransitions()->Find(StyleProperty::TextColor);
     REQUIRE(all != nullptr);
     CHECK(all->Duration == doctest::Approx(0.12f));
-    CHECK(all->Easing == TransitionEasing::EaseOut);
+    CHECK(all->Easing == TimingFunction::EaseOut());
     const StyleValue onButton = button->ResolveStyle(StyleProperty::Transition);
     REQUIRE(onButton.AsTransitions() != nullptr);
     CHECK(onButton.AsTransitions()->Find(StyleProperty::TextColor) == nullptr);

@@ -45,14 +45,102 @@ export namespace foundation::ui
         [[nodiscard]] constexpr bool operator==(const BoxShadow&) const noexcept = default;
     };
 
-    /// CSS timing-function names a `transition` accepts.
-    enum class TransitionEasing : u8
+    /// A CSS timing function: the cubic Bezier from (0, 0) to (1, 1) through (X1, Y1) and (X2, Y2)
+    /// that `cubic-bezier()` writes (the named easings are presets of it), or `steps(n)`, which
+    /// holds each of n levels and jumps at a step's end (or, with StepsJumpStart, its start).
+    struct TimingFunction
     {
-        Linear,
-        Ease,
-        EaseIn,
-        EaseOut,
-        EaseInOut
+        f32 X1 = 0.25f;
+        f32 Y1 = 0.1f;
+        f32 X2 = 0.25f;
+        f32 Y2 = 1.0f;
+        u16 Steps = 0; ///< 0: the curve
+        bool StepsJumpStart = false;
+
+        [[nodiscard]] static constexpr TimingFunction CubicBezier(f32 x1, f32 y1, f32 x2, f32 y2) noexcept
+        {
+            TimingFunction f;
+            f.X1 = x1;
+            f.Y1 = y1;
+            f.X2 = x2;
+            f.Y2 = y2;
+            return f;
+        }
+        [[nodiscard]] static constexpr TimingFunction Linear() noexcept { return CubicBezier(0.0f, 0.0f, 1.0f, 1.0f); }
+        [[nodiscard]] static constexpr TimingFunction Ease() noexcept { return CubicBezier(0.25f, 0.1f, 0.25f, 1.0f); }
+        [[nodiscard]] static constexpr TimingFunction EaseIn() noexcept { return CubicBezier(0.42f, 0.0f, 1.0f, 1.0f); }
+        [[nodiscard]] static constexpr TimingFunction EaseOut() noexcept { return CubicBezier(0.0f, 0.0f, 0.58f, 1.0f); }
+        [[nodiscard]] static constexpr TimingFunction EaseInOut() noexcept
+        {
+            return CubicBezier(0.42f, 0.0f, 0.58f, 1.0f);
+        }
+        [[nodiscard]] static constexpr TimingFunction StepsOf(u16 count, bool jumpStart = false) noexcept
+        {
+            TimingFunction f = Linear();
+            f.Steps = count;
+            f.StepsJumpStart = jumpStart;
+            return f;
+        }
+
+        /// The eased progress at `t` (0 to 1): the curve's y where its x is t. Y may leave 0 to 1
+        /// for a curve that overshoots (a back-out bounce).
+        [[nodiscard]] f32 Evaluate(f32 t) const noexcept
+        {
+            t = Clamp(t, 0.0f, 1.0f);
+            if (Steps > 0)
+            {
+                const f32 n = static_cast<f32>(Steps);
+                const f32 step = StepsJumpStart ? Ceil(t * n) : Floor(t * n);
+                return t >= 1.0f ? 1.0f : Min(step, n) / n;
+            }
+            if (X1 == Y1 && X2 == Y2)
+            {
+                return t; // the straight line
+            }
+            // Solve x(u) = t for the curve's parameter u (Newton, then bisection if it stalls),
+            // then read y(u).
+            const auto at = [](f32 a, f32 b, f32 u)
+            {
+                const f32 v = 1.0f - u;
+                return 3.0f * v * v * u * a + 3.0f * v * u * u * b + u * u * u;
+            };
+            const auto slope = [](f32 a, f32 b, f32 u)
+            {
+                const f32 v = 1.0f - u;
+                return 3.0f * v * v * a + 6.0f * v * u * (b - a) + 3.0f * u * u * (1.0f - b);
+            };
+            f32 u = t;
+            for (i32 i = 0; i < 8; ++i)
+            {
+                const f32 error = at(X1, X2, u) - t;
+                if (Abs(error) < 1e-5f)
+                {
+                    return at(Y1, Y2, u);
+                }
+                const f32 d = slope(X1, X2, u);
+                if (Abs(d) < 1e-6f)
+                {
+                    break;
+                }
+                u -= error / d;
+            }
+            f32 lo = 0.0f;
+            f32 hi = 1.0f;
+            u = t;
+            for (i32 i = 0; i < 32; ++i)
+            {
+                const f32 x = at(X1, X2, u);
+                if (Abs(x - t) < 1e-5f)
+                {
+                    break;
+                }
+                (x < t ? lo : hi) = u;
+                u = (lo + hi) * 0.5f;
+            }
+            return at(Y1, Y2, u);
+        }
+
+        [[nodiscard]] constexpr bool operator==(const TimingFunction&) const noexcept = default;
     };
 
     /// One entry of a `transition:` list. `Property == StyleProperty::COUNT` means `all`.
@@ -62,7 +150,7 @@ export namespace foundation::ui
         /// Seconds.
         f32 Duration = 0.0f;
         f32 Delay = 0.0f;
-        TransitionEasing Easing = TransitionEasing::Ease;
+        TimingFunction Easing = TimingFunction::Ease();
 
         [[nodiscard]] constexpr bool operator==(const TransitionSpec&) const noexcept = default;
     };

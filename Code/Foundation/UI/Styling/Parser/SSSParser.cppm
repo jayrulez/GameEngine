@@ -942,7 +942,7 @@ export namespace foundation::ui
                 }
                 if (Peek().Kind == TokenKind::Ident)
                 {
-                    spec.Easing = ParseEasingName(Consume().Text);
+                    spec.Easing = ParseTimingFunction();
                 }
                 if (Peek().Kind == TokenKind::Number)
                 {
@@ -1026,24 +1026,56 @@ export namespace foundation::ui
             return value / 1000.0f;
         }
 
-        [[nodiscard]] static TransitionEasing ParseEasingName(StringView name)
+        /// A CSS timing function: linear, ease, ease-in, ease-out, ease-in-out, step-start,
+        /// step-end, cubic-bezier(x1, y1, x2, y2) (x clamped to 0 to 1, as CSS requires) or
+        /// steps(n[, start | jump-start | end | jump-end]). Anything else is ease.
+        TimingFunction ParseTimingFunction()
         {
+            const StringView name = Consume().Text;
             if (name == StringView(u8"linear"))
-                return TransitionEasing::Linear;
+                return TimingFunction::Linear();
             if (name == StringView(u8"ease-in"))
-                return TransitionEasing::EaseIn;
+                return TimingFunction::EaseIn();
             if (name == StringView(u8"ease-out"))
-                return TransitionEasing::EaseOut;
+                return TimingFunction::EaseOut();
             if (name == StringView(u8"ease-in-out"))
-                return TransitionEasing::EaseInOut;
-            return TransitionEasing::Ease;
+                return TimingFunction::EaseInOut();
+            if (name == StringView(u8"step-start"))
+                return TimingFunction::StepsOf(1, true);
+            if (name == StringView(u8"step-end"))
+                return TimingFunction::StepsOf(1, false);
+            if (name == StringView(u8"cubic-bezier") && Peek().Kind == TokenKind::LParen)
+            {
+                Consume();
+                f32 v[4] = {};
+                for (i32 i = 0; i < 4; ++i)
+                {
+                    v[i] = Peek().Kind == TokenKind::Number ? Consume().NumericValue : 0.0f;
+                    MatchComma();
+                }
+                Expect(TokenKind::RParen);
+                return TimingFunction::CubicBezier(Clamp(v[0], 0.0f, 1.0f), v[1], Clamp(v[2], 0.0f, 1.0f), v[3]);
+            }
+            if (name == StringView(u8"steps") && Peek().Kind == TokenKind::LParen)
+            {
+                Consume();
+                const f32 count = Peek().Kind == TokenKind::Number ? Consume().NumericValue : 1.0f;
+                bool jumpStart = false;
+                if (MatchComma() && Peek().Kind == TokenKind::Ident)
+                {
+                    const StringView position = Consume().Text;
+                    jumpStart = position == StringView(u8"start") || position == StringView(u8"jump-start");
+                }
+                Expect(TokenKind::RParen);
+                return TimingFunction::StepsOf(static_cast<u16>(Clamp(count, 1.0f, 1000.0f)), jumpStart);
+            }
+            return TimingFunction::Ease();
         }
 
-        /// `box-shadow: <x> <y> [blur [spread]] <color> [inset]` (also `none`). Lengths are
-        /// plain numbers (dp); the color is any color syntax; `inset` may lead or trail.
         /// `box-shadow: none`, or one or more shadows separated by commas, each `[inset] <x> <y>
-        /// [blur] [spread] [color] [inset]`; the first is painted on top. A list keeps its first
-        /// StyleValue::kMaxShadows; one that does not parse makes the value none.
+        /// [blur] [spread] [color] [inset]`: lengths are plain numbers (dp), the colour any colour
+        /// syntax, and `inset` may lead or trail. The first is painted on top. A list keeps its
+        /// first StyleValue::kMaxShadows; one that does not parse makes the value none.
         StyleValue ParseBoxShadowValue()
         {
             if (Peek().Kind == TokenKind::Ident && Peek().Text == StringView(u8"none"))

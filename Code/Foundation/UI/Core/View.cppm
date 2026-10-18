@@ -997,7 +997,7 @@ export namespace foundation::ui
             f32 Elapsed = 0.0f;
             f32 Duration = 0.0f;
             f32 Delay = 0.0f;
-            TransitionEasing Easing = TransitionEasing::Ease;
+            TimingFunction Easing = TimingFunction::Ease();
         };
         struct TransitionState
         {
@@ -1008,7 +1008,7 @@ export namespace foundation::ui
             f32 BlendElapsed = 0.0f;
             f32 BlendDuration = 0.0f;
             f32 BlendDelay = 0.0f;
-            TransitionEasing BlendEasing = TransitionEasing::Ease;
+            TimingFunction BlendEasing = TimingFunction::Ease();
         };
         UniquePtr<TransitionState> m_transitionState; ///< null until the first transition
         bool m_transitionRegistered = false;          ///< listed in the context's tick set

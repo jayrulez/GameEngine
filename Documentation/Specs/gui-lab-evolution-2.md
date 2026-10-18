@@ -117,6 +117,23 @@ Design:
 Tests: the harnesses themselves; the tester's new inputs; a sweep entry; the soak's CSV written and
 parsed.
 
+As built on `vg` (2026-10-18): GUI.Fuzz.Tests (45b95a01f) runs five targets in ctest (the CSS
+parser and cascade, the markup loader with layout and drawing, the keymap's bindings, the string
+table reader, input streams on every sandbox page), seeded from the sandbox's own files and
+`Data/Tests/GUI/Fuzz/`, with `GUI_FUZZ_RUNS` mutations a seed (40 by default: six seconds); with
+`OPTION_GUI_LIBFUZZER` in a tree built with `-fsanitize=fuzzer-no-link,address` and
+`BUILDSYSTEM_OUTPUT_SUFFIX=-Fuzz`, each is a libFuzzer executable. Two minutes of each found one
+crash, a string table read short of its locales' cells (fixed on master, 66aeb480a; kept as a seed);
+an ASAN run of 300 mutations a seed found nothing more. The tester leaves, scrolls, taps, swipes and
+hands each failure to a capture (ebd4bfafa), and tests drive every input it has. The sweep walks each
+page by keys and the pad too, fails on a warning or an error, and runs as `GUI.Sweep.vulkan` and
+`.webgpu` (388 steps, clean on both); `--soak <minutes>` writes frame time percentiles, live
+allocations and resident memory to a CSV every ten seconds (ccd11ce18). The real screen: the
+showcase's Play now leads to a HUD and a pause menu (8eab45e50). The faults the inventory's section
+18 listed were already pinned by the bug round of 2026-10-17.
+Left: the input fuzzer's streams are long (74 runs in two minutes under libFuzzer); a failure
+capture is a seam only, no host saves a screenshot yet; the soak has not run in RelWithDebInfo.
+
 ### E11 Text: fallback fonts, font properties, direction from content
 
 Facts: a run has one face; the Language page draws everything in DejaVu Sans Mono because Roboto

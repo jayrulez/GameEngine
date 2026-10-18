@@ -25,15 +25,19 @@ export namespace foundation::ui
         RTTI_OBJECT(ColorDrawable, Drawable)
     public:
         core::Color Color{};
+        /// A custom property (`--name`) the colour comes from where the drawn view has one; Color is
+        /// its fallback.
+        String ColorVariable;
 
         ColorDrawable() = default;
         explicit ColorDrawable(core::Color color) : Color(color) {}
 
         void Draw(UIDrawContext& ctx, const Rectangle& bounds) override
         {
-            if (Color.a > 0.0f)
+            const core::Color color = ctx.ColorOf(Color, ColorVariable.AsView());
+            if (color.a > 0.0f)
             {
-                ctx.VG().FillRect(bounds, Color);
+                ctx.VG().FillRect(bounds, color);
             }
         }
     };

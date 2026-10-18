@@ -38,6 +38,11 @@ export namespace foundation::ui
         /// A colour per side, in place of BorderColor; where two sides meet, the corner splits
         /// between them as CSS draws it.
         Optional<vg::BorderColors> SideColors;
+        /// Custom properties (`--name`) the fill and the border colour come from where the drawn
+        /// view has them; FillColor and BorderColor are their fallbacks. A side's own colour
+        /// (SideColors) stays as written.
+        String FillVariable;
+        String BorderVariable;
 
         /// The border's width on each side: SideWidths, or BorderWidth on all four.
         [[nodiscard]] vg::BorderWidths Widths() const
@@ -75,6 +80,8 @@ export namespace foundation::ui
 
         void Draw(UIDrawContext& ctx, const Rectangle& bounds) override
         {
+            const core::Color fill = ctx.ColorOf(FillColor, FillVariable.AsView());
+            const core::Color border = ctx.ColorOf(BorderColor, BorderVariable.AsView());
             // Border strokes are INSET (stroke center pulled in by half the width) so the whole
             // border lies INSIDE bounds - border-box painting. VG strokes are
             // centered on the path, so an un-inset stroke would hang half outside the view,
@@ -82,11 +89,11 @@ export namespace foundation::ui
             if (SideWidths.HasValue() || SideColors.HasValue())
             {
                 // Sides that differ: VG's box draws them, analytically or tessellated.
-                const vg::BorderColors colors = Colors();
+                const vg::BorderColors colors = SideColors.HasValue() ? SideColors.Value() : vg::BorderColors(border);
                 const bool bordered = !colors.IsTransparent() && !Widths().IsZero();
-                if (FillColor.a > 0.0f || bordered)
+                if (fill.a > 0.0f || bordered)
                 {
-                    ctx.VG().DrawBox(bounds, Radii, FillColor, bordered ? Widths() : vg::BorderWidths{}, colors);
+                    ctx.VG().DrawBox(bounds, Radii, fill, bordered ? Widths() : vg::BorderWidths{}, colors);
                 }
                 return;
             }
@@ -94,11 +101,11 @@ export namespace foundation::ui
             {
                 // Fill and border as ONE box: one signed distance gives both, so they cannot
                 // disagree at the corners, and the border lies inside bounds (border-box).
-                const bool bordered = BorderColor.a > 0.0f && BorderWidth > 0.0f;
-                if (FillColor.a > 0.0f || bordered)
+                const bool bordered = border.a > 0.0f && BorderWidth > 0.0f;
+                if (fill.a > 0.0f || bordered)
                 {
-                    ctx.VG().DrawBox(bounds, Radii, FillColor, vg::BorderWidths(bordered ? BorderWidth : 0.0f),
-                                     BorderColor);
+                    ctx.VG().DrawBox(bounds, Radii, fill, vg::BorderWidths(bordered ? BorderWidth : 0.0f),
+                                     border);
                 }
                 return;
             }
@@ -108,11 +115,11 @@ export namespace foundation::ui
                                        Max(0.0f, bounds.height - BorderWidth)};
             if (!Radii.IsZero())
             {
-                if (FillColor.a > 0.0f)
+                if (fill.a > 0.0f)
                 {
-                    ctx.VG().FillRoundedRect(bounds, Radii, FillColor);
+                    ctx.VG().FillRoundedRect(bounds, Radii, fill);
                 }
-                if (BorderColor.a > 0.0f && BorderWidth > 0.0f)
+                if (border.a > 0.0f && BorderWidth > 0.0f)
                 {
                     // Shrink radii with the inset so the stroke stays concentric.
                     vg::CornerRadii r = Radii;
@@ -120,18 +127,18 @@ export namespace foundation::ui
                     r.topRight = Max(0.0f, r.topRight - inset);
                     r.bottomRight = Max(0.0f, r.bottomRight - inset);
                     r.bottomLeft = Max(0.0f, r.bottomLeft - inset);
-                    ctx.VG().StrokeRoundedRect(borderRect, r, BorderColor, BorderWidth);
+                    ctx.VG().StrokeRoundedRect(borderRect, r, border, BorderWidth);
                 }
             }
             else
             {
-                if (FillColor.a > 0.0f)
+                if (fill.a > 0.0f)
                 {
-                    ctx.VG().FillRect(bounds, FillColor);
+                    ctx.VG().FillRect(bounds, fill);
                 }
-                if (BorderColor.a > 0.0f && BorderWidth > 0.0f)
+                if (border.a > 0.0f && BorderWidth > 0.0f)
                 {
-                    ctx.VG().StrokeRect(borderRect, BorderColor, BorderWidth);
+                    ctx.VG().StrokeRect(borderRect, border, BorderWidth);
                 }
             }
         }

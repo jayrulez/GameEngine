@@ -806,6 +806,64 @@ TEST_CASE("box-model: a backdrop blur keeps to the corners the view's background
     CHECK(rounded > square);
 }
 
+TEST_CASE("box-model: a drawable's var() colours resolve against the view drawing it")
+{
+    // One rule, several accents: the background takes --accent from the view it fills, and the
+    // var()'s fallback where the view has none.
+    UIContext ctx{DefaultAllocator()};
+    auto root = MakeRoot();
+    EnsureGlobals();
+    Init(ctx, root.Get(), 400, 300);
+    ctx.SetStyleSheet(LoadSSS(u8".card { background: rounded-rect(var(--accent, #0000FF), radius=4, "
+                              u8"border=var(--edge), border-width=1); }"
+                              u8".red { --accent: #FF0000; }"
+                              u8".green { --accent: #00FF00; }"
+                              u8".wash { background: linear-gradient(90deg, var(--from), #000000); --from: #FFFF00; }"));
+    const auto colourOf = [&](StringView classes) -> Color
+    {
+        auto frame = New<FrameLayout>();
+        auto card = New<Panel>();
+        LayoutStyle size;
+        size.Width = SizeSpec::Fixed(Unit::Dp(40));
+        size.Height = SizeSpec::Fixed(Unit::Dp(20));
+        card->SetLayout(size);
+        card->AddClass(u8"card");
+        if (!classes.IsEmpty())
+            card->AddClass(classes);
+        frame->AddView(card.Get());
+        root->AddView(frame.Get());
+        LayoutPass(ctx, root.Get());
+        vg::VGContext vgContext;
+        ctx.DrawRootView(root.Get(), vgContext);
+        root->RemoveView(frame.Get());
+        const vg::VGBatch& batch = vgContext.GetBatch();
+        return batch.vertices.IsEmpty() ? Color{-1, -1, -1, -1} : batch.vertices[0].color;
+    };
+    const Color red = colourOf(u8"red");
+    CHECK(red.r > 0.99f);
+    CHECK(red.b < 0.01f);
+    const Color green = colourOf(u8"green");
+    CHECK(green.g > 0.99f);
+    CHECK(green.r < 0.01f);
+    const Color fallback = colourOf(u8""); // no --accent: the var()'s fallback
+    CHECK(fallback.b > 0.99f);
+    CHECK(fallback.r < 0.01f);
+
+    // The parse keeps the names beside the fallbacks.
+    core::RefPtr<StyleSheet> sheet = LoadSSS(u8".x { background: linear-gradient(var(--a), #000000 50%, var(--b, #FFFFFF)); }"
+                                             u8".y { background: color(var(--c)); }");
+    REQUIRE(sheet);
+    auto* gradient = core::Cast<GradientDrawable>(sheet->GetRule(0).GetValue(StyleProperty::Background).Value().AsDrawable());
+    REQUIRE(gradient != nullptr);
+    REQUIRE(gradient->StopVariables.Size() == 3u);
+    CHECK(gradient->StopVariables[0] == StringView(u8"--a"));
+    CHECK(gradient->StopVariables[1].IsEmpty());
+    CHECK(gradient->Stops[2].color.r == doctest::Approx(1.0f)); // b's fallback
+    auto* solid = core::Cast<ColorDrawable>(sheet->GetRule(1).GetValue(StyleProperty::Background).Value().AsDrawable());
+    REQUIRE(solid != nullptr);
+    CHECK(solid->ColorVariable == StringView(u8"--c"));
+}
+
 // === sheet-driven LayoutStyle ===
 
 TEST_CASE("box-model: the cascade fills undeclared LayoutStyle fields; inline wins")

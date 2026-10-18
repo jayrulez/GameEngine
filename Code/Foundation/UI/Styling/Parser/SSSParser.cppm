@@ -172,6 +172,28 @@ export namespace foundation::ui
         /// Parse a color argument inside a function call (for drawable factories).
         Color ParseColorArg() { return ParseColorValue(); }
 
+        /// A drawable's colour argument that may be `var(--name[, fallback])`: the custom property's
+        /// name goes in `variable` (empty for a written colour), resolved where the drawable is
+        /// drawn, and the fallback (transparent without one) or the written colour is returned.
+        Color ParseColorArgOrVar(String& variable)
+        {
+            variable = String();
+            if (Peek().Kind == TokenKind::Ident && Peek().Text == StringView(u8"var") &&
+                m_pos + 1 < static_cast<i32>(m_tokens.Size()) &&
+                m_tokens[static_cast<usize>(m_pos + 1)].Kind == TokenKind::LParen)
+            {
+                Consume(); // var
+                Consume(); // (
+                variable = String(ConsumeIdent());
+                Color fallback = Color::Transparent;
+                if (MatchComma())
+                    fallback = ParseColorValue();
+                Expect(TokenKind::RParen);
+                return fallback;
+            }
+            return ParseColorValue();
+        }
+
         /// Parse 1-4 numbers into per-corner radii: one value =
         /// uniform; four = top-left, top-right, bottom-right, bottom-left (CSS order).
         vg::CornerRadii ParseCornerRadiiValue()
@@ -292,17 +314,23 @@ export namespace foundation::ui
             return tok.NumericValue;
         }
 
-        /// A gradient's colour stops, each `<color> [<offset>%]`, separated by commas, up to a
-        /// keyword argument or the closing parenthesis. Offsets left out are spread evenly
+        /// A gradient's colour stops, each `<color> [<offset>%]` (a colour may be a var()), separated
+        /// by commas, up to a keyword argument or the closing parenthesis; `variables` gets each
+        /// stop's custom property name, or nothing when every colour is written. Offsets left out are spread evenly
         /// between their neighbours, the first at 0 and the last at 1, as CSS spreads them.
-        Array<vg::GradientStop> ParseGradientStops()
+        Array<vg::GradientStop> ParseGradientStops(Array<String>& variables)
         {
             Array<vg::GradientStop> stops;
             Array<bool> placed;
+            variables.Clear();
+            bool anyVariable = false;
             while (!IsAtRParen() && PeekKeywordArg().IsEmpty())
             {
                 vg::GradientStop stop;
-                stop.color = ParseColorValue();
+                String variable;
+                stop.color = ParseColorArgOrVar(variable);
+                anyVariable = anyVariable || !variable.IsEmpty();
+                variables.PushBack(Move(variable));
                 const bool hasOffset = Peek().Kind == TokenKind::Number;
                 if (hasOffset)
                     stop.offset = ParseFloatValue();
@@ -311,6 +339,8 @@ export namespace foundation::ui
                 if (!MatchComma())
                     break;
             }
+            if (!anyVariable)
+                variables.Clear(); // written colours only: no names to resolve
             if (stops.IsEmpty())
                 return stops;
             if (!placed[0])
@@ -1872,8 +1902,10 @@ export namespace foundation::ui
         Register(u8"color",
                  [](SSSParser& parser, StyleSheet& sheet) -> RefPtr<Drawable>
                  {
-                     const Color color = parser.ParseColorArg();
+                     String variable;
+                     const Color color = parser.ParseColorArgOrVar(variable);
                      RefPtr<ColorDrawable> d = MakeRef<ColorDrawable>(parser.Allocator(), color);
+                     d->ColorVariable = Move(variable);
                      sheet.OwnDrawable(d);
                      return d;
                  });
@@ -1884,9 +1916,11 @@ export namespace foundation::ui
         Register(u8"rounded-rect",
                  [](SSSParser& parser, StyleSheet& sheet) -> RefPtr<Drawable>
                  {
-                     const Color fillColor = parser.ParseColorArg();
+                     String fillVariable;
+                     const Color fillColor = parser.ParseColorArgOrVar(fillVariable);
                      vg::CornerRadii radii{};
                      Color borderColor = Color::Transparent;
+                     String borderVariable;
                      Thickness widths{};
                      bool sideWidths = false;
                      Optional<Color> sides[4]; // top, right, bottom, left
@@ -1909,7 +1943,7 @@ export namespace foundation::ui
                          else if (kw == StringView(u8"border"))
                          {
                              parser.ConsumeKeywordArg();
-                             borderColor = parser.ParseColorArg();
+                             borderColor = parser.ParseColorArgOrVar(borderVariable);
                          }
                          else if (kw == StringView(u8"border-top") || kw == StringView(u8"border-right") ||
                                   kw == StringView(u8"border-bottom") || kw == StringView(u8"border-left"))
@@ -1927,6 +1961,8 @@ export namespace foundation::ui
 
                      RefPtr<RoundedRectDrawable> d = MakeRef<RoundedRectDrawable>(
                          parser.Allocator(), fillColor, radii, borderColor, widths.Top);
+                     d->FillVariable = Move(fillVariable);
+                     d->BorderVariable = Move(borderVariable);
                      if (sideWidths)
                          d->SideWidths = vg::BorderWidths(widths.Top, widths.Right, widths.Bottom, widths.Left);
                      if (sides[0].HasValue() || sides[1].HasValue() || sides[2].HasValue() || sides[3].HasValue())
@@ -1968,11 +2004,15 @@ export namespace foundation::ui
                          parser.MatchComma();
                      }
 
-                     const Color c1 = parser.ParseColorArg();
+                     String startVariable;
+                     const Color c1 = parser.ParseColorArgOrVar(startVariable);
                      parser.MatchComma();
-                     const Color c2 = parser.ParseColorArg();
+                     String endVariable;
+                     const Color c2 = parser.ParseColorArgOrVar(endVariable);
                      RefPtr<GradientDrawable> d =
                          MakeRef<GradientDrawable>(parser.Allocator(), c1, c2, dir);
+                     d->StartVariable = Move(startVariable);
+                     d->EndVariable = Move(endVariable);
                      detail::ParseGradientRadius(parser, *d);
                      sheet.OwnDrawable(d);
                      return d;
@@ -2017,7 +2057,7 @@ export namespace foundation::ui
                          parser.MatchComma();
                      }
                      d->AngleDegrees = angle < 0.0f ? angle + 360.0f : angle;
-                     d->Stops = parser.ParseGradientStops();
+                     d->Stops = parser.ParseGradientStops(d->StopVariables);
                      detail::ParseGradientRadius(parser, *d);
                      sheet.OwnDrawable(d);
                      return d;
@@ -2030,7 +2070,7 @@ export namespace foundation::ui
                  {
                      RefPtr<GradientDrawable> d = MakeRef<GradientDrawable>(parser.Allocator());
                      d->Radial = true;
-                     d->Stops = parser.ParseGradientStops();
+                     d->Stops = parser.ParseGradientStops(d->StopVariables);
                      detail::ParseGradientRadius(parser, *d);
                      sheet.OwnDrawable(d);
                      return d;

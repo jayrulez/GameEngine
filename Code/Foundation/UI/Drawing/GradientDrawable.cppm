@@ -48,6 +48,12 @@ export namespace foundation::ui
         bool Radial = false;
         /// The box's corners: the fill is rounded to them, and a shadow under it follows them.
         vg::CornerRadii Radii{};
+        /// Custom properties (`--name`) the colours come from where the drawn view has them, the
+        /// written colours their fallbacks: StartColor's and EndColor's, and one per stop (empty
+        /// for a written one) when StopVariables is as long as Stops.
+        String StartVariable;
+        String EndVariable;
+        Array<String> StopVariables;
 
         GradientDrawable() = default;
         GradientDrawable(core::Color start, core::Color end,
@@ -82,7 +88,7 @@ export namespace foundation::ui
             if (Radial)
             {
                 vg::VGRadialGradientFill fill{centre, Sqrt(w * w + h * h) * 0.5f};
-                AddStopsTo(fill);
+                AddStopsTo(ctx, fill);
                 ctx.VG().FillPath(pb.ToPath(), fill);
                 return;
             }
@@ -118,23 +124,25 @@ export namespace foundation::ui
                 }
             }
             vg::VGLinearGradientFill fill{from, to};
-            AddStopsTo(fill);
+            AddStopsTo(ctx, fill);
             ctx.VG().FillPath(pb.ToPath(), fill);
         }
 
     private:
         template <typename Fill>
-        void AddStopsTo(Fill& fill) const
+        void AddStopsTo(const UIDrawContext& ctx, Fill& fill) const
         {
             if (Stops.IsEmpty())
             {
-                fill.AddStop(0.0f, StartColor);
-                fill.AddStop(1.0f, EndColor);
+                fill.AddStop(0.0f, ctx.ColorOf(StartColor, StartVariable.AsView()));
+                fill.AddStop(1.0f, ctx.ColorOf(EndColor, EndVariable.AsView()));
                 return;
             }
-            for (const vg::GradientStop& stop : Stops)
+            const bool named = StopVariables.Size() == Stops.Size();
+            for (usize i = 0; i < Stops.Size(); ++i)
             {
-                fill.AddStop(stop.offset, stop.color);
+                const vg::GradientStop& stop = Stops[i];
+                fill.AddStop(stop.offset, named ? ctx.ColorOf(stop.color, StopVariables[i].AsView()) : stop.color);
             }
         }
     };

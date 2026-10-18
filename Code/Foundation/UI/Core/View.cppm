@@ -728,6 +728,12 @@ export namespace foundation::ui
         /// through the parent chain like every custom property; None when unset. Also the
         /// custom-layout extension point: a container reads `child->CustomProperty(u8"--ring-angle")`.
         [[nodiscard]] StyleValue CustomProperty(StringView name);
+        /// A custom property of `view` (a View) as a colour, if it is one: what a drawable's var()
+        /// colours resolve through (UIDrawContext::SetCustomColors).
+        [[nodiscard]] static Optional<Color> CustomColorOf(const void* view, StringView name)
+        {
+            return const_cast<View*>(static_cast<const View*>(view))->CustomProperty(name).AsColor();
+        }
         /// A Length-valued property resolved against `referenceSize` (the containing box on
         /// that axis) and this view's font size; a plain Float value passes through; else
         /// `defaultVal`.
@@ -1369,7 +1375,12 @@ export namespace foundation::ui
 
                 ApplyTextEffects(ctx, *child);
                 const DrawBlend previousBlend = ctx.SetBlend(child->CurrentDrawBlend());
+                // A drawable's var() colours resolve against this child's custom properties while
+                // it draws (its children set their own).
+                const UIDrawContext::CustomColors previousColors =
+                    ctx.SetCustomColors(UIDrawContext::CustomColors{child, &View::CustomColorOf});
                 child->OnDraw(ctx);
+                ctx.SetCustomColors(previousColors);
                 ctx.SetBlend(previousBlend);
                 DrawBoxShadows(ctx, *child, shadows.AsShadows(), true);
 

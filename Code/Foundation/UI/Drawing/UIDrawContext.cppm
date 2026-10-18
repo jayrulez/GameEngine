@@ -71,6 +71,33 @@ export namespace foundation::ui
             return m_debugSettings;
         }
 
+        /// Where a drawable's `var(--name)` colours resolve: the view being drawn's custom
+        /// properties, through `lookup`. DrawChildren sets it around each view's drawing and puts
+        /// the previous one back.
+        using CustomColorLookup = Optional<core::Color> (*)(const void* source, StringView name);
+        struct CustomColors
+        {
+            const void* source = nullptr;
+            CustomColorLookup lookup = nullptr;
+        };
+        CustomColors SetCustomColors(CustomColors colors) noexcept
+        {
+            const CustomColors previous = m_customColors;
+            m_customColors = colors;
+            return previous;
+        }
+        /// A drawable's colour: the custom property `variable` names, if the view being drawn has
+        /// it as a colour, else `value` (the var()'s fallback, or the colour written).
+        [[nodiscard]] core::Color ColorOf(core::Color value, StringView variable) const
+        {
+            if (variable.IsEmpty() || m_customColors.lookup == nullptr)
+            {
+                return value;
+            }
+            const Optional<core::Color> found = m_customColors.lookup(m_customColors.source, variable);
+            return found.HasValue() ? found.Value() : value;
+        }
+
         /// Pushes a clip rectangle (in current local coordinates).
         void PushClip(const Rectangle& rect) { m_vg->PushClipRect(rect); }
         /// Pops the last pushed clip.
@@ -107,6 +134,7 @@ export namespace foundation::ui
         vg::VGContext* m_vg;
         DrawBlend m_blend{};
         f32 m_dpiScale;
+        CustomColors m_customColors{};
         fonts::IFontService* m_fontService;
         UIDebugDrawSettings m_debugSettings;
     };

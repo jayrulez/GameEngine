@@ -265,7 +265,7 @@ field and combo box their first line's, any other the bottom of its content box)
 lines them up, growing to hold them (e6db1fec3). Arranged edges round to the root's display scale,
 each edge on its own, with relative offsets and the scroll shift; a new scale lays the whole tree
 out again (1d369d485). The layout overlay draws border boxes, padding, margins and text baselines
-over a root's tree (`SceneRoot::SetLayoutOverlay`; F9 or `--layout-overlay` in the sandbox,
+over a root's tree (`SceneRoot::SetDebugOverlay` since E8c; F9 or `--layout-overlay` in the sandbox,
 9d9c4d5bc). The sandbox's Layout page shows all of it in markup (22d67ab76).
 Left: a container's baseline is its content box's bottom, not its first child's as in CSS, and
 grid and stack place `baseline` as start; text is not snapped to the pixel grid, only boxes;
@@ -326,7 +326,8 @@ sets returns to the node's own value, its default (widgets write theirs in a sco
 set before a sheet first styled it (fb87619cd). Every node carries a text style (colour, font
 with family and size, alignment) that inherits, read by widgets through OnTextStyleChange; the
 SetTheme hooks are gone; the table marks the inherited properties; inherit, initial and unset
-work (ad3c1da49). A part's style is a box and an opacity, each aspect over the widget's own look
+work (ad3c1da49). The built-in themes still write their colours directly: the palette of custom
+properties the design proposed is not built (in the 0.2 backlog). A part's style is a box and an opacity, each aspect over the widget's own look
 (1fceed0e8). A state change restyles the node alone unless a rule reads that state through an
 ancestor (its subtree) or a sibling (its later siblings) (d21ff1e93). Found on the way: a flex
 row clamped a non-stretched item's height to the row's (9cf7b51d1). The Styling page shows the
@@ -1037,8 +1038,9 @@ As built after the numbers (2026-10-17):
   every channel within 8 on all but 0.1% of the pixels; a miss writes a diff; exit 1 on a miss, 77
   without a device. `--approve-images` (or `--approve-images backend`) writes the references, once
   the user has looked. Deterministic: two Vulkan runs give the same bytes, and WebGPU on the same
-  GPU the same pixels. The references wait for the user's approval, and the ctest entries for
-  them. The culling differential runs in GUI.Tests on VG's geometry rather than here.
+  GPU the same pixels. The user approved the references, and ctest runs `GUI.Images.vulkan` and
+  `GUI.Images.webgpu` (skipped, 77, without a device). The culling differential runs in GUI.Tests
+  on VG's geometry rather than here.
 
 ### E9 Translation, right to left, and accessibility groundwork
 

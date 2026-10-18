@@ -82,10 +82,13 @@ Gaps the phases left, by area (each phase's own notes say more):
   a model of their own); the platform adapters (UI Automation, NSAccessibility, AT-SPI) and real
   text to speech are host work.
 - **Layout.** A container's baseline is its content box's bottom, not its first child's; grid and
-  stack place `baseline` as start; text is not snapped to the pixel grid; `z-index` is parsed but
-  orders neither drawing nor hit testing; no `calc()`; a node scrolling on both axes gives `fr`
-  columns their content's width.
-- **Styling.** Parts take no motion and no text properties; `inherit` on a non-inherited property
+  stack place `baseline` as start; text is not snapped to the pixel grid; no `calc()`; a node
+  scrolling on both axes gives `fr` columns their content's width.
+- **Keyboard.** A menu's arrows, Return and Escape are handled in widget code, so a player cannot
+  rebind them through the keymap; there is no way to capture the next key before the keymap sees
+  it (a rebinding screen); no punctuation or keypad key codes, tab index or Tab passing through.
+- **Styling.** The built-in themes write their colours directly, not through a palette of custom
+  properties (E3's design); parts take no motion and no text properties; `inherit` on a non-inherited property
   takes the parent's cascaded value, not its live one; attribute selectors read reflected
   properties only; a reflected property code set before the sheet first styled the node loses
   to the sheet.

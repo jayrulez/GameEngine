@@ -16,3 +16,11 @@ foreach(backend vulkan webgpu)
              COMMAND GUISandbox --${backend} --image-tests --image-out ${CMAKE_BINARY_DIR}/gui-images)
     set_tests_properties(GUI.Images.${backend} PROPERTIES SKIP_RETURN_CODE 77)
 endforeach()
+
+# The sweep (E10 of Specs/gui-lab-evolution-2.md): every page's widgets clicked and right-clicked,
+# every page walked by keys and the pad, the game menu opened, on each backend; it fails when
+# anything warns or errs while it runs, and is skipped (77) without a device.
+foreach(backend vulkan webgpu)
+    add_test(NAME GUI.Sweep.${backend} COMMAND GUISandbox --${backend} --sweep)
+    set_tests_properties(GUI.Sweep.${backend} PROPERTIES SKIP_RETURN_CODE 77)
+endforeach()

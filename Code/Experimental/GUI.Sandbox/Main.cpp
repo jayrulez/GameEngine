@@ -13,6 +13,7 @@
 // Drawn through VG with everything it has (analytic boxes, layers and blurs, the MSAA and stencil
 // pass), only on frames that need it. Input reaches the root on show through GuiInputBridge.
 
+#include <algorithm> // sort (the soak's frame times)
 #include <new>
 #include <cstdio> // printf, fprintf
 #include <cstdlib> // atof
@@ -58,8 +59,29 @@ namespace script = foundation::script;
 
 namespace
 {
-    // This binary's composition root: the ONE ambient-allocator decision here.
-    [[nodiscard]] IAllocator& AppRoot() noexcept { return DefaultAllocator(); }
+    // This binary's composition root: the ONE ambient-allocator decision here. It counts what is
+    // live (--soak reports it); built in place and never destroyed, so frees at exit still find it.
+    [[nodiscard]] TrackingAllocator& AppRoot() noexcept
+    {
+        alignas(TrackingAllocator) static unsigned char storage[sizeof(TrackingAllocator)];
+        static TrackingAllocator* const tracking = new (storage) TrackingAllocator(DefaultAllocator());
+        return *tracking;
+    }
+
+    // The process's resident memory in MiB (Linux; 0 elsewhere), for what does not go through AppRoot.
+    [[nodiscard]] f64 ResidentMiB()
+    {
+        f64 mib = 0.0;
+        if (FILE* statm = std::fopen("/proc/self/statm", "r"))
+        {
+            unsigned long size = 0;
+            unsigned long resident = 0;
+            if (std::fscanf(statm, "%lu %lu", &size, &resident) == 2)
+                mib = static_cast<f64>(resident) * 4096.0 / (1024.0 * 1024.0);
+            std::fclose(statm);
+        }
+        return mib;
+    }
 
     constexpr StringView kRoboto = u8"Assets/fonts/roboto/Roboto-Regular.ttf";
     constexpr StringView kLilita = u8"Assets/fonts/lilita-one/LilitaOne-Regular.ttf";
@@ -205,6 +227,10 @@ public:
     void SetAlwaysRedraw(bool always) { m_alwaysRedraw = always; }
     void SetFrameStats(bool stats) { m_frameStats = stats; }
     void SetSweep(bool sweep) { m_sweep = sweep; }
+    /// --soak <minutes> [--soak-csv <path>]: the sweep's steps over and over for that long, a CSV
+    /// row every ten seconds (frame time percentiles, live allocations and bytes, resident memory).
+    void SetSoak(f32 minutes) { m_soakSeconds = Max(0.0f, minutes) * 60.0f; m_sweep = m_soakSeconds > 0.0f; }
+    void SetSoakCsv(StringView path) { m_soakCsv = String(path); }
     void SetScroll(f32 pixels) { m_scroll = pixels; }
     void SetLayoutOverlay(bool on) { m_layoutOverlay = on; }
     void SetInputOverlay(bool on) { m_inputOverlay = on; }
@@ -219,10 +245,19 @@ public:
     [[nodiscard]] int ImageExitCode(int runCode) const
     {
         if (!m_imageTests)
-            return runCode;
+            return m_sweep ? SweepExitCode() : runCode;
         if (m_imagesDone == 0)
             return 77;
         return m_imageFailures == 0 ? 0 : 1;
+    }
+    // The sweep's verdict: 77 (skipped) when it never ran (no device), else whether anything warned.
+    [[nodiscard]] int SweepExitCode() const
+    {
+        if (!m_sweepDone)
+            return 77;
+        if (m_sweepLog.problems != 0)
+            std::printf("GUISandbox sweep: %u warnings or errors\n", m_sweepLog.problems);
+        return m_sweepLog.problems == 0 ? 0 : 1;
     }
     void SetInspectSelector(StringView selector) { m_openInspector = true; m_inspectSelector = String(selector); }
     /// --lang <locale>: the GUI's language at start (E9e; "pseudo": English pseudolocalized).
@@ -296,16 +331,39 @@ private:
     bool m_frameStats = false;
     i32 m_stressLoad = 1;
     f32 m_nextStressStatsTime = 0.0f;
-    // --sweep: every page, then the game menu, each widget hovered, clicked and right-clicked, one
-    // step a frame, each printed first (a crash's last line names its widget); then exit.
+    // --sweep: every page, then the game menu, each widget hovered, clicked and right-clicked, and
+    // each page walked by keys and the pad, one step a frame, each printed first (a crash's last
+    // line names its widget); then exit, failing if anything warned or erred while it ran (the
+    // GUI.Sweep ctest entries, skipped without a device).
     bool m_sweep = false;
+    bool m_sweepDone = false;
     struct SweepStep
     {
         String page;     // a page to show first (empty: none)
         bool menu = false; // the game menu's root
+        bool keys = false; // the page walked by Tab, the arrows and the pad instead of a click
         Float2 at{};
         String what;
     };
+    // What warned or erred while the sweep ran.
+    class SweepLog final : public ILogSink
+    {
+    public:
+        u32 problems = 0;
+        void Write(LogLevel level, StringView, StringView) noexcept override
+        {
+            if (static_cast<u8>(level) >= static_cast<u8>(LogLevel::Warning))
+                ++problems;
+        }
+    };
+    SweepLog m_sweepLog;
+    f32 m_soakSeconds = 0.0f; // > 0: soaking, not sweeping once
+    String m_soakCsv = String(u8"gui-soak.csv");
+    f32 m_soakStart = -1.0f;
+    f32 m_soakNextRow = 0.0f;
+    Array<f32> m_soakFrames; // frame times (ms) since the last row
+    FILE* m_soakFile = nullptr;
+    void SoakFrame();
     Array<SweepStep> m_sweepSteps;
     usize m_sweepNext = 0;
     f32 m_nextStatsTime = 1.0f;
@@ -1440,6 +1498,45 @@ namespace
 
 }
 
+void GUISandbox::SoakFrame()
+{
+    if (m_soakStart < 0.0f)
+    {
+        m_soakStart = m_totalTime;
+        m_soakNextRow = m_totalTime + 10.0f;
+        m_soakFile = std::fopen(reinterpret_cast<const char*>(m_soakCsv.CStr()), "w");
+        if (m_soakFile != nullptr)
+            std::fprintf(m_soakFile, "seconds,frames,p50_ms,p95_ms,p99_ms,live_allocations,live_bytes,resident_mib\n");
+        std::printf("GUISandbox soak: %.1f minutes, rows in %s\n", static_cast<double>(m_soakSeconds / 60.0f),
+                    reinterpret_cast<const char*>(m_soakCsv.CStr()));
+    }
+    m_soakFrames.PushBack(m_deltaTime * 1000.0f);
+    if (m_totalTime < m_soakNextRow || m_soakFrames.IsEmpty())
+        return;
+    m_soakNextRow += 10.0f;
+    Array<f32> sorted = m_soakFrames;
+    std::sort(sorted.begin(), sorted.end());
+    const auto at = [&sorted](f32 share) { return sorted[Min(sorted.Size() - 1, static_cast<usize>(share * static_cast<f32>(sorted.Size())))]; };
+    const TrackingAllocator& tracking = AppRoot();
+    std::printf("GUISandbox soak %.0fs: p50 %.2f ms, p95 %.2f ms, p99 %.2f ms, %llu live allocations, %.1f MiB resident\n",
+                static_cast<double>(m_totalTime - m_soakStart), static_cast<double>(at(0.5f)), static_cast<double>(at(0.95f)),
+                static_cast<double>(at(0.99f)), static_cast<unsigned long long>(tracking.LiveAllocations()), ResidentMiB());
+    if (m_soakFile != nullptr)
+    {
+        std::fprintf(m_soakFile, "%.1f,%llu,%.3f,%.3f,%.3f,%llu,%llu,%.2f\n", static_cast<double>(m_totalTime - m_soakStart),
+                     static_cast<unsigned long long>(sorted.Size()), static_cast<double>(at(0.5f)), static_cast<double>(at(0.95f)),
+                     static_cast<double>(at(0.99f)), static_cast<unsigned long long>(tracking.LiveAllocations()),
+                     static_cast<unsigned long long>(tracking.LiveBytes()), ResidentMiB());
+        std::fflush(m_soakFile);
+    }
+    m_soakFrames.Clear();
+    if (m_totalTime - m_soakStart >= m_soakSeconds && m_soakFile != nullptr)
+    {
+        std::fclose(m_soakFile);
+        m_soakFile = nullptr;
+    }
+}
+
 void GUISandbox::Sweep()
 {
     if (m_frames < 10)
@@ -1460,15 +1557,21 @@ void GUISandbox::Sweep()
                 const gui::Rect bounds = node->GetScreenBounds();
                 if (bounds.y + bounds.height * 0.5f > static_cast<f32>(m_height))
                     continue; // below the fold
-                m_sweepSteps.PushBack(SweepStep{page.id, false, Float2{bounds.x + bounds.width * 0.5f, bounds.y + bounds.height * 0.5f}, node->DebugName()});
+                m_sweepSteps.PushBack(SweepStep{page.id, false, false, Float2{bounds.x + bounds.width * 0.5f, bounds.y + bounds.height * 0.5f}, node->DebugName()});
             }
+            m_sweepSteps.PushBack(SweepStep{page.id, false, true, Float2{}, String(u8"keys and pad")});
         }
         ShowPage(m_startPage.AsView());
-        m_sweepSteps.PushBack(SweepStep{String(), true, Float2{}, String(u8"open the game menu")});
+        m_sweepSteps.PushBack(SweepStep{String(), true, false, Float2{}, String(u8"open the game menu")});
         std::printf("GUISandbox sweep: %llu steps\n", static_cast<unsigned long long>(m_sweepSteps.Size()));
+        GlobalLogger().AddSink(&m_sweepLog); // from here on, a warning fails the sweep
     }
+    if (m_soakSeconds > 0.0f && m_sweepNext >= m_sweepSteps.Size() && m_totalTime - m_soakStart < m_soakSeconds)
+        m_sweepNext = 0; // soaking: round again
     if (m_sweepNext >= m_sweepSteps.Size())
     {
+        GlobalLogger().RemoveSink(&m_sweepLog);
+        m_sweepDone = true;
         std::printf("GUISandbox sweep: done\n");
         std::fflush(stdout);
         Exit();
@@ -1485,6 +1588,22 @@ void GUISandbox::Sweep()
     }
     if (step.page.AsView() != m_current.AsView())
         ShowPage(step.page.AsView());
+    if (step.keys)
+    {
+        // Through the page by Tab, the arrows and the pad: what a keyboard or pad player reaches.
+        gui::EventDispatcher& keys = *m_root->GetEventDispatcher();
+        const gui::KeyCode codes[] = {gui::KeyCode::Tab, gui::KeyCode::Tab, gui::KeyCode::Down, gui::KeyCode::Right,
+                                      gui::KeyCode::Up, gui::KeyCode::Left, gui::KeyCode::Space};
+        for (const gui::KeyCode code : codes)
+        {
+            keys.InjectKeyDown(static_cast<u32>(code));
+            keys.InjectKeyUp(static_cast<u32>(code));
+        }
+        keys.InjectPadButton(gui::PadButton::South);
+        keys.InjectPadButton(gui::PadButton::East);
+        keys.InjectKeyDown(static_cast<u32>(gui::KeyCode::Escape));
+        return;
+    }
     // Device pixels: the root's transform maps them (its display scale).
     const Float2 at{step.at.x * m_root->GetDisplayScale(), step.at.y * m_root->GetDisplayScale()};
     gui::EventDispatcher& d = *m_root->GetEventDispatcher();
@@ -1532,7 +1651,11 @@ void GUISandbox::OnRender()
     if (m_scroll > 0.0f && m_frames >= 10 && m_frames <= 20 && m_content != nullptr)
         m_content->SetScrollOffset(Float2{0.0f, m_scroll});
     if (m_sweep)
+    {
         Sweep();
+        if (m_soakSeconds > 0.0f)
+            SoakFrame();
+    }
 
     // A window moved to a monitor of another density takes its scale.
     const Float2 viewport{static_cast<f32>(m_width) - InspectorPixels(), static_cast<f32>(m_height)};
@@ -1937,6 +2060,10 @@ int main(int argc, char** argv)
             app.SetFrameStats(true);
         else if (arg == StringView(u8"--sweep"))
             app.SetSweep(true);
+        else if (arg == StringView(u8"--soak") && i + 1 < argc)
+            app.SetSoak(static_cast<f32>(std::atof(argv[++i])));
+        else if (arg == StringView(u8"--soak-csv") && i + 1 < argc)
+            app.SetSoakCsv(next());
         else if (arg == StringView(u8"--layout-overlay"))
             app.SetLayoutOverlay(true);
         else if (arg == StringView(u8"--input-overlay"))

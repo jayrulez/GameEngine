@@ -199,14 +199,28 @@ export namespace experimental::gui
                     return i;
             return Lines.IsEmpty() ? 0 : Lines.Size() - 1;
         }
-        /// Where a caret at `offset` stands across its line.
-        [[nodiscard]] f32 CaretX(usize offset) const { return Lines.IsEmpty() ? 0.0f : CaretXOnLine(offset, LineOf(offset)); }
+        /// Where a caret at `offset` stands across its line (`upstream`: after the text before it,
+        /// where that is elsewhere, at a direction's boundary).
+        [[nodiscard]] f32 CaretX(usize offset, bool upstream = false) const
+        {
+            return Lines.IsEmpty() ? 0.0f : CaretXOnLine(offset, LineOf(offset), upstream);
+        }
         /// Where a caret at `offset` stands across line `line` (a wrapped line's end: its own, not
-        /// the next line's start).
-        [[nodiscard]] f32 CaretXOnLine(usize offset, usize line) const
+        /// the next line's start). Downstream (the default) it is before the text after it;
+        /// `upstream`, after the text before it: the two differ where the directions meet (E9c).
+        [[nodiscard]] f32 CaretXOnLine(usize offset, usize line, bool upstream = false) const
         {
             if (line >= Lines.Size())
                 return 0.0f;
+            if (upstream)
+                for (const LaidOutGlyphs& run : GlyphRuns)
+                {
+                    if (run.Line != line || run.Run < 0)
+                        continue;
+                    for (usize g = 0; g < run.Glyphs.Size(); ++g)
+                        if (run.GlyphEnd[g] == offset && run.GlyphStart[g] < offset)
+                            return run.Glyphs[g].rightToLeft ? run.Glyphs[g].x : run.Glyphs[g].x + run.Glyphs[g].advance;
+                }
             // The leading edge of the glyph the offset starts (a right-to-left glyph's is its
             // right), else the trailing edge of the one before it, else the line's start.
             const LaidOutLine& at = Lines[line];
@@ -238,9 +252,12 @@ export namespace experimental::gui
             return x;
         }
         /// The offset a caret takes for a point: the line under its y (the first above, the last
-        /// below), then the glyph edge nearest its x.
-        [[nodiscard]] usize OffsetAt(core::Float2 point) const
+        /// below), then the glyph edge nearest its x; `upstream` says the edge was the trailing one
+        /// of the text before the offset.
+        [[nodiscard]] usize OffsetAt(core::Float2 point, bool* upstream = nullptr) const
         {
+            if (upstream != nullptr)
+                *upstream = false;
             if (Lines.IsEmpty())
                 return 0;
             usize line = Lines.Size() - 1;
@@ -250,13 +267,16 @@ export namespace experimental::gui
                     line = i;
                     break;
                 }
-            return OffsetOnLine(line, point.x);
+            return OffsetOnLine(line, point.x, upstream);
         }
-        /// The offset on line `line` nearest across to `x`.
-        [[nodiscard]] usize OffsetOnLine(usize line, f32 x) const
+        /// The offset on line `line` nearest across to `x` (`upstream` as OffsetAt's).
+        [[nodiscard]] usize OffsetOnLine(usize line, f32 x, bool* upstream = nullptr) const
         {
+            if (upstream != nullptr)
+                *upstream = false;
             if (line >= Lines.Size())
                 return 0;
+            bool trailing = false;
             usize best = Lines[line].Start;
             usize lastStart = Lines[line].Start; // the last glyph's start: a wrapped line's end
             f32 bestDistance = Abs(x - (Lines[line].RightToLeft ? Lines[line].Left + Lines[line].Width : Lines[line].Left));
@@ -276,11 +296,13 @@ export namespace experimental::gui
                     {
                         bestDistance = left;
                         best = leftOffset;
+                        trailing = glyph.rightToLeft; // a right-to-left glyph's left edge is its end
                     }
                     if (right < bestDistance)
                     {
                         bestDistance = right;
                         best = rightOffset;
+                        trailing = !glyph.rightToLeft;
                     }
                     lastStart = core::Max(lastStart, run.GlyphStart[g]);
                 }
@@ -289,8 +311,128 @@ export namespace experimental::gui
             // Where a line wraps, its end is the next line's start: a caret there would stand on
             // the next line, so the end of a wrapped line is before its last space.
             if (best == Lines[line].End && line + 1 < Lines.Size() && Lines[line + 1].Start == best)
+            {
                 best = lastStart;
+                trailing = false;
+            }
+            // Upstream only where it stands apart from downstream (a direction's boundary).
+            if (upstream != nullptr && trailing && best > Lines[line].Start)
+                *upstream = CaretXOnLine(best, line, true) != CaretXOnLine(best, line, false);
             return best;
+        }
+
+        /// The caret one stop across from (`offset`, `upstream`) on its line, left (`step` below 0)
+        /// or right, in visual order (E9c): the line's caret places sorted by x, each once. Past the
+        /// line's edge it goes on to the next line where the line reads that way and to the one
+        /// before where it reads the other way. False when there is nowhere to go.
+        [[nodiscard]] bool OffsetVisually(usize offset, bool upstream, i32 step, usize& outOffset, bool& outUpstream) const
+        {
+            if (Lines.IsEmpty())
+                return false;
+            const usize line = LineOf(offset);
+            struct Stop
+            {
+                f32 X;
+                usize Offset;
+                bool Upstream;
+            };
+            Array<Stop> stops;
+            const auto add = [&](usize at, bool up)
+            {
+                const f32 x = CaretXOnLine(at, line, up);
+                for (const Stop& s : stops)
+                    if (Abs(s.X - x) < 0.01f)
+                        return; // a place already reached
+                stops.PushBack(Stop{x, at, up});
+            };
+            // Downstream first, so a place both reach keeps the plain caret.
+            add(Lines[line].Start, false);
+            const bool passes[] = {false, true};
+            for (const bool up : passes)
+                for (const LaidOutGlyphs& run : GlyphRuns)
+                    if (run.Line == line && run.Run >= 0)
+                        for (usize g = 0; g < run.Glyphs.Size(); ++g)
+                            add(up ? run.GlyphEnd[g] : run.GlyphStart[g], up);
+            for (usize i = 1; i < stops.Size(); ++i) // insertion sort: a line's stops are few
+                for (usize j = i; j > 0 && stops[j].X < stops[j - 1].X; --j)
+                    Swap(stops[j], stops[j - 1]);
+            const f32 x = CaretXOnLine(offset, line, upstream);
+            usize at = 0;
+            for (usize i = 0; i < stops.Size(); ++i)
+                if (Abs(stops[i].X - x) < Abs(stops[at].X - x))
+                    at = i;
+            if (step > 0 && at + 1 < stops.Size())
+            {
+                outOffset = stops[at + 1].Offset;
+                outUpstream = stops[at + 1].Upstream;
+                return true;
+            }
+            if (step < 0 && at > 0)
+            {
+                outOffset = stops[at - 1].Offset;
+                outUpstream = stops[at - 1].Upstream;
+                return true;
+            }
+            const bool towardsEnd = (step > 0) != Lines[line].RightToLeft;
+            if (towardsEnd && line + 1 < Lines.Size())
+            {
+                outOffset = Lines[line + 1].Start;
+                outUpstream = false;
+                return true;
+            }
+            if (!towardsEnd && line > 0)
+            {
+                outOffset = Lines[line - 1].End;
+                outUpstream = true;
+                return true;
+            }
+            return false;
+        }
+
+        /// The boxes across line `line` that bytes [start, end) of the text cover (one a stretch of
+        /// glyphs side by side: a selection in mixed-direction text falls in pieces, E9c), left to
+        /// right, as x ranges.
+        void RangeOnLine(usize start, usize end, usize line, Array<core::Float2>& out) const
+        {
+            out.Clear();
+            if (line >= Lines.Size() || end <= start)
+                return;
+            for (const LaidOutGlyphs& run : GlyphRuns)
+            {
+                if (run.Line != line || run.Run < 0)
+                    continue;
+                for (usize g = 0; g < run.Glyphs.Size(); ++g)
+                {
+                    const usize a = Max(start, run.GlyphStart[g]);
+                    const usize b = Min(end, run.GlyphEnd[g]);
+                    if (b <= a)
+                        continue;
+                    const fonts::GlyphPosition& glyph = run.Glyphs[g];
+                    const usize span = run.GlyphEnd[g] - run.GlyphStart[g];
+                    // A ligature's share (from its start's side).
+                    f32 from = static_cast<f32>(a - run.GlyphStart[g]) / static_cast<f32>(span);
+                    f32 to = static_cast<f32>(b - run.GlyphStart[g]) / static_cast<f32>(span);
+                    if (glyph.rightToLeft)
+                    {
+                        const f32 f = 1.0f - to;
+                        to = 1.0f - from;
+                        from = f;
+                    }
+                    out.PushBack(core::Float2{glyph.x + glyph.advance * from, glyph.x + glyph.advance * to});
+                }
+            }
+            for (usize i = 1; i < out.Size(); ++i)
+                for (usize j = i; j > 0 && out[j].x < out[j - 1].x; --j)
+                    Swap(out[j], out[j - 1]);
+            usize kept = 0;
+            for (usize i = 0; i < out.Size(); ++i)
+            {
+                if (kept > 0 && out[i].x <= out[kept - 1].y + 0.01f)
+                    out[kept - 1].y = Max(out[kept - 1].y, out[i].y); // touching: one box
+                else
+                    out[kept++] = out[i];
+            }
+            out.Resize(kept);
         }
     };
 

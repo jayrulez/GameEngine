@@ -283,3 +283,17 @@ TEST_CASE("text editing keys: bound in the text contexts, multiline keys only in
     elsewhere.Declare(SV(u8"menu"));
     CHECK(match(SV(u8"left"), elsewhere, command) == KeymapMatch::None);
 }
+
+TEST_CASE("edit model: typing the filter refuses whole leaves the selection as it was")
+{
+    TextEditModel digits;
+    digits.SetFilter(InputFilter::Digits());
+    digits.SetText(core::StringView(u8"12345"));
+    digits.Select(TextRange{1, 3});
+    CHECK_FALSE(digits.Insert(core::StringView(u8"ab"))); // letters: none let in
+    CHECK(digits.GetText() == core::StringView(u8"12345"));
+    CHECK(digits.GetSelection().Start == 1u);
+    CHECK(digits.GetSelection().End == 3u);
+    CHECK(digits.Insert(core::StringView(u8"a9"))); // some let in: they replace it
+    CHECK(digits.GetText() == core::StringView(u8"1945"));
+}

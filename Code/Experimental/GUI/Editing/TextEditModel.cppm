@@ -458,7 +458,9 @@ export namespace experimental::gui
                     end = NextGrapheme(accepted.AsView(), end);
                 accepted = core::String(accepted.AsView().SubStr(0, end));
             }
-            if (accepted.Size() == 0 && selection.IsEmpty())
+            // Nothing of what was typed is let in: nothing changes (the selection it would have
+            // replaced stays, rather than being deleted for nothing).
+            if (accepted.Size() == 0 && (selection.IsEmpty() || text.Size() != 0))
                 return false;
             Remember(selection.IsEmpty() ? kind : RunKind::Other);
             m_text.Remove(selection.Start, selection.End - selection.Start);

@@ -27,6 +27,7 @@
             <Button id="nav-binding" class="nav" text="Data binding" command="page.binding"/>
             <Button id="nav-input" class="nav" text="Input" command="page.input"/>
             <Button id="nav-navigation" class="nav" text="Navigation and commands" command="page.navigation"/>
+            <Button id="nav-language" class="nav" text="Language and direction" command="page.language"/>
             <Label class="nav-heading" text="MEASURE"/>
             <Button id="nav-stress" class="nav" text="Stress" command="page.stress"/>
             <Label class="nav-heading" text="DEMO"/>

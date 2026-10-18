@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Scene - :particle_effect_page partition (implementation).
+// Editor::Particles - :page partition (implementation).
 //
 // The three-pane ParticleEffect authoring tool (see ParticleEffectPage.cppm for the overview).
 
@@ -9,9 +9,10 @@ module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
 
-module editor.scene;
+module editor.particles;
 
 import foundation.core;
+import foundation.fonts; // VerticalAlignment (the labels)
 import foundation.content;
 import foundation.rhi;
 import foundation.graphics;

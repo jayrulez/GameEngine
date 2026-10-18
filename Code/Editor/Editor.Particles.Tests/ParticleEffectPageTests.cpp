@@ -12,7 +12,7 @@
 import foundation.core;
 import foundation.particles;
 import particles.pipeline; // SeedDefaultParticleEffect
-import editor.scene;
+import editor.particles;
 
 using namespace foundation::core;
 namespace particles = foundation::particles;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Scene - :particle_effect_page partition.
+// Editor::Particles - :page partition.
 //
 // ParticleEffectEditorPage: a full authoring tool for a
 // ParticleEffectAsset, modelled on (and exceeding) Sedulous's three-pane particle editor.
@@ -28,7 +28,7 @@
 module;
 #include "Core/Prelude.h"
 
-export module editor.scene:particle_effect_page;
+export module editor.particles:page;
 
 import foundation.core;
 import foundation.content;

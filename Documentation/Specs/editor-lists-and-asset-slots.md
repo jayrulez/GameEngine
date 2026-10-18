@@ -31,7 +31,7 @@ good one: one grid row whose view is a header with an add icon over a row per el
 `AssetPickerSlot` that fills plus move-up, move-down and remove icon buttons. The generated
 inspector uses it for the mesh's materials (`Editor.Scene/InspectorViewImpl.cpp:1763`) and for
 reflected containers (`:2709`); the particle page uses it for a system's materials
-(`Editor.Scene/ParticleEffectPageImpl.cpp:1631`). reflection-track.md records how it came to be
+(`Editor.Particles/ParticleEffectPageImpl.cpp:1631`). reflection-track.md records how it came to be
 (:433-445).
 
 Everywhere else a list is hand-rolled, in four different shapes:

@@ -290,14 +290,23 @@ export namespace foundation::rhi::vk
 
         bool HasCalibrationDomains() const
         {
-            // The KHR and EXT entry points share a signature; the instance answers whichever exists.
-            auto query = reinterpret_cast<PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT>(
-                vkGetInstanceProcAddr(m_instance, "vkGetPhysicalDeviceCalibrateableTimeDomainsKHR"));
-            if (query == nullptr)
+            // Ask for the entry point belonging to the extension THIS DEVICE advertised, not
+            // KHR-with-an-EXT-fallback. vkGetInstanceProcAddr answers for anything the LOADER
+            // knows, so the KHR name returns a valid trampoline even on a driver that only
+            // implements the EXT form - calling it then reaches an ICD with no such entry and the
+            // loader logs "ICD associated with VkPhysicalDevice does not support
+            // GetPhysicalDeviceCalibrateableTimeDomainsKHR". m_calibratedTimestamps already holds
+            // exactly which one queryExtensionSupport() saw in this device's extension list.
+            if (m_calibratedTimestamps == nullptr)
             {
-                query = reinterpret_cast<PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT>(
-                    vkGetInstanceProcAddr(m_instance, "vkGetPhysicalDeviceCalibrateableTimeDomainsEXT"));
+                return false;
             }
+            const bool khr = std::strcmp(m_calibratedTimestamps, "VK_KHR_calibrated_timestamps") == 0;
+            // The KHR and EXT entry points share a signature, so one pointer type serves both.
+            auto query = reinterpret_cast<PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT>(
+                vkGetInstanceProcAddr(m_instance,
+                                      khr ? "vkGetPhysicalDeviceCalibrateableTimeDomainsKHR"
+                                          : "vkGetPhysicalDeviceCalibrateableTimeDomainsEXT"));
             if (query == nullptr)
             {
                 return false;

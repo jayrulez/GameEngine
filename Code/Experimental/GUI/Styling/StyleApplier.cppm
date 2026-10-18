@@ -621,7 +621,7 @@ export namespace experimental::gui
                 }
             }
             // A border per side: its style none or hidden draws nothing, whatever its width.
-            const auto side = [&](const char8_t* name, f32& width, Color& color)
+            const auto side = [&](const char8_t* name, f32& width, Color& color, BorderLine& line)
             {
                 core::String w(u8"border-");
                 w.Append(core::StringView(name));
@@ -634,15 +634,18 @@ export namespace experimental::gui
                 const core::StringView lineStyle = styleValue != nullptr ? styleValue->Keyword.AsView() : core::StringView(u8"none");
                 const bool drawn = lineStyle != core::StringView(u8"none") && lineStyle != core::StringView(u8"hidden");
                 width = drawn ? Max(0.0f, PixelsOf(style.Value(w.AsView()), lengths, 0.0f, 3.0f)) : 0.0f;
+                line = lineStyle == core::StringView(u8"dashed")   ? BorderLine::Dashed
+                       : lineStyle == core::StringView(u8"dotted") ? BorderLine::Dotted
+                                                                   : BorderLine::Solid; // double, groove and the rest: solid
                 if (const StyleValue* c = style.Value(colorName.AsView()))
                     color = c->ColorValue;
                 else
                     color = Color{0.0f, 0.0f, 0.0f, 1.0f};
             };
-            side(u8"top", box.BorderWidths.top, box.BorderColors.top);
-            side(u8"right", box.BorderWidths.right, box.BorderColors.right);
-            side(u8"bottom", box.BorderWidths.bottom, box.BorderColors.bottom);
-            side(u8"left", box.BorderWidths.left, box.BorderColors.left);
+            side(u8"top", box.BorderWidths.top, box.BorderColors.top, box.BorderLines[0]);
+            side(u8"right", box.BorderWidths.right, box.BorderColors.right, box.BorderLines[1]);
+            side(u8"bottom", box.BorderWidths.bottom, box.BorderColors.bottom, box.BorderLines[2]);
+            side(u8"left", box.BorderWidths.left, box.BorderColors.left, box.BorderLines[3]);
             // A border image over the border's widths (E13).
             if (const core::StringView skin = style.Get(u8"border-image"); skin.Size() != 0 && skin != core::StringView(u8"none"))
                 ParseBorderImage(skin, resources, lengths, box.BorderWidths, box.Skin);

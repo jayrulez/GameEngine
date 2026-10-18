@@ -96,3 +96,14 @@ TEST_CASE("spritesheet: a sprite named as an image is its atlas and region, in a
     const core::Rectangle placed = PlaceImageLayer(box.Layers[0], core::Rectangle{0.0f, 0.0f, 100.0f, 100.0f}, 16.0f, 16.0f);
     CHECK(placed.width == doctest::Approx(16.0f));
 }
+
+TEST_CASE("border-style: dashed and dotted sides are recorded; the rest are solid")
+{
+    Bed bed(u8".skin { border-width: 2px; border-color: red; border-style: dashed dotted solid double; }");
+    const NodeBox& box = bed.panel->GetBox();
+    CHECK(box.BorderLines[0] == BorderLine::Dashed);
+    CHECK(box.BorderLines[1] == BorderLine::Dotted);
+    CHECK(box.BorderLines[2] == BorderLine::Solid);
+    CHECK(box.BorderLines[3] == BorderLine::Solid); // double: drawn solid
+    CHECK(box.BorderWidths.top == doctest::Approx(2.0f));
+}

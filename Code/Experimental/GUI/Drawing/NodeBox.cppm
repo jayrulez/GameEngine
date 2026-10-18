@@ -86,6 +86,14 @@ export namespace experimental::gui
         LayerLength Y{};
     };
 
+    /// How a border side is drawn (CSS's border-style; the styles the lab does not draw are solid).
+    enum class BorderLine : u8
+    {
+        Solid,
+        Dashed, ///< dashes three times its width, gaps twice it
+        Dotted, ///< round dots as wide as it, as far apart
+    };
+
     /// How a border image fills an edge (CSS's border-image-repeat).
     enum class BorderImageRepeat : u8
     {
@@ -167,6 +175,7 @@ export namespace experimental::gui
         Color BackgroundColor{0.0f, 0.0f, 0.0f, 0.0f};
         Array<BoxLayer> Layers; ///< First on top, as CSS lists them.
         BorderImage Skin;       ///< border-image: drawn in place of the border when it has an image (E13)
+        BorderLine BorderLines[4]{}; ///< top, right, bottom, left (E13: dashed and dotted)
         vg::BorderWidths BorderWidths{};
         vg::BorderColors BorderColors{};
         vg::CornerRadii Radii{};
@@ -249,7 +258,14 @@ export namespace experimental::gui
             if (Skin.Image != nullptr)
                 DrawSkin(canvas, rect); // a border image stands in for the border (CSS)
             else if (!BorderWidths.IsZero() && !BorderColors.IsTransparent())
-                canvas.DrawBox(rect, Radii, Color{0.0f, 0.0f, 0.0f, 0.0f}, BorderWidths, BorderColors);
+            {
+                const bool solid = BorderLines[0] == BorderLine::Solid && BorderLines[1] == BorderLine::Solid &&
+                                   BorderLines[2] == BorderLine::Solid && BorderLines[3] == BorderLine::Solid;
+                if (solid)
+                    canvas.DrawBox(rect, Radii, Color{0.0f, 0.0f, 0.0f, 0.0f}, BorderWidths, BorderColors);
+                else
+                    DrawLinedBorder(canvas, rect);
+            }
         }
 
         /// The backdrop blur alone (a node drawing through a layer draws it first, behind the layer).
@@ -287,6 +303,64 @@ export namespace experimental::gui
                 canvas.DrawImageRounded(layer.Image, shown, source, Radii);
             else
                 canvas.DrawImage(layer.Image, shown, source, Color::White);
+        }
+
+        // A border with dashed or dotted sides (E13): one rounded stroke when every side is alike,
+        // else each side a straight stroke of its own along its edge.
+        void DrawLinedBorder(vg::VGContext& canvas, const Rectangle& rect) const
+        {
+            const f32 widths[4] = {BorderWidths.top, BorderWidths.right, BorderWidths.bottom, BorderWidths.left};
+            const Color colors[4] = {BorderColors.top, BorderColors.right, BorderColors.bottom, BorderColors.left};
+            const auto pattern = [](BorderLine line, f32 w, f32 (&out)[2], vg::StrokeStyle& style) -> usize
+            {
+                style = vg::StrokeStyle(w);
+                if (line == BorderLine::Dashed)
+                {
+                    out[0] = 3.0f * w;
+                    out[1] = 2.0f * w;
+                    return 2;
+                }
+                if (line == BorderLine::Dotted)
+                {
+                    style.cap = vg::VGLineCap::Round;
+                    out[0] = 0.001f; // a dot: its round caps
+                    out[1] = 2.0f * w;
+                    return 2;
+                }
+                return 0;
+            };
+            bool alike = true;
+            for (usize i = 1; i < 4; ++i)
+                alike = alike && widths[i] == widths[0] && BorderLines[i] == BorderLines[0] && colors[i] == colors[0];
+            if (alike && widths[0] > 0.0f)
+            {
+                const f32 w = widths[0];
+                const Rectangle inset{rect.x + w * 0.5f, rect.y + w * 0.5f, rect.width - w, rect.height - w};
+                const auto shrink = [w](f32 r) { return Max(0.0f, r - w * 0.5f); };
+                vg::PathBuilder shape;
+                vg::ShapeBuilder::BuildRoundedRect(inset, vg::CornerRadii(shrink(Radii.topLeft), shrink(Radii.topRight), shrink(Radii.bottomRight), shrink(Radii.bottomLeft)),
+                                                   shape);
+                f32 dash[2];
+                vg::StrokeStyle style;
+                const usize n = pattern(BorderLines[0], w, dash, style);
+                canvas.StrokePath(shape.ToPath(), colors[0], style, Span<const f32>(dash, n));
+                return;
+            }
+            const f32 l = rect.x, t = rect.y, r = rect.x + rect.width, b = rect.y + rect.height;
+            const core::Float2 from[4] = {{l, t + widths[0] * 0.5f}, {r - widths[1] * 0.5f, t}, {r, b - widths[2] * 0.5f}, {l + widths[3] * 0.5f, b}};
+            const core::Float2 to[4] = {{r, t + widths[0] * 0.5f}, {r - widths[1] * 0.5f, b}, {l, b - widths[2] * 0.5f}, {l + widths[3] * 0.5f, t}};
+            for (usize i = 0; i < 4; ++i)
+            {
+                if (widths[i] <= 0.0f || colors[i].a <= 0.0f)
+                    continue;
+                vg::PathBuilder edge;
+                edge.MoveTo(from[i]);
+                edge.LineTo(to[i]);
+                f32 dash[2];
+                vg::StrokeStyle style;
+                const usize n = pattern(BorderLines[i], widths[i], dash, style);
+                canvas.StrokePath(edge.ToPath(), colors[i], style, Span<const f32>(dash, n));
+            }
         }
 
         // The border image: nine pieces of the image (its region) into the box, corners as they

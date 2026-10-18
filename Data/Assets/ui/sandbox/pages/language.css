@@ -8,7 +8,7 @@
 .count { width: 200px; height: 24px; text-align: center; }
 .mixed-lead { width: 590px; height: 44px; color: var(--muted); }
 .mixed { width: 590px; height: 28px; }
-/* Roboto has no Arabic: what shows it takes DejaVu Sans Mono, and so does the page in Arabic. */
-#page-language .arabic { font-family: DejaVu; }
-#page-language:lang(ar) label, #page-language:lang(ar) button, #page-language:lang(ar) textfield,
-#page-language:lang(ar) checkbox { font-family: DejaVu; }
+/* Roboto has no Arabic: a character it lacks is drawn in DejaVu Sans Mono, the family after it
+   (E11), so Latin stays in Roboto and Arabic joins in DejaVu, in English and in Arabic alike. */
+#page-language label, #page-language button, #page-language textfield,
+#page-language checkbox { font-family: Roboto, DejaVu; }

@@ -239,3 +239,19 @@ TEST_CASE("accessibility: an expander reads expanded or collapsed and takes the 
     CHECK(bridge.Spoken[0] == core::String(u8"Level 2"));
     bed.Context().SetAccessibilityBridge(nullptr);
 }
+
+TEST_CASE("accessibility: a node marked again but reading the same (an animation's frames) is not sent again")
+{
+    Bed bed(kForm);
+    Recorder bridge;
+    bed.Context().SetAccessibilityBridge(&bridge);
+    bed.Step();
+    REQUIRE(bridge.Updates.Size() == 1u);
+    bed.Find(SV(u8"save"))->SetAlpha(0.5f); // drawn differently, read the same
+    bed.Step();
+    CHECK(bridge.Updates.Size() == 1u);
+    core::Cast<Button>(bed.Find(SV(u8"save")))->SetText(SV(u8"Save now"));
+    bed.Step();
+    CHECK(bridge.Updates.Size() == 2u);
+    bed.Context().SetAccessibilityBridge(nullptr);
+}

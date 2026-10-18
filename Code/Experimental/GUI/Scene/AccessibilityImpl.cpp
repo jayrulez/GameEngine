@@ -287,6 +287,37 @@ namespace experimental::gui
             }
         };
 
+        // What a node says, as one number: sent again only when it changes.
+        [[nodiscard]] u64 HashOf(const AccessNode& n)
+        {
+            u64 h = HashBytes(&n.Role, sizeof(n.Role));
+            const auto text = [&h](const core::String& s) { h = HashBytes(s.Data(), s.Size(), h ^ 0x9E3779B97F4A7C15ull); };
+            const auto value = [&h](const auto& v) { h = HashBytes(&v, sizeof(v), h); };
+            text(n.Name);
+            text(n.Description);
+            text(n.Value);
+            value(n.HasNumber);
+            value(n.Number);
+            value(n.Min);
+            value(n.Max);
+            value(n.Step);
+            value(n.Bounds.x);
+            value(n.Bounds.y);
+            value(n.Bounds.width);
+            value(n.Bounds.height);
+            value(n.States);
+            value(n.Actions);
+            const auto ids = [&h](const Array<u64>& list)
+            {
+                h = HashBytes(list.Data(), list.Size() * sizeof(u64), h ^ list.Size());
+            };
+            ids(n.Children);
+            ids(n.LabelledBy);
+            ids(n.DescribedBy);
+            ids(n.Controls);
+            return h == 0 ? 1 : h;
+        }
+
         void ClearMarks(Node& node)
         {
             if (!node.IsAccessDirty() && !node.HasAccessDirtyDescendant())
@@ -314,6 +345,10 @@ namespace experimental::gui
                 sent.PushBack(id);
                 AccessNode described;
                 builder.Describe(node, RoleOf(node), described);
+                const u64 hash = HashOf(described);
+                if (hash == node.GetAccessSent())
+                    return; // marked, yet it reads as it did (a fade's frames): nothing to send
+                node.SetAccessSent(hash);
                 out.PushBack(Move(described));
             }
             void Walk(Node& node, Node* owner)
@@ -422,6 +457,9 @@ namespace experimental::gui
                 update = BuildAccessTree(*root);
                 ClearMarks(*root);
                 root->m_accessSent = true;
+                for (const AccessNode& n : update.Nodes) // what each said, so a mark alone sends nothing
+                    if (Node* node = ResolveAccessId(n.Id))
+                        node->SetAccessSent(HashOf(n));
             }
             else
             {

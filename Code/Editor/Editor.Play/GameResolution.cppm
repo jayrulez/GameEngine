@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Scene - :game_resolution partition (Sedulous c5100e94).
+// Editor::Play - :game_resolution partition (Sedulous c5100e94).
 //
 // The resolutions the Game tab offers to draw at. The project's own render resolution comes
 // first and is the default; then each export preset that draws at its own size, as that
@@ -13,7 +13,7 @@
 module;
 #include "Core/Prelude.h"
 
-export module editor.scene:game_resolution;
+export module editor.play:game_resolution;
 
 import foundation.core;
 import engine.project;

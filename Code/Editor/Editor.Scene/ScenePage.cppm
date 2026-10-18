@@ -30,9 +30,7 @@ import foundation.graphics;
 import foundation.shell;
 import foundation.runtime;
 import foundation.runtime.client;
-import engine.defaultapp;
 import engine.composition; // AddAllSceneManagers (the full composition for headless scratch scenes)
-import engine.gameinstance; // GameInstance (the Game tab's run; multi-instance factory)
 import foundation.scene;
 import engine.scene;
 import foundation.scene.resource;
@@ -62,10 +60,8 @@ import :settings_profiles; // QueueSettingsProfileEdit (a profile-mode settings 
 import :scene_page_interface; // ISceneEditorPage (published on the page)
 import :viewport_capture;     // ViewportCaptureRecorder (viewport_screenshot)
 import :scene_loading;        // LoadEditorScene (the document, its binds, its prefabs)
-import :pie_tools;            // RegisterPieTools (the contribution)
 import :actions; // the scene editor's action declarations
 import :mcp_tools;            // RegisterSceneLiveTools (the contribution)
-import :game_page;
 import :gizmo;
 import :tools;
 import editor.viewporttools;
@@ -809,8 +805,7 @@ export namespace editor
     };
 
     inline void RegisterSceneEditor(EditorContext& context, runtime::IApplicationHost& host,
-                                    ui::runtime::UIHost& uiHost,
-                                    engine::runtime::DefaultApplication* embeddedApp = nullptr)
+                                    ui::runtime::UIHost& uiHost)
     {
         GlobalTypeRegistry().Register(scene::SceneDocument::StaticType(), TypeDomain(u8"Editor"));
         RegisterSerializable<scene::SceneDocument>();
@@ -839,9 +834,6 @@ export namespace editor
             EditorContext* ctx = &context;
             context.RegisterMcpToolContribution([ctx](foundation::mcp::McpServer& server)
                                                 { RegisterSceneLiveTools(server, *ctx); });
-            // Play in editor for agents: start, stop, state and capture, per Game tab.
-            context.RegisterMcpToolContribution([ctx](foundation::mcp::McpServer& server)
-                                                { RegisterPieTools(server, *ctx); });
         }
 
         // Model imports: generate/refresh the hierarchy prefab beside the manifest (the
@@ -851,19 +843,6 @@ export namespace editor
         // open scene and an open prefab page refreshes like any external asset change.
         EditorContext* editorContext = &context;
         runtime::IApplicationHost* appHost = &host;
-
-        // Play-in-editor: the singleton Game tab (player behavior in-process).
-        context.GamePageFactory = [editorContext, appHost, appUiHost = &uiHost, embeddedApp](
-                                      bool newInstance, StringView pieId) -> UniquePtr<EditorPage>
-        {
-            // Reuse the primary instance for the normal Play; spin up an extra for "Play New Instance".
-            engine::runtime::GameInstance* instance =
-                newInstance ? embeddedApp->CreateInstance() : &embeddedApp->Instance();
-            return UniquePtr<EditorPage>(
-                editor::EditorRootAllocator().New<GameEditorPage>(*editorContext, *appHost, *appUiHost,
-                                                       embeddedApp, instance, pieId),
-                editor::EditorRootAllocator());
-        };
 
         // Export seam: scene/prefab TEXT sources transcode to the binary wire on the main
         // thread before the pack job. The scratch scene is assembled from the full

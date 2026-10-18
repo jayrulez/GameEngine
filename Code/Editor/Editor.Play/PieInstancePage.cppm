@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::Scene - :pie_page_interface partition (agent-playtesting-and-asset-creation.md P3).
+// Editor::Play - :pie_page_interface partition (agent-playtesting-and-asset-creation.md P3).
 //
 // IPieInstancePage: what one play-in-editor instance, a Game tab, lets the PIE tools act through:
 // beyond what the scene tools read (IGameScenePage: its id, whether it runs and its scene), its
@@ -10,13 +10,13 @@
 module;
 #include "Core/Prelude.h"
 
-export module editor.scene:pie_page_interface;
+export module editor.play:pie_page_interface;
 
 import foundation.core;
 import foundation.input;
 import foundation.scene;
 import editor.core;
-import :scene_page_interface; // ViewportCapture
+import editor.scene;          // ViewportCapture, IGameScenePage
 import :game_resolution;      // GameResolutionChoice
 
 using namespace foundation::core;

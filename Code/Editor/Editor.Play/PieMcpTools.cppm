@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::Scene - :pie_tools partition (agent-playtesting-and-asset-creation.md P3).
+// Editor::Play - :pie_tools partition (agent-playtesting-and-asset-creation.md P3).
 //
 // The play-in-editor tools the editor's MCP host serves through the scene editor's tool
 // contribution: pie_start, pie_stop, pie_state, pie_list, pie_resolution, pie_screenshot and
@@ -12,7 +12,7 @@
 module;
 #include "Core/Prelude.h"
 
-export module editor.scene:pie_tools;
+export module editor.play:pie_tools;
 
 import foundation.core;
 import foundation.json;

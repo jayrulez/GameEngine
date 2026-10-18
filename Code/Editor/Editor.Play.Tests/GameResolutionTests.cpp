@@ -11,7 +11,7 @@
 import foundation.core;
 import engine.project;
 import editor.core;
-import editor.scene;
+import editor.play;
 
 using namespace foundation::core;
 using namespace editor;

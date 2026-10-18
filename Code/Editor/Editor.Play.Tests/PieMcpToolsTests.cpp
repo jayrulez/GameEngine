@@ -15,7 +15,8 @@ import foundation.input;
 import foundation.shell;
 import foundation.scene;
 import editor.core;
-import editor.scene;
+import editor.scene; // RegisterSceneLiveTools (entity_inspect over a running game)
+import editor.play;
 
 using namespace foundation::core;
 using namespace foundation::mcp;

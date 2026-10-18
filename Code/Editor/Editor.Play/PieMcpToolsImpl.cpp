@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::Scene - :pie_tools partition (implementation).
+// Editor::Play - :pie_tools partition (implementation).
 module;
 #include "Core/Prelude.h"
 
-module editor.scene;
+module editor.play;
 
 import foundation.core;
 import foundation.json;

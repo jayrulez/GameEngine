@@ -22,7 +22,7 @@ target_link_libraries(Tools.Editor PRIVATE
     Engine::Scene Engine::Render Engine::Animation Engine::Particles
     Engine::Composition # RegisterAllScriptFacades: the COMPLETE engine facade surface the cook
                           # AND live validation compile against (run/ui/physics/audio/... facades)
-    Editor::Core Editor::App Editor::Scene Editor::Animation Editor::Render Editor::Particles Editor::Geometry Editor::Materials
+    Editor::Core Editor::App Editor::Scene Editor::Animation Editor::Play Editor::Render Editor::Particles Editor::Geometry Editor::Materials
     Pipeline::Core Pipeline::Cook
     Pipeline::Registration # the composition root: every builder/importer/type registration
     Foundation::Resource Foundation::Geometry.Resource Foundation::Materials.Resource Foundation::Texture.Resource

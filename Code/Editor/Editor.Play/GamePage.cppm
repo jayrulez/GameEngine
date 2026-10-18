@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Scene - :game_page partition.
+// Editor::Play - :game_page partition.
 //
 // GameEditorPage: a singleton
 // "Game" dock tab hosting the PLAYER behavior - a FRESH run of the project's default scene,
@@ -16,7 +16,7 @@ module;
 #include "Core/Log/Log.h"
 #include "Core/Reflection/Reflect.h" // RTTI_OBJECT (the game-audio settings section)
 
-export module editor.scene:game_page;
+export module editor.play:game_page;
 
 import foundation.core;
 import foundation.content;
@@ -51,8 +51,7 @@ import engine.gameinstance; // GameInstance - this tab drives its OWN run (multi
 import editor.core;
 import :game_resolution;
 import editor.app;
-import :scene_page_interface; // ViewportCapture
-import :viewport_capture;     // ViewportCaptureRecorder (pie_screenshot)
+import editor.scene;         // ViewportCapture, ViewportCaptureRecorder (pie_screenshot), IGameScenePage
 import :pie_page_interface;   // IPieInstancePage (published on the page)
 
 using namespace foundation::core;

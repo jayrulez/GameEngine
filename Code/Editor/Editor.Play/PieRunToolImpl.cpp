@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::Scene - pie_run, the playtest primitive (agent-playtesting-and-asset-creation.md P4).
+// Editor::Play - pie_run, the playtest primitive (agent-playtesting-and-asset-creation.md P4).
 //
 // One call plays a device-level input timeline into one running PIE instance for a stretch of
 // run time, and answers what happened: probe samples (entity fields and game script properties)
@@ -11,7 +11,7 @@
 module;
 #include "Core/Prelude.h"
 
-module editor.scene;
+module editor.play;
 
 import foundation.core;
 import foundation.json;

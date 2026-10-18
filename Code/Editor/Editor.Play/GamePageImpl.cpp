@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Scene - :game_page partition.
+// Editor::Play - :game_page partition.
 //
 // GameEditorPage: a singleton
 // "Game" dock tab hosting the PLAYER behavior - a FRESH run of the project's default scene,
@@ -15,13 +15,14 @@ module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
 
-module editor.scene;
+module editor.play;
 
 import foundation.core;
 import foundation.content;
 import foundation.vfs;
 import foundation.resource;
 import foundation.scene;
+import foundation.settings; // the project's editor store (the Game tab's settings)
 import foundation.scene.resource;
 import engine.render;
 import foundation.runtime;

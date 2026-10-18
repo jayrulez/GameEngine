@@ -39,9 +39,6 @@ target_sources(Editor.Scene
         EntityJsonImpl.cpp
         SceneMcpToolsImpl.cpp
         SceneMcpEditToolsImpl.cpp
-        PieMcpToolsImpl.cpp
-        PieRunToolImpl.cpp
-        GamePageImpl.cpp
         SettingsProfilesImpl.cpp
         SceneLoadingImpl.cpp
     PUBLIC
@@ -56,8 +53,6 @@ target_sources(Editor.Scene
             SceneEditorPageInterface.cppm
             ViewportCaptureRecorder.cppm
             SceneLoading.cppm
-            PieInstancePage.cppm
-            PieMcpTools.cppm
             SceneActions.cppm
             EntityJson.cppm
             SceneMcpTools.cppm
@@ -70,7 +65,5 @@ target_sources(Editor.Scene
             EntityPickerDialog.cppm
             ComponentPickerDialog.cppm
             ScenePage.cppm
-            GamePage.cppm
-            GameResolution.cppm
             EditorSceneModule.cppm)
 

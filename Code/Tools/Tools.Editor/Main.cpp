@@ -60,6 +60,7 @@ import editor.core;
 import editor.app;
 import editor.scene;
 import editor.animation;
+import editor.play;
 import editor.render;
 import editor.particles;
 import editor.geometry;
@@ -314,8 +315,8 @@ int main(int argc, char** argv)
                                 foundation::ui::runtime::UIHost& uiHost)
     {
         app.SetSceneRenderer(host.Ctx().GetSubsystem<engine::render::RenderSubsystem>());
-        editor::RegisterSceneEditor(app.Context(), host, uiHost,
-                                              app.EmbeddedApplication());
+        editor::RegisterSceneEditor(app.Context(), host, uiHost);
+        editor::RegisterPlayInEditor(app.Context(), host, uiHost, app.EmbeddedApplication());
         editor::RegisterMaterialEditor(app.Context(), host, uiHost);
         editor::RegisterShaderEditor(
             app.Context(), host, uiHost,

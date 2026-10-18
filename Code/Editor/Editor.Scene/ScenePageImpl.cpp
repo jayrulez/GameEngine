@@ -31,8 +31,6 @@ import foundation.graphics;
 import foundation.shell;
 import foundation.runtime;
 import foundation.runtime.client;
-import engine.defaultapp;
-import engine.gameinstance; // GameInstance (the Game tab's run; multi-instance factory)
 import foundation.scene;
 import engine.scene;
 import foundation.scene.resource;
@@ -50,7 +48,6 @@ import editor.app;
 import editor.camera;
 import :camera_preview;
 import :edit;
-import :game_page;
 import :gizmo;
 import :component_gizmos;
 import :hierarchy;

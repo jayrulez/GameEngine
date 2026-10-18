@@ -1,7 +1,7 @@
 # The GUI lab's second evolution: the gaps the field still shows
 
-> STATUS: APPROVED 2026-10-18 (user: "approved"; theming to be discussed before E13 starts). Follows `gui-lab-evolution.md` (E1 to E9, built
-> on `vg`). Read CONVENTIONS.md first.
+> STATUS: APPROVED 2026-10-18 (user: "approved"; theming discussed the same day, see E13).
+> Follows `gui-lab-evolution.md` (E1 to E9, built on `vg`). Read CONVENTIONS.md first.
 
 ## Why
 
@@ -69,6 +69,8 @@ more:
    surface where the platform gives only one).
 8. Line breaking by Unicode's rules (UAX #14, libunibreak or our own) is deferred: E11 keeps breaking
    at spaces, and adds only the break anywhere a word too long for its box needs.
+9. Skins belong in themes. The token set is to be as large as useful control over styling needs
+   (the user did not fix a size): E13's layered tokens are the proposal.
 
 The first evolution's rulings (2026-10-16) still apply where nothing here changes them.
 
@@ -207,8 +209,28 @@ and atlas, CSS itself):
   foundation.ui.
 - **Media**: `orientation`, `not`, `prefers-reduced-motion` and `prefers-contrast` from the host.
 - **`@import`** through the resource provider.
-- **Themes through a palette**: the built-in themes' colours become custom properties on the root
-  (E3's design), so a game retints a theme by setting a dozen variables.
+- **Themes** (discussed with the user 2026-10-18; Material's design tokens and Godot's per-control
+  theme items are the references). A theme is a CSS file in the data at the user-agent origin; the
+  built-in dark and light themes stay embedded as the fallback, and a game ships its own as an
+  asset, hot-reloaded as sheets are. Its tokens are custom properties on the root, live (a game
+  retints at runtime, a subtree overrides them, `var()` reaches drawables), in three layers:
+  1. **Base tokens**, about fifteen colours (accent and the text on it; surfaces base, raised and
+     sunken; text, dim text, border, focus ring, selection; danger, success, warning) and the
+     metrics (three corner radii, a spacing scale, font sizes small, body, title and heading,
+     border and focus-ring widths, motion's fast and slow durations and its easing). A theme that
+     sets only these restyles everything consistently.
+  2. **Derived states**: hover, pressed and disabled colours mixed from the base by default
+     (`color-mix()`); a theme that wants its own sets them.
+  3. **Widget tokens**: every part of every widget reads a token of its own falling back to the
+     base (`button { background: var(--button-background, var(--accent)) }`), so a theme changes one
+     control alone. The list is generated from the built-in sheet, documented, and shown by the
+     inspector beside the part that reads it.
+
+  Skins are tokens too (ruling 9): a widget token may hold a drawable (`border-image(...)`, an SVG,
+  a gradient) as well as a colour, and a theme brings its fonts with `@font-face`, so a game-styled
+  theme overrides widget tokens with its art through the same mechanism. Light, dark and
+  high-contrast are `@media (prefers-color-scheme)` and `(prefers-contrast)` blocks in one theme,
+  chosen by the host's flags. The lab does not read foundation.ui's `.sss` themes.
 - **Parts take motion and text properties**; `inherit` reads the parent's live value.
 
 Tests: each value form parsed and drawn; an SVG at two scales; a nine-slice skin; dashed borders;

@@ -204,6 +204,17 @@ TEST_CASE("harfbuzz: installed, it is the shaper a font service hands out")
     }
 }
 
+TEST_CASE("harfbuzz: installing again changes nothing, so a repeat never touches the registry")
+{
+    HarfBuzzShaping::Uninstall();
+    const usize before = TextShaperFactory::Count();
+    HarfBuzzShaping::Install();
+    HarfBuzzShaping::Install();
+    CHECK(TextShaperFactory::Count() == before + 1);
+    HarfBuzzShaping::Uninstall();
+    CHECK(TextShaperFactory::Count() == before);
+}
+
 TEST_CASE("harfbuzz: the glyphs substitutions reach are named, and bakers bake them")
 {
     IFont* font = Load("/roboto/Roboto-Regular.ttf");

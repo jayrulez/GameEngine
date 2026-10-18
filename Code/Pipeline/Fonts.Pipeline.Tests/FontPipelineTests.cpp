@@ -253,6 +253,15 @@ TEST_CASE("font.pipeline: a distance-field cook keeps the glyphs shaping reaches
     RemoveTree();
 }
 
+TEST_CASE("font.pipeline: the font builder installs HarfBuzz when made, not as it builds")
+{
+    // Builds run in parallel on job workers; installing from Build raced another's shaper lookup.
+    HarfBuzzShaping::Uninstall();
+    REQUIRE_FALSE(HarfBuzzShaping::IsInstalled());
+    FontAssetBuilder builder;
+    CHECK(HarfBuzzShaping::IsInstalled());
+}
+
 TEST_CASE("font.pipeline: builder fails on a missing source file")
 {
     RegisterFontAsset();

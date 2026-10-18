@@ -103,6 +103,11 @@ export namespace pipeline{
     class FontAssetBuilder final : public pipeline::DefaultAssetBuilder
     {
     public:
+        // The bakers bake what HarfBuzz's substitutions reach. Installed here, on the thread that
+        // registers builders, not in Build: builds run in parallel on job workers, and installing
+        // from each raced another worker's shaper lookup (a crash cooking PaperKid's two fonts).
+        FontAssetBuilder() { HarfBuzzShaping::Install(); }
+
         [[nodiscard]] const TypeInfo* AssetType() const override
         {
             return &FontAsset::StaticType();
@@ -138,7 +143,6 @@ export namespace pipeline{
                                    pipeline::AssetBuildContext& ctx) override
         {
             const FontAsset& fa = static_cast<const FontAsset&>(asset); // guarded by AssetType()
-            HarfBuzzShaping::Install(); // the bakers bake what HarfBuzz's substitutions reach
             if (ctx.output == nullptr || fa.fileName.IsEmpty())
             {
                 return Status{ErrorCode::InvalidArgument};

@@ -350,9 +350,11 @@ export namespace foundation::fonts
     public:
         using Creator = ITextShaper* (*)(IAllocator& allocator);
 
+        /// Not thread-safe: register before shaping starts on other threads. Registering the newest
+        /// again changes nothing.
         static void Register(Creator creator)
         {
-            if (creator == nullptr)
+            if (creator == nullptr || (!Store().IsEmpty() && Store().Back() == creator))
                 return;
             Unregister(creator);
             Store().PushBack(creator);

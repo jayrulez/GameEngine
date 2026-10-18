@@ -645,9 +645,10 @@ export namespace experimental::gui
         if (free(SlotDirection))
         {
             const StringView v = keyword(u8"direction");
-            node.SetLayoutDirection(v == StringView(u8"rtl")   ? Node::LayoutDirection::RightToLeft
-                                    : v == StringView(u8"ltr") ? Node::LayoutDirection::LeftToRight
-                                                               : Node::LayoutDirection::Inherit);
+            node.SetLayoutDirection(v == StringView(u8"rtl")    ? Node::LayoutDirection::RightToLeft
+                                    : v == StringView(u8"ltr")  ? Node::LayoutDirection::LeftToRight
+                                    : v == StringView(u8"auto") ? Node::LayoutDirection::Auto
+                                                                : Node::LayoutDirection::Inherit);
         }
 
         // The logical sides (E9b) name the physical ones the node's direction puts them on; given

@@ -151,10 +151,13 @@ export namespace experimental::gui
         [[nodiscard]] Color GetTextColor() const noexcept { return m_textStyle.TextColor; }
         [[nodiscard]] fonts::CachedFont* GetFont() const noexcept { return m_textStyle.Font; }
         [[nodiscard]] TextHAlign GetTextAlignH() const noexcept { return m_textStyle.HAlign; }
-        /// Which way its text's paragraphs run: as it does (E9c).
-        [[nodiscard]] fonts::TextDirection TextDirectionFor() const
+        /// Which way its text's paragraphs run: as it does (E9c), or each as it reads (auto, E11).
+        [[nodiscard]] ParagraphDirection TextDirectionFor() const
         {
-            return IsRightToLeft() ? fonts::TextDirection::RightToLeft : fonts::TextDirection::LeftToRight;
+            const bool rightToLeft = IsRightToLeft();
+            if (IsDirectionAuto())
+                return ParagraphDirection{fonts::TextDirection::Auto, rightToLeft};
+            return ParagraphDirection{rightToLeft ? fonts::TextDirection::RightToLeft : fonts::TextDirection::LeftToRight, false};
         }
         [[nodiscard]] TextVAlign GetTextAlignV() const noexcept { return m_textStyle.VAlign; }
         /// A modal popup's dim: its `::backdrop` part over the default one.
@@ -286,10 +289,10 @@ export namespace experimental::gui
         /// The way it runs may have changed: what shows text takes it in OnTextStyleChange.
         void OnDirectionChange() override
         {
-            const bool rtl = IsRightToLeft();
-            if (rtl == m_textRightToLeft)
+            const ParagraphDirection direction = TextDirectionFor();
+            if (direction == m_textDirection)
                 return; // it runs as it did: joining a tree that runs the same way costs nothing
-            m_textRightToLeft = rtl;
+            m_textDirection = direction;
             OnTextStyleChange();
             RequestLayout();
             Invalidate();
@@ -311,7 +314,7 @@ export namespace experimental::gui
         }
 
         TextStyle m_textStyle;
-        bool m_textRightToLeft = false; // the direction its text was last told (E9c)
+        ParagraphDirection m_textDirection; // the direction its text was last told (E9c, E11)
         TextStyle m_unstyledText;
         bool m_unstyledTextCaptured = false;
         core::Array<InlineStyleDeclaration> m_inlineStyle;

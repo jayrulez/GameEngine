@@ -116,6 +116,16 @@ export namespace experimental::gui
             return FallbackFamilies == o.FallbackFamilies && Weight == o.Weight && Italic == o.Italic;
         }
     };
+
+    /// Which way a text's paragraphs run: one way, or (Auto, E11) each as its first strong
+    /// character reads, one with none as `AutoRightToLeft` says (its node's way).
+    struct ParagraphDirection
+    {
+        fonts::TextDirection Direction = fonts::TextDirection::LeftToRight;
+        bool AutoRightToLeft = false;
+        [[nodiscard]] bool operator==(const ParagraphDirection&) const noexcept = default;
+    };
+
     /// What a run takes when its markup leaves a style unset, and how the lines go.
     struct TextLayoutStyle
     {
@@ -135,6 +145,8 @@ export namespace experimental::gui
         TextOverflow Overflow = TextOverflow::Clip;
         /// Each paragraph's base direction (E9c): its node's, or (Auto) its first strong character's.
         fonts::TextDirection Direction = fonts::TextDirection::LeftToRight;
+        /// An Auto paragraph with no strong character runs right to left (its node does).
+        bool AutoRightToLeft = false;
     };
 
     /// A run's glyphs on one line: positions in layout coordinates, y on the baseline.
@@ -782,15 +794,36 @@ export namespace experimental::gui
             out.PushBack(base + text.Size());
         }
 
+        // The first strongly directional character's way: 1 right to left (Hebrew, Arabic, Syriac,
+        // Thaana, N'Ko and their presentation forms), 0 left to right (the letters of the scripts
+        // that read so), -1 none (digits, spaces, punctuation and symbols only): an auto
+        // paragraph's direction, by the rule of Unicode's P2 over the common scripts.
+        [[nodiscard]] inline i32 FirstStrongDirection(const Array<u32>& codepoints) noexcept
+        {
+            for (const u32 cp : codepoints)
+            {
+                if ((cp >= 0x0590 && cp <= 0x08FF) || (cp >= 0xFB1D && cp <= 0xFDFF) || (cp >= 0xFE70 && cp <= 0xFEFF))
+                    return 1;
+                const bool letter = (cp >= u'A' && cp <= u'Z') || (cp >= u'a' && cp <= u'z') ||
+                                    (cp >= 0xC0 && cp <= 0x058F && cp != 0xD7 && cp != 0xF7) || (cp >= 0x0900 && cp < 0x2000) ||
+                                    (cp >= 0x3040 && cp < 0xFB1D);
+                if (letter)
+                    return 0;
+            }
+            return -1;
+        }
+
         // Bidi (E9c): each paragraph's embedding levels from the installed resolver over its pieces'
         // characters (an icon as U+FFFC), and a piece crossing a level change split there, so each
         // piece reads one way. False when nothing reads right to left and the base direction is
         // left to right (the layout then runs as it always has, the pieces untouched). With no
         // resolver installed, a right-to-left paragraph keeps its pieces in order (only its start
         // moves to the right) and each is shaped as its script reads.
-        [[nodiscard]] inline bool ResolveBidi(Array<TextPiece>& pieces, fonts::TextDirection direction, f32 letterSpacing)
+        [[nodiscard]] inline bool ResolveBidi(Array<TextPiece>& pieces, fonts::TextDirection direction, bool autoRightToLeft,
+                                              f32 letterSpacing)
         {
-            const u8 baseLevel = direction == fonts::TextDirection::RightToLeft ? 1 : 0;
+            const bool automatic = direction == fonts::TextDirection::Auto;
+            const u8 baseLevel = direction == fonts::TextDirection::RightToLeft || (automatic && autoRightToLeft) ? 1 : 0;
             bool rightToLeftText = false; // (a right-to-left base needs the path even for no text)
             for (const TextPiece& piece : pieces)
                 for (usize i = 0; i < piece.Text.Size() && !rightToLeftText; ++i)
@@ -830,12 +863,21 @@ export namespace experimental::gui
                         owner.PushBack(p);
                     }
                 }
+                // An auto paragraph runs as its first strong character reads, else as its node does;
+                // the resolver is then told which (a resolver alone would make it left to right).
                 u8 paragraph = baseLevel;
+                fonts::TextDirection paragraphDirection = direction;
+                if (automatic)
+                {
+                    const i32 strong = FirstStrongDirection(codepoints);
+                    paragraph = strong >= 0 ? static_cast<u8>(strong) : baseLevel;
+                    paragraphDirection = paragraph != 0 ? fonts::TextDirection::RightToLeft : fonts::TextDirection::LeftToRight;
+                }
                 levels.levels.Clear();
                 const bool resolved = resolver != nullptr && !codepoints.IsEmpty();
                 if (resolved)
                 {
-                    resolver->Resolve(Span<const u32>(codepoints.Data(), codepoints.Size()), direction, levels);
+                    resolver->Resolve(Span<const u32>(codepoints.Data(), codepoints.Size()), paragraphDirection, levels);
                     paragraph = levels.paragraphLevel;
                 }
                 while (levels.levels.Size() < codepoints.Size())
@@ -1260,7 +1302,7 @@ export namespace experimental::gui
             runStart += text.Size();
         }
 
-        const bool bidi = detail::ResolveBidi(pieces, style.Direction, spacing);
+        const bool bidi = detail::ResolveBidi(pieces, style.Direction, style.AutoRightToLeft, spacing);
 
         // The base font's metrics size an empty line.
         TextPiece empty;
@@ -1365,7 +1407,11 @@ export namespace experimental::gui
         if (bidi)
             for (usize l = 0; l < keptLines; ++l)
                 detail::OrderLine(pieces, lineFirstPiece[l], l + 1 < lineFirstPiece.Size() ? lineFirstPiece[l + 1] : pieces.Size(),
-                                  style.Direction == fonts::TextDirection::RightToLeft ? u8{1} : u8{0}, layout.Lines[l]);
+                                  style.Direction == fonts::TextDirection::RightToLeft ||
+                                          (style.Direction == fonts::TextDirection::Auto && style.AutoRightToLeft)
+                                      ? u8{1}
+                                      : u8{0},
+                                  layout.Lines[l]);
 
         // Glyphs, icons, underlines and links, from each line's start.
         Array<usize> offsets;

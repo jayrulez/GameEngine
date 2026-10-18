@@ -47,6 +47,7 @@ add_executable(GUI.Tests
     FontFallbackTests.cpp
     FontSelectionTests.cpp
     FontFaceTests.cpp
+    AutoDirectionTests.cpp
     AccessibilityTests.cpp
     EffectsTests.cpp
     ReactiveTests.cpp

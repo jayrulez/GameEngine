@@ -137,15 +137,15 @@ TEST_CASE("direction: CSS's direction sets it; text-align start and end follow i
     styles.ApplyTree(*bed.root.Get());
     CHECK(label->GetTextAlignH() == TextHAlign::Start); // the paragraph's direction places them (E9c)
     CHECK(other->GetTextAlignH() == TextHAlign::End);
-    CHECK(label->GetTextLayout().GetDirection() == foundation::fonts::TextDirection::LeftToRight);
+    CHECK(label->GetTextLayout().GetDirection().Direction == foundation::fonts::TextDirection::LeftToRight);
     styles.SetStyleSheet(CSSParser::Parse(SV(u8".page { direction: rtl; } .start { text-align: start; } .end { text-align: end; }")));
     styles.ApplyTree(*bed.root.Get());
     CHECK(page->GetLayoutDirection() == Node::LayoutDirection::RightToLeft);
-    CHECK(label->GetTextLayout().GetDirection() == foundation::fonts::TextDirection::RightToLeft); // its text runs as it does
+    CHECK(label->GetTextLayout().GetDirection().Direction == foundation::fonts::TextDirection::RightToLeft); // its text runs as it does
     styles.SetStyleSheet(CSSParser::Parse(SV(u8".start { text-align: start; }")));
     styles.ApplyTree(*bed.root.Get());
     CHECK(page->GetLayoutDirection() == Node::LayoutDirection::Inherit); // the sheet no longer says
-    CHECK(label->GetTextLayout().GetDirection() == foundation::fonts::TextDirection::LeftToRight);
+    CHECK(label->GetTextLayout().GetDirection().Direction == foundation::fonts::TextDirection::LeftToRight);
 }
 
 TEST_CASE("direction: inline start and end margins, paddings and insets land on the sides the direction puts them on")

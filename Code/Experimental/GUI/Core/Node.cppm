@@ -1788,11 +1788,15 @@ export namespace experimental::gui
 
         /// Which way its content runs: as what holds it does (the top of a GUI: its language's,
         /// as the Localization's tables say), left to right, or right to left (CSS's `direction`).
+        /// Auto (HTML's dir="auto", E11 of Specs/gui-lab-evolution-2.md): its text's paragraphs
+        /// each run as their first strong character reads, typed or translated; its boxes run as
+        /// what holds it does.
         enum class LayoutDirection : u8
         {
             Inherit,
             LeftToRight,
             RightToLeft,
+            Auto,
         };
         void SetLayoutDirection(LayoutDirection direction)
         {
@@ -1805,14 +1809,16 @@ export namespace experimental::gui
         [[nodiscard]] LayoutDirection GetLayoutDirection() const noexcept { return m_direction; }
         void SetDirectionName(const core::String& name)
         {
-            SetLayoutDirection(name == core::StringView(u8"rtl")   ? LayoutDirection::RightToLeft
-                               : name == core::StringView(u8"ltr") ? LayoutDirection::LeftToRight
-                                                                   : LayoutDirection::Inherit);
+            SetLayoutDirection(name == core::StringView(u8"rtl")    ? LayoutDirection::RightToLeft
+                               : name == core::StringView(u8"ltr")  ? LayoutDirection::LeftToRight
+                               : name == core::StringView(u8"auto") ? LayoutDirection::Auto
+                                                                    : LayoutDirection::Inherit);
         }
         [[nodiscard]] core::String GetDirectionName() const
         {
             return core::String(m_direction == LayoutDirection::RightToLeft   ? core::StringView(u8"rtl")
                                 : m_direction == LayoutDirection::LeftToRight ? core::StringView(u8"ltr")
+                                : m_direction == LayoutDirection::Auto        ? core::StringView(u8"auto")
                                                                               : core::StringView(u8"inherit"));
         }
         /// Whether its content runs right to left (the first ancestor not inheriting says, else
@@ -1821,7 +1827,7 @@ export namespace experimental::gui
         {
             for (const Node* n = this; n != nullptr; n = n->m_parent)
             {
-                if (n->m_direction != LayoutDirection::Inherit)
+                if (n->m_direction == LayoutDirection::LeftToRight || n->m_direction == LayoutDirection::RightToLeft)
                     return n->m_direction == LayoutDirection::RightToLeft;
                 if (n->m_parent == nullptr)
                     return n->ContextRightToLeft();
@@ -1854,8 +1860,22 @@ export namespace experimental::gui
         {
             OnDirectionChange();
             for (usize i = 0; i < m_children.Size(); ++i)
-                if (Node* child = m_children[i].Get(); child != nullptr && child->m_direction == LayoutDirection::Inherit)
+                if (Node* child = m_children[i].Get(); child != nullptr && child->FollowsParentDirection())
                     child->NotifyDirectionChange();
+        }
+        /// Whether its text's paragraphs take their direction from their content: the first node up
+        /// from it that sets a direction sets auto.
+        [[nodiscard]] bool IsDirectionAuto() const
+        {
+            for (const Node* n = this; n != nullptr; n = n->m_parent)
+                if (n->m_direction != LayoutDirection::Inherit)
+                    return n->m_direction == LayoutDirection::Auto;
+            return false;
+        }
+        /// Its boxes run as its parent's do (inherited, or auto, whose boxes follow the parent).
+        [[nodiscard]] bool FollowsParentDirection() const noexcept
+        {
+            return m_direction == LayoutDirection::Inherit || m_direction == LayoutDirection::Auto;
         }
         /// The way it runs may have changed (its own direction, an ancestor's, or a new parent).
         virtual void OnDirectionChange() {}
@@ -2254,7 +2274,7 @@ export namespace experimental::gui
         void HandleParentChange()
         {
             OnParentChange();
-            if (m_direction == LayoutDirection::Inherit)
+            if (FollowsParentDirection())
                 NotifyDirectionChange(); // it may run another way under its new parent
             Invalidate();
             SendEvent(Event(EventType::ParentChanged, this));

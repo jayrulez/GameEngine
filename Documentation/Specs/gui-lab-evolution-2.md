@@ -227,6 +227,25 @@ Tests: keypad and punctuation codes through the bridge; tab index order; a focus
 memory; Tab captured; a menu rebound; capture and cancel; mnemonics; type-ahead in a non-Latin
 layout. Screen: a rebinding screen.
 
+As built on `vg` (2026-10-18): the lab's key codes now cover the keyboard (punctuation, the keypad
+with codes of its own, F13 to F24, the lock and system keys, the modifier keys alone), one table
+giving each its binding name and display text, and the bridge maps every key the shell reports; a
+modifier key pressed alone matches its own binding. `CaptureNextKey` takes the next key or pad
+button before anything else, a modifier alone as it is released, dropping the text a taken key
+types; Escape cancels unless asked for. Type-ahead reads typed text, matching letters in either
+case in Latin, Greek and Cyrillic; lists and combo boxes claim the keys that type and ask for text
+input to get them (ca2080584). `tab-index`, `focus-group` (a tab strip is one by default; a radio
+is its group's current member) and `tab-captures` (b6f6796e8). A menu's moves are `menu.up`,
+`menu.down`, `menu.left` and `menu.right` in the `menu` key context, the arrows by default; a
+binding whose command nothing on the focus path handles is now as if unbound. An `&` in a button's
+or a menu item's text marks its access key, underlined while Alt is held (or always), Alt and the
+key activating it in the open menu or the focus scope (e9e324f38). Scripts get `gui::captureKey`
+and `gui::keyText`, and the showcase a Controls page that rebinds four actions, a taken key
+swapping (f742c1d26).
+Left: asking for text input over a list would raise an on-screen keyboard on a touch platform (the
+lab has none yet); access keys do not reach a label's `for` target; Ctrl+Tab from a widget that
+captures Tab inside a tab view is the tab view's (it switches tabs) before it moves focus.
+
 ### E13 Styling breadth and theme assets
 
 Facts: no `calc()`; colours without `hsl()` or `currentColor`; radial gradients of one shape; borders

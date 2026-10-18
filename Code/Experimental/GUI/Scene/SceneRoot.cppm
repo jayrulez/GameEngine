@@ -185,6 +185,9 @@ export namespace experimental::gui
         bool RunAccessAction(const AccessActionRequest& request);
         /// `root`'s whole tree as it is now, listening or not (the inspector's, a test's).
         [[nodiscard]] AccessTreeUpdate BuildAccessTree(SceneRoot& root);
+        /// `node`'s accessibility node as it is now; false when it has none of its own (no role,
+        /// hidden, or a part of a leaf: what a screen reader reads it as is an ancestor's).
+        bool DescribeAccess(Node& node, AccessNode& out);
         /// The node an accessibility id names, or null when it is gone.
         [[nodiscard]] Node* ResolveAccessId(u64 id) const noexcept
         {

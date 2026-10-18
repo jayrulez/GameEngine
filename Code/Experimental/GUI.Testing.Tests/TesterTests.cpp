@@ -191,3 +191,65 @@ TEST_CASE("testing: a picture matches its reference within a tolerance on all bu
     CHECK(diff.GetPixel(50, 50).g == diff.GetPixel(50, 50).r); // an equal one grey
     CHECK_FALSE(CompareImages(image::Image(10, 10, image::PixelFormat::RGBA8), reference).SameSize);
 }
+
+TEST_CASE("testing: right clicks, hover and leave, pad presses and file drops reach what they aim at")
+{
+    Bed bed;
+    Tester tester(*bed.root.Get());
+    int menus = 0;
+    (void)bed.show->AddEventListener(EventType::ContextMenu, [&](const Event&) { ++menus; });
+    CHECK(tester.RightClick(Finder::Text(SV(u8"Show"))));
+    CHECK(menus == 1);
+    CHECK(bed.clicks == 0); // a right click is not a click
+
+    CHECK(tester.Hover(Finder::Selector(SV(u8"#ok"))));
+    CHECK(bed.ok->IsHovered());
+    tester.Leave();
+    CHECK_FALSE(bed.ok->IsHovered());
+
+    bed.show->RequestFocus();
+    tester.PadPress(PadButton::South); // the pad's A activates the focus
+    CHECK(bed.clicks == 1);
+
+    bed.dialog->SetDropTypes(core::String(u8"files"));
+    core::Array<core::String> dropped;
+    (void)bed.dialog->AddEventListener(EventType::Drop, [&](const Event& e)
+    { dropped = DroppedPaths(static_cast<const DragEvent&>(e).Payload); });
+    core::Array<core::String> paths;
+    paths.PushBack(core::String(u8"/tmp/level.map"));
+    CHECK(tester.DropFiles(Finder::Selector(SV(u8"#dialog")), paths));
+    REQUIRE(dropped.Size() == 1u);
+    CHECK(dropped[0] == SV(u8"/tmp/level.map"));
+}
+
+TEST_CASE("testing: the wheel and a finger scroll what they are over, and a tap clicks")
+{
+    Bed bed;
+    auto list = Add<Panel>(*bed.root.Get(), u8"list", 10.0f, 130.0f, 150.0f, 60.0f);
+    list->EditLayoutStyle([](LayoutStyle& style) { style.OverflowY = Overflow::Scroll; });
+    auto tall = Add<Panel>(*list.Get(), u8"tall", 0.0f, 0.0f, 150.0f, 600.0f);
+    Tester tester(*bed.root.Get());
+
+    CHECK(tester.Scroll(Finder::Selector(SV(u8"#list")), core::Float2{0.0f, -3.0f})); // toward the user: down
+    const f32 wheeled = list->GetScrollOffset().y;
+    CHECK(wheeled > 0.0f);
+    CHECK(tester.Swipe(Finder::Selector(SV(u8"#list")), core::Float2{0.0f, -40.0f})); // a finger up pans down
+    CHECK(list->GetScrollOffset().y > wheeled);
+
+    CHECK(tester.Tap(Finder::Text(SV(u8"Show"))));
+    CHECK(bed.clicks == 1);
+}
+
+TEST_CASE("testing: a failure is handed to the capture with a name, so a host with a device saves the screen")
+{
+    Bed bed;
+    Tester tester(*bed.root.Get());
+    core::Array<core::String> captured;
+    tester.SetFailureCapture([&](core::StringView name) { captured.PushBack(core::String(name)); });
+    CHECK(tester.One(Finder::Text(SV(u8"Nowhere"))) == nullptr);
+    CHECK_FALSE(tester.Click(Finder::Text(SV(u8"Also nowhere"))));
+    REQUIRE(captured.Size() == 2u);
+    CHECK(captured[0] == SV(u8"failure-1"));
+    CHECK(captured[1] == SV(u8"failure-2"));
+    CHECK(tester.Failures().Size() == 2u);
+}

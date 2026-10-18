@@ -188,6 +188,9 @@ export namespace experimental::gui::testing
 
         /// Where failures go as well as into Failures (a test passes doctest's FAIL_CHECK).
         void SetFailureHandler(core::Function<void(core::StringView)> handler) { m_onFailure = core::Move(handler); }
+        /// What saves the screen at a failure, given a name for it (`failure-1`, ...): a host with a
+        /// device (the sandbox's image tests) writes the frame there; none, nothing is saved.
+        void SetFailureCapture(core::Function<void(core::StringView)> capture) { m_capture = core::Move(capture); }
         [[nodiscard]] const Array<core::String>& Failures() const noexcept { return m_failures; }
 
         // === Time ===
@@ -239,6 +242,58 @@ export namespace experimental::gui::testing
             if (!Aim(target, at))
                 return false;
             (void)Dispatcher().InjectMouseMove(at);
+            Frame();
+            return true;
+        }
+        /// The pointer leaves the root (what it hovered is left).
+        void Leave()
+        {
+            (void)Dispatcher().InjectMouseMove(core::Float2{-1.0f, -1.0f});
+            Frame();
+        }
+        /// The wheel turned over the middle of what `target` finds, by `delta` in notches, as the
+        /// platform reports them (a negative y scrolls down, the wheel turned toward the user).
+        bool Scroll(const Finder& target, core::Float2 delta, u32 modifiers = 0)
+        {
+            core::Float2 at;
+            if (!Aim(target, at))
+                return false;
+            (void)Dispatcher().InjectMouseMove(at);
+            (void)Dispatcher().InjectMouseWheel(at, delta, modifiers);
+            Frame();
+            return true;
+        }
+        /// A finger down and up on the middle of what `target` finds.
+        bool Tap(const Finder& target)
+        {
+            core::Float2 at;
+            if (!Aim(target, at))
+                return false;
+            EventDispatcher& d = Dispatcher();
+            (void)d.InjectTouchDown(kFinger, at);
+            Frame();
+            (void)d.InjectTouchUp(kFinger, at);
+            Frame();
+            return true;
+        }
+        /// A finger down on `from`'s middle, moved in steps by `by`, lifted there: a swipe that pans
+        /// what it is over (as fast as the steps make it, which flings).
+        bool Swipe(const Finder& from, core::Float2 by)
+        {
+            core::Float2 start;
+            if (!Aim(from, start))
+                return false;
+            EventDispatcher& d = Dispatcher();
+            (void)d.InjectTouchDown(kFinger, start);
+            Frame();
+            constexpr int kSteps = 8;
+            for (int i = 1; i <= kSteps; ++i)
+            {
+                const f32 t = static_cast<f32>(i) / static_cast<f32>(kSteps);
+                (void)d.InjectTouchMove(kFinger, core::Float2{start.x + by.x * t, start.y + by.y * t});
+                Frame();
+            }
+            (void)d.InjectTouchUp(kFinger, core::Float2{start.x + by.x, start.y + by.y});
             Frame();
             return true;
         }
@@ -354,6 +409,8 @@ export namespace experimental::gui::testing
             m_failures.PushBack(core::String(message));
             if (m_onFailure)
                 m_onFailure(message);
+            if (m_capture)
+                m_capture(core::Format(u8"failure-{}", m_failures.Size()).AsView());
         }
         // The middle of the one node `target` finds, if a pointer there reaches it (not something
         // over it).
@@ -396,7 +453,9 @@ export namespace experimental::gui::testing
         StyleManager* m_styles = nullptr;
         core::Duration m_frame;
         core::Function<void(core::StringView)> m_onFailure;
+        core::Function<void(core::StringView)> m_capture;
         Array<core::String> m_failures;
+        static constexpr u64 kFinger = 1; // the tester's one finger
     };
 
     /// How a picture compares with its reference (E8g).

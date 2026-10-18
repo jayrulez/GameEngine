@@ -298,6 +298,29 @@ Tests: each value form parsed and drawn; an SVG at two scales; a nine-slice skin
 media queries from host flags; an import chain with a cycle; a theme retinted by its palette. Screen:
 a settings screen in a skinned theme.
 
+As built on `vg` (2026-10-18): `calc()` lengths, a sum of units, the percentage resolving where
+percentages do (29360ffcb); `hsl()`, `hsla()`, `color-mix()` in sRGB and `currentColor`, the
+nearest declared colour, through the cascade (2a0dac384); media query lists, `not`, `orientation`
+and the user's preferences, `prefers-color-scheme`, `prefers-contrast` and
+`prefers-reduced-motion`, which a host sets on its GUI (308c7961e); `@import` through the
+resource provider's new `LoadText`, a cycle stopping (95775b47d); `background-size` and
+`background-position` (39a54cd9f); SVG images drawn as paths at the size they fill (`LoadSvg`),
+`border-image` nine-slice skins (stretch, repeat, round, fill) and `@spritesheet` atlases written
+as `url(atlas.png#xywh=...)` (202d678bb); dashed and dotted borders through VG's dash patterns,
+the lab's alone, no Foundation change (8b433b342). The built-in theme is one sheet of tokens on
+`:root` (a new pseudo-class) in the three layers, light and more contrast as media blocks, its
+values the old themes' to the pixel; a part inherits its widget's style, so tokens reach it
+(4dedc5a54). Skin tokens bring a theme's art for buttons, fields, combo boxes, windows and menus;
+a combo box's and a list's own face gives way to a sheet's fill (08aeff4fa). Screen: the
+sandbox's Themes page, the same settings in the built-in tokens and in an Ember subtree skinned
+with art its own script draws (e17b642d5).
+Left: parts take no transitions or text properties yet, and `inherit` reads the parent's
+cascaded value, not a value it is animating through (both want per-frame work of their own);
+`@icon` is not read; a background with no `background-size` still fills its box (the lab's old
+default, not CSS's natural size); `@import` paths are from the data root, not the importing
+sheet; the token list is in the theme's source, not generated into a document, and the inspector
+does not show a part's token beside it.
+
 ### E14 Motion as an API
 
 Facts: sheets have transitions and keyframes (E3); code and scripts have eepp's actions

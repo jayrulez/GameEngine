@@ -106,21 +106,13 @@
 
 A survey of ours against LunarSong, RmlUi, AUI and eepp (text and fonts left out) found that
 most of the polish gap is in how our samples and themes use the framework, but these are real
-gaps in it, ranked by how much polish they cost, and two bugs.
+gaps in it, ranked by how much polish they cost, and two bugs. Done and moved to the week of
+2026-10-10: the sheet's opacity (a bug) and blending as authored rather than in linear light.
 
 - **Bug: a shadow takes its radius from `corner-radius`, not from the background's radius**
   (`View.cppm:1308`): Sky Hopper's `.cloud` and `.hud` cards (`GameTheme.sss`) round their
   background with `radius=24`/`20` but set no `corner-radius`, so they cast square shadows. The
   shadow should follow the shape it sits under.
-- **Bug: the sheet's `opacity` does nothing**: `StyleProperty::Opacity` is parsed and classified
-  (`SSSParser.cppm:1089`, `StyleProperty.cppm`) and nothing applies it to a view. Fixed
-  (dc10e620d).
-- **UI blends in linear light, with no sRGB mode**: vertex colours are decoded to linear and the
-  target is `BGRA8UnormSrgb` (`vg.vs.hlsl`; `Renderer.cppm`), so translucent panels, scrims and
-  shadows read fainter than the values a designer writes (half-black over white comes out about
-  73% grey, not 50%), and gradients brighten at their middles. Offer an sRGB-encoded blend for UI
-  canvases (the default), keeping linear for in-world panels that should light like the scene;
-  LunarSong's `UITargetSpace` is a reference.
 - **Game UI at a reference resolution is scaled as a transform** (`Engine.UI/UISubsystemImpl.cpp`,
   the canvas scaler sets `Transform.Scale`): layout runs in reference pixels, so the device-pixel
   rounding the DPI path does never sees the real scale, and rounded rects and strokes land on
@@ -139,8 +131,9 @@ gaps in it, ranked by how much polish they cost, and two bugs.
 - **Motion in sheets**: no `transform` property (rotate, skew, scale), no keyframes, and only
   quadratic easings (no `cubic-bezier`), so hover lifts, press squashes and focus pulses need
   script.
-- **Box paint**: one shadow per box; no per-side borders or border styles; `var()` cannot reach
-  inside a drawable's arguments.
+- **Box paint**: one shadow per box; no per-side borders in sheets (VG draws a colour per side
+  since e220e7d42, which no drawable uses yet) or border styles; `var()` cannot reach inside a
+  drawable's arguments.
 - **Baseline alignment in FlexLayout** (user 2026-10-16; found by the GUI lab assessments): markup
   takes `align-items="baseline"` and `align-self="baseline"` (`MarkupRegistry.cppm:397`, `:683`)
   and `Align::Baseline` exists, but FlexLayout treats it as `start` (`FlexLayout.cppm:500`), so a

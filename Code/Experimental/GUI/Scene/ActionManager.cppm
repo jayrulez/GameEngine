@@ -53,6 +53,14 @@ export namespace experimental::gui
             return false;
         }
 
+        /// Calls `f(action)` for each running action.
+        template <typename F>
+        void ForEachAction(F&& f)
+        {
+            for (const RefPtr<Action>& a : m_actions)
+                f(*a);
+        }
+
         bool RemoveAllActionsFromTarget(Node* target)
         {
             bool removed = false;

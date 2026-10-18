@@ -24,6 +24,7 @@ import :drawable;
 import :text; // TextHAlign / TextVAlign (theme text-align hooks)
 import :node;
 import :node_box; // PartStyle
+import :style_properties; // StyleValue, for MotionValue (E14)
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -37,6 +38,20 @@ export namespace experimental::gui
     {
         core::String Name;
         core::String Value;
+    };
+
+    /// One property a tween moves (E14): the style pass composes it over the cascade, as CSS's
+    /// animation origin, from `From` (or the value underneath when it has none) toward `To`.
+    struct MotionValue
+    {
+        core::String Property;
+        StyleValue From;
+        bool HasFrom = false;
+        StyleValue To;
+        f32 Progress = 0.0f; ///< eased: a curve that overshoots leaves [0, 1]
+        StyleValue Shown;    ///< what the last style pass showed (a tween replacing it starts there)
+        bool HasShown = false;
+        u64 Owner = 0; ///< the tween writing it
     };
 
     class UINode : public Node
@@ -231,6 +246,40 @@ export namespace experimental::gui
         }
         [[nodiscard]] core::Span<const InlineStyleDeclaration> GetInlineStyle() const noexcept { return m_inlineStyle.AsSpan(); }
 
+        // === The animated layer (E14) ===
+        /// What tweens move on it, over its cascade. A change marks it for the style pass to apply
+        /// again (MarkStyleMotionDirty), not to resolve anew.
+        [[nodiscard]] core::Span<MotionValue> MotionValues() noexcept { return m_motion.AsSpan(); }
+        [[nodiscard]] bool HasMotion() const noexcept { return !m_motion.IsEmpty(); }
+        [[nodiscard]] MotionValue* FindMotion(core::StringView property) noexcept
+        {
+            for (MotionValue& m : m_motion)
+                if (m.Property.AsView() == property)
+                    return &m;
+            return nullptr;
+        }
+        /// Sets the layer's value for its property (replacing the one there).
+        MotionValue& SetMotion(MotionValue value)
+        {
+            MarkStyleMotionDirty();
+            if (MotionValue* m = FindMotion(value.Property.AsView()))
+                return *m = core::Move(value);
+            m_motion.PushBack(core::Move(value));
+            return m_motion[m_motion.Size() - 1];
+        }
+        /// Gives `property` back to the cascade; false when nothing moved it.
+        bool RemoveMotion(core::StringView property)
+        {
+            for (usize i = 0; i < m_motion.Size(); ++i)
+                if (m_motion[i].Property.AsView() == property)
+                {
+                    m_motion.RemoveAt(i);
+                    MarkStyleMotionDirty();
+                    return true;
+                }
+            return false;
+        }
+
         /// A reflected property a sheet set by its CSS name: the node's own value from before, the
         /// value the sheet last wrote (as text; empty when it writes none now), and whether code
         /// has since taken it.
@@ -328,6 +377,7 @@ export namespace experimental::gui
         TextStyle m_unstyledText;
         bool m_unstyledTextCaptured = false;
         core::Array<InlineStyleDeclaration> m_inlineStyle;
+        core::Array<MotionValue> m_motion; // what tweens move, over the cascade (E14)
         core::Array<StyledProperty> m_styledProperties;
         struct NamedPartStyle
         {

@@ -60,6 +60,7 @@ export namespace experimental::gui
     };
 
     class EventDispatcher; // owned by the SceneRoot; reached via GetEventDispatcher()
+    class Tween;           // a property moving on the GUI's clock (:tween, E14)
     class ElementSet;      // what a GUI may create (:element_types); its SceneRoot holds one
     class SceneRoot;       // the root of a GUI (:scene_root)
     class GUIContext;      // the GUI a root is part of (:scene_root)
@@ -781,6 +782,15 @@ export namespace experimental::gui
             for (Node* p = m_parent; p != nullptr && !p->m_childStyleDirty; p = p->m_parent)
                 p->m_childStyleDirty = true;
         }
+        /// What a tween moves changed (E14): the style pass applies the style it has with the
+        /// node's animated layer over it again, without resolving the cascade anew.
+        void MarkStyleMotionDirty()
+        {
+            m_styleMotionDirty = true;
+            for (Node* p = m_parent; p != nullptr && !p->m_childStyleDirty; p = p->m_parent)
+                p->m_childStyleDirty = true;
+        }
+        [[nodiscard]] bool IsStyleMotionDirty() const noexcept { return m_styleMotionDirty; }
         /// The states a selector reads (E3), one bit each: a node whose state changed restyles
         /// alone, or with its subtree or its later siblings when a sheet reads that state through
         /// an ancestor or a sibling (the style pass decides; StyleManager knows its sheets).
@@ -855,6 +865,7 @@ export namespace experimental::gui
         void ClearStyleDirty() noexcept
         {
             m_styleDirty = false;
+            m_styleMotionDirty = false;
             m_styleSubtreeDirty = false;
             m_childStyleDirty = false;
             m_childrenArrangementChanged = false;
@@ -1295,6 +1306,18 @@ export namespace experimental::gui
         // Programmatic focus (routes through the dispatcher; defined in the impl unit).
         void RequestFocus();
         void ReleaseFocus();
+
+        /// Moves `property` to `to` over `seconds` on the GUI's clock (E14), eased as `easing` names
+        /// (a CSS easing or a named curve). The property is named as a sheet names it, and composes
+        /// over the cascade, holding its end until stopped; a name no sheet knows is a reflected
+        /// property (`value`, `x`, `textColor`). A tween of the same property replaces the running
+        /// one, from the value showing. The tween, to shape further (a start value, a delay,
+        /// repeats); inert on a node in no GUI. Defined in Styling/TweenImpl.cpp.
+        RefPtr<Tween> Animate(core::StringView property, core::StringView to, f32 seconds,
+                              core::StringView easing = core::StringView(u8"ease"));
+        /// Stops what moves `property` and gives it back to the sheet (a tween that ended holds
+        /// its end until this); false when nothing moved it.
+        bool StopAnimation(core::StringView property);
 
         // Run an action on this node (targets it, hands it to the SceneRoot's manager).
         // No-op (the action is dropped) if the node is not attached under a SceneRoot.
@@ -2506,6 +2529,7 @@ export namespace experimental::gui
         bool m_styleDirty = true;          // restyle this node
         bool m_styleSubtreeDirty = true;   // ... and every descendant
         bool m_childStyleDirty = false;    // some descendant waits for a restyle
+        bool m_styleMotionDirty = false;   // a tween moved: apply again, the cascade as it was
         bool m_childrenArrangementChanged = false; // its children were added, removed or moved
         bool m_layoutDirty = false;        // this container's layout must run
         bool m_childLayoutDirty = false;   // some descendant's must

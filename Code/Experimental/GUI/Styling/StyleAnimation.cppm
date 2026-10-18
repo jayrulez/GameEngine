@@ -168,6 +168,33 @@ export namespace experimental::gui
         LengthContext Lengths{};
     };
 
+    /// The node's animated layer over `style` (E14): each value a tween moves, from its start or
+    /// the value underneath (the cascade's and its transitions', else the property's initial
+    /// value) toward its end, as CSS's animation origin outranks the rest. Each value shown is
+    /// kept, for a tween that replaces it to start there.
+    inline void OverlayMotion(UINode& node, ResolvedStyle& style, const StyleInterpolationContext* ctx)
+    {
+        for (MotionValue& motion : node.MotionValues())
+        {
+            const core::StringView property = motion.Property.AsView();
+            const StyleValue* under = style.Value(property);
+            StyleValue initial;
+            if (under == nullptr)
+                if (const StylePropertySpec* spec = FindStyleProperty(property); spec != nullptr && spec->Initial != nullptr)
+                {
+                    initial = ResolvedStyle::ParseLonghand(property, core::StringView(spec->Initial));
+                    if (initial.Kind != StyleValueKind::None)
+                        under = &initial;
+                }
+            const StyleValue* from = motion.HasFrom ? &motion.From : under;
+            // Nothing to move from (no start, nothing underneath): it shows its end.
+            StyleValue value = from != nullptr ? InterpolateStyleValue(*from, motion.To, motion.Progress, ctx) : motion.To;
+            style.Override(property, value);
+            motion.Shown = core::Move(value);
+            motion.HasShown = true;
+        }
+    }
+
     // === The action ===
 
     class StyleAnimation : public Action
@@ -332,6 +359,7 @@ export namespace experimental::gui
                 if (track.ValueNow(value, &ctx))
                     effective.Override(track.Property.AsView(), value);
             }
+            OverlayMotion(*node, effective, &ctx); // tweens over the sheet's motion
             m_resets.Clear();
             ApplyStyle(*node, effective, m_context.Resources, m_context.FontService, m_context.Lengths);
         }

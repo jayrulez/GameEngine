@@ -139,5 +139,6 @@ export import :easing;
 export import :motion;
 export import :style_interpolation;
 export import :style_animation;
+export import :tween;
 export import :style_manager;
 export import :theme;

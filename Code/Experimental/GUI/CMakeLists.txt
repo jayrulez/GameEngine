@@ -114,6 +114,7 @@ target_sources(GUI
             Styling/Motion.cppm
             Styling/StyleInterpolation.cppm
             Styling/StyleAnimation.cppm
+            Styling/Tween.cppm
             Styling/StyleManager.cppm
             Styling/Theme.cppm
             Markup/MarkupLoader.cppm
@@ -127,5 +128,6 @@ target_sources(GUI
         Scene/AccessibilityImpl.cpp
         Scene/DebugOverlayImpl.cpp
         Scene/GUIReflectionImpl.cpp
-        Core/ReactiveImpl.cpp)
+        Core/ReactiveImpl.cpp
+        Styling/TweenImpl.cpp)
 

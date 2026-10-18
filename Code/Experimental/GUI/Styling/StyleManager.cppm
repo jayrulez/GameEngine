@@ -34,6 +34,7 @@ import :style_sheet;
 import :media_query;
 import :style_applier;
 import :style_animation;
+import :style_interpolation; // StyleInterpolationContext (E14)
 import :resource_provider;
 import :css_values; // ParseLength
 import :css_parser; // an @import's sheet
@@ -246,6 +247,7 @@ export namespace experimental::gui
             // differently (with what it holds); else only the new ones restyle (marked so).
             const bool rearranged = m_readsSiblings && node.ChildrenArrangementChanged();
             bool descend = subtree || rearranged || node.HasStyleDirtyDescendant();
+            const bool moved = node.IsStyleMotionDirty();
             node.ClearStyleDirty();
             bool customsChanged = false;
             if (self)
@@ -255,6 +257,11 @@ export namespace experimental::gui
                     customsChanged = ApplyOne(*widget);
                     ++m_lastRestyleCount;
                 }
+            }
+            else if (moved)
+            {
+                if (UIWidget* widget = core::Cast<UIWidget>(&node))
+                    ApplyMotion(*widget);
             }
             // Applying it may have marked what it holds (a direction it now runs in, E9b).
             descend = descend || node.HasStyleDirtyDescendant();
@@ -283,23 +290,11 @@ export namespace experimental::gui
             return true;
         }
 
-        // Restyles one widget; whether its custom properties changed (its children then restyle,
-        // as they inherit them).
-        bool ApplyOne(UIWidget& widget)
+        // What applying `resolved` to `widget` needs: the length-resolution context (the viewport
+        // from the media context, the root font size configurable, the element's font size from
+        // its resolved font-size, for em), the resources and the fonts.
+        [[nodiscard]] StyleApplyContext ApplyContextFor(const UIWidget& widget, const ResolvedStyle& resolved) const
         {
-            // Custom properties inherit: the nearest styled ancestor's resolved style gives those
-            // this widget does not set (ApplyTree styles parents first, so theirs are current).
-            const ResolvedStyle* inherited = nullptr;
-            for (Node* ancestor = widget.GetParent(); ancestor != nullptr && inherited == nullptr;
-                 ancestor = ancestor->GetParent())
-                inherited = m_cache.Find(ancestor);
-            const Array<const StyleSheet*> subtrees = SubtreeSheetsOver(widget);
-            ResolvedStyle resolved = ResolveFor(widget, subtrees, {}, inherited);
-            resolved.SettleKeywords(inherited);
-            const UINode::TextStyle textBefore = widget.GetTextStyle();
-
-            // Build the length-resolution context: viewport from the media context, root font
-            // size configurable, element font size from this widget's resolved font-size (for em).
             StyleApplyContext context;
             context.Resources = m_resources;
             context.FontService = m_fontService;
@@ -317,6 +312,49 @@ export namespace experimental::gui
             const core::StringView fontSize = resolved.Get(core::StringView(u8"font-size"), core::StringView(u8""));
             context.Lengths.ElementFontSize =
                 fontSize.Size() != 0 ? ResolveLength(fontSize, parentLengths, parentSize).ValueOr(parentSize) : parentSize;
+            return context;
+        }
+
+        // A tween moved (E14) and nothing else changed: the style it has, with the animated layer
+        // over it, applied again (through its transitions and animations when they run).
+        void ApplyMotion(UIWidget& widget)
+        {
+            if (const RefPtr<StyleAnimation>* running = m_animations.Find(&widget); running != nullptr && *running && !(*running)->IsDone())
+            {
+                (*running)->ApplyNow();
+                return;
+            }
+            const ResolvedStyle* cached = m_cache.Find(&widget);
+            if (cached == nullptr)
+            {
+                (void)ApplyOne(widget);
+                return;
+            }
+            ResolvedStyle effective = *cached;
+            const StyleApplyContext context = ApplyContextFor(widget, effective);
+            StyleInterpolationContext lengths;
+            lengths.Lengths = context.Lengths;
+            lengths.BoxSize = widget.GetSize();
+            OverlayMotion(widget, effective, &lengths);
+            ApplyStyle(widget, effective, context.Resources, context.FontService, context.Lengths);
+        }
+
+        // Restyles one widget; whether its custom properties changed (its children then restyle,
+        // as they inherit them).
+        bool ApplyOne(UIWidget& widget)
+        {
+            // Custom properties inherit: the nearest styled ancestor's resolved style gives those
+            // this widget does not set (ApplyTree styles parents first, so theirs are current).
+            const ResolvedStyle* inherited = nullptr;
+            for (Node* ancestor = widget.GetParent(); ancestor != nullptr && inherited == nullptr;
+                 ancestor = ancestor->GetParent())
+                inherited = m_cache.Find(ancestor);
+            const Array<const StyleSheet*> subtrees = SubtreeSheetsOver(widget);
+            ResolvedStyle resolved = ResolveFor(widget, subtrees, {}, inherited);
+            resolved.SettleKeywords(inherited);
+            const UINode::TextStyle textBefore = widget.GetTextStyle();
+
+            const StyleApplyContext context = ApplyContextFor(widget, resolved);
 
             RefPtr<StyleAnimation>* running = m_animations.Find(&widget);
             if (running != nullptr && (*running)->IsDone())
@@ -413,6 +451,16 @@ export namespace experimental::gui
                     animation->ApplyNow();
                     animation->Stop();
                     m_animations.Remove(&widget);
+                }
+                else if (widget.HasMotion())
+                {
+                    // Tweens over it (E14); the cache keeps the cascade alone.
+                    ResolvedStyle effective = resolved;
+                    StyleInterpolationContext lengths;
+                    lengths.Lengths = context.Lengths;
+                    lengths.BoxSize = widget.GetSize();
+                    OverlayMotion(widget, effective, &lengths);
+                    ApplyStyle(widget, effective, context.Resources, context.FontService, context.Lengths);
                 }
                 else
                 {

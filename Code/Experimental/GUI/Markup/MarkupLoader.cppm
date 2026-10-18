@@ -125,7 +125,7 @@ export namespace experimental::gui
                 core::StringView value = attr->Value();
                 // A translated text (E9a): `text="@menu.play"`, its count and arguments in
                 // `text-count` and `text-args` (each a value or a {{binding}}); `@@` is a literal @.
-                if (IsTranslationExtra(name))
+                if (IsTranslationExtra(element, name))
                     continue;
                 if (value.Size() > 1 && value[0] == u8'@')
                 {
@@ -226,11 +226,20 @@ export namespace experimental::gui
         // follows the text built from them. False when nothing bound (no such property, or a
         // malformed template), so the attribute is handled as written.
         // `text-count` and `text-args` belong to `text`'s translation (when `text` is a key).
-        [[nodiscard]] static bool IsTranslationExtra(core::StringView name) noexcept
+        // `<prop>-count` or `<prop>-args` beside a `<prop>="@key"`: the translation's count and
+        // arguments, which BindTranslated reads. Any other attribute so named is the widget's own
+        // (`animation-iteration-count`).
+        [[nodiscard]] static bool IsTranslationExtra(const xml::XmlElement& element, core::StringView name)
         {
-            const auto ends = [name](core::StringView suffix)
-            { return name.Size() > suffix.Size() && name.SubStr(name.Size() - suffix.Size(), suffix.Size()) == suffix; };
-            return ends(core::StringView(u8"-count")) || ends(core::StringView(u8"-args"));
+            core::StringView base;
+            const core::StringView suffixes[] = {core::StringView(u8"-count"), core::StringView(u8"-args")};
+            for (const core::StringView suffix : suffixes)
+                if (name.Size() > suffix.Size() && name.SubStr(name.Size() - suffix.Size(), suffix.Size()) == suffix)
+                    base = name.SubStr(0, name.Size() - suffix.Size());
+            if (base.Size() == 0)
+                return false;
+            const core::StringView value = element.GetAttribute(base);
+            return value.Size() > 1 && value[0] == u8'@' && value[1] != u8'@';
         }
         // One argument: {{name}} reads the GUI's data, anything else is itself.
         [[nodiscard]] static Node::TranslationArgument TranslationArgumentOf(core::StringView text)

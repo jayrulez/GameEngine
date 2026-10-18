@@ -177,3 +177,19 @@ TEST_CASE("translation: :lang() matches a node's language, its own or the GUI's,
     CHECK(page->GetAlpha() == doctest::Approx(0.5f)); // pt-BR under :lang(pt)
     CHECK(arabic->GetAlpha() == doctest::Approx(0.25f));
 }
+
+TEST_CASE("translation: an attribute ending in -count or -args is the widget's own unless its property is an @key")
+{
+    Bed bed;
+    core::RefPtr<Node> page = bed.Load(u8R"(<Panel id="box" animation-iteration-count="3" tooltip-args="kept"/>)");
+    REQUIRE(page);
+    const UINode* node = core::Cast<UINode>(page.Get());
+    bool count = false, args = false;
+    for (const InlineStyleDeclaration& d : node->GetInlineStyle())
+    {
+        count = count || d.Name == core::String(u8"animation-iteration-count");
+        args = args || d.Name == core::String(u8"tooltip-args");
+    }
+    CHECK(count); // not taken for a translation's count
+    CHECK(args);  // tooltip is no @key here
+}

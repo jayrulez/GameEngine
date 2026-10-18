@@ -107,6 +107,15 @@ export namespace experimental::gui
         [[nodiscard]] Keymap& GetKeymap() noexcept { return m_keymap; }
         /// The fonts and resources its text asks for (a rich text's own faces and its icons); not owned.
         void SetFontService(fonts::IFontService* fonts) noexcept { m_fontService = fonts; }
+        /// What the host knows of the user's preferences (its platform's dark mode, contrast and
+        /// reduced-motion settings, E13): sheets read them as prefers-color-scheme,
+        /// prefers-contrast and prefers-reduced-motion. A change restyles at the next frame.
+        void SetColorScheme(bool dark) noexcept { m_darkScheme = dark; }
+        [[nodiscard]] bool IsDarkScheme() const noexcept { return m_darkScheme; }
+        void SetContrastPreference(ContrastPreference contrast) noexcept { m_contrast = contrast; }
+        [[nodiscard]] ContrastPreference GetContrastPreference() const noexcept { return m_contrast; }
+        void SetReducedMotion(bool reduce) noexcept { m_reducedMotion = reduce; }
+        [[nodiscard]] bool IsReducedMotion() const noexcept { return m_reducedMotion; }
         [[nodiscard]] fonts::IFontService* GetFontService() const noexcept { return m_fontService; }
         void SetResourceProvider(IResourceProvider* resources) noexcept { m_resources = resources; }
         /// The texts its translated properties resolve through (E9a), the host's; not owned. Its
@@ -211,6 +220,9 @@ export namespace experimental::gui
         CommandSet m_commands;
         Keymap m_keymap;
         fonts::IFontService* m_fontService = nullptr;
+        bool m_darkScheme = true; // the user's preferences, for media queries (E13)
+        ContrastPreference m_contrast = ContrastPreference::NoPreference;
+        bool m_reducedMotion = false;
         IResourceProvider* m_resources = nullptr;
         foundation::i18n::Localization* m_localization = nullptr; // the host's
         u32 m_localizationToken = 0;
@@ -595,7 +607,11 @@ export namespace experimental::gui
         /// What this root's media queries see: its logical size, and its density (96 dpi at 1x).
         [[nodiscard]] MediaContext GetMediaContext() const noexcept
         {
-            return MediaContext{GetSize().x, GetSize().y, 96.0f * m_displayScale};
+            MediaContext context{GetSize().x, GetSize().y, 96.0f * m_displayScale};
+            context.DarkScheme = m_context->IsDarkScheme();
+            context.Contrast = m_context->GetContrastPreference();
+            context.ReducedMotion = m_context->IsReducedMotion();
+            return context;
         }
 
         // Per-frame hook for subclasses (layout, timers, ...).

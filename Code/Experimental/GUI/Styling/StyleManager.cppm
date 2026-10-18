@@ -132,7 +132,7 @@ export namespace experimental::gui
 
         void SetMediaContext(const MediaContext& context)
         {
-            if (context.Width == m_context.Width && context.Height == m_context.Height && context.Dpi == m_context.Dpi)
+            if (context == m_context)
                 return; // unchanged: nothing to restyle (a host may set it every frame)
             m_context = context;
             m_allDirty = true;

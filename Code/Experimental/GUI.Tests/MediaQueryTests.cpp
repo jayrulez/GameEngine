@@ -90,10 +90,57 @@ TEST_CASE("media-query: multiple rules inside one @media block")
 TEST_CASE("media-query: a feature it does not know matches nothing, rather than everything")
 {
     const MediaContext wide{800.0f, 600.0f, 96.0f};
-    CHECK_FALSE(MediaQuery(SV(u8"(orientation: landscape)")).Evaluate(wide));
-    CHECK_FALSE(MediaQuery(SV(u8"(prefers-reduced-motion)")).Evaluate(wide));
+    CHECK_FALSE(MediaQuery(SV(u8"(aspect-ratio: 16/9)")).Evaluate(wide));
+    CHECK_FALSE(MediaQuery(SV(u8"(prefers-reduced-motion)")).Evaluate(wide)); // known now: the context does not ask for it
     CHECK_FALSE(MediaQuery(SV(u8"(min-width: 600px) and (hover: hover)")).Evaluate(wide));
     CHECK(MediaQuery(SV(u8"(min-width: 600px)")).Evaluate(wide));
-    StyleSheet sheet = CSSParser::Parse(SV(u8"button { color: black; } @media (orientation: landscape) { button { color: red; } }"));
+    StyleSheet sheet = CSSParser::Parse(SV(u8"button { color: black; } @media (pointer: coarse) { button { color: red; } }"));
     CHECK(sheet.Resolve(*Widget(u8"button").Get(), wide).Get(SV(u8"color")) == SV(u8"black"));
+}
+
+TEST_CASE("media-query: orientation, not, comma lists and media types (E13)")
+{
+    const MediaContext wide{800.0f, 600.0f, 96.0f};
+    const MediaContext tall{600.0f, 800.0f, 96.0f};
+    CHECK(MediaQuery(SV(u8"(orientation: landscape)")).Evaluate(wide));
+    CHECK_FALSE(MediaQuery(SV(u8"(orientation: landscape)")).Evaluate(tall));
+    CHECK(MediaQuery(SV(u8"(orientation: portrait)")).Evaluate(tall));
+    CHECK(MediaQuery(SV(u8"not (orientation: portrait)")).Evaluate(wide));
+    CHECK_FALSE(MediaQuery(SV(u8"not all and (min-width: 700px)")).Evaluate(wide));
+    CHECK(MediaQuery(SV(u8"screen and (max-width: 500px), (orientation: portrait)")).Evaluate(tall)); // the second
+    CHECK_FALSE(MediaQuery(SV(u8"screen and (max-width: 500px), (orientation: portrait)")).Evaluate(wide));
+    CHECK_FALSE(MediaQuery(SV(u8"print")).Evaluate(wide));
+    CHECK_FALSE(MediaQuery(SV(u8"not (hover: hover)")).Evaluate(wide)); // a feature it cannot test: not either
+    CHECK(MediaQuery(SV(u8"(hover: hover), (min-width: 1px)")).Evaluate(wide)); // another in the list still can
+}
+
+TEST_CASE("media-query: the host's preferences: colour scheme, contrast, reduced motion")
+{
+    MediaContext context{800.0f, 600.0f, 96.0f};
+    CHECK(MediaQuery(SV(u8"(prefers-color-scheme: dark)")).Evaluate(context)); // dark by default
+    context.DarkScheme = false;
+    CHECK(MediaQuery(SV(u8"(prefers-color-scheme: light)")).Evaluate(context));
+    CHECK(MediaQuery(SV(u8"(prefers-contrast: no-preference)")).Evaluate(context));
+    CHECK_FALSE(MediaQuery(SV(u8"(prefers-contrast)")).Evaluate(context));
+    context.Contrast = ContrastPreference::More;
+    CHECK(MediaQuery(SV(u8"(prefers-contrast: more)")).Evaluate(context));
+    CHECK(MediaQuery(SV(u8"(prefers-contrast)")).Evaluate(context));
+    CHECK_FALSE(MediaQuery(SV(u8"(prefers-reduced-motion: reduce)")).Evaluate(context));
+    context.ReducedMotion = true;
+    CHECK(MediaQuery(SV(u8"(prefers-reduced-motion)")).Evaluate(context));
+
+    // From the GUI to a sheet: a root's media context carries the host's flags.
+    core::RefPtr<GUIContext> gui = core::MakeRef<GUIContext>(core::DefaultAllocator());
+    core::RefPtr<SceneRoot> root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), gui);
+    core::RefPtr<UIWidget> w = Widget(u8"button");
+    root->AddChild(w.Get());
+    StyleManager styles(CSSParser::Parse(SV(u8"button { opacity: 1; } @media (prefers-color-scheme: light) and (prefers-contrast: more) { button { opacity: 0.5; } }")));
+    styles.SetMediaContext(root->GetMediaContext());
+    styles.ApplyTree(*root.Get());
+    CHECK(w->GetAlpha() == doctest::Approx(1.0f));
+    gui->SetColorScheme(false);
+    gui->SetContrastPreference(ContrastPreference::More);
+    styles.SetMediaContext(root->GetMediaContext()); // the host passes it each frame: a change restyles
+    styles.ApplyTree(*root.Get());
+    CHECK(w->GetAlpha() == doctest::Approx(0.5f));
 }

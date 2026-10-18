@@ -104,3 +104,48 @@ TEST_CASE("easing: times parse in seconds and milliseconds")
     CHECK(ParseTime(SV(u8"250ms")).Value() == doctest::Approx(0.25f));
     CHECK_FALSE(ParseTime(SV(u8"250")).HasValue());
 }
+
+TEST_CASE("easing: the named curves past CSS's: ten families, eased in, out and in-out (E14)")
+{
+    const char8_t* families[] = {u8"sine", u8"quad", u8"cubic", u8"quart", u8"quint", u8"expo", u8"circ", u8"back", u8"elastic", u8"bounce"};
+    const char8_t* modes[] = {u8"ease-in-", u8"ease-out-", u8"ease-in-out-"};
+    for (const char8_t* family : families)
+        for (const char8_t* mode : modes)
+        {
+            core::String name(mode);
+            name.Append(core::StringView(family));
+            INFO(reinterpret_cast<const char*>(name.Data()));
+            const core::Optional<Easing> e = ParseEasing(name.AsView());
+            REQUIRE(e.HasValue());
+            CHECK(e.Value().Kind == EasingKind::Named);
+            CHECK(e.Value().Evaluate(0.0f) == doctest::Approx(0.0f).epsilon(1e-3));
+            CHECK(e.Value().Evaluate(1.0f) == doctest::Approx(1.0f).epsilon(1e-3));
+        }
+    const Easing outQuad = ParseEasing(SV(u8"ease-out-quad")).Value();
+    CHECK(outQuad.Evaluate(0.5f) == doctest::Approx(0.75f));
+    CHECK(ParseEasing(SV(u8"ease-in-quad")).Value().Evaluate(0.5f) == doctest::Approx(0.25f));
+    const Easing inOutCubic = ParseEasing(SV(u8"ease-in-out-cubic")).Value();
+    CHECK(inOutCubic.Evaluate(0.5f) == doctest::Approx(0.5f));
+    CHECK(inOutCubic.Evaluate(0.25f) == doctest::Approx(1.0f - inOutCubic.Evaluate(0.75f))); // symmetric
+    CHECK(ParseEasing(SV(u8"ease-in-back")).Value().Evaluate(0.2f) < 0.0f);  // pulls back first
+    CHECK(ParseEasing(SV(u8"ease-out-back")).Value().Evaluate(0.8f) > 1.0f); // overshoots
+    CHECK(ParseEasing(SV(u8"ease-out-bounce")).Value().Evaluate(0.5f) > 0.5f);
+    // Not curves: an unknown family, a missing one, CSS's own names still beziers.
+    CHECK_FALSE(ParseEasing(SV(u8"ease-out-wobble")).HasValue());
+    CHECK_FALSE(ParseEasing(SV(u8"ease-out-")).HasValue());
+    CHECK(ParseEasing(SV(u8"ease-out")).Value().Kind == EasingKind::CubicBezier);
+    // A sheet's transition takes them too.
+    const core::Array<TransitionSpec> list = ParseTransitionList(SV(u8"opacity 0.3s ease-out-elastic"));
+    REQUIRE(list.Size() == 1u);
+    CHECK(list[0].Timing.Kind == EasingKind::Named);
+    CHECK(list[0].Timing.Family == EaseFamily::Elastic);
+}
+
+TEST_CASE("easing: a named curve's name reads back as the same curve")
+{
+    const Easing e = Easing::Named(EaseFamily::Back, EaseMode::InOut);
+    CHECK(NamedEasingText(e) == SV(u8"ease-in-out-back"));
+    const Easing again = ParseEasing(NamedEasingText(e).AsView()).Value();
+    CHECK(again.Family == EaseFamily::Back);
+    CHECK(again.Mode == EaseMode::InOut);
+}

@@ -184,6 +184,8 @@ export namespace experimental::gui
                                                : e.Position == StepPosition::JumpEnd  ? u8"jump-end"
                                                : e.Position == StepPosition::JumpNone ? u8"jump-none"
                                                                                       : u8"jump-both"));
+            case EasingKind::Named:
+                return NamedEasingText(e);
             }
             return core::String(u8"ease");
         }

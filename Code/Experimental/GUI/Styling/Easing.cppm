@@ -26,6 +26,31 @@ export namespace experimental::gui
         Linear,
         CubicBezier,
         Steps,
+        Named, ///< one of the named curves past CSS's (E14): a family eased in, out, or both
+    };
+
+    /// The named curves' families (easings.net's, as Godot's Tween and Zero's eases name them):
+    /// powers of t, a sine, an exponential, a circle, and three that leave [0, 1] on the way
+    /// (back overshoots, elastic rings, bounce bounces at the end).
+    enum class EaseFamily : u8
+    {
+        Sine,
+        Quad,
+        Cubic,
+        Quart,
+        Quint,
+        Expo,
+        Circ,
+        Back,
+        Elastic,
+        Bounce,
+    };
+    /// Which end of a family's curve is slow: the start (in), the end (out), or both (in-out).
+    enum class EaseMode : u8
+    {
+        In,
+        Out,
+        InOut,
     };
 
     /// Where a steps() easing jumps: at the start of each interval, at its end, at both, or at
@@ -44,6 +69,8 @@ export namespace experimental::gui
         f32 X1 = 0.0f, Y1 = 0.0f, X2 = 1.0f, Y2 = 1.0f; ///< CubicBezier's control points
         i32 Steps = 1;
         StepPosition Position = StepPosition::JumpEnd;
+        EaseFamily Family = EaseFamily::Quad; ///< Named's
+        EaseMode Mode = EaseMode::Out;
 
         [[nodiscard]] static constexpr Easing Linear() noexcept { return Easing{}; }
         [[nodiscard]] static constexpr Easing Bezier(f32 x1, f32 y1, f32 x2, f32 y2) noexcept
@@ -64,6 +91,14 @@ export namespace experimental::gui
             e.Position = position;
             return e;
         }
+        [[nodiscard]] static constexpr Easing Named(EaseFamily family, EaseMode mode) noexcept
+        {
+            Easing e;
+            e.Kind = EasingKind::Named;
+            e.Family = family;
+            e.Mode = mode;
+            return e;
+        }
         /// CSS's default easing.
         [[nodiscard]] static constexpr Easing Ease() noexcept { return Bezier(0.25f, 0.1f, 0.25f, 1.0f); }
 
@@ -79,11 +114,31 @@ export namespace experimental::gui
                 return BezierAt(SolveForX(t), Y1, Y2);
             case EasingKind::Steps:
                 return StepAt(t);
+            case EasingKind::Named:
+                return NamedAt(t);
             }
             return t;
         }
 
     private:
+        // Foundation's curves (Math/Easings), by family and mode.
+        [[nodiscard]] f32 NamedAt(f32 t) const noexcept
+        {
+            static constexpr EasingFunction kCurves[][3] = {
+                {&EaseInSin, &EaseOutSin, &EaseInOutSin},
+                {&EaseInQuadratic, &EaseOutQuadratic, &EaseInOutQuadratic},
+                {&EaseInCubic, &EaseOutCubic, &EaseInOutCubic},
+                {&EaseInQuartic, &EaseOutQuartic, &EaseInOutQuartic},
+                {&EaseInQuintic, &EaseOutQuintic, &EaseInOutQuintic},
+                {&EaseInExponential, &EaseOutExponential, &EaseInOutExponential},
+                {&EaseInCircular, &EaseOutCircular, &EaseInOutCircular},
+                {&EaseInBack, &EaseOutBack, &EaseInOutBack},
+                {&EaseInElastic, &EaseOutElastic, &EaseInOutElastic},
+                {&EaseInBounce, &EaseOutBounce, &EaseInOutBounce},
+            };
+            return kCurves[static_cast<usize>(Family)][static_cast<usize>(Mode)](t);
+        }
+
         // One coordinate of the curve from (0, 0) through p1, p2 to (1, 1) at parameter s.
         [[nodiscard]] static f32 BezierAt(f32 s, f32 p1, f32 p2) noexcept
         {
@@ -145,11 +200,48 @@ export namespace experimental::gui
         }
     };
 
+    namespace detail
+    {
+        inline constexpr const char8_t* kEaseFamilyNames[] = {u8"sine", u8"quad", u8"cubic", u8"quart", u8"quint",
+                                                              u8"expo", u8"circ", u8"back", u8"elastic", u8"bounce"};
+        inline constexpr const char8_t* kEaseModePrefixes[] = {u8"ease-in-", u8"ease-out-", u8"ease-in-out-"}; // by EaseMode
+    }
+
+    /// A named curve: `ease-in-<family>`, `ease-out-<family>` or `ease-in-out-<family>`, the
+    /// family one of sine, quad, cubic, quart, quint, expo, circ, back, elastic, bounce.
+    [[nodiscard]] inline Optional<Easing> ParseNamedEasing(core::StringView v)
+    {
+        // In-out first: "ease-in-" is a prefix of it.
+        constexpr EaseMode kOrder[] = {EaseMode::InOut, EaseMode::In, EaseMode::Out};
+        for (const EaseMode mode : kOrder)
+        {
+            const core::StringView prefix(detail::kEaseModePrefixes[static_cast<usize>(mode)]);
+            if (v.Size() <= prefix.Size() || v.SubStr(0, prefix.Size()) != prefix)
+                continue;
+            const core::StringView family = v.SubStr(prefix.Size(), v.Size() - prefix.Size());
+            for (usize i = 0; i < sizeof(detail::kEaseFamilyNames) / sizeof(detail::kEaseFamilyNames[0]); ++i)
+                if (family == core::StringView(detail::kEaseFamilyNames[i]))
+                    return Easing::Named(static_cast<EaseFamily>(i), mode);
+            return {};
+        }
+        return {};
+    }
+    /// A named curve's name, as ParseNamedEasing reads it.
+    [[nodiscard]] inline core::String NamedEasingText(const Easing& e)
+    {
+        core::String text{core::StringView(detail::kEaseModePrefixes[static_cast<usize>(e.Mode)])};
+        text.Append(core::StringView(detail::kEaseFamilyNames[static_cast<usize>(e.Family)]));
+        return text;
+    }
+
     /// A CSS <easing-function>: linear, ease, ease-in, ease-out, ease-in-out, step-start,
-    /// step-end, cubic-bezier(x1, y1, x2, y2) (x1 and x2 in [0, 1]) or steps(n[, position]).
+    /// step-end, cubic-bezier(x1, y1, x2, y2) (x1 and x2 in [0, 1]) or steps(n[, position]); or a
+    /// named curve past CSS's (ParseNamedEasing), so sheets and code ease alike.
     [[nodiscard]] inline Optional<Easing> ParseEasing(core::StringView text)
     {
         const core::StringView v = Trim(text);
+        if (Optional<Easing> named = ParseNamedEasing(v); named.HasValue())
+            return named;
         if (v == core::StringView(u8"linear"))
             return Easing::Linear();
         if (v == core::StringView(u8"ease"))

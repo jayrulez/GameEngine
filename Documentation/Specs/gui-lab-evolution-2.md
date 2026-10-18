@@ -313,7 +313,11 @@ values the old themes' to the pixel; a part inherits its widget's style, so toke
 (4dedc5a54). Skin tokens bring a theme's art for buttons, fields, combo boxes, windows and menus;
 a combo box's and a list's own face gives way to a sheet's fill (08aeff4fa). Screen: the
 sandbox's Themes page, the same settings in the built-in tokens and in an Ember subtree skinned
-with art its own script draws (e17b642d5).
+with art its own script draws (e17b642d5). After the screen's check: dashed and dotted borders
+redone per side, each pattern fitted to start and end on a piece and the sides meeting on the
+corner's diagonal, square or rounded (4b80fb824); radius tokens beside the skin tokens, so a
+focus ring follows rounded art (4f0abfcd0); list rows of every kind show the pointer over them
+(e2ff1536f); a window placed in a tree closes from its close button (80771da01).
 Left: parts take no transitions or text properties yet, and `inherit` reads the parent's
 cascaded value, not a value it is animating through (both want per-frame work of their own);
 `@icon` is not read; a background with no `background-size` still fills its box (the lab's old
@@ -345,6 +349,19 @@ foundation.ui's `Storyboard`, Godot's `Tween`):
 
 Tests: every value kind tweened; groups and callbacks; replacement per property; springs settling
 and retargeting; the paused-game clock; scripts in both languages.
+
+Decided (2026-10-18), from the code as it stands: a tween's property is named as a sheet names it
+when the property table has it, and composes as CSS's animation origin does, over the cascade and
+the sheet's own transitions: the tween writes a value into the node's animated layer and the
+style pass applies it, so a sheet's later change to the same property does not undo a tween that
+holds. A tween with no `from` moves from the underlying value (what the cascade would show,
+Web Animations' implicit keyframe), and holds its end until stopped or replaced (a fill of
+`forwards`; `Stop` gives the property back to the sheet). A name the property table does not
+have is a reflected property (`value`, `x`, `textColor`), read and written through its accessors,
+which pin it as code's, numbers, colours and points interpolating. The named eases are
+easings.net's ten families in, out and in-out, Foundation's curves, written `ease-out-back` in
+sheets and code alike. Of the eepp actions only `TickAction` has callers outside tests; the others
+go, their tests moving to the tweens.
 
 ### E15 Retained rendering
 

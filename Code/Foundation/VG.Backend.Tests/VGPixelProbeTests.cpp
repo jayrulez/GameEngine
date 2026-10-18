@@ -1195,6 +1195,8 @@ namespace
         CHECK(Abs(static_cast<i32>(seamLeft[2]) + static_cast<i32>(seamRight[2]) - 255) <= 12);
         CHECK(seamLeft[0] > 100);
         CHECK(seamRight[2] > 100);
+        CHECK(seamLeft[2] >= 60); // each side carries the other's colour, which a sharp seam does not
+        CHECK(seamRight[0] >= 60);
         CHECK(px.At(63, 20)[0] >= 253); // above the backdrop the seam is sharp
         CHECK(px.At(63, 20)[2] <= 2);
         CHECK(px.At(64, 20)[2] >= 253);

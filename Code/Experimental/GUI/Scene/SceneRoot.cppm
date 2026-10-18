@@ -388,9 +388,13 @@ export namespace experimental::gui
                     break;
             }
             bool ran = false;
-            CommandEvent event{id, CommandPhase::Capture, false};
+            CommandEvent event{id, CommandPhase::Capture, false, false};
             for (usize i = path.Size(); i-- > 0;)
+            {
                 ran |= path[i]->RunCommandHandlers(event);
+                if (event.Stop)
+                    return true; // taken on the way down (a modal wrapper, a mode that owns the key)
+            }
             event.Phase = CommandPhase::Bubble;
             for (Node* n : path)
             {

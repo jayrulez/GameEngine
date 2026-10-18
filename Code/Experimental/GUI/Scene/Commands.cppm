@@ -66,6 +66,7 @@ export namespace experimental::gui
         core::StringView Id;
         CommandPhase Phase = CommandPhase::Bubble;
         bool Propagate = false; ///< A bubble handler sets it to let the command go on up.
+        bool Stop = false;      ///< A capture handler sets it to take the command: none below it, nor any bubble handler, runs.
     };
 
     using CommandHandler = core::Function<void(CommandEvent&)>;

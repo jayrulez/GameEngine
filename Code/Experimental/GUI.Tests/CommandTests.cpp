@@ -141,3 +141,21 @@ TEST_CASE("command: markup binds a control to a command by id, before it is atta
     Frame(*root.Get());
     CHECK(play->IsEnabled());
 }
+
+TEST_CASE("command: a capture handler that stops it takes it: nothing below runs, nor any bubble handler")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    auto panel = Make<UIWidget>();
+    auto field = Make<Button>();
+    field->SetTabFocusable(true);
+    root->AddChild(panel.Get());
+    panel->AddChild(field.Get());
+    core::Array<core::String> order;
+    (void)panel->OnCommand(SV(u8"save"), [&order](CommandEvent& e) { order.PushBack(core::String(u8"panel-capture")); e.Stop = true; }, CommandPhase::Capture);
+    (void)field->OnCommand(SV(u8"save"), [&order](CommandEvent&) { order.PushBack(core::String(u8"field")); });
+    (void)root->OnCommand(SV(u8"save"), [&order](CommandEvent&) { order.PushBack(core::String(u8"root")); });
+    root->GetEventDispatcher()->SetFocusNode(field.Get());
+    CHECK(root->RunCommand(SV(u8"save")));
+    REQUIRE(order.Size() == 1u);
+    CHECK(order[0] == core::String(u8"panel-capture"));
+}

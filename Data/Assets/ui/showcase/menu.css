@@ -31,7 +31,7 @@
 
 /* Panels enter by rising into place. */
 .panel { width: 440px; }
-.menu { height: 196px; }
+.menu { height: 260px; }
 .enter { animation: rise 0.42s cubic-bezier(0.2, 0.8, 0.2, 1); }
 @keyframes rise { from { opacity: 0; transform: translate(0, 26px) scale(0.97); } to { opacity: 1; transform: translate(0, 0) scale(1); } }
 
@@ -136,6 +136,19 @@ progressbar::fill { background-color: #f3a047; }
 .hud-prompt { width: 260px; height: 26px; font-family: Roboto; font-size: 15px; color: var(--muted); text-align: end;
               vertical-align: middle; }
 #pause-panel { height: 230px; }
+
+/* Controls: an action and its key in a row; the key a pill that, while it listens, breathes. */
+.controls { height: 350px; }
+.row-label.wide { width: 150px; }
+.bind-btn { width: 200px; height: 34px; font-family: Roboto; font-size: 17px; color: var(--ink); text-align: center;
+            vertical-align: middle; background-color: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 17; transition: box-shadow 0.2s ease-out; }
+.bind-btn:hover { box-shadow: 0 0 14px 2px var(--glow); }
+.bind-btn:focus-visible { box-shadow: 0 0 0 2px #fff4e2, 0 0 16px 2px var(--glow); }
+.bind-btn.listening { color: var(--accent); border-color: var(--accent); animation: listen 0.7s ease-in-out infinite alternate; }
+@keyframes listen { from { box-shadow: 0 0 0 rgba(243, 160, 71, 0); } to { box-shadow: 0 0 18px 3px rgba(243, 160, 71, 0.75); } }
+.controls-hint { width: 380px; height: 22px; font-family: Roboto; font-size: 14px; color: var(--muted); text-align: center;
+                 vertical-align: middle; }
 
 /* Leaving: the whole menu fades to black before the window closes. */
 .leaving { animation: fade-out 0.6s ease-in forwards; }

@@ -230,6 +230,57 @@ export namespace experimental::gui
         return {};
     }
 
+    /// A keystroke as a binding writes it ("ctrl-shift-s", "numpad5", "pad-north"): what ParseKeystroke
+    /// reads back (E12: a rebinding screen saves what it captured). Empty for a code with no name.
+    [[nodiscard]] inline core::String KeystrokeName(const Keystroke& stroke)
+    {
+        core::String out;
+        if (stroke.Pad)
+        {
+            for (const detail::NamedCode& pad : detail::kPadNames)
+                if (pad.Code == stroke.Code)
+                {
+                    out.Append(core::StringView(u8"pad-"));
+                    out.Append(core::StringView(pad.Name));
+                }
+            return out;
+        }
+        const KeyCode key = static_cast<KeyCode>(stroke.Code);
+        core::String name;
+        for (const detail::NamedKey& n : detail::kKeyNames)
+            if (n.Code == key && n.Code != KeyCode::Return)
+            {
+                name = core::String(core::StringView(n.Name));
+                break;
+            }
+        if (key == KeyCode::Return)
+            name = core::String(core::StringView(u8"enter"));
+        for (usize i = 0; i < 26 && name.Size() == 0; ++i)
+            if (kLetterKeys[i] == key)
+                name.PushBack(static_cast<char8_t>(u8'a' + i));
+        if (name.Size() == 0 && key >= KeyCode::Num0 && key <= KeyCode::Num9)
+            name.PushBack(static_cast<char8_t>(u8'0' + (stroke.Code - static_cast<u32>(KeyCode::Num0))));
+        if (const u32 n = detail::FunctionKeyNumber(key); name.Size() == 0 && n != 0)
+        {
+            name.PushBack(u8'f');
+            if (n >= 10)
+                name.PushBack(static_cast<char8_t>(u8'0' + n / 10));
+            name.PushBack(static_cast<char8_t>(u8'0' + n % 10));
+        }
+        if (name.Size() == 0)
+            return out;
+        if ((stroke.Modifiers & KeyModCtrl) != 0)
+            out.Append(core::StringView(u8"ctrl-"));
+        if ((stroke.Modifiers & KeyModShift) != 0)
+            out.Append(core::StringView(u8"shift-"));
+        if ((stroke.Modifiers & KeyModAlt) != 0)
+            out.Append(core::StringView(u8"alt-"));
+        if ((stroke.Modifiers & KeyModSuper) != 0)
+            out.Append(core::StringView(u8"super-"));
+        out.Append(name.AsView());
+        return out;
+    }
+
     /// A keystroke as a menu shows it: "Ctrl+Shift+S", "F10", "Enter", "Pad East".
     [[nodiscard]] inline core::String KeystrokeText(const Keystroke& stroke)
     {

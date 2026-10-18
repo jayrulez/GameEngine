@@ -548,6 +548,26 @@ namespace experimental::gui
         return root != nullptr && root->GetContext().GetKeymap().Bind(keys, command, context);
     }
 
+    void Gui::CaptureKey(RefPtr<foundation::script::IScriptDelegate> handler)
+    {
+        SceneRoot* root = ScriptRoot();
+        if (root == nullptr || !handler)
+            return;
+        const auto deliver = [handler](core::StringView keys)
+        {
+            core::Variant args[1] = {core::Variant::From(core::String(keys))};
+            (void)handler->Invoke(Span<core::Variant>(args, 1));
+        };
+        root->GetEventDispatcher()->CaptureNextKey([deliver](const Keystroke& stroke) { deliver(KeystrokeName(stroke).AsView()); },
+                                                   [deliver] { deliver(StringView{}); });
+    }
+
+    core::String Gui::KeyText(StringView keys)
+    {
+        const Optional<Keystroke> stroke = ParseKeystroke(keys);
+        return stroke.HasValue() ? KeystrokeText(stroke.Value()) : core::String{};
+    }
+
     void Node::OnCommandScript(StringView id, RefPtr<foundation::script::IScriptDelegate> handler)
     {
         if (!handler)
@@ -648,6 +668,7 @@ namespace experimental::gui
             registry.Register(UINode::StaticType());
             registry.Register(UIWidget::StaticType());
             registry.Register(Gui::StaticType()); // binds as `gui` (its scriptName)
+            foundation::script::RegisterDelegateShape(u8"void KeyHandler(const string &in keys)"); // gui::captureKey's
             return true;
         }();
         (void)once;
@@ -1241,5 +1262,7 @@ namespace experimental::gui
         builder.Method<&Gui::IsCommandChecked>("isCommandChecked");
         builder.Method<&Gui::RunCommand>("runCommand");
         builder.Method<&Gui::BindKey>("bindKey");
+        builder.Method<&Gui::CaptureKey>("captureKey");
+        builder.Method<&Gui::KeyText>("keyText");
     }
 }

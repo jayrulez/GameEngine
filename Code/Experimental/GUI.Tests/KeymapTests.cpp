@@ -363,3 +363,16 @@ TEST_CASE("keymap: a modifier key binds alone, though pressing it sets its own m
     CHECK(bed.ran.Size() == 2u); // unbound: Numpad 5 is not 5
 }
 
+TEST_CASE("keymap: a keystroke's name reads back as the same keystroke")
+{
+    const char8_t* const names[] = {u8"ctrl-shift-s", u8"numpad5", u8"pad-north", u8"f24", u8"alt-f4", u8"leftshift",
+                                    u8"ctrl-minus", u8"enter", u8"super-space", u8"7", u8"grave"};
+    for (const char8_t* name : names)
+    {
+        const auto stroke = ParseKeystroke(SV(name));
+        REQUIRE(stroke.HasValue());
+        CHECK(KeystrokeName(stroke.Value()) == SV(name));
+        CHECK(ParseKeystroke(KeystrokeName(stroke.Value()).AsView()).Value() == stroke.Value());
+    }
+    CHECK(KeystrokeName(Keystroke{static_cast<core::u32>(KeyCode::Unknown), 0, false}).IsEmpty());
+}

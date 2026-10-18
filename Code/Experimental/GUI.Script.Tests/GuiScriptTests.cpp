@@ -283,6 +283,77 @@ TEST_CASE("gui-script: Luau defines, handles and runs commands")
 }
 #endif
 
+namespace
+{
+    // A script capturing keys (E12): the next key's name lands in the data as `captured`, and a
+    // key bound from it runs its command.
+    void CheckCapture(GuiBed& bed)
+    {
+        gui::EventDispatcher& d = *bed.root->GetEventDispatcher();
+        bed.Run(u8"listen");
+        CHECK(d.IsCapturingKey());
+        d.InjectKeyDown(static_cast<u32>(gui::KeyCode::Q), gui::KeyModCtrl);
+        bed.Update();
+        CHECK(bed.root->GetContext().GetData().Get(u8"captured").Get<String>() == StringView(u8"ctrl-q"));
+        CHECK(bed.Number(u8"jumps") == doctest::Approx(0.0));
+        d.InjectKeyDown(static_cast<u32>(gui::KeyCode::Q), gui::KeyModCtrl); // now bound to jump
+        bed.Update();
+        CHECK(bed.Number(u8"jumps") == doctest::Approx(1.0));
+        bed.Run(u8"listen");
+        d.InjectKeyDown(static_cast<u32>(gui::KeyCode::Escape), 0); // cancelled: empty
+        bed.Update();
+        CHECK(bed.root->GetContext().GetData().Get(u8"captured").Get<String>().IsEmpty());
+        CHECK(bed.errors.count == 0);
+    }
+}
+
+#ifdef OPTION_HAS_ANGELSCRIPT
+TEST_CASE("gui-script: AngelScript captures the next key, names it and binds it")
+{
+    RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    const Status loaded = bed.context->Load(
+        u8"funcdef bool CommandHandler();\n"
+        u8"double count = 0;\n"
+        u8"bool jump() { count += 1; return false; }\n"
+        u8"void onKey(const string &in keys) {\n"
+        u8"  gui::set(\"captured\", keys);\n"
+        u8"  if (keys != \"\") gui::bindKey(keys, \"jump\", \"\");\n"
+        u8"  gui::set(\"shown\", gui::keyText(keys));\n"
+        u8"}\n"
+        u8"void main() { gui::root().onCommand(\"jump\", CommandHandler(jump)); }\n"
+        u8"void listen() { gui::captureKey(KeyHandler(onKey)); }\n"
+        u8"double jumps() { return count; }\n",
+        u8"main");
+    REQUIRE(loaded.IsOk());
+    CheckCapture(bed);
+    bed.Run(u8"listen");
+    bed.root->GetEventDispatcher()->InjectKeyDown(static_cast<u32>(gui::KeyCode::Keypad5), 0);
+    CHECK(bed.root->GetContext().GetData().Get(u8"shown").Get<String>() == StringView(u8"Numpad 5"));
+}
+#endif
+
+#ifdef OPTION_HAS_LUAU
+TEST_CASE("gui-script: Luau captures the next key, names it and binds it")
+{
+    RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    const Status loaded = bed.context->Load(
+        u8"local count = 0\n"
+        u8"gui.root():onCommand(\"jump\", function() count = count + 1; return false end)\n"
+        u8"function listen()\n"
+        u8"  gui.captureKey(function(keys)\n"
+        u8"    gui.set(\"captured\", keys)\n"
+        u8"    if keys ~= \"\" then gui.bindKey(keys, \"jump\", \"\") end\n"
+        u8"  end)\n"
+        u8"end\n"
+        u8"function jumps() return count end\n",
+        u8"main");
+    REQUIRE(loaded.IsOk());
+    CheckCapture(bed);
+}
+#endif
+
 #ifdef OPTION_HAS_ANGELSCRIPT
 TEST_CASE("gui-script: AngelScript binds widgets to data and to each other")
 {

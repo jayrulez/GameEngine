@@ -22,6 +22,7 @@
         <Panel id="main" class="panel menu enter" flex-direction="column" align-items="center" gap="12" nav-scope="wrap" nav-default="play">
             <Button id="play" class="menu-btn primary" text="Play"/>
             <Button id="settings-btn" class="menu-btn" text="Settings"/>
+            <Button id="controls-btn" class="menu-btn" text="Controls"/>
             <Button id="quit" class="menu-btn" text="Quit"/>
         </Panel>
 
@@ -43,6 +44,30 @@
                 <TextField text="{{name}}" class="row-field"/>
             </Panel>
             <Button id="settings-back" class="menu-btn small" text="Back"/>
+        </Panel>
+
+        <!-- Controls (E12 of gui-lab-evolution-2.md): each action's key, rebound by choosing it and
+             pressing a key or a pad button; Escape cancels, and a key another action had swaps. -->
+        <Panel id="controls" class="panel glass controls" flex-direction="column" align-items="center" gap="10" nav-scope="contain">
+            <Label class="panel-title" text="Controls"/>
+            <Panel class="row" flex-direction="row" align-items="start" gap="14">
+                <Label class="row-label wide" text="Jump"/>
+                <Button id="bind-jump" class="bind-btn" text="{{key-jump}}"/>
+            </Panel>
+            <Panel class="row" flex-direction="row" align-items="start" gap="14">
+                <Label class="row-label wide" text="Dash"/>
+                <Button id="bind-dash" class="bind-btn" text="{{key-dash}}"/>
+            </Panel>
+            <Panel class="row" flex-direction="row" align-items="start" gap="14">
+                <Label class="row-label wide" text="Interact"/>
+                <Button id="bind-interact" class="bind-btn" text="{{key-interact}}"/>
+            </Panel>
+            <Panel class="row" flex-direction="row" align-items="start" gap="14">
+                <Label class="row-label wide" text="Map"/>
+                <Button id="bind-map" class="bind-btn" text="{{key-map}}"/>
+            </Panel>
+            <Label class="controls-hint" text="{{controls-hint}}"/>
+            <Button id="controls-back" class="menu-btn small" text="Back"/>
         </Panel>
     </Panel>
 

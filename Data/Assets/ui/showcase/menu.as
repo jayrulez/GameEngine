@@ -12,6 +12,7 @@ funcdef bool CommandHandler();
 Node@ stage;         // the menu screen: the title and the slot
 Node@ mainPanel;     // in the slot
 Node@ settingsPanel; // in the slot, in the main menu's place
+Node@ controlsPanel; // in the slot too: the actions' keys
 Node@ loadingScreen; // a screen of its own
 Node@ modal;         // over everything, the quit question
 Node@ hud;           // in the game: health, the score, the clock and objective
@@ -57,6 +58,8 @@ Node@ current()
 {
     if (loadingScreen.displayed)
         return loadingScreen;
+    if (controlsPanel.displayed)
+        return controlsPanel;
     return mainPanel.displayed ? mainPanel : settingsPanel;
 }
 
@@ -103,6 +106,58 @@ string musicText() { return gui::getBool("music") ? "On" : "Off"; }
 
 void onPlay() { changeTo(loadingScreen); }
 void onSettings() { changeTo(settingsPanel); }
+void onControls() { changeTo(controlsPanel); }
+
+// === Controls (E12 of gui-lab-evolution-2.md) ===
+// Each action's key, bound to its command in the game's key context. Choosing one listens for the
+// next key or pad button (gui::captureKey, before the keymap and navigation see it); a key another
+// action had swaps over to it; Escape cancels.
+array<string> actions = {"jump", "dash", "interact", "map"};
+array<string> keys = {"space", "leftshift", "e", "m"};
+int listening = -1; // the action waiting for its key (-1: none)
+
+void showKeys()
+{
+    for (uint i = 0; i < actions.length(); i++)
+    {
+        gui::set("key-" + actions[i], gui::keyText(keys[i]));
+        gui::bindKey(keys[i], "game." + actions[i], "game");
+    }
+}
+void listen(int action)
+{
+    if (listening >= 0)
+        return;
+    listening = action;
+    UIWidget@ button = UIWidget::of(gui::root().find("bind-" + actions[action]));
+    button.addClass("listening");
+    gui::set("key-" + actions[action], "Press a key...");
+    gui::set("controls-hint", "A key or a pad button; Esc to keep " + gui::keyText(keys[action]));
+    gui::captureKey(KeyHandler(onCapturedKey));
+}
+void onCapturedKey(const string &in pressed)
+{
+    const int action = listening;
+    listening = -1;
+    UIWidget::of(gui::root().find("bind-" + actions[action])).removeClass("listening");
+    gui::set("controls-hint", "Choose an action to change its key");
+    if (pressed != "")
+    {
+        for (uint i = 0; i < actions.length(); i++)
+            if (int(i) != action && keys[i] == pressed)
+            {
+                keys[i] = keys[action]; // taken: the two swap
+                gui::set("controls-hint", gui::keyText(keys[i]) + " moved to " + actions[i]);
+            }
+        gui::bindKey(keys[action], "", "game"); // the old key unbound there
+        keys[action] = pressed;
+    }
+    showKeys();
+}
+void onBindJump() { listen(0); }
+void onBindDash() { listen(1); }
+void onBindInteract() { listen(2); }
+void onBindMap() { listen(3); }
 void onBack() { loadingNow = false; changeTo(mainPanel); }
 // The quit question opens over the menu, which stays where it is behind the dimmed glass.
 void onQuit()
@@ -212,7 +267,7 @@ bool onBackCommand()
         onStay();
     else if (modal.displayed)
         return false; // closing already
-    else if (!changing() && (loadingScreen.displayed || settingsPanel.displayed))
+    else if (!changing() && (loadingScreen.displayed || settingsPanel.displayed || controlsPanel.displayed))
         onBack();
     return false;
 }
@@ -230,6 +285,7 @@ void main()
     @stage = root.find("stage");
     @mainPanel = root.find("main");
     @settingsPanel = root.find("settings");
+    @controlsPanel = root.find("controls");
     @loadingScreen = root.find("loading");
     @modal = root.find("modal");
     @hud = root.find("hud");
@@ -239,6 +295,14 @@ void main()
     root.find("settings-btn").on("click", Action(onSettings));
     root.find("quit").on("click", Action(onQuit));
     root.find("settings-back").on("click", Action(onBack));
+    root.find("controls-btn").on("click", Action(onControls));
+    root.find("controls-back").on("click", Action(onBack));
+    root.find("bind-jump").on("click", Action(onBindJump));
+    root.find("bind-dash").on("click", Action(onBindDash));
+    root.find("bind-interact").on("click", Action(onBindInteract));
+    root.find("bind-map").on("click", Action(onBindMap));
+    gui::set("controls-hint", "Choose an action to change its key");
+    showKeys();
     root.find("loading-back").on("click", Action(onBack));
     root.find("confirm-yes").on("click", Action(onLeave));
     root.find("confirm-no").on("click", Action(onStay));
@@ -277,6 +341,8 @@ void enter()
     conceal(modal, "modal-in");
     conceal(settingsPanel, "enter");
     UIWidget::of(settingsPanel).removeClass("leave");
+    conceal(controlsPanel, "enter");
+    UIWidget::of(controlsPanel).removeClass("leave");
     conceal(loadingScreen, "screen-in");
     UIWidget::of(loadingScreen).removeClass("leave");
     UIWidget::of(mainPanel).removeClass("leave");

@@ -67,6 +67,12 @@ export namespace experimental::gui
         /// Binds `keys` ("ctrl-s", "pad-east", a chord) to `command` where `context` holds (empty:
         /// everywhere); false when they do not parse.
         static bool BindKey(core::StringView keys, core::StringView command, core::StringView context);
+        /// The next key or pad button, before anything else sees it (E12: a rebinding screen):
+        /// `handler(keys)` with its binding name ("ctrl-s", "pad-north"), or empty when Escape
+        /// cancelled. A handler of shape `void KeyHandler(const string &in keys)`.
+        static void CaptureKey(RefPtr<foundation::script::IScriptDelegate> handler);
+        /// A binding's keys as a menu shows them ("ctrl-s": "Ctrl+S"); empty when they do not parse.
+        [[nodiscard]] static core::String KeyText(core::StringView keys);
     };
 
     /// What a script handler (`node.on(name, fn)`) is given: the event's data, positions in the

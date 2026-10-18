@@ -1016,21 +1016,43 @@ export namespace foundation::ui
             return StyleValue::TransitionsRef(Move(list));
         }
 
-        /// `blur(<sigma>)` or `none`: the blur's sigma in dp as a Float (0 for none). Other filter
-        /// functions are not drawn yet; one leaves the property unset.
+        /// `none` or a list of filter functions: blur(<sigma>) in dp, grayscale(<amount>),
+        /// saturate(<amount>) and brightness(<amount>), each amount a number or a percentage
+        /// (grayscale(1) is saturate(0)). They combine: blurs add, the colour factors multiply. A
+        /// backdrop-filter draws only the blur. An unknown function leaves the property unset.
         StyleValue ParseFilterValue()
         {
-            if (Peek().Kind != TokenKind::Ident)
-                return StyleValue::None();
-            const StringView name = Consume().Text;
-            if (name == StringView(u8"none"))
-                return StyleValue::FloatVal(0.0f);
-            if (name != StringView(u8"blur"))
-                return StyleValue::None();
-            Expect(TokenKind::LParen);
-            const f32 sigma = Peek().Kind == TokenKind::Number ? Max(0.0f, ParseFloatValue()) : 0.0f;
-            Expect(TokenKind::RParen);
-            return StyleValue::FloatVal(sigma);
+            StyleFilter filter;
+            if (Peek().Kind == TokenKind::Ident && Peek().Text == StringView(u8"none"))
+            {
+                Consume();
+                return StyleValue::FilterVal(filter);
+            }
+            bool any = false;
+            while (Peek().Kind == TokenKind::Ident)
+            {
+                const StringView name = Consume().Text;
+                if (Peek().Kind != TokenKind::LParen)
+                    return StyleValue::None();
+                Consume();
+                const bool hasAmount = Peek().Kind == TokenKind::Number;
+                const f32 amount = hasAmount ? Max(0.0f, ParseFloatValue()) : 0.0f;
+                if (name == StringView(u8"blur"))
+                    filter.Blur += amount;
+                else if (name == StringView(u8"grayscale"))
+                    filter.Saturation *= 1.0f - Min(hasAmount ? amount : 1.0f, 1.0f);
+                else if (name == StringView(u8"saturate"))
+                    filter.Saturation *= hasAmount ? amount : 1.0f;
+                else if (name == StringView(u8"brightness"))
+                    filter.Brightness *= hasAmount ? amount : 1.0f;
+                else
+                    return StyleValue::None();
+                if (Peek().Kind != TokenKind::RParen)
+                    return StyleValue::None();
+                Consume();
+                any = true;
+            }
+            return any ? StyleValue::FilterVal(filter) : StyleValue::None();
         }
 
         /// `text-shadow: <x> <y> [blur] [color]`, `text-outline: <width> [color]`, `text-glow:

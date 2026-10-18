@@ -284,6 +284,18 @@ TEST_CASE("transition: easing and delay shape the curve")
     CHECK(Red(*v) == doctest::Approx(0.3154f).epsilon(0.002));
 }
 
+TEST_CASE("transition: a filter interpolates its blur and colour factors")
+{
+    StyleFilter to;
+    to.Blur = 4.0f;
+    to.Saturation = 0.0f;
+    const StyleFilter mid =
+        LerpStyleValue(StyleValue::FilterVal(StyleFilter{}), StyleValue::FilterVal(to), 0.5f).AsFilter().Value();
+    CHECK(mid.Blur == doctest::Approx(2.0f));
+    CHECK(mid.Saturation == doctest::Approx(0.5f));
+    CHECK(mid.Brightness == doctest::Approx(1.0f));
+}
+
 TEST_CASE("transition: a transform interpolates its move, turn and scale")
 {
     StyleTransform from;

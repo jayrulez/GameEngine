@@ -686,6 +686,44 @@ TEST_CASE("box-model: filter blurs a view through a layer; backdrop-filter blurs
     CHECK(batch.layers.Size() == 2u); // `filter: none` makes none
 }
 
+TEST_CASE("box-model: filter greys and dims a view at its layer's composite")
+{
+    core::RefPtr<StyleSheet> sheet = LoadSSS(u8".off { filter: grayscale(100%) brightness(0.8) blur(2); }"
+                                             u8".half { filter: grayscale(0.5) saturate(1.5); }"
+                                             u8".odd { filter: sepia(1); }");
+    REQUIRE(sheet);
+    const StyleFilter off = sheet->GetRule(0).GetValue(StyleProperty::Filter).Value().AsFilter().Value();
+    CHECK(off.Saturation == doctest::Approx(0.0f));
+    CHECK(off.Brightness == doctest::Approx(0.8f));
+    CHECK(off.Blur == doctest::Approx(2.0f));
+    // The colour factors multiply: half grey, then half again as vivid.
+    CHECK(sheet->GetRule(1).GetValue(StyleProperty::Filter).Value().AsFilter().Value().Saturation ==
+          doctest::Approx(0.75f));
+    CHECK_FALSE(sheet->GetRule(2).GetValue(StyleProperty::Filter).HasValue()); // not drawn yet
+    // A plain number is a blur's sigma, as code sets it.
+    CHECK(StyleValue::FloatVal(4.0f).AsFilter().Value().Blur == doctest::Approx(4.0f));
+
+    UIContext ctx{DefaultAllocator()};
+    auto root = MakeRoot();
+    EnsureGlobals();
+    Init(ctx, root.Get(), 400, 300);
+    ctx.SetStyleSheet(LoadSSS(u8".off { filter: grayscale(1) brightness(0.8); }"));
+    auto leaf = RV(40, 30, 1);
+    leaf->AddClass(u8"off"); // a leaf too: the filter needs the layer
+    auto frame = New<FrameLayout>();
+    frame->AddView(leaf.Get());
+    root->AddView(frame.Get());
+    LayoutPass(ctx, root.Get());
+    vg::VGContext vgContext;
+    vgContext.SetLayers(true);
+    ctx.DrawRootView(root.Get(), vgContext);
+    const vg::VGBatch& batch = vgContext.GetBatch();
+    REQUIRE(batch.layers.Size() == 1u);
+    CHECK(batch.layers[0].saturation == doctest::Approx(0.0f));
+    CHECK(batch.layers[0].brightness == doctest::Approx(0.8f));
+    CHECK(batch.layers[0].blur == doctest::Approx(0.0f));
+}
+
 TEST_CASE("box-model: a backdrop blur keeps to the corners the view's background rounds")
 {
     // The backdrop's shape: its composite's geometry, a rounded outline where the background

@@ -63,6 +63,18 @@ export namespace foundation::ui
         [[nodiscard]] constexpr bool operator==(const StyleTransform&) const noexcept = default;
     };
 
+    /// A sheet's `filter` (or `backdrop-filter`): a blur's sigma in dp, and the colour filters
+    /// a layer's composite applies, a saturation (0 grey, 1 unchanged) and a brightness factor.
+    struct StyleFilter
+    {
+        f32 Blur = 0.0f;
+        f32 Saturation = 1.0f;
+        f32 Brightness = 1.0f;
+
+        [[nodiscard]] constexpr bool FiltersColour() const noexcept { return Saturation != 1.0f || Brightness != 1.0f; }
+        [[nodiscard]] constexpr bool operator==(const StyleFilter&) const noexcept = default;
+    };
+
     /// A CSS timing function: the cubic Bezier from (0, 0) to (1, 1) through (X1, Y1) and (X2, Y2)
     /// that `cubic-bezier()` writes (the named easings are presets of it), or `steps(n)`, which
     /// holds each of n levels and jumps at a step's end (or, with StepsJumpStart, its start).
@@ -278,6 +290,8 @@ export namespace foundation::ui
             Transform,
             /// An `animation:` list (AnimationList).
             Animations,
+            /// A StyleFilter (filter, backdrop-filter).
+            Filter,
             /// A `transition:` list (TransitionList).
             Transitions,
             /// The `inherit` keyword: take the parent's computed value.
@@ -350,6 +364,30 @@ export namespace foundation::ui
         [[nodiscard]] const AnimationList* AsAnimations() const noexcept
         {
             return m_kind == Kind::Animations ? m_animations.Get() : nullptr;
+        }
+
+        [[nodiscard]] static StyleValue FilterVal(const StyleFilter& filter)
+        {
+            StyleValue v;
+            v.m_kind = Kind::Filter;
+            v.m_filter = filter;
+            return v;
+        }
+        /// The filter a value gives: a Filter's, or a plain number as a blur's sigma (what code
+        /// sets with SetStyle(Filter, sigma)).
+        [[nodiscard]] Optional<StyleFilter> AsFilter() const
+        {
+            if (m_kind == Kind::Filter)
+            {
+                return m_filter;
+            }
+            if (m_kind == Kind::Float)
+            {
+                StyleFilter blurOnly;
+                blurOnly.Blur = m_float;
+                return blurOnly;
+            }
+            return {};
         }
 
         [[nodiscard]] static StyleValue TransformVal(const StyleTransform& transform)
@@ -516,6 +554,7 @@ export namespace foundation::ui
         BoxShadow m_shadows[kMaxShadows]{};
         u8 m_shadowCount = 0;
         StyleTransform m_transform{};
+        StyleFilter m_filter{};
         RefPtr<VariableReference> m_variable;
         RefPtr<TransitionList> m_transitions;
         RefPtr<AnimationList> m_animations;
@@ -549,6 +588,8 @@ export namespace foundation::ui
             return a.AsLength().Value() == b.AsLength().Value();
         case StyleValue::Kind::Transform:
             return a.AsTransform().Value() == b.AsTransform().Value();
+        case StyleValue::Kind::Filter:
+            return a.AsFilter().Value() == b.AsFilter().Value();
         case StyleValue::Kind::Shadow:
         {
             const Span<const BoxShadow> sa = a.AsShadows();
@@ -593,7 +634,7 @@ export namespace foundation::ui
             return false;
         }
         return ka == StyleValue::Kind::Color || ka == StyleValue::Kind::Thickness ||
-               ka == StyleValue::Kind::Shadow || ka == StyleValue::Kind::Transform ||
+               ka == StyleValue::Kind::Shadow || ka == StyleValue::Kind::Transform || ka == StyleValue::Kind::Filter ||
                ka == StyleValue::Kind::Drawable;
     }
 
@@ -651,6 +692,16 @@ export namespace foundation::ui
             const Thickness tb = b.AsThickness().Value();
             return StyleValue::ThicknessVal(Thickness{lerp(ta.Left, tb.Left), lerp(ta.Top, tb.Top),
                                                       lerp(ta.Right, tb.Right), lerp(ta.Bottom, tb.Bottom)});
+        }
+        case StyleValue::Kind::Filter:
+        {
+            const StyleFilter fa = a.AsFilter().Value();
+            const StyleFilter fb = b.AsFilter().Value();
+            StyleFilter out;
+            out.Blur = lerp(fa.Blur, fb.Blur);
+            out.Saturation = lerp(fa.Saturation, fb.Saturation);
+            out.Brightness = lerp(fa.Brightness, fb.Brightness);
+            return StyleValue::FilterVal(out);
         }
         case StyleValue::Kind::Transform:
         {

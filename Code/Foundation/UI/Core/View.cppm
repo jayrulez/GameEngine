@@ -1350,9 +1350,12 @@ export namespace foundation::ui
                 const f32 opacity =
                     child->Opacity * Clamp(child->ResolveStyleFloat(StyleProperty::Opacity, 1.0f), 0.0f, 1.0f);
                 const f32 deviceScale = DeviceScale(ctx.VG().GetTransform());
-                const f32 blur = Max(0.0f, child->ResolveStyleFloat(StyleProperty::Filter, 0.0f)) * deviceScale;
+                const Optional<StyleFilter> filter = child->ResolveStyle(StyleProperty::Filter).AsFilter();
+                const Optional<StyleFilter> backdropFilter = child->ResolveStyle(StyleProperty::BackdropFilter).AsFilter();
+                const f32 blur = filter.HasValue() ? Max(0.0f, filter.Value().Blur) * deviceScale : 0.0f;
+                const bool tinted = filter.HasValue() && filter.Value().FiltersColour();
                 const f32 backdrop =
-                    Max(0.0f, child->ResolveStyleFloat(StyleProperty::BackdropFilter, 0.0f)) * deviceScale;
+                    backdropFilter.HasValue() ? Max(0.0f, backdropFilter.Value().Blur) * deviceScale : 0.0f;
                 if (backdrop > 0.0f)
                 {
                     // What the parent drew behind the view, blurred inside its corners (the ones its
@@ -1364,10 +1367,13 @@ export namespace foundation::ui
                 }
                 const bool faded = opacity < 1.0f;
                 const ViewGroup* group = Cast<ViewGroup>(child);
-                const bool fadesAsGroup = blur > 0.0f || (faded && group != nullptr && group->VisualChildCount() > 0);
+                const bool fadesAsGroup =
+                    blur > 0.0f || tinted || (faded && group != nullptr && group->VisualChildCount() > 0);
                 if (fadesAsGroup)
                 {
-                    ctx.VG().PushLayer(opacity, vg::VGBlendMode::Normal, blur);
+                    ctx.VG().PushLayer(opacity, vg::VGBlendMode::Normal, blur,
+                                       filter.HasValue() ? filter.Value().Saturation : 1.0f,
+                                       filter.HasValue() ? filter.Value().Brightness : 1.0f);
                 }
                 else if (faded)
                 {

@@ -465,6 +465,9 @@ export namespace experimental::gui
         /// The pointer's look over this node (CSS `cursor`); Auto takes its parent's.
         void SetCursor(Cursor cursor) noexcept { m_cursor = cursor; }
         [[nodiscard]] Cursor GetCursor() const noexcept { return m_cursor; }
+        /// The look the pointer takes over it now: its `cursor`, unless what is under the pointer
+        /// says otherwise (a rich text's link shows the pointer hand).
+        [[nodiscard]] virtual Cursor GetCursorNow() const { return m_cursor; }
         [[nodiscard]] core::String GetCursorName() const { return core::String(CursorName(m_cursor)); }
         void SetCursorName(const core::String& name) { m_cursor = CursorNamed(name.AsView()); }
 

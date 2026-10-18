@@ -533,8 +533,8 @@ export namespace experimental::gui
                        : m_dropEffect == DropEffect::Move ? Cursor::Move : Cursor::NoDrop;
             Node* from = m_captureNode != nullptr ? m_captureNode : m_downNode != nullptr ? m_downNode : m_overNode;
             for (Node* n = from; n != nullptr; n = n->GetParent())
-                if (n->GetCursor() != Cursor::Auto)
-                    return n->GetCursor();
+                if (const Cursor cursor = n->GetCursorNow(); cursor != Cursor::Auto)
+                    return cursor;
             return Cursor::Default;
         }
 

@@ -203,6 +203,14 @@ export namespace experimental::gui
                 ctx.PopClip();
         }
 
+        // Over a rich text's link the pointer shows the hand (E11), as a browser's does.
+        [[nodiscard]] Cursor GetCursorNow() const override { return m_overLink ? Cursor::Pointer : UIWidget::GetCursorNow(); }
+        void OnMouseMove(const MouseEvent& event) override
+        {
+            m_overLink = m_rich && m_text.LinkAt(GetContentBounds(), ConvertToNodeSpace(event.Position)).Size() != 0;
+        }
+        void OnMouseLeave(const MouseEvent&) override { m_overLink = false; }
+
         // A click on a rich text's link reports it.
         void OnMouseClick(const MouseEvent& event) override
         {
@@ -227,6 +235,7 @@ export namespace experimental::gui
 
         Text m_text;
         bool m_rich = false;
+        bool m_overLink = false; // the pointer is over one of its links
         Observable m_textChanged; // what bindings reading the text follow
     };
 

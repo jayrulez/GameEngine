@@ -389,6 +389,37 @@ TEST_CASE("label: measures shaped text, and a rich label reports a clicked link"
     CHECK(heard.IsEmpty());
 }
 
+TEST_CASE("text layout: the pointer shows the hand over a rich text's link, and only there")
+{
+    RobotoService fonts;
+    auto context = MakeRef<GUIContext>(DefaultAllocator());
+    context->SetFontService(&fonts.service);
+    auto root = MakeRef<SceneRoot>(DefaultAllocator(), context);
+    root->SetSize(Float2{400.0f, 200.0f});
+    auto rich = MakeRef<RichText>(DefaultAllocator());
+    rich->SetFont(fonts.service.GetFont(u8"Roboto", 16.0f));
+    rich->SetText(u8"go [link=door]open the door[/link] now");
+    rich->SetSize(Float2{400.0f, 40.0f});
+    root->AddChild(rich.Get());
+    const Rect bounds = rich->GetContentBounds();
+    const TextLayout& layout = rich->GetTextLayout().LayoutFor(bounds);
+    REQUIRE_FALSE(layout.Links.IsEmpty());
+    const Float2 origin = rich->GetTextLayout().Origin(bounds);
+    const Float2 onLink{origin.x + layout.Links[0].Rect.x + 2.0f, origin.y + layout.Links[0].Rect.y + layout.Links[0].Rect.height * 0.5f};
+    EventDispatcher* d = root->GetEventDispatcher();
+    d->InjectMouseMove(Float2{origin.x + 1.0f, onLink.y}); // on "go"
+    CHECK(d->GetCursor() == Cursor::Default);
+    d->InjectMouseMove(onLink);
+    CHECK(d->GetCursor() == Cursor::Pointer);
+    d->InjectMouseMove(Float2{390.0f, 190.0f}); // off the label
+    CHECK(d->GetCursor() == Cursor::Default);
+    rich->SetCursor(Cursor::Text); // its own look elsewhere; the hand still over the link
+    d->InjectMouseMove(Float2{origin.x + 1.0f, onLink.y});
+    CHECK(d->GetCursor() == Cursor::Text);
+    d->InjectMouseMove(onLink);
+    CHECK(d->GetCursor() == Cursor::Pointer);
+}
+
 TEST_CASE("text layout: an ellipsis the font's atlas lacks falls back to full stops")
 {
     RobotoService fonts; // baked over printable ASCII: no U+2026

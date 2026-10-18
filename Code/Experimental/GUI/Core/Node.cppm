@@ -1585,6 +1585,8 @@ export namespace experimental::gui
         // while it holds focus. The gui.shell bridge reads the focused node's answer and
         // drives the window's StartTextInput/StopTextInput accordingly. Default: false.
         [[nodiscard]] virtual bool WantsTextInput() const { return false; }
+        /// Whether what it takes is secret (a password): the platform's IME keeps out of it.
+        [[nodiscard]] virtual bool IsTextInputSecret() const { return false; }
         /// Where text is typed in this node, in its own space, and the caret's x there: the IME
         /// places its candidate list beside it. False when it types no text.
         [[nodiscard]] virtual bool GetTextInputArea(Rect& area, f32& caretX) const

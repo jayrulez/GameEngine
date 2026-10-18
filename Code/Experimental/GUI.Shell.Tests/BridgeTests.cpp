@@ -207,6 +207,31 @@ TEST_CASE("bridge: text-input target follows focus of an editable widget")
     CHECK_FALSE(window.IsTextInputActive());
 }
 
+TEST_CASE("bridge: a password field starts secret text input, and a move to a plain field switches it back")
+{
+    auto root = MakeScene(core::Float2{200.0f, 200.0f});
+    auto password = core::MakeRef<TextField>(core::DefaultAllocator());
+    password->SetPassword(true);
+    password->SetSize(core::Float2{100.0f, 24.0f}); // covers (0,0)-(100,24)
+    auto field = core::MakeRef<TextField>(core::DefaultAllocator());
+    field->SetPosition(core::Float2{0.0f, 50.0f});
+    field->SetSize(core::Float2{100.0f, 24.0f});
+    root->AddChild(password.Get());
+    root->AddChild(field.Get());
+
+    shell::NullWindow window(1u, shell::WindowSettings{});
+    GuiInputBridge bridge{root->GetEventDispatcher()};
+    bridge.SetTextInputTarget(&window);
+
+    bridge.Dispatch(MakeButtonEvent(shell::InputEventKind::MouseButtonDown, 10.0f, 10.0f, shell::MouseButton::Left));
+    CHECK(window.IsTextInputActive());
+    CHECK(window.GetTextInputKind() == shell::TextInputKind::Secret); // the IME keeps out
+    bridge.Dispatch(MakeButtonEvent(shell::InputEventKind::MouseButtonDown, 10.0f, 60.0f, shell::MouseButton::Left));
+    CHECK(root->GetEventDispatcher()->GetFocusNode() == field.Get());
+    CHECK(window.IsTextInputActive());
+    CHECK(window.GetTextInputKind() == shell::TextInputKind::Text);
+}
+
 TEST_CASE("bridge: content fit maps window position into content space")
 {
     auto root = MakeScene(core::Float2{200.0f, 200.0f});

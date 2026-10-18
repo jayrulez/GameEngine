@@ -173,6 +173,8 @@ export namespace experimental::gui
         // An enabled one wants platform text input while focused (the bridge enables the window's
         // IME accordingly).
         [[nodiscard]] bool WantsTextInput() const override { return IsTreeEnabled(); }
+        /// A masked field (a password): the platform's IME composes nothing in it.
+        [[nodiscard]] bool IsTextInputSecret() const override { return IsMasked(); }
 
         // === Appearance ===
         // Theming: the text colour drives the caret too (so it shows on any background); a

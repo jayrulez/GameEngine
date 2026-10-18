@@ -126,9 +126,6 @@ export namespace experimental::gui
         {
             SetTag(core::StringView(u8"listbox"));
             SetTabFocusable(true);
-            // Opaque panel background so the list (and any dropdown built on it) paints over
-            // whatever is behind it. Override with SetBackground for a themed look.
-            SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_panelColor));
             // Its rows stacked in a column, as wide as the list, scrolling when they overflow it.
             StyleWriteScope defaults(*this); // its own values, which a sheet returns to
             EditLayoutStyle([](LayoutStyle& s) { s.OverflowY = Overflow::Auto; });
@@ -229,6 +226,14 @@ export namespace experimental::gui
 
 
     protected:
+        // Opaque so the list (and a dropdown built on it) paints over whatever is behind it, unless
+        // a sheet gives it a fill of its own (a theme's, E13).
+        void OnDraw(DrawContext& ctx, const Rect& localBounds) override
+        {
+            if (!BoxFills())
+                ctx.VG().FillRect(Rectangle{localBounds.x, localBounds.y, localBounds.width, localBounds.height}, m_panelColor);
+            UIWidget::OnDraw(ctx, localBounds);
+        }
         // Its items show its font and colour (a sheet's inheritance gives them the same).
         // Its rows draw the selection in listbox::selection's style.
         void OnPartStyleChange(core::StringView part) override

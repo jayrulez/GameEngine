@@ -50,8 +50,6 @@ export namespace experimental::gui
         {
             SetTag(core::StringView(u8"combobox"));
             SetTabFocusable(true);
-            // A visible box so it reads as a control even before it is opened.
-            SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_boxColor));
             m_text.SetAlignment(TextHAlign::Start, TextVAlign::Middle);
         }
 
@@ -228,7 +226,9 @@ export namespace experimental::gui
 
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
         {
-            (void)localBounds;
+            // A visible box so it reads as a control even unstyled; a sheet's fill (a theme's) replaces it.
+            if (!BoxFills())
+                ctx.VG().FillRect(Rectangle{localBounds.x, localBounds.y, localBounds.width, localBounds.height}, m_boxColor);
             const Rect b = GetContentBounds();
             // Selection text (leaving room for the arrow on the right).
             m_text.Draw(ctx, Rect{b.x, b.y, core::Max(0.0f, b.width - 16.0f), b.height});

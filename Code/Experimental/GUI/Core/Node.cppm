@@ -1184,6 +1184,12 @@ export namespace experimental::gui
             Invalidate();
         }
         [[nodiscard]] const NodeBox& GetBox() const noexcept { return m_box; }
+        /// Whether its box paints a fill of its own (a background colour, a layer, a border image):
+        /// a widget's default face then gives way to it (a theme's, E13).
+        [[nodiscard]] bool BoxFills() const noexcept
+        {
+            return m_box.BackgroundColor.a > 0.0f || !m_box.Layers.IsEmpty() || m_box.Skin.Image != nullptr;
+        }
         [[nodiscard]] bool IsBoxFromStyle() const noexcept { return m_boxFromStyle; }
 
         /// CSS's `transform` about `transform-origin`: functions applied left to right after the

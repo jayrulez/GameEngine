@@ -1206,6 +1206,18 @@ In mixed-direction text the arrows move the caret visually, delete and backspace
   draws unjoined (the stb shaper), which E9e's page needs settled: installing it moves Latin
   glyphs by their kerning and the image references with them. `direction: auto` (a paragraph's
   first strong character, for text the user types) waits for that page too.
+- **E9d as built.** `:accessibility` holds the model (AccessNode, AccessTreeUpdate,
+  AccessActionRequest, IAccessibilityBridge, roles, states, actions); `AccessibilityImpl.cpp` builds
+  it. An id is the node's element handle (slot and generation), so a request resolves back. A role
+  is the type's `accessRole` attribute (a base's when its own has none) or markup's `role`; name,
+  value, range, description, expanded and secret are reflected properties marked `access`; checked,
+  mixed, selected and editable are the selector states; `accessActivate` on a type advertises
+  Activate. Markup's `role`, `aria-label`, `aria-labelledby`, `aria-describedby`, `aria-controls`
+  and `aria-hidden` are reflected UIWidget properties. A node is marked by `Invalidate` and by a
+  change of its children; the walk sends each marked node and the included node above it. Bounds
+  are in the window's pixels. Item views expose the rows they have made, not every item, which
+  waits for virtualized rows to have a model of their own. The inspector shows a node's
+  accessibility and an audit (a focusable control with no name, an aria relation naming no widget).
 
 Not in E9: the platform adapters (UI Automation, NSAccessibility, AT-SPI) and real text to speech,
 which are host work with hosting; vertical text; locale-aware number and date formats.

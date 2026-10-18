@@ -701,6 +701,9 @@ namespace experimental::gui
         builder.AccessorProperty<&Node::GetNavPrevious, &Node::SetNavPrevious>("navPrev").PropAttribute("css", core::String(u8"nav-prev"));
         builder.AccessorProperty<&Node::GetNavScopeName, &Node::SetNavScopeName>("navScope").PropAttribute("css", core::String(u8"nav-scope"));
         builder.AccessorProperty<&Node::GetDefaultFocusId, &Node::SetDefaultFocusId>("navDefault").PropAttribute("css", core::String(u8"nav-default"));
+        builder.AccessorProperty<&Node::GetTabIndex, &Node::SetTabIndex>("tabIndex").PropAttribute("css", core::String(u8"tab-index"));
+        builder.AccessorProperty<&Node::IsFocusGroup, &Node::SetFocusGroup>("focusGroup").PropAttribute("css", core::String(u8"focus-group"));
+        builder.AccessorProperty<&Node::GetTabCaptures, &Node::SetTabCaptures>("tabCaptures").PropAttribute("css", core::String(u8"tab-captures"));
         builder.AccessorProperty<&Node::GetCommand, &Node::SetCommand>("command").PropAttribute("css", core::String(u8"command"));
         builder.AccessorProperty<&Node::GetKeyContext, &Node::SetKeyContext>("keyContext").PropAttribute("css", core::String(u8"key-context"));
         builder.AccessorProperty<&Node::GetPointerEvents, &Node::SetPointerEvents>("pointerEvents").PropAttribute("css", core::String(u8"pointer-events"));

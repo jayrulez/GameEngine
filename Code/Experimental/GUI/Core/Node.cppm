@@ -1628,13 +1628,35 @@ export namespace experimental::gui
         // UI_TAB_FOCUSABLE flag.
         void SetTabFocusable(bool focusable) noexcept { m_tabFocusable = focusable; }
         [[nodiscard]] bool IsTabFocusable() const noexcept { return m_tabFocusable; }
+        /// Where Tab reaches it (CSS's and HTML's `tab-index`, E12 of Specs/gui-lab-evolution-2.md):
+        /// a positive index before the rest, lowest first (a tie in tree order); 0, in tree order
+        /// (the default); below 0, never by Tab, though a click, an arrow or code still focuses it.
+        void SetTabIndex(i32 index) noexcept { m_tabIndex = index; }
+        /// Tab and Shift+Tab reach it as keys rather than moving focus (CSS-like `tab-captures`, E12:
+        /// a code editor, a terminal); Ctrl+Tab and Ctrl+Shift+Tab move focus from it instead.
+        void SetTabCaptures(bool captures) noexcept { m_tabCaptures = captures; }
+        [[nodiscard]] bool GetTabCaptures() const noexcept { return m_tabCaptures; }
+        [[nodiscard]] i32 GetTabIndex() const noexcept { return m_tabIndex; }
 
         // === Focus scopes (G7) ===
         // A scope groups what directional and tab navigation move between: it says what happens
         // at its edge, remembers what was last focused inside it (so coming back returns there),
         // and may name the widget focus starts on (its id).
         void SetNavScope(NavScope scope) noexcept { m_navScope = scope; }
-        [[nodiscard]] NavScope GetNavScope() const noexcept { return m_navScope; }
+        /// Its scope's kind: as set, or, for a focus group that sets none, wrap.
+        [[nodiscard]] NavScope GetNavScope() const noexcept
+        {
+            return m_navScope == NavScope::None && m_focusGroup ? NavScope::Wrap : m_navScope;
+        }
+        /// A focus group (E12 of Specs/gui-lab-evolution-2.md: a radio group, a tab strip, a
+        /// toolbar): one Tab stop however many it holds, the member focused there last (else its
+        /// `nav-default`, else its current one, else the first); the arrows move inside it, wrapping
+        /// unless its `nav-scope` says otherwise. Reflected as `focus-group`.
+        void SetFocusGroup(bool group) noexcept { m_focusGroup = group; }
+        [[nodiscard]] bool IsFocusGroup() const noexcept { return m_focusGroup; }
+        /// Whether it is its group's current member (a checked radio, the selected tab): where Tab
+        /// enters a focus group no one has focused in yet.
+        [[nodiscard]] virtual bool IsCurrentInGroup() const { return false; }
         void SetDefaultFocusId(core::StringView id) { m_defaultFocusId = core::String(id); }
         [[nodiscard]] core::StringView GetDefaultFocusId() const noexcept { return m_defaultFocusId.AsView(); }
         /// What was last focused inside this scope (weakly: null once it is gone).
@@ -2481,6 +2503,7 @@ export namespace experimental::gui
         bool m_topLayer = false;  // open as a popup (SetInTopLayer)
         bool m_routeStop = false; // an event's route ends here (a modal popup)
         NavScope m_navScope = NavScope::None;
+        bool m_focusGroup = false; // one Tab stop; its arrows move inside it
         core::String m_defaultFocusId;
         ElementRef m_rememberedFocus{}; // weak: resolved through the GUI's element table
         core::String m_navOverrides[NavOverrideCount]; // nav-up and the rest: an id, none, or auto
@@ -2493,6 +2516,8 @@ export namespace experimental::gui
         u32 m_changedStyleStates = 0; // the StyleStates that changed since the last style pass // focused descendants (one at most; a count survives odd orders)
         bool m_focusVisible = false; // focused by the keyboard or a gamepad
         bool m_tabFocusable = false;
+        i32 m_tabIndex = 0; // where Tab reaches it: positive first, 0 in tree order, below 0 never
+        bool m_tabCaptures = false; // Tab is its key, not focus's
         bool m_hitTestVisible = true;
         u32 m_nextListenerId = 0;
         // The style transform's matrix and origin in local units, from the functions and the size.

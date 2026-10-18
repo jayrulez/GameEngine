@@ -107,6 +107,7 @@ export namespace experimental::gui
         }
         [[nodiscard]] bool IsClosable() const noexcept { return m_closable; }
         [[nodiscard]] bool IsSelected() const noexcept { return m_selected; }
+        [[nodiscard]] bool IsCurrentInGroup() const override { return m_selected; }
         [[nodiscard]] TabCloseButton* GetClosePart() const noexcept { return m_close.Get(); }
         /// The bar it is in (null when it is in none).
         [[nodiscard]] TabBar* GetBar() const;
@@ -788,6 +789,7 @@ export namespace experimental::gui
     inline TabStrip::TabStrip(TabBar& bar) : m_bar(bar)
     {
         SetTag(core::StringView(u8"tabstrip"));
+        SetFocusGroup(true); // one Tab stop, the selected tab; the arrows move between tabs (E12)
         StyleWriteScope defaults(*this);
         EditLayoutStyle([](LayoutStyle& s)
         {

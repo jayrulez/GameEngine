@@ -153,6 +153,8 @@ export namespace experimental::gui
                 ApplyChecked(false);
         }
         [[nodiscard]] bool IsToggle() const noexcept { return m_toggle; }
+        /// A checked button that keeps its check (a radio) is its focus group's current member.
+        [[nodiscard]] bool IsCurrentInGroup() const override { return m_checked && KeepsChecked(); }
 
         /// Whether it is checked (a read a binding records).
         [[nodiscard]] bool IsChecked() const

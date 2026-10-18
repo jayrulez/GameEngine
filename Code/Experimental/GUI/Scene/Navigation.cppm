@@ -223,6 +223,15 @@ export namespace experimental::gui
             if (Node* fallback = detail::FindWidgetById(scope, scope.GetDefaultFocusId());
                 fallback != nullptr && detail::IsNavigable(*fallback))
                 return fallback;
+        // A focus group no one has focused in yet: its current member (a checked radio).
+        if (scope.IsFocusGroup())
+        {
+            Array<Node*> members;
+            detail::CollectNavigable(scope, members);
+            for (Node* member : members)
+                if (member->IsCurrentInGroup())
+                    return member;
+        }
         return picked;
     }
 

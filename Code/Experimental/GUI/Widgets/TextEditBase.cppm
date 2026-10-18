@@ -418,6 +418,14 @@ export namespace experimental::gui
             const KeyCode key = static_cast<KeyCode>(event.KeyCode);
             if (key == KeyCode::Space || (key >= KeyCode::A && key <= KeyCode::Num9))
                 event.Handled = true;
+            // Capturing Tab (E12), it types a tab (no platform sends Tab as text).
+            if (key == KeyCode::Tab && event.Modifiers == 0 && GetTabCaptures() && !IsReadOnly())
+            {
+                event.Handled = true;
+                m_composition.Clear();
+                if (m_model.Insert(core::StringView(u8"\t")))
+                    Edited();
+            }
         }
 
         // Cut, copy, paste and select all, at the event's place, lit where they would do something.

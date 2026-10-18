@@ -410,10 +410,17 @@ export namespace experimental::gui
                     ClosePopupAt(i, PopupCloseReason::Escape);
                     return true;
                 }
-            // Tab and Shift+Tab traverse focus when nothing took them.
-            if (keyCode == static_cast<u32>(KeyCode::Tab) &&
-                (modifiers & (~static_cast<u32>(KeyModShift))) == 0)
-                return (modifiers & KeyModShift) != 0 ? FocusPrevious() : FocusNext();
+            // Tab and Shift+Tab traverse focus when nothing took them; from a widget that captures
+            // Tab (E12) they are its keys, and Ctrl+Tab and Ctrl+Shift+Tab traverse instead.
+            if (keyCode == static_cast<u32>(KeyCode::Tab))
+            {
+                const bool captured = m_focusNode != nullptr && m_focusNode->GetTabCaptures();
+                const u32 traverse = captured ? static_cast<u32>(KeyModCtrl) : 0u;
+                if ((modifiers & ~static_cast<u32>(KeyModShift)) == traverse)
+                    return (modifiers & KeyModShift) != 0 ? FocusPrevious() : FocusNext();
+                if (captured && (modifiers & ~static_cast<u32>(KeyModShift)) == 0)
+                    return true; // the widget's own key, though it did nothing with it
+            }
             // Then the bindings (a keystroke bound to a command where the focus path's contexts allow).
             const u32 strokeModifiers = modifiers & ~ModifierOfKey(static_cast<KeyCode>(keyCode)); // Left Shift alone is "leftshift"
             if (m_keystrokes && m_keystrokes(Keystroke{keyCode, strokeModifiers, false}))
@@ -442,6 +449,36 @@ export namespace experimental::gui
             if (Node* contain = ContainingScopeOf(m_focusNode); contain != nullptr && IsInSubtree(contain, within))
                 within = contain;
             CollectTabStops(within, stops);
+            // A focus group (E12) is one stop, where its first member stood: the member focused
+            // now, else its entry (remembered, default, current, first).
+            for (usize i = 0; i < stops.Size(); ++i)
+            {
+                Node* group = OutermostFocusGroup(stops[i], within);
+                if (group == nullptr)
+                    continue;
+                Node* stop = m_focusNode != nullptr && IsInSubtree(m_focusNode, group) && m_focusNode->IsTabFocusable()
+                                 ? m_focusNode
+                                 : EntryInto(*group, stops[i]);
+                stops[i] = stop;
+                for (usize j = stops.Size(); j-- > i + 1;)
+                    if (OutermostFocusGroup(stops[j], within) == group)
+                        stops.RemoveAt(j);
+            }
+            // tab-index (E12): a negative one is skipped; positive ones first, lowest first, a tie
+            // and the zeros in tree order (insertion sort keeps it: the stops are few).
+            usize kept = 0;
+            for (usize i = 0; i < stops.Size(); ++i)
+                if (stops[i]->GetTabIndex() >= 0)
+                    stops[kept++] = stops[i];
+            stops.Resize(kept);
+            const auto before = [](const Node* a, const Node* b)
+            {
+                const i32 x = a->GetTabIndex(), y = b->GetTabIndex();
+                return x > 0 && (y == 0 || x < y);
+            };
+            for (usize i = 1; i < stops.Size(); ++i)
+                for (usize j = i; j > 0 && before(stops[j], stops[j - 1]); --j)
+                    Swap(stops[j], stops[j - 1]);
             return stops;
         }
 
@@ -2066,6 +2103,16 @@ export namespace experimental::gui
                 }
             }
             SetFocusNode(nullptr);
+        }
+
+        // The outermost focus group holding `node` below `within` (null when none).
+        [[nodiscard]] static Node* OutermostFocusGroup(Node* node, Node* within)
+        {
+            Node* group = nullptr;
+            for (Node* n = node != nullptr ? node->GetParent() : nullptr; n != nullptr && n != within; n = n->GetParent())
+                if (n->IsFocusGroup())
+                    group = n;
+            return group;
         }
 
         // Gather tab-focusable nodes under `node` in pre-order (skipping hidden subtrees, those

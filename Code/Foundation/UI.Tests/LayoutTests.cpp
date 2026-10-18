@@ -1286,4 +1286,11 @@ TEST_CASE("layout: LocalToScreen and ScreenToLocal follow a view's transform, as
     const Float2 q = child->ScreenToLocal(p);
     CHECK(q.x == doctest::Approx(10.0f).epsilon(0.001));
     CHECK(q.y == doctest::Approx(5.0f).epsilon(0.001));
+    // And the order is the draw's, pinned by a point (a round trip alone only shows the two
+    // directions agree): about the top left, turned a quarter, (10, 0) is (0, 10), then scaled by
+    // (2, 0.5) it is (0, 5).
+    child->Transform.Origin = Float2{0.0f, 0.0f};
+    const Float2 turned = child->LocalToParent(Float2{10.0f, 0.0f});
+    CHECK(turned.x - child->Bounds.x == doctest::Approx(0.0f).epsilon(0.001));
+    CHECK(turned.y - child->Bounds.y == doctest::Approx(5.0f).epsilon(0.001));
 }

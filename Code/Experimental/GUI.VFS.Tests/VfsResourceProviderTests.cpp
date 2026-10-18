@@ -42,14 +42,14 @@ namespace
 
 TEST_CASE("gui-vfs: null filesystem returns null")
 {
-    gui::vfs::VfsResourceProvider provider(nullptr);
+    gui::vfs::VfsResourceProvider provider(nullptr, DefaultAllocator());
     CHECK(provider.LoadImage(u8"anything.png") == nullptr);
 }
 
 TEST_CASE("gui-vfs: a missing file returns null")
 {
     MemFS fs;
-    gui::vfs::VfsResourceProvider provider(&fs);
+    gui::vfs::VfsResourceProvider provider(&fs, DefaultAllocator());
     CHECK(provider.LoadImage(u8"nope.png") == nullptr);
 }
 
@@ -60,7 +60,7 @@ TEST_CASE("gui-vfs: undecodable bytes return null")
     for (int i = 0; i < 16; ++i)
         junk.PushBack(static_cast<u8>(i));
     fs.files.InsertOrAssign(String(u8"bad.png"), Move(junk));
-    gui::vfs::VfsResourceProvider provider(&fs);
+    gui::vfs::VfsResourceProvider provider(&fs, DefaultAllocator());
     CHECK(provider.LoadImage(u8"bad.png") == nullptr);
 }
 
@@ -76,16 +76,16 @@ TEST_CASE("gui-vfs: loads and decodes a real image (BMP round-trip)")
     REQUIRE(image::io::SaveImage(src, file, image::io::ImageFileFormat::BMP).IsOk());
 
     vfs::NativeFileSystem fs(u8".", DefaultAllocator()); // rooted at the test working directory
-    gui::vfs::VfsResourceProvider provider(&fs);
+    gui::vfs::VfsResourceProvider provider(&fs, DefaultAllocator());
 
     const image::ImageData* loaded = provider.LoadImage(file);
     REQUIRE(loaded != nullptr);
     CHECK(loaded->Width() == 3);
     CHECK(loaded->Height() == 2);
 
-    // The provider owns the image: a second load yields a distinct cached copy, both valid.
+    // The provider owns the image, one per path: a second load (a restyle asking again) is the same.
     const image::ImageData* again = provider.LoadImage(file);
     REQUIRE(again != nullptr);
-    CHECK(again != loaded);
+    CHECK(again == loaded);
     CHECK(again->Width() == 3);
 }

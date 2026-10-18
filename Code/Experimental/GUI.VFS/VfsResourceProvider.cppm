@@ -8,8 +8,9 @@
 // foundation.ui.vfs) so the core experimental.gui stays free of a VFS dependency - the app links this
 // and hands the provider to a StyleManager. Modeled on foundation.ui.vfs::VfsResourceProvider.
 //
-// The provider owns the decoded images (m_images), matching the IResourceProvider contract that
-// LoadImage returns a borrowed, provider-owned pointer.
+// The provider owns the decoded images, one per path, matching the IResourceProvider contract that
+// LoadImage returns a borrowed, provider-owned pointer: a sheet restyled every frame asks again
+// and gets the same image, not a new copy.
 
 module;
 #include "Core/Prelude.h"
@@ -29,18 +30,25 @@ namespace image = foundation::image;
 export namespace experimental::gui::vfs
 {
     // IResourceProvider that loads (and decodes) images from a VFS filesystem. The caller owns
-    // the filesystem - this provider does not delete it.
+    // the filesystem: this provider does not delete it. Images come from the owner's allocator.
     class VfsResourceProvider final : public experimental::gui::IResourceProvider
     {
     public:
-        explicit VfsResourceProvider(foundation::vfs::IFileSystem* fs) noexcept : m_fs(fs) {}
+        VfsResourceProvider(foundation::vfs::IFileSystem* fs, IAllocator& allocator) noexcept
+            : m_fs(fs), m_allocator(allocator), m_images(allocator)
+        {
+        }
 
-        // Load + decode image data at `path`. Returns a borrowed pointer owned by this provider
-        // (cached in m_images), or null if the file is missing or fails to decode.
+        // Load + decode image data at `path` the first time it is asked for. Returns a borrowed
+        // pointer owned by this provider (the same one for the same path), or null if the file is
+        // missing or fails to decode (asked again, it tries again: it may have arrived).
         const image::ImageData* LoadImage(core::StringView path) override
         {
             if (m_fs == nullptr)
                 return nullptr;
+            for (const Entry& e : m_images)
+                if (e.Path.AsView() == path)
+                    return e.Image.Get();
             UniquePtr<IStream> stream = m_fs->Open(path, FileMode::Read);
             if (!stream)
                 return nullptr;
@@ -59,16 +67,21 @@ export namespace experimental::gui::vfs
                      .IsOk())
                 return nullptr;
 
-            UniquePtr<image::OwnedImageData> owned = MakeUnique<image::OwnedImageData>(
-                foundation::core::DefaultAllocator(), decoded.Width(), decoded.Height(), decoded.Format(),
-                decoded.PixelData());
+            UniquePtr<image::OwnedImageData> owned =
+                MakeUnique<image::OwnedImageData>(m_allocator, decoded.Width(), decoded.Height(), decoded.Format(), decoded.PixelData());
             image::OwnedImageData* raw = owned.Get();
-            m_images.PushBack(Move(owned));
+            m_images.PushBack(Entry{core::String(path), Move(owned)});
             return raw;
         }
 
     private:
+        struct Entry
+        {
+            core::String Path;
+            UniquePtr<image::OwnedImageData> Image;
+        };
         foundation::vfs::IFileSystem* m_fs;
-        Array<UniquePtr<image::OwnedImageData>> m_images; // decoded images owned by this provider
+        IAllocator& m_allocator;
+        Array<Entry> m_images; // decoded images owned by this provider, one per path
     };
 }

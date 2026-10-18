@@ -424,15 +424,18 @@ export namespace experimental::gui
                 m_contextMenu = core::MakeRef<Menu>(MemoryAllocator());
                 m_contextMenu->SetAutoWidth(true);
                 TextEditBase* self = this;
-                const auto add = [&](const char8_t* label, TextEditCommand command)
+                // Each label translated (gui.cut, ...) where the GUI's tables have it, else English.
+                const auto add = [&](const char8_t* label, const char8_t* key, TextEditCommand command)
                 {
-                    m_contextItems.PushBack(m_contextMenu->AddItem(core::StringView(label), [self, command] { self->RunEdit(command); }));
+                    MenuItem* item = m_contextMenu->AddItem(core::StringView(label), [self, command] { self->RunEdit(command); });
+                    (void)item->BindTranslation(core::StringView(u8"text"), core::StringView(key), {}, {}, {}, core::StringView(label));
+                    m_contextItems.PushBack(item);
                 };
-                add(u8"Cut", TextEditCommand::Cut);
-                add(u8"Copy", TextEditCommand::Copy);
-                add(u8"Paste", TextEditCommand::Paste);
+                add(u8"Cut", u8"gui.cut", TextEditCommand::Cut);
+                add(u8"Copy", u8"gui.copy", TextEditCommand::Copy);
+                add(u8"Paste", u8"gui.paste", TextEditCommand::Paste);
                 m_contextMenu->AddSeparator();
-                add(u8"Select all", TextEditCommand::SelectAll);
+                add(u8"Select all", u8"gui.select-all", TextEditCommand::SelectAll);
             }
             const bool selected = HasSelection() && m_model.IsCopyAllowed();
             IClipboard* clipboard = Clipboard();

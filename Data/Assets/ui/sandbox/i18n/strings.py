@@ -44,6 +44,15 @@ TEXTS = {
     "mixed.lead": (
         "Arabic and Latin in one line, and a field to edit them in: the arrows move as the text shows.",
         "عربي ولاتيني في سطر واحد، وحقل لتحريرهما: تتحرك الأسهم كما يظهر النص."),
+    # The lab's own widgets' labels (a message box's buttons, a field's context menu).
+    "gui.ok": ("OK", "موافق"),
+    "gui.cancel": ("Cancel", "إلغاء"),
+    "gui.yes": ("Yes", "نعم"),
+    "gui.no": ("No", "لا"),
+    "gui.cut": ("Cut", "قص"),
+    "gui.copy": ("Copy", "نسخ"),
+    "gui.paste": ("Paste", "لصق"),
+    "gui.select-all": ("Select all", "تحديد الكل"),
 }
 
 # Plural entries: each locale's forms by category.

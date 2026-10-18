@@ -377,14 +377,15 @@ namespace experimental::gui
     }
 
     bool Node::BindTranslation(StringView property, StringView key, RefPtr<DataModel> data, Optional<TranslationArgument> count,
-                               Array<TranslationArgument> args)
+                               Array<TranslationArgument> args, StringView fallback)
     {
         const PropertyInfo* info = FindReflectedProperty(GetType(), property);
         if (info == nullptr || FindAttribute(*info, u8"translatable") == nullptr)
             return false;
         const core::String keyText(key);
+        const core::String fallbackText(fallback);
         const bool bound = BindProperty(property,
-                            [this, keyText, data = core::Move(data), count = core::Move(count), args = core::Move(args)]() -> core::Variant
+                            [this, keyText, fallbackText, data = core::Move(data), count = core::Move(count), args = core::Move(args)]() -> core::Variant
                             {
                                 // The GUI it is in (a binding made before it joins one reruns when it does).
                                 SceneRoot* root = ObserveSceneRoot();
@@ -392,7 +393,9 @@ namespace experimental::gui
                                 if (root != nullptr)
                                     root->GetContext().TrackLanguage();
                                 if (loc == nullptr || !IsAutoTranslating())
-                                    return core::Variant::From<core::String>(keyText);
+                                    return core::Variant::From<core::String>(fallbackText.Size() != 0 ? fallbackText : keyText);
+                                if (fallbackText.Size() != 0 && !loc->Has(keyText.AsView()))
+                                    return core::Variant::From<core::String>(fallbackText); // no table names it: the widget's own
                                 // Arguments as text, a named one read from the GUI's data (followed).
                                 const auto value = [&data](const TranslationArgument& a) -> core::Variant
                                 {
@@ -1140,7 +1143,9 @@ namespace experimental::gui
     {
         builder.Attribute("accessRole", core::String(u8"menuitem")); // what a screen reader takes it for (E9d)
         builder.Attribute("accessActivate", true); // a screen reader may press it
-        builder.AccessorProperty<&MenuItem::GetTextString, &MenuItem::SetTextString>("text").PropAttribute("access", core::String(u8"name"));
+        builder.AccessorProperty<&MenuItem::GetTextString, &MenuItem::SetTextString>("text")
+            .PropAttribute("access", core::String(u8"name"))
+            .PropAttribute("translatable", true);
         builder.AccessorProperty<&MenuItem::IsCheckable, &MenuItem::SetCheckable>("checkable").PropAttribute("css", core::String(u8"checkable"));
         builder.AccessorProperty<&MenuItem::IsChecked, &MenuItem::SetChecked>("checked").PropAttribute("css", core::String(u8"checked"));
         builder.Method<&ElementOf<MenuItem>, MenuItem, Node>("of");

@@ -118,6 +118,14 @@ export namespace experimental::gui
         {
             m_onResult = core::Move(callback);
         }
+        /// Adds a button of its own after the standard ones: `text` its label, `resultName` what
+        /// GetResultName reads (and the change event reports) when it is pressed.
+        void AddButton(core::StringView text, core::StringView resultName)
+        {
+            Button& button = MakeButton(core::String(resultName));
+            button.SetText(text);
+            LayoutContent();
+        }
 
         void SetMessageColor(Color color) { m_message->SetTextColor(color); }
 
@@ -180,7 +188,7 @@ export namespace experimental::gui
             if (event.KeyCode != static_cast<u32>(KeyCode::Escape) || event.Modifiers != 0 || m_results.IsEmpty())
                 return;
             event.Handled = true;
-            Finish(m_results[0]); // the leftmost: Cancel or No, or the only one
+            Finish(m_results[0].AsView()); // the leftmost: Cancel or No, or the only one
         }
 
     public:
@@ -190,7 +198,7 @@ export namespace experimental::gui
             if (m_results.IsEmpty())
                 Close();
             else
-                Finish(m_results[0]);
+                Finish(m_results[0].AsView());
         }
 
     protected:
@@ -215,27 +223,40 @@ export namespace experimental::gui
             switch (buttons)
             {
             case Buttons::Ok:
-                AddButton(core::StringView(u8"OK"), Result::Ok);
+                AddStandard(Result::Ok);
                 break;
             case Buttons::OkCancel:
-                AddButton(core::StringView(u8"Cancel"), Result::Cancel);
-                AddButton(core::StringView(u8"OK"), Result::Ok); // primary rightmost
+                AddStandard(Result::Cancel);
+                AddStandard(Result::Ok); // primary rightmost
                 break;
             case Buttons::YesNo:
-                AddButton(core::StringView(u8"No"), Result::No);
-                AddButton(core::StringView(u8"Yes"), Result::Yes); // primary rightmost
+                AddStandard(Result::No);
+                AddStandard(Result::Yes); // primary rightmost
                 break;
             }
         }
 
-        void AddButton(core::StringView text, Result result)
+        // A standard button: its label translated (gui.ok, ...) where the GUI's tables have it,
+        // else English.
+        void AddStandard(Result result)
+        {
+            static constexpr core::StringView kKeys[] = {u8"gui.ok", u8"gui.cancel", u8"gui.yes", u8"gui.no"};
+            static constexpr core::StringView kEnglish[] = {u8"OK", u8"Cancel", u8"Yes", u8"No"};
+            const usize i = static_cast<usize>(result);
+            Button& button = MakeButton(core::String(kNames[i]));
+            button.SetText(kEnglish[i]);
+            (void)button.BindTranslation(core::StringView(u8"text"), kKeys[i], {}, {}, {}, kEnglish[i]);
+        }
+
+        static constexpr core::StringView kNames[] = {u8"ok", u8"cancel", u8"yes", u8"no"};
+
+        Button& MakeButton(core::String resultName)
         {
             auto button = core::MakeRef<Button>(MemoryAllocator());
-            button->SetText(text);
             ShareTextStyle(*button, false);
             button->AddClass(core::StringView(u8"dialogbutton"));
             MessageBox* self = this;
-            button->SetOnClick([self, result]() { self->Finish(result); });
+            button->SetOnClick([self, resultName]() { self->Finish(resultName.AsView()); });
             {
                 StyleWriteScope buttonDefaults(*button);
                 button->EditLayoutStyle([](LayoutStyle& st)
@@ -245,16 +266,18 @@ export namespace experimental::gui
                 });
             }
             m_buttonRow->AddChild(button.Get());
+            Button& made = *button;
             m_buttons.PushBack(core::Move(button));
-            m_results.PushBack(result);
+            m_results.PushBack(core::Move(resultName));
+            return made;
         }
 
-        void Finish(Result result)
+        void Finish(core::StringView resultName)
         {
-            static constexpr core::StringView kNames[] = {u8"ok", u8"cancel", u8"yes", u8"no"};
-            m_resultName = core::String(kNames[static_cast<usize>(result)]);
-            if (m_onResult)
-                m_onResult(result);
+            m_resultName = core::String(resultName);
+            for (usize i = 0; i < 4; ++i) // a standard one also answers as its Result
+                if (kNames[i] == resultName && m_onResult)
+                    m_onResult(static_cast<Result>(i));
             Close();
             SendEvent(Event(EventType::Changed, this));
         }
@@ -288,7 +311,7 @@ export namespace experimental::gui
         RefPtr<Label> m_message;
         RefPtr<Panel> m_buttonRow;
         Array<RefPtr<Button>> m_buttons;
-        Array<Result> m_results; // each button's, in order
+        Array<core::String> m_results; // each button's result name, in order
         core::Function<void(Result)> m_onResult;
         core::String m_resultName;
         core::RefPtr<Node> m_home; // the page it was shown from, while it is open

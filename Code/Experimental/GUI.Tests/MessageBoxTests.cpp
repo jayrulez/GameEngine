@@ -8,6 +8,7 @@
 #include "Core/Prelude.h"
 import foundation.core;
 import foundation.fonts;
+import foundation.i18n;
 import experimental.gui;
 
 using namespace experimental::gui;
@@ -291,4 +292,41 @@ TEST_CASE("message box: shown in no GUI it refuses, rather than becoming its own
     auto window = core::MakeRef<Window>(core::DefaultAllocator());
     window->OpenModal(*window); // inside itself: refused
     CHECK_FALSE(window->IsOpen());
+}
+
+TEST_CASE("message box: its buttons' labels follow the GUI's language where a table has them, else English")
+{
+    foundation::i18n::StringTable table;
+    REQUIRE(table.Set(core::StringView(u8"gui.ok"), core::StringView(u8"pt"), core::StringView(u8"Confirmar")));
+    foundation::i18n::Localization loc;
+    loc.AddTable(&table);
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->GetContext().SetLocalization(&loc);
+    auto box = core::MakeRef<MessageBox>(core::DefaultAllocator());
+    root->AddChild(box.Get());
+    box->Configure(core::StringView(u8"?"), core::StringView(u8"Proceed?"), MessageBox::Buttons::OkCancel);
+    root->GetContext().Update(core::Duration::FromSeconds(1.0 / 60.0));
+    CHECK(box->ButtonAt(1)->GetText() == core::StringView(u8"OK")); // English: no table has it in English
+    CHECK(box->ButtonAt(0)->GetText() == core::StringView(u8"Cancel"));
+    loc.SetLanguage(core::StringView(u8"pt"));
+    root->GetContext().Update(core::Duration::FromSeconds(1.0 / 60.0));
+    CHECK(box->ButtonAt(1)->GetText() == core::StringView(u8"Confirmar"));
+    CHECK(box->ButtonAt(0)->GetText() == core::StringView(u8"Cancel")); // no table names it: English
+    root->GetContext().SetLocalization(nullptr);
+}
+
+TEST_CASE("message box: a button of the caller's own answers with its name")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    auto box = core::MakeRef<MessageBox>(core::DefaultAllocator());
+    root->AddChild(box.Get());
+    box->Configure(core::StringView(u8"Save?"), core::StringView(u8"Unsaved changes."), MessageBox::Buttons::OkCancel);
+    box->AddButton(core::StringView(u8"Discard"), core::StringView(u8"discard"));
+    REQUIRE(box->ButtonCount() == 3u);
+    bool standard = false;
+    box->SetOnResult([&standard](MessageBox::Result) { standard = true; });
+    REQUIRE(box->Show());
+    CHECK(box->ButtonAt(2)->HandleActivate()); // as Return on it would
+    CHECK(box->GetResultName() == core::String(u8"discard"));
+    CHECK_FALSE(standard); // no standard result
 }

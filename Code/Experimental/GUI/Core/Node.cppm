@@ -1912,8 +1912,11 @@ export namespace experimental::gui
         /// a GUI, or a named argument changes. With a count, the key's plural form for it, `{0}`
         /// the count and `args` from `{1}`; else `args` from `{0}`. A key shows as written while no
         /// Localization is set or auto-translation is off. False when the property is none such.
+        /// `fallback` shows where no table has the key, or the GUI has no Localization (a widget's own
+        /// label, "OK", over "gui.ok"); empty: the key shows, as for markup's @key.
         bool BindTranslation(core::StringView property, core::StringView key, RefPtr<DataModel> data = {},
-                             Optional<TranslationArgument> count = {}, Array<TranslationArgument> args = {}); // GUIReflectionImpl.cpp
+                             Optional<TranslationArgument> count = {}, Array<TranslationArgument> args = {},
+                             core::StringView fallback = {}); // GUIReflectionImpl.cpp
         /// The key a translated property resolves (null when it is not translated).
         [[nodiscard]] const core::String* TranslationKey(core::StringView property) const
         {

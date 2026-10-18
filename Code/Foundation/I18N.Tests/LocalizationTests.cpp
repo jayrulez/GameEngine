@@ -164,6 +164,27 @@ TEST_CASE("i18n.localization: pseudolocalization transforms text, leaving placeh
     CHECK(loc.Text(u8"gone") == StringView(u8"gone: ĝöñé~~"));    // a miss transformed too
 }
 
+TEST_CASE("i18n.localization: pseudolocalization's right to left wraps text in U+202B and U+202C")
+{
+    StringTable t;
+    REQUIRE(t.Set(u8"msg", u8"en", u8"ab"));
+    Localization loc;
+    loc.AddTable(&t);
+    PseudoOptions pseudo;
+    pseudo.Enabled = true;
+    pseudo.Accents = false;
+    pseudo.Lengthen = 0.0f;
+    pseudo.Brackets = false;
+    pseudo.RightToLeft = true;
+    loc.SetPseudolocalization(pseudo);
+    // Byte by byte, so a compiler that encodes the marks differently fails here.
+    const String text = String(loc.Text(u8"msg"));
+    REQUIRE(text.Size() == 8);
+    const u8 expected[] = {0xE2, 0x80, 0xAB, 'a', 'b', 0xE2, 0x80, 0xAC};
+    for (usize i = 0; i < 8; ++i)
+        CHECK(static_cast<u8>(text.CStr()[i]) == expected[i]);
+}
+
 TEST_CASE("i18n.localization: changes call back; a removed token does not")
 {
     StringTable t;

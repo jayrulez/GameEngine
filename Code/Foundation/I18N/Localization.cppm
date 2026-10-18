@@ -243,10 +243,13 @@ export namespace foundation::i18n
         [[nodiscard]] String Pseudolocalize(StringView key, StringView text) const
         {
             String out;
-            // RLE and PDF as bytes: a raw direction control in source is refused by MSVC (C5255) and gcc
-            // (-Wbidi-chars), and gcc can warn of a \u escape too.
+            // RLE and PDF as UTF-8 code units: a raw direction control in source is refused by MSVC
+            // (C5255) and gcc (-Wbidi-chars), gcc can warn of a \u escape too, and MSVC reads a \x in a
+            // u8 literal as a character to encode (C5321).
+            static constexpr char8_t kEmbedRightToLeft[] = {0xE2, 0x80, 0xAB}; // U+202B
+            static constexpr char8_t kPopDirection[] = {0xE2, 0x80, 0xAC};     // U+202C
             if (m_pseudo.RightToLeft)
-                out.Append(StringView(u8"\xE2\x80\xAB")); // U+202B RIGHT-TO-LEFT EMBEDDING
+                out.Append(StringView(kEmbedRightToLeft, 3));
             if (m_pseudo.Brackets)
                 out.Append(StringView(u8"["));
             if (m_pseudo.ShowKeys)
@@ -280,7 +283,7 @@ export namespace foundation::i18n
             if (m_pseudo.Brackets)
                 out.Append(StringView(u8"]"));
             if (m_pseudo.RightToLeft)
-                out.Append(StringView(u8"\xE2\x80\xAC")); // U+202C POP DIRECTIONAL FORMATTING
+                out.Append(StringView(kPopDirection, 3));
             return out;
         }
         // The length of the untouched span starting at `at`, or 0.

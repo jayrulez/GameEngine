@@ -660,3 +660,17 @@ TEST_CASE("scroll: content clipped away takes no press: a row below the view is 
     CHECK(hit == s.root.Get()); // what lies beyond the view there: the root
     CHECK(s.root->OverFind(core::Float2{20.0f, 20.0f}) == s.rows[0].Get()); // inside, the row
 }
+
+TEST_CASE("scroll: a pan moves the content with the finger at a display scale, in the view's own units")
+{
+    Scroller s(10);
+    WidenRows(s);
+    s.root->SetDisplayScale(2.0f); // a finger moves in device pixels, twice the view's units
+    s.root->UpdateLayout();
+    EventDispatcher& d = s.D();
+    d.InjectTouchDown(1, core::Float2{80.0f, 180.0f});
+    d.InjectTouchMove(1, core::Float2{80.0f, 150.0f}); // 30 device pixels up: 15 of the view's
+    REQUIRE(d.IsPanning());
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(15.0f));
+    d.InjectTouchUp(1, core::Float2{80.0f, 150.0f});
+}

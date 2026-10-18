@@ -243,7 +243,7 @@ export namespace experimental::gui
             if (m_panning)
             {
                 if (m_panScroller != nullptr)
-                    m_panScroller->ScrollBy(core::Float2{m_panLast.x - position.x, m_panLast.y - position.y});
+                    m_panScroller->ScrollBy(InNodeUnits(*m_panScroller, m_panLast, core::Float2{m_panLast.x - position.x, m_panLast.y - position.y}));
                 m_panLast = position;
                 m_mousePos = position;
                 return true;
@@ -261,7 +261,7 @@ export namespace experimental::gui
                 m_panning = false;
                 const core::Float2 v = PanVelocity();
                 if (m_panScroller != nullptr && core::Abs(v.x) + core::Abs(v.y) > kFlingMinSpeed)
-                    m_panScroller->Fling(core::Float2{-v.x, -v.y});
+                    m_panScroller->Fling(InNodeUnits(*m_panScroller, position, core::Float2{-v.x, -v.y}));
                 m_panScroller = nullptr;
                 UpdateHoverPath(nullptr, position);
                 return true;
@@ -1335,6 +1335,15 @@ export namespace experimental::gui
 
         // The nearest scroller at or above where the finger went down that can move along the
         // way it moved (its larger axis).
+        // A move of `delta` at world point `at`, in `node`'s own units (a finger moves in the
+        // window's pixels; a scroller scrolls in its logical units, which a display scale or a
+        // transform makes differ).
+        [[nodiscard]] static core::Float2 InNodeUnits(const Node& node, core::Float2 at, core::Float2 delta)
+        {
+            const core::Float2 from = node.ConvertToNodeSpace(at);
+            const core::Float2 to = node.ConvertToNodeSpace(core::Float2{at.x + delta.x, at.y + delta.y});
+            return core::Float2{to.x - from.x, to.y - from.y};
+        }
         [[nodiscard]] Node* PanScrollerFor(core::Float2 moved) const
         {
             const bool across = core::Abs(moved.x) > core::Abs(moved.y);

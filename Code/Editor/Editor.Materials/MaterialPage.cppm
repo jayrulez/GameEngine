@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Scene - :material_page partition.
+// Editor::Materials - :page partition.
 //
 // MaterialEditorPage (Sedulous MaterialEditorPage shape): edits a MaterialAsset - a preview
 // sphere lit by a default sun + procedural sky on the left, the material's parameters on the
@@ -22,7 +22,7 @@ module;
 #include "Core/Log/Log.h"
 #include "Core/Reflection/Reflect.h"
 
-export module editor.scene:material_page;
+export module editor.materials:page;
 
 import foundation.core;
 import foundation.vfs;
@@ -53,11 +53,6 @@ import foundation.vg.renderer;
 import editor.core;
 import editor.app;
 import editor.preview; // PreviewViewport (shared viewport + preview scene + camera + render loop)
-// NO :inspector import here: the INTERFACE names nothing from it (ResourceRefEditor is
-// an impl concern - MaterialPageImpl.cpp imports :inspector itself). Beyond hygiene, it
-// is load-bearing: GCC 15's module merger SEGFAULTS when an interface unit imports both
-// a giant same-module partition (:inspector) and editor.preview. Keep heavy partition
-// imports in impl units unless the interface actually uses their types.
 
 using namespace foundation::core;
 namespace rhi = foundation::rhi;

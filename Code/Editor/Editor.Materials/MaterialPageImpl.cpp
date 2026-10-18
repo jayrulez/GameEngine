@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Scene - :material_page partition.
+// Editor::Materials - :page partition.
 //
 // MaterialEditorPage (Sedulous MaterialEditorPage shape): edits a MaterialAsset - a preview
 // sphere lit by a default sun + procedural sky on the left, the material's parameters on the
@@ -21,7 +21,7 @@ module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
 
-module editor.scene;
+module editor.materials;
 
 import foundation.core;
 import foundation.vfs;
@@ -51,7 +51,6 @@ import foundation.vg.renderer;
 import editor.core;
 import editor.app;
 import editor.preview;   // PreviewViewport (shared viewport + preview scene + camera + render loop)
-import :inspector; // ResourceRefEditor (the picker row)
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -65,6 +64,9 @@ namespace vg = foundation::vg;
 
 namespace editor
 {
+    using app::PrettifyPropertyName; // a row's label from its property's name
+    using app::ResourceRefEditor;    // the picker row
+
     MaterialEditorPage::MaterialEditorPage(EditorContext& context, runtime::IApplicationHost& host,
                                            ui::runtime::UIHost& uiHost,
                                            foundation::content::Instance& instance)

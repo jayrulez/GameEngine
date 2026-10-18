@@ -60,6 +60,7 @@ import editor.core;
 import editor.app;
 import editor.scene;
 import editor.animation;
+import editor.materials;
 import texture.pipeline;
 import fonts.pipeline;
 import image.pipeline;

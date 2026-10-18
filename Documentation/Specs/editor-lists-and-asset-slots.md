@@ -68,7 +68,7 @@ So, drop does NOT work on:
 - **Slots that could take it but are never told the types**: every `ContainerListEditor` slot,
   the mesh's material list included (the widget never calls `SetAcceptedTypes`); the script
   behaviour's script (`InspectorViewImpl.cpp:1973`); a script's asset-typed property (`:2324`);
-  the material page's texture slots and preview mesh (`Editor.Scene/MaterialPageImpl.cpp:518,
+  the material page's texture slots and preview mesh (`Editor.Materials/MaterialPageImpl.cpp:518,
   691`).
 - **Rows that are not slots at all**, shown as a label and a button or as a button whose text is
   the value:

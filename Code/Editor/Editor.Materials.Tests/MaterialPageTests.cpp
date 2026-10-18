@@ -10,7 +10,7 @@
 
 import foundation.core;
 import foundation.materials;
-import editor.scene;
+import editor.materials;
 
 using namespace foundation::core;
 namespace materials = foundation::materials;

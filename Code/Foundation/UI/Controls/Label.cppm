@@ -64,14 +64,32 @@ export namespace foundation::ui
             return this;
         }
 
+        /// The first line's baseline from the top, at the measured height (where a baseline-aligned
+        /// row places it): a single line sits as OnDraw's VAlign puts it; wrapped or several
+        /// lines hug their text, so the first line's ascent.
         [[nodiscard]] f32 GetBaseline() const override
         {
             if (Context != nullptr && Context->FontService() != nullptr)
             {
                 // ResolveFont/ResolveStyle are logically const but not marked (style resolution is lazy).
-                if (fonts::CachedFont* font = const_cast<Label*>(this)->ResolveFont())
+                Label* self = const_cast<Label*>(this);
+                if (fonts::CachedFont* font = self->ResolveFont())
                 {
-                    return font->font->Metrics().ascent;
+                    const fonts::FontMetrics fm = font->font->Metrics();
+                    if (self->IsWordWrapped() || HasNewlines(Text.Value()))
+                    {
+                        return fm.ascent;
+                    }
+                    const f32 height = MeasuredSize.y;
+                    switch (VAlign.Value())
+                    {
+                    case fonts::VerticalAlignment::Middle:
+                        return (height - fm.lineHeight) * 0.5f + fm.ascent;
+                    case fonts::VerticalAlignment::Bottom:
+                        return height + fm.descent;
+                    default:
+                        return fm.ascent;
+                    }
                 }
             }
             return -1.0f;

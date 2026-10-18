@@ -351,3 +351,39 @@ TEST_CASE("text effects: text-shadow, text-outline and text-glow parse as shadow
     const BoxShadow none = sheet->GetRule(3).GetValue(StyleProperty::TextOutline).Value().AsShadow().Value();
     CHECK(none.Color.a == doctest::Approx(0.0f));
 }
+
+TEST_CASE("flex: a row aligned to baselines lines its labels' first lines up")
+{
+    RobotoService fonts;
+    UIContext ctx{DefaultAllocator()};
+    ctx.SetFontService(&fonts.service);
+    auto root = MakeRef<RootView>(DefaultAllocator());
+    tests::Init(ctx, root.Get(), 400, 300);
+    auto row = MakeRef<FlexLayout>(DefaultAllocator());
+    row->AlignItems = Align::Baseline;
+    auto big = MakeRef<Label>(DefaultAllocator(), StringView(u8"Title"));
+    big->FontFamily.SetValue(String(u8"Roboto"));
+    big->FontSize.SetValue(Optional<f32>(32.0f));
+    auto small = MakeRef<Label>(DefaultAllocator(), StringView(u8"note"));
+    small->FontFamily.SetValue(String(u8"Roboto"));
+    small->FontSize.SetValue(Optional<f32>(12.0f));
+    auto box = MakeRef<View>(DefaultAllocator()); // no text: its border box's bottom is its baseline
+    LayoutStyle boxSize;
+    boxSize.Width = SizeSpec::Fixed(Unit::Dp(10));
+    boxSize.Height = SizeSpec::Fixed(Unit::Dp(10));
+    box->SetLayout(boxSize);
+    row->AddView(big.Get());
+    row->AddView(small.Get());
+    row->AddView(box.Get());
+    root->AddView(row.Get());
+    tests::LayoutPass(ctx, root.Get());
+
+    REQUIRE(big->GetBaseline() > small->GetBaseline());
+    const f32 bigLine = big->Bounds.y + big->GetBaseline();
+    const f32 smallLine = small->Bounds.y + small->GetBaseline();
+    CHECK(smallLine == doctest::Approx(bigLine).epsilon(0.02)); // the device-pixel rounding aside
+    CHECK(small->Bounds.y > big->Bounds.y);
+    CHECK(box->Bounds.y + box->Bounds.height == doctest::Approx(bigLine).epsilon(0.02));
+    // The row holds the deepest ascent and the deepest descent.
+    CHECK(row->Bounds.height >= big->Bounds.height);
+}

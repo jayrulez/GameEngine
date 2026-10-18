@@ -115,6 +115,8 @@ export namespace foundation::ui
             f32 main = 0.0f;
             f32 cross = 0.0f;
             bool matchCross = false;
+            /// Baseline-aligned in a row: its baseline from the top of its margin box.
+            Optional<f32> baseline;
         };
         struct FlexLine
         {
@@ -122,6 +124,7 @@ export namespace foundation::ui
             usize count = 0;
             f32 main = 0.0f;
             f32 cross = 0.0f;
+            f32 baseline = 0.0f; ///< from the line's top, where baseline-aligned items line up
         };
 
         static SizeSpec ChildWidth(View* child) { return child->Layout().Width; }
@@ -415,10 +418,24 @@ export namespace foundation::ui
             for (FlexLine& line : m_lines)
             {
                 line.cross = 0.0f;
+                line.baseline = 0.0f;
+                f32 belowBaseline = 0.0f;
                 for (usize i = line.start; i < line.start + line.count; ++i)
                 {
-                    line.cross = Max(line.cross, m_items[i].cross);
+                    FlexItem& item = m_items[i];
+                    line.cross = Max(line.cross, item.cross);
+                    // A row's baseline-aligned items share the line's baseline, the deepest
+                    // ascent above it and the deepest descent below: the line grows to hold both.
+                    // A column has no baselines to line up (CSS): those items sit at the start.
+                    const Optional<Align>& alignSelf = item.child->Layout().AlignSelf;
+                    if (horizontal && (alignSelf.HasValue() ? alignSelf.Value() : AlignItems) == Align::Baseline)
+                    {
+                        item.baseline = BaselineOf(*item.child);
+                        line.baseline = Max(line.baseline, item.baseline.Value());
+                        belowBaseline = Max(belowBaseline, item.cross - item.baseline.Value());
+                    }
                 }
+                line.cross = Max(line.cross, line.baseline + belowBaseline);
             }
 
             // Line packing on the cross axis. A single line IS the container (align-content
@@ -497,7 +514,12 @@ export namespace foundation::ui
                     switch (align)
                     {
                     case Align::Start:
+                        break;
                     case Align::Baseline:
+                        if (item.baseline.HasValue())
+                        {
+                            itemCrossPos = crossPos + line.baseline - item.baseline.Value();
+                        }
                         break;
                     case Align::End:
                         itemCrossPos = crossPos + line.cross - item.cross;
@@ -526,6 +548,15 @@ export namespace foundation::ui
                 }
                 crossPos += line.cross + crossBetween;
             }
+        }
+
+        /// A child's baseline from the top of its margin box: the one it reports (a text view's
+        /// first line), or without one the bottom of its border box, as CSS synthesizes it.
+        [[nodiscard]] static f32 BaselineOf(const View& child)
+        {
+            const f32 top = child.Layout().Margin->Top;
+            const f32 own = child.GetBaseline();
+            return top + (own >= 0.0f ? own : child.MeasuredSize.y);
         }
 
         static void ComputeJustify(Justify justify, f32 containerSize, f32 totalChildSize,

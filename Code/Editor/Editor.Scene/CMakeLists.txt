@@ -42,7 +42,6 @@ target_sources(Editor.Scene
         PieMcpToolsImpl.cpp
         PieRunToolImpl.cpp
         GamePageImpl.cpp
-        MeshPageImpl.cpp
         ParticleEffectPageImpl.cpp
         SettingsProfilesImpl.cpp
         SettingsProfilePageImpl.cpp
@@ -76,7 +75,6 @@ target_sources(Editor.Scene
             GamePage.cppm
             GameResolution.cppm
             SettingsProfilePage.cppm
-            MeshPage.cppm
             ParticleEffectPage.cppm
             EditorSceneModule.cppm)
 

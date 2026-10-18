@@ -38,5 +38,4 @@ export import :page;
 export import :game_page;
 export import :game_resolution;
 export import :settings_profile_page;
-export import :mesh_page;
 export import :particle_effect_page;

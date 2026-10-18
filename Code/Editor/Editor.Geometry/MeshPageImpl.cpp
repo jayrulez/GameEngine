@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Scene - :mesh_page partition (implementation).
+// Editor::Geometry - :page partition (implementation).
 
 module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
 #include "Core/Reflection/Reflect.h"
 
-module editor.scene;
+module editor.geometry;
 
 import foundation.core;
 import foundation.settings; // per-project editor-settings store (preview-material pref)

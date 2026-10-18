@@ -12,7 +12,7 @@
 
 import foundation.core;
 import foundation.geometry;
-import editor.scene;
+import editor.geometry;
 
 using namespace foundation::core;
 namespace geometry = foundation::geometry;

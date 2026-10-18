@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Scene - :mesh_page partition.
+// Editor::Geometry - :page partition.
 //
 // MeshEditorPage: the mesh viewer. Opens a
 // StaticMeshAsset or SkinnedMeshAsset with a GPU orbit preview of the COOKED mesh product on
@@ -21,7 +21,7 @@
 module;
 #include "Core/Prelude.h"
 
-export module editor.scene:mesh_page;
+export module editor.geometry:page;
 
 import foundation.core;
 import foundation.content;

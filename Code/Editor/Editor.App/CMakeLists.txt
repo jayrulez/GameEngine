@@ -66,6 +66,7 @@ target_sources(Editor.App
             ListHeader.cppm
             ViewModeToggles.cppm
             AssetFilter.cppm
+            PropertyNames.cppm
             CategoryTabs.cppm
             TemplatesDialog.cppm
             ExportDialog.cppm

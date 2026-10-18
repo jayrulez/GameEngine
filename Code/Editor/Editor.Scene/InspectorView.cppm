@@ -61,6 +61,7 @@ export namespace editor
     // The asset reference row is Editor.App's (every page uses it): typed at construction, and
     // BindAsset wires pick, drop and clear to one assignment.
     using editor::app::ResourceRefEditor;
+    using editor::app::PrettifyPropertyName; // a row's label from its property's name
 
     // --- Property-attribute conventions (reflection PropAttribute metadata -> inspector) ---
     //
@@ -147,38 +148,6 @@ export namespace editor
             }
         }
         return false;
-    }
-
-    /// "castsShadows" -> "Casts Shadows", "fovYRadians" -> "Fov Y Radians", "IBL" -> "IBL".
-    [[nodiscard]] inline String PrettifyPropertyName(StringView name)
-    {
-        const utf8char* d = name.Data();
-        String out;
-        bool prevLower = false;
-        bool prevUpper = false;
-        for (usize i = 0; i < name.Size(); ++i)
-        {
-            utf8char c = d[i];
-            const bool upper = (c >= u8'A' && c <= u8'Z');
-            const bool lower = (c >= u8'a' && c <= u8'z');
-            if (i == 0 && lower)
-            {
-                c = static_cast<utf8char>(c - (u8'a' - u8'A'));
-            }
-            else if (upper)
-            {
-                const bool nextLower =
-                    (i + 1 < name.Size()) && (d[i + 1] >= u8'a' && d[i + 1] <= u8'z');
-                if (prevLower || (prevUpper && nextLower))
-                {
-                    out += u8' ';
-                }
-            }
-            out += c;
-            prevLower = lower;
-            prevUpper = upper;
-        }
-        return out;
     }
 
     // Bespoke editor for the physics collision-group matrix (a shape reflection rows

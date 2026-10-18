@@ -828,16 +828,6 @@ TEST_CASE("scene-edit: ParsePropertyCondition grammar")
     CHECK(!ParsePropertyCondition(u8"type=x", c));
 }
 
-TEST_CASE("scene-edit: PrettifyPropertyName")
-{
-    CHECK(PrettifyPropertyName(u8"castsShadows").AsView() == StringView(u8"Casts Shadows"));
-    CHECK(PrettifyPropertyName(u8"fovYRadians").AsView() == StringView(u8"Fov Y Radians"));
-    CHECK(PrettifyPropertyName(u8"type").AsView() == StringView(u8"Type"));
-    CHECK(PrettifyPropertyName(u8"skyIntensity").AsView() == StringView(u8"Sky Intensity"));
-    CHECK(PrettifyPropertyName(u8"IBL").AsView() == StringView(u8"IBL"));
-    CHECK(PrettifyPropertyName(u8"ReflectionProbe").AsView() == StringView(u8"Reflection Probe"));
-}
-
 TEST_CASE("scene-edit: render components carry the inspector attribute annotations")
 {
     engine::render::RegisterRenderComponentReflection();

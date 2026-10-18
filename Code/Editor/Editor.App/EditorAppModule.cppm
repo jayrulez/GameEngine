@@ -39,6 +39,7 @@ export import :editor_icons;
     export import :list_header;
     export import :view_mode_toggles;
     export import :asset_filter;
+    export import :property_names;
     export import :category_tabs;
     export import :templates_dialog;
     export import :export_dialog;

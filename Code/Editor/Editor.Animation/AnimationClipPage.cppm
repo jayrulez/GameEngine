@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Scene - :animation_clip_page partition.
+// Editor::Animation - :clip_page partition.
 //
 // AnimationClipEditorPage: preview + light
 // authoring for an AnimationClipAsset. A skeleton-wireframe viewport plays the COOKED clip product
@@ -14,7 +14,7 @@
 module;
 #include "Core/Prelude.h"
 
-export module editor.scene:animation_clip_page;
+export module editor.animation:clip_page;
 
 import foundation.core;
 import foundation.content;

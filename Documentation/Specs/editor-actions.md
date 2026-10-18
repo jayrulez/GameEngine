@@ -211,7 +211,7 @@ command at the surface that shows it, counted 2026-09-27 (`AddItem(u8"` sites ou
 | Editor.App/AssetsViewImpl.cpp | 20 | the asset browser's row, group and background menus |
 | Editor.Scene/HierarchyViewImpl.cpp | 2 | Rename, Copy ID over an entity |
 | Editor.Scene/ParticleEffectPageImpl.cpp | 2 | Move Down, Delete over an emitter |
-| Editor.Scene/AnimationGraphPageImpl.cpp | 2 | Make Transition, Delete Transition over a node |
+| Editor.Animation/AnimationGraphPageImpl.cpp | 2 | Make Transition, Delete Transition over a node |
 | Editor.App/ApplicationImpl.cpp | 1 | a combo box entry, not a command |
 
 The asset browser is the layer. Its three menus today:

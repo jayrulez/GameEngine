@@ -45,9 +45,6 @@ target_sources(Editor.Scene
         MaterialPageImpl.cpp
         MeshPageImpl.cpp
         ParticleEffectPageImpl.cpp
-        AnimationGraphPageImpl.cpp
-        AnimationClipPageImpl.cpp
-        SkeletonPageImpl.cpp
         SettingsProfilesImpl.cpp
         SettingsProfilePageImpl.cpp
         SceneLoadingImpl.cpp
@@ -83,8 +80,5 @@ target_sources(Editor.Scene
             SettingsProfilePage.cppm
             MeshPage.cppm
             ParticleEffectPage.cppm
-            AnimationGraphPage.cppm
-            AnimationClipPage.cppm
-            SkeletonPage.cppm
             EditorSceneModule.cppm)
 

@@ -594,6 +594,7 @@ if(OPTION_BUILD_TOOLS)
     add_subdirectory(Code/Editor/Editor.Camera) # shared free-fly viewport camera (lean, foundation-only) for all editor pages
     add_subdirectory(Code/Editor/Editor.Preview) # shared 3D preview viewport substrate (PreviewViewport, over editor.camera) for bespoke asset pages
     add_subdirectory(Code/Editor/Editor.Scene) # scene editor plugin (SceneEditorPage + RegisterSceneEditor)
+    add_subdirectory(Code/Editor/Editor.Animation) # animation graph, clip and skeleton pages (editor exe only)
     add_subdirectory(Code/Editor/Editor.Navigation) # navmesh bake tooling (collect + Recast bake -> zone asset)
 
     add_subdirectory(Code/Pipeline/Animation.Pipeline)
@@ -636,6 +637,7 @@ if(OPTION_BUILD_TESTS)
     util_test_suite(Code/Pipeline/Audio.Pipeline.Tests                  Pipeline::Audio)
     util_test_suite(Code/Engine/Engine.DefaultApp.Tests             Engine::DefaultApp)
     util_test_suite(Code/Editor/Editor.App.Tests                    Editor::App)
+    util_test_suite(Code/Editor/Editor.Animation.Tests              Editor::Animation)
     util_test_suite(Code/Editor/Editor.Audio.Tests                  Editor::Audio)
     util_test_suite(Code/Pipeline/Pipeline.Cook.Tests                   Pipeline::Cook)
     util_test_suite(Code/Pipeline/Pipeline.Importer.Tests               Pipeline::Importer)

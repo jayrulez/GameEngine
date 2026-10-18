@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Scene - :animation_graph_page partition (implementation).
+// Editor::Animation - :graph_page partition (implementation).
 //
 // The state-machine / blend-tree authoring tool (see AnimationGraphPage.cppm for the overview).
 
@@ -10,11 +10,12 @@ module;
 #include "Core/Log/Log.h"
 #include "Core/Reflection/Reflect.h"
 
-module editor.scene;
+module editor.animation;
 
 import foundation.settings; // per-project editor-settings store (preview skeleton/mesh prefs)
 
 import foundation.core;
+import foundation.fonts; // VerticalAlignment (the labels)
 import foundation.content;
 import foundation.rhi;
 import foundation.graphics;

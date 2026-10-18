@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Scene - :animation_graph_page partition.
+// Editor::Animation - :graph_page partition.
 //
 // AnimationGraphEditorPage: the blend-tree / state-machine
 // authoring tool for an AnimationGraphAsset.
@@ -24,7 +24,7 @@
 module;
 #include "Core/Prelude.h"
 
-export module editor.scene:animation_graph_page;
+export module editor.animation:graph_page;
 
 import foundation.core;
 import foundation.content;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Scene - :animation_clip_page partition (implementation).
+// Editor::Animation - :clip_page partition (implementation).
 
 module;
 #include <cmath> // std::fmod (looping playhead wrap)
@@ -9,9 +9,10 @@ module;
 #include "Core/Log/Log.h"
 #include "Core/Reflection/Reflect.h"
 
-module editor.scene;
+module editor.animation;
 
 import foundation.core;
+import foundation.fonts; // VerticalAlignment (the labels)
 import foundation.settings; // per-project editor-settings store (preview skeleton/mesh prefs)
 import foundation.content;
 import foundation.rhi;
@@ -35,7 +36,7 @@ import foundation.vg.renderer;
 import editor.core;
 import editor.app;
 import editor.preview;
-import :animation_graph_page; // DrawSkeletonWireframe (shared preview helper, impl-only)
+import :graph_page; // DrawSkeletonWireframe (shared preview helper, impl-only)
 
 using namespace foundation::core;
 namespace animation = foundation::animation;

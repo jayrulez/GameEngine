@@ -59,6 +59,7 @@ import engine.composition; // RegisterAllScriptFacades - the COMPLETE engine fac
 import editor.core;
 import editor.app;
 import editor.scene;
+import editor.animation;
 import texture.pipeline;
 import fonts.pipeline;
 import image.pipeline;

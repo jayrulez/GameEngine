@@ -14,7 +14,7 @@ import foundation.core;
 import foundation.animation;
 import foundation.animation.resource;
 import animation.pipeline;
-import editor.scene;
+import editor.animation;
 
 using namespace foundation::core;
 using namespace pipeline;

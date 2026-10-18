@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Scene - :skeleton_page partition.
+// Editor::Animation - :skeleton_page partition.
 //
 // SkeletonEditorPage: a VIEWER for a SkeletonAsset - a bone
 // TREE (hierarchy by parent index) beside a bind-pose wireframe viewport (the
@@ -14,7 +14,7 @@
 module;
 #include "Core/Prelude.h"
 
-export module editor.scene:skeleton_page;
+export module editor.animation:skeleton_page;
 
 import foundation.core;
 import foundation.content;

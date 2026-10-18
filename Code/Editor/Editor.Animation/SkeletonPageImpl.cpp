@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Scene - :skeleton_page partition (implementation).
+// Editor::Animation - :skeleton_page partition (implementation).
 
 module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
 
-module editor.scene;
+module editor.animation;
 
 import foundation.core;
 import foundation.content;
@@ -32,7 +32,7 @@ import foundation.vg.renderer;
 import editor.core;
 import editor.app;
 import editor.preview;
-import :animation_graph_page; // DrawSkeletonWireframe (shared preview helper, impl-only)
+import :graph_page; // DrawSkeletonWireframe (shared preview helper, impl-only)
 
 using namespace foundation::core;
 namespace animation = foundation::animation;

@@ -349,11 +349,83 @@ export namespace experimental::gui
                     n == core::StringView(u8"box-shadow") || n == core::StringView(u8"filter") ||
                     n == core::StringView(u8"backdrop-filter") || n == core::StringView(u8"mix-blend-mode") ||
                     n == core::StringView(u8"text-shadow") || n == core::StringView(u8"text-outline") ||
-                    n == core::StringView(u8"text-glow") ||
+                    n == core::StringView(u8"text-glow") || n == core::StringView(u8"background-size") ||
+                    n == core::StringView(u8"background-position") ||
                     (n.Size() > 7 && n.SubStr(0, 7) == core::StringView(u8"border-")))
                     return true;
             }
             return false;
+        }
+
+        // One axis of a layer's size or position: a length, a percentage, or (`allowAuto`) auto.
+        [[nodiscard]] inline Optional<LayerLength> ParseLayerLength(core::StringView t, const LengthContext& lengths, bool allowAuto)
+        {
+            if (t == core::StringView(u8"auto"))
+                return allowAuto ? Optional<LayerLength>(LayerLength{0.0f, 0.0f, true}) : Optional<LayerLength>{};
+            const Optional<LengthValue> l = ParseLengthValue(t);
+            if (!l.HasValue())
+                return {};
+            return LayerLength{ResolveLengthValue(l.Value(), lengths, 0.0f), l.Value().PercentPart(), false};
+        }
+        // background-size for one layer: cover, contain, or one or two of a length, a percentage
+        // (of the box) and auto (one given: the height auto).
+        inline void ParseLayerSize(core::StringView t, const LengthContext& lengths, BoxLayer& out)
+        {
+            if (t == core::StringView(u8"cover") || t == core::StringView(u8"contain"))
+            {
+                out.Size = t == core::StringView(u8"cover") ? LayerSize::Cover : LayerSize::Contain;
+                return;
+            }
+            const Array<core::StringView> parts = SplitTopLevel(t, u8' ');
+            if (parts.IsEmpty() || parts.Size() > 2)
+                return;
+            const Optional<LayerLength> w = ParseLayerLength(parts[0], lengths, true);
+            const Optional<LayerLength> h = parts.Size() > 1 ? ParseLayerLength(parts[1], lengths, true) : Optional<LayerLength>(LayerLength{0.0f, 0.0f, true});
+            if (!w.HasValue() || !h.HasValue())
+                return;
+            out.Size = w.Value().Auto && h.Value().Auto ? LayerSize::Auto : LayerSize::Lengths;
+            out.Width = w.Value();
+            out.Height = h.Value();
+        }
+        // background-position for one layer: one or two of left, center, right, top, bottom, a
+        // length and a percentage (of the room left over); one given: the other centred.
+        inline void ParseLayerPosition(core::StringView t, const LengthContext& lengths, BoxLayer& out)
+        {
+            const Array<core::StringView> parts = SplitTopLevel(t, u8' ');
+            if (parts.IsEmpty() || parts.Size() > 2)
+                return;
+            LayerLength x{0.0f, 50.0f, false}, y{0.0f, 50.0f, false};
+            bool xSet = false;
+            for (usize i = 0; i < parts.Size(); ++i)
+            {
+                const core::StringView p = parts[i];
+                const auto percent = [](f32 v) { return LayerLength{0.0f, v, false}; };
+                if (p == core::StringView(u8"left") || p == core::StringView(u8"right"))
+                {
+                    x = percent(p == core::StringView(u8"left") ? 0.0f : 100.0f);
+                    xSet = true;
+                }
+                else if (p == core::StringView(u8"top") || p == core::StringView(u8"bottom"))
+                {
+                    y = percent(p == core::StringView(u8"top") ? 0.0f : 100.0f);
+                }
+                else if (p == core::StringView(u8"center"))
+                    continue;
+                else if (const Optional<LayerLength> l = ParseLayerLength(p, lengths, false); l.HasValue())
+                {
+                    if (i == 0 && !xSet)
+                    {
+                        x = l.Value();
+                        xSet = true;
+                    }
+                    else
+                        y = l.Value();
+                }
+                else
+                    return;
+            }
+            out.X = x;
+            out.Y = y;
         }
 
         // The node's box from the sheet's box properties, in pixels.
@@ -365,8 +437,14 @@ export namespace experimental::gui
                 box.BackgroundColor = c->ColorValue;
             if (const StyleValue* layers = style.Value(u8"background-image"))
             {
+                // background-size and background-position (E13): a comma list, one per layer, the
+                // last repeated for layers past it (CSS's rule).
+                const Array<core::StringView> sizes = SplitTopLevel(style.Get(u8"background-size"), u8',');
+                const Array<core::StringView> positions = SplitTopLevel(style.Get(u8"background-position"), u8',');
+                usize index = 0;
                 for (const BackgroundLayer& layer : layers->Layers)
                 {
+                    const usize at = index++;
                     BoxLayer out;
                     if (layer.Kind == BackgroundKind::Image)
                     {
@@ -374,6 +452,10 @@ export namespace experimental::gui
                         out.Image = resources != nullptr ? resources->LoadImage(layer.Image.AsView()) : nullptr;
                         if (out.Image == nullptr)
                             continue; // not loaded (no provider, or no such image)
+                        if (!sizes.IsEmpty())
+                            ParseLayerSize(Trim(sizes[Min(at, sizes.Size() - 1)]), lengths, out);
+                        if (!positions.IsEmpty())
+                            ParseLayerPosition(Trim(positions[Min(at, positions.Size() - 1)]), lengths, out);
                     }
                     else if (layer.Kind == BackgroundKind::Gradient)
                     {

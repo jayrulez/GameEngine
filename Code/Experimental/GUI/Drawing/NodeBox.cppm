@@ -45,12 +45,82 @@ export namespace experimental::gui
     };
 
     /// One background layer over the background colour: a gradient or an image.
+    /// A layer's size or position along one axis (E13 of Specs/gui-lab-evolution-2.md): pixels and a
+    /// percentage of a base the drawing knows, or auto.
+    struct LayerLength
+    {
+        f32 Px = 0.0f;
+        f32 Percent = 0.0f;
+        bool Auto = false;
+        [[nodiscard]] f32 Resolve(f32 base) const noexcept { return Px + Percent * base * 0.01f; }
+    };
+    /// How an image layer is sized in its box (CSS's background-size; Fill when none is given, the
+    /// lab's own default: the box filled, as before there was a background-size).
+    enum class LayerSize : u8
+    {
+        Fill,
+        Auto,    ///< its own size
+        Cover,   ///< as small as covers the box, its aspect kept
+        Contain, ///< as large as fits in the box, its aspect kept
+        Lengths, ///< Width and Height (either auto: from the other by the aspect)
+    };
+
     struct BoxLayer
     {
         bool IsImage = false;
         BoxGradient Gradient;
         const image::ImageData* Image = nullptr; ///< Not owned (the resource provider's).
+        LayerSize Size = LayerSize::Fill;
+        LayerLength Width{0.0f, 0.0f, true};
+        LayerLength Height{0.0f, 0.0f, true};
+        /// background-position: from the box's left and top, a percentage of the room left over
+        /// (the box less the image: 50% centres it, 100% puts it at the far edge).
+        LayerLength X{};
+        LayerLength Y{};
     };
+
+    /// Where an image of `iw` by `ih` pixels lands for `layer` in `box`: its size by the layer's
+    /// background-size, placed by its background-position (it may reach past the box; drawing
+    /// cuts it there). Empty for an image or a box of no size.
+    [[nodiscard]] inline Rectangle PlaceImageLayer(const BoxLayer& layer, const Rectangle& box, f32 iw, f32 ih) noexcept
+    {
+        if (iw <= 0.0f || ih <= 0.0f || box.width <= 0.0f || box.height <= 0.0f)
+            return Rectangle{};
+        f32 w = box.width, h = box.height;
+        switch (layer.Size)
+        {
+        case LayerSize::Fill: return box;
+        case LayerSize::Auto:
+            w = iw;
+            h = ih;
+            break;
+        case LayerSize::Cover:
+        case LayerSize::Contain:
+        {
+            const f32 sx = box.width / iw, sy = box.height / ih;
+            const f32 scale = layer.Size == LayerSize::Cover ? Max(sx, sy) : Min(sx, sy);
+            w = iw * scale;
+            h = ih * scale;
+            break;
+        }
+        case LayerSize::Lengths:
+            w = layer.Width.Auto ? -1.0f : layer.Width.Resolve(box.width);
+            h = layer.Height.Auto ? -1.0f : layer.Height.Resolve(box.height);
+            if (w < 0.0f && h < 0.0f)
+            {
+                w = iw;
+                h = ih;
+            }
+            else if (w < 0.0f)
+                w = h * iw / ih;
+            else if (h < 0.0f)
+                h = w * ih / iw;
+            break;
+        }
+        if (w <= 0.0f || h <= 0.0f)
+            return Rectangle{};
+        return Rectangle{box.x + layer.X.Resolve(box.width - w), box.y + layer.Y.Resolve(box.height - h), w, h};
+    }
 
     /// One box shadow, in pixels.
     struct BoxShadow
@@ -165,12 +235,32 @@ export namespace experimental::gui
             return vg::CornerRadii(grow(r.topLeft), grow(r.topRight), grow(r.bottomRight), grow(r.bottomLeft));
         }
 
+        // An image layer sized and placed in the box (E13), the part outside it cut off (its
+        // source cropped to match, so nothing spills past the box or its corners).
+        void DrawImageLayer(vg::VGContext& canvas, const BoxLayer& layer, const Rectangle& rect) const
+        {
+            const f32 iw = static_cast<f32>(layer.Image->Width());
+            const f32 ih = static_cast<f32>(layer.Image->Height());
+            const Rectangle placed = PlaceImageLayer(layer, rect, iw, ih);
+            if (placed.width <= 0.0f || placed.height <= 0.0f)
+                return;
+            const Rectangle shown = Rectangle::Intersect(placed, rect);
+            if (shown.width <= 0.0f || shown.height <= 0.0f)
+                return;
+            const Rectangle source{(shown.x - placed.x) / placed.width * iw, (shown.y - placed.y) / placed.height * ih,
+                                   shown.width / placed.width * iw, shown.height / placed.height * ih};
+            if (Radii.topLeft > 0.0f || Radii.topRight > 0.0f || Radii.bottomRight > 0.0f || Radii.bottomLeft > 0.0f)
+                canvas.DrawImageRounded(layer.Image, shown, source, Radii);
+            else
+                canvas.DrawImage(layer.Image, shown, source, Color::White);
+        }
+
         void DrawLayer(vg::VGContext& canvas, const BoxLayer& layer, const Rectangle& rect) const
         {
             if (layer.IsImage)
             {
                 if (layer.Image != nullptr)
-                    canvas.DrawImage(layer.Image, rect);
+                    DrawImageLayer(canvas, layer, rect);
                 return;
             }
             const BoxGradient& g = layer.Gradient;

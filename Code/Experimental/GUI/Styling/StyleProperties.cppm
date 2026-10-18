@@ -139,6 +139,8 @@ export namespace experimental::gui
             {u8"direction", StyleGrammar::Keyword},
             {u8"background-color", StyleGrammar::Color},
             {u8"background-image", StyleGrammar::Layers},
+            {u8"background-size", StyleGrammar::Text},
+            {u8"background-position", StyleGrammar::Text},
             {u8"border-top-width", StyleGrammar::Length},
             {u8"border-right-width", StyleGrammar::Length},
             {u8"border-bottom-width", StyleGrammar::Length},

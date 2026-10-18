@@ -291,7 +291,17 @@ TEST_CASE("shell: an input event's text keeps whole characters when it is cut to
         source[i * 3 + 2] = static_cast<char>(0xa5);
     }
     CopyEventText(e.text, source);
-    CHECK(StringView(e.text).Size() == 63u);
+    CHECK(StringView(e.text).Size() == 63u); // the cut falls between characters
+    // One ASCII byte in front: the cut at 63 bytes lands inside the 21st character, which backs off
+    // to the 20th's end, 61 bytes.
+    char shifted[1 + 3 * 22 + 1] = {};
+    shifted[0] = 'a';
+    for (int i = 0; i < 3 * 22; ++i)
+    {
+        shifted[1 + i] = source[i];
+    }
+    CopyEventText(e.text, shifted);
+    CHECK(StringView(e.text).Size() == 61u);
     CopyEventText(e.text, "short");
     CHECK(StringView(e.text) == StringView(u8"short"));
     CopyEventText(e.text, nullptr);

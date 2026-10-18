@@ -319,3 +319,59 @@ TEST_CASE("theme: a skin's radius token rounds its control, so the focus ring fo
     CHECK(field->GetBox().Radii.bottomRight == doctest::Approx(4.0f));
     CHECK(combo->GetBox().Radii.topLeft == doctest::Approx(4.0f)); // a combo box follows the fields
 }
+
+namespace
+{
+    UIWidget* FindTagged(Node& node, core::StringView tag)
+    {
+        if (UIWidget* widget = core::Cast<UIWidget>(&node); widget != nullptr && widget->GetTag() == tag)
+            return widget;
+        for (core::usize i = 0; i < node.ChildCount(); ++i)
+            if (UIWidget* found = FindTagged(*node.GetChildAt(i), tag))
+                return found;
+        return nullptr;
+    }
+}
+
+TEST_CASE("theme: a list's rows show the pointer over them (a combo box's popup is a list box)")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{300.0f, 300.0f});
+    auto box = Make<ListBox>();
+    box->AddItem(core::StringView(u8"one"));
+    box->AddItem(core::StringView(u8"two"));
+    core::Array<core::String> rows;
+    rows.PushBack(core::String(u8"a"));
+    rows.PushBack(core::String(u8"b"));
+    StringListModel model(core::Move(rows));
+    auto view = Make<ListView>();
+    view->SetSize(core::Float2{200.0f, 100.0f});
+    view->SetRowHeight(20.0f);
+    root->AddChild(box.Get());
+    root->AddChild(view.Get());
+    view->SetModel(&model);
+    (void)root->UpdateLayout();
+
+    StyleManager mgr;
+    mgr.SetStyleSheet(CSSParser::Parse(DefaultThemeCSS()));
+    mgr.ApplyTree(*root.Get());
+    UIWidget* item = FindTagged(*box.Get(), core::StringView(u8"listboxitem"));
+    REQUIRE(item != nullptr);
+    UIWidget* row = FindTagged(*view.Get(), core::StringView(u8"listviewrow"));
+    REQUIRE(row != nullptr);
+    CHECK(item->GetBox().BackgroundColor.a == doctest::Approx(0.0f));
+    CHECK(row->GetBox().BackgroundColor.a == doctest::Approx(0.0f));
+
+    item->SetHovered(true);
+    row->SetHovered(true);
+    mgr.ApplyTree(*root.Get());
+    CHECK(item->GetBox().BackgroundColor.a > 0.0f);
+    CHECK(row->GetBox().BackgroundColor.a > 0.0f);
+    CHECK(item->GetTextColor().a > 0.0f); // still the label's text colour
+
+    // A sheet retints the hover with one token.
+    mgr.SetStyleSheet(CSSParser::Parse(core::StringView(u8":root { --list-hover: #ff0000; }")));
+    mgr.SetUserAgentSheet(CSSParser::Parse(DefaultThemeCSS()));
+    mgr.ApplyTree(*root.Get());
+    CHECK(item->GetBox().BackgroundColor.r == doctest::Approx(1.0f));
+}

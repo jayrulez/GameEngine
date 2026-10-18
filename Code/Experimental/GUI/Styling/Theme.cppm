@@ -55,11 +55,12 @@ export namespace experimental::gui
                 --control-hover: color-mix(in srgb, var(--control-raised) 94%, white);
                 --chrome-hover: color-mix(in srgb, var(--chrome-raised) 90%, white);
                 --overlay-hover: rgba(255, 255, 255, 0.18);
+                --row-hover: rgba(255, 255, 255, 0.07);
                 --disabled-opacity: 0.45;
             }
             /* 3. Widgets, each part through a token of its own. */
             .panel    { background-color: var(--panel-background, var(--surface)); }
-            label, menuitem, menusubmenu, checkbox, radio, switch, expanderheader { color: var(--label-text, var(--text)); }
+            label, listboxitem, menuitem, menusubmenu, checkbox, radio, switch, expanderheader { color: var(--label-text, var(--text)); }
             button    { background-color: var(--button-background, var(--accent)); color: var(--button-text, var(--on-accent));
                         padding: var(--button-padding, var(--space-l)); text-align: center; transition: opacity var(--motion-fast); }
             button:hover  { opacity: 0.9; }
@@ -88,6 +89,7 @@ export namespace experimental::gui
             tableheadercell { color: var(--table-header-text, var(--text-dim)); }
             treeview  { background-color: var(--list-background, var(--surface-sunken)); color: var(--list-text, var(--text)); }
             treeview::selection { background-color: var(--list-selection, var(--selection)); }
+            listboxitem:hover, listviewrow:hover, tablerow:hover, treerow:hover { background-color: var(--list-hover, var(--row-hover)); }
             combobox  { background-color: var(--combobox-background, var(--control)); color: var(--combobox-text, var(--text-strong));
                         padding: var(--space-s); }
             scrollview { background-color: var(--scrollview-background, var(--surface-sunken)); }
@@ -157,6 +159,7 @@ export namespace experimental::gui
                     --control-hover: color-mix(in srgb, var(--control-raised) 94%, black);
                     --chrome-hover: color-mix(in srgb, var(--chrome-raised) 92%, black);
                     --overlay-hover: rgba(0, 0, 0, 0.12);
+                    --row-hover: rgba(0, 0, 0, 0.06);
                     --tab-checked-background: #ffffff; --tab-checked-text: #17202b; --tab-dragging-background: #9cc0ef; --tab-dragging-text: #17202b;
                     --menu-highlight: #9cc0ef; --menubar-selected: #9cc0ef; --menubar-selected-text: #17202b;
                     --tabbar-background: #d8dee8; --tabpages-background: #e6eaf1; --slider-thumb: #3a4658;

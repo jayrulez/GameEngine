@@ -60,13 +60,15 @@ export namespace experimental::gui
         return text;
     }
 
-    // One selectable row. Internal to the ListBox, exposed as a Label for styling.
+    // One selectable row. Internal to the ListBox; a Label tagged "listboxitem", so a sheet can
+    // style its rows (`listboxitem:hover`) apart from the labels around the list.
     class ListBoxItem : public Label
     {
         RTTI_OBJECT(ListBoxItem, Label)
     public:
         ListBoxItem()
         {
+            SetTag(core::StringView(u8"listboxitem"));
             StyleWriteScope defaults(*this); // its own values, which a sheet returns to
             SetTextAlignment(TextHAlign::Start, TextVAlign::Middle);
         }

@@ -30,7 +30,7 @@ export namespace experimental::gui
             button    { background-color: #33507a; color: #f4f7fb; padding: 9; text-align: center; transition: opacity 0.15s; }
             button:hover  { opacity: 0.9; }
             button:active { opacity: 0.78; }
-            tab           { background-color: #23262e; color: #c2c9d4; padding: 6 10; column-gap: 6; text-align: left; }
+            tab           { background-color: #23262e; color: #c2c9d4; padding: 6 10; column-gap: 6; text-align: start; }
             tab:hover     { background-color: #2b2f39; }
             tab:checked   { background-color: #33507a; color: #f4f7fb; }
             tab.dragging  { background-color: #4a6fa5; color: #ffffff; cursor: grabbing; }
@@ -104,7 +104,7 @@ export namespace experimental::gui
             button    { background-color: #cdd8ea; color: #17202b; padding: 9; text-align: center; transition: opacity 0.15s; }
             button:hover  { opacity: 0.9; }
             button:active { opacity: 0.78; }
-            tab           { background-color: #cfd6e2; color: #3a4453; padding: 6 10; column-gap: 6; text-align: left; }
+            tab           { background-color: #cfd6e2; color: #3a4453; padding: 6 10; column-gap: 6; text-align: start; }
             tab:hover     { background-color: #c2cad8; }
             tab:checked   { background-color: #ffffff; color: #17202b; }
             tab.dragging  { background-color: #9cc0ef; color: #17202b; cursor: grabbing; }

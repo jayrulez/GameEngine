@@ -910,6 +910,8 @@ namespace experimental::gui
             HandleSizeChange();
         }
         m_placing = false;
+        if (m_mirrorOnRtl)
+            RefreshMirror(); // laid out again when the direction changes
         if (resized || m_layoutDirty)
         {
             m_layoutDirty = false;
@@ -1101,10 +1103,12 @@ namespace experimental::gui
         const Thickness b = GetBorderThickness();
         const f32 w = core::Max(0.0f, m_size.x - b.TotalHorizontal());
         const f32 h = core::Max(0.0f, m_size.y - b.TotalVertical());
+        // The vertical bar on the inline end (the left in right to left, E9b); the offsets stay physical.
+        const bool rtl = IsRightToLeft();
         if (axis == 1 && showY)
-            return Rect{m_size.x - b.Right - barWidth, b.Top, barWidth, showX ? core::Max(0.0f, h - barWidth) : h};
+            return Rect{rtl ? b.Left : m_size.x - b.Right - barWidth, b.Top, barWidth, showX ? core::Max(0.0f, h - barWidth) : h};
         if (axis == 0 && showX)
-            return Rect{b.Left, m_size.y - b.Bottom - barWidth, showY ? core::Max(0.0f, w - barWidth) : w, barWidth};
+            return Rect{rtl && showY ? b.Left + barWidth : b.Left, m_size.y - b.Bottom - barWidth, showY ? core::Max(0.0f, w - barWidth) : w, barWidth};
         return Rect{};
     }
 

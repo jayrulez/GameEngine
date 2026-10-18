@@ -1714,6 +1714,26 @@ export namespace experimental::gui
             }
             return false;
         }
+        /// Whether its drawing (with what it holds) flips left for right in right to left: an
+        /// arrow or icon that points along the line (CSS has none; the lab's `mirror-on-rtl`).
+        void SetMirrorOnRtl(bool mirror)
+        {
+            if (mirror == m_mirrorOnRtl)
+                return;
+            m_mirrorOnRtl = mirror;
+            RefreshMirror();
+        }
+        [[nodiscard]] bool GetMirrorOnRtl() const noexcept { return m_mirrorOnRtl; }
+        /// Whether it is drawn flipped now.
+        [[nodiscard]] bool IsMirrored() const noexcept { return m_mirrored; }
+        void RefreshMirror()
+        {
+            const bool mirrored = m_mirrorOnRtl && IsRightToLeft();
+            if (mirrored == m_mirrored)
+                return;
+            m_mirrored = mirrored;
+            UpdateStyleTransform();
+        }
         /// The direction changed here or above: the subtree lays out again (its rows run the other
         /// way) and restyles (text-align's start and end follow it).
         void DirectionChanged()
@@ -2057,7 +2077,7 @@ export namespace experimental::gui
         }
         void HandleSizeChange()
         {
-            if (!m_styleTransforms.IsEmpty())
+            if (!m_styleTransforms.IsEmpty() || m_mirrored)
                 UpdateStyleTransform();
             OnSizeChange();
             Invalidate();
@@ -2246,6 +2266,8 @@ export namespace experimental::gui
         u8 m_quietInvalidations = 0;            // inside BeginQuietInvalidation's
         AutoTranslate m_autoTranslate = AutoTranslate::Inherit;
         LayoutDirection m_direction = LayoutDirection::Inherit;
+        bool m_mirrorOnRtl = false;
+        bool m_mirrored = false; // mirror-on-rtl, and it runs right to left: flipped about its centre
         mutable Observable m_translationChanged; // its auto-translation changed (its translated bindings follow)
         core::String m_lang;                     // its language, empty: inherited
         struct TranslatedProperty
@@ -2281,11 +2303,18 @@ export namespace experimental::gui
         bool m_hitTestVisible = true;
         u32 m_nextListenerId = 0;
         // The style transform's matrix and origin in local units, from the functions and the size.
+        // Mirrored (E9b), flipped about its centre first, wherever the origin is.
         void UpdateStyleTransform()
         {
-            SetExtraTransform(ComposeTransforms(m_styleTransforms, m_size),
-                              core::Float2{ResolveAgainst(m_transformOriginX, m_size.x),
-                                           ResolveAgainst(m_transformOriginY, m_size.y)});
+            const core::Float2 origin{ResolveAgainst(m_transformOriginX, m_size.x), ResolveAgainst(m_transformOriginY, m_size.y)};
+            Transform2D transform = ComposeTransforms(m_styleTransforms, m_size);
+            if (m_mirrored)
+            {
+                Transform2D flip = Transform2D::Identity();
+                flip.Scale(-1.0f, 1.0f, m_size.x * 0.5f - origin.x, 0.0f);
+                transform = transform * flip;
+            }
+            SetExtraTransform(transform, origin);
             Invalidate();
         }
 

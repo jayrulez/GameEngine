@@ -1192,6 +1192,20 @@ In mixed-direction text the arrows move the caret visually, delete and backspace
   Right along the way they run. `mirror-on-rtl` flips a node's drawing about its centre, through
   the style transform. A right-to-left horizontal scroller still starts at offset 0 (its left);
   starting at its inline start waits for a use.
+- **E9c as built.** The formatter (`LayOutText`) resolves each paragraph's levels through
+  `BidiResolverFactory` (its base the Text's direction, which a widget takes from its node),
+  splits a piece where the level changes, wraps in logical order, then places each line's pieces
+  in visual order (L1 by piece, L2 through `ReorderLine`), each shaped through `Shape` in the way
+  it reads. Text with nothing right to left in a left-to-right paragraph takes the old path, so
+  the image tests are unchanged. `TextHAlign::Start` and `End` resolve per line and are the
+  defaults; text-align's start and end map to them. A caret has an affinity (upstream: after the
+  text before it); `OffsetAt` reports which edge it found. Left and Right walk a line's caret places
+  sorted by x through `ITextCaretPlaces`, which every text field provides; word moves, deletes, Home
+  and End stay logical, and a selection collapses to its logical start or end. Ranges draw as the
+  boxes their glyphs cover. GUISandbox installs foundation.fonts.bidi; not HarfBuzz yet, so Arabic
+  draws unjoined (the stb shaper), which E9e's page needs settled: installing it moves Latin
+  glyphs by their kerning and the image references with them. `direction: auto` (a paragraph's
+  first strong character, for text the user types) waits for that page too.
 
 Not in E9: the platform adapters (UI Automation, NSAccessibility, AT-SPI) and real text to speech,
 which are host work with hosting; vertical text; locale-aware number and date formats.

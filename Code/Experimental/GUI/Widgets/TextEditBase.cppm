@@ -223,7 +223,7 @@ export namespace experimental::gui
             const f32 left = origin.x + layout.CaretX(start);
             const f32 right = origin.x + layout.CaretX(end);
             area = Rect{left, origin.y + line.Top, core::Max(1.0f, right - left), line.Height};
-            caretX = origin.x + layout.CaretX(DisplayCaret());
+            caretX = origin.x + layout.CaretX(DisplayCaret(), CaretUpstream());
             return true;
         }
 
@@ -232,6 +232,7 @@ export namespace experimental::gui
         {
             SetTabFocusable(true);
             SetKeyContext(core::StringView(u8"textinput"));
+            m_model.SetCaretPlaces(&m_places); // Left and Right across what it shows (E9c)
             m_text.SetAlignment(TextHAlign::Start, TextVAlign::Top);
             m_hintText.SetAlignment(TextHAlign::Start, TextVAlign::Top);
             m_hintText.SetColor(m_placeholderColor);
@@ -460,7 +461,8 @@ export namespace experimental::gui
             if (event.Button != MouseButton::Left)
                 return;
             const bool shift = (event.Modifiers & static_cast<u32>(KeyModShift)) != 0;
-            const usize pos = OffsetAtPoint(ConvertToNodeSpace(event.Position));
+            bool upstream = false;
+            const usize pos = OffsetAtPoint(ConvertToNodeSpace(event.Position), &upstream);
 
             // A double press selects the word, a triple everything (the dispatcher counts them).
             if (event.ClickCount >= 2 && !shift)
@@ -473,7 +475,7 @@ export namespace experimental::gui
                 CaretMoved();
                 return;
             }
-            m_model.SetCaret(pos, shift); // Shift extends from the anchor
+            m_model.SetCaret(pos, shift, upstream); // Shift extends from the anchor
             m_selecting = true;           // begin a drag-select (pointer is captured)
             CaretMoved();
         }
@@ -482,7 +484,9 @@ export namespace experimental::gui
         {
             if (!m_selecting)
                 return;
-            m_model.SetCaret(OffsetAtPoint(ConvertToNodeSpace(event.Position)), true);
+            bool upstream = false;
+            const usize pos = OffsetAtPoint(ConvertToNodeSpace(event.Position), &upstream);
+            m_model.SetCaret(pos, true, upstream);
             CaretMoved();
         }
 
@@ -561,7 +565,7 @@ export namespace experimental::gui
                 const usize caret = DisplayCaret();
                 const LaidOutLine line = LineAt(layout, caret);
                 const f32 h = line.Height > 0.0f ? line.Height : m_text.GetLineHeight();
-                GetPartStyle(u8"caret").Draw(ctx, Rect{origin.x + layout.CaretX(caret), origin.y + line.Top, kCaretWidth, h},
+                GetPartStyle(u8"caret").Draw(ctx, Rect{origin.x + layout.CaretX(caret, CaretUpstream()), origin.y + line.Top, kCaretWidth, h},
                                              FilledBox(m_caretColor));
             }
             ctx.PopClip();
@@ -584,16 +588,54 @@ export namespace experimental::gui
                 const bool takesBreak = !wraps && end > line.End && i + 1 < layout.Lines.Size();
                 if (a > b || (a == b && !takesBreak))
                     continue;
-                const f32 x0 = layout.CaretXOnLine(a, i);
-                const f32 x1 = layout.CaretXOnLine(b, i) + (takesBreak && !underline ? 4.0f : 0.0f);
-                if (underline)
-                    ctx.VG().FillRect(Rectangle{origin.x + x0, origin.y + line.Top + line.Height - 1.0f, x1 - x0, 1.0f},
-                                      m_text.GetColor());
-                else
-                    GetPartStyle(u8"selection").Draw(ctx, Rect{origin.x + x0, origin.y + line.Top, x1 - x0, line.Height},
-                                                     FilledBox(m_selectionColor));
+                // In pieces where directions mix (E9c); a break taken in shows past the line's end.
+                layout.RangeOnLine(a, b, i, m_rangeBoxes);
+                if (takesBreak && !underline)
+                {
+                    const f32 end = layout.CaretXOnLine(line.End, i, true);
+                    m_rangeBoxes.PushBack(line.RightToLeft ? core::Float2{end - 4.0f, end} : core::Float2{end, end + 4.0f});
+                }
+                for (const core::Float2 box : m_rangeBoxes)
+                {
+                    if (underline)
+                        ctx.VG().FillRect(Rectangle{origin.x + box.x, origin.y + line.Top + line.Height - 1.0f, box.y - box.x, 1.0f},
+                                          m_text.GetColor());
+                    else
+                        GetPartStyle(u8"selection").Draw(ctx, Rect{origin.x + box.x, origin.y + line.Top, box.y - box.x, line.Height},
+                                                         FilledBox(m_selectionColor));
+                }
             }
         }
+        // Where the caret shows: after the text before it (the model's affinity) unless composing.
+        [[nodiscard]] bool CaretUpstream() const { return !Composing() && m_model.IsCaretUpstream(); }
+
+        // Where carets stand in what it shows: the layout's, offsets mapped through the mask or
+        // the composition.
+        class ShownCaretPlaces : public ITextCaretPlaces
+        {
+        public:
+            explicit ShownCaretPlaces(TextEditBase& edit) : m_edit(edit) {}
+            [[nodiscard]] bool OffsetVisually(usize offset, bool upstream, i32 step, usize& outOffset, bool& outUpstream) const override
+            {
+                const TextLayout& layout = m_edit.EditLayout();
+                if (layout.GlyphRuns.IsEmpty())
+                {
+                    // Nothing shaped (no font yet): by a grapheme, as the bytes go.
+                    const core::StringView text = m_edit.m_model.GetText();
+                    outOffset = step < 0 ? PrevGrapheme(text, offset) : NextGrapheme(text, offset);
+                    outUpstream = false;
+                    return true;
+                }
+                usize display = 0;
+                if (!layout.OffsetVisually(m_edit.DisplayOffset(offset), upstream, step, display, outUpstream))
+                    return false;
+                outOffset = m_edit.ModelOffset(display);
+                return true;
+            }
+
+        private:
+            TextEditBase& m_edit;
+        };
 
         // === The model's changes ===
         void RunEdit(TextEditCommand command)
@@ -652,10 +694,10 @@ export namespace experimental::gui
             return dispatcher != nullptr ? dispatcher->GetClipboard() : nullptr;
         }
 
-        [[nodiscard]] usize OffsetAtPoint(core::Float2 local) const
+        [[nodiscard]] usize OffsetAtPoint(core::Float2 local, bool* upstream = nullptr) const
         {
             const core::Float2 origin = TextOrigin(GetContentBounds());
-            return ModelOffset(EditLayout().OffsetAt(core::Float2{local.x - origin.x, local.y - origin.y}));
+            return ModelOffset(EditLayout().OffsetAt(core::Float2{local.x - origin.x, local.y - origin.y}, upstream));
         }
 
         core::RefPtr<Menu> m_contextMenu;  // cut, copy, paste, select all (its child while open)
@@ -678,6 +720,8 @@ export namespace experimental::gui
         core::Function<void(core::StringView)> m_onSubmit;
 
         bool m_selecting = false; // drag-select in progress (pointer is captured)
+        ShownCaretPlaces m_places{*this};
+        mutable Array<core::Float2> m_rangeBoxes; // a line's share of a range, reused each draw
 
         // Blink state (advances via Update()), and the model's clock.
         bool m_caretVisible = true;

@@ -114,6 +114,17 @@ export namespace experimental::gui
         [[nodiscard]] virtual i32 LinesPerPage() const = 0;
     };
 
+    /// What a view knows of where carets stand (E9c): Left and Right move across what it shows,
+    /// which in mixed-direction text is not the order of the bytes.
+    class ITextCaretPlaces
+    {
+    public:
+        virtual ~ITextCaretPlaces() = default;
+        /// The caret one place left (`step` below 0) or right of (`offset`, `upstream`); false when
+        /// there is none that way (it stays).
+        [[nodiscard]] virtual bool OffsetVisually(usize offset, bool upstream, i32 step, usize& outOffset, bool& outUpstream) const = 0;
+    };
+
     class TextEditModel
     {
     public:
@@ -127,6 +138,7 @@ export namespace experimental::gui
         {
             m_text = core::String(text);
             m_caret = m_anchor = m_text.Size();
+            m_upstream = false;
             m_undo.Clear();
             EndRun();
             m_goalX = -1.0f;
@@ -137,6 +149,9 @@ export namespace experimental::gui
 
         // === Caret and selection ===
         [[nodiscard]] usize GetCaret() const noexcept { return m_caret; }
+        /// Whether the caret stands after the text before it rather than before the text after it
+        /// (where the two differ, at a direction's boundary, E9c).
+        [[nodiscard]] bool IsCaretUpstream() const noexcept { return m_upstream; }
         [[nodiscard]] usize GetAnchor() const noexcept { return m_anchor; }
         [[nodiscard]] bool HasSelection() const noexcept { return m_caret != m_anchor; }
         [[nodiscard]] TextRange GetSelection() const noexcept
@@ -150,9 +165,10 @@ export namespace experimental::gui
         }
         /// Puts the caret at `offset` (snapped back to a grapheme boundary); `extend` keeps the
         /// anchor, so the selection grows to it.
-        void SetCaret(usize offset, bool extend = false)
+        void SetCaret(usize offset, bool extend = false, bool upstream = false)
         {
             m_caret = Snap(offset);
+            m_upstream = upstream && m_caret == offset;
             if (!extend)
                 m_anchor = m_caret;
             EndRun();
@@ -162,6 +178,7 @@ export namespace experimental::gui
         {
             m_anchor = Snap(range.Start);
             m_caret = Snap(range.End);
+            m_upstream = false;
             EndRun();
             m_goalX = -1.0f;
         }
@@ -184,6 +201,8 @@ export namespace experimental::gui
         [[nodiscard]] bool IsCopyAllowed() const noexcept { return m_copyAllowed; }
         /// The lines vertical movement and Home and End follow (null: the text's own).
         void SetLines(const ITextLines* lines) noexcept { m_lines = lines; }
+        /// Where carets stand in the view (null: Left and Right move by graphemes, as the bytes go).
+        void SetCaretPlaces(const ITextCaretPlaces* places) noexcept { m_places = places; }
         [[nodiscard]] UndoStack& GetUndoStack() noexcept { return m_undo; }
 
         /// The model's clock, in seconds, which undo folding reads.
@@ -203,12 +222,13 @@ export namespace experimental::gui
             const core::StringView text = m_text.AsView();
             switch (command)
             {
+            // Across what the view shows (E9c); a selection collapses to its start or end.
             case C::MoveLeft:
-                return MoveCaret(HasSelection() ? GetSelection().Start : PrevGrapheme(text, m_caret), false);
+                return HasSelection() ? MoveCaret(GetSelection().Start, false) : MoveAcross(-1, false);
             case C::MoveRight:
-                return MoveCaret(HasSelection() ? GetSelection().End : NextGrapheme(text, m_caret), false);
-            case C::SelectLeft: return MoveCaret(PrevGrapheme(text, m_caret), true);
-            case C::SelectRight: return MoveCaret(NextGrapheme(text, m_caret), true);
+                return HasSelection() ? MoveCaret(GetSelection().End, false) : MoveAcross(1, false);
+            case C::SelectLeft: return MoveAcross(-1, true);
+            case C::SelectRight: return MoveAcross(1, true);
             case C::MoveWordLeft:
             case C::SelectWordLeft: return MoveCaret(PrevWordBoundary(text, m_caret), command == C::SelectWordLeft);
             case C::MoveWordRight:
@@ -302,8 +322,23 @@ export namespace experimental::gui
             return offset;
         }
 
-        bool MoveCaret(usize to, bool extend)
+        // One place left or right: across the view where it says where carets stand, else by a
+        // grapheme as the bytes go.
+        bool MoveAcross(i32 step, bool extend)
         {
+            const core::StringView text = m_text.AsView();
+            if (m_places == nullptr)
+                return MoveCaret(step < 0 ? PrevGrapheme(text, m_caret) : NextGrapheme(text, m_caret), extend);
+            usize to = m_caret;
+            bool upstream = m_upstream;
+            if (!m_places->OffsetVisually(m_caret, m_upstream, step, to, upstream))
+                return MoveCaret(m_caret, extend, m_upstream);
+            const usize snapped = Snap(core::Min(to, text.Size()));
+            return MoveCaret(snapped, extend, upstream && snapped == to);
+        }
+        bool MoveCaret(usize to, bool extend, bool upstream = false)
+        {
+            m_upstream = upstream;
             m_caret = to;
             if (!extend)
                 m_anchor = to;
@@ -334,6 +369,7 @@ export namespace experimental::gui
                 to = OffsetByTextLines(lines);
             }
             m_caret = to; // the goal stays for the next vertical move
+            m_upstream = false;
             if (!extend)
                 m_anchor = to;
             EndRun();
@@ -381,6 +417,7 @@ export namespace experimental::gui
             Remember(HasSelection() ? RunKind::Other : kind);
             m_text.Remove(range.Start, range.End - range.Start);
             m_caret = m_anchor = range.Start;
+            m_upstream = false;
             m_goalX = -1.0f;
             Changed();
             return true;
@@ -427,6 +464,7 @@ export namespace experimental::gui
             m_text.Remove(selection.Start, selection.End - selection.Start);
             m_text.Insert(selection.Start, accepted.AsView());
             m_caret = m_anchor = selection.Start + accepted.Size();
+            m_upstream = false;
             m_goalX = -1.0f;
             Changed();
             return true;
@@ -453,6 +491,7 @@ export namespace experimental::gui
                 return true;
             m_text = core::Move(restored.Text);
             m_caret = core::Min(restored.Caret, m_text.Size());
+            m_upstream = false;
             m_anchor = core::Min(restored.Anchor, m_text.Size());
             EndRun();
             m_goalX = -1.0f;
@@ -469,6 +508,8 @@ export namespace experimental::gui
         UndoStack m_undo;
         InputFilter m_filter;
         const ITextLines* m_lines = nullptr;
+        const ITextCaretPlaces* m_places = nullptr;
+        bool m_upstream = false; // the caret's affinity (E9c)
         usize m_maxLength = 0;
         f32 m_goalX = -1.0f; // where vertical movement aims across (-1: from the caret)
         f64 m_now = 0.0;

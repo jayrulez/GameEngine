@@ -5,7 +5,9 @@
 // paragraph's levels through Foundation's resolver (SheenBidi installed here, as GUISandbox does),
 // wraps in logical order, then lays each line out in visual order, each piece shaped the way it
 // reads; start and end alignment follow the paragraph; a caret's x is a glyph's leading edge and a
-// point's offset the nearest edge, both the right way round in right-to-left text. Over DejaVu Sans
+// point's offset the nearest edge, both the right way round in right-to-left text, with an affinity
+// where the directions meet; Left and Right step through a line's caret places in visual order; a
+// range is a box per stretch of glyphs side by side. Over DejaVu Sans
 // Mono, which draws Arabic.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -176,4 +178,107 @@ TEST_CASE("bidi text: left-to-right text lays out the same with the resolver ins
         for (usize g = 0; g < before.GlyphRuns[r].Glyphs.Size(); ++g)
             CHECK(before.GlyphRuns[r].Glyphs[g].x == after.GlyphRuns[r].Glyphs[g].x);
     }
+}
+
+TEST_CASE("bidi text: Right steps through every caret place of a mixed line once, left to right")
+{
+    DejaVu font;
+    Bidi bidi;
+    String text(u8"ab ");
+    text.Append(StringView(kWord)); // a 0, b 1, a space 2, Arabic 3 to 11
+    const TextLayout layout = LayOutText(ParseTextMarkup(text.AsView()), Style(font, fonts::TextDirection::LeftToRight));
+    usize offset = 0;
+    bool upstream = false;
+    f32 x = layout.CaretX(offset, upstream);
+    int steps = 0;
+    usize next = 0;
+    bool nextUpstream = false;
+    while (layout.OffsetVisually(offset, upstream, 1, next, nextUpstream))
+    {
+        const f32 nx = layout.CaretX(next, nextUpstream);
+        CHECK(nx > x);
+        x = nx;
+        offset = next;
+        upstream = nextUpstream;
+        REQUIRE(++steps < 20);
+    }
+    CHECK(steps == 7); // three Latin edges and the space's, three inside the Arabic, its right end
+    CHECK(x == doctest::Approx(layout.Lines[0].Width));
+    CHECK(offset == 3u); // the right end is the Arabic's start
+    // And back again, the same places.
+    int back = 0;
+    while (layout.OffsetVisually(offset, upstream, -1, next, nextUpstream))
+    {
+        offset = next;
+        upstream = nextUpstream;
+        REQUIRE(++back < 20);
+    }
+    CHECK(back == 7);
+    CHECK(offset == 0u);
+}
+
+TEST_CASE("bidi text: a point's caret draws where it was found; a range across directions is in pieces")
+{
+    DejaVu font;
+    Bidi bidi;
+    String text(u8"ab ");
+    text.Append(StringView(kWord));
+    const TextLayout layout = LayOutText(ParseTextMarkup(text.AsView()), Style(font, fonts::TextDirection::LeftToRight));
+    const LaidOutLine& line = layout.Lines[0];
+    for (const LaidOutGlyphs& run : layout.GlyphRuns)
+        for (const fonts::GlyphPosition& g : run.Glyphs)
+        {
+            const f32 edges[] = {g.x, g.x + g.advance};
+            for (const f32 edge : edges)
+            {
+                bool upstream = false;
+                const usize at = layout.OffsetAt(Float2{edge, line.Top + 1.0f}, &upstream);
+                CHECK(layout.CaretX(at, upstream) == doctest::Approx(edge));
+            }
+        }
+    Array<Float2> boxes;
+    layout.RangeOnLine(0, 5, 0, boxes); // "ab ", then the first Arabic letter, at the far right
+    REQUIRE(boxes.Size() == 2u);
+    CHECK(boxes[0].x == doctest::Approx(0.0f));
+    CHECK(boxes[1].y == doctest::Approx(line.Width));
+    layout.RangeOnLine(0, 11, 0, boxes);
+    CHECK(boxes.Size() == 1u); // all of it: one box
+}
+
+namespace
+{
+    // Caret places that run against the bytes, as a right-to-left line's do.
+    struct Reversed : ITextCaretPlaces
+    {
+        usize Size = 0;
+        bool OffsetVisually(usize offset, bool, i32 step, usize& out, bool& upstream) const override
+        {
+            upstream = false;
+            if (step > 0 ? offset == 0 : offset >= Size)
+                return false;
+            out = step > 0 ? offset - 1 : offset + 1;
+            return true;
+        }
+    };
+}
+
+TEST_CASE("bidi text: the model moves Left and Right across the view's caret places, and stays at their ends")
+{
+    TextEditModel model;
+    model.SetText(StringView(u8"abcd"));
+    Reversed places;
+    places.Size = 4;
+    model.SetCaretPlaces(&places);
+    model.SetCaret(1);
+    CHECK(model.Run(TextEditCommand::MoveLeft));
+    CHECK(model.GetCaret() == 2u); // left goes on through the text
+    CHECK(model.Run(TextEditCommand::SelectRight));
+    CHECK(model.GetCaret() == 1u);
+    CHECK(model.GetAnchor() == 2u);
+    model.SetCaret(0);
+    CHECK(model.Run(TextEditCommand::MoveRight));
+    CHECK(model.GetCaret() == 0u); // nowhere further that way
+    model.SetCaretPlaces(nullptr);
+    CHECK(model.Run(TextEditCommand::MoveRight));
+    CHECK(model.GetCaret() == 1u); // without, as the bytes go
 }

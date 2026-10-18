@@ -220,3 +220,74 @@ TEST_CASE("tween: over a running transition, and a sheet transition after it end
     bed.Frame(1.0); // the transition ended; the tween still holds
     CHECK(bed.widget->GetAlpha() == doctest::Approx(1.0f));
 }
+
+TEST_CASE("tween: a sequence runs its steps in order, each from where the last left the time")
+{
+    Bed bed(u8"box { opacity: 1; background-color: #000000; }");
+    core::Array<int> order;
+    auto sequence = core::MakeRef<TweenSequence>(core::DefaultAllocator());
+    sequence->Add(bed.widget->CreateTween(SV(u8"opacity"), SV(u8"0"), 1.0f, SV(u8"linear")))
+        .Call([&order]() { order.PushBack(1); })
+        .Wait(0.5f)
+        .Add(bed.widget->CreateTween(SV(u8"background-color"), SV(u8"#ff0000"), 1.0f, SV(u8"linear")))
+        .Call([&order]() { order.PushBack(2); });
+    int finished = 0;
+    sequence->OnFinished([&finished]() { ++finished; });
+    bed.widget->RunAction(sequence);
+    bed.Frame(0.5);
+    CHECK(bed.widget->GetAlpha() == doctest::Approx(0.5f));
+    CHECK(bed.Red() == doctest::Approx(0.0f)); // not yet
+    bed.Frame(1.25); // the fade ends at 1.0, the call, the wait to 1.5, then 0.25 of the colour
+    CHECK(bed.widget->GetAlpha() == doctest::Approx(0.0f));
+    REQUIRE(order.Size() == 1u);
+    CHECK(bed.Red() == doctest::Approx(0.25f));
+    bed.Frame(1.0);
+    CHECK(bed.Red() == doctest::Approx(1.0f));
+    REQUIRE(order.Size() == 2u);
+    CHECK(order[1] == 2);
+    CHECK(finished == 1);
+    CHECK(sequence->IsDone());
+}
+
+TEST_CASE("tween: a parallel group runs its steps together and ends with the last; a group repeats")
+{
+    Bed bed(u8"box { opacity: 1; background-color: #000000; }");
+    auto together = core::MakeRef<TweenParallel>(core::DefaultAllocator());
+    together->Add(bed.widget->CreateTween(SV(u8"opacity"), SV(u8"0"), 0.5f, SV(u8"linear")))
+        .Add(bed.widget->CreateTween(SV(u8"background-color"), SV(u8"#ff0000"), 1.0f, SV(u8"linear")))
+        .Repeat(2);
+    int finished = 0;
+    together->OnFinished([&finished]() { ++finished; });
+    bed.widget->RunAction(together);
+    bed.Frame(0.25);
+    CHECK(bed.widget->GetAlpha() == doctest::Approx(0.5f));
+    CHECK(bed.Red() == doctest::Approx(0.25f));
+    bed.Frame(0.5); // the fade ended at 0.5; the colour runs on
+    CHECK(bed.widget->GetAlpha() == doctest::Approx(0.0f));
+    CHECK(bed.Red() == doctest::Approx(0.75f));
+    bed.Frame(0.5); // the first run ended at 1.0; 0.25 into the second, each from where it showed
+    CHECK(finished == 0);
+    CHECK(bed.Red() == doctest::Approx(1.0f));
+    CHECK(bed.widget->GetAlpha() == doctest::Approx(0.0f));
+    bed.Frame(1.0);
+    CHECK(finished == 1);
+    CHECK(together->IsDone());
+}
+
+TEST_CASE("tween: a tween started on its own takes its property from a group's step")
+{
+    Bed bed(u8"box { opacity: 1; }");
+    auto sequence = core::MakeRef<TweenSequence>(core::DefaultAllocator());
+    core::RefPtr<Tween> inGroup = bed.widget->CreateTween(SV(u8"opacity"), SV(u8"0"), 1.0f, SV(u8"linear"));
+    sequence->Add(inGroup);
+    bed.widget->RunAction(sequence);
+    bed.Frame(0.5);
+    REQUIRE(bed.widget->GetAlpha() == doctest::Approx(0.5f));
+    bed.widget->Animate(SV(u8"opacity"), SV(u8"1"), 0.5f, SV(u8"linear"));
+    CHECK(inGroup->IsDone());
+    bed.Frame(0.25);
+    CHECK(bed.widget->GetAlpha() == doctest::Approx(0.75f));
+    CHECK(bed.widget->StopAnimation(SV(u8"opacity")));
+    bed.Frame(0.0);
+    CHECK(bed.widget->GetAlpha() == doctest::Approx(1.0f));
+}

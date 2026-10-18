@@ -22,41 +22,63 @@ namespace experimental::gui
 
     namespace
     {
-        // The running tween of `property` on `node`, or null.
-        Tween* RunningTween(Node& node, core::StringView property)
+        // Calls `f(tween)` for each running tween, inside groups too.
+        template <typename F>
+        void VisitRunning(Action& action, F& f)
         {
-            ActionManager* manager = node.GetActionManager();
-            if (manager == nullptr)
-                return nullptr;
-            Tween* found = nullptr;
-            manager->ForEachAction([&](Action& action)
-            {
-                if (Tween* tween = core::Cast<Tween>(&action); tween != nullptr && !tween->IsDone() &&
-                                                               tween->ResolveTarget() == &node && tween->GetProperty() == property)
-                    found = tween;
-            });
-            return found;
+            if (action.IsDone())
+                return;
+            if (Tween* tween = core::Cast<Tween>(&action))
+                f(*tween);
+            else if (TweenGroup* group = core::Cast<TweenGroup>(&action))
+                group->ForEachRunning([&f](Action& step) { VisitRunning(step, f); });
         }
+        template <typename F>
+        void ForEachRunningTween(Node& node, F&& f)
+        {
+            if (ActionManager* manager = node.GetActionManager())
+                manager->ForEachAction([&f](Action& action) { VisitRunning(action, f); });
+        }
+    }
+
+    void ReplaceOthersOf(Tween& tween)
+    {
+        Node* target = tween.ResolveTarget();
+        if (target == nullptr)
+            return;
+        ForEachRunningTween(*target, [&](Tween& other)
+        {
+            if (&other != &tween && other.ResolveTarget() == target && other.GetProperty() == tween.GetProperty())
+                other.Replace(); // the new one starts from the value it shows
+        });
+    }
+
+    RefPtr<Tween> Node::CreateTween(core::StringView property, core::StringView to, f32 seconds, core::StringView easing)
+    {
+        RefPtr<Tween> tween = core::MakeRef<Tween>(MemoryAllocator(), core::String(property), core::String(to), seconds,
+                                                   ParseEasing(easing).ValueOr(Easing::Ease()));
+        TargetAction(*tween);
+        return tween;
     }
 
     RefPtr<Tween> Node::Animate(core::StringView property, core::StringView to, f32 seconds, core::StringView easing)
     {
-        if (Tween* running = RunningTween(*this, property))
-            running->Replace(); // the new one starts from the value it shows
-        RefPtr<Tween> tween = core::MakeRef<Tween>(MemoryAllocator(), core::String(property), core::String(to), seconds,
-                                                   ParseEasing(easing).ValueOr(Easing::Ease()));
-        RunAction(tween);
+        RefPtr<Tween> tween = CreateTween(property, to, seconds, easing);
+        RunAction(tween); // its start replaces the one running
         return tween;
     }
 
     bool Node::StopAnimation(core::StringView property)
     {
         bool stopped = false;
-        if (Tween* running = RunningTween(*this, property))
+        ForEachRunningTween(*this, [&](Tween& tween)
         {
-            running->Cancel();
-            stopped = true;
-        }
+            if (tween.ResolveTarget() == this && tween.GetProperty() == property)
+            {
+                tween.Cancel();
+                stopped = true;
+            }
+        });
         if (UINode* node = core::Cast<UINode>(this))
             stopped = node->RemoveMotion(property) || stopped;
         return stopped;

@@ -1315,6 +1315,9 @@ export namespace experimental::gui
         /// repeats); inert on a node in no GUI. Defined in Styling/TweenImpl.cpp.
         RefPtr<Tween> Animate(core::StringView property, core::StringView to, f32 seconds,
                               core::StringView easing = core::StringView(u8"ease"));
+        /// A tween of this node as Animate makes one, not yet running: a step for a group (E14).
+        RefPtr<Tween> CreateTween(core::StringView property, core::StringView to, f32 seconds,
+                                  core::StringView easing = core::StringView(u8"ease"));
         /// Stops what moves `property` and gives it back to the sheet (a tween that ended holds
         /// its end until this); false when nothing moved it.
         bool StopAnimation(core::StringView property);
@@ -1325,12 +1328,19 @@ export namespace experimental::gui
         {
             if (!action)
                 return;
-            action->SetTarget(this);
-            // Held weakly too: a node destroyed mid-animation takes its actions with it.
-            if (const ElementRef ref = TakeElementRef(); ref.table != nullptr)
-                action->SetWeakTarget(Action::WeakTarget{ref.table, ref.slot, ref.generation, &ResolveActionTarget});
+            TargetAction(*action);
             if (ActionManager* manager = GetActionManager())
                 manager->AddAction(core::Move(action));
+        }
+
+        /// Makes this node `action`'s target, held weakly too: a node destroyed mid-animation takes
+        /// its actions with it. RunAction does it; a step of a group (E14) is targeted so, then run
+        /// by its group.
+        void TargetAction(Action& action)
+        {
+            action.SetTarget(this);
+            if (const ElementRef ref = TakeElementRef(); ref.table != nullptr)
+                action.SetWeakTarget(Action::WeakTarget{ref.table, ref.slot, ref.generation, &ResolveActionTarget});
         }
 
         [[nodiscard]] static Node* ResolveActionTarget(const Action::WeakTarget& weak)

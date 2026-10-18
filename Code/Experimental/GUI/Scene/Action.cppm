@@ -51,6 +51,9 @@ export namespace experimental::gui
         /// frames while its target is out of view (E8b); it still runs, so it is caught up when the
         /// target shows. True unless an action knows better.
         [[nodiscard]] virtual bool CanMoveTarget() const { return true; }
+        /// How much of the time its last Update was given ran past its end (E14): a group's next
+        /// step starts with it, so a sequence keeps time whatever the frames.
+        [[nodiscard]] virtual core::Duration GetOverrun() const { return core::Duration{}; }
 
         void SetTarget(Node* target)
         {

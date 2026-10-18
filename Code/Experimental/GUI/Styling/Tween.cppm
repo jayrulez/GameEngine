@@ -27,6 +27,7 @@ import :style_value;
 import :style_properties;
 import :style_sheet;   // ResolvedStyle::ParseLonghand
 import :style_applier; // the reflected properties' lookup and parsing, as a sheet's
+import :style_interpolation;
 import :easing;
 
 using namespace foundation::core;
@@ -36,6 +37,11 @@ export namespace experimental::gui
 {
     /// A mark no other tween has had (in the library, so every binary draws from one count).
     [[nodiscard]] u64 NextTweenOwner() noexcept;
+
+    class Tween;
+    /// Another tween of `tween`'s property on its node, running on its own or in a group, gives
+    /// way to it (defined in TweenImpl.cpp, which sees the action manager).
+    void ReplaceOthersOf(Tween& tween);
 
     class Tween : public Action
     {
@@ -104,10 +110,15 @@ export namespace experimental::gui
         void Replace() noexcept { m_done = true; }
 
         // === Action ===
+        /// Starting (run, or reached in its group, or again for a group's next run) it takes its
+        /// property from any other tween moving it, and reads its values afresh at its first frame.
         void Start() override
         {
             m_elapsed = 0.0f;
+            m_overrun = 0.0f;
             m_done = false;
+            m_route = Route::Unbound;
+            ReplaceOthersOf(*this);
         }
         void Stop() override { m_done = true; }
         void Update(core::Duration elapsed) override
@@ -146,6 +157,7 @@ export namespace experimental::gui
             {
                 finished = true;
                 run = m_iterations > 0 ? static_cast<u32>(m_iterations - 1) : 0;
+                m_overrun = active;
             }
             else
             {
@@ -154,6 +166,7 @@ export namespace experimental::gui
                 {
                     finished = true;
                     run = static_cast<u32>(core::Max(m_iterations, 1) - 1);
+                    m_overrun = active - m_seconds * static_cast<f32>(core::Max(m_iterations, 1));
                 }
                 else
                 {
@@ -180,6 +193,7 @@ export namespace experimental::gui
             return core::Duration::FromSeconds(static_cast<f64>(m_delay + m_seconds * static_cast<f32>(core::Max(m_iterations, 1))));
         }
         [[nodiscard]] bool CanMoveTarget() const override { return !IsPaintOnlyStyleProperty(m_property.AsView()); }
+        [[nodiscard]] core::Duration GetOverrun() const override { return core::Duration::FromSeconds(static_cast<f64>(m_overrun)); }
 
     private:
         enum class Route : u8
@@ -225,7 +239,9 @@ export namespace experimental::gui
                 }
                 else if (const MotionValue* before = node->FindMotion(m_property.AsView()); before != nullptr && before->HasShown)
                 {
-                    motion.From = before->Shown; // from where the tween it replaces left it
+                    // From where the tween before it is now: its progress may have moved since the
+                    // style pass last showed it (it ended this frame, before the pass).
+                    motion.From = before->HasUnder ? InterpolateStyleValue(before->Under, before->To, before->Progress) : before->Shown;
                     motion.HasFrom = true;
                 }
                 motion.Owner = m_owner;
@@ -303,9 +319,255 @@ export namespace experimental::gui
         Variant m_to;
         u64 m_owner = 0; // its mark in the layer
         f32 m_elapsed = 0.0f;
+        f32 m_overrun = 0.0f;
         f32 m_progress = 0.0f;
         bool m_done = false;
     };
 
     RTTI_DEFINE_OBJECT(Tween, "rtti::gui")
+
+    // === Groups (E14) ===
+
+    /// A step of a group that waits.
+    class TweenWait : public Action
+    {
+        RTTI_OBJECT(TweenWait, Action)
+    public:
+        explicit TweenWait(f32 seconds) noexcept : m_seconds(core::Max(0.0f, seconds)) {}
+        void Start() override
+        {
+            m_elapsed = 0.0f;
+            m_done = false;
+        }
+        void Stop() override { m_done = true; }
+        void Update(core::Duration elapsed) override
+        {
+            if (m_done)
+                return;
+            m_elapsed += elapsed.AsSecondsF();
+            m_done = m_elapsed >= m_seconds;
+        }
+        [[nodiscard]] bool IsDone() override { return m_done; }
+        [[nodiscard]] f32 GetCurrentProgress() override { return m_seconds > 0.0f ? core::Min(1.0f, m_elapsed / m_seconds) : 1.0f; }
+        [[nodiscard]] core::Duration GetTotalTime() override { return core::Duration::FromSeconds(static_cast<f64>(m_seconds)); }
+        [[nodiscard]] bool CanMoveTarget() const override { return false; }
+        [[nodiscard]] core::Duration GetOverrun() const override
+        {
+            return core::Duration::FromSeconds(static_cast<f64>(core::Max(0.0f, m_elapsed - m_seconds)));
+        }
+
+    private:
+        f32 m_seconds;
+        f32 m_elapsed = 0.0f;
+        bool m_done = false;
+    };
+    RTTI_DEFINE_OBJECT(TweenWait, "rtti::gui")
+
+    /// A step of a group that calls back, taking no time.
+    class TweenCall : public Action
+    {
+        RTTI_OBJECT(TweenCall, Action)
+    public:
+        explicit TweenCall(core::Function<void()> callback) : m_callback(core::Move(callback)) {}
+        void Start() override
+        {
+            m_done = false;
+            m_overrun = 0.0f;
+        }
+        void Stop() override { m_done = true; }
+        void Update(core::Duration elapsed) override
+        {
+            if (m_done)
+                return;
+            m_done = true;
+            m_overrun = elapsed.AsSecondsF();
+            if (m_callback)
+                m_callback();
+        }
+        [[nodiscard]] bool IsDone() override { return m_done; }
+        [[nodiscard]] f32 GetCurrentProgress() override { return m_done ? 1.0f : 0.0f; }
+        [[nodiscard]] core::Duration GetTotalTime() override { return core::Duration{}; }
+        [[nodiscard]] bool CanMoveTarget() const override { return false; }
+        [[nodiscard]] core::Duration GetOverrun() const override { return core::Duration::FromSeconds(static_cast<f64>(m_overrun)); }
+
+    private:
+        core::Function<void()> m_callback;
+        f32 m_overrun = 0.0f;
+        bool m_done = false;
+    };
+    RTTI_DEFINE_OBJECT(TweenCall, "rtti::gui")
+
+    /// Steps run as one (Zero's action groups, Godot's chained and parallel tweens, foundation.ui's
+    /// storyboards): tweens of any nodes, waits, calls and other groups, one after another
+    /// (TweenSequence) or together (TweenParallel), repeated as a whole, calling back at the end.
+    /// Run it on a node (RunAction): the node's GUI keeps its time; each step keeps its own target.
+    class TweenGroup : public Action
+    {
+        RTTI_OBJECT(TweenGroup, Action)
+    public:
+        TweenGroup& Add(RefPtr<Action> step)
+        {
+            if (step)
+                m_steps.PushBack(core::Move(step));
+            return *this;
+        }
+        TweenGroup& Wait(f32 seconds) { return Add(core::MakeRef<TweenWait>(MemoryAllocator(), seconds)); }
+        TweenGroup& Call(core::Function<void()> callback)
+        {
+            return Add(core::MakeRef<TweenCall>(MemoryAllocator(), core::Move(callback)));
+        }
+        /// How many times it runs (1 by default; a negative count runs until stopped).
+        TweenGroup& Repeat(i32 count)
+        {
+            m_iterations = count;
+            return *this;
+        }
+        TweenGroup& OnFinished(core::Function<void()> callback)
+        {
+            m_onFinished = core::Move(callback);
+            return *this;
+        }
+        [[nodiscard]] usize StepCount() const noexcept { return m_steps.Size(); }
+
+        /// Calls `f(step)` for each step running now (a replacement finds a tween inside a group).
+        template <typename F>
+        void ForEachRunning(F&& f)
+        {
+            for (const RefPtr<Action>& step : m_steps)
+                if (IsRunning(*step))
+                    f(*step);
+        }
+
+        void Start() override
+        {
+            m_run = 0;
+            m_done = false;
+            m_overrun = 0.0f;
+            StartRun();
+        }
+        void Stop() override
+        {
+            for (const RefPtr<Action>& step : m_steps)
+                step->Stop();
+            m_done = true;
+        }
+        void Update(core::Duration elapsed) override
+        {
+            f32 seconds = elapsed.AsSecondsF();
+            for (u32 guard = 0; !m_done && guard < 64; ++guard)
+            {
+                f32 over = 0.0f;
+                if (!Advance(seconds, over))
+                    return;
+                ++m_run;
+                if (m_iterations >= 0 && m_run >= static_cast<u32>(core::Max(m_iterations, 1)))
+                {
+                    m_done = true;
+                    m_overrun = over;
+                    if (m_onFinished)
+                        m_onFinished();
+                    FireDone();
+                    return;
+                }
+                StartRun();
+                if (over <= 0.0f)
+                    return;
+                seconds = over; // the next run takes what this one left
+            }
+        }
+        [[nodiscard]] bool IsDone() override { return m_done; }
+        [[nodiscard]] f32 GetCurrentProgress() override { return 0.0f; }
+        [[nodiscard]] core::Duration GetTotalTime() override { return core::Duration{}; }
+        [[nodiscard]] bool CanMoveTarget() const override
+        {
+            for (const RefPtr<Action>& step : m_steps)
+                if (step->CanMoveTarget())
+                    return true;
+            return false;
+        }
+        [[nodiscard]] core::Duration GetOverrun() const override { return core::Duration::FromSeconds(static_cast<f64>(m_overrun)); }
+
+    protected:
+        virtual void StartRun() = 0;
+        /// Runs the steps `seconds` on; true when this run has ended, with what it left over.
+        virtual bool Advance(f32 seconds, f32& overrun) = 0;
+        [[nodiscard]] virtual bool IsRunning(const Action& step) const = 0;
+
+        Array<RefPtr<Action>> m_steps;
+
+    private:
+        i32 m_iterations = 1;
+        u32 m_run = 0;
+        f32 m_overrun = 0.0f;
+        bool m_done = false;
+        core::Function<void()> m_onFinished;
+    };
+    RTTI_DEFINE_OBJECT(TweenGroup, "rtti::gui")
+
+    /// Steps one after another: each starts as the last ends, with the time it left.
+    class TweenSequence : public TweenGroup
+    {
+        RTTI_OBJECT(TweenSequence, TweenGroup)
+    protected:
+        void StartRun() override
+        {
+            m_index = 0;
+            if (!m_steps.IsEmpty())
+                m_steps[0]->Start();
+        }
+        bool Advance(f32 seconds, f32& overrun) override
+        {
+            while (m_index < m_steps.Size())
+            {
+                Action& step = *m_steps[m_index];
+                step.Update(core::Duration::FromSeconds(static_cast<f64>(seconds)));
+                if (!step.IsDone())
+                    return false;
+                seconds = step.GetOverrun().AsSecondsF();
+                if (++m_index < m_steps.Size())
+                    m_steps[m_index]->Start();
+            }
+            overrun = seconds;
+            return true;
+        }
+        [[nodiscard]] bool IsRunning(const Action& step) const override
+        {
+            return m_index < m_steps.Size() && m_steps[m_index].Get() == &step;
+        }
+
+    private:
+        usize m_index = 0;
+    };
+    RTTI_DEFINE_OBJECT(TweenSequence, "rtti::gui")
+
+    /// Steps together: the run ends with the last of them.
+    class TweenParallel : public TweenGroup
+    {
+        RTTI_OBJECT(TweenParallel, TweenGroup)
+    protected:
+        void StartRun() override
+        {
+            for (const RefPtr<Action>& step : m_steps)
+                step->Start();
+        }
+        bool Advance(f32 seconds, f32& overrun) override
+        {
+            bool all = true;
+            f32 least = seconds;
+            for (const RefPtr<Action>& step : m_steps)
+            {
+                if (step->IsDone())
+                    continue;
+                step->Update(core::Duration::FromSeconds(static_cast<f64>(seconds)));
+                if (step->IsDone())
+                    least = core::Min(least, step->GetOverrun().AsSecondsF());
+                else
+                    all = false;
+            }
+            overrun = least; // the time past the end of the step that ended last
+            return all;
+        }
+        [[nodiscard]] bool IsRunning(const Action& step) const override { return !const_cast<Action&>(step).IsDone(); }
+    };
+    RTTI_DEFINE_OBJECT(TweenParallel, "rtti::gui")
 }

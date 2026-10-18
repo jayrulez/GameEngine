@@ -189,6 +189,10 @@ export namespace experimental::gui
             const StyleValue* from = motion.HasFrom ? &motion.From : under;
             // Nothing to move from (no start, nothing underneath): it shows its end.
             StyleValue value = from != nullptr ? InterpolateStyleValue(*from, motion.To, motion.Progress, ctx) : motion.To;
+            // Kept before the override, which writes over the value `from` may point at.
+            motion.HasUnder = from != nullptr;
+            if (from != nullptr)
+                motion.Under = *from;
             style.Override(property, value);
             motion.Shown = core::Move(value);
             motion.HasShown = true;

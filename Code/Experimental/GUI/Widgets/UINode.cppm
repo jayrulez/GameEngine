@@ -49,8 +49,10 @@ export namespace experimental::gui
         bool HasFrom = false;
         StyleValue To;
         f32 Progress = 0.0f; ///< eased: a curve that overshoots leaves [0, 1]
-        StyleValue Shown;    ///< what the last style pass showed (a tween replacing it starts there)
+        StyleValue Shown;    ///< what the last style pass showed
         bool HasShown = false;
+        StyleValue Under;    ///< what it moved from there (From, or the value underneath)
+        bool HasUnder = false;
         u64 Owner = 0; ///< the tween writing it
     };
 

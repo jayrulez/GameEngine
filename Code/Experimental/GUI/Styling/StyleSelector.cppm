@@ -1012,13 +1012,16 @@ export namespace experimental::gui
         i64 s = 0;
         if (m_id.AsView().Size() != 0)
             s += kSpecificityId;
-        u32 pseudo = m_pseudo | (m_partPseudo << 16); // a part's states count as pseudo-classes too
         i64 classes = static_cast<i64>(m_classes.Size() + m_attributes.Size() + m_nths.Size() + (m_langs.IsEmpty() ? 0u : 1u));
-        while (pseudo != 0)
-        {
-            classes += pseudo & 1u;
-            pseudo >>= 1u;
-        }
+        // Its pseudo-classes and its part's states, each one a class's worth (counted apart: the
+        // two sets use the same bits).
+        const u32 sets[2] = {m_pseudo, m_partPseudo};
+        for (u32 pseudo : sets)
+            while (pseudo != 0)
+            {
+                classes += pseudo & 1u;
+                pseudo >>= 1u;
+            }
         s += classes * kSpecificityClass;
         if (m_tag.AsView().Size() != 0)
             s += kSpecificityTag;

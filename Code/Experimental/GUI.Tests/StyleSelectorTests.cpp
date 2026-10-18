@@ -378,3 +378,11 @@ TEST_CASE("selector: positions and siblings follow the children as they are adde
     row.parent->RemoveChild(label.Get());
     CHECK(Sel(u8":nth-last-child(1)").Select(row[2]));
 }
+
+TEST_CASE("selector: a part's state counts as a pseudo-class of its own, beside the compound's")
+{
+    // :first-of-type and the part's :hover both count (they shared bits before).
+    CHECK(Sel(u8"slider:first-of-type::thumb:hover").Specificity() == 2 * 1024 + 1 + 1);
+    CHECK(Sel(u8"slider::thumb:hover").Specificity() == 1024 + 1 + 1);
+    CHECK(Sel(u8"slider:hover::thumb:hover").Specificity() == 2 * 1024 + 1 + 1);
+}

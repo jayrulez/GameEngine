@@ -109,8 +109,9 @@ most of the polish gap is in how our samples and themes use the framework, but t
 gaps in it, ranked by how much polish they cost, and two bugs. Done: the sheet's opacity (a bug)
 and blending as authored (week of 2026-10-10); the shadow's corners (the other bug), rounded
 clipping, per-side borders, shadow lists, gradients, baseline alignment, device-pixel rounding
-under a scaled canvas, easing curves, sheet transforms, keyframe animations and colour filters
-(week of 2026-10-17). What is left of them:
+under a scaled canvas, easing curves, sheet transforms (in written order, with skew and
+transform-origin), keyframe animations and their events, colour filters and var() colours in
+drawables (week of 2026-10-17). What is left of them:
 
 - **A content-shaped glow**: CSS's `filter: drop-shadow()`, a blurred, tinted copy of what a view
   draws under it. It needs a layer drawn twice, sharp and blurred (VG keeps one blurred copy for
@@ -118,13 +119,11 @@ under a scaled canvas, easing curves, sheet transforms, keyframe animations and 
 - **More colour filters**: `contrast()`, `sepia()`, `hue-rotate()`, `invert()` and `opacity()`
   are not drawn (an unknown function leaves `filter` unset); the layer shader takes saturation
   and brightness through the composite's effect pair, which has no room for more.
-- **Transforms as CSS writes them**: a sheet's `transform` applies translate, rotate, then scale
-  whatever order it lists them in, and has no `skew()` or `transform-origin` (it pivots about the
-  view's own Transform origin, the centre by default).
-- **Box paint**: border styles (dashed, dotted) need VG stroking of their own; `var()` cannot
-  reach inside a drawable's arguments.
+- **Box paint**: border styles (dashed, dotted) need VG stroking of their own. `var()` reaches a
+  drawable's colours (rounded-rect's fill and border, color(), gradient stops) but not its lengths
+  (a radius, a border width) or a side's own colour, nor the state variants state-rounded derives.
 - **Keyframes**: a keyframe cannot set its own timing function (every segment takes the
-  animation's), and no event says an animation ended or iterated.
+  animation's).
 - **To check visually**: without the box shaders (the analytic box path, which both hosts give
   VG) the fill is drawn over the full bounds and the border stroked inset on top
   (`RoundedRectDrawable.cppm`), which may leave a faint halo outside a thin or translucent border

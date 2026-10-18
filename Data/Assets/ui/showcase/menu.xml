@@ -1,6 +1,6 @@
 <!--
-  The GUI lab's showcase (G6 of Documentation/Specs/vg-and-gui-lab.md): a game's main menu in
-  markup, played by mouse, keyboard or gamepad (G7: the menu wraps, settings, loading and the modal
+  The GUI lab's showcase (G6 of Documentation/Specs/vg-and-gui-lab.md): a game's main menu, its
+  HUD and its pause menu (E10 of gui-lab-evolution-2.md) in markup, played by mouse, keyboard or gamepad (G7: the menu wraps, settings, loading and the modal
   keep focus inside them, Stay is the modal's safe default), styled by menu.css and brought to life by menu.as. The host loads this, sizes the root
   and its layers (backdrop, menu screen, loading screen, modal) to the window, binds {{name}}
   values to the GUI's data, and runs the script.
@@ -51,6 +51,37 @@
         <Label class="loading-status" text="{{status}}"/>
         <ProgressBar value="{{progress}}" class="loading-bar"/>
         <Button id="loading-back" class="menu-btn small" text="Back"/>
+    </Panel>
+
+    <!-- In the game: the HUD over the backdrop (health, the objective and the run's clock, the score
+         along the top; the pause prompt low on the right), its values the GUI's data, which the script moves as a stand-in game would. -->
+    <Panel id="hud" class="hud" flex-direction="column" justify-content="space-between">
+        <Panel class="hud-top" flex-direction="row" justify-content="space-between" align-items="start">
+            <Panel class="hud-card" flex-direction="column" gap="6">
+                <Label class="hud-caption" text="HEALTH"/>
+                <ProgressBar id="hud-health" value="{{health}}" class="hud-health"/>
+            </Panel>
+            <Panel class="hud-middle" flex-direction="column" align-items="center" gap="4">
+                <Label class="hud-objective" text="Gather the drifting lights"/>
+                <Label class="hud-clock" text="{{clock}}"/>
+            </Panel>
+            <Panel class="hud-card hud-right" flex-direction="column" align-items="end" gap="2">
+                <Label class="hud-caption" text="SCORE"/>
+                <Label id="hud-score" class="hud-score" text="{{score}}"/>
+            </Panel>
+        </Panel>
+        <Panel class="hud-bottom" flex-direction="row" justify-content="end">
+            <Label class="hud-prompt" text="Esc or Start: pause"/>
+        </Panel>
+    </Panel>
+
+    <!-- Paused: over the HUD, which dims and blurs and stops, as the quit question does. -->
+    <Panel id="pause" class="modal" flex-direction="column" justify-content="center" align-items="center" nav-scope="contain" nav-default="resume">
+        <Panel id="pause-panel" class="panel glass" flex-direction="column" align-items="center" gap="14">
+            <Label class="panel-title" text="Paused"/>
+            <Button id="resume" class="menu-btn primary" text="Resume"/>
+            <Button id="to-menu" class="menu-btn" text="Quit to menu"/>
+        </Panel>
     </Panel>
 
     <!-- Quit: a modal over the whole screen, which dims and blurs what is behind it and takes

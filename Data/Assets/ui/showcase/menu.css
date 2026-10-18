@@ -108,6 +108,35 @@ progressbar::track { background-color: rgba(255, 255, 255, 0.12); }
 progressbar::fill { background-color: #f3a047; }
 .loading-bar { width: 420px; height: 14px; }
 
+/* The HUD: cards in the top corners with the objective and clock between them, the prompt low on
+   the right; all of it over the backdrop, which keeps drifting. */
+.hud { padding: 28px 34px; }
+.hud-top, .hud-bottom { width: 100%; }
+.hud-card { padding: 12px 16px; background-color: rgba(10, 6, 24, 0.45); backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 14; box-shadow: 0 8px 18px rgba(0, 0, 0, 0.4); }
+.hud-caption { width: 160px; height: 18px; font-family: Roboto; font-size: 13px; color: var(--muted); }
+.hud-right .hud-caption { width: 220px; text-align: end; } /* as wide as the health card: the objective centred */
+.hud-health { width: 220px; height: 14px; border-radius: 7; }
+#hud-health::fill { background-color: #6fd38a; }
+#hud-health.hp-low::fill { background-color: #e0607a; }
+.hud-health.hp-low { animation: warn 0.6s ease-in-out infinite alternate; }
+@keyframes warn { from { box-shadow: 0 0 0 rgba(224, 96, 122, 0); } to { box-shadow: 0 0 18px 3px rgba(224, 96, 122, 0.8); } }
+.hud-score { width: 220px; height: 46px; font-family: Lilita; font-size: 40px; color: var(--ink); text-align: end;
+             vertical-align: middle; text-shadow: 0 2px 3px rgba(0, 0, 0, 0.6); transform-origin: right center; }
+/* A point scored: the number pops; two classes taking turns so each score replays it. */
+.pop-a { animation: pop-a 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.pop-b { animation: pop-b 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
+@keyframes pop-a { from { transform: scale(1.35); text-glow: 14px var(--glow); } to { transform: scale(1); text-glow: 0px var(--glow); } }
+@keyframes pop-b { from { transform: scale(1.35); text-glow: 14px var(--glow); } to { transform: scale(1); text-glow: 0px var(--glow); } }
+.hud-middle { padding-top: 8px; }
+.hud-objective { width: 420px; height: 30px; font-family: Lilita; font-size: 26px; color: var(--ink); text-align: center;
+                 vertical-align: middle; text-shadow: 0 2px 3px rgba(0, 0, 0, 0.6); }
+.hud-clock { width: 200px; height: 24px; font-family: Roboto; font-size: 18px; color: var(--muted); text-align: center;
+             vertical-align: middle; }
+.hud-prompt { width: 260px; height: 26px; font-family: Roboto; font-size: 15px; color: var(--muted); text-align: end;
+              vertical-align: middle; }
+#pause-panel { height: 230px; }
+
 /* Leaving: the whole menu fades to black before the window closes. */
 .leaving { animation: fade-out 0.6s ease-in forwards; }
 @keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }

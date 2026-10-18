@@ -33,6 +33,7 @@ import :ui_widget;
 import :list_box;
 import :event_dispatcher; // the popup stack (E5)
 import :popup_placement;
+import :reactive; // Observable: a binding follows the selection
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -67,15 +68,28 @@ export namespace experimental::gui
         void SetItemsText(const core::String& text)
         {
             m_items.Clear();
-            m_selected = -1;
             if (m_dropdown)
                 m_dropdown->Clear();
             for (const core::StringView item : SplitItems(text.AsView()))
                 AddItem(item);
+            // The old selection is gone with its item: none shows.
+            if (m_selected != -1)
+            {
+                m_selected = -1;
+                m_text.SetString(core::StringView{});
+                m_selectedChanged.Notify();
+                Invalidate();
+            }
         }
         [[nodiscard]] core::String GetItemsText() const { return JoinItems(m_items); }
 
-        [[nodiscard]] i32 GetSelectedIndex() const noexcept { return m_selected; }
+        /// The selected item's index, or -1 (markup's and a sheet's `selected`; a read a binding
+        /// follows).
+        [[nodiscard]] i32 GetSelectedIndex() const
+        {
+            m_selectedChanged.Track();
+            return m_selected;
+        }
         [[nodiscard]] core::StringView GetSelectedText() const
         {
             return (m_selected >= 0 && static_cast<usize>(m_selected) < m_items.Size())
@@ -91,8 +105,18 @@ export namespace experimental::gui
             m_selected = index;
             m_text.SetString(m_items[static_cast<usize>(index)].AsView());
             Invalidate();
+            m_selectedChanged.Notify();
             if (m_onChanged)
                 m_onChanged(index);
+        }
+        /// The user picked `index` (the keys, type-ahead, the dropdown): as SetSelectedIndex, and
+        /// a `change` event when it changed, as a slider's or a field's.
+        void SelectByUser(i32 index)
+        {
+            const i32 was = m_selected;
+            SetSelectedIndex(index);
+            if (m_selected != was)
+                SendEvent(Event(EventType::Changed, this));
         }
         void SetOnSelectionChanged(core::Function<void(i32)> callback)
         {
@@ -167,12 +191,12 @@ export namespace experimental::gui
             const i32 last = static_cast<i32>(m_items.Size()) - 1;
             if (key == KeyCode::Down && m_selected < last)
             {
-                SetSelectedIndex(m_selected + 1);
+                SelectByUser(m_selected + 1);
                 event.Handled = true;
             }
             else if (key == KeyCode::Up && m_selected > 0)
             {
-                SetSelectedIndex(m_selected - 1);
+                SelectByUser(m_selected - 1);
                 event.Handled = true;
             }
             else if (const char8_t typed = TypedCharacter(key); typed != 0)
@@ -185,7 +209,7 @@ export namespace experimental::gui
                     const core::StringView item = m_items[static_cast<usize>(i)].AsView();
                     if (item.Size() != 0 && Lower(item[0]) == typed)
                     {
-                        SetSelectedIndex(i);
+                        SelectByUser(i);
                         event.Handled = true;
                         break;
                     }
@@ -250,7 +274,7 @@ export namespace experimental::gui
 
         void OnPicked(i32 index)
         {
-            SetSelectedIndex(index);
+            SelectByUser(index);
             CloseDropdown();
         }
 
@@ -276,6 +300,7 @@ export namespace experimental::gui
         Color m_boxColor{0.18f, 0.20f, 0.25f, 1.0f};
         Color m_arrowColor{0.75f, 0.80f, 0.86f, 1.0f};
         core::Function<void(i32)> m_onChanged;
+        mutable Observable m_selectedChanged;
     };
 
 }

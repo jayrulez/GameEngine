@@ -138,3 +138,33 @@ TEST_CASE("combobox: the dropdown opens below the box at a display scale")
     CHECK(d->TopPopup()->GetPosition().x == doctest::Approx(10.0f));
     CHECK(d->TopPopup()->GetPosition().y == doctest::Approx(46.0f)); // the box's bottom, in root units
 }
+
+TEST_CASE("combobox: new items drop the old selection's text; the selection binds and a pick reports a change")
+{
+    auto cb = Make<ComboBox>();
+    cb->SetItemsText(core::String(u8"Low|High"));
+    cb->SetSelectedIndex(1);
+    CHECK(cb->GetSelectedText() == core::StringView(u8"High"));
+    cb->SetItemsText(core::String(u8"A|B|C"));
+    CHECK(cb->GetSelectedIndex() == -1);
+    CHECK(cb->GetSelectedText().Size() == 0u);
+
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{400.0f, 300.0f});
+    auto combo = MakeCombo(root.Get());
+    DataModel& data = root->GetContext().GetData();
+    data.Set(core::StringView(u8"pick"), core::Variant::From<core::i32>(1));
+    REQUIRE(combo->BindData(core::StringView(u8"selected"), root->GetContext().GetDataRef(), core::StringView(u8"pick")));
+    root->GetContext().Update(core::Duration::FromSeconds(1.0 / 60.0));
+    CHECK(combo->GetSelectedIndex() == 1); // the data's
+    int changes = 0;
+    (void)combo->AddEventListener(EventType::Changed, [&changes](const Event&) { ++changes; });
+    combo->SelectByUser(2);
+    root->GetContext().Update(core::Duration::FromSeconds(1.0 / 60.0));
+    CHECK(changes == 1);
+    const core::Variant back = data.Get(core::StringView(u8"pick"));
+    REQUIRE(back.TryGet<core::i32>() != nullptr);
+    CHECK(*back.TryGet<core::i32>() == 2); // written back
+    combo->SetSelectedIndex(0);
+    CHECK(changes == 1); // code's change is no user's
+}

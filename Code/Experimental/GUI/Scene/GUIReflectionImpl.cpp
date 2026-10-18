@@ -1204,6 +1204,9 @@ namespace experimental::gui
         builder.Attribute("accessRole", core::String(u8"combobox")); // what a screen reader takes it for (E9d)
         builder.Attribute("accessActivate", true); // a screen reader may press it
         builder.AccessorProperty<&ComboBox::GetItemsText, &ComboBox::SetItemsText>("items").PropAttribute("css", core::String(u8"items"));
+        builder.AccessorProperty<&ComboBox::GetSelectedIndex, &ComboBox::SetSelectedIndex>("selected")
+            .PropAttribute("css", core::String(u8"selected"))
+            .PropAttribute("twoWay", true); // the user picks: a binding may write it back
         builder.Method<&ElementOf<ComboBox>, ComboBox, Node>("of");
         builder.Creator();
     }

@@ -84,7 +84,8 @@ namespace foundation::graphics
         }
 
         // One attempt at one backend. `raw` is left null when the backend is absent or fails.
-        [[nodiscard]] bool TryCreateBackend(BackendType b, const GraphicsDeviceDesc& desc,
+        // (`desc` goes unread where only backends without options are compiled in: the web build.)
+        [[nodiscard]] bool TryCreateBackend(BackendType b, [[maybe_unused]] const GraphicsDeviceDesc& desc,
                                             rhi::Backend*& raw)
         {
             raw = nullptr;

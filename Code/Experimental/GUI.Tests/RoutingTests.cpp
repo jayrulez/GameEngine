@@ -425,6 +425,28 @@ TEST_CASE("routing: the first finger drives the pointer; moves follow it and a s
     CHECK_FALSE(d->IsTouchActive());
 }
 
+TEST_CASE("routing: every finger down is followed, where it went down and where it is, until it lifts")
+{
+    auto root = MakeRoot();
+    EventDispatcher* d = root->GetEventDispatcher();
+    CHECK(d->GetFingers().Size() == 0u);
+    d->InjectTouchDown(1u, core::Float2{10.0f, 10.0f});
+    (void)d->InjectTouchDown(2u, core::Float2{110.0f, 10.0f});
+    (void)d->InjectTouchMove(2u, core::Float2{120.0f, 30.0f});
+    REQUIRE(d->GetFingers().Size() == 2u);
+    CHECK(d->GetFingers()[1].Id == 2u);
+    CHECK(d->GetFingers()[1].Start.x == doctest::Approx(110.0f));
+    CHECK(d->GetFingers()[1].Now.x == doctest::Approx(120.0f));
+    CHECK(d->GetFingers()[1].Now.y == doctest::Approx(30.0f));
+    // The first lifting leaves the second followed, and the pointer free.
+    d->InjectTouchUp(1u, core::Float2{10.0f, 10.0f});
+    REQUIRE(d->GetFingers().Size() == 1u);
+    CHECK(d->GetFingers()[0].Id == 2u);
+    CHECK_FALSE(d->IsTouchActive());
+    (void)d->InjectTouchUp(2u, core::Float2{120.0f, 30.0f});
+    CHECK(d->GetFingers().Size() == 0u);
+}
+
 TEST_CASE("routing: taps count as a double tap over a wider distance than clicks")
 {
     auto root = MakeRoot();

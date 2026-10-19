@@ -195,8 +195,9 @@ export namespace experimental::gui
         }
 
         // === Touch === The first finger down drives the pointer as the mouse does (a press,
-        // moves, a release, a click), its events marked as touch; other fingers are ignored. A
-        // finger hovers only while it is down, so nothing stays hovered after a tap.
+        // moves, a release, a click), its events marked as touch; every finger down is followed,
+        // where it went down and where it is (E17c: two make a gesture), but no other drives the
+        // pointer. A finger hovers only while it is down, so nothing stays hovered after a tap.
         //
         // A finger is a tap or a pan (gpui-ce's machine): once it moves past kPanSlop the nearest
         // scroller under where it went down that can move that way takes it, the press is
@@ -205,8 +206,10 @@ export namespace experimental::gui
         // catches it: the fling stops and that touch clicks nothing.
         bool InjectTouchDown(u64 finger, core::Float2 position)
         {
+            if (FindFinger(finger) < 0)
+                m_fingers.PushBack(Finger{finger, position, position});
             if (m_touchActive)
-                return false; // a second finger
+                return false; // a second finger: followed, not the pointer
             m_touchActive = true;
             m_touchFinger = finger;
             m_panning = false;
@@ -231,6 +234,8 @@ export namespace experimental::gui
         }
         bool InjectTouchMove(u64 finger, core::Float2 position)
         {
+            if (const i32 at = FindFinger(finger); at >= 0)
+                m_fingers[static_cast<usize>(at)].Now = position;
             if (!m_touchActive || finger != m_touchFinger)
                 return false;
             AddPanSample(position);
@@ -259,6 +264,8 @@ export namespace experimental::gui
         }
         bool InjectTouchUp(u64 finger, core::Float2 position)
         {
+            if (const i32 at = FindFinger(finger); at >= 0)
+                m_fingers.RemoveAt(static_cast<usize>(at));
             if (!m_touchActive || finger != m_touchFinger)
                 return false;
             m_touchActive = false;
@@ -280,9 +287,25 @@ export namespace experimental::gui
             UpdateHoverPath(nullptr, position); // the finger lifted: nothing is under it
             return used;
         }
+        /// A finger down: its id, where it went down and where it is now (device pixels).
+        struct Finger
+        {
+            u64 Id = 0;
+            core::Float2 Start{};
+            core::Float2 Now{};
+        };
+        /// The fingers down, in the order they went down.
+        [[nodiscard]] core::Span<const Finger> GetFingers() const noexcept { return core::Span<const Finger>(m_fingers.Data(), m_fingers.Size()); }
         /// A finger is panning a scroller (its press was cancelled).
         [[nodiscard]] bool IsPanning() const noexcept { return m_panning; }
         [[nodiscard]] bool IsTouchActive() const noexcept { return m_touchActive; }
+        [[nodiscard]] i32 FindFinger(u64 id) const noexcept
+        {
+            for (usize i = 0; i < m_fingers.Size(); ++i)
+                if (m_fingers[i].Id == id)
+                    return static_cast<i32>(i);
+            return -1;
+        }
 
         /// Cancels the press in progress: the pressed node hears PointerCancel (a widget drops its
         /// drag), no release or click follows, and the press path and any capture clear. A
@@ -2268,6 +2291,7 @@ export namespace experimental::gui
         }
 
         Node* m_root;                      // non-owning (the SceneRoot owns this dispatcher)
+        core::Array<Finger> m_fingers;     // every finger down (the first, when active, is the pointer)
         IClipboard* m_clipboard = nullptr; // non-owning system-clipboard adapter (optional)
         Node* m_overNode = nullptr;        // non-owning: the deepest node of the hover path
         NavTrace m_lastNavigation;         // what the last directional move weighed

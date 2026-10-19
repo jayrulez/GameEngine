@@ -807,10 +807,11 @@ namespace
         REQUIRE(bed.errors.count == 0);
         (void)bed.root->UpdateLayout();
         gui::EventDispatcher& d = *bed.root->GetEventDispatcher();
-        gui::Window* window = FindIn<gui::Window>(*bed.root);
+        // Held: closing removes the script's window from the page, its only other owner.
+        const RefPtr<gui::Window> window(FindIn<gui::Window>(*bed.root));
         gui::Menu* menu = FindIn<gui::Menu>(*bed.root);
         gui::Panel* panel = FindIn<gui::Panel>(*bed.root);
-        REQUIRE(window != nullptr);
+        REQUIRE(window.Get() != nullptr);
         REQUIRE(menu != nullptr);
         REQUIRE(panel != nullptr);
         CHECK(window->IsOpen());

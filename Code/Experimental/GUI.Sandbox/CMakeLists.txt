@@ -9,12 +9,16 @@ target_link_libraries(GUISandbox PRIVATE
     Foundation::Script ${SCRIPTLIB_ANGELSCRIPT}) # the showcase (G6) runs AngelScript
 util_copy_sdl3_dll(GUISandbox)
 
+# A sanitized run reports only our leaks, not what the desktop's libraries keep (lsan.supp says
+# which); other builds ignore the variable.
+set(_sandbox_test_env "LSAN_OPTIONS=suppressions=${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp")
+
 # The image tests (E8g of Specs/gui-lab-evolution.md): each page drawn offscreen on each backend
 # and compared with its reference in Data/Tests/GUI/Images; skipped (77) without a device.
 foreach(backend vulkan webgpu)
     add_test(NAME GUI.Images.${backend}
              COMMAND GUISandbox --${backend} --image-tests --image-out ${CMAKE_BINARY_DIR}/gui-images)
-    set_tests_properties(GUI.Images.${backend} PROPERTIES SKIP_RETURN_CODE 77)
+    set_tests_properties(GUI.Images.${backend} PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT "${_sandbox_test_env}")
 endforeach()
 
 # The sweep (E10 of Specs/gui-lab-evolution-2.md): every page's widgets clicked and right-clicked,
@@ -22,5 +26,5 @@ endforeach()
 # anything warns or errs while it runs, and is skipped (77) without a device.
 foreach(backend vulkan webgpu)
     add_test(NAME GUI.Sweep.${backend} COMMAND GUISandbox --${backend} --sweep)
-    set_tests_properties(GUI.Sweep.${backend} PROPERTIES SKIP_RETURN_CODE 77)
+    set_tests_properties(GUI.Sweep.${backend} PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT "${_sandbox_test_env}")
 endforeach()

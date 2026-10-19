@@ -95,6 +95,13 @@ Gaps the phases left, by area (each phase's own notes say more):
 - **Overlays.** No OS popup windows (a popup never leaves its root), modality per root;
   type-ahead by first letter only; a shrunk menu clips rather than scrolls; tooltips for the
   pointer only, never interactive; no Alt mnemonics; scripts cannot build a menu.
+- **Press, drag and release in menus (to evaluate; user 2026-10-19).** The lab's menus, combo
+  boxes and menu buttons open on a click, as the web-style toolkits do (RmlUi, gpui, aui), so a
+  menu bar cannot be pressed, dragged onto an item and released, as native desktop menus can
+  (Godot and eepp do it; foundation.ui opens on press but picks on press too). Skipped for now; weigh
+  it, for the menu bar only, when the editor moves onto the lab. Godot's design is the reference:
+  the title opens on press, items take the release, a release within 400 ms of opening is ignored
+  (a quick click leaves the menu open), touch keeps opening on a tap's release.
 - **Controls.** The range is a base class (a progress bar carries a page it hides); every radio
   and every tab is a tab stop; type-ahead reads keys, not text input; a tree resets on every
   model range.

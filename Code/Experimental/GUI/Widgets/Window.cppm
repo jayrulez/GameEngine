@@ -284,6 +284,7 @@ export namespace experimental::gui
             Node* parent = GetParent();
             if (parent == nullptr)
                 return false;
+            SetDisplayed(true); // one kept out of the layout until opened
             Open(*parent);
             return true;
         }

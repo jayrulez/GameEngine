@@ -688,9 +688,12 @@ export namespace experimental::gui
                 RememberInScopes(*m_focusNode); // coming back to a scope returns here
                 m_focusNode->SetFocusVisible(m_keyboardMode);
                 m_focusNode->HandleFocusGained();
-                // Scrollers around it bring it into view.
-                for (Node* p = m_focusNode->GetParent(); p != nullptr; p = p->GetParent())
-                    p->OnDescendantFocused(*m_focusNode);
+                // Scrollers around it bring it into view: those inside the popup it is in, not the
+                // ones its owner sits in (a popup is placed in the root's space, not scrolled with
+                // them: a page scrolled to a menu opened in it, a little further each time it opened).
+                for (Node* n = m_focusNode; n != nullptr && !n->IsInTopLayer(); n = n->GetParent())
+                    if (Node* p = n->GetParent())
+                        p->OnDescendantFocused(*m_focusNode);
             }
             if (m_dragActive && m_dragFromKeyboard)
                 QueryAtFocus(); // a keyboard drag asks where the focus went

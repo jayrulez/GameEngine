@@ -535,3 +535,42 @@ TEST_CASE("menu: taller than the window, it keeps to it and scrolls by wheel, ar
     (void)d->InjectKeyDown(static_cast<core::u32>(KeyCode::Down)); // round to the first
     CHECK(menu->GetItemScroll() == doctest::Approx(0.0f));
 }
+
+TEST_CASE("menu: opening one in a scrolled page leaves the page where it was (E16)")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{400.0f, 300.0f});
+    EventDispatcher* d = root->GetEventDispatcher();
+    // A page that scrolls, a button half way down it, the button's menu inside it (a script's).
+    auto page = Make<UIWidget>();
+    page->SetSize(core::Float2{400.0f, 200.0f}); // shorter than the window, as a page under a header is
+    page->EditLayoutStyle([](LayoutStyle& s) { s.OverflowY = Overflow::Auto; s.Direction = FlexDirection::Column; });
+    root->AddChild(page.Get());
+    auto spacer = Make<UIWidget>();
+    spacer->EditLayoutStyle([](LayoutStyle& s) { s.Height = LayoutLength::Px(1000.0f); s.Shrink = 0.0f; });
+    page->AddChild(spacer.Get());
+    auto button = Make<UIWidget>();
+    button->EditLayoutStyle([](LayoutStyle& s) { s.Height = LayoutLength::Px(30.0f); s.Shrink = 0.0f; });
+    page->AddChild(button.Get());
+    auto tail = Make<UIWidget>();
+    tail->EditLayoutStyle([](LayoutStyle& s) { s.Height = LayoutLength::Px(1000.0f); s.Shrink = 0.0f; });
+    page->AddChild(tail.Get());
+    auto menu = Make<Menu>();
+    button->AddChild(menu.Get());
+    for (int i = 0; i < 60; ++i)
+        menu->AddItem(core::StringView(u8"Item"), [] {});
+    (void)root->UpdateLayout();
+    page->SetScrollOffset(core::Float2{0.0f, 900.0f}); // the button in view
+    (void)root->UpdateLayout();
+    const float scrolled = page->GetScrollOffset().y;
+    for (int round = 0; round < 3; ++round)
+    {
+        CAPTURE(round);
+        REQUIRE(menu->OpenAtPoint(10.0f, 140.0f));
+        menu->FocusFirstItem(); // focus goes into it, as from the keys
+        root->GetContext().Update(core::Duration{});
+        CHECK(page->GetScrollOffset().y == doctest::Approx(scrolled)); // a popup is not the page's to scroll to
+        (void)d->InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
+        root->GetContext().Update(core::Duration{});
+    }
+}

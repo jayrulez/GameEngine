@@ -87,7 +87,7 @@ void arrive()
     leaveLeft = -1;
     if (arriving is loadingScreen)
     {
-        gui::set("status", "Loading...");
+        gui::set("status", gui::tr("loading.loading"));
         gui::set("progress", 0);
         loadTime = 0;
         loadingNow = true;
@@ -102,7 +102,7 @@ void arrive()
 }
 
 string volumeText() { return "" + int(gui::getNumber("volume") * 100 + 0.5) + "%"; }
-string musicText() { return gui::getBool("music") ? "On" : "Off"; }
+string musicText() { return gui::tr(gui::getBool("music") ? "settings.on" : "settings.off"); }
 
 void onPlay() { changeTo(loadingScreen); }
 void onSettings() { changeTo(settingsPanel); }
@@ -131,8 +131,8 @@ void listen(int action)
     listening = action;
     UIWidget@ button = UIWidget::of(gui::root().find("bind-" + actions[action]));
     button.addClass("listening");
-    gui::set("key-" + actions[action], "Press a key...");
-    gui::set("controls-hint", "A key or a pad button; Esc to keep " + gui::keyText(keys[action]));
+    gui::set("key-" + actions[action], gui::tr("controls.press"));
+    gui::set("controls-hint", gui::tr("controls.keep") + gui::keyText(keys[action]));
     gui::captureKey(KeyHandler(onCapturedKey));
 }
 void onCapturedKey(const string &in pressed)
@@ -140,14 +140,14 @@ void onCapturedKey(const string &in pressed)
     const int action = listening;
     listening = -1;
     UIWidget::of(gui::root().find("bind-" + actions[action])).removeClass("listening");
-    gui::set("controls-hint", "Choose an action to change its key");
+    gui::set("controls-hint", gui::tr("controls.choose"));
     if (pressed != "")
     {
         for (uint i = 0; i < actions.length(); i++)
             if (int(i) != action && keys[i] == pressed)
             {
                 keys[i] = keys[action]; // taken: the two swap
-                gui::set("controls-hint", gui::keyText(keys[i]) + " moved to " + actions[i]);
+                gui::set("controls-hint", gui::tr("controls.swapped") + gui::tr("controls." + actions[i]));
             }
         gui::bindKey(keys[action], "", "game"); // the old key unbound there
         keys[action] = pressed;
@@ -301,7 +301,7 @@ void main()
     root.find("bind-dash").on("click", Action(onBindDash));
     root.find("bind-interact").on("click", Action(onBindInteract));
     root.find("bind-map").on("click", Action(onBindMap));
-    gui::set("controls-hint", "Choose an action to change its key");
+    gui::set("controls-hint", gui::tr("controls.choose"));
     showKeys();
     root.find("loading-back").on("click", Action(onBack));
     root.find("confirm-yes").on("click", Action(onLeave));
@@ -386,7 +386,7 @@ bool update(double dt)
     {
         progress = 1;
         loadingNow = false;
-        gui::set("status", "Ready");
+        gui::set("status", gui::tr("loading.ready"));
         untilGame = 0.6; // a moment on "Ready", then the game
     }
     gui::set("progress", progress);

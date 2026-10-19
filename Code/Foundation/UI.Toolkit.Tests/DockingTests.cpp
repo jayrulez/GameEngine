@@ -690,3 +690,20 @@ TEST_CASE("docking: the owner's ActiveMark on a panel makes its group the active
     leftGroup->SetSelectedIndex(0);
     CHECK(leftGroup->IsActiveGroup());
 }
+
+// With no root and no window host (a layout restored headless), nothing but the manager holds a
+// floated panel's window: it must live until the panel docks again, then go.
+TEST_CASE("docking: with no root or host, a floated panel's window lives until the panel docks again")
+{
+    auto dm = MakeRef<DockManager>(DefaultAllocator());
+    DockablePanel* panel = dm->AddPanel(StringView(u8"Scene"), MakeLabel(u8"C").Get());
+    dm->FloatPanel(panel, 10, 10);
+
+    const WeakRefPtr<DockableWindow> window(RefPtr<DockableWindow>(Cast<DockableWindow>(panel->Parent)));
+    REQUIRE_FALSE(window.Expired());
+    CHECK(window.Lock()->Panel() == panel);
+
+    dm->DockPanel(panel, DockPosition::Left);
+    CHECK(window.Expired());
+    CHECK(Cast<DockableWindow>(panel->Parent) == nullptr);
+}

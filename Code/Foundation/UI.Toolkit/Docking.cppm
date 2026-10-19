@@ -1724,7 +1724,7 @@ export namespace foundation::ui::toolkit
             RemoveFromTree(panel);
 
             RefPtr<DockableWindow> dockable = MakeRef<DockableWindow>(MemoryAllocator(), panel);
-            m_dockableWindows.PushBack(dockable.Get());
+            m_dockableWindows.PushBack(dockable);
 
             dockable->OnDockRequested.Add([this](DockableWindow* fw) { RedockDockableWindow(fw); });
             dockable->OnCloseRequested.Add([this](DockableWindow* fw) { CloseDockableWindow(fw); });
@@ -1855,6 +1855,7 @@ export namespace foundation::ui::toolkit
         /// Destroy a dockable window (OS or virtual).
         void DestroyDockableWindow(DockableWindow* dockable) override
         {
+            const RefPtr<DockableWindow> keep(dockable); // erasing may drop the last reference
             EraseDockableWindow(dockable);
 
             if (dockable->IsOSWindow && DockableWindowHost != nullptr)
@@ -2111,7 +2112,7 @@ export namespace foundation::ui::toolkit
         {
             for (i32 i = static_cast<i32>(m_dockableWindows.Size()) - 1; i >= 0; --i)
             {
-                if (m_dockableWindows[static_cast<usize>(i)] == popup)
+                if (m_dockableWindows[static_cast<usize>(i)].Get() == popup)
                 {
                     m_dockableWindows.RemoveAt(static_cast<usize>(i));
                     break;
@@ -2167,7 +2168,7 @@ export namespace foundation::ui::toolkit
         {
             for (usize i = 0; i < m_dockableWindows.Size(); ++i)
             {
-                if (m_dockableWindows[i] == dw)
+                if (m_dockableWindows[i].Get() == dw)
                 {
                     m_dockableWindows.RemoveAt(i);
                     return;
@@ -2297,7 +2298,7 @@ export namespace foundation::ui::toolkit
             {
                 if (m_dockableWindows[i]->Panel() == panel)
                 {
-                    DockableWindow* dockable = m_dockableWindows[i];
+                    DockableWindow* dockable = m_dockableWindows[i].Get();
                     dockable->DetachPanel();
                     DestroyDockableWindow(dockable);
                     return;
@@ -2825,8 +2826,9 @@ export namespace foundation::ui::toolkit
         View* m_rootNode = nullptr;
         Array<RefPtr<DockablePanel>>
             m_panels; // Owning registry (survives undock; tree shares the ref).
-        Array<DockableWindow*>
-            m_dockableWindows; // Non-owning tracking (PopupLayer owns floating windows).
+        // Owning: the popup layer or the OS window host holds a floating window too, but with
+        // neither (no root, no host) the manager is all that keeps it.
+        Array<RefPtr<DockableWindow>> m_dockableWindows;
         RefPtr<DockZoneIndicator> m_zoneIndicator; // Owned, drawn manually, never AddView'd.
         DockablePanel* m_activePanel = nullptr;     // borrowed; cleared when that panel closes
         bool m_isCleaningUp = false;

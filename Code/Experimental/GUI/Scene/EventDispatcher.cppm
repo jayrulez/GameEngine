@@ -138,6 +138,10 @@ export namespace experimental::gui
         // hid, the next shows at once. Any press or key hides it until the pointer moves to another.
         // A finger shows one by a long press on a node with no context menu.
         void SetTooltipDelay(f32 seconds) noexcept { m_tipDelay = core::Max(0.0f, seconds); }
+        /// While the keys move the focus, the focused control's tooltip shows after the delay, below
+        /// it (E16; on by default). The pointer's tooltip goes first.
+        void SetKeyboardTooltips(bool on) noexcept { m_keyboardTooltips = on; }
+        [[nodiscard]] bool HasKeyboardTooltips() const noexcept { return m_keyboardTooltips; }
         [[nodiscard]] f32 GetTooltipDelay() const noexcept { return m_tipDelay; }
         /// The tooltip shown now, or null.
         [[nodiscard]] Node* GetShownTooltip() const { return m_tip && IsPopupOpen(*m_tip) ? m_tip.Get() : nullptr; }
@@ -1170,6 +1174,7 @@ export namespace experimental::gui
             NoteInput();
             // A pointer in use: the focus ring hides (shown again by the next key or d-pad move).
             m_keyboardMode = false;
+            m_keysMovedFocus = false; // the focus's tooltip waits for the keys again (E16)
             if (m_focusNode != nullptr)
                 m_focusNode->SetFocusVisible(false);
             m_mousePos = position;
@@ -1909,6 +1914,11 @@ export namespace experimental::gui
         f32 m_tipHiddenAt = -1000.0f;
         bool m_tipSuppressed = false;
         static constexpr f32 kTooltipWarm = 0.6f; // seconds after one hid that the next shows at once
+        static constexpr f32 kTooltipGrace = 0.3f; // seconds an interactive one waits for the pointer
+        bool m_tipInteractive = false;  // the one shown takes the pointer (E16)
+        f32 m_tipGrace = 0.0f;
+        bool m_keyboardTooltips = true;
+        bool m_keysMovedFocus = false;  // keys moved the focus since the pointer was last used
         // A long press: armed by a finger's press, disarmed by moving or lifting it.
         bool m_longPressArmed = false;
         f32 m_pressHeld = 0.0f;
@@ -1927,6 +1937,27 @@ export namespace experimental::gui
             if (m_dragActive)
                 return; // no tooltips while dragging (the hint says what a drop would do)
             Node* provider = m_touchActive ? m_tipProvider : TooltipProvider(m_overNode);
+            // While the keys move the focus, the focused control's (E16); the pointer's first.
+            bool fromFocus = false;
+            if (provider == nullptr && !m_touchActive && m_keyboardTooltips && m_keyboardMode && m_keysMovedFocus && m_focusNode != nullptr)
+            {
+                provider = TooltipProvider(m_focusNode);
+                fromFocus = provider != nullptr;
+            }
+            // An interactive tooltip holds while the pointer is in it, and a moment after the pointer
+            // leaves both it and its control, so the pointer can cross the gap into it (E16).
+            if (Node* shown = GetShownTooltip(); shown != nullptr && m_tipInteractive && provider != m_tipProvider)
+            {
+                if (m_overNode != nullptr && IsInSubtree(m_overNode, shown))
+                {
+                    m_tipGrace = 0.0f;
+                    return;
+                }
+                m_tipGrace += seconds;
+                if (m_tipGrace < kTooltipGrace)
+                    return;
+            }
+            m_tipGrace = 0.0f;
             if (provider != m_tipProvider)
             {
                 HideTooltip();
@@ -1939,21 +1970,37 @@ export namespace experimental::gui
             m_tipTimer += seconds;
             const bool warm = m_time - m_tipHiddenAt <= kTooltipWarm; // one just hid: the next at once
             if (m_tipTimer >= (warm ? 0.0f : m_tipDelay))
-                ShowTooltip(*provider, m_mousePos);
+                ShowTooltip(*provider, m_mousePos, fromFocus);
         }
-        void ShowTooltip(Node& provider, core::Float2 at)
+        void ShowTooltip(Node& provider, core::Float2 at, bool belowProvider = false)
         {
             if (m_root == nullptr)
                 return;
             core::RefPtr<Node> content = provider.CreateTooltipContent(provider.GetTooltipText());
             if (!content)
                 return;
-            const core::Float2 p = m_root->ConvertToNodeSpace(at);
             PopupOptions options;
-            options.Kind = PopupKind::Hint;
-            options.AnchorRect = Rect{p.x + 12.0f, p.y, 0.0f, 0.0f}; // right of the pointer
+            // Interactive (E16): a popup the pointer may enter and press in, which a press outside
+            // or Escape closes, rather than a hint any press or key hides.
+            m_tipInteractive = provider.IsTooltipInteractive();
+            options.Kind = m_tipInteractive ? PopupKind::Auto : PopupKind::Hint;
+            if (m_tipInteractive)
+                content->SetHitTestVisible(true);
             options.HasAnchorRect = true;
-            options.Placement = PopupPlacement{PopupSide::Below, PopupAlign::Start, 18.0f, false};
+            if (belowProvider)
+            {
+                // The focused control's: below it, where the pointer is not.
+                const core::Float2 p0 = provider.ConvertToRootSpace(core::Float2{0.0f, 0.0f});
+                const core::Float2 p1 = provider.ConvertToRootSpace(provider.GetSize());
+                options.AnchorRect = Rect{core::Min(p0.x, p1.x), core::Min(p0.y, p1.y), core::Abs(p1.x - p0.x), core::Abs(p1.y - p0.y)};
+                options.Placement = PopupPlacement{PopupSide::Below, PopupAlign::Start, 4.0f, false};
+            }
+            else
+            {
+                const core::Float2 p = m_root->ConvertToNodeSpace(at);
+                options.AnchorRect = Rect{p.x + 12.0f, p.y, 0.0f, 0.0f}; // right of the pointer
+                options.Placement = PopupPlacement{PopupSide::Below, PopupAlign::Start, 18.0f, false};
+            }
             options.FitContent = true; // as its text measures, once its sheet styles it
             options.OnClosed = [this](PopupCloseReason reason)
             {
@@ -2359,6 +2406,7 @@ export namespace experimental::gui
         void UseKeyboard()
         {
             m_keyboardMode = true;
+            m_keysMovedFocus = true;
             if (m_focusNode != nullptr)
                 m_focusNode->SetFocusVisible(true);
         }

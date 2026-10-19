@@ -1807,6 +1807,9 @@ export namespace experimental::gui
         // Optional hover-tooltip text: the dispatcher shows the nearest one up the parent chain
         // from the hovered node, after a delay (E5). Empty (the default) means none here.
         [[nodiscard]] virtual core::StringView GetTooltipText() const { return {}; }
+        /// Its tooltip takes the pointer (E16): it holds while the pointer crosses into it, and a
+        /// press inside it does not close it (a tooltip with a link or a button).
+        [[nodiscard]] virtual bool IsTooltipInteractive() const { return false; }
         /// What its tooltip shows for `text` (E5): a Tooltip label by default (defined where the
         /// widgets are); any node, for a richer one. Null: no tooltip.
         [[nodiscard]] virtual core::RefPtr<Node> CreateTooltipContent(core::StringView text);

@@ -126,6 +126,70 @@ TEST_CASE("tooltip: sits by the pointer at a display scale")
     CHECK(bed.d().GetShownTooltip()->GetPosition().y == doctest::Approx(38.0f));
 }
 
+TEST_CASE("tooltip: the keys moving the focus show the focused control's, below it (E16)")
+{
+    Bed bed;
+    bed.panel->SetTabFocusable(true);
+    bed.other->SetTabFocusable(true);
+    bed.panel->RequestFocus(); // focused from code at the start: no tooltip of its own accord
+    bed.Frames(10);
+    CHECK(bed.d().GetShownTooltip() == nullptr);
+
+    bed.d().InjectKeyDown(static_cast<core::u32>(KeyCode::Tab)); // to the other
+    bed.Frames(4);
+    CHECK(bed.d().GetShownTooltip() == nullptr); // the delay
+    bed.Frames(2);
+    REQUIRE(bed.d().GetShownTooltip() != nullptr);
+    CHECK(bed.Shown() == SV(u8"Another"));
+    const Node* tip = bed.d().GetShownTooltip();
+    CHECK(tip->GetPosition().x == doctest::Approx(150.0f)); // below the control, at its start
+    CHECK(tip->GetPosition().y == doctest::Approx(104.0f));
+
+    bed.d().InjectKeyDown(static_cast<core::u32>(KeyCode::Tab)); // on to the panel: its own, after the delay
+    bed.Frames(1);
+    CHECK(bed.Shown() == SV(u8"The panel")); // warm: at once
+
+    // The pointer in use: the focus's tooltip waits for the keys again.
+    bed.d().InjectMouseDown(core::Float2{280.0f, 280.0f}, MouseButton::Left);
+    bed.d().InjectMouseUp(core::Float2{280.0f, 280.0f}, MouseButton::Left);
+    bed.Frames(10);
+    CHECK(bed.d().GetShownTooltip() == nullptr);
+    bed.d().SetKeyboardTooltips(false);
+    bed.d().InjectKeyDown(static_cast<core::u32>(KeyCode::Tab));
+    bed.Frames(10);
+    CHECK(bed.d().GetShownTooltip() == nullptr); // turned off
+}
+
+TEST_CASE("tooltip: an interactive one holds while the pointer crosses into it, and takes a press (E16)")
+{
+    Bed bed;
+    bed.other->SetTooltipInteractive(true);
+    bed.d().InjectMouseMove(core::Float2{160.0f, 20.0f});
+    bed.Frames(6);
+    Node* tip = bed.d().GetShownTooltip();
+    REQUIRE(tip != nullptr);
+    (void)bed.root->UpdateLayout();
+    const core::Float2 inside = tip->ConvertToWorldSpace(core::Float2{tip->GetSize().x * 0.5f, tip->GetSize().y * 0.5f});
+
+    // Off the control, toward the tooltip: it holds a moment.
+    bed.d().InjectMouseMove(core::Float2{160.0f, 120.0f}); // below the control, before the tooltip
+    bed.Frames(1);
+    CHECK(bed.d().GetShownTooltip() == tip);
+    bed.d().InjectMouseMove(inside); // in it: it holds
+    bed.Frames(10);
+    CHECK(bed.d().GetShownTooltip() == tip);
+    bed.d().InjectMouseDown(inside, MouseButton::Left); // a press inside does not close it
+    bed.d().InjectMouseUp(inside, MouseButton::Left);
+    CHECK(bed.d().GetShownTooltip() == tip);
+
+    // Off both: gone after the grace.
+    bed.d().InjectMouseMove(core::Float2{20.0f, 280.0f});
+    bed.Frames(2); // 0.2 s
+    CHECK(bed.d().GetShownTooltip() == tip);
+    bed.Frames(2);
+    CHECK(bed.d().GetShownTooltip() == nullptr);
+}
+
 TEST_CASE("context menu: a right release asks the node there and up; Shift+F10 asks the focused one")
 {
     Bed bed;

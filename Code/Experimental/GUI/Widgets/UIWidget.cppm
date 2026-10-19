@@ -146,6 +146,8 @@ export namespace experimental::gui
         {
             return m_tooltip.AsView();
         }
+        void SetTooltipInteractive(bool interactive) noexcept { m_tooltipInteractive = interactive; }
+        [[nodiscard]] bool IsTooltipInteractive() const override { return m_tooltipInteractive; }
 
         // === Accessibility in markup (E9d) ===
         /// What a screen reader takes it for, over its type's (markup's `role`; empty: its type's).
@@ -271,6 +273,7 @@ export namespace experimental::gui
         mutable i32 m_position = 1;
         mutable i32 m_positionCount = 1;
         core::String m_tooltip;
+        bool m_tooltipInteractive = false; // its tooltip takes the pointer (E16)
         core::String m_accessRole;
         core::String m_accessLabel;
         core::String m_accessLabelledBy;

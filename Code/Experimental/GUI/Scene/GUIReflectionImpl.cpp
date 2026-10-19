@@ -879,6 +879,8 @@ namespace experimental::gui
         builder.AccessorProperty<&UIWidget::GetTooltipText, &UIWidget::SetTooltip>("tooltip")
             .PropAttribute("css", core::String(u8"tooltip"))
             .PropAttribute("translatable", true);
+        builder.AccessorProperty<&UIWidget::IsTooltipInteractive, &UIWidget::SetTooltipInteractive>("tooltipInteractive")
+            .PropAttribute("css", core::String(u8"tooltip-interactive")); // E16
         // Accessibility in markup (E9d): over what its type and its properties say.
         builder.AccessorProperty<&UIWidget::GetAccessRoleName, &UIWidget::SetAccessRoleName>("role").PropAttribute("css", core::String(u8"role"));
         builder.AccessorProperty<&UIWidget::GetAccessLabel, &UIWidget::SetAccessLabel>("ariaLabel")

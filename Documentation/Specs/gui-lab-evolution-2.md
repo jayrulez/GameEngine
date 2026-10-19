@@ -458,6 +458,24 @@ Design:
 Tests: script-built menus, windows, models and removal in both languages; scrolling menus; focus
 and interactive tooltips.
 
+As built on `vg` (2026-10-19): `on` and `onCommand` return a token and `off` removes either, from
+inside its own handler too, a node's listeners and handlers holding still while they run
+(c9b8fb114). Scripts open windows (`open`, `openModal`, `close`, `isOpen`, `closable`,
+`resizable`, a `close` event), menus (`openAt`, `openBelow`, `isOpen`) and popups (`popup`,
+`closePopup`) of their own (8f1f0e340, f509160df); a window held by its tree alone outlives its own
+close, which had freed it before calling back (c5e6908a4). A script's `ListModel` shows in a view
+through `setModel`, and `gui.tr`, `gui.trCount` and `gui.language` read the localization
+(a8c7670f9). A menu taller than the window keeps to it and scrolls between two arrows, by the
+pointer resting on one, the wheel and the keys (309e4b2ed). The keys moving the focus show the
+focused control's tooltip below it, and `tooltip-interactive` gives a tooltip the pointer can
+cross into and press in (6d42c7615). Screen: the Menus page's script builds a menu of sixty items
+and a window of its own; its buttons show their tooltips from the keys, and one can be entered
+(657b9b96a).
+Left: popups in windows of their own wait for hosting (ruling 7); a tooltip's content is its
+text, so an interactive one has nothing to press yet but itself (a script can open a popup of its
+own for richer content); a script's Variant arguments (a format's list) are not taken by
+`gui.trCount`, which fills `{0}` with the count alone.
+
 ### E17 Direction, accessibility and touch, the leftovers
 
 Facts: several widgets and popup placement do not follow the direction; a right-to-left horizontal

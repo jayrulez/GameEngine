@@ -160,9 +160,10 @@ export namespace experimental::gui
 
             // The track is painted by the node background (themable via background-color); we
             // draw only the thumb here.
+            // Across, its start is the inline start: the right in right to left.
             const Rect thumb = (m_orientation == Orientation::Vertical)
                                    ? Rect{b.x, b.y + pos, b.width, thumbLen}
-                                   : Rect{b.x + pos, b.y, thumbLen, b.height};
+                                   : MirroredIn(Rect{b.x + pos, b.y, thumbLen, b.height}, b, IsRightToLeft());
             GetPartStyle(u8"thumb").Draw(ctx, thumb, FilledBox(m_thumbColor, Radii(thumb)));
         }
 
@@ -180,11 +181,13 @@ export namespace experimental::gui
             return vg::CornerRadii(core::Min(r.width, r.height) * 0.5f);
         }
 
-        // Cursor position along the bar's axis, relative to the track start.
+        // Cursor position along the bar's axis, relative to the track start (the inline start across).
         [[nodiscard]] f32 AlongAxis(const MouseEvent& event, const Rect& b) const
         {
             const core::Float2 local = ConvertToNodeSpace(event.Position);
-            return (m_orientation == Orientation::Vertical) ? (local.y - b.y) : (local.x - b.x);
+            if (m_orientation == Orientation::Vertical)
+                return local.y - b.y;
+            return IsRightToLeft() ? b.Right() - local.x : local.x - b.x;
         }
 
         Orientation m_orientation = Orientation::Vertical;

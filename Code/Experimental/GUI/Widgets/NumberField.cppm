@@ -189,12 +189,6 @@ export namespace experimental::gui
         NumberField()
         {
             SetTag(core::StringView(u8"numberfield"));
-            {
-                StyleWriteScope defaults(*this);
-                Thickness pad = GetPadding();
-                pad.Right = kSpinWidth + 2.0f; // its arrows sit in its right padding
-                SetPadding(pad);
-            }
             NumberField* self = this;
             m_up = core::MakeRef<SpinButton>(MemoryAllocator(), true);
             m_down = core::MakeRef<SpinButton>(MemoryAllocator(), false);
@@ -372,7 +366,8 @@ export namespace experimental::gui
                 TextField::OnMouseMove(event);
                 return;
             }
-            const f32 dx = event.Position.x - m_pressX;
+            // Toward the inline end raises it, as a slider's does.
+            const f32 dx = (event.Position.x - m_pressX) * (IsRightToLeft() ? -1.0f : 1.0f);
             if (!m_scrubbing && core::Abs(dx) < kScrubThreshold)
                 return;
             m_scrubbing = true;
@@ -418,19 +413,34 @@ export namespace experimental::gui
             m_editing = false;
         }
 
-        // Its arrows stacked in its right padding, inside its border.
+        // Its text kept clear of its arrows, at its inline end.
+        [[nodiscard]] Rect EditBounds() const override
+        {
+            const Rect content = GetContentBounds();
+            const Thickness b = GetBorderThickness();
+            if (IsRightToLeft())
+            {
+                const f32 left = core::Max(content.x, b.Left + kSpinWidth + kSpinGap);
+                return Rect{left, content.y, core::Max(0.0f, content.Right() - left), content.height};
+            }
+            const f32 right = core::Min(content.Right(), GetSize().x - b.Right - kSpinWidth - kSpinGap);
+            return Rect{content.x, content.y, core::Max(0.0f, right - content.x), content.height};
+        }
+
+        // Its arrows stacked at its inline end, inside its border.
         void OnLayout() override
         {
             const Thickness b = GetBorderThickness();
             const core::Float2 size = GetSize();
             const f32 h = core::Max(0.0f, size.y - b.TotalVertical());
-            const f32 x = size.x - b.Right - kSpinWidth;
+            const f32 x = IsRightToLeft() ? b.Left : size.x - b.Right - kSpinWidth;
             m_up->Arrange(Rect{x, b.Top, kSpinWidth, h * 0.5f});
             m_down->Arrange(Rect{x, b.Top + h * 0.5f, kSpinWidth, h - h * 0.5f});
         }
 
     private:
         static constexpr f32 kSpinWidth = 16.0f;
+        static constexpr f32 kSpinGap = 2.0f; // between its text and its arrows
         static constexpr f32 kScrubThreshold = 4.0f; // pixels a press moves before it scrubs
         static constexpr f32 kPixelsPerStep = 4.0f;
 

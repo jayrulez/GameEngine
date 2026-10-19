@@ -203,7 +203,7 @@ export namespace experimental::gui
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
         {
             ButtonBase::OnDraw(ctx, localBounds);
-            DrawDisclosure(ctx, GetContentBounds(), true, GetTextColor());
+            DrawDisclosure(ctx, GetContentBounds(), true, GetTextColor(), IsRightToLeft());
         }
     };
 

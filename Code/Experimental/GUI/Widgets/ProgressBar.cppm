@@ -73,23 +73,26 @@ export namespace experimental::gui
         {
             (void)localBounds;
             const Rect b = GetContentBounds();
+            const bool rtl = IsRightToLeft(); // it fills from the inline start
             const f32 radius = b.height * 0.5f;
             GetPartStyle(u8"track").Draw(ctx, b, FilledBox(m_trackColor, vg::CornerRadii(radius)));
             if (m_indeterminate)
             {
                 Sweep();
-                // A third of the track, entering at the left and leaving at the right, clipped to it.
+                // A third of the track, entering at the inline start and leaving at the end, clipped to it.
                 const f32 segment = b.width / 3.0f;
                 const f32 x = b.x - segment + (b.width + segment) * m_phase;
                 const f32 left = core::Max(b.x, x);
                 const f32 right = core::Min(b.x + b.width, x + segment);
                 if (right > left)
-                    GetPartStyle(u8"fill").Draw(ctx, Rect{left, b.y, right - left, b.height}, FilledBox(m_fillColor, vg::CornerRadii(radius)));
+                    GetPartStyle(u8"fill").Draw(ctx, MirroredIn(Rect{left, b.y, right - left, b.height}, b, rtl),
+                                                FilledBox(m_fillColor, vg::CornerRadii(radius)));
                 return;
             }
             const f32 ratio = static_cast<f32>(GetRatio());
             if (ratio > 0.0f)
-                GetPartStyle(u8"fill").Draw(ctx, Rect{b.x, b.y, b.width * ratio, b.height}, FilledBox(m_fillColor, vg::CornerRadii(radius)));
+                GetPartStyle(u8"fill").Draw(ctx, MirroredIn(Rect{b.x, b.y, b.width * ratio, b.height}, b, rtl),
+                                            FilledBox(m_fillColor, vg::CornerRadii(radius)));
         }
 
     private:

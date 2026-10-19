@@ -23,8 +23,9 @@ namespace vg = foundation::vg;
 
 export namespace experimental::gui
 {
-    /// Draws the chevron centred in `box`, as large as fits up to 8 pixels across.
-    inline void DrawDisclosure(DrawContext& ctx, const Rect& box, bool open, Color color)
+    /// Draws the chevron centred in `box`, as large as fits up to 8 pixels across; closed, it points
+    /// toward the inline end (left in right to left).
+    inline void DrawDisclosure(DrawContext& ctx, const Rect& box, bool open, Color color, bool rightToLeft)
     {
         const f32 s = core::Min(4.0f, core::Min(box.width, box.height) * 0.4f); // half its size
         const f32 cx = box.x + box.width * 0.5f;
@@ -38,9 +39,10 @@ export namespace experimental::gui
         }
         else
         {
-            pb.MoveTo(cx - s * 0.5f, cy - s);
-            pb.LineTo(cx + s * 0.75f, cy);
-            pb.LineTo(cx - s * 0.5f, cy + s);
+            const f32 way = rightToLeft ? -1.0f : 1.0f;
+            pb.MoveTo(cx - way * s * 0.5f, cy - s);
+            pb.LineTo(cx + way * s * 0.75f, cy);
+            pb.LineTo(cx - way * s * 0.5f, cy + s);
         }
         pb.Close();
         ctx.VG().FillPath(pb.ToPath(), color);

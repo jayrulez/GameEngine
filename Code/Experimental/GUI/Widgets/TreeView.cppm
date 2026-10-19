@@ -63,7 +63,7 @@ export namespace experimental::gui
             if (m_onClicked)
                 m_onClicked();
         }
-        void OnDraw(DrawContext& ctx, const Rect&) override { DrawDisclosure(ctx, GetLocalBounds(), m_expanded, m_color); }
+        void OnDraw(DrawContext& ctx, const Rect&) override { DrawDisclosure(ctx, GetLocalBounds(), m_expanded, m_color, IsRightToLeft()); }
 
     private:
         bool m_expanded = false;

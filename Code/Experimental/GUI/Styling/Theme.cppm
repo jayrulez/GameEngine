@@ -77,7 +77,7 @@ export namespace experimental::gui
             textfield, textarea { background-color: var(--field-background, var(--control)); color: var(--field-text, var(--text-strong));
                                   padding: var(--space-m); cursor: text; }
             numberfield { background-color: var(--field-background, var(--control)); color: var(--field-text, var(--text-strong));
-                          padding: var(--space-m) 22 var(--space-m) var(--space-m); cursor: text; }
+                          padding: var(--space-m); cursor: text; }
             spinbutton::arrow { background-color: var(--spinbutton-arrow); }
             listbox   { background-color: var(--list-background, var(--surface-sunken)); }
             listbox::selection { background-color: var(--list-selection, var(--selection)); }

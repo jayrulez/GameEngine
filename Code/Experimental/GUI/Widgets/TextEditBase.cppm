@@ -218,7 +218,7 @@ export namespace experimental::gui
         [[nodiscard]] bool GetTextInputArea(Rect& area, f32& caretX) const override
         {
             const TextLayout& layout = EditLayout();
-            const core::Float2 origin = TextOrigin(GetContentBounds());
+            const core::Float2 origin = TextOrigin(EditBounds());
             const usize start = DisplayOffset(SelectionStart());
             const usize end = start + (Composing() ? m_composition.Size() : 0);
             const LaidOutLine line = LineAt(layout, DisplayCaret());
@@ -255,6 +255,9 @@ export namespace experimental::gui
         virtual void KeepCaretInView() = 0;
         /// Where its placeholder draws in `content`.
         [[nodiscard]] virtual Rect PlaceholderBounds(const Rect& content) const { return content; }
+        /// Where its text goes: its content box, less any part of its own beside the text (a
+        /// number field's arrows).
+        [[nodiscard]] virtual Rect EditBounds() const { return GetContentBounds(); }
         /// Whether it masks its text (a password: a bullet for each character).
         [[nodiscard]] virtual bool IsMasked() const { return false; }
         /// The text is about to commit (Return, focus leaving): a field that reads it as something
@@ -554,7 +557,7 @@ export namespace experimental::gui
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
         {
             (void)localBounds;
-            const Rect content = GetContentBounds();
+            const Rect content = EditBounds();
             // What it shows stays inside its padding (the caret's width past the right, so a caret
             // there shows).
             ctx.PushClip(Rect{content.x, content.y, content.width + kCaretWidth, content.height});
@@ -722,7 +725,7 @@ export namespace experimental::gui
 
         [[nodiscard]] usize OffsetAtPoint(core::Float2 local, bool* upstream = nullptr) const
         {
-            const core::Float2 origin = TextOrigin(GetContentBounds());
+            const core::Float2 origin = TextOrigin(EditBounds());
             return ModelOffset(EditLayout().OffsetAt(core::Float2{local.x - origin.x, local.y - origin.y}, upstream));
         }
 

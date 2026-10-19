@@ -74,7 +74,7 @@ export namespace experimental::gui
             const PartStyle& chevron = GetPartStyle(u8"chevron");
             Color color = chevron.HasBackground ? chevron.Box.BackgroundColor : Color{0.80f, 0.84f, 0.90f, 1.0f};
             color.a *= chevron.Opacity;
-            DrawDisclosure(ctx, box, m_open, color);
+            DrawDisclosure(ctx, box, m_open, color, IsRightToLeft());
         }
 
     private:

@@ -79,7 +79,7 @@ export namespace experimental::gui
         // Scrolls by the least that shows the caret, and no further than the text needs.
         void KeepCaretInView() override
         {
-            const f32 view = core::Max(0.0f, GetContentBounds().width - kCaretWidth);
+            const f32 view = core::Max(0.0f, EditBounds().width - kCaretWidth);
             const TextLayout& layout = EditLayout();
             const f32 caret = layout.CaretX(DisplayCaret());
             const f32 before = m_scrollX;

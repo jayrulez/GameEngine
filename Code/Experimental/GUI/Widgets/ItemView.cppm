@@ -1333,9 +1333,16 @@ export namespace experimental::gui
                     pastEnd = m_heights.Top(i) >= bottom; // one below the view
                     ItemRow* row = TakeRow(static_cast<i32>(i), next);
                     // A row not yet styled (just made, or its template's attributes just
-                    // written) is measured again once it is.
+                    // written) is measured again once it is. Unstyled it often measures nothing
+                    // (no font yet); then it keeps its estimate, since rows of no height all start
+                    // at the top and the view would start at the last of them.
                     if (measured && !m_heights.IsMeasured(i))
-                        (void)m_heights.Set(i, row->Measure(across).y, !StylePending(*row));
+                    {
+                        const bool pending = StylePending(*row);
+                        const f32 height = row->Measure(across).y;
+                        if (!pending || height > 0.0f)
+                            (void)m_heights.Set(i, height, !pending);
+                    }
                 }
             }
             for (const core::RefPtr<ItemRow>& row : m_live)

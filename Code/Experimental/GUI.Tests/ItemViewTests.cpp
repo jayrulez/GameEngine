@@ -560,3 +560,34 @@ TEST_CASE("itemview: a template's root fills its row or a grid's cell, inside it
     CHECK(tile->GetSize().y == doctest::Approx(42.0f));
     CHECK(tile->GetPosition().x == doctest::Approx(4.0f));
 }
+
+TEST_CASE("itemview: rows made before they are styled keep their estimate, and the view still starts at the first")
+{
+    // As a page shown after the GUI started: its list makes its rows before a sheet has styled
+    // them, so they measure nothing; that must not stand as their height.
+    RegisterGuiElements();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{600.0f, 600.0f});
+    MarkupLoader loader(*root->GetElementSet(), core::DefaultAllocator());
+    auto tree = loader.LoadFromString(SV(u8R"(<ListView width="420" height="200" row-height="0" estimated-row-height="40" items="a|b|c|d|e|f">
+        <template><Panel class="tall-row"/></template>
+    </ListView>)"));
+    auto* list = core::Cast<ListView>(tree.Get());
+    REQUIRE(list != nullptr);
+    root->AddChild(list);
+    (void)root->UpdateLayout(); // the rows made, unstyled
+    StyleManager styles;
+    styles.SetStyleSheet(CSSParser::Parse(SV(u8".tall-row { height: 30px; }")));
+    for (int frame = 0; frame < 3; ++frame)
+    {
+        styles.ApplyTree(*root.Get());
+        (void)root->UpdateLayout();
+    }
+    ItemRow* first = list->RowForItem(0);
+    REQUIRE(first != nullptr);
+    CHECK(first->GetPosition().y == doctest::Approx(0.0f));
+    CHECK(first->GetSize().y == doctest::Approx(30.0f));
+    ItemRow* fourth = list->RowForItem(3);
+    REQUIRE(fourth != nullptr);
+    CHECK(fourth->GetPosition().y == doctest::Approx(90.0f));
+}

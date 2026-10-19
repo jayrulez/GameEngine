@@ -180,6 +180,45 @@ TEST_CASE("node: event listener fires on size change")
     CHECK(fired == 1); // no longer listening
 }
 
+TEST_CASE("node: a listener removes itself or adds another while listeners run (E16)")
+{
+    auto node = MakeNode();
+    int first = 0, second = 0, added = 0;
+    core::u32 firstId = 0;
+    firstId = node->AddEventListener(EventType::SizeChanged,
+                                     [&](const Event&)
+                                     {
+                                         ++first;
+                                         CHECK(node->RemoveEventListener(firstId)); // its own: from inside it
+                                         (void)node->AddEventListener(EventType::SizeChanged, [&](const Event&) { ++added; });
+                                     });
+    (void)node->AddEventListener(EventType::SizeChanged, [&](const Event&) { ++second; });
+    node->SetSize(core::Float2{10.0f, 10.0f});
+    CHECK(first == 1);
+    CHECK(second == 1);  // the one after it still ran
+    CHECK(added == 0);   // the one added waits for the next event
+    node->SetSize(core::Float2{20.0f, 20.0f});
+    CHECK(first == 1);   // gone
+    CHECK(second == 2);
+    CHECK(added == 1);
+    CHECK_FALSE(node->RemoveEventListener(firstId)); // already gone
+}
+
+TEST_CASE("node: a command handler removes itself while it runs (E16)")
+{
+    auto node = MakeNode();
+    int ran = 0;
+    core::u32 token = 0;
+    token = node->OnCommand(core::StringView(u8"go"), [&](CommandEvent&) { ++ran; CHECK(node->RemoveCommandHandler(token)); });
+    CHECK(node->HandlesCommand(core::StringView(u8"go")));
+    CommandEvent event;
+    event.Id = core::StringView(u8"go");
+    CHECK(node->RunCommandHandlers(event));
+    CHECK(ran == 1);
+    CHECK_FALSE(node->HandlesCommand(core::StringView(u8"go")));
+    CHECK_FALSE(node->RunCommandHandlers(event));
+}
+
 TEST_CASE("node: setting same size does not notify")
 {
     auto node = MakeNode();

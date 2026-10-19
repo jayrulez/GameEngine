@@ -714,3 +714,72 @@ TEST_CASE("gui-script: Luau tweens, springs and plays a sequence (E14)")
     CheckMotion(bed);
 }
 #endif
+
+namespace
+{
+    // Listener tokens (E16): the script put a Button 80 x 30 at the origin, listening for clicks
+    // twice: `once` stops itself from inside, `always` stays until `stopAlways` turns it off.
+    void CheckOff(GuiBed& bed)
+    {
+        REQUIRE(bed.errors.count == 0);
+        (void)bed.root->UpdateLayout();
+        bed.Click(Float2{10.0f, 10.0f});
+        CHECK(bed.Number(u8"onceCount") == doctest::Approx(1.0));
+        CHECK(bed.Number(u8"alwaysCount") == doctest::Approx(1.0));
+        bed.Click(Float2{10.0f, 10.0f});
+        CHECK(bed.Number(u8"onceCount") == doctest::Approx(1.0)); // it stopped itself
+        CHECK(bed.Number(u8"alwaysCount") == doctest::Approx(2.0));
+        CHECK(bed.Number(u8"stopAlways") == doctest::Approx(1.0)); // off said it was there
+        bed.Click(Float2{10.0f, 10.0f});
+        CHECK(bed.Number(u8"alwaysCount") == doctest::Approx(2.0));
+        CHECK(bed.Number(u8"stopAlways") == doctest::Approx(0.0)); // and now it is not
+    }
+}
+
+#ifdef OPTION_HAS_ANGELSCRIPT
+TEST_CASE("gui-script: AngelScript turns listeners off, from inside one too (E16)")
+{
+    RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    const Status loaded = bed.context->Load(
+        u8"funcdef bool EventHandler(GuiEvent e);\n"
+        u8"int onces = 0; int alwayses = 0; int onceToken = 0; int alwaysToken = 0;\n"
+        u8"bool once(GuiEvent e) { onces++; gui::root().childAt(0).off(onceToken); return false; }\n"
+        u8"bool always(GuiEvent e) { alwayses++; return false; }\n"
+        u8"void main() {\n"
+        u8"  Node@ button = gui::root().add(\"Button\");\n"
+        u8"  button.width = 80; button.height = 30;\n"
+        u8"  onceToken = button.on(\"click\", EventHandler(once));\n"
+        u8"  alwaysToken = button.on(\"click\", EventHandler(always));\n"
+        u8"}\n"
+        u8"double onceCount() { return onces; }\n"
+        u8"double alwaysCount() { return alwayses; }\n"
+        u8"double stopAlways() { return gui::root().childAt(0).off(alwaysToken) ? 1 : 0; }\n",
+        u8"main");
+    INFO(doctest::String(reinterpret_cast<const char*>(bed.errors.last.CStr())));
+    REQUIRE(loaded.IsOk());
+    CheckOff(bed);
+}
+#endif
+
+#ifdef OPTION_HAS_LUAU
+TEST_CASE("gui-script: Luau turns listeners off, from inside one too (E16)")
+{
+    RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    const Status loaded = bed.context->Load(
+        u8"local onces, alwayses = 0, 0\n"
+        u8"local button = gui.root():add(\"Button\")\n"
+        u8"button.width = 80; button.height = 30\n"
+        u8"local onceToken\n"
+        u8"onceToken = button:on(\"click\", function() onces = onces + 1; button:off(onceToken); return false end)\n"
+        u8"local alwaysToken = button:on(\"click\", function() alwayses = alwayses + 1; return false end)\n"
+        u8"function onceCount() return onces end\n"
+        u8"function alwaysCount() return alwayses end\n"
+        u8"function stopAlways() return button:off(alwaysToken) and 1 or 0 end\n",
+        u8"main");
+    INFO(doctest::String(reinterpret_cast<const char*>(bed.errors.last.CStr())));
+    REQUIRE(loaded.IsOk());
+    CheckOff(bed);
+}
+#endif

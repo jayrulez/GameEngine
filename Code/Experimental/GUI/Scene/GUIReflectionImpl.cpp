@@ -311,16 +311,16 @@ namespace experimental::gui
         return child != nullptr ? child->HandleAs(Node::StaticType()) : core::Variant{};
     }
 
-    void Node::On(StringView eventName, RefPtr<foundation::script::IScriptDelegate> handler)
+    i32 Node::On(StringView eventName, RefPtr<foundation::script::IScriptDelegate> handler)
     {
         EventType type = EventType::MouseClick;
         if (!handler || !EventTypeNamed(eventName, type))
-            return;
+            return 0;
         // The node holds the handler (and with it the script function); the script holds the node
         // only weakly, so neither keeps the other alive.
         // The handler gets the event's data (one ignoring it may take no parameter), and takes the
         // event by returning true.
-        (void)AddEventListener(type,
+        return static_cast<i32>(AddEventListener(type,
                                [handler, name = core::String(eventName)](const Event& event)
                                {
                                    core::Variant args[1] = {core::Variant::From<GuiEvent>(ScriptEventOf(event, name.AsView()))};
@@ -328,7 +328,7 @@ namespace experimental::gui
                                    const bool* took = result.HasValue() ? result.Value().TryGet<bool>() : nullptr;
                                    if (took != nullptr && *took)
                                        event.Handled = true;
-                               });
+                               }));
     }
 
     // === Bindings ===
@@ -568,17 +568,17 @@ namespace experimental::gui
         return stroke.HasValue() ? KeystrokeText(stroke.Value()) : core::String{};
     }
 
-    void Node::OnCommandScript(StringView id, RefPtr<foundation::script::IScriptDelegate> handler)
+    i32 Node::OnCommandScript(StringView id, RefPtr<foundation::script::IScriptDelegate> handler)
     {
         if (!handler)
-            return;
-        (void)OnCommand(id,
+            return 0;
+        return static_cast<i32>(OnCommand(id,
                         [handler](CommandEvent& event)
                         {
                             Result<core::Variant> result = handler->Invoke(Span<core::Variant>{});
                             const bool* goOn = result.HasValue() ? result.Value().TryGet<bool>() : nullptr;
                             event.Propagate = goOn != nullptr && *goOn;
-                        });
+                        }));
     }
 
     void Gui::Set(StringView name, const core::Variant& value)
@@ -745,6 +745,7 @@ namespace experimental::gui
         builder.Method<&Node::ChildElement, Node>("childAt");
         builder.Method<&Node::ElementChildCount>("childCount");
         builder.Method<&Node::On>("on");
+        builder.Method<&Node::Off>("off"); // what on and onCommand gave (E16)
         builder.Method<&Node::BindScript>("bind");
         builder.Method<&Node::BindSceneData>("bindData");
         builder.Method<&Node::OnCommandScript>("onCommand");

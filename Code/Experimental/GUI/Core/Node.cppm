@@ -1501,8 +1501,16 @@ export namespace experimental::gui
         [[nodiscard]] Variant ChildElement(i32 index);
         [[nodiscard]] i32 ElementChildCount() const noexcept { return static_cast<i32>(m_children.Size()); }
         /// Calls `handler` on each event named `eventName` (click, mousedown, mouseup,
-        /// mouseenter, mouseleave, mousemove, wheel, keydown, keyup, textinput, focus, blur).
-        void On(core::StringView eventName, RefPtr<foundation::script::IScriptDelegate> handler);
+        /// mouseenter, mouseleave, mousemove, wheel, keydown, keyup, textinput, focus, blur). A
+        /// token for Off (0 for no such event).
+        i32 On(core::StringView eventName, RefPtr<foundation::script::IScriptDelegate> handler);
+        /// Stops what On or OnCommandScript started (E16), from inside that handler too; false when
+        /// the token is none of this node's.
+        bool Off(i32 token)
+        {
+            const u32 id = static_cast<u32>(token);
+            return token > 0 && (RemoveEventListener(id) || RemoveCommandHandler(id));
+        }
         /// Binds `property` to what `expression` returns, run again whenever what it read changed
         /// (gui.getNumber and the rest, widget properties). False when no such property.
         bool BindScript(core::StringView property, RefPtr<foundation::script::IScriptDelegate> expression);
@@ -1515,7 +1523,7 @@ export namespace experimental::gui
         bool FocusElement();
         /// Handles command `id` with a script function, in the bubble phase; the function returning
         /// true lets the command go on up the focus path.
-        void OnCommandScript(core::StringView id, RefPtr<foundation::script::IScriptDelegate> handler);
+        i32 OnCommandScript(core::StringView id, RefPtr<foundation::script::IScriptDelegate> handler);
         /// Removes this node from its tree at the end of the UI's update (Close): never under a
         /// running handler.
         void Destroy() { Close(); }
@@ -1778,14 +1786,15 @@ export namespace experimental::gui
             if (m_background || m_box.BackgroundColor.a > 0.0f || !m_box.Layers.IsEmpty() || IsTabFocusable())
                 return true;
             for (usize i = 0; i < m_listeners.Size(); ++i)
-                switch (m_listeners[i].Type)
-                {
-                case EventType::MouseDown:
-                case EventType::MouseUp:
-                case EventType::MouseClick:
-                case EventType::MouseWheel: return true;
-                default: break;
-                }
+                if (!m_listeners[i].Removed)
+                    switch (m_listeners[i].Type)
+                    {
+                    case EventType::MouseDown:
+                    case EventType::MouseUp:
+                    case EventType::MouseClick:
+                    case EventType::MouseWheel: return true;
+                    default: break;
+                    }
             return false;
         }
 
@@ -2287,7 +2296,8 @@ export namespace experimental::gui
         void ForEachListener(F&& f) const
         {
             for (const Listener& listener : m_listeners)
-                f(listener.Type, listener.Capture);
+                if (!listener.Removed)
+                    f(listener.Type, listener.Capture);
         }
 
         // === Command handlers (G7 of Specs/vg-and-gui-lab.md) ===
@@ -2298,24 +2308,41 @@ export namespace experimental::gui
         /// Handles command `id` in `phase`; a token for RemoveCommandHandler.
         u32 OnCommand(core::StringView id, CommandHandler handler, CommandPhase phase = CommandPhase::Bubble)
         {
-            m_commandHandlers.PushBack(CommandHandlerEntry{core::String(id), phase, core::Move(handler), ++m_nextListenerId});
+            CommandHandlerEntry entry{core::String(id), phase, core::Move(handler), ++m_nextListenerId};
+            if (m_dispatching != 0)
+                m_pendingCommandHandlers.PushBack(core::Move(entry)); // joins once the running ones return
+            else
+                m_commandHandlers.PushBack(core::Move(entry));
             NotifyCommandsChanged();
             return m_nextListenerId;
         }
-        void RemoveCommandHandler(u32 token)
+        /// Removes a handler; one removed while handlers run (its own, from inside it) is marked and
+        /// goes once they return, never destroyed while it runs. False when the token is none of its.
+        bool RemoveCommandHandler(u32 token)
         {
             for (usize i = 0; i < m_commandHandlers.Size(); ++i)
-                if (m_commandHandlers[i].Token == token)
+                if (m_commandHandlers[i].Token == token && !m_commandHandlers[i].Removed)
                 {
-                    m_commandHandlers.RemoveAt(i);
+                    if (m_dispatching != 0)
+                        m_commandHandlers[i].Removed = true;
+                    else
+                        m_commandHandlers.RemoveAt(i);
                     NotifyCommandsChanged();
-                    return;
+                    return true;
                 }
+            for (usize i = 0; i < m_pendingCommandHandlers.Size(); ++i)
+                if (m_pendingCommandHandlers[i].Token == token)
+                {
+                    m_pendingCommandHandlers.RemoveAt(i);
+                    NotifyCommandsChanged();
+                    return true;
+                }
+            return false;
         }
         [[nodiscard]] bool HandlesCommand(core::StringView id) const
         {
             for (const CommandHandlerEntry& entry : m_commandHandlers)
-                if (entry.Id.AsView() == id)
+                if (!entry.Removed && entry.Id.AsView() == id)
                     return true;
             return false;
         }
@@ -2349,10 +2376,11 @@ export namespace experimental::gui
         bool RunCommandHandlers(CommandEvent& event)
         {
             bool ran = false;
+            DispatchScope scope(*this);
             for (usize i = 0; i < m_commandHandlers.Size(); ++i)
             {
                 CommandHandlerEntry& entry = m_commandHandlers[i];
-                if (entry.Phase != event.Phase || entry.Id.AsView() != event.Id)
+                if (entry.Removed || entry.Phase != event.Phase || entry.Id.AsView() != event.Id)
                     continue;
                 entry.Handler(event);
                 ran = true;
@@ -2366,30 +2394,49 @@ export namespace experimental::gui
         u32 AddEventListener(EventType type, EventCallback callback, bool capture = false)
         {
             const u32 id = ++m_nextListenerId;
-            m_listeners.PushBack(Listener{id, type, core::Move(callback), capture});
+            if (m_dispatching != 0)
+                m_pendingListeners.PushBack(Listener{id, type, core::Move(callback), capture}); // after the running ones
+            else
+                m_listeners.PushBack(Listener{id, type, core::Move(callback), capture});
             return id;
         }
         [[nodiscard]] bool HasListener(EventType type) const
         {
             for (const Listener& l : m_listeners)
+                if (l.Type == type && !l.Removed)
+                    return true;
+            for (const Listener& l : m_pendingListeners)
                 if (l.Type == type)
                     return true;
             return false;
         }
-        void RemoveEventListener(u32 id)
+        /// Removes a listener; one removed while listeners run (its own, from inside it) is marked
+        /// and goes once they return, never destroyed while it runs. False when the id is none of its.
+        bool RemoveEventListener(u32 id)
         {
             for (usize i = 0; i < m_listeners.Size(); ++i)
-                if (m_listeners[i].Id == id)
+                if (m_listeners[i].Id == id && !m_listeners[i].Removed)
                 {
-                    m_listeners.RemoveAt(i);
-                    return;
+                    if (m_dispatching != 0)
+                        m_listeners[i].Removed = true;
+                    else
+                        m_listeners.RemoveAt(i);
+                    return true;
                 }
+            for (usize i = 0; i < m_pendingListeners.Size(); ++i)
+                if (m_pendingListeners[i].Id == id)
+                {
+                    m_pendingListeners.RemoveAt(i);
+                    return true;
+                }
+            return false;
         }
         /// Tells this node's listeners of an event about it (not routed: geometry, focus, change).
         void SendEvent(const Event& event)
         {
+            DispatchScope scope(*this);
             for (usize i = 0; i < m_listeners.Size(); ++i)
-                if (m_listeners[i].Type == event.Type)
+                if (!m_listeners[i].Removed && m_listeners[i].Type == event.Type)
                     m_listeners[i].Callback(event);
         }
 
@@ -2528,14 +2575,48 @@ export namespace experimental::gui
             EventType Type;
             EventCallback Callback;
             bool Capture = false;
+            bool Removed = false; // while listeners run: goes once they return
         };
         // The listeners of one kind (capture or bubble) for an input event. By index: a listener
         // may add another.
         void RunListeners(const Event& event, bool capture)
         {
+            DispatchScope scope(*this);
             for (usize i = 0; i < m_listeners.Size(); ++i)
-                if (m_listeners[i].Type == event.Type && m_listeners[i].Capture == capture)
+                if (!m_listeners[i].Removed && m_listeners[i].Type == event.Type && m_listeners[i].Capture == capture)
                     m_listeners[i].Callback(event);
+        }
+        // While its listeners or handlers run, the lists hold still: one removed is marked, one added
+        // waits; both settle when the outermost run returns (a script's `off` from inside its own
+        // handler would otherwise free the function running).
+        struct DispatchScope
+        {
+            Node& Owner;
+            explicit DispatchScope(Node& owner) noexcept : Owner(owner) { ++Owner.m_dispatching; }
+            ~DispatchScope()
+            {
+                if (--Owner.m_dispatching == 0)
+                    Owner.SettleHandlers();
+            }
+        };
+        void SettleHandlers()
+        {
+            for (usize i = 0; i < m_listeners.Size();)
+                if (m_listeners[i].Removed)
+                    m_listeners.RemoveAt(i);
+                else
+                    ++i;
+            for (Listener& l : m_pendingListeners)
+                m_listeners.PushBack(core::Move(l));
+            m_pendingListeners.Clear();
+            for (usize i = 0; i < m_commandHandlers.Size();)
+                if (m_commandHandlers[i].Removed)
+                    m_commandHandlers.RemoveAt(i);
+                else
+                    ++i;
+            for (CommandHandlerEntry& e : m_pendingCommandHandlers)
+                m_commandHandlers.PushBack(core::Move(e));
+            m_pendingCommandHandlers.Clear();
         }
         // The widget's own handler for an input event.
         void InvokeInputHandler(const Event& event)
@@ -2740,8 +2821,12 @@ export namespace experimental::gui
             CommandPhase Phase;
             CommandHandler Handler;
             u32 Token;
+            bool Removed = false; // while handlers run: goes once they return
         };
         Array<CommandHandlerEntry> m_commandHandlers;
+        Array<CommandHandlerEntry> m_pendingCommandHandlers; // added while handlers ran
+        Array<Listener> m_pendingListeners;                  // added while listeners ran
+        u16 m_dispatching = 0;                               // runs of its listeners or handlers in progress
         Property<core::String> m_command; // the bound command's id (SetCommand)
         bool m_commandBound = false;      // its binding made (once)
         // Tells this GUI's commands that what decides availability changed (GUIClusterImpl.cpp).

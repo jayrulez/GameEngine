@@ -6,6 +6,7 @@
 
 module;
 #include "Core/Prelude.h"
+#include "Core/Log/Log.h" // the oversized-allocation report (see create())
 
 #include "VkIncludes.h"
 
@@ -73,6 +74,23 @@ export namespace foundation::rhi::vk
                 allocInfo.pNext = &allocFlags;
             allocInfo.allocationSize = memReqs.size;
             allocInfo.memoryTypeIndex = static_cast<u32>(memType);
+
+            // Name any absurdly large buffer BEFORE allocating it. The editor has twice been
+            // caught asking Vulkan for an exact power of two - 2^32 and 2^34 bytes - which is a
+            // doubling growth path, not a resource that is legitimately that big; the validation
+            // layer was the only thing reporting it, and it reports a size with no owner. The
+            // label plus the repeated sizes is what identifies WHICH buffer is doubling.
+            // 256 MB: quiet in normal operation, low enough to catch the whole doubling run.
+            constexpr u64 kSuspiciousAllocBytes = 256ull * 1024ull * 1024ull;
+            if (memReqs.size >= kSuspiciousAllocBytes)
+            {
+                LOG_WARNING(u8"RHI",
+                            u8"large buffer allocation: {} MB for '{}' (requested size {} B, usage "
+                            u8"bits {}). Repeated doubling of the same label is a growth leak.",
+                            memReqs.size / (1024ull * 1024ull),
+                            d.label.IsEmpty() ? StringView(u8"<unlabelled>") : d.label, d.size,
+                            static_cast<u32>(d.usage));
+            }
 
             if (vkAllocateMemory(device, &allocInfo, nullptr, &m_memory) != VK_SUCCESS)
             {

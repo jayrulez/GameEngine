@@ -89,6 +89,20 @@ export namespace foundation::rhi::vk
             ai.allocationSize = memReqs.size;
             ai.memoryTypeIndex = static_cast<u32>(memType);
 
+            // Same report as VkBuffer::create: name an absurd allocation BEFORE making it, since
+            // the existing log below only fires when the allocation FAILS - and an oversized one
+            // that the driver happens to satisfy is exactly the case that went unnoticed.
+            constexpr u64 kSuspiciousAllocBytes = 256ull * 1024ull * 1024ull;
+            if (memReqs.size >= kSuspiciousAllocBytes)
+            {
+                LOG_WARNING(u8"VkTexture",
+                            u8"large texture allocation: {} MB for '{}' ({}x{}x{}, {} mips, {} "
+                            u8"layers). Repeated doubling of the same label is a growth leak.",
+                            static_cast<u64>(memReqs.size) / (1024ull * 1024ull),
+                            d.label.IsEmpty() ? StringView(u8"<unlabelled>") : d.label, d.width,
+                            d.height, d.depth, d.mipLevelCount, d.arrayLayerCount);
+            }
+
             const VkResult memRes = vkAllocateMemory(device, &ai, nullptr, &m_memory);
             m_allocationSize = memRes == VK_SUCCESS ? memReqs.size : 0;
             if (memRes != VK_SUCCESS)

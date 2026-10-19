@@ -490,7 +490,7 @@ private:
     struct BenchTotals
     {
         f64 Draw = 0.0, Prepare = 0.0, Gpu = 0.0;
-        u64 Vertices = 0, Commands = 0, Drawn = 0;
+        u64 Vertices = 0, Commands = 0, Drawn = 0, Culled = 0;
     } m_bench;
     String m_inspectSelector;     // --inspect <selector>: selected once the GUI is up
     f32 m_inspectorWidth = 460.0f;  // logical units; the boundary drags it
@@ -2040,14 +2040,15 @@ void GUISandbox::RunBench()
     m_bench.Vertices += stats.Vertices;
     m_bench.Commands += stats.Commands;
     m_bench.Drawn += stats.NodesDrawn;
+    m_bench.Culled += stats.NodesCulled;
     if (measured + 1 < m_benchFrames)
         return;
     const f64 n = static_cast<f64>(m_benchFrames);
     std::printf("GUISandbox bench %s on %s, %u frames, %ux%u, each changing one label: draw %.3f ms, prepare %.3f ms, gpu+wait %.3f ms; "
-                "%.0f nodes drawn, %.0f vertices, %.0f commands\n",
+                "%.0f nodes drawn, %.0f culled, %.0f vertices, %.0f commands\n",
                 reinterpret_cast<const char*>(m_benchPage.CStr()), reinterpret_cast<const char*>(m_backendName.CStr()), m_benchFrames,
                 kImageWidth, kImageHeight, m_bench.Draw / n, m_bench.Prepare / n, m_bench.Gpu / n, static_cast<f64>(m_bench.Drawn) / n,
-                static_cast<f64>(m_bench.Vertices) / n, static_cast<f64>(m_bench.Commands) / n);
+                static_cast<f64>(m_bench.Culled) / n, static_cast<f64>(m_bench.Vertices) / n, static_cast<f64>(m_bench.Commands) / n);
     std::fflush(stdout);
     Exit();
 }

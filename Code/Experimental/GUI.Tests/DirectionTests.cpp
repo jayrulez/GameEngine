@@ -407,3 +407,19 @@ TEST_CASE("direction: a right-to-left scroller held at its end follows it as the
     bed.Layout();
     CHECK(strip->GetScrollOffset().x == doctest::Approx(-220.0f));
 }
+
+TEST_CASE("direction: content wider than a right-to-left row overflows toward its inline end, the left")
+{
+    Bed bed;
+    bed.root->SetSize(core::Float2{300.0f, 300.0f});
+    bed.root->SetLayoutDirection(Node::LayoutDirection::RightToLeft);
+    auto row = Box(*bed.root.Get(), [](LayoutStyle& s) {
+        s.Direction = FlexDirection::Row;
+        s.Width = LayoutLength::Px(100.0f);
+        s.Height = LayoutLength::Px(20.0f);
+    });
+    auto wide = Box(*row.Get(), [](LayoutStyle& s) { s.Width = LayoutLength::Px(130.0f); s.Shrink = 0.0f; });
+    bed.Layout();
+    // As CSS has it: its start against the row's right edge, the 30 past it on the left.
+    CHECK(wide->GetPosition().x == doctest::Approx(-30.0f));
+}

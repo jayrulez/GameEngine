@@ -969,17 +969,11 @@ namespace experimental::gui
         (void)RunFlow(flow);
         if (flow.rtl)
         {
-            // Mirrored within the box, or within the content when it is wider. A scroller's starts at
-            // its right and overflows to the left, to negative offsets (E17a, CSS's); anything else
-            // keeps its content in its box.
-            f32 span = box.width;
-            if (!ScrollsFromRight())
-                for (usize i = 0; i < m_children.Size(); ++i)
-                    if (const Node& child = *m_children[i]; InFlow(child))
-                        span = core::Max(span, child.GetPosition().x - box.x + child.GetSize().x + child.GetMarginWithin(box.width).Left);
+            // Mirrored within the box: content wider than it overflows toward the inline end, the
+            // left, as CSS's does (E17a); a scroller's then scrolls to negative offsets.
             for (usize i = 0; i < m_children.Size(); ++i)
                 if (Node& child = *m_children[i]; InFlow(child))
-                    child.SetPosition(core::Float2{box.x + span - (child.GetPosition().x - box.x) - child.GetSize().x,
+                    child.SetPosition(core::Float2{box.x + box.width - (child.GetPosition().x - box.x) - child.GetSize().x,
                                                    child.GetPosition().y});
         }
 

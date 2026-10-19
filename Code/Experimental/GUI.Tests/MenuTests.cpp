@@ -574,3 +574,29 @@ TEST_CASE("menu: opening one in a scrolled page leaves the page where it was (E1
         root->GetContext().Update(core::Duration{});
     }
 }
+
+TEST_CASE("menu bar: at a scale its width does not land on the device grid, it settles (no layout every frame)")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetDisplayScale(1.3f); // its buttons' widths snap to the grid at a fraction of a unit
+    root->SetViewportSize(core::Float2{520.0f, 390.0f});
+    auto host = Make<UIWidget>();
+    host->EditLayoutStyle([](LayoutStyle& s) { s.Kind = Display::Stack; });
+    host->SetSize(core::Float2{300.0f, 40.0f});
+    root->AddChild(host.Get());
+    auto bar = Make<MenuBar>();
+    bar->SetSize(core::Float2{290.0f, 28.0f});
+    (void)bar->AddMenu(core::StringView(u8"File"));
+    (void)bar->AddMenu(core::StringView(u8"Edit"));
+    host->AddChild(bar.Get());
+    for (int i = 0; i < 4; ++i)
+        (void)root->UpdateLayout();
+    // Laid out again on its own (its text changed, a font came): it settles, rather than sizing
+    // itself back to the fraction and asking for another pass, each pass.
+    bar->RequestLayout();
+    for (int i = 0; i < 4; ++i)
+        (void)root->UpdateLayout();
+    CHECK_FALSE(root->IsLayoutDirty());
+    CHECK_FALSE(root->HasLayoutDirtyDescendant());
+    CHECK_FALSE(bar->IsLayoutDirty());
+}

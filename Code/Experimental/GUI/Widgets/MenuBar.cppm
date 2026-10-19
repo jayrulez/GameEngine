@@ -250,7 +250,11 @@ export namespace experimental::gui
                 e.button->SetSize(core::Float2{w, m_barHeight});
                 x += w;
             }
-            SetSize(core::Float2{x, m_barHeight});
+            // Within a device pixel of its size it is that size: the layout snaps its box to the
+            // device grid, and sizing it back to the fraction asked for a layout again, every frame.
+            const f32 pixel = 1.0f / core::Max(GetPixelScale(), 0.01f);
+            if (core::Abs(GetSize().x - x) >= pixel || core::Abs(GetSize().y - m_barHeight) >= pixel)
+                SetSize(core::Float2{x, m_barHeight});
         }
 
         // Top-left of `node` in root-local space (sum of positions up to, but excluding, the

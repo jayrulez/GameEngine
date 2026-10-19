@@ -310,3 +310,50 @@ TEST_CASE("table-view: a row added before its cells are set (a script's add, the
     CHECK(model->Data(model->Index(0, 0)).ToString() == core::String(u8"Ada"));
     CHECK(model->Data(model->Index(0, 1)).ToString() == core::String(u8"9"));
 }
+
+TEST_CASE("table-view: in right to left its columns run from the right, wider ones overflowing to the left")
+{
+    TableModel model;
+    FillPeople(model, 5);
+    core::RefPtr<SceneRoot> root;
+    auto table = MountTable(root, &model);
+    root->SetLayoutDirection(Node::LayoutDirection::RightToLeft);
+    table->SetColumnWidth(0, LayoutLength::Px(250.0f));
+    table->SetColumnWidth(1, LayoutLength::Px(200.0f));
+    (void)root->UpdateLayout();
+    const Rect box = table->GetContentBounds();
+    const core::f32 right = table->ConvertToRootSpace(core::Float2{box.x + box.width, 0.0f}).x;
+
+    // At its start: offset 0, the first column against the right edge, the rest past the left.
+    CHECK(table->GetScrollOffset().x == doctest::Approx(0.0f));
+    CHECK(table->GetScrollMin().x < -100.0f);
+    ItemRow* row = table->RowForItem(0);
+    REQUIRE(row != nullptr);
+    auto* content = core::Cast<TableRowContent>(row->GetContent());
+    REQUIRE(content != nullptr);
+    const Rect name = content->CellAt(0)->GetScreenBounds();
+    const Rect age = content->CellAt(1)->GetScreenBounds();
+    CHECK(name.x + name.width == doctest::Approx(right).epsilon(0.01));
+    CHECK(age.x + age.width == doctest::Approx(name.x).epsilon(0.01));
+    // The header's cells over their columns.
+    const Rect heading = table->GetHeader()->GetChildAt(0)->GetScreenBounds();
+    CHECK(heading.x == doctest::Approx(name.x).epsilon(0.01));
+
+    // Scrolled to its end, the left: the last column shows.
+    table->SetScrollOffset(core::Float2{-1000.0f, 0.0f});
+    (void)root->UpdateLayout();
+    CHECK(table->GetScrollOffset().x == doctest::Approx(table->GetScrollMin().x));
+    const Rect ageThen = content->CellAt(1)->GetScreenBounds();
+    CHECK(ageThen.x == doctest::Approx(table->ConvertToRootSpace(core::Float2{box.x, 0.0f}).x).epsilon(0.01));
+
+    // A column's grip is at its inline end, the left: pulled further left, it widens.
+    table->SetScrollOffset(core::Float2{0.0f, 0.0f});
+    (void)root->UpdateLayout();
+    const Rect cell = table->GetHeader()->GetChildAt(0)->GetScreenBounds();
+    EventDispatcher& d = *root->GetEventDispatcher();
+    const core::Float2 grip{cell.x + 2.0f, cell.y + cell.height * 0.5f};
+    d.InjectMouseDown(grip, MouseButton::Left);
+    d.InjectMouseMove(core::Float2{grip.x - 30.0f, grip.y});
+    d.InjectMouseUp(core::Float2{grip.x - 30.0f, grip.y}, MouseButton::Left);
+    CHECK(table->GetColumnWidth(0) == doctest::Approx(280.0f));
+}

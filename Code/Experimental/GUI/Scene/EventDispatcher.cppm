@@ -1823,16 +1823,17 @@ export namespace experimental::gui
                 const core::Float2 size = n->GetSize();
                 const core::Float2 range = n->GetScrollRange();
                 const core::Float2 offset = n->GetScrollOffset();
-                const auto speed = [&](f32 at, f32 length, f32 now, f32 max) -> f32
+                const core::Float2 low = n->GetScrollMin(), high = n->GetScrollMax();
+                const auto speed = [&](f32 at, f32 length, f32 now, f32 min, f32 max) -> f32
                 {
-                    if (at < m_dragScrollBand && now > 0.0f)
+                    if (at < m_dragScrollBand && now > min)
                         return -m_dragScrollSpeed * (1.0f - core::Max(0.0f, at) / m_dragScrollBand);
                     if (at > length - m_dragScrollBand && now < max)
                         return m_dragScrollSpeed * (1.0f - core::Max(0.0f, length - at) / m_dragScrollBand);
                     return 0.0f;
                 };
-                const core::Float2 v{range.x > 0.0f ? speed(p.x, size.x, offset.x, range.x) : 0.0f,
-                                     range.y > 0.0f ? speed(p.y, size.y, offset.y, range.y) : 0.0f};
+                const core::Float2 v{range.x > 0.0f ? speed(p.x, size.x, offset.x, low.x, high.x) : 0.0f,
+                                     range.y > 0.0f ? speed(p.y, size.y, offset.y, low.y, high.y) : 0.0f};
                 if (v.x != 0.0f || v.y != 0.0f)
                 {
                     n->ScrollBy(core::Float2{v.x * seconds, v.y * seconds});

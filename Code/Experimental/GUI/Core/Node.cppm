@@ -1227,8 +1227,10 @@ export namespace experimental::gui
         [[nodiscard]] bool IsFlinging() const noexcept { return m_flinging; }
         /// Scrolls to `offset`, at once or easing there (Auto: as the node's `scroll-behavior` says).
         void ScrollTo(core::Float2 offset, ScrollBehavior behavior = ScrollBehavior::Auto);
-        /// Scrolls to the end of its content (the bottom; a horizontal-only scroller's right).
+        /// Scrolls to the end of its content (the bottom; a horizontal-only scroller's inline end).
         void ScrollToEnd(ScrollBehavior behavior = ScrollBehavior::Auto);
+        /// Where the end of its content is (ScrollToEnd's offset), from `from` on the other axis.
+        [[nodiscard]] core::Float2 ScrollEnd(core::Float2 from) const; // LayoutImpl.cpp
         /// Keeps it at the end of its content as the content grows (a log, a chat), while it is at
         /// the end: scrolled away it lets go, and back at the end it holds again (AUI's way).
         void SetStickToEnd(bool stick)
@@ -1243,8 +1245,9 @@ export namespace experimental::gui
         [[nodiscard]] bool IsAtScrollEnd() const
         {
             const core::Float2 range = GetScrollRange();
-            const bool down = range.y > 0.0f || range.x <= 0.0f;
-            return down ? m_scrollOffset.y >= range.y - 0.5f : m_scrollOffset.x >= range.x - 0.5f;
+            if (range.y > 0.0f || range.x <= 0.0f)
+                return m_scrollOffset.y >= range.y - 0.5f;
+            return ScrollsFromRight() ? m_scrollOffset.x <= GetScrollMin().x + 0.5f : m_scrollOffset.x >= range.x - 0.5f;
         }
         /// Where a smooth scroll is going (the offset itself when none runs).
         [[nodiscard]] core::Float2 GetScrollTarget() const noexcept { return m_smoothScrolling ? m_scrollTarget : m_scrollOffset; }
@@ -1268,6 +1271,25 @@ export namespace experimental::gui
             const auto scrolls = [](Overflow o) { return o == Overflow::Scroll || o == Overflow::Auto; };
             return core::Float2{scrolls(m_layoutStyle.OverflowX) ? core::Max(0.0f, m_contentExtent.x - box.width) : 0.0f,
                                 scrolls(m_layoutStyle.OverflowY) ? core::Max(0.0f, m_contentExtent.y - box.height) : 0.0f};
+        }
+        /// Where the offset may go on each axis (E17a, CSS's scroll positions): from 0 at the content's
+        /// start to its range, except across a right-to-left scroller, whose start is its right, so
+        /// it goes from minus its range at the left to 0 there.
+        [[nodiscard]] core::Float2 GetScrollMin() const
+        {
+            return core::Float2{ScrollsFromRight() ? -GetScrollRange().x : 0.0f, 0.0f};
+        }
+        [[nodiscard]] core::Float2 GetScrollMax() const
+        {
+            const core::Float2 range = GetScrollRange();
+            return core::Float2{ScrollsFromRight() ? 0.0f : range.x, range.y};
+        }
+        /// Its content starts at its right and overflows to the left: it scrolls across, its flow
+        /// running right to left (a dock's sides stay where they say).
+        [[nodiscard]] bool ScrollsFromRight() const
+        {
+            const bool across = m_layoutStyle.OverflowX == Overflow::Scroll || m_layoutStyle.OverflowX == Overflow::Auto;
+            return across && m_layoutStyle.Kind != Display::Dock && m_layoutStyle.Kind != Display::None && IsRightToLeft();
         }
         /// The content's size as last laid out: what a scroll container scrolls over.
         [[nodiscard]] core::Float2 GetContentExtent() const noexcept { return m_contentExtent; }
@@ -2666,9 +2688,7 @@ export namespace experimental::gui
         /// scroll's steps come here without ending it.
         void ApplyScrollOffset(core::Float2 offset)
         {
-            const bool pending = m_layoutDirty || m_childLayoutDirty;
-            const core::Float2 range = pending ? core::Float2{kUnbounded, kUnbounded} : GetScrollRange();
-            const core::Float2 clamped{core::Clamp(offset.x, 0.0f, range.x), core::Clamp(offset.y, 0.0f, range.y)};
+            const core::Float2 clamped = ClampScroll(offset);
             if (clamped == m_scrollOffset)
                 return;
             m_scrollOffset = clamped;
@@ -2679,6 +2699,14 @@ export namespace experimental::gui
                 ShowOverlayScrollbars();
             OnScrollChange();
             SendEvent(Event(EventType::Scroll, this));
+        }
+        /// `offset` within where it may go (with a layout pending, as asked: the layout clamps it).
+        [[nodiscard]] core::Float2 ClampScroll(core::Float2 offset) const
+        {
+            if (m_layoutDirty || m_childLayoutDirty)
+                return offset;
+            const core::Float2 low = GetScrollMin(), high = GetScrollMax();
+            return core::Float2{core::Clamp(offset.x, low.x, high.x), core::Clamp(offset.y, low.y, high.y)};
         }
         /// Eases toward m_scrollTarget on the GUI's clock (LayoutImpl.cpp, which sees :actions).
         void StartSmoothScroll();

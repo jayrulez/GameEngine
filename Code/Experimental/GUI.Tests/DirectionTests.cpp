@@ -330,3 +330,80 @@ TEST_CASE("direction: a right-to-left submenu opens to the left; Left goes into 
     d.InjectKeyDown(static_cast<core::u32>(KeyCode::Right));
     CHECK_FALSE(sub->IsOpen());
 }
+
+TEST_CASE("direction: a right-to-left scroller starts at its inline start, its offset 0 there and negative toward the left")
+{
+    Bed bed;
+    bed.root->SetSize(core::Float2{300.0f, 300.0f});
+    bed.root->SetLayoutDirection(Node::LayoutDirection::RightToLeft);
+    auto strip = Box(*bed.root.Get(), [](LayoutStyle& s) {
+        s.Direction = FlexDirection::Row;
+        s.OverflowX = Overflow::Auto;
+        s.Width = LayoutLength::Px(100.0f);
+        s.Height = LayoutLength::Px(60.0f);
+    });
+    core::RefPtr<Panel> cells[4];
+    for (auto& cell : cells)
+        cell = Box(*strip.Get(), [](LayoutStyle& s) { s.Width = LayoutLength::Px(80.0f); s.Shrink = 0.0f; });
+    bed.Layout();
+    const Rect box = strip->GetContentBounds();
+
+    // At the start: the first cell against the right edge, the rest past the left (CSS's model).
+    CHECK(strip->GetScrollOffset().x == doctest::Approx(0.0f));
+    CHECK(strip->GetScrollMin().x == doctest::Approx(-220.0f));
+    CHECK(strip->GetScrollMax().x == doctest::Approx(0.0f));
+    CHECK(cells[0]->GetPosition().x + 80.0f == doctest::Approx(box.x + box.width));
+    CHECK(cells[3]->GetPosition().x == doctest::Approx(box.x - 220.0f));
+    // The thumb at the right, where the content starts.
+    const Rect track = strip->ScrollBarTrack(0);
+    const Rect thumb = strip->ScrollBarThumb(0);
+    CHECK(thumb.x + thumb.width == doctest::Approx(track.x + track.width));
+
+    // Clamped to [-range, 0]; the end is the left.
+    strip->SetScrollOffset(core::Float2{50.0f, 0.0f});
+    CHECK(strip->GetScrollOffset().x == doctest::Approx(0.0f));
+    strip->SetScrollOffset(core::Float2{-1000.0f, 0.0f});
+    CHECK(strip->GetScrollOffset().x == doctest::Approx(-220.0f));
+    CHECK(strip->IsAtScrollEnd());
+    CHECK(strip->ScrollBarThumb(0).x == doctest::Approx(track.x));
+    strip->SetScrollOffset(core::Float2{0.0f, 0.0f});
+    strip->ScrollToEnd(ScrollBehavior::Instant);
+    CHECK(strip->GetScrollOffset().x == doctest::Approx(-220.0f));
+
+    // A vertical wheel notch down goes toward the inline end.
+    strip->SetScrollOffset(core::Float2{0.0f, 0.0f});
+    EventDispatcher& d = *bed.root->GetEventDispatcher();
+    const core::Float2 over = strip->ConvertToRootSpace(core::Float2{50.0f, 20.0f});
+    d.InjectMouseWheel(over, core::Float2{0.0f, -1.0f});
+    CHECK(strip->GetScrollOffset().x < 0.0f);
+
+    // Content added at the end leaves the start where it was.
+    strip->SetScrollOffset(core::Float2{0.0f, 0.0f});
+    auto more = Box(*strip.Get(), [](LayoutStyle& s) { s.Width = LayoutLength::Px(80.0f); s.Shrink = 0.0f; });
+    bed.Layout();
+    CHECK(strip->GetScrollOffset().x == doctest::Approx(0.0f));
+    CHECK(strip->GetScrollMin().x == doctest::Approx(-300.0f));
+    CHECK(cells[0]->GetPosition().x + 80.0f == doctest::Approx(box.x + box.width));
+}
+
+TEST_CASE("direction: a right-to-left scroller held at its end follows it as the content grows")
+{
+    Bed bed;
+    bed.root->SetSize(core::Float2{300.0f, 300.0f});
+    bed.root->SetLayoutDirection(Node::LayoutDirection::RightToLeft);
+    auto strip = Box(*bed.root.Get(), [](LayoutStyle& s) {
+        s.Direction = FlexDirection::Row;
+        s.OverflowX = Overflow::Auto;
+        s.Width = LayoutLength::Px(100.0f);
+        s.Height = LayoutLength::Px(60.0f);
+    });
+    for (int i = 0; i < 3; ++i)
+        Box(*strip.Get(), [](LayoutStyle& s) { s.Width = LayoutLength::Px(80.0f); s.Shrink = 0.0f; });
+    bed.Layout();
+    strip->ScrollToEnd(ScrollBehavior::Instant);
+    strip->SetStickToEnd(true);
+    REQUIRE(strip->IsLatchedToEnd());
+    Box(*strip.Get(), [](LayoutStyle& s) { s.Width = LayoutLength::Px(80.0f); s.Shrink = 0.0f; });
+    bed.Layout();
+    CHECK(strip->GetScrollOffset().x == doctest::Approx(-220.0f));
+}

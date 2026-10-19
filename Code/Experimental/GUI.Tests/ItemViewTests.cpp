@@ -504,6 +504,26 @@ TEST_CASE("itemview: a grid lays cells across then down, stretched to fill; the 
     CHECK(m.list->GetLayoutModeName() == SV(u8"grid"));
 }
 
+TEST_CASE("itemview: in right to left a grid lays its cells from the right")
+{
+    StringListModel model(Numbered(50));
+    Mounted m = MountList(model, 20.0f, 100.0f);
+    m.root->SetLayoutDirection(Node::LayoutDirection::RightToLeft);
+    m.list->SetLayoutMode(ItemLayout::Grid);
+    m.list->SetCellWidth(60.0f);
+    m.list->SetCellHeight(40.0f);
+    m.Layout();
+    REQUIRE(m.list->GetColumnsAcross() == 3);
+    ItemRow* first = m.list->RowForItem(0);
+    ItemRow* second = m.list->RowForItem(1);
+    REQUIRE(first != nullptr);
+    REQUIRE(second != nullptr);
+    const Rect box = m.list->GetContentBounds();
+    CHECK(first->GetPosition().x + first->GetSize().x == doctest::Approx(box.x + box.width).epsilon(0.01));
+    CHECK(second->GetPosition().x < first->GetPosition().x);
+    CHECK(m.list->ItemBounds(1).x == doctest::Approx(second->GetPosition().x).epsilon(0.01));
+}
+
 TEST_CASE("itemview: in right to left a grid's Left goes on to the next cell and Right back")
 {
     StringListModel model(Numbered(50));

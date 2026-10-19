@@ -438,9 +438,18 @@ export namespace experimental::gui
             {
                 const i32 across = GridColumns(box.width);
                 const f32 w = box.width / static_cast<f32>(across);
-                return Rect{box.x + static_cast<f32>(i % across) * w, box.y + ContentTopInset() + ItemTop(i), w, ItemHeight(i)};
+                return CellBounds(box, i, across, w, box.y + ContentTopInset() + ItemTop(i), ItemHeight(i));
             }
-            return Rect{box.x, box.y + ContentTopInset() + ItemTop(i), RowWidth(box.width), ItemHeight(i)};
+            const f32 width = RowWidth(box.width);
+            return Rect{RowLeft(box, width), box.y + ContentTopInset() + ItemTop(i), width, ItemHeight(i)};
+        }
+        /// Where a row `width` wide starts: at the box's left, or, scrolling from the right (right to
+        /// left, a table wider than its view), at its right less the width, overflowing leftward.
+        [[nodiscard]] f32 RowLeft(const Rect& box, f32 width) const { return ScrollsFromRight() ? box.Right() - width : box.x; }
+        /// A grid's cell: across its line from the inline start.
+        [[nodiscard]] Rect CellBounds(const Rect& box, i32 item, i32 across, f32 width, f32 y, f32 height) const
+        {
+            return MirroredIn(Rect{box.x + static_cast<f32>(item % across) * width, y, width, height}, box, IsRightToLeft());
         }
 
         // === Grid ===
@@ -1348,7 +1357,7 @@ export namespace experimental::gui
         for (const core::RefPtr<ItemRow>& row : m_live)
         {
             const usize i = static_cast<usize>(row->m_item);
-            row->Arrange(Rect{box.x, box.y + inset + m_heights.Top(i), width, m_heights.At(i)});
+            row->Arrange(Rect{RowLeft(box, width), box.y + inset + m_heights.Top(i), width, m_heights.At(i)});
         }
         m_realizing = false;
     }
@@ -1394,7 +1403,7 @@ export namespace experimental::gui
         {
             row->m_taken = false;
             const i32 i = row->m_item;
-            row->Arrange(Rect{box.x + static_cast<f32>(i % across) * cellW, box.y + inset + static_cast<f32>(i / across) * m_cellSize.y, cellW, m_cellSize.y});
+            row->Arrange(CellBounds(box, i, across, cellW, box.y + inset + static_cast<f32>(i / across) * m_cellSize.y, m_cellSize.y));
         }
         SetScrollExtent(core::Float2{box.width, inset + ContentHeight()});
         m_realizing = false;
@@ -1665,7 +1674,9 @@ export namespace experimental::gui
         const Rect b = ItemBounds(item);
         const core::Float2 content{query.Local.x + GetScrollOffset().x, query.Local.y + GetScrollOffset().y};
         const bool across = m_layout == ItemLayout::Grid;
-        const f32 at = across ? (content.x - b.x) / core::Max(1.0f, b.width) : (content.y - b.y) / core::Max(1.0f, b.height);
+        f32 at = across ? (content.x - b.x) / core::Max(1.0f, b.width) : (content.y - b.y) / core::Max(1.0f, b.height);
+        if (across && IsRightToLeft())
+            at = 1.0f - at; // before is the inline start, the right
         drop.Place = at < 0.25f ? DropPlace::Before : at > 0.75f ? DropPlace::After : DropPlace::On;
         effect = m_model->CanDrop(drop, reason);
         if (effect == DropEffect::None && reason.IsEmpty())
@@ -1744,7 +1755,8 @@ export namespace experimental::gui
         else
         {
             const bool before = m_dropPlace == DropPlace::Before && m_dropItem >= 0;
-            const Rect line = across ? Rect{before ? row.x - 1.0f : row.x + row.width - 1.0f, row.y, 2.0f, row.height}
+            const bool left = before != IsRightToLeft(); // before is the inline start
+            const Rect line = across ? Rect{left ? row.x - 1.0f : row.x + row.width - 1.0f, row.y, 2.0f, row.height}
                                      : Rect{row.x, (before ? row.y : row.y + row.height) - 1.0f, row.width, 2.0f};
             ctx.VG().FillRect(core::Rectangle{line.x, line.y, line.width, line.height}, color);
         }

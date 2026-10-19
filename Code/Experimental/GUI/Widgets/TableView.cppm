@@ -65,8 +65,9 @@ export namespace experimental::gui
         [[nodiscard]] usize GetColumn() const noexcept { return m_column; }
         [[nodiscard]] bool IsResizing() const noexcept { return m_resizing; }
 
-        // A press on its edge resizes its column (E7): a drag from what holds it is not offered.
-        [[nodiscard]] bool OwnsPressDrag(core::Float2 local) const override { return local.x >= GetSize().x - kGrip; }
+        // A press on its edge, its inline end, resizes its column (E7): a drag from what holds it is
+        // not offered.
+        [[nodiscard]] bool OwnsPressDrag(core::Float2 local) const override { return OnGripAt(local.x); }
 
     protected:
         void OnMouseDown(const MouseEvent& event) override;
@@ -77,8 +78,9 @@ export namespace experimental::gui
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override;
 
     private:
-        static constexpr f32 kGrip = 5.0f; // how near its right edge a press resizes
-        [[nodiscard]] bool OnGrip(core::Float2 world) const { return ConvertToNodeSpace(world).x >= GetSize().x - kGrip; }
+        static constexpr f32 kGrip = 5.0f; // how near its inline-end edge a press resizes
+        [[nodiscard]] bool OnGripAt(f32 x) const { return IsRightToLeft() ? x <= kGrip : x >= GetSize().x - kGrip; }
+        [[nodiscard]] bool OnGrip(core::Float2 world) const { return OnGripAt(ConvertToNodeSpace(world).x); }
 
         TableView& m_table; // the view whose header holds it
         usize m_column = 0;
@@ -361,20 +363,24 @@ export namespace experimental::gui
             f32 x = box.x;
             for (i32 c = 0; c < column && static_cast<usize>(c) < m_widths.Size(); ++c)
                 x += m_widths[static_cast<usize>(c)];
-            return Rect{x, box.y, GetColumnWidth(static_cast<usize>(core::Max(0, column))), box.height};
+            return MirroredIn(Rect{x, box.y, GetColumnWidth(static_cast<usize>(core::Max(0, column))), box.height}, box, IsRightToLeft());
         }
 
         // The header lies at the top of the view, over the rows scrolled under it.
         void OnLayoutDecorations() override
         {
+            // Over the rows, from where they start (their columns from the inline start).
             const Rect box = GetContentBounds();
             m_header->SetVisible(m_headerHeight > 0.0f);
-            m_header->Arrange(Rect{box.x, box.y + GetScrollOffset().y, core::Max(box.width, GetColumnsWidth()), m_headerHeight});
+            const f32 width = core::Max(box.width, GetColumnsWidth());
+            m_header->Arrange(Rect{RowLeft(box, width), box.y + GetScrollOffset().y, width, m_headerHeight});
+            const Rect across{0.0f, 0.0f, width, m_headerHeight};
+            const bool rtl = IsRightToLeft();
             f32 x = 0.0f;
             for (usize c = 0; c < m_headerCells.Size(); ++c)
             {
                 const f32 w = GetColumnWidth(c);
-                m_headerCells[c]->Arrange(Rect{x, 0.0f, w, m_headerHeight});
+                m_headerCells[c]->Arrange(MirroredIn(Rect{x, 0.0f, w, m_headerHeight}, across, rtl));
                 x += w;
             }
             if (GetChildIndex(m_header.Get()) + 1 != ChildCount())
@@ -526,7 +532,9 @@ export namespace experimental::gui
     {
         if (m_resizing)
         {
-            m_table.ResizeColumn(m_column, m_startWidth + (event.Position.x - m_pressX));
+            // Pulled toward the inline end, it widens.
+            const f32 dx = event.Position.x - m_pressX;
+            m_table.ResizeColumn(m_column, m_startWidth + (IsRightToLeft() ? -dx : dx));
             return;
         }
         SetCursor(OnGrip(event.Position) ? Cursor::EwResize : Cursor::Auto); // the edge says it resizes
@@ -543,10 +551,10 @@ export namespace experimental::gui
         Label::OnDraw(ctx, localBounds);
         if (m_table.GetSortColumn() != static_cast<i32>(m_column) || m_table.GetSortOrder() == SortOrder::None)
             return;
-        // A small triangle at its right, up for ascending, down for descending.
+        // A small triangle at its inline end, up for ascending, down for descending.
         const Rect box = GetContentBounds();
         const f32 s = 4.0f;
-        const f32 cx = box.x + box.width - s;
+        const f32 cx = MirroredX(box.x + box.width - s, box, IsRightToLeft());
         const f32 cy = box.y + box.height * 0.5f;
         const f32 dir = m_table.GetSortOrder() == SortOrder::Ascending ? -1.0f : 1.0f;
         vg::PathBuilder pb;
@@ -572,14 +580,16 @@ export namespace experimental::gui
 
     inline void TableRowContent::OnLayout()
     {
+        // Its columns from the inline start.
         const Rect box = GetContentBounds();
+        const bool rtl = IsRightToLeft();
         f32 x = box.x;
         for (usize c = 0; c < m_cells.Size(); ++c)
         {
             if (!m_cells[c]->IsDisplayed())
                 continue;
             const f32 w = m_table.GetColumnWidth(c);
-            m_cells[c]->Arrange(Rect{x, box.y, w, box.height});
+            m_cells[c]->Arrange(MirroredIn(Rect{x, box.y, w, box.height}, box, rtl));
             x += w;
         }
     }

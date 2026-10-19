@@ -969,11 +969,14 @@ namespace experimental::gui
         (void)RunFlow(flow);
         if (flow.rtl)
         {
-            // Mirrored within the box, or within the content when it is wider (a scroller's).
+            // Mirrored within the box, or within the content when it is wider. A scroller's starts at
+            // its right and overflows to the left, to negative offsets (E17a, CSS's); anything else
+            // keeps its content in its box.
             f32 span = box.width;
-            for (usize i = 0; i < m_children.Size(); ++i)
-                if (const Node& child = *m_children[i]; InFlow(child))
-                    span = core::Max(span, child.GetPosition().x - box.x + child.GetSize().x + child.GetMarginWithin(box.width).Left);
+            if (!ScrollsFromRight())
+                for (usize i = 0; i < m_children.Size(); ++i)
+                    if (const Node& child = *m_children[i]; InFlow(child))
+                        span = core::Max(span, child.GetPosition().x - box.x + child.GetSize().x + child.GetMarginWithin(box.width).Left);
             for (usize i = 0; i < m_children.Size(); ++i)
                 if (Node& child = *m_children[i]; InFlow(child))
                     child.SetPosition(core::Float2{box.x + span - (child.GetPosition().x - box.x) - child.GetSize().x,
@@ -1024,8 +1027,11 @@ namespace experimental::gui
             child.Arrange(Rect{x, y, b.x, b.y});
         }
 
-        // Relative: moved after the flow, its siblings where they were.
+        // Relative: moved after the flow, its siblings where they were. From the right, the extent
+        // reaches from the content's left edge, past the box's left, to the box's right.
         core::Float2 extent{0.0f, 0.0f};
+        const bool fromRight = ScrollsFromRight();
+        f32 leftmost = 0.0f;
         for (usize i = 0; i < m_children.Size(); ++i)
         {
             Node& child = *m_children[i];
@@ -1043,7 +1049,10 @@ namespace experimental::gui
             const Thickness m = child.GetMarginWithin(box.width);
             extent.x = core::Max(extent.x, child.GetPosition().x + child.GetSize().x + m.Right - box.x);
             extent.y = core::Max(extent.y, child.GetPosition().y + child.GetSize().y + m.Bottom - box.y);
+            leftmost = core::Min(leftmost, child.GetPosition().x - m.Left - box.x);
         }
+        if (fromRight)
+            extent.x = core::Max(extent.x, box.width) - leftmost;
         SetScrollExtent(extent);
     }
 
@@ -1055,15 +1064,11 @@ namespace experimental::gui
         if (latched && !m_smoothScrolling && !m_flinging)
         {
             // Held at the end: it follows the content's new end.
-            const core::Float2 range = GetScrollRange();
-            ApplyScrollOffset(range.y > 0.0f || range.x <= 0.0f ? core::Float2{m_scrollOffset.x, range.y} : core::Float2{range.x, m_scrollOffset.y});
+            ApplyScrollOffset(ScrollEnd(m_scrollOffset));
             m_latchedToEnd = true;
         }
         if (m_smoothScrolling)
-        {
-            const core::Float2 range = GetScrollRange();
-            m_scrollTarget = core::Float2{core::Clamp(m_scrollTarget.x, 0.0f, range.x), core::Clamp(m_scrollTarget.y, 0.0f, range.y)};
-        }
+            m_scrollTarget = ClampScroll(m_scrollTarget);
     }
 
     void Node::RequestLayout()
@@ -1157,7 +1162,8 @@ namespace experimental::gui
         const f32 view = axis == 1 ? box.height : box.width;
         const f32 extent = core::Max(view, axis == 1 ? m_contentExtent.y : m_contentExtent.x);
         const f32 range = axis == 1 ? GetScrollRange().y : GetScrollRange().x;
-        const f32 offset = axis == 1 ? m_scrollOffset.y : m_scrollOffset.x;
+        // Along the track from where the offset may start (the left, from the right too).
+        const f32 offset = axis == 1 ? m_scrollOffset.y : m_scrollOffset.x - GetScrollMin().x;
         const f32 length = axis == 1 ? track.height : track.width;
         const f32 thumb = core::Min(length, core::Max(kMinThumb, length * view / core::Max(1.0f, extent)));
         const f32 at = range > 0.0f ? (length - thumb) * offset / range : 0.0f;
@@ -1283,9 +1289,7 @@ namespace experimental::gui
         }
         // A smooth scroll eases toward its target; another scroll while it runs moves the target
         // on, so wheel notches accumulate rather than restart.
-        const bool pending = m_layoutDirty || m_childLayoutDirty;
-        const core::Float2 range = pending ? core::Float2{kUnbounded, kUnbounded} : GetScrollRange();
-        m_scrollTarget = core::Float2{core::Clamp(offset.x, 0.0f, range.x), core::Clamp(offset.y, 0.0f, range.y)};
+        m_scrollTarget = ClampScroll(offset);
         if (m_scrollTarget == m_scrollOffset)
         {
             m_smoothScrolling = false;
@@ -1295,12 +1299,15 @@ namespace experimental::gui
         StartSmoothScroll();
     }
 
-    void Node::ScrollToEnd(ScrollBehavior behavior)
+    void Node::ScrollToEnd(ScrollBehavior behavior) { ScrollTo(ScrollEnd(GetScrollTarget()), behavior); }
+
+    core::Float2 Node::ScrollEnd(core::Float2 from) const
     {
+        // The bottom; a scroller that only scrolls across, its inline end (the left from the right).
         const core::Float2 range = GetScrollRange();
-        const core::Float2 from = GetScrollTarget();
-        // The bottom; a scroller that only scrolls across, its right.
-        ScrollTo(range.y > 0.0f || range.x <= 0.0f ? core::Float2{from.x, range.y} : core::Float2{range.x, from.y}, behavior);
+        if (range.y > 0.0f || range.x <= 0.0f)
+            return core::Float2{from.x, range.y};
+        return core::Float2{ScrollsFromRight() ? GetScrollMin().x : range.x, from.y};
     }
 
     void Node::StartSmoothScroll()
@@ -1388,7 +1395,7 @@ namespace experimental::gui
                 delta = core::Float2{delta.y, 0.0f};
             const core::Float2 range = GetScrollRange();
             if (delta.x == 0.0f && range.y <= 0.0f && range.x > 0.0f)
-                delta = core::Float2{delta.y, 0.0f};
+                delta = core::Float2{ScrollsFromRight() ? -delta.y : delta.y, 0.0f}; // down goes toward the inline end
             const core::Float2 target = GetScrollTarget();
             ScrollBy(core::Float2{-delta.x * m_scrollStep, -delta.y * m_scrollStep}, ScrollBehavior::Auto);
             event.Handled = GetScrollTarget() != target || m_layoutStyle.Overscroll == OverscrollBehavior::Contain;
@@ -1479,7 +1486,8 @@ namespace experimental::gui
             const f32 travel = axis == 1 ? track.height - thumb.height : track.width - thumb.width;
             const f32 at = (axis == 1 ? p.y - track.y : p.x - track.x) - m_scrollDragGrab;
             const f32 range = axis == 1 ? GetScrollRange().y : GetScrollRange().x;
-            const f32 offset = travel > 0.0f ? core::Clamp(at / travel, 0.0f, 1.0f) * range : 0.0f;
+            const f32 low = axis == 1 ? 0.0f : GetScrollMin().x;
+            const f32 offset = low + (travel > 0.0f ? core::Clamp(at / travel, 0.0f, 1.0f) * range : 0.0f);
             SetScrollOffset(axis == 1 ? core::Float2{m_scrollOffset.x, offset} : core::Float2{offset, m_scrollOffset.y});
             event.Handled = true;
             return;

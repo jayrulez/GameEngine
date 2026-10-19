@@ -44,11 +44,11 @@ namespace vg = foundation::vg;
 
 export namespace experimental::gui
 {
-    /// `text` read as arithmetic: numbers (with a decimal point), + - * /, unary minus and
-    /// parentheses; none when it is not one (or divides by zero).
-    [[nodiscard]] inline Optional<f64> EvaluateExpression(core::StringView text)
+    namespace detail
     {
-        struct Parser
+        // At namespace scope, not local to EvaluateExpression: clang does not emit the members
+        // of a class local to an exported inline function for its importers.
+        struct ExpressionParser
         {
             core::StringView s;
             usize i = 0;
@@ -118,7 +118,13 @@ export namespace experimental::gui
                 }
             }
         };
-        Parser p{text};
+    }
+
+    /// `text` read as arithmetic: numbers (with a decimal point), + - * /, unary minus and
+    /// parentheses; none when it is not one (or divides by zero).
+    [[nodiscard]] inline Optional<f64> EvaluateExpression(core::StringView text)
+    {
+        detail::ExpressionParser p{text};
         const f64 v = p.Sum();
         p.Skip();
         if (!p.ok || p.i != text.Size() || text.Size() == 0)

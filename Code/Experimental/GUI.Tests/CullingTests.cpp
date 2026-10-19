@@ -189,7 +189,7 @@ TEST_CASE("culling: the same geometry shows with culling on as off, at the top, 
         const core::Array<u64> reference = page.Draw(false, &culledOff);
         const core::Array<u64> culled = page.Draw(true, &culledOn);
         CHECK(culledOff == 0u);
-        CHECK(culledOn > 60u); // most of the 80 rows are out of view (a culled row counts once)
+        CHECK(culledOn < 20u); // the 80 rows out of view are skipped by the scroller's index (E15), not visited
         REQUIRE(reference.Size() == culled.Size());
         bool same = true;
         for (usize i = 0; i < reference.Size(); ++i)
@@ -301,4 +301,100 @@ TEST_CASE("culling: a box in view fading in from nothing keeps asking for frames
     CHECK(fading->GetDrawnFrame() != 0u);   // in view, though nothing of it shows
     CHECK(HostFrame(*root.Get(), styles));  // its fade asks: it is no quiet animation out of sight
     CHECK(root->GetLastFrameStats().Reasons.Animation);
+}
+
+namespace
+{
+    // What the index must give: every child whose transformed subtree ink meets `area`, in order.
+    core::Array<Node*> ReachingByWalk(Node& parent, const Rect& area)
+    {
+        core::Array<Node*> out;
+        for (usize i = 0; i < parent.ChildCount(); ++i)
+        {
+            Node* c = parent.GetChildAt(i);
+            const Rect r = c->GetTransform().TransformRect(c->GetSubtreeInk());
+            if (r.x <= area.Right() && area.x <= r.Right() && r.y <= area.Bottom() && area.y <= r.Bottom())
+                out.PushBack(c);
+        }
+        return out;
+    }
+    bool SameNodes(const core::Array<Node*>& a, const core::Array<Node*>& b)
+    {
+        if (a.Size() != b.Size())
+            return false;
+        for (usize i = 0; i < a.Size(); ++i)
+            if (a[i] != b[i])
+                return false;
+        return true;
+    }
+}
+
+TEST_CASE("child index: a node's index of its children agrees with a walk, moved, scattered and painted (E15)")
+{
+    Page page;
+    page.Draw(true);
+    Node& scroller = *page.scroller.Get();
+    static constexpr f32 kHeights[3] = {0.0f, 40.0f, 300.0f}; // a point, a row, a view
+    const auto agree = [&]()
+    {
+        bool all = true;
+        for (f32 y = -100.0f; y < 3200.0f; y += 97.0f)
+            for (const f32 h : kHeights)
+            {
+                const Rect area{10.0f, y, 200.0f, h};
+                core::Array<Node*> indexed;
+                scroller.ChildrenReaching(area, indexed);
+                all = all && SameNodes(indexed, ReachingByWalk(scroller, area));
+            }
+        return all;
+    };
+    CHECK(agree());
+    const core::u32 builds = scroller.GetChildIndexBuilds();
+    CHECK(builds >= 1u);
+
+    // A card fades in a row: something under the scroller changed, but no reach moved.
+    scroller.GetChildAt(5)->GetChildAt(0)->SetAlpha(0.5f);
+    page.Draw(true);
+    CHECK(agree());
+    CHECK(scroller.GetChildIndexBuilds() == builds);
+
+    // Rows moved and scattered out of order: built again, and still agreeing.
+    scroller.GetChildAt(3)->SetPosition(core::Float2{20.0f, 2500.0f});
+    scroller.GetChildAt(70)->SetPosition(core::Float2{0.0f, 10.0f});
+    page.Draw(true);
+    CHECK(scroller.GetChildIndexBuilds() > builds);
+    CHECK(agree());
+    // A child taken away and one added: the index is of the children it has.
+    scroller.RemoveChild(scroller.GetChildAt(10));
+    (void)Add(scroller, u8"row");
+    page.Draw(true);
+    CHECK(agree());
+}
+
+TEST_CASE("child index: a point finds through the index what it finds by trying each child (E15)")
+{
+    Page page;
+    page.Draw(true);
+    page.scroller->SetScrollOffset(core::Float2{0.0f, 731.0f});
+    page.Draw(true);
+    Node& scroller = *page.scroller.Get();
+    bool same = true;
+    int found = 0;
+    for (f32 y = 2.0f; y < 300.0f; y += 7.0f)
+        for (f32 x = 2.0f; x < 370.0f; x += 13.0f) // short of the box placed over the page's edge
+        {
+            const core::Float2 p{x, y};
+            Node* expected = nullptr;
+            for (usize i = scroller.ChildCount(); i-- > 0 && expected == nullptr;)
+                expected = scroller.GetChildAt(i)->OverFind(p);
+            if (expected == nullptr && scroller.PointInside(p))
+                expected = &scroller;
+            Node* hit = page.root->OverFind(p);
+            if (hit == page.root.Get())
+                hit = nullptr; // the root's own box: what the walk above does not try
+            same = same && hit == expected;
+            found += hit != nullptr ? 1 : 0;
+        }
+    CHECK(same);
+    CHECK(found > 100);
 }

@@ -74,6 +74,18 @@ export namespace experimental::gui
             return m_vg->IsRectVisible(Rectangle{local.x - kMargin, local.y - kMargin, local.width + 2.0f * kMargin,
                                                  local.height + 2.0f * kMargin});
         }
+        /// What of the current local space can show (E15): the clip mapped back, grown by the
+        /// margin IsVisible allows. False when everything can show (no clip, or culling off): a
+        /// node with many children then draws them all.
+        [[nodiscard]] bool GetVisibleBounds(Rect& out) const
+        {
+            Rectangle clip{};
+            if (!m_culling || !m_vg->GetLocalClipBounds(clip))
+                return false;
+            constexpr f32 kMargin = 32.0f; // IsVisible's
+            out = Rect{clip.x - kMargin, clip.y - kMargin, clip.width + 2.0f * kMargin, clip.height + 2.0f * kMargin};
+            return true;
+        }
         /// Off, every node draws, whatever the clip (the culling test's reference).
         void SetCulling(bool culling) noexcept { m_culling = culling; }
         [[nodiscard]] bool IsCulling() const noexcept { return m_culling; }

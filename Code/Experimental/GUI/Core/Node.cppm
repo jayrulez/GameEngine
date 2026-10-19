@@ -493,10 +493,16 @@ export namespace experimental::gui
         /// Whether any child sets a z-index (else they paint and hit-test as they stand).
         [[nodiscard]] bool HasStackedChildren() const noexcept
         {
-            for (const RefPtr<Node>& child : m_children)
-                if (child->m_layoutStyle.ZIndex != 0)
-                    return true;
-            return false;
+            // Kept until the children or one's z-index change: asked on every draw and hit test, it
+            // read each child, which on a long column cost more than drawing what shows (E15).
+            if (!m_stackedKnown)
+            {
+                m_stacked = false;
+                for (const RefPtr<Node>& child : m_children)
+                    m_stacked = m_stacked || child->m_layoutStyle.ZIndex != 0;
+                m_stackedKnown = true;
+            }
+            return m_stacked;
         }
         /// Its children in paint order: by z-index (CSS's, among siblings), then as they stand.
         void ChildrenInPaintOrder(Array<Node*>& out) const
@@ -528,6 +534,22 @@ export namespace experimental::gui
                 Array<Node*> order;
                 if (HasStackedChildren())
                     ChildrenInPaintOrder(order);
+                else if (m_children.Size() >= kIndexedChildren)
+                {
+                    // Many children: those whose drawing holds the point, from the index (E15).
+                    core::Float2 p = ConvertToNodeSpace(worldPoint);
+                    if (m_scrollOffset.x != 0.0f || m_scrollOffset.y != 0.0f)
+                    {
+                        const core::Float2 shift = ScrollShift();
+                        p = core::Float2{p.x + shift.x, p.y + shift.y};
+                    }
+                    ChildrenReaching(Rect{p.x, p.y, 0.0f, 0.0f}, order);
+                    for (usize i = order.Size(); i-- > 0;)
+                        if (!order[i]->m_topLayer)
+                            if (Node* hit = order[i]->OverFind(worldPoint))
+                                return hit;
+                    return PointInside(worldPoint) ? this : nullptr;
+                }
                 const usize count = order.IsEmpty() ? m_children.Size() : order.Size();
                 for (usize i = count; i-- > 0;)
                 {
@@ -678,7 +700,18 @@ export namespace experimental::gui
                 const core::Float2 shift = ScrollShift();
                 ctx.ConcatTransform(Transform2D{}.Translate(-shift.x, -shift.y));
             }
-            if (!HasStackedChildren())
+            Rect view;
+            if (!HasStackedChildren() && m_children.Size() >= kIndexedChildren && ctx.GetVisibleBounds(view))
+            {
+                // Many children under a clip: those that can reach it, from the index, rather than
+                // each asked in turn (E15: a long column visited thousands only to cull them).
+                Array<Node*> shown;
+                ChildrenReaching(view, shown);
+                for (Node* child : shown)
+                    if (!child->m_topLayer)
+                        child->Draw(ctx);
+            }
+            else if (!HasStackedChildren())
             {
                 for (const RefPtr<Node>& child : m_children)
                     if (!child->m_topLayer) // drawn by the root's top layer, after the tree
@@ -713,6 +746,66 @@ export namespace experimental::gui
             m_needsRedraw = false; // drawn: clean until something invalidates it again
         }
 
+        /// A node with this many children keeps an index of where each one's drawing reaches
+        /// (E15), so drawing and hit testing visit those that can matter, not every one.
+        static constexpr usize kIndexedChildren = 32;
+
+        /// Its children whose drawing can reach `area` (in their parent's space, past its scroll),
+        /// in their order, from its index of them. The index is checked against the children once
+        /// something under it changed, and built again only when a child's reach moved: a colour
+        /// animating in a row costs no rebuild, a row resized does.
+        void ChildrenReaching(const Rect& area, Array<Node*>& out)
+        {
+            RefreshChildIndex();
+            const ChildIndex& index = *m_childIndex;
+            const bool vertical = index.Vertical;
+            const f32 lo = vertical ? area.y : area.x;
+            const f32 hi = vertical ? area.Bottom() : area.Right();
+            const usize n = index.Order.Size();
+            // Those starting at or before the area's far edge: a prefix of the order.
+            usize first = 0, last = n;
+            {
+                usize a = 0, b = n;
+                while (a < b)
+                {
+                    const usize mid = (a + b) / 2;
+                    const Rect& r = index.Rects[index.Order[mid]];
+                    if ((vertical ? r.y : r.x) <= hi)
+                        a = mid + 1;
+                    else
+                        b = mid;
+                }
+                last = a;
+            }
+            // And of those, the ones from where the farthest reach so far gets to the near edge.
+            {
+                usize a = 0, b = last;
+                while (a < b)
+                {
+                    const usize mid = (a + b) / 2;
+                    if (index.Reach[mid] < lo)
+                        a = mid + 1;
+                    else
+                        b = mid;
+                }
+                first = a;
+            }
+            Array<u32> picked;
+            for (usize j = first; j < last; ++j)
+            {
+                const u32 i = index.Order[j];
+                const Rect& r = index.Rects[i];
+                if (r.x <= area.Right() && area.x <= r.Right() && r.y <= area.Bottom() && area.y <= r.Bottom())
+                    picked.PushBack(i);
+            }
+            picked.Sort([](u32 a, u32 b) { return a < b; }); // few, and nearly in order already
+            for (const u32 i : picked)
+                out.PushBack(m_children[i].Get());
+        }
+        /// How many times its index of its children was built (tests, the inspector): once, then
+        /// again only when a child's reach moved.
+        [[nodiscard]] u32 GetChildIndexBuilds() const noexcept { return m_childIndexBuilds; }
+
         /// What it draws itself, in its own space: its box grown by its outer shadows (three sigma
         /// of their blur past their spread and offset). A widget drawing past its box adds that (a
         /// label's overflowing text); a filter's blur is added over the whole subtree.
@@ -737,7 +830,15 @@ export namespace experimental::gui
             if (m_subtreeInkValid)
                 return m_subtreeInk;
             Rect ink = GetInkBounds();
-            if (!ClipsChildren())
+            if (!ClipsChildren() && m_children.Size() >= kIndexedChildren)
+            {
+                // Many children: what the index holds of their reach (E15), not each asked again. It
+                // counts hidden ones too, so it is never smaller than what they draw.
+                RefreshChildIndex();
+                if (!m_children.IsEmpty())
+                    ink = Rect::Union(ink, m_childIndex->Bounds);
+            }
+            else if (!ClipsChildren())
                 for (const RefPtr<Node>& child : m_children)
                 {
                     const Node& c = *child;
@@ -854,6 +955,9 @@ export namespace experimental::gui
         // its sheets); marking each child here made building a long list quadratic.
         void ChildrenStyleChanged()
         {
+            m_childIndexAll = true; // its index of its children is of others (E15)
+            m_stackedKnown = false;
+            m_changedChildren.Clear();
             MarkAccessDirty(); // its accessibility node's children changed (E9d)
             m_childrenArrangementChanged = true;
             MarkStyleDirty(false);
@@ -947,6 +1051,8 @@ export namespace experimental::gui
         void SetLayoutStyle(const LayoutStyle& style)
         {
             PinStyle(ChangedLayoutSlots(m_layoutStyle, style)); // from code: what it changed is its own
+            if (style.ZIndex != m_layoutStyle.ZIndex && m_parent != nullptr)
+                m_parent->m_stackedKnown = false; // its parent paints its children in another order
             m_layoutStyle = style;
             RequestBoxLayout();
         }
@@ -1790,10 +1896,13 @@ export namespace experimental::gui
             m_subtreeInkValid = false;
             if (!IsTreeVisible() || m_quietInvalidations != 0)
                 return;
+            Node* through = this; // the child of each ancestor the change came up through
             for (Node* p = m_parent; p != nullptr; p = p->m_parent)
             {
                 p->m_needsRedraw = true;
                 p->m_subtreeInkValid = false; // what it holds may reach elsewhere now
+                p->NoteChildChanged(*through); // and that child's reach may have moved (E15)
+                through = p;
             }
         }
         [[nodiscard]] bool NeedsRedraw() const noexcept { return m_needsRedraw; }
@@ -2449,6 +2558,124 @@ export namespace experimental::gui
         mutable usize m_indexInParent = 0;                // its index, while
         mutable u32 m_indexGeneration = kNoGeneration;    // this is its parent's generation
         Array<RefPtr<Node>> m_children; // owning
+        // Where each child's drawing reaches, in this node's children's space, ordered along the
+        // axis they spread on, with the farthest reach so far at each place (E15).
+        struct ChildIndex
+        {
+            Array<Rect> Rects;  // by child
+            Array<u32> Order;   // children by where they start along the axis
+            Array<f32> Reach;   // the farthest end along the axis of Order[0..i]
+            Rect Bounds;        // around every child's reach
+            bool Vertical = true;
+            bool Built = false;
+        };
+        // Mutable: kept by the const reads of what it draws (GetSubtreeInk), as the ink is.
+        mutable UniquePtr<ChildIndex> m_childIndex; // made for a node with many children
+        mutable bool m_childIndexAll = true;        // every child's reach to be read again
+        mutable Array<Node*> m_changedChildren;     // children something under changed in, since the index was checked
+        mutable u32 m_childIndexBuilds = 0;
+        mutable bool m_stackedKnown = false; // whether m_stacked holds HasStackedChildren's answer
+        mutable bool m_stacked = false;
+
+        // Something changed under `child`: its reach is read again at the next check (all of them,
+        // once that is most of them). Cleared with the children, so it never holds one gone.
+        void NoteChildChanged(Node& child)
+        {
+            if (!m_childIndex || m_childIndexAll)
+                return;
+            if (m_changedChildren.Size() > m_children.Size() / 4 + 8)
+            {
+                m_childIndexAll = true;
+                m_changedChildren.Clear();
+                return;
+            }
+            m_changedChildren.PushBack(&child);
+        }
+
+        // Checks the index against the children (those something changed under, or all when the
+        // children changed), building it again when a reach moved.
+        void RefreshChildIndex() const
+        {
+            if (!m_childIndex)
+                m_childIndex = MakeUnique<ChildIndex>(MemoryAllocator());
+            ChildIndex& index = *m_childIndex;
+            const usize n = m_children.Size();
+            const auto reachOf = [](const Node& c) { return c.GetTransform().TransformRect(c.GetSubtreeInk()); };
+            bool moved = false;
+            if (!index.Built || m_childIndexAll || index.Rects.Size() != n)
+            {
+                moved = !index.Built || index.Rects.Size() != n;
+                index.Rects.Resize(n);
+                for (usize i = 0; i < n; ++i)
+                {
+                    const Rect r = reachOf(*m_children[i]);
+                    moved = moved || !(index.Rects[i] == r);
+                    index.Rects[i] = r;
+                }
+            }
+            else
+            {
+                for (Node* child : m_changedChildren)
+                {
+                    const usize i = GetChildIndex(child);
+                    if (i == kInvalidIndex)
+                        continue;
+                    const Rect r = reachOf(*child);
+                    moved = moved || !(index.Rects[i] == r);
+                    index.Rects[i] = r;
+                }
+            }
+            m_childIndexAll = false;
+            m_changedChildren.Clear();
+            if (!moved)
+                return;
+            // The axis they spread along more: a column's, or a row's; and the bounds of them all.
+            f32 minX = 0.0f, maxX = 0.0f, minY = 0.0f, maxY = 0.0f;
+            for (usize i = 0; i < n; ++i)
+            {
+                const Rect& r = index.Rects[i];
+                minX = i == 0 ? r.x : core::Min(minX, r.x);
+                maxX = i == 0 ? r.x : core::Max(maxX, r.x);
+                minY = i == 0 ? r.y : core::Min(minY, r.y);
+                maxY = i == 0 ? r.y : core::Max(maxY, r.y);
+                index.Bounds = i == 0 ? r : Rect::Union(index.Bounds, r);
+            }
+            index.Vertical = maxY - minY >= maxX - minX;
+            const bool vertical = index.Vertical;
+            const auto start = [&](u32 i) { return vertical ? index.Rects[i].y : index.Rects[i].x; };
+            // Ordered by start: a merge sort, as children placed anywhere may come in any order.
+            index.Order.Resize(n);
+            for (usize i = 0; i < n; ++i)
+                index.Order[i] = static_cast<u32>(i);
+            Array<u32> scratch;
+            scratch.Resize(n);
+            for (usize width = 1; width < n; width *= 2)
+            {
+                for (usize lo = 0; lo < n; lo += 2 * width)
+                {
+                    const usize mid = core::Min(lo + width, n), hi = core::Min(lo + 2 * width, n);
+                    usize a = lo, b = mid, k = lo;
+                    while (a < mid && b < hi)
+                        scratch[k++] = start(index.Order[b]) < start(index.Order[a]) ? index.Order[b++] : index.Order[a++];
+                    while (a < mid)
+                        scratch[k++] = index.Order[a++];
+                    while (b < hi)
+                        scratch[k++] = index.Order[b++];
+                }
+                core::Swap(index.Order, scratch);
+            }
+            index.Reach.Resize(n);
+            f32 reach = 0.0f;
+            for (usize j = 0; j < n; ++j)
+            {
+                const Rect& r = index.Rects[index.Order[j]];
+                const f32 end = vertical ? r.Bottom() : r.Right();
+                reach = j == 0 ? end : core::Max(reach, end);
+                index.Reach[j] = reach;
+            }
+            index.Built = true;
+            ++m_childIndexBuilds;
+        }
         Array<Listener> m_listeners;
         Array<UniquePtr<Effect>> m_bindings; // this node's bindings (Bind, BindProperty)
         struct PropertyBinding

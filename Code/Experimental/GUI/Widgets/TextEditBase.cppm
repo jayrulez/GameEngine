@@ -237,6 +237,10 @@ export namespace experimental::gui
             m_model.SetCaretPlaces(&m_places); // Left and Right across what it shows (E9c)
             m_text.SetAlignment(TextHAlign::Start, TextVAlign::Top);
             m_hintText.SetAlignment(TextHAlign::Start, TextVAlign::Top);
+            {
+                StyleWriteScope defaults(*this); // `text-align` from the start, which a sheet changes
+                SetTextAlignment(TextHAlign::Start, TextVAlign::Top);
+            }
             m_hintText.SetColor(m_placeholderColor);
             // Each editing command, by the name the keymap binds, runs on its model.
             for (usize i = 0; i < static_cast<usize>(TextEditCommand::Count); ++i)
@@ -373,6 +377,9 @@ export namespace experimental::gui
             m_hintText.SetFontSelection(GetFontService(), GetTextStyle().FontFamily.AsView(), GetTextStyle().Selection);
             m_text.SetDirection(TextDirectionFor());
             m_hintText.SetDirection(TextDirectionFor());
+            // Across, as its `text-align` says; down, as the editor places its lines.
+            m_text.SetAlignment(GetTextAlignH(), m_text.GetVAlign());
+            m_hintText.SetAlignment(GetTextAlignH(), m_hintText.GetVAlign());
             m_text.SetColor(GetTextColor());
             m_text.SetLetterSpacing(GetTextStyle().LetterSpacing);
             m_text.SetBreakWords(GetTextStyle().BreakWords);

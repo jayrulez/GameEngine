@@ -683,6 +683,48 @@ TEST_CASE("textfield: a long value scrolls to keep the caret in view")
     CHECK(fx.field->GetCaret() >= 39u);
 }
 
+TEST_CASE("textfield: a short line sits where its alignment puts it, start being the right in right to left")
+{
+    // 200 wide, 6px a byte: "abcd" is 24px; the view is 198.5 (the caret's width kept clear).
+    const auto at = [](TextField& f, core::f32 x) { return f.ConvertToRootSpace(core::Float2{x, 12.0f}); };
+    {
+        Fixture fx(u8"abcd");
+        fx.root->SetLayoutDirection(Node::LayoutDirection::RightToLeft);
+        (void)fx.root->UpdateLayout();
+        // Against the right edge: the line spans 174.5 to 198.5.
+        fx.d()->InjectMouseDown(at(*fx.field, 183.0f), MouseButton::Left);
+        fx.d()->InjectMouseUp(at(*fx.field, 183.0f), MouseButton::Left);
+        CHECK(fx.field->GetCaret() == 1u); // just past the a
+        fx.d()->InjectMouseDown(at(*fx.field, 20.0f), MouseButton::Left);
+        fx.d()->InjectMouseUp(at(*fx.field, 20.0f), MouseButton::Left);
+        CHECK(fx.field->GetCaret() == 0u); // left of this left-to-right run: its start
+    }
+    {
+        Fixture fx(u8"abcd");
+        fx.field->SetTextAlignment(TextHAlign::End, TextVAlign::Middle);
+        (void)fx.root->UpdateLayout();
+        fx.d()->InjectMouseDown(at(*fx.field, 183.0f), MouseButton::Left);
+        fx.d()->InjectMouseUp(at(*fx.field, 183.0f), MouseButton::Left);
+        CHECK(fx.field->GetCaret() == 1u);
+        fx.field->SetTextAlignment(TextHAlign::Center, TextVAlign::Middle); // 87.25 to 111.25
+        fx.d()->InjectMouseDown(at(*fx.field, 99.0f), MouseButton::Left);
+        fx.d()->InjectMouseUp(at(*fx.field, 99.0f), MouseButton::Left);
+        CHECK(fx.field->GetCaret() == 2u);
+    }
+}
+
+TEST_CASE("textfield: a long right-to-left line rests on its start, the right, and scrolls from there")
+{
+    Fixture fx;
+    fx.root->SetLayoutDirection(Node::LayoutDirection::RightToLeft);
+    (void)fx.root->UpdateLayout();
+    fx.d()->InjectText(core::StringView(u8"0123456789012345678901234567890123456789")); // 240px
+    // The caret at the end of this left-to-right run, its right: the right part shows.
+    CHECK(fx.field->GetScrollX() == doctest::Approx(0.0f));
+    fx.d()->InjectKeyDown(Key(KeyCode::Home)); // the run's start, its left: scrolled from the right
+    CHECK(fx.field->GetScrollX() == doctest::Approx(240.0f - (200.0f - 1.5f)));
+}
+
 TEST_CASE("textfield: a password shows a mask, keeps carets on its characters, and lets nothing out")
 {
     MemClipboard clip;

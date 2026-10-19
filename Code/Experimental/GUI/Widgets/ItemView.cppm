@@ -60,6 +60,7 @@ import :reactive;         // Observable (what bindings follow)
 import :element_types;    // ElementSet (a template's elements)
 import :markup;           // MarkupLoader, ItemBinding (template rows)
 import :string_list_model;
+import :list_model;       // a script's model (E16)
 import :list_box;         // SplitItems, JoinItems
 import foundation.vg;     // StrokeStyle (the drop indicator)
 
@@ -356,6 +357,12 @@ export namespace experimental::gui
                 UseTemplates();
         }
         [[nodiscard]] core::String GetRowTypeColumn() const { return m_rowTypeColumn; }
+        /// Shows a script's list model (E16), keeping it alive while it does.
+        void SetListModel(RefPtr<ListModel> model)
+        {
+            m_listModel = core::Move(model);
+            SetModel(m_listModel ? &m_listModel->Model() : nullptr);
+        }
         /// A model of its own from text, '|' between the items (markup's `items`).
         void SetItemsText(const core::String& text)
         {
@@ -1127,7 +1134,8 @@ export namespace experimental::gui
             }
         }
 
-        IModel* m_model = nullptr; // non-owning (unless it is m_ownModel)
+        IModel* m_model = nullptr; // non-owning (unless it is m_ownModel, or m_listModel's)
+        RefPtr<ListModel> m_listModel; // a script's model it shows (E16)
         core::UniquePtr<StringListModel> m_ownModel; // markup's `items`
         RowFactory m_factory;
         Array<RowTemplate> m_templates;

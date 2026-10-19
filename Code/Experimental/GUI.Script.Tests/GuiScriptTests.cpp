@@ -15,6 +15,7 @@
 
 import foundation.core;
 import foundation.script;
+import foundation.i18n; // a script's localized texts (E16)
 import experimental.gui;
 #ifdef OPTION_HAS_ANGELSCRIPT
 import foundation.script.angelscript;
@@ -903,5 +904,90 @@ TEST_CASE("gui-script: Luau opens windows, menus and popups of its own (E16)")
     INFO(doctest::String(reinterpret_cast<const char*>(bed.errors.last.CStr())));
     REQUIRE(loaded.IsOk());
     CheckOverlays(bed);
+}
+#endif
+
+namespace
+{
+    // A script's list model and localized texts (E16): the script made a ListModel of three rows,
+    // shown by a ListView it put first under the root, and keeps `edit` to change it; the GUI's
+    // localization has `title` and the plural `lives`.
+    struct Texts
+    {
+        foundation::i18n::StringTable table;
+        foundation::i18n::Localization loc;
+        Texts()
+        {
+            REQUIRE(table.Set(StringView(u8"title"), StringView(u8"en"), StringView(u8"Settings")));
+            REQUIRE(table.SetPluralRule(StringView(u8"en"), StringView(u8"one: n = 1")));
+            REQUIRE(table.SetPlural(StringView(u8"lives"), StringView(u8"en"), foundation::i18n::PluralCategory::One, StringView(u8"{0} life")));
+            REQUIRE(table.SetPlural(StringView(u8"lives"), StringView(u8"en"), foundation::i18n::PluralCategory::Other, StringView(u8"{0} lives")));
+            loc.AddTable(&table);
+            loc.SetLanguage(StringView(u8"en"));
+        }
+    };
+
+    void CheckModelAndTexts(GuiBed& bed)
+    {
+        REQUIRE(bed.errors.count == 0);
+        gui::ListView* list = Cast<gui::ListView>(bed.root->GetChildAt(0));
+        REQUIRE(list != nullptr);
+        CHECK(list->GetModel()->RowCount() == 3u);
+        bed.Run(u8"edit"); // insert at 1, remove the last, rename the first
+        CHECK(list->GetModel()->RowCount() == 3u);
+        CHECK(bed.Number(u8"firstIsAlpha") == doctest::Approx(1.0));
+        CHECK(bed.Number(u8"secondIsNew") == doctest::Approx(1.0));
+        CHECK(bed.Number(u8"textsRight") == doctest::Approx(1.0));
+    }
+}
+
+#ifdef OPTION_HAS_ANGELSCRIPT
+TEST_CASE("gui-script: AngelScript fills a list model and reads localized texts (E16)")
+{
+    RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    Texts texts;
+    bed.root->GetContext().SetLocalization(&texts.loc);
+    const Status loaded = bed.context->Load(
+        u8"ListModel@ model;\n"
+        u8"void main() {\n"
+        u8"  @model = ListModel();\n"
+        u8"  model.add(\"one\"); model.add(\"two\"); model.add(\"three\");\n"
+        u8"  ListView::of(gui::root().add(\"ListView\")).setModel(model);\n"
+        u8"}\n"
+        u8"void edit() { model.insert(1, \"new\"); model.remove(model.count() - 1); model.set(0, \"alpha\"); }\n"
+        u8"double firstIsAlpha() { return model.get(0) == \"alpha\" ? 1 : 0; }\n"
+        u8"double secondIsNew() { return model.get(1) == \"new\" ? 1 : 0; }\n"
+        u8"double textsRight() { return gui::tr(\"title\") == \"Settings\" && gui::trCount(\"lives\", 3) == \"3 lives\" &&\n"
+        u8"  gui::trCount(\"lives\", 1) == \"1 life\" && gui::tr(\"missing\") == \"missing\" && gui::language() == \"en\" ? 1 : 0; }\n",
+        u8"main");
+    INFO(doctest::String(reinterpret_cast<const char*>(bed.errors.last.CStr())));
+    REQUIRE(loaded.IsOk());
+    CheckModelAndTexts(bed);
+    bed.root->GetContext().SetLocalization(nullptr);
+}
+#endif
+
+#ifdef OPTION_HAS_LUAU
+TEST_CASE("gui-script: Luau fills a list model and reads localized texts (E16)")
+{
+    RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    Texts texts;
+    bed.root->GetContext().SetLocalization(&texts.loc);
+    const Status loaded = bed.context->Load(
+        u8"local model = ListModel.new()\n"
+        u8"model:add(\"one\"); model:add(\"two\"); model:add(\"three\")\n"
+        u8"ListView.of(gui.root():add(\"ListView\")):setModel(model)\n"
+        u8"function edit() model:insert(1, \"new\"); model:remove(model:count() - 1); model:set(0, \"alpha\") end\n"
+        u8"function firstIsAlpha() return model:get(0) == \"alpha\" and 1 or 0 end\n"
+        u8"function secondIsNew() return model:get(1) == \"new\" and 1 or 0 end\n"
+        u8"function textsRight() return (gui.tr(\"title\") == \"Settings\" and gui.trCount(\"lives\", 3) == \"3 lives\" and\n"
+        u8"  gui.trCount(\"lives\", 1) == \"1 life\" and gui.tr(\"missing\") == \"missing\" and gui.language() == \"en\") and 1 or 0 end\n",
+        u8"main");
+    INFO(doctest::String(reinterpret_cast<const char*>(bed.errors.last.CStr())));
+    REQUIRE(loaded.IsOk());
+    CheckModelAndTexts(bed);
+    bed.root->GetContext().SetLocalization(nullptr);
 }
 #endif

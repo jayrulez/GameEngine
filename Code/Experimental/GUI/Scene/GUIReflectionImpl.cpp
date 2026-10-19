@@ -603,6 +603,36 @@ namespace experimental::gui
                         }));
     }
 
+    namespace
+    {
+        foundation::i18n::Localization* ScriptLocalization()
+        {
+            SceneRoot* root = ScriptRoot();
+            return root != nullptr ? root->GetContext().GetLocalization() : nullptr;
+        }
+    }
+
+    core::String Gui::Translate(StringView key)
+    {
+        foundation::i18n::Localization* localization = ScriptLocalization();
+        return localization != nullptr ? localization->TextString(key) : core::String(key);
+    }
+
+    core::String Gui::TranslateCount(StringView key, i32 count)
+    {
+        foundation::i18n::Localization* localization = ScriptLocalization();
+        if (localization == nullptr)
+            return core::String(key);
+        const core::Variant args[1] = {core::Variant::From<i64>(count)};
+        return localization->FormatPlural(key, count, Span<const core::Variant>(args, 1));
+    }
+
+    core::String Gui::Language()
+    {
+        foundation::i18n::Localization* localization = ScriptLocalization();
+        return localization != nullptr ? core::String(localization->Language()) : core::String{};
+    }
+
     void Gui::Set(StringView name, const core::Variant& value)
     {
         if (DataModel* data = ScriptDataModel())
@@ -694,6 +724,7 @@ namespace experimental::gui
             registry.Register(TweenGroup::StaticType());
             registry.Register(TweenSequence::StaticType());
             registry.Register(TweenParallel::StaticType());
+            registry.Register(ListModel::StaticType()); // a script's list (E16)
             foundation::script::RegisterDelegateShape(u8"void KeyHandler(const string &in keys)"); // gui::captureKey's
             return true;
         }();
@@ -808,6 +839,18 @@ namespace experimental::gui
         builder.Method<&TweenGroup::RepeatScript>("repeats");
         builder.Method<&TweenGroup::OnFinishedScript>("onFinished");
         builder.Method<&TweenGroup::IsFinished>("isDone");
+    }
+
+    REFLECT_MEMBERS(ListModel, "rtti::gui")
+    {
+        builder.Method<&ListModel::Add>("add");
+        builder.Method<&ListModel::Insert>("insert");
+        builder.Method<&ListModel::Remove>("remove");
+        builder.Method<&ListModel::Set>("set");
+        builder.Method<&ListModel::Get>("get");
+        builder.Method<&ListModel::Count>("count");
+        builder.Method<&ListModel::Clear>("clear");
+        builder.Constructor<>(); // ListModel() / ListModel.new()
     }
 
     REFLECT_MEMBERS(TweenSequence, "rtti::gui")
@@ -1268,6 +1311,7 @@ namespace experimental::gui
     REFLECT_MEMBERS(ItemView, "rtti::gui")
     {
         builder.AccessorProperty<&ItemView::GetItemsText, &ItemView::SetItemsText>("items").PropAttribute("css", core::String(u8"items"));
+        builder.Method<&ItemView::SetListModel>("setModel"); // a script's ListModel (E16)
         builder.AccessorProperty<&ItemView::GetRowHeight, &ItemView::SetRowHeight>("rowHeight").PropAttribute("css", core::String(u8"row-height"));
         builder.AccessorProperty<&ItemView::GetEstimatedRowHeight, &ItemView::SetEstimatedRowHeight>("estimatedRowHeight")
             .PropAttribute("css", core::String(u8"estimated-row-height"));
@@ -1335,6 +1379,9 @@ namespace experimental::gui
         builder.Method<&Gui::Root, Node>("root");
         builder.Method<&Gui::GetNumber>("getNumber");
         builder.Method<&Gui::GetText>("getText");
+        builder.Method<&Gui::Translate>("tr"); // the localization's keys (E16)
+        builder.Method<&Gui::TranslateCount>("trCount");
+        builder.Method<&Gui::Language>("language");
         builder.Method<&Gui::GetBool>("getBool");
         builder.Method<&Gui::Set>("set");
         builder.Method<&Gui::DefineCommand>("defineCommand");

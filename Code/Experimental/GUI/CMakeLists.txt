@@ -115,6 +115,7 @@ target_sources(GUI
             Styling/StyleInterpolation.cppm
             Styling/StyleAnimation.cppm
             Styling/Tween.cppm
+            Model/ListModel.cppm
             Styling/StyleManager.cppm
             Styling/Theme.cppm
             Markup/MarkupLoader.cppm

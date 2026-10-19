@@ -140,5 +140,6 @@ export import :motion;
 export import :style_interpolation;
 export import :style_animation;
 export import :tween;
+export import :list_model;
 export import :style_manager;
 export import :theme;

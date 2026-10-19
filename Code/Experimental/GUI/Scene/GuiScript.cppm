@@ -54,6 +54,12 @@ export namespace experimental::gui
         /// when unset or unconvertible). A read a binding follows.
         [[nodiscard]] static f64 GetNumber(core::StringView name);
         [[nodiscard]] static core::String GetText(core::StringView name);
+        /// The GUI's localized text for `key` (E16): the key itself when no table has it.
+        [[nodiscard]] static core::String Translate(core::StringView key);
+        /// The key's plural form for `count`, its `{0}` the count.
+        [[nodiscard]] static core::String TranslateCount(core::StringView key, i32 count);
+        /// The GUI's language ("en", "ar-EG"); empty with no localization.
+        [[nodiscard]] static core::String Language();
         [[nodiscard]] static bool GetBool(core::StringView name);
         /// Sets the GUI's data value `name` (whatever is bound to it follows).
         static void Set(core::StringView name, const Variant& value);

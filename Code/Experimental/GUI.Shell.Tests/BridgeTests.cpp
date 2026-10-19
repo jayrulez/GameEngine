@@ -598,6 +598,68 @@ TEST_CASE("bridge: PumpFromSurface forwards the polled finger: down when it appe
     CHECK(clicks == 1);
 }
 
+TEST_CASE("bridge: a finger cancelled ends its gesture; two polled fingers make one; a trackpad's pinch is the mouse's")
+{
+    auto root = MakeScene(core::Float2{200.0f, 200.0f});
+    auto pad = core::MakeRef<Panel>(core::DefaultAllocator());
+    pad->SetSize(core::Float2{200.0f, 200.0f});
+    pad->SetTouchActions(0); // its fingers its own
+    root->AddChild(pad.Get());
+    core::Array<core::String> seen;
+    PointerType pointer = PointerType::Touch;
+    core::f32 scale = 0.0f;
+    const EventType types[] = {EventType::GestureStart, EventType::GestureChange, EventType::GestureEnd, EventType::GestureCancel};
+    for (const EventType type : types)
+        (void)pad->AddEventListener(type, [&](const Event& e)
+                                    {
+                                        seen.PushBack(core::String(EventTypeName(e.Type)));
+                                        pointer = static_cast<const GestureEvent&>(e).Pointer;
+                                        scale = static_cast<const GestureEvent&>(e).Scale;
+                                    });
+    GuiInputBridge bridge{root->GetEventDispatcher()};
+    bridge.SetWindowSize(core::Float2{200.0f, 200.0f});
+
+    // Two fingers, then one taken back by the platform.
+    (void)bridge.Dispatch(Finger(shell::InputEventKind::TouchDown, 1u, 0.3f, 0.5f)); // nothing takes the press
+    CHECK(bridge.Dispatch(Finger(shell::InputEventKind::TouchDown, 2u, 0.7f, 0.5f)));
+    REQUIRE(seen.Size() == 1u);
+    CHECK(seen.Back() == core::String(u8"gesturestart"));
+    CHECK(bridge.Dispatch(Finger(shell::InputEventKind::TouchCancel, 2u, 0.7f, 0.5f)));
+    CHECK(seen.Back() == core::String(u8"gesturecancel"));
+    (void)bridge.Dispatch(Finger(shell::InputEventKind::TouchUp, 1u, 0.3f, 0.5f));
+
+    // Two fingers polled from a surface, spreading.
+    TouchInputManager manager;
+    shell::InputSurface surface{&manager, 1u,
+                                core::ContentFit{core::Rectangle{0.0f, 0.0f, 200.0f, 200.0f}, core::Float2{200.0f, 200.0f}, core::FitMode::Stretch}};
+    surface.SetWindowSize(core::Float2{200.0f, 200.0f});
+    manager.touch.points.PushBack(shell::TouchPoint{5u, 0.4f, 0.5f, 1.0f, 80.0f, 100.0f});
+    manager.touch.points.PushBack(shell::TouchPoint{6u, 0.6f, 0.5f, 1.0f, 120.0f, 100.0f});
+    bridge.PumpFromSurface(surface);
+    CHECK(seen.Back() == core::String(u8"gesturestart"));
+    manager.touch.points[0] = shell::TouchPoint{5u, 0.3f, 0.5f, 1.0f, 60.0f, 100.0f};
+    manager.touch.points[1] = shell::TouchPoint{6u, 0.7f, 0.5f, 1.0f, 140.0f, 100.0f};
+    bridge.PumpFromSurface(surface);
+    CHECK(scale == doctest::Approx(2.0f));
+    manager.touch.points.Clear();
+    bridge.PumpFromSurface(surface);
+    CHECK(seen.Back() == core::String(u8"gestureend"));
+
+    // A trackpad's pinch, at the mouse: the same events, the mouse's.
+    (void)bridge.Dispatch(MouseMove(100.0f, 100.0f));
+    shell::InputEvent pinch{};
+    pinch.kind = shell::InputEventKind::PinchBegin;
+    CHECK(bridge.Dispatch(pinch));
+    pinch.kind = shell::InputEventKind::PinchUpdate;
+    pinch.value = 1.5f;
+    CHECK(bridge.Dispatch(pinch));
+    CHECK(scale == doctest::Approx(1.5f));
+    CHECK(pointer == PointerType::Mouse);
+    pinch.kind = shell::InputEventKind::PinchEnd;
+    CHECK(bridge.Dispatch(pinch));
+    CHECK(seen.Back() == core::String(u8"gestureend"));
+}
+
 TEST_CASE("bridge: an IME's composition reaches the focused field, and the window learns where it types")
 {
     auto root = MakeScene(core::Float2{200.0f, 200.0f});

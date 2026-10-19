@@ -188,6 +188,18 @@ export namespace experimental::gui
                 routed = ForwardTouch(event.kind, event.touchId, at);
                 break;
             }
+            case shell::InputEventKind::TouchCancel:
+                routed = m_dispatcher->InjectTouchCancel(event.touchId);
+                break;
+            case shell::InputEventKind::PinchBegin:
+                routed = m_dispatcher->InjectPinch(EventType::GestureStart, 1.0f);
+                break;
+            case shell::InputEventKind::PinchUpdate:
+                routed = m_dispatcher->InjectPinch(EventType::GestureChange, event.value);
+                break;
+            case shell::InputEventKind::PinchEnd:
+                routed = m_dispatcher->InjectPinch(EventType::GestureEnd, 1.0f);
+                break;
             case shell::InputEventKind::MouseWheel:
                 // For wheel, x/y is the scroll delta; position is the last known cursor spot.
                 routed = m_dispatcher->InjectMouseWheel(m_dispatcher->GetMousePosition(),
@@ -300,45 +312,35 @@ export namespace experimental::gui
             default: return m_dispatcher->InjectTouchUp(finger, at);
             }
         }
-        // The polled fingers against the one driving the pointer: down when one appears, moves
-        // while it stays, up when it is gone.
+        // The polled fingers against the ones last seen: down when one appears, moves while it
+        // stays, up when it is gone (every finger, E17c: two make a gesture).
         void PumpTouch(shell::ITouch& touch)
         {
+            core::Array<PumpedFinger> now;
             shell::TouchPoint point;
-            bool found = false;
-            shell::TouchPoint first;
-            bool any = false;
             for (core::i32 i = 0; i < touch.TouchCount(); ++i)
                 if (touch.GetTouchPoint(i, point))
-                {
-                    if (!any)
-                    {
-                        first = point;
-                        any = true;
-                    }
-                    if (m_pumpedFinger.HasValue() && point.id == m_pumpedFinger.Value())
-                    {
-                        found = true;
-                        break;
-                    }
-                }
-            if (m_pumpedFinger.HasValue())
+                    now.PushBack(PumpedFinger{point.id, core::Float2{point.pointerX, point.pointerY}});
+            for (const PumpedFinger& was : m_pumpedFingers)
             {
-                if (found)
-                {
-                    const core::Float2 at{point.pointerX, point.pointerY};
-                    if (at.x != m_lastTouchAt.x || at.y != m_lastTouchAt.y)
-                        (void)ForwardTouch(shell::InputEventKind::TouchMove, point.id, at);
-                    return;
-                }
-                (void)ForwardTouch(shell::InputEventKind::TouchUp, m_pumpedFinger.Value(), m_lastTouchAt);
-                m_pumpedFinger = {};
+                bool stays = false;
+                for (const PumpedFinger& is : now)
+                    stays = stays || is.Id == was.Id;
+                if (!stays)
+                    (void)ForwardTouch(shell::InputEventKind::TouchUp, was.Id, was.At);
             }
-            if (any)
+            for (const PumpedFinger& is : now)
             {
-                m_pumpedFinger = first.id;
-                (void)ForwardTouch(shell::InputEventKind::TouchDown, first.id, core::Float2{first.pointerX, first.pointerY});
+                const PumpedFinger* was = nullptr;
+                for (const PumpedFinger& f : m_pumpedFingers)
+                    if (f.Id == is.Id)
+                        was = &f;
+                if (was == nullptr)
+                    (void)ForwardTouch(shell::InputEventKind::TouchDown, is.Id, is.At);
+                else if (was->At.x != is.At.x || was->At.y != is.At.y)
+                    (void)ForwardTouch(shell::InputEventKind::TouchMove, is.Id, is.At);
             }
+            m_pumpedFingers = core::Move(now);
         }
         // SDL copies a finger into mouse events by default: a mouse event while a finger is down,
         // or at the place a finger last was, is taken for that copy and ignored. The mouse moving
@@ -612,7 +614,12 @@ export namespace experimental::gui
         core::Float2 m_windowSize{0.0f, 0.0f}; // for placing touch events (SetWindowSize)
         bool m_touchSeen = false;              // a finger was used: the mouse may be SDL's copy of it
         core::Float2 m_lastTouchAt{0.0f, 0.0f}; // where the driving finger last was (content space)
-        core::Optional<u64> m_pumpedFinger;    // the polled finger driving the pointer
+        struct PumpedFinger
+        {
+            u64 Id = 0;
+            core::Float2 At{0.0f, 0.0f};
+        };
+        core::Array<PumpedFinger> m_pumpedFingers; // the polled fingers as last seen
     };
 
     /// One action of the game's input map and what it does in the GUI.

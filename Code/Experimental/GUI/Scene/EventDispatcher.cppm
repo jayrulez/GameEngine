@@ -313,6 +313,69 @@ export namespace experimental::gui
         };
         /// The fingers down, in the order they went down.
         [[nodiscard]] core::Span<const Finger> GetFingers() const noexcept { return core::Span<const Finger>(m_fingers.Data(), m_fingers.Size()); }
+        /// A finger the platform took back (a system gesture): no release follows. Its gesture is
+        /// cancelled, its press cancelled, its pan ended where it is.
+        bool InjectTouchCancel(u64 finger)
+        {
+            if (const i32 at = FindFinger(finger); at >= 0)
+                m_fingers.RemoveAt(static_cast<usize>(at));
+            if (m_gesturing && IsGestureFinger(finger))
+            {
+                EndGesture(EventType::GestureCancel);
+                return true;
+            }
+            if (!m_touchActive || finger != m_touchFinger)
+                return false;
+            if (!m_panning)
+                CancelPointer();
+            m_touchActive = false;
+            m_panning = false;
+            m_panScroller = nullptr;
+            m_longPressArmed = false;
+            m_touchDragArmed = false;
+            UpdateHoverPath(nullptr, m_mousePos);
+            return true;
+        }
+        /// A trackpad's pinch at the pointer (the platform's gesture, its fingers never touches):
+        /// begun, updated by `scaleDelta` (above 1 spreading), ended. The same gesture events as
+        /// two fingers make, for a node whose touch-action leaves pinch-zoom out, marked as the
+        /// mouse's; no rotation and no translation.
+        bool InjectPinch(EventType phase, f32 scaleDelta)
+        {
+            if (phase == EventType::GestureStart)
+            {
+                if (m_gesturing)
+                    return false;
+                Node* target = HitTest(m_mousePos);
+                if (target == nullptr || (target->EffectiveTouchActions() & kTouchPinchZoom) != 0)
+                    return false;
+                m_gestureIds[0] = m_gestureIds[1] = kNoFinger;
+                m_gestureFocus0 = m_mousePos;
+                m_gestureScale = 1.0f;
+                m_gestureRotation = 0.0f;
+                m_gestureTranslation = core::Float2{0.0f, 0.0f};
+                m_gesturePointer = PointerType::Mouse;
+                m_gestureTarget = core::RefPtr<Node>(target);
+                m_gesturing = true;
+                RouteGesture(EventType::GestureStart, 1.0f, 0.0f, core::Float2{0.0f, 0.0f});
+                return true;
+            }
+            if (!m_gesturing || m_gesturePointer != PointerType::Mouse)
+                return false;
+            if (phase == EventType::GestureChange)
+            {
+                if (m_gestureTarget->GetRootNode() != m_root)
+                {
+                    EndGesture(EventType::GestureCancel);
+                    return true;
+                }
+                m_gestureScale *= scaleDelta;
+                RouteGesture(EventType::GestureChange, scaleDelta, 0.0f, core::Float2{0.0f, 0.0f});
+                return true;
+            }
+            EndGesture(phase == EventType::GestureCancel ? EventType::GestureCancel : EventType::GestureEnd);
+            return true;
+        }
         /// Two fingers are making a gesture (E17c).
         [[nodiscard]] bool IsGesturing() const noexcept { return m_gesturing; }
         /// Ends the gesture in progress as cancelled (a finger the platform took back): its target
@@ -1503,12 +1566,16 @@ export namespace experimental::gui
             m_gestureScale = 1.0f;
             m_gestureRotation = 0.0f;
             m_gestureTranslation = core::Float2{0.0f, 0.0f};
+            m_gesturePointer = PointerType::Touch;
             m_gestureTarget = core::RefPtr<Node>(target);
             m_gesturing = true;
             RouteGesture(EventType::GestureStart, 1.0f, 0.0f, core::Float2{0.0f, 0.0f});
             return true;
         }
-        [[nodiscard]] bool IsGestureFinger(u64 id) const noexcept { return id == m_gestureIds[0] || id == m_gestureIds[1]; }
+        [[nodiscard]] bool IsGestureFinger(u64 id) const noexcept
+        {
+            return m_gesturePointer == PointerType::Touch && (id == m_gestureIds[0] || id == m_gestureIds[1]);
+        }
         void MoveGesture()
         {
             const i32 ia = FindFinger(m_gestureIds[0]), ib = FindFinger(m_gestureIds[1]);
@@ -1545,6 +1612,7 @@ export namespace experimental::gui
             if (target && target->GetRootNode() == m_root)
             {
                 GestureEvent event(type, target.Get());
+                event.Pointer = m_gesturePointer;
                 event.Focus = GestureFocus();
                 event.Scale = m_gestureScale;
                 event.Rotation = m_gestureRotation;
@@ -1563,6 +1631,7 @@ export namespace experimental::gui
         void RouteGesture(EventType type, f32 scaleDelta, f32 rotationDelta, core::Float2 translationDelta)
         {
             GestureEvent event(type, m_gestureTarget.Get());
+            event.Pointer = m_gesturePointer;
             event.Focus = GestureFocus();
             event.Scale = m_gestureScale;
             event.Rotation = m_gestureRotation;
@@ -2424,6 +2493,8 @@ export namespace experimental::gui
         bool m_gesturing = false;
         core::RefPtr<Node> m_gestureTarget;
         u64 m_gestureIds[2]{};
+        PointerType m_gesturePointer = PointerType::Touch; // two fingers, or a trackpad's pinch
+        static constexpr u64 kNoFinger = ~u64{0};
         f32 m_gestureSpan0 = 1.0f;
         f32 m_gestureAngle = 0.0f; // the fingers' line, as last seen
         core::Float2 m_gestureFocus0{0.0f, 0.0f};

@@ -271,6 +271,10 @@ public:
     void SetImageTests(bool on) { m_imageTests = on; }
     void SetApproveImages(StringView how) { m_imageTests = true; m_approve = String(how); }
     void SetImageOut(StringView dir) { m_imageOut = String(dir); }
+    // --bench <page> [frames] (E15): the page drawn offscreen at the image tests' size, its title's
+    // text changed each frame (the smallest change a frame can carry), and the frames' average
+    // cost printed by stage: the GUI's draw, the renderer's prepare, the GPU's work.
+    void SetBench(StringView page, u32 frames) { m_benchPage = String(page); m_benchFrames = Max(frames, 1u); }
     void SetBackendName(StringView name) { m_backendName = String(name); }
     // What main returns: the image tests' verdict (77, skipped, when no device came up).
     [[nodiscard]] int ImageExitCode(int runCode) const
@@ -475,6 +479,19 @@ private:
     rhi::ScreenshotCapture m_imageCapture;
     void RunImageTests();
     bool RenderImage(gui::SceneRoot& root, StringView path, image::Image& out);
+    // Draws `root` into the offscreen target; with `capture`, reads it back into `*out`.
+    bool RenderOffscreen(gui::SceneRoot& root, StringView capture, image::Image* out);
+    bool EnsureOffscreenTarget();
+    void RunBench();
+    String m_benchPage;
+    u32 m_benchFrames = 0;
+    u32 m_benchFrame = 0;
+    f64 m_lastPrepareMs = 0.0, m_lastGpuMs = 0.0; // the last offscreen frame's
+    struct BenchTotals
+    {
+        f64 Draw = 0.0, Prepare = 0.0, Gpu = 0.0;
+        u64 Vertices = 0, Commands = 0, Drawn = 0;
+    } m_bench;
     String m_inspectSelector;     // --inspect <selector>: selected once the GUI is up
     f32 m_inspectorWidth = 460.0f;  // logical units; the boundary drags it
     bool m_resizingInspector = false; // the boundary is held
@@ -1695,6 +1712,11 @@ void GUISandbox::UpdateMenu()
 
 void GUISandbox::OnRender()
 {
+    if (!m_benchPage.IsEmpty())
+    {
+        RunBench();
+        return;
+    }
     if (m_imageTests)
     {
         RunImageTests();
@@ -1865,17 +1887,12 @@ void GUISandbox::RunImageTests()
                 if (page.id.AsView() == StringView(u8"language"))
                     m_imagePages.PushBack(String(u8"language@ar")); // and right to left, in Arabic (E9e)
             }
-        rhi::TextureDesc desc = rhi::TextureDesc::RenderTarget(m_swapChain->Format(), kImageWidth, kImageHeight);
-        desc.usage = desc.usage | rhi::TextureUsage::CopySrc;
-        if (m_device->CreateTexture(desc, m_imageTarget) != ErrorCode::Ok ||
-            m_device->CreateTextureView(m_imageTarget, rhi::TextureViewDesc{}, m_imageView) != ErrorCode::Ok)
+        if (!EnsureOffscreenTarget())
         {
             std::printf("GUISandbox: image tests: no offscreen target\n");
             Exit();
             return;
         }
-        m_imageTargets.Configure(*m_device);
-        (void)m_imageTargets.Create(m_swapChain->Format(), kImageWidth, kImageHeight);
         (void)CreateDirectories(m_imageOut.AsView());
     }
     if (m_imagePage >= m_imagePages.Size())
@@ -1966,8 +1983,82 @@ void GUISandbox::RunImageTests()
                 static_cast<unsigned long long>(result.Pixels), result.LargestDelta, reinterpret_cast<const char*>(diffPath.CStr()));
 }
 
+// The offscreen target the image tests and the bench draw into, made the first time.
+bool GUISandbox::EnsureOffscreenTarget()
+{
+    if (m_imageTarget != nullptr)
+        return true;
+    rhi::TextureDesc desc = rhi::TextureDesc::RenderTarget(m_swapChain->Format(), kImageWidth, kImageHeight);
+    desc.usage = desc.usage | rhi::TextureUsage::CopySrc;
+    if (m_device->CreateTexture(desc, m_imageTarget) != ErrorCode::Ok ||
+        m_device->CreateTextureView(m_imageTarget, rhi::TextureViewDesc{}, m_imageView) != ErrorCode::Ok)
+        return false;
+    m_imageTargets.Configure(*m_device);
+    (void)m_imageTargets.Create(m_swapChain->Format(), kImageWidth, kImageHeight);
+    return true;
+}
+
+// The bench (E15): settle the page, then time frames that each change the page title's text.
+void GUISandbox::RunBench()
+{
+    constexpr u32 kSettle = 30;
+    if (m_benchFrame == 0)
+    {
+        if (!EnsureOffscreenTarget())
+        {
+            std::printf("GUISandbox: bench: no offscreen target\n");
+            Exit();
+            return;
+        }
+        ShowPage(m_benchPage.AsView());
+    }
+    m_root->SetDisplayScale(1.0f);
+    m_root->SetViewportSize(Float2{static_cast<f32>(kImageWidth), static_cast<f32>(kImageHeight)});
+    const u32 measured = m_benchFrame >= kSettle ? m_benchFrame - kSettle : 0u;
+    if (m_benchFrame >= kSettle)
+        for (Page& p : m_pages)
+            if (p.id == m_benchPage && p.node != nullptr && p.node->ChildCount() > 0)
+                if (gui::Label* title = Cast<gui::Label>(p.node->GetChildAt(0))) // the page's title
+                    title->SetText(Format(u8"{} {}", m_benchPage, measured).AsView());
+    LayOutShell();
+    m_gui->Update(Duration::FromSeconds(1.0 / 60.0));
+    m_styles.SetMediaContext(m_root->GetMediaContext());
+    m_styles.ApplyTree(*m_root);
+    m_root->UpdateLayout();
+    if (!RenderOffscreen(*m_root, StringView{}, nullptr))
+    {
+        std::printf("GUISandbox: bench: a frame could not be drawn\n");
+        Exit();
+        return;
+    }
+    if (m_benchFrame++ < kSettle)
+        return;
+    const gui::FrameStats& stats = m_root->GetLastFrameStats();
+    m_bench.Draw += stats.DrawMs;
+    m_bench.Prepare += m_lastPrepareMs;
+    m_bench.Gpu += m_lastGpuMs;
+    m_bench.Vertices += stats.Vertices;
+    m_bench.Commands += stats.Commands;
+    m_bench.Drawn += stats.NodesDrawn;
+    if (measured + 1 < m_benchFrames)
+        return;
+    const f64 n = static_cast<f64>(m_benchFrames);
+    std::printf("GUISandbox bench %s on %s, %u frames, %ux%u, each changing one label: draw %.3f ms, prepare %.3f ms, gpu+wait %.3f ms; "
+                "%.0f nodes drawn, %.0f vertices, %.0f commands\n",
+                reinterpret_cast<const char*>(m_benchPage.CStr()), reinterpret_cast<const char*>(m_backendName.CStr()), m_benchFrames,
+                kImageWidth, kImageHeight, m_bench.Draw / n, m_bench.Prepare / n, m_bench.Gpu / n, static_cast<f64>(m_bench.Drawn) / n,
+                static_cast<f64>(m_bench.Vertices) / n, static_cast<f64>(m_bench.Commands) / n);
+    std::fflush(stdout);
+    Exit();
+}
+
 // One picture of `root`, drawn into the offscreen target, read back and written to `path`.
 bool GUISandbox::RenderImage(gui::SceneRoot& root, StringView path, image::Image& out)
+{
+    return RenderOffscreen(root, path, &out);
+}
+
+bool GUISandbox::RenderOffscreen(gui::SceneRoot& root, StringView capture, image::Image* out)
 {
     m_vg->Clear();
     {
@@ -1978,7 +2069,10 @@ bool GUISandbox::RenderImage(gui::SceneRoot& root, StringView path, image::Image
     if (m_fenceVal > 0)
         m_fence->Wait(m_fenceVal, ~0ull);
     m_renderer.BeginFrame(static_cast<i32>(m_frameIndex));
+    const Stopwatch prepareWatch = Stopwatch::StartNew();
     const vg::renderer::VGRenderSlice slice = m_renderer.Prepare(batch, static_cast<i32>(m_frameIndex), kImageWidth, kImageHeight);
+    m_lastPrepareMs = prepareWatch.Elapsed().AsMilliseconds();
+    const Stopwatch gpuWatch = Stopwatch::StartNew();
     m_pool->Reset();
     rhi::CommandEncoder* enc = nullptr;
     if (m_pool->CreateEncoder(enc) != ErrorCode::Ok || enc == nullptr)
@@ -2001,16 +2095,22 @@ bool GUISandbox::RenderImage(gui::SceneRoot& root, StringView path, image::Image
     rhi::RenderPassEncoder* rp = enc->BeginRenderPass(rpd);
     m_renderer.Render(*rp, kImageWidth, kImageHeight, static_cast<i32>(m_frameIndex), slice);
     rp->End();
-    m_imageCapture.Request(path);
-    const bool recorded = m_imageCapture.Record(*m_device, *enc, m_imageTarget, m_swapChain->Format(), kImageWidth, kImageHeight);
+    const bool capturing = out != nullptr;
+    bool recorded = true;
+    if (capturing)
+    {
+        m_imageCapture.Request(capture);
+        recorded = m_imageCapture.Record(*m_device, *enc, m_imageTarget, m_swapChain->Format(), kImageWidth, kImageHeight);
+    }
     rhi::CommandBuffer* cb = enc->Finish();
     ++m_fenceVal;
     rhi::CommandBuffer* cbs[1] = {cb};
     m_graphicsQueue->Submit(Span<rhi::CommandBuffer* const>(cbs, 1), m_fence, m_fenceVal);
     m_device->WaitIdle();
+    m_lastGpuMs = gpuWatch.Elapsed().AsMilliseconds();
     m_pool->DestroyEncoder(enc);
     m_frameIndex = (m_frameIndex + 1) % kFrames;
-    return recorded && m_imageCapture.Complete(*m_device, AppRoot(), out).IsOk();
+    return !capturing || (recorded && m_imageCapture.Complete(*m_device, AppRoot(), *out).IsOk());
 }
 
 void GUISandbox::OnShutdown()
@@ -2130,6 +2230,18 @@ int main(int argc, char** argv)
             app.SetOpenInspector(true);
         else if (arg == StringView(u8"--image-tests"))
             app.SetImageTests(true);
+        else if (arg == StringView(u8"--bench") && i + 1 < argc)
+        {
+            const StringView page = next();
+            u32 frames = 300;
+            if (i + 1 < argc)
+                if (Optional<f32> n = gui::ParseLength(StringView(reinterpret_cast<const char8_t*>(argv[i + 1]))); n.HasValue())
+                {
+                    frames = static_cast<u32>(n.Value());
+                    (void)next();
+                }
+            app.SetBench(page, frames);
+        }
         else if (arg == StringView(u8"--approve-images"))
             app.SetApproveImages(i + 1 < argc && StringView(reinterpret_cast<const char8_t*>(argv[i + 1])) == StringView(u8"backend") ? next() : StringView(u8"shared"));
         else if (arg == StringView(u8"--image-out") && i + 1 < argc)

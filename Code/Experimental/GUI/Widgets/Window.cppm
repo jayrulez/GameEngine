@@ -270,6 +270,7 @@ export namespace experimental::gui
                 (void)dispatcher->ClosePopup(*this); // its OnClosed finishes
                 return;
             }
+            const core::RefPtr<Node> keep(this); // the tree may hold its only reference (a script's window)
             RemoveFromParent();
             Closed();
         }

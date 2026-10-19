@@ -176,3 +176,23 @@ TEST_CASE("window: the close button closes a window placed in a tree, which open
     CHECK(win->GetParent() == nullptr);
     CHECK(closed == 2);
 }
+
+TEST_CASE("window: one held by its tree alone closes and calls back, not freed before it does (E16)")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{600.0f, 400.0f});
+    int closed = 0;
+    {
+        auto win = Make<Window>();
+        win->SetSize(core::Float2{200.0f, 150.0f});
+        win->SetOnClose([&closed]() { ++closed; });
+        root->AddChild(win.Get());
+        win->Open(*root.Get());
+    } // the tree holds it alone now, as a script's window
+    REQUIRE(root->ChildCount() == 1u);
+    Window* win = core::Cast<Window>(root->GetChildAt(0));
+    REQUIRE(win != nullptr);
+    win->Close();
+    CHECK(closed == 1);
+    CHECK(root->ChildCount() == 0u);
+}

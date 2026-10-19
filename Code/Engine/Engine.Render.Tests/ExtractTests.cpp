@@ -2190,3 +2190,35 @@ TEST_CASE("render: the screen overlay pass draws through the target's UNORM view
     device.DestroyTexture(target);
 }
 
+
+// The overlay pass makes its stencil target on first use, on a subsystem initialized or not, so the
+// subsystem lets it go when it is destroyed as well as when it shuts down.
+TEST_CASE("render: a subsystem never initialized lets its overlay depth target go")
+{
+    rhi::null::NullDevice device{DefaultAllocator()};
+    foundation::vfs::NativeFileSystem dataFs(foundation::vfs::FindDataRoot(), DefaultAllocator());
+    {
+        RenderSubsystem sub{DefaultAllocator(), device, 2, dataFs};
+        RecordingOverlay overlay;
+        sub.RegisterOverlay(&overlay);
+        rhi::Texture* target = nullptr;
+        REQUIRE(device.CreateTexture(rhi::TextureDesc::RenderTarget(rhi::TextureFormat::RGBA8Unorm, 8, 8), target).IsOk());
+        rhi::TextureView* view = nullptr;
+        REQUIRE(device.CreateTextureView(target, rhi::TextureViewDesc{}, view).IsOk());
+        rhi::CommandPool* pool = nullptr;
+        REQUIRE(device.CreateCommandPool(rhi::QueueType::Graphics, pool).IsOk());
+        rhi::CommandEncoder* encoder = nullptr;
+        REQUIRE(pool->CreateEncoder(encoder).IsOk());
+
+        sub.RenderOverlays(*encoder, view, rhi::TextureFormat::RGBA8Unorm, 8, 8, 0);
+        REQUIRE(overlay.calls == 1);
+
+        sub.UnregisterOverlay(&overlay);
+        pool->DestroyEncoder(encoder);
+        device.DestroyCommandPool(pool);
+        device.DestroyTextureView(view);
+        device.DestroyTexture(target);
+        CHECK(device.Counters().textures == 1); // the overlay pass's depth target
+    }
+    CHECK(device.Counters().textures == 0);
+}

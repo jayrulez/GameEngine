@@ -123,6 +123,9 @@ export namespace engine::render
               m_framesInFlight(framesInFlight < 1 ? 1 : framesInFlight)
         {
         }
+        // The overlay pass makes its depth target on first use, initialized or not, so one never
+        // shut down still holds it.
+        ~RenderSubsystem() override;
 
         // --- Extension seam for downstream subsystems (particles, world-UI, ...) --------------------
         // Register an external Renderer (borrowed - caller owns it); returns its dispatch id to stamp on
@@ -318,6 +321,9 @@ export namespace engine::render
         void OnShutdown() override;
 
     private:
+        // Destroys the overlay pass's depth target now (the GPU is idle or never used it).
+        void ReleaseOverlayDepth();
+
         // Empty every debug list (EndRendering, and EndFrame for an iteration that rendered none).
         void ClearDebugLists();
         // A per-frame snapshot pool: one ExtractedScene per RenderScene call, kept alive (and its

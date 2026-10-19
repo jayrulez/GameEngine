@@ -986,6 +986,25 @@ namespace engine::render
         }
     }
 
+    RenderSubsystem::~RenderSubsystem()
+    {
+        ReleaseOverlayDepth();
+    }
+
+    void RenderSubsystem::ReleaseOverlayDepth()
+    {
+        if (m_overlayDsView != nullptr)
+        {
+            m_device->DestroyTextureView(m_overlayDsView);
+            m_overlayDsView = nullptr;
+        }
+        if (m_overlayDsTexture != nullptr)
+        {
+            m_device->DestroyTexture(m_overlayDsTexture);
+            m_overlayDsTexture = nullptr;
+        }
+    }
+
     void RenderSubsystem::OnShutdown()
     {
         if (foundation::runtime::Context* ctx = GetContext())
@@ -997,16 +1016,7 @@ namespace engine::render
         }
         m_device->WaitIdle();     // GPU must finish before we free its buffers/PSOs/descriptors
         m_retireQueue.Flush();    // pending retired resources (GPU idle - free now)
-        if (m_overlayDsView != nullptr)
-        {
-            m_device->DestroyTextureView(m_overlayDsView);
-            m_overlayDsView = nullptr;
-        }
-        if (m_overlayDsTexture != nullptr)
-        {
-            m_device->DestroyTexture(m_overlayDsTexture);
-            m_overlayDsTexture = nullptr;
-        }
+        ReleaseOverlayDepth();
         m_frame.Reset();          // releases the forward pass's per-frame GPU resources
         m_pickSystem.Reset();     // pick readback buffers (device idle above)
         m_clusterSystem.Reset();  // before the ShaderSystem it borrows

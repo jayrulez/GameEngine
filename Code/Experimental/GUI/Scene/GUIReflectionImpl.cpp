@@ -112,6 +112,24 @@ namespace experimental::gui
                 out.deltaY = wheel.Delta.y;
                 break;
             }
+            case EventType::GestureStart:
+            case EventType::GestureChange:
+            case EventType::GestureEnd:
+            case EventType::GestureCancel:
+            {
+                const GestureEvent& gesture = static_cast<const GestureEvent&>(event);
+                place(gesture.Focus);
+                out.pointer = core::String(gesture.Pointer == PointerType::Touch ? u8"touch" : u8"mouse");
+                out.scale = gesture.Scale;
+                out.rotation = gesture.Rotation;
+                out.translationX = gesture.Translation.x;
+                out.translationY = gesture.Translation.y;
+                out.scaleDelta = gesture.ScaleDelta;
+                out.rotationDelta = gesture.RotationDelta;
+                out.deltaX = gesture.TranslationDelta.x;
+                out.deltaY = gesture.TranslationDelta.y;
+                break;
+            }
             case EventType::KeyDown:
             case EventType::KeyUp:
             {
@@ -750,6 +768,12 @@ namespace experimental::gui
             .Property<&GuiEvent::text>("text")
             .Property<&GuiEvent::deltaX>("deltaX")
             .Property<&GuiEvent::deltaY>("deltaY")
+            .Property<&GuiEvent::scale>("scale")
+            .Property<&GuiEvent::rotation>("rotation")
+            .Property<&GuiEvent::translationX>("translationX")
+            .Property<&GuiEvent::translationY>("translationY")
+            .Property<&GuiEvent::scaleDelta>("scaleDelta")
+            .Property<&GuiEvent::rotationDelta>("rotationDelta")
             .Property<&GuiEvent::index>("index")
             .Property<&GuiEvent::id>("id")
             .Property<&GuiEvent::dragType>("dragType")
@@ -787,6 +811,7 @@ namespace experimental::gui
         builder.AccessorProperty<&Node::GetKeyContext, &Node::SetKeyContext>("keyContext").PropAttribute("css", core::String(u8"key-context"));
         builder.AccessorProperty<&Node::GetPointerEvents, &Node::SetPointerEvents>("pointerEvents").PropAttribute("css", core::String(u8"pointer-events"));
         builder.AccessorProperty<&Node::GetCursorName, &Node::SetCursorName>("cursor").PropAttribute("css", core::String(u8"cursor"));
+        builder.AccessorProperty<&Node::GetTouchActionName, &Node::SetTouchActionName>("touchAction").PropAttribute("css", core::String(u8"touch-action"));
         builder.AccessorProperty<&Node::GetAutoTranslateName, &Node::SetAutoTranslateName>("autoTranslate")
             .PropAttribute("css", core::String(u8"auto-translate"));
         builder.AccessorProperty<&Node::GetLang, &Node::SetLang>("lang").PropAttribute("css", core::String(u8"lang"));

@@ -478,6 +478,21 @@ export namespace experimental::gui
         [[nodiscard]] virtual Cursor GetCursorNow() const { return m_cursor; }
         [[nodiscard]] core::String GetCursorName() const { return core::String(CursorName(m_cursor)); }
         void SetCursorName(const core::String& name) { m_cursor = CursorNamed(name.AsView()); }
+        /// What a finger over it may do that the lab does itself (CSS `touch-action`, kTouch* bits,
+        /// E17c); not inherited: an ancestor narrows it instead (EffectiveTouchActions).
+        void SetTouchActions(u8 bits) noexcept { m_touchActions = static_cast<u8>(bits & kTouchAuto); }
+        [[nodiscard]] u8 GetTouchActions() const noexcept { return m_touchActions; }
+        /// Its own value narrowed by every ancestor's, as CSS intersects them.
+        [[nodiscard]] u8 EffectiveTouchActions() const noexcept
+        {
+            u8 bits = kTouchAuto;
+            for (const Node* n = this; n != nullptr; n = n->m_parent)
+                bits &= n->m_touchActions;
+            return bits;
+        }
+        [[nodiscard]] core::String GetTouchActionName() const { return TouchActionsName(m_touchActions); }
+        /// A text it does not know is `auto`, its initial value, as a dropped declaration leaves it.
+        void SetTouchActionName(const core::String& name) { m_touchActions = TouchActionsNamed(name.AsView()).ValueOr(kTouchAuto); }
 
         [[nodiscard]] virtual bool PointInside(core::Float2 worldPoint) const
         {
@@ -2721,6 +2736,7 @@ export namespace experimental::gui
         void NotifyRemovingChild(Node& child);
 
         Cursor m_cursor = Cursor::Auto;
+        u8 m_touchActions = kTouchAuto; // touch-action
         bool m_hovered = false; // on the dispatcher's hover path
         bool m_pressed = false; // on its press path
         Node* m_parent = nullptr;       // non-owning back-pointer

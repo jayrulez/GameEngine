@@ -222,6 +222,30 @@ TEST_CASE("testing: right clicks, hover and leave, pad presses and file drops re
     CHECK(dropped[0] == SV(u8"/tmp/level.map"));
 }
 
+TEST_CASE("testing: two fingers pinch, turn and pan what takes gestures")
+{
+    Bed bed;
+    auto pad = Add<Panel>(*bed.root.Get(), u8"pad", 200.0f, 10.0f, 200.0f, 200.0f);
+    pad->SetTouchActions(0); // its fingers its own
+    f32 scale = 0.0f, rotation = 0.0f;
+    core::Float2 moved{0.0f, 0.0f};
+    (void)pad->AddEventListener(EventType::GestureEnd, [&](const Event& e)
+                                {
+                                    const auto& g = static_cast<const GestureEvent&>(e);
+                                    scale = g.Scale;
+                                    rotation = g.Rotation;
+                                    moved = g.Translation;
+                                });
+    Tester tester(*bed.root.Get());
+    CHECK(tester.Pinch(Finder::Selector(SV(u8"#pad")), 60.0f, 120.0f));
+    CHECK(scale == doctest::Approx(2.0f));
+    CHECK(tester.Rotate(Finder::Selector(SV(u8"#pad")), 0.5f));
+    CHECK(rotation == doctest::Approx(0.5f).epsilon(0.01));
+    CHECK(tester.TwoFingerPan(Finder::Selector(SV(u8"#pad")), core::Float2{30.0f, -10.0f}));
+    CHECK(moved.x == doctest::Approx(30.0f));
+    CHECK(moved.y == doctest::Approx(-10.0f));
+}
+
 TEST_CASE("testing: the wheel and a finger scroll what they are over, and a tap clicks")
 {
     Bed bed;

@@ -208,6 +208,8 @@ export namespace experimental::gui
         {
             if (FindFinger(finger) < 0)
                 m_fingers.PushBack(Finger{finger, position, position});
+            if (BeginGesture())
+                return true; // a second finger over a node that takes gestures
             if (m_touchActive)
                 return false; // a second finger: followed, not the pointer
             m_touchActive = true;
@@ -236,13 +238,23 @@ export namespace experimental::gui
         {
             if (const i32 at = FindFinger(finger); at >= 0)
                 m_fingers[static_cast<usize>(at)].Now = position;
+            if (m_gesturing && IsGestureFinger(finger))
+            {
+                MoveGesture();
+                return true;
+            }
             if (!m_touchActive || finger != m_touchFinger)
                 return false;
             AddPanSample(position);
             if (!m_panning && !m_dragActive && !m_touchDragArmed)
             {
                 const core::Float2 moved{position.x - m_pressAt.x, position.y - m_pressAt.y};
-                if (core::Abs(moved.x) > Dips(kPanSlop) || core::Abs(moved.y) > Dips(kPanSlop))
+                // Panned only along an axis the touch-action where it went down leaves to the lab;
+                // along another, the finger goes on as the pointer (the node's own drag).
+                const Node* under = HitTest(m_pressAt);
+                const u8 allowed = under != nullptr ? under->EffectiveTouchActions() : kTouchAuto;
+                const u8 axis = core::Abs(moved.x) > core::Abs(moved.y) ? kTouchPanX : kTouchPanY;
+                if ((core::Abs(moved.x) > Dips(kPanSlop) || core::Abs(moved.y) > Dips(kPanSlop)) && (allowed & axis) != 0)
                     if (Node* scroller = PanScrollerFor(moved))
                     {
                         m_panning = true;
@@ -266,6 +278,11 @@ export namespace experimental::gui
         {
             if (const i32 at = FindFinger(finger); at >= 0)
                 m_fingers.RemoveAt(static_cast<usize>(at));
+            if (m_gesturing && IsGestureFinger(finger))
+            {
+                EndGesture(EventType::GestureEnd); // the other finger, still down, does nothing more
+                return true;
+            }
             if (!m_touchActive || finger != m_touchFinger)
                 return false;
             m_touchActive = false;
@@ -296,6 +313,15 @@ export namespace experimental::gui
         };
         /// The fingers down, in the order they went down.
         [[nodiscard]] core::Span<const Finger> GetFingers() const noexcept { return core::Span<const Finger>(m_fingers.Data(), m_fingers.Size()); }
+        /// Two fingers are making a gesture (E17c).
+        [[nodiscard]] bool IsGesturing() const noexcept { return m_gesturing; }
+        /// Ends the gesture in progress as cancelled (a finger the platform took back): its target
+        /// hears `gesturecancel`.
+        void CancelGesture()
+        {
+            if (m_gesturing)
+                EndGesture(EventType::GestureCancel);
+        }
         /// A finger is panning a scroller (its press was cancelled).
         [[nodiscard]] bool IsPanning() const noexcept { return m_panning; }
         [[nodiscard]] bool IsTouchActive() const noexcept { return m_touchActive; }
@@ -1445,6 +1471,108 @@ export namespace experimental::gui
         }
         // A second press of the same button near in time and place is a double click, a third a
         // triple (positions in device pixels).
+        // === Gestures (E17c) === Two fingers down over a node whose touch-action leaves pinch-zoom
+        // out (the node, or what holds both fingers' nodes) make one gesture from the moment the
+        // second lands: the first finger's press is cancelled, and the node hears gesturestart,
+        // gesturechange as the fingers move (scale, rotation and translation together, as Safari's
+        // and aui's), and gestureend when one lifts. Over a node that leaves pinch-zoom to the lab,
+        // a second finger does nothing, as before.
+        bool BeginGesture()
+        {
+            if (m_gesturing || m_fingers.Size() != 2)
+                return false;
+            Node* target = CommonAncestor(HitTest(m_fingers[0].Now), HitTest(m_fingers[1].Now));
+            if (target == nullptr || (target->EffectiveTouchActions() & kTouchPinchZoom) != 0)
+                return false;
+            if (m_touchActive)
+            {
+                CancelPointer(); // the first finger's press: a gesture, not a tap
+                m_longPressArmed = false;
+                m_touchDragArmed = false;
+                m_panning = false;
+                m_panScroller = nullptr;
+                m_touchActive = false;
+                UpdateHoverPath(nullptr, m_fingers[0].Now);
+            }
+            m_gestureIds[0] = m_fingers[0].Id;
+            m_gestureIds[1] = m_fingers[1].Id;
+            const core::Float2 a = m_fingers[0].Now, b = m_fingers[1].Now;
+            m_gestureSpan0 = core::Max(core::Length(core::Float2{b.x - a.x, b.y - a.y}), 1.0f);
+            m_gestureAngle = core::Atan2(b.y - a.y, b.x - a.x);
+            m_gestureFocus0 = core::Float2{(a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f};
+            m_gestureScale = 1.0f;
+            m_gestureRotation = 0.0f;
+            m_gestureTranslation = core::Float2{0.0f, 0.0f};
+            m_gestureTarget = core::RefPtr<Node>(target);
+            m_gesturing = true;
+            RouteGesture(EventType::GestureStart, 1.0f, 0.0f, core::Float2{0.0f, 0.0f});
+            return true;
+        }
+        [[nodiscard]] bool IsGestureFinger(u64 id) const noexcept { return id == m_gestureIds[0] || id == m_gestureIds[1]; }
+        void MoveGesture()
+        {
+            const i32 ia = FindFinger(m_gestureIds[0]), ib = FindFinger(m_gestureIds[1]);
+            if (ia < 0 || ib < 0)
+                return;
+            if (m_gestureTarget->GetRootNode() != m_root)
+            {
+                EndGesture(EventType::GestureCancel); // its node left the tree
+                return;
+            }
+            const core::Float2 a = m_fingers[static_cast<usize>(ia)].Now, b = m_fingers[static_cast<usize>(ib)].Now;
+            const f32 scale = core::Max(core::Length(core::Float2{b.x - a.x, b.y - a.y}), 1.0f) / m_gestureSpan0;
+            const f32 angle = core::Atan2(b.y - a.y, b.x - a.x);
+            f32 turned = angle - m_gestureAngle; // the shorter way round: past a half turn it wraps
+            if (turned > core::kPi)
+                turned -= 2.0f * core::kPi;
+            else if (turned < -core::kPi)
+                turned += 2.0f * core::kPi;
+            m_gestureAngle = angle;
+            const core::Float2 focus{(a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f};
+            const core::Float2 translation = InNodeUnits(*m_gestureTarget, m_gestureFocus0,
+                                                         core::Float2{focus.x - m_gestureFocus0.x, focus.y - m_gestureFocus0.y});
+            const f32 scaleDelta = scale / m_gestureScale;
+            const core::Float2 translationDelta{translation.x - m_gestureTranslation.x, translation.y - m_gestureTranslation.y};
+            m_gestureScale = scale;
+            m_gestureRotation += turned;
+            m_gestureTranslation = translation;
+            RouteGesture(EventType::GestureChange, scaleDelta, turned, translationDelta);
+        }
+        void EndGesture(EventType type)
+        {
+            m_gesturing = false;
+            const core::RefPtr<Node> target = core::Move(m_gestureTarget);
+            if (target && target->GetRootNode() == m_root)
+            {
+                GestureEvent event(type, target.Get());
+                event.Focus = GestureFocus();
+                event.Scale = m_gestureScale;
+                event.Rotation = m_gestureRotation;
+                event.Translation = m_gestureTranslation;
+                (void)target->RouteEvent(event);
+            }
+        }
+        [[nodiscard]] core::Float2 GestureFocus() const
+        {
+            const i32 ia = FindFinger(m_gestureIds[0]), ib = FindFinger(m_gestureIds[1]);
+            if (ia < 0 || ib < 0)
+                return m_gestureFocus0;
+            const core::Float2 a = m_fingers[static_cast<usize>(ia)].Now, b = m_fingers[static_cast<usize>(ib)].Now;
+            return core::Float2{(a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f};
+        }
+        void RouteGesture(EventType type, f32 scaleDelta, f32 rotationDelta, core::Float2 translationDelta)
+        {
+            GestureEvent event(type, m_gestureTarget.Get());
+            event.Focus = GestureFocus();
+            event.Scale = m_gestureScale;
+            event.Rotation = m_gestureRotation;
+            event.Translation = m_gestureTranslation;
+            event.ScaleDelta = scaleDelta;
+            event.RotationDelta = rotationDelta;
+            event.TranslationDelta = translationDelta;
+            (void)m_gestureTarget->RouteEvent(event);
+        }
+
         /// `dips` in the device pixels positions come in: the root's display scale times it.
         [[nodiscard]] f32 Dips(f32 dips) const noexcept { return dips * (m_root != nullptr ? m_root->GetPixelScale() : 1.0f); }
         void CountClick(core::Float2 position, MouseButton button, PointerType pointer)
@@ -2292,6 +2420,16 @@ export namespace experimental::gui
 
         Node* m_root;                      // non-owning (the SceneRoot owns this dispatcher)
         core::Array<Finger> m_fingers;     // every finger down (the first, when active, is the pointer)
+        // The gesture in progress (E17c): its node, its two fingers, and its totals so far.
+        bool m_gesturing = false;
+        core::RefPtr<Node> m_gestureTarget;
+        u64 m_gestureIds[2]{};
+        f32 m_gestureSpan0 = 1.0f;
+        f32 m_gestureAngle = 0.0f; // the fingers' line, as last seen
+        core::Float2 m_gestureFocus0{0.0f, 0.0f};
+        f32 m_gestureScale = 1.0f;
+        f32 m_gestureRotation = 0.0f;
+        core::Float2 m_gestureTranslation{0.0f, 0.0f};
         IClipboard* m_clipboard = nullptr; // non-owning system-clipboard adapter (optional)
         Node* m_overNode = nullptr;        // non-owning: the deepest node of the hover path
         NavTrace m_lastNavigation;         // what the last directional move weighed

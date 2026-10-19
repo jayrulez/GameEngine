@@ -583,6 +583,83 @@ TEST_CASE("gui-script: a Luau handler reads the event and takes it")
 }
 #endif // OPTION_HAS_LUAU
 
+namespace
+{
+    // Two fingers spread from 100 apart to 200 over the pad, then turned a quarter (E17c).
+    void CheckGestures(GuiBed& bed)
+    {
+        REQUIRE(bed.errors.count == 0);
+        (void)bed.root->UpdateLayout();
+        gui::EventDispatcher& d = *bed.root->GetEventDispatcher();
+        d.InjectTouchDown(1u, Float2{150.0f, 200.0f});
+        d.InjectTouchDown(2u, Float2{250.0f, 200.0f});
+        d.InjectTouchMove(1u, Float2{100.0f, 200.0f});
+        d.InjectTouchMove(2u, Float2{300.0f, 200.0f});
+        CHECK(bed.Number(u8"lastScale") == doctest::Approx(2.0));
+        d.InjectTouchMove(1u, Float2{200.0f, 100.0f});
+        d.InjectTouchMove(2u, Float2{200.0f, 300.0f});
+        CHECK(bed.Number(u8"lastRotation") == doctest::Approx(1.5708).epsilon(0.01));
+        d.InjectTouchUp(2u, Float2{200.0f, 300.0f});
+        d.InjectTouchUp(1u, Float2{200.0f, 100.0f});
+        CHECK(bed.Number(u8"started") == doctest::Approx(1.0));
+        CHECK(bed.Number(u8"ended") == doctest::Approx(1.0));
+    }
+}
+
+#ifdef OPTION_HAS_ANGELSCRIPT
+TEST_CASE("gui-script: an AngelScript handler takes a node's gestures, declared by its touch-action")
+{
+    RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    const Status loaded = bed.context->Load(
+        u8"funcdef bool EventHandler(GuiEvent e);\n"
+        u8"double scale = 0; double rotation = 0; double startCount = 0; double endCount = 0;\n"
+        u8"bool onStart(GuiEvent e) { startCount += 1; return true; }\n"
+        u8"bool onChange(GuiEvent e) { scale = e.scale; rotation = e.rotation; return true; }\n"
+        u8"bool onEnd(GuiEvent e) { endCount += 1; return true; }\n"
+        u8"void main() {\n"
+        u8"  Node@ pad = gui::root().add(\"Panel\");\n"
+        u8"  pad.x = 50; pad.y = 50; pad.width = 300; pad.height = 300;\n"
+        u8"  pad.touchAction = \"pan-x pan-y\";\n"
+        u8"  pad.on(\"gesturestart\", EventHandler(onStart));\n"
+        u8"  pad.on(\"gesturechange\", EventHandler(onChange));\n"
+        u8"  pad.on(\"gestureend\", EventHandler(onEnd));\n"
+        u8"}\n"
+        u8"double lastScale() { return scale; }\n"
+        u8"double lastRotation() { return rotation; }\n"
+        u8"double started() { return startCount; }\n"
+        u8"double ended() { return endCount; }\n",
+        u8"main");
+    INFO(doctest::String(reinterpret_cast<const char*>(bed.errors.last.CStr())));
+    REQUIRE(loaded.IsOk());
+    CheckGestures(bed);
+}
+#endif // OPTION_HAS_ANGELSCRIPT
+
+#ifdef OPTION_HAS_LUAU
+TEST_CASE("gui-script: a Luau handler takes a node's gestures, declared by its touch-action")
+{
+    RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    const Status loaded = bed.context->Load(
+        u8"local scale, rotation, startCount, endCount = 0, 0, 0, 0\n"
+        u8"local pad = gui.root():add(\"Panel\")\n"
+        u8"pad.x = 50; pad.y = 50; pad.width = 300; pad.height = 300\n"
+        u8"pad.touchAction = \"none\"\n"
+        u8"pad:on(\"gesturestart\", function(e) startCount = startCount + 1; return true end)\n"
+        u8"pad:on(\"gesturechange\", function(e) scale = e.scale; rotation = e.rotation; return true end)\n"
+        u8"pad:on(\"gestureend\", function(e) endCount = endCount + 1; return true end)\n"
+        u8"function lastScale() return scale end\n"
+        u8"function lastRotation() return rotation end\n"
+        u8"function started() return startCount end\n"
+        u8"function ended() return endCount end\n",
+        u8"main");
+    INFO(doctest::String(reinterpret_cast<const char*>(bed.errors.last.CStr())));
+    REQUIRE(loaded.IsOk());
+    CheckGestures(bed);
+}
+#endif // OPTION_HAS_LUAU
+
 #ifdef OPTION_HAS_ANGELSCRIPT
 TEST_CASE("gui-script: an AngelScript source and targets drag and drop, a dragquery handler taking a drop")
 {

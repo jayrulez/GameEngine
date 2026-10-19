@@ -126,9 +126,78 @@ export namespace experimental::gui
         TabClose,
         // An item view's row was activated (an ItemEvent): a double-click, Return, the pad's South.
         ItemActivate,
+        // Two fingers (or a trackpad's pinch) over a node whose touch-action leaves pinch-zoom out
+        // (a GestureEvent, E17c): begun, moved (scale, rotation, translation), ended, or cancelled
+        // (a finger the platform took back, the node gone).
+        GestureStart,
+        GestureChange,
+        GestureEnd,
+        GestureCancel,
     };
 
     /// What drives the pointer: the mouse, or a finger (the first one down).
+    /// What a finger may do that the lab does itself (CSS's touch-action, E17c): pan across, pan up
+    /// and down (a scroller's), and pinch, turn and pan with two (a gesture). What a node leaves out
+    /// comes to it instead: a one-finger move along an axis it does not leave to the lab goes on as
+    /// the pointer (its own drag), and two fingers over a node that does not leave pinch-zoom make a
+    /// gesture.
+    inline constexpr u8 kTouchPanX = 1;
+    inline constexpr u8 kTouchPanY = 2;
+    inline constexpr u8 kTouchPinchZoom = 4;
+    inline constexpr u8 kTouchAuto = kTouchPanX | kTouchPanY | kTouchPinchZoom;
+    /// touch-action's value: auto, none, manipulation, or any of pan-x, pan-y and pinch-zoom; none
+    /// for a word it does not know (the declaration is dropped, as CSS drops it).
+    [[nodiscard]] inline Optional<u8> TouchActionsNamed(core::StringView k)
+    {
+        k = core::Trim(k);
+        if (k == core::StringView(u8"auto") || k == core::StringView(u8"manipulation"))
+            return kTouchAuto;
+        if (k == core::StringView(u8"none"))
+            return u8{0};
+        u8 bits = 0;
+        usize at = 0;
+        while (at < k.Size())
+        {
+            while (at < k.Size() && k[at] == u8' ')
+                ++at;
+            usize end = at;
+            while (end < k.Size() && k[end] != u8' ')
+                ++end;
+            const core::StringView word = k.SubStr(at, end - at);
+            if (word == core::StringView(u8"pan-x"))
+                bits |= kTouchPanX;
+            else if (word == core::StringView(u8"pan-y"))
+                bits |= kTouchPanY;
+            else if (word == core::StringView(u8"pinch-zoom"))
+                bits |= kTouchPinchZoom;
+            else if (word.Size() != 0)
+                return {};
+            at = end;
+        }
+        return bits == 0 ? Optional<u8>{} : Optional<u8>{bits};
+    }
+    /// touch-action's text for `bits`.
+    [[nodiscard]] inline core::String TouchActionsName(u8 bits)
+    {
+        if (bits == kTouchAuto)
+            return core::String(u8"auto");
+        if (bits == 0)
+            return core::String(u8"none");
+        core::String out;
+        const auto add = [&](const char8_t* word)
+        {
+            if (out.Size() != 0)
+                out.Append(u8" ");
+            out.Append(word);
+        };
+        if ((bits & kTouchPanX) != 0)
+            add(u8"pan-x");
+        if ((bits & kTouchPanY) != 0)
+            add(u8"pan-y");
+        if ((bits & kTouchPinchZoom) != 0)
+            add(u8"pinch-zoom");
+        return out;
+    }
     enum class PointerType : u8
     {
         Mouse,
@@ -337,6 +406,23 @@ export namespace experimental::gui
         }
     };
 
+    /// A two-finger gesture (E17c): pinch, turn and pan as one, as Safari's and aui's are. Each
+    /// value is the total since it began and the change since the last event; the translation is in
+    /// the target's units, about the fingers' middle (`Focus`, device pixels, as positions come).
+    struct GestureEvent : Event
+    {
+        core::Float2 Focus{0.0f, 0.0f};
+        f32 Scale = 1.0f;     ///< the fingers' span over their span when it began
+        f32 Rotation = 0.0f;  ///< radians the line between them has turned, clockwise
+        core::Float2 Translation{0.0f, 0.0f};
+        f32 ScaleDelta = 1.0f; ///< this event's factor (the totals multiply up from them)
+        f32 RotationDelta = 0.0f;
+        core::Float2 TranslationDelta{0.0f, 0.0f};
+        PointerType Pointer = PointerType::Touch; ///< touch, or the mouse's trackpad
+
+        GestureEvent(EventType type, Node* target) noexcept : Event(type, target) {}
+    };
+
     struct KeyEvent : Event
     {
         u32 KeyCode;
@@ -529,6 +615,8 @@ export namespace experimental::gui
             {u8"dragenter", EventType::DragEnter},  {u8"dragover", EventType::DragOver},
             {u8"dragleave", EventType::DragLeave},  {u8"drop", EventType::Drop},
             {u8"dragquery", EventType::DragQuery},
+            {u8"gesturestart", EventType::GestureStart}, {u8"gesturechange", EventType::GestureChange},
+            {u8"gestureend", EventType::GestureEnd},     {u8"gesturecancel", EventType::GestureCancel},
         };
     }
     /// The event type markup and scripts call `name` ("click", "keydown"); false for one they do not.

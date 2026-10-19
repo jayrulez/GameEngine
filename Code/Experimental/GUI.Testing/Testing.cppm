@@ -297,6 +297,13 @@ export namespace experimental::gui::testing
             Frame();
             return true;
         }
+        /// Two fingers on `target`'s middle, `span` apart across, pinched to `toSpan` apart in steps,
+        /// lifted there (E17c: a gesture where the target's touch-action takes one).
+        bool Pinch(const Finder& target, f32 span, f32 toSpan) { return TwoFingers(target, span, toSpan, 0.0f, core::Float2{0.0f, 0.0f}); }
+        /// Two fingers on `target`'s middle turned `radians` about it, clockwise, in steps.
+        bool Rotate(const Finder& target, f32 radians, f32 span = 100.0f) { return TwoFingers(target, span, span, radians, core::Float2{0.0f, 0.0f}); }
+        /// Two fingers on `target`'s middle moved together by `by` (device pixels), in steps.
+        bool TwoFingerPan(const Finder& target, core::Float2 by, f32 span = 100.0f) { return TwoFingers(target, span, span, 0.0f, by); }
         /// Pressed on `from`, moved in steps to `to`'s middle, released there.
         bool DragTo(const Finder& from, const Finder& to)
         {
@@ -456,6 +463,37 @@ export namespace experimental::gui::testing
         core::Function<void(core::StringView)> m_capture;
         Array<core::String> m_failures;
         static constexpr u64 kFinger = 1; // the tester's one finger
+        static constexpr u64 kSecondFinger = 2;
+        // Two fingers about `target`'s middle, from `span` apart across to `toSpan`, the line between
+        // them turning `turn` and their middle moving `by`, eight steps a frame each.
+        bool TwoFingers(const Finder& target, f32 span, f32 toSpan, f32 turn, core::Float2 by)
+        {
+            core::Float2 middle;
+            if (!Aim(target, middle))
+                return false;
+            const auto place = [&](f32 t, f32 side)
+            {
+                const f32 half = (span + (toSpan - span) * t) * 0.5f * side;
+                const f32 angle = turn * t;
+                return core::Float2{middle.x + by.x * t + half * core::Cos(angle), middle.y + by.y * t + half * core::Sin(angle)};
+            };
+            EventDispatcher& d = Dispatcher();
+            (void)d.InjectTouchDown(kFinger, place(0.0f, -1.0f));
+            (void)d.InjectTouchDown(kSecondFinger, place(0.0f, 1.0f));
+            Frame();
+            constexpr int kSteps = 8;
+            for (int i = 1; i <= kSteps; ++i)
+            {
+                const f32 t = static_cast<f32>(i) / static_cast<f32>(kSteps);
+                (void)d.InjectTouchMove(kFinger, place(t, -1.0f));
+                (void)d.InjectTouchMove(kSecondFinger, place(t, 1.0f));
+                Frame();
+            }
+            (void)d.InjectTouchUp(kSecondFinger, place(1.0f, 1.0f));
+            (void)d.InjectTouchUp(kFinger, place(1.0f, -1.0f));
+            Frame();
+            return true;
+        }
     };
 
     /// How a picture compares with its reference (E8g).

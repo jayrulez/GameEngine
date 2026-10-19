@@ -18,6 +18,17 @@ using namespace foundation::rhi;
 
 namespace
 {
+    // Destroys the test's backend on every way out, after the device the test destroys itself.
+    struct BackendRelease
+    {
+        Backend*& backend;
+        ~BackendRelease()
+        {
+            if (backend != nullptr)
+                backend->Destroy();
+        }
+    };
+
     Device* MakeDevice(Backend*& outBackend)
     {
         outBackend = nullptr;
@@ -46,6 +57,7 @@ namespace
 TEST_CASE("vk.queries: a calibration reads the GPU's timestamp beside core::GetTicks")
 {
     Backend* backend = nullptr;
+    const BackendRelease release{backend};
     Device* device = MakeDevice(backend);
     if (device == nullptr)
     {
@@ -87,6 +99,7 @@ TEST_CASE("vk.queries: a calibration reads the GPU's timestamp beside core::GetT
 TEST_CASE("vk.queries: a statistics query resolves to a record the device decodes")
 {
     Backend* backend = nullptr;
+    const BackendRelease release{backend};
     Device* device = MakeDevice(backend);
     if (device == nullptr)
     {
@@ -172,6 +185,7 @@ TEST_CASE("vk.queries: a statistics query resolves to a record the device decode
 TEST_CASE("vk.counters: memory held follows real allocations, and the driver reports its budget")
 {
     Backend* backend = nullptr;
+    const BackendRelease release{backend};
     Device* device = MakeDevice(backend);
     if (device == nullptr)
     {
@@ -221,6 +235,7 @@ TEST_CASE("vk.queries: a bundle runs inside a statistics query without a validat
     // Vulkan requires a secondary command buffer to inherit the active query's statistics flags,
     // or vkCmdExecuteCommands is invalid (the profiler armed in any game that uses bundles).
     Backend* backend = nullptr;
+    const BackendRelease release{backend};
     (void)vk::CreateBackend(vk::VkBackendDesc{.enableValidation = true}, backend);
     if (backend == nullptr || backend->EnumerateAdapters().IsEmpty())
     {

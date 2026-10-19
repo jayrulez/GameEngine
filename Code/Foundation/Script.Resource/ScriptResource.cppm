@@ -360,6 +360,10 @@ export namespace foundation::script
     // Registers the cooked record + product types (content-DB construction by type name).
     inline void RegisterScriptResource()
     {
+        // Data version 1: each property's replicated flag. A record cooked before it is in
+        // another layout; the strict reader refuses it and the script recooks. No REFLECT block
+        // owns this type - patched on the TypeInfo.
+        const_cast<TypeInfo&>(ScriptClassSource::StaticType()).dataVersion = 1;
         GlobalTypeRegistry().Register(ScriptClassSource::StaticType());
         RegisterSerializable<ScriptClassSource>();
         GlobalTypeRegistry().Register(ScriptClass::StaticType());

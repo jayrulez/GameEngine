@@ -247,3 +247,37 @@ TEST_CASE("script.resource: cooked record -> factory -> runtime product, luau la
         u8"Mover = {}\nMover.__index = Mover\n"
         u8"function Mover.new(entity) return setmetatable({}, Mover) end\n");
 }
+
+// A record cooked before each property carried its replicated flag is in another layout. Read as
+// this one it misread its counts and held the editor for minutes opening a scene; the data
+// version refuses it, and the script recooks.
+TEST_CASE("script.resource: a record cooked before the replicated flag is refused")
+{
+    RegisterScriptResource();
+    TypeInfo& type = const_cast<TypeInfo&>(ScriptClassSource::StaticType());
+    CHECK(type.dataVersion == 1u);
+
+    const StringView dir = u8"scratch_scriptres_stale";
+    RemoveDbTree(dir);
+    foundation::vfs::NativeFileSystem mount(dir, DefaultAllocator());
+    content::ContentDatabase db(DefaultAllocator(), mount, BinarySerializerFactory(), u8".rasset");
+    ScriptClassSource cooked;
+    cooked.language = String(u8"angelscript");
+    cooked.className = String(u8"Mover");
+    ScriptPropertyDesc speed;
+    speed.name = String(u8"speed");
+    cooked.properties.PushBack(Move(speed));
+    auto* instance = db.RootGroup()->CreateInstance(u8"cooked", ScriptClassSource::StaticType());
+    REQUIRE(instance != nullptr);
+    type.dataVersion = 0; // as the cook before the flag stamped it
+    REQUIRE(instance->WriteObject(cooked).IsOk());
+    type.dataVersion = 1;
+
+    ScriptClassFactory factory(DefaultAllocator());
+    foundation::resource::ResourceManager manager(DefaultAllocator(), db);
+    manager.AddFactory(&factory);
+    foundation::resource::Proxy<ScriptClass> product = manager.Bind<ScriptClass>(instance->Id());
+    CHECK_FALSE(product);
+
+    RemoveDbTree(dir);
+}

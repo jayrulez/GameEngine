@@ -653,9 +653,10 @@ export namespace pipeline{
         [[nodiscard]] u32 Version() const override
         {
             // Base cook-logic version (2: the cooked record gained a bytecode field; 3: each
-            // property a replicated flag) + every language cook's compiler version, so a Luau (or
-            // other bytecode) vendor bump recooks every script pack automatically.
-            return 3 + ScriptLanguageCookRegistry::Get().CombinedCookVersion();
+            // property a replicated flag; 4: the record carries data version 1, so the reader
+            // refuses one from before the flag) + every language cook's compiler version, so a
+            // Luau (or other bytecode) vendor bump recooks every script pack automatically.
+            return 4 + ScriptLanguageCookRegistry::Get().CombinedCookVersion();
         }
 
         [[nodiscard]] Status Build(const pipeline::Asset& asset,

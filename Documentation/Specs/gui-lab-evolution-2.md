@@ -571,8 +571,10 @@ falling back to DejaVu (0b29f4084).
 Left: the audit skips docks (physical by design), popups at a point, item views' recycled rows
 (the unit tests cover theirs) and the Stress and Motion pages; transforms stay physical, as CSS's
 do; the Arabic is unchecked by a speaker; scripts see negative x offsets in right to left, as the
-ruling has it; a typed field takes its direction from its content (E11), so a Latin name in an
-Arabic form starts at its left.
+ruling has it. A text field laid its one line out from its left whatever its direction and
+`text-align`, which never reached its text: it now places a short line by its alignment against
+the line's direction and scrolls a long one from its inline start, and `text-align` from a sheet
+reaches it (the user's catch on the Arabic settings screen).
 
 ## Not taken in this round
 

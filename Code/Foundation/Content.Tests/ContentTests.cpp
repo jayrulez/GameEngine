@@ -49,6 +49,63 @@ namespace
         }
     };
 
+    // A mount that passes everything to another and counts the reads reaching its files.
+    class CountingMount final : public IFileSystem
+    {
+        class Counted final : public IStream
+        {
+        public:
+            Counted(UniquePtr<IStream> inner, u64& reads) : m_inner(Move(inner)), m_reads(&reads) {}
+
+            [[nodiscard]] u64 Read(void* data, u64 size) override
+            {
+                ++*m_reads;
+                return m_inner->Read(data, size);
+            }
+            [[nodiscard]] u64 Write(const void* data, u64 size) override { return m_inner->Write(data, size); }
+            [[nodiscard]] i64 Seek(i64 offset, SeekOrigin origin) override { return m_inner->Seek(offset, origin); }
+            [[nodiscard]] i64 Tell() const override { return m_inner->Tell(); }
+            [[nodiscard]] i64 Size() const override { return m_inner->Size(); }
+            [[nodiscard]] bool IsValid() const override { return m_inner->IsValid(); }
+
+        private:
+            UniquePtr<IStream> m_inner;
+            u64* m_reads;
+        };
+
+    public:
+        explicit CountingMount(IFileSystem& inner) : m_inner(&inner) {}
+
+        [[nodiscard]] UniquePtr<IStream> Open(StringView path, FileMode mode) override
+        {
+            UniquePtr<IStream> stream = m_inner->Open(path, mode);
+            if (!stream)
+            {
+                return stream;
+            }
+            return MakeUnique<Counted>(DefaultAllocator(), Move(stream), reads);
+        }
+        [[nodiscard]] bool Exists(StringView path) override { return m_inner->Exists(path); }
+        [[nodiscard]] IEnumerableFileSystem* AsEnumerable() noexcept override { return m_inner->AsEnumerable(); }
+        [[nodiscard]] IWritableFileSystem* AsWritable() noexcept override { return m_inner->AsWritable(); }
+        [[nodiscard]] IStatFileSystem* AsStat() noexcept override { return m_inner->AsStat(); }
+
+        u64 reads = 0;
+
+    private:
+        IFileSystem* m_inner;
+    };
+
+    // Many small fields: a record whose binary envelope is read field by field.
+    class WordsRecord final : public ISerializable
+    {
+        RTTI_OBJECT(WordsRecord, ISerializable)
+    public:
+        Array<String> words;
+
+        void Serialize(ISerializer& ar) override { foundation::core::Serialize(ar, "words", words); }
+    };
+
     // Every occurrence of `from` in `text` replaced with `to` (byte-wise; test-local helper).
     String ReplaceAll(StringView text, StringView from, StringView to)
     {
@@ -150,6 +207,7 @@ namespace
 
 RTTI_DEFINE_OBJECT(MaterialResource, "rtti::content::test")
 RTTI_DEFINE_OBJECT(CountedRecord, "rtti::content::test")
+RTTI_DEFINE_OBJECT(WordsRecord, "rtti::content::test")
 
 TEST_CASE("content: binary round-trip")
 {
@@ -812,5 +870,44 @@ TEST_CASE("content: a payload of another data version is refused unread")
 
     (void)db.DeleteInstance(old->Id());
     RemoveDirectory(JoinPath(dir, u8"records"));
+    RemoveDirectory(dir);
+}
+
+// A binary envelope reads field by field; straight off a file each field was a system call.
+TEST_CASE("content: an object reads from its file in a few large reads")
+{
+    GlobalTypeRegistry().Register(WordsRecord::StaticType());
+    RegisterSerializable<WordsRecord>();
+    const StringView dir = u8"scratch_content_buffered_db";
+    FileDelete(JoinPath(dir, u8"words.rasset"));
+    RemoveDirectory(dir);
+    NativeFileSystem native(dir, DefaultAllocator());
+    Guid id;
+    {
+        ContentDatabase db(DefaultAllocator(), native, MakeBinaryFactory(), u8".rasset");
+        foundation::content::Instance* words = db.RootGroup()->CreateInstance(u8"words", WordsRecord::StaticType());
+        REQUIRE(words != nullptr);
+        id = words->Id();
+        WordsRecord record;
+        for (i32 i = 0; i < 500; ++i)
+        {
+            record.words.PushBack(Format(u8"word{}", i));
+        }
+        REQUIRE(words->WriteObject(record).IsOk());
+    }
+
+    CountingMount counting(native);
+    ContentDatabase db(DefaultAllocator(), counting, MakeBinaryFactory(), u8".rasset");
+    foundation::content::Instance* words = db.GetInstance(id);
+    REQUIRE(words != nullptr);
+    counting.reads = 0;
+    RefPtr<ISerializable> object = words->ReadObject();
+    auto* record = Cast<WordsRecord>(object.Get());
+    REQUIRE(record != nullptr);
+    REQUIRE(record->words.Size() == 500u);
+    CHECK(record->words[499] == u8"word499");
+    CHECK(counting.reads < 8u); // was one per count, length and character: thousands
+
+    (void)db.DeleteInstance(id);
     RemoveDirectory(dir);
 }

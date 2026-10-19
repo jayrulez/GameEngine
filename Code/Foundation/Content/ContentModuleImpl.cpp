@@ -278,7 +278,10 @@ namespace foundation::content
         {
             return RefPtr<ISerializable>{};
         }
-        Result<RefPtr<ISerializable>, String> object = ReadEnvelope(*stream, false);
+        // Buffered: a binary envelope reads field by field, and straight off a file each
+        // field is a system call (a cooked script's were thousands, dearer still on Windows).
+        BufferedStream buffered(*stream, 64 * 1024);
+        Result<RefPtr<ISerializable>, String> object = ReadEnvelope(buffered, false);
         return object.HasValue() ? Move(object.Value()) : RefPtr<ISerializable>{};
     }
 

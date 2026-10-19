@@ -1039,6 +1039,9 @@ namespace foundation::shell
                 }
                 break;
             }
+            case SDL_EVENT_WINDOW_EXPOSED:
+                m_windows.PushEvent(WindowEvent{WindowEventType::Exposed, static_cast<core::u32>(event.window.windowID)});
+                break;
             case SDL_EVENT_WINDOW_FOCUS_GAINED:
             {
                 const core::u32 id = static_cast<core::u32>(event.window.windowID);

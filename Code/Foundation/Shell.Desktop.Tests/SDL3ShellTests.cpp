@@ -106,6 +106,30 @@ TEST_CASE("shell.desktop: a window-close event stops the shell")
     CHECK_FALSE(shell.MainWindow()->IsOpen());
 }
 
+// On Wayland a window's new state takes effect only with the app's next frame; an app that skips
+// idle frames hears that one is wanted (a sandbox left idle took no pointer until resized).
+TEST_CASE("shell.desktop: an exposed window asks for a frame")
+{
+    SDL3Shell shell(DefaultAllocator());
+    if (shell.MainWindow() == nullptr)
+    {
+        return;
+    }
+
+    SDL_Event event{};
+    event.type = SDL_EVENT_WINDOW_EXPOSED;
+    event.window.windowID = SDL_GetWindowID(static_cast<SDL3Window*>(shell.MainWindow())->Handle());
+    SDL_PushEvent(&event);
+
+    shell.ProcessEvents();
+    bool exposed = false;
+    for (const WindowEvent& e : shell.WindowManager()->Events())
+    {
+        exposed = exposed || (e.type == WindowEventType::Exposed && e.windowId == shell.MainWindow()->Id());
+    }
+    CHECK(exposed);
+}
+
 TEST_CASE("shell.desktop: keyboard events drive double-buffered key state")
 {
     SDL3Shell shell(DefaultAllocator());

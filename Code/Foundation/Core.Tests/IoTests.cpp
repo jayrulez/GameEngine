@@ -275,6 +275,98 @@ TEST_CASE("serialization: short read on load is reported")
     CHECK(loader.GetStatus().Code() == ErrorCode::Internal);
 }
 
+namespace
+{
+    // Counts the reads that reach the stream underneath.
+    class CountingStream final : public IStream
+    {
+    public:
+        explicit CountingStream(IStream& inner) : m_inner(&inner) {}
+
+        [[nodiscard]] u64 Read(void* data, u64 size) override
+        {
+            ++reads;
+            return m_inner->Read(data, size);
+        }
+        [[nodiscard]] u64 Write(const void* data, u64 size) override { return m_inner->Write(data, size); }
+        [[nodiscard]] i64 Seek(i64 offset, SeekOrigin origin) override { return m_inner->Seek(offset, origin); }
+        [[nodiscard]] i64 Tell() const override { return m_inner->Tell(); }
+        [[nodiscard]] i64 Size() const override { return m_inner->Size(); }
+        [[nodiscard]] bool IsValid() const override { return m_inner->IsValid(); }
+
+        u64 reads = 0;
+
+    private:
+        IStream* m_inner;
+    };
+}
+
+// A record read in another layout than it was written in hands the reader a garbage count.
+// It used to reserve it and read past the end once per element (a cooked script from before
+// a field was added held the editor for minutes).
+TEST_CASE("serialization: a count longer than the data left fails at once")
+{
+    MemoryStream stream;
+    {
+        BinaryWriter writer(stream);
+        writer.Write(u32{0x7FFFFFFF});
+        writer.WriteBytes("abcdefgh", 8);
+    }
+    CHECK(stream.Seek(0, SeekOrigin::Begin) == 0);
+
+    CountingStream counted(stream);
+    BinarySerializer loader(counted, SerializeMode::Read);
+    Array<String> words;
+    Serialize(loader, words);
+    CHECK_FALSE(loader.IsOk());
+    CHECK(words.IsEmpty());
+    CHECK(counted.reads == 1u); // the count, and nothing after it
+}
+
+TEST_CASE("serialization: a string longer than the data left fails at once")
+{
+    MemoryStream stream;
+    {
+        BinaryWriter writer(stream);
+        writer.Write(u32{1000000});
+        writer.WriteBytes("abc", 3);
+    }
+    CHECK(stream.Seek(0, SeekOrigin::Begin) == 0);
+
+    CountingStream counted(stream);
+    BinarySerializer loader(counted, SerializeMode::Read);
+    String text;
+    Serialize(loader, text);
+    CHECK_FALSE(loader.IsOk());
+    CHECK(text.IsEmpty());
+    CHECK(counted.reads == 1u);
+}
+
+TEST_CASE("serialization: an array stops at its first element that fails to read")
+{
+    MemoryStream stream;
+    {
+        BinaryWriter writer(stream);
+        writer.Write(u32{4000}); // small enough to pass unasked; only one element follows
+        writer.WriteString(StringView(u8"only"));
+    }
+    CHECK(stream.Seek(0, SeekOrigin::Begin) == 0);
+
+    CountingStream counted(stream);
+    BinarySerializer loader(counted, SerializeMode::Read);
+    Array<String> words;
+    Serialize(loader, words);
+    CHECK_FALSE(loader.IsOk());
+    REQUIRE(words.Size() == 1u);
+    CHECK(words[0] == u8"only");
+    const u64 readsAtFailure = counted.reads;
+    u32 after = 7;
+    Serialize(loader, after); // a failed reader reads nothing more and hands back zero
+    CHECK(after == 0u);
+    CHECK(counted.reads == readsAtFailure);
+    CHECK(readsAtFailure < 16u);
+}
+
 // --- IO: BufferedStream ----------------------------------------------------
 
 TEST_CASE("io: BufferedStream write then read round-trip (small buffer)")

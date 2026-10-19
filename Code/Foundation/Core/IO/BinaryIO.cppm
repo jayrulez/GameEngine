@@ -10,6 +10,7 @@
 
 module;
 #include "Core/Prelude.h"
+#include <cstring>
 #include <type_traits>
 
 export module foundation.core:binary_io;
@@ -80,12 +81,18 @@ export namespace foundation::core
 
         [[nodiscard]] bool IsOk() const noexcept { return m_ok; }
 
-        // Raw bytes. Sticks to !IsOk() on a short read.
+        // Raw bytes. Sticks to !IsOk() on a short read; once failed it reads nothing more and
+        // hands back zeros, so a count read after the failure is 0 and a loop over it ends.
         bool ReadBytes(void* data, usize size)
         {
             if (size == 0)
             {
                 return m_ok;
+            }
+            if (!m_ok)
+            {
+                std::memset(data, 0, size);
+                return false;
             }
             if (m_stream->Read(data, size) != size)
             {
@@ -113,6 +120,11 @@ export namespace foundation::core
             {
                 return false;
             }
+            if (!Holds(length))
+            {
+                m_ok = false;
+                return false;
+            }
 
             outValue.Reserve(length);
             for (u32 i = 0; i < length; ++i)
@@ -127,7 +139,25 @@ export namespace foundation::core
             return m_ok;
         }
 
+        // Whether `count` items of at least a byte each can still be in the stream. A count
+        // beyond the bytes left is a misread (a record written in another layout), not data:
+        // trusting it reserves gigabytes and reads past the end millions of times. A count up
+        // to kTrustedCount passes without asking the stream (a file stream's size and position
+        // are two system calls), since reading it out costs little before the end stops it.
+        [[nodiscard]] bool Holds(u64 count) const
+        {
+            if (count <= kTrustedCount)
+            {
+                return true;
+            }
+            const i64 size = m_stream->Size();
+            const i64 at = m_stream->Tell();
+            return size < 0 || at < 0 || count <= static_cast<u64>(size > at ? size - at : 0);
+        }
+
     private:
+        static constexpr u64 kTrustedCount = 4096;
+
         IStream* m_stream;
         bool m_ok = true;
     };

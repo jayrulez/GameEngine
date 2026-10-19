@@ -194,6 +194,10 @@ export namespace foundation::core
     {
         u32 count = static_cast<u32>(array.Size());
         ar.BeginArray(count);
+        if (ar.Mode() == SerializeMode::Read && !ar.IsPayloadOk())
+        {
+            count = 0; // the read has failed: the count it read is not data
+        }
 
         // Scalars (and byte) in a backend whose element layout IS the raw run: one Blob for the
         // whole array. Byte-identical to the per-element loop below (each element would be one
@@ -226,6 +230,10 @@ export namespace foundation::core
             {
                 T element{};
                 Serialize(ar, element);
+                if (!ar.IsPayloadOk())
+                {
+                    break; // stop at the first failure; the rest would read past it
+                }
                 array.PushBack(Move(element));
             }
         }

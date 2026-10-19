@@ -66,7 +66,17 @@ export namespace foundation::core
 
         // Naming and object scopes are inherited as no-ops from Serializer; a
         // flat byte stream carries no names. Arrays are length-prefixed.
-        void BeginArray(u32& count) override { Scalar(&count, ScalarKind::UInt32); }
+        void BeginArray(u32& count) override
+        {
+            Scalar(&count, ScalarKind::UInt32);
+            // Every element takes at least a byte, so a count the bytes left cannot hold is a
+            // misread: fail here and read none, rather than reserve it and loop to the end.
+            if (IsReading() && !m_reader.Holds(count))
+            {
+                Fail(ErrorCode::Internal);
+                count = 0;
+            }
+        }
 
         void Scalar(void* value, ScalarKind kind) override { RawBytes(value, ScalarSize(kind)); }
 

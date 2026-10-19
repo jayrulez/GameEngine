@@ -335,15 +335,16 @@ namespace
 
 TEST_CASE("theme: a list's rows show the pointer over them (a combo box's popup is a list box)")
 {
+    // The model first: the view unregisters from it when the tree lets the view go.
+    core::Array<core::String> rows;
+    rows.PushBack(core::String(u8"a"));
+    rows.PushBack(core::String(u8"b"));
+    StringListModel model(core::Move(rows));
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{300.0f, 300.0f});
     auto box = Make<ListBox>();
     box->AddItem(core::StringView(u8"one"));
     box->AddItem(core::StringView(u8"two"));
-    core::Array<core::String> rows;
-    rows.PushBack(core::String(u8"a"));
-    rows.PushBack(core::String(u8"b"));
-    StringListModel model(core::Move(rows));
     auto view = Make<ListView>();
     view->SetSize(core::Float2{200.0f, 100.0f});
     view->SetRowHeight(20.0f);

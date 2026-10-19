@@ -78,6 +78,23 @@ export namespace foundation::ui
     class
         PopupLayer; // defined in :popup_layer; RootView holds one (created lazily in the impl unit).
 
+    /// Live View instances, process-wide. A view leak is otherwise invisible until the editor
+    /// is wedged: a long session grew the tree until style inheritance (which recurses up the
+    /// parent chain) stopped returning and the process reached ~17 GB. Defined in
+    /// UIClusterImpl.cpp so the count is ONE per process, not one per shared library.
+    [[nodiscard]] u64 LiveViewCount() noexcept;
+    /// The high-water mark LiveViewCount has reached. Crossing a doubling threshold logs a
+    /// warning naming the count - that log is the thing that identifies what is leaking.
+    [[nodiscard]] u64 PeakViewCount() noexcept;
+
+    namespace detail
+    {
+        // View's ctor/dtor are inline in this interface, so they call through to the impl unit
+        // rather than touching the counter directly (it has exactly one definition there).
+        void NoteViewConstructed() noexcept;
+        void NoteViewDestroyed() noexcept;
+    }
+
     // Aliases so faithful field names such as `Visibility` (which shadow their own types
     // inside the class) can still name those types elsewhere in the cluster.
     using VisibilityValue = Visibility;
@@ -240,7 +257,11 @@ export namespace foundation::ui
         /// drawing the view.
         void RefreshStyleTransform();
 
-        View() = default;
+        // Counted so a view leak is measurable (LiveViewCount / the doubling-threshold warning
+        // in UIClusterImpl.cpp). The dtor is virtual via RefCounted; declaring it here is what
+        // makes the decrement run for every subclass.
+        View() noexcept { detail::NoteViewConstructed(); }
+        ~View() override { detail::NoteViewDestroyed(); }
 
         // === Cursor ===
         /// Per-position cursor: defaults to the whole-view Cursor field. Views with internal
@@ -725,7 +746,11 @@ export namespace foundation::ui
         /// sheet, the local sheets from the outermost ancestor inward, and the inline sheet
         /// (later wins); `inherit`/`initial`/`var()` resolved; text properties inherit from
         /// the parent's computed value when unset. Cached per view (see RebuildStyleCache).
-        [[nodiscard]] StyleValue ResolveStyle(StyleProperty prop);
+        /// `inheritDepth` counts the parent hops this query has already taken: callers leave it
+        /// 0 and the inheritance walk bumps it, so a cyclic or pathologically deep parent chain
+        /// is reported instead of recursing until the stack dies (kMaxStyleInheritDepth in
+        /// UIClusterImpl.cpp).
+        [[nodiscard]] StyleValue ResolveStyle(StyleProperty prop, i32 inheritDepth = 0);
         /// A custom property (`--name`, including the dashes) from the cascade, inherited
         /// through the parent chain like every custom property; None when unset. Also the
         /// custom-layout extension point: a container reads `child->CustomProperty(u8"--ring-angle")`.
@@ -982,12 +1007,14 @@ export namespace foundation::ui
         [[nodiscard]] const StyleCache& EnsureStyleCache();
         /// The cascade's raw winning value for `prop` (no keyword/variable resolution), or None.
         [[nodiscard]] StyleValue RawStyleValue(StyleProperty prop);
-        /// Turns Inherit/Initial/Variable into a concrete value (depth-limited for var chains).
-        [[nodiscard]] StyleValue ResolveKeywords(StyleProperty prop, const StyleValue& raw, i32 depth);
+        /// Turns Inherit/Initial/Variable into a concrete value. `depth` limits var() chains;
+        /// `inheritDepth` limits the separate walk up the parent chain that `inherit` performs.
+        [[nodiscard]] StyleValue ResolveKeywords(StyleProperty prop, const StyleValue& raw,
+                                                 i32 depth, i32 inheritDepth = 0);
         [[nodiscard]] StyleValue ResolveVariableValue(const StyleValue& reference, i32 depth);
         /// The cascade's value with keywords/inheritance resolved and NO transition overlay:
         /// what ResolveStyle returns once every transition on `prop` has finished.
-        [[nodiscard]] StyleValue ComputeStyle(StyleProperty prop);
+        [[nodiscard]] StyleValue ComputeStyle(StyleProperty prop, i32 inheritDepth = 0);
         /// After a cache rebuild: for every listed animatable property whose WINNING RULE
         /// changed (`oldWinners` vs the new cache), start or retarget a transition from the
         /// value before the rebuild (a running entry's current value, mid-flight included) to

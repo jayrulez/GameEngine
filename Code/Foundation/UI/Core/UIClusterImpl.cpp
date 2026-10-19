@@ -12,6 +12,7 @@
 module;
 #include "Core/Prelude.h"
 #include "Core/Debug/Assert.h"
+#include "Core/Log/Log.h" // the style-inheritance depth report + the view-count watchdog
 
 module foundation.ui;
 
@@ -19,6 +20,81 @@ using namespace foundation::core;
 
 namespace foundation::ui
 {
+    namespace
+    {
+        // Style inheritance walks UP the parent chain (ComputeStyle -> Parent->ResolveStyle, and
+        // the same hop from ResolveKeywords' `inherit`), so its recursion depth is the tree's
+        // height - unbounded if a Parent chain is ever cyclic, and ruinous if the tree has grown
+        // without limit. A long editor session hit exactly that: the UI thread sat in
+        // ResolveStyle <-> ComputeStyle deep enough that a debugger could not unwind it, with
+        // ~17 GB resident. var() chains were already capped at 8; this is the missing cap on the
+        // OTHER recursion. Generous on purpose - docked panels nesting lists nesting rows are
+        // legitimately deep - so hitting it means something is wrong, not merely elaborate.
+        constexpr i32 kMaxStyleInheritDepth = 256;
+
+        // One report per process: the condition repeats for every property of every view in the
+        // bad chain, and a flood would bury the first (most useful) line.
+        Atomic<bool> g_inheritDepthReported{false};
+
+        bool StyleInheritDepthExceeded(i32 inheritDepth, const View* view)
+        {
+            if (inheritDepth < kMaxStyleInheritDepth)
+            {
+                return false;
+            }
+            if (!g_inheritDepthReported.exchange(true))
+            {
+                LOG_ERROR(u8"UI",
+                          u8"style inheritance exceeded {} parent hops at view {} - a cyclic or "
+                          u8"runaway-deep Parent chain. Inheritance stops here (treated as unset); "
+                          u8"live views = {}, peak = {}. Suspect a view leak or a reparent that "
+                          u8"made a view its own ancestor.",
+                          kMaxStyleInheritDepth, static_cast<const void*>(view), LiveViewCount(),
+                          PeakViewCount());
+            }
+            return true;
+        }
+
+        // Live View instances. ONE counter per process (this is the only definition); the
+        // interface's inline ctor/dtor call the Note* functions below rather than touching it.
+        Atomic<u64> g_liveViews{0};
+        Atomic<u64> g_peakViews{0};
+        // Warn on crossing a doubling threshold, so a leak announces itself in O(log n) lines
+        // instead of either silence or a flood. An editor with every panel open is a few
+        // thousand views, so the first threshold is already well clear of normal.
+        Atomic<u64> g_nextViewWarn{1u << 16}; // 65536
+    }
+
+    // Default (seq_cst) ordering throughout: foundation.core:atomic exports the Atomic alias but
+    // not <atomic>'s memory_order enumerators, and view construction is not hot enough to be
+    // worth pulling the header in just to relax a counter.
+    u64 LiveViewCount() noexcept { return g_liveViews.load(); }
+    u64 PeakViewCount() noexcept { return g_peakViews.load(); }
+
+    namespace detail
+    {
+        void NoteViewConstructed() noexcept
+        {
+            const u64 live = g_liveViews.fetch_add(1) + 1;
+            u64 peak = g_peakViews.load();
+            while (live > peak && !g_peakViews.compare_exchange_weak(peak, live))
+            {
+            }
+            // compare_exchange, not a plain compare-then-store: concurrent constructions past the
+            // threshold then produce ONE line per threshold rather than one per thread.
+            u64 threshold = g_nextViewWarn.load();
+            if (live >= threshold && g_nextViewWarn.compare_exchange_strong(threshold, threshold * 2))
+            {
+                LOG_WARNING(u8"UI",
+                            u8"live View count reached {} (next report at {}). Expected a few "
+                            u8"thousand; a climbing count with no UI growth is a view leak.",
+                            live, threshold * 2);
+            }
+        }
+
+        void NoteViewDestroyed() noexcept { g_liveViews.fetch_sub(1); }
+    }
+
     // === View cluster method bodies (kept out of the :view interface partition to slim its BMI) ===
 
     void View::Invalidate()
@@ -742,12 +818,20 @@ namespace foundation::ui
         return value;
     }
 
-    StyleValue View::ResolveKeywords(StyleProperty prop, const StyleValue& raw, i32 depth)
+    StyleValue View::ResolveKeywords(StyleProperty prop, const StyleValue& raw, i32 depth,
+                                     i32 inheritDepth)
     {
         switch (raw.GetKind())
         {
         case StyleValue::Kind::Inherit:
-            return Parent != nullptr ? Parent->ResolveStyle(prop) : StyleValue::None();
+            // An explicit `inherit` is the second way up the parent chain, and it is counted
+            // against the same budget as ComputeStyle's implicit walk - otherwise a chain of
+            // views each declaring `inherit` would recurse without limit.
+            if (Parent == nullptr || StyleInheritDepthExceeded(inheritDepth, this))
+            {
+                return StyleValue::None();
+            }
+            return Parent->ResolveStyle(prop, inheritDepth + 1);
         case StyleValue::Kind::Initial:
             return StyleValue::None();
         case StyleValue::Kind::Variable:
@@ -764,9 +848,9 @@ namespace foundation::ui
         }
     }
 
-    StyleValue View::ResolveStyle(StyleProperty prop)
+    StyleValue View::ResolveStyle(StyleProperty prop, i32 inheritDepth)
     {
-        StyleValue value = ComputeStyle(prop);
+        StyleValue value = ComputeStyle(prop, inheritDepth);
         if (m_transitionState)
         {
             for (const StyleTransition& tr : m_transitionState->Active)
@@ -795,12 +879,12 @@ namespace foundation::ui
         return value;
     }
 
-    StyleValue View::ComputeStyle(StyleProperty prop)
+    StyleValue View::ComputeStyle(StyleProperty prop, i32 inheritDepth)
     {
         const StyleValue raw = RawStyleValue(prop);
         if (!raw.IsNone())
         {
-            const StyleValue value = ResolveKeywords(prop, raw, 0);
+            const StyleValue value = ResolveKeywords(prop, raw, 0, inheritDepth);
             if (!value.IsNone() || raw.GetKind() == StyleValue::Kind::Initial)
             {
                 return value;
@@ -809,7 +893,14 @@ namespace foundation::ui
         }
         if (IsInheritableStyle(prop) && Parent != nullptr)
         {
-            return Parent->ResolveStyle(prop);
+            // The implicit inheritance hop. Capped: this is the recursion that wedged a long
+            // editor session (see kMaxStyleInheritDepth). Exceeding it yields None, i.e. the
+            // property reads as unset - a wrong colour beats a hung UI thread.
+            if (StyleInheritDepthExceeded(inheritDepth, this))
+            {
+                return StyleValue::None();
+            }
+            return Parent->ResolveStyle(prop, inheritDepth + 1);
         }
         return StyleValue::None();
     }

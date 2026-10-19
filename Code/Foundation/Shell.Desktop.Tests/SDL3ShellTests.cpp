@@ -130,6 +130,58 @@ TEST_CASE("shell.desktop: an exposed window asks for a frame")
     CHECK(exposed);
 }
 
+TEST_CASE("shell.desktop: a finger the platform takes back, and a trackpad's pinch, reach the input events")
+{
+    SDL3Shell shell(DefaultAllocator());
+    if (shell.MainWindow() == nullptr)
+    {
+        return;
+    }
+    const SDL_WindowID window = SDL_GetWindowID(static_cast<SDL3Window*>(shell.MainWindow())->Handle());
+
+    SDL_Event down{};
+    down.type = SDL_EVENT_FINGER_DOWN;
+    down.tfinger.windowID = window;
+    down.tfinger.fingerID = 7;
+    down.tfinger.x = 0.5f;
+    down.tfinger.y = 0.5f;
+    SDL_PushEvent(&down);
+    SDL_Event cancel = down;
+    cancel.type = SDL_EVENT_FINGER_CANCELED;
+    SDL_PushEvent(&cancel);
+    const SDL_EventType pinches[] = {SDL_EVENT_PINCH_BEGIN, SDL_EVENT_PINCH_UPDATE, SDL_EVENT_PINCH_END};
+    for (const SDL_EventType type : pinches)
+    {
+        SDL_Event pinch{};
+        pinch.type = type;
+        pinch.pinch.windowID = window;
+        pinch.pinch.scale = 1.25f;
+        SDL_PushEvent(&pinch);
+    }
+
+    shell.ProcessEvents();
+    bool cancelled = false;
+    int pinchKinds = 0;
+    float scale = 0.0f;
+    for (const InputEvent& e : shell.Input()->Events())
+    {
+        cancelled = cancelled || (e.kind == InputEventKind::TouchCancel && e.touchId == 7);
+        if (e.kind == InputEventKind::PinchBegin || e.kind == InputEventKind::PinchEnd)
+        {
+            ++pinchKinds;
+        }
+        if (e.kind == InputEventKind::PinchUpdate)
+        {
+            ++pinchKinds;
+            scale = e.value;
+        }
+    }
+    CHECK(cancelled);
+    CHECK(pinchKinds == 3);
+    CHECK(scale == doctest::Approx(1.25f));
+    CHECK(shell.Input()->Touch()->TouchCount() == 0); // the cancelled finger is gone
+}
+
 TEST_CASE("shell.desktop: keyboard events drive double-buffered key state")
 {
     SDL3Shell shell(DefaultAllocator());

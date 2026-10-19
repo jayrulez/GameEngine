@@ -342,6 +342,13 @@ namespace foundation::shell
 
     namespace
     {
+        // A trackpad's touch device (SDL reports its fingers as touches too, its pinch as a gesture).
+        bool IsTrackpad(SDL_TouchID touch)
+        {
+            const SDL_TouchDeviceType type = SDL_GetTouchDeviceType(touch);
+            return type == SDL_TOUCH_DEVICE_INDIRECT_ABSOLUTE || type == SDL_TOUCH_DEVICE_INDIRECT_RELATIVE;
+        }
+
         // Exclusive takes the display mode closest to the window's size; desktop fullscreen is
         // SDL's fullscreen with no mode, the display left as it is. Loud and windowed when the
         // display refuses.
@@ -1154,10 +1161,15 @@ namespace foundation::shell
                 break;
             }
 
-            // --- Touch ---
+            // --- Touch --- A touchscreen's fingers only: a trackpad's are the mouse already, and its
+            // pinch comes as one gesture (below), so they are not taken for touches on the window.
             case SDL_EVENT_FINGER_DOWN:
             case SDL_EVENT_FINGER_MOTION:
             {
+                if (IsTrackpad(event.tfinger.touchID))
+                {
+                    break;
+                }
                 InputEvent e{};
                 e.kind = (event.type == SDL_EVENT_FINGER_DOWN) ? InputEventKind::TouchDown
                                                                : InputEventKind::TouchMove;
@@ -1181,15 +1193,34 @@ namespace foundation::shell
                 break;
             }
             case SDL_EVENT_FINGER_UP:
+            case SDL_EVENT_FINGER_CANCELED:
             {
+                if (IsTrackpad(event.tfinger.touchID))
+                {
+                    break;
+                }
                 InputEvent e{};
-                e.kind = InputEventKind::TouchUp;
+                e.kind = event.type == SDL_EVENT_FINGER_UP ? InputEventKind::TouchUp : InputEventKind::TouchCancel;
                 e.window = static_cast<core::u32>(event.tfinger.windowID);
                 e.touchId = static_cast<core::u64>(event.tfinger.fingerID);
                 e.x = event.tfinger.x;
                 e.y = event.tfinger.y;
                 m_input.EmitEvent(e);
                 m_input.TouchDevice().Remove(e.touchId);
+                break;
+            }
+
+            case SDL_EVENT_PINCH_BEGIN:
+            case SDL_EVENT_PINCH_UPDATE:
+            case SDL_EVENT_PINCH_END:
+            {
+                InputEvent e{};
+                e.kind = event.type == SDL_EVENT_PINCH_BEGIN    ? InputEventKind::PinchBegin
+                         : event.type == SDL_EVENT_PINCH_UPDATE ? InputEventKind::PinchUpdate
+                                                                : InputEventKind::PinchEnd;
+                e.window = static_cast<core::u32>(event.pinch.windowID);
+                e.value = event.pinch.scale;
+                m_input.EmitEvent(e);
                 break;
             }
 

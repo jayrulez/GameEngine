@@ -302,6 +302,12 @@ export namespace foundation::shell
         TouchMove,
         TouchUp,
         TextEditing, // an IME's composition so far (empty: it ended); see WindowSettings::drawsTextComposition
+        TouchCancel, // the platform took a finger back (a system gesture): no TouchUp follows
+        // A trackpad's pinch (the platform's gesture; its fingers are not touches): `value` is the
+        // scale change since the last update, above 1 spreading.
+        PinchBegin,
+        PinchUpdate,
+        PinchEnd,
     };
 
     struct InputEvent

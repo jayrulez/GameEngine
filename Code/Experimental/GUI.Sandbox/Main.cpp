@@ -1793,7 +1793,13 @@ void GUISandbox::OnRender()
         m_nextStressStatsTime = m_totalTime + 1.0f;
     }
     const bool drawnNeeds = drawn.NeedsFrame();
-    if (!m_alwaysRedraw && !drawnNeeds && !paneNeeds && !ScreenshotPending())
+    // The window system asked for a frame: on Wayland its new state takes effect only with one,
+    // and left idle the decorations' resize edges covered the GUI and kept the pointer from it.
+    bool exposed = false;
+    if (m_shell->WindowManager() != nullptr && m_window != nullptr)
+        for (const shell::WindowEvent& event : m_shell->WindowManager()->Events())
+            exposed = exposed || (event.type == shell::WindowEventType::Exposed && event.windowId == m_window->Id());
+    if (!m_alwaysRedraw && !drawnNeeds && !paneNeeds && !exposed && !ScreenshotPending())
     {
         SleepMilliseconds(8);
         return;

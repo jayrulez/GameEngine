@@ -345,6 +345,41 @@ export namespace foundation::vg
             return TransformRect(rect).Intersects(m_currentState.clipRect);
         }
 
+        /// The active scissor clip in CURRENT local coordinates: the bounds of its corners mapped
+        /// back through the transform (a box around it under a rotation, never smaller). False
+        /// when no clip is active, where everything can show. A caller with many children asks
+        /// once which of them can show, rather than asking IsRectVisible of each.
+        [[nodiscard]] bool GetLocalClipBounds(Rectangle& out) const
+        {
+            if (!m_currentState.scissored)
+                return false;
+            const Rectangle clip = m_currentState.clipRect;
+            if (clip.width <= 0.0f || clip.height <= 0.0f)
+            {
+                out = Rectangle{0.0f, 0.0f, 0.0f, 0.0f}; // degenerate clip: nothing shows
+                return true;
+            }
+            if (m_currentState.transform == Float4x4::Identity())
+            {
+                out = clip;
+                return true;
+            }
+            const Float4x4 inverse = Inverse(m_currentState.transform);
+            const Float2 corners[4] = {TransformPoint2D(Float2{clip.x, clip.y}, inverse),
+                                       TransformPoint2D(Float2{clip.x + clip.width, clip.y}, inverse),
+                                       TransformPoint2D(Float2{clip.x, clip.y + clip.height}, inverse),
+                                       TransformPoint2D(Float2{clip.x + clip.width, clip.y + clip.height}, inverse)};
+            Float2 mn = corners[0];
+            Float2 mx = corners[0];
+            for (const Float2& c : corners)
+            {
+                mn = Float2{Min(mn.x, c.x), Min(mn.y, c.y)};
+                mx = Float2{Max(mx.x, c.x), Max(mx.y, c.y)};
+            }
+            out = Rectangle{mn.x, mn.y, mx.x - mn.x, mx.y - mn.y};
+            return true;
+        }
+
         void PopClip()
         {
             FlushCurrentCommand();

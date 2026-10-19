@@ -127,6 +127,40 @@ TEST_CASE("vgcontext: IsRectVisible tracks the scissor clip (draw-culling query)
     CHECK(ctx.IsRectVisible(Rectangle{200, 200, 10, 10})); // clip gone
 }
 
+TEST_CASE("vgcontext: GetLocalClipBounds gives the clip in local space, around it under a rotation")
+{
+    VGContext ctx;
+    Rectangle local{};
+    CHECK_FALSE(ctx.GetLocalClipBounds(local)); // no clip: everything can show
+
+    ctx.PushClipRect(Rectangle{10, 20, 100, 50});
+    REQUIRE(ctx.GetLocalClipBounds(local));
+    CHECK(local.x == doctest::Approx(10.0f));
+    CHECK(local.height == doctest::Approx(50.0f));
+
+    ctx.PushState();
+    ctx.Translate(0.0f, 500.0f); // the content moved down: the clip sits above it
+    REQUIRE(ctx.GetLocalClipBounds(local));
+    CHECK(local.y == doctest::Approx(-480.0f));
+    ctx.Scale(2.0f, 2.0f); // twice as large: the clip covers half as much of it
+    REQUIRE(ctx.GetLocalClipBounds(local));
+    CHECK(local.width == doctest::Approx(50.0f));
+    CHECK(local.y == doctest::Approx(-240.0f));
+    ctx.PopState();
+
+    ctx.PushState();
+    ctx.Translate(60.0f, 45.0f);
+    ctx.Rotate(0.7853982f); // 45 degrees: a box around the turned clip, never smaller than it
+    REQUIRE(ctx.GetLocalClipBounds(local));
+    const f32 side = (100.0f + 50.0f) * 0.70710678f;
+    CHECK(local.width == doctest::Approx(side).epsilon(0.01));
+    CHECK(local.height == doctest::Approx(side).epsilon(0.01));
+    ctx.PopState();
+
+    ctx.PopClip();
+    CHECK_FALSE(ctx.GetLocalClipBounds(local));
+}
+
 TEST_CASE("vgcontext: IsRectVisible and a clip rect hold under a rotation or a flip")
 {
     VGContext ctx;

@@ -1308,10 +1308,8 @@ void GUISandbox::OpenWindow()
         // A window to drag by its title and resize from its corner, holding tabs.
         m_floating = MakeRef<gui::Window>(AppRoot());
         m_floating->SetSize(Float2{340.0f, 280.0f});
-        m_floating->SetPosition(Float2{520.0f, 160.0f});
         m_floating->SetTitle(u8"A floating window");
         m_floating->SetFont(m_font);
-        m_root->AddChild(m_floating.Get());
         auto tabs = MakeRef<gui::TabView>(AppRoot());
         tabs->SetFont(m_font);
         tabs->EditLayoutStyle([](gui::LayoutStyle& s) { s.Grow = 1.0f; });
@@ -1330,9 +1328,9 @@ void GUISandbox::OpenWindow()
             body->AddClass(u8"text");
             page->AddChild(body.Get());
         }
-        return;
     }
-    // The button toggles it; closed (its close button, or this), it opens again in the middle.
+    // The button toggles it, opening it in the middle each time; closed (its close button, or this),
+    // it opens there again.
     if (m_floating->GetParent() != nullptr)
         m_floating->Close();
     else

@@ -453,14 +453,15 @@ export namespace experimental::gui
             Invalidate();
         }
         // Where a tab dropped at `local` (the bar's space) would go: before the first tab whose
-        // middle lies past it.
+        // middle lies past it toward the inline end.
         [[nodiscard]] i32 InsertionIndex(core::Float2 local) const
         {
             const core::Float2 world = ConvertToWorldSpace(local);
+            const f32 way = IsRightToLeft() ? -1.0f : 1.0f;
             for (i32 i = 0; i < GetTabCount(); ++i)
             {
                 const Rect r = GetTab(i)->GetScreenBounds();
-                if (world.x < r.x + r.width * 0.5f)
+                if (way * world.x < way * (r.x + r.width * 0.5f))
                     return i;
             }
             return GetTabCount();
@@ -562,9 +563,11 @@ export namespace experimental::gui
             const auto midpoint = [&](const Tab& other) { return other.GetPosition().x - tab.GetPosition().x + other.GetSize().x * 0.5f; };
             // (Until the strip lays out again the two keep their old places, and the test after a
             // move is against the new neighbour's, so a tab never changes back on the same move.)
-            if (next != nullptr && x > midpoint(*next))
+            // The next tab is toward the inline end: the left in right to left.
+            const f32 way = IsRightToLeft() ? -1.0f : 1.0f;
+            if (next != nullptr && way * x > way * midpoint(*next))
                 MoveTab(at, at + 1);
-            else if (previous != nullptr && x < midpoint(*previous))
+            else if (previous != nullptr && way * x < way * midpoint(*previous))
                 MoveTab(at, at - 1);
         }
 
@@ -773,13 +776,18 @@ export namespace experimental::gui
             return;
         const PartStyle& part = GetPartStyle(u8"drop-indicator");
         const Color color = part.HasBackground ? part.Box.BackgroundColor : Color{0.31f, 0.61f, 1.0f, 1.0f};
+        // At the inline start of the tab it would go before, else past the last one's end.
+        const bool rtl = IsRightToLeft();
         f32 x = 0.0f;
         if (const Tab* at = GetTab(m_dropIndex))
-            x = ConvertToNodeSpace(core::Float2{at->GetScreenBounds().x, 0.0f}).x;
+        {
+            const Rect r = at->GetScreenBounds();
+            x = ConvertToNodeSpace(core::Float2{rtl ? r.x + r.width : r.x, 0.0f}).x;
+        }
         else if (const Tab* last = GetTab(GetTabCount() - 1))
         {
             const Rect r = last->GetScreenBounds();
-            x = ConvertToNodeSpace(core::Float2{r.x + r.width, 0.0f}).x;
+            x = ConvertToNodeSpace(core::Float2{rtl ? r.x : r.x + r.width, 0.0f}).x;
         }
         ctx.VG().FillRect(core::Rectangle{x - 1.0f, 0.0f, 2.0f, GetSize().y}, color);
     }

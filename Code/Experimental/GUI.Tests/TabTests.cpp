@@ -341,6 +341,33 @@ TEST_CASE("tabview: pages pair with tabs; only the selected one shows; hidden on
     CHECK(changes == 2);
 }
 
+TEST_CASE("tabs: in right to left a tab dragged toward the left passes the next one")
+{
+    auto root = MakeRoot();
+    root->SetLayoutDirection(Node::LayoutDirection::RightToLeft);
+    auto bar = Make<TabBar>();
+    root->AddChild(bar.Get());
+    bar->SetReorderable(true);
+    Tab* a = AddSizedTab(*bar, u8"A");
+    Tab* b = AddSizedTab(*bar, u8"B");
+    AddSizedTab(*bar, u8"C");
+    (void)root->UpdateLayout();
+    REQUIRE(CentreOf(*a).x > CentreOf(*b).x); // the first tab at the right
+    EventDispatcher& d = *root->GetEventDispatcher();
+    const core::Float2 start = CentreOf(*a);
+    d.InjectMouseDown(start, MouseButton::Left);
+    d.InjectMouseMove(core::Float2{start.x - 30.0f, start.y}); // short of B's midpoint
+    CHECK(bar->IndexOf(a) == 0);
+    d.InjectMouseMove(core::Float2{start.x - 90.0f, start.y}); // past it, toward the inline end
+    CHECK(bar->IndexOf(a) == 1);
+    d.InjectMouseUp(core::Float2{start.x - 90.0f, start.y}, MouseButton::Left);
+    (void)root->UpdateLayout();
+    d.InjectMouseDown(CentreOf(*a), MouseButton::Left);
+    d.InjectMouseMove(core::Float2{CentreOf(*a).x + 90.0f, start.y}); // back toward the inline start
+    CHECK(bar->IndexOf(a) == 0);
+    d.InjectMouseUp(core::Float2{CentreOf(*a).x, start.y}, MouseButton::Left);
+}
+
 TEST_CASE("tabview: a close request reaches the view, and unless taken, the page and its tab go; a drag moves the page too")
 {
     auto root = MakeRoot();

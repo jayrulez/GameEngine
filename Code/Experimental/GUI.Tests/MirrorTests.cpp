@@ -208,3 +208,39 @@ TEST_CASE("mirror: a horizontal scrollbar pressed near its right end in right to
     d.InjectMouseUp(at, MouseButton::Left);
     CHECK(bar->GetValue() < 50.0); // the right end is its start
 }
+
+TEST_CASE("mirror: a tree row is indented from the inline start, its arrow before its text")
+{
+    CheckMirrored(
+        []() -> core::RefPtr<UIWidget>
+        {
+            auto row = Make<TreeRowContent>();
+            row->GetLabel()->SetText(core::StringView(u8"Node"));
+            row->Configure(32.0f, 16.0f, true, false);
+            return row;
+        },
+        core::Float2{200.0f, 20.0f});
+}
+
+TEST_CASE("mirror: a window's grip is at its bottom left in right to left, and pulling it moves the left edge")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{800.0f, 600.0f});
+    root->SetLayoutDirection(Node::LayoutDirection::RightToLeft);
+    auto window = Make<Window>();
+    window->SetPosition(core::Float2{300.0f, 100.0f});
+    window->SetSize(core::Float2{300.0f, 200.0f});
+    root->AddChild(window.Get());
+    (void)root->UpdateLayout();
+    const core::Float2 at = window->ConvertToRootSpace(core::Float2{0.0f, 0.0f});
+    const core::Float2 grip = window->ConvertToRootSpace(core::Float2{4.0f, 196.0f}); // in its bottom-left corner
+    EventDispatcher& d = *root->GetEventDispatcher();
+    d.InjectMouseDown(grip, MouseButton::Left);
+    d.InjectMouseMove(core::Float2{grip.x - 40.0f, grip.y + 20.0f});
+    d.InjectMouseUp(core::Float2{grip.x - 40.0f, grip.y + 20.0f}, MouseButton::Left);
+    (void)root->UpdateLayout();
+    CHECK(window->GetSize().x == doctest::Approx(340.0f));
+    CHECK(window->GetSize().y == doctest::Approx(220.0f));
+    // The right edge stays where it was.
+    CHECK(window->ConvertToRootSpace(core::Float2{window->GetSize().x, 0.0f}).x == doctest::Approx(at.x + 300.0f));
+}

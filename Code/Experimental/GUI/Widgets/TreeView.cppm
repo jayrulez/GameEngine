@@ -109,10 +109,12 @@ export namespace experimental::gui
     protected:
         void OnLayout() override
         {
+            // Indented from the inline start, the arrow before the text.
             const Rect box = GetContentBounds();
-            m_arrow->Arrange(Rect{box.x + m_indent, box.y, m_arrowSize, box.height});
+            const bool rtl = IsRightToLeft();
+            m_arrow->Arrange(MirroredIn(Rect{box.x + m_indent, box.y, m_arrowSize, box.height}, box, rtl));
             const f32 textX = m_indent + m_arrowSize + 2.0f;
-            m_label->Arrange(Rect{box.x + textX, box.y, core::Max(0.0f, box.width - textX - 2.0f), box.height});
+            m_label->Arrange(MirroredIn(Rect{box.x + textX, box.y, core::Max(0.0f, box.width - textX - 2.0f), box.height}, box, rtl));
         }
         void OnTextStyleChange() override { ShareTextStyle(*m_label); }
 

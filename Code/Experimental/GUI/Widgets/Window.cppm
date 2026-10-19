@@ -135,12 +135,14 @@ export namespace experimental::gui
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
         {
             DragHandle::OnDraw(ctx, localBounds);
+            // Its lines in the corner it sits in: bottom right, bottom left in right to left.
             const Rect b = GetLocalBounds();
+            const bool rtl = IsRightToLeft();
             vg::PathBuilder lines;
             for (f32 k = 4.0f; k <= 12.0f; k += 4.0f)
             {
-                lines.MoveTo(b.x + b.width - 3.0f, b.y + b.height - 3.0f - k);
-                lines.LineTo(b.x + b.width - 3.0f - k, b.y + b.height - 3.0f);
+                lines.MoveTo(MirroredX(b.x + b.width - 3.0f, b, rtl), b.y + b.height - 3.0f - k);
+                lines.LineTo(MirroredX(b.x + b.width - 3.0f - k, b, rtl), b.y + b.height - 3.0f);
             }
             ctx.VG().StrokePath(lines.ToPath(), m_color, vg::StrokeStyle(1.2f, vg::VGLineCap::Round, vg::VGLineJoin::Round));
         }
@@ -382,11 +384,16 @@ export namespace experimental::gui
             SetPosition(core::Float2{(r.x - s.x) * 0.5f, (r.y - s.y) * 0.5f});
         }
 
+        // From its grip's corner: in right to left the grip is at its bottom left, so the left edge
+        // follows the pointer and the right stays.
         void ResizeBy(core::Float2 delta)
         {
             const core::Float2 s = GetSize();
-            SetSize(core::Float2{core::Max(m_minSize.x, s.x + delta.x),
-                                 core::Max(m_minSize.y, s.y + delta.y)});
+            const bool rtl = IsRightToLeft();
+            const f32 width = core::Max(m_minSize.x, s.x + (rtl ? -delta.x : delta.x));
+            if (rtl && width != s.x)
+                SetPosition(core::Float2{GetPosition().x + s.x - width, GetPosition().y});
+            SetSize(core::Float2{width, core::Max(m_minSize.y, s.y + delta.y)});
         }
 
         void Relayout()
@@ -394,7 +401,8 @@ export namespace experimental::gui
             const core::Float2 s = GetSize();
             m_titleBar->Arrange(Rect{0.0f, 0.0f, s.x, m_titleBarHeight});
             m_contentHost->Arrange(Rect{0.0f, m_titleBarHeight, s.x, core::Max(0.0f, s.y - m_titleBarHeight)});
-            m_resizeGrip->Arrange(Rect{s.x - m_gripSize, s.y - m_gripSize, m_gripSize, m_gripSize});
+            m_resizeGrip->Arrange(MirroredIn(Rect{s.x - m_gripSize, s.y - m_gripSize, m_gripSize, m_gripSize},
+                                             Rect{0.0f, 0.0f, s.x, s.y}, IsRightToLeft()));
             if (GetChildIndex(m_resizeGrip.Get()) + 1 != ChildCount())
                 m_resizeGrip->ToFront(); // over the content
         }

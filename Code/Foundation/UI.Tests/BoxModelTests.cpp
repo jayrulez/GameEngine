@@ -427,7 +427,10 @@ TEST_CASE("box-model: box-shadow takes a list, each drawn, the first on top")
     core::RefPtr<StyleSheet> sheet =
         LoadSSS(u8"RecordingView { box-shadow: 0 2 4 rgba(255, 0, 0, 0.5), inset 1 1 2 #0000FF80, 0 8 16 #00FF0080; }");
     REQUIRE(sheet);
-    const Span<const BoxShadow> shadows = sheet->GetRule(0).GetValue(StyleProperty::BoxShadow).Value().AsShadows();
+    // Held: GetValue returns a copy, and the span reads into it.
+    const Optional<StyleValue> value = sheet->GetRule(0).GetValue(StyleProperty::BoxShadow);
+    REQUIRE(value.HasValue());
+    const Span<const BoxShadow> shadows = value.Value().AsShadows();
     REQUIRE(shadows.Size() == 3u);
     CHECK(shadows[0].Color.r == doctest::Approx(1.0f)); // the rgba()'s commas are its own
     CHECK(shadows[1].Inset);

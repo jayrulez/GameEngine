@@ -230,11 +230,12 @@ export namespace experimental::gui
             if (!BoxFills())
                 ctx.VG().FillRect(Rectangle{localBounds.x, localBounds.y, localBounds.width, localBounds.height}, m_boxColor);
             const Rect b = GetContentBounds();
-            // Selection text (leaving room for the arrow on the right).
-            m_text.Draw(ctx, Rect{b.x, b.y, core::Max(0.0f, b.width - 16.0f), b.height});
-            // A small down-arrow at the right.
+            const bool rtl = IsRightToLeft(); // the arrow at the inline end
+            // Selection text (leaving room for the arrow).
+            m_text.Draw(ctx, MirroredIn(Rect{b.x, b.y, core::Max(0.0f, b.width - 16.0f), b.height}, b, rtl));
+            // A small down-arrow.
             const f32 aw = 8.0f, ah = 5.0f;
-            const f32 ax = b.x + b.width - aw - 4.0f;
+            const f32 ax = MirroredIn(Rect{b.x + b.width - aw - 4.0f, 0.0f, aw, 0.0f}, b, rtl).x;
             const f32 ay = b.y + (b.height - ah) * 0.5f;
             vg::PathBuilder pb;
             pb.MoveTo(ax, ay);

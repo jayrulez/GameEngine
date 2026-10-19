@@ -45,6 +45,7 @@ add_executable(GUI.Tests
     DebugOverlayTests.cpp
     TranslationTests.cpp
     DirectionTests.cpp
+    MirrorTests.cpp
     BidiTextTests.cpp
     FontFallbackTests.cpp
     FontSelectionTests.cpp

@@ -309,21 +309,23 @@ export namespace experimental::gui
             const Rect b = GetLocalBounds();
             if (IsLit())
                 GetPartStyle(u8"highlight").Draw(ctx, b, FilledBox(m_highlight));
+            const bool rtl = IsRightToLeft(); // the gutter at the inline start, the pad at the end
 
-            // Left gutter: a check mark (if checked) else an icon (if set).
+            // The gutter: a check mark (if checked) else an icon (if set).
             if (m_checkable && m_checked)
             {
-                DrawCheck(ctx, b);
+                DrawCheck(ctx, b, rtl);
             }
             else if (m_icon)
             {
                 const f32 s = core::Max(0.0f, core::Max(0.0f, kGutter - 8.0f));
-                m_icon->Draw(ctx, Rect{b.x + 4.0f, b.y + (b.height - s) * 0.5f, s, s});
+                m_icon->Draw(ctx, MirroredIn(Rect{b.x + 4.0f, b.y + (b.height - s) * 0.5f, s, s}, b, rtl));
             }
 
-            // Text + shortcut share the inner rect (opposite alignments).
-            const Rect inner{b.x + kGutter, b.y, core::Max(0.0f, b.width - kGutter - kRightPad),
-                             b.height};
+            // Text + shortcut share the inner rect (opposite alignments, which follow the direction).
+            const Rect inner = MirroredIn(Rect{b.x + kGutter, b.y, core::Max(0.0f, b.width - kGutter - kRightPad),
+                                               b.height},
+                                          b, rtl);
             if (m_mnemonicEnd > m_mnemonicStart) // its access key underlined while access keys show
             {
                 const bool shown = AreMnemonicsShown();
@@ -337,10 +339,10 @@ export namespace experimental::gui
         /// Lit: under the pointer, focused, or (a submenu item) with its submenu open.
         [[nodiscard]] virtual bool IsLit() const { return IsHovered() || IsFocused(); }
 
-        // Draw a check mark stroked inside the left gutter.
-        void DrawCheck(DrawContext& ctx, const Rect& b) const
+        // Draw a check mark stroked inside the gutter (a check is not mirrored, only placed).
+        void DrawCheck(DrawContext& ctx, const Rect& b, bool rtl) const
         {
-            const f32 cx = b.x + kGutter * 0.5f;
+            const f32 cx = MirroredX(b.x + kGutter * 0.5f, b, rtl);
             const f32 cy = b.y + b.height * 0.5f;
             vg::PathBuilder pb;
             pb.MoveTo(cx - 4.0f, cy);
@@ -349,8 +351,8 @@ export namespace experimental::gui
             ctx.VG().StrokePath(pb.ToPath(), m_checkColor, vg::StrokeStyle(1.6f));
         }
 
-        static constexpr f32 kGutter = 22.0f;   // left column (check / icon)
-        static constexpr f32 kRightPad = 14.0f; // right column (shortcut end / submenu arrow)
+        static constexpr f32 kGutter = 22.0f;   // inline-start column (check / icon)
+        static constexpr f32 kRightPad = 14.0f; // inline-end column (shortcut end / submenu arrow)
 
     private:
         Text m_text;
@@ -417,15 +419,16 @@ export namespace experimental::gui
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
         {
             MenuItem::OnDraw(ctx, localBounds);
-            // A right-pointing arrow in the right pad.
+            // An arrow in the inline-end pad, pointing toward where the submenu opens.
             const Rect b = GetLocalBounds();
+            const bool rtl = IsRightToLeft();
             const f32 aw = 5.0f, ah = 8.0f;
             const f32 ax = b.x + b.width - aw - 6.0f;
             const f32 ay = b.y + (b.height - ah) * 0.5f;
             vg::PathBuilder pb;
-            pb.MoveTo(ax, ay);
-            pb.LineTo(ax, ay + ah);
-            pb.LineTo(ax + aw, ay + ah * 0.5f);
+            pb.MoveTo(MirroredX(ax, b, rtl), ay);
+            pb.LineTo(MirroredX(ax, b, rtl), ay + ah);
+            pb.LineTo(MirroredX(ax + aw, b, rtl), ay + ah * 0.5f);
             pb.Close();
             ctx.VG().FillPath(pb.ToPath(), m_arrowColor);
         }

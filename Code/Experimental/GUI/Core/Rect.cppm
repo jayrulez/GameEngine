@@ -137,6 +137,18 @@ export namespace experimental::gui
         }
     };
 
+    /// `x` mirrored across `within` when `mirror`: a widget's own part in right to left (E17a), as
+    /// far from the right edge as it was from the left. Its shape mirrors with its points.
+    [[nodiscard]] constexpr f32 MirroredX(f32 x, const Rect& within, bool mirror) noexcept
+    {
+        return mirror ? within.x + within.Right() - x : x;
+    }
+    /// `r` mirrored across `within` when `mirror`: a part placed from the left, placed from the right.
+    [[nodiscard]] constexpr Rect MirroredIn(const Rect& r, const Rect& within, bool mirror) noexcept
+    {
+        return mirror ? Rect{within.x + within.Right() - r.Right(), r.y, r.width, r.height} : r;
+    }
+
     [[nodiscard]] constexpr bool operator==(const Rect& a, const Rect& b) noexcept
     {
         return a.x == b.x && a.y == b.y && a.width == b.width && a.height == b.height;

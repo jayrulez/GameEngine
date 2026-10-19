@@ -109,9 +109,8 @@ Gaps the phases left, by area (each phase's own notes say more):
   by taking it; the scroll band and hover delay are dispatcher settings, not styles; an OS file
   shows nothing while dragged over; the pad's d-pad moves focus during a keyboard drag inside a
   list; a tree takes a drop as a reset; a copy of a tree's own nodes is not taken.
-- **Events and the rest.** Escape closing a popup is the dispatcher's special case; click
-  thresholds are device pixels, not scaled; the stress page's turning boxes keep drawing out of
-  view (a rotation about the centre could be bounded).
+- **Events and the rest.** Escape closing a popup is the dispatcher's special case; the stress
+  page's turning boxes keep drawing out of view (a rotation about the centre could be bounded).
 
 ## The GUI lab's inspector as MCP tools: a phase of its own (user 2026-10-17)
 

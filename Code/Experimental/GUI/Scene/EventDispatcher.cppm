@@ -237,7 +237,7 @@ export namespace experimental::gui
             if (!m_panning && !m_dragActive && !m_touchDragArmed)
             {
                 const core::Float2 moved{position.x - m_pressAt.x, position.y - m_pressAt.y};
-                if (core::Abs(moved.x) > kPanSlop || core::Abs(moved.y) > kPanSlop)
+                if (core::Abs(moved.x) > Dips(kPanSlop) || core::Abs(moved.y) > Dips(kPanSlop))
                     if (Node* scroller = PanScrollerFor(moved))
                     {
                         m_panning = true;
@@ -267,7 +267,7 @@ export namespace experimental::gui
                 AddPanSample(position);
                 m_panning = false;
                 const core::Float2 v = PanVelocity();
-                if (m_panScroller != nullptr && core::Abs(v.x) + core::Abs(v.y) > kFlingMinSpeed)
+                if (m_panScroller != nullptr && core::Abs(v.x) + core::Abs(v.y) > Dips(kFlingMinSpeed))
                     m_panScroller->Fling(InNodeUnits(*m_panScroller, position, core::Float2{-v.x, -v.y}));
                 m_panScroller = nullptr;
                 UpdateHoverPath(nullptr, position);
@@ -708,7 +708,7 @@ export namespace experimental::gui
         // reason shows by the pointer. A release over the target drops; Escape, a right press, the
         // pad's East or the source leaving the tree cancels; the source is told how it ended.
 
-        /// How far a press moves before it drags (logical units; Godot's is 10, Zero's 6).
+        /// How far a press moves before it drags, in DIPs (scaled by the display; Godot's is 10, Zero's 6).
         void SetDragThreshold(f32 distance) noexcept { m_dragThreshold = core::Max(0.0f, distance); }
         [[nodiscard]] f32 GetDragThreshold() const noexcept { return m_dragThreshold; }
         /// Starts a drag from code (Godot's force_drag): `source` gives no request itself.
@@ -1153,7 +1153,7 @@ export namespace experimental::gui
         bool PointerMove(core::Float2 position, PointerType pointer, u64 id, u32 modifiers = 0)
         {
             m_mousePos = position;
-            if (m_longPressArmed && core::Abs(position.x - m_pressAt.x) + core::Abs(position.y - m_pressAt.y) > kTapSlop)
+            if (m_longPressArmed && core::Abs(position.x - m_pressAt.x) + core::Abs(position.y - m_pressAt.y) > Dips(kTapSlop))
                 m_longPressArmed = false; // the finger moved: a drag or a scroll, not a long press
             // A drag in progress: the pointer only asks where a drop would land.
             if (m_dragActive)
@@ -1164,7 +1164,7 @@ export namespace experimental::gui
             }
             // A press moved past the threshold: a drag, if a source up from the pressed node gives one.
             if (m_downNode != nullptr && !m_dragTried && (pointer == PointerType::Mouse || m_touchDragArmed) &&
-                core::Abs(position.x - m_pressAt.x) + core::Abs(position.y - m_pressAt.y) > m_dragThreshold)
+                core::Abs(position.x - m_pressAt.x) + core::Abs(position.y - m_pressAt.y) > Dips(m_dragThreshold))
                 if (TryDrag(position, modifiers, pointer))
                     return true;
             Node* hit = HitTest(position);
@@ -1422,11 +1422,13 @@ export namespace experimental::gui
         }
         // A second press of the same button near in time and place is a double click, a third a
         // triple (positions in device pixels).
+        /// `dips` in the device pixels positions come in: the root's display scale times it.
+        [[nodiscard]] f32 Dips(f32 dips) const noexcept { return dips * (m_root != nullptr ? m_root->GetPixelScale() : 1.0f); }
         void CountClick(core::Float2 position, MouseButton button, PointerType pointer)
         {
             const f32 dx = position.x - m_lastPressAt.x;
             const f32 dy = position.y - m_lastPressAt.y;
-            const f32 slop = pointer == PointerType::Touch ? kTapSlop : kClickSlop; // a finger wobbles more
+            const f32 slop = Dips(pointer == PointerType::Touch ? kTapSlop : kClickSlop); // a finger wobbles more
             const bool near = dx * dx + dy * dy <= slop * slop;
             const bool soon = m_time - m_lastPressTime <= kClickInterval;
             m_clickCount = (button == m_lastPressButton && near && soon && m_clickCount > 0) ? m_clickCount + 1 : 1;
@@ -1435,8 +1437,10 @@ export namespace experimental::gui
             m_lastPressButton = button;
         }
         static constexpr f32 kClickInterval = 0.45f; // seconds between the presses of a double click
-        static constexpr f32 kClickSlop = 6.0f;      // device pixels between them
-        static constexpr f32 kTapSlop = 24.0f;       // device pixels between two taps
+        // Lengths in DIPs, as a person's hand measures them: scaled by the display (Dips) to the
+        // device pixels positions come in (E17c; Android's touch slop is 8dp, scaled the same way).
+        static constexpr f32 kClickSlop = 6.0f;      // between the presses of a double click
+        static constexpr f32 kTapSlop = 24.0f;       // between two taps
         static constexpr f32 kStickDeadZone = 0.2f;  // a stick at rest wobbles within this
         static constexpr f32 kStickSpeed = 1400.0f;  // pixels a second, pushed all the way
 
@@ -1471,8 +1475,8 @@ export namespace experimental::gui
                 }
             }
         }
-        static constexpr f32 kPanSlop = 8.0f;        // a finger moved this far is panning, not tapping
-        static constexpr f32 kFlingMinSpeed = 60.0f; // pixels a second: slower let go just stops
+        static constexpr f32 kPanSlop = 8.0f;        // DIPs a finger moved: panning, not tapping
+        static constexpr f32 kFlingMinSpeed = 60.0f; // DIPs a second: slower let go just stops
         static constexpr f32 kPanWindow = 0.1f;      // seconds of the finger's path its speed is read over
 
         // The nearest scroller at or above where the finger went down that can move along the

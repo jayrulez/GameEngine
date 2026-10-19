@@ -522,6 +522,33 @@ TEST_CASE("scroll: a finger that stays put taps; one that moves pans, cancelling
     CHECK(clicks == 1);
 }
 
+TEST_CASE("scroll: the pan slop is in DIPs: a finger's 12-pixel wobble taps on a display of scale 2, and pans at 1")
+{
+    {
+        Scroller s(10);
+        WidenRows(s);
+        s.root->SetDisplayScale(2.0f); // device pixels twice the root's units: row 1 is 100..200 down
+        (void)s.root->UpdateLayout();
+        int clicks = 0;
+        s.rows[1]->AddEventListener(EventType::MouseClick, [&](const Event&) { ++clicks; });
+        EventDispatcher& d = s.D();
+        d.InjectTouchDown(1, core::Float2{80.0f, 140.0f});
+        d.InjectTouchMove(1, core::Float2{80.0f, 152.0f}); // 6 DIPs: within the 8
+        CHECK_FALSE(d.IsPanning());
+        d.InjectTouchUp(1, core::Float2{80.0f, 152.0f});
+        CHECK(clicks == 1);
+    }
+    {
+        Scroller s(10);
+        WidenRows(s);
+        EventDispatcher& d = s.D();
+        d.InjectTouchDown(1, core::Float2{40.0f, 70.0f});
+        d.InjectTouchMove(1, core::Float2{40.0f, 82.0f}); // 12 DIPs: past it
+        CHECK(d.IsPanning());
+        d.InjectTouchUp(1, core::Float2{40.0f, 82.0f});
+    }
+}
+
 TEST_CASE("scroll: let go moving, a pan flings on, slowing, and a new finger catches it")
 {
     Scroller s(40); // 2000 tall: room to glide

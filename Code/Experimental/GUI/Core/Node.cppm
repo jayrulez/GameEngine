@@ -2085,6 +2085,14 @@ export namespace experimental::gui
             }
             return false;
         }
+        /// Which way an arrow key goes along the line (E17a): +1 toward the inline end (Right, or
+        /// Left in right to left), -1 toward its start, 0 for any other key.
+        [[nodiscard]] i32 InlineStep(KeyCode key) const
+        {
+            if (key != KeyCode::Left && key != KeyCode::Right)
+                return 0;
+            return (key == KeyCode::Right) != IsRightToLeft() ? 1 : -1;
+        }
         /// Whether its drawing (with what it holds) flips left for right in right to left: an
         /// arrow or icon that points along the line (CSS has none; the lab's `mirror-on-rtl`).
         void SetMirrorOnRtl(bool mirror)

@@ -1478,14 +1478,11 @@ export namespace experimental::gui
         case KeyCode::Up: target = current < 0 ? 0 : current - across >= 0 ? current - across : current; break;
         case KeyCode::Down: target = current < 0 ? 0 : current + across < items ? current + across : current; break;
         case KeyCode::Left:
-            if (!grid)
-                return;
-            target = current <= 0 ? 0 : current - 1;
-            break;
         case KeyCode::Right:
+            // Along a grid's rows as they run: toward the inline end is the next item.
             if (!grid)
                 return;
-            target = current < 0 ? 0 : core::Min(items - 1, current + 1);
+            target = InlineStep(key) < 0 ? (current <= 0 ? 0 : current - 1) : (current < 0 ? 0 : core::Min(items - 1, current + 1));
             break;
         case KeyCode::Home: target = 0; break;
         case KeyCode::End: target = items - 1; break;

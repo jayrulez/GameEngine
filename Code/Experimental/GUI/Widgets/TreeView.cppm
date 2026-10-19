@@ -254,15 +254,16 @@ export namespace experimental::gui
             row.Configure(static_cast<f32>(entry.Depth) * m_indentWidth, m_arrowSize, entry.HasChildren, m_expanded.Contains(entry.Id));
         }
 
-        // Right opens a node, or on an open one goes to its first child; Left closes an open one,
-        // or goes to its parent.
+        // The arrow toward the inline end (Right, Left in right to left) opens a node, or on an open
+        // one goes to its first child; toward the start closes an open one, or goes to its parent.
         bool OnExtraKey(KeyCode key, u32 modifiers) override
         {
             const i32 item = GetCurrentItem();
             if (modifiers != 0 || item < 0 || item >= static_cast<i32>(m_flat.Size()))
                 return false;
             const FlatEntry& entry = m_flat[static_cast<usize>(item)];
-            if (key == KeyCode::Right && entry.HasChildren)
+            const i32 along = InlineStep(key);
+            if (along > 0 && entry.HasChildren)
             {
                 if (!IsItemExpanded(item))
                     ExpandItem(item);
@@ -273,7 +274,7 @@ export namespace experimental::gui
                 }
                 return true;
             }
-            if (key == KeyCode::Left)
+            if (along < 0)
             {
                 if (entry.HasChildren && IsItemExpanded(item))
                 {

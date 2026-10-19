@@ -387,12 +387,21 @@ export namespace experimental::gui
         MenuSubItem()
         {
             SetTag(core::StringView(u8"menusubmenu"));
-            // Right (menu.right in the menu key context, E12) opens it and goes in.
+            // The arrow toward where its submenu opens, the inline end (menu.right in the menu key
+            // context, E12, or menu.left in right to left), opens it and goes in.
             MenuSubItem* self = this;
-            (void)OnCommand(core::StringView(kMenuRightCommand), [self](CommandEvent&) { (void)self->OnActivate(); });
+            (void)OnCommand(core::StringView(kMenuRightCommand), [self](CommandEvent& e) { self->Across(true, e); });
+            (void)OnCommand(core::StringView(kMenuLeftCommand), [self](CommandEvent& e) { self->Across(false, e); });
         }
 
         void SetSubMenu(Menu* menu) noexcept { m_subMenu = menu; }
+        void Across(bool right, CommandEvent& e)
+        {
+            if (right != IsRightToLeft())
+                (void)OnActivate();
+            else
+                e.Propagate = true;
+        }
         [[nodiscard]] Menu* GetSubMenu() const noexcept { return m_subMenu; }
 
         // The menu installs this to open the submenu; true from the keys (its first item then takes focus).
@@ -530,16 +539,18 @@ export namespace experimental::gui
             Menu* self = this;
             (void)OnCommand(core::StringView(kMenuDownCommand), [self](CommandEvent&) { self->Step(1); });
             (void)OnCommand(core::StringView(kMenuUpCommand), [self](CommandEvent&) { self->Step(-1); });
-            // Left in a submenu closes it, focus going back to its item; in a menu of a bar, on to
-            // the bar (which moves along it).
-            (void)OnCommand(core::StringView(kMenuLeftCommand), [self](CommandEvent& e)
-                            {
-                                if (core::Cast<MenuSubItem>(self->GetParent()) != nullptr)
-                                    self->Close();
-                                else
-                                    e.Propagate = true;
-                            });
-            (void)OnCommand(core::StringView(kMenuRightCommand), [](CommandEvent& e) { e.Propagate = true; });
+            // The arrow toward the inline start (Left, Right in right to left) in a submenu closes it,
+            // focus going back to its item; in a menu of a bar, either goes on to the bar (which
+            // moves along it).
+            const auto across = [self](bool right, CommandEvent& e)
+            {
+                if (right == self->IsRightToLeft() && core::Cast<MenuSubItem>(self->GetParent()) != nullptr)
+                    self->Close();
+                else
+                    e.Propagate = true;
+            };
+            (void)OnCommand(core::StringView(kMenuLeftCommand), [across](CommandEvent& e) { across(false, e); });
+            (void)OnCommand(core::StringView(kMenuRightCommand), [across](CommandEvent& e) { across(true, e); });
             SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_panelColor));
             // Taller than the window, its items scroll (E16): the wheel turns them.
             (void)AddEventListener(EventType::MouseWheel, [self](const Event& e)

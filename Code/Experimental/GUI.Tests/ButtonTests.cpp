@@ -250,6 +250,22 @@ TEST_CASE("button: the arrows move round an exclusive group, checking as they go
     CHECK_FALSE(lone->IsChecked());
 }
 
+TEST_CASE("button: in right to left Left moves on through an exclusive group and Right back")
+{
+    auto root = MakeRoot();
+    root->SetLayoutDirection(Node::LayoutDirection::RightToLeft);
+    auto r0 = Place<RadioButton>(*root, core::Float2{0.0f, 0.0f});
+    auto r1 = Place<RadioButton>(*root, core::Float2{0.0f, 40.0f});
+    r0->SetName(core::String(u8"g"));
+    r1->SetName(core::String(u8"g"));
+    EventDispatcher* d = root->GetEventDispatcher();
+    r0->RequestFocus();
+    d->InjectKeyDown(static_cast<core::u32>(KeyCode::Left));
+    CHECK(r1->IsChecked());
+    d->InjectKeyDown(static_cast<core::u32>(KeyCode::Right));
+    CHECK(r0->IsChecked());
+}
+
 TEST_CASE("button: its text and icon are parts after its indicator, in its text style")
 {
     auto b = Make<Button>();

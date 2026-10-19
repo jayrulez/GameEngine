@@ -388,7 +388,8 @@ export namespace experimental::gui
             if (event.Modifiers != 0 || !m_toggle)
                 return;
             const KeyCode key = static_cast<KeyCode>(event.KeyCode);
-            const i32 step = (key == KeyCode::Down || key == KeyCode::Right) ? 1 : (key == KeyCode::Up || key == KeyCode::Left) ? -1 : 0;
+            // Down and the arrow toward the inline end go on; Up and toward the start go back.
+            const i32 step = key == KeyCode::Down ? 1 : key == KeyCode::Up ? -1 : InlineStep(key);
             if (step == 0)
                 return;
             core::Array<ButtonBase*> group;

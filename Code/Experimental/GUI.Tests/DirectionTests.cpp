@@ -290,3 +290,43 @@ TEST_CASE("direction: a right-to-left menu bar's Left goes on to the next menu")
     d.InjectKeyDown(static_cast<core::u32>(KeyCode::Right));
     CHECK(bar->ButtonAt(0)->IsFocused());
 }
+
+TEST_CASE("direction: the arrow toward the inline end is a step on, the other a step back")
+{
+    Bed bed;
+    auto part = core::MakeRef<UIWidget>(core::DefaultAllocator());
+    bed.root->AddChild(part.Get());
+    CHECK(part->InlineStep(KeyCode::Right) == 1);
+    CHECK(part->InlineStep(KeyCode::Left) == -1);
+    CHECK(part->InlineStep(KeyCode::Up) == 0);
+    part->SetLayoutDirection(Node::LayoutDirection::RightToLeft);
+    CHECK(part->InlineStep(KeyCode::Left) == 1);
+    CHECK(part->InlineStep(KeyCode::Right) == -1);
+}
+
+TEST_CASE("direction: a right-to-left submenu opens to the left; Left goes into it and Right comes back")
+{
+    Bed bed;
+    bed.root->SetSize(core::Float2{600.0f, 400.0f});
+    bed.root->SetLayoutDirection(Node::LayoutDirection::RightToLeft);
+    auto anchor = core::MakeRef<UIWidget>(core::DefaultAllocator());
+    bed.root->AddChild(anchor.Get());
+    auto menu = core::MakeRef<Menu>(core::DefaultAllocator());
+    menu->SetWidth(160.0f);
+    menu->SetItemHeight(26.0f);
+    Menu* sub = menu->AddSubMenu(SV(u8"More"));
+    sub->AddItem(SV(u8"Deep"), [] {});
+    menu->Open(*anchor, core::Float2{400.0f, 50.0f});
+    bed.Layout();
+    // A context menu at a point opens toward the left of it.
+    CHECK(menu->ConvertToRootSpace(core::Float2{0.0f, 0.0f}).x == doctest::Approx(240.0f));
+    EventDispatcher& d = *bed.root->GetEventDispatcher();
+    menu->FocusFirstItem();
+    d.InjectKeyDown(static_cast<core::u32>(KeyCode::Left));
+    REQUIRE(sub->IsOpen());
+    bed.Layout();
+    // At its item's inline end: the menu's left edge.
+    CHECK(sub->ConvertToRootSpace(core::Float2{sub->GetSize().x, 0.0f}).x == doctest::Approx(240.0f));
+    d.InjectKeyDown(static_cast<core::u32>(KeyCode::Right));
+    CHECK_FALSE(sub->IsOpen());
+}

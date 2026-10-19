@@ -504,6 +504,24 @@ TEST_CASE("itemview: a grid lays cells across then down, stretched to fill; the 
     CHECK(m.list->GetLayoutModeName() == SV(u8"grid"));
 }
 
+TEST_CASE("itemview: in right to left a grid's Left goes on to the next cell and Right back")
+{
+    StringListModel model(Numbered(50));
+    Mounted m = MountList(model, 20.0f, 100.0f);
+    m.root->SetLayoutDirection(Node::LayoutDirection::RightToLeft);
+    m.list->SetLayoutMode(ItemLayout::Grid);
+    m.list->SetCellWidth(60.0f);
+    m.list->SetCellHeight(40.0f);
+    m.Layout();
+    m.list->RequestFocus();
+    m.list->SetSelectedItem(4);
+    m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Left));
+    CHECK(m.list->GetSelectedItem() == 5);
+    m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Right));
+    m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Right));
+    CHECK(m.list->GetSelectedItem() == 3);
+}
+
 TEST_CASE("itemview: a template's root fills its row or a grid's cell, inside its margin")
 {
     RegisterGuiElements();

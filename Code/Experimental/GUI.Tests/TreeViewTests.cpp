@@ -141,3 +141,20 @@ TEST_CASE("tree-view: keyboard Right expands and Left collapses the selection")
     CHECK(tree->VisibleRowCount() == 2);
     CHECK_FALSE(tree->IsItemExpanded(0));
 }
+TEST_CASE("tree-view: in right to left Left expands and Right collapses, toward the way it is indented")
+{
+    Tree t;
+    core::RefPtr<SceneRoot> root;
+    auto tree = MountTree(root, &t.model);
+    root->SetLayoutDirection(Node::LayoutDirection::RightToLeft);
+    EventDispatcher* d = root->GetEventDispatcher();
+    tree->RequestFocus();
+
+    tree->SetSelectedItem(0);
+    const auto key = [](KeyCode k) { return static_cast<core::u32>(k); };
+    d->InjectKeyDown(key(KeyCode::Left)); // toward the inline end: expand
+    CHECK(tree->IsItemExpanded(0));
+    d->InjectKeyDown(key(KeyCode::Right)); // toward the start: collapse
+    CHECK_FALSE(tree->IsItemExpanded(0));
+}
+

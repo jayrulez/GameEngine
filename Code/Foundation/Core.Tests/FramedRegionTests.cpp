@@ -171,3 +171,21 @@ TEST_CASE("framed-region (binary): RawRemainder without an active frame is unsup
     Array<u8> blob;
     CHECK_FALSE(ar.RawRemainder(blob)); // no frame -> false (caller drops the section with a warning)
 }
+
+// A frame length read out of another layout is garbage: it used to be allocated whole (up to 4 GB)
+// before the short read failed.
+TEST_CASE("framed-region (binary): a frame longer than the data left fails without reading it")
+{
+    MemoryStream stream;
+    {
+        BinaryWriter writer(stream);
+        writer.Write(u32{0x7FFFFFF0});
+        writer.Write(u32{123});
+    }
+    REQUIRE(stream.Seek(0, SeekOrigin::Begin) == 0);
+    BinarySerializer ar(stream, SerializeMode::Read);
+    ar.BeginFramedRegion();
+    CHECK_FALSE(ar.IsOk());
+    CHECK(stream.Tell() == 4); // the length, and nothing after it
+    ar.EndFramedRegion();
+}

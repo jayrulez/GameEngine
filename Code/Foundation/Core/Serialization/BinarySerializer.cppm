@@ -119,6 +119,13 @@ export namespace foundation::core
                     Fail(ErrorCode::Internal);
                     length = 0;
                 }
+                // A length the bytes left cannot hold is a misread, not a frame: fail and read none,
+                // rather than allocate it (up to 4 GB) before the short read says so.
+                if (length > 0 && !m_reader.Holds(length))
+                {
+                    Fail(ErrorCode::Internal);
+                    length = 0;
+                }
                 if (length > 0)
                 {
                     Array<u8> tmp;

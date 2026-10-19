@@ -494,6 +494,58 @@ Design:
 
 Tests: the Arabic sweep; item counts in the accessibility tree; gestures from scripted fingers.
 
+Surveyed and planned (2026-10-19), on the lab as it stands and on Godot, eepp, RmlUi, aui, gpui
+and foundation.ui:
+
+- **Direction.** The direction model, the layouts and text already follow it; of the widgets only
+  Slider, the tab bar's keys, MenuBar and the scroller's bar side read it. Parts placed by hand do
+  not (the menu's gutter and submenu arrow, the combo box's arrow, the progress fill, the
+  horizontal scrollbar, the number field's buttons, the tree's indent, chevrons and keys, the
+  table's columns, the grid's cells, the toggle's knob, the radio keys, the window's grip, the tab
+  bar's drag), and popup placement is physical, so menus, combo boxes, context menus and tooltips
+  open as in left to right. The plan, one place per concern: popup sides and the start alignment
+  logical, resolved in `PlacePopups` against the anchor's direction; a `Node::InlineRect` for every
+  part placed by hand, the theme mirroring the directional glyphs (`mirror-on-rtl`); an
+  `InlineStep` for the arrow keys; scrollers starting at their inline start (the ruling below); the
+  sweep in Arabic as its own test, and a mirror audit laying each page out both ways.
+- **Accessibility.** Item views expose the rows they have made, with no item role, in the order the
+  rows were made, under ids that pass from item to item as rows recycle; the focus stays on the
+  view, so the narrator reads the list's name; finding an item by its id scans the rows. The plan
+  (eepp's model, the nearest to the lab's): item nodes from the model under ids that follow the
+  item, in item order, roles `listitem`, `treeitem` and `row`; set size, position, level, row and
+  column counts and an off-screen state on the node; bounds for made rows only; the focus the
+  current item; focus and scroll-into-view actions making the row; an item found by its id in
+  constant time.
+- **Touch.** The dispatcher follows one finger (a test asserts a second is ignored); every
+  threshold is in device pixels (the 0.2 backlog's note); SDL's trackpad pinch and finger cancel
+  reach the shell and are dropped, and the sandbox's polled touch follows the first finger. The
+  plan (Safari's and aui's model): one recognizer in the dispatcher making one gesture of scale,
+  rotation and translation (deltas and totals, about a focal point), as `gesturestart`,
+  `gesturechange`, `gestureend` and `gesturecancel` on the event route and in both script
+  languages; the slop 8 DIP times the display scale, and every click, tap, pan, drag and fling
+  threshold in DIPs with it; the trackpad's pinch into the same events, a finger cancel ending a
+  gesture, the trackpad's fingers no longer taken for a touchscreen, the polled path following
+  every finger.
+
+Rulings (user, 2026-10-19):
+
+1. A right-to-left scroller uses CSS's signed offset: 0 at the inline start, negative toward the
+   left, clamped to [-range, 0]; the thumb, scrolling to the end and the wheel follow the inline
+   end.
+2. Item nodes for a window, not every item: the made rows and about a page around them, the current
+   item and the selected ones, each with its set size and position, so a reader counts every item
+   and reaches any of them by the keys or the actions. "Every item has a node" above reads "a
+   reader can count and reach every item".
+3. Gestures are claimed by `touch-action`, as CSS has it: a node names what the lab may still do
+   itself (`auto`, `none`, `pan-x`, `pan-y`, `pinch-zoom`, `manipulation`), the value in force the
+   intersection of the node's and its ancestors', and what it leaves out comes to it as gesture
+   events from the gesture's start. Nothing looks pressed and then cancels; a node takes gestures
+   only by saying so.
+
+Order: E17a, E17c, E17b (the last widens the accessibility model most). Screens: the settings
+screen in Arabic; an image viewer pinched, turned and panned; `--narrate` on the Data views page
+reading an item's position among them all.
+
 ## Not taken in this round
 
 - **Engine hosting** (a scene component, reference-resolution scaling, world-space canvases): not in

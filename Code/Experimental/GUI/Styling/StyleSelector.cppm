@@ -160,6 +160,9 @@ export namespace experimental::gui
         void ForEachNested(F&& f) const;
 
         [[nodiscard]] bool Matches(const UIWidget& element, bool applyPseudo = true) const;
+        /// Whether its tag, id, classes and attributes match `element`: it matches there in some
+        /// position and state (its pseudo-classes and nested selectors are not asked).
+        [[nodiscard]] bool MatchesIdentity(const UIWidget& element) const;
 
     private:
         void Parse(core::StringView fragment);
@@ -256,6 +259,38 @@ export namespace experimental::gui
                     return true;
             }
             return false;
+        }
+
+        /// Calls `f(compound)` for each compound that reads siblings with a child or descendant step
+        /// below it (`.row:first-child` in `.row:first-child .label`; both of `.a + .b` in
+        /// `.a + .b .c`), nested selectors included: a rearrangement of a parent's children can then
+        /// change what matches inside a child that compound matches, not only the child. Read at the
+        /// subject alone (`li:nth-child(odd)`, `.a + .b`), it changes the children only.
+        template <typename F>
+        void ForEachSiblingReadAbove(F&& f) const
+        {
+            const usize n = m_rules.Size();
+            const auto bySibling = [](Combinator c) { return c == Combinator::Adjacent || c == Combinator::Sibling; };
+            for (usize i = 0; i < n; ++i)
+            {
+                const StyleSelectorRule& rule = m_rules[i];
+                bool nested = false;
+                rule.ForEachNested([&](const StyleSelector& s)
+                {
+                    nested = nested || s.ReadsSiblings();
+                    s.ForEachSiblingReadAbove(f);
+                });
+                const bool reads = rule.ReadsPosition() || nested || (i > 0 && bySibling(rule.GetCombinator())) ||
+                                   (i + 1 < n && bySibling(m_rules[i + 1].GetCombinator()));
+                if (!reads)
+                    continue;
+                for (usize j = i + 1; j < n; ++j)
+                    if (!bySibling(m_rules[j].GetCombinator()))
+                    {
+                        f(rule);
+                        break;
+                    }
+            }
         }
 
         /// A comma-separated list split at its top level (commas inside parentheses, brackets or
@@ -738,6 +773,23 @@ export namespace experimental::gui
         : m_combinator(combinator)
     {
         Parse(fragment);
+    }
+
+    inline bool StyleSelectorRule::MatchesIdentity(const UIWidget& element) const
+    {
+        if (m_never)
+            return false;
+        if (m_tag.AsView().Size() != 0 && m_tag != element.GetTag())
+            return false;
+        if (m_id.AsView().Size() != 0 && m_id != element.GetId())
+            return false;
+        for (const core::String& cls : m_classes)
+            if (!element.HasClass(cls.AsView()))
+                return false;
+        for (const AttributeTest& test : m_attributes)
+            if (!detail::AttributeMatches(test, element))
+                return false;
+        return true;
     }
 
     inline bool StyleSelectorRule::Matches(const UIWidget& element, bool applyPseudo) const

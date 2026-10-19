@@ -185,6 +185,56 @@ TEST_CASE("incremental: a state restyles the subtree, or the later siblings, onl
     CHECK(run(u8"label:not(:hover) { opacity: 0.5; }") == 1u);             // a subject's own state
 }
 
+// A popup, tooltip or window joining the root rearranges its children. Restyling each child's
+// whole subtree for it restyled the whole page each time (a second in Debug); a child's subtree
+// restyles only when a rule reads siblings in a compound that child can match, with a step below.
+TEST_CASE("incremental: a child joining restyles its siblings, and what they hold only when a rule reads siblings there")
+{
+    struct Run
+    {
+        core::u32 restyled = 0;
+        core::f32 oldLastLabel = 0.0f;
+        core::f32 newLabel = 0.0f;
+    };
+    const auto run = [](const char8_t* css)
+    {
+        auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+        root->SetSize(core::Float2{400.0f, 400.0f});
+        auto list = Widget(u8"panel");
+        root->AddChild(list.Get());
+        core::Array<core::RefPtr<UIWidget>> labels;
+        const auto row = [&](const char8_t* tag)
+        {
+            auto r = Widget(tag);
+            for (int i = 0; i < (tag == core::StringView(u8"row") ? 1 : 2); ++i)
+            {
+                auto label = Widget(u8"label");
+                r->AddChild(label.Get());
+                labels.PushBack(label);
+            }
+            list->AddChild(r.Get());
+            return r;
+        };
+        row(u8"other");
+        for (int i = 0; i < 3; ++i)
+            row(u8"row");
+        StyleManager styles(CSSParser::Parse(SV(css)));
+        Frame(*root.Get(), styles);
+        const core::RefPtr<UIWidget> oldLast = labels.Back();
+        row(u8"row");
+        Frame(*root.Get(), styles);
+        return Run{static_cast<core::u32>(styles.LastRestyleCount()), oldLast->GetAlpha(), labels.Back()->GetAlpha()};
+    };
+    CHECK(run(u8"label { opacity: 0.9; }").restyled == 3u);         // the list (its children changed), the new row, its label
+    CHECK(run(u8"row:last-child { opacity: 0.5; }").restyled == 7u); // and the four children before it themselves
+    const Run through = run(u8"row:last-child label { opacity: 0.5; }");
+    CHECK(through.restyled == 10u); // and the old rows' labels; not the other's two
+    CHECK(through.oldLastLabel == doctest::Approx(1.0f));
+    CHECK(through.newLabel == doctest::Approx(0.5f));
+    CHECK(run(u8"row + row label { opacity: 0.5; }").restyled == 10u);
+    CHECK(run(u8":first-child label { opacity: 0.5; }").restyled == 12u); // a compound any child matches
+}
+
 TEST_CASE("incremental: a sheet change restyles everything once")
 {
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));

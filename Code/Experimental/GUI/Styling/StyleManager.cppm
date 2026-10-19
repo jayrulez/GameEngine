@@ -250,7 +250,9 @@ export namespace experimental::gui
             const bool self = forceSubtree || forceSelf || node.IsStyleDirty();
             const bool subtree = forceSubtree || node.IsStyleSubtreeDirty() || (states & m_ancestorStates) != 0;
             // Its children came, went or moved: when a sheet reads siblings, each may match
-            // differently (with what it holds); else only the new ones restyle (marked so).
+            // differently, and what each holds only when a rule reads them through an ancestor;
+            // else only the new ones restyle (marked so). (Restyling every child's subtree made each
+            // popup or tooltip joining the root restyle the whole page: a second in Debug.)
             const bool rearranged = m_readsSiblings && node.ChildrenArrangementChanged();
             bool descend = subtree || rearranged || node.HasStyleDirtyDescendant();
             const bool moved = node.IsStyleMotionDirty();
@@ -278,9 +280,22 @@ export namespace experimental::gui
                 m_ancestors.Push(*above);
             for (usize i = 0; i < node.ChildCount(); ++i)
                 if (Node* child = node.GetChildAt(i))
-                    Visit(*child, subtree || rearranged, customsChanged);
+                    Visit(*child, subtree || (rearranged && HoldsSiblingReads(*child)), customsChanged || rearranged);
             if (above != nullptr)
                 m_ancestors.Pop();
+        }
+
+        // Whether a rearrangement of `child`'s siblings can change what matches inside it: a rule
+        // reads siblings in a compound `child` could match, with a step below it.
+        [[nodiscard]] bool HoldsSiblingReads(const Node& child) const
+        {
+            const UIWidget* widget = core::Cast<UIWidget>(&child);
+            if (widget == nullptr)
+                return !m_siblingReadsAbove.IsEmpty();
+            for (const StyleSelectorRule& compound : m_siblingReadsAbove)
+                if (compound.MatchesIdentity(*widget))
+                    return true;
+            return false;
         }
 
         [[nodiscard]] static bool SameCustomProperties(const ResolvedStyle& a, const ResolvedStyle& b)
@@ -811,12 +826,14 @@ export namespace experimental::gui
             m_ancestorStates = 0;
             m_siblingStates = 0;
             m_readsSiblings = false;
+            m_siblingReadsAbove.Clear();
             const auto learn = [&](const StyleSheet& sheet)
             {
                 for (const StyleRule& rule : sheet.Rules())
                 {
                     rule.Selector().CollectRelationStates(m_ancestorStates, m_siblingStates);
                     m_readsSiblings = m_readsSiblings || rule.Selector().ReadsSiblings();
+                    rule.Selector().ForEachSiblingReadAbove([&](const StyleSelectorRule& compound) { m_siblingReadsAbove.PushBack(compound); });
                 }
             };
             learn(m_userAgent);
@@ -886,6 +903,7 @@ export namespace experimental::gui
         u32 m_siblingStates = 0;  // states a rule reads through an earlier sibling: a change restyles the later siblings
         u32 m_lastRestyleCount = 0;
         bool m_readsSiblings = false; // some rule reads siblings: a rearrangement restyles them
+        Array<StyleSelectorRule> m_siblingReadsAbove; // compounds reading siblings with a step below: what such a child holds restyles too
         AncestorFilter m_ancestors; // the names above the widget ApplyTree's walk is at
         bool m_filtering = false;   // inside that walk (a widget styled any other way has no filter)
     };

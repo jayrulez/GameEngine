@@ -813,7 +813,6 @@ namespace
         REQUIRE(window != nullptr);
         REQUIRE(menu != nullptr);
         REQUIRE(panel != nullptr);
-        const RefPtr<gui::Node> keepMenu(menu), keepPanel(panel); // a closed popup leaves its tree
         CHECK(window->IsOpen());
         CHECK(window->GetTitle() == StringView(u8"Settings"));
 
@@ -825,11 +824,23 @@ namespace
         bed.Click(item->ConvertToWorldSpace(Float2{item->GetSize().x * 0.5f, item->GetSize().y * 0.5f}));
         CHECK(bed.Number(u8"pickedOpen") == doctest::Approx(1.0));
         CHECK_FALSE(menu->IsOpen());
+        // Closed, the script's menu went back where it waits (nothing else keeps it), unseen there,
+        // and opens again.
+        CHECK(menu->GetParent() != nullptr);
+        CHECK_FALSE(menu->IsDisplayed());
+        bed.Run(u8"openMenu");
+        CHECK(menu->IsOpen());
+        (void)d.InjectKeyDown(static_cast<u32>(gui::KeyCode::Escape));
+        CHECK_FALSE(menu->IsOpen());
 
         bed.Run(u8"openPanel");
         CHECK(d.IsPopupOpen(*panel));
         bed.Run(u8"closePanel");
         CHECK_FALSE(d.IsPopupOpen(*panel));
+        CHECK(panel->GetParent() == bed.root.Get()); // back where it stood
+        bed.Run(u8"openPanel");
+        CHECK(d.IsPopupOpen(*panel));
+        bed.Run(u8"closePanel");
 
         bed.Run(u8"closeWindow");
         CHECK_FALSE(window->IsOpen());

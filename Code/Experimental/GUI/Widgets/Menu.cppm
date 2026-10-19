@@ -725,7 +725,12 @@ export namespace experimental::gui
             Node* owner = GetParent() != nullptr ? GetParent() : GetRootNode();
             if (owner == nullptr || owner == this)
                 return false;
-            Open(*owner, core::Float2{x, y});
+            PopupOptions options;
+            options.AnchorRect = Rect{x, y, 0.0f, 0.0f};
+            options.HasAnchorRect = true;
+            options.TakesFocus = true;
+            options.ReturnHome = true; // a script's menu: back where it waits, to open again
+            OpenAs(*owner, core::Move(options));
             return IsOpen();
         }
         /// Opens it below `anchor` (a node's handle), as that node's popup; whether it opened.
@@ -733,7 +738,14 @@ export namespace experimental::gui
         {
             Node* node = Node::FromHandle(anchor);
             if (node != nullptr)
-                OpenBelow(*node, *node);
+            {
+                PopupOptions options;
+                options.Anchor = node;
+                options.Placement = PopupPlacement{PopupSide::Below, PopupAlign::Start, 0.0f, true};
+                options.TakesFocus = true;
+                options.ReturnHome = true; // a script's menu: back where it waits, to open again
+                OpenAs(*node, core::Move(options));
+            }
             return core::Variant::From<bool>(node != nullptr && IsOpen());
         }
 
@@ -937,6 +949,7 @@ export namespace experimental::gui
             Menu* self = this;
             options.OnClosed = [self](PopupCloseReason reason)
             {
+                self->SetDisplayed(false); // one gone back to where it waits is unseen there
                 if (self->m_onClosed)
                     self->m_onClosed(reason);
             };

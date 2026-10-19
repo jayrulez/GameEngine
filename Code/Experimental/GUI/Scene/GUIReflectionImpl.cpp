@@ -580,6 +580,7 @@ namespace experimental::gui
         options.Placement = PopupPlacement{PopupSide::Below, PopupAlign::Start, 0.0f, true};
         options.TakesFocus = true;
         options.FitContent = true;
+        options.ReturnHome = true; // a script's popup: back where it stood, to open again
         dispatcher->OpenPopup(*this, *node, core::Move(options));
         return core::Variant::From<bool>(dispatcher->IsPopupOpen(*node));
     }

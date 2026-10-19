@@ -62,6 +62,9 @@ export namespace experimental::gui
         bool FitContent = false;
         /// The pointer passes through it to what is below (a drag's preview).
         bool PassesPointer = false;
+        /// Closed, it goes back where it stood before it opened, rather than leaving the tree (a
+        /// script's own popup or menu: nothing else keeps it, so leaving would free it). E16.
+        bool ReturnHome = false;
         /// Told when it closes, and why (after the `toggle` event).
         core::Function<void(PopupCloseReason)> OnClosed;
     };
@@ -829,6 +832,12 @@ export namespace experimental::gui
                         ClosePopupAt(i, PopupCloseReason::Replaced);
                 }
             }
+            PopupEntry entry;
+            if (options.ReturnHome && popup.GetParent() != nullptr)
+            {
+                entry.Home = core::RefPtr<Node>(popup.GetParent());
+                entry.HomeIndex = popup.GetParent()->GetChildIndex(&popup);
+            }
             if (popup.GetParent() != &owner)
             {
                 // Held across the move: its old parent may hold the only reference (a dialog
@@ -837,7 +846,6 @@ export namespace experimental::gui
                 popup.RemoveFromParent();
                 owner.AddChild(&popup);
             }
-            PopupEntry entry;
             entry.Popup = core::RefPtr<Node>(&popup);
             entry.Size = popup.GetSize();
             const bool focusing = (options.TakesFocus || options.Modal) && options.Kind != PopupKind::Hint;
@@ -1903,6 +1911,8 @@ export namespace experimental::gui
             mutable core::Float2 Size{0.0f, 0.0f}; // its own size, which placement shrinks from
             Array<Node::ElementRef> SavedFocus;  // the focus it took, then the nodes holding it
             NavScope ScopeBefore = NavScope::None;
+            core::RefPtr<Node> Home; // where it goes back to when it closes (ReturnHome)
+            usize HomeIndex = 0;
         };
         Array<PopupEntry> m_popups; // the top layer, bottom first
         bool m_swallowing = false;  // a press that closed a popup: its release is consumed too
@@ -2133,6 +2143,8 @@ export namespace experimental::gui
             const bool focusInside = m_focusNode == nullptr || IsInSubtree(m_focusNode, popup.Get());
             Demote(*popup, entry);
             popup->RemoveFromParent(); // a closed popup leaves the tree; its owner keeps it
+            if (entry.Home) // or it goes back where it stood (ReturnHome)
+                (void)entry.Home->AddChildAt(popup.Get(), core::Min(entry.HomeIndex, entry.Home->ChildCount()));
             if (focusInside && !entry.SavedFocus.IsEmpty())
                 RestoreFocus(entry, nullptr);
             if (entry.Options.OnClosed)

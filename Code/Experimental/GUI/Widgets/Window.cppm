@@ -276,6 +276,26 @@ export namespace experimental::gui
         }
 
         [[nodiscard]] bool IsOpen() const noexcept { return m_open; }
+
+        // === The script surface (E16; reflected in GUIReflectionImpl.cpp) ===
+        /// Opens it where it is, over what holds it (a window a script added to a page); false in none.
+        bool OpenInPlace()
+        {
+            Node* parent = GetParent();
+            if (parent == nullptr)
+                return false;
+            Open(*parent);
+            return true;
+        }
+        /// Opens it as a modal window over the GUI it is in; false in none.
+        bool OpenModalOver()
+        {
+            Node* root = GetRootNode();
+            if (root == nullptr || root == this)
+                return false;
+            OpenModal(*root);
+            return true;
+        }
         [[nodiscard]] bool IsModal() const noexcept { return m_modal; }
 
         // Theming parts: window::title (header bar) / ::grip (resize handle).
@@ -351,6 +371,7 @@ export namespace experimental::gui
             OnWindowClosed();
             if (m_onClose)
                 m_onClose();
+            SendEvent(Event(EventType::Close, this)); // a script's on("close")
         }
 
         void CenterIn(Node& root)

@@ -783,3 +783,125 @@ TEST_CASE("gui-script: Luau turns listeners off, from inside one too (E16)")
     CheckOff(bed);
 }
 #endif
+
+namespace
+{
+    // Windows, menus and popups from a script (E16): under the root, a Window opened in place
+    // (listened to for `close`), a Menu with one item "open" (its `activate` listened to), a Button
+    // and a Panel; `openMenu` opens the menu at (20, 20), `openPanel` the panel as the button's
+    // popup (an open auto popup closes another, so one at a time).
+    template <typename T>
+    T* FindIn(gui::Node& node)
+    {
+        if (T* found = Cast<T>(&node))
+            return found;
+        for (usize i = 0; i < node.ChildCount(); ++i)
+            if (T* found = FindIn<T>(*node.GetChildAt(i)))
+                return found;
+        return nullptr;
+    }
+
+    void CheckOverlays(GuiBed& bed)
+    {
+        REQUIRE(bed.errors.count == 0);
+        (void)bed.root->UpdateLayout();
+        gui::EventDispatcher& d = *bed.root->GetEventDispatcher();
+        gui::Window* window = FindIn<gui::Window>(*bed.root);
+        gui::Menu* menu = FindIn<gui::Menu>(*bed.root);
+        gui::Panel* panel = FindIn<gui::Panel>(*bed.root);
+        REQUIRE(window != nullptr);
+        REQUIRE(menu != nullptr);
+        REQUIRE(panel != nullptr);
+        const RefPtr<gui::Node> keepMenu(menu), keepPanel(panel); // a closed popup leaves its tree
+        CHECK(window->IsOpen());
+        CHECK(window->GetTitle() == StringView(u8"Settings"));
+
+        bed.Run(u8"openMenu");
+        CHECK(menu->IsOpen());
+        (void)bed.root->UpdateLayout();
+        gui::Node* item = menu->GetChildAt(0);
+        REQUIRE(item != nullptr);
+        bed.Click(item->ConvertToWorldSpace(Float2{item->GetSize().x * 0.5f, item->GetSize().y * 0.5f}));
+        CHECK(bed.Number(u8"pickedOpen") == doctest::Approx(1.0));
+        CHECK_FALSE(menu->IsOpen());
+
+        bed.Run(u8"openPanel");
+        CHECK(d.IsPopupOpen(*panel));
+        bed.Run(u8"closePanel");
+        CHECK_FALSE(d.IsPopupOpen(*panel));
+
+        bed.Run(u8"closeWindow");
+        CHECK_FALSE(window->IsOpen());
+        CHECK(bed.Number(u8"closeCount") == doctest::Approx(1.0));
+    }
+}
+
+#ifdef OPTION_HAS_ANGELSCRIPT
+TEST_CASE("gui-script: AngelScript opens windows, menus and popups of its own (E16)")
+{
+    RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    const Status loaded = bed.context->Load(
+        u8"funcdef bool EventHandler(GuiEvent e);\n"
+        u8"int closes = 0; bool picked = false;\n"
+        u8"bool onClose(GuiEvent e) { closes++; return false; }\n"
+        u8"bool onActivate(GuiEvent e) { picked = e.id == \"open\"; return true; }\n"
+        u8"Node@ win; Node@ panel; Node@ menu; Node@ anchor;\n"
+        u8"void main() {\n"
+        u8"  Node@ root = gui::root();\n"
+        u8"  @win = root.add(\"Window\"); win.width = 200; win.height = 150;\n"
+        u8"  Window::of(win).title = \"Settings\";\n"
+        u8"  win.on(\"close\", EventHandler(onClose));\n"
+        u8"  Window::of(win).open();\n"
+        u8"  @menu = root.add(\"Menu\");\n"
+        u8"  Node@ item = menu.add(\"MenuItem\");\n"
+        u8"  MenuItem::of(item).text = \"Open\";\n"
+        u8"  UIWidget::of(item).id = \"open\";\n"
+        u8"  menu.on(\"activate\", EventHandler(onActivate));\n"
+        u8"  @anchor = root.add(\"Button\"); anchor.width = 80; anchor.height = 30;\n"
+        u8"  @panel = root.add(\"Panel\"); panel.width = 100; panel.height = 60;\n"
+        u8"}\n"
+        u8"void openMenu() { Menu::of(menu).openAt(20, 20); }\n"
+        u8"void openPanel() { anchor.popup(panel); }\n"
+        u8"void closeWindow() { Window::of(win).close(); }\n"
+        u8"void closePanel() { panel.closePopup(); }\n"
+        u8"double closeCount() { return closes; }\n"
+        u8"double pickedOpen() { return picked ? 1 : 0; }\n",
+        u8"main");
+    INFO(doctest::String(reinterpret_cast<const char*>(bed.errors.last.CStr())));
+    REQUIRE(loaded.IsOk());
+    CheckOverlays(bed);
+}
+#endif
+
+#ifdef OPTION_HAS_LUAU
+TEST_CASE("gui-script: Luau opens windows, menus and popups of its own (E16)")
+{
+    RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    const Status loaded = bed.context->Load(
+        u8"local closes, picked = 0, false\n"
+        u8"local root = gui.root()\n"
+        u8"local win = root:add(\"Window\"); win.width = 200; win.height = 150\n"
+        u8"Window.of(win).title = \"Settings\"\n"
+        u8"win:on(\"close\", function() closes = closes + 1; return false end)\n"
+        u8"Window.of(win):open()\n"
+        u8"local menu = root:add(\"Menu\")\n"
+        u8"local item = menu:add(\"MenuItem\")\n"
+        u8"MenuItem.of(item).text = \"Open\"\n"
+        u8"UIWidget.of(item).id = \"open\"\n"
+        u8"menu:on(\"activate\", function(e) picked = e.id == \"open\"; return true end)\n"
+        u8"local anchor = root:add(\"Button\"); anchor.width = 80; anchor.height = 30\n"
+        u8"local panel = root:add(\"Panel\"); panel.width = 100; panel.height = 60\n"
+        u8"function openMenu() Menu.of(menu):openAt(20, 20) end\n"
+        u8"function openPanel() anchor:popup(panel) end\n"
+        u8"function closeWindow() Window.of(win):close() end\n"
+        u8"function closePanel() panel:closePopup() end\n"
+        u8"function closeCount() return closes end\n"
+        u8"function pickedOpen() return picked and 1 or 0 end\n",
+        u8"main");
+    INFO(doctest::String(reinterpret_cast<const char*>(bed.errors.last.CStr())));
+    REQUIRE(loaded.IsOk());
+    CheckOverlays(bed);
+}
+#endif

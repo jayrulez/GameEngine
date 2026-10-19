@@ -520,7 +520,7 @@ export namespace experimental::gui
             {u8"change", EventType::Changed},        {u8"pointercancel", EventType::PointerCancel},
             {u8"link", EventType::Link},             {u8"input", EventType::Input},
             {u8"submit", EventType::Submit},         {u8"composition", EventType::Composition},
-            {u8"toggle", EventType::Toggle},
+            {u8"toggle", EventType::Toggle},         {u8"close", EventType::Close},
             {u8"contextmenu", EventType::ContextMenu},
             {u8"scroll", EventType::Scroll},
             {u8"tabclose", EventType::TabClose},

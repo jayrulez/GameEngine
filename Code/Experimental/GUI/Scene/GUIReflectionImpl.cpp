@@ -568,6 +568,28 @@ namespace experimental::gui
         return stroke.HasValue() ? KeystrokeText(stroke.Value()) : core::String{};
     }
 
+    core::Variant Node::OpenPopupScript(core::Variant content)
+    {
+        Node* node = FromHandle(content);
+        EventDispatcher* dispatcher = GetEventDispatcher();
+        if (node == nullptr || node == this || dispatcher == nullptr)
+            return core::Variant::From<bool>(false);
+        node->SetDisplayed(true);
+        PopupOptions options;
+        options.Anchor = this;
+        options.Placement = PopupPlacement{PopupSide::Below, PopupAlign::Start, 0.0f, true};
+        options.TakesFocus = true;
+        options.FitContent = true;
+        dispatcher->OpenPopup(*this, *node, core::Move(options));
+        return core::Variant::From<bool>(dispatcher->IsPopupOpen(*node));
+    }
+
+    bool Node::ClosePopupScript()
+    {
+        EventDispatcher* dispatcher = GetEventDispatcher();
+        return dispatcher != nullptr && dispatcher->IsPopupOpen(*this) && dispatcher->ClosePopup(*this);
+    }
+
     i32 Node::OnCommandScript(StringView id, RefPtr<foundation::script::IScriptDelegate> handler)
     {
         if (!handler)
@@ -746,6 +768,8 @@ namespace experimental::gui
         builder.Method<&Node::ElementChildCount>("childCount");
         builder.Method<&Node::On>("on");
         builder.Method<&Node::Off>("off"); // what on and onCommand gave (E16)
+        builder.Method<&Node::OpenPopupScript, bool, Node>("popup");
+        builder.Method<&Node::ClosePopupScript>("closePopup");
         builder.Method<&Node::BindScript>("bind");
         builder.Method<&Node::BindSceneData>("bindData");
         builder.Method<&Node::OnCommandScript>("onCommand");
@@ -1227,6 +1251,9 @@ namespace experimental::gui
     {
         builder.Attribute("accessRole", core::String(u8"menu")); // what a screen reader takes it for (E9d)
         builder.Method<&Menu::Close>("close");
+        builder.Method<&Menu::OpenAtPoint>("openAt"); // a script's own menus (E16)
+        builder.Method<&Menu::OpenBelowNode, bool, Node>("openBelow");
+        builder.Method<&Menu::IsOpen>("isOpen");
         builder.Method<&ElementOf<Menu>, Menu, Node>("of");
         builder.Creator();
     }
@@ -1291,6 +1318,13 @@ namespace experimental::gui
     {
         builder.Attribute("accessRole", core::String(u8"window")); // what a screen reader takes it for (E9d)
         builder.AccessorProperty<&Window::GetTitle, &Window::SetTitle>("title").PropAttribute("access", core::String(u8"name")).PropAttribute("css", core::String(u8"title"));
+        // A script's own windows (E16): opened where they are or modal, closed, listened to (`close`).
+        builder.AccessorProperty<&Window::IsClosable, &Window::SetClosable>("closable").PropAttribute("css", core::String(u8"closable"));
+        builder.AccessorProperty<&Window::IsResizable, &Window::SetResizable>("resizable").PropAttribute("css", core::String(u8"resizable"));
+        builder.Method<&Window::OpenInPlace>("open");
+        builder.Method<&Window::OpenModalOver>("openModal");
+        builder.Method<&Window::Close>("close");
+        builder.Method<&Window::IsOpen>("isOpen");
         builder.Method<&ElementOf<Window>, Window, Node>("of");
         builder.Creator();
     }

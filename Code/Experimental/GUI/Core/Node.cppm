@@ -1504,6 +1504,12 @@ export namespace experimental::gui
         /// mouseenter, mouseleave, mousemove, wheel, keydown, keyup, textinput, focus, blur). A
         /// token for Off (0 for no such event).
         i32 On(core::StringView eventName, RefPtr<foundation::script::IScriptDelegate> handler);
+        /// Opens `content` (a node's handle) as a popup below this node (E16): closed by a press
+        /// outside it or Escape, focus going into it and back; whether it opened.
+        [[nodiscard]] core::Variant OpenPopupScript(core::Variant content);
+        /// Closes this node where it is open as a popup (a script's popup, menu or window); false
+        /// when it is not one.
+        bool ClosePopupScript();
         /// Stops what On or OnCommandScript started (E16), from inside that handler too; false when
         /// the token is none of this node's.
         bool Off(i32 token)

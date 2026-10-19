@@ -623,6 +623,26 @@ export namespace experimental::gui
             options.TakesFocus = true; // the keyboard and the pad work in it; focus comes back on close
             OpenAs(owner, core::Move(options));
         }
+        // === The script surface (E16; reflected in GUIReflectionImpl.cpp) ===
+        /// Opens it at a point in the root's space, as a popup of what holds it (a menu a script
+        /// added); whether it opened.
+        bool OpenAtPoint(f32 x, f32 y)
+        {
+            Node* owner = GetParent() != nullptr ? GetParent() : GetRootNode();
+            if (owner == nullptr || owner == this)
+                return false;
+            Open(*owner, core::Float2{x, y});
+            return IsOpen();
+        }
+        /// Opens it below `anchor` (a node's handle), as that node's popup; whether it opened.
+        [[nodiscard]] core::Variant OpenBelowNode(core::Variant anchor)
+        {
+            Node* node = Node::FromHandle(anchor);
+            if (node != nullptr)
+                OpenBelow(*node, *node);
+            return core::Variant::From<bool>(node != nullptr && IsOpen());
+        }
+
         /// Focuses its first item that can take it (a menu opened from the keyboard or the pad).
         void FocusFirstItem() { FocusItem(0, 1); }
         /// Shows the menu as a popup of `owner`, against `anchor` (a menu bar's button: below it).

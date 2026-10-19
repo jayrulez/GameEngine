@@ -151,8 +151,27 @@ export namespace foundation::shell
     };
 
     // -----------------------------------------------------------------------
-    // Input devices - double-buffered state fed by the SDL3 event pump.
+    // Input devices - state fed by the SDL3 event pump. Pressed and released are the edges the
+    // frame's events brought, latched until the next frame: a press and its release arriving in
+    // one frame (a quick click while a frame takes long) read as both, never as neither, as the
+    // state at the frame's ends alone would.
     // -----------------------------------------------------------------------
+    // One button's state and the edges since the frame began.
+    struct ButtonLatch
+    {
+        bool Down = false;
+        bool Pressed = false;
+        bool Released = false;
+        void Set(bool down) noexcept
+        {
+            if (down && !Down)
+                Pressed = true;
+            else if (!down && Down)
+                Released = true;
+            Down = down;
+        }
+        void BeginFrame() noexcept { Pressed = Released = false; }
+    };
     inline constexpr core::u32 kKeyCount = static_cast<core::u32>(KeyCode::Count);
     inline constexpr core::u32 kMouseButtonCount = static_cast<core::u32>(MouseButton::Count);
     inline constexpr core::u32 kGamepadButtonCount = static_cast<core::u32>(GamepadButton::Count);
@@ -161,19 +180,18 @@ export namespace foundation::shell
     class SDL3Keyboard final : public IKeyboard
     {
     public:
-        [[nodiscard]] bool IsKeyDown(KeyCode key) const override { return m_current[Index(key)]; }
-        [[nodiscard]] bool IsKeyPressed(KeyCode key) const override;
-        [[nodiscard]] bool IsKeyReleased(KeyCode key) const override;
+        [[nodiscard]] bool IsKeyDown(KeyCode key) const override { return m_keys[Index(key)].Down; }
+        [[nodiscard]] bool IsKeyPressed(KeyCode key) const override { return m_keys[Index(key)].Pressed; }
+        [[nodiscard]] bool IsKeyReleased(KeyCode key) const override { return m_keys[Index(key)].Released; }
         [[nodiscard]] KeyModifiers Modifiers() const override { return m_mods; }
 
-        void SetKey(KeyCode key, bool down) { m_current[Index(key)] = down; }
+        void SetKey(KeyCode key, bool down) { m_keys[Index(key)].Set(down); }
         void SetModifiers(KeyModifiers mods) { m_mods = mods; }
         void BeginFrame();
 
     private:
         static core::u32 Index(KeyCode key) noexcept;
-        bool m_current[kKeyCount] = {};
-        bool m_previous[kKeyCount] = {};
+        ButtonLatch m_keys[kKeyCount] = {};
         KeyModifiers m_mods = KeyModifiers::None;
     };
 
@@ -212,8 +230,7 @@ export namespace foundation::shell
 
         SDL_Window* m_window = nullptr;
         core::f32 m_x = 0, m_y = 0, m_dx = 0, m_dy = 0, m_sx = 0, m_sy = 0;
-        bool m_current[kMouseButtonCount] = {};
-        bool m_previous[kMouseButtonCount] = {};
+        ButtonLatch m_buttons[kMouseButtonCount] = {};
         bool m_relative = false;
         bool m_cursorVisible = true;
         bool m_globalCapture = false;
@@ -248,7 +265,7 @@ export namespace foundation::shell
         [[nodiscard]] core::u32 Id() const noexcept { return m_id; }
         [[nodiscard]] SDL_Gamepad* Handle() const noexcept { return m_pad; }
         void SetIndex(core::i32 index) noexcept { m_index = index; }
-        void SetButton(GamepadButton b, bool down) { m_current[Index(b)] = down; }
+        void SetButton(GamepadButton b, bool down) { m_buttons[Index(b)].Set(down); }
         void Disconnect() noexcept { m_pad = nullptr; }
         void BeginFrame();
 
@@ -258,8 +275,7 @@ export namespace foundation::shell
         core::u32 m_id;
         core::i32 m_index;
         core::String m_name;
-        bool m_current[kGamepadButtonCount] = {};
-        bool m_previous[kGamepadButtonCount] = {};
+        ButtonLatch m_buttons[kGamepadButtonCount] = {};
     };
 
     class SDL3Touch final : public ITouch

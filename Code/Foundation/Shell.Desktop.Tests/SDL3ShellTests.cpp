@@ -198,6 +198,57 @@ TEST_CASE("shell.desktop: mouse motion and buttons are tracked")
     CHECK_FALSE(mouse->IsButtonPressed(MouseButton::Left));
 }
 
+TEST_CASE("shell.desktop: a click or a tap whose press and release share a frame reads as both")
+{
+    SDL3Shell shell(DefaultAllocator());
+    if (shell.MainWindow() == nullptr)
+    {
+        return;
+    }
+    IInputManager* input = shell.Input();
+    REQUIRE(input != nullptr);
+    IMouse* mouse = input->Mouse();
+    IKeyboard* kb = input->Keyboard();
+    REQUIRE(mouse != nullptr);
+    REQUIRE(kb != nullptr);
+    const SDL_WindowID winId = SDL_GetWindowID(static_cast<SDL3Window*>(shell.MainWindow())->Handle());
+
+    constexpr bool kDownThenUp[2] = {true, false};
+    // A quick click: down and up before the frame reads them (a slow frame, a fast finger).
+    for (const bool down : kDownThenUp)
+    {
+        SDL_Event button{};
+        button.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
+        button.button.windowID = winId;
+        button.button.button = SDL_BUTTON_LEFT;
+        button.button.down = down;
+        SDL_PushEvent(&button);
+    }
+    // And a quick tap of a key.
+    for (const bool down : kDownThenUp)
+    {
+        SDL_Event key{};
+        key.type = down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP;
+        key.key.windowID = winId;
+        key.key.scancode = SDL_SCANCODE_A;
+        key.key.down = down;
+        SDL_PushEvent(&key);
+    }
+    shell.ProcessEvents();
+    CHECK_FALSE(mouse->IsButtonDown(MouseButton::Left));
+    CHECK(mouse->IsButtonPressed(MouseButton::Left)); // not lost between the frame's two ends
+    CHECK(mouse->IsButtonReleased(MouseButton::Left));
+    CHECK_FALSE(kb->IsKeyDown(KeyCode::A));
+    CHECK(kb->IsKeyPressed(KeyCode::A));
+    CHECK(kb->IsKeyReleased(KeyCode::A));
+
+    // The next frame, nothing new.
+    shell.ProcessEvents();
+    CHECK_FALSE(mouse->IsButtonPressed(MouseButton::Left));
+    CHECK_FALSE(mouse->IsButtonReleased(MouseButton::Left));
+    CHECK_FALSE(kb->IsKeyPressed(KeyCode::A));
+}
+
 TEST_CASE("shell.desktop: cursor state is settable")
 {
     SDL3Shell shell(DefaultAllocator());

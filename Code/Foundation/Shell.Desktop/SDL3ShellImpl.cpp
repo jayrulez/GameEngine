@@ -501,23 +501,11 @@ namespace foundation::shell
         return false;
     }
 
-    bool SDL3Keyboard::IsKeyPressed(KeyCode key) const
-    {
-        const core::u32 i = Index(key);
-        return m_current[i] && !m_previous[i];
-    }
-
-    bool SDL3Keyboard::IsKeyReleased(KeyCode key) const
-    {
-        const core::u32 i = Index(key);
-        return !m_current[i] && m_previous[i];
-    }
-
     void SDL3Keyboard::BeginFrame()
     {
-        for (core::u32 i = 0; i < kKeyCount; ++i)
+        for (ButtonLatch& key : m_keys)
         {
-            m_previous[i] = m_current[i];
+            key.BeginFrame();
         }
     }
 
@@ -541,19 +529,11 @@ namespace foundation::shell
         return static_cast<core::f32>(gy);
     }
 
-    bool SDL3Mouse::IsButtonDown(MouseButton b) const { return m_current[Index(b)]; }
+    bool SDL3Mouse::IsButtonDown(MouseButton b) const { return m_buttons[Index(b)].Down; }
 
-    bool SDL3Mouse::IsButtonPressed(MouseButton b) const
-    {
-        const core::u32 i = Index(b);
-        return m_current[i] && !m_previous[i];
-    }
+    bool SDL3Mouse::IsButtonPressed(MouseButton b) const { return m_buttons[Index(b)].Pressed; }
 
-    bool SDL3Mouse::IsButtonReleased(MouseButton b) const
-    {
-        const core::u32 i = Index(b);
-        return !m_current[i] && m_previous[i];
-    }
+    bool SDL3Mouse::IsButtonReleased(MouseButton b) const { return m_buttons[Index(b)].Released; }
 
     void SDL3Mouse::SetRelativeMode(bool enabled)
     {
@@ -629,7 +609,7 @@ namespace foundation::shell
     {
         if (index < kMouseButtonCount)
         {
-            m_current[index] = down;
+            m_buttons[index].Set(down);
         }
     }
 
@@ -641,9 +621,9 @@ namespace foundation::shell
 
     void SDL3Mouse::BeginFrame()
     {
-        for (core::u32 i = 0; i < kMouseButtonCount; ++i)
+        for (ButtonLatch& button : m_buttons)
         {
-            m_previous[i] = m_current[i];
+            button.BeginFrame();
         }
         m_dx = m_dy = m_sx = m_sy = 0.0f;
     }
@@ -703,19 +683,11 @@ namespace foundation::shell
         }
     }
 
-    bool SDL3Gamepad::IsButtonDown(GamepadButton b) const { return m_current[Index(b)]; }
+    bool SDL3Gamepad::IsButtonDown(GamepadButton b) const { return m_buttons[Index(b)].Down; }
 
-    bool SDL3Gamepad::IsButtonPressed(GamepadButton b) const
-    {
-        const core::u32 i = Index(b);
-        return m_current[i] && !m_previous[i];
-    }
+    bool SDL3Gamepad::IsButtonPressed(GamepadButton b) const { return m_buttons[Index(b)].Pressed; }
 
-    bool SDL3Gamepad::IsButtonReleased(GamepadButton b) const
-    {
-        const core::u32 i = Index(b);
-        return !m_current[i] && m_previous[i];
-    }
+    bool SDL3Gamepad::IsButtonReleased(GamepadButton b) const { return m_buttons[Index(b)].Released; }
 
     core::f32 SDL3Gamepad::Axis(GamepadAxis a) const
     {
@@ -739,9 +711,9 @@ namespace foundation::shell
 
     void SDL3Gamepad::BeginFrame()
     {
-        for (core::u32 i = 0; i < kGamepadButtonCount; ++i)
+        for (ButtonLatch& button : m_buttons)
         {
-            m_previous[i] = m_current[i];
+            button.BeginFrame();
         }
     }
 

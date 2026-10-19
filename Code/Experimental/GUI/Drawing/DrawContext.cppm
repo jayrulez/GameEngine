@@ -102,6 +102,30 @@ export namespace experimental::gui
             if (m_redraws != nullptr)
                 m_redraws->PushBack(world);
         }
+        /// Where the frame notes what it changed (E15: damage, in device pixels); none by default.
+        void SetDamageRecorder(Array<Rect>* recorder) noexcept { m_damage = recorder; }
+        void RecordDamage(const Rect& device)
+        {
+            if (m_damage != nullptr)
+                m_damage->PushBack(device);
+        }
+        [[nodiscard]] bool RecordsDamage() const noexcept { return m_damage != nullptr; }
+        /// `local` in device pixels under the current transform: the bounds of its corners.
+        [[nodiscard]] Rect DeviceRect(const Rect& local) const
+        {
+            const core::Float4x4 m = m_vg->GetTransform();
+            const core::Float2 corners[4] = {core::TransformPoint2D(core::Float2{local.x, local.y}, m),
+                                             core::TransformPoint2D(core::Float2{local.Right(), local.y}, m),
+                                             core::TransformPoint2D(core::Float2{local.x, local.Bottom()}, m),
+                                             core::TransformPoint2D(core::Float2{local.Right(), local.Bottom()}, m)};
+            core::Float2 mn = corners[0], mx = corners[0];
+            for (const core::Float2& c : corners)
+            {
+                mn = core::Float2{core::Min(mn.x, c.x), core::Min(mn.y, c.y)};
+                mx = core::Float2{core::Max(mx.x, c.x), core::Max(mx.y, c.y)};
+            }
+            return Rect{mn.x, mn.y, mx.x - mn.x, mx.y - mn.y};
+        }
         void CountDrawn() noexcept { ++m_nodesDrawn; }
         void CountCulled() noexcept { ++m_nodesCulled; }
         [[nodiscard]] u32 NodesDrawn() const noexcept { return m_nodesDrawn; }
@@ -115,5 +139,6 @@ export namespace experimental::gui
         bool m_culling = true;
         u32 m_frame = 0;
         Array<Rect>* m_redraws = nullptr;
+        Array<Rect>* m_damage = nullptr; // what the frame changed (E15)
     };
 }

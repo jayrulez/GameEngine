@@ -347,6 +347,11 @@ export namespace experimental::gui
             m_frameRedraws.Clear();
             if (m_debugOverlay.RedrawFlash)
                 ctx.SetRedrawRecorder(&m_frameRedraws);
+            // Damage (E15): what changed since the last frame, its nodes' old areas noted as they
+            // changed, their new ones as they draw.
+            m_lastDamage = core::Move(m_pendingDamage);
+            m_pendingDamage = core::Array<Rect>{};
+            ctx.SetDamageRecorder(&m_lastDamage);
             // The window bounds the drawing, so what lies outside it is culled (E8b); only the
             // drawing: navigation and hit testing still reach a node past it.
             const bool sized = GetSize().x > 0.0f && GetSize().y > 0.0f;
@@ -356,6 +361,10 @@ export namespace experimental::gui
             if (sized)
                 ctx.PopClip();
             ctx.SetRedrawRecorder(nullptr);
+            ctx.SetDamageRecorder(nullptr);
+            m_lastDamageBounds = Rect{};
+            for (usize i = 0; i < m_lastDamage.Size(); ++i)
+                m_lastDamageBounds = i == 0 ? m_lastDamage[i] : Rect::Union(m_lastDamageBounds, m_lastDamage[i]);
             const vg::VGBatch& batch = ctx.VG().GetBatch(); // flushed: its last command counts
             m_lastFrame.DrawMs = watch.Elapsed().AsMilliseconds();
             m_lastFrame.NodesDrawn = ctx.NodesDrawn() - drawn;
@@ -365,6 +374,13 @@ export namespace experimental::gui
             m_lastFrame.FramesDrawn = ++m_framesDrawn;
             m_framePublished = false;
         }
+        /// What the last frame drew changed, in device pixels (E15): each node's area where it is new,
+        /// changed, moved or gone, and the bounds of them all. A host that can present part of a
+        /// frame (or redraw a HUD over its scene) redraws this much; empty when nothing changed.
+        [[nodiscard]] const core::Array<Rect>& GetLastDamage() const noexcept { return m_lastDamage; }
+        [[nodiscard]] const Rect& GetLastDamageBounds() const noexcept { return m_lastDamageBounds; }
+        void AddDamage(const Rect& device) override { m_pendingDamage.PushBack(device); }
+
         /// The frame in progress, which the phases add to.
         [[nodiscard]] FrameStats* GetFrameStats() override { return &m_frameStats; }
         /// The last frame: its style, layout and reasons (as NeedsFrame closed it), and its draw
@@ -529,8 +545,10 @@ export namespace experimental::gui
             m_displayScale = core::Max(scale, 0.01f);
             Transformable::SetScale(core::Float2{m_displayScale, m_displayScale});
             if (m_displayScale != was)
+            {
                 RequestLayoutTree(); // every edge rounds to the new grid
-            Invalidate();
+                Invalidate();        // the same scale again changes nothing (E15: no damage)
+            }
             ApplyViewport();
         }
         [[nodiscard]] f32 GetDisplayScale() const noexcept { return m_displayScale; }
@@ -626,6 +644,9 @@ export namespace experimental::gui
         f32 m_displayScale = 1.0f;
         DebugOverlay m_debugOverlay;
         core::Array<Rect> m_frameRedraws;     // the nodes this frame drew that invalidated themselves (world)
+        core::Array<Rect> m_pendingDamage;    // old areas noted since the last frame (device pixels, E15)
+        core::Array<Rect> m_lastDamage;       // the last frame's damage
+        Rect m_lastDamageBounds;
         core::Array<RedrawFlash> m_flashes;   // fading
         fonts::CachedFont* m_debugFont = nullptr; // the overlay's text (the host's)
         FrameStats m_frameStats; // in progress

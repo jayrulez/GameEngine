@@ -245,6 +245,7 @@ export namespace experimental::gui
             if (index == kInvalidIndex)
                 return;
             RefPtr<Node> keepAlive = m_children[index]; // hold across detach + callback
+            child->NoteOldArea(nullptr); // where it showed is to be drawn again (E15)
             child->m_parent = nullptr;
             m_children.RemoveAt(index);
             ChildrenRearranged(*child);
@@ -635,6 +636,8 @@ export namespace experimental::gui
             if (!ctx.IsVisible(GetSubtreeInk()))
             {
                 ctx.CountCulled();
+                m_drawnAreaValid = false; // not on screen: nothing of it to draw again
+                m_damageNoted = false;
                 ctx.Restore();
                 return;
             }
@@ -643,8 +646,21 @@ export namespace experimental::gui
             m_drawnFrame = ctx.Frame();
             if (m_alpha <= 0.0f)
             {
+                m_drawnAreaValid = false; // shows nothing (a fade out noted where it showed)
+                m_damageNoted = false;
                 ctx.Restore();
                 return;
+            }
+            // Damage (E15): where it covers now, when that is new, changed or moved, beside where
+            // it covered before (noted when it changed).
+            if (ctx.RecordsDamage())
+            {
+                const Rect area = ctx.DeviceRect(GetSubtreeInk());
+                if (!m_drawnAreaValid || m_damageNoted || !(area == m_drawnArea))
+                    ctx.RecordDamage(area);
+                m_drawnArea = area;
+                m_drawnAreaValid = true;
+                m_damageNoted = false;
             }
             ctx.CountDrawn();
             if (m_invalidatedSelf && ctx.RecordsRedraws() && m_parent != nullptr) // the root would flash all
@@ -1895,7 +1911,16 @@ export namespace experimental::gui
             m_invalidatedSelf = true;
             m_subtreeInkValid = false;
             if (!IsTreeVisible() || m_quietInvalidations != 0)
+            {
+                NoteOldArea(nullptr); // hidden: where it showed is to be drawn again
                 return;
+            }
+            NoteOldArea(MarkAncestorsForRedraw()); // the topmost: its root
+        }
+        /// Its ancestors draw again (what holds it changed), up to its root, which it returns: what
+        /// Invalidate does above the node, without the node's own area counting as changed.
+        Node* MarkAncestorsForRedraw()
+        {
             Node* through = this; // the child of each ancestor the change came up through
             for (Node* p = m_parent; p != nullptr; p = p->m_parent)
             {
@@ -1904,7 +1929,27 @@ export namespace experimental::gui
                 p->NoteChildChanged(*through); // and that child's reach may have moved (E15)
                 through = p;
             }
+            return through;
         }
+        /// A frame's damage (E15): the root collects the areas, in device pixels, that changed
+        /// since its last frame (where a node was, before it changed, moved, hid or went). Nodes
+        /// other than a root keep none.
+        virtual void AddDamage(const Rect& device) { (void)device; }
+
+    private:
+        // What it covered when last drawn is to be drawn again: told to its root, once a frame.
+        void NoteOldArea(Node* root)
+        {
+            if (!m_drawnAreaValid || m_damageNoted)
+                return;
+            m_damageNoted = true;
+            if (root == nullptr)
+                root = GetRootNode();
+            if (root != nullptr)
+                root->AddDamage(m_drawnArea);
+        }
+
+    public:
         [[nodiscard]] bool NeedsRedraw() const noexcept { return m_needsRedraw; }
 
         /// Its accessibility node may read differently (E9d): the next update sends it, and its
@@ -2448,8 +2493,8 @@ export namespace experimental::gui
         {
             OnVisibilityChange();
             Invalidate();
-            if (m_parent != nullptr)
-                m_parent->Invalidate(); // hidden, it marks itself alone: what drew it must draw again
+            if (!m_visible)
+                (void)MarkAncestorsForRedraw(); // hidden, it marks itself alone: what drew it must draw again
             SendEvent(Event(EventType::VisibilityChanged, this)); // hidden keeps its place: no layout
         }
         void HandleEnabledChange()
@@ -2575,6 +2620,9 @@ export namespace experimental::gui
         mutable Array<Node*> m_changedChildren;     // children something under changed in, since the index was checked
         mutable u32 m_childIndexBuilds = 0;
         mutable bool m_stackedKnown = false; // whether m_stacked holds HasStackedChildren's answer
+        Rect m_drawnArea;              // what its subtree covered when last drawn, in device pixels (E15)
+        bool m_drawnAreaValid = false; // drawn, and on screen
+        bool m_damageNoted = false;    // its old area went to its root since it was drawn
         mutable bool m_stacked = false;
 
         // Something changed under `child`: its reach is read again at the next check (all of them,

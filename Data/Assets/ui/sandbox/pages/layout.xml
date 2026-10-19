@@ -118,7 +118,7 @@
             <Label class="chip" text="in flow"/>
             <Label class="chip" position="relative" top="-16px" text="nudged"/>
             <Label class="chip" text="in flow"/>
-            <Label class="lay-badge" position="absolute" top="8px" right="8px" text="3"/>
+            <Label class="lay-badge" position="absolute" top="8px" inset-inline-end="8px" text="3"/>
         </Panel>
     </Panel>
 </Panel>

@@ -27,4 +27,12 @@ endforeach()
 foreach(backend vulkan webgpu)
     add_test(NAME GUI.Sweep.${backend} COMMAND GUISandbox --${backend} --sweep)
     set_tests_properties(GUI.Sweep.${backend} PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT "${_sandbox_test_env}")
+    # The same in Arabic, right to left (E17a of Specs/gui-lab-evolution-2.md).
+    add_test(NAME GUI.Sweep.${backend}.ar COMMAND GUISandbox --${backend} --sweep --lang ar)
+    set_tests_properties(GUI.Sweep.${backend}.ar PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT "${_sandbox_test_env}")
 endforeach()
+
+# The mirror audit (E17a): every page laid out both ways, every widget where the mirror of its left-to-
+# right place puts it. Layout only, so one backend; skipped (77) without a device.
+add_test(NAME GUI.Mirror COMMAND GUISandbox --vulkan --mirror-audit)
+set_tests_properties(GUI.Mirror PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT "${_sandbox_test_env}")

@@ -258,6 +258,10 @@ public:
     void SetAlwaysRedraw(bool always) { m_alwaysRedraw = always; }
     void SetFrameStats(bool stats) { m_frameStats = stats; }
     void SetSweep(bool sweep) { m_sweep = sweep; }
+    /// --mirror-audit (E17a): each page laid out left to right and then right to left, in one
+    /// language (its text measures the same both ways); every widget must stand at the mirror of its
+    /// left-to-right place within the page. Prints each that does not; exits 1 if any did.
+    void SetMirrorAudit(bool on) { m_mirrorAudit = on; }
     /// --soak <minutes> [--soak-csv <path>]: the sweep's steps over and over for that long, a CSV
     /// row every ten seconds (frame time percentiles, live allocations and bytes, resident memory).
     void SetSoak(f32 minutes) { m_soakSeconds = Max(0.0f, minutes) * 60.0f; m_sweep = m_soakSeconds > 0.0f; }
@@ -279,6 +283,8 @@ public:
     // What main returns: the image tests' verdict (77, skipped, when no device came up).
     [[nodiscard]] int ImageExitCode(int runCode) const
     {
+        if (m_mirrorAudit)
+            return m_mirrorAuditDone ? (m_mirrorMisplaced == 0 ? 0 : 1) : 77;
         if (!m_imageTests)
             return m_sweep ? SweepExitCode() : runCode;
         if (m_imagesDone == 0)
@@ -350,6 +356,9 @@ private:
     void UpdateMenu();
     void TypeKeys(gui::SceneRoot& root);
     void Sweep();
+    void MirrorAudit();
+    // Styled and laid out as a frame would, without drawing.
+    void Settle();
     void DrawAndPresent(gui::SceneRoot& root);
     [[nodiscard]] gui::SceneRoot& Shown() { return m_showingMenu ? *m_menuRoot : *m_root; }
 
@@ -374,6 +383,9 @@ private:
     // GUI.Sweep ctest entries, skipped without a device).
     bool m_sweep = false;
     bool m_sweepDone = false;
+    bool m_mirrorAudit = false;
+    bool m_mirrorAuditDone = false;
+    u32 m_mirrorMisplaced = 0;
     struct SweepStep
     {
         String page;     // a page to show first (empty: none)
@@ -1609,6 +1621,91 @@ void GUISandbox::SoakFrame()
     }
 }
 
+void GUISandbox::Settle()
+{
+    LayOutShell();
+    m_gui->Update(Duration::FromSeconds(1.0 / 60.0));
+    m_styles.SetMediaContext(m_root->GetMediaContext());
+    m_styles.ApplyTree(*m_root);
+    m_root->UpdateLayout();
+}
+
+namespace
+{
+    // The widgets a mirror audit checks: shown and sized, outside what is placed physically on
+    // purpose (a dock's sides, a popup at a point) and an item view's rows, which it recycles from
+    // item to item (the unit tests check theirs).
+    void CollectMirrored(gui::Node& node, Array<gui::Node*>& out)
+    {
+        if (!node.IsVisible() || !node.IsDisplayed() || node.IsInTopLayer())
+            return;
+        if (node.GetSize().x > 0.0f && node.GetSize().y > 0.0f && Cast<gui::UIWidget>(&node) != nullptr)
+            out.PushBack(&node);
+        if (node.GetLayoutStyle().Kind == gui::Display::Dock || Cast<gui::ItemView>(&node) != nullptr)
+            return;
+        for (usize i = 0; i < node.ChildCount(); ++i)
+            CollectMirrored(*node.GetChildAt(i), out);
+    }
+}
+
+void GUISandbox::MirrorAudit()
+{
+    // Each widget's layout box within its parent (before its own transform, which CSS keeps
+    // physical, and its parent's scroll): in right to left, at the mirror of where it was.
+    struct Placed
+    {
+        gui::Node* node;
+        Float2 at;
+        Float2 size;
+    };
+    u32 widgets = 0;
+    for (const Page& page : m_pages)
+    {
+        if (page.id.AsView() == StringView(u8"stress") || page.id.AsView() == StringView(u8"motion"))
+            continue; // thousands of widgets all alike; things on the move
+        ShowPage(page.id.AsView());
+        page.node->SetLayoutDirection(gui::Node::LayoutDirection::LeftToRight);
+        for (int i = 0; i < 3; ++i)
+            Settle(); // rows measured once styled, a frame on
+        Array<gui::Node*> nodes;
+        CollectMirrored(*page.node, nodes);
+        Array<Placed> before;
+        for (gui::Node* node : nodes)
+            if (node != page.node && node->GetParent() != nullptr)
+                before.PushBack(Placed{node, node->GetPosition(), node->GetSize()});
+        page.node->SetLayoutDirection(gui::Node::LayoutDirection::RightToLeft);
+        for (int i = 0; i < 3; ++i)
+            Settle();
+        for (const Placed& p : before)
+        {
+            ++widgets;
+            const Float2 at = p.node->GetPosition();
+            const f32 want = p.node->GetParent()->GetSize().x - p.at.x - p.size.x;
+            if (Abs(at.x - want) <= 1.0f && Abs(p.node->GetSize().x - p.size.x) <= 1.0f && Abs(at.y - p.at.y) <= 1.0f)
+                continue;
+            ++m_mirrorMisplaced;
+            String what = p.node->DebugName();
+            if (const auto* label = Cast<gui::Label>(p.node))
+            {
+                what.Append(u8" \"");
+                what.Append(label->GetText().SubStr(0, Min<usize>(label->GetText().Size(), 24)));
+                what.Append(u8"\"");
+            }
+            std::printf("GUISandbox mirror: %s %s in %s at x %.1f, wanted %.1f (left to right %.1f, %.1f wide; y %.1f from %.1f)\n",
+                        reinterpret_cast<const char*>(page.id.CStr()), reinterpret_cast<const char*>(what.CStr()),
+                        reinterpret_cast<const char*>(p.node->GetParent()->DebugName().CStr()), static_cast<double>(at.x),
+                        static_cast<double>(want), static_cast<double>(p.at.x), static_cast<double>(p.size.x),
+                        static_cast<double>(at.y), static_cast<double>(p.at.y));
+        }
+        page.node->SetLayoutDirection(gui::Node::LayoutDirection::Inherit);
+    }
+    ShowPage(m_startPage.AsView());
+    std::printf("GUISandbox mirror: %u widgets, %u misplaced\n", widgets, m_mirrorMisplaced);
+    std::fflush(stdout);
+    m_mirrorAuditDone = true;
+    Exit();
+}
+
 void GUISandbox::Sweep()
 {
     if (m_frames < 10)
@@ -1719,6 +1816,11 @@ void GUISandbox::OnRender()
     if (m_imageTests)
     {
         RunImageTests();
+        return;
+    }
+    if (m_mirrorAudit && m_frames >= 10 && !m_mirrorAuditDone)
+    {
+        MirrorAudit();
         return;
     }
     RouteInput();
@@ -2227,6 +2329,8 @@ int main(int argc, char** argv)
             app.SetFrameStats(true);
         else if (arg == StringView(u8"--sweep"))
             app.SetSweep(true);
+        else if (arg == StringView(u8"--mirror-audit"))
+            app.SetMirrorAudit(true);
         else if (arg == StringView(u8"--soak") && i + 1 < argc)
             app.SetSoak(static_cast<f32>(std::atof(argv[++i])));
         else if (arg == StringView(u8"--soak-csv") && i + 1 < argc)

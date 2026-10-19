@@ -14,7 +14,7 @@
 .cursor-not-allowed { width: 110px; cursor: not-allowed; background-color: var(--bad); }
 .cursor-crosshair { width: 100px; cursor: crosshair; }
 .dnd-cards { width: 170px; }
-.dnd-card { width: 160px; height: 30px; padding-left: 10px; border-radius: 6; background-color: var(--shell-surface-2); color: var(--ink); font-family: Roboto; font-size: 14px; vertical-align: middle; cursor: grab; }
+.dnd-card { width: 160px; height: 30px; padding-inline-start: 10px; border-radius: 6; background-color: var(--shell-surface-2); color: var(--ink); font-family: Roboto; font-size: 14px; vertical-align: middle; cursor: grab; }
 .dnd-card:drag-source { opacity: 0.45; }
 .chip-card { color: var(--muted); }
 .dnd-bin { width: 190px; height: 110px; padding: 8px; gap: 4px; border: 1px dashed var(--line); border-radius: 8; }
@@ -29,7 +29,7 @@
 .dnd-files { width: 590px; height: 50px; }
 .dnd-files > .dnd-bin-title { width: 570px; }
 .dnd-card:focus-visible, .dnd-bin:focus-visible { border: 2px solid var(--shell-accent); }
-.swatch { width: 120px; height: 28px; padding-left: 10px; border-radius: 6; color: #ffffff; font-family: Roboto; font-size: 14px; vertical-align: middle; cursor: grab; }
+.swatch { width: 120px; height: 28px; padding-inline-start: 10px; border-radius: 6; color: #ffffff; font-family: Roboto; font-size: 14px; vertical-align: middle; cursor: grab; }
 .swatch-red { background-color: #c0392b; }
 .swatch-green { background-color: #27ae60; }
 .swatch-blue { background-color: #2f7de1; }

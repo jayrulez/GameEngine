@@ -546,6 +546,34 @@ Order: E17a, E17c, E17b (the last widens the accessibility model most). Screens:
 screen in Arabic; an image viewer pinched, turned and panned; `--narrate` on the Data views page
 reading an item's position among them all.
 
+E17a as built on `vg` (2026-10-19): popups place themselves on logical sides (`InlineEnd`,
+`InlineStart`) and a dropdown's start is the inline start, resolved in `PlacePopup` against the
+anchor's direction (else the popup's own, its owner's); a tooltip takes its provider's (a6c76cba1).
+`MirroredX` and `MirroredIn` place a widget's own parts from the inline start: a menu's gutter,
+label, shortcut and submenu arrow, a combo box's arrow (e1b835173); a progress fill, a horizontal
+scrollbar's thumb and its presses, a switch's knob, a closed chevron, a number field's arrows and
+the room its text keeps clear of them (a new `EditBounds` of the text editors, not a physical
+padding, in code or in the theme) (1be20d13b); a tree row's indent, a window's grip at its bottom
+left pulling its left edge, and a tab drag's passing, drop place and mark (f172cfedb).
+`Node::InlineStep` says which way an arrow goes along the line, for the tree, an exclusive group, a
+grid, a submenu (its `menu.left` and `menu.right` read by direction) and the tab strip (597c67847).
+A scroller across a right-to-left flow keeps CSS's scroll positions, `GetScrollMin` and
+`GetScrollMax` bounding every clamp; its end, the wheel on a strip and the thumb follow; a table's
+rows, columns, header, sort mark and grips and a grid's cells run from the right (52334041d).
+Content wider than a right-to-left box overflows toward its inline end, the left (d723c036c).
+`GUISandbox --mirror-audit` (the GUI.Mirror test) lays every page out both ways and checks each
+widget's box within its parent; it found the pages' sheets padding and pinning by physical sides
+where they meant the inline start, now logical; 748 widgets, none out of place; the sweep runs in
+Arabic too, `GUI.Sweep.<backend>.ar` (a0f69b745). The Arabic Language page's reference moved a
+pixel with the overflow rule, approved by the user (4f85b68ec). Screen: the game menu, its
+settings among it, speaks Arabic: every text a key, the script's through `gui::tr`, its families
+falling back to DejaVu (0b29f4084).
+Left: the audit skips docks (physical by design), popups at a point, item views' recycled rows
+(the unit tests cover theirs) and the Stress and Motion pages; transforms stay physical, as CSS's
+do; the Arabic is unchecked by a speaker; scripts see negative x offsets in right to left, as the
+ruling has it; a typed field takes its direction from its content (E11), so a Latin name in an
+Arabic form starts at its left.
+
 ## Not taken in this round
 
 - **Engine hosting** (a scene component, reference-resolution scaling, world-space canvases): not in

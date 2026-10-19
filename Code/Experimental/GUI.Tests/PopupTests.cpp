@@ -330,32 +330,95 @@ TEST_CASE("popups: placement flips, shrinks and clamps at every edge")
 {
     const Rect bounds{0.0f, 0.0f, 400.0f, 300.0f};
     // Below fits.
-    PlacedPopup p = PlacePopup(Rect{10.0f, 10.0f, 50.0f, 20.0f}, core::Float2{100.0f, 80.0f}, bounds);
+    PlacedPopup p = PlacePopup(Rect{10.0f, 10.0f, 50.0f, 20.0f}, core::Float2{100.0f, 80.0f}, bounds, PopupPlacement{}, false);
     CHECK(p.Side == PopupSide::Below);
     CHECK(p.Position.y == doctest::Approx(30.0f));
     // Near the bottom: flipped above.
-    p = PlacePopup(Rect{10.0f, 260.0f, 50.0f, 20.0f}, core::Float2{100.0f, 80.0f}, bounds);
+    p = PlacePopup(Rect{10.0f, 260.0f, 50.0f, 20.0f}, core::Float2{100.0f, 80.0f}, bounds, PopupPlacement{}, false);
     CHECK(p.Side == PopupSide::Above);
     CHECK(p.Position.y == doctest::Approx(180.0f));
     // Too tall for either side: the larger side, shrunk to it.
-    p = PlacePopup(Rect{10.0f, 100.0f, 50.0f, 20.0f}, core::Float2{100.0f, 400.0f}, bounds);
+    p = PlacePopup(Rect{10.0f, 100.0f, 50.0f, 20.0f}, core::Float2{100.0f, 400.0f}, bounds, PopupPlacement{}, false);
     CHECK(p.Side == PopupSide::Below);
     CHECK(p.Size.y == doctest::Approx(180.0f));
     CHECK(p.Position.y + p.Size.y <= 300.0f + 0.01f);
     // Past the right edge: slid back in.
-    p = PlacePopup(Rect{380.0f, 10.0f, 20.0f, 20.0f}, core::Float2{100.0f, 50.0f}, bounds);
+    p = PlacePopup(Rect{380.0f, 10.0f, 20.0f, 20.0f}, core::Float2{100.0f, 50.0f}, bounds, PopupPlacement{}, false);
     CHECK(p.Position.x == doctest::Approx(300.0f));
-    // A submenu at the right edge flips left of its item; at the bottom it slides up.
+    // A submenu at the right edge flips to its item's inline start; at the bottom it slides up.
     p = PlacePopup(Rect{300.0f, 250.0f, 80.0f, 20.0f}, core::Float2{120.0f, 100.0f}, bounds,
-                   PopupPlacement{PopupSide::Right, PopupAlign::Start, 0.0f, true});
-    CHECK(p.Side == PopupSide::Left);
+                   PopupPlacement{PopupSide::InlineEnd, PopupAlign::Start, 0.0f, true}, false);
+    CHECK(p.Side == PopupSide::InlineStart);
     CHECK(p.Position.x == doctest::Approx(180.0f));
     CHECK(p.Position.y == doctest::Approx(200.0f));
     // Centred under its anchor, past the left edge: clamped to it.
     p = PlacePopup(Rect{0.0f, 10.0f, 20.0f, 20.0f}, core::Float2{100.0f, 50.0f}, bounds,
-                   PopupPlacement{PopupSide::Below, PopupAlign::Center, 4.0f, true});
+                   PopupPlacement{PopupSide::Below, PopupAlign::Center, 4.0f, true}, false);
     CHECK(p.Position.x == doctest::Approx(0.0f));
     CHECK(p.Position.y == doctest::Approx(34.0f));
+}
+
+TEST_CASE("popups: in right to left the inline sides and the start alignment mirror")
+{
+    const Rect bounds{0.0f, 0.0f, 400.0f, 300.0f};
+    // A dropdown's start is the right: the right edges line up.
+    PlacedPopup p = PlacePopup(Rect{200.0f, 10.0f, 150.0f, 20.0f}, core::Float2{100.0f, 80.0f}, bounds,
+                               PopupPlacement{}, true);
+    CHECK(p.Side == PopupSide::Below);
+    CHECK(p.Position.x == doctest::Approx(250.0f));
+    // End lines up the left edges; centred is the same either way.
+    p = PlacePopup(Rect{200.0f, 10.0f, 150.0f, 20.0f}, core::Float2{100.0f, 80.0f}, bounds,
+                   PopupPlacement{PopupSide::Below, PopupAlign::End, 0.0f, true}, true);
+    CHECK(p.Position.x == doctest::Approx(200.0f));
+    p = PlacePopup(Rect{200.0f, 10.0f, 150.0f, 20.0f}, core::Float2{100.0f, 80.0f}, bounds,
+                   PopupPlacement{PopupSide::Below, PopupAlign::Center, 0.0f, true}, true);
+    CHECK(p.Position.x == doctest::Approx(225.0f));
+    // A submenu goes to its item's inline end, the left, its top with the item's.
+    p = PlacePopup(Rect{200.0f, 40.0f, 80.0f, 20.0f}, core::Float2{120.0f, 100.0f}, bounds,
+                   PopupPlacement{PopupSide::InlineEnd, PopupAlign::Start, 0.0f, true}, true);
+    CHECK(p.Side == PopupSide::InlineEnd);
+    CHECK(p.Position.x == doctest::Approx(80.0f));
+    CHECK(p.Position.y == doctest::Approx(40.0f));
+    // At the left edge it flips to the inline start, the right.
+    p = PlacePopup(Rect{20.0f, 40.0f, 80.0f, 20.0f}, core::Float2{120.0f, 100.0f}, bounds,
+                   PopupPlacement{PopupSide::InlineEnd, PopupAlign::Start, 0.0f, true}, true);
+    CHECK(p.Side == PopupSide::InlineStart);
+    CHECK(p.Position.x == doctest::Approx(100.0f));
+    // A context menu at a point opens toward the left of it.
+    p = PlaceAtPoint(core::Float2{300.0f, 50.0f}, core::Float2{100.0f, 80.0f}, bounds, true);
+    CHECK(p.Position.x == doctest::Approx(200.0f));
+    CHECK(p.Position.y == doctest::Approx(50.0f));
+}
+
+TEST_CASE("popups: one opened in a right-to-left part of a page places itself in that direction")
+{
+    Bed bed; // the page runs left to right; a part of it right to left
+    auto part = Make<UIWidget>();
+    part->SetSize(core::Float2{400.0f, 300.0f});
+    part->SetLayoutDirection(Node::LayoutDirection::RightToLeft);
+    bed.root->AddChild(part.Get());
+    auto field = MakeButton(*part, core::Float2{200.0f, 10.0f}, core::Float2{150.0f, 20.0f});
+    (void)bed.root->UpdateLayout();
+    const core::Float2 fieldAt = field->ConvertToRootSpace(core::Float2{0.0f, 0.0f});
+
+    // Below its anchor, the right edges lined up (a combo box's list).
+    auto list = Make<Probe>(u8"list");
+    list->SetSize(core::Float2{100.0f, 80.0f});
+    PopupOptions below;
+    below.Anchor = field.Get();
+    bed.d().OpenPopup(*field, *list, core::Move(below));
+    (void)bed.root->UpdateLayout();
+    const core::Float2 listAt = list->ConvertToRootSpace(core::Float2{0.0f, 0.0f});
+    CHECK(listAt.x + 100.0f == doctest::Approx(fieldAt.x + 150.0f));
+    CHECK(listAt.y == doctest::Approx(fieldAt.y + 20.0f));
+    (void)bed.d().ClosePopup(*list);
+
+    // At a point, owned there: toward the left of it (a context menu).
+    auto menu = Make<Probe>(u8"menu");
+    menu->SetSize(core::Float2{100.0f, 80.0f});
+    bed.d().OpenPopup(*part, *menu, At(core::Float2{300.0f, 50.0f}));
+    (void)bed.root->UpdateLayout();
+    CHECK(menu->ConvertToRootSpace(core::Float2{0.0f, 0.0f}).x == doctest::Approx(200.0f));
 }
 
 TEST_CASE("popups: an anchored popup follows its anchor when what holds it scrolls")

@@ -707,8 +707,8 @@ export namespace experimental::gui
         }
 
         /// Shows the menu as a popup of `owner` at `position` (in the root's space): a context
-        /// menu at the pointer, below it and to its right, above it where it does not fit, slid
-        /// back in from the edges.
+        /// menu at the pointer, below it and toward the owner's inline end, above it where it does
+        /// not fit, slid back in from the edges.
         void Open(Node& owner, core::Float2 position)
         {
             PopupOptions options;
@@ -973,7 +973,7 @@ export namespace experimental::gui
             }
             PopupOptions options;
             options.Anchor = item;
-            options.Placement = PopupPlacement{PopupSide::Right, PopupAlign::Start, 0.0f, true};
+            options.Placement = PopupPlacement{PopupSide::InlineEnd, PopupAlign::Start, 0.0f, true};
             options.TakesFocus = true;
             sub->OpenAs(*item, core::Move(options));
             if (fromKeys)

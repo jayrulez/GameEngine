@@ -939,7 +939,10 @@ export namespace experimental::gui
                 Node& popup = *e.Popup;
                 if (e.Options.FitContent)
                     e.Size = popup.Measure(LayoutConstraints{});
-                PlacedPopup placed = PlacePopup(anchor, e.Size, bounds, e.Options.Placement);
+                // Its sides and alignment in the anchor's direction, else its own (its owner's).
+                const bool rightToLeft = e.Options.Anchor != nullptr ? e.Options.Anchor->IsRightToLeft()
+                                                                     : popup.IsRightToLeft();
+                PlacedPopup placed = PlacePopup(anchor, e.Size, bounds, e.Options.Placement, rightToLeft);
                 // On the device grid, as its arrange puts it, so the two agree.
                 const f32 scale = core::Max(popup.GetPixelScale(), 0.01f);
                 const auto snap = [scale](f32 v) { return core::Round(v * scale) / scale; };
@@ -1992,6 +1995,9 @@ export namespace experimental::gui
             core::RefPtr<Node> content = provider.CreateTooltipContent(provider.GetTooltipText());
             if (!content)
                 return;
+            // The root holds it, but it reads and opens as its provider runs.
+            const bool rightToLeft = provider.IsRightToLeft();
+            content->SetLayoutDirection(rightToLeft ? Node::LayoutDirection::RightToLeft : Node::LayoutDirection::LeftToRight);
             PopupOptions options;
             // Interactive (E16): a popup the pointer may enter and press in, which a press outside
             // or Escape closes, rather than a hint any press or key hides.
@@ -2011,7 +2017,8 @@ export namespace experimental::gui
             else
             {
                 const core::Float2 p = m_root->ConvertToNodeSpace(at);
-                options.AnchorRect = Rect{p.x + 12.0f, p.y, 0.0f, 0.0f}; // right of the pointer
+                // Clear of the pointer toward the inline end.
+                options.AnchorRect = Rect{rightToLeft ? p.x - 12.0f : p.x + 12.0f, p.y, 0.0f, 0.0f};
                 options.Placement = PopupPlacement{PopupSide::Below, PopupAlign::Start, 18.0f, false};
             }
             options.FitContent = true; // as its text measures, once its sheet styles it

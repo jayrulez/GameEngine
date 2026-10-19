@@ -408,6 +408,36 @@ eepp's frame buffers per node):
 Tests: replay identical to a fresh draw (the image tests); invalidation reaching exactly the
 changed nodes; the index agreeing with a tree walk. Measurements in the notes.
 
+Measured first (2026-10-19, RelWithDebInfo, `GUISandbox --bench <page>`: 960 x 720 offscreen, the
+page title's text changed each frame), the draw was not where the time went: the GUI's draw took
+0.09 ms on Controls, 0.11 ms on Data views and 0.22 ms on Stress at load 1, against 1.0 to 1.5 ms of
+GPU work and waiting, and culling already kept the drawing to what shows (99 to 170 nodes). What
+grew with the load was the walk: at load 20 the draw took 1.62 ms, visiting 7984 nodes only to cull
+them beside the 170 it drew. Ruling (user, 2026-10-19): aim E15 at the walk, not at recorded draw
+lists; keep damage.
+
+As built on `vg` (2026-10-19): `GUISandbox --bench <page> [frames]` prints a frame's cost by stage
+(3b3cffea5, bffc9c392, e09c4443b). VG's `GetLocalClipBounds`, the clip in local space (d8f94dcd0).
+A node with 32 children or more keeps an index of where each child's drawing reaches, ordered
+along the axis they spread on; drawing asks it which children reach the clip and hit testing which
+hold the point; `Invalidate` notes the child a change came up through so a check reads those
+alone, and the index is built again only when a reach moved; the node's subtree ink reads the
+index's bounds, and whether it has stacked children is kept until a z-index or the children change
+(c3ba4a460). Damage: each drawn node keeps the device area its subtree covered, tells its root
+where it was when it changes, moves, hides or goes, and notes where it is when that is new or moved;
+`SceneRoot::GetLastDamage` (993ff9026). The style cache's entries are checked against the element
+table, so a destroyed widget's are swept and never pass to one at its address (32aa6381a, a report
+from the read of the code that came with Sedulous's port).
+
+Numbers after, the same bench: load 20, 1.62 ms to 0.66 ms, culled 7984 to 5 (the rest is 3000
+out-of-view children animating every frame, each reach read again); load 1, 0.22 to 0.20 ms;
+Controls and Data views unchanged at 0.09 and 0.11 ms. A frame changing one label damages 3.6% of
+the window (the label), where before every drawn frame redrew it all.
+Left: no host presents part of a frame yet (the sandbox draws the whole window; the damage is
+there for one that can); the GPU-and-wait time grows with the stress load though the geometry is
+the same, which is outside the GUI's draw and not yet explained; a node's own drawing is still
+tessellated each frame it draws (the ruling's choice).
+
 ### E16 What scripts and overlays still cannot do
 
 Facts: scripts cannot remove a listener, or build menus, windows, popups, models, actions or

@@ -13,8 +13,10 @@
 // or parent change marked (Node::MarkStyleDirty), with their subtrees or later siblings when a
 // sheet reads that state through them, the children of a widget whose children were rearranged
 // when a sheet reads siblings, the children of one whose custom properties changed, and
-// everything after a new sheet, media or fonts. Cache entries are keyed by raw Node*: call
-// Forget() or Clear() when widgets are destroyed (no automatic lifecycle wiring).
+// everything after a new sheet, media or fonts. Cache entries are keyed by the widget's address
+// and checked against its place in its GUI's element table, so a destroyed widget's entries are
+// never taken for a new one's at the same address, and a sweep drops them as the caches grow;
+// Forget() or Clear() drops them at once.
 
 module;
 #include "Core/Prelude.h"
@@ -221,6 +223,8 @@ export namespace experimental::gui
             m_filtering = true;
             Visit(root, all, false);
             m_filtering = false;
+            if (m_owners.Size() > m_sweepAt)
+                SweepGone();
             if (FrameStats* stats = root.GetFrameStats()) // the GUI's frame stats (E8a)
             {
                 stats->StyleMs += watch.Elapsed().AsMilliseconds();
@@ -230,6 +234,8 @@ export namespace experimental::gui
 
         /// How many widgets the last ApplyTree restyled (none in a frame where nothing changed).
         [[nodiscard]] u32 LastRestyleCount() const noexcept { return m_lastRestyleCount; }
+        /// How many widgets it keeps a style for (a destroyed one's go at the next sweep).
+        [[nodiscard]] usize CachedWidgetCount() const noexcept { return m_cache.Size(); }
 
     private:
         void Visit(Node& node, bool forceSubtree, bool forceSelf)
@@ -319,6 +325,11 @@ export namespace experimental::gui
         // over it, applied again (through its transitions and animations when they run).
         void ApplyMotion(UIWidget& widget)
         {
+            if (!IsOwn(widget))
+            {
+                (void)ApplyOne(widget); // entries at its address were another's: from scratch
+                return;
+            }
             if (const RefPtr<StyleAnimation>* running = m_animations.Find(&widget); running != nullptr && *running && !(*running)->IsDone())
             {
                 (*running)->ApplyNow();
@@ -343,6 +354,7 @@ export namespace experimental::gui
         // as they inherit them).
         bool ApplyOne(UIWidget& widget)
         {
+            Claim(widget);
             // Custom properties inherit: the nearest styled ancestor's resolved style gives those
             // this widget does not set (ApplyTree styles parents first, so theirs are current).
             const ResolvedStyle* inherited = nullptr;
@@ -555,18 +567,20 @@ export namespace experimental::gui
             return own;
         }
 
-        // Drop a widget's cached style (call before it is destroyed).
+        // Drop a widget's cached style (a destroyed one's go by themselves, at the next sweep).
         void Forget(Node* widget)
         {
             m_cache.Remove(widget);
             m_animations.Remove(widget);
             m_startedAnimations.Remove(widget);
+            m_owners.Remove(widget);
         }
         void Clear()
         {
             m_cache = {};
             m_animations = {};
             m_startedAnimations = {};
+            m_owners = {};
         }
 
     private:
@@ -822,6 +836,47 @@ export namespace experimental::gui
         bool m_fontFacesLoaded = false; // this sheet's faces were asked for
         bool m_importsExpanded = false; // this sheet's @imports are in it
         f32 m_rootFontSize = 16.0f;                   // CSS `rem` base
+        // Whose entries an address's are: the widget's place in its GUI's element table when they
+        // were made (the table held, so a closed GUI's reads as gone, not freed).
+        struct Owner
+        {
+            RefPtr<ElementTable> Table;
+            u32 Slot = 0;
+            u32 Generation = 0;
+        };
+        // Whether the entries at `widget`'s address are its own: none yet, or made for it (a widget
+        // in no GUI has nothing to check against, and keeps them).
+        [[nodiscard]] bool IsOwn(const Node& widget) const
+        {
+            const Owner* owner = m_owners.Find(const_cast<Node*>(&widget));
+            return owner == nullptr || !owner->Table || owner->Table->Resolve(owner->Slot, owner->Generation) == &widget;
+        }
+        // Makes the entries at `widget`'s address its own, dropping a destroyed widget's first.
+        void Claim(Node& widget)
+        {
+            if (!IsOwn(widget))
+                Forget(&widget);
+            if (m_owners.Find(&widget) != nullptr)
+                return;
+            const Node::ElementRef ref = widget.TakeElementRef();
+            m_owners.InsertOrAssign(&widget, Owner{RefPtr<ElementTable>(ref.table), ref.slot, ref.generation});
+        }
+        // Drops the entries of every widget gone since, once the caches have doubled since the
+        // last sweep (so a GUI that keeps its widgets pays nothing).
+        void SweepGone()
+        {
+            Array<Node*> gone;
+            for (const auto& entry : m_owners)
+                if (entry.value.Table && entry.value.Table->Resolve(entry.value.Slot, entry.value.Generation) != entry.key)
+                    gone.PushBack(entry.key);
+            for (Node* node : gone)
+                Forget(node);
+            m_sweepAt = Max<usize>(kFirstSweep, m_owners.Size() * 2);
+        }
+        static constexpr usize kFirstSweep = 256;
+
+        HashMap<Node*, Owner> m_owners; // whose entries each address's are
+        usize m_sweepAt = kFirstSweep;
         HashMap<Node*, ResolvedStyle> m_cache; // last-applied style per widget (non-owning keys)
         HashMap<Node*, RefPtr<StyleAnimation>> m_animations; // widget -> its running transitions and animations
         HashMap<Node*, Array<core::String>> m_startedAnimations; // widget -> the @keyframes it has started

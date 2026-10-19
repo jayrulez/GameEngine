@@ -256,3 +256,52 @@ TEST_CASE("transition: animation-play-state pauses an animation's clock, and run
     bed.Advance(0.25);
     CHECK(bed.widget->GetSize().x == doctest::Approx(150.0f)); // resumed where it stood
 }
+
+TEST_CASE("style cache: destroyed widgets' entries do not pile up, nor pass to a widget at their address")
+{
+    core::RefPtr<SceneRoot> root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    StyleManager styles;
+    styles.SetStyleSheet(CSSParser::Parse(SV(u8"box { opacity: 0.3; } box.glow { animation: glow 1s linear; } "
+                                                 u8"@keyframes glow { from { opacity: 0; } to { opacity: 1; } }")));
+    // Churn: rows made, styled and destroyed, as a list rebuilding them does, nobody calling Forget.
+    for (int i = 0; i < 2000; ++i)
+    {
+        core::RefPtr<UIWidget> row = core::MakeRef<UIWidget>(core::DefaultAllocator());
+        row->SetTag(SV(u8"box"));
+        root->AddChild(row.Get());
+        styles.ApplyTree(*root);
+        root->RemoveChild(row.Get());
+    }
+    styles.ApplyTree(*root);
+    CHECK(styles.CachedWidgetCount() < 600u); // swept as they grew, not one per row ever made
+
+    // A widget at a destroyed one's address: its own style, and its own animation from the start.
+    const void* address = nullptr;
+    {
+        core::RefPtr<UIWidget> first = core::MakeRef<UIWidget>(core::DefaultAllocator());
+        first->SetTag(SV(u8"box"));
+        first->AddClass(SV(u8"glow"));
+        root->AddChild(first.Get());
+        styles.ApplyTree(*root);
+        root->GetContext().Update(core::Duration::FromSeconds(2.0)); // its animation ran out
+        address = first.Get();
+        root->RemoveChild(first.Get());
+    }
+    bool reused = false;
+    for (int attempt = 0; attempt < 64 && !reused; ++attempt)
+    {
+        core::RefPtr<UIWidget> next = core::MakeRef<UIWidget>(core::DefaultAllocator());
+        if (next.Get() != address)
+            continue;
+        reused = true;
+        next->SetTag(SV(u8"box"));
+        next->AddClass(SV(u8"glow"));
+        root->AddChild(next.Get());
+        styles.ApplyTree(*root);
+        root->GetContext().Update(core::Duration::FromSeconds(0.5));
+        CHECK(next->GetAlpha() == doctest::Approx(0.5f)); // half way through its own run (not the 0.3 at rest)
+        root->RemoveChild(next.Get());
+    }
+    if (!reused)
+        MESSAGE("no widget landed at the freed address; the reuse half was not exercised");
+}

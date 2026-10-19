@@ -31,6 +31,24 @@ namespace
         }
     };
 
+    // Counts its reads, so a test can tell a refused payload was never walked.
+    class CountedRecord final : public ISerializable
+    {
+        RTTI_OBJECT(CountedRecord, ISerializable)
+    public:
+        static inline i32 reads = 0;
+        i32 value = 0;
+
+        void Serialize(ISerializer& ar) override
+        {
+            if (ar.Mode() == SerializeMode::Read)
+            {
+                ++reads;
+            }
+            foundation::core::Serialize(ar, "value", value);
+        }
+    };
+
     // Every occurrence of `from` in `text` replaced with `to` (byte-wise; test-local helper).
     String ReplaceAll(StringView text, StringView from, StringView to)
     {
@@ -131,6 +149,7 @@ namespace
 }
 
 RTTI_DEFINE_OBJECT(MaterialResource, "rtti::content::test")
+RTTI_DEFINE_OBJECT(CountedRecord, "rtti::content::test")
 
 TEST_CASE("content: binary round-trip")
 {
@@ -759,4 +778,39 @@ TEST_CASE("content: ReadObjectFrom reads an edited envelope, and refuses another
     (void)db.DeleteInstance(copper->Id());
     (void)db.DeleteInstance(steel->Id());
     RemoveTree(dir);
+}
+
+// A payload stamped with another data version is in another layout: it is refused, and not
+// read as this one (in binary that walked garbage counts past the end of the file).
+TEST_CASE("content: a payload of another data version is refused unread")
+{
+    GlobalTypeRegistry().Register(CountedRecord::StaticType());
+    RegisterSerializable<CountedRecord>();
+    const StringView dir = u8"scratch_content_version_db";
+    FileDelete(JoinPath(dir, u8"records/old.rasset"));
+    RemoveDirectory(JoinPath(dir, u8"records"));
+    RemoveDirectory(dir);
+    NativeFileSystem mount(dir, DefaultAllocator());
+    ContentDatabase db(DefaultAllocator(), mount, MakeBinaryFactory(), u8".rasset");
+    Group* records = db.RootGroup()->CreateGroup(u8"records");
+    foundation::content::Instance* old = records->CreateInstance(u8"old", CountedRecord::StaticType());
+    REQUIRE(old != nullptr);
+    CountedRecord record;
+    record.value = 5;
+    REQUIRE(old->WriteObject(record).IsOk()); // written at data version 0
+
+    TypeInfo& type = const_cast<TypeInfo&>(CountedRecord::StaticType());
+    CountedRecord::reads = 0;
+    REQUIRE(old->ReadObject().Get() != nullptr); // the same version reads
+    CHECK(CountedRecord::reads == 1);
+
+    type.dataVersion = 1; // the layout moved on
+    CountedRecord::reads = 0;
+    CHECK(old->ReadObject().Get() == nullptr);
+    CHECK(CountedRecord::reads == 0);
+    type.dataVersion = 0;
+
+    (void)db.DeleteInstance(old->Id());
+    RemoveDirectory(JoinPath(dir, u8"records"));
+    RemoveDirectory(dir);
 }

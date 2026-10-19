@@ -341,12 +341,16 @@ namespace foundation::content
         }
 
         // Deserialize the payload under its data-version scope (a version other than the
-        // type's current one fails the read here - no migration).
+        // type's current one fails the read here - no migration). A refused payload is not
+        // read: it is in another layout, and reading it as this one only walks garbage.
         BeginVersionedPayload(ar, *type);
-        ar.Key("payload");
-        ar.BeginObject();
-        object->Serialize(ar);
-        ar.EndObject();
+        if (ar.IsOk())
+        {
+            ar.Key("payload");
+            ar.BeginObject();
+            object->Serialize(ar);
+            ar.EndObject();
+        }
         EndVersionedPayload(ar);
         if (!ar.IsOk())
         {

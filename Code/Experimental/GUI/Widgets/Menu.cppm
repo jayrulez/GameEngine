@@ -436,6 +436,79 @@ export namespace experimental::gui
         Color m_arrowColor{0.80f, 0.84f, 0.90f, 1.0f};
     };
 
+    // A menu's scroll arrow (E16): at its top or its bottom while its items do not fit the window;
+    // the pointer resting on it scrolls them at a steady speed (Windows's and macOS's menus).
+    class MenuScrollArrow : public UIWidget
+    {
+        RTTI_OBJECT(MenuScrollArrow, UIWidget)
+    public:
+        explicit MenuScrollArrow(bool up) : m_up(up)
+        {
+            SetTag(core::StringView(u8"menuscroll"));
+            SetTabFocusable(false);
+            SetAccessHidden(true); // a screen reader's keys scroll the menu as they move
+        }
+        void SetOnScroll(core::Function<void(f32)> scroll) { m_onScroll = core::Move(scroll); }
+        void SetColors(Color face, Color arrow)
+        {
+            m_face = face;
+            m_arrow = arrow;
+            Invalidate();
+        }
+        /// Whether it can scroll further its way (dimmed at the end).
+        void SetLive(bool live)
+        {
+            if (live == m_live)
+                return;
+            m_live = live;
+            Invalidate();
+        }
+
+    protected:
+        void OnPointerStateChange() override
+        {
+            UIWidget::OnPointerStateChange();
+            if (!IsHovered() || m_ticking)
+                return;
+            m_ticking = true;
+            MenuScrollArrow* self = this;
+            RunAction(core::MakeRef<TickAction>(MemoryAllocator(), [self](core::Duration elapsed)
+            {
+                if (!self->IsHovered())
+                {
+                    self->m_ticking = false;
+                    return false;
+                }
+                constexpr f32 kSpeed = 360.0f; // points a second
+                if (self->m_onScroll)
+                    self->m_onScroll((self->m_up ? -kSpeed : kSpeed) * static_cast<f32>(elapsed.AsSecondsF()));
+                return true;
+            }));
+        }
+        void OnDraw(DrawContext& ctx, const Rect& localBounds) override
+        {
+            ctx.VG().FillRect(localBounds.ToRectangle(), m_face);
+            const f32 cx = localBounds.x + localBounds.width * 0.5f, cy = localBounds.y + localBounds.height * 0.5f;
+            const f32 w = 5.0f, h = 3.0f;
+            vg::PathBuilder pb;
+            pb.MoveTo(cx - w, m_up ? cy + h : cy - h);
+            pb.LineTo(cx + w, m_up ? cy + h : cy - h);
+            pb.LineTo(cx, m_up ? cy - h : cy + h);
+            pb.Close();
+            Color arrow = m_arrow;
+            arrow.a *= m_live ? 1.0f : 0.35f;
+            ctx.VG().FillPath(pb.ToPath(), arrow);
+        }
+
+    private:
+        bool m_up;
+        bool m_live = true;
+        bool m_ticking = false;
+        Color m_face{0.16f, 0.17f, 0.21f, 1.0f};
+        Color m_arrow{0.80f, 0.84f, 0.90f, 1.0f};
+        core::Function<void(f32)> m_onScroll;
+    };
+
     // === Menu ==================================================================
     class Menu : public UIWidget
     {
@@ -465,8 +538,29 @@ export namespace experimental::gui
                             });
             (void)OnCommand(core::StringView(kMenuRightCommand), [](CommandEvent& e) { e.Propagate = true; });
             SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_panelColor));
+            // Taller than the window, its items scroll (E16): the wheel turns them.
+            (void)AddEventListener(EventType::MouseWheel, [self](const Event& e)
+                                   {
+                                       if (!self->m_scrolls)
+                                           return;
+                                       self->ScrollBy(-static_cast<const WheelEvent&>(e).Delta.y * kWheelStep);
+                                       e.Handled = true;
+                                   });
             StyleWriteScope defaults(*this); // its own values, which a sheet returns to
             SetTextColor(Color{0.88f, 0.90f, 0.94f, 1.0f});
+        }
+
+        /// Whether its items are taller than the window holds, so they scroll (E16).
+        [[nodiscard]] bool Scrolls() const noexcept { return m_scrolls; }
+        /// How far its items are scrolled, in points (0: the first at the top).
+        [[nodiscard]] f32 GetItemScroll() const noexcept { return m_scroll; }
+        void ScrollBy(f32 delta)
+        {
+            if (delta == 0.0f)
+                return;
+            m_scroll += delta;
+            Relayout();
+            Invalidate();
         }
 
         void SetWidth(f32 width)
@@ -665,6 +759,13 @@ export namespace experimental::gui
         }
 
         void OnSizeChange() override { Relayout(); }
+        // Measured as it lays itself out: its rows' width, and the height it keeps (a popup fitting
+        // its content asks this, so a menu that scrolls is placed at the height it shows).
+        [[nodiscard]] core::Float2 MeasureContent(core::Float2) override
+        {
+            const Extent extent = MeasureItems();
+            return core::Float2{extent.Width, extent.Height};
+        }
 
     private:
         // Up and down go round the items (from the menu itself: the first or the last).
@@ -687,6 +788,7 @@ export namespace experimental::gui
                 MenuRow* row = m_rows[static_cast<usize>(i)];
                 if (row->IsSelectable() && row->IsTreeEnabled() && row->IsTabFocusable())
                 {
+                    ScrollRowIntoView(*row);
                     row->RequestFocus();
                     return true;
                 }
@@ -706,7 +808,10 @@ export namespace experimental::gui
             }
             Menu* self = this;
             row->SetOnHovered([self, row]() { self->OnRowHovered(row); });
-            AddChild(node);
+            if (m_scrollUp) // before the scroll arrows, which stay over the items
+                (void)AddChildAt(node, GetChildIndex(m_scrollUp.Get()));
+            else
+                AddChild(node);
             m_rows.PushBack(row);
             Relayout();
         }
@@ -718,19 +823,48 @@ export namespace experimental::gui
                     it->SetRowHeight(m_itemHeight);
         }
 
-        void Relayout()
+        // Its width, its items' height, and the height it keeps: taller than the window holds (less
+        // a margin), it keeps to the window and scrolls its items between two arrows (E16), rather
+        // than running off the window's edge.
+        struct Extent
         {
-            f32 width = m_width;
+            f32 Width = 0.0f, Content = 0.0f, Height = 0.0f;
+            bool Scrolls = false;
+        };
+        [[nodiscard]] Extent MeasureItems()
+        {
+            Extent e;
+            e.Width = m_width;
             if (m_autoWidth)
             {
                 f32 widest = 1.0f;
                 for (MenuRow* row : m_rows)
                     if (MenuItem* it = core::Cast<MenuItem>(row))
                         widest = core::Max(widest, it->PreferredWidth());
-                width = widest;
+                e.Width = widest;
             }
+            for (MenuRow* row : m_rows)
+                e.Content += row->RowHeight();
+            const Node* root = GetRootNode();
+            const f32 room = root != nullptr && root != this && root->GetSize().y > 0.0f ? root->GetSize().y - 2.0f * kScreenMargin : 0.0f;
+            e.Scrolls = room > 2.0f * kArrowHeight + m_itemHeight && e.Content > room;
+            e.Height = e.Scrolls ? room : e.Content;
+            return e;
+        }
 
-            f32 y = 0.0f;
+        void Relayout()
+        {
+            const Extent extent = MeasureItems();
+            // Being placed (a popup shrunk to the room beside its anchor), it keeps the height it was
+            // given and scrolls within it; else the height it measures.
+            const bool placed = IsBeingPlaced() && GetSize().y > 0.0f;
+            const f32 width = extent.Width, content = extent.Content;
+            const f32 height = placed ? core::Min(GetSize().y, extent.Content) : extent.Height;
+            m_scrolls = placed ? content > height + 0.5f && height > 2.0f * kArrowHeight + m_itemHeight : extent.Scrolls;
+            const f32 top = m_scrolls ? kArrowHeight : 0.0f;
+            const f32 view = height - 2.0f * top;
+            m_scroll = m_scrolls ? core::Clamp(m_scroll, 0.0f, core::Max(0.0f, content - view)) : 0.0f;
+            f32 y = top - m_scroll;
             for (MenuRow* row : m_rows)
             {
                 const f32 h = row->RowHeight();
@@ -738,7 +872,58 @@ export namespace experimental::gui
                 row->SetSize(core::Float2{width, h});
                 y += h;
             }
-            SetSize(core::Float2{width, y});
+            if (m_scrolls && !m_scrollUp)
+            {
+                Menu* self = this;
+                m_scrollUp = core::MakeRef<MenuScrollArrow>(MemoryAllocator(), true);
+                m_scrollDown = core::MakeRef<MenuScrollArrow>(MemoryAllocator(), false);
+                m_scrollUp->SetOnScroll([self](f32 d) { self->ScrollBy(d); });
+                m_scrollDown->SetOnScroll([self](f32 d) { self->ScrollBy(d); });
+                AddChild(m_scrollUp.Get()); // last: over the items, hit before them
+                AddChild(m_scrollDown.Get());
+            }
+            if (m_scrollUp)
+            {
+                MenuScrollArrow* arrows[2] = {m_scrollUp.Get(), m_scrollDown.Get()};
+                for (MenuScrollArrow* arrow : arrows)
+                {
+                    arrow->SetDisplayed(m_scrolls);
+                    arrow->SetColors(m_panelColor, GetTextColor());
+                }
+                m_scrollUp->SetPosition(core::Float2{0.0f, 0.0f});
+                m_scrollUp->SetSize(core::Float2{width, kArrowHeight});
+                m_scrollUp->SetLive(m_scroll > 0.0f);
+                m_scrollDown->SetPosition(core::Float2{0.0f, height - kArrowHeight});
+                m_scrollDown->SetSize(core::Float2{width, kArrowHeight});
+                m_scrollDown->SetLive(m_scroll < content - view);
+            }
+            SetClipChildren(m_scrolls);
+            // Sized by its items without pinning the size (as SetSize does): a popup that fits its
+            // content measures it again each pass, and a pinned size would hold a stale height.
+            if (GetSize().x != width || GetSize().y != height)
+                Arrange(Rect{GetPosition().x, GetPosition().y, width, height});
+        }
+        // Scrolls so `row` shows whole between the arrows (a key moved to it).
+        void ScrollRowIntoView(const MenuRow& row)
+        {
+            if (!m_scrolls)
+                return;
+            f32 y = 0.0f;
+            for (MenuRow* r : m_rows)
+            {
+                if (r == &row)
+                    break;
+                y += r->RowHeight();
+            }
+            const f32 view = GetSize().y - 2.0f * kArrowHeight;
+            if (y < m_scroll)
+                m_scroll = y;
+            else if (y + row.RowHeight() > m_scroll + view)
+                m_scroll = y + row.RowHeight() - view;
+            else
+                return;
+            Relayout();
+            Invalidate();
         }
 
         void OpenAs(Node& owner, PopupOptions options)
@@ -892,6 +1077,13 @@ export namespace experimental::gui
         static constexpr f64 kSafeAreaGrace = 0.3; // seconds a resting pointer waits before switching
         f32 m_width = 160.0f;
         f32 m_itemHeight = 26.0f;
+        // Scrolling, when its items do not fit the window (E16).
+        static constexpr f32 kArrowHeight = 16.0f;
+        static constexpr f32 kScreenMargin = 8.0f; // kept from the window's top and bottom
+        static constexpr f32 kWheelStep = 40.0f;   // points a wheel notch turns
+        bool m_scrolls = false;
+        f32 m_scroll = 0.0f;
+        core::RefPtr<MenuScrollArrow> m_scrollUp, m_scrollDown;
         Color m_panelColor{0.16f, 0.17f, 0.21f, 1.0f};
         core::Function<void(PopupCloseReason)> m_onClosed;
     };
@@ -929,5 +1121,6 @@ export namespace experimental::gui
     inline bool MenuSubItem::IsLit() const { return MenuItem::IsLit() || (m_subMenu != nullptr && m_subMenu->IsOpen()); }
 
     RTTI_DEFINE_OBJECT(MenuRow, "rtti::gui")
+    RTTI_DEFINE_OBJECT(MenuScrollArrow, "rtti::gui")
     RTTI_DEFINE_OBJECT(MenuSubItem, "rtti::gui")
 }

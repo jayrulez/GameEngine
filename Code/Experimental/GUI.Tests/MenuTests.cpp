@@ -487,3 +487,51 @@ TEST_CASE("menu: a submenu added before its title is set (a script's add, then t
     };
     CHECK(named(named, *menu.Get()));
 }
+
+TEST_CASE("menu: taller than the window, it keeps to it and scrolls by wheel, arrow and key (E16)")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{400.0f, 300.0f});
+    auto anchor = Make<UIWidget>();
+    anchor->SetSize(core::Float2{10.0f, 10.0f});
+    root->AddChild(anchor.Get());
+    EventDispatcher* d = root->GetEventDispatcher();
+    auto menu = Make<Menu>();
+    menu->SetItemHeight(25.0f);
+    for (int i = 0; i < 40; ++i)
+        menu->AddItem(core::StringView(u8"Item"), [] {});
+    menu->Open(*anchor, core::Float2{20.0f, 20.0f});
+    root->GetContext().Update(core::Duration{}); // a frame: the popup placed
+    REQUIRE(d->IsPopupOpen(*menu));
+    CHECK(menu->Scrolls());
+    CHECK(menu->GetSize().y <= 300.0f);
+    const core::Float2 at = menu->ConvertToWorldSpace(core::Float2{0.0f, 0.0f});
+    CHECK(at.y >= 0.0f);
+    CHECK(at.y + menu->GetSize().y <= 300.0f + 0.5f); // kept to the window
+    CHECK(menu->GetItemScroll() == doctest::Approx(0.0f));
+
+    // The wheel, over its items.
+    const core::Float2 middle = menu->ConvertToWorldSpace(core::Float2{50.0f, menu->GetSize().y * 0.5f});
+    (void)d->InjectMouseWheel(middle, core::Float2{0.0f, -2.0f});
+    CHECK(menu->GetItemScroll() > 0.0f);
+    const float wheeled = menu->GetItemScroll();
+
+    // The pointer resting on the down arrow, half a second.
+    const core::Float2 bottom = menu->ConvertToWorldSpace(core::Float2{50.0f, menu->GetSize().y - 4.0f});
+    d->InjectMouseMove(bottom);
+    root->GetContext().Update(core::Duration::FromSeconds(0.25));
+    root->GetContext().Update(core::Duration::FromSeconds(0.25));
+    CHECK(menu->GetItemScroll() > wheeled + 100.0f);
+    d->InjectMouseMove(core::Float2{390.0f, 290.0f}); // off it: it stops
+    const float rested = menu->GetItemScroll();
+    root->GetContext().Update(core::Duration::FromSeconds(0.5));
+    CHECK(menu->GetItemScroll() == doctest::Approx(rested));
+
+    // The keys: up from no item goes round to the last, which scrolls into view at the end.
+    menu->RequestFocus();
+    (void)d->InjectKeyDown(static_cast<core::u32>(KeyCode::Up));
+    const float end = 40.0f * 25.0f - (menu->GetSize().y - 32.0f);
+    CHECK(menu->GetItemScroll() == doctest::Approx(end));
+    (void)d->InjectKeyDown(static_cast<core::u32>(KeyCode::Down)); // round to the first
+    CHECK(menu->GetItemScroll() == doctest::Approx(0.0f));
+}

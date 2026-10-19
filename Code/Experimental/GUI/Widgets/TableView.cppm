@@ -446,7 +446,10 @@ export namespace experimental::gui
             for (usize c = 0; c < columns; ++c)
             {
                 const LayoutLength w = c < m_columnWidths.Size() ? m_columnWidths[c] : LayoutLength{};
-                m_widths.PushBack(core::Max(m_minColumnWidth, w.Resolve(bodyWidth).ValueOr(share)));
+                // Read as the given widths are above: ValueOr on this temporary goes unemitted in an
+                // optimized clang build, which then fails to link.
+                const core::Optional<f32> px = w.Resolve(bodyWidth);
+                m_widths.PushBack(core::Max(m_minColumnWidth, px.HasValue() ? px.Value() : share));
             }
             // Widths changed with the row's own width the same (one column narrower, an auto one
             // wider): the rows' cells are placed again, as the header's are.

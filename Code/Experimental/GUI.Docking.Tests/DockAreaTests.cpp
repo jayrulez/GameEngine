@@ -6,7 +6,8 @@
 // own; the windows follow the layout (made, placed, titled, ended) and the layout follows what the
 // user does to them (moved or resized, closed); a float is docked into like the main surface; a tab
 // dragged with Shift, Move to's Float and dock.float float a panel; a float dragged by its title
-// docks whole over a target, is only moved with Shift, and goes back on Escape.
+// docks whole over a target, is only moved with Shift, and goes back on Escape; the dock keys reach
+// across the surfaces (past a float's edge, the surface cycle) and so does the Move to menu.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -395,4 +396,139 @@ TEST_CASE("dock area: a float laid out before the area has its size stands at it
     REQUIRE(window != nullptr);
     CHECK(window->GetPosition().x == doctest::Approx(350.0f));
     CHECK(window->GetPosition().y == doctest::Approx(70.0f));
+}
+
+namespace
+{
+    // The dock space whose stack the focus is in; null when none.
+    DockSpace* FocusedSpace(Bed& bed)
+    {
+        if (bed.area->GetMainSpace()->FocusedStack() != kNoDock)
+            return bed.area->GetMainSpace();
+        for (usize i = 0; i < bed.area->GetFloatCount(); ++i)
+            if (bed.area->GetFloat(i)->GetSpace()->FocusedStack() != kNoDock)
+                return bed.area->GetFloat(i)->GetSpace();
+        return nullptr;
+    }
+    DockNodeId FocusedStackOf(Bed& bed)
+    {
+        DockSpace* space = FocusedSpace(bed);
+        return space != nullptr ? space->FocusedStack() : kNoDock;
+    }
+}
+
+TEST_CASE("dock area: an arrow past a float's edge focuses what lies beyond it: the topmost other float, else the main surface")
+{
+    Bed bed;
+    DefineDockingCommands(bed.root->GetContext());
+    REQUIRE(bed.controller.Edit([](DockLayout& l) { return l.InsertBeside(SV(u8"console"), l.CentralStack(), DockSide::End, 0.3f); }).Ok());
+    bed.Lay();
+    const DockSurfaceId first = bed.Float(u8"profiler", core::Rectangle{100.0f, 80.0f, 200.0f, 160.0f});
+    const DockSurfaceId second = bed.Float(u8"memory", core::Rectangle{280.0f, 100.0f, 300.0f, 120.0f}); // over the first's right edge
+    DockLayout const& layout = bed.controller.GetLayout();
+
+    // Left of the first float: the main surface's stack there (the scene's).
+    bed.TabOf(u8"profiler")->RequestFocus();
+    CHECK(bed.root->RunCommand(SV(u8"dock.focus-left")));
+    CHECK(FocusedStackOf(bed) == layout.StackOf(SV(u8"scene")));
+
+    // Right of the first float: the second, over the main surface there.
+    bed.TabOf(u8"profiler")->RequestFocus();
+    CHECK(bed.root->RunCommand(SV(u8"dock.focus-right")));
+    CHECK(FocusedStackOf(bed) == layout.StackOf(SV(u8"memory")));
+    CHECK(Cast<DockFloat>(bed.area->GetChildAt(bed.area->ChildCount() - 1)) == nullptr); // the preview stays on top
+
+    // Right of the second: the main surface's stack there (the console's, along the right).
+    CHECK(bed.root->RunCommand(SV(u8"dock.focus-right")));
+    CHECK(FocusedStackOf(bed) == layout.StackOf(SV(u8"console")));
+
+    // Past the main surface's own edge is outside the area: nothing.
+    (void)bed.root->RunCommand(SV(u8"dock.focus-right"));
+    CHECK(FocusedStackOf(bed) == layout.StackOf(SV(u8"console")));
+    (void)first;
+    (void)second;
+}
+
+TEST_CASE("dock area: a panel moved past a float's edge goes into the stack beyond; a float it empties ends, the focus with the panel")
+{
+    Bed bed;
+    DefineDockingCommands(bed.root->GetContext());
+    bed.Float(u8"profiler", core::Rectangle{100.0f, 80.0f, 300.0f, 200.0f});
+    REQUIRE(bed.controller.Edit([](DockLayout& l) { return l.InsertTab(SV(u8"memory"), l.StackOf(SV(u8"profiler"))); }).Ok());
+    bed.Lay();
+    const DockNodeId scene = bed.controller.GetLayout().StackOf(SV(u8"scene"));
+
+    bed.TabOf(u8"memory")->RequestFocus();
+    CHECK(bed.root->RunCommand(SV(u8"dock.move-left")));
+    bed.Lay();
+    CHECK(bed.controller.GetLayout().StackOf(SV(u8"memory")) == scene);
+    CHECK(FocusedSpace(bed) == bed.area->GetMainSpace());
+    CHECK(FocusedStackOf(bed) == scene);
+    CHECK(bed.area->GetFloatCount() == 1u);
+
+    // The float's last panel: the float ends with the move (its dock space with it), the focus
+    // following the panel into the main surface.
+    bed.TabOf(u8"profiler")->RequestFocus();
+    CHECK(bed.root->RunCommand(SV(u8"dock.move-up")));
+    bed.Lay();
+    CHECK(bed.area->GetFloatCount() == 0u);
+    CHECK(bed.controller.GetLayout().StackOf(SV(u8"profiler")) == scene);
+    CHECK(FocusedStackOf(bed) == scene);
+}
+
+TEST_CASE("dock area: dock.next-surface and dock.previous-surface go around the surfaces, back to the stack last focused in each")
+{
+    Bed bed;
+    DefineDockingCommands(bed.root->GetContext());
+    REQUIRE(bed.controller.Edit([](DockLayout& l) { return l.InsertBeside(SV(u8"console"), l.CentralStack(), DockSide::End, 0.3f); }).Ok());
+    bed.Lay();
+    bed.TabOf(u8"scene")->RequestFocus();
+    (void)bed.root->RunCommand(SV(u8"dock.next-surface")); // no other surface to go to
+    CHECK(FocusedStackOf(bed) == bed.controller.GetLayout().StackOf(SV(u8"scene")));
+    bed.Float(u8"profiler", core::Rectangle{100.0f, 80.0f, 200.0f, 160.0f});
+    bed.Float(u8"memory", core::Rectangle{350.0f, 100.0f, 150.0f, 120.0f});
+    DockLayout const& layout = bed.controller.GetLayout();
+
+    bed.TabOf(u8"console")->RequestFocus(); // the main surface's second stack
+    CHECK(bed.root->RunCommand(SV(u8"dock.next-surface")));
+    CHECK(FocusedStackOf(bed) == layout.StackOf(SV(u8"profiler")));
+    CHECK(bed.area->GetChildAt(bed.area->ChildCount() - 2) == bed.area->GetFloat(0)); // brought to the front
+    CHECK(bed.root->RunCommand(SV(u8"dock.next-surface")));
+    CHECK(FocusedStackOf(bed) == layout.StackOf(SV(u8"memory")));
+    CHECK(bed.root->RunCommand(SV(u8"dock.next-surface")));
+    CHECK(FocusedStackOf(bed) == layout.StackOf(SV(u8"console"))); // around, to where it was
+    CHECK(bed.root->RunCommand(SV(u8"dock.previous-surface")));
+    CHECK(FocusedStackOf(bed) == layout.StackOf(SV(u8"memory")));
+}
+
+TEST_CASE("dock area: a float's Move to menu lists the other surfaces' stacks, named for where they are")
+{
+    Bed bed;
+    bed.Float(u8"profiler", core::Rectangle{100.0f, 80.0f, 300.0f, 200.0f});
+    bed.Float(u8"memory", core::Rectangle{420.0f, 100.0f, 200.0f, 160.0f});
+    DockSpace* space = bed.SpaceOf(u8"profiler");
+    REQUIRE(space != nullptr);
+    Menu* menu = space->OpenMoveTo(SV(u8"profiler"), *bed.TabOf(u8"profiler"), core::Float2{0.0f, 0.0f});
+    REQUIRE(menu != nullptr);
+    Menu* into = nullptr;
+    for (usize i = 0; i < menu->ChildCount(); ++i)
+        if (auto* sub = Cast<MenuSubItem>(menu->GetChildAt(i)); sub != nullptr && sub->GetText() == SV(u8"Into"))
+            into = sub->GetSubMenu();
+    REQUIRE(into != nullptr);
+    MenuItem* scene = nullptr;
+    bool memory = false;
+    for (usize i = 0; i < into->ChildCount(); ++i)
+        if (auto* item = Cast<MenuItem>(into->GetChildAt(i)))
+        {
+            if (item->GetText() == SV(u8"Scene (main)"))
+                scene = item;
+            memory = memory || item->GetText() == SV(u8"Memory (floating)");
+        }
+    CHECK(memory);
+    REQUIRE(scene != nullptr);
+    scene->HandleActivate(); // the float's only panel: the float ends with it
+    bed.Lay();
+    CHECK(bed.controller.GetLayout().StackOf(SV(u8"profiler")) == bed.controller.GetLayout().StackOf(SV(u8"scene")));
+    CHECK(bed.area->GetFloatCount() == 1u);
+    CHECK(FocusedStackOf(bed) == bed.controller.GetLayout().StackOf(SV(u8"scene")));
 }

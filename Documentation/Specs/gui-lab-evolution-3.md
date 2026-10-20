@@ -301,8 +301,19 @@ Qt-ADS's), the preview the room its content would take; with Shift it only moves
 back. On the way, in the core: a drag source may follow the pointer itself with no preview, a window
 reports a move or resize the user made and its title bar can start a drag instead, and a tab bar's
 owner may pass a tab offered on. The controller's pass over its views takes views made and ended as
-it goes. Not yet: a stack's own grip carrying the stack; the keyboard and `dock.*` commands acting
-across surfaces (they stay within the focused one).
+it goes. Not yet: a stack's own grip carrying the stack.
+
+The dock keys across surfaces (2026-10-20). A float lies over the main surface, not beside it, so an
+arrow alone cannot reach most floats; no surveyed UI crosses overlapping windows with arrows alone
+(Visual Studio's Alt+F6, Windows' F6 and Ctrl+F6, Dear ImGui's Ctrl+Tab and i3's `focus
+mode_toggle` cycle instead). The user's choice: `dock.next-surface` and `dock.previous-surface`
+(Ctrl+Alt+\` and with Shift) take the focus around the surfaces (the main one, then the floats as
+they were made) to the stack last left in each, bringing a float to the front; the arrows stay
+within a surface, and past a float's edge go on to what lies just beyond it there (the topmost
+other float, else the main surface), the move keys carrying the panel into that stack, before the
+surface's own edge. "Move to" lists the other surfaces' stacks, named for where they are. A DockArea
+is a DockSpace's `IDockSurroundings`. On the way, in the core: a menu item outlives an action that
+ends its menu, and a window's title bar is the mirror of itself right to left.
 
 Not in scope: the editor moving off foundation.ui's docking. It needs the toolkit too, which is not
 written, and the lab's libraries proven stable first (the user, 2026-10-20).

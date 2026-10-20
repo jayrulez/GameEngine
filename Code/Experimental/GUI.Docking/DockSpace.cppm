@@ -53,10 +53,13 @@ export namespace experimental::gui
     }
 
     /// Docking's commands, with the keys they go by: `dock.focus-*` and `dock.move-*` (left, right,
-    /// up, down) focus the stack that way, or move the focused stack's panel into it (along the
-    /// surface's edge when none is that way); `dock.maximize` shows the focused stack alone or all
-    /// again; `dock.close` closes its panel; `dock.move-to` opens the menu of where it may go
-    /// (what a tab's context menu opens too). A DockSpace takes them for the stack the focus is in.
+    /// up, down) focus the stack that way, or move the focused stack's panel into it (past the
+    /// surface's edge into what lies beyond it, in a DockArea; else along that edge); `dock.maximize`
+    /// shows the focused stack alone or all again; `dock.close` closes its panel; `dock.move-to`
+    /// opens the menu of where it may go (what a tab's context menu opens too); `dock.float` floats
+    /// it. A DockSpace takes them for the stack the focus is in. `dock.next-surface` and
+    /// `dock.previous-surface` take the focus to a DockArea's next surface (its main one, then its
+    /// floats), to the stack last focused there.
     inline void DefineDockingCommands(GUIContext& context)
     {
         struct Named
@@ -78,6 +81,8 @@ export namespace experimental::gui
             {u8"dock.close", u8"Close the Panel", u8"ctrl-alt-w"},
             {u8"dock.move-to", u8"Move the Panel To...", u8"ctrl-alt-period"},
             {u8"dock.float", u8"Float the Panel", u8"ctrl-alt-f"},
+            {u8"dock.next-surface", u8"Focus the Next Dock Surface", u8"ctrl-alt-grave"},
+            {u8"dock.previous-surface", u8"Focus the Previous Dock Surface", u8"ctrl-alt-shift-grave"},
         };
         for (const Named& named : kCommands)
         {
@@ -87,7 +92,6 @@ export namespace experimental::gui
         }
     }
 
-    /// A way on the screen, for the directional commands.
     /// What a tab torn out of its stack leaves while it is dragged (DockSpace::SetTornTab).
     enum class DockTornTab : u8
     {
@@ -95,6 +99,7 @@ export namespace experimental::gui
         Close, ///< its strip closes up, a neighbour's panel shown
     };
 
+    /// A way on the screen, for the directional commands.
     enum class DockDirection : u8
     {
         Left,
@@ -104,6 +109,21 @@ export namespace experimental::gui
     };
 
     class DockSpace;
+
+    /// What a DockSpace's keys and its Move to menu reach past its own surface: the other surfaces
+    /// shown with it (a DockArea's main surface and its floats).
+    class IDockSurroundings
+    {
+    public:
+        virtual ~IDockSurroundings() = default;
+        /// The stack of another surface past `stack`'s surface the way `way` goes (what lies just
+        /// beyond its edge there); kNoDock when none does.
+        [[nodiscard]] virtual DockNodeId StackBeyond(const DockSpace& from, DockNodeId stack, DockDirection way) const = 0;
+        /// The stacks the other surfaces show, for the Move to menu.
+        virtual void OtherStacks(const DockSpace& from, Array<DockNodeId>& out) const = 0;
+        /// Focuses a stack any of them shows (its chosen tab); false when none does.
+        virtual bool FocusStackAnywhere(DockNodeId stack) = 0;
+    };
 
     /// A stack as a DockSpace shows it: a TabView whose drops are the layout's to decide (its
     /// middle tabs a dragged panel in, an edge band puts it beside).
@@ -270,15 +290,64 @@ export namespace experimental::gui
             }
             return best;
         }
-        /// Focuses the stack the way `way` goes from the focused one (its chosen tab); false when there
-        /// is none.
+        /// The stack this widget shows at `screenPoint`, or the one nearest it; kNoDock when it shows
+        /// none.
+        [[nodiscard]] DockNodeId StackAt(core::Float2 screenPoint) const
+        {
+            DockNodeId best = kNoDock;
+            f32 bestDistance = 0.0f;
+            for (const Shown& shown : m_shown)
+            {
+                if (shown.Kind != DockNodeKind::Stack || !Holds(*shown.Widget))
+                    continue;
+                const Rect b = shown.Widget->GetScreenBounds();
+                const f32 dx = Max(0.0f, Max(b.x - screenPoint.x, screenPoint.x - (b.x + b.width)));
+                const f32 dy = Max(0.0f, Max(b.y - screenPoint.y, screenPoint.y - (b.y + b.height)));
+                const f32 distance = dx * dx + dy * dy;
+                if (best == kNoDock || distance < bestDistance)
+                {
+                    best = shown.Node;
+                    bestDistance = distance;
+                }
+            }
+            return best;
+        }
+        /// The stacks this widget shows (a maximized one alone), in the layout's order.
+        void StacksShown(Array<DockNodeId>& out) const
+        {
+            for (const Shown& shown : m_shown)
+                if (shown.Kind == DockNodeKind::Stack && Holds(*shown.Widget))
+                    out.PushBack(shown.Node);
+        }
+        /// A stack's chosen tab focused; false when this widget shows none of it.
+        bool FocusStack(DockNodeId stack)
+        {
+            TabView* view = Cast<TabView>(WidgetOf(stack));
+            if (view == nullptr || !Holds(*view))
+                return false;
+            Tab* tab = view->GetBar()->GetSelectedTab();
+            if (tab == nullptr)
+                return false;
+            tab->RequestFocus();
+            return true;
+        }
+        /// What its keys and Move to menu reach past its own surface (a DockArea sets it); none, they
+        /// stay in it.
+        void SetSurroundings(IDockSurroundings* surroundings) noexcept { m_surroundings = surroundings; }
+        [[nodiscard]] IDockSurroundings* GetSurroundings() const noexcept { return m_surroundings; }
+        /// Focuses the stack the way `way` goes from the focused one (its chosen tab), past the
+        /// surface's edge into the surroundings when none of its own is; false when there is none.
         bool FocusToward(DockDirection way)
         {
-            const DockNodeId to = StackToward(FocusedStack(), way);
-            return to != kNoDock && FocusStack(to);
+            const DockNodeId from = FocusedStack();
+            if (const DockNodeId to = StackToward(from, way); to != kNoDock)
+                return FocusStack(to);
+            const DockNodeId beyond = from != kNoDock && m_surroundings != nullptr ? m_surroundings->StackBeyond(*this, from, way) : kNoDock;
+            return beyond != kNoDock && m_surroundings->FocusStackAnywhere(beyond);
         }
-        /// The focused stack's chosen panel moved the way `way` goes: into the stack there, else along
-        /// the surface's edge that way. The focus goes with it.
+        /// The focused stack's chosen panel moved the way `way` goes: into the stack there, else into
+        /// the stack beyond the surface's edge (the surroundings'), else along that edge. The focus
+        /// goes with it.
         DockOutcome MoveFocused(DockDirection way)
         {
             const DockNodeId stack = FocusedStack();
@@ -286,7 +355,10 @@ export namespace experimental::gui
             if (node == nullptr || node->Panels.IsEmpty())
                 return DockOutcome::Refuse(u8"no stack is focused");
             const String panel = node->Panels[Min(static_cast<usize>(node->Active), node->Panels.Size() - 1)];
-            const DockNodeId to = StackToward(stack, way);
+            const RefPtr<DockSpace> keep(this); // a float this empties ends with the edit
+            DockNodeId to = StackToward(stack, way);
+            if (to == kNoDock && m_surroundings != nullptr)
+                to = m_surroundings->StackBeyond(*this, stack, way);
             DockDrop drop;
             if (to != kNoDock)
                 drop = DockDrop{DockDropKind::Middle, to, kNoDock, -1, DockSide::Start};
@@ -294,7 +366,7 @@ export namespace experimental::gui
                 drop = DockDrop{DockDropKind::Edge, kNoDock, m_surface, -1, SideOf(way)};
             const DockOutcome outcome = m_controller->Edit([&](DockLayout& layout) { return ApplyDrop(layout, panel.AsView(), drop); });
             if (outcome.Ok())
-                (void)FocusStack(m_controller->GetLayout().StackOf(panel.AsView()));
+                (void)FocusLanded(m_controller->GetLayout().StackOf(panel.AsView()));
             return outcome;
         }
         /// The focused stack shown alone, or every stack again when one is.
@@ -360,8 +432,9 @@ export namespace experimental::gui
 
         // === The "Move to" menu (D4) ===
         /// Opens the menu of the places `panel` may go, at `at` (root space) for `owner`: into each
-        /// other stack, beside one (on each side), along the surface's edges; a place the layout
-        /// refuses is shown disabled. Null when the panel is not docked here.
+        /// other stack, beside one (on each side), its own and then the surroundings', along the
+        /// surface's edges, floated; a place the layout refuses is shown disabled. Null when the
+        /// panel is not docked here.
         Menu* OpenMoveTo(core::StringView panel, Node& owner, core::Float2 at)
         {
             if (m_controller == nullptr || m_controller->GetLayout().SurfaceOf(m_controller->GetLayout().StackOf(panel)) != m_surface)
@@ -377,8 +450,9 @@ export namespace experimental::gui
                 const bool can = ApplyDrop(after, panel, drop).Ok();
                 MenuItem* item = into.AddItem(text, [self, moving, drop]()
                 {
+                    const RefPtr<DockSpace> keep(self); // a float this empties ends with the edit
                     if (self->m_controller->Edit([&](DockLayout& layout) { return ApplyDrop(layout, moving.AsView(), drop); }).Ok())
-                        (void)self->FocusStack(self->m_controller->GetLayout().StackOf(moving.AsView()));
+                        (void)self->FocusLanded(self->m_controller->GetLayout().StackOf(moving.AsView()));
                 });
                 item->SetEnabled(can);
             };
@@ -387,16 +461,25 @@ export namespace experimental::gui
             const char8_t* const edgeNames[] = {u8"Left", u8"Right", u8"Top", u8"Bottom"};
             Menu* into = menu.AddSubMenu(core::StringView(u8"Into"));
             Menu* beside = menu.AddSubMenu(core::StringView(u8"Beside"));
-            for (const Shown& shown : m_shown)
+            // Its own stacks, then the other surfaces' (named for where they are).
+            Array<DockNodeId> stacks;
+            StacksShown(stacks);
+            const usize own = stacks.Size();
+            if (m_surroundings != nullptr)
+                m_surroundings->OtherStacks(*this, stacks);
+            for (usize s = 0; s < stacks.Size(); ++s)
             {
-                if (shown.Kind != DockNodeKind::Stack || !Holds(*shown.Widget))
-                    continue;
-                const String name = StackName(shown.Node);
-                if (shown.Node != from)
-                    add(*into, name.AsView(), DockDrop{DockDropKind::Middle, shown.Node, kNoDock, -1, DockSide::Start});
+                const DockNodeId stack = stacks[s];
+                const DockSurface* surface = s < own ? nullptr : m_controller->GetLayout().FindSurface(m_controller->GetLayout().SurfaceOf(stack));
+                const bool floating = surface != nullptr && surface->Kind == DockSurfaceKind::Floating;
+                const String name = s < own ? StackName(stack)
+                                  : floating ? Format(u8"{} (floating)", StackName(stack))
+                                             : Format(u8"{} (main)", StackName(stack));
+                if (stack != from)
+                    add(*into, name.AsView(), DockDrop{DockDropKind::Middle, stack, kNoDock, -1, DockSide::Start});
                 Menu* sides = beside->AddSubMenu(name.AsView());
                 for (usize i = 0; i < 4; ++i)
-                    add(*sides, core::StringView(besideNames[i]), DockDrop{DockDropKind::Beside, shown.Node, kNoDock, -1, SideOf(ways[i])});
+                    add(*sides, core::StringView(besideNames[i]), DockDrop{DockDropKind::Beside, stack, kNoDock, -1, SideOf(ways[i])});
             }
             Menu* edge = menu.AddSubMenu(core::StringView(u8"Along the Edge"));
             for (usize i = 0; i < 4; ++i)
@@ -863,17 +946,13 @@ export namespace experimental::gui
                     return true;
             return false;
         }
-        // A stack's chosen tab focused; false when it shows none.
-        bool FocusStack(DockNodeId stack)
+        // The stack a panel moved to focused, here or in the surroundings. A float the move emptied
+        // has left the tree still holding its old widgets: only the surface it shows is asked of it.
+        bool FocusLanded(DockNodeId stack)
         {
-            TabView* view = Cast<TabView>(WidgetOf(stack));
-            if (view == nullptr || !Holds(*view))
-                return false;
-            Tab* tab = view->GetBar()->GetSelectedTab();
-            if (tab == nullptr)
-                return false;
-            tab->RequestFocus();
-            return true;
+            if (m_controller->GetLayout().SurfaceOf(stack) == m_surface && FocusStack(stack))
+                return true;
+            return m_surroundings != nullptr && m_surroundings->FocusStackAnywhere(stack);
         }
         // The side a way goes to, as the surface runs (right to left: left is its end).
         [[nodiscard]] DockSide SideOf(DockDirection way) const
@@ -1085,6 +1164,7 @@ export namespace experimental::gui
         f32 m_surfaceBand = 20.0f;
         DockTornTab m_tornTab = DockTornTab::Dim;
         Function<Rectangle(core::StringView)> m_floatPlacer;
+        IDockSurroundings* m_surroundings = nullptr; // its DockArea's (non-owning; the area holds this)
         RefPtr<Panel> m_preview;
         RefPtr<Menu> m_moveMenu;
         Rect m_previewBounds{};

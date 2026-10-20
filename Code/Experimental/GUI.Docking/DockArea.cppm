@@ -13,7 +13,9 @@
 // dragged with Shift held floats: the dock spaces pass the drop on, and the area shows the window
 // at the pointer and makes it there. A float dragged by its title bar follows the pointer and docks
 // whole where it is let go over a target (the preview the area its content would take); with Shift
-// it is only moved; Escape puts it back.
+// it is only moved; Escape puts it back. The dock keys reach across its surfaces: an arrow past a
+// float's edge goes on to the stack beyond it, `dock.next-surface` and `dock.previous-surface` take
+// the focus from one surface to the next, and the Move to menu lists every surface's stacks.
 
 module;
 #include "Core/Prelude.h"
@@ -67,7 +69,7 @@ export namespace experimental::gui
         core::Float2 m_dragFrom{0.0f, 0.0f}; // where it was (Escape puts it back)
     };
 
-    class DockArea : public UIWidget, public IDockView
+    class DockArea : public UIWidget, public IDockView, public IDockSurroundings
     {
         RTTI_OBJECT(DockArea, UIWidget)
     public:
@@ -88,6 +90,9 @@ export namespace experimental::gui
             m_preview->SetHitTestVisible(false);
             m_preview->SetVisible(false);
             AddChild(m_preview.Get());
+            DockArea* self = this;
+            (void)OnCommand(core::StringView(u8"dock.next-surface"), [self](CommandEvent& e) { e.Propagate = !self->FocusNextSurface(false); });
+            (void)OnCommand(core::StringView(u8"dock.previous-surface"), [self](CommandEvent& e) { e.Propagate = !self->FocusNextSurface(true); });
         }
         ~DockArea() override
         {
@@ -181,6 +186,100 @@ export namespace experimental::gui
             RequestLayout();
         }
         [[nodiscard]] const String* PanelOf(const Node&) const override { return nullptr; } // its dock spaces answer
+
+        // === IDockSurroundings ===
+        /// What is just past the surface's edge (its window's, for a float) the way `way` goes, level
+        /// with the middle of `stack`: the topmost other float there, else the main surface; of it,
+        /// the stack there or the one nearest. Past the main surface's edge is outside the area:
+        /// nothing (`dock.next-surface` reaches the floats from it).
+        [[nodiscard]] DockNodeId StackBeyond(const DockSpace& from, DockNodeId stack, DockDirection way) const override
+        {
+            const UIWidget* shown = from.WidgetOf(stack);
+            const DockFloat* own = FloatShowing(from);
+            if (shown == nullptr || (own == nullptr && &from != m_main.Get()))
+                return kNoDock;
+            const Rect edge = own != nullptr ? own->GetScreenBounds() : from.GetScreenBounds();
+            const Rect a = shown->GetScreenBounds();
+            constexpr f32 kPast = 2.0f;
+            core::Float2 probe{a.x + a.width * 0.5f, a.y + a.height * 0.5f};
+            switch (way)
+            {
+            case DockDirection::Left: probe.x = edge.x - kPast; break;
+            case DockDirection::Right: probe.x = edge.x + edge.width + kPast; break;
+            case DockDirection::Up: probe.y = edge.y - kPast; break;
+            case DockDirection::Down: probe.y = edge.y + edge.height + kPast; break;
+            }
+            const auto contains = [&probe](const Rect& r)
+            { return probe.x >= r.x && probe.x < r.x + r.width && probe.y >= r.y && probe.y < r.y + r.height; };
+            // The floats front to back, as they are drawn.
+            for (usize i = ChildCount(); i > 0; --i)
+            {
+                const DockFloat* window = Cast<DockFloat>(GetChildAt(i - 1));
+                if (window != nullptr && window != own && window->IsVisible() && contains(window->GetScreenBounds()))
+                    return window->GetSpace()->StackAt(probe);
+            }
+            return own != nullptr && contains(m_main->GetScreenBounds()) ? m_main->StackAt(probe) : kNoDock;
+        }
+        void OtherStacks(const DockSpace& from, Array<DockNodeId>& out) const override
+        {
+            if (&from != m_main.Get())
+                m_main->StacksShown(out);
+            for (const RefPtr<DockFloat>& window : m_floats)
+                if (window->GetSpace() != &from)
+                    window->GetSpace()->StacksShown(out);
+        }
+        bool FocusStackAnywhere(DockNodeId stack) override
+        {
+            NoteFocusedStack();
+            if (m_main->FocusStack(stack))
+                return true;
+            for (const RefPtr<DockFloat>& window : m_floats)
+                if (window->GetSpace()->WidgetOf(stack) != nullptr)
+                {
+                    const RefPtr<DockFloat> raised = window;
+                    raised->ToFront(); // the float it is in comes to the front
+                    m_preview->ToFront();
+                    return raised->GetSpace()->FocusStack(stack);
+                }
+            return false;
+        }
+
+        /// The focus taken to the next surface (`backward`, the one before): the main one, then the
+        /// floats as they were made, around; to the stack last focused there, else its first. With
+        /// the focus in none of them, to the first (the last). False when there is no other surface.
+        bool FocusNextSurface(bool backward)
+        {
+            Array<DockSpace*> spaces;
+            spaces.PushBack(m_main.Get());
+            for (const RefPtr<DockFloat>& window : m_floats)
+                spaces.PushBack(window->GetSpace());
+            usize at = spaces.Size(); // none focused
+            for (usize i = 0; i < spaces.Size(); ++i)
+                if (spaces[i]->FocusedStack() != kNoDock)
+                    at = i;
+            const usize count = spaces.Size();
+            for (usize step = 1; step <= count; ++step)
+            {
+                usize next = 0;
+                if (at == count)
+                    next = backward ? count - step : step - 1;
+                else if (step == count)
+                    break; // round to where it is
+                else
+                    next = backward ? (at + count - step) % count : (at + step) % count;
+                DockSpace& space = *spaces[next];
+                DockNodeId stack = LastFocusedIn(space.GetSurface());
+                if (stack == kNoDock || space.WidgetOf(stack) == nullptr)
+                {
+                    Array<DockNodeId> stacks;
+                    space.StacksShown(stacks);
+                    stack = stacks.IsEmpty() ? kNoDock : stacks[0];
+                }
+                if (stack != kNoDock && FocusStackAnywhere(stack))
+                    return true;
+            }
+            return false;
+        }
 
         /// Where a float being asked for would stand (this widget's space); false when none is.
         [[nodiscard]] bool GetFloatPreview(Rectangle& out) const
@@ -289,6 +388,39 @@ export namespace experimental::gui
         {
             DockArea* self = this;
             space.SetFloatPlacer([self](core::StringView panel) { return self->FloatBoundsFor(panel); });
+            space.SetSurroundings(this);
+        }
+        [[nodiscard]] const DockFloat* FloatShowing(const DockSpace& space) const
+        {
+            for (const RefPtr<DockFloat>& window : m_floats)
+                if (window->GetSpace() == &space)
+                    return window.Get();
+            return nullptr;
+        }
+        // The stack the focus is in noted as its surface's last, for the focus to come back to.
+        void NoteFocusedStack()
+        {
+            DockSpace* focused = m_main->FocusedStack() != kNoDock ? m_main.Get() : nullptr;
+            for (const RefPtr<DockFloat>& window : m_floats)
+                if (focused == nullptr && window->GetSpace()->FocusedStack() != kNoDock)
+                    focused = window->GetSpace();
+            if (focused == nullptr)
+                return;
+            const DockSurfaceId surface = focused->GetSurface();
+            for (LastFocused& last : m_lastFocused)
+                if (last.Surface == surface)
+                {
+                    last.Stack = focused->FocusedStack();
+                    return;
+                }
+            m_lastFocused.PushBack(LastFocused{surface, focused->FocusedStack()});
+        }
+        [[nodiscard]] DockNodeId LastFocusedIn(DockSurfaceId surface) const
+        {
+            for (const LastFocused& last : m_lastFocused)
+                if (last.Surface == surface)
+                    return last.Stack;
+            return kNoDock;
         }
         [[nodiscard]] DockSpace* SpaceOf(core::StringView panel) const
         {
@@ -370,6 +502,12 @@ export namespace experimental::gui
         Rectangle m_previewBounds{0.0f, 0.0f, 0.0f, 0.0f};
         String m_floatPanel; // the panel it is for
         DockSurfaceId m_moving = kNoDock; // a float dragged with Shift: only moved
+        struct LastFocused
+        {
+            DockSurfaceId Surface;
+            DockNodeId Stack;
+        };
+        Array<LastFocused> m_lastFocused; // each surface's stack the focus last left
     };
 
     inline DockFloat::DockFloat(DockArea& area, DockSurfaceId surface) : m_area(&area), m_surface(surface)

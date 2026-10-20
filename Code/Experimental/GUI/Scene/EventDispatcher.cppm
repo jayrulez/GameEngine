@@ -476,6 +476,7 @@ export namespace experimental::gui
         bool InjectKeyDown(u32 keyCode, u32 modifiers = 0)
         {
             NoteInput();
+            DropHiddenFocus();
             m_capture.DropText = false;
             if (keyCode == static_cast<u32>(KeyCode::LeftAlt) || keyCode == static_cast<u32>(KeyCode::RightAlt))
                 SetAltHeld(true);
@@ -643,6 +644,7 @@ export namespace experimental::gui
         void InjectPadButton(PadButton button)
         {
             NoteInput();
+            DropHiddenFocus();
             UseKeyboard();
             if (m_capture.Waiting)
             {
@@ -786,6 +788,15 @@ export namespace experimental::gui
         [[nodiscard]] bool IsPointerOver(core::Float2 position) const { return IsPointerTaken(HitTest(position)); }
 
         // === Focus ===
+        /// A focused node no longer shown (it or a node above it hidden, or out of the layout) gives
+        /// the focus up, as a removed one does: the keys go to its scope then, never to what cannot
+        /// be seen (a screen's button left focused as the screen hides is not pressed by Return).
+        /// Run each tick and before a key or a pad button.
+        void DropHiddenFocus()
+        {
+            if (m_focusNode != nullptr && !m_focusNode->IsTreeVisible())
+                SetFocusNode(nullptr);
+        }
         void SetFocusNode(Node* node)
         {
             if (node == m_focusNode)
@@ -1166,6 +1177,7 @@ export namespace experimental::gui
         void Tick(f32 seconds)
         {
             m_time += seconds; // the clock click counting, tooltips and long presses read
+            DropHiddenFocus();
             if (m_dragActive)
                 TickDrag(seconds);
             UpdateTooltip(seconds);

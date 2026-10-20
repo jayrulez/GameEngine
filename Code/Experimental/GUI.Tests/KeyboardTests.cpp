@@ -3,7 +3,7 @@
 
 // GUI - the keyboard's breadth (E12 of Specs/gui-lab-evolution-2.md): tab-index, focus groups,
 // Tab captured by a widget, a menu's keys through the keymap, the next key captured, mnemonics and
-// type-ahead from text input.
+// type-ahead from text input; a focused widget hidden gives the focus up.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -216,6 +216,37 @@ TEST_CASE("keyboard: a binding whose command nothing on the focus path handles l
     bed.D().SetFocusNode(bed.buttons[0].Get());
     bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Down), 0);
     CHECK(bed.Focused() == SV(u8"b")); // navigation had it
+}
+
+TEST_CASE("keyboard: a focused widget hidden gives up the focus: Return does not press it, the scope's commands run")
+{
+    Bed bed;
+    core::RefPtr<Panel> screen = Make<Panel>();
+    bed.root->AddChild(screen.Get());
+    Button& back = bed.Add(u8"back", screen.Get());
+    int pressed = 0;
+    back.SetOnClick([&pressed]() { ++pressed; });
+    int ran = 0;
+    (void)bed.root->GetContext().DefineCommand(SV(u8"test.back"));
+    REQUIRE(bed.root->GetContext().GetKeymap().Bind(SV(u8"escape"), SV(u8"test.back")));
+    (void)bed.root->OnCommand(SV(u8"test.back"), [&ran](CommandEvent&) { ++ran; });
+    back.RequestFocus();
+    REQUIRE(bed.Focused() == SV(u8"back"));
+
+    screen->SetDisplayed(false); // the screen hides with its button focused
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Return));
+    CHECK(pressed == 0);
+    CHECK(bed.D().GetFocusNode() == nullptr);
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
+    CHECK(ran == 1);
+
+    // Hidden by `visibility` too, and found out by the tick as well as by a key.
+    screen->SetDisplayed(true);
+    back.RequestFocus();
+    REQUIRE(bed.Focused() == SV(u8"back"));
+    back.SetVisible(false);
+    bed.D().Tick(0.016f);
+    CHECK(bed.D().GetFocusNode() == nullptr);
 }
 
 TEST_CASE("keyboard: CaptureNextKey takes the next key before bindings and widgets, with its modifiers, and drops its text")

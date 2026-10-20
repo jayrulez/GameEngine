@@ -128,9 +128,70 @@ needs them.
 
 A Viewport page: a spinning cube a camera flies around, the page's controls over it.
 
-### D Docking
+As built on `vg` (2026-10-20): the sandbox's Viewport page, a spinning cube (the samples' shared
+`SpinningCube`) a fly camera moves through from the widget's gated input, a note over the scene,
+a camera reset and a letterbox at a fixed 16:9. Its image reference shows the widget unbound: the
+image tests draw offscreen, where no window binds it.
 
-Designed from a survey of the reference UIs (Godot's docks, the Zero editor, ezEngine, Dear
-ImGui's dock nodes through Lumix, traktor, zed's panes and docks, foundation.ui's own port and its
-known faults), then built in phases, its sandbox page last: panels docked, tabbed, split, floated
-in the window and as OS windows, a layout saved and restored.
+### D Docking (proposed, from the survey; for review)
+
+The survey (2026-10-20) read Godot's docks, the Zero editor, ezEngine with Qt-ADS, Dear ImGui's
+dock nodes through Lumix, traktor, zed and gpui, LunarSong, eepp, and foundation.ui's own port.
+Findings that decide the design:
+
+- foundation.ui's port makes the live widgets the layout tree, so nothing can be tested or previewed
+  without them; its floating windows hold one panel each, cannot be docked into, and are not saved;
+  panels a saved layout does not place float in a cascade; its drop zones are hard-coded squares
+  drawn outside the styled tree; one 50 px minimum for every split (a squeezed console asserted);
+  and its OS-window floats chase the cursor every frame, which Wayland punishes.
+- The best of the others: a layout as plain data with tested operations (LunarSong, ImGui), n-ary
+  splits whose weights survive a removal (zed resets them to equal, a fault), every floating window a
+  whole dock tree (ADS, LunarSong), a central document area that stays when empty (ImGui), panels
+  known by a registered id never by title (Godot and ez break on renames), a panel that registers late
+  filling its saved place (zed, ImGui), a drop preview that is the real result (ImGui's future node,
+  where zed and our port draw fixed fractions), the strongest keyboard (zed's directional moves) and a
+  no-drag route (Godot's "Move to" map). traktor's docking, untested, rotted into dead code.
+
+The design:
+
+1. **A layout is data.** `DockLayout`: surfaces (the main window's and each floating one's, with its
+   bounds, screen and scale), a flat table of nodes by stable id (`Split{Axis, Children, Weights}`,
+   `Stack{Panels, Active, Flags}`, one stack may be the central one), and each hidden panel's last
+   place. Operations (insert as a tab or beside a stack, move, float, close, show at its last place,
+   resize, maximize) are functions on it that refuse with a reason, never fall back silently, and
+   normalize after (empty stacks go, single children collapse, same-axis splits merge, weights sum
+   to one). Tested headless, fuzzed by random sequences that keep its invariants.
+2. **Panels by id.** A registry of panel descriptions (id, a title key, icon, a factory, a close
+   policy: hide, rebuild or destroy, a default place, the places it may go, which panels it may tab
+   with, whether it may have several instances), registered in code, markup or script. The registry
+   owns a panel's content, so moving it between windows or hiding it never destroys it.
+3. **Widgets from the data.** A `DockSpace` widget shows one surface: splits become a new `Splitter`
+   widget (n children, minimums from each child's min-content so nothing is squeezed past what it can
+   draw, keyboard resizing, a separator's accessibility role, right to left), stacks a `TabView` whose
+   strip's group is `dock`, reconciled by node id without rebuilding what did not change.
+4. **Drag to dock.** A tab torn from a strip carries the panel; a stack's own grip carries the stack.
+   Over a strip it is a tab at an index; over a stack, its middle or an edge band (`--dock-edge`, a
+   sheet's); over the surface's edges, a split of the whole; anywhere else, a float at the pointer.
+   The preview is the layout the drop would make, laid out; refusals show their reason as the lab's
+   drops do. The zones and the preview are parts of the styled tree, sized and coloured by tokens.
+   The keyboard drag (`drag.pick`) works on them; `dock.*` commands move and focus by direction, float,
+   re-dock, maximize and reset; a "Move to" menu shows a map of the places.
+5. **Floating through the host.** Docking never opens an OS window itself: it asks the host (a
+   surface host: open, close, move a surface; which surface is under the screen pointer). GuiHost
+   opens a window with a root in the same GUI; a virtual host puts a floating surface in a lab
+   `Window` in the main root, for the web and one-window platforms. A drag across windows is routed
+   by the GUI to the root under the pointer; no window chases the pointer: the drag shows a preview,
+   and the window is made or moved at the drop. On Wayland, where a client can neither place its
+   windows nor know the global pointer, floats are decorated windows and docking between them goes
+   by the keyboard and the "Move to" menu.
+6. **Saved as text.** A versioned layout document per project and user, named presets beside it, a
+   dry run before a restore (a bad file keeps the current layout), panels it names that are not
+   registered kept as placeholders that fill when they are, registered panels it does not name put
+   at their default place, floating windows clamped back onto the screens there are.
+
+The phases, each a layer with its tests: D0 the Splitter; D1 the layout and its operations; D2
+saving and restoring; D3 the DockSpace, the registry and the panels' lifetimes; D4 drag to dock
+within one window, the keyboard and the "Move to" menu; D5 floating surfaces in the window; D6
+floating as OS windows through the host, and drags between windows; D7 presets, the tools an agent
+drives it with, and the editor's move off foundation.ui's docking. The sandbox's Docking page grows
+with them.

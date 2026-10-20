@@ -130,7 +130,7 @@ TEST_CASE("gestures: two fingers over a node that keeps pinch-zoom pinch, turn a
     CHECK_FALSE(bed.Saw(u8"click"));
 }
 
-TEST_CASE("gestures: a two-finger pan's translation is in the node's units, at any display scale")
+TEST_CASE("gestures: a two-finger pan's translation is in the GUI's units, at any scale and any turn of the node")
 {
     Bed bed(0);
     bed.root->SetDisplayScale(2.0f); // device pixels twice the root's units
@@ -143,6 +143,20 @@ TEST_CASE("gestures: a two-finger pan's translation is in the node's units, at a
     CHECK(bed.last.Translation.x == doctest::Approx(20.0f)); // 40 device pixels: 20 units
     CHECK(bed.last.Translation.y == doctest::Approx(-20.0f));
     CHECK(bed.last.Scale == doctest::Approx(1.0f));
+    d.InjectTouchUp(2u, core::Float2{440.0f, 260.0f});
+    d.InjectTouchUp(1u, core::Float2{340.0f, 260.0f});
+
+    // Turned a quarter by its last gesture, as a viewer turns its picture: a move across is still across.
+    bed.pad->SetRotationOrigin(core::Float2{150.0f, 150.0f}); // about its middle: still under the fingers
+    bed.pad->SetRotation(core::kPi * 0.5f);
+    (void)bed.root->UpdateLayout();
+    d.InjectTouchDown(1u, core::Float2{300.0f, 300.0f});
+    d.InjectTouchDown(2u, core::Float2{400.0f, 300.0f});
+    REQUIRE(d.IsGesturing());
+    d.InjectTouchMove(1u, core::Float2{340.0f, 300.0f});
+    d.InjectTouchMove(2u, core::Float2{440.0f, 300.0f});
+    CHECK(bed.last.Translation.x == doctest::Approx(20.0f));
+    CHECK(bed.last.Translation.y == doctest::Approx(0.0f).epsilon(0.001));
 }
 
 TEST_CASE("gestures: over a node that leaves pinch-zoom to the lab, a second finger does nothing")

@@ -1596,7 +1596,8 @@ export namespace experimental::gui
                 turned += 2.0f * core::kPi;
             m_gestureAngle = angle;
             const core::Float2 focus{(a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f};
-            const core::Float2 translation = InNodeUnits(*m_gestureTarget, m_gestureFocus0,
+            // In the GUI's units, as positions are: not the node's own, which its gesture may turn.
+            const core::Float2 translation = InNodeUnits(*m_root, m_gestureFocus0,
                                                          core::Float2{focus.x - m_gestureFocus0.x, focus.y - m_gestureFocus0.y});
             const f32 scaleDelta = scale / m_gestureScale;
             const core::Float2 translationDelta{translation.x - m_gestureTranslation.x, translation.y - m_gestureTranslation.y};

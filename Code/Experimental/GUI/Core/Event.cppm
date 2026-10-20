@@ -408,7 +408,8 @@ export namespace experimental::gui
 
     /// A two-finger gesture (E17c): pinch, turn and pan as one, as Safari's and aui's are. Each
     /// value is the total since it began and the change since the last event; the translation is in
-    /// the target's units, about the fingers' middle (`Focus`, device pixels, as positions come).
+    /// the GUI's units (the root's, not a node's own, which its gesture may turn), about the fingers'
+    /// middle (`Focus`, device pixels, as positions come).
     struct GestureEvent : Event
     {
         core::Float2 Focus{0.0f, 0.0f};

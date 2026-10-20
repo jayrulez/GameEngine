@@ -140,7 +140,27 @@ export namespace experimental::gui
         {
             if (context == m_context)
                 return; // unchanged: nothing to restyle (a host may set it every frame)
+            const MediaContext before = m_context;
             m_context = context;
+            // The viewport's size alone (a window resized: each frame of the drag) restyles
+            // everything only when a sheet reads it, through vw or vh or a size query that now
+            // answers differently; else only the widgets whose own inline style reads it.
+            MediaContext sized = before;
+            sized.Width = context.Width;
+            sized.Height = context.Height;
+            if (sized == context && m_importsExpanded)
+            {
+                if (!m_relationsKnown)
+                    LearnRelations();
+                bool flips = m_sheetsReadViewport;
+                for (usize i = 0; !flips && i < m_sizeQueries.Size(); ++i)
+                    flips = m_sizeQueries[i]->Evaluate(before) != m_sizeQueries[i]->Evaluate(context);
+                if (!flips)
+                {
+                    m_viewportResized = true;
+                    return;
+                }
+            }
             m_allDirty = true;
         }
         [[nodiscard]] const MediaContext& GetMediaContext() const noexcept { return m_context; }
@@ -215,6 +235,9 @@ export namespace experimental::gui
                 LoadFontFaces();
             const bool all = m_allDirty;
             m_allDirty = false;
+            if (m_viewportResized && !all)
+                MarkViewportReaders(root);
+            m_viewportResized = false;
             // The names above what is styled, from the walk's start up (E8): pushed on the way down.
             m_ancestors.Clear();
             for (const Node* n = root.GetParent(); n != nullptr; n = n->GetParent())
@@ -821,16 +844,46 @@ export namespace experimental::gui
         }
 
         // The states the sheets read through an ancestor and through a sibling (LearnRelations).
+        // A value that reads the viewport's size: a number in vw or vh (`50vw`, `calc(100vh - 2px)`).
+        [[nodiscard]] static bool ReadsViewport(core::StringView value) noexcept
+        {
+            for (usize i = 1; i + 1 < value.Size(); ++i)
+                if (value[i] == u8'v' && (value[i + 1] == u8'w' || value[i + 1] == u8'h') &&
+                    ((value[i - 1] >= u8'0' && value[i - 1] <= u8'9') || value[i - 1] == u8'.'))
+                    return true;
+            return false;
+        }
+        // The widgets whose inline style reads the viewport restyle after it resized (the sheets
+        // reading none of it).
+        void MarkViewportReaders(Node& node)
+        {
+            if (const UINode* ui = Cast<UINode>(&node))
+                for (const InlineStyleDeclaration& d : ui->GetInlineStyle())
+                    if (ReadsViewport(d.Value.AsView()))
+                    {
+                        node.MarkStyleDirty(false);
+                        break;
+                    }
+            for (usize i = 0; i < node.ChildCount(); ++i)
+                MarkViewportReaders(*node.GetChildAt(i));
+        }
+
         void LearnRelations()
         {
             m_ancestorStates = 0;
             m_siblingStates = 0;
             m_readsSiblings = false;
             m_siblingReadsAbove.Clear();
+            m_sheetsReadViewport = false;
+            m_sizeQueries.Clear();
             const auto learn = [&](const StyleSheet& sheet)
             {
                 for (const StyleRule& rule : sheet.Rules())
                 {
+                    if (rule.Media().FeatureCount() != 0)
+                        m_sizeQueries.PushBack(&rule.Media()); // any feature: the size's among them, perhaps
+                    for (const StyleProperty& p : rule.Properties())
+                        m_sheetsReadViewport = m_sheetsReadViewport || ReadsViewport(p.Value.AsView());
                     rule.Selector().CollectRelationStates(m_ancestorStates, m_siblingStates);
                     m_readsSiblings = m_readsSiblings || rule.Selector().ReadsSiblings();
                     rule.Selector().ForEachSiblingReadAbove([&](const StyleSelectorRule& compound) { m_siblingReadsAbove.PushBack(compound); });
@@ -899,6 +952,9 @@ export namespace experimental::gui
         HashMap<Node*, Array<core::String>> m_startedAnimations; // widget -> the @keyframes it has started
         bool m_allDirty = true; // the next ApplyTree restyles everything (a new sheet, media, fonts)
         bool m_relationsKnown = false;
+        bool m_sheetsReadViewport = false;     // a declaration in vw or vh: a resize restyles everything
+        Array<const MediaQuery*> m_sizeQueries; // the rules' media queries with features, asked again on a resize
+        bool m_viewportResized = false;        // the viewport's size changed, no sheet reading it
         u32 m_ancestorStates = 0; // states a rule reads through an ancestor: a change restyles the subtree
         u32 m_siblingStates = 0;  // states a rule reads through an earlier sibling: a change restyles the later siblings
         u32 m_lastRestyleCount = 0;

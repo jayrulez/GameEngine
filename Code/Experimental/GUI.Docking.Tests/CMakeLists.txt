@@ -2,6 +2,7 @@ add_executable(GUI.Docking.Tests
     DockLayoutTests.cpp
     DockDocumentTests.cpp
     DockSpaceTests.cpp
+    DockDropTests.cpp
     TestsMain.cpp)
 
 target_link_libraries(GUI.Docking.Tests PRIVATE Experimental::GUI.Docking Experimental::GUI Foundation::Xml Foundation::Xml.Serialization doctest::doctest)

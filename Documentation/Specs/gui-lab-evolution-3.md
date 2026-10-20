@@ -249,5 +249,15 @@ longer selects its first tab while a selection asked for waits for its tab (it b
 was not to be shown); a node destroyed leaves the children held elsewhere pointing at no parent
 (a panel's content, kept by the controller, reached its freed page when it moved).
 
+D4, the pointer, as built on `vg` (2026-10-20): a tab torn from a stack's strip carries its panel.
+Over a strip it goes in at a tab's place, over a stack's middle into it, over a stack's edge band
+(the sheet's `edge-band`, the theme's `--dock-edge`, a third of the stack at most) beside it, over
+the surface's band (`surface-band`, `--dock-surface-edge`) along the whole edge, which wins over a
+strip lying there. Each drop is the layout's move tried on a copy: refused, the layout's reason shows
+and nothing moves; accepted, a `dock-preview` panel stands where the panel would be (the split
+shares of the layout it would make; the separators' room is left out). The strip's drops reach the
+layout through two hooks the core's tab bar gained: a tab offered may be refused or described, and a
+dropped one taken over. Not yet: a stack's own grip, the keyboard, `dock.*` and the "Move to" menu.
+
 Not in scope: the editor moving off foundation.ui's docking. It needs the toolkit too, which is not
 written, and the lab's libraries proven stable first (the user, 2026-10-20).

@@ -11,4 +11,6 @@ target_sources(GUI.Docking
             DockLayout.cppm
             DockDocument.cppm
             DockController.cppm
-            DockSpace.cppm)
+            DockSpace.cppm
+    PRIVATE
+        DockingReflection.cpp)

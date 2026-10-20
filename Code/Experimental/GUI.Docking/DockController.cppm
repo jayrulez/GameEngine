@@ -54,7 +54,49 @@ export namespace experimental::gui
     public:
         virtual ~IDockView() = default;
         virtual void ShowLayout() = 0;
+        /// The panel a page it shows is for; null for a page it does not show.
+        [[nodiscard]] virtual const String* PanelOf(const Node& page) const = 0;
     };
+
+    /// Where a dragged panel goes when dropped (D4): into a stack's strip at a tab's place, into a
+    /// stack (its middle), beside a stack (its edge band) or along a whole surface's edge.
+    enum class DockDropKind : u8
+    {
+        Tab,
+        Middle,
+        Beside,
+        Edge,
+    };
+    struct DockDrop
+    {
+        DockDropKind Kind = DockDropKind::Middle;
+        DockNodeId Stack = kNoDock;      ///< Tab, Middle, Beside: the stack dropped on
+        DockSurfaceId Surface = kNoDock; ///< Edge: the surface
+        i32 Index = -1;                  ///< Tab: its place among the stack's tabs, as they are now
+        DockSide Side = DockSide::Start; ///< Beside, Edge
+    };
+    /// A docked panel dropped: the move it is, done on `layout` (a copy, to preview it and say why
+    /// not, or the controller's).
+    inline DockOutcome ApplyDrop(DockLayout& layout, core::StringView panel, const DockDrop& drop)
+    {
+        switch (drop.Kind)
+        {
+        case DockDropKind::Tab:
+        {
+            i32 index = drop.Index;
+            // Among its own tabs: counted with it where it is, so a place past it is one less.
+            if (const DockNode* stack = layout.FindNode(drop.Stack); stack != nullptr && layout.StackOf(panel) == drop.Stack)
+                for (usize i = 0; i < stack->Panels.Size(); ++i)
+                    if (stack->Panels[i].AsView() == panel && index > static_cast<i32>(i))
+                        --index;
+            return layout.MoveToTab(panel, drop.Stack, index);
+        }
+        case DockDropKind::Middle: return layout.MoveToTab(panel, drop.Stack);
+        case DockDropKind::Beside: return layout.MoveBeside(panel, drop.Stack, drop.Side);
+        case DockDropKind::Edge: return layout.MoveToEdge(panel, drop.Surface, drop.Side);
+        }
+        return DockOutcome::Refuse(u8"no such drop");
+    }
 
     class DockController
     {
@@ -165,6 +207,15 @@ export namespace experimental::gui
         void NoteWeights(DockNodeId split, Span<const f32> weights) { (void)m_layout.SetWeights(split, weights); }
         void NoteActive(core::StringView panel) { (void)m_layout.Activate(panel); }
         void NoteTabPlace(core::StringView panel, DockNodeId stack, i32 index) { (void)m_layout.MoveToTab(panel, stack, index); }
+
+        /// The panel a page some view shows is for (a dragged tab's); null when none shows it.
+        [[nodiscard]] const String* PanelShownBy(const Node& page) const
+        {
+            for (const IDockView* view : m_views)
+                if (const String* panel = view->PanelOf(page))
+                    return panel;
+            return nullptr;
+        }
 
         // === The views ===
         void AddView(IDockView& view)

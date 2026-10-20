@@ -40,12 +40,40 @@ export namespace experimental::gui
             tabview.dock-stack { background-color: var(--dock-stack-background, var(--panel)); }
             tabview.dock-central { background-color: var(--dock-central-background, var(--surface)); }
             label.dock-placeholder { color: var(--dock-placeholder, var(--muted)); padding: 16px; }
+            dockspace { edge-band: var(--dock-edge, 64px); surface-band: var(--dock-surface-edge, 20px); }
+            panel.dock-preview {
+                background-color: var(--dock-preview, rgba(80, 150, 255, 0.25));
+                border: 2px solid var(--dock-preview-border, var(--accent));
+                border-radius: 4px;
+            }
         )");
     }
+
+    class DockSpace;
+
+    /// A stack as a DockSpace shows it: a TabView whose drops are the layout's to decide (its
+    /// middle tabs a dragged panel in, an edge band puts it beside).
+    class DockStack : public TabView
+    {
+        RTTI_OBJECT(DockStack, TabView)
+    public:
+        DockStack(DockSpace& space, DockNodeId node) noexcept : m_space(&space), m_node(node) {}
+        [[nodiscard]] DockNodeId GetNode() const noexcept { return m_node; }
+
+    protected:
+        void OnDragQuery(DropQuery& query) override;
+        void OnDragLeave(const DragEvent& event) override;
+        void OnDrop(const DragEvent& event) override;
+
+    private:
+        DockSpace* m_space;
+        DockNodeId m_node;
+    };
 
     class DockSpace : public UIWidget, public IDockView
     {
         RTTI_OBJECT(DockSpace, UIWidget)
+        friend class DockStack;
     public:
         DockSpace()
         {
@@ -95,6 +123,69 @@ export namespace experimental::gui
             return nullptr;
         }
 
+        [[nodiscard]] const String* PanelOf(const Node& page) const override
+        {
+            for (const Shown& shown : m_shown)
+                for (const Page& p : shown.Pages)
+                    if (p.Widget.Get() == &page)
+                        return &p.Panel;
+            return nullptr;
+        }
+
+        // === Drops (D4) ===
+        /// How far into a stack its edge band reaches (a third of it at most); the sheet's
+        /// `edge-band`, the theme's `--dock-edge`.
+        [[nodiscard]] f32 GetEdgeBand() const noexcept { return m_edgeBand; }
+        void SetEdgeBand(f32 band) noexcept { m_edgeBand = Max(0.0f, band); }
+        /// How far into the surface its own edge band reaches (`surface-band`, `--dock-surface-edge`).
+        [[nodiscard]] f32 GetSurfaceBand() const noexcept { return m_surfaceBand; }
+        void SetSurfaceBand(f32 band) noexcept { m_surfaceBand = Max(0.0f, band); }
+
+        /// The docked panel a drag carries (a torn-out tab of a page some view of the controller
+        /// shows); null for anything else.
+        [[nodiscard]] const String* DraggedPanel(const DragPayload& payload) const
+        {
+            if (m_controller == nullptr || payload.Type.AsView() != core::StringView(u8"lab/tab"))
+                return nullptr;
+            const Tab* tab = Cast<Tab>(Node::FromHandle(payload.Value));
+            const Node* page = tab != nullptr ? tab->GetPage() : nullptr;
+            return page != nullptr ? m_controller->PanelShownBy(*page) : nullptr;
+        }
+        /// The drop a point means (in this widget's space), over `stack` (kNoDock: over none): the
+        /// surface's edge within its band, else the stack's edge within its band, else its middle;
+        /// false when it means none.
+        [[nodiscard]] bool DropAt(core::Float2 at, DockNodeId stack, DockDrop& drop) const
+        {
+            const Rect bounds = GetScreenBounds();
+            const f32 w = bounds.width;
+            const f32 h = bounds.height;
+            DockSide side{};
+            if (NearestEdge(at, Rect{0.0f, 0.0f, w, h}, Min(m_surfaceBand, Min(w, h) / 3.0f), side))
+            {
+                drop = DockDrop{DockDropKind::Edge, kNoDock, m_surface, -1, side};
+                return true;
+            }
+            const UIWidget* widget = stack != kNoDock ? WidgetOf(stack) : nullptr;
+            if (widget == nullptr)
+                return false;
+            const Rect sb = widget->GetScreenBounds();
+            const Rect r{sb.x - bounds.x, sb.y - bounds.y, sb.width, sb.height};
+            if (NearestEdge(at, r, Min(m_edgeBand, Min(r.width, r.height) / 3.0f), side))
+                drop = DockDrop{DockDropKind::Beside, stack, kNoDock, -1, side};
+            else
+                drop = DockDrop{DockDropKind::Middle, stack, kNoDock, -1, DockSide::Start};
+            return true;
+        }
+        /// Where the preview of the drop being offered stands (this widget's space); false when none
+        /// shows.
+        [[nodiscard]] bool GetPreviewBounds(Rect& out) const
+        {
+            if (!m_preview || !m_preview->IsVisible())
+                return false;
+            out = m_previewBounds;
+            return true;
+        }
+
         /// The layout shown again: the widgets of nodes still there kept and brought in step, those of
         /// nodes gone let go.
         void ShowLayout() override
@@ -111,14 +202,17 @@ export namespace experimental::gui
                 top = Build(surface->Maximized != kNoDock ? surface->Maximized : surface->Root);
                 Keep(surface->Root); // a stack maximized: the rest kept for its restore
             }
-            if (ChildCount() != (top ? 1u : 0u) || (top && GetChildAt(0) != top.Get()))
+            Node* const shown = ChildCount() > 0 && GetChildAt(0) != m_preview.Get() ? GetChildAt(0) : nullptr;
+            if (shown != top.Get())
             {
-                while (ChildCount() > 0)
-                    RemoveChild(GetChildAt(ChildCount() - 1));
+                if (shown != nullptr)
+                    RemoveChild(shown);
                 if (top)
                 {
                     top->EditLayoutStyle([](LayoutStyle& s) { s.Grow = 1.0f; });
-                    AddChild(top.Get());
+                    if (top->GetParent() != nullptr)
+                        top->RemoveFromParent();
+                    AddChildAt(top.Get(), 0); // under the preview
                 }
             }
             for (usize i = m_shown.Size(); i > 0; --i)
@@ -128,6 +222,18 @@ export namespace experimental::gui
                     m_shown.RemoveAt(i - 1);
                 }
         }
+
+    protected:
+        void OnDragQuery(DropQuery& query) override
+        {
+            // Reached over a separator, or past a stack that left it the surface's band.
+            const String* panel = DraggedPanel(query.Payload);
+            DockDrop drop;
+            if (panel != nullptr && DropAt(query.Local, kNoDock, drop))
+                Offer(*this, query, panel->AsView(), drop);
+        }
+        void OnDragLeave(const DragEvent&) override { Withdraw(*this); }
+        void OnDrop(const DragEvent&) override { TakeOffer(*this); }
 
     private:
         struct Page
@@ -239,8 +345,27 @@ export namespace experimental::gui
             DockSpace* self = this;
             if (!Find(id)->Widget)
             {
-                RefPtr<TabView> made = MakeRef<TabView>(MemoryAllocator());
+                RefPtr<DockStack> made = MakeRef<DockStack>(MemoryAllocator(), *this, id);
                 made->AddClass(core::StringView(u8"dock-stack"));
+                // Its strip: a tab dropped there is the layout's move too.
+                TabBar* bar = made->GetBar();
+                bar->SetOnTabOffered([self, id, bar](DropQuery& query, Tab&, i32 index)
+                {
+                    if (const String* panel = self->DraggedPanel(query.Payload))
+                    {
+                        const String dragged = *panel;
+                        // The surface's band wins over the strip (a strip along the surface's edge).
+                        DockDrop drop{DockDropKind::Tab, id, kNoDock, index, DockSide::Start};
+                        DockDrop edge;
+                        if (self->DropAt(self->FromNode(*bar, query.Local), kNoDock, edge))
+                            drop = edge;
+                        self->Offer(*bar, query, dragged.AsView(), drop);
+                    }
+                    else
+                        query.Refuse(core::StringView(u8"it is not a docked panel"));
+                });
+                bar->SetTabTaker([self, bar](Tab&, i32) { self->TakeOffer(*bar); });
+                (void)bar->AddEventListener(EventType::DragLeave, [self, bar](const Event&) { self->Withdraw(*bar); });
                 made->SetGroup(String(u8"dock"));
                 made->SetReorderable(true);
                 TabView* view = made.Get();
@@ -362,10 +487,185 @@ export namespace experimental::gui
             }
         }
 
+        // A point in `node`'s space, in this widget's.
+        [[nodiscard]] core::Float2 FromNode(const Node& node, core::Float2 local) const
+        {
+            const Rect space = GetScreenBounds();
+            const Rect from = node.GetScreenBounds();
+            return core::Float2{local.x + from.x - space.x, local.y + from.y - space.y};
+        }
+
+        // The side of `r` whose band of `band` holds `at`, nearest first; false when none does.
+        [[nodiscard]] bool NearestEdge(core::Float2 at, const Rect& r, f32 band, DockSide& side) const
+        {
+            if (band <= 0.0f || at.x < r.x || at.y < r.y || at.x > r.x + r.width || at.y > r.y + r.height)
+                return false;
+            const f32 left = at.x - r.x;
+            const f32 right = r.x + r.width - at.x;
+            const f32 top = at.y - r.y;
+            const f32 bottom = r.y + r.height - at.y;
+            const f32 nearest = Min(Min(left, right), Min(top, bottom));
+            if (nearest > band)
+                return false;
+            const bool rtl = IsRightToLeft();
+            if (nearest == left)
+                side = rtl ? DockSide::End : DockSide::Start;
+            else if (nearest == right)
+                side = rtl ? DockSide::Start : DockSide::End;
+            else
+                side = nearest == top ? DockSide::Top : DockSide::Bottom;
+            return true;
+        }
+
+        // A drop offered by `owner` (a stack, its strip, or this widget): tried on a copy of the
+        // layout, refused with the layout's reason, or accepted with the preview where the panel
+        // would be.
+        void Offer(Node& owner, DropQuery& query, core::StringView panel, const DockDrop& drop)
+        {
+            DockLayout after = m_controller->GetLayout();
+            const DockOutcome outcome = ApplyDrop(after, panel, drop);
+            m_offerOwner = &owner;
+            if (!outcome.Ok())
+            {
+                m_offer = {};
+                query.Refuse(outcome.Refused.AsView());
+                HidePreview();
+                return;
+            }
+            query.Accept(DropEffect::Move);
+            m_offer = Offered{String(panel), drop, true};
+            Rect at;
+            if (BoundsIn(after, after.StackOf(panel), at))
+                ShowPreview(at);
+            else
+                HidePreview(); // it would go to another surface
+        }
+        void Withdraw(Node& owner)
+        {
+            if (m_offerOwner != &owner)
+                return; // another took the drag over already
+            m_offerOwner = nullptr;
+            m_offer = {};
+            HidePreview();
+        }
+        void TakeOffer(Node& owner)
+        {
+            const Offered offer = m_offerOwner == &owner ? m_offer : Offered{};
+            m_offerOwner = nullptr;
+            m_offer = {};
+            HidePreview();
+            if (offer.Valid && m_controller != nullptr)
+                (void)m_controller->Edit([&offer](DockLayout& layout) { return ApplyDrop(layout, offer.Panel.AsView(), offer.Drop); });
+        }
+
+        // Where `node` stands in `layout`'s surface as this widget would show it: the shares of each
+        // split from its root (the separators' room left out).
+        [[nodiscard]] bool BoundsIn(const DockLayout& layout, DockNodeId node, Rect& out) const
+        {
+            const DockSurface* surface = layout.FindSurface(m_surface);
+            if (surface == nullptr || node == kNoDock || layout.SurfaceOf(node) != m_surface)
+                return false;
+            const Rect bounds = GetScreenBounds();
+            const Rect whole{0.0f, 0.0f, bounds.width, bounds.height};
+            if (surface->Maximized != kNoDock)
+            {
+                out = whole;
+                return node == surface->Maximized;
+            }
+            return BoundsUnder(layout, surface->Root, node, whole, out);
+        }
+        [[nodiscard]] bool BoundsUnder(const DockLayout& layout, DockNodeId at, DockNodeId node, const Rect& r, Rect& out) const
+        {
+            if (at == node)
+            {
+                out = r;
+                return true;
+            }
+            const DockNode* split = layout.FindNode(at);
+            if (split == nullptr || split->IsStack())
+                return false;
+            const bool vertical = split->Axis == DockAxis::Vertical;
+            const bool mirrored = !vertical && IsRightToLeft();
+            const f32 extent = vertical ? r.height : r.width;
+            f32 from = 0.0f;
+            for (usize i = 0; i < split->Children.Size(); ++i)
+            {
+                const f32 size = extent * split->Weights[i];
+                Rect part = r;
+                if (vertical)
+                {
+                    part.y = r.y + from;
+                    part.height = size;
+                }
+                else
+                {
+                    part.x = mirrored ? r.x + r.width - from - size : r.x + from;
+                    part.width = size;
+                }
+                if (BoundsUnder(layout, split->Children[i], node, part, out))
+                    return true;
+                from += size;
+            }
+            return false;
+        }
+
+        void ShowPreview(const Rect& at)
+        {
+            if (!m_preview)
+            {
+                m_preview = MakeRef<Panel>(MemoryAllocator());
+                m_preview->AddClass(core::StringView(u8"dock-preview"));
+                m_preview->SetHitTestVisible(false); // the drag sees what is under it
+                AddChild(m_preview.Get());
+            }
+            m_previewBounds = at;
+            m_preview->EditLayoutStyle([at](LayoutStyle& s)
+            {
+                s.Placement = Position::Absolute;
+                s.Left = LayoutLength::Px(at.x);
+                s.Top = LayoutLength::Px(at.y);
+                s.Width = LayoutLength::Px(at.width);
+                s.Height = LayoutLength::Px(at.height);
+            });
+            m_preview->SetVisible(true);
+        }
+        void HidePreview()
+        {
+            if (m_preview)
+                m_preview->SetVisible(false);
+        }
+
+        struct Offered
+        {
+            String Panel;
+            DockDrop Drop;
+            bool Valid = false;
+        };
+
         DockController* m_controller = nullptr;
         DockSurfaceId m_surface = kNoDock;
         Array<Shown> m_shown;
+        f32 m_edgeBand = 64.0f;
+        f32 m_surfaceBand = 20.0f;
+        RefPtr<Panel> m_preview;
+        Rect m_previewBounds{};
+        Node* m_offerOwner = nullptr; // what offered the drop shown (non-owning; compared only)
+        Offered m_offer;
     };
 
-    RTTI_DEFINE_OBJECT(DockSpace, "rtti::gui::docking")
+    // A stack's drops: the surface's band is the DockSpace's (left for the walk to reach it), the
+    // rest the stack's own edge bands and middle.
+    inline void DockStack::OnDragQuery(DropQuery& query)
+    {
+        const String* panel = m_space->DraggedPanel(query.Payload);
+        if (panel == nullptr)
+            return; // a tab of another kind: not the layout's
+        DockDrop drop;
+        if (!m_space->DropAt(m_space->FromNode(*this, query.Local), m_node, drop) || drop.Kind == DockDropKind::Edge)
+            return;
+        const String dragged = *panel;
+        m_space->Offer(*this, query, dragged.AsView(), drop);
+    }
+    inline void DockStack::OnDragLeave(const DragEvent&) { m_space->Withdraw(*this); }
+    inline void DockStack::OnDrop(const DragEvent&) { m_space->TakeOffer(*this); }
 }

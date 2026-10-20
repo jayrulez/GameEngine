@@ -1,0 +1,28 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026-Present Robert Campbell
+
+// GUI.Docking - the docking widgets' reflection: what a sheet sets on them (D4 of
+// Specs/gui-lab-evolution-3.md: the drop bands, sized by the theme's tokens).
+
+module;
+#include "Core/Prelude.h"
+#include "Core/Reflection/Reflect.h"
+
+module experimental.gui.docking;
+
+import foundation.core;
+import experimental.gui;
+
+namespace core = foundation::core;
+
+namespace experimental::gui
+{
+    REFLECT_MEMBERS(DockSpace, "rtti::gui::docking")
+    {
+        builder.AccessorProperty<&DockSpace::GetEdgeBand, &DockSpace::SetEdgeBand>("edgeBand").PropAttribute("css", core::String(u8"edge-band"));
+        builder.AccessorProperty<&DockSpace::GetSurfaceBand, &DockSpace::SetSurfaceBand>("surfaceBand")
+            .PropAttribute("css", core::String(u8"surface-band"));
+    }
+
+    RTTI_DEFINE_OBJECT(DockStack, "rtti::gui::docking")
+}

@@ -5,7 +5,8 @@
 // shows the main surface and each floating one as a window over it, holding a dock space of its
 // own; the windows follow the layout (made, placed, titled, ended) and the layout follows what the
 // user does to them (moved or resized, closed); a float is docked into like the main surface; a tab
-// dragged with Shift, Move to's Float and dock.float float a panel.
+// dragged with Shift, Move to's Float and dock.float float a panel; a float dragged by its title
+// docks whole over a target, is only moved with Shift, and goes back on Escape.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -132,7 +133,7 @@ TEST_CASE("dock area: a floating surface is a window over the main one, at its b
     CHECK(bed.controller.Content(SV(u8"profiler")) == content);
 }
 
-TEST_CASE("dock area: a float moved or resized by the user writes its bounds back, kept where its title can be reached")
+TEST_CASE("dock area: a float moved (Shift on its title) or resized by the user writes its bounds back, kept where its title can be reached")
 {
     Bed bed;
     const DockSurfaceId floating = bed.Float(u8"profiler", core::Rectangle{100.0f, 80.0f, 300.0f, 200.0f});
@@ -140,8 +141,9 @@ TEST_CASE("dock area: a float moved or resized by the user writes its bounds bac
     REQUIRE(window != nullptr);
     const core::Float2 at{window->GetScreenBounds().x + 150.0f, window->GetScreenBounds().y + 10.0f};
     bed.D().InjectMouseDown(at, MouseButton::Left);
-    bed.D().InjectMouseMove(core::Float2{at.x + 40.0f, at.y + 30.0f});
-    bed.D().InjectMouseUp(core::Float2{at.x + 40.0f, at.y + 30.0f}, MouseButton::Left);
+    bed.D().InjectMouseMove(core::Float2{at.x + 20.0f, at.y + 15.0f}, KeyModShift);
+    bed.D().InjectMouseMove(core::Float2{at.x + 40.0f, at.y + 30.0f}, KeyModShift);
+    bed.D().InjectMouseUp(core::Float2{at.x + 40.0f, at.y + 30.0f}, MouseButton::Left, KeyModShift);
     bed.Lay();
     const core::Rectangle moved = bed.controller.GetLayout().FindSurface(floating)->Bounds;
     CHECK(moved.x == doctest::Approx(140.0f));
@@ -149,10 +151,21 @@ TEST_CASE("dock area: a float moved or resized by the user writes its bounds bac
     CHECK(moved.width == doctest::Approx(300.0f));
 
     // Far off the area: its title bar kept in reach, and that is what is noted.
+    // Its grip: the size noted too.
+    const Rect box = window->GetScreenBounds();
+    const core::Float2 grip{box.x + box.width - 7.0f, box.y + box.height - 7.0f};
+    bed.D().InjectMouseDown(grip, MouseButton::Left);
+    bed.D().InjectMouseMove(core::Float2{grip.x + 50.0f, grip.y + 20.0f});
+    bed.D().InjectMouseUp(core::Float2{grip.x + 50.0f, grip.y + 20.0f}, MouseButton::Left);
+    bed.Lay();
+    CHECK(bed.controller.GetLayout().FindSurface(floating)->Bounds.width == doctest::Approx(350.0f));
+    CHECK(bed.controller.GetLayout().FindSurface(floating)->Bounds.height == doctest::Approx(220.0f));
+
     const core::Float2 from{window->GetScreenBounds().x + 150.0f, window->GetScreenBounds().y + 10.0f};
     bed.D().InjectMouseDown(from, MouseButton::Left);
-    bed.D().InjectMouseMove(core::Float2{from.x + 2000.0f, from.y - 500.0f});
-    bed.D().InjectMouseUp(core::Float2{from.x + 2000.0f, from.y - 500.0f}, MouseButton::Left);
+    bed.D().InjectMouseMove(core::Float2{from.x + 20.0f, from.y}, KeyModShift);
+    bed.D().InjectMouseMove(core::Float2{from.x + 2000.0f, from.y - 500.0f}, KeyModShift);
+    bed.D().InjectMouseUp(core::Float2{from.x + 2000.0f, from.y - 500.0f}, MouseButton::Left, KeyModShift);
     bed.Lay();
     const core::Rectangle kept = bed.controller.GetLayout().FindSurface(floating)->Bounds;
     CHECK(kept.x == doctest::Approx(800.0f - DockArea::kKeepInView));
@@ -273,4 +286,94 @@ TEST_CASE("dock area: Move to's Float and dock.float float a panel over its stac
     bed.Lay();
     CHECK(bed.area->GetFloatCount() == 2u);
     CHECK(bed.SpaceOf(u8"profiler") != main);
+}
+
+namespace
+{
+    // A float's title bar pressed and dragged to `to` (in steps), the window following.
+    void DragTitle(Bed& bed, DockFloat& window, core::Float2 to, core::u32 modifiers = 0)
+    {
+        const Rect at = window.GetScreenBounds();
+        const core::Float2 press{at.x + 60.0f, at.y + 10.0f};
+        bed.D().InjectMouseDown(press, MouseButton::Left);
+        bed.D().InjectMouseMove(core::Float2{press.x + 10.0f, press.y}, modifiers);
+        bed.D().InjectMouseMove(to, modifiers);
+    }
+}
+
+TEST_CASE("dock area: a float dragged by its title follows the pointer and docks whole where it is let go over a target")
+{
+    Bed bed;
+    const DockSurfaceId floating = bed.Float(u8"profiler", core::Rectangle{420.0f, 300.0f, 300.0f, 200.0f});
+    REQUIRE(bed.controller.Edit([](DockLayout& l) { return l.InsertBeside(SV(u8"memory"), l.StackOf(SV(u8"profiler")), DockSide::End); }).Ok());
+    bed.Lay();
+    DockFloat* window = bed.area->FloatOf(floating);
+    REQUIRE(window != nullptr);
+    const core::Float2 middle{300.0f, 250.0f}; // the central stack's middle
+    DragTitle(bed, *window, middle);
+    REQUIRE(bed.D().IsDragging());
+    CHECK(bed.D().GetDragPreview() == nullptr); // the window is what follows
+    CHECK(window->IsBeingDragged());
+    CHECK(window->HasClass(SV(u8"dock-dragging")));
+    CHECK(window->GetPosition().x == doctest::Approx(middle.x - 60.0f)); // held where it was taken
+    CHECK(window->GetPosition().y == doctest::Approx(middle.y - 10.0f));
+    Rect preview;
+    REQUIRE(bed.area->GetMainSpace()->GetPreviewBounds(preview)); // the target under it answered
+    CHECK(preview.width == doctest::Approx(800.0f).epsilon(0.02)); // into the central stack: all of it
+    bed.D().InjectMouseUp(middle, MouseButton::Left);
+    bed.Lay();
+    CHECK(bed.area->GetFloatCount() == 0u);
+    const DockNode& central = *bed.controller.GetLayout().FindNode(bed.controller.GetLayout().CentralStack());
+    CHECK(central.Panels.Size() == 3u); // scene, then the float's two
+    CHECK(bed.area->GetMainSpace()->PageOf(SV(u8"memory")) != nullptr);
+}
+
+TEST_CASE("dock area: a float let go in a stack's edge band docks beside it, its own split kept")
+{
+    Bed bed;
+    const DockSurfaceId floating = bed.Float(u8"profiler", core::Rectangle{420.0f, 300.0f, 300.0f, 200.0f});
+    REQUIRE(bed.controller.Edit([](DockLayout& l) { return l.InsertBeside(SV(u8"memory"), l.StackOf(SV(u8"profiler")), DockSide::Bottom); }).Ok());
+    bed.Lay();
+    const core::Float2 right{770.0f, 250.0f}; // in the central stack's right band (64), not the surface's (20)
+    DragTitle(bed, *bed.area->FloatOf(floating), right);
+    Rect preview;
+    REQUIRE(bed.area->GetMainSpace()->GetPreviewBounds(preview));
+    CHECK(preview.x == doctest::Approx(400.0f).epsilon(0.03)); // its half
+    bed.D().InjectMouseUp(right, MouseButton::Left);
+    bed.Lay();
+    const DockLayout& layout = bed.controller.GetLayout();
+    const DockNode& root = *layout.FindNode(layout.FindSurface(layout.MainSurface())->Root);
+    REQUIRE(root.Axis == DockAxis::Horizontal);
+    REQUIRE(root.Children.Size() == 2u);
+    const DockNode& moved = *layout.FindNode(root.Children[1]);
+    CHECK(moved.Axis == DockAxis::Vertical); // the float's split, kept
+    CHECK(layout.SurfaceOf(layout.StackOf(SV(u8"memory"))) == layout.MainSurface());
+}
+
+TEST_CASE("dock area: a float dragged with Shift is only moved; Escape puts it back")
+{
+    Bed bed;
+    const DockSurfaceId floating = bed.Float(u8"profiler", core::Rectangle{100.0f, 100.0f, 300.0f, 200.0f});
+    DockFloat* window = bed.area->FloatOf(floating);
+    const core::Float2 to{400.0f, 300.0f};
+    DragTitle(bed, *window, to, KeyModShift);
+    CHECK(bed.D().GetDropTarget() == bed.area.Get());
+    Rect preview;
+    CHECK_FALSE(bed.area->GetMainSpace()->GetPreviewBounds(preview));
+    bed.D().InjectMouseUp(to, MouseButton::Left, KeyModShift);
+    bed.Lay();
+    REQUIRE(bed.area->FloatOf(floating) == window);
+    const core::Rectangle bounds = bed.controller.GetLayout().FindSurface(floating)->Bounds;
+    CHECK(bounds.x == doctest::Approx(to.x - 60.0f));
+    CHECK(bounds.y == doctest::Approx(to.y - 10.0f));
+    CHECK_FALSE(window->IsBeingDragged());
+
+    DragTitle(bed, *window, core::Float2{600.0f, 500.0f});
+    CHECK(window->GetPosition().x != doctest::Approx(bounds.x));
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
+    bed.D().InjectMouseUp(core::Float2{600.0f, 500.0f}, MouseButton::Left);
+    bed.Lay();
+    CHECK(window->GetPosition().x == doctest::Approx(bounds.x));
+    CHECK(window->GetPosition().y == doctest::Approx(bounds.y));
+    CHECK(bed.controller.GetLayout().FindSurface(floating) != nullptr); // nothing docked
 }

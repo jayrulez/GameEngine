@@ -11,7 +11,9 @@
 // went), each at its surface's bounds (this widget's space), and notes back what the user does to a
 // window: moved or resized, its bounds; closed, its panels closed as their policies say. A tab
 // dragged with Shift held floats: the dock spaces pass the drop on, and the area shows the window
-// at the pointer and makes it there.
+// at the pointer and makes it there. A float dragged by its title bar follows the pointer and docks
+// whole where it is let go over a target (the preview the area its content would take); with Shift
+// it is only moved; Escape puts it back.
 
 module;
 #include "Core/Prelude.h"
@@ -44,11 +46,25 @@ export namespace experimental::gui
         [[nodiscard]] DockArea* GetArea() const noexcept { return m_area; }
         /// Its close button's: its panels closed as their policies say.
         void RequestClose() override;
+        /// Being dragged by its title bar (D5): it follows the pointer, out of hit tests with all it
+        /// holds so the targets under it answer (`.dock-dragging`).
+        [[nodiscard]] bool IsBeingDragged() const noexcept { return m_dragging; }
+        /// While it is dragged, nothing of it is under the pointer: the drop is asked of what is below.
+        [[nodiscard]] Node* OverFind(core::Float2 worldPoint) override { return m_dragging ? nullptr : Window::OverFind(worldPoint); }
 
     private:
+        friend class DockArea;
+        // Its title bar's drag: the whole surface, the window following the pointer.
+        bool StartTitleDrag(DragRequest& request);
+        void FollowTo(core::Float2 rootAt);
+        void EndTitleDrag(const DragResult& result);
+
         DockArea* m_area;
         DockSurfaceId m_surface;
         RefPtr<DockSpace> m_space;
+        bool m_dragging = false;
+        core::Float2 m_grab{0.0f, 0.0f}; // where on it the press took it
+        core::Float2 m_dragFrom{0.0f, 0.0f}; // where it was (Escape puts it back)
     };
 
     class DockArea : public UIWidget, public IDockView
@@ -194,8 +210,18 @@ export namespace experimental::gui
         // window at the pointer, its title bar under it.
         void OnDragQuery(DropQuery& query) override
         {
+            if (!DockSpace::AsksToFloat(query))
+                return;
+            // A float dragged by its title with Shift: only moved, where it is let go.
+            if (const DockSurfaceId surface = m_main->DraggedSurface(query.Payload); surface != kNoDock)
+            {
+                HidePreview();
+                m_moving = surface;
+                query.Accept(DropEffect::Move);
+                return;
+            }
             const String* panel = m_main->DraggedPanel(query.Payload);
-            if (panel == nullptr || !DockSpace::AsksToFloat(query))
+            if (panel == nullptr)
                 return;
             const String dragged = *panel;
             DockLayout after = m_controller->GetLayout();
@@ -214,9 +240,20 @@ export namespace experimental::gui
             m_preview->ToFront();
             RequestLayout();
         }
-        void OnDragLeave(const DragEvent&) override { HidePreview(); }
+        void OnDragLeave(const DragEvent&) override
+        {
+            HidePreview();
+            m_moving = kNoDock;
+        }
         void OnDrop(const DragEvent&) override
         {
+            if (const DockSurfaceId moving = m_moving; moving != kNoDock)
+            {
+                m_moving = kNoDock;
+                if (DockFloat* window = FloatOf(moving))
+                    NoteArranged(*window); // where it was let go
+                return;
+            }
             const String panel = core::Move(m_floatPanel);
             const Rectangle bounds = m_previewBounds;
             HidePreview();
@@ -327,10 +364,23 @@ export namespace experimental::gui
         RefPtr<Panel> m_preview; // where a float asked for would stand
         Rectangle m_previewBounds{0.0f, 0.0f, 0.0f, 0.0f};
         String m_floatPanel; // the panel it is for
+        DockSurfaceId m_moving = kNoDock; // a float dragged with Shift: only moved
     };
 
     inline DockFloat::DockFloat(DockArea& area, DockSurfaceId surface) : m_area(&area), m_surface(surface)
     {
+        // Its title bar's press is a dock drag of the whole surface.
+        DragHandle* bar = GetTitleBar();
+        bar->SetDragsItself(false);
+        DockFloat* self = this;
+        bar->SetDragSource([self](DragRequest& request) { return self->StartTitleDrag(request); });
+        // When the drag ends the window may be gone (docked away): its title bar, which the drag
+        // holds, says whether it is still in one.
+        bar->SetOnDragEnd([bar](const DragResult& result)
+        {
+            if (DockFloat* window = Cast<DockFloat>(bar->GetParent()))
+                window->EndTitleDrag(result);
+        });
         m_space = MakeRef<DockSpace>(MemoryAllocator());
         m_space->EditLayoutStyle([](LayoutStyle& s)
         {
@@ -341,4 +391,43 @@ export namespace experimental::gui
         SetMinSize(core::Float2{160.0f, 100.0f});
     }
     inline void DockFloat::RequestClose() { m_area->CloseFloat(m_surface); }
+
+    inline bool DockFloat::StartTitleDrag(DragRequest& request)
+    {
+        if (request.FromKeyboard)
+            return false;
+        request.Payload.Type = String(kDockSurfaceDragType);
+        request.Payload.Value = core::Variant::From<u64>(static_cast<u64>(m_surface));
+        request.Payload.Label = String(GetTitle());
+        request.Payload.Allowed = DropEffectsMove;
+        m_grab = request.Press; // the title bar is at the window's top left: the same place
+        m_dragFrom = GetPosition();
+        DockFloat* self = this;
+        request.Follow = [self](core::Float2 rootAt) { self->FollowTo(rootAt); };
+        return true;
+    }
+    inline void DockFloat::FollowTo(core::Float2 rootAt)
+    {
+        if (!m_dragging)
+        {
+            m_dragging = true;
+            AddClass(core::StringView(u8"dock-dragging"));
+            ToFront();
+        }
+        const core::Float2 at = m_area->ConvertToNodeSpace(rootAt);
+        SetPosition(core::Float2{at.x - m_grab.x, at.y - m_grab.y});
+        m_area->RequestLayout();
+    }
+    inline void DockFloat::EndTitleDrag(const DragResult& result)
+    {
+        m_dragging = false;
+        RemoveClass(core::StringView(u8"dock-dragging"));
+        if (result.Cancelled)
+        {
+            SetPosition(m_dragFrom); // Escape: put back as it was
+            m_area->RequestLayout();
+        }
+        else if (result.Target == nullptr)
+            m_area->NoteArranged(*this); // let go over nothing (off the area): left there, in reach
+    }
 }

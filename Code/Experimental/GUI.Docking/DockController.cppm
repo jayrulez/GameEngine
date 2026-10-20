@@ -77,6 +77,17 @@ export namespace experimental::gui
     };
     /// A docked panel dropped: the move it is, done on `layout` (a copy, to preview it and say why
     /// not, or the controller's).
+    /// What a dock drag carries: a docked panel (a tab torn out) or a whole floating surface (a
+    /// float dragged by its title, D5).
+    struct DockDragged
+    {
+        String Panel;
+        DockSurfaceId Surface = kNoDock;
+        [[nodiscard]] bool IsSurface() const noexcept { return Surface != kNoDock; }
+    };
+    /// The drag type of a whole floating surface; its value the surface's id.
+    inline constexpr const char8_t* kDockSurfaceDragType = u8"lab/dock-surface";
+
     inline DockOutcome ApplyDrop(DockLayout& layout, core::StringView panel, const DockDrop& drop)
     {
         switch (drop.Kind)
@@ -96,6 +107,36 @@ export namespace experimental::gui
         case DockDropKind::Edge: return layout.MoveToEdge(panel, drop.Surface, drop.Side);
         }
         return DockOutcome::Refuse(u8"no such drop");
+    }
+    /// A drop of what a drag carries: a panel as above; a floating surface docked whole (into the
+    /// stack over its strip or its middle, beside it, along the surface's edge).
+    inline DockOutcome ApplyDrop(DockLayout& layout, const DockDragged& dragged, const DockDrop& drop)
+    {
+        if (!dragged.IsSurface())
+            return ApplyDrop(layout, dragged.Panel.AsView(), drop);
+        switch (drop.Kind)
+        {
+        case DockDropKind::Tab:
+        case DockDropKind::Middle: return layout.DockSurfaceInto(dragged.Surface, drop.Stack);
+        case DockDropKind::Beside: return layout.DockSurfaceBeside(dragged.Surface, drop.Stack, drop.Side);
+        case DockDropKind::Edge: return layout.DockSurfaceAtEdge(dragged.Surface, drop.Surface, drop.Side);
+        }
+        return DockOutcome::Refuse(u8"no such drop");
+    }
+    /// The panels a drag carries, as `layout` has them (a surface's, in its stacks' order).
+    [[nodiscard]] inline Array<String> PanelsOf(const DockLayout& layout, const DockDragged& dragged)
+    {
+        Array<String> out;
+        if (!dragged.IsSurface())
+        {
+            out.PushBack(dragged.Panel);
+            return out;
+        }
+        for (const DockNode& node : layout.Nodes())
+            if (node.IsStack() && layout.SurfaceOf(node.Id) == dragged.Surface)
+                for (const String& panel : node.Panels)
+                    out.PushBack(panel);
+        return out;
     }
 
     class DockController

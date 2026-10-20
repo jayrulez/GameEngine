@@ -386,6 +386,81 @@ export namespace experimental::gui
             return {};
         }
 
+        // === A stack moved whole (its strip's grip) ===
+        /// Every panel of `stack` as tabs of `into` at `index` (-1: last), in order, its active panel
+        /// active there; the emptied stack goes (the central one stays, empty).
+        DockOutcome MoveStackInto(DockNodeId stack, DockNodeId into, i32 index = -1)
+        {
+            if (DockOutcome refused = CanMoveStack(stack); !refused.Ok())
+                return refused;
+            if (stack == into)
+                return DockOutcome::Refuse(u8"a stack cannot go into itself");
+            if (DockOutcome refused = CanTabInto(into); !refused.Ok())
+                return refused;
+            const DockNode& from = *FindNode(stack);
+            if (FindNode(into)->Has(DockStackNoTabs) && from.Panels.Size() > 1)
+                return DockOutcome::Refuse(u8"that stack holds one panel");
+            const Array<String> panels = from.Panels;
+            const String active = panels[Min(static_cast<usize>(from.Active), panels.Size() - 1)];
+            i32 at = index < 0 ? static_cast<i32>(FindNode(into)->Panels.Size()) : Min(index, static_cast<i32>(FindNode(into)->Panels.Size()));
+            for (const String& panel : panels)
+            {
+                TakeOut(panel.AsView());
+                PlaceTab(panel.AsView(), into, at++);
+            }
+            DockNode& target = *Node(into);
+            target.Active = IndexIn(target, active.AsView());
+            Normalize();
+            return {};
+        }
+        /// `stack` beside `target`, taking `share` of its room (a float it was all of goes).
+        DockOutcome MoveStackBeside(DockNodeId stack, DockNodeId target, DockSide side, f32 share = 0.5f)
+        {
+            if (DockOutcome refused = CanMoveStack(stack); !refused.Ok())
+                return refused;
+            if (stack == target)
+                return DockOutcome::Refuse(u8"a stack cannot go beside itself");
+            if (DockOutcome refused = CanDockBeside(target); !refused.Ok())
+                return refused;
+            PlaceNodeBeside(TakeStack(stack), target, side, share);
+            Normalize();
+            return {};
+        }
+        /// `stack` along the whole edge of `surface`.
+        DockOutcome MoveStackToEdge(DockNodeId stack, DockSurfaceId surface, DockSide side, f32 share = 0.25f)
+        {
+            if (DockOutcome refused = CanMoveStack(stack); !refused.Ok())
+                return refused;
+            const DockSurface* into = FindSurface(surface);
+            if (into == nullptr)
+                return DockOutcome::Refuse(u8"no such surface");
+            if (into->Root == stack)
+                return DockOutcome::Refuse(u8"a surface's only stack cannot go to its own edge");
+            PlaceNodeAtEdge(TakeStack(stack), surface, side, share);
+            Normalize();
+            return {};
+        }
+        /// `stack` in a floating surface of its own at `bounds`; `made` is that surface.
+        DockOutcome FloatStack(DockNodeId stack, Rectangle bounds, DockSurfaceId* made = nullptr)
+        {
+            if (DockOutcome refused = CanMoveStack(stack); !refused.Ok())
+                return refused;
+            const DockSurfaceId from = SurfaceOf(stack);
+            if (FindSurface(from)->Kind == DockSurfaceKind::Floating && FindSurface(from)->Root == stack)
+                return DockOutcome::Refuse(u8"it floats alone already");
+            const DockNodeId moved = TakeStack(stack);
+            DockSurface surface;
+            surface.Id = m_nextSurface++;
+            surface.Kind = DockSurfaceKind::Floating;
+            surface.Root = moved;
+            surface.Bounds = bounds;
+            m_surfaces.PushBack(surface);
+            if (made != nullptr)
+                *made = surface.Id;
+            Normalize();
+            return {};
+        }
+
         /// A docked panel closed: no longer docked, its place kept to show it there again.
         DockOutcome Close(core::StringView panel)
         {
@@ -587,6 +662,18 @@ export namespace experimental::gui
                 return DockOutcome::Refuse(u8"a surface cannot dock into itself");
             return {};
         }
+        // A stack picked up whole: one there, with panels, not locked.
+        [[nodiscard]] DockOutcome CanMoveStack(DockNodeId stack) const
+        {
+            const DockNode* node = FindNode(stack);
+            if (node == nullptr || !node->IsStack())
+                return DockOutcome::Refuse(u8"not a stack");
+            if (node->Panels.IsEmpty())
+                return DockOutcome::Refuse(u8"the stack is empty");
+            if (node->Has(DockStackLocked))
+                return DockOutcome::Refuse(u8"its stack is locked");
+            return {};
+        }
         [[nodiscard]] DockOutcome CanDockBeside(DockNodeId stack) const
         {
             const DockNode* node = FindNode(stack);
@@ -783,6 +870,24 @@ export namespace experimental::gui
                     if (surface.Root == splitId)
                         surface.Root = childId;
             Node(childId)->Parent = parentId;
+        }
+        // A stack taken from where it is, the root of none now, to be placed (a float it was all of
+        // goes). The central stack stays where it is, emptied: a new stack takes its panels and goes.
+        DockNodeId TakeStack(DockNodeId stack)
+        {
+            if (Node(stack)->Has(DockStackCentral))
+            {
+                DockNode& made = MakeNode(DockNodeKind::Stack);
+                DockNode& central = *Node(stack);
+                made.Panels = core::Move(central.Panels);
+                made.Active = central.Active;
+                central.Panels.Clear();
+                central.Active = 0;
+                return made.Id;
+            }
+            Detach(stack);
+            Node(stack)->Parent = kNoDock;
+            return stack;
         }
         // A floating surface's root taken off it (the root of none now) and the surface gone.
         DockNodeId Lift(DockSurfaceId surface)

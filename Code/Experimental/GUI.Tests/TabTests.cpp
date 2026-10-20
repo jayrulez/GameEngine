@@ -579,6 +579,34 @@ TEST_CASE("tabs: an owner answers a tab offered to a strip (a refusal with its r
     CHECK(bottom->GetDropIndex() == -1);
 }
 
+TEST_CASE("tabs: a tab of a group is picked up from the keyboard and dropped on a strip's tab it is moved to")
+{
+    auto root = MakeRoot();
+    auto top = BarAt(*root, 10.0f, u8"docs");
+    auto bottom = BarAt(*root, 150.0f, u8"docs");
+    auto alone = BarAt(*root, 250.0f, u8"");
+    Tab* a = AddSizedTab(*top, u8"A");
+    AddSizedTab(*top, u8"B");
+    AddSizedTab(*bottom, u8"X");
+    Tab* y = AddSizedTab(*bottom, u8"Y");
+    Tab* t = AddSizedTab(*alone, u8"T");
+    (void)root->UpdateLayout();
+    EventDispatcher& d = *root->GetEventDispatcher();
+    t->RequestFocus();
+    CHECK_FALSE(d.PickDrag()); // a strip of no group: nowhere for it to go
+    a->RequestFocus();
+    REQUIRE(d.PickDrag());
+    CHECK(d.IsKeyboardDrag());
+    CHECK(d.GetDragPayload().Type == core::StringView(u8"lab/tab"));
+    y->RequestFocus(); // the focus moves as ever; the strip asked is the focused tab's
+    CHECK(d.GetDropTarget() == bottom.Get());
+    d.InjectKeyDown(static_cast<core::u32>(KeyCode::Return));
+    CHECK_FALSE(d.IsDragging());
+    CHECK(top->GetTabCount() == 1);
+    REQUIRE(bottom->GetTabCount() == 3);
+    CHECK(bottom->IndexOf(a) >= 1);
+}
+
 TEST_CASE("tabs: a tab torn out of one tab view and dropped on another of its group brings its page")
 {
     auto root = MakeRoot();

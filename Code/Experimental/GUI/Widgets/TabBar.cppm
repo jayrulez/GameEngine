@@ -121,6 +121,10 @@ export namespace experimental::gui
         [[nodiscard]] bool OwnsPressDrag(core::Float2) const override;
         // A drag resting on it selects it (E7, Godot's switch on drag hover).
         bool OnDragHoverOpen(core::Float2) override;
+        /// Picked up from the keyboard (`drag.pick`) in a strip of a group: the drag a tear makes.
+        bool OnDragRequested(DragRequest& request) override;
+        /// The drag a tab torn out of its strip is.
+        void FillTabPayload(DragPayload& payload);
 
     protected:
         bool OnActivate() override;
@@ -650,6 +654,24 @@ export namespace experimental::gui
         return bar != nullptr && bar->IsReorderable();
     }
 
+    inline void Tab::FillTabPayload(DragPayload& payload)
+    {
+        payload.Type = core::String(u8"lab/tab");
+        payload.Value = HandleAs(Node::StaticType());
+        payload.Label = core::String(GetText());
+        payload.Allowed = DropEffectsMove;
+    }
+
+    inline bool Tab::OnDragRequested(DragRequest& request)
+    {
+        // The pointer's drag is the tear (the tab owns its press); the keyboard's is this.
+        const TabBar* bar = GetBar();
+        if (!request.FromKeyboard || bar == nullptr || bar->GetGroup().IsEmpty())
+            return false;
+        FillTabPayload(request.Payload);
+        return true;
+    }
+
     inline bool Tab::OnDragHoverOpen(core::Float2)
     {
         TabBar* bar = GetBar();
@@ -703,10 +725,7 @@ export namespace experimental::gui
             {
                 EndDrag();
                 DragRequest request;
-                request.Payload.Type = core::String(u8"lab/tab");
-                request.Payload.Value = HandleAs(Node::StaticType());
-                request.Payload.Label = core::String(GetText());
-                request.Payload.Allowed = DropEffectsMove;
+                FillTabPayload(request.Payload);
                 d->StartDrag(*this, core::Move(request));
                 return;
             }

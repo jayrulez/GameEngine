@@ -7,7 +7,7 @@
 // The layout is data, not widgets: what the dock widgets show is reconciled from it, a drop's
 // preview is an operation run on a copy of it, and it is tested without a GUI. Surfaces are the
 // main window's and each floating window's, each a whole tree (a floating window can be docked
-// into). Nodes live in one table by stable id: a split has an axis, children and their weights (a
+// into, and docks whole: its panels as a stack's tabs, or its tree beside a stack or along an edge). Nodes live in one table by stable id: a split has an axis, children and their weights (a
 // share each, summing to one), a stack its panels (by registered id, never by title), the active
 // one and its flags. The main surface has one central stack (the documents' area), kept when it is
 // empty. A panel closed keeps its last place, to be shown there again.
@@ -331,6 +331,61 @@ export namespace experimental::gui
             Normalize();
             return {};
         }
+        // === A floating surface docked whole (D5) ===
+        /// Every panel of floating `surface` as tabs of `stack`, in its stacks' order (the float's
+        /// active panel active there); the surface goes.
+        DockOutcome DockSurfaceInto(DockSurfaceId surface, DockNodeId stack)
+        {
+            if (DockOutcome refused = CanDockWhole(surface, stack); !refused.Ok())
+                return refused;
+            if (DockOutcome refused = CanTabInto(stack); !refused.Ok())
+                return refused;
+            Array<String> panels;
+            String active;
+            CollectPanels(SurfaceRef(surface)->Root, panels, active);
+            if (FindNode(stack)->Has(DockStackNoTabs) && panels.Size() > 1)
+                return DockOutcome::Refuse(u8"that stack holds one panel");
+            for (const DockNodeId id : StacksOf(surface))
+                if (FindNode(id)->Has(DockStackLocked))
+                    return DockOutcome::Refuse(u8"a stack in it is locked");
+            for (const String& panel : panels)
+            {
+                TakeOut(panel.AsView());
+                PlaceTab(panel.AsView(), stack, -1);
+            }
+            DockNode& into = *Node(stack);
+            into.Active = IndexIn(into, active.AsView());
+            Normalize(); // the emptied surface goes
+            return {};
+        }
+        /// Floating `surface`'s whole tree beside `stack`, taking `share` of its room; the surface goes.
+        DockOutcome DockSurfaceBeside(DockSurfaceId surface, DockNodeId stack, DockSide side, f32 share = 0.5f)
+        {
+            if (DockOutcome refused = CanDockWhole(surface, stack); !refused.Ok())
+                return refused;
+            if (DockOutcome refused = CanDockBeside(stack); !refused.Ok())
+                return refused;
+            const DockNodeId root = Lift(surface);
+            PlaceNodeBeside(root, stack, side, share);
+            Normalize();
+            return {};
+        }
+        /// Floating `surface`'s whole tree along the edge of surface `into`; the floating one goes.
+        DockOutcome DockSurfaceAtEdge(DockSurfaceId surface, DockSurfaceId into, DockSide side, f32 share = 0.25f)
+        {
+            const DockSurface* from = FindSurface(surface);
+            if (from == nullptr || from->Kind != DockSurfaceKind::Floating)
+                return DockOutcome::Refuse(u8"not a floating surface");
+            if (FindSurface(into) == nullptr)
+                return DockOutcome::Refuse(u8"no such surface");
+            if (into == surface)
+                return DockOutcome::Refuse(u8"a surface cannot dock into itself");
+            const DockNodeId root = Lift(surface);
+            PlaceNodeAtEdge(root, into, side, share);
+            Normalize();
+            return {};
+        }
+
         /// A docked panel closed: no longer docked, its place kept to show it there again.
         DockOutcome Close(core::StringView panel)
         {
@@ -520,6 +575,18 @@ export namespace experimental::gui
                 return DockOutcome::Refuse(u8"that stack holds one panel");
             return {};
         }
+        // A floating surface, docked whole at `stack` of another surface.
+        [[nodiscard]] DockOutcome CanDockWhole(DockSurfaceId surface, DockNodeId stack) const
+        {
+            const DockSurface* from = FindSurface(surface);
+            if (from == nullptr || from->Kind != DockSurfaceKind::Floating)
+                return DockOutcome::Refuse(u8"not a floating surface");
+            if (FindNode(stack) == nullptr)
+                return DockOutcome::Refuse(u8"no such stack");
+            if (SurfaceOf(stack) == surface)
+                return DockOutcome::Refuse(u8"a surface cannot dock into itself");
+            return {};
+        }
         [[nodiscard]] DockOutcome CanDockBeside(DockNodeId stack) const
         {
             const DockNode* node = FindNode(stack);
@@ -576,10 +643,14 @@ export namespace experimental::gui
         // A new stack holding `panel`, `share` of `targetId`'s room, on `side` of it.
         void PlaceBeside(core::StringView panel, DockNodeId targetId, DockSide side, f32 share)
         {
-            share = Clamp(share, 0.05f, 0.95f);
             DockNode& made = MakeNode(DockNodeKind::Stack);
             made.Panels.PushBack(String(panel));
-            const DockNodeId madeId = made.Id;
+            PlaceNodeBeside(made.Id, targetId, side, share);
+        }
+        // Node `madeId` (a root of none) `share` of `targetId`'s room, on `side` of it.
+        void PlaceNodeBeside(DockNodeId madeId, DockNodeId targetId, DockSide side, f32 share)
+        {
+            share = Clamp(share, 0.05f, 0.95f);
             DockNode* target = Node(targetId);
             const DockAxis axis = AxisOf(side);
             DockNode* parent = Node(target->Parent);
@@ -602,10 +673,14 @@ export namespace experimental::gui
         // A new stack holding `panel` along the whole surface's edge.
         void PlaceAtEdge(core::StringView panel, DockSurfaceId surfaceId, DockSide side, f32 share)
         {
-            share = Clamp(share, 0.05f, 0.95f);
             DockNode& made = MakeNode(DockNodeKind::Stack);
             made.Panels.PushBack(String(panel));
-            const DockNodeId madeId = made.Id;
+            PlaceNodeAtEdge(made.Id, surfaceId, side, share);
+        }
+        // Node `madeId` (a root of none) along the whole surface's edge.
+        void PlaceNodeAtEdge(DockNodeId madeId, DockSurfaceId surfaceId, DockSide side, f32 share)
+        {
+            share = Clamp(share, 0.05f, 0.95f);
             const DockAxis axis = AxisOf(side);
             DockNode* root = Node(SurfaceRef(surfaceId)->Root);
             if (!root->IsStack() && root->Axis == axis)
@@ -708,6 +783,39 @@ export namespace experimental::gui
                     if (surface.Root == splitId)
                         surface.Root = childId;
             Node(childId)->Parent = parentId;
+        }
+        // A floating surface's root taken off it (the root of none now) and the surface gone.
+        DockNodeId Lift(DockSurfaceId surface)
+        {
+            const DockNodeId root = SurfaceRef(surface)->Root;
+            Detach(root); // a floating surface's root: the surface goes
+            Node(root)->Parent = kNoDock;
+            return root;
+        }
+        // The panels under `id`, in order (stacks depth first), and the first stack's active one.
+        void CollectPanels(DockNodeId id, Array<String>& out, String& active) const
+        {
+            const DockNode* node = FindNode(id);
+            if (node == nullptr)
+                return;
+            if (node->IsStack())
+            {
+                if (active.IsEmpty() && !node->Panels.IsEmpty())
+                    active = node->Panels[Min(static_cast<usize>(node->Active), node->Panels.Size() - 1)];
+                for (const String& panel : node->Panels)
+                    out.PushBack(panel);
+                return;
+            }
+            for (const DockNodeId child : node->Children)
+                CollectPanels(child, out, active);
+        }
+        [[nodiscard]] Array<DockNodeId> StacksOf(DockSurfaceId surface) const
+        {
+            Array<DockNodeId> out;
+            for (const DockNode& node : m_nodes)
+                if (node.IsStack() && SurfaceOf(node.Id) == surface)
+                    out.PushBack(node.Id);
+            return out;
         }
         void Normalize();
         void NeighboursBeside(DockNodeId stack, Array<String>& out) const;

@@ -80,6 +80,8 @@ namespace experimental::gui
             c.Min = core::Float2{w.HasValue() ? w.Value() : 0.0f, h.HasValue() ? h.Value() : 0.0f};
             c.Max = core::Float2{w.HasValue() ? w.Value() : maxW, h.HasValue() ? h.Value() : maxH};
             c.PercentBase = percentBase;
+            c.ExactWidth = w.HasValue();
+            c.ExactHeight = h.HasValue();
             return child.Measure(c);
         }
         // The child's margin as the flow lays it out: in right to left, left and right swapped (the
@@ -888,14 +890,16 @@ namespace experimental::gui
             size.y = core::Clamp(size.y, minH, maxH);
             // The container's limit holds an auto size; a size the style gives overflows it, as in
             // CSS, unless the container fixes the size exactly (flex's resolved size, a stretch).
-            const auto fit = [](f32 v, bool given, f32 lo, f32 hi)
+            // Exact is said, not read from a limit as low as the minimum: measured with no room (its
+            // min-content), a node with a width of its own keeps it.
+            const auto fit = [](f32 v, bool given, bool exact, f32 lo, f32 hi)
             {
-                if (lo == hi)
+                if (exact)
                     return lo;
                 return core::Max(lo, given ? v : core::Min(v, hi));
             };
-            size.x = fit(size.x, w.HasValue(), constraints.Min.x, constraints.Max.x);
-            size.y = fit(size.y, h.HasValue(), constraints.Min.y, constraints.Max.y);
+            size.x = fit(size.x, w.HasValue(), constraints.ExactWidth, constraints.Min.x, constraints.Max.x);
+            size.y = fit(size.y, h.HasValue(), constraints.ExactHeight, constraints.Min.y, constraints.Max.y);
         }
         u8 slot = m_measureCount;
         if (slot < kMeasureSlots)

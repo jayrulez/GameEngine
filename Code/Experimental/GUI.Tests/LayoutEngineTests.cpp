@@ -146,6 +146,28 @@ TEST_CASE("layout: grow shares free space; shrink takes an overflow, stopping at
     CHECK(b->GetSize().x == doctest::Approx(300.0f)); // does not shrink: the line overflows
 }
 
+TEST_CASE("layout: a width of its own holds with no room; an item shrinks no narrower than a fixed child")
+{
+    // Measured with no room (its min-content), a node with a width keeps it: the room limits an auto
+    // size, not one its style gives, unless the container fixes the size exactly.
+    auto lone = core::MakeRef<Panel>(core::DefaultAllocator());
+    lone->EditLayoutStyle([](LayoutStyle& s) { s.Width = LayoutLength::Px(120.0f); });
+    CHECK(lone->Measure(LayoutConstraints{core::Float2{0.0f, 0.0f}, core::Float2{0.0f, kUnbounded}}).x == doctest::Approx(120.0f));
+    CHECK(lone->Measure(LayoutConstraints::Tight(core::Float2{50.0f, 20.0f}, core::Float2{-1.0f, -1.0f})).x == doctest::Approx(50.0f));
+
+    Bed bed;
+    auto line = Box(*bed.root.Get(), [](LayoutStyle& s) {
+        s.Height = LayoutLength::Px(40.0f);
+        s.Direction = FlexDirection::Row;
+    });
+    auto a = Box(*line.Get(), [](LayoutStyle&) {}); // auto width: its content's
+    (void)Fixed(*a.Get(), 150.0f, 20.0f);
+    auto b = Box(*line.Get(), [](LayoutStyle& s) { s.Width = LayoutLength::Px(400.0f); });
+    bed.Layout();
+    CHECK(a->GetSize().x == doctest::Approx(150.0f)); // its automatic minimum: the fixed child
+    CHECK(b->GetSize().x == doctest::Approx(250.0f)); // the overflow all b's
+}
+
 TEST_CASE("layout: flex wraps into lines; reverse and order change the sequence")
 {
     Bed bed;

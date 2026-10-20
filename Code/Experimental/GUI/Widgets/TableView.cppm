@@ -572,7 +572,7 @@ export namespace experimental::gui
             if (m_cells[c]->IsDisplayed())
             {
                 const f32 w = m_table.GetColumnWidth(c);
-                height = core::Max(height, m_cells[c]->Measure(LayoutConstraints{core::Float2{w, 0.0f}, core::Float2{w, kUnbounded}, core::Float2{w, -1.0f}}).y);
+                height = core::Max(height, m_cells[c]->Measure(LayoutConstraints{core::Float2{w, 0.0f}, core::Float2{w, kUnbounded}, core::Float2{w, -1.0f}, true, false}).y);
             }
         return core::Float2{available.x, height};
     }

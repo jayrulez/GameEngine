@@ -448,21 +448,27 @@ export namespace experimental::gui
 
     /// What a container allows a child when it measures it: the border-box size from `Min` to
     /// `Max` (kUnbounded for none), and the lengths its percentages resolve against (negative when
-    /// the container's own size is not known yet).
+    /// the container's own size is not known yet). On an axis marked exact the container fixes the
+    /// size (Min, a flex item's resolved size, a stretch), which even a size the child's style gives
+    /// takes; on any other, that size overflows the room, as in CSS, even when the room is none
+    /// (min-content asks with none).
     struct LayoutConstraints
     {
         core::Float2 Min{0.0f, 0.0f};
         core::Float2 Max{kUnbounded, kUnbounded};
         core::Float2 PercentBase{-1.0f, -1.0f};
+        bool ExactWidth = false;
+        bool ExactHeight = false;
 
         [[nodiscard]] static LayoutConstraints Tight(core::Float2 size, core::Float2 percentBase) noexcept
         {
-            return LayoutConstraints{size, size, percentBase};
+            return LayoutConstraints{size, size, percentBase, true, true};
         }
         [[nodiscard]] bool operator==(const LayoutConstraints& o) const noexcept
         {
             return Min.x == o.Min.x && Min.y == o.Min.y && Max.x == o.Max.x && Max.y == o.Max.y &&
-                   PercentBase.x == o.PercentBase.x && PercentBase.y == o.PercentBase.y;
+                   PercentBase.x == o.PercentBase.x && PercentBase.y == o.PercentBase.y && ExactWidth == o.ExactWidth &&
+                   ExactHeight == o.ExactHeight;
         }
     };
 }

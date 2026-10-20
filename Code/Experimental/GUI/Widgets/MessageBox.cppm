@@ -299,7 +299,7 @@ export namespace experimental::gui
             if (!m_message || !m_buttonRow)
                 return; // may run mid-construction
             const f32 inner = core::Max(0.0f, GetSize().x - 2.0f * kPad);
-            const f32 text = m_message->Measure(LayoutConstraints{core::Float2{inner, 0.0f}, core::Float2{inner, kUnbounded}, core::Float2{inner, -1.0f}}).y;
+            const f32 text = m_message->Measure(LayoutConstraints{core::Float2{inner, 0.0f}, core::Float2{inner, kUnbounded}, core::Float2{inner, -1.0f}, true, false}).y;
             const f32 height = GetTitleBarHeight() + kPad + text + kGap + kButtonHeight + kPad;
             if (core::Abs(height - GetSize().y) > 0.5f)
             {

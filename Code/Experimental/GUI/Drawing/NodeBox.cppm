@@ -103,16 +103,20 @@ export namespace experimental::gui
     };
     /// A nine-slice skin over the box (CSS's border-image, E13 of Specs/gui-lab-evolution-2.md):
     /// the image cut by Slice into corners, edges and a middle, drawn into Width from the box's
-    /// edges, in place of the border; the middle too when Fill.
+    /// edges, in place of the border; the middle too when Fill. The image is a raster or an SVG,
+    /// whose pieces are drawn as paths at the size they land.
     struct BorderImage
     {
         const image::ImageData* Image = nullptr; ///< Not owned (the resource provider's).
+        const foundation::vg::svg::SVGDocument* Svg = nullptr; ///< instead of Image; not owned (the resource provider's)
         Rectangle Source{};                      ///< its region of Image (a sprite); empty: all of it
-        f32 Slice[4]{};                          ///< top, right, bottom, left, in the image's pixels
+        f32 Slice[4]{};                          ///< top, right, bottom, left, in the image's pixels (an SVG's units)
         f32 Width[4]{-1.0f, -1.0f, -1.0f, -1.0f}; ///< top, right, bottom, left, in pixels; below 0: the border's width
         bool Fill = false;
         BorderImageRepeat RepeatX = BorderImageRepeat::Stretch; ///< top, bottom and middle across
         BorderImageRepeat RepeatY = BorderImageRepeat::Stretch; ///< left, right and middle down
+
+        [[nodiscard]] bool HasPicture() const noexcept { return Image != nullptr || Svg != nullptr; }
     };
 
     /// Where an image of `iw` by `ih` pixels lands for `layer` in `box`: its size by the layer's
@@ -215,7 +219,7 @@ export namespace experimental::gui
         [[nodiscard]] bool IsEmpty() const noexcept
         {
             return BackgroundColor.a <= 0.0f && Layers.IsEmpty() && BorderWidths.IsZero() && Shadows.IsEmpty() &&
-                   BackdropBlur <= 0.0f && Skin.Image == nullptr;
+                   BackdropBlur <= 0.0f && !Skin.HasPicture();
         }
         /// Whether the node must draw through a layer of its own: a filter or a blend applies to
         /// the node and its subtree as one picture.
@@ -255,7 +259,7 @@ export namespace experimental::gui
                                        rect.width - 2.0f * shadow.Spread, rect.height - 2.0f * shadow.Spread};
                 canvas.FillBoxShadow(shrunk, Grown(Radii, -shadow.Spread), shadow.Blur, shadow.ShadowColor, true);
             }
-            if (Skin.Image != nullptr)
+            if (Skin.HasPicture())
                 DrawSkin(canvas, rect); // a border image stands in for the border (CSS)
             else if (!BorderWidths.IsZero() && !BorderColors.IsTransparent())
             {
@@ -419,9 +423,10 @@ export namespace experimental::gui
         // are cut, edges and the middle stretched, repeated or rounded along.
         void DrawSkin(vg::VGContext& canvas, const Rectangle& rect) const
         {
-            const Rectangle src = Skin.Source.width > 0.0f && Skin.Source.height > 0.0f
-                                      ? Skin.Source
-                                      : Rectangle{0.0f, 0.0f, static_cast<f32>(Skin.Image->Width()), static_cast<f32>(Skin.Image->Height())};
+            const Rectangle src = Skin.Source.width > 0.0f && Skin.Source.height > 0.0f ? Skin.Source
+                                  : Skin.Image != nullptr
+                                      ? Rectangle{0.0f, 0.0f, static_cast<f32>(Skin.Image->Width()), static_cast<f32>(Skin.Image->Height())}
+                                      : Rectangle{0.0f, 0.0f, Skin.Svg->width, Skin.Svg->height};
             const f32 borders[4] = {BorderWidths.top, BorderWidths.right, BorderWidths.bottom, BorderWidths.left};
             f32 w[4];
             for (usize i = 0; i < 4; ++i)
@@ -494,8 +499,21 @@ export namespace experimental::gui
                         continue;
                     const Rectangle part{piece.x + (shown.x - tile.x) / tw * piece.width, piece.y + (shown.y - tile.y) / th * piece.height,
                                          shown.width / tw * piece.width, shown.height / th * piece.height};
-                    canvas.DrawImage(Skin.Image, shown, part, Color::White);
+                    if (Skin.Image != nullptr)
+                        canvas.DrawImage(Skin.Image, shown, part, Color::White);
+                    else
+                        DrawSvgPart(canvas, shown, part);
                 }
+        }
+        // `part` of the skin's SVG (in its units) into `shown`: the whole document scaled and
+        // placed so that part lands there, clipped to it.
+        void DrawSvgPart(vg::VGContext& canvas, const Rectangle& shown, const Rectangle& part) const
+        {
+            const f32 sx = shown.width / part.width, sy = shown.height / part.height;
+            canvas.PushClipRect(shown);
+            foundation::vg::svg::SVGRenderer::Render(
+                canvas, *Skin.Svg, Rectangle{shown.x - part.x * sx, shown.y - part.y * sy, Skin.Svg->width * sx, Skin.Svg->height * sy});
+            canvas.PopClip();
         }
 
         // An SVG layer: sized and placed as an image of its own size is, drawn as paths, the part

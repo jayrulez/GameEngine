@@ -1334,7 +1334,7 @@ export namespace experimental::gui
         /// a widget's default face then gives way to it (a theme's, E13).
         [[nodiscard]] bool BoxFills() const noexcept
         {
-            return m_box.BackgroundColor.a > 0.0f || !m_box.Layers.IsEmpty() || m_box.Skin.Image != nullptr;
+            return m_box.BackgroundColor.a > 0.0f || !m_box.Layers.IsEmpty() || m_box.Skin.HasPicture();
         }
         [[nodiscard]] bool IsBoxFromStyle() const noexcept { return m_boxFromStyle; }
 

@@ -451,12 +451,27 @@ export namespace experimental::gui
             if (source.Size() == 0 || resources == nullptr)
                 return;
             Rectangle region;
-            out.Image = resources->LoadImage(ImagePath(source, region));
-            if (out.Image == nullptr)
-                return;
-            out.Source = region;
-            const f32 iw = region.width > 0.0f ? region.width : static_cast<f32>(out.Image->Width());
-            const f32 ih = region.width > 0.0f ? region.height : static_cast<f32>(out.Image->Height());
+            f32 iw = 0.0f, ih = 0.0f;
+            if (IsSvgSource(source)) // by its name or written inline: sliced in its own units
+            {
+                out.Svg = resources->Svg(source);
+                if (out.Svg == nullptr || out.Svg->width <= 0.0f || out.Svg->height <= 0.0f)
+                {
+                    out.Svg = nullptr; // a picture of no size has nothing to slice
+                    return;
+                }
+                iw = out.Svg->width;
+                ih = out.Svg->height;
+            }
+            else
+            {
+                out.Image = resources->LoadImage(ImagePath(source, region));
+                if (out.Image == nullptr)
+                    return;
+                out.Source = region;
+                iw = region.width > 0.0f ? region.width : static_cast<f32>(out.Image->Width());
+                ih = region.width > 0.0f ? region.height : static_cast<f32>(out.Image->Height());
+            }
             // One to four values, as margins take them: top, right, bottom, left.
             const auto spread = [](f32 (&v)[4], usize count)
             {

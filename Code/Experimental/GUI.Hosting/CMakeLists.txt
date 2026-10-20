@@ -14,5 +14,6 @@ target_sources(GUI.Hosting
             HostingModule.cppm
             VgShaders.cppm
             PictureBaker.cppm
+            HostedContent.cppm
             GuiHost.cppm
             Offscreen.cppm)

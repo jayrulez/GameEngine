@@ -40,6 +40,7 @@ import experimental.gui;
 import experimental.gui.shell; // GuiInputBridge, ShellClipboard
 import :vg_shaders;
 import :picture_baker;
+import :hosted_content;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -93,12 +94,13 @@ export namespace experimental::gui
         GuiHost(IAllocator& allocator, graphics::GraphicsDevice& device, shell::IShell& shellRef, fonts::IFontService* fonts,
                 const VgShaderSet& shaders)
             : m_allocator(allocator), m_device(device), m_shell(shellRef), m_fonts(fonts), m_shaders(shaders),
-              m_context(MakeRef<GUIContext>(allocator)), m_attached(allocator)
+              m_context(MakeRef<GUIContext>(allocator)), m_attached(allocator), m_contents(allocator)
         {
             m_context->SetFontService(fonts);
             m_styles.SetFontService(fonts);
             m_clipboard = MakeUnique<ShellClipboard>(allocator, &shellRef);
             m_router = MakeUnique<shell::InputRouter>(allocator, shellRef.Input());
+            m_contentRouter = MakeUnique<shell::InputRouter>(allocator, shellRef.Input());
             if (m_device.Raw() != nullptr && m_shaders.IsUsable())
             {
                 m_baker = MakeUnique<GpuPictureBaker>(allocator, allocator, *m_device.Raw(), fonts);
@@ -114,6 +116,9 @@ export namespace experimental::gui
         }
         ~GuiHost()
         {
+            for (Hosted& hosted : m_contents)
+                Unbind(hosted);
+            m_contents.Clear();
             for (const Attached& attached : m_attached)
                 Forget(attached);
             m_attached.Clear();
@@ -151,6 +156,25 @@ export namespace experimental::gui
                     pane->Bridge->SetCursorTarget(mouse);
         }
         void SetOverlay(Overlay overlay) { m_overlay = Move(overlay); }
+        /// Content its node shows that draws outside the GUI (a viewport's scene): bound, placed and
+        /// recorded by the host each frame while it is added. Remove it before it goes.
+        void AddContent(IHostedContent& content)
+        {
+            for (const Hosted& hosted : m_contents)
+                if (hosted.Content == &content)
+                    return;
+            m_contents.PushBack(Hosted{&content, nullptr});
+        }
+        void RemoveContent(IHostedContent& content)
+        {
+            for (usize i = 0; i < m_contents.Size(); ++i)
+                if (m_contents[i].Content == &content)
+                {
+                    Unbind(m_contents[i]);
+                    m_contents.RemoveAt(i);
+                    return;
+                }
+        }
         /// Told of each file the OS drops, before the window it landed on is.
         void SetDropObserver(Function<void(const shell::DroppedFile&)> observer) { m_dropObserver = Move(observer); }
 
@@ -303,6 +327,7 @@ export namespace experimental::gui
                 }
                 data.NeedsFrame = needs;
             }
+            PlaceContents();
             m_bakesRecorded = false;
         }
 
@@ -341,6 +366,10 @@ export namespace experimental::gui
                 (void)m_baker->Record(*frame.encoder, static_cast<i32>(frame.frameIndex));
                 m_bakesRecorded = true;
             }
+            // What the window's nodes show from outside the GUI, drawn before the GUI samples it.
+            for (const Hosted& hosted : m_contents)
+                if (hosted.Window == frame.window && hosted.Content->HostedNode()->IsTreeVisible())
+                    hosted.Content->Record(*frame.encoder, static_cast<i32>(frame.frameIndex));
             vg::VGBatch& batch = data->Canvas->GetBatch();
             const i32 slot = static_cast<i32>(frame.frameIndex);
             data->Renderer.BeginFrame(slot);
@@ -466,19 +495,68 @@ export namespace experimental::gui
             return nullptr;
         }
 
+        struct Hosted
+        {
+            IHostedContent* Content = nullptr;
+            graphics::RenderWindow* Window = nullptr; // the window it is bound to
+        };
+
+        // Each content bound to the window its node is in (again when that changes), and placed
+        // over its node; then their router, so the application reads what it gates this frame.
+        void PlaceContents()
+        {
+            for (Hosted& hosted : m_contents)
+            {
+                Node* node = hosted.Content->HostedNode();
+                SceneRoot* root = node != nullptr ? node->GetSceneRoot() : nullptr;
+                graphics::RenderWindow* window = root != nullptr ? WindowFor(root) : nullptr;
+                if (window != hosted.Window)
+                {
+                    Unbind(hosted);
+                    if (window != nullptr)
+                    {
+                        hosted.Content->Bind(*m_device.Raw(), RendererFor(window), m_shell.Input(), window->Window().Id());
+                        if (shell::InputSurface* surface = hosted.Content->HostedSurface())
+                            m_contentRouter->AddSurface(surface);
+                        hosted.Window = window;
+                    }
+                }
+                if (window == nullptr)
+                    continue;
+                const Rectangle pane = PaneArea(*root);
+                const Rect bounds = node->GetScreenBounds(); // the root's device pixels
+                hosted.Content->Place(Rectangle{pane.x + bounds.x, pane.y + bounds.y, bounds.width, bounds.height},
+                                      Float2{static_cast<f32>(window->Window().Width()), static_cast<f32>(window->Window().Height())});
+            }
+            m_contentRouter->Update();
+        }
+        void Unbind(Hosted& hosted)
+        {
+            if (hosted.Window == nullptr)
+                return;
+            if (shell::InputSurface* surface = hosted.Content->HostedSurface())
+                m_contentRouter->RemoveSurface(surface);
+            hosted.Content->Bind(*m_device.Raw(), nullptr, m_shell.Input(), 0);
+            hosted.Window = nullptr;
+        }
+
         void Forget(GuiWindowData::Pane& pane)
         {
             m_router->RemoveSurface(pane.Surface.Get());
             pane.Bridge->SetTextInputTarget(nullptr); // the window may close after this
         }
-        // A window leaves: its panes' roots are let go now (the trees may hold views of models their
-        // application frees next), its renderer forgets the bakes; the GPU half of the payload stays
-        // with the RenderWindow until the GPU is done with it.
+        // A window leaves: its panes' roots are let go now (the trees may hold widgets showing
+        // models their application frees next), its renderer forgets the bakes, and its hosted
+        // contents let it go; the GPU half of the payload stays with the RenderWindow until the GPU
+        // is done with it.
         void Forget(const Attached& attached)
         {
             for (const UniquePtr<GuiWindowData::Pane>& pane : attached.Data->Panes)
                 Forget(*pane);
             attached.Data->Panes.Clear();
+            for (Hosted& hosted : m_contents) // their window goes: they let its renderer go
+                if (hosted.Window == attached.Window)
+                    Unbind(hosted);
             if (m_baker)
                 m_baker->RemoveTarget(attached.Data->Renderer);
         }
@@ -572,11 +650,13 @@ export namespace experimental::gui
         StyleManager m_styles;
         UniquePtr<ShellClipboard> m_clipboard;
         UniquePtr<shell::InputRouter> m_router;
+        UniquePtr<shell::InputRouter> m_contentRouter; // the hosted contents' surfaces
         UniquePtr<GpuPictureBaker> m_baker;
         PictureBakerSetup m_bakerSetup;
         bool m_bakerReady = false;
         bool m_bakesRecorded = false;
         Array<Attached> m_attached;
+        Array<Hosted> m_contents;
         PointerFilter m_pointerFilter;
         Overlay m_overlay;
         Function<void(const shell::DroppedFile&)> m_dropObserver;

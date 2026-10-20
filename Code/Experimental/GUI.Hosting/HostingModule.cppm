@@ -16,3 +16,4 @@ export import :vg_shaders;
 export import :picture_baker;
 export import :gui_host;
 export import :offscreen;
+export import :hosted_content;

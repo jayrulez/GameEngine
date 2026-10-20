@@ -41,7 +41,7 @@ first three: hosting, the viewport, then docking.
 | GUI.Inspector | `experimental.gui.inspector` | The inspector (a tool) | none | Built |
 | GUI.Testing | `experimental.gui.testing` | Test helpers, image comparison (a tool) | none | Built |
 | GUI.Hosting | `experimental.gui.hosting` | The host on `foundation.graphics`: one GUI, a root per window, each window's VG context, renderer, targets and input; the frame; offscreen pictures; the picture baker | UI.Runtime | H1 to H3 |
-| GUI.Viewport | `experimental.gui.viewport` | A node showing 3D (or any GPU) content drawn into a target of its own, with input gated to it | UI.Viewport | V1, V2 |
+| GUI.Viewport | `experimental.gui.viewport` | A widget showing 3D (or any GPU) content drawn into a target of its own, with input gated to it | UI.Viewport | V1, V2 |
 | GUI.Docking | `experimental.gui.docking` | Docking: splits, tab groups, drop zones, floating panels in the window and as OS windows, layouts saved and restored; its default sheet | UI.Toolkit's docking and UI.Application | D, after its survey |
 | GUI.Toolkit | `experimental.gui.toolkit` | Editor widgets: the property grid, colour pickers, curves, node graphs, tool and status bars | UI.Toolkit less docking | Empty (round two's ruling 4) |
 | GUI.Gamekit | `experimental.gui.gamekit` | A game's screens: a screen stack, input modes, transitions, prompts, toasts | UI.Gamekit | Empty |
@@ -107,12 +107,22 @@ its references were drawn; the host's default is encoded, as foundation.ui's is.
 
 ### V1 The viewport
 
-`ViewportView`, a node that shows content drawn into a colour target (and depth) of its own, sized
-to the node in device pixels: an `OnRender` the application fills, recorded before the window's
+`Viewport`, a widget that shows content drawn into a colour target (and depth) of its own, sized
+to the widget in device pixels: an `OnRender` the application fills, recorded before the window's
 pass, the target registered with the window's renderer as an external texture, so the node draws
 it as an image. Its input is gated: a shell input surface over the node's area, so a 3D camera
 reads the keyboard and mouse only while the node is hovered or focused, and a drag that leaves it
 keeps going. It follows the window it is in (a node moved to another window's root re-registers).
+
+As built on `vg` (2026-10-20): `Viewport`, a widget, is hosted content (`IHostedContent`, a new
+seam in GUI.Hosting): handed to the host once (`HostIn`), the host binds it to the renderer of the
+window its widget is in and binds it again when it moves to another window (foundation.ui's
+application had to call `AttachToWindow` itself), sizes its targets to the widget in that window's
+device pixels, places its input surface over it (on a router of the host's own, so the GUI keeps
+the pointer for hover and focus) and records its drawing on that window's frame before the GUI
+samples it; with no `OnRender` it clears, hidden it records nothing. Not carried from
+foundation.ui: a game-in-a-panel's keyboard capture and hosted text input, until an embedded GUI
+needs them.
 
 ### V2 The sandbox's viewport
 

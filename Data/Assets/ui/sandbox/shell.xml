@@ -19,6 +19,7 @@
             <Button id="nav-layout" class="nav" text="Layout" command="page.layout"/>
             <Button id="nav-data-views" class="nav" text="Data views" command="page.data-views"/>
             <Button id="nav-menus" class="nav" text="Menus and windows" command="page.menus"/>
+            <Button id="nav-viewport" class="nav" text="Viewport" command="page.viewport"/>
             <Label class="nav-heading" text="LOOKS"/>
             <Button id="nav-styling" class="nav" text="Styling" command="page.styling"/>
             <Button id="nav-effects" class="nav" text="Effects" command="page.effects"/>

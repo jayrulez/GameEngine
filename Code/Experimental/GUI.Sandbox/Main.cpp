@@ -46,12 +46,17 @@ import experimental.gui.shell;
 import experimental.gui.inspector; // Ctrl+Shift+I (E8e)
 import experimental.gui.testing;   // --keys targets by selector or text (E8f), the image tests' match (E8g)
 import experimental.gui.hosting;   // the host: the window's GUI, offscreen pictures, the picture baker
+import experimental.gui.viewport;  // the Viewport page's widget
+import foundation.shaders;         // the Viewport page's cube compiles its shader
 import foundation.rhi.capture;     // F12 and --screenshot
 import gui.sandbox.stress; // the Stress page (E8a)
 import foundation.script; // the pages' and the game menu's scripts
 #ifdef OPTION_HAS_ANGELSCRIPT
 import foundation.script.angelscript;
 #endif
+
+#include "../../Samples/Common/FlyCamera.h"    // the Viewport page's camera, from its gated input
+#include "../../Samples/Common/SpinningCube.h" // what the Viewport page shows
 
 using namespace foundation::core;
 namespace rhi = foundation::rhi;
@@ -462,6 +467,14 @@ private:
     f32 m_nextStatsTime = 1.0f;
     u64 m_frames = 0;      // frames the loop ran
 
+    // === The Viewport page (V2 of Specs/gui-lab-evolution-3.md) ===
+    RefPtr<gui::Viewport> m_viewport;
+    samples::SpinningCube m_cube;
+    samples::FlyCamera m_camera;
+    foundation::shaders::Compiler* m_cubeCompiler = nullptr;
+    f32 m_spin = 0.0f;
+    void ResetCamera();
+
     // === Fonts ===
     UniquePtr<fonts::TrueTypeFontService> m_fontService;
     fonts::CachedFont* m_font = nullptr; // Roboto 16, for what native code builds
@@ -648,6 +661,12 @@ void GUISandbox::OnStartup(runtime::IApplicationHost& host)
     BuildMenu();
     if (m_openMenuAtStart)
         OpenMenu();
+
+    // The Viewport page's cube, its pipeline built for the widget's formats.
+    if (m_viewport && foundation::shaders::createCompiler(foundation::shaders::CompilerDesc{}, m_cubeCompiler).IsOk() &&
+        m_cubeCompiler != nullptr)
+        m_cube.Init(m_device, m_cubeCompiler, static_cast<i32>(host.Graphics()->FramesInFlight()), m_viewport->ColorFormat(),
+                    m_viewport->DepthFormat());
 
     // What the sandbox does to the host's input and drawing: the inspector picks and draws over
     // the page, its boundary takes the pointer, a desk test hears of the OS's drops.
@@ -953,6 +972,39 @@ void GUISandbox::FillNativeHosts()
         view->SetFit(gui::ObjectFit::Contain);
         view->SetTooltip(u8"An Image from code: a generated picture, object-fit: contain");
         host->AddChild(view.Get());
+    }
+
+    // Viewport: a cube drawn into the widget's targets, under the page's note (V2).
+    if (gui::Node* host = FindById(*m_shellNode, u8"viewport-host"))
+    {
+        m_viewport = MakeRef<gui::Viewport>(AppRoot());
+        m_viewport->AddClass(u8"viewport-scene");
+        (void)host->AddChildAt(m_viewport.Get(), 0); // under the note
+        m_viewport->HostIn(*m_guiHost);
+        GUISandbox* self = this;
+        m_viewport->OnRender = [self](gui::Viewport& viewport, rhi::CommandEncoder& encoder, i32 frameIndex)
+        {
+            const u32 width = viewport.RenderWidth(), height = viewport.RenderHeight();
+            const f32 aspect = static_cast<f32>(width) / static_cast<f32>(Max(height, 1u));
+            const Float4x4 projection = Float4x4::PerspectiveFovRH(1.0f, aspect, 0.1f, 100.0f);
+            const samples::FlyCamera& camera = self->m_camera;
+            const Float4x4 view = Float4x4::LookAtRH(camera.position, camera.position + camera.Forward(), camera.Up());
+            const Float4x4 model = Float4x4::RotationY(self->m_spin) * Float4x4::RotationX(self->m_spin * 0.5f);
+            self->m_cube.Render(encoder, viewport.ColorView(), viewport.DepthView(), width, height, viewport.LinearClearColor(),
+                                model * view * projection, frameIndex); // row vectors: v * M * V * P
+        };
+        (void)m_root->OnCommand(u8"viewport.reset", [self](gui::CommandEvent&) { self->ResetCamera(); });
+        (void)m_root->OnCommand(u8"viewport.fit",
+                                [self](gui::CommandEvent&)
+                                {
+                                    // A fixed 16:9 picture letterboxed in the widget, or the widget's own pixels.
+                                    const bool fixed = self->m_viewport->GetFitMode() != FitMode::Letterbox;
+                                    self->m_viewport->SetFixedResolution(fixed ? 1280u : 0u, fixed ? 720u : 0u);
+                                    self->m_viewport->SetFitMode(fixed ? FitMode::Letterbox : FitMode::Stretch);
+                                    if (auto* button = Cast<gui::Button>(FindById(*self->m_shellNode, u8"viewport-fit")))
+                                        button->SetText(fixed ? u8"Follow the widget" : u8"Letterbox at 16:9");
+                                });
+        ResetCamera();
     }
 
     // Data views over native models.
@@ -1866,6 +1918,13 @@ void GUISandbox::OnUpdate(runtime::IApplicationHost&, f32 deltaTime)
     }
     // The host: each pane's input, the GUI's clock, styles and layout; whether a frame is needed.
     m_guiHost->Update(deltaTime);
+    // The Viewport page's camera reads the widget's gated input while it is hovered or focused.
+    if (m_viewport && m_viewport->IsTreeVisible())
+    {
+        m_spin += deltaTime;
+        if (m_viewport->IsActive())
+            m_camera.Update(m_viewport->Keyboard(), m_viewport->Mouse(), deltaTime);
+    }
 
     ++m_frames;
     if (m_frameStats && m_totalTime >= m_nextStatsTime)
@@ -1910,6 +1969,16 @@ void GUISandbox::OnRenderWindow(runtime::IApplicationHost&, graphics::FrameConte
         std::fprintf(stderr, "GUISandbox: the screenshot could not be taken (this surface cannot be copied)\n");
         Exit();
     }
+}
+
+// The Viewport page's camera, framing the cube.
+void GUISandbox::ResetCamera()
+{
+    m_camera.position = Float3{0.0f, 0.0f, 4.5f};
+    m_camera.yaw = 0.0f;
+    m_camera.pitch = 0.0f;
+    m_camera.moveSpeed = 4.0f;
+    m_camera.fastSpeed = 12.0f;
 }
 
 // F12: the next frame, to <user data>/screenshots.
@@ -2140,6 +2209,10 @@ void GUISandbox::OnShutdown(runtime::IApplicationHost&)
     closeScript(m_menuScript);
     m_scripts.Reset();
     m_screenshot.Release(*m_device); // its readback buffer
+    m_cube.Shutdown();
+    if (m_cubeCompiler != nullptr)
+        m_cubeCompiler->Destroy();
+    m_cubeCompiler = nullptr;
     m_offscreen.Reset();
     // The window's panes leave the host (their renderer forgets the bakes) before the trees go.
     if (m_guiHost->WindowFor(m_root.Get()) != nullptr)
@@ -2150,7 +2223,8 @@ void GUISandbox::OnShutdown(runtime::IApplicationHost&)
     m_floating.Reset();
     m_dialog.Reset();
     m_shellNode.Reset();
-    m_root.Reset(); // the views go with the tree, before the models they read
+    m_viewport.Reset(); // its targets go with the tree, while the host and the device are here
+    m_root.Reset(); // the widgets go with the tree, before the models they read
     m_menu.Reset();
     m_gui.Reset();
     m_tableProxy.Reset();

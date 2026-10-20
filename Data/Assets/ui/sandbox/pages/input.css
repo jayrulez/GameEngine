@@ -34,3 +34,7 @@
 .swatch-green { background-color: #27ae60; }
 .swatch-blue { background-color: #2f7de1; }
 .canvas { width: 300px; }
+.viewer { width: 590px; height: 260px; overflow: hidden; border-radius: 8; background-color: var(--shell-surface-2); }
+.photo { width: 200px; height: 200px; }
+.viewer-reset { width: 100px; height: 32px; font-family: Roboto; font-size: 15px; border-radius: 6; }
+.viewer-said { width: 470px; height: 24px; font-family: Roboto; font-size: 14px; color: var(--muted); vertical-align: middle; }

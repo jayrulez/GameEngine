@@ -1511,9 +1511,9 @@ void GUISandbox::TypeKeys(gui::SceneRoot& root)
     const usize index = static_cast<usize>((m_frames - 10) / 15);
     if (index >= keys.Size())
         return;
-    // Pointer steps (logical units, as a screenshot is): click:x,y rclick:x,y move:x,y down:x,y up:x,y;
-    // or at the middle of what a selector or a text finds: click:#ok, click:text=Show,
-    // move:text~=Sett (no spaces: a step ends at one).
+    // Pointer steps (logical units, as a screenshot is): click:x,y rclick:x,y move:x,y down:x,y up:x,y,
+    // and two fingers' pinch:, turn: and pan2:; or at the middle of what a selector or a text finds:
+    // click:#ok, click:text=Show, move:text~=Sett (no spaces: a step ends at one).
     const StringView step = keys[index];
     usize colon = 0;
     while (colon < step.Size() && step[colon] != u8':')
@@ -1553,6 +1553,30 @@ void GUISandbox::TypeKeys(gui::SceneRoot& root)
             (void)d.InjectMouseMove(at);
             (void)d.InjectMouseDown(at, button);
             (void)d.InjectMouseUp(at, button);
+        }
+        else if (verb == StringView(u8"pinch") || verb == StringView(u8"turn") || verb == StringView(u8"pan2"))
+        {
+            // Two fingers about it (E17c): pinch spreads them from 100 to 200 apart, turn turns them a
+            // quarter, pan2 moves them together 60 across and 30 down (logical units).
+            const f32 half = 50.0f * scale;
+            const f32 spread = verb == StringView(u8"pinch") ? 2.0f : 1.0f;
+            const f32 turn = verb == StringView(u8"turn") ? kPi * 0.5f : 0.0f;
+            const Float2 by = verb == StringView(u8"pan2") ? Float2{60.0f * scale, 30.0f * scale} : Float2{0.0f, 0.0f};
+            const auto finger = [&](f32 t, f32 side)
+            {
+                const f32 reach = half * (1.0f + (spread - 1.0f) * t) * side;
+                return Float2{at.x + by.x * t + reach * Cos(turn * t), at.y + by.y * t + reach * Sin(turn * t)};
+            };
+            (void)d.InjectTouchDown(1u, finger(0.0f, -1.0f));
+            (void)d.InjectTouchDown(2u, finger(0.0f, 1.0f));
+            for (int i = 1; i <= 8; ++i)
+            {
+                const f32 t = static_cast<f32>(i) / 8.0f;
+                (void)d.InjectTouchMove(1u, finger(t, -1.0f));
+                (void)d.InjectTouchMove(2u, finger(t, 1.0f));
+            }
+            (void)d.InjectTouchUp(2u, finger(1.0f, 1.0f));
+            (void)d.InjectTouchUp(1u, finger(1.0f, -1.0f));
         }
         m_menuWantsUpdate = true;
         return;

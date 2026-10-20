@@ -85,4 +85,18 @@
         </Panel>
         <Label class="caption" white-space="normal" height="40" text="The swatches are sources in markup (drag-type, drag-value), the canvas a target (drop-types, drop-reason); its script hears the drop."/>
     </Panel>
+
+    <!-- Multi-touch (E17c of Documentation/Specs/gui-lab-evolution-2.md): the frame's touch-action is
+         none, so its fingers are its own; its script turns each gesture into the picture's transform. -->
+    <Panel class="section" gap="12">
+        <Label class="section-title" text="Pinch, turn and pan"/>
+        <Panel id="input-viewer" class="viewer" touch-action="none" display="stack" justify-items="center" align-items="center">
+            <Image id="input-photo" class="photo" src="Assets/images/logo.png" object-fit="contain"/>
+        </Panel>
+        <Panel flex-direction="row" align-items="center" gap="12">
+            <Button id="input-viewer-reset" class="viewer-reset" text="Reset"/>
+            <Label class="viewer-said" text="{{viewer}}"/>
+        </Panel>
+        <Label class="caption" white-space="normal" height="40" text="Two fingers on the frame pinch, turn and pan the picture at once; a trackpad's pinch over it scales it. Its touch-action is none: the lab leaves its fingers to it."/>
+    </Panel>
 </Panel>

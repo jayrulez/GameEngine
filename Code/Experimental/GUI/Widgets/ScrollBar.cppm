@@ -42,7 +42,7 @@ export namespace experimental::gui
             SetTag(core::StringView(u8"scrollbar"));
             SetPageShown(true); // its page is the visible part
             // The track is the node background so the theme's background-color styles it.
-            SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_trackColor));
+            SetBox(FilledBox(m_trackColor)); // its own track, which a sheet's (a theme's) replaces
         }
 
         void SetOrientation(Orientation orientation)
@@ -74,7 +74,7 @@ export namespace experimental::gui
         void SetTrackColor(Color color)
         {
             m_trackColor = color;
-            SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), color));
+            SetBox(FilledBox(color));
         }
         void SetThumbColor(Color color)
         {

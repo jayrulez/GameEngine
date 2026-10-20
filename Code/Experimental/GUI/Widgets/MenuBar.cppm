@@ -47,7 +47,7 @@ export namespace experimental::gui
         MenuBar()
         {
             SetTag(core::StringView(u8"menubar"));
-            SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_barColor));
+            SetBox(FilledBox(m_barColor)); // its own face, which a sheet's (a theme's) replaces
             // Its keys are bindings in the menu key context (E12): Left and Right from a button or
             // an open menu (which passes them on here) move along the bar, Down opens a button's.
             SetKeyContext(core::StringView(kMenuKeyContext));

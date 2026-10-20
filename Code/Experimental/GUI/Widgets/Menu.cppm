@@ -551,7 +551,7 @@ export namespace experimental::gui
             };
             (void)OnCommand(core::StringView(kMenuLeftCommand), [across](CommandEvent& e) { across(false, e); });
             (void)OnCommand(core::StringView(kMenuRightCommand), [across](CommandEvent& e) { across(true, e); });
-            SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_panelColor));
+            SetBox(FilledBox(m_panelColor)); // its own face, which a sheet's (a theme's) replaces
             // Taller than the window, its items scroll (E16): the wheel turns them.
             (void)AddEventListener(EventType::MouseWheel, [self](const Event& e)
                                    {

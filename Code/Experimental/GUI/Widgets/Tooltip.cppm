@@ -39,7 +39,7 @@ export namespace experimental::gui
             SetHitTestVisible(false); // never steals pointer events
             StyleWriteScope defaults(*this); // its own values, which a sheet returns to
             SetPadding(Thickness{6.0f, 3.0f, 6.0f, 3.0f});
-            SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_bgColor));
+            SetBox(FilledBox(m_bgColor)); // its own face, which a sheet's (a theme's) replaces
             m_text.SetAlignment(TextHAlign::Start, TextVAlign::Middle);
         }
 

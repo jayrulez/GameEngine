@@ -174,7 +174,7 @@ export namespace experimental::gui
             SetTag(core::StringView(u8"tableview"));
             m_header = core::MakeRef<UIWidget>(MemoryAllocator());
             m_header->SetTag(core::StringView(u8"tableheader"));
-            m_header->SetBackground(core::MakeRef<RectangleDrawable>(MemoryAllocator(), m_headerColor));
+            m_header->SetBox(FilledBox(m_headerColor)); // its own face, which a sheet's replaces
             AddChild(m_header.Get());
             StyleWriteScope defaults(*this); // its own values, which a sheet returns to
             SetTextColor(Color{0.86f, 0.89f, 0.94f, 1.0f});

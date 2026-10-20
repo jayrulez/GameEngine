@@ -376,3 +376,30 @@ TEST_CASE("theme: a list's rows show the pointer over them (a combo box's popup 
     mgr.ApplyTree(*root.Get());
     CHECK(item->GetBox().BackgroundColor.r == doctest::Approx(1.0f));
 }
+
+TEST_CASE("theme: a widget's own face gives way to a sheet's: menus, their bar, tooltips, scrollbars, a table's header")
+{
+    // Their faces were drawings over the box, so a theme's colour (the light theme's) lay beneath
+    // them unseen; each is now its own box, which a sheet's replaces.
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{400.0f, 400.0f});
+    auto menu = Make<Menu>();
+    auto bar = Make<MenuBar>();
+    auto tooltip = Make<Tooltip>();
+    auto scrollbar = Make<ScrollBar>();
+    UIWidget* const widgets[] = {menu.Get(), bar.Get(), tooltip.Get(), scrollbar.Get()};
+    for (UIWidget* w : widgets)
+    {
+        root->AddChild(w);
+        CHECK(w->BoxFills()); // its own face, unstyled
+    }
+    StyleManager mgr;
+    mgr.SetStyleSheet(CSSParser::Parse(core::StringView(u8"menu, menubar, tooltip, scrollbar { background-color: #ff0000; }")));
+    mgr.ApplyTree(*root.Get());
+    for (UIWidget* w : widgets)
+    {
+        CAPTURE(w->GetTag());
+        CHECK(w->GetBox().BackgroundColor.r == doctest::Approx(1.0f));
+        CHECK(w->GetBox().BackgroundColor.g == doctest::Approx(0.0f));
+    }
+}

@@ -487,7 +487,7 @@ namespace
     }
 }
 
-TEST_CASE("tabs: a tab dragged out of its strip tears out as a drag that a strip of its group takes, where the mark is")
+TEST_CASE("tabs: in a group's strip a tab moved past the threshold, any way, is a drag that a strip of its group takes, where the mark is")
 {
     auto root = MakeRoot();
     auto top = BarAt(*root, 10.0f, u8"docs");
@@ -503,9 +503,9 @@ TEST_CASE("tabs: a tab dragged out of its strip tears out as a drag that a strip
 
     const core::Float2 start = CentreOf(*b);
     d.InjectMouseDown(start, MouseButton::Left);
-    d.InjectMouseMove(core::Float2{start.x, start.y + 20.0f}); // not past the tear (32)
+    d.InjectMouseMove(core::Float2{start.x + 3.0f, start.y}); // within the threshold (6)
     CHECK_FALSE(d.IsDragging());
-    d.InjectMouseMove(core::Float2{start.x, start.y + 60.0f});
+    d.InjectMouseMove(core::Float2{start.x + 8.0f, start.y}); // along the strip: a drag at once
     REQUIRE(d.IsDragging());
     CHECK(d.GetDragPayload().Type == core::StringView(u8"lab/tab"));
     CHECK(d.GetDragPayload().Label == core::StringView(u8"B"));
@@ -524,6 +524,42 @@ TEST_CASE("tabs: a tab dragged out of its strip tears out as a drag that a strip
     CHECK(bottom->GetTab(1) == b); // the tab itself moved
     CHECK(bottom->GetSelectedTab() == b);
     CHECK(bottom->GetDropIndex() == -1);
+}
+
+TEST_CASE("tabs: in a group's strip a tab dropped back into it reorders it; not reorderable, its strip does not take it")
+{
+    auto root = MakeRoot();
+    auto top = BarAt(*root, 10.0f, u8"docs");
+    Tab* a = AddSizedTab(*top, u8"A");
+    AddSizedTab(*top, u8"B");
+    Tab* c = AddSizedTab(*top, u8"C");
+    (void)root->UpdateLayout();
+    EventDispatcher& d = *root->GetEventDispatcher();
+
+    // A along the strip past C's middle: no slide on the way, then last at the drop.
+    const core::Float2 start = CentreOf(*a);
+    d.InjectMouseDown(start, MouseButton::Left);
+    const Rect cr = c->GetScreenBounds();
+    const core::Float2 end{cr.x + cr.width - 4.0f, start.y};
+    d.InjectMouseMove(core::Float2{start.x + 10.0f, start.y});
+    REQUIRE(d.IsDragging());
+    d.InjectMouseMove(end);
+    CHECK(top->GetTab(0) == a); // nothing slid
+    CHECK(d.GetDropTarget() == top.Get());
+    CHECK(top->GetDropIndex() == 3);
+    d.InjectMouseUp(end, MouseButton::Left);
+    CHECK(top->GetTab(2) == a);
+    CHECK(top->GetSelectedTab() == a);
+
+    top->SetReorderable(false);
+    const core::Float2 again = CentreOf(*a);
+    d.InjectMouseDown(again, MouseButton::Left);
+    d.InjectMouseMove(core::Float2{again.x - 10.0f, again.y});
+    REQUIRE(d.IsDragging()); // its group still takes it elsewhere
+    d.InjectMouseMove(CentreOf(*top->GetTab(0)));
+    CHECK(d.GetDropTarget() != top.Get());
+    d.InjectMouseUp(CentreOf(*top->GetTab(0)), MouseButton::Left);
+    CHECK(top->GetTab(2) == a);
 }
 
 TEST_CASE("tabs: an owner answers a tab offered to a strip (a refusal with its reason) and takes a dropped one over")

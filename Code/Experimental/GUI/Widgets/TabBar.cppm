@@ -11,9 +11,9 @@
 // reports `tabclose` (a TabEvent), and the tab goes unless a listener takes the event; which tabs
 // show their close part is the bar's policy (never, the selected one, the hovered and selected
 // ones, all). With `reorderable`, a tab dragged across a neighbour's midpoint changes places with
-// it; dragged out of the strip past a tear distance it becomes a drag (E7, type `lab/tab`) that
-// the strips of its `group` take, a mark showing where it would land; between tab views its page
-// goes with it. Tabs past the strip's end scroll it (the wheel turns it, a selected tab is scrolled to), and
+// it. In a strip of a `group` a tab moved past the drag threshold, any way, is a drag at once (E7,
+// type `lab/tab`) that the group's strips take, its own too (a reorder when it is `reorderable`),
+// a mark showing where it would land; between tab views its page goes with it. Tabs past the strip's end scroll it (the wheel turns it, a selected tab is scrolled to), and
 // a button at its end lists them all.
 //
 // A change the user makes reports `change`; code's report only to bindings, as a button's do.
@@ -37,7 +37,6 @@ import :text; // TextHAlign
 import :button_base;
 import :disclosure;
 import :menu;
-import :event_dispatcher; // StartDrag (a tab torn out of its strip)
 import :draw_context;
 
 using namespace foundation::core;
@@ -117,11 +116,13 @@ export namespace experimental::gui
         [[nodiscard]] Node* GetPage() const noexcept { return m_page; }
 
         [[nodiscard]] u32 GetWidgetStates() const override { return m_selected ? WidgetStateChecked : WidgetStateNone; }
-        // In a reorderable strip its press reorders it (E7): a drag from what holds it is not offered.
+        // In a reorderable strip of no group its press reorders it (E7): a drag from what holds it is
+        // not offered. In a group's strip the press is the drag's, which it gives.
         [[nodiscard]] bool OwnsPressDrag(core::Float2) const override;
         // A drag resting on it selects it (E7, Godot's switch on drag hover).
         bool OnDragHoverOpen(core::Float2) override;
-        /// Picked up from the keyboard (`drag.pick`) in a strip of a group: the drag a tear makes.
+        /// In a strip of a group: the pointer's drag past the threshold, held where it was pressed,
+        /// or picked up from the keyboard (`drag.pick`).
         bool OnDragRequested(DragRequest& request) override;
         /// The drag a tab torn out of its strip is.
         void FillTabPayload(DragPayload& payload);
@@ -181,7 +182,6 @@ export namespace experimental::gui
         bool m_pressing = false; // a left press on it, not yet released
         bool m_dragging = false; // that press moved far enough to reorder
         f32 m_pressX = 0.0f;
-        core::Float2 m_pressLocal{0.0f, 0.0f}; // where on it the press was
         core::RefPtr<TabBar> m_tornFrom; // the bar told it was torn out, told again when the drag ends
     };
 
@@ -353,7 +353,8 @@ export namespace experimental::gui
         }
 
         // === Reordering ===
-        /// A tab dragged across a neighbour's midpoint changes places with it.
+        /// A tab dragged across a neighbour's midpoint changes places with it (in a group's strip,
+        /// dropped back into the strip at a new place).
         void SetReorderable(bool reorderable) noexcept { m_reorderable = reorderable; }
         [[nodiscard]] bool IsReorderable() const noexcept { return m_reorderable; }
 
@@ -361,9 +362,6 @@ export namespace experimental::gui
         /// Strips of one group take each other's tabs (torn out and dropped); empty: none.
         void SetGroup(const core::String& group) { m_group = group; }
         [[nodiscard]] core::String GetGroup() const { return m_group; }
-        /// How far out of the strip a tab is dragged before it tears out as a drag.
-        void SetTearDistance(f32 distance) noexcept { m_tearDistance = core::Max(1.0f, distance); }
-        [[nodiscard]] f32 GetTearDistance() const noexcept { return m_tearDistance; }
         /// Where a tab dropped here would go, while a drag of one is over the strip (-1: none).
         [[nodiscard]] i32 GetDropIndex() const noexcept { return m_dropIndex; }
         /// Whether it takes a dragged tab (a torn-out tab of its group), and puts the mark at
@@ -372,7 +370,7 @@ export namespace experimental::gui
         {
             const Tab* tab = DraggedTab(query.Payload);
             const TabBar* from = tab != nullptr ? tab->GetBar() : nullptr;
-            if (from == nullptr || m_group.IsEmpty() || from->m_group != m_group)
+            if (from == nullptr || m_group.IsEmpty() || from->m_group != m_group || (from == this && !m_reorderable))
                 return false;
             query.Accept(DropEffect::Move);
             query.Place = index;
@@ -619,7 +617,6 @@ export namespace experimental::gui
         core::Function<void(Tab&)> m_onRemoved;
         core::Function<void(i32)> m_closeHandler;
         core::String m_group;
-        f32 m_tearDistance = 32.0f;
         i32 m_dropIndex = -1;
         core::Function<void(Node&, i32)> m_pageAdopter;
         core::Function<void(DropQuery&, Tab&, i32)> m_onTabOffered;
@@ -698,7 +695,7 @@ export namespace experimental::gui
     inline bool Tab::OwnsPressDrag(core::Float2) const
     {
         const TabBar* bar = GetBar();
-        return bar != nullptr && bar->IsReorderable();
+        return bar != nullptr && bar->IsReorderable() && bar->GetGroup().IsEmpty();
     }
 
     inline void Tab::FillTabPayload(DragPayload& payload)
@@ -711,11 +708,15 @@ export namespace experimental::gui
 
     inline bool Tab::OnDragRequested(DragRequest& request)
     {
-        // The pointer's drag is the tear (the tab owns its press); the keyboard's is this.
         const TabBar* bar = GetBar();
-        if (!request.FromKeyboard || bar == nullptr || bar->GetGroup().IsEmpty())
+        if (bar == nullptr || bar->GetGroup().IsEmpty())
             return false;
         FillTabPayload(request.Payload);
+        if (!request.FromKeyboard)
+        {
+            request.GrabOffset = request.Press; // its ghost held where the press took it
+            request.HasGrabOffset = true;
+        }
         return true;
     }
 
@@ -756,29 +757,15 @@ export namespace experimental::gui
         m_pressing = true;
         m_dragging = false;
         m_pressX = event.Position.x;
-        m_pressLocal = ConvertToNodeSpace(event.Position);
     }
 
     inline void Tab::OnMouseMove(const MouseEvent& event)
     {
         TabBar* bar = GetBar();
-        if (!m_pressing || bar == nullptr || !bar->IsReorderable())
+        // A group's strip: the dispatcher's drag past its threshold (OnDragRequested), not this.
+        if (!m_pressing || bar == nullptr || !bar->IsReorderable() || !bar->GetGroup().IsEmpty())
             return;
         constexpr f32 kDragThreshold = 4.0f;
-        // Out of the strip past the tear distance, in a group: a drag other strips may take.
-        const Rect strip = bar->GetScreenBounds();
-        const f32 out = core::Max(strip.y - event.Position.y, event.Position.y - (strip.y + strip.height));
-        if (!bar->GetGroup().IsEmpty() && out > bar->GetTearDistance())
-            if (EventDispatcher* d = GetEventDispatcher())
-            {
-                EndDrag();
-                DragRequest request;
-                FillTabPayload(request.Payload);
-                request.GrabOffset = m_pressLocal; // its ghost held where the press took it
-                request.HasGrabOffset = true;
-                d->StartDrag(*this, core::Move(request));
-                return;
-            }
         if (!m_dragging && core::Abs(event.Position.x - m_pressX) < kDragThreshold)
             return;
         if (!m_dragging)

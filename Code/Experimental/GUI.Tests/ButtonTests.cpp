@@ -277,7 +277,7 @@ TEST_CASE("button: its text and icon are parts after its indicator, in its text 
     CHECK(b->GetText() == core::StringView(u8"Save"));
     CHECK_FALSE(b->GetTextPart()->IsHitTestVisible());
 
-    auto icon = core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), core::Color::Red);
+    auto icon = core::MakeRef<ImageDrawable>(core::DefaultAllocator()); // an icon: image content
     b->SetIcon(icon);
     REQUIRE(b->GetIconPart() != nullptr);
     CHECK(b->GetChildAt(0) == b->GetIconPart());

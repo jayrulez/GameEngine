@@ -21,7 +21,6 @@ import foundation.fonts; // CachedFont
 import :rect;
 import :event;
 import :drawable;
-import :rectangle_drawable;
 import :label;
 import :ui_widget;
 import :layout_style;

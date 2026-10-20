@@ -21,7 +21,6 @@ import foundation.vg;   // CornerRadii
 import :rect;
 import :event;
 import :draw_context;
-import :rectangle_drawable;
 import :ui_widget;
 import :layout_style; // Orientation
 import :range_value;

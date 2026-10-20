@@ -28,7 +28,6 @@ import :node;
 import :label;
 import :text; // TextHAlign
 import :ui_widget;
-import :rectangle_drawable;
 import :model_index;
 import :model;
 import :item_view;

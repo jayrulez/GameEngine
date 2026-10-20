@@ -3,10 +3,10 @@
 
 // GUI - :drawable partition
 //
-// Drawable: base for composable visual primitives, rendered into a destination Rect via
-// DrawContext. Derived from eepp's Drawable (include/eepp/graphics/drawable.hpp): keeps
-// the color/alpha tint state and the stateful flag, but replaces eepp's global-draw with
-// the DrawContext seam. Object-derived (our RTTI everywhere; -fno-rtti) so concrete
+// Drawable: image content drawn into a destination Rect via DrawContext (an Image widget's
+// picture, a menu item's or a button's icon); a node's look is its box, not a drawable.
+// Derived from eepp's Drawable (include/eepp/graphics/drawable.hpp): keeps the color/alpha
+// tint state, but replaces eepp's global-draw with the DrawContext seam. Object-derived (our RTTI everywhere; -fno-rtti) so concrete
 // drawables get Cast<T> for downcasts; not reflection-registered/scripted.
 
 module;
@@ -18,7 +18,6 @@ export module experimental.gui:drawable;
 import foundation.core; // Object, Optional, Float2, Color
 import :rect;
 import :draw_context;
-import :control_state;
 
 using namespace foundation::core;
 
@@ -28,18 +27,8 @@ export namespace experimental::gui
     {
         RTTI_OBJECT(Drawable, Object)
     public:
-        // State-unaware draw into a destination rect.
+        // Draws into a destination rect.
         virtual void Draw(DrawContext& ctx, const Rect& dest) = 0;
-
-        // State-aware draw - defaults to the state-unaware overload.
-        virtual void Draw(DrawContext& ctx, const Rect& dest, ControlState state)
-        {
-            (void)state;
-            Draw(ctx, dest);
-        }
-
-        // True if drawing varies with ControlState (StateListDrawable, skins).
-        [[nodiscard]] virtual bool IsStateful() const { return false; }
         /// Draws it multiplied by `tint` (an Image's image-color); one that cannot tint draws as it is.
         virtual void DrawTinted(DrawContext& ctx, const Rect& dest, Color tint)
         {

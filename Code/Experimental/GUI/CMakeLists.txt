@@ -39,17 +39,9 @@ target_sources(GUI
             Scene/Accessibility.cppm
             Scene/SceneRoot.cppm
             Scene/GuiScript.cppm
-            Drawing/ControlState.cppm
             Drawing/DrawContext.cppm
             Drawing/Drawable.cppm
-            Drawing/RectangleDrawable.cppm
-            Drawing/BorderDrawable.cppm
-            Drawing/StateListDrawable.cppm
-            Drawing/LinearGradientDrawable.cppm
-            Drawing/RadialGradientDrawable.cppm
             Drawing/ImageDrawable.cppm
-            Drawing/NineSliceDrawable.cppm
-            Drawing/LayerDrawable.cppm
             Drawing/NodeBox.cppm
             Text/Text.cppm
             Text/TextRuns.cppm

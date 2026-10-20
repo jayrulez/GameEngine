@@ -19,7 +19,6 @@ import foundation.fonts; // CachedFont
 import :rect;
 import :draw_context;
 import :text;
-import :rectangle_drawable;
 import :node;
 import :ui_widget;
 

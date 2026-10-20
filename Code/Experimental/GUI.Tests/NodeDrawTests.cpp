@@ -22,7 +22,7 @@ namespace
     {
         auto node = MakeNode();
         node->SetSize(size);
-        node->SetBackground(core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), color));
+        node->SetBox(FilledBox(color));
         return node;
     }
 }
@@ -33,7 +33,7 @@ TEST_CASE("node-draw: background renders through VG")
     vg::VGContext ctx;
     DrawContext dc{ctx};
     panel->Draw(dc);
-    CHECK(ctx.GetBatch().vertices.Size() > 0);
+    CHECK(ctx.GetBatch().vertices.Size() + ctx.GetBatch().boxVertices.Size() > 0);
 }
 
 TEST_CASE("node-draw: empty node with no background draws nothing")
@@ -77,7 +77,7 @@ TEST_CASE("node-draw: nested tree renders parent and children")
     DrawContext dc{ctx};
     root->Draw(dc);
     // Both the root background and the child background contribute geometry.
-    CHECK(ctx.GetBatch().vertices.Size() > 0);
+    CHECK(ctx.GetBatch().vertices.Size() + ctx.GetBatch().boxVertices.Size() > 0);
 }
 
 TEST_CASE("node-draw: hidden child is skipped while parent still draws")
@@ -111,16 +111,6 @@ TEST_CASE("node-draw: clip children does not crash and still draws")
     vg::VGContext ctx;
     DrawContext dc{ctx};
     root->Draw(dc);
-    CHECK(ctx.GetBatch().vertices.Size() > 0);
+    CHECK(ctx.GetBatch().vertices.Size() + ctx.GetBatch().boxVertices.Size() > 0);
 }
 
-TEST_CASE("node-draw: foreground draws over children")
-{
-    auto node = MakePanel(core::Float2{100.0f, 100.0f}, core::Color::White);
-    node->SetForeground(core::MakeRef<BorderDrawable>(core::DefaultAllocator(),
-                                                      core::Color{0.0f, 0.0f, 0.0f, 1.0f}, 2.0f));
-    vg::VGContext ctx;
-    DrawContext dc{ctx};
-    node->Draw(dc);
-    CHECK(ctx.GetBatch().vertices.Size() > 0);
-}

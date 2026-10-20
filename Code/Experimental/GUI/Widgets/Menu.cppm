@@ -38,7 +38,6 @@ import :rect;
 import :event;
 import :draw_context;
 import :drawable;
-import :rectangle_drawable;
 import :text;
 import :node;
 import :ui_widget;

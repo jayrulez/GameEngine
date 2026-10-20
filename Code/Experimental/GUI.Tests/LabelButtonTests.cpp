@@ -33,18 +33,17 @@ TEST_CASE("label: text properties")
     CHECK(label->MeasureText().x == 0.0f); // no font yet -> zero measure
 }
 
-TEST_CASE("label: draws its background (text is a no-op without a font)")
+TEST_CASE("label: draws its box (text is a no-op without a font)")
 {
     auto label = Make<Label>();
     label->SetSize(core::Float2{100.0f, 40.0f});
     label->SetText(SV(u8"Hi"));
-    label->SetBackground(
-        core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), core::Color::Blue));
+    label->SetBox(FilledBox(core::Color::Blue));
 
     vg::VGContext ctx;
     DrawContext dc{ctx};
     label->Draw(dc);
-    CHECK(ctx.GetBatch().vertices.Size() > 0); // background geometry
+    CHECK(ctx.GetBatch().vertices.Size() + ctx.GetBatch().boxVertices.Size() > 0); // its fill
 }
 
 TEST_CASE("button: defaults - tag and centered text")
@@ -79,7 +78,7 @@ TEST_CASE("button: click callback fires on press+release")
     CHECK(clicks == 1);
 }
 
-TEST_CASE("button: control state reacts to the pointer")
+TEST_CASE("button: its states follow the pointer")
 {
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{200.0f, 200.0f});
@@ -88,11 +87,11 @@ TEST_CASE("button: control state reacts to the pointer")
     root->AddChild(btn.Get());
     EventDispatcher* d = root->GetEventDispatcher();
 
-    CHECK(btn->GetControlState() == ControlState::Normal);
+    CHECK_FALSE(btn->IsHovered());
     d->InjectMouseMove(core::Float2{50.0f, 50.0f});
-    CHECK(btn->GetControlState() == ControlState::Hover);
+    CHECK(btn->IsHovered());
     d->InjectMouseDown(core::Float2{50.0f, 50.0f}, MouseButton::Left);
-    CHECK(btn->GetControlState() == ControlState::Pressed);
+    CHECK(btn->IsPressed());
 }
 
 TEST_CASE("button: styled by CSS through the default tag")

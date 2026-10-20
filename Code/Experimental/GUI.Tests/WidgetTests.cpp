@@ -39,7 +39,7 @@ TEST_CASE("uinode: over-large padding clamps to zero, not negative")
     CHECK(content.height == 0.0f);
 }
 
-TEST_CASE("uinode: control state follows pointer, focus, and enabled")
+TEST_CASE("uinode: its states follow the pointer, the focus, and being enabled")
 {
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{200.0f, 200.0f});
@@ -49,54 +49,27 @@ TEST_CASE("uinode: control state follows pointer, focus, and enabled")
     root->AddChild(w.Get());
     EventDispatcher* d = root->GetEventDispatcher();
 
-    CHECK(w->GetControlState() == ControlState::Normal);
-
-    // Hover then leave (before any click, so no focus yet): Hover -> Normal.
+    // Hover then leave (before any click, so no focus yet).
     d->InjectMouseMove(core::Float2{50.0f, 50.0f}); // over w
     CHECK(w->IsHovered());
-    CHECK(w->GetControlState() == ControlState::Hover);
     d->InjectMouseMove(core::Float2{150.0f, 150.0f}); // off w
     CHECK_FALSE(w->IsHovered());
-    CHECK(w->GetControlState() == ControlState::Normal);
 
-    // Press/release (click focuses the node).
+    // Press and release (a click focuses the node).
     d->InjectMouseMove(core::Float2{50.0f, 50.0f});
     d->InjectMouseDown(core::Float2{50.0f, 50.0f}, MouseButton::Left);
     CHECK(w->IsPressed());
-    CHECK(w->GetControlState() == ControlState::Pressed);
-
     d->InjectMouseUp(core::Float2{50.0f, 50.0f}, MouseButton::Left);
     CHECK_FALSE(w->IsPressed());
-    CHECK(w->GetControlState() == ControlState::Hover); // hover outranks focus
+    CHECK(w->IsHovered());
 
-    // Leave while focused (from the click): falls to Focused, not Normal.
+    // Leave while focused, from the click.
     d->InjectMouseMove(core::Float2{150.0f, 150.0f});
+    CHECK_FALSE(w->IsHovered());
     CHECK(w->IsFocused());
-    CHECK(w->GetControlState() == ControlState::Focused);
 
     w->SetEnabled(false);
-    CHECK(w->GetControlState() == ControlState::Disabled); // wins over everything
-}
-
-TEST_CASE("uinode: skin background draws with the current control state")
-{
-    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
-    root->SetSize(core::Float2{200.0f, 200.0f});
-    auto w = Make<UINode>();
-    w->SetSize(core::Float2{100.0f, 100.0f});
-
-    auto skin = core::MakeRef<StateListDrawable>(core::DefaultAllocator());
-    skin->Set(ControlState::Normal,
-              core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), core::Color::Blue));
-    skin->Set(ControlState::Hover,
-              core::MakeRef<RectangleDrawable>(core::DefaultAllocator(), core::Color::Red));
-    w->SetSkin(skin);
-    root->AddChild(w.Get());
-
-    // Draws (in Normal state) through VG.
-    // (State selection is covered by StateListDrawable + control-state tests above.)
-    CHECK(w->GetControlState() == ControlState::Normal);
-    CHECK(w->GetBackground() != nullptr);
+    CHECK_FALSE(w->IsTreeEnabled());
 }
 
 TEST_CASE("uiwidget: tag and id")
@@ -132,12 +105,11 @@ TEST_CASE("uiwidget: style classes add/remove/toggle")
     CHECK_FALSE(w->HasClass(core::StringView(u8"active")));
 }
 
-TEST_CASE("uiwidget: margin and inherited padding/state")
+TEST_CASE("uiwidget: margin and inherited padding")
 {
     auto w = Make<UIWidget>();
     w->SetMargin(Thickness{4.0f});
     CHECK(w->GetMargin().Left == 4.0f);
     w->SetPadding(Thickness{2.0f}); // inherited from UINode
     CHECK(w->GetPadding().Top == 2.0f);
-    CHECK(w->GetControlState() == ControlState::Normal); // inherited from UINode
 }

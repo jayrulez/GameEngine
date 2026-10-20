@@ -4,9 +4,7 @@
 // GUI - :ui_node partition
 //
 // UINode: a Node with UI chrome. Ported from eepp's UI::UINode - adds padding (a content
-// inset), a state-aware skin, and a ControlState that tracks pointer/focus/enabled so
-// StateListDrawable skins/backgrounds react to input automatically. (Base Node already
-// carries the background/foreground drawables + clip from the render-seam phase.)
+// inset) and the text style; its look is its box, which sheets set, its states the selectors'.
 
 module;
 #include "Core/Prelude.h"
@@ -18,7 +16,6 @@ import foundation.core;  // RefPtr, Max, Move, Color
 import foundation.fonts; // CachedFont
 import :rect;
 import :thickness;
-import :control_state;
 import :event;
 import :drawable;
 import :text; // TextHAlign / TextVAlign (theme text-align hooks)
@@ -61,11 +58,6 @@ export namespace experimental::gui
         RTTI_OBJECT(UINode, Node)
     public:
         UINode() = default;
-
-        // Content padding (inset for content/children).
-        // Skin = a state-aware background (typically a StateListDrawable). Node::Draw draws
-        // the background with GetControlState(), so the skin reacts to hover/press/focus.
-        void SetSkin(RefPtr<Drawable> skin) { SetBackground(core::Move(skin)); }
 
         // === Text style (E3) ===
         // Every node carries the text properties, so they inherit down the tree through nodes
@@ -328,21 +320,6 @@ export namespace experimental::gui
         /// The sheet's style for `part` (an empty one when the sheet styles it not).
         [[nodiscard]] const PartStyle& GetPartStyle(core::StringView part) const; // GUIClusterImpl.cpp
         [[nodiscard]] const PartStyle* FindPartStyle(core::StringView part) const override { return &GetPartStyle(part); }
-
-        // Visual state, driven by pointer/focus/enabled (priority: disabled > pressed >
-        // hover > focused > normal).
-        [[nodiscard]] ControlState GetControlState() const override
-        {
-            if (!IsEnabled())
-                return ControlState::Disabled;
-            if (IsPressed())
-                return ControlState::Pressed;
-            if (IsHovered())
-                return ControlState::Hover;
-            if (IsFocused())
-                return ControlState::Focused;
-            return ControlState::Normal;
-        }
 
     protected:
         /// The text style changed: a widget showing text refreshes what it draws with.

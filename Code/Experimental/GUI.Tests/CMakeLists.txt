@@ -3,8 +3,7 @@ add_executable(GUI.Tests
     TestsMain.cpp
     RectTests.cpp
     Transform2DTests.cpp
-    DrawingTests.cpp
-    GradientImageTests.cpp
+    ImageDrawableTests.cpp
     CompositorTests.cpp
     TransformableTests.cpp
     NodeTests.cpp

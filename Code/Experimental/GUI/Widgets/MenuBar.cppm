@@ -28,7 +28,6 @@ import foundation.core;  // RefPtr, MakeRef, Array, Function, Move, Max, Float2
 import foundation.fonts; // CachedFont
 import :event;
 import :node;
-import :rectangle_drawable;
 import :ui_widget;
 import :button;
 import :menu;

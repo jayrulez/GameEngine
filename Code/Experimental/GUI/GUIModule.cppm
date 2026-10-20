@@ -46,17 +46,9 @@ export import :element_types;
 export import :gui_script;
 
 // Drawing / render seam (Phase 2)
-export import :control_state;
 export import :draw_context;
 export import :drawable;
-export import :rectangle_drawable;
-export import :border_drawable;
-export import :state_list_drawable;
-export import :linear_gradient_drawable;
-export import :radial_gradient_drawable;
 export import :image_drawable;
-export import :nine_slice_drawable;
-export import :layer_drawable;
 export import :node_box;
 
 // Text (Phase 4)

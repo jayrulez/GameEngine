@@ -28,7 +28,6 @@ import :event;
 import :draw_context;
 import :text;
 import :node;
-import :rectangle_drawable;
 import :ui_widget;
 import :list_box;
 import :event_dispatcher; // the popup stack (E5)

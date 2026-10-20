@@ -25,7 +25,6 @@ import :transformable;
 import :event;
 import :draw_context;
 import :drawable;
-import :control_state;
 import :action;
 import :action_manager;
 import :mutation_queue;
@@ -604,20 +603,7 @@ export namespace experimental::gui
         [[nodiscard]] bool IsRouteStop() const noexcept { return m_routeStop; }
         void SetRouteStop(bool stop) noexcept { m_routeStop = stop; }
 
-        // === Drawing ===
-        void SetBackground(RefPtr<Drawable> background)
-        {
-            m_background = core::Move(background);
-            Invalidate();
-        }
-        [[nodiscard]] Drawable* GetBackground() const noexcept { return m_background.Get(); }
-        void SetForeground(RefPtr<Drawable> foreground)
-        {
-            m_foreground = core::Move(foreground);
-            Invalidate();
-        }
-        [[nodiscard]] Drawable* GetForeground() const noexcept { return m_foreground.Get(); }
-
+        // === Drawing === A node draws its box (SetBox, or a sheet's) under what it draws itself.
         void SetClipChildren(bool clip)
         {
             if (clip == m_clipChildren)
@@ -629,12 +615,6 @@ export namespace experimental::gui
         [[nodiscard]] bool ClipsChildren() const noexcept
         {
             return m_clipChildren || m_layoutStyle.OverflowX != Overflow::Visible || m_layoutStyle.OverflowY != Overflow::Visible;
-        }
-
-        // The visual state drawables render in (skins/StateList). Base: enabled-driven.
-        [[nodiscard]] virtual ControlState GetControlState() const
-        {
-            return m_enabled ? ControlState::Normal : ControlState::Disabled;
         }
 
         // Draw this node and its subtree through the DrawContext, applying the node's
@@ -705,11 +685,8 @@ export namespace experimental::gui
                 ctx.PushOpacity(m_alpha);
 
             const Rect local = GetLocalBounds();
-            const ControlState state = GetControlState();
 
             m_box.DrawUnder(ctx, local, !backdropFirst);
-            if (m_background)
-                m_background->Draw(ctx, local, state);
             OnDraw(ctx, local);
 
             // Children clip to the box, its rounded corners included (a path clip; a host without
@@ -765,8 +742,6 @@ export namespace experimental::gui
 
             if (IsScrollContainer())
                 DrawScrollBars(ctx);
-            if (m_foreground)
-                m_foreground->Draw(ctx, local, state);
 
             if (layered)
                 ctx.VG().PopLayer();
@@ -1826,7 +1801,7 @@ export namespace experimental::gui
         /// A plain layout container lets the pointer through to the game.
         [[nodiscard]] virtual bool TakesPointer() const
         {
-            if (m_background || m_box.BackgroundColor.a > 0.0f || !m_box.Layers.IsEmpty() || IsTabFocusable())
+            if (m_box.BackgroundColor.a > 0.0f || !m_box.Layers.IsEmpty() || IsTabFocusable())
                 return true;
             for (usize i = 0; i < m_listeners.Size(); ++i)
                 if (!m_listeners[i].Removed)
@@ -2898,8 +2873,6 @@ export namespace experimental::gui
         core::String m_dropTypes;
         bool m_dropTargetState = false;
         bool m_dragSourceState = false;
-        RefPtr<Drawable> m_background;
-        RefPtr<Drawable> m_foreground;
         core::Float2 m_size{0.0f, 0.0f};
         LayoutStyle m_layoutStyle;              // what it asks of layout (E2)
         Display m_displayBeforeNone = Display::Flex; // what SetDisplayed(true) gives back

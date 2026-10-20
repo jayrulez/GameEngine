@@ -315,5 +315,11 @@ surface's own edge. "Move to" lists the other surfaces' stacks, named for where 
 is a DockSpace's `IDockSurroundings`. On the way, in the core: a menu item outlives an action that
 ends its menu, and a window's title bar is the mirror of itself right to left.
 
+Docking is the pointer's (the user, 2026-10-20): a drag, with modifiers (Shift to float, Shift on a
+float's title to only move it). The `dock.*` commands stay defined but no key is bound to them, as
+Ctrl+Alt and an arrow is GNOME's and Ctrl+Alt is AltGr on many layouts; the keyboard's way in is a
+focused tab's context menu (Shift+F10, the Menu key), which is Move to and reaches every place, and
+`drag.pick` (Ctrl+Shift+D). An application binds the commands where it wants keys.
+
 Not in scope: the editor moving off foundation.ui's docking. It needs the toolkit too, which is not
 written, and the lab's libraries proven stable first (the user, 2026-10-20).

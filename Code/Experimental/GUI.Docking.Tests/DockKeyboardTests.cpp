@@ -4,7 +4,8 @@
 // GUI.Docking - docking from the keyboard (D4 of Specs/gui-lab-evolution-3.md): a docked panel's
 // tab picked up (`drag.pick`) and dropped on another stack's tab; `dock.focus-*` and `dock.move-*`
 // by direction (into the stack that way, else along the surface's edge, the focus going with the
-// panel); `dock.maximize` and back; `dock.close`; and the keys they go by.
+// panel); `dock.maximize` and back; `dock.close`; none bound to a key, the keyboard's way in a tab's
+// context menu.
 #include "DockingTestBed.h"
 
 using namespace experimental::gui;
@@ -61,7 +62,7 @@ TEST_CASE("dock keys: focus and move by direction; into the stack that way, else
     CHECK(bed.Focused() == bed.StackOf(u8"inspector"));
 }
 
-TEST_CASE("dock keys: maximize and back, close, and the keys they go by")
+TEST_CASE("dock keys: maximize and back, close; no key bound to them")
 {
     KeyBed bed;
     const DockNodeId central = bed.controller.GetLayout().CentralStack();
@@ -75,15 +76,25 @@ TEST_CASE("dock keys: maximize and back, close, and the keys they go by")
     CHECK(bed.Run(u8"dock.close"));
     CHECK(bed.StackOf(u8"inspector") == kNoDock);
 
-    bed.Lay();
-    bed.TabOf(u8"scene")->RequestFocus();
-    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Left), KeyModCtrl | KeyModAlt);
-    CHECK(bed.Focused() == bed.StackOf(u8"hierarchy"));
-    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Down), KeyModCtrl | KeyModAlt | KeyModShift); // the hierarchy along the bottom
-    const DockLayout& layout = bed.controller.GetLayout();
-    const DockNode* root = layout.FindNode(layout.FindSurface(layout.MainSurface())->Root);
-    CHECK(root->Axis == DockAxis::Vertical);
-    CHECK(root->Children.Back() == bed.StackOf(u8"hierarchy"));
+    // No key is bound to them: docking is the pointer's, and the keys a desktop leaves free differ.
+    const char8_t* const commands[] = {u8"dock.focus-left", u8"dock.move-down", u8"dock.maximize", u8"dock.close",
+                                       u8"dock.move-to", u8"dock.float", u8"dock.next-surface", u8"dock.previous-surface"};
+    for (const char8_t* command : commands)
+    {
+        CHECK(bed.root->GetGUIContext()->GetCommands().Find(SV(command)) != nullptr);
+        CHECK(bed.root->GetGUIContext()->GetKeymap().ShortcutText(SV(command)).IsEmpty());
+    }
+}
+
+TEST_CASE("dock keys: the keyboard's way in is a focused tab's context menu (Shift+F10), Move to")
+{
+    KeyBed bed;
+    bed.TabOf(u8"inspector")->RequestFocus();
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::F10), KeyModShift);
+    bed.root->GetGUIContext()->Update(core::Duration::FromSeconds(0.016)); // the binding runs in the frame
+    Menu* menu = bed.space->GetMoveMenu();
+    REQUIRE(menu != nullptr);
+    CHECK(menu->IsOpen());
 }
 
 namespace

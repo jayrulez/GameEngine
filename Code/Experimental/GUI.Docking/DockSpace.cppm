@@ -52,44 +52,45 @@ export namespace experimental::gui
         )");
     }
 
-    /// Docking's commands, with the keys they go by: `dock.focus-*` and `dock.move-*` (left, right,
-    /// up, down) focus the stack that way, or move the focused stack's panel into it (past the
-    /// surface's edge into what lies beyond it, in a DockArea; else along that edge); `dock.maximize`
-    /// shows the focused stack alone or all again; `dock.close` closes its panel; `dock.move-to`
-    /// opens the menu of where it may go (what a tab's context menu opens too); `dock.float` floats
-    /// it. A DockSpace takes them for the stack the focus is in. `dock.next-surface` and
-    /// `dock.previous-surface` take the focus to a DockArea's next surface (its main one, then its
-    /// floats), to the stack last focused there.
+    /// Docking's commands: `dock.focus-*` and `dock.move-*` (left, right, up, down) focus the stack
+    /// that way, or move the focused stack's panel into it (past the surface's edge into what lies
+    /// beyond it, in a DockArea; else along that edge); `dock.maximize` shows the focused stack alone
+    /// or all again; `dock.close` closes its panel; `dock.move-to` opens the menu of where it may go
+    /// (what a tab's context menu opens too); `dock.float` floats it. A DockSpace takes them for the
+    /// stack the focus is in. `dock.next-surface` and `dock.previous-surface` take the focus to a
+    /// DockArea's next surface (its main one, then its floats), to the stack last focused there.
+    ///
+    /// None is bound to a key: docking is the pointer's (a drag, Shift to float), and the keys a
+    /// desktop leaves free differ (Ctrl+Alt and an arrow is GNOME's, Ctrl+Alt is AltGr on many
+    /// layouts). The keyboard's way in is a tab's context menu (Shift+F10, the Menu key), which is
+    /// Move to, and `drag.pick` (Ctrl+Shift+D); an application binds these where it wants keys, or
+    /// shows them in a menu.
     inline void DefineDockingCommands(GUIContext& context)
     {
         struct Named
         {
             const char8_t* Id;
             const char8_t* Label;
-            const char8_t* Keys;
         };
         static constexpr Named kCommands[] = {
-            {u8"dock.focus-left", u8"Focus the Stack to the Left", u8"ctrl-alt-left"},
-            {u8"dock.focus-right", u8"Focus the Stack to the Right", u8"ctrl-alt-right"},
-            {u8"dock.focus-up", u8"Focus the Stack Above", u8"ctrl-alt-up"},
-            {u8"dock.focus-down", u8"Focus the Stack Below", u8"ctrl-alt-down"},
-            {u8"dock.move-left", u8"Move the Panel Left", u8"ctrl-alt-shift-left"},
-            {u8"dock.move-right", u8"Move the Panel Right", u8"ctrl-alt-shift-right"},
-            {u8"dock.move-up", u8"Move the Panel Up", u8"ctrl-alt-shift-up"},
-            {u8"dock.move-down", u8"Move the Panel Down", u8"ctrl-alt-shift-down"},
-            {u8"dock.maximize", u8"Maximize the Stack", u8"ctrl-alt-m"},
-            {u8"dock.close", u8"Close the Panel", u8"ctrl-alt-w"},
-            {u8"dock.move-to", u8"Move the Panel To...", u8"ctrl-alt-period"},
-            {u8"dock.float", u8"Float the Panel", u8"ctrl-alt-f"},
-            {u8"dock.next-surface", u8"Focus the Next Dock Surface", u8"ctrl-alt-grave"},
-            {u8"dock.previous-surface", u8"Focus the Previous Dock Surface", u8"ctrl-alt-shift-grave"},
+            {u8"dock.focus-left", u8"Focus the Stack to the Left"},
+            {u8"dock.focus-right", u8"Focus the Stack to the Right"},
+            {u8"dock.focus-up", u8"Focus the Stack Above"},
+            {u8"dock.focus-down", u8"Focus the Stack Below"},
+            {u8"dock.move-left", u8"Move the Panel Left"},
+            {u8"dock.move-right", u8"Move the Panel Right"},
+            {u8"dock.move-up", u8"Move the Panel Up"},
+            {u8"dock.move-down", u8"Move the Panel Down"},
+            {u8"dock.maximize", u8"Maximize the Stack"},
+            {u8"dock.close", u8"Close the Panel"},
+            {u8"dock.move-to", u8"Move the Panel To..."},
+            {u8"dock.float", u8"Float the Panel"},
+            {u8"dock.next-surface", u8"Focus the Next Dock Surface"},
+            {u8"dock.previous-surface", u8"Focus the Previous Dock Surface"},
         };
         for (const Named& named : kCommands)
-        {
             if (context.GetCommands().Find(core::StringView(named.Id)) == nullptr)
                 context.DefineCommand(core::StringView(named.Id)).SetLabel(core::StringView(named.Label));
-            (void)context.GetKeymap().Bind(core::StringView(named.Keys), core::StringView(named.Id));
-        }
     }
 
     /// What a tab torn out of its stack leaves while it is dragged (DockSpace::SetTornTab).

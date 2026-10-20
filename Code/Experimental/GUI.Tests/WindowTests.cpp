@@ -88,6 +88,36 @@ TEST_CASE("window: dragging the grip resizes, clamped to the minimum")
     CHECK(win->GetSize().y == doctest::Approx(80.0f));
 }
 
+TEST_CASE("window: right to left, its title bar is the mirror of left to right")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{600.0f, 400.0f});
+    auto win = Make<Window>();
+    win->SetSize(core::Float2{220.0f, 150.0f});
+    win->SetTitleBarHeight(28.0f);
+    root->AddChild(win.Get());
+    root->UpdateLayout();
+    DragHandle* bar = win->GetTitleBar();
+    REQUIRE(bar->ChildCount() == 2u); // the title, the close button
+    const core::f32 width = bar->GetSize().x;
+    core::Float2 at[2];
+    core::Float2 size[2];
+    for (core::usize i = 0; i < 2; ++i)
+    {
+        at[i] = bar->GetChildAt(i)->GetPosition();
+        size[i] = bar->GetChildAt(i)->GetSize();
+    }
+    CHECK(at[1].x + size[1].x < width - 1.0f); // the close button kept off the edge
+
+    win->SetLayoutDirection(Node::LayoutDirection::RightToLeft);
+    root->UpdateLayout();
+    for (core::usize i = 0; i < 2; ++i)
+    {
+        CHECK(bar->GetChildAt(i)->GetPosition().x == doctest::Approx(width - at[i].x - size[i].x));
+        CHECK(bar->GetChildAt(i)->GetSize().x == doctest::Approx(size[i].x));
+    }
+}
+
 TEST_CASE("window: content host is placed below the title bar and add-able")
 {
     auto win = Make<Window>();

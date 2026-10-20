@@ -188,7 +188,8 @@ export namespace experimental::gui
                     st.AlignItems = Align::Center;
                     st.ColumnGap = 6.0f;
                 });
-                m_titleBar->SetPadding(Thickness{0.0f, 0.0f, 8.0f, 0.0f});
+                // The same at both ends: right to left, the bar is the mirror of left to right.
+                m_titleBar->SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
             }
             Window* self = this;
             m_titleBar->OnDrag = [self](core::Float2 d)
@@ -203,7 +204,6 @@ export namespace experimental::gui
             m_title = core::MakeRef<Label>(MemoryAllocator());
             StyleWriteScope defaults(*m_title); // its own values, which a sheet returns to
             m_title->SetTextAlignment(TextHAlign::Start, TextVAlign::Middle);
-            m_title->SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
             m_title->SetHitTestVisible(false); // clicks fall through to the draggable title bar
             m_title->EditLayoutStyle([](LayoutStyle& st) { st.Grow = 1.0f; });
             m_titleBar->AddChild(m_title.Get());
